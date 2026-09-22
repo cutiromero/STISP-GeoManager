@@ -1,0 +1,299 @@
+.air-about {
+  gap: 22px;
+}
+.air-about-affiliation {
+  margin: 30px 16px 16px;
+  padding-top: 20px;
+  border-top: 1px solid #dce7ef;
+  color: #647d91;
+}
+.air-about-affiliation span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  margin-bottom: 8px;
+}
+.air-about-affiliation strong {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.air-team-hero {
+  padding: clamp(28px, 4vw, 64px);
+  min-height: 350px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  border-radius: 18px;
+  background-position: center;
+  background-size: cover;
+  color: #edf6fc;
+  overflow: hidden;
+}
+.air-team-hero h1.ant-typography {
+  color: #fff;
+  font-size: clamp(28px, 3.2vw, 44px);
+  margin: 14px 0;
+  line-height: 1.3;
+}
+.air-team-hero > p {
+  max-width: 760px;
+  line-height: 1.9;
+  color: #cfdfec;
+  margin: 8px 0;
+}
+.air-team-hero .air-team-subtitle {
+  color: #edf6fc;
+  font-size: 17px;
+}
+.air-team-hero .ant-btn {
+  margin-top: 20px;
+}
+.air-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #547e9b;
+}
+.air-team-hero .air-eyebrow {
+  color: #9ecbe8;
+}
+.air-hero-facts {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+.air-hero-facts span {
+  padding: 6px 12px;
+  background: rgba(121, 177, 214, 0.12);
+  border: 1px solid rgba(153, 197, 227, 0.28);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.air-section {
+  padding: clamp(20px, 2.5vw, 36px);
+  border: 1px solid #dde8f1;
+  background: #fff;
+  border-radius: 16px;
+  min-width: 0;
+  box-shadow: 0 8px 30px rgba(30, 67, 95, 0.035);
+}
+.air-section p {
+  color: #607385;
+  line-height: 1.9;
+}
+.air-section-heading h2.ant-typography {
+  margin: 8px 0 22px;
+  color: #25465f;
+  font-size: 25px;
+}
+.air-section-description {
+  margin: -10px 0 24px;
+}
+.air-institution-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
+  align-items: center;
+  gap: 40px;
+}
+.air-institution-section h2.ant-typography {
+  color: #25465f;
+  font-size: 23px;
+  margin-top: 8px;
+}
+.air-institution-identity {
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #214c6c, #173c5c);
+}
+.air-institution-identity img {
+  width: 100%;
+  max-width: 410px;
+  height: auto;
+}
+.air-institution-identity span {
+  color: #d0e3f0;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.air-institution-identity .anticon {
+  margin-left: 8px;
+}
+.air-research-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.air-research-grid article {
+  background: #f3f8fc;
+  padding: 22px;
+  border-radius: 12px;
+  border-top: 3px solid #94bdd8;
+}
+.air-research-grid article > span {
+  font-size: 20px;
+  color: #8baec7;
+  font-weight: 600;
+}
+.air-research-grid h3 {
+  font-size: 16px;
+  color: #2c506b;
+  margin: 18px 0 8px;
+}
+.air-research-grid p {
+  font-size: 13px;
+  margin: 0;
+}
+.air-member-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.air-member-card {
+  border: 1px solid #dce8f1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fcfdff;
+}
+.air-member-summary {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 20px;
+  padding: 24px;
+  align-items: start;
+}
+.air-member-portrait {
+  width: 104px;
+  height: 140px;
+  object-fit: cover;
+  object-position: center 20%;
+  border-radius: 8px;
+  background: #eaf0f6;
+}
+.air-member-summary h3 {
+  font-size: 21px;
+  color: #244a65;
+  margin: 0 0 6px;
+}
+.air-member-role {
+  color: #6b8497;
+  font-size: 12px;
+}
+.air-member-summary p {
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 12px 0;
+}
+.air-member-email {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.air-profile-link {
+  display: block;
+  font-size: 12px;
+  margin-top: 10px;
+}
+.air-publications {
+  border-top: 1px solid #e2ebf3;
+  background: #f3f8fc;
+  border-radius: 0;
+}
+.air-publications .ant-collapse-header {
+  font-size: 13px;
+  color: #416e8c;
+}
+.air-publications ol {
+  padding-left: 20px;
+  margin: 0;
+}
+.air-publications li {
+  padding: 0 0 14px 4px;
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  color: #566e80;
+}
+.air-contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.air-contact-grid article {
+  border: 1px solid #dce8f1;
+  border-radius: 12px;
+  padding: 26px;
+  background: #f5f9fc;
+}
+.air-contact-grid .anticon {
+  color: #6d9bbb;
+  font-size: 24px;
+}
+.air-contact-grid h3 {
+  font-size: 22px;
+  color: #254b66;
+}
+.air-contact-grid a {
+  overflow-wrap: anywhere;
+}
+.air-contact-address {
+  display: flex;
+  gap: 18px;
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid #e0eaf2;
+  color: #486b84;
+}
+@media (max-width: 1280px) {
+  .air-research-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .air-member-summary {
+    grid-template-columns: 85px minmax(0, 1fr);
+    gap: 14px;
+    padding: 18px;
+  }
+  .air-member-portrait {
+    width: 85px;
+    height: 116px;
+  }
+}
+@media (max-width: 1000px) {
+  .air-member-grid,
+  .air-institution-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .air-institution-identity {
+    max-width: 460px;
+  }
+}
+@media (max-width: 600px) {
+  .air-research-grid,
+  .air-contact-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .air-team-hero {
+    padding: 26px 20px;
+    min-height: 320px;
+  }
+  .air-member-summary {
+    grid-template-columns: 72px minmax(0, 1fr);
+    padding: 16px;
+  }
+  .air-member-portrait {
+    width: 72px;
+    height: 100px;
+  }
+  .air-member-summary h3 {
+    font-size: 19px;
+  }
+  .air-section {
+    padding: 20px 16px;
+  }
+}

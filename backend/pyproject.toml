@@ -1,0 +1,16 @@
+[project]
+name = "geomanager"
+version = "0.1.11"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "geomanager.test_settings"
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = [
+  "--strict-markers",
+  "--reuse-db",
+]
+markers = [
+  "unit: pure unit tests that should avoid database and external services",
+  "integration: Django integration tests covering models, services, and API endpoints",
+]

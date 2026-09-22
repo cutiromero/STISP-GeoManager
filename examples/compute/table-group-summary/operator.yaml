@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "identifier": "table-group-summary",
+  "name": "表格分组汇总",
+  "version": "1.0.0",
+  "description": "表格分组汇总的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
+  "author": "平台示例算法",
+  "runtime": "python-geospatial-v1",
+  "inputs": [
+    {
+      "key": "table",
+      "label": "输入表格",
+      "kind": "table",
+      "required": true
+    }
+  ],
+  "parameters": [
+    {
+      "key": "group",
+      "label": "分组字段",
+      "type": "field",
+      "input": "table",
+      "required": true
+    },
+    {
+      "key": "value",
+      "label": "数值字段",
+      "type": "field",
+      "input": "table",
+      "required": true
+    },
+    {
+      "key": "method",
+      "label": "统计方法",
+      "type": "enum",
+      "choices": [
+        "mean",
+        "sum",
+        "min",
+        "max",
+        "count"
+      ],
+      "default": "mean",
+      "required": true
+    }
+  ],
+  "outputs": [
+    {
+      "key": "summary",
+      "label": "分组统计表",
+      "kind": "table",
+      "file": "summary.csv",
+      "required": true
+    }
+  ],
+  "timeoutSeconds": 1800,
+  "deterministic": true
+}

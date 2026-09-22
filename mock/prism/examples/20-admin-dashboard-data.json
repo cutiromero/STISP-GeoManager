@@ -1,0 +1,1199 @@
+{
+  "GET /api/admin/operation-logs/": {
+    "200": {
+      "items": [
+        {
+          "id": 101,
+          "occurredAt": "2026-06-14 09:30:00",
+          "operator": "系统管理员",
+          "module": "认证授权",
+          "action": "登录系统",
+          "result": "success",
+          "ipAddress": "127.0.0.1",
+          "summary": "系统管理员登录 mock 前端"
+        },
+        {
+          "id": 102,
+          "occurredAt": "2026-06-14 09:32:00",
+          "operator": "李数据管理员",
+          "module": "栅格数据",
+          "action": "启动栅格扫描",
+          "result": "success",
+          "ipAddress": "127.0.0.1",
+          "summary": "扫描研究数据根目录 raster/original"
+        },
+        {
+          "id": 103,
+          "occurredAt": "2026-06-14 09:35:00",
+          "operator": "陈研究员",
+          "module": "数据目录",
+          "action": "查询数据资源",
+          "result": "success",
+          "ipAddress": "127.0.0.1",
+          "summary": "查询 Traim 和 survey_points_2026"
+        },
+        {
+          "id": 104,
+          "occurredAt": "2026-06-14 09:38:00",
+          "operator": "李数据管理员",
+          "module": "数据导入",
+          "action": "导入校验",
+          "result": "warning",
+          "ipAddress": "127.0.0.1",
+          "summary": "2 行坐标精度不足，允许继续导入"
+        },
+        {
+          "id": 105,
+          "occurredAt": "2026-06-14 09:41:00",
+          "operator": "系统",
+          "module": "异步任务",
+          "action": "生成导出文件",
+          "result": "success",
+          "ipAddress": "",
+          "summary": "生成 layers_export_mock_20260614.zip"
+        }
+      ],
+      "total": 5
+    }
+  },
+  "GET /api/admin/system-logs/": {
+    "200": {
+      "files": [
+        {
+          "name": "application.log",
+          "sizeBytes": 4096,
+          "modifiedAt": "2026-06-20T09:45:00+08:00"
+        },
+        {
+          "name": "django.log",
+          "sizeBytes": 2048,
+          "modifiedAt": "2026-06-20T09:43:00+08:00"
+        },
+        {
+          "name": "security.log",
+          "sizeBytes": 1024,
+          "modifiedAt": "2026-06-20T09:40:00+08:00"
+        }
+      ],
+      "selectedFile": "application.log",
+      "lines": 500,
+      "content": "2026-06-20 09:41:12 [INFO] apps.core.initialization:88 完成默认用户组初始化\n2026-06-20 09:42:03 [INFO] apps.catalog.services:214 完成数据目录扫描\n2026-06-20 09:45:00 [INFO] apps.raster.services.jobs:57 栅格任务队列空闲",
+      "generatedAt": "2026-06-20T09:45:10+08:00"
+    }
+  },
+  "GET /api/admin/dashboard/": {
+    "200": {
+      "generatedAt": "2026-06-14T09:35:00+08:00",
+      "cards": {
+        "resources": {
+          "total": 8,
+          "active": 7
+        },
+        "layers": {
+          "total": 5,
+          "active": 4
+        },
+        "rasters": {
+          "resources": 2,
+          "datasets": 2,
+          "layers": 2
+        },
+        "dataOverview": {
+          "totalResources": 8,
+          "activeResources": 7,
+          "totalSizeBytes": 276889600,
+          "totalItemCount": 387,
+          "typeBreakdown": [
+            {
+              "dataType": "vector",
+              "count": 2,
+              "sizeBytes": 491520,
+              "itemCount": 255
+            },
+            {
+              "dataType": "raster",
+              "count": 2,
+              "sizeBytes": 276824064,
+              "itemCount": 2
+            },
+            {
+              "dataType": "table",
+              "count": 2,
+              "sizeBytes": 65536,
+              "itemCount": 130
+            }
+          ],
+          "ownUploads": {
+            "totalResources": 3,
+            "activeResources": 3,
+            "totalSizeBytes": 246579,
+            "totalItemCount": 128,
+            "typeBreakdown": [
+              {
+                "dataType": "vector",
+                "count": 1,
+                "sizeBytes": 180224,
+                "itemCount": 120
+              },
+              {
+                "dataType": "table",
+                "count": 1,
+                "sizeBytes": 66355,
+                "itemCount": 8
+              }
+            ],
+            "categoryBreakdown": [
+              {
+                "categoryCode": "base_geo",
+                "categoryName": "基础地理信息数据",
+                "count": 0,
+                "sizeBytes": 0,
+                "itemCount": 0,
+                "children": [
+                  {
+                    "categoryCode": "base_geo_admin",
+                    "categoryName": "行政区划",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "base_geo_elements",
+                    "categoryName": "基础地理要素",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "base_geo_lucc",
+                    "categoryName": "LUCC",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  }
+                ]
+              },
+              {
+                "categoryCode": "habitat",
+                "categoryName": "胡杨生境数据",
+                "count": 1,
+                "sizeBytes": 66355,
+                "itemCount": 8,
+                "children": [
+                  {
+                    "categoryCode": "habitat_water",
+                    "categoryName": "水",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "habitat_soil",
+                    "categoryName": "土壤",
+                    "count": 1,
+                    "sizeBytes": 66355,
+                    "itemCount": 8
+                  },
+                  {
+                    "categoryCode": "habitat_climate",
+                    "categoryName": "气候",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "habitat_biotic",
+                    "categoryName": "生物环境",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  }
+                ]
+              },
+              {
+                "categoryCode": "distribution",
+                "categoryName": "胡杨空间分布信息",
+                "count": 1,
+                "sizeBytes": 180224,
+                "itemCount": 120,
+                "children": [
+                  {
+                    "categoryCode": "distribution_vector",
+                    "categoryName": "分布矢量",
+                    "count": 1,
+                    "sizeBytes": 180224,
+                    "itemCount": 120
+                  },
+                  {
+                    "categoryCode": "distribution_survey_image",
+                    "categoryName": "调查点图片",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  }
+                ]
+              },
+              {
+                "categoryCode": "thematic",
+                "categoryName": "胡杨专题数据",
+                "count": 0,
+                "sizeBytes": 0,
+                "itemCount": 0,
+                "children": [
+                  {
+                    "categoryCode": "thematic_gene_germplasm",
+                    "categoryName": "基因与种质",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "thematic_individual",
+                    "categoryName": "个体",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "spatial",
+                    "categoryName": "种群",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "spatial",
+                    "categoryName": "群落",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "thematic_ecosystem",
+                    "categoryName": "生态系统",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "thematic_landscape_rs",
+                    "categoryName": "景观与遥感",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  }
+                ]
+              }
+            ],
+            "unclassifiedCount": 1,
+            "spatialSummary": {
+              "spatialResourceCount": 1,
+              "missingSpatialResourceCount": 2,
+              "totalBounds": [
+                84.88,
+                40.46,
+                85.36,
+                40.88
+              ],
+              "resourceExtents": [
+                {
+                  "resourceId": 11,
+                  "name": "塔里木河胡杨林样地监测点",
+                  "dataType": "vector",
+                  "bounds": [
+                    84.88,
+                    40.46,
+                    85.36,
+                    40.88
+                  ],
+                  "center": [
+                    85.12,
+                    40.67
+                  ],
+                  "coverageAreaKm2": 2117.42,
+                  "sizeBytes": 180224,
+                  "itemCount": 120,
+                  "coordinateSystem": "EPSG:4326",
+                  "uploaderName": "系统管理员",
+                  "updatedAt": "2026-06-14T09:20:00+08:00"
+                }
+              ],
+              "resourceExtentsTruncated": false,
+              "coverageRanking": [
+                {
+                  "resourceId": 11,
+                  "name": "塔里木河胡杨林样地监测点",
+                  "dataType": "vector",
+                  "bounds": [
+                    84.88,
+                    40.46,
+                    85.36,
+                    40.88
+                  ],
+                  "center": [
+                    85.12,
+                    40.67
+                  ],
+                  "coverageAreaKm2": 2117.42,
+                  "sizeBytes": 180224,
+                  "itemCount": 120,
+                  "coordinateSystem": "EPSG:4326",
+                  "uploaderName": "系统管理员",
+                  "updatedAt": "2026-06-14T09:20:00+08:00"
+                }
+              ],
+              "heatmapCells": [
+                {
+                  "column": 3,
+                  "row": 2,
+                  "bounds": [
+                    85.06,
+                    40.628,
+                    85.12,
+                    40.712
+                  ],
+                  "resourceCount": 1,
+                  "itemCount": 120
+                }
+              ]
+            }
+          },
+          "visibleResources": {
+            "totalResources": 8,
+            "activeResources": 7,
+            "totalSizeBytes": 276889600,
+            "totalItemCount": 387,
+            "typeBreakdown": [
+              {
+                "dataType": "vector",
+                "count": 2,
+                "sizeBytes": 491520,
+                "itemCount": 255
+              },
+              {
+                "dataType": "raster",
+                "count": 2,
+                "sizeBytes": 276824064,
+                "itemCount": 2
+              },
+              {
+                "dataType": "table",
+                "count": 2,
+                "sizeBytes": 65536,
+                "itemCount": 130
+              }
+            ],
+            "categoryBreakdown": [
+              {
+                "categoryCode": "base_geo",
+                "categoryName": "基础地理信息数据",
+                "count": 2,
+                "sizeBytes": 138412032,
+                "itemCount": 2,
+                "children": [
+                  {
+                    "categoryCode": "base_geo_admin",
+                    "categoryName": "行政区划",
+                    "count": 1,
+                    "sizeBytes": 245760,
+                    "itemCount": 1
+                  },
+                  {
+                    "categoryCode": "base_geo_elements",
+                    "categoryName": "基础地理要素",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "base_geo_lucc",
+                    "categoryName": "LUCC",
+                    "count": 1,
+                    "sizeBytes": 138166272,
+                    "itemCount": 1
+                  }
+                ]
+              },
+              {
+                "categoryCode": "habitat",
+                "categoryName": "胡杨生境数据",
+                "count": 2,
+                "sizeBytes": 65536,
+                "itemCount": 130,
+                "children": [
+                  {
+                    "categoryCode": "habitat_water",
+                    "categoryName": "水",
+                    "count": 1,
+                    "sizeBytes": 32768,
+                    "itemCount": 65
+                  },
+                  {
+                    "categoryCode": "habitat_soil",
+                    "categoryName": "土壤",
+                    "count": 1,
+                    "sizeBytes": 32768,
+                    "itemCount": 65
+                  },
+                  {
+                    "categoryCode": "habitat_climate",
+                    "categoryName": "气候",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "habitat_biotic",
+                    "categoryName": "生物环境",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  }
+                ]
+              },
+              {
+                "categoryCode": "distribution",
+                "categoryName": "胡杨空间分布信息",
+                "count": 2,
+                "sizeBytes": 491520,
+                "itemCount": 255,
+                "children": [
+                  {
+                    "categoryCode": "distribution_vector",
+                    "categoryName": "分布矢量",
+                    "count": 2,
+                    "sizeBytes": 491520,
+                    "itemCount": 255
+                  },
+                  {
+                    "categoryCode": "distribution_survey_image",
+                    "categoryName": "调查点图片",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  }
+                ]
+              },
+              {
+                "categoryCode": "thematic",
+                "categoryName": "胡杨专题数据",
+                "count": 1,
+                "sizeBytes": 138166272,
+                "itemCount": 1,
+                "children": [
+                  {
+                    "categoryCode": "thematic_gene_germplasm",
+                    "categoryName": "基因与种质",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "thematic_individual",
+                    "categoryName": "个体",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "spatial",
+                    "categoryName": "种群",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "spatial",
+                    "categoryName": "群落",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "thematic_ecosystem",
+                    "categoryName": "生态系统",
+                    "count": 0,
+                    "sizeBytes": 0,
+                    "itemCount": 0
+                  },
+                  {
+                    "categoryCode": "thematic_landscape_rs",
+                    "categoryName": "景观与遥感",
+                    "count": 1,
+                    "sizeBytes": 138166272,
+                    "itemCount": 1
+                  }
+                ]
+              }
+            ],
+            "unclassifiedCount": 1,
+            "spatialSummary": {
+              "spatialResourceCount": 4,
+              "missingSpatialResourceCount": 4,
+              "totalBounds": [
+                80.18,
+                39.78,
+                89.24,
+                43.12
+              ],
+              "resourceExtents": [
+                {
+                  "resourceId": 15,
+                  "name": "塔里木河流域胡杨林分布范围",
+                  "dataType": "vector",
+                  "bounds": [
+                    80.18,
+                    39.78,
+                    89.24,
+                    43.12
+                  ],
+                  "center": [
+                    84.71,
+                    41.45
+                  ],
+                  "coverageAreaKm2": 277365.48,
+                  "sizeBytes": 245760,
+                  "itemCount": 128,
+                  "coordinateSystem": "EPSG:4326",
+                  "uploaderName": "李数据管理员",
+                  "updatedAt": "2026-06-12T16:10:00+08:00"
+                },
+                {
+                  "resourceId": 12,
+                  "name": "Traim",
+                  "dataType": "raster",
+                  "bounds": [
+                    88.328434,
+                    40.079174,
+                    88.401642,
+                    40.160831
+                  ],
+                  "center": [
+                    88.365038,
+                    40.120003
+                  ],
+                  "coverageAreaKm2": 56.95,
+                  "sizeBytes": 138412032,
+                  "itemCount": 1,
+                  "coordinateSystem": "EPSG:3857",
+                  "uploaderName": "李数据管理员",
+                  "updatedAt": "2026-06-07T11:34:08+08:00"
+                },
+                {
+                  "resourceId": 11,
+                  "name": "塔里木河胡杨林样地监测点",
+                  "dataType": "vector",
+                  "bounds": [
+                    84.88,
+                    40.46,
+                    85.36,
+                    40.88
+                  ],
+                  "center": [
+                    85.12,
+                    40.67
+                  ],
+                  "coverageAreaKm2": 2117.42,
+                  "sizeBytes": 245760,
+                  "itemCount": 126,
+                  "coordinateSystem": "EPSG:4326",
+                  "uploaderName": "系统管理员",
+                  "updatedAt": "2026-06-14T09:20:00+08:00"
+                }
+              ],
+              "resourceExtentsTruncated": false,
+              "coverageRanking": [
+                {
+                  "resourceId": 15,
+                  "name": "塔里木河流域胡杨林分布范围",
+                  "dataType": "vector",
+                  "bounds": [
+                    80.18,
+                    39.78,
+                    89.24,
+                    43.12
+                  ],
+                  "center": [
+                    84.71,
+                    41.45
+                  ],
+                  "coverageAreaKm2": 277365.48,
+                  "sizeBytes": 245760,
+                  "itemCount": 128,
+                  "coordinateSystem": "EPSG:4326",
+                  "uploaderName": "李数据管理员",
+                  "updatedAt": "2026-06-12T16:10:00+08:00"
+                },
+                {
+                  "resourceId": 11,
+                  "name": "塔里木河胡杨林样地监测点",
+                  "dataType": "vector",
+                  "bounds": [
+                    84.88,
+                    40.46,
+                    85.36,
+                    40.88
+                  ],
+                  "center": [
+                    85.12,
+                    40.67
+                  ],
+                  "coverageAreaKm2": 2117.42,
+                  "sizeBytes": 245760,
+                  "itemCount": 126,
+                  "coordinateSystem": "EPSG:4326",
+                  "uploaderName": "系统管理员",
+                  "updatedAt": "2026-06-14T09:20:00+08:00"
+                },
+                {
+                  "resourceId": 12,
+                  "name": "Traim",
+                  "dataType": "raster",
+                  "bounds": [
+                    88.328434,
+                    40.079174,
+                    88.401642,
+                    40.160831
+                  ],
+                  "center": [
+                    88.365038,
+                    40.120003
+                  ],
+                  "coverageAreaKm2": 56.95,
+                  "sizeBytes": 138412032,
+                  "itemCount": 1,
+                  "coordinateSystem": "EPSG:3857",
+                  "uploaderName": "李数据管理员",
+                  "updatedAt": "2026-06-07T11:34:08+08:00"
+                }
+              ],
+              "heatmapCells": [
+                {
+                  "column": 4,
+                  "row": 2,
+                  "bounds": [
+                    84.71,
+                    41.116,
+                    85.8425,
+                    41.784
+                  ],
+                  "resourceCount": 1,
+                  "itemCount": 128
+                },
+                {
+                  "column": 4,
+                  "row": 1,
+                  "bounds": [
+                    84.71,
+                    40.448,
+                    85.8425,
+                    41.116
+                  ],
+                  "resourceCount": 1,
+                  "itemCount": 126
+                },
+                {
+                  "column": 7,
+                  "row": 0,
+                  "bounds": [
+                    88.1075,
+                    39.78,
+                    89.24,
+                    40.448
+                  ],
+                  "resourceCount": 1,
+                  "itemCount": 1
+                }
+              ]
+            }
+          },
+          "uploaders": [
+            {
+              "user": {
+                "id": 1,
+                "username": "ops_manager",
+                "displayName": "系统管理员"
+              },
+              "resourceCount": 3,
+              "sizeBytes": 246579,
+              "itemCount": 128
+            },
+            {
+              "user": {
+                "id": 2,
+                "username": "data_admin",
+                "displayName": "李数据管理员"
+              },
+              "resourceCount": 3,
+              "sizeBytes": 276643840,
+              "itemCount": 129
+            }
+          ]
+        },
+        "users": {
+          "total": 4,
+          "active": 3,
+          "disabled": 1,
+          "groups": 4,
+          "vectorResources": 2,
+          "tableResources": 2
+        },
+        "activeUsers": {
+          "period": "day",
+          "rangeStart": "2026-06-14",
+          "rangeEnd": "2026-06-14",
+          "count": 2,
+          "loginCount": 5,
+          "series": [
+            {
+              "key": "09",
+              "label": "09:00",
+              "count": 2
+            },
+            {
+              "key": "10",
+              "label": "10:00",
+              "count": 1
+            }
+          ],
+          "ranking": [
+            {
+              "userId": 1,
+              "displayName": "系统管理员",
+              "username": "ops_manager",
+              "loginCount": 3
+            }
+          ]
+        }
+      }
+    }
+  },
+  "GET /api/admin/dashboard/server/": {
+    "200": {
+      "generatedAt": "2026-06-14T09:35:05+08:00",
+      "hostname": "mock-dev",
+      "platform": "Darwin arm64",
+      "cards": {
+        "cpu": {
+          "model": "Apple Silicon",
+          "physicalCount": 8,
+          "logicalCount": 8,
+          "usagePercent": 18.5,
+          "loadAverage": [
+            1.12,
+            1.05,
+            0.98
+          ]
+        },
+        "memory": {
+          "model": "Unified Memory",
+          "slotCount": 1,
+          "totalBytes": 34359738368,
+          "usedBytes": 12884901888,
+          "availableBytes": 21474836480,
+          "usagePercent": 37.5
+        },
+        "disks": {
+          "count": 1,
+          "devices": [
+            {
+              "name": "disk0",
+              "model": "APPLE SSD",
+              "size": "1 TB"
+            }
+          ],
+          "mount": "/",
+          "totalBytes": 1000000000000,
+          "usedBytes": 420000000000,
+          "freeBytes": 580000000000,
+          "usagePercent": 42
+        },
+        "gpu": {
+          "available": true,
+          "count": 2,
+          "totalMemoryMiB": 49152,
+          "usedMemoryMiB": 12288,
+          "utilizationPercent": 25,
+          "devices": [
+            {
+              "index": 0,
+              "name": "NVIDIA RTX 4090",
+              "memoryTotalMiB": 24576,
+              "memoryUsedMiB": 6144,
+              "utilizationPercent": 25
+            },
+            {
+              "index": 1,
+              "name": "NVIDIA RTX 4090",
+              "memoryTotalMiB": 24576,
+              "memoryUsedMiB": 6144,
+              "utilizationPercent": 25
+            }
+          ]
+        }
+      }
+    }
+  },
+  "GET /api/admin/data/resources/": {
+    "200": {
+      "items": [
+        {
+          "id": 11,
+          "name": "塔里木河胡杨林样地监测点",
+          "code": "RES-POPULUS-PLOTS",
+          "dataType": "vector",
+          "domainType": "field_survey",
+          "category": {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          },
+          "categoryPath": [
+            {
+              "id": 101,
+              "code": "spatial",
+              "name": "地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "source": "塔里木河野外调查",
+          "provider": "生态监测组",
+          "dataDate": "2026-05-20",
+          "spatialExtent": "塔里木河中游",
+          "coordinateSystem": "EPSG:4326",
+          "fileFormat": "GPKG",
+          "storagePath": "populus_monitoring_plots",
+          "description": "胡杨林样地监测点及冠幅、胸径、健康等级属性。",
+          "qualityNote": "坐标经人工抽查，字段完整率 98%。",
+          "defaultVisualization": {
+            "layerName": "样地监测点",
+            "defaultVisible": true
+          },
+          "inventoryGroupId": 1,
+          "status": "active",
+          "accessGroups": [
+            {
+              "id": 3,
+              "name": "科研用户",
+              "isGuest": false,
+              "isSuperadmin": false
+            }
+          ],
+          "canManageAccess": true,
+          "maintainer": "系统管理员",
+          "createdAt": "2026-06-01T10:00:00+08:00",
+          "updatedAt": "2026-06-14T09:20:00+08:00",
+          "defaultLayer": {
+            "id": 21,
+            "name": "样地监测点",
+            "code": "LAYER-POPULUS-PLOTS",
+            "layerType": "vector",
+            "geometryType": "point",
+            "defaultVisible": true,
+            "defaultOpacity": 90,
+            "symbolization": {
+              "color": "#1d7f45",
+              "radius": 6
+            },
+            "rasterRules": {},
+            "isActive": true
+          },
+          "sizeBytes": 245760,
+          "itemCount": 126,
+          "uploader": {
+            "id": 1,
+            "username": "ops_manager",
+            "displayName": "系统管理员"
+          },
+          "projectTagId": 1
+        },
+        {
+          "id": 12,
+          "name": "Traim",
+          "code": "raster-91d2a5ecd116",
+          "dataType": "raster",
+          "domainType": "remote_sensing",
+          "category": {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          },
+          "categoryPath": [
+            {
+              "id": 101,
+              "code": "spatial",
+              "name": "地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "source": "栅格导入",
+          "provider": "生态监测组",
+          "dataDate": null,
+          "spatialExtent": "88.328434,40.079174,88.401642,40.160831",
+          "coordinateSystem": "EPSG:3857",
+          "fileFormat": "COG",
+          "storagePath": "原始影像/Traim.cog.tif",
+          "description": "源文件：原始影像/Traim.tif",
+          "qualityNote": "导入时使用 gdalwarp 统一投影到 EPSG:3857 并输出 COG。",
+          "defaultVisualization": {
+            "layerName": "Traim 原始影像",
+            "defaultVisible": false,
+            "defaultOpacity": 90
+          },
+          "inventoryGroupId": 2,
+          "status": "active",
+          "accessGroups": [
+            {
+              "id": 3,
+              "name": "科研用户",
+              "isGuest": false,
+              "isSuperadmin": false
+            },
+            {
+              "id": 4,
+              "name": "数据管理员",
+              "isGuest": false,
+              "isSuperadmin": false
+            }
+          ],
+          "canManageAccess": true,
+          "maintainer": "李数据管理员",
+          "createdAt": "2026-06-07T11:32:47+08:00",
+          "updatedAt": "2026-06-07T11:34:08+08:00",
+          "defaultLayer": {
+            "id": 1,
+            "name": "Traim",
+            "code": "raster-91d2a5ecd116",
+            "layerType": "raster",
+            "geometryType": "mixed",
+            "defaultVisible": false,
+            "defaultOpacity": 90,
+            "symbolization": {},
+            "rasterRules": {
+              "mode": "rgb",
+              "bands": [
+                1,
+                2,
+                3
+              ]
+            },
+            "isActive": true
+          },
+          "sizeBytes": 138412032,
+          "itemCount": 1,
+          "uploader": {
+            "id": 2,
+            "username": "data_admin",
+            "displayName": "李数据管理员"
+          },
+          "projectTagId": 1
+        },
+        {
+          "id": 13,
+          "name": "胡杨样地生长指标表",
+          "code": "table-populus-growth-2026",
+          "dataType": "table",
+          "domainType": "individual",
+          "category": {
+            "id": 102,
+            "code": "non_spatial",
+            "name": "非地理数据"
+          },
+          "categoryPath": [
+            {
+              "id": 102,
+              "code": "non_spatial",
+              "name": "非地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "source": "塔里木河野外调查",
+          "provider": "生态监测组",
+          "dataDate": "2026-05-21",
+          "spatialExtent": "塔里木河中游",
+          "coordinateSystem": "",
+          "fileFormat": "SQLite",
+          "storagePath": "populus_growth_2026",
+          "description": "样地胸径、冠幅、健康等级和地下水位观测表。",
+          "qualityNote": "非空间表，字段完整率 96%。",
+          "defaultVisualization": {},
+          "inventoryGroupId": null,
+          "status": "inactive",
+          "accessGroups": [
+            {
+              "id": 5,
+              "name": "游客",
+              "isGuest": true,
+              "isSuperadmin": false
+            },
+            {
+              "id": 4,
+              "name": "数据管理员",
+              "isGuest": false,
+              "isSuperadmin": false
+            }
+          ],
+          "canManageAccess": true,
+          "maintainer": "李数据管理员",
+          "createdAt": "2026-06-10T15:20:00+08:00",
+          "updatedAt": "2026-06-11T10:15:00+08:00",
+          "defaultLayer": null,
+          "sizeBytes": 32768,
+          "itemCount": 128,
+          "uploader": {
+            "id": 2,
+            "username": "data_admin",
+            "displayName": "李数据管理员"
+          },
+          "projectTagId": 1
+        }
+      ],
+      "total": 3,
+      "summary": {
+        "total": 3,
+        "activeCount": 2,
+        "inactiveCount": 1,
+        "restrictedCount": 3,
+        "sizeBytes": 138690560,
+        "itemCount": 255
+      },
+      "groupSummaries": [
+        {
+          "key": "__all__",
+          "kind": "all",
+          "domainType": null,
+          "categoryCode": null,
+          "inventoryGroupId": null,
+          "resourceCount": 3,
+          "activeCount": 2,
+          "inactiveCount": 1,
+          "sizeBytes": 138690560,
+          "itemCount": 255
+        },
+        {
+          "key": "__category__:distribution",
+          "kind": "category",
+          "domainType": null,
+          "categoryCode": "distribution",
+          "inventoryGroupId": null,
+          "resourceCount": 1,
+          "activeCount": 1,
+          "inactiveCount": 0,
+          "sizeBytes": 245760,
+          "itemCount": 126
+        },
+        {
+          "key": "__category__:distribution_vector",
+          "kind": "category",
+          "domainType": null,
+          "categoryCode": "distribution_vector",
+          "inventoryGroupId": null,
+          "resourceCount": 1,
+          "activeCount": 1,
+          "inactiveCount": 0,
+          "sizeBytes": 245760,
+          "itemCount": 126
+        },
+        {
+          "key": "__category__:thematic",
+          "kind": "category",
+          "domainType": null,
+          "categoryCode": "thematic",
+          "inventoryGroupId": null,
+          "resourceCount": 1,
+          "activeCount": 0,
+          "inactiveCount": 1,
+          "sizeBytes": 32768,
+          "itemCount": 128
+        },
+        {
+          "key": "__category__:thematic_individual",
+          "kind": "category",
+          "domainType": null,
+          "categoryCode": "thematic_individual",
+          "inventoryGroupId": null,
+          "resourceCount": 1,
+          "activeCount": 0,
+          "inactiveCount": 1,
+          "sizeBytes": 32768,
+          "itemCount": 128
+        },
+        {
+          "key": "__unclassified__",
+          "kind": "unclassified",
+          "domainType": null,
+          "categoryCode": null,
+          "inventoryGroupId": null,
+          "resourceCount": 1,
+          "activeCount": 1,
+          "inactiveCount": 0,
+          "sizeBytes": 138412032,
+          "itemCount": 1
+        },
+        {
+          "key": "__custom__:1",
+          "kind": "custom",
+          "domainType": null,
+          "categoryCode": null,
+          "inventoryGroupId": 1,
+          "resourceCount": 1,
+          "activeCount": 1,
+          "inactiveCount": 0,
+          "sizeBytes": 245760,
+          "itemCount": 126
+        },
+        {
+          "key": "__custom__:2",
+          "kind": "custom",
+          "domainType": null,
+          "categoryCode": null,
+          "inventoryGroupId": 2,
+          "resourceCount": 1,
+          "activeCount": 1,
+          "inactiveCount": 0,
+          "sizeBytes": 138412032,
+          "itemCount": 1
+        }
+      ],
+      "availableAccessGroups": [
+        {
+          "id": 2,
+          "name": "普通用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        },
+        {
+          "id": 3,
+          "name": "科研用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        },
+        {
+          "id": 5,
+          "name": "游客",
+          "isGuest": true,
+          "isSuperadmin": false
+        }
+      ],
+      "inventoryGroups": [
+        {
+          "id": 1,
+          "name": "野外样地数据",
+          "createdAt": "2026-06-01T10:00:00+08:00",
+          "updatedAt": "2026-06-01T10:00:00+08:00"
+        },
+        {
+          "id": 2,
+          "name": "遥感影像数据",
+          "createdAt": "2026-06-01T10:05:00+08:00",
+          "updatedAt": "2026-06-01T10:05:00+08:00"
+        }
+      ]
+    }
+  },
+  "POST /api/admin/data/resources/{id}/": {
+    "200": {
+      "detail": "数据资源已更新"
+    }
+  }
+}

@@ -1,0 +1,287 @@
+{
+  "GET /api/catalog/map-compositions/": {
+    "200": {
+      "items": [
+        {
+          "id": 11,
+          "projectId": 1,
+          "projectName": "塔里木河样地工程",
+          "name": "塔里木河胡杨样地分布图",
+          "description": "包含区位副图、经纬网、数据来源和制图说明",
+          "status": "completed",
+          "layout": {
+            "version": 1,
+            "page": {
+              "preset": "A4",
+              "orientation": "landscape",
+              "widthMm": 297,
+              "heightMm": 210,
+              "dpi": 300,
+              "backgroundColor": "#ffffff"
+            },
+            "mapFrame": {
+              "xMm": 14,
+              "yMm": 28,
+              "widthMm": 210,
+              "heightMm": 150,
+              "bounds": [
+                87.4,
+                43.6,
+                87.8,
+                44.0
+              ]
+            },
+            "grid": {
+              "enabled": true,
+              "type": "geographic",
+              "interval": 0.1
+            },
+            "overview": {
+              "enabled": true,
+              "bounds": [
+                50,
+                35,
+                100,
+                48
+              ]
+            }
+          },
+          "owner": {
+            "id": 1,
+            "username": "admin",
+            "displayName": "系统管理员"
+          },
+          "audienceGroups": [],
+          "currentVersion": {
+            "id": 31,
+            "compositionId": 11,
+            "versionNumber": 1,
+            "format": "pdf",
+            "dpi": 300,
+            "widthPx": 3508,
+            "heightPx": 2480,
+            "note": "第一版正式成果",
+            "snapshotSchemaVersion": 2,
+            "snapshotChecksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "previewUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=preview",
+            "downloadUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=artifact",
+            "createdAt": "2026-07-14T15:30:00+08:00"
+          },
+          "versions": [
+            {
+              "id": 31,
+              "compositionId": 11,
+              "versionNumber": 1,
+              "format": "pdf",
+              "dpi": 300,
+              "widthPx": 3508,
+              "heightPx": 2480,
+              "note": "第一版正式成果",
+              "snapshotSchemaVersion": 2,
+              "snapshotChecksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "previewUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=preview",
+              "downloadUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=artifact",
+              "createdAt": "2026-07-14T15:30:00+08:00"
+            }
+          ],
+          "isOwner": true,
+          "canPreview": true,
+          "canDownload": true,
+          "canEditLayout": true,
+          "canPublish": true,
+          "canUnpublish": false,
+          "canRestoreProject": true,
+          "canLoadSourceProject": true,
+          "canDelete": true,
+          "createdAt": "2026-07-14T14:00:00+08:00",
+          "updatedAt": "2026-07-14T15:30:00+08:00"
+        }
+      ],
+      "availableAudienceGroups": [
+        {
+          "id": 3,
+          "name": "科研用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        }
+      ]
+    }
+  },
+  "POST /api/catalog/map-compositions/": {
+    "201": {
+      "id": 12,
+      "projectId": 1,
+      "projectName": "塔里木河样地工程",
+      "name": "胡杨样地监测专题图",
+      "description": "A4 横版专题图",
+      "status": "draft",
+      "layout": {
+        "version": 1,
+        "page": {
+          "preset": "A4",
+          "orientation": "landscape",
+          "widthMm": 297,
+          "heightMm": 210,
+          "dpi": 300,
+          "backgroundColor": "#ffffff"
+        }
+      },
+      "owner": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员"
+      },
+      "audienceGroups": [],
+      "currentVersion": null,
+      "publishedVersion": null,
+      "versions": [],
+      "isOwner": true,
+      "canPreview": false,
+      "canDownload": false,
+      "canEditLayout": true,
+      "canPublish": false,
+      "canUnpublish": false,
+      "canRestoreProject": false,
+      "canLoadSourceProject": true,
+      "canDelete": true,
+      "createdAt": "2026-07-14T16:00:00+08:00",
+      "updatedAt": "2026-07-14T16:00:00+08:00"
+    }
+  },
+  "GET /api/catalog/map-compositions/{compositionId}/": {
+    "200": {
+      "id": 11,
+      "projectId": 1,
+      "projectName": "塔里木河样地工程",
+      "name": "塔里木河胡杨样地分布图",
+      "description": "包含区位副图、经纬网、数据来源和制图说明",
+      "status": "completed",
+      "layout": {
+        "version": 1
+      },
+      "owner": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员"
+      },
+      "audienceGroups": [],
+      "currentVersion": null,
+      "publishedVersion": null,
+      "versions": [],
+      "isOwner": true,
+      "canPreview": false,
+      "canDownload": false,
+      "canEditLayout": true,
+      "canPublish": false,
+      "canUnpublish": false,
+      "canRestoreProject": false,
+      "canLoadSourceProject": true,
+      "canDelete": true,
+      "createdAt": "2026-07-14T14:00:00+08:00",
+      "updatedAt": "2026-07-14T15:30:00+08:00"
+    }
+  },
+  "POST /api/catalog/map-compositions/{compositionId}/": {
+    "200": {
+      "id": 11,
+      "projectId": 1,
+      "projectName": "塔里木河样地工程",
+      "name": "塔里木河胡杨样地分布图（修订）",
+      "description": "已更新制图说明",
+      "status": "published",
+      "layout": {
+        "version": 1
+      },
+      "owner": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员"
+      },
+      "audienceGroups": [
+        {
+          "id": 3,
+          "name": "科研用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        }
+      ],
+      "currentVersion": null,
+      "publishedVersion": null,
+      "versions": [],
+      "isOwner": true,
+      "canPreview": false,
+      "canDownload": false,
+      "canEditLayout": true,
+      "canPublish": false,
+      "canUnpublish": true,
+      "canRestoreProject": false,
+      "canLoadSourceProject": true,
+      "canDelete": true,
+      "createdAt": "2026-07-14T14:00:00+08:00",
+      "updatedAt": "2026-07-14T16:20:00+08:00"
+    }
+  },
+  "POST /api/catalog/map-compositions/{compositionId}/versions/": {
+    "201": {
+      "id": 32,
+      "compositionId": 11,
+      "versionNumber": 2,
+      "format": "png",
+      "dpi": 300,
+      "widthPx": 3508,
+      "heightPx": 2480,
+      "note": "更新图例和数据来源",
+      "snapshotSchemaVersion": 2,
+      "snapshotChecksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "previewUrl": "/api/catalog/map-compositions/11/versions/2/file/?variant=preview",
+      "downloadUrl": "/api/catalog/map-compositions/11/versions/2/file/?variant=artifact",
+      "createdAt": "2026-07-14T16:30:00+08:00"
+    }
+  },
+  "POST /api/catalog/map-compositions/{compositionId}/publish/": {
+    "200": {
+      "id": 11,
+      "projectId": 1,
+      "projectName": "塔里木河样地工程",
+      "name": "塔里木河胡杨样地分布图",
+      "description": "正式发布",
+      "status": "published",
+      "layout": {
+        "version": 1
+      },
+      "owner": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员"
+      },
+      "audienceGroups": [
+        {
+          "id": 3,
+          "name": "科研用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        }
+      ],
+      "currentVersion": null,
+      "publishedVersion": null,
+      "versions": [],
+      "isOwner": true,
+      "canPreview": false,
+      "canDownload": false,
+      "canEditLayout": true,
+      "canPublish": true,
+      "canUnpublish": true,
+      "canRestoreProject": false,
+      "canLoadSourceProject": true,
+      "canDelete": true,
+      "publishedAt": "2026-07-14T16:40:00+08:00",
+      "publishedBy": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员"
+      },
+      "createdAt": "2026-07-14T14:00:00+08:00",
+      "updatedAt": "2026-07-14T16:40:00+08:00"
+    }
+  }
+}

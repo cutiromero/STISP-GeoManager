@@ -1,0 +1,74 @@
+[runtime]
+debug = false
+allowed_hosts = ["localhost", "127.0.0.1"]
+csrf_trusted_origins = []
+waitress_host = "0.0.0.0"
+waitress_port = 8000
+waitress_threads = 2
+disable_catalog_startup_scan = true
+disable_raster_startup_scan = true
+
+[application.system]
+name = "时空智能服务平台"
+allow_registration = true
+
+[application.storage]
+app_data = "/path/to/data/appdata"
+research_data_root = "/path/to/data/research"
+
+[application.map]
+default_center = [80.0, 41.5]
+default_zoom = 4.5
+default_basemap = "satellite"
+mapbox_access_token = ""
+tianditu_access_token = ""
+
+[application.limits]
+# 安全默认值；完成代理、磁盘和超时配置后可在后台提高，硬上限为 1024 MB。
+upload_max_mb = 64
+query_result_limit = 5000
+max_raster_side_pixels = 12000
+
+[application.raster]
+symbolizer_timeout_seconds = 120
+
+# 计算中心可选择 native（当前 AutoDL 兼容）或 docker（隔离强度更高）。
+# native 使用本机 Python 子进程执行 deploy/compute/runner.py。
+[compute]
+mode = "native"
+interpreter = ""
+command = ["docker"]
+image = "geomanager-compute:1"
+memory_mb = 2048
+timeout_seconds = 1800
+input_mb = 1024
+output_mb = 1024
+retention_days = 7
+user_queue = 3
+global_queue = 20
+
+[application.backup.local]
+directory = ""
+
+[application.backup.object_storage]
+provider = "s3_compatible"
+endpoint = ""
+region = ""
+bucket = ""
+prefix = ""
+access_key_id = ""
+secret_access_key = ""
+
+[application.backup.plans.platform]
+enabled = false
+daily_at = "03:00"
+target = "object_storage"
+retention_count = 14
+include_logs = false
+
+[application.backup.plans.research]
+enabled = false
+daily_at = "02:00"
+target = "object_storage"
+retention_count = 7
+include_logs = false

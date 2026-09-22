@@ -1,0 +1,34 @@
+[workspace]
+name = "geomanager"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64", "win-64"]
+
+[dependencies]
+django = ">=6.0,<7.0"
+fiona = "*"
+gdal = "*"
+geopandas = ">=1.0"
+libgdal-arrow-parquet = "*"
+numba = "*"
+openpyxl = ">=3.1"
+pandas = "*"
+pillow = ">=11.0"
+pip = "*"
+pyarrow = "*"
+pytest = ">=9.0"
+pytest-django = ">=4.12"
+python = "3.14.*"
+rasterio = ">=1.4"
+ruff = "*"
+tomlkit = ">=0.13"
+waitress = "*"
+whitenoise = ">=6.8"
+xlrd = ">=2.0"
+pyyaml = ">=6,<7"
+
+[tasks]
+test = "python -m pytest"
+format = "ruff format ."
+lint = "ruff check ."
+migrate = "python manage.py migrate --config ../config/app.test.toml"
+dev = "python manage.py runserver --config ../config/app.test.toml"

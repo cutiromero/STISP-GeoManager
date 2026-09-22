@@ -1,0 +1,80 @@
+.composition-canvas {
+  width: 100%;
+  min-width: 0;
+}
+.composition-canvas-tools {
+  padding: 8px;
+  background: #fff;
+  border-bottom: 1px solid #d6e2ec;
+}
+.composition-canvas-scroll {
+  overflow: auto;
+  padding: 24px;
+  background: #e8edf3;
+  max-height: 62vh;
+}
+.composition-editable-paper {
+  position: relative;
+  min-width: 280px;
+  box-shadow: 0 4px 20px #182d4826;
+  overflow: hidden;
+}
+.composition-canvas-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.composition-element {
+  position: absolute;
+  box-sizing: border-box;
+  touch-action: none;
+  cursor: move;
+  border: 1px solid transparent;
+}
+.composition-element:hover {
+  border-color: #539ee7;
+}
+.composition-element.selected {
+  border: 2px solid #1677ff;
+  background: #1677ff0a;
+}
+.composition-element.locked {
+  cursor: default;
+}
+.composition-element-name {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 1px 4px;
+  color: #fff;
+  background: #1677ff;
+  font-size: 10px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.composition-resize-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  bottom: 0;
+  right: 0;
+  background: #1677ff;
+  border: 1px solid #fff;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.composition-selection-properties {
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  background: #fff;
+}
+.composition-selection-properties fieldset {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}

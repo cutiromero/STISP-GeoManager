@@ -1,0 +1,20 @@
+{
+  "GET /api/agent/bootstrap/": {
+    "200": {
+      "canChat": true,
+      "canAgent": true,
+      "canManage": false,
+      "workerOnline": true,
+      "thinkingEnabled": true,
+      "internetEnabled": false,
+      "allowAttachments": true,
+      "models": [{"alias": "mock", "name": "本地开发模拟模型", "allowAgent": true, "contextWindowTokens": 32768, "supportsThinking": true, "supportsVision": true, "status": "online", "checkedAt": "2026-09-20T12:00:00Z"}],
+      "defaultChatModel": "mock",
+      "defaultAgentModel": "mock",
+      "capabilities": ["chat", "read_data", "analyze_data"]
+    }
+  },
+  "GET /api/agent/conversations/": {"200": {"items": []}},
+  "GET /api/agent/resources/": {"200": {"items": []}},
+  "POST /api/agent/attachments/": {"201": {"id": 1, "fileName": "sample.png", "mediaType": "image/png", "sizeBytes": 2048, "kind": "image", "previewUrl": "", "extractedText": "", "createdAt": "2026-09-21T10:00:00Z"}}
+}

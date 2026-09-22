@@ -1,0 +1,110 @@
+{
+  "GET /api/login/overview/": {
+    "200": {
+      "generatedAt": "2026-06-15T10:30:00+08:00",
+      "platform": {
+        "chineseName": "时空智能服务平台",
+        "englishName": "Spatiotemporal Intelligence Service Platform",
+        "abbreviation": "STISP",
+        "edition": "STISP · Spatiotemporal Services Edition",
+        "version": "v1.0.0"
+      },
+      "hero": {
+        "badge": "生态保护数据共享平台",
+        "summary": "平台集成遥感影像、空间矢量、野外样方、长期监测与生态专题数据，提供统一编目、三维地理可视化、综合查询分析和共享服务。",
+        "capabilityTags": [
+          "遥感影像",
+          "矢量边界",
+          "野外样方",
+          "长期监测",
+          "生态专题"
+        ]
+      },
+      "metrics": [
+        {
+          "id": "dataResources",
+          "label": "平台数据资源",
+          "value": 1286,
+          "displayValue": "1,286",
+          "note": "平台已接入总量，登录后按权限显示",
+          "updatedAt": "2026-06-15T10:30:00+08:00"
+        },
+        {
+          "id": "thematicLayers",
+          "label": "专题图层",
+          "value": 37,
+          "displayValue": "37",
+          "note": "生态保护专题",
+          "updatedAt": "2026-06-15T10:30:00+08:00"
+        },
+        {
+          "id": "monitoringSites",
+          "label": "监测站点",
+          "value": 94,
+          "displayValue": "94",
+          "note": "长期观测网络",
+          "updatedAt": "2026-06-15T10:30:00+08:00"
+        },
+        {
+          "id": "coveredBasins",
+          "label": "覆盖流域",
+          "value": 12,
+          "displayValue": "12",
+          "note": "中亚重点区域",
+          "updatedAt": "2026-06-15T10:30:00+08:00"
+        }
+      ],
+      "serviceStatus": {
+        "title": "平台服务状态",
+        "headline": "资源目录已接入 · 图层服务可用 · 权限认证开启",
+        "description": "登录后可按账号权限进入数据目录、地图工作台与后台管理功能。",
+        "services": [
+          {
+            "id": "resourceCatalog",
+            "label": "资源目录",
+            "status": "normal",
+            "description": "已完成公开资源目录索引统计。"
+          },
+          {
+            "id": "layerService",
+            "label": "图层服务",
+            "status": "normal",
+            "description": "地图图层服务当前可用。"
+          },
+          {
+            "id": "permissionGateway",
+            "label": "权限认证",
+            "status": "normal",
+            "description": "统一身份认证与权限控制已开启。"
+          }
+        ],
+        "nodeSummary": {
+          "total": 3,
+          "normal": 3,
+          "warning": 0,
+          "risk": 0,
+          "legend": [
+            {
+              "status": "normal",
+              "label": "正常",
+              "count": 3
+            },
+            {
+              "status": "warning",
+              "label": "待同步",
+              "count": 0
+            },
+            {
+              "status": "risk",
+              "label": "异常",
+              "count": 0
+            }
+          ]
+        }
+      },
+      "footer": {
+        "statisticsNotice": "统计口径已接入后端平台概览接口"
+      }
+    }
+  }
+}

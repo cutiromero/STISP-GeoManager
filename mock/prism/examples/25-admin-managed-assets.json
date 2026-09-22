@@ -1,0 +1,131 @@
+{
+  "GET /api/admin/workspaces/": {
+    "200": {
+      "items": [
+        {
+          "id": 1,
+          "kind": "project",
+          "name": "塔里木河样地工程",
+          "description": "样地监测点和遥感底图组合",
+          "snapshot": {
+            "version": 1,
+            "groups": [],
+            "selectedLayerId": null,
+            "mapView": {
+              "center": [
+                87.62,
+                43.8
+              ],
+              "bounds": [
+                87.4,
+                43.6,
+                87.8,
+                44
+              ],
+              "zoom": 8.4,
+              "bearing": 0,
+              "pitch": 18
+            },
+            "savedAt": "2026-06-16T10:20:00+08:00"
+          },
+          "owner": {
+            "id": 1,
+            "username": "admin",
+            "displayName": "系统管理员"
+          },
+          "createdAt": "2026-06-16T10:20:00+08:00",
+          "updatedAt": "2026-06-18T09:15:00+08:00",
+          "status": "active",
+          "accessGroups": [
+            {
+              "id": 2,
+              "name": "普通用户",
+              "isGuest": false,
+              "isSuperadmin": false
+            }
+          ],
+          "isOwner": true,
+          "canEdit": true,
+          "canDelete": true,
+          "canManageAccess": true
+        },
+        {
+          "id": 2,
+          "kind": "topic",
+          "name": "胡杨林密度专题",
+          "description": "点密度热力图专题",
+          "snapshot": {
+            "version": 1,
+            "groups": [],
+            "selectedLayerId": null,
+            "mapView": null,
+            "savedAt": "2026-06-17T14:35:00+08:00"
+          },
+          "owner": {
+            "id": 8,
+            "username": "researcher_chen",
+            "displayName": "陈研究员"
+          },
+          "createdAt": "2026-06-17T14:35:00+08:00",
+          "updatedAt": "2026-06-17T14:35:00+08:00",
+          "status": "inactive",
+          "accessGroups": [],
+          "isOwner": false,
+          "canEdit": false,
+          "canDelete": false,
+          "canManageAccess": true
+        }
+      ],
+      "total": 2,
+      "availableAccessGroups": [
+        {
+          "id": 2,
+          "name": "普通用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        },
+        {
+          "id": 3,
+          "name": "游客",
+          "isGuest": true,
+          "isSuperadmin": false
+        }
+      ]
+    }
+  },
+  "POST /api/admin/workspaces/{workspaceId}/": {
+    "200": {
+      "id": 1,
+      "kind": "project",
+      "name": "塔里木河样地工程",
+      "description": "样地监测点和遥感底图组合",
+      "snapshot": {
+        "version": 1,
+        "groups": [],
+        "selectedLayerId": null,
+        "mapView": null,
+        "savedAt": "2026-06-16T10:20:00+08:00"
+      },
+      "owner": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员"
+      },
+      "createdAt": "2026-06-16T10:20:00+08:00",
+      "updatedAt": "2026-06-20T10:00:00+08:00",
+      "status": "active",
+      "accessGroups": [
+        {
+          "id": 2,
+          "name": "普通用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        }
+      ],
+      "isOwner": true,
+      "canEdit": true,
+      "canDelete": true,
+      "canManageAccess": true
+    }
+  }
+}

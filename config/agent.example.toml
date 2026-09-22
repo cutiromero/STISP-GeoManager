@@ -1,0 +1,40 @@
+# Merge into the server's existing TOML; never replace its paths or credentials.
+# The platform and model services are independent; no GPU/service startup changes.
+[[application.agent.models]]
+alias = "qwen27b"
+name = "Qwen3.8-27B"
+base_url = "http://127.0.0.1:19000/v1"
+model_id = "Qwen/Qwen3.8-27B"
+agent = true
+qwen = true
+# Set true only after a real image request has been accepted by this endpoint.
+vision = true
+context_window_tokens = 32768
+
+[[application.agent.models]]
+alias = "qwen9b"
+name = "Qwen3.5-9B"
+base_url = "http://127.0.0.1:19001/v1"
+model_id = "Qwen/Qwen3.5-9B"
+agent = false
+qwen = true
+vision = false
+context_window_tokens = 32768
+
+[[application.agent.models]]
+alias = "gemma12b"
+name = "Gemma 3 12B IT"
+base_url = "http://127.0.0.1:19002/v1"
+model_id = "google/gemma-3-12b-it"
+agent = false
+qwen = false
+context_window_tokens = 32768
+
+# Local development uses an isolated configuration and synthetic data:
+# [[application.agent.models]]
+# alias = "mock"
+# name = "本地开发模拟模型"
+# base_url = "http://127.0.0.1:19100/v1"
+# model_id = "mock-local"
+# agent = true
+# qwen = false

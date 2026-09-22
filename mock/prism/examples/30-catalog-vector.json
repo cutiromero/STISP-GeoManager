@@ -1,0 +1,1572 @@
+{
+  "GET /api/catalog/directories/": {
+    "200": {
+      "items": [
+        {
+          "id": 1,
+          "name": "矢量数据",
+          "code": "vector",
+          "parentId": null,
+          "resourceIds": [
+            3
+          ],
+          "children": []
+        },
+        {
+          "id": 2,
+          "name": "栅格数据",
+          "code": "raster",
+          "parentId": null,
+          "resourceIds": [
+            1,
+            2
+          ],
+          "children": [
+            {
+              "id": 21,
+              "name": "原始影像",
+              "code": "raster_original",
+              "parentId": 2,
+              "resourceIds": [
+                1
+              ],
+              "children": []
+            },
+            {
+              "id": 22,
+              "name": "胡杨提取结果",
+              "code": "raster_result",
+              "parentId": 2,
+              "resourceIds": [
+                2
+              ],
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "name": "表格数据",
+          "code": "table",
+          "parentId": null,
+          "resourceIds": [
+            13
+          ],
+          "children": []
+        }
+      ]
+    }
+  },
+  "GET /api/catalog/resources/": {
+    "200": {
+      "items": [
+        {
+          "id": 1,
+          "name": "Traim",
+          "code": "raster-91d2a5ecd116",
+          "dataType": "raster",
+          "spatialClass": "spatial",
+          "domainType": "remote_sensing",
+          "category": {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          },
+          "source": "栅格导入",
+          "provider": "",
+          "dataDate": null,
+          "spatialExtent": "88.328434,40.079174,88.401642,40.160831",
+          "coordinateSystem": "EPSG:3857",
+          "fileFormat": "COG",
+          "description": "源文件：原始影像/Traim.tif",
+          "qualityNote": "导入时使用 gdalwarp 统一投影到 EPSG:3857 并输出 COG。",
+          "status": "active",
+          "isQueryable": false,
+          "isRenderable": true,
+          "updatedAt": "2026-06-07T11:34:08.121395+00:00",
+          "sizeBytes": 138412032,
+          "itemCount": 1,
+          "categoryPath": [
+            {
+              "id": 101,
+              "code": "spatial",
+              "name": "地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "projectTagId": 1
+        },
+        {
+          "id": 2,
+          "name": "Traim_result",
+          "code": "raster-fa42b738b42f",
+          "dataType": "raster",
+          "spatialClass": "spatial",
+          "domainType": "remote_sensing",
+          "category": {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          },
+          "source": "栅格导入",
+          "provider": "",
+          "dataDate": null,
+          "spatialExtent": "88.328434,40.079174,88.401642,40.160831",
+          "coordinateSystem": "EPSG:3857",
+          "fileFormat": "COG",
+          "description": "源文件：胡杨提取结果/Traim_result.tif",
+          "qualityNote": "导入时使用 gdalwarp 统一投影到 EPSG:3857 并输出 COG。",
+          "status": "active",
+          "isQueryable": false,
+          "isRenderable": true,
+          "updatedAt": "2026-06-07T11:34:11.743237+00:00",
+          "sizeBytes": 138412032,
+          "itemCount": 1,
+          "categoryPath": [
+            {
+              "id": 101,
+              "code": "spatial",
+              "name": "地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "projectTagId": 1
+        },
+        {
+          "id": 3,
+          "name": "塔里木河胡杨样地监测点",
+          "code": "survey-points-2026",
+          "dataType": "vector",
+          "spatialClass": "spatial",
+          "domainType": "field_survey",
+          "category": {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          },
+          "source": "2026 塔里木河野外调查",
+          "provider": "生态监测组",
+          "dataDate": "2026-06-01",
+          "spatialExtent": "87.600000,43.795100,87.642800,43.812450",
+          "coordinateSystem": "EPSG:4326",
+          "fileFormat": "GPKG",
+          "description": "由 Excel/CSV 导入的地理样地监测点数据。",
+          "qualityNote": "坐标有效 3/3 行。",
+          "status": "active",
+          "isQueryable": true,
+          "isRenderable": false,
+          "updatedAt": "2026-06-18T12:30:00+08:00",
+          "sizeBytes": 245760,
+          "itemCount": 3,
+          "categoryPath": [
+            {
+              "id": 101,
+              "code": "spatial",
+              "name": "地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "projectTagId": 1
+        },
+        {
+          "id": 13,
+          "name": "胡杨群落生物多样性与功能性状数据表",
+          "code": "nongeo-poplar-community-traits-2024",
+          "dataType": "table",
+          "spatialClass": "non_spatial",
+          "domainType": "community",
+          "category": {
+            "id": 102,
+            "code": "non_spatial",
+            "name": "非地理数据"
+          },
+          "source": "2024 塔里木盆地野外调查",
+          "provider": "中亚胡杨林生态系统保护项目组",
+          "dataDate": "2024-09-30",
+          "spatialExtent": "塔里木盆地样区",
+          "coordinateSystem": "",
+          "fileFormat": "XLSX",
+          "description": "包含胡杨群落样方多样性、环境因子、物种功能性状和字段说明的非地理表格资源。",
+          "qualityNote": "已完成字段标准化预检，部分字段来自样方统计和实验测定。",
+          "status": "active",
+          "isQueryable": true,
+          "isRenderable": false,
+          "updatedAt": "2026-06-18T12:00:00+08:00",
+          "sizeBytes": 1087239,
+          "itemCount": 2927,
+          "categoryPath": [
+            {
+              "id": 102,
+              "code": "non_spatial",
+              "name": "非地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "projectTagId": 1
+        },
+        {
+          "id": 14,
+          "name": "胡杨林项目临时资料汇总表",
+          "code": "other-project-notes-2026",
+          "dataType": "table",
+          "spatialClass": "non_spatial",
+          "domainType": "other",
+          "category": {
+            "id": 102,
+            "code": "non_spatial",
+            "name": "非地理数据"
+          },
+          "source": "用户导入",
+          "provider": "中亚胡杨林生态系统保护项目组",
+          "dataDate": "2026-07-04",
+          "spatialExtent": "",
+          "coordinateSystem": "",
+          "fileFormat": "CSV",
+          "description": "暂未归入专门业务专题的项目资料，先按其他类型登记并保留字段说明。",
+          "qualityNote": "导入时未匹配到明确业务专题，可在后续数据治理中重新归类。",
+          "status": "active",
+          "isQueryable": true,
+          "isRenderable": false,
+          "updatedAt": "2026-07-04T10:20:00+08:00",
+          "sizeBytes": 18432,
+          "itemCount": 86,
+          "categoryPath": [
+            {
+              "id": 102,
+              "code": "non_spatial",
+              "name": "非地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "projectTagId": 1
+        }
+      ]
+    },
+    "400": {
+      "detail": "无效的数据业务类型"
+    }
+  },
+  "POST /api/catalog/scan/": {
+    "200": {
+      "items": [],
+      "count": 0
+    }
+  },
+  "GET /api/catalog/workspaces/": {
+    "200": {
+      "items": [
+        {
+          "id": 1,
+          "kind": "project",
+          "name": "塔里木河样地工程",
+          "description": "样地监测点和遥感底图组合",
+          "owner": {
+            "id": 1,
+            "username": "admin",
+            "displayName": "系统管理员"
+          },
+          "accessGroups": [
+            {
+              "id": 2,
+              "name": "普通用户",
+              "isGuest": false,
+              "isSuperadmin": false
+            }
+          ],
+          "isOwner": true,
+          "canEdit": true,
+          "canDelete": true,
+          "canManageAccess": true,
+          "createdAt": "2026-06-16T10:20:00+08:00",
+          "updatedAt": "2026-06-16T10:20:00+08:00"
+        }
+      ],
+      "availableAccessGroups": [
+        {
+          "id": 2,
+          "name": "普通用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        },
+        {
+          "id": 3,
+          "name": "游客",
+          "isGuest": true,
+          "isSuperadmin": false
+        }
+      ],
+      "total": 1,
+      "limit": 24,
+      "offset": 0
+    }
+  },
+  "POST /api/catalog/workspaces/": {
+    "201": {
+      "id": 2,
+      "kind": "topic",
+      "name": "胡杨林密度专题",
+      "description": "点密度热力图专题",
+      "snapshot": {
+        "version": 1,
+        "groups": [],
+        "selectedLayerId": null,
+        "mapView": null,
+        "savedAt": "2026-06-16T10:30:00+08:00"
+      },
+      "owner": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员"
+      },
+      "accessGroups": [],
+      "isOwner": true,
+      "canEdit": true,
+      "canDelete": true,
+      "canManageAccess": true,
+      "createdAt": "2026-06-16T10:30:00+08:00",
+      "updatedAt": "2026-06-16T10:30:00+08:00"
+    }
+  },
+  "GET /api/catalog/workspaces/{workspaceId}/": {
+    "200": {
+      "id": 1,
+      "kind": "project",
+      "name": "塔里木河样地工程",
+      "description": "样地监测点和遥感底图组合",
+      "snapshot": {
+        "version": 1,
+        "groups": [],
+        "selectedLayerId": null,
+        "mapView": null,
+        "savedAt": "2026-06-16T10:20:00+08:00"
+      },
+      "owner": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员"
+      },
+      "accessGroups": [
+        {
+          "id": 2,
+          "name": "普通用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        }
+      ],
+      "isOwner": true,
+      "canEdit": true,
+      "canDelete": true,
+      "canManageAccess": true,
+      "createdAt": "2026-06-16T10:20:00+08:00",
+      "updatedAt": "2026-06-16T10:20:00+08:00"
+    }
+  },
+  "POST /api/catalog/workspaces/{workspaceId}/": {
+    "200": {
+      "detail": "工程已删除"
+    }
+  },
+  "POST /api/catalog/import/preview/": {
+    "200": {
+      "columns": [
+        "样地编号",
+        "longitude",
+        "latitude",
+        "胸径_cm",
+        "冠幅_m",
+        "健康等级",
+        "调查日期"
+      ],
+      "rows": [
+        {
+          "样地编号": "TP-2026-001",
+          "longitude": "87.600000",
+          "latitude": "43.800000",
+          "胸径_cm": "32.5",
+          "冠幅_m": "7.8",
+          "健康等级": "良好",
+          "调查日期": "2026-05-20"
+        },
+        {
+          "样地编号": "TP-2026-002",
+          "longitude": "87.615320",
+          "latitude": "43.812450",
+          "胸径_cm": "28.1",
+          "冠幅_m": "6.4",
+          "健康等级": "一般",
+          "调查日期": "2026-05-20"
+        },
+        {
+          "样地编号": "TP-2026-003",
+          "longitude": "87.642800",
+          "latitude": "43.795100",
+          "胸径_cm": "35.7",
+          "冠幅_m": "8.1",
+          "健康等级": "良好",
+          "调查日期": "2026-05-21"
+        }
+      ],
+      "rowCount": 128,
+      "suggestedTableName": "populus_plots_2026_a13f9c2d4b71",
+      "suggestedName": "胡杨样地调查点 2026",
+      "duplicateTarget": {
+        "targetType": "data_resource_name",
+        "targetName": "胡杨样地调查点 2026",
+        "message": "数据名称已存在：胡杨样地调查点 2026"
+      },
+      "detected": {
+        "isGeographic": true,
+        "longitudeColumn": "longitude",
+        "latitudeColumn": "latitude",
+        "coordinateStats": null,
+        "validationIssues": []
+      },
+      "limitations": [
+        "仅预览前 20 行；提交前仍需执行坐标和字段校验。"
+      ]
+    }
+  },
+  "POST /api/catalog/import/validate/": {
+    "200": {
+      "coordinateStats": {
+        "totalRows": 128,
+        "validRows": 126,
+        "missingRows": 2,
+        "quantizationErrorMeters": {
+          "min": 0.03,
+          "max": 0.62
+        }
+      },
+      "validationIssues": [
+        {
+          "code": "missing_coordinate",
+          "message": "2 行缺少经纬度，将在导入时跳过。",
+          "blocking": false,
+          "count": 2
+        },
+        {
+          "code": "low_precision",
+          "message": "部分坐标小数位较少，建议核对原始记录。",
+          "blocking": false,
+          "count": 5,
+          "minMeters": 0.3,
+          "maxMeters": 3.2,
+          "ratio": 1.4
+        }
+      ],
+      "duplicateTarget": {
+        "targetType": "data_resource_name",
+        "targetName": "胡杨样地调查点 2026",
+        "message": "数据名称已存在：胡杨样地调查点 2026"
+      }
+    }
+  },
+  "POST /api/catalog/import/commit/": {
+    "400": {
+      "detail": "上传前必须显式选择所属项目标签（公开项目为 1）"
+    },
+    "201": {
+      "mode": "geographic",
+      "resourceId": 31,
+      "resourceName": "胡杨样地调查点 2026",
+      "layerName": "populus_plots_2026_a13f9c2d4b71",
+      "tableName": "populus_plots_2026_a13f9c2d4b71",
+      "importedRows": 126,
+      "skippedRows": 2,
+      "bounds": [
+        87.6,
+        43.7951,
+        87.6428,
+        43.81245
+      ],
+      "coordinateStats": {
+        "totalRows": 128,
+        "validRows": 126,
+        "missingRows": 2,
+        "quantizationErrorMeters": {
+          "min": 0.03,
+          "max": 0.62
+        }
+      },
+      "validationIssues": [
+        {
+          "code": "missing_coordinate",
+          "message": "2 行缺少经纬度，已跳过。",
+          "blocking": false,
+          "count": 2
+        }
+      ]
+    }
+  },
+  "GET /api/catalog/resources/{id}/profile/": {
+    "200": {
+      "resource": {
+        "id": 3,
+        "name": "塔里木河胡杨样地监测点",
+        "code": "survey-points-2026",
+        "dataType": "vector",
+        "domainType": "field_survey",
+        "category": {
+          "id": 101,
+          "code": "spatial",
+          "name": "地理数据"
+        },
+        "source": "2026 塔里木河野外调查",
+        "provider": "生态监测组",
+        "dataDate": "2026-06-01",
+        "spatialExtent": "87.600000,43.795100,87.642800,43.812450",
+        "coordinateSystem": "EPSG:4326",
+        "fileFormat": "GPKG",
+        "description": "由 Excel/CSV 导入的地理样地监测点数据。",
+        "qualityNote": "坐标有效 3/3 行。",
+        "status": "active",
+        "isQueryable": true,
+        "isRenderable": false,
+        "updatedAt": "2026-06-18T12:30:00+08:00",
+        "sizeBytes": 245760,
+        "itemCount": 3,
+        "categoryPath": [
+          {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          }
+        ],
+        "classificationStatus": "classified",
+        "projectTagId": 1
+      },
+      "fields": [
+        {
+          "name": "sample_id",
+          "type": "str",
+          "nullable": false,
+          "sampleValues": [
+            "TP-2026-001"
+          ],
+          "description": "样地编号"
+        },
+        {
+          "name": "health",
+          "type": "str",
+          "nullable": false,
+          "sampleValues": [
+            "良好"
+          ],
+          "description": "健康状况"
+        },
+        {
+          "name": "dbh_cm",
+          "type": "float",
+          "nullable": false,
+          "sampleValues": [
+            32.5
+          ],
+          "description": "胸径（厘米）"
+        }
+      ],
+      "featureCount": 3,
+      "geometryType": "Point",
+      "bounds": [
+        87.6,
+        43.7951,
+        87.6428,
+        43.81245
+      ]
+    }
+  },
+  "GET /api/catalog/resources/{id}/visualization-summary/": {
+    "200": {
+      "resource": {
+        "id": 3,
+        "name": "塔里木河胡杨样地监测点",
+        "code": "survey-points-2026",
+        "dataType": "vector",
+        "domainType": "field_survey",
+        "category": {
+          "id": 101,
+          "code": "spatial",
+          "name": "地理数据"
+        },
+        "source": "2026 塔里木河野外调查",
+        "provider": "生态监测组",
+        "dataDate": "2026-06-01",
+        "spatialExtent": "87.600000,43.795100,87.642800,43.812450",
+        "coordinateSystem": "EPSG:4326",
+        "fileFormat": "GPKG",
+        "description": "由 Excel/CSV 导入的地理样地监测点数据。",
+        "qualityNote": "坐标有效 3/3 行。",
+        "status": "active",
+        "isQueryable": true,
+        "isRenderable": false,
+        "updatedAt": "2026-06-18T12:30:00+08:00",
+        "sizeBytes": 245760,
+        "itemCount": 3,
+        "categoryPath": [
+          {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          }
+        ],
+        "classificationStatus": "classified",
+        "projectTagId": 1
+      },
+      "domainType": "field_survey",
+      "generatedAt": "2026-07-07T09:30:00+08:00",
+      "source": "backend_aggregate",
+      "profile": {
+        "featureCount": 3,
+        "fieldCount": 3,
+        "geometryType": "Point",
+        "bounds": [
+          87.6,
+          43.7951,
+          87.6428,
+          43.81245
+        ]
+      },
+      "categoryStats": [
+        {
+          "field": "health",
+          "label": "健康状况",
+          "total": 3,
+          "nullCount": 0,
+          "uniqueCount": 2,
+          "truncated": false,
+          "items": [
+            {
+              "label": "良好",
+              "count": 2,
+              "ratio": 0.6667
+            },
+            {
+              "label": "关注",
+              "count": 1,
+              "ratio": 0.3333
+            }
+          ]
+        }
+      ],
+      "numericStats": [
+        {
+          "field": "dbh_cm",
+          "label": "胸径（厘米）",
+          "count": 3,
+          "nullCount": 0,
+          "min": 21.8,
+          "max": 32.5,
+          "mean": 27.8,
+          "median": 29.1,
+          "q1": 25.45,
+          "q3": 30.8,
+          "histogram": [
+            {
+              "min": 21.8,
+              "max": 27.15,
+              "count": 1,
+              "label": "21.80-27.15"
+            },
+            {
+              "min": 27.15,
+              "max": 32.5,
+              "count": 2,
+              "label": "27.15-32.50"
+            }
+          ]
+        }
+      ],
+      "spatialSummary": {
+        "featureCount": 3,
+        "validGeometryCount": 3,
+        "nullGeometryCount": 0,
+        "coordinateCoverageRatio": 1,
+        "bounds": [
+          87.6,
+          43.7951,
+          87.6428,
+          43.81245
+        ],
+        "geometryTypes": [
+          {
+            "label": "Point",
+            "count": 3,
+            "ratio": 1
+          }
+        ],
+        "centroid": [
+          87.6214,
+          43.8038
+        ]
+      },
+      "qualityIssues": [
+        {
+          "code": "quality_ready",
+          "severity": "info",
+          "title": "基础质量良好",
+          "message": "当前资源坐标和主要字段可用于可视化分析。",
+          "count": 0,
+          "ratio": 0
+        }
+      ],
+      "recommendedCharts": [
+        {
+          "chartType": "rank_bar",
+          "title": "调查指标排行",
+          "description": "根据胸径、株数或盖度等字段展示重点样点。",
+          "fields": [
+            "dbh_cm"
+          ]
+        },
+        {
+          "chartType": "donut",
+          "title": "健康状态构成",
+          "description": "展示野外调查记录的分类结构。",
+          "fields": [
+            "health"
+          ]
+        }
+      ],
+      "recommendedSymbolizations": [
+        {
+          "templateId": "field_survey.habitat.unique.v1",
+          "name": "野外调查生境类型",
+          "description": "按栖息地类型区分调查样点，适合作为野外调查数据的默认地图表达。",
+          "businessType": "field_survey",
+          "rendererType": "uniqueValue",
+          "primaryField": "栖息地类型",
+          "matchedFields": [
+            "栖息地类型"
+          ],
+          "matchStatus": "matched",
+          "isPrimary": true,
+          "priority": 10,
+          "warnings": [],
+          "symbolization": {
+            "opacity": 90,
+            "pointMode": "symbol",
+            "renderer": {
+              "type": "uniqueValue",
+              "field": "栖息地类型",
+              "templateId": "field_survey.habitat.unique.v1",
+              "businessType": "field_survey",
+              "updatedByUser": false,
+              "classes": [
+                {
+                  "id": "forest",
+                  "label": "林地",
+                  "values": [
+                    "林地"
+                  ],
+                  "color": "#2F7D62",
+                  "iconImage": "gm-tree",
+                  "size": 1.06,
+                  "count": 17,
+                  "visible": true
+                },
+                {
+                  "id": "grassland",
+                  "label": "草地",
+                  "values": [
+                    "草地"
+                  ],
+                  "color": "#7FBC61",
+                  "iconImage": "gm-leaf",
+                  "size": 1,
+                  "count": 24,
+                  "visible": true
+                }
+              ],
+              "defaultClass": {
+                "id": "other",
+                "label": "其他生境",
+                "values": [],
+                "color": "#8A8F98",
+                "iconImage": "gm-sample",
+                "size": 0.92,
+                "count": 0,
+                "visible": true
+              }
+            },
+            "symbol": {
+              "iconImage": "gm-sample",
+              "iconSize": 1,
+              "textField": ""
+            },
+            "circle": {
+              "circleColor": "#2F7D62",
+              "circleRadius": 7
+            }
+          }
+        },
+        {
+          "templateId": "field_survey.importance.graduated.v1",
+          "name": "野外调查重要值分级",
+          "description": "按重要值进行连续分级，适合查看样点或物种优势度差异。",
+          "businessType": "field_survey",
+          "rendererType": "graduated",
+          "primaryField": "重要值",
+          "matchedFields": [
+            "重要值"
+          ],
+          "matchStatus": "matched",
+          "isPrimary": false,
+          "priority": 20,
+          "warnings": [],
+          "symbolization": {
+            "opacity": 90,
+            "pointMode": "symbol",
+            "renderer": {
+              "type": "graduated",
+              "field": "重要值",
+              "method": "quantile",
+              "classCount": 5,
+              "precision": 2,
+              "colorRamp": "green",
+              "templateId": "field_survey.importance.graduated.v1",
+              "businessType": "field_survey",
+              "updatedByUser": false,
+              "classes": [
+                {
+                  "id": "range-1",
+                  "label": "低重要值",
+                  "min": 0.62,
+                  "max": 4.86,
+                  "color": "#E4F6D6",
+                  "iconImage": "gm-plot",
+                  "size": 0.88,
+                  "count": 24,
+                  "visible": true
+                }
+              ],
+              "defaultClass": {
+                "id": "no-data",
+                "label": "无数值/空值",
+                "min": null,
+                "max": null,
+                "color": "#8A8F98",
+                "iconImage": "gm-plot",
+                "size": 0.9,
+                "count": 0,
+                "visible": true
+              }
+            },
+            "symbol": {
+              "iconImage": "gm-plot",
+              "iconSize": 1,
+              "textField": ""
+            },
+            "circle": {
+              "circleColor": "#2F7D62",
+              "circleRadius": 7
+            }
+          }
+        }
+      ],
+      "monitorPreview": {
+        "title": "监测能力预留",
+        "status": "planned",
+        "items": [
+          {
+            "label": "阈值配置",
+            "status": "planned",
+            "description": "后续支持对胸径、盖度、重要值和遥感指数设置预警阈值。"
+          },
+          {
+            "label": "定时扫描",
+            "status": "planned",
+            "description": "后续支持定时扫描资源质量与生态指标异常。"
+          }
+        ]
+      }
+    }
+  },
+  "POST /api/catalog/resources/{id}/query/": {
+    "200": {
+      "resourceId": 3,
+      "resourceName": "塔里木河胡杨样地监测点",
+      "totalCount": 3,
+      "returnedCount": 3,
+      "limit": 30000,
+      "limitExceeded": false,
+      "bounds": [
+        87.6,
+        43.7951,
+        87.6428,
+        43.81245
+      ],
+      "elapsedMs": 38,
+      "fields": [
+        {
+          "name": "sample_id",
+          "type": "str",
+          "nullable": false,
+          "sampleValues": [
+            "TP-2026-001"
+          ],
+          "description": "样地编号"
+        },
+        {
+          "name": "health",
+          "type": "str",
+          "nullable": false,
+          "sampleValues": [
+            "良好"
+          ],
+          "description": "健康状况"
+        },
+        {
+          "name": "dbh_cm",
+          "type": "float",
+          "nullable": false,
+          "sampleValues": [
+            32.5
+          ],
+          "description": "胸径（厘米）"
+        }
+      ],
+      "geojson": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                87.6,
+                43.8
+              ]
+            },
+            "properties": {
+              "id": 1,
+              "name": "TP-2026-001",
+              "health": "良好",
+              "dbh_cm": 32.5,
+              "canopy_m": 7.8
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                87.61532,
+                43.81245
+              ]
+            },
+            "properties": {
+              "id": 2,
+              "name": "TP-2026-002",
+              "health": "一般",
+              "dbh_cm": 28.1,
+              "canopy_m": 6.4
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                87.6428,
+                43.7951
+              ]
+            },
+            "properties": {
+              "id": 3,
+              "name": "TP-2026-003",
+              "health": "良好",
+              "dbh_cm": 35.7,
+              "canopy_m": 8.1
+            }
+          }
+        ]
+      },
+      "warnings": []
+    }
+  },
+  "POST /api/catalog/export/async/": {
+    "202": {
+      "id": "export-mock-20260614-001",
+      "kind": "export",
+      "status": "queued",
+      "progressPercent": 5,
+      "messages": [
+        "导出任务已提交",
+        "等待后台打包图层文件"
+      ],
+      "result": null,
+      "error": "",
+      "startedAt": 1781413200,
+      "finishedAt": null
+    }
+  },
+  "GET /api/layers/": {
+    "200": {
+      "items": [
+        {
+          "id": 1,
+          "name": "Traim",
+          "code": "raster-91d2a5ecd116",
+          "layerType": "raster",
+          "geometryType": "mixed",
+          "category": null,
+          "dataResourceId": 1,
+          "sortOrder": 100,
+          "defaultVisible": false,
+          "defaultOpacity": 90,
+          "symbolization": {},
+          "bounds": [
+            88.3284339,
+            40.0791742,
+            88.4016422,
+            40.1608305
+          ],
+          "legend": "",
+          "rasterRules": {
+            "mode": "rgb",
+            "bands": [
+              1,
+              2,
+              3
+            ],
+            "stretch": {
+              "enabled": true,
+              "type": "minmax",
+              "perBand": {
+                "1": {
+                  "min": 0,
+                  "max": 74
+                },
+                "2": {
+                  "min": 0,
+                  "max": 83
+                },
+                "3": {
+                  "min": 0,
+                  "max": 93
+                },
+                "4": {
+                  "min": 0,
+                  "max": 106
+                },
+                "5": {
+                  "min": 0,
+                  "max": 112
+                },
+                "6": {
+                  "min": 0,
+                  "max": 108
+                },
+                "7": {
+                  "min": 0,
+                  "max": 117
+                },
+                "8": {
+                  "min": 0,
+                  "max": 92
+                }
+              }
+            },
+            "palette": "poplar",
+            "uniqueValues": [],
+            "alphaBand": "mask",
+            "nodata": {
+              "enabled": true
+            }
+          },
+          "isActive": true,
+          "updatedAt": "2026-06-07T11:34:08.123065+00:00"
+        },
+        {
+          "id": 2,
+          "name": "Traim_result",
+          "code": "raster-fa42b738b42f",
+          "layerType": "raster",
+          "geometryType": "mixed",
+          "category": null,
+          "dataResourceId": 2,
+          "sortOrder": 100,
+          "defaultVisible": false,
+          "defaultOpacity": 90,
+          "symbolization": {},
+          "bounds": [
+            88.3284339,
+            40.0791742,
+            88.4016422,
+            40.1608305
+          ],
+          "legend": "",
+          "rasterRules": {
+            "mode": "gray",
+            "bands": [
+              1
+            ],
+            "stretch": {
+              "enabled": true,
+              "type": "minmax",
+              "perBand": {
+                "1": {
+                  "min": 0,
+                  "max": 2
+                }
+              }
+            },
+            "palette": "poplar",
+            "uniqueValues": [],
+            "alphaBand": "mask",
+            "nodata": {
+              "enabled": true
+            }
+          },
+          "isActive": true,
+          "updatedAt": "2026-06-07T11:34:11.744219+00:00"
+        },
+        {
+          "id": 31,
+          "name": "塔里木大学移交胡杨DNA样品清单",
+          "code": "germplasm-dna-sex-points-2024",
+          "layerType": "vector",
+          "geometryType": "point",
+          "category": {
+            "id": 301,
+            "type": "data_category",
+            "code": "germplasm",
+            "name": "种质资源"
+          },
+          "dataResourceId": 31,
+          "sortOrder": 110,
+          "defaultVisible": false,
+          "defaultOpacity": 90,
+          "symbolization": {
+            "opacity": 90,
+            "pointMode": "symbol",
+            "renderer": {
+              "type": "uniqueValue",
+              "field": "性别",
+              "templateId": "germplasm.dna-sex-tree.v1",
+              "businessType": "germplasm",
+              "updatedByUser": false,
+              "classes": [
+                {
+                  "id": "female",
+                  "label": "雌性",
+                  "values": [
+                    "雌株",
+                    "雌株珠"
+                  ],
+                  "color": "#D65A8A",
+                  "iconImage": "gm-tree",
+                  "size": 1.08,
+                  "count": 302,
+                  "visible": true
+                },
+                {
+                  "id": "male",
+                  "label": "雄性",
+                  "values": [
+                    "雄株"
+                  ],
+                  "color": "#2878B5",
+                  "iconImage": "gm-tree",
+                  "size": 1.08,
+                  "count": 361,
+                  "visible": true
+                }
+              ],
+              "defaultClass": {
+                "id": "other",
+                "label": "未知/其他",
+                "values": [],
+                "color": "#8A8F98",
+                "iconImage": "gm-tree",
+                "size": 0.96,
+                "count": 0,
+                "visible": true
+              },
+              "normalizationNotes": [
+                "字段值“雌株珠”疑似“雌株”的录入别名，默认并入雌性类别。"
+              ]
+            },
+            "symbol": {
+              "iconImage": "gm-tree",
+              "iconColor": "#2F7D62",
+              "iconSize": 1.08,
+              "textField": "",
+              "textSize": 12
+            }
+          },
+          "bounds": [
+            74.365,
+            40.398,
+            90.922,
+            43.812
+          ],
+          "legend": "按性别默认分为雌性、雄性和未知/其他，使用树形图标表达种质资源点位。",
+          "rasterRules": {},
+          "isActive": true,
+          "updatedAt": "2026-07-01T12:00:00+08:00"
+        },
+        {
+          "id": 32,
+          "name": "胡杨样点海拔分级示例",
+          "code": "survey-elevation-graduated-2026",
+          "layerType": "vector",
+          "geometryType": "point",
+          "category": {
+            "id": 101,
+            "type": "data_category",
+            "code": "monitoring",
+            "name": "长期监测"
+          },
+          "dataResourceId": 3,
+          "sortOrder": 111,
+          "defaultVisible": false,
+          "defaultOpacity": 88,
+          "symbolization": {
+            "opacity": 88,
+            "pointMode": "symbol",
+            "renderer": {
+              "type": "graduated",
+              "field": "海拔",
+              "method": "manual",
+              "classCount": 5,
+              "precision": 0,
+              "colorRamp": "green",
+              "updatedByUser": false,
+              "classes": [
+                {
+                  "id": "range-1",
+                  "label": "低海拔",
+                  "min": 820,
+                  "max": 900,
+                  "color": "#E4F6D6",
+                  "iconImage": "gm-tree",
+                  "size": 0.88,
+                  "count": 18,
+                  "visible": true
+                },
+                {
+                  "id": "range-2",
+                  "label": "中低海拔",
+                  "min": 900,
+                  "max": 960,
+                  "color": "#B8E186",
+                  "iconImage": "gm-tree",
+                  "size": 0.96,
+                  "count": 24,
+                  "visible": true
+                },
+                {
+                  "id": "range-3",
+                  "label": "中海拔",
+                  "min": 960,
+                  "max": 1040,
+                  "color": "#7FBC61",
+                  "iconImage": "gm-tree",
+                  "size": 1.04,
+                  "count": 31,
+                  "visible": true
+                },
+                {
+                  "id": "range-4",
+                  "label": "中高海拔",
+                  "min": 1040,
+                  "max": 1080,
+                  "color": "#2F7D62",
+                  "iconImage": "gm-tree",
+                  "size": 1.12,
+                  "count": 22,
+                  "visible": true
+                },
+                {
+                  "id": "range-5",
+                  "label": "高海拔",
+                  "min": 1080,
+                  "max": 1120,
+                  "color": "#145A46",
+                  "iconImage": "gm-tree",
+                  "size": 1.2,
+                  "count": 15,
+                  "visible": true
+                }
+              ],
+              "defaultClass": {
+                "id": "no-data",
+                "label": "无数值/空值",
+                "min": null,
+                "max": null,
+                "color": "#8A8F98",
+                "iconImage": "gm-tree",
+                "size": 0.9,
+                "count": 2,
+                "visible": true
+              }
+            },
+            "symbol": {
+              "iconImage": "gm-tree",
+              "iconColor": "#2F7D62",
+              "iconSize": 1,
+              "textField": "",
+              "textSize": 12
+            }
+          },
+          "bounds": [
+            87.6,
+            43.7951,
+            87.6428,
+            43.81245
+          ],
+          "legend": "按海拔字段进行 5 级自定义数值分级，使用 gm-tree 平台图标并为每个等级维护独立颜色和范围。",
+          "rasterRules": {},
+          "isActive": true,
+          "updatedAt": "2026-07-03T12:00:00+08:00"
+        }
+      ]
+    }
+  },
+  "GET /api/search/": {
+    "200": {
+      "resources": [
+        {
+          "id": 1,
+          "name": "Traim",
+          "code": "raster-91d2a5ecd116",
+          "dataType": "raster",
+          "domainType": "remote_sensing",
+          "category": {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          },
+          "source": "栅格导入",
+          "provider": "",
+          "dataDate": null,
+          "spatialExtent": "88.328434,40.079174,88.401642,40.160831",
+          "coordinateSystem": "EPSG:3857",
+          "fileFormat": "COG",
+          "description": "源文件：原始影像/Traim.tif",
+          "qualityNote": "导入时使用 gdalwarp 统一投影到 EPSG:3857 并输出 COG。",
+          "status": "active",
+          "isQueryable": false,
+          "isRenderable": true,
+          "updatedAt": "2026-06-07T11:34:08.121395+00:00",
+          "sizeBytes": 138412032,
+          "itemCount": 1,
+          "categoryPath": [
+            {
+              "id": 101,
+              "code": "spatial",
+              "name": "地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "projectTagId": 1
+        },
+        {
+          "id": 2,
+          "name": "Traim_result",
+          "code": "raster-fa42b738b42f",
+          "dataType": "raster",
+          "domainType": "remote_sensing",
+          "category": {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          },
+          "source": "栅格导入",
+          "provider": "",
+          "dataDate": null,
+          "spatialExtent": "88.328434,40.079174,88.401642,40.160831",
+          "coordinateSystem": "EPSG:3857",
+          "fileFormat": "COG",
+          "description": "源文件：胡杨提取结果/Traim_result.tif",
+          "qualityNote": "导入时使用 gdalwarp 统一投影到 EPSG:3857 并输出 COG。",
+          "status": "active",
+          "isQueryable": false,
+          "isRenderable": true,
+          "updatedAt": "2026-06-07T11:34:11.743237+00:00",
+          "sizeBytes": 138412032,
+          "itemCount": 1,
+          "categoryPath": [
+            {
+              "id": 101,
+              "code": "spatial",
+              "name": "地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "projectTagId": 1
+        },
+        {
+          "id": 3,
+          "name": "塔里木河胡杨样地监测点",
+          "code": "survey-points-2026",
+          "dataType": "vector",
+          "domainType": "field_survey",
+          "category": {
+            "id": 101,
+            "code": "spatial",
+            "name": "地理数据"
+          },
+          "source": "2026 塔里木河野外调查",
+          "provider": "生态监测组",
+          "dataDate": "2026-06-01",
+          "spatialExtent": "87.600000,43.795100,87.642800,43.812450",
+          "coordinateSystem": "EPSG:4326",
+          "fileFormat": "GPKG",
+          "description": "由 Excel/CSV 导入的地理样地监测点数据。",
+          "qualityNote": "坐标有效 3/3 行。",
+          "status": "active",
+          "isQueryable": true,
+          "isRenderable": false,
+          "updatedAt": "2026-06-18T12:30:00+08:00",
+          "sizeBytes": 245760,
+          "itemCount": 3,
+          "categoryPath": [
+            {
+              "id": 101,
+              "code": "spatial",
+              "name": "地理数据"
+            }
+          ],
+          "classificationStatus": "classified",
+          "projectTagId": 1
+        }
+      ]
+    }
+  },
+  "POST /api/catalog/vector-import/preview/": {
+    "200": {
+      "sourceFileName": "新疆自治区边界.zip",
+      "sourceFormat": "SHAPEFILE",
+      "layers": [
+        {
+          "sourceLayerName": "新疆自治区_中华人民共和国",
+          "suggestedName": "新疆自治区_中华人民共和国",
+          "suggestedTableName": "xinjiang_boundary_2026",
+          "geometryType": "Polygon",
+          "featureCount": 1,
+          "vertexCount": 27139,
+          "bounds": [
+            73.49901303,
+            34.33631216,
+            96.38533386,
+            49.18141068
+          ],
+          "coordinateSystem": "EPSG:4326",
+          "epsg": 4326,
+          "encoding": "GB18030",
+          "fields": [
+            {
+              "name": "Name",
+              "type": "object",
+              "nullable": false,
+              "sampleValues": [
+                "中华人民共和国"
+              ]
+            },
+            {
+              "name": "adcode",
+              "type": "object",
+              "nullable": false,
+              "sampleValues": [
+                "100000"
+              ]
+            }
+          ],
+          "previewRows": [
+            {
+              "Name": "中华人民共和国",
+              "adcode": "100000"
+            }
+          ],
+          "quality": {
+            "validCount": 1,
+            "invalidCount": 0,
+            "emptyCount": 0,
+            "nullCount": 0,
+            "mixedGeometry": false
+          }
+        }
+      ],
+      "limitations": [
+        "Shapefile 请以 ZIP 上传，并包含同名 .shp、.shx、.dbf。"
+      ]
+    }
+  },
+  "POST /api/catalog/vector-import/validate/": {
+    "200": {
+      "layer": {
+        "sourceLayerName": "新疆自治区_中华人民共和国",
+        "suggestedName": "新疆自治区边界",
+        "suggestedTableName": "xinjiang_boundary_2026",
+        "geometryType": "Polygon",
+        "featureCount": 1,
+        "vertexCount": 27139,
+        "bounds": [
+          73.49901303,
+          34.33631216,
+          96.38533386,
+          49.18141068
+        ],
+        "coordinateSystem": "EPSG:4326",
+        "epsg": 4326,
+        "encoding": "GB18030",
+        "fields": [
+          {
+            "name": "Name",
+            "type": "object",
+            "nullable": false,
+            "sampleValues": [
+              "中华人民共和国"
+            ]
+          }
+        ],
+        "previewRows": [
+          {
+            "Name": "中华人民共和国"
+          }
+        ],
+        "quality": {
+          "validCount": 1,
+          "invalidCount": 0,
+          "emptyCount": 0,
+          "nullCount": 0,
+          "mixedGeometry": false
+        }
+      },
+      "validationIssues": [],
+      "duplicateTarget": null
+    }
+  },
+  "POST /api/catalog/vector-import/commit/": {
+    "400": {
+      "detail": "上传前必须显式选择所属项目标签（公开项目为 1）"
+    },
+    "201": {
+      "mode": "vector",
+      "resourceId": 31,
+      "resourceName": "新疆自治区边界",
+      "vectorDatasetId": 7,
+      "layerId": 31,
+      "layerName": "xinjiang_boundary_2026",
+      "sourceLayerName": "新疆自治区_中华人民共和国",
+      "importedFeatures": 1,
+      "skippedFeatures": 0,
+      "bounds": [
+        73.49901303,
+        34.33631216,
+        96.38533386,
+        49.18141068
+      ],
+      "geometryType": "Polygon",
+      "coordinateSystem": "EPSG:4326",
+      "sourceEncoding": "GB18030",
+      "validationIssues": []
+    }
+  },
+  "GET /api/catalog/export/jobs/{job_id}/download/": {
+    "409": {
+      "detail": "导出任务尚未完成"
+    }
+  }
+}

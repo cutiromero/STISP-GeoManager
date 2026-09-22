@@ -1,0 +1,10 @@
+AUTH_LOGIN_SUCCESS = "auth.login.success"
+AUTH_LOGIN_FAILED = "auth.login.failed"
+AUTH_GUEST_LOGIN_SUCCESS = "auth.guest_login.success"
+AUTH_REGISTER_LOGIN_SUCCESS = "auth.register_login.success"
+
+SUCCESSFUL_AUTH_EVENT_CODES = (
+    AUTH_LOGIN_SUCCESS,
+    AUTH_GUEST_LOGIN_SUCCESS,
+    AUTH_REGISTER_LOGIN_SUCCESS,
+)

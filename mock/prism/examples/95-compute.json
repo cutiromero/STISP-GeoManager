@@ -1,0 +1,14 @@
+{
+  "GET /api/compute/algorithms/": {
+    "200": {
+      "items": [],
+      "total": 0
+    }
+  },
+  "GET /api/compute/tasks/": {
+    "200": {
+      "items": [],
+      "total": 0
+    }
+  }
+}

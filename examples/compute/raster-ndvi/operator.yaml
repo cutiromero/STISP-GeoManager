@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "identifier": "raster-ndvi",
+  "name": "NDVI示例",
+  "version": "1.0.0",
+  "description": "NDVI示例的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
+  "author": "平台示例算法",
+  "runtime": "python-geospatial-v1",
+  "inputs": [
+    {
+      "key": "image",
+      "label": "多波段影像",
+      "kind": "raster",
+      "minBands": 2,
+      "required": true
+    }
+  ],
+  "parameters": [
+    {
+      "key": "red",
+      "label": "红光波段",
+      "type": "band",
+      "input": "image",
+      "default": 1,
+      "required": true
+    },
+    {
+      "key": "nir",
+      "label": "近红外波段",
+      "type": "band",
+      "input": "image",
+      "default": 2,
+      "required": true
+    }
+  ],
+  "outputs": [
+    {
+      "key": "ndvi",
+      "label": "NDVI栅格",
+      "kind": "raster",
+      "file": "ndvi.tif",
+      "required": true
+    }
+  ],
+  "timeoutSeconds": 1800,
+  "deterministic": true
+}

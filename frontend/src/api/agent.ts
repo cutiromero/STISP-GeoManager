@@ -1,0 +1,76 @@
+import { requestForm, requestJson } from "./client";
+import type {
+  AgentBootstrap,
+  AgentConversation,
+  AgentConversationDetail,
+  AgentConversationList,
+  AgentConversationUpdate,
+  AgentRun,
+  AgentRunInput,
+  AgentRunPoll,
+  AgentResourceList,
+  AgentAdmin,
+  AgentAdminUpdate,
+  AgentWorkflow,
+  AgentWorkflowInput,
+  AgentAttachment,
+} from "./generated/types.gen";
+
+export const agentApi = {
+  bootstrap: () => requestJson<AgentBootstrap>("/api/agent/bootstrap/"),
+  conversations: (mode: "chat" | "agent", q = "", archived = false) =>
+    requestJson<AgentConversationList>(
+      `/api/agent/conversations/?${new URLSearchParams({ mode, q, archived: String(archived) })}`,
+    ),
+  create: (mode: "chat" | "agent") =>
+    requestJson<AgentConversation>("/api/agent/conversations/", {
+      method: "POST",
+      body: { mode },
+    }),
+  detail: (id: number) =>
+    requestJson<AgentConversationDetail>(`/api/agent/conversations/${id}/`),
+  update: (id: number, body: AgentConversationUpdate) =>
+    requestJson<AgentConversation>(`/api/agent/conversations/${id}/`, {
+      method: "PATCH",
+      body,
+    }),
+  remove: (id: number) =>
+    requestJson<{ detail: string }>(`/api/agent/conversations/${id}/`, {
+      method: "DELETE",
+    }),
+  submit: (id: number, body: AgentRunInput) =>
+    requestJson<AgentRun>(`/api/agent/conversations/${id}/runs/`, {
+      method: "POST",
+      body,
+    }),
+  uploadAttachment: (conversationId: number, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return requestForm<AgentAttachment>(
+      `/api/agent/conversations/${conversationId}/attachments/`,
+      form,
+    );
+  },
+  poll: (id: number, after = 0) =>
+    requestJson<AgentRunPoll>(`/api/agent/runs/${id}/?after=${after}`),
+  cancel: (id: number) =>
+    requestJson<AgentRun>(`/api/agent/runs/${id}/cancel/`, { method: "POST" }),
+  resources: (q = "") =>
+    requestJson<AgentResourceList>(
+      `/api/agent/resources/?q=${encodeURIComponent(q)}`,
+    ),
+  admin: () => requestJson<AgentAdmin>("/api/agent/admin/"),
+  savePolicy: (body: AgentAdminUpdate) =>
+    requestJson<AgentAdmin>("/api/agent/admin/", { method: "PUT", body }),
+  createWorkflow: (body: AgentWorkflowInput) =>
+    requestJson<AgentWorkflow>("/api/agent/workflows/", {
+      method: "POST",
+      body,
+    }),
+  workflow: (id: string) =>
+    requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/`),
+  cancelWorkflow: (id: string) =>
+    requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/cancel/`, {
+      method: "POST",
+    }),
+};

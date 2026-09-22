@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "identifier": "raster-linear",
+  "name": "栅格线性变换",
+  "version": "1.0.0",
+  "description": "栅格线性变换的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
+  "author": "平台示例算法",
+  "runtime": "python-geospatial-v1",
+  "inputs": [
+    {
+      "key": "source",
+      "label": "输入栅格",
+      "kind": "raster",
+      "minBands": 1,
+      "required": true
+    }
+  ],
+  "parameters": [
+    {
+      "key": "band",
+      "label": "计算波段",
+      "type": "band",
+      "input": "source",
+      "default": 1,
+      "required": true
+    },
+    {
+      "key": "scale",
+      "label": "乘数",
+      "type": "number",
+      "default": 1.0,
+      "required": true
+    },
+    {
+      "key": "offset",
+      "label": "偏移量",
+      "type": "number",
+      "default": 0.0,
+      "required": true
+    }
+  ],
+  "outputs": [
+    {
+      "key": "raster",
+      "label": "变换后的栅格",
+      "kind": "raster",
+      "file": "transformed.tif",
+      "required": true
+    }
+  ],
+  "timeoutSeconds": 1800,
+  "deterministic": true
+}

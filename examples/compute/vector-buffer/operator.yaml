@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "identifier": "vector-buffer",
+  "name": "矢量缓冲区",
+  "version": "1.0.0",
+  "description": "矢量缓冲区的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
+  "author": "平台示例算法",
+  "runtime": "python-geospatial-v1",
+  "inputs": [
+    {
+      "key": "features",
+      "label": "输入矢量",
+      "kind": "vector",
+      "required": true
+    }
+  ],
+  "parameters": [
+    {
+      "key": "distance",
+      "label": "缓冲距离（米）",
+      "type": "number",
+      "default": 100.0,
+      "min": 0.1,
+      "max": 100000,
+      "help": "使用数据范围对应的UTM投影计算；范围过大的数据请先裁剪。",
+      "required": true
+    }
+  ],
+  "outputs": [
+    {
+      "key": "buffer",
+      "label": "缓冲区",
+      "kind": "vector",
+      "file": "buffer.gpkg",
+      "required": true
+    }
+  ],
+  "timeoutSeconds": 1800,
+  "deterministic": true
+}

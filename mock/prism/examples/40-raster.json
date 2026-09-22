@@ -1,0 +1,811 @@
+{
+  "GET /api/raster/datasets/": {
+    "200": {
+      "items": [
+        {
+          "id": 2,
+          "name": "Traim_result",
+          "code": "raster-fa42b738b42f",
+          "status": "ready",
+          "sourceFileName": "Traim_result.tif",
+          "sourceFormat": "GTiff",
+          "sourceManifest": [
+            {
+              "name": "Traim_result.tif",
+              "size": 18524218,
+              "role": "primary"
+            }
+          ],
+          "sourceChecksumSha256": "mock-traim-result-sha256",
+          "rasterKind": "categorical",
+          "sourcePath": "胡杨提取结果/Traim_result.tif",
+          "processedPath": "胡杨提取结果/Traim_result.cog.tif",
+          "sourceMetadataPath": "source/胡杨提取结果/Traim_result.tif.gdalinfo.json",
+          "processedMetadataPath": "preprocessed/胡杨提取结果/Traim_result.cog.tif.gdalinfo.json",
+          "dataResourceId": 2,
+          "mapLayerId": 2,
+          "bandCount": 1,
+          "bounds3857": [
+            9832676.279,
+            4877454.34,
+            9840825.79,
+            4889341.335
+          ],
+          "bounds4326": [
+            88.3284339,
+            40.0791742,
+            88.4016422,
+            40.1608305
+          ],
+          "imageCoordinates": [
+            [
+              88.3284339,
+              40.1608305
+            ],
+            [
+              88.4016422,
+              40.1608305
+            ],
+            [
+              88.4016422,
+              40.0791742
+            ],
+            [
+              88.3284339,
+              40.0791742
+            ]
+          ],
+          "defaultRules": {
+            "mode": "gray",
+            "bands": [
+              1
+            ],
+            "stretch": {
+              "enabled": true,
+              "type": "minmax",
+              "perBand": {
+                "1": {
+                  "min": 0,
+                  "max": 2
+                }
+              }
+            },
+            "palette": "poplar",
+            "uniqueValues": [],
+            "alphaBand": "mask",
+            "nodata": {
+              "enabled": true
+            }
+          },
+          "sourceFileSize": 4464959,
+          "processedFileSize": 5861035,
+          "progressLog": "开始读取源文件元数据\n开始 gdalwarp 预处理到 EPSG:3857 COG\nCreating output file that is 12444P x 18151L.\n0.\n.\n.\n10.\n.\n.\n20.\n.\n.\n30.\n.\n.\n40.\n.\n.\n50.\n.\n.\n60.\n.\n.\n70.\n.\n.\n80.\n.\n.\n90.\n.\n.\n100 - done.\n开始读取预处理文件元数据\n导入完成",
+          "errorMessage": "",
+          "importedAt": "2026-06-07T11:34:08.126235+00:00",
+          "processedAt": "2026-06-07T11:34:11.744732+00:00",
+          "metadata": {
+            "size": [
+              12444,
+              18151
+            ],
+            "driver": "GTiff",
+            "coordinateSystem": 3857,
+            "bands": [
+              {
+                "band": 1,
+                "type": "Byte",
+                "description": "Band 1",
+                "colorInterpretation": "Gray",
+                "min": 0,
+                "max": 2,
+                "isInteger": true
+              }
+            ]
+          }
+        },
+        {
+          "id": 1,
+          "name": "Traim",
+          "code": "raster-91d2a5ecd116",
+          "status": "ready",
+          "sourceFileName": "Traim.tif",
+          "sourceFormat": "GTiff",
+          "sourceManifest": [
+            {
+              "name": "Traim.tif",
+              "size": 318524218,
+              "role": "primary"
+            }
+          ],
+          "sourceChecksumSha256": "mock-traim-source-sha256",
+          "rasterKind": "imagery",
+          "sourcePath": "原始影像/Traim.tif",
+          "processedPath": "原始影像/Traim.cog.tif",
+          "sourceMetadataPath": "source/原始影像/Traim.tif.gdalinfo.json",
+          "processedMetadataPath": "preprocessed/原始影像/Traim.cog.tif.gdalinfo.json",
+          "dataResourceId": 1,
+          "mapLayerId": 1,
+          "bandCount": 8,
+          "bounds3857": [
+            9832676.279,
+            4877454.34,
+            9840825.79,
+            4889341.335
+          ],
+          "bounds4326": [
+            88.3284339,
+            40.0791742,
+            88.4016422,
+            40.1608305
+          ],
+          "imageCoordinates": [
+            [
+              88.3284339,
+              40.1608305
+            ],
+            [
+              88.4016422,
+              40.1608305
+            ],
+            [
+              88.4016422,
+              40.0791742
+            ],
+            [
+              88.3284339,
+              40.0791742
+            ]
+          ],
+          "defaultRules": {
+            "mode": "rgb",
+            "bands": [
+              1,
+              2,
+              3
+            ],
+            "stretch": {
+              "enabled": true,
+              "type": "minmax",
+              "perBand": {
+                "1": {
+                  "min": 0,
+                  "max": 74
+                },
+                "2": {
+                  "min": 0,
+                  "max": 83
+                },
+                "3": {
+                  "min": 0,
+                  "max": 93
+                },
+                "4": {
+                  "min": 0,
+                  "max": 106
+                },
+                "5": {
+                  "min": 0,
+                  "max": 112
+                },
+                "6": {
+                  "min": 0,
+                  "max": 108
+                },
+                "7": {
+                  "min": 0,
+                  "max": 117
+                },
+                "8": {
+                  "min": 0,
+                  "max": 92
+                }
+              }
+            },
+            "palette": "poplar",
+            "uniqueValues": [],
+            "alphaBand": "mask",
+            "nodata": {
+              "enabled": true
+            }
+          },
+          "sourceFileSize": 716582060,
+          "processedFileSize": 834434559,
+          "progressLog": "开始读取源文件元数据\n开始 gdalwarp 预处理到 EPSG:3857 COG\nCreating output file that is 12444P x 18151L.\n0.\n.\n.\n10.\n.\n.\n20.\n.\n.\n30.\n.\n.\n40.\n.\n.\n50.\n.\n.\n60.\n.\n.\n70.\n.\n.\n80.\n.\n.\n90.\n.\n.\n100 - done in 00:01:18.\n开始读取预处理文件元数据\n导入完成",
+          "errorMessage": "",
+          "importedAt": "2026-06-07T11:32:47.997926+00:00",
+          "processedAt": "2026-06-07T11:34:08.123793+00:00",
+          "metadata": {
+            "size": [
+              12444,
+              18151
+            ],
+            "driver": "GTiff",
+            "coordinateSystem": 3857,
+            "bands": [
+              {
+                "band": 1,
+                "type": "Byte",
+                "description": "CoastalBlue (427.300000 Nanometers)",
+                "colorInterpretation": "Gray",
+                "min": 0,
+                "max": 74,
+                "isInteger": true
+              },
+              {
+                "band": 2,
+                "type": "Byte",
+                "description": "Blue (477.900000 Nanometers)",
+                "colorInterpretation": "Undefined",
+                "min": 0,
+                "max": 83,
+                "isInteger": true
+              },
+              {
+                "band": 3,
+                "type": "Byte",
+                "description": "Green (546.200000 Nanometers)",
+                "colorInterpretation": "Undefined",
+                "min": 0,
+                "max": 93,
+                "isInteger": true
+              },
+              {
+                "band": 4,
+                "type": "Byte",
+                "description": "Yellow (607.800000 Nanometers)",
+                "colorInterpretation": "Undefined",
+                "min": 0,
+                "max": 106,
+                "isInteger": true
+              },
+              {
+                "band": 5,
+                "type": "Byte",
+                "description": "Red (658.800000 Nanometers)",
+                "colorInterpretation": "Undefined",
+                "min": 0,
+                "max": 112,
+                "isInteger": true
+              },
+              {
+                "band": 6,
+                "type": "Byte",
+                "description": "RedEdge (723.700000 Nanometers)",
+                "colorInterpretation": "Undefined",
+                "min": 0,
+                "max": 108,
+                "isInteger": true
+              },
+              {
+                "band": 7,
+                "type": "Byte",
+                "description": "NIR1 (832.500000 Nanometers)",
+                "colorInterpretation": "Undefined",
+                "min": 0,
+                "max": 117,
+                "isInteger": true
+              },
+              {
+                "band": 8,
+                "type": "Byte",
+                "description": "NIR2 (908.000000 Nanometers)",
+                "colorInterpretation": "Undefined",
+                "min": 0,
+                "max": 92,
+                "isInteger": true
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "POST /api/raster/import/preview/": {
+    "200": {
+      "primaryFileName": "Tarim_worldview_1.tif",
+      "sourceFormat": "GTiff",
+      "files": [
+        {
+          "name": "Tarim_worldview_1.tif",
+          "size": 2097152,
+          "role": "primary"
+        }
+      ],
+      "metadata": {
+        "size": [
+          512,
+          512
+        ],
+        "driver": "GTiff",
+        "coordinateSystem": 32645,
+        "bands": [
+          {
+            "band": 1,
+            "type": "Byte",
+            "description": "Band 1",
+            "colorInterpretation": "Gray",
+            "min": 0,
+            "max": 255,
+            "isInteger": true
+          }
+        ]
+      },
+      "bounds4326": [
+        88.3822727,
+        40.1414209,
+        88.3853239,
+        40.1437626
+      ],
+      "defaultRules": {
+        "mode": "rgb",
+        "bands": [
+          5,
+          3,
+          2
+        ]
+      },
+      "suggestedName": "Tarim_worldview_1",
+      "rasterKind": "imagery",
+      "resampling": "bilinear",
+      "warnings": [
+        "多波段影像缺少波段语义，请确认 RGB 波段组合"
+      ]
+    }
+  },
+  "POST /api/raster/import/": {
+    "400": {
+      "detail": "上传前必须显式选择所属项目标签（公开项目为 1）"
+    },
+    "202": {
+      "id": "raster-import-mock-001",
+      "kind": "import",
+      "status": "ready",
+      "stage": "ready",
+      "progressPercent": 100,
+      "messages": [
+        "已保存上传文件：uploaded/poplar-2026.tif",
+        "gdalwarp 预处理完成",
+        "栅格导入完成，已生成 COG 预处理文件"
+      ],
+      "result": null,
+      "error": "",
+      "startedAt": 1781430000,
+      "finishedAt": 1781430060
+    }
+  },
+  "POST /api/raster/scan/": {
+    "202": {
+      "id": "raster-scan-mock-001",
+      "kind": "scan",
+      "status": "running",
+      "stage": "validating",
+      "progressPercent": 35,
+      "messages": [
+        "发现 原始影像/Traim.tif",
+        "发现 胡杨提取结果/Traim_result.tif",
+        "正在检查预处理缓存"
+      ],
+      "result": null,
+      "error": "",
+      "startedAt": 1781413100,
+      "finishedAt": null
+    }
+  },
+  "POST /api/raster/render/": {
+    "200": {
+      "delivery": "xyz",
+      "datasetId": 1,
+      "layerId": 1,
+      "styleHash": "mock-rgb-minmax-1-2-3",
+      "tileUrl": "/api/raster/tiles/1/mock-rgb-minmax-1-2-3/{z}/{x}/{y}.png",
+      "minZoom": 0,
+      "maxZoom": 18,
+      "tileSampling": "linear",
+      "status": "ready",
+      "bounds3857": [
+        9832676.279,
+        4877454.34,
+        9840825.79,
+        4889341.335
+      ],
+      "bounds4326": [
+        88.3284339,
+        40.0791742,
+        88.4016422,
+        40.1608305
+      ],
+      "imageCoordinates": [
+        [
+          88.3284339,
+          40.1608305
+        ],
+        [
+          88.4016422,
+          40.1608305
+        ],
+        [
+          88.4016422,
+          40.0791742
+        ],
+        [
+          88.3284339,
+          40.0791742
+        ]
+      ],
+      "rules": {
+        "mode": "rgb",
+        "bands": [
+          1,
+          2,
+          3
+        ],
+        "stretch": {
+          "enabled": true,
+          "type": "minmax"
+        },
+        "palette": "poplar",
+        "alphaBand": "mask",
+        "nodata": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "POST /api/raster/render/async/": {
+    "202": {
+      "id": "render-mock-20260614-001",
+      "kind": "render",
+      "status": "running",
+      "stage": "preprocessing",
+      "progressPercent": 45,
+      "messages": [
+        "读取栅格元数据",
+        "生成样式缓存键",
+        "准备 XYZ 瓦片缓存"
+      ],
+      "result": null,
+      "error": "",
+      "startedAt": 1781413300,
+      "finishedAt": null
+    }
+  },
+  "POST /api/raster/unique-values/": {
+    "200": {
+      "band": 1,
+      "items": [
+        {
+          "value": 0,
+          "color": "#000000",
+          "label": "背景"
+        },
+        {
+          "value": 1,
+          "color": "#1f9d55",
+          "label": "胡杨"
+        },
+        {
+          "value": 2,
+          "color": "#d9a441",
+          "label": "其他植被"
+        }
+      ]
+    }
+  },
+  "GET /api/raster/jobs/{job_id}/": {
+    "200": {
+      "id": "raster-import-mock-001",
+      "kind": "import",
+      "status": "ready",
+      "stage": "ready",
+      "progressPercent": 100,
+      "messages": [
+        "已保存上传文件：uploaded/poplar-2026.tif",
+        "gdalwarp 预处理完成",
+        "栅格导入完成，已生成 COG 预处理文件"
+      ],
+      "result": {
+        "items": [
+          {
+            "id": 2,
+            "name": "Traim_result",
+            "code": "raster-fa42b738b42f",
+            "status": "ready",
+            "sourceFileName": "Traim_result.tif",
+            "sourceFormat": "GTiff",
+            "sourceManifest": [
+              {
+                "name": "Traim_result.tif",
+                "size": 18524218,
+                "role": "primary"
+              }
+            ],
+            "sourceChecksumSha256": "mock-traim-result-sha256",
+            "rasterKind": "categorical",
+            "sourcePath": "胡杨提取结果/Traim_result.tif",
+            "processedPath": "胡杨提取结果/Traim_result.cog.tif",
+            "sourceMetadataPath": "source/胡杨提取结果/Traim_result.tif.gdalinfo.json",
+            "processedMetadataPath": "preprocessed/胡杨提取结果/Traim_result.cog.tif.gdalinfo.json",
+            "dataResourceId": 2,
+            "mapLayerId": 2,
+            "bandCount": 1,
+            "bounds3857": [
+              9832676.279,
+              4877454.34,
+              9840825.79,
+              4889341.335
+            ],
+            "bounds4326": [
+              88.3284339,
+              40.0791742,
+              88.4016422,
+              40.1608305
+            ],
+            "imageCoordinates": [
+              [
+                88.3284339,
+                40.1608305
+              ],
+              [
+                88.4016422,
+                40.1608305
+              ],
+              [
+                88.4016422,
+                40.0791742
+              ],
+              [
+                88.3284339,
+                40.0791742
+              ]
+            ],
+            "defaultRules": {
+              "mode": "gray",
+              "bands": [
+                1
+              ],
+              "stretch": {
+                "enabled": true,
+                "type": "minmax",
+                "perBand": {
+                  "1": {
+                    "min": 0,
+                    "max": 2
+                  }
+                }
+              },
+              "palette": "poplar",
+              "uniqueValues": [],
+              "alphaBand": "mask",
+              "nodata": {
+                "enabled": true
+              }
+            },
+            "sourceFileSize": 4464959,
+            "processedFileSize": 5861035,
+            "progressLog": "开始读取源文件元数据\n开始 gdalwarp 预处理到 EPSG:3857 COG\nCreating output file that is 12444P x 18151L.\n0.\n.\n.\n10.\n.\n.\n20.\n.\n.\n30.\n.\n.\n40.\n.\n.\n50.\n.\n.\n60.\n.\n.\n70.\n.\n.\n80.\n.\n.\n90.\n.\n.\n100 - done.\n开始读取预处理文件元数据\n导入完成",
+            "errorMessage": "",
+            "importedAt": "2026-06-07T11:34:08.126235+00:00",
+            "processedAt": "2026-06-07T11:34:11.744732+00:00",
+            "metadata": {
+              "size": [
+                12444,
+                18151
+              ],
+              "driver": "GTiff",
+              "coordinateSystem": 3857,
+              "bands": [
+                {
+                  "band": 1,
+                  "type": "Byte",
+                  "description": "Band 1",
+                  "colorInterpretation": "Gray",
+                  "min": 0,
+                  "max": 2,
+                  "isInteger": true
+                }
+              ]
+            }
+          },
+          {
+            "id": 1,
+            "name": "Traim",
+            "code": "raster-91d2a5ecd116",
+            "status": "ready",
+            "sourceFileName": "Traim.tif",
+            "sourceFormat": "GTiff",
+            "sourceManifest": [
+              {
+                "name": "Traim.tif",
+                "size": 318524218,
+                "role": "primary"
+              }
+            ],
+            "sourceChecksumSha256": "mock-traim-source-sha256",
+            "rasterKind": "imagery",
+            "sourcePath": "原始影像/Traim.tif",
+            "processedPath": "原始影像/Traim.cog.tif",
+            "sourceMetadataPath": "source/原始影像/Traim.tif.gdalinfo.json",
+            "processedMetadataPath": "preprocessed/原始影像/Traim.cog.tif.gdalinfo.json",
+            "dataResourceId": 1,
+            "mapLayerId": 1,
+            "bandCount": 8,
+            "bounds3857": [
+              9832676.279,
+              4877454.34,
+              9840825.79,
+              4889341.335
+            ],
+            "bounds4326": [
+              88.3284339,
+              40.0791742,
+              88.4016422,
+              40.1608305
+            ],
+            "imageCoordinates": [
+              [
+                88.3284339,
+                40.1608305
+              ],
+              [
+                88.4016422,
+                40.1608305
+              ],
+              [
+                88.4016422,
+                40.0791742
+              ],
+              [
+                88.3284339,
+                40.0791742
+              ]
+            ],
+            "defaultRules": {
+              "mode": "rgb",
+              "bands": [
+                1,
+                2,
+                3
+              ],
+              "stretch": {
+                "enabled": true,
+                "type": "minmax",
+                "perBand": {
+                  "1": {
+                    "min": 0,
+                    "max": 74
+                  },
+                  "2": {
+                    "min": 0,
+                    "max": 83
+                  },
+                  "3": {
+                    "min": 0,
+                    "max": 93
+                  },
+                  "4": {
+                    "min": 0,
+                    "max": 106
+                  },
+                  "5": {
+                    "min": 0,
+                    "max": 112
+                  },
+                  "6": {
+                    "min": 0,
+                    "max": 108
+                  },
+                  "7": {
+                    "min": 0,
+                    "max": 117
+                  },
+                  "8": {
+                    "min": 0,
+                    "max": 92
+                  }
+                }
+              },
+              "palette": "poplar",
+              "uniqueValues": [],
+              "alphaBand": "mask",
+              "nodata": {
+                "enabled": true
+              }
+            },
+            "sourceFileSize": 716582060,
+            "processedFileSize": 834434559,
+            "progressLog": "开始读取源文件元数据\n开始 gdalwarp 预处理到 EPSG:3857 COG\nCreating output file that is 12444P x 18151L.\n0.\n.\n.\n10.\n.\n.\n20.\n.\n.\n30.\n.\n.\n40.\n.\n.\n50.\n.\n.\n60.\n.\n.\n70.\n.\n.\n80.\n.\n.\n90.\n.\n.\n100 - done in 00:01:18.\n开始读取预处理文件元数据\n导入完成",
+            "errorMessage": "",
+            "importedAt": "2026-06-07T11:32:47.997926+00:00",
+            "processedAt": "2026-06-07T11:34:08.123793+00:00",
+            "metadata": {
+              "size": [
+                12444,
+                18151
+              ],
+              "driver": "GTiff",
+              "coordinateSystem": 3857,
+              "bands": [
+                {
+                  "band": 1,
+                  "type": "Byte",
+                  "description": "CoastalBlue (427.300000 Nanometers)",
+                  "colorInterpretation": "Gray",
+                  "min": 0,
+                  "max": 74,
+                  "isInteger": true
+                },
+                {
+                  "band": 2,
+                  "type": "Byte",
+                  "description": "Blue (477.900000 Nanometers)",
+                  "colorInterpretation": "Undefined",
+                  "min": 0,
+                  "max": 83,
+                  "isInteger": true
+                },
+                {
+                  "band": 3,
+                  "type": "Byte",
+                  "description": "Green (546.200000 Nanometers)",
+                  "colorInterpretation": "Undefined",
+                  "min": 0,
+                  "max": 93,
+                  "isInteger": true
+                },
+                {
+                  "band": 4,
+                  "type": "Byte",
+                  "description": "Yellow (607.800000 Nanometers)",
+                  "colorInterpretation": "Undefined",
+                  "min": 0,
+                  "max": 106,
+                  "isInteger": true
+                },
+                {
+                  "band": 5,
+                  "type": "Byte",
+                  "description": "Red (658.800000 Nanometers)",
+                  "colorInterpretation": "Undefined",
+                  "min": 0,
+                  "max": 112,
+                  "isInteger": true
+                },
+                {
+                  "band": 6,
+                  "type": "Byte",
+                  "description": "RedEdge (723.700000 Nanometers)",
+                  "colorInterpretation": "Undefined",
+                  "min": 0,
+                  "max": 108,
+                  "isInteger": true
+                },
+                {
+                  "band": 7,
+                  "type": "Byte",
+                  "description": "NIR1 (832.500000 Nanometers)",
+                  "colorInterpretation": "Undefined",
+                  "min": 0,
+                  "max": 117,
+                  "isInteger": true
+                },
+                {
+                  "band": 8,
+                  "type": "Byte",
+                  "description": "NIR2 (908.000000 Nanometers)",
+                  "colorInterpretation": "Undefined",
+                  "min": 0,
+                  "max": 92,
+                  "isInteger": true
+                }
+              ]
+            }
+          }
+        ],
+        "count": 2
+      },
+      "error": "",
+      "startedAt": 1781413100,
+      "finishedAt": 1781413188
+    }
+  }
+}

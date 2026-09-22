@@ -1,0 +1,363 @@
+{
+  "updatedAt": "2026-09-18",
+  "articles": [
+    {
+      "id": "platform-guide",
+      "category": "入门指南",
+      "title": "平台导览",
+      "summary": "进入系统首先打开地理工作台。数据资源是第二个模块，提供地理数据与非地理数据两类入口。",
+      "audiences": ["所有用户"],
+      "tags": ["平台导览"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "进入系统首先打开地理工作台。数据资源是第二个模块，提供地理数据与非地理数据两类入口。",
+            "顶部项目选择器始终选择一个具体项目。时空科普和团队动态是公共板块，不随项目切换隐藏。项目管理位于后台管理。",
+            "全局搜索可检索有权访问的资源、工程和成果。操作按钮由功能权限控制，项目标签决定可访问哪些业务对象。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "quick-start",
+      "category": "入门指南",
+      "title": "快速入门",
+      "summary": "登录后确认顶部项目标签；所有人自动可访问“公开”，其他标签由超级管理员分配。",
+      "audiences": ["所有用户"],
+      "tags": ["快速入门"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "登录后确认顶部项目标签；所有人自动可访问“公开”，其他标签由超级管理员分配。",
+            "在资源列表选择数据，加载到图层树后查看地图及属性。先保存重要编辑，再切换项目或退出系统。",
+            "需要重复使用图层、符号和视图时保存地图工程；正式制图从已保存工程创建出图草稿。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "account-roles",
+      "category": "入门指南",
+      "title": "账号、项目与权限",
+      "summary": "一人可拥有多个项目标签，但每次仅在选定的一个项目内工作。没有“全部可访问”的工作模式。",
+      "audiences": ["所有用户"],
+      "tags": ["账号、项目与权限"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "一人可拥有多个项目标签，但每次仅在选定的一个项目内工作。没有“全部可访问”的工作模式。",
+            "超级管理员在后台创建项目、分配用户标签；其他用户不能自行获得私有项目访问权。“公开”项目无需分配。",
+            "项目成员可查看所属项目的已发布对象；编辑、删除、下载等还需相应功能权限。保存于公开项目意味着允许所有人阅读，上传前应确认项目选择。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "map-workbench",
+      "category": "空间分析",
+      "title": "地理工作台",
+      "summary": "从数据列表加载矢量或栅格图层。可调整顺序、显隐和符号化，定位到图层范围，查看属性。",
+      "audiences": ["所有用户"],
+      "tags": ["地理工作台"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "从数据列表加载矢量或栅格图层。可调整顺序、显隐和符号化，定位到图层范围，查看属性。",
+            "默认使用 Mapbox 底图；底图菜单可切换已配置的服务。工程会保存底图选择，重新打开时恢复。网络或服务配置异常会提示，制图不会用简化背景冒充正式底图。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spatial-query",
+      "category": "空间分析",
+      "title": "空间查询",
+      "summary": "查询对象下拉列表仅列出已加载到图层树、有有效来源的可查询矢量数据；同一来源合并显示。",
+      "audiences": ["所有用户"],
+      "tags": ["空间查询"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "查询对象下拉列表仅列出已加载到图层树、有有效来源的可查询矢量数据；同一来源合并显示。",
+            "先加载所需数据，再选择查询对象并绘制或指定空间范围。隐藏但未移除的图层仍可作为查询对象；栅格不在矢量查询列表。",
+            "移除某来源的最后一个图层后，该来源不能继续查询，相关选择和结果会清空。查询按来源重新执行，当前加载图层的原属性筛选不自动带入。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "attribute-layer",
+      "category": "空间分析",
+      "title": "属性查询与图层",
+      "summary": "属性查询用于按字段条件筛选数据。检查字段类型、运算符和空值，再将结果加载为图层。",
+      "audiences": ["所有用户"],
+      "tags": ["属性查询与图层"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "属性查询用于按字段条件筛选数据。检查字段类型、运算符和空值，再将结果加载为图层。",
+            "图层可显示或隐藏；移除图层不会删除资源文件。查询结果和当前显示范围并非同一概念，导出前请确认所选数据及范围。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data-import",
+      "category": "数据管理",
+      "title": "数据上传",
+      "summary": "进入数据资源的上传入口，显式选择隶属项目标签。超级管理员可选全部项目，一般用户只能选已获授权项目；至少须有“公开”等一个有效标签。",
+      "audiences": ["所有用户"],
+      "tags": ["数据上传"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "进入数据资源的上传入口，显式选择隶属项目标签。超级管理员可选全部项目，一般用户只能选已获授权项目；至少须有“公开”等一个有效标签。",
+            "按是否具有地理坐标信息选择地理或非地理数据，上传并预览文件，完成字段、坐标参考系、名称和来源等校验后提交。",
+            "提交后在相同项目的存量数据中核对记录、预览和项目标签。切换项目不会改变已经上传数据的归属。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data-standards",
+      "category": "数据管理",
+      "title": "数据准备规范",
+      "summary": "地理数据应具有明确坐标参考系和有效几何或坐标字段；经纬度、投影坐标及单位要区分。非地理数据应明确字段名称、含义、单位和缺失值。",
+      "audiences": ["所有用户"],
+      "tags": ["数据准备规范"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "地理数据应具有明确坐标参考系和有效几何或坐标字段；经纬度、投影坐标及单位要区分。非地理数据应明确字段名称、含义、单位和缺失值。",
+            "为文件和记录提供可辨识名称、来源、采集日期或版本。先检查导入预览及警告，再提交；不要把导入成功等同于专业质量审查完成。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data-inventory",
+      "category": "数据管理",
+      "title": "存量数据维护",
+      "summary": "存量列表只展示当前项目有权访问的数据，可按名称、类型等筛选。地理数据与非地理数据分类依据坐标及几何信息。",
+      "audiences": ["所有用户"],
+      "tags": ["存量数据维护"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "存量列表只展示当前项目有权访问的数据，可按名称、类型等筛选。地理数据与非地理数据分类依据坐标及几何信息。",
+            "资源的项目标签与访问权联动。看不到私有项目资源时，请先确认顶部项目及管理员分配的标签，而不是在资源上选择额外可见角色。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "project-topic",
+      "category": "数据管理",
+      "title": "工程、制图与成果",
+      "summary": "工程保存图层引用、查询条件、符号化、底图及地图视图。工程列表分页展示摘要，打开时才读取完整快照。",
+      "audiences": ["所有用户"],
+      "tags": ["工程、制图与成果"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "工程保存图层引用、查询条件、符号化、底图及地图视图。工程列表分页展示摘要，打开时才读取完整快照。",
+            "覆盖或编辑工程需基于最近读取的版本。如果另一窗口已保存，系统拒绝覆盖并提示冲突。保留当前编辑内容，重新读取工程、核对差异后再保存。",
+            "从工程创建制图草稿，拖动地图框、标题、图例、指北针、比例尺、区位框等要素。主图、格网和比例尺使用同一实际输出范围；比例尺表示地图中心附近的局部尺度。",
+            "沿用现有纸张、DPI 和输出格式。预览确认后生成版本并发布；发布成果对所属项目成员可读，公开项目所有人可读，下载和还原另需功能权限。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "admin-management",
+      "category": "后台管理",
+      "title": "后台与公共内容",
+      "summary": "后台根据功能权限提供用户、项目、资源、成果、日志和备份管理。超级管理员具有最高权限，可查看所有项目，但业务操作仍选择一个具体项目。",
+      "audiences": ["所有用户"],
+      "tags": ["后台与公共内容"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "后台根据功能权限提供用户、项目、资源、成果、日志和备份管理。超级管理员具有最高权限，可查看所有项目，但业务操作仍选择一个具体项目。",
+            "新闻和科普已发布内容所有人可读，与项目无关。内容管理员编辑时上传的新附件先暂存，仅上传者预览；点击保存后与正文、封面、说明一起生效。",
+            "取消编辑会撤销新上传的暂存附件。异常离开页面留下的附件在 24 小时后过期，停止访问；后续上传或管理员执行清理时删除过期文件。现有文章内容和学习链接保持不变。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "permission-audit",
+      "category": "后台管理",
+      "title": "权限与日志",
+      "summary": "超级管理员在项目管理中分配用户标签，在账号或角色管理中维护操作权限。两者分别决定数据范围与可执行操作。",
+      "audiences": ["所有用户"],
+      "tags": ["权限与日志"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "超级管理员在项目管理中分配用户标签，在账号或角色管理中维护操作权限。两者分别决定数据范围与可执行操作。",
+            "核对数据访问问题时记录用户、当前项目、对象名称、操作及时间。日志可用于追溯创建、更新、上传、发布和权限调整；不要传播密码或会话信息。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "backup-security",
+      "category": "后台管理",
+      "title": "备份与恢复",
+      "summary": "平台备份包含业务数据库、配置、媒体、上传、所有项目内容及持久成果；科研备份包含公开与所有私有项目科研目录，不受当前项目切换影响。",
+      "audiences": ["所有用户"],
+      "tags": ["备份与恢复"],
+      "blocks": [
+        {
+          "type": "bullets",
+          "title": "操作说明",
+          "items": [
+            "平台备份包含业务数据库、配置、媒体、上传、所有项目内容及持久成果；科研备份包含公开与所有私有项目科研目录，不受当前项目切换影响。",
+            "完整恢复需要匹配的两类备份。先在独立目录解压，核对清单校验值、数据库完整性和文件引用，确认资源、附件、工程与成果可用后，再安排恢复窗口。",
+            "缓存、临时文件和备份自身不作为科研原始资料。备份包含内部数据与配置，应存放于管理员控制的目录。"
+          ]
+        }
+      ]
+    }
+  ],
+  "english": [
+    {
+      "id": "platform-guide",
+      "title": "Platform tour",
+      "items": [
+        "The geo workspace is the first module. Data Resources is second and organizes geographic and non-geographic data.",
+        "Select one project at a time. Published knowledge and team news remain visible regardless of that selection. Project management is under Administration.",
+        "Search authorized resources, map projects and outputs. Feature permissions control actions; project labels control access to business objects."
+      ]
+    },
+    {
+      "id": "quick-start",
+      "title": "Quick start",
+      "items": [
+        "After signing in, check the current project. Everyone can access Public; a super administrator assigns other labels.",
+        "Load a resource into the layer tree, then inspect its map and attributes. Save edits before switching projects or signing out.",
+        "Save a map project to reuse layers, symbology and the view. Create a map-output draft from a saved project."
+      ]
+    },
+    {
+      "id": "account-roles",
+      "title": "Accounts, projects and permissions",
+      "items": [
+        "One person may belong to several projects but works in one selected project at a time. There is no all-project workspace.",
+        "Super administrators create labels and assign users in Administration. Public needs no assignment; private access cannot be self-assigned.",
+        "Project members can view published objects in that project. Editing, deletion and download also require the corresponding permissions. Check the project before uploading to Public."
+      ]
+    },
+    {
+      "id": "map-workbench",
+      "title": "Geo workspace",
+      "items": [
+        "Load vector or raster layers, change their order, visibility and symbology, zoom to their extent, and inspect attributes.",
+        "Mapbox is the default. Select another configured provider in the basemap menu. Saved projects retain the selection. Export reports unavailable imagery instead of substituting a placeholder."
+      ]
+    },
+    {
+      "id": "spatial-query",
+      "title": "Spatial query",
+      "items": [
+        "The target list contains queryable vector sources already loaded in the layer tree, with duplicate sources combined.",
+        "Load data first, choose a target, and draw or specify the spatial extent. Hidden layers remain loaded; raster data is not a vector-query target.",
+        "Removing the final layer for a source clears its query selection and results. Queries run against the source; existing layer attribute filters are not automatically inherited."
+      ]
+    },
+    {
+      "id": "attribute-layer",
+      "title": "Attributes and layers",
+      "items": [
+        "Use attribute queries to filter data by fields. Check types, operators and null values before loading results as a layer.",
+        "Hiding or removing a layer does not delete its resource. Query results and the visible map extent differ; check the data and extent before exporting."
+      ]
+    },
+    {
+      "id": "data-import",
+      "title": "Upload data",
+      "items": [
+        "Open Upload in Data Resources and explicitly select the owning project. Super administrators can select any project; other users select only authorized projects.",
+        "Choose geographic or non-geographic data according to coordinate information. Preview the file and validate fields, CRS, name and source before committing.",
+        "Verify the record, preview and project label in the same project inventory. Switching projects does not change uploaded data ownership."
+      ]
+    },
+    {
+      "id": "data-standards",
+      "title": "Prepare data",
+      "items": [
+        "Geographic data needs a known CRS and valid geometry or coordinate fields. Distinguish geographic and projected coordinates and their units. Document non-geographic field meanings, units and missing values.",
+        "Provide identifiable names, sources, dates or versions. Review previews and warnings before committing; successful import does not replace scientific quality review."
+      ]
+    },
+    {
+      "id": "data-inventory",
+      "title": "Data inventory",
+      "items": [
+        "Inventory lists authorized data in the current project, with name and type filters. Geographic classification depends on usable coordinates or geometry.",
+        "Resource access follows its project label. If private data is missing, check the current project and assigned labels; there is no extra audience-role setting on resources."
+      ]
+    },
+    {
+      "id": "project-topic",
+      "title": "Projects, cartography and outputs",
+      "items": [
+        "Projects store layer references, queries, symbology, basemap and map view. The list is paginated; full snapshots are fetched only on opening.",
+        "Edits and overwrites must use the last-read version. If another window saved first, the server rejects the overwrite. Retain your edits, reload, compare changes and save again.",
+        "Create a layout draft and drag the map frame, title, legend, north arrow, scale and overview. Image, grid and scale use the same output extent; the scale represents the map centre.",
+        "Use the existing paper, DPI and output formats. Preview, create a version and publish to the owning project. Public is readable by everyone; download and restoration require the relevant permissions."
+      ]
+    },
+    {
+      "id": "admin-management",
+      "title": "Administration and public content",
+      "items": [
+        "Administration exposes user, project, resource, output, log and backup management according to permissions. Super administrators access every project but business operations still select one.",
+        "Published news and knowledge are public regardless of project. New uploads stay private to the uploading editor until Save commits the body, cover, captions and attachments together.",
+        "Cancel removes staged uploads. Files left by an interrupted session expire after 24 hours and become inaccessible. A later upload or an administrator's cleanup removes expired files. Existing article content and learning links are unchanged."
+      ]
+    },
+    {
+      "id": "permission-audit",
+      "title": "Permissions and audit logs",
+      "items": [
+        "Super administrators assign project labels in Project Management and action permissions in account or role management. These control scope and allowed actions respectively.",
+        "For access issues, record user, current project, object, action and time. Logs trace updates, uploads, publication and permission changes; do not share passwords or session data."
+      ]
+    },
+    {
+      "id": "backup-security",
+      "title": "Backup and recovery",
+      "items": [
+        "Platform backup includes databases, configuration, media, uploads, project content and persistent outputs. Research backup includes Public and all private-project research directories.",
+        "Full recovery needs matching backups of both types. Restore to a separate directory first and verify checksums, databases and references before scheduling a recovery window.",
+        "Caches, temporary files and backup archives themselves are not primary research data. Backups contain internal data and configuration and belong in administrator-controlled storage."
+      ]
+    }
+  ]
+}

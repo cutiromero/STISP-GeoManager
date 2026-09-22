@@ -1,0 +1,37 @@
+# Docker 容器内运行配置示例。
+# 适用于复制为宿主机配置目录中的 app.toml，再将整个目录挂载到 /config。
+# 业务数据和科研数据通过 Docker 数据卷统一挂载到 /data 下。
+
+[runtime]
+debug = false
+allowed_hosts = ["localhost", "127.0.0.1"]
+csrf_trusted_origins = []
+waitress_host = "0.0.0.0"
+waitress_port = 8000
+waitress_threads = 2
+disable_catalog_startup_scan = true
+disable_raster_startup_scan = true
+
+[application.system]
+name = "时空智能服务平台"
+allow_registration = true
+
+[application.storage]
+app_data = "/data/app"
+research_data_root = "/data/research"
+
+[application.map]
+default_center = [80.0, 41.5]
+default_zoom = 4.5
+default_basemap = "satellite"
+mapbox_access_token = ""
+tianditu_access_token = ""
+
+[application.limits]
+# 小内存部署安全默认值；完成代理、磁盘和超时配置后可在后台提高，硬上限为 1024 MB。
+upload_max_mb = 64
+query_result_limit = 5000
+max_raster_side_pixels = 12000
+
+[application.raster]
+symbolizer_timeout_seconds = 120

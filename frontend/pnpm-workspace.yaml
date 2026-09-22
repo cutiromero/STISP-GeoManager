@@ -1,0 +1,20 @@
+packages:
+  - .
+
+allowBuilds:
+  core-js: true
+  esbuild: true
+  protobufjs: true
+
+minimumReleaseAgeExclude:
+  - lodash@4.17.24
+  - uuid@11.1.1
+  - js-yaml@4.1.2
+
+overrides:
+  js-yaml@<=4.1.1: ^4.1.2
+  lodash@<=4.17.23: ^4.17.24
+  uuid@<11.1.1: ^11.1.1
+
+patchedDependencies:
+  mapbox-gl@3.25.0: patches/mapbox-gl@3.25.0.patch

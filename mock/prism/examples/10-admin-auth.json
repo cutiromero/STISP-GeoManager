@@ -1,0 +1,1728 @@
+{
+  "GET /api/admin/profile/": {
+    "200": {
+      "user": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员",
+        "email": "admin@example.local",
+        "avatarUrl": "",
+        "department": "平台运维组",
+        "isStaff": false,
+        "isSuperuser": false,
+        "roles": [
+          "超级管理员"
+        ],
+        "permissions": {
+          "canAccessAdmin": true,
+          "canManageFeaturePermissions": true,
+          "canCreateUser": true,
+          "canViewOperationLogs": true,
+          "canViewAllOperationLogs": true,
+          "canViewOwnOperationLogs": true,
+          "canViewGroupOperationLogs": true,
+          "canViewSystemLogs": true,
+          "canManageSystemSettings": true,
+          "canManageDataBackup": true,
+          "canManageAuth": true,
+          "canViewDashboardResourceCard": true,
+          "canViewDashboardLayerCard": true,
+          "canViewDashboardRasterCard": true,
+          "canViewDashboardUserCard": true,
+          "canViewDashboardActiveUsersCard": true,
+          "canViewDashboardSystemCard": true,
+          "canBrowseData": true,
+          "canQueryData": true,
+          "canLoadVectorLayer": true,
+          "canLoadRasterLayer": true,
+          "canUseCustomSymbolization": true,
+          "canUseAiInterpretation": true,
+          "canExportData": true,
+          "canManageRasterData": true,
+          "canUploadData": true,
+          "canViewDataOverview": true,
+          "canViewDataResources": true,
+          "canCreateDataResources": true,
+          "canChangeDataResources": true,
+          "canDeleteDataResources": true,
+          "canViewWorkspaces": true,
+          "canCreateWorkspaces": true,
+          "canChangeWorkspaces": true,
+          "canDeleteWorkspaces": true,
+          "canViewMapCompositions": true,
+          "canCreateMapCompositions": true,
+          "canChangeMapCompositions": true,
+          "canDeleteMapCompositions": true,
+          "canExportMapCompositions": true,
+          "canPublishMapCompositions": true,
+          "canViewResultArtifacts": true,
+          "canImportResultArtifacts": true,
+          "canDownloadResultArtifacts": true,
+          "canPublishResultArtifacts": true,
+          "canDeleteResultArtifacts": true
+        },
+        "groupIds": [
+          1
+        ],
+        "isActive": true,
+        "directPermissions": [],
+        "effectivePermissions": [
+          "core.manage_auth",
+          "core.browse_data",
+          "core.query_data",
+          "catalog.add_dataresource",
+          "core.view_data_overview"
+        ],
+        "operationLogGroupIds": [
+          1,
+          2
+        ],
+        "groupPermissions": [
+          "core.manage_auth",
+          "core.browse_data",
+          "core.query_data",
+          "catalog.add_dataresource",
+          "core.view_data_overview"
+        ],
+        "disabledPermissions": []
+      },
+      "avatarUrl": "",
+      "department": "平台运维组",
+      "grantedPermissions": [
+        "core.manage_auth",
+        "core.browse_data",
+        "core.query_data"
+      ],
+      "disabledPermissions": [],
+      "effectivePermissions": [
+        "core.manage_auth",
+        "core.browse_data",
+        "core.query_data"
+      ],
+      "availablePermissions": [
+        {
+          "id": "core.manage_auth",
+          "label": "认证授权管理",
+          "group": "人员权限"
+        },
+        {
+          "id": "core.browse_data",
+          "label": "浏览数据",
+          "group": "数据权限"
+        },
+        {
+          "id": "core.query_data",
+          "label": "查询数据",
+          "group": "数据权限"
+        },
+        {
+          "id": "core.view_data_overview",
+          "label": "查看总数据情况",
+          "group": "概览权限"
+        },
+        {
+          "id": "catalog.add_dataresource",
+          "label": "新增数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.view_dataresource",
+          "label": "查看存量数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.change_dataresource",
+          "label": "编辑数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.delete_dataresource",
+          "label": "删除数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.add_workspacescene",
+          "label": "新增工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.view_workspacescene",
+          "label": "查看工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.change_workspacescene",
+          "label": "编辑工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.delete_workspacescene",
+          "label": "删除工程专题",
+          "group": "数据权限"
+        }
+      ],
+      "groupPermissions": [
+        "core.manage_auth",
+        "core.browse_data",
+        "core.query_data"
+      ]
+    }
+  },
+  "POST /api/admin/profile/update/": {
+    "200": {
+      "user": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员",
+        "email": "admin@example.local",
+        "avatarUrl": "",
+        "department": "平台运维组",
+        "isStaff": false,
+        "isSuperuser": false,
+        "roles": [
+          "超级管理员"
+        ],
+        "permissions": {
+          "canAccessAdmin": true,
+          "canManageFeaturePermissions": true,
+          "canCreateUser": true,
+          "canViewOperationLogs": true,
+          "canViewAllOperationLogs": true,
+          "canViewOwnOperationLogs": true,
+          "canViewGroupOperationLogs": true,
+          "canViewSystemLogs": true,
+          "canManageSystemSettings": true,
+          "canManageDataBackup": true,
+          "canManageAuth": true,
+          "canViewDashboardResourceCard": true,
+          "canViewDashboardLayerCard": true,
+          "canViewDashboardRasterCard": true,
+          "canViewDashboardUserCard": true,
+          "canViewDashboardActiveUsersCard": true,
+          "canViewDashboardSystemCard": true,
+          "canBrowseData": true,
+          "canQueryData": true,
+          "canLoadVectorLayer": true,
+          "canLoadRasterLayer": true,
+          "canUseCustomSymbolization": true,
+          "canUseAiInterpretation": true,
+          "canExportData": true,
+          "canManageRasterData": true,
+          "canUploadData": true,
+          "canViewDataOverview": true,
+          "canViewDataResources": true,
+          "canCreateDataResources": true,
+          "canChangeDataResources": true,
+          "canDeleteDataResources": true,
+          "canViewWorkspaces": true,
+          "canCreateWorkspaces": true,
+          "canChangeWorkspaces": true,
+          "canDeleteWorkspaces": true,
+          "canViewMapCompositions": true,
+          "canCreateMapCompositions": true,
+          "canChangeMapCompositions": true,
+          "canDeleteMapCompositions": true,
+          "canExportMapCompositions": true,
+          "canPublishMapCompositions": true,
+          "canViewResultArtifacts": true,
+          "canImportResultArtifacts": true,
+          "canDownloadResultArtifacts": true,
+          "canPublishResultArtifacts": true,
+          "canDeleteResultArtifacts": true
+        },
+        "groupIds": [
+          1
+        ],
+        "isActive": true,
+        "directPermissions": [],
+        "effectivePermissions": [
+          "core.manage_auth",
+          "core.browse_data",
+          "core.query_data",
+          "catalog.add_dataresource",
+          "core.view_data_overview"
+        ],
+        "operationLogGroupIds": [
+          1,
+          2
+        ],
+        "groupPermissions": [
+          "core.manage_auth",
+          "core.browse_data",
+          "core.query_data",
+          "catalog.add_dataresource",
+          "core.view_data_overview"
+        ],
+        "disabledPermissions": []
+      },
+      "avatarUrl": "",
+      "department": "平台运维组",
+      "grantedPermissions": [
+        "core.manage_auth",
+        "core.browse_data",
+        "core.query_data"
+      ],
+      "disabledPermissions": [],
+      "effectivePermissions": [
+        "core.manage_auth",
+        "core.browse_data",
+        "core.query_data"
+      ],
+      "availablePermissions": [
+        {
+          "id": "core.manage_auth",
+          "label": "认证授权管理",
+          "group": "人员权限"
+        },
+        {
+          "id": "core.view_data_overview",
+          "label": "查看总数据情况",
+          "group": "概览权限"
+        },
+        {
+          "id": "catalog.add_dataresource",
+          "label": "新增数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.view_dataresource",
+          "label": "查看存量数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.change_dataresource",
+          "label": "编辑数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.delete_dataresource",
+          "label": "删除数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.add_workspacescene",
+          "label": "新增工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.view_workspacescene",
+          "label": "查看工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.change_workspacescene",
+          "label": "编辑工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.delete_workspacescene",
+          "label": "删除工程专题",
+          "group": "数据权限"
+        }
+      ],
+      "groupPermissions": [
+        "core.manage_auth",
+        "core.browse_data",
+        "core.query_data"
+      ]
+    }
+  },
+  "POST /api/admin/profile/permissions/": {
+    "200": {
+      "user": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "系统管理员",
+        "email": "admin@example.local",
+        "avatarUrl": "",
+        "department": "平台运维组",
+        "isStaff": false,
+        "isSuperuser": false,
+        "roles": [
+          "超级管理员"
+        ],
+        "permissions": {
+          "canAccessAdmin": true,
+          "canManageFeaturePermissions": true,
+          "canCreateUser": true,
+          "canViewOperationLogs": true,
+          "canViewAllOperationLogs": true,
+          "canViewOwnOperationLogs": true,
+          "canViewGroupOperationLogs": true,
+          "canViewSystemLogs": true,
+          "canManageSystemSettings": true,
+          "canManageDataBackup": true,
+          "canManageAuth": true,
+          "canViewDashboardResourceCard": true,
+          "canViewDashboardLayerCard": true,
+          "canViewDashboardRasterCard": true,
+          "canViewDashboardUserCard": true,
+          "canViewDashboardActiveUsersCard": true,
+          "canViewDashboardSystemCard": true,
+          "canBrowseData": true,
+          "canQueryData": true,
+          "canLoadVectorLayer": true,
+          "canLoadRasterLayer": true,
+          "canUseCustomSymbolization": true,
+          "canUseAiInterpretation": true,
+          "canExportData": true,
+          "canManageRasterData": true,
+          "canUploadData": true,
+          "canViewDataOverview": true,
+          "canViewDataResources": true,
+          "canCreateDataResources": true,
+          "canChangeDataResources": true,
+          "canDeleteDataResources": true,
+          "canViewWorkspaces": true,
+          "canCreateWorkspaces": true,
+          "canChangeWorkspaces": true,
+          "canDeleteWorkspaces": true,
+          "canViewMapCompositions": true,
+          "canCreateMapCompositions": true,
+          "canChangeMapCompositions": true,
+          "canDeleteMapCompositions": true,
+          "canExportMapCompositions": true,
+          "canPublishMapCompositions": true,
+          "canViewResultArtifacts": true,
+          "canImportResultArtifacts": true,
+          "canDownloadResultArtifacts": true,
+          "canPublishResultArtifacts": true,
+          "canDeleteResultArtifacts": true
+        },
+        "groupIds": [
+          1
+        ],
+        "isActive": true,
+        "directPermissions": [],
+        "effectivePermissions": [
+          "core.manage_auth",
+          "core.browse_data",
+          "catalog.add_dataresource",
+          "core.view_data_overview"
+        ],
+        "operationLogGroupIds": [
+          1,
+          2
+        ],
+        "groupPermissions": [
+          "core.manage_auth",
+          "core.browse_data",
+          "catalog.add_dataresource",
+          "core.view_data_overview"
+        ],
+        "disabledPermissions": []
+      },
+      "avatarUrl": "",
+      "department": "平台运维组",
+      "grantedPermissions": [
+        "core.manage_auth",
+        "core.browse_data",
+        "core.query_data"
+      ],
+      "disabledPermissions": [
+        "core.query_data"
+      ],
+      "effectivePermissions": [
+        "core.manage_auth",
+        "core.browse_data"
+      ],
+      "availablePermissions": [
+        {
+          "id": "core.query_data",
+          "label": "查询数据",
+          "group": "数据权限"
+        },
+        {
+          "id": "core.view_data_overview",
+          "label": "查看总数据情况",
+          "group": "概览权限"
+        },
+        {
+          "id": "catalog.add_dataresource",
+          "label": "新增数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.view_dataresource",
+          "label": "查看存量数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.change_dataresource",
+          "label": "编辑数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.delete_dataresource",
+          "label": "删除数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.add_workspacescene",
+          "label": "新增工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.view_workspacescene",
+          "label": "查看工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.change_workspacescene",
+          "label": "编辑工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.delete_workspacescene",
+          "label": "删除工程专题",
+          "group": "数据权限"
+        }
+      ],
+      "groupPermissions": [
+        "core.manage_auth",
+        "core.browse_data"
+      ]
+    }
+  },
+  "POST /api/admin/profile/password/": {
+    "200": {
+      "detail": "密码已更新"
+    }
+  },
+  "GET /api/users/": {
+    "200": {
+      "items": [
+        {
+          "id": 1,
+          "username": "ops_manager",
+          "displayName": "系统管理员",
+          "email": "ops.manager@example.local",
+          "avatarUrl": "",
+          "department": "平台运维组",
+          "isStaff": false,
+          "isSuperuser": false,
+          "roles": [
+            "系统管理员"
+          ],
+          "permissions": {
+            "canAccessAdmin": true,
+            "canManageFeaturePermissions": true,
+            "canCreateUser": true,
+            "canViewOperationLogs": true,
+            "canViewAllOperationLogs": true,
+            "canViewOwnOperationLogs": true,
+            "canViewGroupOperationLogs": true,
+            "canViewSystemLogs": true,
+            "canManageSystemSettings": true,
+            "canManageDataBackup": true,
+            "canManageAuth": true,
+            "canViewDashboardResourceCard": true,
+            "canViewDashboardLayerCard": true,
+            "canViewDashboardRasterCard": true,
+            "canViewDashboardUserCard": true,
+            "canViewDashboardActiveUsersCard": true,
+            "canViewDashboardSystemCard": true,
+            "canBrowseData": true,
+            "canQueryData": true,
+            "canLoadVectorLayer": true,
+            "canLoadRasterLayer": true,
+            "canUseCustomSymbolization": true,
+            "canUseAiInterpretation": true,
+            "canExportData": true,
+            "canManageRasterData": true,
+            "canUploadData": true,
+            "canViewDataOverview": true,
+            "canViewDataResources": true,
+            "canCreateDataResources": true,
+            "canChangeDataResources": true,
+            "canDeleteDataResources": true,
+            "canViewWorkspaces": true,
+            "canCreateWorkspaces": true,
+            "canChangeWorkspaces": true,
+            "canDeleteWorkspaces": true,
+            "canViewMapCompositions": true,
+            "canCreateMapCompositions": true,
+            "canChangeMapCompositions": true,
+            "canDeleteMapCompositions": true,
+            "canExportMapCompositions": true,
+            "canPublishMapCompositions": true,
+            "canViewResultArtifacts": true,
+            "canImportResultArtifacts": false,
+            "canDownloadResultArtifacts": false,
+            "canPublishResultArtifacts": false,
+            "canDeleteResultArtifacts": false
+          },
+          "groupIds": [
+            6
+          ],
+          "isActive": true,
+          "directPermissions": [],
+          "effectivePermissions": [
+            "core.manage_auth",
+            "core.manage_feature_permissions",
+            "core.create_user",
+            "core.view_operation_logs",
+            "core.view_all_operation_logs",
+            "core.view_group_operation_logs",
+            "core.manage_system_settings",
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "core.custom_symbolization",
+            "core.ai_interpretation",
+            "catalog.export_dataresource",
+            "raster.manage_raster_dataset",
+            "catalog.add_dataresource",
+            "core.view_data_overview"
+          ],
+          "operationLogGroupIds": [
+            3,
+            4
+          ],
+          "groupPermissions": [
+            "core.manage_auth",
+            "core.manage_feature_permissions",
+            "core.create_user",
+            "core.view_operation_logs",
+            "core.view_all_operation_logs",
+            "core.view_group_operation_logs",
+            "core.manage_system_settings",
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "core.custom_symbolization",
+            "core.ai_interpretation",
+            "catalog.export_dataresource",
+            "raster.manage_raster_dataset",
+            "catalog.add_dataresource",
+            "core.view_data_overview"
+          ],
+          "disabledPermissions": []
+        },
+        {
+          "id": 2,
+          "username": "researcher_chen",
+          "displayName": "陈研究员",
+          "email": "chen.research@example.local",
+          "avatarUrl": "",
+          "department": "生态监测组",
+          "isStaff": false,
+          "isSuperuser": false,
+          "roles": [
+            "科研用户"
+          ],
+          "permissions": {
+            "canAccessAdmin": true,
+            "canManageFeaturePermissions": false,
+            "canCreateUser": false,
+            "canViewOperationLogs": true,
+            "canViewAllOperationLogs": false,
+            "canViewOwnOperationLogs": true,
+            "canViewGroupOperationLogs": true,
+            "canViewSystemLogs": false,
+            "canManageSystemSettings": false,
+            "canManageDataBackup": false,
+            "canManageAuth": false,
+            "canViewDashboardResourceCard": true,
+            "canViewDashboardLayerCard": true,
+            "canViewDashboardRasterCard": true,
+            "canViewDashboardUserCard": true,
+            "canViewDashboardActiveUsersCard": true,
+            "canViewDashboardSystemCard": true,
+            "canBrowseData": true,
+            "canQueryData": true,
+            "canLoadVectorLayer": true,
+            "canLoadRasterLayer": true,
+            "canUseCustomSymbolization": false,
+            "canUseAiInterpretation": false,
+            "canExportData": true,
+            "canManageRasterData": false,
+            "canUploadData": true,
+            "canViewDataOverview": true,
+            "canViewDataResources": true,
+            "canCreateDataResources": true,
+            "canChangeDataResources": false,
+            "canDeleteDataResources": false,
+            "canViewWorkspaces": true,
+            "canCreateWorkspaces": true,
+            "canChangeWorkspaces": true,
+            "canDeleteWorkspaces": true,
+            "canViewMapCompositions": true,
+            "canCreateMapCompositions": true,
+            "canChangeMapCompositions": true,
+            "canDeleteMapCompositions": true,
+            "canExportMapCompositions": true,
+            "canPublishMapCompositions": true,
+            "canViewResultArtifacts": true,
+            "canImportResultArtifacts": true,
+            "canDownloadResultArtifacts": true,
+            "canPublishResultArtifacts": true,
+            "canDeleteResultArtifacts": true
+          },
+          "groupIds": [
+            3
+          ],
+          "isActive": true,
+          "directPermissions": [
+            "catalog.export_dataresource"
+          ],
+          "effectivePermissions": [
+            "core.view_operation_logs",
+            "core.view_own_operation_logs",
+            "core.view_group_operation_logs",
+            "core.view_dashboard_resource_card",
+            "core.view_dashboard_layer_card",
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "catalog.export_dataresource",
+            "catalog.add_dataresource",
+            "core.view_data_overview"
+          ],
+          "operationLogGroupIds": [
+            3
+          ],
+          "groupPermissions": [
+            "core.view_operation_logs",
+            "core.view_own_operation_logs",
+            "core.view_group_operation_logs",
+            "core.view_dashboard_resource_card",
+            "core.view_dashboard_layer_card",
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "catalog.add_dataresource",
+            "core.view_data_overview"
+          ],
+          "disabledPermissions": []
+        },
+        {
+          "id": 3,
+          "username": "data_admin_li",
+          "displayName": "李数据管理员",
+          "email": "li.data@example.local",
+          "avatarUrl": "",
+          "department": "数据治理组",
+          "isStaff": false,
+          "isSuperuser": false,
+          "roles": [
+            "数据管理员"
+          ],
+          "permissions": {
+            "canAccessAdmin": true,
+            "canManageFeaturePermissions": true,
+            "canCreateUser": false,
+            "canViewOperationLogs": true,
+            "canViewAllOperationLogs": true,
+            "canViewOwnOperationLogs": true,
+            "canViewGroupOperationLogs": true,
+            "canViewSystemLogs": false,
+            "canManageSystemSettings": false,
+            "canManageDataBackup": false,
+            "canManageAuth": false,
+            "canViewDashboardResourceCard": true,
+            "canViewDashboardLayerCard": true,
+            "canViewDashboardRasterCard": true,
+            "canViewDashboardUserCard": true,
+            "canViewDashboardActiveUsersCard": true,
+            "canViewDashboardSystemCard": true,
+            "canBrowseData": true,
+            "canQueryData": true,
+            "canLoadVectorLayer": true,
+            "canLoadRasterLayer": true,
+            "canUseCustomSymbolization": true,
+            "canUseAiInterpretation": true,
+            "canExportData": true,
+            "canManageRasterData": true,
+            "canUploadData": true,
+            "canViewDataOverview": true,
+            "canViewDataResources": true,
+            "canCreateDataResources": true,
+            "canChangeDataResources": true,
+            "canDeleteDataResources": true,
+            "canViewWorkspaces": true,
+            "canCreateWorkspaces": true,
+            "canChangeWorkspaces": true,
+            "canDeleteWorkspaces": true,
+            "canViewMapCompositions": true,
+            "canCreateMapCompositions": true,
+            "canChangeMapCompositions": true,
+            "canDeleteMapCompositions": true,
+            "canExportMapCompositions": true,
+            "canPublishMapCompositions": true,
+            "canViewResultArtifacts": true,
+            "canImportResultArtifacts": false,
+            "canDownloadResultArtifacts": false,
+            "canPublishResultArtifacts": false,
+            "canDeleteResultArtifacts": false
+          },
+          "groupIds": [
+            4
+          ],
+          "isActive": true,
+          "directPermissions": [],
+          "effectivePermissions": [
+            "core.view_operation_logs",
+            "core.view_own_operation_logs",
+            "core.view_dashboard_resource_card",
+            "core.view_dashboard_layer_card",
+            "core.view_dashboard_raster_card",
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "core.custom_symbolization",
+            "core.ai_interpretation",
+            "catalog.export_dataresource",
+            "raster.manage_raster_dataset",
+            "catalog.add_dataresource",
+            "core.view_data_overview"
+          ],
+          "operationLogGroupIds": [
+            4
+          ],
+          "groupPermissions": [
+            "core.view_operation_logs",
+            "core.view_own_operation_logs",
+            "core.view_dashboard_resource_card",
+            "core.view_dashboard_layer_card",
+            "core.view_dashboard_raster_card",
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "core.custom_symbolization",
+            "core.ai_interpretation",
+            "catalog.export_dataresource",
+            "raster.manage_raster_dataset",
+            "catalog.add_dataresource",
+            "core.view_data_overview"
+          ],
+          "disabledPermissions": []
+        },
+        {
+          "id": 4,
+          "username": "guest_wang",
+          "displayName": "王访客",
+          "email": "guest.wang@example.local",
+          "avatarUrl": "",
+          "department": "合作单位",
+          "isStaff": false,
+          "isSuperuser": false,
+          "roles": [
+            "游客"
+          ],
+          "permissions": {
+            "canAccessAdmin": false,
+            "canManageFeaturePermissions": false,
+            "canCreateUser": false,
+            "canViewOperationLogs": false,
+            "canViewAllOperationLogs": false,
+            "canViewOwnOperationLogs": true,
+            "canViewGroupOperationLogs": true,
+            "canViewSystemLogs": false,
+            "canManageSystemSettings": false,
+            "canManageDataBackup": false,
+            "canManageAuth": false,
+            "canViewDashboardResourceCard": true,
+            "canViewDashboardLayerCard": true,
+            "canViewDashboardRasterCard": true,
+            "canViewDashboardUserCard": true,
+            "canViewDashboardActiveUsersCard": true,
+            "canViewDashboardSystemCard": true,
+            "canBrowseData": true,
+            "canQueryData": true,
+            "canLoadVectorLayer": true,
+            "canLoadRasterLayer": true,
+            "canUseCustomSymbolization": false,
+            "canUseAiInterpretation": false,
+            "canExportData": false,
+            "canManageRasterData": false,
+            "canUploadData": true,
+            "canViewDataOverview": true,
+            "canViewDataResources": false,
+            "canCreateDataResources": true,
+            "canChangeDataResources": false,
+            "canDeleteDataResources": false,
+            "canViewWorkspaces": true,
+            "canCreateWorkspaces": true,
+            "canChangeWorkspaces": true,
+            "canDeleteWorkspaces": true,
+            "canViewMapCompositions": true,
+            "canCreateMapCompositions": true,
+            "canChangeMapCompositions": true,
+            "canDeleteMapCompositions": true,
+            "canExportMapCompositions": false,
+            "canPublishMapCompositions": true,
+            "canViewResultArtifacts": true,
+            "canImportResultArtifacts": false,
+            "canDownloadResultArtifacts": false,
+            "canPublishResultArtifacts": false,
+            "canDeleteResultArtifacts": false
+          },
+          "groupIds": [
+            2
+          ],
+          "isActive": false,
+          "directPermissions": [],
+          "effectivePermissions": [
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "catalog.add_dataresource",
+            "core.view_data_overview"
+          ],
+          "operationLogGroupIds": [],
+          "groupPermissions": [
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "catalog.add_dataresource",
+            "core.view_data_overview"
+          ],
+          "disabledPermissions": []
+        }
+      ]
+    }
+  },
+  "POST /api/users/": {
+    "201": {
+      "user": {
+        "id": 5,
+        "username": "new_monitor",
+        "displayName": "新监测员",
+        "email": "new.monitor@example.local",
+        "avatarUrl": "",
+        "department": "生态监测组",
+        "isStaff": false,
+        "isSuperuser": false,
+        "roles": [
+          "科研用户"
+        ],
+        "permissions": {
+          "canAccessAdmin": true,
+          "canManageFeaturePermissions": false,
+          "canCreateUser": false,
+          "canViewOperationLogs": true,
+          "canViewAllOperationLogs": false,
+          "canViewOwnOperationLogs": true,
+          "canViewGroupOperationLogs": true,
+          "canViewSystemLogs": false,
+          "canManageSystemSettings": false,
+          "canManageDataBackup": false,
+          "canManageAuth": false,
+          "canViewDashboardResourceCard": true,
+          "canViewDashboardLayerCard": true,
+          "canViewDashboardRasterCard": true,
+          "canViewDashboardUserCard": true,
+          "canViewDashboardActiveUsersCard": true,
+          "canViewDashboardSystemCard": true,
+          "canBrowseData": true,
+          "canQueryData": true,
+          "canLoadVectorLayer": true,
+          "canLoadRasterLayer": true,
+          "canUseCustomSymbolization": false,
+          "canUseAiInterpretation": false,
+          "canExportData": true,
+          "canManageRasterData": false,
+          "canUploadData": true,
+          "canViewDataOverview": true,
+          "canViewDataResources": true,
+          "canCreateDataResources": true,
+          "canChangeDataResources": false,
+          "canDeleteDataResources": false,
+          "canViewWorkspaces": true,
+          "canCreateWorkspaces": true,
+          "canChangeWorkspaces": true,
+          "canDeleteWorkspaces": true,
+          "canViewMapCompositions": true,
+          "canCreateMapCompositions": true,
+          "canChangeMapCompositions": true,
+          "canDeleteMapCompositions": true,
+          "canExportMapCompositions": true,
+          "canPublishMapCompositions": true,
+          "canViewResultArtifacts": true,
+          "canImportResultArtifacts": true,
+          "canDownloadResultArtifacts": true,
+          "canPublishResultArtifacts": true,
+          "canDeleteResultArtifacts": true
+        },
+        "groupIds": [
+          3
+        ],
+        "isActive": true,
+        "directPermissions": [],
+        "effectivePermissions": [
+          "core.browse_data",
+          "core.query_data",
+          "core.load_vector_layer",
+          "core.load_raster_layer",
+          "catalog.add_dataresource",
+          "core.view_data_overview"
+        ],
+        "operationLogGroupIds": [],
+        "groupPermissions": [
+          "core.browse_data",
+          "core.query_data",
+          "core.load_vector_layer",
+          "core.load_raster_layer",
+          "catalog.add_dataresource",
+          "core.view_data_overview"
+        ],
+        "disabledPermissions": []
+      },
+      "generatedPassword": "MockPwd-2026-7Xq"
+    }
+  },
+  "POST /api/users/{userId}/groups/": {
+    "200": {
+      "id": 2,
+      "username": "researcher_chen",
+      "displayName": "陈研究员",
+      "email": "chen.research@example.local",
+      "avatarUrl": "",
+      "department": "生态监测组",
+      "isStaff": false,
+      "isSuperuser": false,
+      "roles": [
+        "科研用户",
+        "数据管理员"
+      ],
+      "permissions": {
+        "canAccessAdmin": true,
+        "canManageFeaturePermissions": false,
+        "canCreateUser": false,
+        "canViewOperationLogs": true,
+        "canViewAllOperationLogs": false,
+        "canViewOwnOperationLogs": true,
+        "canViewGroupOperationLogs": true,
+        "canViewSystemLogs": false,
+        "canManageSystemSettings": false,
+        "canManageDataBackup": false,
+        "canManageAuth": false,
+        "canViewDashboardResourceCard": true,
+        "canViewDashboardLayerCard": true,
+        "canViewDashboardRasterCard": true,
+        "canViewDashboardUserCard": true,
+        "canViewDashboardActiveUsersCard": true,
+        "canViewDashboardSystemCard": true,
+        "canBrowseData": true,
+        "canQueryData": true,
+        "canLoadVectorLayer": true,
+        "canLoadRasterLayer": true,
+        "canUseCustomSymbolization": false,
+        "canUseAiInterpretation": false,
+        "canExportData": true,
+        "canManageRasterData": false,
+        "canUploadData": true,
+        "canViewDataOverview": true,
+        "canViewDataResources": true,
+        "canCreateDataResources": true,
+        "canChangeDataResources": false,
+        "canDeleteDataResources": false,
+        "canViewWorkspaces": true,
+        "canCreateWorkspaces": true,
+        "canChangeWorkspaces": true,
+        "canDeleteWorkspaces": true,
+        "canViewMapCompositions": true,
+        "canCreateMapCompositions": true,
+        "canChangeMapCompositions": true,
+        "canDeleteMapCompositions": true,
+        "canExportMapCompositions": true,
+        "canPublishMapCompositions": true,
+        "canViewResultArtifacts": true,
+        "canImportResultArtifacts": true,
+        "canDownloadResultArtifacts": true,
+        "canPublishResultArtifacts": true,
+        "canDeleteResultArtifacts": true
+      },
+      "groupIds": [
+        3,
+        4
+      ],
+      "isActive": true,
+      "directPermissions": [
+        "catalog.export_dataresource"
+      ],
+      "effectivePermissions": [
+        "core.view_operation_logs",
+        "core.view_own_operation_logs",
+        "core.view_group_operation_logs",
+        "core.view_dashboard_resource_card",
+        "core.view_dashboard_layer_card",
+        "core.browse_data",
+        "core.query_data",
+        "core.load_vector_layer",
+        "core.load_raster_layer",
+        "catalog.export_dataresource",
+        "catalog.add_dataresource",
+        "core.view_data_overview"
+      ],
+      "operationLogGroupIds": [
+        3
+      ],
+      "groupPermissions": [
+        "core.view_operation_logs",
+        "core.view_own_operation_logs",
+        "core.view_group_operation_logs",
+        "core.view_dashboard_resource_card",
+        "core.view_dashboard_layer_card",
+        "core.browse_data",
+        "core.query_data",
+        "core.load_vector_layer",
+        "core.load_raster_layer",
+        "catalog.add_dataresource",
+        "core.view_data_overview"
+      ],
+      "disabledPermissions": []
+    }
+  },
+  "POST /api/users/{userId}/permissions/": {
+    "200": {
+      "id": 2,
+      "username": "researcher_chen",
+      "displayName": "陈研究员",
+      "email": "chen.research@example.local",
+      "avatarUrl": "",
+      "department": "生态监测组",
+      "isStaff": false,
+      "isSuperuser": false,
+      "roles": [
+        "科研用户"
+      ],
+      "permissions": {
+        "canAccessAdmin": true,
+        "canManageFeaturePermissions": false,
+        "canCreateUser": false,
+        "canViewOperationLogs": true,
+        "canViewAllOperationLogs": false,
+        "canViewOwnOperationLogs": true,
+        "canViewGroupOperationLogs": true,
+        "canViewSystemLogs": false,
+        "canManageSystemSettings": false,
+        "canManageDataBackup": false,
+        "canManageAuth": false,
+        "canViewDashboardResourceCard": true,
+        "canViewDashboardLayerCard": true,
+        "canViewDashboardRasterCard": true,
+        "canViewDashboardUserCard": true,
+        "canViewDashboardActiveUsersCard": true,
+        "canViewDashboardSystemCard": true,
+        "canBrowseData": true,
+        "canQueryData": true,
+        "canLoadVectorLayer": true,
+        "canLoadRasterLayer": true,
+        "canUseCustomSymbolization": false,
+        "canUseAiInterpretation": false,
+        "canExportData": true,
+        "canManageRasterData": false,
+        "canUploadData": true,
+        "canViewDataOverview": true,
+        "canViewDataResources": true,
+        "canCreateDataResources": true,
+        "canChangeDataResources": false,
+        "canDeleteDataResources": false,
+        "canViewWorkspaces": true,
+        "canCreateWorkspaces": true,
+        "canChangeWorkspaces": true,
+        "canDeleteWorkspaces": true,
+        "canViewMapCompositions": true,
+        "canCreateMapCompositions": true,
+        "canChangeMapCompositions": true,
+        "canDeleteMapCompositions": true,
+        "canExportMapCompositions": true,
+        "canPublishMapCompositions": true,
+        "canViewResultArtifacts": true,
+        "canImportResultArtifacts": true,
+        "canDownloadResultArtifacts": true,
+        "canPublishResultArtifacts": true,
+        "canDeleteResultArtifacts": true
+      },
+      "groupIds": [
+        3
+      ],
+      "isActive": true,
+      "directPermissions": [
+        "catalog.export_dataresource",
+        "core.custom_symbolization"
+      ],
+      "effectivePermissions": [
+        "core.view_operation_logs",
+        "core.view_own_operation_logs",
+        "core.view_group_operation_logs",
+        "core.view_dashboard_resource_card",
+        "core.view_dashboard_layer_card",
+        "core.browse_data",
+        "core.query_data",
+        "core.load_vector_layer",
+        "core.load_raster_layer",
+        "catalog.export_dataresource",
+        "catalog.add_dataresource",
+        "core.view_data_overview"
+      ],
+      "operationLogGroupIds": [
+        3
+      ],
+      "groupPermissions": [
+        "core.view_operation_logs",
+        "core.view_own_operation_logs",
+        "core.view_group_operation_logs",
+        "core.view_dashboard_resource_card",
+        "core.view_dashboard_layer_card",
+        "core.browse_data",
+        "core.query_data",
+        "core.load_vector_layer",
+        "core.load_raster_layer",
+        "catalog.add_dataresource",
+        "core.view_data_overview"
+      ],
+      "disabledPermissions": []
+    }
+  },
+  "POST /api/users/{userId}/password/reset/": {
+    "200": {
+      "detail": "密码已重置",
+      "generatedPassword": "Reset-2026-zP4"
+    }
+  },
+  "POST /api/users/{userId}/": {
+    "200": {
+      "id": 4,
+      "username": "guest_wang",
+      "displayName": "王访客",
+      "email": "guest.wang@example.local",
+      "avatarUrl": "",
+      "department": "合作单位",
+      "isStaff": false,
+      "isSuperuser": false,
+      "roles": [
+        "游客"
+      ],
+      "permissions": {
+        "canAccessAdmin": false,
+        "canManageFeaturePermissions": false,
+        "canCreateUser": false,
+        "canViewOperationLogs": false,
+        "canViewAllOperationLogs": false,
+        "canViewOwnOperationLogs": true,
+        "canViewGroupOperationLogs": true,
+        "canViewSystemLogs": false,
+        "canManageSystemSettings": false,
+        "canManageDataBackup": false,
+        "canManageAuth": false,
+        "canViewDashboardResourceCard": true,
+        "canViewDashboardLayerCard": true,
+        "canViewDashboardRasterCard": true,
+        "canViewDashboardUserCard": true,
+        "canViewDashboardActiveUsersCard": true,
+        "canViewDashboardSystemCard": true,
+        "canBrowseData": true,
+        "canQueryData": true,
+        "canLoadVectorLayer": true,
+        "canLoadRasterLayer": true,
+        "canUseCustomSymbolization": false,
+        "canUseAiInterpretation": false,
+        "canExportData": false,
+        "canManageRasterData": false,
+        "canUploadData": true,
+        "canViewDataOverview": true,
+        "canViewDataResources": false,
+        "canCreateDataResources": true,
+        "canChangeDataResources": false,
+        "canDeleteDataResources": false,
+        "canViewWorkspaces": true,
+        "canCreateWorkspaces": true,
+        "canChangeWorkspaces": true,
+        "canDeleteWorkspaces": true,
+        "canViewMapCompositions": true,
+        "canCreateMapCompositions": true,
+        "canChangeMapCompositions": true,
+        "canDeleteMapCompositions": true,
+        "canExportMapCompositions": false,
+        "canPublishMapCompositions": true,
+        "canViewResultArtifacts": true,
+        "canImportResultArtifacts": false,
+        "canDownloadResultArtifacts": false,
+        "canPublishResultArtifacts": false,
+        "canDeleteResultArtifacts": false
+      },
+      "groupIds": [
+        2
+      ],
+      "isActive": true,
+      "directPermissions": [],
+      "effectivePermissions": [
+        "core.browse_data",
+        "core.query_data",
+        "core.load_vector_layer",
+        "catalog.add_dataresource",
+        "core.view_data_overview"
+      ],
+      "operationLogGroupIds": [],
+      "groupPermissions": [
+        "core.browse_data",
+        "core.query_data",
+        "core.load_vector_layer",
+        "catalog.add_dataresource",
+        "core.view_data_overview"
+      ],
+      "disabledPermissions": []
+    }
+  },
+  "GET /api/groups/": {
+    "200": {
+      "items": [
+        {
+          "id": 1,
+          "name": "超级管理员",
+          "userCount": 1,
+          "permissions": [
+            "core.manage_feature_permissions",
+            "core.create_user",
+            "core.view_operation_logs",
+            "core.view_system_logs",
+            "core.view_all_operation_logs",
+            "core.view_group_operation_logs",
+            "core.view_own_operation_logs",
+            "core.manage_system_settings",
+            "core.manage_data_backup",
+            "core.manage_auth",
+            "core.view_dashboard_resource_card",
+            "core.view_dashboard_layer_card",
+            "core.view_dashboard_raster_card",
+            "core.view_dashboard_user_card",
+            "core.view_dashboard_active_users_card",
+            "core.view_dashboard_system_card",
+            "core.view_data_overview",
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "core.custom_symbolization",
+            "core.ai_interpretation",
+            "catalog.export_dataresource",
+            "catalog.add_dataresource",
+            "catalog.view_dataresource",
+            "catalog.change_dataresource",
+            "catalog.delete_dataresource",
+            "catalog.add_workspacescene",
+            "catalog.view_workspacescene",
+            "catalog.change_workspacescene",
+            "catalog.delete_workspacescene",
+            "raster.manage_raster_dataset"
+          ],
+          "isProtected": true,
+          "lockedPermissions": [
+            "core.manage_auth",
+            "core.manage_feature_permissions",
+            "core.manage_system_settings",
+            "core.manage_data_backup"
+          ]
+        },
+        {
+          "id": 2,
+          "name": "平台管理员",
+          "userCount": 2,
+          "permissions": [
+            "core.create_user",
+            "core.manage_auth",
+            "core.manage_feature_permissions",
+            "core.view_operation_logs",
+            "core.view_all_operation_logs",
+            "core.view_dashboard_resource_card",
+            "core.view_dashboard_layer_card",
+            "core.view_dashboard_raster_card",
+            "core.view_dashboard_user_card",
+            "core.view_dashboard_active_users_card",
+            "core.view_data_overview",
+            "core.browse_data",
+            "core.query_data",
+            "core.custom_symbolization",
+            "core.ai_interpretation",
+            "catalog.add_dataresource",
+            "catalog.view_dataresource",
+            "catalog.change_dataresource",
+            "catalog.delete_dataresource",
+            "catalog.export_dataresource",
+            "catalog.add_workspacescene",
+            "catalog.view_workspacescene",
+            "catalog.change_workspacescene",
+            "catalog.delete_workspacescene",
+            "catalog.add_mapcomposition",
+            "catalog.view_mapcomposition",
+            "catalog.change_mapcomposition",
+            "catalog.delete_mapcomposition",
+            "catalog.export_mapcomposition",
+            "catalog.publish_mapcomposition",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "raster.manage_raster_dataset"
+          ],
+          "isProtected": true,
+          "lockedPermissions": []
+        },
+        {
+          "id": 3,
+          "name": "科研用户",
+          "userCount": 4,
+          "permissions": [
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "core.custom_symbolization",
+            "core.ai_interpretation",
+            "core.view_data_overview",
+            "catalog.add_dataresource",
+            "catalog.view_dataresource",
+            "catalog.export_dataresource",
+            "catalog.add_workspacescene",
+            "catalog.view_workspacescene",
+            "catalog.change_workspacescene",
+            "catalog.delete_workspacescene",
+            "catalog.add_mapcomposition",
+            "catalog.view_mapcomposition",
+            "catalog.change_mapcomposition",
+            "catalog.delete_mapcomposition",
+            "catalog.export_mapcomposition",
+            "catalog.publish_mapcomposition"
+          ],
+          "isProtected": true,
+          "lockedPermissions": []
+        },
+        {
+          "id": 4,
+          "name": "普通用户",
+          "userCount": 2,
+          "permissions": [
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "catalog.view_workspacescene",
+            "catalog.view_mapcomposition"
+          ],
+          "isProtected": true,
+          "lockedPermissions": []
+        },
+        {
+          "id": 5,
+          "name": "游客",
+          "userCount": 1,
+          "permissions": [
+            "core.browse_data",
+            "core.query_data",
+            "core.load_vector_layer",
+            "core.load_raster_layer",
+            "catalog.view_workspacescene",
+            "catalog.view_mapcomposition"
+          ],
+          "isProtected": true,
+          "lockedPermissions": []
+        }
+      ],
+      "availablePermissions": [
+        {
+          "id": "core.manage_auth",
+          "label": "认证授权管理",
+          "group": "人员权限"
+        },
+        {
+          "id": "core.manage_feature_permissions",
+          "label": "功能权限管理",
+          "group": "人员权限"
+        },
+        {
+          "id": "core.create_user",
+          "label": "创建用户",
+          "group": "人员权限"
+        },
+        {
+          "id": "core.view_operation_logs",
+          "label": "查看操作日志",
+          "group": "日志权限"
+        },
+        {
+          "id": "core.view_system_logs",
+          "label": "查看系统日志",
+          "group": "后台权限"
+        },
+        {
+          "id": "core.view_all_operation_logs",
+          "label": "查看全部日志",
+          "group": "日志权限"
+        },
+        {
+          "id": "core.view_group_operation_logs",
+          "label": "查看角色日志",
+          "group": "日志权限"
+        },
+        {
+          "id": "core.view_own_operation_logs",
+          "label": "查看自己的日志",
+          "group": "日志权限"
+        },
+        {
+          "id": "core.manage_system_settings",
+          "label": "系统设置管理",
+          "group": "后台权限"
+        },
+        {
+          "id": "core.manage_data_backup",
+          "label": "管理数据备份",
+          "group": "后台权限"
+        },
+        {
+          "id": "core.view_dashboard_resource_card",
+          "label": "资源总览卡片",
+          "group": "概览权限"
+        },
+        {
+          "id": "core.view_dashboard_layer_card",
+          "label": "图层总览卡片",
+          "group": "概览权限"
+        },
+        {
+          "id": "core.view_dashboard_raster_card",
+          "label": "栅格总览卡片",
+          "group": "概览权限"
+        },
+        {
+          "id": "core.view_dashboard_user_card",
+          "label": "用户总览卡片",
+          "group": "概览权限"
+        },
+        {
+          "id": "core.view_dashboard_active_users_card",
+          "label": "活跃用户总览卡片",
+          "group": "概览权限"
+        },
+        {
+          "id": "core.view_dashboard_system_card",
+          "label": "系统信息总览",
+          "group": "概览权限"
+        },
+        {
+          "id": "core.browse_data",
+          "label": "浏览数据",
+          "group": "数据权限"
+        },
+        {
+          "id": "core.query_data",
+          "label": "查询数据",
+          "group": "数据权限"
+        },
+        {
+          "id": "core.load_vector_layer",
+          "label": "加载矢量图层",
+          "group": "数据权限"
+        },
+        {
+          "id": "core.load_raster_layer",
+          "label": "加载栅格图层",
+          "group": "数据权限"
+        },
+        {
+          "id": "core.custom_symbolization",
+          "label": "自定义符号化",
+          "group": "数据权限"
+        },
+        {
+          "id": "core.ai_interpretation",
+          "label": "AI智能解译",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.export_dataresource",
+          "label": "导出数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "raster.manage_raster_dataset",
+          "label": "管理栅格数据",
+          "group": "数据权限"
+        },
+        {
+          "id": "core.view_data_overview",
+          "label": "查看总数据情况",
+          "group": "概览权限"
+        },
+        {
+          "id": "catalog.add_dataresource",
+          "label": "新增数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.view_dataresource",
+          "label": "查看存量数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.change_dataresource",
+          "label": "编辑数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.delete_dataresource",
+          "label": "删除数据资源",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.add_workspacescene",
+          "label": "新增工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.view_workspacescene",
+          "label": "查看工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.change_workspacescene",
+          "label": "编辑工程专题",
+          "group": "数据权限"
+        },
+        {
+          "id": "catalog.delete_workspacescene",
+          "label": "删除工程专题",
+          "group": "数据权限"
+        }
+      ]
+    }
+  },
+  "POST /api/groups/": {
+    "201": {
+      "id": 5,
+      "name": "外部协作组",
+      "userCount": 0,
+      "permissions": [
+        "core.browse_data",
+        "core.query_data"
+      ],
+      "isProtected": false,
+      "lockedPermissions": []
+    }
+  },
+  "POST /api/groups/{groupId}/": {
+    "200": {
+      "id": 5,
+      "name": "外部协作组",
+      "userCount": 0,
+      "permissions": [
+        "core.browse_data",
+        "core.query_data",
+        "core.load_vector_layer"
+      ],
+      "isProtected": false,
+      "lockedPermissions": []
+    }
+  },
+  "GET /api/admin/settings/": {
+    "200": {
+      "systemName": "时空智能服务平台",
+      "allowRegistration": true,
+      "map": {
+        "defaultCenter": [
+          80,
+          41.5
+        ],
+        "defaultZoom": 4.5,
+        "defaultBasemap": "satellite",
+        "mapboxAccessToken": "pk.mock-mapbox-token",
+        "tiandituAccessToken": "0123456789abcdef0123456789abcdef"
+      },
+      "limits": {
+        "uploadMaxMb": 512,
+        "queryResultLimit": 30000,
+        "maxRasterSidePixels": 10000
+      },
+      "raster": {
+        "tileSize": 256,
+        "cacheMaxMb": 2048,
+        "defaultResampling": "nearest"
+      },
+      "editable": true
+    }
+  },
+  "POST /api/admin/settings/": {
+    "200": {
+      "systemName": "时空智能服务平台",
+      "allowRegistration": true,
+      "map": {
+        "defaultCenter": [
+          80,
+          41.5
+        ],
+        "defaultZoom": 4.5,
+        "defaultBasemap": "satellite",
+        "mapboxAccessToken": "pk.mock-mapbox-token",
+        "tiandituAccessToken": "0123456789abcdef0123456789abcdef"
+      },
+      "limits": {
+        "uploadMaxMb": 512,
+        "queryResultLimit": 30000,
+        "maxRasterSidePixels": 10000
+      },
+      "raster": {
+        "tileSize": 256,
+        "cacheMaxMb": 2048,
+        "defaultResampling": "nearest"
+      },
+      "editable": true
+    }
+  },
+  "GET /api/admin/role-applications/": {
+    "200": {
+      "items": [
+        {
+          "id": 1,
+          "userId": 3,
+          "requestedRole": "research",
+          "status": "pending",
+          "reason": "参与胡杨林长期生态监测，需要上传和导出科研数据。",
+          "reviewNote": "",
+          "createdAt": "2026-07-14T10:30:00+08:00",
+          "reviewedAt": null,
+          "user": {
+            "id": 3,
+            "username": "researcher",
+            "displayName": "张研究员",
+            "email": "researcher@example.local",
+            "department": "生态监测组"
+          },
+          "reviewer": null
+        }
+      ]
+    }
+  },
+  "POST /api/admin/role-applications/{applicationId}/review/": {
+    "200": {
+      "id": 1,
+      "userId": 3,
+      "requestedRole": "research",
+      "status": "approved",
+      "reason": "参与胡杨林长期生态监测，需要上传和导出科研数据。",
+      "reviewNote": "申请材料完整，批准科研数据权限。",
+      "createdAt": "2026-07-14T10:30:00+08:00",
+      "reviewedAt": "2026-07-14T11:00:00+08:00",
+      "user": {
+        "id": 3,
+        "username": "researcher",
+        "displayName": "张研究员",
+        "email": "researcher@example.local",
+        "department": "生态监测组"
+      },
+      "reviewer": {
+        "id": 1,
+        "username": "admin",
+        "displayName": "超级管理员",
+        "email": "admin@example.local",
+        "department": "系统管理"
+      }
+    }
+  }
+}

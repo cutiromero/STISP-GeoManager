@@ -1,0 +1,37 @@
+{
+  "GET /api/map/thumbnail-tiles/{z}/{x}/{y}.png": {
+    "503": {
+      "detail": "制图底图服务暂时不可用，请稍后重试或检查服务器到 Mapbox/OSM 的网络连接"
+    }
+  },
+  "GET /api/projects/": {
+    "200": {
+      "items": [
+        {
+          "id": 1,
+          "name": "公开",
+          "code": "default",
+          "description": "公共内容",
+          "isDefault": true,
+          "isActive": true,
+          "sortOrder": 0
+        }
+      ],
+      "canManage": false,
+      "canAssign": false,
+      "assignableItems": []
+    }
+  },
+  "POST /api/catalog/results/": {
+    "400": {
+      "detail": "上传前必须显式选择所属项目标签（公开项目为 1）"
+    }
+  },
+  "GET /api/content/articles/": {
+    "200": {
+      "items": [],
+      "total": 0,
+      "canEdit": false
+    }
+  }
+}

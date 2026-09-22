@@ -1,0 +1,89 @@
+{
+  "GET /api/catalog/results/": {
+    "200": {
+      "items": [
+        {
+          "id": 21,
+          "name": "2025 年塔里木河胡杨分布分析报告",
+          "description": "基于平台监测数据形成的年度分析成果。",
+          "sourceType": "analysis",
+          "resultType": "report",
+          "status": "published",
+          "category": {
+            "id": 41,
+            "type": "data_category",
+            "code": "thematic_landscape_rs",
+            "name": "景观与遥感",
+            "parentId": 4,
+            "selectable": true
+          },
+          "categoryPath": [
+            {
+              "id": 4,
+              "code": "thematic",
+              "name": "胡杨专题数据"
+            },
+            {
+              "id": 41,
+              "code": "thematic_landscape_rs",
+              "name": "景观与遥感"
+            }
+          ],
+          "provider": "塔里木大学",
+          "fileName": "2025-poplar-distribution-report.pdf",
+          "fileFormat": "pdf",
+          "sizeBytes": 2457600,
+          "previewUrl": "/api/catalog/results/21/file/?variant=preview",
+          "downloadUrl": "/api/catalog/results/21/file/?variant=artifact",
+          "owner": {
+            "id": 8,
+            "username": "researcher_chen",
+            "displayName": "陈研究员"
+          },
+          "accessGroups": [
+            {
+              "id": 3,
+              "name": "科研用户",
+              "isGuest": false,
+              "isSuperadmin": false
+            }
+          ],
+          "canPreview": true,
+          "canDownload": true,
+          "canPublish": true,
+          "canUnpublish": true,
+          "canDelete": true,
+          "publishedAt": "2026-07-23T10:00:00+08:00",
+          "publishedBy": {
+            "id": 8,
+            "username": "researcher_chen",
+            "displayName": "陈研究员"
+          },
+          "createdAt": "2026-07-23T09:50:00+08:00",
+          "updatedAt": "2026-07-23T10:00:00+08:00"
+        }
+      ],
+      "availableAccessGroups": [
+        {
+          "id": 3,
+          "name": "科研用户",
+          "isGuest": false,
+          "isSuperadmin": false
+        },
+        {
+          "id": 5,
+          "name": "游客",
+          "isGuest": true,
+          "isSuperadmin": false
+        }
+      ]
+    }
+  },
+  "POST /api/catalog/results/{resultId}/": {
+    "200": {
+      "deleted": true,
+      "id": 21,
+      "detail": "成果文件已删除"
+    }
+  }
+}

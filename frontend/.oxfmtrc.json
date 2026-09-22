@@ -1,0 +1,25 @@
+{
+  "useTabs": false,
+  "tabWidth": 2,
+  "printWidth": 80,
+  "singleQuote": false,
+  "jsxSingleQuote": false,
+  "quoteProps": "as-needed",
+  "trailingComma": "all",
+  "semi": true,
+  "arrowParens": "always",
+  "bracketSameLine": false,
+  "bracketSpacing": true,
+  "ignorePatterns": [
+    "dist/**",
+    "generated/**",
+    "src/api/generated/**",
+    "src/api/schema.d.ts",
+    ".playwright-cli/**",
+    "output/**",
+    ".cache/**",
+    "test-results/**",
+    "playwright-report/**",
+    "coverage/**"
+  ]
+}

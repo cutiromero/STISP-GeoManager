@@ -1,0 +1,277 @@
+{
+  "GET /api/admin/backups/overview/": {
+    "200": {
+      "settings": {
+        "plans": {
+          "platform": {
+            "enabled": true,
+            "dailyAt": "03:00",
+            "target": "object_storage",
+            "retentionCount": 14,
+            "includeLogs": false
+          },
+          "research": {
+            "enabled": true,
+            "dailyAt": "02:00",
+            "target": "object_storage",
+            "retentionCount": 7,
+            "includeLogs": false
+          }
+        },
+        "local": {
+          "directory": "",
+          "configured": true
+        },
+        "objectStorage": {
+          "provider": "s3_compatible",
+          "endpoint": "https://s3.example.com",
+          "region": "cn-north-1",
+          "bucket": "geomanager-backups",
+          "prefix": "prod/",
+          "accessKeyId": "backup-service",
+          "secretConfigured": true,
+          "secretPreview": "******7d9a",
+          "configured": true
+        },
+        "updatedAt": "2026-07-03T10:20:00+08:00"
+      },
+      "summaries": [
+        {
+          "planType": "research",
+          "label": "科研数据",
+          "source": "科研数据根目录",
+          "available": true,
+          "fileCount": 126,
+          "sizeBytes": 8394301440
+        },
+        {
+          "planType": "platform",
+          "label": "平台数据",
+          "source": "业务数据根目录",
+          "available": true,
+          "fileCount": 42,
+          "sizeBytes": 314572800
+        }
+      ],
+      "activeRuns": [
+        {
+          "id": 32,
+          "planType": "research",
+          "targetType": "object_storage",
+          "trigger": "manual",
+          "status": "running",
+          "progressPercent": 48,
+          "messages": [
+            "开始打包科研数据",
+            "已写入 raster/original/scene-001.tif"
+          ],
+          "result": null,
+          "error": "",
+          "archiveName": "research-backup-20260703101800.zip",
+          "sizeBytes": 0,
+          "checksumSha256": "",
+          "objectKey": "",
+          "localPath": "",
+          "createdBy": "系统管理员",
+          "createdAt": "2026-07-03T10:18:00+08:00",
+          "startedAt": "2026-07-03T10:18:01+08:00",
+          "finishedAt": null
+        }
+      ],
+      "recentRuns": [
+        {
+          "id": 31,
+          "planType": "platform",
+          "targetType": "object_storage",
+          "trigger": "scheduled",
+          "status": "success",
+          "progressPercent": 100,
+          "messages": [
+            "归档已生成",
+            "对象存储上传完成"
+          ],
+          "result": {
+            "fileCount": 42,
+            "archiveSha256": "2dd9a7c5f4fd4e0d9234567890abcdef1234567890abcdef1234567890abcd"
+          },
+          "error": "",
+          "archiveName": "platform-backup-20260703030000.zip",
+          "sizeBytes": 328204912,
+          "checksumSha256": "2dd9a7c5f4fd4e0d9234567890abcdef1234567890abcdef1234567890abcd",
+          "objectKey": "prod/platform/2026/07/platform-backup-20260703030000.zip",
+          "localPath": "",
+          "createdBy": null,
+          "createdAt": "2026-07-03T03:00:00+08:00",
+          "startedAt": "2026-07-03T03:00:01+08:00",
+          "finishedAt": "2026-07-03T03:03:42+08:00"
+        }
+      ],
+      "generatedAt": "2026-07-03T10:20:00+08:00"
+    }
+  },
+  "GET /api/admin/backups/settings/": {
+    "200": {
+      "plans": {
+        "platform": {
+          "enabled": true,
+          "dailyAt": "03:00",
+          "target": "object_storage",
+          "retentionCount": 14,
+          "includeLogs": false
+        },
+        "research": {
+          "enabled": true,
+          "dailyAt": "02:00",
+          "target": "object_storage",
+          "retentionCount": 7,
+          "includeLogs": false
+        }
+      },
+      "local": {
+        "directory": "",
+        "configured": true
+      },
+      "objectStorage": {
+        "provider": "s3_compatible",
+        "endpoint": "https://s3.example.com",
+        "region": "cn-north-1",
+        "bucket": "geomanager-backups",
+        "prefix": "prod/",
+        "accessKeyId": "backup-service",
+        "secretConfigured": true,
+        "secretPreview": "******7d9a",
+        "configured": true
+      },
+      "updatedAt": "2026-07-03T10:20:00+08:00"
+    }
+  },
+  "POST /api/admin/backups/settings/": {
+    "200": {
+      "plans": {
+        "platform": {
+          "enabled": true,
+          "dailyAt": "03:00",
+          "target": "object_storage",
+          "retentionCount": 14,
+          "includeLogs": false
+        },
+        "research": {
+          "enabled": true,
+          "dailyAt": "02:00",
+          "target": "object_storage",
+          "retentionCount": 7,
+          "includeLogs": false
+        }
+      },
+      "local": {
+        "directory": "",
+        "configured": true
+      },
+      "objectStorage": {
+        "provider": "s3_compatible",
+        "endpoint": "https://s3.example.com",
+        "region": "cn-north-1",
+        "bucket": "geomanager-backups",
+        "prefix": "prod/",
+        "accessKeyId": "backup-service",
+        "secretConfigured": true,
+        "secretPreview": "******7d9a",
+        "configured": true
+      },
+      "updatedAt": "2026-07-03T10:20:00+08:00"
+    }
+  },
+  "POST /api/admin/backups/targets/test/": {
+    "200": {
+      "targetType": "object_storage",
+      "status": "success",
+      "message": "对象存储连接测试成功",
+      "testedAt": "2026-07-03T10:20:00+08:00"
+    }
+  },
+  "GET /api/admin/backups/runs/": {
+    "200": {
+      "items": [
+        {
+          "id": 31,
+          "planType": "platform",
+          "targetType": "object_storage",
+          "trigger": "scheduled",
+          "status": "success",
+          "progressPercent": 100,
+          "messages": [
+            "归档已生成",
+            "对象存储上传完成"
+          ],
+          "result": {
+            "fileCount": 42,
+            "archiveSha256": "2dd9a7c5f4fd4e0d9234567890abcdef1234567890abcdef1234567890abcd"
+          },
+          "error": "",
+          "archiveName": "platform-backup-20260703030000.zip",
+          "sizeBytes": 328204912,
+          "checksumSha256": "2dd9a7c5f4fd4e0d9234567890abcdef1234567890abcdef1234567890abcd",
+          "objectKey": "prod/platform/2026/07/platform-backup-20260703030000.zip",
+          "localPath": "",
+          "createdBy": null,
+          "createdAt": "2026-07-03T03:00:00+08:00",
+          "startedAt": "2026-07-03T03:00:01+08:00",
+          "finishedAt": "2026-07-03T03:03:42+08:00"
+        }
+      ],
+      "total": 1
+    }
+  },
+  "POST /api/admin/backups/runs/": {
+    "202": {
+      "id": 33,
+      "planType": "platform",
+      "targetType": "local",
+      "trigger": "manual",
+      "status": "queued",
+      "progressPercent": 0,
+      "messages": [
+        "备份任务已创建"
+      ],
+      "result": null,
+      "error": "",
+      "archiveName": "platform-backup-20260703102500.zip",
+      "sizeBytes": 0,
+      "checksumSha256": "",
+      "objectKey": "",
+      "localPath": "",
+      "createdBy": "系统管理员",
+      "createdAt": "2026-07-03T10:25:00+08:00",
+      "startedAt": null,
+      "finishedAt": null
+    }
+  },
+  "GET /api/admin/backups/runs/{runId}/": {
+    "200": {
+      "id": 33,
+      "planType": "platform",
+      "targetType": "local",
+      "trigger": "manual",
+      "status": "success",
+      "progressPercent": 100,
+      "messages": [
+        "归档已生成",
+        "本地备份已保存"
+      ],
+      "result": {
+        "fileCount": 42,
+        "archiveSha256": "8cc9a7c5f4fd4e0d9234567890abcdef1234567890abcdef1234567890abcd"
+      },
+      "error": "",
+      "archiveName": "platform-backup-20260703102500.zip",
+      "sizeBytes": 328204912,
+      "checksumSha256": "8cc9a7c5f4fd4e0d9234567890abcdef1234567890abcdef1234567890abcd",
+      "objectKey": "",
+      "localPath": "platform/platform-backup-20260703102500.zip",
+      "createdBy": "系统管理员",
+      "createdAt": "2026-07-03T10:25:00+08:00",
+      "startedAt": "2026-07-03T10:25:01+08:00",
+      "finishedAt": "2026-07-03T10:28:12+08:00"
+    }
+  }
+}

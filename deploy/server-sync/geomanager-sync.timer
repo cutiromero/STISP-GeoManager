@@ -1,0 +1,10 @@
+[Unit]
+Description=Run GeoManager update every day at 04:00 Asia/Shanghai
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Asia/Shanghai
+Persistent=true
+Unit=geomanager-sync.service
+
+[Install]
+WantedBy=timers.target

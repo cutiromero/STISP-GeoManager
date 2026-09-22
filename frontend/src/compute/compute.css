@@ -1,0 +1,96 @@
+.compute-shell {
+  min-height: 100vh;
+  padding-top: 70px;
+  background: #f3f6f8;
+  color: #243c49;
+}
+.compute-content {
+  width: min(1360px, 100%);
+  margin: 0 auto;
+  padding: 30px 36px 56px;
+}
+.compute-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0 20px;
+}
+.compute-intro h2 {
+  margin-top: 10px;
+  color: #153f56;
+}
+.compute-eyebrow {
+  color: #587784;
+  letter-spacing: 2px;
+  font-size: 12px;
+}
+.compute-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0 24px;
+}
+.compute-algorithm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+  gap: 20px;
+}
+.compute-algorithm-card {
+  border: 1px solid #dbe5e9;
+  border-radius: 12px;
+}
+.compute-card-footer {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 28px;
+  align-items: center;
+}
+
+.compute-algorithm-card .ant-card-body {
+  min-height: 188px;
+}
+
+.compute-algorithm-card .ant-typography {
+  overflow-wrap: anywhere;
+}
+
+.compute-algorithm-card .ant-card-body > .ant-typography {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  min-height: 72px;
+}
+
+.compute-card-footer .ant-select {
+  flex: 1 1 150px;
+}
+.compute-version-card {
+  border: 1px solid #dde7eb;
+  border-radius: 10px;
+  padding: 20px;
+}
+.compute-manifest {
+  background: #f4f7f9;
+  color: #244556;
+  padding: 16px;
+  border-radius: 8px;
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .compute-content {
+    padding: 20px 16px 36px;
+  }
+  .compute-intro {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0;
+  }
+}
