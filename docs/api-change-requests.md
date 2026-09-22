@@ -18,7 +18,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| API-20260922-001 | Implementing | /api/agent/*; /api/compute/algorithms/ | generation controls; stable order | Updated | Existing fixtures | In progress | Pending | Actual token accounting and two algorithm templates |
+| API-20260922-001 | Verified | /api/agent/*; /api/compute/algorithms/ | generation controls; stable order | Updated | HTTP model fixtures | Passed | Passed | v0.1.13 server receipt; actual token accounting and two published algorithms |
 | API-20260920-002 | Verified | `DELETE /api/compute/algorithms/{algorithmId}/` | management operation | Updated | Updated | Implemented | Passed | Deletes registrations without task history and protects algorithms referenced by task history |
 | API-20260919-001 | Verified | /api/compute/* | generic algorithm registry and durable compute | Updated | Added | Passed | Passed | 应用/worker/真实Linux容器/浏览器端到端验收通过 |
 | API-20260918-006 | Verified | 工程、内容附件、底图代理 | concurrency; pagination; staged assets; basemap | Updated | Updated | Implemented | Passed | A01–A14 整改，详见 2026-09-18-a-items-acceptance.md |
@@ -852,7 +852,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 - Verification: 数据资源跨用户/项目权限回归（含平台管理员、图层和计算输入）、GPU 快照单卡/多卡解析、智能体协议解析和 maxSteps 迁移校验；前端类型检查与构建；服务器公网 Qwen 默认数据分析提示词。
 
 ## API-20260922-001 - 智能体参数与算法排序
-- Status: Implementing
+- Status: Verified
 - Owner: Codex（契约、前后端和验证）
 - Endpoints: `/api/agent/admin/`、`/api/agent/runs/{runId}/`、`/api/compute/algorithms/`、`/api/compute/templates/{templateId}/`
 - Change type: additive policy/run fields; stable list ordering; new templates
@@ -861,4 +861,4 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 - Frontend reason: 显示实际生效参数和用量；算法按分类排序值、分类名称、算法名称、ID稳定分页。
 - Backend implementation notes: 完整请求通过/tokenize计数，/v1/models核实实际窗口；模板5为NDWI、6为矢量面积周长。
 - Verification: 参数保存至HTTP请求、截断缓存、上下文边界、算法数值、排序、生成类型及浏览器验证。
-- Result: 实施中，结果写入发布记录。
+- Result: 后端62项、前端406项测试通过；本地及正式浏览器参数保存和回答通过；真实模型65536窗口/16384生成，两个算法数值验收并发布。见docs/releases/0.1.13.md及同SHA服务器回执。
