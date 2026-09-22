@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">B · 时空图层</title>
+  <desc id="desc">叠置的地理数据平面与中央定位节点，表达多源数据汇聚和空间计算。</desc>
+  <path d="M18 83L64 110L110 83" fill="none" stroke="#089D9D" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 64L64 91L110 64" fill="none" stroke="#173F60" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M64 16L112 44L64 72L16 44Z" fill="#173F60" stroke="#173F60" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M41 44L64 30L87 44L64 58Z" fill="none" stroke="white" stroke-width="4.5" stroke-linejoin="round"/>
+  <circle cx="64" cy="44" r="5.5" fill="#2CD5C5"/>
+</svg>

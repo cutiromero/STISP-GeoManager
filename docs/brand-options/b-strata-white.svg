@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">B · 时空图层 · 白色版</title>
+  <desc id="desc">适合深色导航栏的单色数据图层标识。</desc>
+  <defs>
+    <mask id="target"><rect width="128" height="128" fill="white"/><path d="M41 44L64 30L87 44L64 58Z" fill="none" stroke="black" stroke-width="4.5" stroke-linejoin="round"/><circle cx="64" cy="44" r="5.5" fill="black"/></mask>
+  </defs>
+  <g fill="none" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 83L64 110L110 83"/>
+    <path d="M18 64L64 91L110 64"/>
+  </g>
+  <path d="M64 16L112 44L64 72L16 44Z" fill="white" stroke="white" stroke-width="4" stroke-linejoin="round" mask="url(#target)"/>
+</svg>
