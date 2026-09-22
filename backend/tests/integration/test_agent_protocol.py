@@ -11,8 +11,21 @@ from apps.agent.models import AgentAttachment, AgentRun
 from apps.agent.policy import default_policy
 from apps.agent.provider import stream
 from apps.agent.worker import attach_inputs, context_messages, run_task
+from apps.agent.worker import parse_agent_command
 from apps.projects.context import project_scope
 from tests.integration.test_agent import new_run, setup_agent  # noqa: F401
+
+
+@pytest.mark.parametrize("resource_id", ["9", 9, "09", "0", "-1", "9.0", [9], True])
+def test_resource_id_normalization_preserves_strict_validation(resource_id):
+    command = parse_agent_command(
+        json.dumps(
+            {"action": "describe_resource", "arguments": {"resourceId": resource_id}}
+        )
+    )
+    result = command["arguments"]["resourceId"]
+    expected = 9 if resource_id == "9" else resource_id
+    assert result == expected and type(result) is type(expected)
 
 
 @pytest.mark.parametrize(

@@ -127,6 +127,7 @@ SYSTEM_AGENT = """你是当前项目的数据分析智能体。先发现数据�
 仅使用下方当前已授权工具，算子提交及结果入库通过列出的专用工具执行。不能直接执行任意代码、SQL或文件操作。
 只能返回一个JSON对象，禁止Markdown包裹。调用工具格式：{"action":"工具名","arguments":{...}}；回答格式：{"action":"final","answer":"中文Markdown回答"}。
 工具参数filters为最多8个{field,op,value}条件，op只允许eq/ne/gt/gte/lt/lte/contains。
+resourceId是单个正整数，例如9；不是字符串或数组。fields是字段名数组，filters是条件数组。
 统计必须来自summarize_data或aggregate_data真实输出，不允许用样例行猜测全表统计。scope=prefix_sample仅代表前10000行，必须明确样本限制；保留筛选、有效数、空值和单位未知等限制。不自动宣称因果关系。
 引用真实证据序号，如[证据 2]。final中用Markdown表格呈现关键数值。没有相关资源时明确说明，禁止虚构。
 可用工具（工具名必须完全匹配，arguments 必须是对象；没有参数的工具也要发送空对象）：
@@ -234,6 +235,15 @@ def parse_agent_command(raw: str) -> dict:
                     key: item for key, item in value.items() if key != "action"
                 },
             }
+    arguments = value.get("arguments")
+    if isinstance(arguments, dict):
+        resource_id = arguments.get("resourceId")
+        # Normalize only canonical decimal IDs; scope and authorization still
+        # belong to execute(). Other malformed values remain validation errors.
+        if isinstance(resource_id, str) and re.fullmatch(
+            r"[1-9][0-9]{0,17}", resource_id
+        ):
+            arguments["resourceId"] = int(resource_id)
     return value
 
 
