@@ -77,9 +77,9 @@ def test_structured_deep_response_keeps_command_out_of_thinking(
 
 @pytest.mark.django_db(transaction=True)
 def test_deep_agent_direct_json_executes_tools_and_keeps_current_selection(
-    setup_agent,
-    settings,  # noqa: F811
-):  # noqa: F811
+    setup_agent,  # noqa: F811
+    settings,
+):
     env = setup_agent
     captured = []
 
