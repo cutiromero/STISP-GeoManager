@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "identifier": "raster-ndwi",
+  "name": "NDWI水体指数",
+  "version": "1.0.0",
+  "description": "按(绿光−近红外)/(绿光＋近红外)计算水体指数，保留坐标和无效像元；输出连续指数供水体判读。",
+  "author": "STISP",
+  "runtime": "python-geospatial-v1",
+  "inputs": [{"key": "image", "label": "多波段反射率影像", "kind": "raster", "minBands": 2, "required": true}],
+  "parameters": [
+    {"key": "green", "label": "绿光波段", "type": "band", "input": "image", "default": 1, "required": true},
+    {"key": "nir", "label": "近红外波段", "type": "band", "input": "image", "default": 2, "required": true}
+  ],
+  "outputs": [{"key": "ndwi", "label": "NDWI指数栅格", "kind": "raster", "file": "ndwi.tif", "required": true}],
+  "timeoutSeconds": 1800,
+  "deterministic": true
+}

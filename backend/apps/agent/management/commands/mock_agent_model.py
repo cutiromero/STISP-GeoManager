@@ -61,7 +61,7 @@ class MockHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(b'{"data":[{"id":"mock-local"}]}')
+        self.wfile.write(b'{"data":[{"id":"mock-local","max_model_len":32768}]}')
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
@@ -69,7 +69,24 @@ class MockHandler(BaseHTTPRequestHandler):
             self.send_error(413)
             return
         body = json.loads(self.rfile.read(length))
+        if self.path == "/tokenize":
+            # Mock-only deterministic budget, not a production tokenizer.
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {
+                        "count": len(
+                            json.dumps(body.get("messages", []), ensure_ascii=False)
+                        )
+                    }
+                ).encode()
+            )
+            return
         text = mock_answer(body)
+        if body.get("chat_template_kwargs", {}).get("enable_thinking"):
+            text = "<think>模拟思考片段。</think>" + text
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()

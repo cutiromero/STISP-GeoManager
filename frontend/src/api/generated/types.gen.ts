@@ -72,7 +72,7 @@ export type AgentQuota = {
 };
 
 /**
- * 超级管理员控制策略；首期无执行或写入能力
+ * 超级管理员控制策略；工具执行仍受项目与功能权限约束
  */
 export type AgentPolicy = {
     /**
@@ -134,13 +134,21 @@ export type AgentPolicy = {
      */
     dailyRuns: number;
     /**
-     * UTF-8 保守上下文预算（字节）
+     * 输入文本大小保护上限（UTF-8字节）；实际窗口另外通过模型分词器核验
      */
     maxContextBytes: number;
     /**
-     * 回答 token 上限
+     * 单次模型调用的思考与正文合计生成 token 上限
      */
     maxOutputTokens: number;
+    /**
+     * 输入 token 预算；同时受实际模型窗口减去生成预留和256 token安全余量限制
+     */
+    maxContextTokens: number;
+    /**
+     * Qwen深度思考强度，通过chat_template_kwargs传至推理服务
+     */
+    reasoningEffort: 'low' | 'medium' | 'xhigh';
     /**
      * 采样温度
      */
@@ -350,9 +358,48 @@ export type AgentEvidence = {
 };
 
 /**
+ * 最近一次模型调用实际采用的参数；旧运行为空对象，生成用量汇总本轮各次调用
+ */
+export type AgentGenerationParameters = {
+    /**
+     * 模型服务报告的真实窗口
+     */
+    contextWindowTokens?: number;
+    /**
+     * 完整请求经模型分词器计算的输入token
+     */
+    inputTokens?: number;
+    /**
+     * 本轮配置的输入token预算
+     */
+    maxContextTokens?: number;
+    /**
+     * 本轮每次调用的生成上限
+     */
+    maxOutputTokens?: number;
+    /**
+     * 本轮思考强度，仅深度模式生效
+     */
+    reasoningEffort?: 'low' | 'medium' | 'xhigh';
+    /**
+     * 本轮采样温度
+     */
+    temperature?: number;
+    /**
+     * 本轮核采样阈值
+     */
+    topP?: number;
+    /**
+     * 模型回报的本轮生成token总数，含思考与正文
+     */
+    generatedTokens?: number;
+};
+
+/**
  * 持久运行记录；引用失权时返回 403，不返回旧内容
  */
 export type AgentRun = {
+    generationParameters?: AgentGenerationParameters;
     /**
      * 运行 ID
      */
@@ -430,7 +477,7 @@ export type AgentEvent = {
     /**
      * 事件类别
      */
-    kind: 'status' | 'text' | 'thinking' | 'tool_started' | 'tool_completed' | 'context';
+    kind: 'status' | 'text' | 'thinking' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage';
     /**
      * 增量文字或简要操作说明
      */

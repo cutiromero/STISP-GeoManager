@@ -143,6 +143,37 @@ def test_public_algorithm_private_inputs_and_idempotency(setup_compute):
     assert post(env, "tasks/", project=1).status_code == 404
 
 
+def test_algorithm_catalog_orders_categories_before_names(setup_compute):
+    from apps.compute.models import AlgorithmCategory
+
+    env = setup_compute
+    env["client"].force_login(env["admin"])
+    with project_scope(ProjectScope((1,), 1, env["admin"].id, True)):
+        AlgorithmCategory.objects.create(name="Raster", sort_order=10)
+        AlgorithmCategory.objects.create(name="Vector", sort_order=20)
+        for identifier, name, category in [
+            ("order-z", "Z raster", "Raster"),
+            ("order-v", "A vector", "Vector"),
+            ("order-a", "A raster", "Raster"),
+        ]:
+            AlgorithmResource.objects.create(
+                identifier=identifier,
+                name=name,
+                category=category,
+                created_by=env["admin"],
+            )
+    response = env["client"].get(
+        "/api/compute/algorithms/?manage=1", HTTP_X_PROJECT_ID="1"
+    )
+    assert response.status_code == 200
+    items = [
+        item["name"]
+        for item in response.json()["items"]
+        if item["identifier"].startswith("order-")
+    ]
+    assert items == ["A raster", "Z raster", "A vector"]
+
+
 def test_no_cross_project_or_other_users_tasks(setup_compute):
     env = setup_compute
     task_id = post(env, "tasks/").json()["id"]

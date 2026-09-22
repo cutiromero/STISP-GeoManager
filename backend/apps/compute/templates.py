@@ -9,6 +9,8 @@ TEMPLATES = {
     2: "vector-buffer",
     3: "table-group-summary",
     4: "raster-ndvi",
+    5: "raster-ndwi",
+    6: "vector-metrics",
 }
 
 

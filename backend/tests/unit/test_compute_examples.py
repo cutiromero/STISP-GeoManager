@@ -102,3 +102,55 @@ def test_vector_buffer_uses_metres(tmp_path):
     )
     result = gpd.read_file(tmp_path / "buffer.gpkg").to_crs(frame.estimate_utm_crs())
     assert result.area.iloc[0] == pytest.approx(np.pi * 100**2, rel=0.005)
+
+
+def test_ndwi_and_invalid_pixels(tmp_path):
+    source = tmp_path / "image.tif"
+    with rasterio.open(
+        source,
+        "w",
+        driver="GTiff",
+        width=3,
+        height=1,
+        count=2,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_origin(80, 40, 0.1, 0.1),
+        nodata=-9999,
+    ) as dst:
+        dst.write(np.array([[[6, 0, -9999]], [[2, 0, 3]]], dtype="float32"))
+        dst.scales = (0.1, 0.1)
+    run = runpy.run_path(ROOT / "raster-ndwi/main.py")["run"]
+    run(ExampleContext(tmp_path, source, {"green": 1, "nir": 2}))
+    with rasterio.open(tmp_path / "ndwi.tif") as output:
+        values = output.read(1, masked=True)
+        assert values[0, 0] == pytest.approx(0.5)
+        assert values.mask[0, 1] and values.mask[0, 2]
+        assert output.crs.to_epsg() == 4326
+    with pytest.raises(ValueError, match="不能相同"):
+        run(ExampleContext(tmp_path, source, {"green": 1, "nir": 1}))
+
+
+def test_polygon_metrics_preserve_attributes_holes_and_crs(tmp_path):
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+
+    source = tmp_path / "faces.gpkg"
+    square = [
+        (500000, 4000000),
+        (500100, 4000000),
+        (500100, 4000100),
+        (500000, 4000100),
+    ]
+    hole = [(500025, 4000025), (500075, 4000025), (500075, 4000075), (500025, 4000075)]
+    frame = gpd.GeoDataFrame(
+        {"name": ["test"]}, geometry=[Polygon(square, [hole])], crs=32644
+    )
+    frame.to_file(source, layer="data", driver="GPKG")
+    runpy.run_path(ROOT / "vector-metrics/main.py")["run"](
+        ExampleContext(tmp_path, source, {})
+    )
+    result = gpd.read_file(tmp_path / "metrics.gpkg")
+    assert result.crs == frame.crs and result["name"].tolist() == ["test"]
+    assert result.area_m2.iloc[0] == pytest.approx(7500, rel=0.002)
+    assert result.perimeter_m.iloc[0] == pytest.approx(600, rel=0.002)

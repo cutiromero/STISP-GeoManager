@@ -161,7 +161,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   );
   const selectedModel = models.find((item) => item.alias === model);
   const deepThinkingAvailable =
-    Boolean(bootstrap?.thinkingEnabled) && Boolean(selectedModel?.supportsThinking);
+    Boolean(bootstrap?.thinkingEnabled) &&
+    Boolean(selectedModel?.supportsThinking);
   const attachmentsAvailable = Boolean(bootstrap?.allowAttachments);
   const internetAvailable = Boolean(bootstrap?.internetEnabled);
   const evidence = runs.flatMap((r) =>
@@ -228,11 +229,13 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     const preferred = localStorage.getItem(
       `agent-thinking:${user?.id}:${mode}`,
     );
-    const next = preferred === "deep" && deepThinkingAvailable ? "deep" : "fast";
+    const next =
+      preferred === "deep" && deepThinkingAvailable ? "deep" : "fast";
     setThinkingMode(next);
   }, [deepThinkingAvailable, mode, user?.id]);
   useEffect(() => {
-    if (!deepThinkingAvailable && thinkingMode !== "fast") setThinkingMode("fast");
+    if (!deepThinkingAvailable && thinkingMode !== "fast")
+      setThinkingMode("fast");
   }, [deepThinkingAvailable, thinkingMode]);
   useEffect(() => {
     if (mode !== "agent" || !canUse) return;
@@ -245,7 +248,12 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   }, [mode, canUse]);
   useEffect(() => {
     if (mode !== "agent" || !workflow) return;
-    if (!["queued", "running", "waiting_compute", "waiting_approval"].includes(workflow.status)) return;
+    if (
+      !["queued", "running", "waiting_compute", "waiting_approval"].includes(
+        workflow.status,
+      )
+    )
+      return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
@@ -253,7 +261,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         const next = await agentApi.workflow(workflow.id);
         if (disposed) return;
         setWorkflow(next);
-        if (["queued", "running", "waiting_compute", "waiting_approval"].includes(next.status)) {
+        if (
+          ["queued", "running", "waiting_compute", "waiting_approval"].includes(
+            next.status,
+          )
+        ) {
           timer = setTimeout(poll, document.hidden ? 3000 : 1200);
         }
       } catch (e) {
@@ -456,7 +468,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     }
   };
   const submitWorkflow = async () => {
-    if (mode !== "agent" || !canUse || workflowBusy || !workflowGoal.trim() || !modelOnline) return;
+    if (
+      mode !== "agent" ||
+      !canUse ||
+      workflowBusy ||
+      !workflowGoal.trim() ||
+      !modelOnline
+    )
+      return;
     setWorkflowBusy(true);
     setError("");
     try {
@@ -483,7 +502,10 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     try {
       if (!current) return;
       const item = await agentApi.uploadAttachment(current.id, file);
-      setAttachments((old) => [...old.filter((entry) => entry.id !== item.id), item]);
+      setAttachments((old) => [
+        ...old.filter((entry) => entry.id !== item.id),
+        item,
+      ]);
       message.success(ui("附件已上传", "Attachment uploaded"));
     } catch (e) {
       report(e);
@@ -687,34 +709,67 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
             <Collapse
               size="small"
               className="agent-workflow-panel"
-              items={[{
-                key: "workflow",
-                label: ui("科研工作流（高光谱解译）", "Research workflow (hyperspectral interpretation)"),
-                children: <Space direction="vertical" style={{ width: "100%" }}>
-                  <Typography.Text type="secondary">
-                    {ui("提交目标后，系统会记录数据发现、算法规划和后续迭代。当前版本先生成可审计计划，算子执行需由超级管理员开启。", "The system records discovery, algorithm planning, and future iterations. This version creates an auditable plan; operator execution requires administrator approval.")}
-                  </Typography.Text>
-                  <Input.TextArea
-                    value={workflowGoal}
-                    onChange={(e) => setWorkflowGoal(e.target.value)}
-                    maxLength={12000}
-                    autoSize={{ minRows: 2, maxRows: 4 }}
-                    placeholder={ui("例如：识别目标影像中的矿物和岩性，并按成矿理论检查共生关系。", "Example: identify minerals and lithologies, then check associations against metallogenic theory.")}
-                  />
-                  <Button type="primary" loading={workflowBusy} disabled={!workflowGoal.trim() || !modelOnline} onClick={() => void submitWorkflow()}>
-                    {ui("发布科研工作流", "Submit research workflow")}
-                  </Button>
-                  {workflow && (
-                    <div className="agent-workflow-status">
-                      <Space wrap>
-                        <Tag color={workflow.status === "succeeded" ? "green" : workflow.status === "failed" ? "red" : "blue"}>{workflowStatus[workflow.status] ?? workflow.status}</Tag>
-                        <span>{workflow.detail}</span>
-                      </Space>
-                      {workflow.steps.map((item) => <p key={item.id}>{item.sequence}. {item.message}</p>)}
-                    </div>
-                  )}
-                </Space>,
-              }]}
+              items={[
+                {
+                  key: "workflow",
+                  label: ui(
+                    "科研工作流（算法计划预览）",
+                    "Research workflow (algorithm plan preview)",
+                  ),
+                  children: (
+                    <Space direction="vertical" style={{ width: "100%" }}>
+                      <Typography.Text type="secondary">
+                        {ui(
+                          "按当前项目资源与已开放算法生成一次执行计划。此入口用于计划预览；实际计算可在计算中心选择算法、输入和参数后提交。",
+                          "Build one execution plan from project resources and enabled algorithms. This entry previews the plan; submit an actual calculation with selected inputs and parameters in the compute center.",
+                        )}
+                      </Typography.Text>
+                      <Input.TextArea
+                        value={workflowGoal}
+                        onChange={(e) => setWorkflowGoal(e.target.value)}
+                        maxLength={12000}
+                        autoSize={{ minRows: 2, maxRows: 4 }}
+                        placeholder={ui(
+                          "例如：整理当前项目可用的影像处理算法与输入数据。",
+                          "Example: organize available image-processing algorithms and project inputs.",
+                        )}
+                      />
+                      <Button
+                        type="primary"
+                        loading={workflowBusy}
+                        disabled={!workflowGoal.trim() || !modelOnline}
+                        onClick={() => void submitWorkflow()}
+                      >
+                        {ui("生成算法计划", "Preview algorithm plan")}
+                      </Button>
+                      {workflow && (
+                        <div className="agent-workflow-status">
+                          <Space wrap>
+                            <Tag
+                              color={
+                                workflow.status === "succeeded"
+                                  ? "green"
+                                  : workflow.status === "failed"
+                                    ? "red"
+                                    : "blue"
+                              }
+                            >
+                              {workflowStatus[workflow.status] ??
+                                workflow.status}
+                            </Tag>
+                            <span>{workflow.detail}</span>
+                          </Space>
+                          {workflow.steps.map((item) => (
+                            <p key={item.id}>
+                              {item.sequence}. {item.message}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </Space>
+                  ),
+                },
+              ]}
             />
           )}
           <div className="agent-messages" ref={viewport}>
@@ -782,8 +837,17 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     <div className="agent-run-attachments">
                       {r.attachments.map((item) =>
                         item.kind === "image" && item.previewUrl ? (
-                          <a key={item.id} href={item.previewUrl} target="_blank" rel="noreferrer">
-                            <img src={item.previewUrl} alt={item.fileName} className="agent-attachment-preview" />
+                          <a
+                            key={item.id}
+                            href={item.previewUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img
+                              src={item.previewUrl}
+                              alt={item.fileName}
+                              className="agent-attachment-preview"
+                            />
                           </a>
                         ) : (
                           <Tag key={item.id} icon={<PaperClipOutlined />}>
@@ -806,22 +870,51 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       size="small"
                       className="agent-thinking-panel"
                       defaultActiveKey={active(r) ? ["thinking"] : []}
-                      items={[{
-                        key: "thinking",
-                        label: active(r)
-                          ? ui("模型思考过程（生成中）", "Model reasoning (generating)")
-                          : `${ui("模型思考过程", "Model reasoning")}${r.thinkingDurationMs ? ` · ${(r.thinkingDurationMs / 1000).toFixed(1)}s` : ""}`,
-                        children: (
-                          <pre className="agent-thinking-content">
-                            {r.id === running?.id
-                              ? events.filter((e) => e.kind === "thinking").map((e) => e.text).join("") || ui("正在等待模型返回思考内容…", "Waiting for the model reasoning stream…")
-                              : r.thinkingText || ui("模型未返回可展示的思考内容。", "The model did not return displayable reasoning.")}
-                          </pre>
-                        ),
-                      }]}
+                      items={[
+                        {
+                          key: "thinking",
+                          label: active(r)
+                            ? ui(
+                                "模型思考过程（生成中）",
+                                "Model reasoning (generating)",
+                              )
+                            : `${ui("模型思考过程", "Model reasoning")}${r.thinkingDurationMs ? ` · ${(r.thinkingDurationMs / 1000).toFixed(1)}s` : ""}`,
+                          children: (
+                            <pre className="agent-thinking-content">
+                              {r.id === running?.id
+                                ? events
+                                    .filter((e) => e.kind === "thinking")
+                                    .map((e) => e.text)
+                                    .join("") ||
+                                  ui(
+                                    "正在等待模型返回思考内容…",
+                                    "Waiting for the model reasoning stream…",
+                                  )
+                                : r.thinkingText ||
+                                  ui(
+                                    "本次未保存到思考片段，请结合运行状态查看原因。",
+                                    "No reasoning segments were saved. See the run status below.",
+                                  )}
+                            </pre>
+                          ),
+                        },
+                      ]}
                     />
                   )}
                   <SafeMarkdown text={r.answer} />
+                  {r.generationParameters?.inputTokens !== undefined && (
+                    <Typography.Paragraph type="secondary">
+                      {ui("本轮参数", "Run parameters")}: {ui("窗口", "Window")}{" "}
+                      {r.generationParameters.contextWindowTokens} ·{" "}
+                      {ui("输入", "Input")} {r.generationParameters.inputTokens}{" "}
+                      · {ui("每次生成上限", "Generation limit per call")}{" "}
+                      {r.generationParameters.maxOutputTokens} token
+                      {r.generationParameters.generatedTokens !== undefined &&
+                        ` · ${ui("累计生成", "Generated total")} ${r.generationParameters.generatedTokens}`}
+                      {r.thinkingMode === "deep" &&
+                        ` · ${ui("思考强度", "Effort")} ${r.generationParameters.reasoningEffort}`}
+                    </Typography.Paragraph>
+                  )}
                   {r.detail && r.status !== "succeeded" && <p>{r.detail}</p>}
                   {!active(r) && (
                     <Space>
@@ -855,7 +948,12 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     key: "actions",
                     label: ui("本次执行步骤", "Actions in this run"),
                     children: events
-                      .filter((e) => e.kind !== "text" && e.kind !== "thinking")
+                      .filter(
+                        (e) =>
+                          !["text", "thinking", "parameters", "usage"].includes(
+                            e.kind,
+                          ),
+                      )
                       .map((e) => <p key={e.id}>{e.text}</p>),
                   },
                 ]}
@@ -873,14 +971,30 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     void uploadAttachment(file);
                     return false;
                   }}
-                  disabled={Boolean(running) || busy || uploadingAttachment || current?.archived}
+                  disabled={
+                    Boolean(running) ||
+                    busy ||
+                    uploadingAttachment ||
+                    current?.archived
+                  }
                 >
-                  <Button icon={<PaperClipOutlined />} loading={uploadingAttachment}>
+                  <Button
+                    icon={<PaperClipOutlined />}
+                    loading={uploadingAttachment}
+                  >
                     {ui("上传文档或图片", "Upload document or image")}
                   </Button>
                 </Upload>
                 {attachments.map((item) => (
-                  <Tag key={item.id} closable={!running && !busy} onClose={() => setAttachments((old) => old.filter((entry) => entry.id !== item.id))}>
+                  <Tag
+                    key={item.id}
+                    closable={!running && !busy}
+                    onClose={() =>
+                      setAttachments((old) =>
+                        old.filter((entry) => entry.id !== item.id),
+                      )
+                    }
+                  >
                     {item.fileName}
                   </Tag>
                 ))}
@@ -984,7 +1098,10 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               />
               {!deepThinkingAvailable && (
                 <Typography.Text type="secondary">
-                  {ui("当前模型或管理员策略未开启", "Unavailable for this model or policy")}
+                  {ui(
+                    "当前模型或管理员策略未开启",
+                    "Unavailable for this model or policy",
+                  )}
                 </Typography.Text>
               )}
             </div>

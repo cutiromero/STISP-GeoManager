@@ -51,7 +51,9 @@ def default_policy():
         # current 32K-token local model window this leaves room for the answer
         # and system/tool instructions instead of failing on a small file.
         "maxContextBytes": 384000,
-        "maxOutputTokens": 4096,
+        "maxOutputTokens": 8192,
+        "maxContextTokens": 49152,
+        "reasoningEffort": "medium",
         "temperature": 0.2,
         "topP": 0.9,
         "maxSteps": 32,
@@ -165,7 +167,11 @@ def visible_models(user, mode=None, p=None, admin=False):
                 "alias": model.alias,
                 "name": model.name,
                 "allowAgent": can_agent,
-                "contextWindowTokens": model.context_window_tokens,
+                "contextWindowTokens": h.detail.get(
+                    "contextWindowTokens", model.context_window_tokens
+                )
+                if recent
+                else model.context_window_tokens,
                 "supportsThinking": model.qwen,
                 "supportsVision": model.vision,
                 "status": h.detail.get("status", "unknown") if recent else "unknown",
@@ -215,7 +221,8 @@ def validate_policy(value):
     for k, lo, hi in [
         ("dailyRuns", 1, 1000),
         ("maxContextBytes", 8000, 500000),
-        ("maxOutputTokens", 128, 8192),
+        ("maxOutputTokens", 128, 32768),
+        ("maxContextTokens", 1024, 262144),
         ("maxSteps", 1, 64),
         ("maxResources", 1, 3),
         ("maxIterations", 1, 20),
@@ -227,6 +234,8 @@ def validate_policy(value):
     ]:
         if type(value[k]) is not int or not lo <= value[k] <= hi:
             raise ValidationError(f"{k} 超出允许范围")
+    if value["reasoningEffort"] not in {"low", "medium", "xhigh"}:
+        raise ValidationError("思考强度必须为 low、medium 或 xhigh")
     for k, lo, hi in (("temperature", 0.0, 2.0), ("topP", 0.0, 1.0)):
         if type(value[k]) not in (int, float) or not lo <= value[k] <= hi:
             raise ValidationError(f"{k} 超出允许范围")

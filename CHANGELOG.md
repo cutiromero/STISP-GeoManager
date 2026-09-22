@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.13] - 2026-09-23
+
+- 修复深度思考遇到生成上限时缓存丢失；保留思考与正文，明确显示截断原因。
+- 增加输入 token 预算和思考强度；通过模型分词接口检查完整请求，显示实际服务窗口、本轮参数与生成用量；生成上限允许配置至32768。
+- 工具列表按当前策略过滤，权限错误保留具体原因；工作流入口明确为算法计划预览，预留迭代参数不再作为有效控制展示。
+- 新增 NDWI 水体指数与矢量面积周长算法模板，算法目录按分类排序值、分类名、算法名及ID稳定排列。
+
 ## [0.1.12] - 2026-09-22
 
 - 采用用户选定的“轨道地球”STISP 图标，统一登录页、工作台导航及浏览器标签图标；保留旧素材和三个设计方案供追溯。

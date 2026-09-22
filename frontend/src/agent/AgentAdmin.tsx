@@ -145,10 +145,22 @@ export default function AgentAdmin() {
                 ["agentEnabled", "数据智能体", "Data agent"],
                 ["thinkingEnabled", "允许深度思考", "Allow deep thinking"],
                 ["workflowEnabled", "科研工作流规划", "Research workflows"],
-                ["operatorEnabled", "允许智能体提交算子", "Allow agent operators"],
-                ["systemInfoEnabled", "允许读取系统参数", "Allow system information"],
+                [
+                  "operatorEnabled",
+                  "允许智能体提交算子",
+                  "Allow agent operators",
+                ],
+                [
+                  "systemInfoEnabled",
+                  "允许读取系统参数",
+                  "Allow system information",
+                ],
                 ["internetEnabled", "允许联网检索", "Allow internet retrieval"],
-                ["allowAttachments", "允许上传文档和图片", "Allow document and image uploads"],
+                [
+                  "allowAttachments",
+                  "允许上传文档和图片",
+                  "Allow document and image uploads",
+                ],
               ] as const
             ).map(([key, zh, en]) => (
               <Form.Item
@@ -240,8 +252,7 @@ export default function AgentAdmin() {
                     {(() => {
                       const model = data.models.find(
                         (item) =>
-                          item.alias ===
-                          data.policy.models[field.name]?.alias,
+                          item.alias === data.policy.models[field.name]?.alias,
                       );
                       return ui(
                         `模型窗口：${model?.contextWindowTokens ?? "未知"} token · ${model?.supportsThinking ? "支持深度思考" : "仅快速回答"}`,
@@ -261,23 +272,57 @@ export default function AgentAdmin() {
         >
           <Typography.Paragraph type="secondary">
             {ui(
-              "当前 Qwen3.8-27B 模型窗口为 32768 token；平台按 UTF-8 字节做保守预算，并为回答预留空间。提高预算可减少小文件被截断，但不能超过模型真实窗口。",
-              "The current Qwen3.8-27B window is 32768 tokens. The platform uses a conservative UTF-8 byte budget and reserves room for the answer; raising it reduces premature truncation but cannot exceed the model window.",
+              "模型窗口以各模型卡片中的服务实测值为准。输入预算与生成预留共享窗口；生成量包含思考和正文。保存后新运行采用新参数，已有运行保留开始时的参数。",
+              "Model cards show the serving window. Input and generation share it; generation includes reasoning and the final answer. Saved settings apply to new runs.",
             )}
           </Typography.Paragraph>
           <Space size="large" wrap>
             <Form.Item
               name="maxContextBytes"
-              label={ui("上下文预算（字节）", "Context budget (bytes)")}
-              extra={ui("8000–500000，默认384000；模型实际窗口仍受限制", "8000–500000; default 384000; model window still applies")}
+              label={ui(
+                "输入文本大小保护（字节）",
+                "Input text size guard (bytes)",
+              )}
+              extra={ui(
+                "文本大小保护；模型窗口通过实际分词另行检查",
+                "Text size guard; the tokenizer checks the actual window separately",
+              )}
             >
               <InputNumber min={8000} max={500000} step={1000} />
             </Form.Item>
             <Form.Item
               name="maxOutputTokens"
-              label={ui("最长回答 token", "Output token limit")}
+              label={ui(
+                "思考＋正文生成上限（token）",
+                "Reasoning + answer token limit",
+              )}
             >
-              <InputNumber min={128} max={8192} step={128} />
+              <InputNumber min={128} max={32768} step={1024} />
+            </Form.Item>
+            <Form.Item
+              name="maxContextTokens"
+              label={ui("输入预算（token）", "Input token budget")}
+            >
+              <InputNumber min={1024} max={262144} step={1024} />
+            </Form.Item>
+            <Form.Item
+              name="reasoningEffort"
+              label={ui("深度思考强度", "Reasoning effort")}
+            >
+              <Select
+                style={{ minWidth: 170 }}
+                options={[
+                  { value: "low", label: ui("低 · 较快", "Low · faster") },
+                  {
+                    value: "medium",
+                    label: ui("中 · 均衡", "Medium · balanced"),
+                  },
+                  {
+                    value: "xhigh",
+                    label: ui("高 · 更长思考", "High · longer reasoning"),
+                  },
+                ]}
+              />
             </Form.Item>
             <Form.Item name="temperature" label="Temperature">
               <InputNumber min={0} max={2} step={0.1} />
@@ -322,12 +367,28 @@ export default function AgentAdmin() {
                 ["dailyRuns", "每人每日次数", "Daily runs per user", 1, 1000],
                 ["maxSteps", "最多工具步骤", "Tool step limit", 1, 64],
                 ["maxResources", "最多详细资源", "Resource limit", 1, 3],
-                ["maxIterations", "最大迭代轮次", "Iteration limit", 1, 20],
-                ["maxOperatorSteps", "最大算子步骤", "Operator step limit", 1, 64],
+                [
+                  "maxIterations",
+                  "迭代上限（后续扩展预留）",
+                  "Iteration limit (reserved)",
+                  1,
+                  20,
+                ],
+                [
+                  "maxOperatorSteps",
+                  "最大算子步骤",
+                  "Operator step limit",
+                  1,
+                  64,
+                ],
               ] as const
             ).map(([key, zh, en, min, max]) => (
               <Form.Item key={key} name={key} label={ui(zh, en)}>
-                <InputNumber min={min} max={max} />
+                <InputNumber
+                  min={min}
+                  max={max}
+                  disabled={key === "maxIterations"}
+                />
               </Form.Item>
             ))}
           </Space>

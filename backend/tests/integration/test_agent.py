@@ -367,7 +367,7 @@ def test_context_budget_reserves_output_tokens_and_uses_model_window(setup_agent
         model_id="qwen",
         context_window_tokens=32768,
     )
-    assert context_budget_bytes(p, model) == (32768 - p["maxOutputTokens"]) * 4
+    assert context_budget_bytes(p, model) == p["maxContextBytes"]
 
 
 def test_deep_thinking_requires_qwen_and_is_persisted(setup_agent, settings):
@@ -453,7 +453,10 @@ def test_qwen_reasoning_content_is_separate_from_answer(monkeypatch):
     )
     assert "".join(answer) == "答案"
     assert "".join(thoughts) == "先判断。"
-    assert captured["chat_template_kwargs"] == {"enable_thinking": True}
+    assert captured["chat_template_kwargs"] == {
+        "enable_thinking": True,
+        "reasoning_effort": "medium",
+    }
 
 
 def test_policy_accepts_explicit_operator_enablement(setup_agent):

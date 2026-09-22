@@ -243,9 +243,11 @@ export default function AlgorithmManager({
       <Space wrap>
         {[
           [1, "栅格线性变换", "Raster transform"],
-          [2, "矢量缓冲区", "Vector buffer"],
-          [3, "表格分组汇总", "Table summary"],
           [4, "NDVI示例", "NDVI example"],
+          [5, "NDWI水体指数", "NDWI water index"],
+          [2, "矢量缓冲区", "Vector buffer"],
+          [6, "矢量面积与周长", "Polygon area and perimeter"],
+          [3, "表格分组汇总", "Table summary"],
         ].map(([id, zh, en]) => (
           <Button
             key={id}

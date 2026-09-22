@@ -5,6 +5,7 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Case, When, Value, IntegerField
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -167,8 +168,23 @@ def algorithms(request):
         query = query.filter(name__icontains=request.GET["q"][:160])
     if request.GET.get("category"):
         query = query.filter(category=request.GET["category"])
+    categories = AlgorithmCategory._base_manager.filter(
+        project_tag_id__in={1, project_id()}
+    ).order_by("sort_order", "id")
+    orders = {}
+    for category in categories:
+        orders.setdefault(category.name, category.sort_order)
+    query = query.annotate(
+        category_order=Case(
+            *[When(category=name, then=Value(order)) for name, order in orders.items()],
+            default=Value(999999),
+            output_field=IntegerField(),
+        )
+    )
     return page(
-        request, query.order_by("-id"), lambda a: algorithm_data(a, request.user)
+        request,
+        query.order_by("category_order", "category", "name", "id"),
+        lambda a: algorithm_data(a, request.user),
     )
 
 
@@ -343,7 +359,7 @@ def inputs(request):
     require_actor(request.user, project_id(), "submit_task", "core.browse_data")
     query = filter_accessible(
         DataResource.objects.filter(
-        status="active", data_type__in=["raster", "vector", "table"]
+            status="active", data_type__in=["raster", "vector", "table"]
         ),
         request.user,
     ).order_by("-id")

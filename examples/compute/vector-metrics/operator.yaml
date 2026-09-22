@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "identifier": "vector-metrics",
+  "name": "矢量面积与周长",
+  "version": "1.0.0",
+  "description": "为面矢量添加WGS84椭球面积（平方米）和边界长度（米，含孔洞），保留原属性和坐标系。",
+  "author": "STISP",
+  "runtime": "python-geospatial-v1",
+  "inputs": [{"key": "features", "label": "面矢量", "kind": "vector", "required": true}],
+  "parameters": [],
+  "outputs": [{"key": "metrics", "label": "面积周长结果", "kind": "vector", "file": "metrics.gpkg", "required": true}],
+  "timeoutSeconds": 1800,
+  "deterministic": true
+}

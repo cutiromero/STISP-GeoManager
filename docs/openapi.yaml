@@ -7484,7 +7484,7 @@ components:
       additionalProperties: false
     AgentPolicy:
       type: object
-      description: 超级管理员控制策略；首期无执行或写入能力
+      description: 超级管理员控制策略；工具执行仍受项目与功能权限约束
       properties:
         enabled:
           type: boolean
@@ -7540,14 +7540,23 @@ components:
           maximum: 1000
         maxContextBytes:
           type: integer
-          description: UTF-8 保守上下文预算（字节）
+          description: 输入文本大小保护上限（UTF-8字节）；实际窗口另外通过模型分词器核验
           minimum: 8000
           maximum: 500000
         maxOutputTokens:
           type: integer
-          description: 回答 token 上限
+          description: 单次模型调用的思考与正文合计生成 token 上限
           minimum: 128
-          maximum: 8192
+          maximum: 32768
+        maxContextTokens:
+          type: integer
+          description: 输入 token 预算；同时受实际模型窗口减去生成预留和256 token安全余量限制
+          minimum: 1024
+          maximum: 262144
+        reasoningEffort:
+          type: string
+          description: Qwen深度思考强度，通过chat_template_kwargs传至推理服务
+          enum: [low, medium, xhigh]
         temperature:
           type: number
           description: 采样温度
@@ -7636,6 +7645,8 @@ components:
       - dailyRuns
       - maxContextBytes
       - maxOutputTokens
+      - maxContextTokens
+      - reasoningEffort
       - temperature
       - topP
       - maxSteps
@@ -7815,10 +7826,42 @@ components:
       - result
       - recordedAt
       additionalProperties: false
+    AgentGenerationParameters:
+      type: object
+      description: 最近一次模型调用实际采用的参数；旧运行为空对象，生成用量汇总本轮各次调用
+      additionalProperties: false
+      properties:
+        contextWindowTokens:
+          type: integer
+          description: 模型服务报告的真实窗口
+        inputTokens:
+          type: integer
+          description: 完整请求经模型分词器计算的输入token
+        maxContextTokens:
+          type: integer
+          description: 本轮配置的输入token预算
+        maxOutputTokens:
+          type: integer
+          description: 本轮每次调用的生成上限
+        reasoningEffort:
+          type: string
+          description: 本轮思考强度，仅深度模式生效
+          enum: [low, medium, xhigh]
+        temperature:
+          type: number
+          description: 本轮采样温度
+        topP:
+          type: number
+          description: 本轮核采样阈值
+        generatedTokens:
+          type: integer
+          description: 模型回报的本轮生成token总数，含思考与正文
     AgentRun:
       type: object
       description: 持久运行记录；引用失权时返回 403，不返回旧内容
       properties:
+        generationParameters:
+          $ref: '#/components/schemas/AgentGenerationParameters'
         id:
           type: integer
           description: 运行 ID
@@ -7913,6 +7956,8 @@ components:
           - tool_started
           - tool_completed
           - context
+          - parameters
+          - usage
         text:
           type: string
           description: 增量文字或简要操作说明

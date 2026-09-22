@@ -108,6 +108,7 @@ def run_json(r, user):
         "conversationId": r.conversation_id,
         "model": r.model,
         "thinkingMode": r.thinking_mode,
+        "generationParameters": _run_parameters(r),
         "status": r.status,
         "prompt": r.prompt,
         "answer": r.answer,
@@ -129,6 +130,17 @@ def run_json(r, user):
             )
         ],
     }
+
+
+def _run_parameters(run):
+    parameters = run.events.filter(kind="parameters").order_by("-id").first()
+    result = json.loads(parameters.text) if parameters else {}
+    usages = [json.loads(item.text) for item in run.events.filter(kind="usage")]
+    if usages:
+        result["generatedTokens"] = sum(
+            item.get("completion_tokens", 0) for item in usages
+        )
+    return result
 
 
 def _thinking_duration_ms(run):
@@ -332,7 +344,10 @@ def submit(request, conversation_id):
             for item in attachments
         ):
             raise ApiProblem("文档分析尚未由管理员开启", 403)
-        if any(item.kind == "image" for item in attachments) and not model_config.vision:
+        if (
+            any(item.kind == "image" for item in attachments)
+            and not model_config.vision
+        ):
             raise ApiProblem("当前模型未验收图片分析能力", 400)
         for previous in c.runs.all():
             if c.mode == "agent":

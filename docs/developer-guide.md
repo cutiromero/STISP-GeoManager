@@ -2518,3 +2518,11 @@ API 以 `docs/openapi.yaml` 为准，生成代码实际位于 `frontend/src/api/
 科研工作流使用 `/api/agent/workflows/`，同样要求 Session、CSRF 和 `X-Project-Id`。提交返回 202，并保存目标、模型、资源 ID、策略快照和幂等键；独立 `workflow_worker` 负责节点执行。首期默认只生成数据发现和算法计划，`executeOperators` 必须同时满足请求开关、超级管理员 `operatorEnabled` 策略、已发布且标记为 `agent.enabled` 的算法版本以及计算中心可用，不能绕过计算中心直接运行代码。
 
 `GET /api/agent/workflows/{workflowId}/` 返回当前状态、步骤、checkpoint 引用和结果 ID；`POST /api/agent/workflows/{workflowId}/cancel/` 在排队时立即结束任务，在运行或等待计算时设置取消标记，由 worker 在安全边界收尾。工作流 worker 重启不会重新提交处于 `waiting_compute` 的算子任务；每次恢复仍重新检查项目成员、账号和数据资源权限。当前工作流实现为 LangGraph 可选编排适配器，未安装 LangGraph 时使用同一节点契约的兼容运行路径。
+
+## 2026-09-22 智能体生成控制与算法
+
+maxOutputTokens为每次调用的思考与正文合计上限；maxContextTokens限制输入。reasoningEffort通过Qwen模板传递low/medium/xhigh。worker开始时读取生成策略，新保存的参数作用于之后开始的运行，权限和取消仍实时核验。
+
+完整请求通过模型服务/tokenize计数，以/v1/models返回的max_model_len作为真实窗口，并预留256 token余量。优先裁剪旧历史和旧工具对，再截短附件文字，保留当前问题。maxContextBytes是独立文本大小保护。AgentRun.generationParameters显示最近实际参数及累计生成量，旧记录为空对象。
+
+科研工作流目前执行一次已登记算法的计划和计算；maxIterations保留兼容，在界面标为预留。算法列表按分类sortOrder、分类名、算法名、ID分页前排序。模板5为NDWI水体指数，模板6为矢量面积与周长，均需试运行核对后发布。

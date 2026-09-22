@@ -18,6 +18,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20260922-001 | Implementing | /api/agent/*; /api/compute/algorithms/ | generation controls; stable order | Updated | Existing fixtures | In progress | Pending | Actual token accounting and two algorithm templates |
 | API-20260920-002 | Verified | `DELETE /api/compute/algorithms/{algorithmId}/` | management operation | Updated | Updated | Implemented | Passed | Deletes registrations without task history and protects algorithms referenced by task history |
 | API-20260919-001 | Verified | /api/compute/* | generic algorithm registry and durable compute | Updated | Added | Passed | Passed | 应用/worker/真实Linux容器/浏览器端到端验收通过 |
 | API-20260918-006 | Verified | 工程、内容附件、底图代理 | concurrency; pagination; staged assets; basemap | Updated | Updated | Implemented | Passed | A01–A14 整改，详见 2026-09-18-a-items-acceptance.md |
@@ -849,3 +850,15 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 - Backend implementation notes: `DataResource.owner_only` 默认 false，由后端权限过滤强制执行；上传者和超级管理员可见，平台管理员仍受该隐私边界约束。GPU 仅读取主机已有 `nvidia-smi`，CPU-only 主机省略卡片。Qwen 响应兼容隐藏思考块、Markdown JSON 包裹和扁平化参数，并在协议纠正时反馈安全的参数错误。
 - Mock examples: `mock/prism/examples/97-data-visibility-gpu-agent.json`，包含 `ownerOnly` 请求/响应和单卡/多卡快照。
 - Verification: 数据资源跨用户/项目权限回归（含平台管理员、图层和计算输入）、GPU 快照单卡/多卡解析、智能体协议解析和 maxSteps 迁移校验；前端类型检查与构建；服务器公网 Qwen 默认数据分析提示词。
+
+## API-20260922-001 - 智能体参数与算法排序
+- Status: Implementing
+- Owner: Codex（契约、前后端和验证）
+- Endpoints: `/api/agent/admin/`、`/api/agent/runs/{runId}/`、`/api/compute/algorithms/`、`/api/compute/templates/{templateId}/`
+- Change type: additive policy/run fields; stable list ordering; new templates
+- OpenAPI change: AgentPolicy新增输入token预算和思考强度，生成上限32768；AgentRun新增实际参数和用量。
+- Mock examples: 通过HTTP模拟模型验证真实请求，旧运行样例可省略新增可选字段。
+- Frontend reason: 显示实际生效参数和用量；算法按分类排序值、分类名称、算法名称、ID稳定分页。
+- Backend implementation notes: 完整请求通过/tokenize计数，/v1/models核实实际窗口；模板5为NDWI、6为矢量面积周长。
+- Verification: 参数保存至HTTP请求、截断缓存、上下文边界、算法数值、排序、生成类型及浏览器验证。
+- Result: 实施中，结果写入发布记录。
