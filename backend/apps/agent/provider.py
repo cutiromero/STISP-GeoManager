@@ -153,6 +153,7 @@ def stream(
         # vLLM/Qwen may omit the opening marker but still emit </think>.
         saw_reasoning_field = False
         implicit_thinking = thinking
+        structured_prefix = structured
         length_limited = False
 
         def emit_thinking(text):
@@ -160,10 +161,20 @@ def stream(
                 on_thinking(text)
 
         def emit_content(text):
-            nonlocal inline_buffer, in_thinking, implicit_thinking
+            nonlocal inline_buffer, in_thinking, implicit_thinking, structured_prefix
             if not text:
                 return ""
             inline_buffer += text
+            if structured_prefix:
+                prefix = inline_buffer.lstrip()
+                if not prefix:
+                    return ""
+                structured_prefix = False
+                # JSON-constrained Qwen responses can start directly with a
+                # command, even with enable_thinking=True. Such content is not
+                # an implicit reasoning block and has no closing </think>.
+                if prefix.startswith("{"):
+                    implicit_thinking = False
             output = []
             while inline_buffer:
                 if implicit_thinking and not saw_reasoning_field and not in_thinking:

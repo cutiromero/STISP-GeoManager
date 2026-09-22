@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.14] - 2026-09-23
+
+- 修复数据智能体在深度模式下把直接返回的JSON命令误记为思考、导致工具协议失败的问题。
+- 每轮明确传入当前选择的资源ID和当前问题，历史选择独立标记；上传附件保留当前资源范围，协议纠正包含实际错误响应。
+- 增加结构化深度响应、分片思考标记、历史资源切换和真实HTTP多步工具回归测试。
+
 ## [0.1.13] - 2026-09-23
 
 - 修复深度思考遇到生成上限时缓存丢失；保留思考与正文，明确显示截断原因。
