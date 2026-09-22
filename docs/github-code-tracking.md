@@ -41,3 +41,5 @@ git push -u origin HEAD
 GitHub Actions 在该仓库关闭，避免首次推送 main 时触发继承的 GHCR 镜像发布任务；历史工作流文件保留。尚未建立任何服务器自动部署或定时推送任务。
 
 GitHub 凭据由现有 Git Credential Manager 提供，不写入远程 URL、脚本正文或仓库。仓库保持私有，后续协作者按需授予访问权限。
+
+本机全局 Git 代理指向失效的 `127.0.0.1:4780`。本次已验证直接推送成功，并仅设置本仓库 `remote.origin.proxy` 为空，使新 origin 直连；全局代理和其他仓库设置保持不变。
