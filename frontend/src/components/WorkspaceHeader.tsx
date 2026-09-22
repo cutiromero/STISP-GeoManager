@@ -47,7 +47,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { api } from "../api/client";
-import capfedLogoWhite from "../assets/capfed-logo-white.svg";
+import stispLogoWhite from "../assets/stisp-logo-white.svg";
 import { platformBrand } from "../config/platformBrand";
 import { useAppContext } from "../contexts/AppContext";
 import { canManageProjects } from "../router";
@@ -1174,7 +1174,7 @@ export default function WorkspaceHeader({
       >
         <span className="brand-logo-frame">
           <img
-            src={capfedLogoWhite}
+            src={stispLogoWhite}
             alt={`${platformDisplayName} Logo`}
             width={40}
             height={40}

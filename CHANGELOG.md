@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-09-22
+
+- 采用用户选定的“轨道地球”STISP 图标，统一登录页、工作台导航及浏览器标签图标；保留旧素材和三个设计方案供追溯。
+- 图标使用原生 SVG，提供蓝绿彩色和深色背景白色版本；不变更 API、权限、数据路径或业务逻辑。
+
 ## [0.1.11] - 2026-09-22
 
 - 智能体接入受策略控制的系统参数、已发布计算算法、算子提交、计算结果入库和受限公网检索，并保留项目权限、审计和计算中心隔离边界。

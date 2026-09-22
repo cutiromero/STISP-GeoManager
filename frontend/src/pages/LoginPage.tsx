@@ -25,7 +25,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
-import capfedLogoWhite from "../assets/capfed-logo-white.svg";
+import stispLogoWhite from "../assets/stisp-logo-white.svg";
 import loginBackground01 from "../assets/spatiotemporal/digital-city.png";
 import loginBackground02 from "../assets/spatiotemporal/digital-earth.png";
 import loginBackground03 from "../assets/spatiotemporal/data-layers.png";
@@ -278,7 +278,7 @@ export default function LoginPage() {
         <header className="login-brand-head">
           <span className="login-logo-frame">
             <img
-              src={capfedLogoWhite}
+              src={stispLogoWhite}
               alt={`${primaryPlatformName} Logo`}
               width={48}
               height={48}
@@ -366,7 +366,7 @@ export default function LoginPage() {
         <Card className="login-card" variant="borderless">
           <div className="login-card-header">
             <span className="login-card-logo">
-              <img src={capfedLogoWhite} alt="" width={32} height={32} />
+              <img src={stispLogoWhite} alt="" width={32} height={32} />
             </span>
             <span>
               <strong>{platformShortName}</strong>
