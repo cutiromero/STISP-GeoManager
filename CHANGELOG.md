@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.17] - 2026-09-24
+
+- 新闻改写为会议概况、参会单位与李茂林汇报，规范图注和附件名称，新闻页不再展示内部来源说明。
+- 平台及智能体导航图标恢复上一版，删除黄思圻研究方向末尾句号。
+- 栅格详情增加灰度、伪彩色、RGB及四种配色，支持波段、不透明度、拉伸和NoData调整，应用后调用已有后端渲染。
+
 ## [0.1.16] - 2026-09-24
 
 - 模型对话和数据智能体支持用户调整深度思考强度，保留后台默认值与总开关。

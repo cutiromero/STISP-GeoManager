@@ -1,6 +1,6 @@
 [project]
 name = "geomanager"
-version = "0.1.16"
+version = "0.1.17"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "geomanager.test_settings"
