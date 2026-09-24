@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16] - 2026-09-24
+
+- 模型对话和数据智能体支持用户调整深度思考强度，保留后台默认值与总开关。
+- 移除本地模型提示；发送问题后定位最新提问。
+- 使用新栏目图标和成果背景，补齐三位成员与照片，更新张依涵邮箱。
+- 发布时清理指定人工验收项目，保留其中的用户对话和审计记录。
+
 ## [0.1.15] - 2026-09-24
 
 - 新增普通分析、长材料、长推理任务预算和自定义生成预留；显示服务窗口、用户可用窗口、输入预算及实际调用用量。
