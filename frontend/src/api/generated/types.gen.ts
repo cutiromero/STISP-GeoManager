@@ -361,6 +361,10 @@ export type AgentModel = {
  * 当前用户智能体入口和能力
  */
 export type AgentBootstrap = {
+    /**
+     * 后台默认思考强度；开启任务预算时以当前方案默认值为准
+     */
+    defaultReasoningEffort?: 'low' | 'medium' | 'xhigh';
     budgets?: AgentBudgetOptions;
     /**
      * 允许聊天
@@ -687,6 +691,10 @@ export type AgentConversationUpdate = {
  * 提交任务
  */
 export type AgentRunInput = {
+    /**
+     * 深度思考时用户选择的强度，优先于任务预算和后台默认值；快速模式不可传入
+     */
+    reasoningEffort?: 'low' | 'medium' | 'xhigh';
     budgetProfile?: AgentBudgetProfileId;
     /**
      * 思考与正文生成额度

@@ -172,6 +172,7 @@ def bootstrap(request):
             "canManage": is_superadmin(request.user),
             "budgets": budget_options(request.user, p),
             "thinkingEnabled": bool(p.get("thinkingEnabled", True)),
+            "defaultReasoningEffort": p["reasoningEffort"],
             "internetEnabled": bool(p.get("internetEnabled", False)),
             "allowAttachments": bool(p.get("allowAttachments", False)),
             "maxAttachmentBytes": int(p.get("maxAttachmentBytes", 20 * 1024 * 1024)),
@@ -264,6 +265,7 @@ def submit(request, conversation_id):
             "idempotencyKey",
             "resourceIds",
             "thinkingMode",
+            "reasoningEffort",
             "attachmentIds",
             "internetEnabled",
             "budgetProfile",
@@ -280,6 +282,13 @@ def submit(request, conversation_id):
     attachment_ids = value.get("attachmentIds", [])
     internet_enabled = value.get("internetEnabled", False)
     thinking_mode = value.get("thinkingMode", "fast")
+    reasoning_effort = value.get("reasoningEffort", "")
+    if "reasoningEffort" in value and (
+        not isinstance(reasoning_effort, str)
+        or reasoning_effort not in {"low", "medium", "xhigh"}
+        or thinking_mode != "deep"
+    ):
+        raise ApiProblem("思考强度须在深度思考模式下选择低、标准或高")
     budget_profile = value.get("budgetProfile", "")
     output_tokens = value.get("maxOutputTokens")
     if (
@@ -316,6 +325,7 @@ def submit(request, conversation_id):
                 existing.prompt,
                 existing.resource_ids,
                 existing.thinking_mode,
+                existing.reasoning_effort,
                 existing.attachment_ids,
                 existing.internet_enabled,
                 existing.budget_profile,
@@ -325,6 +335,7 @@ def submit(request, conversation_id):
                 prompt.strip(),
                 selected,
                 thinking_mode,
+                reasoning_effort,
                 attachment_ids,
                 internet_enabled,
                 budget_profile,
@@ -394,6 +405,7 @@ def submit(request, conversation_id):
             owner=request.user,
             model=alias,
             thinking_mode=thinking_mode,
+            reasoning_effort=reasoning_effort,
             prompt=prompt.strip(),
             idempotency_key=key,
             resource_ids=selected,

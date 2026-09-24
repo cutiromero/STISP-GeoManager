@@ -3,6 +3,10 @@
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 > 版本：v0.1.0
 
+## 用户思考强度（2026-09-24）
+
+智能体 bootstrap 返回 `defaultReasoningEffort`。提交接口在 `thinkingMode=deep` 时接受可选 `reasoningEffort`（`low/medium/xhigh`）。显式选择优先于预算方案强度和后台默认强度；省略时沿用原默认策略。快速模式传入强度返回 400。强度持久化到本轮任务并参与幂等校验，worker 在预算解析后、上下文计数及模型请求前应用。后台深度思考开关与模型能力检查继续生效。
+
 > 本文保留历史业务接入说明。历史 `accessGroupIds`、`audienceGroupIds`、`availableAccessGroups` 只用于兼容元数据，不授予或限制项目内对象访问。项目、内容、工程规则以本文最新章节及上述当前规则为准；不要沿用早期按角色共享、四大类或 all 聚合的示例。
 
 ---

@@ -48,6 +48,9 @@ import { createUuid } from "../utils/uuid";
 import { useAgentBootstrap } from "./useAgentBootstrap";
 import SafeMarkdown from "./SafeMarkdown";
 import TaskBudgetControl from "./TaskBudgetControl";
+import ReasoningEffortControl, {
+  type ReasoningEffort,
+} from "./ReasoningEffortControl";
 import "./agent.css";
 
 const active = (r: AgentRun) => r.status === "queued" || r.status === "running";
@@ -126,6 +129,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [budgetProfile, setBudgetProfile] =
     useState<AgentBudgetProfileId>("normal");
   const [outputOverride, setOutputOverride] = useState<number>();
+  const [effortOverride, setEffortOverride] = useState<ReasoningEffort>();
+  const defaultEffort =
+    (bootstrap?.budgets?.enabled
+      ? bootstrap.budgets.profiles.find(
+          (item) => item.budgetProfile === budgetProfile,
+        )?.reasoningEffort
+      : bootstrap?.defaultReasoningEffort) ?? "medium";
+  const requestedEffort = thinkingMode === "deep" ? effortOverride : undefined;
   useEffect(() => {
     if (bootstrap?.budgets) setBudgetProfile(bootstrap.budgets.defaultProfile);
   }, [bootstrap?.budgets?.defaultProfile]);
@@ -149,6 +160,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const listSequence = useRef(0);
   const restoredConversation = useRef(false);
   const viewport = useRef<HTMLDivElement>(null);
+  const pendingScroll = useRef<number | null>(null);
   const failedSubmission = useRef<{
     id: number;
     key: string;
@@ -156,6 +168,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     model: string;
     selected: number[];
     thinkingMode: "fast" | "deep";
+    reasoningEffort?: ReasoningEffort;
     attachmentIds: number[];
     internetEnabled: boolean;
     budgetProfile?: AgentBudgetProfileId;
@@ -350,6 +363,19 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   }, [current?.id, running?.id, canUse]);
   useEffect(() => {
     const box = viewport.current;
+    if (box && pendingScroll.current !== null) {
+      const question = box.querySelector<HTMLElement>(
+        `[data-run-id="${pendingScroll.current}"]`,
+      );
+      if (question) {
+        box.scrollTop +=
+          question.getBoundingClientRect().top -
+          box.getBoundingClientRect().top -
+          16;
+        pendingScroll.current = null;
+        return;
+      }
+    }
     if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 250)
       box.scrollTop = box.scrollHeight;
   }, [runs, events]);
@@ -422,6 +448,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         previous.model === model &&
         JSON.stringify(previous.selected) === JSON.stringify(selected) &&
         previous.thinkingMode === thinkingMode &&
+        previous.reasoningEffort === requestedEffort &&
         JSON.stringify(previous.attachmentIds) ===
           JSON.stringify(attachments.map((item) => item.id)) &&
         previous.internetEnabled === (internetEnabled && internetAvailable) &&
@@ -438,6 +465,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
             model,
             selected,
             thinkingMode,
+            reasoningEffort: requestedEffort,
             attachmentIds: attachments.map((item) => item.id),
             internetEnabled: internetEnabled && internetAvailable,
             budgetProfile: bootstrap?.budgets?.enabled
@@ -456,11 +484,13 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
           ? { budgetProfile, maxOutputTokens: outputOverride }
           : {}),
         thinkingMode,
+        reasoningEffort: requestedEffort,
         resourceIds: mode === "agent" ? selected : [],
         attachmentIds: attachments.map((item) => item.id),
         internetEnabled: internetEnabled && internetAvailable,
       });
       if (!alive.current || seq !== sequence.current) return;
+      pendingScroll.current = run.id;
       setRuns((old) => [...old.filter((r) => r.id !== run.id), run]);
       setPrompt("");
       setEvents([]);
@@ -835,7 +865,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               </div>
             )}
             {runs.map((r) => (
-              <section className="agent-turn" key={r.id}>
+              <section className="agent-turn" key={r.id} data-run-id={r.id}>
                 <div className="agent-user-message">{r.prompt}</div>
                 <div className="agent-assistant-message">
                   <Space>
@@ -1147,6 +1177,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                   )}
                 </Typography.Text>
               )}
+              {thinkingMode === "deep" && deepThinkingAvailable && (
+                <ReasoningEffortControl
+                  value={effortOverride ?? defaultEffort}
+                  overridden={effortOverride !== undefined}
+                  disabled={Boolean(running) || busy}
+                  onChange={setEffortOverride}
+                />
+              )}
             </div>
             <div className="agent-thinking-row">
               <Switch
@@ -1186,17 +1224,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                   label: `${m.name} · ${m.status === "online" ? ui("在线", "Online") : m.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${m.supportsVision ? ` · ${ui("支持图片", "Vision")}` : ""}`,
                 }))}
               />
-              <span>
-                {mode === "agent"
-                  ? ui(
-                      "只读分析 · 答案附数据依据",
-                      "Read-only analysis · Inspect supporting data",
-                    )
-                  : ui(
-                      "回答由本地模型生成，请核对重要信息",
-                      "Local model responses may need verification",
-                    )}
-              </span>
+              {mode === "agent" && (
+                <span>
+                  {ui(
+                    "只读分析 · 答案附数据依据",
+                    "Read-only analysis · Inspect supporting data",
+                  )}
+                </span>
+              )}
             </div>
           </div>
         </main>

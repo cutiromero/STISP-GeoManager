@@ -73,6 +73,9 @@ class AgentRun(ProjectScopedModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     model = models.CharField(max_length=80)
     thinking_mode = models.CharField(max_length=8, default="fast")
+    reasoning_effort = models.CharField(
+        max_length=8, blank=True, default="", db_default=""
+    )
     budget_profile = models.CharField(
         max_length=16, blank=True, default="", db_default=""
     )

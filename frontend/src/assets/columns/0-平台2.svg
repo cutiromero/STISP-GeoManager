@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="64" height="64" fill="none" shape-rendering="geometricPrecision">
+  <defs><clipPath id="globeClip"><circle cx="512" cy="512" r="284"/></clipPath></defs>
+  <circle cx="512" cy="512" r="448" fill="#0C92F2"/>
+  <circle cx="512" cy="512" r="388" fill="#EAF5FC"/>
+  <circle cx="512" cy="512" r="284" fill="#61B6F2"/>
+  <g clip-path="url(#globeClip)" stroke="#FFFFFF" stroke-linecap="round" fill="none">
+    <ellipse cx="512" cy="512" rx="118" ry="284" stroke-width="28"/>
+    <path d="M210 512h604M250 400c150 70 374 70 524 0M250 624c150-70 374-70 524 0" stroke-width="26"/>
+  </g>
+  <path d="M206 274C332 146 492 96 651 132c103 24 191 75 257 148l-58 52c-53-58-124-99-208-119-128-30-257 10-358 112z" fill="#A8C8E6"/>
+  <path d="M214 754c99 101 228 146 358 116 83-19 156-61 214-118l59 54c-71 71-166 124-274 148-159 36-319-14-444-139z" fill="#61B6F2"/>
+  <path d="M700 206c77 70 125 166 137 271 11 96-6 190-49 273l-72-36c34-66 47-141 38-217-9-84-48-160-109-216z" fill="#FC830A"/>
+  <circle cx="512" cy="512" r="116" fill="#FFFFFF"/>
+  <circle cx="512" cy="512" r="96" fill="#0C92F2"/>
+  <path d="M512 512V458M512 512l45 27" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="512" cy="512" r="19" fill="#FC830A"/>
+  <circle cx="828" cy="288" r="42" fill="#FC830A"/><circle cx="828" cy="288" r="18" fill="#FFFFFF"/>
+</svg>

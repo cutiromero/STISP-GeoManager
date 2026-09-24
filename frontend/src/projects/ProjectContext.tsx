@@ -1,3 +1,4 @@
+import ColumnIcon from "../components/ColumnIcon";
 import { useAuditText } from "../i18n/auditUi";
 import { App, Select, Space, Tag } from "antd";
 import {
@@ -136,7 +137,9 @@ export function ProjectSelector() {
   if (!value) return null;
   return (
     <Space size={6} className="project-selector">
-      <Tag color="blue">{ui("项目")}</Tag>
+      <Tag color="blue" icon={<ColumnIcon name="project" />}>
+        {ui("项目")}
+      </Tag>
       <Select
         aria-label={ui("当前项目标签")}
         value={value.current}

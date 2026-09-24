@@ -2,22 +2,10 @@ import { ProjectLabel } from "../projects/ProjectLabel";
 import { resetProjectSession } from "../projects/session";
 import { ProjectSelector } from "../projects/ProjectContext";
 import {
-  AlertOutlined,
-  ApartmentOutlined,
-  BookOutlined,
-  CalculatorOutlined,
-  DatabaseOutlined,
   FolderOpenOutlined,
-  InfoCircleOutlined,
-  ImportOutlined,
   LogoutOutlined,
-  PictureOutlined,
-  ProjectOutlined,
-  QrcodeOutlined,
   QuestionCircleOutlined,
-  ReadOutlined,
   SearchOutlined,
-  SettingOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import type { MenuProps, TourProps } from "antd";
@@ -47,7 +35,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { api } from "../api/client";
-import stispLogoWhite from "../assets/stisp-logo-white.svg";
+import ColumnIcon from "./ColumnIcon";
 import { platformBrand } from "../config/platformBrand";
 import { useAppContext } from "../contexts/AppContext";
 import { canManageProjects } from "../router";
@@ -114,7 +102,7 @@ function AgentNavigationButton({
       onMouseLeave={onMouseLeave}
       title={title}
     >
-      <AlertOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+      <ColumnIcon name="agent" aria-hidden="true" style={{ fontSize: 16 }} />
       <span className="tab-text">{title}</span>
     </Button>
   );
@@ -1008,7 +996,7 @@ export default function WorkspaceHeader({
         onMouseLeave={collapseTabHover}
         title={t("navigation.dataResources")}
       >
-        <FolderOpenOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+        <ColumnIcon name="data" style={{ fontSize: 16 }} />
         <span className="tab-text">{t("navigation.dataResources")}</span>
       </Button>
     </Dropdown>
@@ -1079,7 +1067,7 @@ export default function WorkspaceHeader({
     >
       <SearchResultSection
         title={t("navigation.searchData")}
-        icon={<DatabaseOutlined style={{ fontSize: 15 }} />}
+        icon={<ColumnIcon name="data" style={{ fontSize: 15 }} />}
         emptyText={t("navigation.noMatchingData")}
       >
         {filteredResources.map((resource) => (
@@ -1132,7 +1120,7 @@ export default function WorkspaceHeader({
 
       <SearchResultSection
         title={t("navigation.searchTopics")}
-        icon={<ProjectOutlined style={{ fontSize: 15 }} />}
+        icon={<ColumnIcon name="project" style={{ fontSize: 15 }} />}
         emptyText={t("navigation.noMatchingResults")}
       >
         {filteredTopicScenes.map((composition) => (
@@ -1173,12 +1161,7 @@ export default function WorkspaceHeader({
         title={t("navigation.returnToCatalog")}
       >
         <span className="brand-logo-frame">
-          <img
-            src={stispLogoWhite}
-            alt={`${platformDisplayName} Logo`}
-            width={40}
-            height={40}
-          />
+          <ColumnIcon name="platform" style={{ fontSize: 32 }} />
         </span>
         <div className="brand-copy">
           <strong>{platformBrand.shortName}</strong>
@@ -1244,7 +1227,11 @@ export default function WorkspaceHeader({
               onMouseLeave={collapseTabHover}
               title={t("navigation.mapWorkspace")}
             >
-              <ApartmentOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+              <ColumnIcon
+                name="map"
+                aria-hidden="true"
+                style={{ fontSize: 16 }}
+              />
               <span className="tab-text">{t("navigation.mapWorkspace")}</span>
             </Button>
           </Dropdown>
@@ -1261,7 +1248,11 @@ export default function WorkspaceHeader({
             onMouseLeave={collapseTabHover}
             title={t("navigation.compute")}
           >
-            <CalculatorOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+            <ColumnIcon
+              name="compute"
+              aria-hidden="true"
+              style={{ fontSize: 16 }}
+            />
             <span className="tab-text">{t("navigation.compute")}</span>
           </Button>
           <Dropdown
@@ -1282,7 +1273,11 @@ export default function WorkspaceHeader({
               onMouseLeave={collapseTabHover}
               title={t("navigation.analytics")}
             >
-              <BookOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+              <ColumnIcon
+                name="analysis"
+                aria-hidden="true"
+                style={{ fontSize: 16 }}
+              />
               <span className="tab-text">{t("navigation.analytics")}</span>
             </Button>
           </Dropdown>
@@ -1298,7 +1293,11 @@ export default function WorkspaceHeader({
             onMouseLeave={collapseTabHover}
             title={t("navigation.results")}
           >
-            <PictureOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+            <ColumnIcon
+              name="results"
+              aria-hidden="true"
+              style={{ fontSize: 16 }}
+            />
             <span className="tab-text">{t("navigation.results")}</span>
           </Button>
           <AgentNavigationButton
@@ -1330,7 +1329,11 @@ export default function WorkspaceHeader({
                 onMouseLeave={collapseTabHover}
                 title={t("navigation.administration")}
               >
-                <SettingOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+                <ColumnIcon
+                  name="admin"
+                  aria-hidden="true"
+                  style={{ fontSize: 16 }}
+                />
                 <span className="tab-text">
                   {t("navigation.administration")}
                 </span>
@@ -1348,7 +1351,11 @@ export default function WorkspaceHeader({
             onMouseLeave={collapseTabHover}
             title={t("navigation.knowledge")}
           >
-            <ReadOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+            <ColumnIcon
+              name="knowledge"
+              aria-hidden="true"
+              style={{ fontSize: 16 }}
+            />
             <span className="tab-text">{t("navigation.knowledge")}</span>
           </Button>
           <Button
@@ -1358,7 +1365,7 @@ export default function WorkspaceHeader({
             onClick={() => navigateFromHeader("/news")}
             title="团队动态"
           >
-            <ReadOutlined />
+            <ColumnIcon name="news" />
             <span className="tab-text">团队动态</span>
           </Button>
           <Dropdown
@@ -1379,7 +1386,11 @@ export default function WorkspaceHeader({
               onMouseLeave={collapseTabHover}
               title={t("navigation.about")}
             >
-              <InfoCircleOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+              <ColumnIcon
+                name="about"
+                aria-hidden="true"
+                style={{ fontSize: 16 }}
+              />
               <span className="tab-text">{t("navigation.about")}</span>
             </Button>
           </Dropdown>
@@ -1393,7 +1404,7 @@ export default function WorkspaceHeader({
             type="text"
             aria-label={t("navigation.dataImport")}
             className="data-import-shortcut"
-            icon={<ImportOutlined />}
+            icon={<ColumnIcon name="upload" />}
             onClick={() => navigateFromHeader("/resources/data/import")}
             title={t("navigation.dataImport")}
           >
@@ -1412,7 +1423,7 @@ export default function WorkspaceHeader({
           <Button
             aria-label={t("navigation.publicAccountQr")}
             className="wechat-button"
-            icon={<QrcodeOutlined />}
+            icon={<ColumnIcon name="wechat" />}
             title={t("navigation.publicAccountQr")}
           />
         </Popover>

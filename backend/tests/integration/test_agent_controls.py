@@ -18,7 +18,8 @@ from tests.integration.test_agent import new_run, setup_agent  # noqa: F401
 
 
 @pytest.mark.django_db(transaction=True)
-def test_admin_save_reaches_real_http_model_request(setup_agent, settings):  # noqa: F811
+@pytest.mark.parametrize("user_effort", ["", "xhigh"])
+def test_admin_save_reaches_real_http_model_request(setup_agent, settings, user_effort):  # noqa: F811
     requests = []
 
     class Handler(MockHandler):
@@ -74,6 +75,7 @@ def test_admin_save_reaches_real_http_model_request(setup_agent, settings):  # n
                     prompt="test",
                     status="running",
                     thinking_mode="deep",
+                    reasoning_effort=user_effort,
                     idempotency_key=f"controls-{index}",
                 )
                 run.idempotency_key = f"controls-{index}"
@@ -91,7 +93,7 @@ def test_admin_save_reaches_real_http_model_request(setup_agent, settings):  # n
             )
             assert sent["chat_template_kwargs"] == {
                 "enable_thinking": True,
-                "reasoning_effort": effort,
+                "reasoning_effort": user_effort or effort,
             }
             counted = [body for path, body in requests if path == "/tokenize"][-1]
             assert counted["messages"] == sent["messages"]

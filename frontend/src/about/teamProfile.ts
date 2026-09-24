@@ -6,6 +6,9 @@ import portrait4 from "../assets/team/gong-xintao.jpeg";
 import portrait5 from "../assets/team/cheng-wenyan.png";
 import portrait6 from "../assets/team/huang-siqi.jpeg";
 import portrait7 from "../assets/team/li-maolin.jpeg";
+import portrait8 from "../assets/team/han-yang.jpeg";
+import portrait9 from "../assets/team/sun-shuhui.jpeg";
+import portrait10 from "../assets/team/gao-danning.jpeg";
 
 export type TeamMember = {
   id: string;
@@ -133,7 +136,7 @@ export const teamMembers: TeamMember[] = [
     id: "zhang-yihan",
     name: "张依涵",
     englishName: "Zhang Yihan",
-    email: "15828506093@163.com",
+    email: "zhangyihan242@mails.ucas.ac.cn",
     focus: "农业生态遥感",
     focusEn: "Agricultural and ecological remote sensing",
     publications: [
@@ -231,5 +234,35 @@ export const teamMembers: TeamMember[] = [
       },
     ],
     portrait: portrait7,
+  },
+  {
+    id: "han-yang",
+    name: "韩杨",
+    englishName: "Han Yang",
+    email: "2025165103@stu.sdjzu.edu.cn",
+    focus: "农业遥感",
+    focusEn: "Agricultural remote sensing",
+    publications: [],
+    portrait: portrait8,
+  },
+  {
+    id: "sun-shuhui",
+    name: "孙淑慧",
+    englishName: "Sun Shuhui",
+    email: "2742919686@qq.com",
+    focus: "农业遥感",
+    focusEn: "Agricultural remote sensing",
+    publications: [],
+    portrait: portrait9,
+  },
+  {
+    id: "gao-danning",
+    name: "高澹宁",
+    englishName: "Gao Danning",
+    email: "13522057561@163.com",
+    focus: "遥感大数据智能分析",
+    focusEn: "Intelligent analysis of remote-sensing big data",
+    publications: [],
+    portrait: portrait10,
   },
 ];

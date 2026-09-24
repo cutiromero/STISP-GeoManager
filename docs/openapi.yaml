@@ -7880,6 +7880,10 @@ components:
       type: object
       description: 当前用户智能体入口和能力
       properties:
+        defaultReasoningEffort:
+          type: string
+          enum: [low, medium, xhigh]
+          description: 后台默认思考强度；开启任务预算时以当前方案默认值为准
         budgets:
           $ref: '#/components/schemas/AgentBudgetOptions'
         canChat:
@@ -8233,6 +8237,10 @@ components:
       type: object
       description: 提交任务
       properties:
+        reasoningEffort:
+          type: string
+          enum: [low, medium, xhigh]
+          description: 深度思考时用户选择的强度，优先于任务预算和后台默认值；快速模式不可传入
         budgetProfile:
           $ref: '#/components/schemas/AgentBudgetProfileId'
         maxOutputTokens:

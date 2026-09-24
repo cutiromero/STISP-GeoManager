@@ -28,6 +28,8 @@ vi.mock("../api/platform", () => ({
 
 vi.mock("../api/client", () => ({
   api: mockApi,
+  requestJson: vi.fn().mockResolvedValue({ canChat: false, canAgent: false }),
+  requestForm: vi.fn(),
 }));
 
 const bootstrap: Bootstrap = {

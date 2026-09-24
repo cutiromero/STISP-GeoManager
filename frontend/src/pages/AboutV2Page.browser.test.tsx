@@ -82,7 +82,7 @@ describe("combined team introduction", () => {
 
   it("shows all supplied members and expands their publications with clean DOI links", async () => {
     renderAbout();
-    expect(screen.getAllByRole("img", { name: /照片$/ })).toHaveLength(8);
+    expect(screen.getAllByRole("img", { name: /照片$/ })).toHaveLength(11);
     const card = screen
       .getByRole("heading", { name: "李茂林" })
       .closest("article")!;
@@ -107,7 +107,7 @@ describe("combined team introduction", () => {
         name: "Spatiotemporal Intelligence Research Team",
       }),
     ).toBeVisible();
-    expect(screen.getAllByRole("img", { name: /portrait$/ })).toHaveLength(8);
+    expect(screen.getAllByRole("img", { name: /portrait$/ })).toHaveLength(11);
     fireEvent.click(
       within(screen.getByRole("complementary")).getByRole("button", {
         name: /Contact/,

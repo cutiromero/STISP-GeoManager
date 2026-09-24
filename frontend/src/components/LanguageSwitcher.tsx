@@ -1,4 +1,4 @@
-import { GlobalOutlined } from "@ant-design/icons";
+import ColumnIcon from "./ColumnIcon";
 import { Button, Dropdown } from "antd";
 import type { MenuProps } from "antd";
 import { useTranslation } from "react-i18next";
@@ -41,7 +41,7 @@ export default function LanguageSwitcher({
       <Button
         className={className}
         type="text"
-        icon={<GlobalOutlined />}
+        icon={<ColumnIcon name="language" />}
         aria-label={t("language.switchTo")}
         title={t("language.switchTo")}
       >

@@ -126,7 +126,8 @@ def test_submission_budget_and_idempotency(setup_agent):  # noqa: F811
 
 
 @pytest.mark.django_db(transaction=True)
-def test_admin_profile_save_reaches_http_request(setup_agent, settings):  # noqa: F811
+@pytest.mark.parametrize("user_effort", ["", "medium"])
+def test_admin_profile_save_reaches_http_request(setup_agent, settings, user_effort):  # noqa: F811
     requests = []
 
     class Handler(MockHandler):
@@ -173,6 +174,7 @@ def test_admin_profile_save_reaches_http_request(setup_agent, settings):  # noqa
                     model="mock",
                     prompt="hello",
                     thinking_mode="deep",
+                    reasoning_effort=user_effort,
                     status="running",
                     idempotency_key=f"budget-http-{index}",
                     budget_profile="reasoning",
@@ -187,7 +189,9 @@ def test_admin_profile_save_reaches_http_request(setup_agent, settings):  # noqa
                 -1
             ]
             assert sent["max_tokens"] == tokens
-            assert sent["chat_template_kwargs"]["reasoning_effort"] == effort
+            assert sent["chat_template_kwargs"]["reasoning_effort"] == (
+                user_effort or effort
+            )
             params = json.loads(run.events.filter(kind="parameters").last().text)
             assert params["maxRunSeconds"] == 3600
             assert params["maxContextTokens"] == 32768 - tokens - 256

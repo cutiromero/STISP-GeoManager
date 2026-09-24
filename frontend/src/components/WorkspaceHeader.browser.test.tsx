@@ -40,6 +40,8 @@ vi.mock("../api/platform", () => ({
 
 vi.mock("../api/client", () => ({
   api: mockApi,
+  requestJson: vi.fn().mockResolvedValue({ canChat: false, canAgent: false }),
+  requestForm: vi.fn(),
 }));
 
 vi.mock("../utils/layerWorkspaceStorage", () => ({
@@ -474,12 +476,12 @@ describe("WorkspaceHeader", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens the reserved intelligent warning page", () => {
+  it("hides the agent entry when neither agent capability is granted", () => {
     renderHeader();
 
-    fireEvent.click(screen.getByRole("button", { name: "智能预警" }));
-
-    expect(screen.getByTestId("location-path")).toHaveTextContent("/warning");
+    expect(
+      screen.queryByRole("button", { name: "智能体" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps first-entry map navigation available and opens guidance on demand", async () => {

@@ -43,7 +43,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
-import resultsPoplarReflectionImage from "../assets/portal/results-poplar-reflection.png";
+import resultsShowcaseImage from "../assets/portal/results-showcase-20260924.png";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useAppContext } from "../contexts/AppContext";
 import type { MapComposition, ResultArtifact } from "../types";
@@ -229,7 +229,7 @@ export default function ResultsPage() {
         <section
           className="portal-hero results-page-hero"
           style={{
-            backgroundImage: `linear-gradient(90deg, rgba(5, 31, 31, 0.94) 0%, rgba(8, 42, 38, 0.76) 42%, rgba(13, 38, 34, 0.4) 70%, rgba(5, 24, 27, 0.64) 100%), url(${resultsPoplarReflectionImage})`,
+            backgroundImage: `linear-gradient(90deg, rgba(5, 31, 31, 0.88) 0%, rgba(8, 42, 38, 0.62) 42%, rgba(13, 38, 34, 0.2) 70%, rgba(5, 24, 27, 0.4) 100%), url(${resultsShowcaseImage})`,
           }}
         >
           <div>

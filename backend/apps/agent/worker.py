@@ -285,6 +285,8 @@ def run_task(run_id):
             p, window = apply_budget(
                 fresh_user(run.owner_id), p, run.budget_snapshot, service_window
             )
+            if run.thinking_mode == "deep" and run.reasoning_effort:
+                p = {**p, "reasoningEffort": run.reasoning_effort}
             deadline = time.monotonic() + p["maxRunSeconds"]
             messages = context_messages(run, p, model)
             messages = attach_inputs(messages, run, model, p)
