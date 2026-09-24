@@ -19,6 +19,7 @@ import type {
 } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
 import "./agent.css";
+import BudgetSettings from "./BudgetSettings";
 
 export default function AgentAdmin() {
   const ui = useComputeText();
@@ -266,13 +267,17 @@ export default function AgentAdmin() {
             }
           </Form.List>
         </Card>
+        <BudgetSettings />
         <Card
-          title={ui("上下文与生成参数", "Context and generation")}
+          title={ui(
+            "全局参数与工作流规划预算",
+            "Global settings and workflow planning budgets",
+          )}
           style={{ marginTop: 16 }}
         >
           <Typography.Paragraph type="secondary">
             {ui(
-              "模型窗口以各模型卡片中的服务实测值为准。输入预算与生成预留共享窗口；生成量包含思考和正文。保存后新运行采用新参数，已有运行保留开始时的参数。",
+              "开启任务预算后，下方输入、生成、思考强度和时限仅用于科研工作流规划；关闭任务预算时也用于模型对话和数据智能体。温度等其他参数始终生效。",
               "Model cards show the serving window. Input and generation share it; generation includes reasoning and the final answer. Saved settings apply to new runs.",
             )}
           </Typography.Paragraph>

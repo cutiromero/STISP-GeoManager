@@ -73,6 +73,8 @@ class AgentRun(ProjectScopedModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     model = models.CharField(max_length=80)
     thinking_mode = models.CharField(max_length=8, default="fast")
+    budget_profile = models.CharField(max_length=16, blank=True, default="")
+    budget_snapshot = models.JSONField(default=dict)
     prompt = models.TextField()
     answer = models.TextField(blank=True)
     status = models.CharField(max_length=16, default="queued", db_index=True)

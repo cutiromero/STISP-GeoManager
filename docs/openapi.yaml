@@ -7482,10 +7482,178 @@ components:
       - id
       - dailyRuns
       additionalProperties: false
+    AgentBudgetProfileId:
+      type: string
+      description: 普通分析、长材料、长推理
+      enum:
+      - normal
+      - materials
+      - reasoning
+    AgentBudgetPreset:
+      type: object
+      description: 每种任务的默认预算
+      additionalProperties: false
+      properties:
+        maxOutputTokens:
+          type: integer
+          description: 思考与正文生成额度
+          minimum: 128
+          maximum: 261632
+        maxRunSeconds:
+          type: integer
+          description: 任务时限，秒
+          minimum: 60
+          maximum: 7200
+        reasoningEffort:
+          type: string
+          description: 深度模式下的思考强度
+          enum:
+          - low
+          - medium
+          - xhigh
+      required:
+      - maxOutputTokens
+      - maxRunSeconds
+      - reasoningEffort
+    AgentBudgetLimit:
+      type: object
+      description: 当前角色允许范围
+      additionalProperties: false
+      properties:
+        contextWindowTokens:
+          type: integer
+          description: 角色允许的总窗口，实际仍受模型服务约束
+          minimum: 1024
+          maximum: 262144
+        maxOutputTokens:
+          type: integer
+          description: 思考与正文生成额度
+          minimum: 128
+          maximum: 261632
+        maxRunSeconds:
+          type: integer
+          description: 任务时限，秒
+          minimum: 60
+          maximum: 7200
+      required:
+      - contextWindowTokens
+      - maxOutputTokens
+      - maxRunSeconds
+    AgentBudgetChoice:
+      type: object
+      description: 受用户额度限制后的默认值；提交时核对所选模型
+      additionalProperties: false
+      properties:
+        budgetProfile:
+          $ref: '#/components/schemas/AgentBudgetProfileId'
+        tier:
+          type: string
+          description: 服务器判定的额度级别
+          enum:
+          - standard
+          - superadmin
+        contextWindowTokens:
+          type: integer
+          description: 角色允许的总窗口，实际仍受模型服务约束
+          minimum: 1024
+          maximum: 262144
+        maxOutputTokens:
+          type: integer
+          description: 思考与正文生成额度
+          minimum: 128
+          maximum: 261632
+        maxRunSeconds:
+          type: integer
+          description: 任务时限，秒
+          minimum: 60
+          maximum: 7200
+        reasoningEffort:
+          type: string
+          description: 深度模式下的思考强度
+          enum:
+          - low
+          - medium
+          - xhigh
+        requestedMaxOutputTokens:
+          type: [integer, 'null']
+          description: 显式要求的额度，未设置为null
+      required:
+      - budgetProfile
+      - tier
+      - contextWindowTokens
+      - maxOutputTokens
+      - maxRunSeconds
+      - reasoningEffort
+      - requestedMaxOutputTokens
+    AgentBudgetOptions:
+      type: object
+      description: 当前用户可用方案和额度
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+          description: 是否开启任务预算
+        tier:
+          type: string
+          description: 服务器判定的额度级别
+          enum:
+          - standard
+          - superadmin
+        defaultProfile:
+          $ref: '#/components/schemas/AgentBudgetProfileId'
+        limits:
+          $ref: '#/components/schemas/AgentBudgetLimit'
+        profiles:
+          type: array
+          description: 三种任务的默认值
+          items:
+            $ref: '#/components/schemas/AgentBudgetChoice'
+        maxPromptCharacters:
+          type: integer
+          description: 文字长度保护；仍需对完整输入分词校验
+      required:
+      - enabled
+      - tier
+      - defaultProfile
+      - limits
+      - profiles
+      - maxPromptCharacters
     AgentPolicy:
       type: object
       description: 超级管理员控制策略；工具执行仍受项目与功能权限约束
       properties:
+        taskBudgetsEnabled:
+          type: boolean
+          description: 启用按任务与角色分配预算，关闭时使用旧版全局配置
+        defaultBudgetProfile:
+          $ref: '#/components/schemas/AgentBudgetProfileId'
+        budgetProfiles:
+          type: object
+          description: 三种任务的默认值
+          additionalProperties: false
+          properties:
+            normal:
+              $ref: '#/components/schemas/AgentBudgetPreset'
+            materials:
+              $ref: '#/components/schemas/AgentBudgetPreset'
+            reasoning:
+              $ref: '#/components/schemas/AgentBudgetPreset'
+          required:
+          - normal
+          - materials
+          - reasoning
+        budgetLimits:
+          type: object
+          description: 服务端鉴权决定额度
+          additionalProperties: false
+          properties:
+            standard:
+              $ref: '#/components/schemas/AgentBudgetLimit'
+            superadmin:
+              $ref: '#/components/schemas/AgentBudgetLimit'
+          required:
+          - standard
+          - superadmin
         enabled:
           type: boolean
           description: 模块总开关
@@ -7627,6 +7795,10 @@ components:
           items:
             $ref: '#/components/schemas/AgentQuota'
       required:
+      - taskBudgetsEnabled
+      - defaultBudgetProfile
+      - budgetProfiles
+      - budgetLimits
       - enabled
       - chatEnabled
       - agentEnabled
@@ -7708,6 +7880,8 @@ components:
       type: object
       description: 当前用户智能体入口和能力
       properties:
+        budgets:
+          $ref: '#/components/schemas/AgentBudgetOptions'
         canChat:
           type: boolean
           description: 允许聊天
@@ -7831,9 +8005,26 @@ components:
       description: 最近一次模型调用实际采用的参数；旧运行为空对象，生成用量汇总本轮各次调用
       additionalProperties: false
       properties:
+        serviceContextWindowTokens:
+          type: integer
+          description: 模型服务报告的真实总窗口
+        budgetProfile:
+          type: string
+          description: 实际预算方案，旧任务为空
+        maxRunSeconds:
+          type: integer
+          description: 任务时限，秒
+          minimum: 60
+          maximum: 7200
+        lastGeneratedTokens:
+          type: integer
+          description: 最近一次模型调用实际生成token，含思考和正文
+        modelCalls:
+          type: integer
+          description: 已收到用量回报的模型调用次数
         contextWindowTokens:
           type: integer
-          description: 模型服务报告的真实窗口
+          description: 本次可用窗口，取服务窗口与用户额度的较小值
         inputTokens:
           type: integer
           description: 完整请求经模型分词器计算的输入token
@@ -7860,6 +8051,14 @@ components:
       type: object
       description: 持久运行记录；引用失权时返回 403，不返回旧内容
       properties:
+        budgetProfile:
+          type: string
+          description: 实际方案，旧任务为空
+          enum:
+          - ''
+          - normal
+          - materials
+          - reasoning
         generationParameters:
           $ref: '#/components/schemas/AgentGenerationParameters'
         id:
@@ -8034,6 +8233,13 @@ components:
       type: object
       description: 提交任务
       properties:
+        budgetProfile:
+          $ref: '#/components/schemas/AgentBudgetProfileId'
+        maxOutputTokens:
+          type: integer
+          description: 思考与正文生成额度
+          minimum: 128
+          maximum: 261632
         model:
           type: string
           description: 可见模型别名
@@ -8041,7 +8247,7 @@ components:
           type: string
           description: 问题
           minLength: 1
-          maxLength: 12000
+          maxLength: 1048576
         idempotencyKey:
           type: string
           description: 每次用户操作唯一键，网络重试复用

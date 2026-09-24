@@ -35,6 +35,7 @@ import { useProjectContext } from "../projects/ProjectContext";
 import { useComputeText } from "../compute/ui";
 import { agentApi } from "../api/agent";
 import type {
+  AgentBudgetProfileId,
   AgentConversation,
   AgentRun,
   AgentResource,
@@ -46,6 +47,7 @@ import type {
 import { createUuid } from "../utils/uuid";
 import { useAgentBootstrap } from "./useAgentBootstrap";
 import SafeMarkdown from "./SafeMarkdown";
+import TaskBudgetControl from "./TaskBudgetControl";
 import "./agent.css";
 
 const active = (r: AgentRun) => r.status === "queued" || r.status === "running";
@@ -121,6 +123,12 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState("");
   const [thinkingMode, setThinkingMode] = useState<"fast" | "deep">("fast");
+  const [budgetProfile, setBudgetProfile] =
+    useState<AgentBudgetProfileId>("normal");
+  const [outputOverride, setOutputOverride] = useState<number>();
+  useEffect(() => {
+    if (bootstrap?.budgets) setBudgetProfile(bootstrap.budgets.defaultProfile);
+  }, [bootstrap?.budgets?.defaultProfile]);
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
   const [error, setError] = useState("");
@@ -150,6 +158,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     thinkingMode: "fast" | "deep";
     attachmentIds: number[];
     internetEnabled: boolean;
+    budgetProfile?: AgentBudgetProfileId;
+    maxOutputTokens?: number;
   } | null>(null);
   const running = runs.find(active);
   const canUse = mode === "agent" ? bootstrap?.canAgent : bootstrap?.canChat;
@@ -414,7 +424,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         previous.thinkingMode === thinkingMode &&
         JSON.stringify(previous.attachmentIds) ===
           JSON.stringify(attachments.map((item) => item.id)) &&
-        previous.internetEnabled === (internetEnabled && internetAvailable);
+        previous.internetEnabled === (internetEnabled && internetAvailable) &&
+        previous.budgetProfile ===
+          (bootstrap?.budgets?.enabled ? budgetProfile : undefined) &&
+        previous.maxOutputTokens ===
+          (bootstrap?.budgets?.enabled ? outputOverride : undefined);
       const submission = same
         ? previous
         : {
@@ -426,12 +440,21 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
             thinkingMode,
             attachmentIds: attachments.map((item) => item.id),
             internetEnabled: internetEnabled && internetAvailable,
+            budgetProfile: bootstrap?.budgets?.enabled
+              ? budgetProfile
+              : undefined,
+            maxOutputTokens: bootstrap?.budgets?.enabled
+              ? outputOverride
+              : undefined,
           };
       failedSubmission.current = submission;
       const run = await agentApi.submit(c.id, {
         model,
         prompt: text,
         idempotencyKey: submission.key,
+        ...(bootstrap?.budgets?.enabled
+          ? { budgetProfile, maxOutputTokens: outputOverride }
+          : {}),
         thinkingMode,
         resourceIds: mode === "agent" ? selected : [],
         attachmentIds: attachments.map((item) => item.id),
@@ -906,9 +929,15 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     <Typography.Paragraph type="secondary">
                       {ui("本轮参数", "Run parameters")}: {ui("窗口", "Window")}{" "}
                       {r.generationParameters.contextWindowTokens} ·{" "}
-                      {ui("输入", "Input")} {r.generationParameters.inputTokens}{" "}
-                      · {ui("每次生成上限", "Generation limit per call")}{" "}
+                      {ui("最近调用输入", "Last call input")}{" "}
+                      {r.generationParameters.inputTokens} ·{" "}
+                      {ui("每次生成上限", "Generation limit per call")}{" "}
                       {r.generationParameters.maxOutputTokens} token
+                      {r.generationParameters.lastGeneratedTokens !==
+                        undefined &&
+                        ` · ${ui("最近生成", "Last generated")} ${r.generationParameters.lastGeneratedTokens}`}
+                      {r.generationParameters.modelCalls !== undefined &&
+                        ` · ${ui("调用次数", "Model calls")} ${r.generationParameters.modelCalls}`}
                       {r.generationParameters.generatedTokens !== undefined &&
                         ` · ${ui("累计生成", "Generated total")} ${r.generationParameters.generatedTokens}`}
                       {r.thinkingMode === "deep" &&
@@ -1022,7 +1051,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 autoSize={{ minRows: 2, maxRows: 6 }}
-                maxLength={12000}
+                maxLength={bootstrap?.budgets?.maxPromptCharacters ?? 12000}
                 disabled={!canUse || current?.archived}
                 placeholder={ui(
                   "输入问题，Enter 发送，Shift+Enter 换行",
@@ -1073,6 +1102,20 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 </Button>
               )}
             </div>
+            {bootstrap?.budgets?.enabled && selectedModel && (
+              <TaskBudgetControl
+                options={bootstrap.budgets}
+                profile={budgetProfile}
+                output={outputOverride}
+                serviceWindow={selectedModel.contextWindowTokens}
+                disabled={Boolean(running) || busy}
+                onProfile={(value) => {
+                  setBudgetProfile(value);
+                  setOutputOverride(undefined);
+                }}
+                onOutput={setOutputOverride}
+              />
+            )}
             <div className="agent-thinking-row">
               <Typography.Text type="secondary">
                 {ui("回答模式", "Answer mode")}

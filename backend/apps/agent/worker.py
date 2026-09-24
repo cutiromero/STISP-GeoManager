@@ -19,6 +19,7 @@ from .models import AgentAttachment, AgentRun, AgentRuntime, RunEvent
 from .policy import fresh_user, require_access, policy
 from .provider import stream, check_model, model_window, ModelError
 from .context import prepare_context
+from .budgets import apply_budget, check_budget_access
 from .tools import TOOLS, execute, evidence_items, check_evidence
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ def guard(run_id, deadline):
     with project_scope(scope_for(run)):
         user = fresh_user(run.owner_id)
         p = require_access(user, run.conversation.mode, run.model)
+        check_budget_access(user, p, run.budget_snapshot)
         if run.conversation.mode == "agent":
             for previous in run.conversation.runs.all():
                 check_evidence(previous, user, p)
@@ -165,7 +167,7 @@ def attach_inputs(messages, run, model, policy_value):
             text = attachment.extracted_text.strip()
             if not text:
                 text = "（该文档没有可提取的文本，可能是扫描件）"
-            parts[0]["text"] += f"\n\n【附件：{attachment.name}】\n{text[:120000]}"
+            parts[0]["text"] += f"\n\n【附件：{attachment.name}】\n{text}"
             continue
         if not getattr(model, "vision", False):
             raise ModelError("当前模型未验收图片分析能力")
@@ -279,10 +281,14 @@ def run_task(run_id):
             )
             model = registry()[run.model]
             deadline = time.monotonic() + p["maxRunSeconds"]
+            service_window = model_window(model)
+            p, window = apply_budget(
+                fresh_user(run.owner_id), p, run.budget_snapshot, service_window
+            )
+            deadline = time.monotonic() + p["maxRunSeconds"]
             messages = context_messages(run, p, model)
             messages = attach_inputs(messages, run, model, p)
             current = messages[-1]
-            window = model_window(model)
 
             def prepare():
                 tokens, trimmed = prepare_context(
@@ -294,6 +300,11 @@ def run_task(run_id):
                     json.dumps(
                         {
                             "contextWindowTokens": window,
+                            "serviceContextWindowTokens": service_window,
+                            "budgetProfile": run.budget_snapshot.get(
+                                "budgetProfile", ""
+                            ),
+                            "maxRunSeconds": p["maxRunSeconds"],
                             "inputTokens": tokens,
                             "maxContextTokens": p["maxContextTokens"],
                             "maxOutputTokens": p["maxOutputTokens"],

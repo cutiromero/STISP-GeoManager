@@ -8,6 +8,7 @@ from apps.core.permissions import has_feature_perm
 from apps.projects.context import require_live_membership
 from .config import registry
 from .models import AgentPolicy, AgentRuntime
+from .budgets import defaults as budget_defaults, validate_budgets
 
 CAPABILITIES = {
     "chat": True,
@@ -33,6 +34,7 @@ def default_policy():
     first = next(iter(models), "")
     agent = next((m.alias for m in models.values() if m.agent), "")
     return {
+        **budget_defaults(),
         "enabled": True,
         "chatEnabled": True,
         "agentEnabled": True,
@@ -203,6 +205,7 @@ def validate_policy(value):
     defaults = default_policy()
     if not isinstance(value, dict) or set(value) != set(defaults):
         raise ValidationError("策略字段不完整或含未支持能力")
+    validate_budgets(value)
     for k in (
         "enabled",
         "chatEnabled",

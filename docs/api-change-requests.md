@@ -18,6 +18,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20260924-001 | Verified | /api/agent/admin/; /api/agent/bootstrap/; /api/agent/conversations/{id}/runs/ | role ceilings; task budgets; usage | Updated | HTTP model fixtures | Passed | Passed | Local browser; backend request capture; v0.1.15 |
 | API-20260922-001 | Verified | /api/agent/*; /api/compute/algorithms/ | generation controls; stable order | Updated | HTTP model fixtures | Passed | Passed | v0.1.13 server receipt; actual token accounting and two published algorithms |
 | API-20260920-002 | Verified | `DELETE /api/compute/algorithms/{algorithmId}/` | management operation | Updated | Updated | Implemented | Passed | Deletes registrations without task history and protects algorithms referenced by task history |
 | API-20260919-001 | Verified | /api/compute/* | generic algorithm registry and durable compute | Updated | Added | Passed | Passed | 应用/worker/真实Linux容器/浏览器端到端验收通过 |
@@ -862,3 +863,23 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 - Backend implementation notes: 完整请求通过/tokenize计数，/v1/models核实实际窗口；模板5为NDWI、6为矢量面积周长。
 - Verification: 参数保存至HTTP请求、截断缓存、上下文边界、算法数值、排序、生成类型及浏览器验证。
 - Result: 后端62项、前端406项测试通过；本地及正式浏览器参数保存和回答通过；真实模型65536窗口/16384生成，两个算法数值验收并发布。见docs/releases/0.1.13.md及同SHA服务器回执。
+
+## API-20260924-001 - 任务预算与角色额度
+
+- Status: Verified
+- Owner: Codex, contract/backend/frontend sequential handoff
+- Endpoints: /api/agent/admin/; /api/agent/bootstrap/; /api/agent/conversations/{id}/runs/
+- Change type: additive policy, request and usage fields
+- OpenAPI change: AgentBudget schemas; AgentPolicy/Bootstrap/RunInput/GenerationParameters
+- Mock examples: tests/integration/test_agent_budgets.py HTTP model fixtures
+- Frontend reason: select a task budget and show permitted/default/actual usage separately
+- Backend implementation notes: persisted snapshot and server-authenticated role ceilings
+- Verification: 86 backend tests; 409 frontend tests; local browser save and real HTTP submission
+- Result: policy edits reach model requests; standard users cannot request superadmin limits
+
+
+- 管理策略新增 taskBudgetsEnabled、defaultBudgetProfile、budgetProfiles、budgetLimits；默认关闭，部署时经管理员保存开启。
+- bootstrap 返回当前用户预算选项；提交可选 budgetProfile/maxOutputTokens，由后端身份决定上限；任务保存生效参数快照，幂等键比较预算请求。
+- 运行参数增加实际服务窗口、方案、时限、最近生成量和调用次数；累计生成量跨调用求和。
+- 提交长度按当前用户额度检查，完整请求仍由实际分词校验。附件提取按额度扩大，不以文件字节数充当 token。
+- 本任务按契约→后端→前端顺序完成跨模块交接。HTTP 模型样例使用 tests/integration/test_agent_budgets.py，验证管理员两次修改均传入真实 HTTP 请求。

@@ -68,7 +68,11 @@ def _pdf_text(payload: bytes) -> str:
                 text.append(value.decode("utf-8", errors="replace"))
             for raw in re.findall(rb"<([0-9A-Fa-f]{4,})>\s*T[Jj]", block):
                 try:
-                    text.append(bytes.fromhex(raw.decode()).decode("utf-16-be", errors="replace"))
+                    text.append(
+                        bytes.fromhex(raw.decode()).decode(
+                            "utf-16-be", errors="replace"
+                        )
+                    )
                 except (ValueError, UnicodeError):
                     continue
     return "\n".join(text)
@@ -93,7 +97,9 @@ def _docx_text(payload: bytes) -> str:
     return "".join(values)
 
 
-def extract_text(payload: bytes, suffix: str) -> tuple[str, str]:
+def extract_text(
+    payload: bytes, suffix: str, max_characters=MAX_EXTRACTED_CHARACTERS
+) -> tuple[str, str]:
     if suffix in {".txt", ".md", ".csv"}:
         text = payload.decode("utf-8-sig", errors="replace")
     elif suffix == ".docx":
@@ -103,8 +109,8 @@ def extract_text(payload: bytes, suffix: str) -> tuple[str, str]:
     else:
         return "", "not_applicable"
     text = text.replace("\x00", "").strip()
-    if len(text) > MAX_EXTRACTED_CHARACTERS:
-        return text[:MAX_EXTRACTED_CHARACTERS], "truncated"
+    if len(text) > max_characters:
+        return text[:max_characters], "truncated"
     return text, "ready" if text else "empty"
 
 
@@ -126,7 +132,15 @@ def validate_image(payload: bytes, suffix: str) -> str:
     return f"image/{'jpeg' if expected == 'jpeg' else expected}"
 
 
-def store_attachment(*, conversation, owner, upload, max_bytes=MAX_ATTACHMENT_BYTES, max_count=MAX_ATTACHMENTS_PER_CONVERSATION):
+def store_attachment(
+    *,
+    conversation,
+    owner,
+    upload,
+    max_bytes=MAX_ATTACHMENT_BYTES,
+    max_count=MAX_ATTACHMENTS_PER_CONVERSATION,
+    max_characters=MAX_EXTRACTED_CHARACTERS,
+):
     if owner.pk != conversation.owner_id:
         raise ValidationError("只能上传到自己的会话")
     original, suffix, kind = _safe_name(upload.name)
@@ -141,7 +155,9 @@ def store_attachment(*, conversation, owner, upload, max_bytes=MAX_ATTACHMENT_BY
     existing = conversation.attachments.filter(checksum=digest).first()
     if existing:
         return existing
-    if conversation.attachments.count() >= max(1, min(MAX_ATTACHMENTS_PER_CONVERSATION, int(max_count))):
+    if conversation.attachments.count() >= max(
+        1, min(MAX_ATTACHMENTS_PER_CONVERSATION, int(max_count))
+    ):
         raise ValidationError("每个会话的附件数量已达管理员设置上限")
     if kind == "image":
         mime_type = validate_image(payload, suffix)
@@ -156,7 +172,9 @@ def store_attachment(*, conversation, owner, upload, max_bytes=MAX_ATTACHMENT_BY
         }[suffix]
         if suffix == ".pdf" and not payload.startswith(b"%PDF-"):
             raise ValidationError("PDF 文件签名无效")
-        extracted, extraction_status = extract_text(payload, suffix)
+        extracted, extraction_status = extract_text(
+            payload, suffix, max(120000, min(1048576, int(max_characters)))
+        )
     relative = f"projects/{conversation.project_tag_id}/agent-attachments/{uuid4().hex}{suffix}"
     target = app_path(relative)
     target.parent.mkdir(parents=True, exist_ok=True)

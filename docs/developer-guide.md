@@ -2526,3 +2526,16 @@ maxOutputTokens为每次调用的思考与正文合计上限；maxContextTokens�
 完整请求通过模型服务/tokenize计数，以/v1/models返回的max_model_len作为真实窗口，并预留256 token余量。优先裁剪旧历史和旧工具对，再截短附件文字，保留当前问题。maxContextBytes是独立文本大小保护。AgentRun.generationParameters显示最近实际参数及累计生成量，旧记录为空对象。
 
 科研工作流目前执行一次已登记算法的计划和计算；maxIterations保留兼容，在界面标为预留。算法列表按分类sortOrder、分类名、算法名、ID分页前排序。模板5为NDWI水体指数，模板6为矢量面积与周长，均需试运行核对后发布。
+
+
+### v0.1.15 任务预算
+
+模型对话和数据智能体支持 normal/materials/reasoning 三种方案。管理员通过 `/api/agent/admin/` 配置各方案默认生成量、思考强度和任务时限，并设置 standard/superadmin 两档总窗口、生成量、时限上限。平台管理员归 standard；超级管理员身份沿用既有 Django 用户和超级管理员组判定。
+
+`/api/agent/bootstrap/` 的 budgets 给出当前用户可用方案、默认值和上限。提交运行可带 `budgetProfile` 和可选 `maxOutputTokens`；未提供生成量时采用方案默认值，并收窄至角色上限及实际模型窗口的一半；显式设置允许更大的生成量，但必须给输入及安全余量至少留下512 token。输入预算等于可用总窗口减生成预留和256 token余量。完整消息含系统、历史、附件和工具结果，使用服务端 tokenizer 计数。
+
+预算在提交时持久化到 AgentRun；修改方案默认值不改变已有运行。运行期间降低角色额度、撤销权限或关闭预算会停止超过新授权范围的任务。新字段不接受客户端角色声明；幂等重试要求方案和显式生成量相同。
+
+实际参数位于 generationParameters：contextWindowTokens 为用户本次可用窗口，serviceContextWindowTokens 为服务报告窗口；inputTokens 为最近请求计数，lastGeneratedTokens 为最近一次服务回报生成量，generatedTokens 为累计生成量，modelCalls 为收到用量回报的调用次数。思考和正文共同计入生成额度，预留量不等于消耗量。服务未提供 usage 时不伪造用量。
+
+本次预算作用于对话和数据智能体。科研工作流规划继续采用已有全局预算。附件仍有独立格式、大小和数量限制；扩大文本提取量不会令图片、栅格或整个数据库自动变成模型输入。

@@ -135,6 +135,10 @@ def stream(
         guard()
         conn.connect()
         sock = conn.sock
+        if sock:
+            # Native-window prefill can exceed the short connect timeout.
+            # The guard monitor still interrupts cancellation and run deadlines.
+            sock.settimeout(300)
         thread = threading.Thread(target=monitor, daemon=True)
         thread.start()
         conn.request(
@@ -232,7 +236,7 @@ def stream(
             if len(line) > 65536:
                 raise ModelError("模型响应超出限制")
             total += len(line)
-            if total > 2 * 1024 * 1024:
+            if total > max(2 * 1024 * 1024, max_tokens * 512):
                 raise ModelError("模型响应过大")
             if line.strip() == b"data: [DONE]":
                 complete = True

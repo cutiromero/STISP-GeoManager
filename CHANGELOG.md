@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15] - 2026-09-24
+
+- 新增普通分析、长材料、长推理任务预算和自定义生成预留；显示服务窗口、用户可用窗口、输入预算及实际调用用量。
+- 后台配置方案默认值和普通用户/超级管理员额度，服务端强制鉴权并保存每次任务参数快照。
+- 支持262144-token模型窗口，扩大长文本、附件提取和流式响应保护范围；保留取消、超时及权限撤销检查。
+- 新增预算传参、越权、幂等、快照及长输入回归测试。
+
 ## [0.1.14] - 2026-09-23
 
 - 修复数据智能体在深度模式下把直接返回的JSON命令误记为思考、导致工具协议失败的问题。

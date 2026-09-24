@@ -72,9 +72,125 @@ export type AgentQuota = {
 };
 
 /**
+ * 普通分析、长材料、长推理
+ */
+export type AgentBudgetProfileId = 'normal' | 'materials' | 'reasoning';
+
+/**
+ * 每种任务的默认预算
+ */
+export type AgentBudgetPreset = {
+    /**
+     * 思考与正文生成额度
+     */
+    maxOutputTokens: number;
+    /**
+     * 任务时限，秒
+     */
+    maxRunSeconds: number;
+    /**
+     * 深度模式下的思考强度
+     */
+    reasoningEffort: 'low' | 'medium' | 'xhigh';
+};
+
+/**
+ * 当前角色允许范围
+ */
+export type AgentBudgetLimit = {
+    /**
+     * 角色允许的总窗口，实际仍受模型服务约束
+     */
+    contextWindowTokens: number;
+    /**
+     * 思考与正文生成额度
+     */
+    maxOutputTokens: number;
+    /**
+     * 任务时限，秒
+     */
+    maxRunSeconds: number;
+};
+
+/**
+ * 受用户额度限制后的默认值；提交时核对所选模型
+ */
+export type AgentBudgetChoice = {
+    budgetProfile: AgentBudgetProfileId;
+    /**
+     * 服务器判定的额度级别
+     */
+    tier: 'standard' | 'superadmin';
+    /**
+     * 角色允许的总窗口，实际仍受模型服务约束
+     */
+    contextWindowTokens: number;
+    /**
+     * 思考与正文生成额度
+     */
+    maxOutputTokens: number;
+    /**
+     * 任务时限，秒
+     */
+    maxRunSeconds: number;
+    /**
+     * 深度模式下的思考强度
+     */
+    reasoningEffort: 'low' | 'medium' | 'xhigh';
+    /**
+     * 显式要求的额度，未设置为null
+     */
+    requestedMaxOutputTokens: number | null;
+};
+
+/**
+ * 当前用户可用方案和额度
+ */
+export type AgentBudgetOptions = {
+    /**
+     * 是否开启任务预算
+     */
+    enabled: boolean;
+    /**
+     * 服务器判定的额度级别
+     */
+    tier: 'standard' | 'superadmin';
+    defaultProfile: AgentBudgetProfileId;
+    limits: AgentBudgetLimit;
+    /**
+     * 三种任务的默认值
+     */
+    profiles: Array<AgentBudgetChoice>;
+    /**
+     * 文字长度保护；仍需对完整输入分词校验
+     */
+    maxPromptCharacters: number;
+};
+
+/**
  * 超级管理员控制策略；工具执行仍受项目与功能权限约束
  */
 export type AgentPolicy = {
+    /**
+     * 启用按任务与角色分配预算，关闭时使用旧版全局配置
+     */
+    taskBudgetsEnabled: boolean;
+    defaultBudgetProfile: AgentBudgetProfileId;
+    /**
+     * 三种任务的默认值
+     */
+    budgetProfiles: {
+        normal: AgentBudgetPreset;
+        materials: AgentBudgetPreset;
+        reasoning: AgentBudgetPreset;
+    };
+    /**
+     * 服务端鉴权决定额度
+     */
+    budgetLimits: {
+        standard: AgentBudgetLimit;
+        superadmin: AgentBudgetLimit;
+    };
     /**
      * 模块总开关
      */
@@ -245,6 +361,7 @@ export type AgentModel = {
  * 当前用户智能体入口和能力
  */
 export type AgentBootstrap = {
+    budgets?: AgentBudgetOptions;
     /**
      * 允许聊天
      */
@@ -362,7 +479,27 @@ export type AgentEvidence = {
  */
 export type AgentGenerationParameters = {
     /**
-     * 模型服务报告的真实窗口
+     * 模型服务报告的真实总窗口
+     */
+    serviceContextWindowTokens?: number;
+    /**
+     * 实际预算方案，旧任务为空
+     */
+    budgetProfile?: string;
+    /**
+     * 任务时限，秒
+     */
+    maxRunSeconds?: number;
+    /**
+     * 最近一次模型调用实际生成token，含思考和正文
+     */
+    lastGeneratedTokens?: number;
+    /**
+     * 已收到用量回报的模型调用次数
+     */
+    modelCalls?: number;
+    /**
+     * 本次可用窗口，取服务窗口与用户额度的较小值
      */
     contextWindowTokens?: number;
     /**
@@ -399,6 +536,10 @@ export type AgentGenerationParameters = {
  * 持久运行记录；引用失权时返回 403，不返回旧内容
  */
 export type AgentRun = {
+    /**
+     * 实际方案，旧任务为空
+     */
+    budgetProfile?: '' | 'normal' | 'materials' | 'reasoning';
     generationParameters?: AgentGenerationParameters;
     /**
      * 运行 ID
@@ -546,6 +687,11 @@ export type AgentConversationUpdate = {
  * 提交任务
  */
 export type AgentRunInput = {
+    budgetProfile?: AgentBudgetProfileId;
+    /**
+     * 思考与正文生成额度
+     */
+    maxOutputTokens?: number;
     /**
      * 可见模型别名
      */

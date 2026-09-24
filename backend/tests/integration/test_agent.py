@@ -423,6 +423,9 @@ def test_qwen_reasoning_content_is_separate_from_answer(monkeypatch):
         def request(self, _method, _path, body, headers):
             captured.update(json.loads(body))
 
+        def settimeout(self, seconds):
+            assert seconds == 300
+
         def getresponse(self):
             return Response()
 

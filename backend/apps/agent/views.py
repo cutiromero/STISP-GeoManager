@@ -37,6 +37,7 @@ from .policy import (
 from .tools import check_evidence, resources, resolve_resource, brief
 from .attachments import delete_attachment, serialize_attachment, store_attachment
 from .workflow import HAS_LANGGRAPH
+from .budgets import budget_options, resolve_budget
 
 
 class ApiProblem(Exception):
@@ -78,8 +79,8 @@ def endpoint(methods):
     return decorate
 
 
-def body(request, keys):
-    if len(request.body) > 256000:
+def body(request, keys, max_bytes=256000):
+    if len(request.body) > max_bytes:
         raise ApiProblem("请求过大")
     value = json.loads(request.body)
     if not isinstance(value, dict) or set(value) - set(keys):
@@ -108,6 +109,7 @@ def run_json(r, user):
         "conversationId": r.conversation_id,
         "model": r.model,
         "thinkingMode": r.thinking_mode,
+        "budgetProfile": r.budget_snapshot.get("budgetProfile", ""),
         "generationParameters": _run_parameters(r),
         "status": r.status,
         "prompt": r.prompt,
@@ -137,6 +139,8 @@ def _run_parameters(run):
     result = json.loads(parameters.text) if parameters else {}
     usages = [json.loads(item.text) for item in run.events.filter(kind="usage")]
     if usages:
+        result["lastGeneratedTokens"] = usages[-1].get("completion_tokens", 0)
+        result["modelCalls"] = len(usages)
         result["generatedTokens"] = sum(
             item.get("completion_tokens", 0) for item in usages
         )
@@ -166,6 +170,7 @@ def bootstrap(request):
             "canChat": chat,
             "canAgent": agent,
             "canManage": is_superadmin(request.user),
+            "budgets": budget_options(request.user, p),
             "thinkingEnabled": bool(p.get("thinkingEnabled", True)),
             "internetEnabled": bool(p.get("internetEnabled", False)),
             "allowAttachments": bool(p.get("allowAttachments", False)),
@@ -250,6 +255,7 @@ def conversation_detail(request, conversation_id):
 @endpoint(["POST"])
 def submit(request, conversation_id):
     c = own_conversation(request.user, conversation_id)
+    prompt_limit = budget_options(request.user, policy())["maxPromptCharacters"]
     value = body(
         request,
         [
@@ -260,7 +266,10 @@ def submit(request, conversation_id):
             "thinkingMode",
             "attachmentIds",
             "internetEnabled",
+            "budgetProfile",
+            "maxOutputTokens",
         ],
+        max_bytes=max(256000, prompt_limit * 6 + 8192),
     )
     alias, prompt, key = (
         value.get("model"),
@@ -271,10 +280,13 @@ def submit(request, conversation_id):
     attachment_ids = value.get("attachmentIds", [])
     internet_enabled = value.get("internetEnabled", False)
     thinking_mode = value.get("thinkingMode", "fast")
+    budget_profile = value.get("budgetProfile", "")
+    output_tokens = value.get("maxOutputTokens")
     if (
         not isinstance(alias, str)
         or not isinstance(prompt, str)
-        or not 1 <= len(prompt.strip()) <= 12000
+        or not 1 <= len(prompt.strip()) <= prompt_limit
+        or not isinstance(budget_profile, str)
         or not isinstance(key, str)
         or not 8 <= len(key) <= 80
         or thinking_mode not in {"fast", "deep"}
@@ -306,6 +318,8 @@ def submit(request, conversation_id):
                 existing.thinking_mode,
                 existing.attachment_ids,
                 existing.internet_enabled,
+                existing.budget_profile,
+                existing.budget_snapshot.get("requestedMaxOutputTokens"),
             ) != (
                 alias,
                 prompt.strip(),
@@ -313,6 +327,8 @@ def submit(request, conversation_id):
                 thinking_mode,
                 attachment_ids,
                 internet_enabled,
+                budget_profile,
+                output_tokens,
             ):
                 raise ApiProblem("幂等键已用于不同请求", 409)
             return JsonResponse(run_json(existing, request.user), status=202)
@@ -357,6 +373,12 @@ def submit(request, conversation_id):
         available = visible_models(request.user, c.mode, p)
         if not any(m["alias"] == alias and m["status"] == "online" for m in available):
             raise ApiProblem("该模型当前离线或尚未验收", 503)
+        serving_window = next(
+            m["contextWindowTokens"] for m in available if m["alias"] == alias
+        )
+        budget_snapshot = resolve_budget(
+            request.user, p, budget_profile, output_tokens, serving_window
+        )
         if AgentRun._base_manager.filter(
             owner=request.user, status__in=ACTIVE
         ).exists():
@@ -377,6 +399,8 @@ def submit(request, conversation_id):
             resource_ids=selected,
             attachment_ids=attachment_ids,
             internet_enabled=internet_enabled,
+            budget_profile=budget_profile,
+            budget_snapshot=budget_snapshot,
         )
         if c.title == "新会话":
             c.title = prompt.strip()[:60]
@@ -416,6 +440,9 @@ def conversation_attachments(request, conversation_id):
         upload=upload,
         max_bytes=p.get("maxAttachmentBytes", 20 * 1024 * 1024),
         max_count=p.get("maxAttachments", 8),
+        max_characters=max(
+            120000, budget_options(request.user, p)["maxPromptCharacters"]
+        ),
     )
     log_operation(
         request.user,
