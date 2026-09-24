@@ -7261,7 +7261,7 @@ export type ComputeOutputSpec = {
     /**
      * 类型
      */
-    kind: 'raster' | 'vector' | 'table' | 'image' | 'report';
+    kind: 'raster' | 'vector' | 'table' | 'image' | 'report' | 'archive';
     /**
      * 输出目录内文件名
      */

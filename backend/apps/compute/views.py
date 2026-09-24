@@ -453,6 +453,8 @@ def output_preview(request, output_id):
 def output_import(request, output_id):
     output = authorized_output(request, output_id)
     require_actor(request.user, project_id(), "catalog.add_dataresource")
+    if output.kind == "archive":
+        raise ComputeError("多文件结果请下载解压后，按数据格式分别导入")
     body = payload(request)
     name = clean_text(
         body.get("name") or output.task.name + " · " + output.label, 160, "入库名称"

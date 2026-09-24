@@ -159,6 +159,7 @@ export function OutputTable({
                     size="small"
                     disabled={
                       output.expired ||
+                      output.kind === "archive" ||
                       !permissions.import_outputs ||
                       ["queued", "running"].includes(output.importStatus)
                     }

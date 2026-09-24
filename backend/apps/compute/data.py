@@ -167,6 +167,10 @@ def inspect_output(path, kind):
         raise ComputeError("结果文件超过平台大小限制")
     if kind in {"vector", "table"} and path.stat().st_size > 120 * 1024**2:
         raise ComputeError("矢量和表格输出不可超过120 MiB")
+    if kind == "archive":
+        from .archives import inspect_archive
+
+        return inspect_archive(path, config().output_mb * 1024**2)
     if kind == "raster":
         import rasterio
 
@@ -293,6 +297,8 @@ def import_output(record):
     from .access import require_actor
 
     output = record.output
+    if output.kind == "archive":
+        raise ComputeError("多文件结果请下载解压后，按数据格式分别导入")
     require_actor(
         record.requested_by, output.task.project_tag_id, "catalog.add_dataresource"
     )

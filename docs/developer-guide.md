@@ -2543,3 +2543,8 @@ maxOutputTokens为每次调用的思考与正文合计上限；maxContextTokens�
 实际参数位于 generationParameters：contextWindowTokens 为用户本次可用窗口，serviceContextWindowTokens 为服务报告窗口；inputTokens 为最近请求计数，lastGeneratedTokens 为最近一次服务回报生成量，generatedTokens 为累计生成量，modelCalls 为收到用量回报的调用次数。思考和正文共同计入生成额度，预留量不等于消耗量。服务未提供 usage 时不伪造用量。
 
 本次预算作用于对话和数据智能体。科研工作流规划继续采用已有全局预算。附件仍有独立格式、大小和数量限制；扩大文本提取量不会令图片、栅格或整个数据库自动变成模型输入。
+
+
+### MHGDAL多文件结果（2026-09-24）
+
+计算输出声明支持`kind: archive`、`.zip`文件。服务端校验单层文件名、重复项、链接、CRC和解压总大小；仅供下载与元数据预览。对压缩包调用结果入库接口返回400，用户解压后按支持的数据格式分别导入。公开资源匿名读取继续只返回当前公开项目中启用且非owner_only的数据。

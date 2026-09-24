@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.18] - 2026-09-25
+
+- 修复匿名游客访问公开数据时的500错误，保留个人数据隐私边界。
+- 接入21个MHGDAL计算工具；深度学习训练和测试保留禁用占位。
+- 支持多文件计算结果ZIP下载、完整性与大小校验。
+
 ## [0.1.17] - 2026-09-24
 
 - 新闻改写为会议概况、参会单位与李茂林汇报，规范图注和附件名称，新闻页不再展示内部来源说明。

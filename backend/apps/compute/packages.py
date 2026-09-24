@@ -18,6 +18,7 @@ EXTENSIONS = {
     "table": {".csv"},
     "image": {".png", ".jpg"},
     "report": {".pdf"},
+    "archive": {".zip"},
 }
 
 

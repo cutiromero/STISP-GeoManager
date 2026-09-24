@@ -100,6 +100,8 @@ def access_filter(user):
 
 def resource_access_filter(user):
     query = project_access_filter(user)
+    if not user.is_authenticated:
+        return query & Q(status="active", owner_only=False)
     if user_can_bypass_owner_only(user):
         return query
     owner_visibility = Q(owner_only=False) | Q(maintainer=user)
@@ -113,6 +115,13 @@ def related_access_filter(user, relation: str):
     if user_can_bypass_owner_only(user):
         return Q()
     relation_prefix = f"{relation}__"
+    if not user.is_authenticated:
+        return Q(**{relation: None}) | Q(
+            **{
+                relation_prefix + "status": "active",
+                relation_prefix + "owner_only": False,
+            }
+        )
     visible = Q(**{relation_prefix + "owner_only": False}) | Q(
         **{relation_prefix + "maintainer": user}
     )
@@ -142,7 +151,10 @@ def user_can_access(obj, user) -> bool:
         return False
     if hasattr(obj, "owner_only") and obj.owner_only and not (
         user_can_bypass_owner_only(user)
-        or getattr(obj, "maintainer_id", None) == getattr(user, "id", None)
+        or (
+            user.is_authenticated
+            and getattr(obj, "maintainer_id", None) == user.id
+        )
     ):
         return False
     if user_has_full_data_access(user):
