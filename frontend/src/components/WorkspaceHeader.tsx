@@ -2,6 +2,7 @@ import { ProjectLabel } from "../projects/ProjectLabel";
 import { resetProjectSession } from "../projects/session";
 import { ProjectSelector } from "../projects/ProjectContext";
 import {
+  AlertOutlined,
   FolderOpenOutlined,
   LogoutOutlined,
   QuestionCircleOutlined,
@@ -36,6 +37,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { api } from "../api/client";
 import ColumnIcon from "./ColumnIcon";
+import stispLogoWhite from "../assets/stisp-logo-white.svg";
 import { platformBrand } from "../config/platformBrand";
 import { useAppContext } from "../contexts/AppContext";
 import { canManageProjects } from "../router";
@@ -102,7 +104,7 @@ function AgentNavigationButton({
       onMouseLeave={onMouseLeave}
       title={title}
     >
-      <ColumnIcon name="agent" aria-hidden="true" style={{ fontSize: 16 }} />
+      <AlertOutlined aria-hidden="true" style={{ fontSize: 16 }} />
       <span className="tab-text">{title}</span>
     </Button>
   );
@@ -1161,7 +1163,12 @@ export default function WorkspaceHeader({
         title={t("navigation.returnToCatalog")}
       >
         <span className="brand-logo-frame">
-          <ColumnIcon name="platform" style={{ fontSize: 32 }} />
+          <img
+            src={stispLogoWhite}
+            alt={`${platformDisplayName} Logo`}
+            width={40}
+            height={40}
+          />
         </span>
         <div className="brand-copy">
           <strong>{platformBrand.shortName}</strong>

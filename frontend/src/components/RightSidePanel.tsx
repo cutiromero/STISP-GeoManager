@@ -34,6 +34,7 @@ import {
   type RasterSymbolization,
 } from "../symbolization";
 import FeatureDetailPanel from "./FeatureDetailPanel";
+import RasterRenderingControls from "./RasterRenderingControls";
 
 const thumbnailMinIndicatorSizePx = 10;
 const thumbnailTileSize = 256;
@@ -1860,7 +1861,7 @@ function RasterOverviewPanel({
         </Typography.Text>
       </div>
 
-      <RasterRenderingSummary raster={raster} />
+      <RasterRenderingSummary raster={raster} layer={layer} />
 
       <div className="eco-spatial-card raster-spatial-card">
         <div className="right-panel-heading">
@@ -1983,7 +1984,7 @@ function RasterBandPanel({
         <RasterBandRangeChart bands={raster.bands} />
       </div>
 
-      <RasterRenderingSummary raster={raster} />
+      <RasterRenderingSummary raster={raster} layer={layer} />
 
       {error ? (
         <div className="eco-risk-card">
@@ -2312,7 +2313,13 @@ export function rasterBandRangePosition(
   return { left: Math.min(left, 100 - width), width };
 }
 
-function RasterRenderingSummary({ raster }: { raster: RasterInsightModel }) {
+function RasterRenderingSummary({
+  raster,
+  layer,
+}: {
+  raster: RasterInsightModel;
+  layer: LoadedRasterLayer | null;
+}) {
   const english = usePanelEnglish();
   const activeBands = raster.symbolization.bands
     .map((band) => `B${band}`)
@@ -2347,7 +2354,7 @@ function RasterRenderingSummary({ raster }: { raster: RasterInsightModel }) {
         </span>
         <span>
           <b>{raster.symbolization.opacity}%</b>
-          {english ? "Layer opacity" : "图层透明度"}
+          {english ? "Layer opacity" : "图层不透明度"}
         </span>
         <span>
           <b>
@@ -2372,6 +2379,11 @@ function RasterRenderingSummary({ raster }: { raster: RasterInsightModel }) {
           NoData
         </span>
       </div>
+      <RasterRenderingControls
+        layer={layer}
+        value={raster.symbolization}
+        bands={raster.bands}
+      />
     </div>
   );
 }

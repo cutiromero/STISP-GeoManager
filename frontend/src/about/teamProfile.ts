@@ -176,7 +176,7 @@ export const teamMembers: TeamMember[] = [
     name: "黄思圻",
     englishName: "Huang Siqi",
     email: "huangsiqi26@mails.ucas.ac.cn",
-    focus: "高光谱岩心矿物识别、智能编录和找矿预测。",
+    focus: "高光谱岩心矿物识别、智能编录和找矿预测",
     focusEn:
       "Hyperspectral core mineral identification, intelligent logging and mineral prospectivity prediction",
     publications: [],
