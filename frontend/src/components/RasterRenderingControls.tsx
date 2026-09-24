@@ -141,7 +141,7 @@ export default function RasterRenderingControls({
       <label>
         {label("图层不透明度", "Layer opacity")} {draft.opacity}%
         <Slider
-          aria-label={label("图层不透明度", "Layer opacity")}
+          ariaLabelForHandle={label("图层不透明度", "Layer opacity")}
           min={0}
           max={100}
           value={draft.opacity}

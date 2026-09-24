@@ -2535,19 +2535,21 @@ export default function MapPage() {
           aria-label={english ? "Feature information panel" : "要素信息面板"}
         >
           <ConfigProvider theme={workspacePanelTheme}>
-            <RightSidePanel
-              selectedFeature={rightPanelSelectedFeature}
-              selectedResource={rightPanelSelectedResource}
-              selectedResourceProfile={rightPanelSelectedResourceProfile}
-              selectedLayer={rightPanelSelectedLayer}
-              visualizationSummary={rightPanelVisualizationSummary}
-              visualizationSummaryLoading={
-                rightPanelVisualizationSummaryLoading
-              }
-              visualizationSummaryError={visualizationSummaryError}
-              currentView={currentMapView}
-              mapConfig={bootstrap.map}
-            />
+            <LayerContext.Provider value={layerContextValue}>
+              <RightSidePanel
+                selectedFeature={rightPanelSelectedFeature}
+                selectedResource={rightPanelSelectedResource}
+                selectedResourceProfile={rightPanelSelectedResourceProfile}
+                selectedLayer={rightPanelSelectedLayer}
+                visualizationSummary={rightPanelVisualizationSummary}
+                visualizationSummaryLoading={
+                  rightPanelVisualizationSummaryLoading
+                }
+                visualizationSummaryError={visualizationSummaryError}
+                currentView={currentMapView}
+                mapConfig={bootstrap.map}
+              />
+            </LayerContext.Provider>
           </ConfigProvider>
         </aside>
         <aside

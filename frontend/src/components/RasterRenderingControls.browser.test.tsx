@@ -71,6 +71,13 @@ describe("raster rendering controls", () => {
       !cloneDefaultRasterSymbolization().nodata.enabled,
     );
   });
+  it("exposes the opacity slider to keyboard users", () => {
+    show();
+    const slider = screen.getByRole("slider", { name: "图层不透明度" });
+    fireEvent.keyDown(slider, { key: "Home", keyCode: 36 });
+    fireEvent.click(screen.getByRole("button", { name: "应用渲染方案" }));
+    expect(apply.mock.calls[0][2].opacity).toBe(0);
+  });
   it("uses three valid bands when switching to RGB", async () => {
     show();
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "渲染方案" }));
