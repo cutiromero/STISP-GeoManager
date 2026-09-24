@@ -1,7 +1,7 @@
 """Build reproducible first-party MHGDAL packages from text sources."""
 
 import io
-import json
+import yaml
 from pathlib import Path
 import zipfile
 from catalog import TOOLS
@@ -31,8 +31,8 @@ def run(context):
     files.update(
         {
             "main.py": dispatch.encode(),
-            "operator.yaml": json.dumps(
-                tool["manifest"], ensure_ascii=False, indent=2
+            "operator.yaml": yaml.safe_dump(
+                tool["manifest"], allow_unicode=True, sort_keys=True
             ).encode(),
             "README.md": (
                 tool["manifest"]["name"]

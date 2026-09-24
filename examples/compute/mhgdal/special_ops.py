@@ -105,6 +105,15 @@ def batch_subset(context):
     inverse = gdal.InvGeoTransform(src.GetGeoTransform())
     if layer.GetFeatureCount() > 1000:
         raise ValueError("单任务最多裁剪1000个点")
+    estimated_bytes = (
+        layer.GetFeatureCount()
+        * width
+        * width
+        * src.RasterCount
+        * (gdal.GetDataTypeSize(src.GetRasterBand(1).DataType) // 8)
+    )
+    if estimated_bytes > 512 * 1024**2:
+        raise ValueError("裁剪结果预计超过512 MiB，请分批选择点或减小裁剪宽度")
     with tempfile.TemporaryDirectory(
         dir=context.output_path("result.zip").parent
     ) as temp:

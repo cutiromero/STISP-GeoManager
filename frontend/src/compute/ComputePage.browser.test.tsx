@@ -158,7 +158,7 @@ describe("通用计算界面", () => {
     expect(await screen.findByText("管理员新增的表格算法")).toBeTruthy();
     fireEvent.mouseDown(await screen.findByText("选择版本开始计算"));
     fireEvent.click(await screen.findByText("2.1.0"));
-    fireEvent.click(await screen.findByRole("button", { name: "执行" }));
+    fireEvent.click(await screen.findByRole("button", { name: /执\s*行/ }));
     expect(await screen.findByLabelText("缩放倍数")).toBeTruthy();
     expect(screen.getByLabelText("计算用表格 · table")).toBeTruthy();
     view.unmount();
@@ -219,6 +219,7 @@ describe("通用计算界面", () => {
     await screen.findByText("管理员新增的表格算法");
     fireEvent.mouseDown(screen.getByText("选择版本开始计算"));
     fireEvent.click(await screen.findByText("2.1.0"));
+    fireEvent.click(await screen.findByRole("button", { name: /执\s*行/ }));
     await screen.findByLabelText("缩放倍数");
     scope.current = "2";
     view.rerender(

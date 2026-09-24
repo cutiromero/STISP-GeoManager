@@ -1,4 +1,5 @@
 from datetime import timedelta
+from dataclasses import replace
 from unittest.mock import patch
 
 from django.utils import timezone
@@ -37,7 +38,15 @@ def make_output(env, kind, name):
     return task, path
 
 
-def test_recovery_stops_old_container_and_only_restarts_once(setup_compute):
+@pytest.mark.parametrize(
+    "mode,stopper", [("docker", "stop_container"), ("native", "stop_native")]
+)
+def test_recovery_stops_old_container_and_only_restarts_once(
+    setup_compute, mode, stopper
+):
+    from apps.compute.config import config
+
+    runtime_config = replace(config(), mode=mode)
     env = setup_compute
     task = ComputeTask.objects.get(pk=post(env, "tasks/").json()["id"])
     ComputeTask.objects.filter(pk=task.pk).update(
@@ -50,7 +59,10 @@ def test_recovery_stops_old_container_and_only_restarts_once(setup_compute):
             container_name="gm-compute-" + token * 32,
             runtime_digest=task.version.runtime_digest,
         )
-        with patch("apps.compute.worker.stop_container") as stop:
+        with (
+            patch("apps.compute.worker.config", return_value=runtime_config),
+            patch("apps.compute.worker." + stopper) as stop,
+        ):
             recover()
         stop.assert_called_once()
         task.refresh_from_db()

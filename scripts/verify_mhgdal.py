@@ -1,7 +1,6 @@
 """Synthetic numerical acceptance for every executable MHGDAL export."""
 
 import importlib.util
-import io
 import json
 from pathlib import Path
 import sys
@@ -12,8 +11,10 @@ from osgeo import gdal, ogr, osr
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "examples/compute/mhgdal"))
+sys.path.insert(0, str(ROOT / "backend"))
 from catalog import TOOLS  # noqa: E402
 from build import build  # noqa: E402
+from apps.compute.packages import inspect_package  # noqa: E402
 
 
 class Context:
@@ -212,7 +213,13 @@ def run_suite(folder):
         output.mkdir()
         package = output / "package"
         package.mkdir()
-        with zipfile.ZipFile(io.BytesIO(build(tool))) as z:
+        package_file = output / "algorithm.zip"
+        package_file.write_bytes(build(tool))
+        assert (
+            inspect_package(package_file)["identifier"]
+            == tool["manifest"]["identifier"]
+        )
+        with zipfile.ZipFile(package_file) as z:
             z.extractall(package)
         spec = importlib.util.spec_from_file_location("trial_main", package / "main.py")
         module = importlib.util.module_from_spec(spec)
@@ -249,6 +256,20 @@ def run_suite(folder):
         )
         with zipfile.ZipFile(alternate / "result.zip") as z:
             assert z.testzip() is None
+    from special_ops import batch_subset
+
+    try:
+        batch_subset(
+            Context(
+                {"raster": files["raster"], "vector": files["points"]},
+                {"width": 10000, "export_bounds": False},
+                alternate,
+            )
+        )
+    except ValueError as exc:
+        assert "512 MiB" in str(exc)
+    else:
+        raise AssertionError("Oversized batch must be rejected before writing")
     (folder / "results.json").write_text(
         json.dumps(results, indent=2), encoding="utf-8"
     )
