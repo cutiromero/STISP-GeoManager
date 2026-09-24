@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 export const auditUiZh = {
+  会议现场: "会议现场",
+  "编辑备注（正文不展示）": "编辑备注（正文不展示）",
   内容类型不匹配: "内容类型不匹配",
   "学习链接请按“资料名称 | https://地址”填写":
     "学习链接请按“资料名称 | https://地址”填写",
@@ -107,6 +109,8 @@ export const auditUiZh = {
     "每次在一个项目内查看和操作数据、地图工程及成果。公开项目所有人可读；其他项目仅获配对应标签的用户及超管可读。",
 };
 export const auditUiEn = {
+  会议现场: "Conference highlights",
+  "编辑备注（正文不展示）": "Editorial notes (not displayed)",
   内容类型不匹配: "Content type does not match",
   "学习链接请按“资料名称 | https://地址”填写":
     "Use one link per line: title | https://address",

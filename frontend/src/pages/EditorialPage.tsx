@@ -333,7 +333,7 @@ export default function EditorialPage({
                 a.mimeType.startsWith("image/") && a.url !== article.coverUrl,
             ) && (
               <section className="editorial-gallery">
-                <h2>{ui("图文资料")}</h2>
+                <h2>{ui(kind === "news" ? "会议现场" : "图文资料")}</h2>
                 <Image.PreviewGroup>
                   {article.assets
                     .filter(
@@ -358,7 +358,7 @@ export default function EditorialPage({
                   .map((a) => (
                     <p key={a.id}>
                       <a href={a.url} target="_blank" rel="noreferrer">
-                        {a.name}（PDF）
+                        {kind === "news" ? a.caption || a.name : a.name}（PDF）
                       </a>
                     </p>
                   ))}
@@ -380,9 +380,11 @@ export default function EditorialPage({
                 ))}
               </section>
             )}
-            <footer className="editorial-source">
-              {ui("素材来源、课件页码")}：{article.source || ui("团队整理")}
-            </footer>
+            {kind === "knowledge" && (
+              <footer className="editorial-source">
+                {ui("素材来源、课件页码")}：{article.source || ui("团队整理")}
+              </footer>
+            )}
           </article>
         ) : (
           <>
@@ -535,7 +537,12 @@ export default function EditorialPage({
           >
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="source" label={ui("素材来源、课件页码")}>
+          <Form.Item
+            name="source"
+            label={ui(
+              kind === "news" ? "编辑备注（仅内部保存）" : "素材来源、课件页码",
+            )}
+          >
             <Input.TextArea rows={2} />
           </Form.Item>
           {editing && editing !== "new" ? (

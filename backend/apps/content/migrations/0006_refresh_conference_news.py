@@ -1,0 +1,58 @@
+from django.db import migrations
+from django.db.models import F
+from django.utils import timezone
+
+"""团队会议新闻定稿。"""
+
+NEWS_KEY = "news-china-partners-2026-s3"
+NEWS_TITLE = "团队参加2026年中国伙伴学术论坛第三场研讨会，李茂林作专题报告"
+NEWS_SUMMARY = "会议围绕AI时代的生态系统与环境研究展开交流。团队26届李茂林作专题报告，介绍森林碳汇、雷击火与荒漠化评估相关研究。"
+NEWS_BODY = """2026年9月11日，2026年中国伙伴学术论坛（China Partners Academic Forum 2026）第三场研讨会举行，主题为“AI时代的生态系统与环境研究”。会议由中国科学院新疆生态与地理研究所、曲阜师范大学和比利时根特大学的学者共同组织，围绕人工智能与地球观测在生态环境研究中的应用开展学术交流。
+
+来自根特大学、中国科学院新疆生态与地理研究所、地理科学与资源研究所、空天信息创新研究院，以及中国科学院大学、曲阜师范大学、浙江工业大学等单位的学者参与交流。会议设置特邀报告、专题汇报与自由讨论等环节，议题涵盖地理人工智能、草地遥感、干旱与沙尘监测、土地利用变化等方向。
+
+团队26届李茂林作题为《从地球观测到可持续发展目标：东亚干旱区森林碳、野火与荒漠化综合评估》的报告，介绍团队运用多源遥感与空间分析方法研究干旱区生态环境问题的相关工作。
+
+报告围绕三个方面展开：分析采矿扰动下森林生态网络的结构变化及其与碳汇功能的关系，探讨生态修复的优先布局；结合气象、地形与植被信息，研究雷击火的时空分布、驱动因素和火势蔓延模拟；以蒙古高原为对象，介绍融合气候、植被、土壤及人类活动因素的荒漠化脆弱性评估，并探讨机器学习在驱动机制分析与未来情景预测中的应用。
+
+报告将上述研究与气候行动、陆地生态等可持续发展目标相联系，讨论地球观测与人工智能如何为干旱区生态监测、风险评估和修复决策提供支持。此次汇报为团队与参会学者围绕相关研究方法和应用开展交流提供了机会。"""
+
+
+def news_asset_caption(name, mime_type):
+    if mime_type == "application/pdf":
+        return (
+            "研讨会议程"
+            if "2026S3" in name or "海报" in name or "议程" in name
+            else "李茂林专题报告"
+        )
+    if "报告封面" in name:
+        return "李茂林专题报告：从地球观测到可持续发展目标"
+    return "2026年中国伙伴学术论坛第三场研讨会现场"
+
+
+def refresh_news(apps, schema_editor):
+    alias = schema_editor.connection.alias
+    articles = apps.get_model("content", "Article").objects.using(alias)
+    assets = apps.get_model("content", "Asset").objects.using(alias)
+    for article in articles.filter(project_tag_id=1, seed_key=NEWS_KEY):
+        articles.filter(pk=article.pk).update(
+            title=NEWS_TITLE,
+            summary=NEWS_SUMMARY,
+            body=NEWS_BODY,
+            source="",
+            revision=F("revision") + 1,
+            updated_at=timezone.now(),
+        )
+        for asset in assets.filter(article_id=article.pk):
+            caption = news_asset_caption(asset.name, asset.mime_type)
+            assets.filter(pk=asset.pk).update(
+                caption=caption,
+                name=caption + ".pdf"
+                if asset.mime_type == "application/pdf"
+                else asset.name,
+            )
+
+
+class Migration(migrations.Migration):
+    dependencies = [("content", "0005_asset_expires_at_asset_pending_owner")]
+    operations = [migrations.RunPython(refresh_news, migrations.RunPython.noop)]
