@@ -18,7 +18,6 @@ import {
   Empty,
   Input,
   Popover,
-  QRCode,
   Tag,
   Tour,
   Typography,
@@ -1004,19 +1003,6 @@ export default function WorkspaceHeader({
     </Dropdown>
   );
 
-  const wechatContent = (
-    <div className="wechat-popover-content">
-      <QRCode
-        value="https://example.local/capfed-wechat"
-        size={136}
-        bordered={false}
-        color="#173f39"
-      />
-      <strong>{platformBrand.shortName}</strong>
-      <span>{t("navigation.publicAccountQr")}</span>
-    </div>
-  );
-
   const userContent = (
     <div className="user-popover-content">
       <div className="user-popover-head">
@@ -1370,10 +1356,10 @@ export default function WorkspaceHeader({
             data-nav-key="news"
             className={tabClass(activeTab === "news", expandedTabId === "news")}
             onClick={() => navigateFromHeader("/news")}
-            title="团队动态"
+            title={t("navigation.news")}
           >
             <ColumnIcon name="news" />
-            <span className="tab-text">团队动态</span>
+            <span className="tab-text">{t("navigation.news")}</span>
           </Button>
           <Dropdown
             menu={{ items: aboutMenuItems }}
@@ -1421,19 +1407,6 @@ export default function WorkspaceHeader({
           </Button>
         )}
         <LanguageSwitcher compact className="header-language-switcher" />
-        <Popover
-          trigger="click"
-          placement="bottomRight"
-          content={wechatContent}
-          classNames={{ root: "workspace-info-popover" }}
-        >
-          <Button
-            aria-label={t("navigation.publicAccountQr")}
-            className="wechat-button"
-            icon={<ColumnIcon name="wechat" />}
-            title={t("navigation.publicAccountQr")}
-          />
-        </Popover>
         <Popover
           trigger="click"
           placement="bottomRight"

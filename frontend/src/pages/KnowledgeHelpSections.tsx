@@ -1,3 +1,5 @@
+import { useAppContext } from "../contexts/AppContext";
+import { canReadHelp, downloadHelp } from "../about/helpAccess";
 import {
   BookOutlined,
   BranchesOutlined,
@@ -17,7 +19,6 @@ import {
   helpAudienceCards,
   helpArticles,
   helpCategories,
-  helpDocumentDownload,
   helpFaq,
   helpQuickLinks,
   type HelpArticle,
@@ -349,24 +350,28 @@ export function KnowledgeSection({
 }
 
 export function DocsSection({ section }: { section: AboutSection }) {
+  const { user } = useAppContext();
+  const articles = helpArticles.filter(article => canReadHelp(article.id, user));
+  const faq = helpFaq.filter(item => !!user?.permissions.canAccessAdmin || !/管理员|PDF/.test(item.question));
+  const saveHelp = () => downloadHelp(articles.map(a => `# ${a.title}\n\n${a.summary}\n\n${a.blocks.flatMap(helpBlockText).join("\n\n")}`).join("\n\n"), false);
   const [activeArticleId, setActiveArticleId] = useState("platform-guide");
   const [searchKeyword, setSearchKeyword] = useState("");
   const activeArticle =
-    helpArticles.find((article) => article.id === activeArticleId) ??
-    helpArticles[0]!;
+    articles.find((article) => article.id === activeArticleId) ??
+    articles[0]!;
   const normalizedKeyword = searchKeyword.trim().toLowerCase();
   const filteredCategories = helpCategories
     .map((category) => ({
       ...category,
       items: category.items.filter((item) => {
-        const article = helpArticles.find(
+        const article = articles.find(
           (candidate) => candidate.id === item.articleId,
         );
-        return article ? helpArticleMatches(article, normalizedKeyword) : true;
+        return article ? helpArticleMatches(article, normalizedKeyword) : false;
       }),
     }))
     .filter((category) => category.items.length > 0);
-  const filteredFaq = helpFaq.filter((item) => {
+  const filteredFaq = faq.filter((item) => {
     if (!normalizedKeyword) {
       return true;
     }
@@ -381,12 +386,12 @@ export function DocsSection({ section }: { section: AboutSection }) {
         <div className="about-page-help-hero-copy">
           <span className="about-page-kicker">{section.eyebrow}</span>
           <Typography.Title level={2}>{section.title}</Typography.Title>
-          <Typography.Paragraph>{section.summary}</Typography.Paragraph>
+          <Typography.Paragraph>帮助文档按当前账号可用功能显示。登录后可在个人设置查看工具操作和智能体权限。</Typography.Paragraph>
           <div
             className="about-page-help-audience-grid"
             aria-label="帮助文档适用对象"
           >
-            {helpAudienceCards.map((card) => (
+            {helpAudienceCards.filter(card => user?.permissions.canAccessAdmin || !card.title.includes("管理员")).map((card) => (
               <article key={card.title}>
                 <strong>{card.title}</strong>
                 <span>{card.description}</span>
@@ -394,7 +399,7 @@ export function DocsSection({ section }: { section: AboutSection }) {
             ))}
           </div>
           <div className="about-page-help-actions">
-            {helpQuickLinks.map((quickLink) => (
+            {helpQuickLinks.filter(link => canReadHelp(link.articleId, user)).map((quickLink) => (
               <button
                 aria-pressed={activeArticle.id === quickLink.articleId}
                 key={quickLink.articleId}
@@ -410,14 +415,13 @@ export function DocsSection({ section }: { section: AboutSection }) {
         <div className="about-page-help-download">
           <FilePdfOutlined />
           <strong>离线帮助文档</strong>
-          <small>{helpDocumentDownload.meta}</small>
+          <small>当前账号适用的操作指南</small>
           <Button
-            download={helpDocumentDownload.filename}
-            href={helpDocumentDownload.href}
+            onClick={saveHelp}
             icon={<DownloadOutlined />}
             type="primary"
           >
-            {helpDocumentDownload.label}
+            下载当前帮助文档
           </Button>
         </div>
       </section>
@@ -488,16 +492,15 @@ export function DocsSection({ section }: { section: AboutSection }) {
         <aside className="about-page-help-side">
           <section className="about-page-help-side-panel about-page-help-download-panel">
             <FilePdfOutlined />
-            <strong>PDF 帮助文档</strong>
-            <p>{helpDocumentDownload.meta}</p>
+            <strong>我的帮助文档</strong>
+            <p>当前账号适用的操作指南</p>
             <Button
-              download={helpDocumentDownload.filename}
-              href={helpDocumentDownload.href}
+              onClick={saveHelp}
               icon={<DownloadOutlined />}
               block
               type="primary"
             >
-              下载 PDF
+              下载当前帮助文档
             </Button>
           </section>
           <section className="about-page-help-side-panel">
@@ -506,7 +509,7 @@ export function DocsSection({ section }: { section: AboutSection }) {
               <Typography.Title level={4}>常见问题</Typography.Title>
             </div>
             <div className="about-page-help-faq-list">
-              {(filteredFaq.length > 0 ? filteredFaq : helpFaq).map((item) => (
+              {(filteredFaq.length > 0 ? filteredFaq : faq).map((item) => (
                 <details key={item.question}>
                   <summary>{item.question}</summary>
                   <p>{item.answer}</p>

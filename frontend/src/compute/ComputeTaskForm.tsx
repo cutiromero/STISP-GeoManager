@@ -37,6 +37,7 @@ function ParameterControl({
   checked?: boolean;
   onChange?: (value: unknown) => void;
 }) {
+  const ui = useComputeText();
   const data = parameter.input ? inputs[parameter.input] : undefined;
   if (parameter.type === "boolean")
     return <Switch id={id} checked={checked} onChange={onChange} />;
@@ -57,7 +58,7 @@ function ParameterControl({
         value={value as string | number | undefined}
         onChange={onChange}
         showSearch
-        options={values.map((value) => ({ value, label: String(value) }))}
+        options={values.map((value) => ({ value, label: parameter.type === "enum" ? ui(String(value)) : String(value) }))}
         style={{ minWidth: 180 }}
       />
     );
@@ -228,7 +229,7 @@ export default function ComputeTaskForm({
     <Modal
       open
       width={720}
-      title={`${trial ? ui("算法试运行", "Trial run") : ui("新建计算任务", "New compute task")} · ${version.manifest.name} ${version.version}`}
+      title={`${trial ? ui("算法试运行", "Trial run") : ui("新建计算任务", "New compute task")} · ${ui(version.manifest.name)} ${version.version}`}
       onCancel={onClose}
       onOk={submit}
       confirmLoading={busy}
@@ -257,7 +258,7 @@ export default function ComputeTaskForm({
         form={form}
         layout="vertical"
         initialValues={{
-          name: initial?.name ?? version.manifest.name,
+          name: initial?.name ?? ui(version.manifest.name),
           inputs: initial
             ? Object.fromEntries(
                 initial.inputs.map((r) => [String(r.key), r.resourceId]),
@@ -292,7 +293,7 @@ export default function ComputeTaskForm({
           <Form.Item
             key={input.key}
             name={["inputs", input.key]}
-            label={`${input.label} · ${input.kind}`}
+            label={`${ui(input.label)} · ${input.kind}`}
             rules={[{ required: input.required }]}
           >
             <Select
@@ -334,8 +335,8 @@ export default function ComputeTaskForm({
             <Form.Item
               key={parameter.key}
               name={["parameters", parameter.key]}
-              label={parameter.label}
-              help={parameter.help}
+              label={ui(parameter.label)}
+              help={parameter.help ? ui(parameter.help) : undefined}
               rules={[{ required: parameter.required }]}
               valuePropName={parameter.type === "boolean" ? "checked" : "value"}
               preserve={false}
@@ -348,7 +349,7 @@ export default function ComputeTaskForm({
       <Typography.Paragraph type="secondary">
         {ui("输出：", "Outputs: ")}
         {version.manifest.outputs
-          .map((o) => `${o.label} (${o.kind})`)
+          .map((o) => `${ui(o.label)} (${o.kind})`)
           .join("、")}
       </Typography.Paragraph>
     </Modal>

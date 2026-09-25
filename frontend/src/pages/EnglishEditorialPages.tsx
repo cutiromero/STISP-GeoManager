@@ -1,3 +1,4 @@
+import { canReadHelp, downloadHelp } from "../about/helpAccess";
 import helpContent from "../about/helpContent.json";
 import {
   BranchesOutlined,
@@ -53,6 +54,8 @@ const remoteSensingPapers = [
 ];
 
 export function EnglishHelpCenter() {
+  const { user } = useAppContext();
+  const guides = helpContent.english.filter(guide => canReadHelp(guide.id, user));
   return (
     <section className="about-v2-section">
       <Typography.Title level={2}>Platform help</Typography.Title>
@@ -61,12 +64,11 @@ export function EnglishHelpCenter() {
         cartography.
       </Typography.Paragraph>
       <Button
-        href={`${import.meta.env.BASE_URL}docs/platform-help-center.pdf`}
-        download
+        onClick={() => downloadHelp(guides.map(g => `# ${g.title}\n\n${g.items.join("\n\n")}`).join("\n\n"), true)}
       >
-        Download bilingual PDF manual
+        Download my help guide
       </Button>
-      {helpContent.english.map((guide) => (
+      {guides.map((guide) => (
         <article key={guide.id}>
           <Typography.Title level={3}>{guide.title}</Typography.Title>
           {guide.items.map((item) => (

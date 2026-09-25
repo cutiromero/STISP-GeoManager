@@ -1,8 +1,22 @@
 import { useTranslation } from "react-i18next";
+import translations from "./builtin.en.json";
+export function builtinEnglish(text: string): string {
+  const dictionary: Record<string, string> = translations;
+  if (dictionary[text]) return dictionary[text];
+  if (/^附加影像\d+$/.test(text))
+    return text.replace("附加影像", "Additional image ");
+  const generic = "；按任务生成独立结果，保留输入数据。";
+  const example = "的标准接入示例；管理员须使用小样试运行并核对结果后发布。";
+  if (text.endsWith(generic))
+    return `${builtinEnglish(text.slice(0, -generic.length))}; produce a separate result and preserve the input data.`;
+  if (text.endsWith(example))
+    return `${builtinEnglish(text.slice(0, -example.length))} integration example. Validate a small trial before publication.`;
+  return text;
+}
 export function useComputeText() {
   const { i18n } = useTranslation();
-  return (zh: string, en: string) =>
-    i18n.resolvedLanguage?.startsWith("en") ? en : zh;
+  return (zh: string, en?: string) =>
+    i18n.resolvedLanguage?.startsWith("en") ? (en ?? builtinEnglish(zh)) : zh;
 }
 export const taskStatusLabels: Record<string, [string, string]> = {
   queued: ["排队中", "Queued"],

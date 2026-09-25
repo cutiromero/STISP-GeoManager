@@ -1,11 +1,14 @@
 from functools import wraps
+from functools import lru_cache
+from pathlib import Path
 import json
 import logging
 import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Case, When, Value, IntegerField
+from django.db.models import Case, When, Value, IntegerField, Q
+from django.conf import settings
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -36,6 +39,12 @@ from .services import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def builtin_search_labels():
+    path = Path(settings.PROGRAM_ROOT) / "frontend/src/compute/builtin.en.json"
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def endpoint(methods, public=False):
@@ -165,7 +174,9 @@ def algorithms(request):
     else:
         query = query.filter(enabled=True, versions__status="published").distinct()
     if request.GET.get("q"):
-        query = query.filter(name__icontains=request.GET["q"][:160])
+        term = request.GET["q"][:160]
+        translated = [zh for zh, en in builtin_search_labels().items() if term.casefold() in en.casefold()]
+        query = query.filter(Q(name__icontains=term) | Q(name__in=translated))
     if request.GET.get("category"):
         query = query.filter(category=request.GET["category"])
     categories = AlgorithmCategory._base_manager.filter(

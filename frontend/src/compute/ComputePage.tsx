@@ -164,7 +164,7 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
             setCategory(value);
             setPage(1);
           }}
-          options={categories.map((c) => ({ value: c, label: c }))}
+          options={categories.map((c) => ({ value: c, label: ui(c) }))}
           style={{ minWidth: 180 }}
         />
       </div>
@@ -176,7 +176,7 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
             title={
               <Space>
                 <ExperimentOutlined />
-                <span>{algorithm.name}</span>
+                <span>{ui(algorithm.name)}</span>
               </Space>
             }
             extra={
@@ -187,16 +187,16 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
               </Tag>
             }
           >
-            <Typography.Paragraph>{algorithm.description}</Typography.Paragraph>
+            <Typography.Paragraph>{ui(algorithm.description)}</Typography.Paragraph>
             <Space wrap>
-              <Tag>{algorithm.category || ui("未分类", "Uncategorized")}</Tag>
+              <Tag>{ui(algorithm.category) || ui("未分类", "Uncategorized")}</Tag>
               {algorithm.versions[0]?.manifest.inputs.map((input) => (
                 <Tag key={input.key}>{input.kind}</Tag>
               ))}
             </Space>
             <div className="compute-card-footer">
               <Typography.Text type="secondary">
-                {algorithm.author}
+                {ui(algorithm.author)}
               </Typography.Text>
               <Select
                 placeholder={ui(
@@ -309,7 +309,7 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
               </Button>
             ),
           },
-          { title: ui("算法", "Algorithm"), dataIndex: "algorithmName" },
+          { title: ui("算法", "Algorithm"), dataIndex: "algorithmName", render: (value: string) => ui(value) },
           {
             title: ui("状态", "Status"),
             key: "status",

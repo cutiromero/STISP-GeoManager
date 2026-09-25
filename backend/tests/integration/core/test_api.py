@@ -370,7 +370,12 @@ class LoginOverviewApiTests(TestCase):
             payload["platform"]["edition"],
             "STISP · Spatiotemporal Services Edition",
         )
-        self.assertEqual(payload["platform"]["version"], "v0.1.5")
+        from django.conf import settings
+        import tomllib
+
+        with (settings.BASE_DIR / "pyproject.toml").open("rb") as file:
+            version = tomllib.load(file)["project"]["version"]
+        self.assertEqual(payload["platform"]["version"], f"v{version}")
         metrics = {item["id"]: item for item in payload["metrics"]}
         self.assertEqual(metrics["dataResources"]["value"], 1)
         self.assertEqual(metrics["thematicLayers"]["value"], 1)
@@ -1096,12 +1101,13 @@ class RegistrationApiTests(TestCase):
         self.assertEqual(application.status, RoleApplication.Status.PENDING)
         self.assertEqual(response.json()["roleApplication"]["status"], "pending")
 
-    def test_manager_can_approve_research_application_and_replace_base_role(self):
+    def test_superadmin_can_approve_research_application_and_replace_base_role(self):
         ensure_superadmin_defaults(create_account=False)
         manager = get_user_model().objects.create_user(
             username="research-reviewer", password="pass12345"
         )
         grant(manager, ("core", "manage_auth"))
+        manager.groups.add(Group.objects.get(name=SUPERADMIN_GROUP_NAME))
         applicant = get_user_model().objects.create_user(
             username="research-review-target",
             email="review.target@example.com",

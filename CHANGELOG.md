@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.19] - 2026-09-25
+
+- 登录后说明当前可用功能，个人权限只展示有效项；普通用户可申请科研权限并查看审核状态。
+- 科研用户申请由超级管理员审核，帮助目录和离线指南按当前功能筛选。
+- 移除公众号二维码入口，补齐团队动态与内置算法名称、分类、说明、参数的英文显示和英文搜索。
+
 ## [0.1.18] - 2026-09-25
 
 - 修复匿名游客访问公开数据时的500错误，保留个人数据隐私边界。

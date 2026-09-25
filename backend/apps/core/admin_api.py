@@ -587,6 +587,8 @@ def user_list(request):
 @require_GET
 @api_permission_required("core.manage_auth")
 def role_application_list(request):
+    if not is_superadmin_user(request.user):
+        return JsonResponse({"detail": "仅超级管理员可查看角色申请"}, status=403)
     status = str(request.GET.get("status", "")).strip()
     valid_statuses = set(RoleApplication.Status.values)
     if status and status not in valid_statuses:
@@ -613,6 +615,8 @@ def role_application_list(request):
 @require_http_methods(["POST"])
 @api_permission_required("core.manage_auth")
 def role_application_review(request, application_id: int):
+    if not is_superadmin_user(request.user):
+        return JsonResponse({"detail": "仅超级管理员可审核角色申请"}, status=403)
     payload = _json_payload(request)
     if isinstance(payload, JsonResponse):
         return payload
@@ -3136,6 +3140,7 @@ def _serialize_profile(user) -> dict[str, Any]:
         "effectivePermissions": sorted(effective),
         "availablePermissions": [
             _serialize_permission(item) for item in FEATURE_PERMISSIONS
+            if item.perm_name in effective
         ],
     }
 

@@ -395,6 +395,58 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/auth/access/:
+    get:
+      tags:
+      - 认证授权
+      summary: 读取本人可用功能和科研用户申请
+      description: 只返回本人有效功能及智能体实际开放操作，升级差异按当前科研角色配置计算。
+      operationId: getAccountAccess
+      security:
+      - sessionAuth: []
+      responses:
+        '200': &id001
+          description: 当前账号功能和申请状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountAccess'
+        '401': &id002
+          $ref: '#/components/responses/Unauthorized'
+        '403': &id003
+          $ref: '#/components/responses/Forbidden'
+  /api/auth/research-application/:
+    post:
+      tags:
+      - 认证授权
+      summary: 普通用户申请科研用户
+      description: 仅普通用户本人可提交；待审核不可重复，拒绝后可重提。提交不会授予权限，由超级管理员审核。
+      operationId: applyResearchRole
+      security:
+      - sessionAuth: []
+      requestBody:
+        required: true
+        description: 申请人资料及理由
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResearchApplicationRequest'
+      responses:
+        '200': *id001
+        '401': *id002
+        '403': *id003
+        '400':
+          description: 资料不完整或无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 已有待审核申请
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/auth/me/:
     get:
       tags:
@@ -432,7 +484,7 @@ paths:
       tags:
       - 管理后台
       summary: 获取当前用户后台资料
-      description: 返回当前登录用户的个人资料、已授予权限、主动关闭权限和有效权限。
+      description: 返回当前登录用户的个人资料、已授予权限、主动关闭权限和有效权限。个人权限目录仅列出当前有效项。
       operationId: getAdminProfile
       security:
       - sessionAuth: []
@@ -1411,7 +1463,7 @@ paths:
       tags:
       - 管理后台
       summary: 查询角色申请
-      description: '查询当前主体可见的科研用户角色申请，默认返回全部状态，可通过 `status` 筛选。
+      description: '仅超级管理员可查询科研用户角色申请，默认返回全部状态，可通过 `status` 筛选。
 
         需要 `core.manage_auth`；非超级管理员主体仍受用户可见范围限制。
 
@@ -1462,7 +1514,7 @@ paths:
       tags:
       - 管理后台
       summary: 审核角色申请
-      description: '审核待处理的科研用户角色申请。通过后移除申请用户的普通用户角色并加入科研用户角色，同时保留其他自定义角色；拒绝后继续保留普通用户角色。
+      description: '仅超级管理员可审核待处理的科研用户角色申请。通过后移除申请用户的普通用户角色并加入科研用户角色，同时保留其他自定义角色；拒绝后继续保留普通用户角色。
 
         申请只能审核一次，审核人不能审核自己的申请。需要 `core.manage_auth`。
 
@@ -9502,6 +9554,60 @@ components:
       - approved
       - rejected
       description: 角色申请状态
+    AccountAccess:
+      type: object
+      required:
+      - permissions
+      - agentActions
+      - researchEligible
+      - researchAdditionalPermissions
+      - application
+      properties:
+        permissions:
+          type: array
+          description: 本人当前可用功能，不含未授予或关闭项
+          items:
+            $ref: '#/components/schemas/AdminPermissionItem'
+        agentActions:
+          type: array
+          description: 当前智能体策略开放的附加操作
+          items:
+            type: string
+        researchEligible:
+          type: boolean
+          description: 是否满足科研用户申请条件
+        researchAdditionalPermissions:
+          type: array
+          description: 成为科研用户后新增的功能，单独展示
+          items:
+            $ref: '#/components/schemas/AdminPermissionItem'
+        application:
+          description: 本人最新申请，尚未申请为null
+          oneOf:
+          - $ref: '#/components/schemas/RoleApplication'
+          - type: 'null'
+    ResearchApplicationRequest:
+      type: object
+      required:
+      - displayName
+      - department
+      - reason
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 150
+          description: 申请人姓名
+        department:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: 单位或部门
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: 科研使用需求和申请理由
     RoleApplication:
       type: object
       required:

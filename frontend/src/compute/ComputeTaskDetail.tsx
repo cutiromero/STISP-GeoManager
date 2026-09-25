@@ -80,7 +80,7 @@ export function OutputTable({
             key: "name",
             render: (_, output) => (
               <Space orientation="vertical" size={0}>
-                <Typography.Text strong>{output.label}</Typography.Text>
+                <Typography.Text strong>{ui(output.label)}</Typography.Text>
                 <Typography.Text type="secondary">
                   {output.fileName} · {(output.sizeBytes / 1024).toFixed(1)} KiB
                 </Typography.Text>
@@ -326,7 +326,7 @@ export default function ComputeTaskDetail({
               {
                 key: "algorithm",
                 label: ui("算法版本", "Algorithm version"),
-                children: task.algorithmName + " " + task.version.version,
+                children: ui(task.algorithmName) + " " + task.version.version,
               },
               {
                 key: "owner",

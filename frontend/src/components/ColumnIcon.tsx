@@ -12,7 +12,6 @@ import news from "../assets/columns/9-团队动态.svg";
 import about from "../assets/columns/10-关于我们.svg";
 import upload from "../assets/columns/11-数据导入.svg";
 import language from "../assets/columns/12-切换语言.svg";
-import wechat from "../assets/columns/13-公众号二维码.svg";
 import project from "../assets/columns/14-项目.svg";
 
 const icons = {
@@ -29,7 +28,6 @@ const icons = {
   about,
   upload,
   language,
-  wechat,
   project,
 };
 

@@ -205,7 +205,7 @@ export default function AdminAuthPage() {
       const [userData, groupData, roleApplicationData] = await Promise.all([
         api.adminUsers(),
         api.adminGroups(),
-        api.roleApplications(),
+        isSuperadmin ? api.roleApplications() : Promise.resolve({ items: [] }),
       ]);
       setUsers(userData.items);
       setGroups(groupData.items);
@@ -249,7 +249,7 @@ export default function AdminAuthPage() {
     } finally {
       setLoading(false);
     }
-  }, [canManageAuth, english, message]);
+  }, [canManageAuth, english, message, isSuperadmin]);
 
   useEffect(() => {
     loadAuthData();
@@ -1155,7 +1155,7 @@ export default function AdminAuthPage() {
         <Spin spinning={loading}>
           <div className="admin-page-stack">
             <UserSummaryCards metrics={userStats} />
-            <ProTable<RoleApplicationListItem>
+            {isSuperadmin && (<ProTable<RoleApplicationListItem>
               className="admin-table"
               rowKey="id"
               headerTitle={
@@ -1184,7 +1184,7 @@ export default function AdminAuthPage() {
                   "No research-user applications",
                 ),
               }}
-            />
+            />)}
             <ProTable<User>
               className="admin-table"
               rowKey="id"

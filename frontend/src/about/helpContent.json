@@ -6,15 +6,19 @@
       "category": "入门指南",
       "title": "平台导览",
       "summary": "进入系统首先打开地理工作台。数据资源是第二个模块，提供地理数据与非地理数据两类入口。",
-      "audiences": ["所有用户"],
-      "tags": ["平台导览"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "平台导览"
+      ],
       "blocks": [
         {
           "type": "bullets",
           "title": "操作说明",
           "items": [
             "进入系统首先打开地理工作台。数据资源是第二个模块，提供地理数据与非地理数据两类入口。",
-            "顶部项目选择器始终选择一个具体项目。时空科普和团队动态是公共板块，不随项目切换隐藏。项目管理位于后台管理。",
+            "顶部项目选择器用于切换工作项目。时空科普和团队动态是公共板块，不随项目切换隐藏。",
             "全局搜索可检索有权访问的资源、工程和成果。操作按钮由功能权限控制，项目标签决定可访问哪些业务对象。"
           ]
         }
@@ -24,15 +28,19 @@
       "id": "quick-start",
       "category": "入门指南",
       "title": "快速入门",
-      "summary": "登录后确认顶部项目标签；所有人自动可访问“公开”，其他标签由超级管理员分配。",
-      "audiences": ["所有用户"],
-      "tags": ["快速入门"],
+      "summary": "登录后确认顶部项目标签；所有人自动可访问“公开”，其他项目显示已获授权的范围。",
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "快速入门"
+      ],
       "blocks": [
         {
           "type": "bullets",
           "title": "操作说明",
           "items": [
-            "登录后确认顶部项目标签；所有人自动可访问“公开”，其他标签由超级管理员分配。",
+            "登录后确认顶部项目标签；所有人自动可访问“公开”，其他项目显示已获授权的范围。",
             "在资源列表选择数据，加载到图层树后查看地图及属性。先保存重要编辑，再切换项目或退出系统。",
             "需要重复使用图层、符号和视图时保存地图工程；正式制图从已保存工程创建出图草稿。"
           ]
@@ -44,15 +52,19 @@
       "category": "入门指南",
       "title": "账号、项目与权限",
       "summary": "一人可拥有多个项目标签，但每次仅在选定的一个项目内工作。没有“全部可访问”的工作模式。",
-      "audiences": ["所有用户"],
-      "tags": ["账号、项目与权限"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "账号、项目与权限"
+      ],
       "blocks": [
         {
           "type": "bullets",
           "title": "操作说明",
           "items": [
             "一人可拥有多个项目标签，但每次仅在选定的一个项目内工作。没有“全部可访问”的工作模式。",
-            "超级管理员在后台创建项目、分配用户标签；其他用户不能自行获得私有项目访问权。“公开”项目无需分配。",
+            "在个人设置查看当前可用功能。普通用户可在“申请成为科研用户”中查看新增功能、提交申请和查看审核状态。",
             "项目成员可查看所属项目的已发布对象；编辑、删除、下载等还需相应功能权限。保存于公开项目意味着允许所有人阅读，上传前应确认项目选择。"
           ]
         }
@@ -63,8 +75,12 @@
       "category": "空间分析",
       "title": "地理工作台",
       "summary": "从数据列表加载矢量或栅格图层。可调整顺序、显隐和符号化，定位到图层范围，查看属性。",
-      "audiences": ["所有用户"],
-      "tags": ["地理工作台"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "地理工作台"
+      ],
       "blocks": [
         {
           "type": "bullets",
@@ -81,8 +97,12 @@
       "category": "空间分析",
       "title": "空间查询",
       "summary": "查询对象下拉列表仅列出已加载到图层树、有有效来源的可查询矢量数据；同一来源合并显示。",
-      "audiences": ["所有用户"],
-      "tags": ["空间查询"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "空间查询"
+      ],
       "blocks": [
         {
           "type": "bullets",
@@ -100,8 +120,12 @@
       "category": "空间分析",
       "title": "属性查询与图层",
       "summary": "属性查询用于按字段条件筛选数据。检查字段类型、运算符和空值，再将结果加载为图层。",
-      "audiences": ["所有用户"],
-      "tags": ["属性查询与图层"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "属性查询与图层"
+      ],
       "blocks": [
         {
           "type": "bullets",
@@ -117,15 +141,19 @@
       "id": "data-import",
       "category": "数据管理",
       "title": "数据上传",
-      "summary": "进入数据资源的上传入口，显式选择隶属项目标签。超级管理员可选全部项目，一般用户只能选已获授权项目；至少须有“公开”等一个有效标签。",
-      "audiences": ["所有用户"],
-      "tags": ["数据上传"],
+      "summary": "进入数据资源的上传入口，选择已获授权的隶属项目；上传前确认文件及项目范围。",
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "数据上传"
+      ],
       "blocks": [
         {
           "type": "bullets",
           "title": "操作说明",
           "items": [
-            "进入数据资源的上传入口，显式选择隶属项目标签。超级管理员可选全部项目，一般用户只能选已获授权项目；至少须有“公开”等一个有效标签。",
+            "进入数据资源的上传入口，选择已获授权的隶属项目；上传前确认文件及项目范围。",
             "按是否具有地理坐标信息选择地理或非地理数据，上传并预览文件，完成字段、坐标参考系、名称和来源等校验后提交。",
             "提交后在相同项目的存量数据中核对记录、预览和项目标签。切换项目不会改变已经上传数据的归属。"
           ]
@@ -137,8 +165,12 @@
       "category": "数据管理",
       "title": "数据准备规范",
       "summary": "地理数据应具有明确坐标参考系和有效几何或坐标字段；经纬度、投影坐标及单位要区分。非地理数据应明确字段名称、含义、单位和缺失值。",
-      "audiences": ["所有用户"],
-      "tags": ["数据准备规范"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "数据准备规范"
+      ],
       "blocks": [
         {
           "type": "bullets",
@@ -155,8 +187,12 @@
       "category": "数据管理",
       "title": "存量数据维护",
       "summary": "存量列表只展示当前项目有权访问的数据，可按名称、类型等筛选。地理数据与非地理数据分类依据坐标及几何信息。",
-      "audiences": ["所有用户"],
-      "tags": ["存量数据维护"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "存量数据维护"
+      ],
       "blocks": [
         {
           "type": "bullets",
@@ -173,8 +209,12 @@
       "category": "数据管理",
       "title": "工程、制图与成果",
       "summary": "工程保存图层引用、查询条件、符号化、底图及地图视图。工程列表分页展示摘要，打开时才读取完整快照。",
-      "audiences": ["所有用户"],
-      "tags": ["工程、制图与成果"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "工程、制图与成果"
+      ],
       "blocks": [
         {
           "type": "bullets",
@@ -193,8 +233,12 @@
       "category": "后台管理",
       "title": "后台与公共内容",
       "summary": "后台根据功能权限提供用户、项目、资源、成果、日志和备份管理。超级管理员具有最高权限，可查看所有项目，但业务操作仍选择一个具体项目。",
-      "audiences": ["所有用户"],
-      "tags": ["后台与公共内容"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "后台与公共内容"
+      ],
       "blocks": [
         {
           "type": "bullets",
@@ -212,8 +256,12 @@
       "category": "后台管理",
       "title": "权限与日志",
       "summary": "超级管理员在项目管理中分配用户标签，在账号或角色管理中维护操作权限。两者分别决定数据范围与可执行操作。",
-      "audiences": ["所有用户"],
-      "tags": ["权限与日志"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "权限与日志"
+      ],
       "blocks": [
         {
           "type": "bullets",
@@ -230,8 +278,12 @@
       "category": "后台管理",
       "title": "备份与恢复",
       "summary": "平台备份包含业务数据库、配置、媒体、上传、所有项目内容及持久成果；科研备份包含公开与所有私有项目科研目录，不受当前项目切换影响。",
-      "audiences": ["所有用户"],
-      "tags": ["备份与恢复"],
+      "audiences": [
+        "所有用户"
+      ],
+      "tags": [
+        "备份与恢复"
+      ],
       "blocks": [
         {
           "type": "bullets",
@@ -268,9 +320,9 @@
       "id": "account-roles",
       "title": "Accounts, projects and permissions",
       "items": [
-        "One person may belong to several projects but works in one selected project at a time. There is no all-project workspace.",
-        "Super administrators create labels and assign users in Administration. Public needs no assignment; private access cannot be self-assigned.",
-        "Project members can view published objects in that project. Editing, deletion and download also require the corresponding permissions. Check the project before uploading to Public."
+        "Use one project at a time. Public is available to everyone; other projects show the data you have been granted access to.",
+        "Your profile lists your current tool and agent permissions. Standard users can review additional research features, submit an application, and check its review status.",
+        "Data access and operation permissions are separate. Check the owning project before uploading."
       ]
     },
     {
@@ -302,7 +354,7 @@
       "id": "data-import",
       "title": "Upload data",
       "items": [
-        "Open Upload in Data Resources and explicitly select the owning project. Super administrators can select any project; other users select only authorized projects.",
+        "Open Upload in Data Resources and select an authorized project for your data.",
         "Choose geographic or non-geographic data according to coordinate information. Preview the file and validate fields, CRS, name and source before committing.",
         "Verify the record, preview and project label in the same project inventory. Switching projects does not change uploaded data ownership."
       ]

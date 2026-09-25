@@ -115,8 +115,8 @@ export default function AlgorithmManager({
     modal.confirm({
       title: ui("删除算法登记", "Delete algorithm registration"),
       content: ui(
-        `确认删除“${algorithm.name}”？没有任务记录的版本和算法包会一并删除。已有任务记录的算法需要归档停用。`,
-        `Delete “${algorithm.name}”? Versions and packages without task history will be removed. Algorithms with task history must be archived instead.`,
+        `确认删除“${ui(algorithm.name)}”？没有任务记录的版本和算法包会一并删除。已有任务记录的算法需要归档停用。`,
+        `Delete “${ui(algorithm.name)}”? Versions and packages without task history will be removed. Algorithms with task history must be archived instead.`,
       ),
       okText: ui("删除", "Delete"),
       okButtonProps: { danger: true },
@@ -189,14 +189,14 @@ export default function AlgorithmManager({
             key: "name",
             render: (_, algorithm) => (
               <Space orientation="vertical" size={0}>
-                <Typography.Text strong>{algorithm.name}</Typography.Text>
+                <Typography.Text strong>{ui(algorithm.name)}</Typography.Text>
                 <Typography.Text type="secondary">
                   {algorithm.identifier}
                 </Typography.Text>
               </Space>
             ),
           },
-          { title: ui("分类", "Category"), dataIndex: "category" },
+          { title: ui("分类", "Category"), dataIndex: "category", render: (value: string) => ui(value) },
           {
             title: ui("状态", "Status"),
             key: "enabled",
@@ -302,7 +302,7 @@ export default function AlgorithmManager({
           <Form.Item name="category" label={ui("分类", "Category")}>
             <Select
               allowClear
-              options={categories.map((c) => ({ value: c, label: c }))}
+              options={categories.map((c) => ({ value: c, label: ui(c) }))}
             />
           </Form.Item>
           <Form.Item name="author" label={ui("作者或来源", "Author or source")}>
@@ -421,7 +421,7 @@ export default function AlgorithmManager({
                   </Tag>
                 </Space>
                 <Typography.Paragraph type="secondary">
-                  {version.manifest.description}
+                  {ui(version.manifest.description)}
                 </Typography.Paragraph>
                 <Space wrap>
                   <Tooltip

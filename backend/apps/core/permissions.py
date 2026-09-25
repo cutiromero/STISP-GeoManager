@@ -38,10 +38,20 @@ class FeaturePermissionDef:
             "概览权限": "Dashboard",
             "数据权限": "Data",
             "成果权限": "Results",
+            "计算权限": "Computation",
         }.get(self.group, self.group)
 
 
 _CUSTOM_PERMISSION_ENGLISH = {
+    "use_local_model": "Chat with local models",
+    "use_data_agent": "Use the data agent",
+    "manage_algorithms": "Register and maintain algorithms",
+    "publish_algorithm": "Publish algorithm versions",
+    "download_algorithm": "Download algorithm source packages",
+    "submit_task": "Submit computation tasks",
+    "view_own_task": "View own computation tasks",
+    "cancel_own_task": "Cancel own computation tasks",
+    "manage_tasks": "Manage project computation tasks",
     "manage_feature_permissions": "Configure feature permissions",
     "create_user": "Create users",
     "view_operation_logs": "View operation logs",

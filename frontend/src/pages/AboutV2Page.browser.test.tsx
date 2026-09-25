@@ -102,6 +102,8 @@ describe("combined team introduction", () => {
   it("keeps the English team, contact and help routes available", async () => {
     await setLocale("en-US");
     renderAbout();
+    expect(screen.getByRole("button", { name: "Team News" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Official account QR code" })).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
         name: "Spatiotemporal Intelligence Research Team",
@@ -123,5 +125,15 @@ describe("combined team introduction", () => {
       }),
     );
     expect(screen.getByTestId("location")).toHaveTextContent("/about/docs");
+    expect(screen.queryByRole("heading", { name: /Backup|Administration|Permission audit/i })).not.toBeInTheDocument();
+  });
+
+  it("shows reader-facing help without administrator introductions or a full manual download", async () => {
+    renderAbout("/about/docs");
+    expect(await screen.findByRole("heading", { name: "帮助文档", level: 2 })).toBeVisible();
+    expect(screen.queryByText("数据管理员")).not.toBeInTheDocument();
+    expect(screen.queryByText("系统管理员")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "后台运行概览" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /PDF/ })).not.toBeInTheDocument();
   });
 });

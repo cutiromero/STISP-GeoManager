@@ -1733,6 +1733,44 @@ export type RegisterResponse = {
  */
 export type RoleApplicationStatus = 'pending' | 'approved' | 'rejected';
 
+export type AccountAccess = {
+    /**
+     * 本人当前可用功能，不含未授予或关闭项
+     */
+    permissions: Array<AdminPermissionItem>;
+    /**
+     * 当前智能体策略开放的附加操作
+     */
+    agentActions: Array<string>;
+    /**
+     * 是否满足科研用户申请条件
+     */
+    researchEligible: boolean;
+    /**
+     * 成为科研用户后新增的功能，单独展示
+     */
+    researchAdditionalPermissions: Array<AdminPermissionItem>;
+    /**
+     * 本人最新申请，尚未申请为null
+     */
+    application: RoleApplication | null;
+};
+
+export type ResearchApplicationRequest = {
+    /**
+     * 申请人姓名
+     */
+    displayName: string;
+    /**
+     * 单位或部门
+     */
+    department: string;
+    /**
+     * 科研使用需求和申请理由
+     */
+    reason: string;
+};
+
 export type RoleApplication = {
     /**
      * 角色申请 ID
@@ -8156,6 +8194,75 @@ export type LogoutResponses = {
 };
 
 export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
+
+export type GetAccountAccessData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/access/';
+};
+
+export type GetAccountAccessErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type GetAccountAccessError = GetAccountAccessErrors[keyof GetAccountAccessErrors];
+
+export type GetAccountAccessResponses = {
+    /**
+     * 当前账号功能和申请状态
+     */
+    200: AccountAccess;
+};
+
+export type GetAccountAccessResponse = GetAccountAccessResponses[keyof GetAccountAccessResponses];
+
+export type ApplyResearchRoleData = {
+    /**
+     * 申请人资料及理由
+     */
+    body: ResearchApplicationRequest;
+    path?: never;
+    query?: never;
+    url: '/api/auth/research-application/';
+};
+
+export type ApplyResearchRoleErrors = {
+    /**
+     * 资料不完整或无效
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 已有待审核申请
+     */
+    409: ErrorResponse;
+};
+
+export type ApplyResearchRoleError = ApplyResearchRoleErrors[keyof ApplyResearchRoleErrors];
+
+export type ApplyResearchRoleResponses = {
+    /**
+     * 当前账号功能和申请状态
+     */
+    200: AccountAccess;
+};
+
+export type ApplyResearchRoleResponse = ApplyResearchRoleResponses[keyof ApplyResearchRoleResponses];
 
 export type GetCurrentUserData = {
     body?: never;

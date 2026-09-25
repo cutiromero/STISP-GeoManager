@@ -1,8 +1,10 @@
 from django.urls import path
 
-from apps.core import admin_api, auth_views, views
+from apps.core import admin_api, auth_views, views, account_access
 
 urlpatterns = [
+    path("auth/access/", account_access.access_view, name="account-access"),
+    path("auth/research-application/", account_access.apply_research, name="apply-research"),
     path("bootstrap/", views.bootstrap, name="bootstrap"),
     path("login/overview/", views.login_overview, name="login-overview"),
     path("health/", views.health, name="health"),

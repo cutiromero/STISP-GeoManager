@@ -26,6 +26,7 @@ import type {
   AdminProfileUpdate,
 } from "../types";
 import { PermissionPanel } from "./PermissionPanel";
+import { AccountAccessCard, OwnedPermissions } from "../components/AccountAccess";
 
 interface ProfileDescriptionItem {
   username: string;
@@ -99,7 +100,7 @@ function createProfileDescriptionColumns(
       editable: false,
       render: () => (
         <Typography.Link onClick={onManagePermissions}>
-          {english ? "Manage permissions" : "管理权限"}
+          {english ? "View permissions" : "查看权限"}
         </Typography.Link>
       ),
     },
@@ -300,6 +301,7 @@ export default function AdminProfilePage() {
 
   return (
     <div className="admin-page-stack">
+      <AccountAccessCard />
       <ProCard
         title={english ? "Profile" : "个人信息"}
         className="admin-section-card"
@@ -478,13 +480,13 @@ export default function AdminProfilePage() {
         onClose={() => setPermDrawerOpen(false)}
         size="large"
       >
-        <PermissionPanel
+        {profile?.user.permissions.canManageFeaturePermissions ? <PermissionPanel
           mode="profile"
           availablePermissions={profile?.availablePermissions ?? []}
           grantedPermissions={grantedPermissions}
           disabledPermissions={disabledPermissions}
           onChange={handlePermissionChange}
-        />
+        /> : <OwnedPermissions items={(profile?.availablePermissions ?? []).filter(p => profile?.effectivePermissions.includes(p.id))} />}
       </Drawer>
     </div>
   );
