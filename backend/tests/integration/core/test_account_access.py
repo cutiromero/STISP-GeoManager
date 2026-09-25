@@ -37,6 +37,7 @@ def test_own_permissions_and_research_application_lifecycle(client):
         for p in profile["availablePermissions"]
     )
     body = dict(displayName="申请人", department="研究组", reason="需要上传数据并分析")
+    assert client.post('/api/auth/research-application/', {**body, 'department': 'x' * 121}, content_type='application/json').status_code == 400
     response = client.post(
         "/api/auth/research-application/", body, content_type="application/json"
     )

@@ -265,7 +265,7 @@ export function AccountAccessCard() {
             label={en ? "Affiliation" : "单位或部门"}
             rules={[{ required: true, whitespace: true }]}
           >
-            <Input maxLength={200} />
+            <Input maxLength={120} />
           </Form.Item>
           <Form.Item
             name="reason"

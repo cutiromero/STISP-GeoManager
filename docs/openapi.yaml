@@ -9601,7 +9601,7 @@ components:
         department:
           type: string
           minLength: 1
-          maxLength: 200
+          maxLength: 120
           description: 单位或部门
         reason:
           type: string

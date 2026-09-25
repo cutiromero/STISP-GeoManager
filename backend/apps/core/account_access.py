@@ -145,7 +145,7 @@ def apply_research(request):
         body = json.loads(request.body)
     except (ValueError, UnicodeError):
         body = None
-    limits = {"displayName": 150, "department": 200, "reason": 2000}
+    limits = {"displayName": 150, "department": 120, "reason": 2000}
     if not isinstance(body, dict) or any(
         not isinstance(body.get(k), str) or not body[k].strip() or len(body[k]) > n
         for k, n in limits.items()
