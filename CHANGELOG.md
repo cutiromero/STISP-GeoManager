@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.20] - 2026-09-27
+
+### Changed
+- 智能体依据改为回答内按需展开，来源与轮次对应；管理员技术详情与生成设置默认折叠，普通用户只显示可用操作和简短方案说明。
+- 长推理方案在模型支持时自动启用深度思考；隐藏未开放的联网检索入口。
+- 计算输入搜索补充用途和输出自动保存说明，项目选择补充工作范围与加入项目提示。
+
 ## [0.1.19] - 2026-09-25
 
 - 登录后说明当前可用功能，个人权限只展示有效项；普通用户可申请科研权限并查看审核状态。

@@ -58,7 +58,10 @@ function ParameterControl({
         value={value as string | number | undefined}
         onChange={onChange}
         showSearch
-        options={values.map((value) => ({ value, label: parameter.type === "enum" ? ui(String(value)) : String(value) }))}
+        options={values.map((value) => ({
+          value,
+          label: parameter.type === "enum" ? ui(String(value)) : String(value),
+        }))}
         style={{ minWidth: 180 }}
       />
     );
@@ -280,15 +283,28 @@ export default function ComputeTaskForm({
         >
           <Input maxLength={160} />
         </Form.Item>
-        <Input.Search
-          placeholder={ui("搜索当前项目数据", "Search current project data")}
-          onSearch={(text) => {
-            setKeyword(text);
-            setPage(1);
-          }}
-          allowClear
-          style={{ marginBottom: 16 }}
-        />
+        {version.manifest.inputs.length > 0 && (
+          <Form.Item
+            label={ui("查找输入数据", "Find input data")}
+            extra={ui(
+              "按名称筛选下方输入数据选项，再选择算法需要的数据。",
+              "Filter the input choices below by name, then select the data for this algorithm.",
+            )}
+          >
+            <Input.Search
+              aria-label={ui("查找输入数据", "Find input data")}
+              placeholder={ui(
+                "输入数据名称，按 Enter 搜索",
+                "Enter a data name and press Enter",
+              )}
+              onSearch={(text) => {
+                setKeyword(text);
+                setPage(1);
+              }}
+              allowClear
+            />
+          </Form.Item>
+        )}
         {version.manifest.inputs.map((input) => (
           <Form.Item
             key={input.key}
@@ -351,6 +367,12 @@ export default function ComputeTaskForm({
         {version.manifest.outputs
           .map((o) => `${ui(o.label)} (${o.kind})`)
           .join("、")}
+      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary">
+        {ui(
+          "结果由系统自动保存，无需填写服务器路径。完成后在任务详情查看；有相应权限时可下载或存入当前项目的数据资源。",
+          "Results are saved automatically; no server path is needed. View them in task details, and download or import them into this project's data resources when authorized.",
+        )}
       </Typography.Paragraph>
     </Modal>
   );

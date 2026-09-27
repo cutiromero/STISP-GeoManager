@@ -1,4 +1,4 @@
-import { InputNumber, Select, Space, Typography } from "antd";
+import { Collapse, InputNumber, Select, Space, Typography } from "antd";
 import type {
   AgentBudgetOptions,
   AgentBudgetProfileId,
@@ -29,6 +29,7 @@ export function budgetPreview(
 }
 
 export default function TaskBudgetControl({
+  canManage = false,
   options,
   profile,
   output,
@@ -37,6 +38,7 @@ export default function TaskBudgetControl({
   onProfile,
   onOutput,
 }: {
+  canManage?: boolean;
   options: AgentBudgetOptions;
   profile: AgentBudgetProfileId;
   output?: number;
@@ -50,9 +52,9 @@ export default function TaskBudgetControl({
   return (
     <div style={{ marginTop: 8 }}>
       <Space wrap>
-        <Typography.Text>{ui("任务预算", "Task budget")}</Typography.Text>
+        <Typography.Text>{ui("分析方案", "Analysis profile")}</Typography.Text>
         <Select
-          aria-label={ui("任务预算", "Task budget")}
+          aria-label={ui("分析方案", "Analysis profile")}
           value={profile}
           disabled={disabled}
           style={{ minWidth: 130 }}
@@ -63,36 +65,73 @@ export default function TaskBudgetControl({
             { value: "reasoning", label: ui("长推理", "Long reasoning") },
           ]}
         />
-        <Typography.Text>{ui("生成上限", "Generation limit")}</Typography.Text>
-        <InputNumber
-          aria-label={ui("本次生成上限", "Generation limit for this task")}
-          value={output ?? null}
-          placeholder={String(budget.output)}
-          min={128}
-          max={budget.ceiling}
-          step={1024}
-          disabled={disabled}
-          onChange={(value) => onOutput(value ?? undefined)}
-          style={{ width: 140 }}
-        />
         <Typography.Text type="secondary">
-          {ui("留空用方案默认值", "Leave empty for profile default")}
+          {profile === "materials"
+            ? ui(
+                "阅读长文档、整理大量材料",
+                "Read long documents and organize material",
+              )
+            : profile === "reasoning"
+              ? ui(
+                  "复杂问题、多步推导",
+                  "Complex questions and multi-step reasoning",
+                )
+              : ui(
+                  "日常问答、常规数据分析",
+                  "Everyday questions and data analysis",
+                )}
         </Typography.Text>
       </Space>
-      <Typography.Paragraph type="secondary" style={{ margin: "4px 0" }}>
-        {ui("服务窗口", "Serving window")} {serviceWindow.toLocaleString()} ·{" "}
-        {ui("您可用", "Your window")} {budget.window.toLocaleString()} ·{" "}
-        {ui("输入预算", "Input budget")} {budget.input.toLocaleString()} ·{" "}
-        {ui("思考＋正文预留", "Reasoning + answer reserve")}{" "}
-        {budget.output.toLocaleString()} token · {ui("时限", "Timeout")}{" "}
-        {budget.seconds / 60} {ui("分钟", "minutes")}
-      </Typography.Paragraph>
-      <Typography.Text type="secondary">
-        {ui(
-          "实际输入还包含历史、系统说明、工具结果和附件；发送后显示实际占用。长推理需同时选择深度思考。",
-          "Input also includes history, instructions, tool results and attachments. Actual usage appears after submission. Select deep thinking when using long reasoning.",
-        )}
-      </Typography.Text>
+      {canManage && (
+        <Collapse
+          ghost
+          size="small"
+          items={[
+            {
+              key: "advanced",
+              label: ui("高级设置", "Advanced settings"),
+              children: (
+                <>
+                  <Space wrap>
+                    <Typography.Text>
+                      {ui("生成上限", "Generation limit")}
+                    </Typography.Text>
+                    <InputNumber
+                      aria-label={ui(
+                        "本次生成上限",
+                        "Generation limit for this task",
+                      )}
+                      value={output ?? null}
+                      placeholder={String(budget.output)}
+                      min={128}
+                      max={budget.ceiling}
+                      step={1024}
+                      disabled={disabled}
+                      onChange={(value) => onOutput(value ?? undefined)}
+                      style={{ width: 140 }}
+                    />
+                    <Typography.Text type="secondary">
+                      {ui(
+                        "留空用方案默认值",
+                        "Leave empty for profile default",
+                      )}
+                    </Typography.Text>
+                  </Space>
+                  <Typography.Paragraph
+                    type="secondary"
+                    style={{ margin: "4px 0" }}
+                  >
+                    {ui("可用上下文", "Available context")}{" "}
+                    {budget.window.toLocaleString()} token ·{" "}
+                    {ui("时限", "Timeout")} {budget.seconds / 60}{" "}
+                    {ui("分钟", "minutes")}
+                  </Typography.Paragraph>
+                </>
+              ),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

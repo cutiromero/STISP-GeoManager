@@ -204,27 +204,12 @@
   margin: 4px 0 0;
   color: #66758a;
 }
-.agent-evidence {
-  width: 310px;
-  padding: 20px 14px;
-  overflow-y: auto;
-  border-left: 1px solid #dfe5ee;
-}
 .agent-evidence-json {
   font-size: 11px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 420px;
   overflow-y: auto;
-}
-.agent-bars > div {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 12px;
-}
-.agent-bars meter {
-  width: 90px;
 }
 .agent-muted {
   color: #7c889a;
@@ -238,9 +223,6 @@
   margin: auto;
 }
 @media (max-width: 1200px) {
-  .agent-evidence {
-    width: 250px;
-  }
   .agent-sidebar {
     width: 210px;
   }
@@ -252,11 +234,6 @@
   }
   .agent-main {
     height: calc(100dvh - 72px);
-  }
-  .agent-evidence {
-    width: 100%;
-    max-height: 400px;
-    border-top: 1px solid #dfe5ee;
   }
   .agent-sidebar {
     display: none;
@@ -279,4 +256,33 @@
   .agent-composer {
     padding: 14px;
   }
+}
+.agent-run-sources {
+  margin: 10px 0;
+  border-top: 1px solid #edf0f5;
+}
+.agent-source-result {
+  max-height: 360px;
+  overflow: auto;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+.agent-source-fields {
+  margin: 0;
+}
+.agent-source-fields > div {
+  padding: 6px 0;
+  border-bottom: 1px solid #edf0f5;
+}
+.agent-source-fields dt {
+  color: #66758a;
+  font-size: 12px;
+}
+.agent-source-fields dd {
+  margin: 2px 0 0 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-source-list {
+  padding-left: 20px;
 }

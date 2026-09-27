@@ -74,6 +74,28 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.restoreAllMocks();
+  bootstrap.canManage = false;
+  bootstrap.canAgent = true;
+  bootstrap.budgets = {
+    enabled: true,
+    tier: "standard",
+    defaultProfile: "normal",
+    maxPromptCharacters: 10000,
+    limits: {
+      contextWindowTokens: 32768,
+      maxOutputTokens: 16384,
+      maxRunSeconds: 1800,
+    },
+    profiles: ["normal", "materials", "reasoning"].map((budgetProfile) => ({
+      budgetProfile: budgetProfile as "normal" | "materials" | "reasoning",
+      tier: "standard",
+      contextWindowTokens: 32768,
+      maxOutputTokens: 8192,
+      maxRunSeconds: 1800,
+      reasoningEffort: "low",
+      requestedMaxOutputTokens: null,
+    })),
+  };
   vi.spyOn(agentApi, "conversations").mockResolvedValue({
     items: [conversation],
   });
@@ -182,6 +204,106 @@ it("restores administrator default and hides the effort control in fast mode", a
       expect.objectContaining({
         thinkingMode: "fast",
         reasoningEffort: undefined,
+      }),
+    ),
+  );
+});
+
+it.each([false, true])(
+  "shows technical details only to managers (%s), with per-answer evidence",
+  async (manager) => {
+    bootstrap.canManage = manager;
+    const saved = run(1, "旧问题", "回答引用 [证据 1]");
+    saved.generationParameters = {
+      inputTokens: 146,
+      contextWindowTokens: 262144,
+      maxOutputTokens: 65536,
+    };
+    saved.evidence = [
+      {
+        id: 1,
+        resourceId: 10,
+        name: "样本影像",
+        tool: "describe_resource",
+        result: { name: "样本影像", count: 12 },
+        recordedAt: "2026-09-27",
+      },
+    ];
+    vi.mocked(agentApi.detail).mockResolvedValue({
+      conversation,
+      runs: [saved],
+    });
+    const { container } = render(
+      <AntApp>
+        <MemoryRouter initialEntries={["/agent/workbench"]}>
+          <AgentPage />
+        </MemoryRouter>
+      </AntApp>,
+    );
+    await screen.findByText("旧问题");
+    expect(container.querySelector(".agent-evidence")).toBeNull();
+    expect(screen.queryByText("管理员未开启")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("本轮参数", { exact: false }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("spinbutton", { name: "本次生成上限" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("数据来源与分析 · 1"));
+    fireEvent.click(await screen.findByText("[1] 样本影像 · 数据概况"));
+    await waitFor(() => expect(screen.getByText("数量")).toBeVisible());
+    expect(screen.queryByText("describe_resource")).not.toBeInTheDocument();
+    if (manager) {
+      fireEvent.click(screen.getByText("运行详情"));
+      await waitFor(() => expect(screen.getByText(/本轮参数/)).toBeVisible());
+      fireEvent.click(screen.getByText("高级设置"));
+      await waitFor(() =>
+        expect(
+          screen.getByRole("spinbutton", { name: "本次生成上限" }),
+        ).toBeVisible(),
+      );
+    } else {
+      expect(screen.queryByText("运行详情")).not.toBeInTheDocument();
+      expect(screen.queryByText("高级设置")).not.toBeInTheDocument();
+      expect(screen.queryByText("工具调用详情")).not.toBeInTheDocument();
+    }
+  },
+);
+
+it("hides unavailable agent navigation and enables deep thinking for long reasoning", async () => {
+  bootstrap.canAgent = false;
+  render(
+    <AntApp>
+      <MemoryRouter initialEntries={["/agent/chat"]}>
+        <AgentPage />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await screen.findByText("旧问题");
+  expect(
+    screen.queryByRole("button", { name: "数据智能体" }),
+  ).not.toBeInTheDocument();
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "分析方案" }));
+  fireEvent.click(
+    await screen.findByText("长推理", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  expect(
+    await screen.findByRole("button", { name: "调整思考强度" }),
+  ).toBeVisible();
+  fireEvent.change(
+    screen.getByPlaceholderText("输入问题，Enter 发送，Shift+Enter 换行"),
+    { target: { value: "推理问题" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: /发送/ }));
+  await waitFor(() =>
+    expect(agentApi.submit).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        thinkingMode: "deep",
+        budgetProfile: "reasoning",
+        maxOutputTokens: undefined,
       }),
     ),
   );

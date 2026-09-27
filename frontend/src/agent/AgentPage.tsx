@@ -3,7 +3,6 @@ import {
   Alert,
   Button,
   Collapse,
-  Empty,
   Input,
   Layout,
   Modal,
@@ -40,7 +39,6 @@ import type {
   AgentRun,
   AgentResource,
   AgentEvent,
-  AgentEvidence,
   AgentWorkflow,
   AgentAttachment,
 } from "../api/generated/types.gen";
@@ -48,56 +46,13 @@ import { createUuid } from "../utils/uuid";
 import { useAgentBootstrap } from "./useAgentBootstrap";
 import SafeMarkdown from "./SafeMarkdown";
 import TaskBudgetControl from "./TaskBudgetControl";
+import RunEvidence from "./RunEvidence";
 import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "./ReasoningEffortControl";
 import "./agent.css";
 
 const active = (r: AgentRun) => r.status === "queued" || r.status === "running";
-
-function Evidence({ item }: { item: AgentEvidence }) {
-  const ui = useComputeText();
-  const groups = item.result.groups;
-  const bars = Array.isArray(groups)
-    ? groups
-        .filter(
-          (g): g is { group: string; value: number } =>
-            typeof g === "object" &&
-            g !== null &&
-            "value" in g &&
-            typeof g.value === "number" &&
-            "group" in g,
-        )
-        .slice(0, 12)
-    : [];
-  const max = Math.max(1, ...bars.map((g) => Math.abs(g.value)));
-  return (
-    <div>
-      <Typography.Text strong>{item.name}</Typography.Text>
-      <p>
-        {ui("资源", "Resource")} #{item.resourceId} ·{" "}
-        {item.recordedAt.slice(0, 19).replace("T", " ")}
-      </p>
-      {bars.length > 0 && (
-        <div
-          className="agent-bars"
-          aria-label={ui("分组统计图", "Grouped statistics")}
-        >
-          {bars.map((g) => (
-            <div key={String(g.group)}>
-              <span>{String(g.group)}</span>
-              <meter min={0} max={max} value={Math.abs(g.value)} />
-              <b>{g.value}</b>
-            </div>
-          ))}
-        </div>
-      )}
-      <pre className="agent-evidence-json">
-        {JSON.stringify(item.result, null, 2)}
-      </pre>
-    </div>
-  );
-}
 
 export default function AgentPage() {
   const project = useProjectContext();
@@ -188,9 +143,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     Boolean(selectedModel?.supportsThinking);
   const attachmentsAvailable = Boolean(bootstrap?.allowAttachments);
   const internetAvailable = Boolean(bootstrap?.internetEnabled);
-  const evidence = runs.flatMap((r) =>
-    r.evidence.map((e) => ({ run: r.id, item: e })),
-  );
   const conversationStorageKey = `agent-conversation:${user?.id ?? "anon"}:${project?.current ?? "1"}:${mode}`;
 
   useEffect(() => {
@@ -604,24 +556,28 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
           className={`agent-sidebar ${showHistory ? "agent-sidebar-open" : ""}`}
         >
           <Typography.Title level={4}>{ui("智能体", "Agent")}</Typography.Title>
-          <Button
-            block
-            icon={<MessageOutlined />}
-            type={mode === "chat" ? "primary" : "text"}
-            disabled={!bootstrap?.canChat}
-            onClick={() => navigate("/agent/chat")}
-          >
-            {ui("模型对话", "Model chat")}
-          </Button>
-          <Button
-            block
-            icon={<RobotOutlined />}
-            type={mode === "agent" ? "primary" : "text"}
-            disabled={!bootstrap?.canAgent}
-            onClick={() => navigate("/agent/workbench")}
-          >
-            {ui("数据智能体", "Data agent")}
-          </Button>
+          {bootstrap?.canChat && (
+            <Button
+              block
+              icon={<MessageOutlined />}
+              type={mode === "chat" ? "primary" : "text"}
+              disabled={!bootstrap?.canChat}
+              onClick={() => navigate("/agent/chat")}
+            >
+              {ui("模型对话", "Model chat")}
+            </Button>
+          )}
+          {bootstrap?.canAgent && (
+            <Button
+              block
+              icon={<RobotOutlined />}
+              type={mode === "agent" ? "primary" : "text"}
+              disabled={!bootstrap?.canAgent}
+              onClick={() => navigate("/agent/workbench")}
+            >
+              {ui("数据智能体", "Data agent")}
+            </Button>
+          )}
           <Button
             block
             icon={<PlusOutlined />}
@@ -758,7 +714,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               )}
             />
           )}
-          {mode === "agent" && (
+          {mode === "agent" && canUse && (
             <Collapse
               size="small"
               className="agent-workflow-panel"
@@ -955,25 +911,48 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     />
                   )}
                   <SafeMarkdown text={r.answer} />
-                  {r.generationParameters?.inputTokens !== undefined && (
-                    <Typography.Paragraph type="secondary">
-                      {ui("本轮参数", "Run parameters")}: {ui("窗口", "Window")}{" "}
-                      {r.generationParameters.contextWindowTokens} ·{" "}
-                      {ui("最近调用输入", "Last call input")}{" "}
-                      {r.generationParameters.inputTokens} ·{" "}
-                      {ui("每次生成上限", "Generation limit per call")}{" "}
-                      {r.generationParameters.maxOutputTokens} token
-                      {r.generationParameters.lastGeneratedTokens !==
-                        undefined &&
-                        ` · ${ui("最近生成", "Last generated")} ${r.generationParameters.lastGeneratedTokens}`}
-                      {r.generationParameters.modelCalls !== undefined &&
-                        ` · ${ui("调用次数", "Model calls")} ${r.generationParameters.modelCalls}`}
-                      {r.generationParameters.generatedTokens !== undefined &&
-                        ` · ${ui("累计生成", "Generated total")} ${r.generationParameters.generatedTokens}`}
-                      {r.thinkingMode === "deep" &&
-                        ` · ${ui("思考强度", "Effort")} ${r.generationParameters.reasoningEffort}`}
-                    </Typography.Paragraph>
-                  )}
+                  <RunEvidence
+                    items={r.evidence}
+                    canManage={Boolean(bootstrap?.canManage)}
+                  />
+                  {bootstrap?.canManage &&
+                    r.generationParameters?.inputTokens !== undefined && (
+                      <Collapse
+                        ghost
+                        size="small"
+                        items={[
+                          {
+                            key: "parameters",
+                            label: ui("运行详情", "Run details"),
+                            children: (
+                              <Typography.Paragraph type="secondary">
+                                {ui("本轮参数", "Run parameters")}:{" "}
+                                {ui("窗口", "Window")}{" "}
+                                {r.generationParameters.contextWindowTokens} ·{" "}
+                                {ui("最近调用输入", "Last call input")}{" "}
+                                {r.generationParameters.inputTokens} ·{" "}
+                                {ui(
+                                  "每次生成上限",
+                                  "Generation limit per call",
+                                )}{" "}
+                                {r.generationParameters.maxOutputTokens} token
+                                {r.generationParameters.lastGeneratedTokens !==
+                                  undefined &&
+                                  ` · ${ui("最近生成", "Last generated")} ${r.generationParameters.lastGeneratedTokens}`}
+                                {r.generationParameters.modelCalls !==
+                                  undefined &&
+                                  ` · ${ui("调用次数", "Model calls")} ${r.generationParameters.modelCalls}`}
+                                {r.generationParameters.generatedTokens !==
+                                  undefined &&
+                                  ` · ${ui("累计生成", "Generated total")} ${r.generationParameters.generatedTokens}`}
+                                {r.thinkingMode === "deep" &&
+                                  ` · ${ui("思考强度", "Effort")} ${r.generationParameters.reasoningEffort}`}
+                              </Typography.Paragraph>
+                            ),
+                          },
+                        ]}
+                      />
+                    )}
                   {r.detail && r.status !== "succeeded" && <p>{r.detail}</p>}
                   {!active(r) && (
                     <Space>
@@ -999,266 +978,247 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 </div>
               </section>
             ))}
-            {events.some((e) => e.kind.startsWith("tool_")) && (
-              <Collapse
-                size="small"
-                items={[
-                  {
-                    key: "actions",
-                    label: ui("本次执行步骤", "Actions in this run"),
-                    children: events
-                      .filter(
-                        (e) =>
-                          !["text", "thinking", "parameters", "usage"].includes(
-                            e.kind,
-                          ),
-                      )
-                      .map((e) => <p key={e.id}>{e.text}</p>),
-                  },
-                ]}
-              />
-            )}
-          </div>
-          <div className="agent-composer">
-            {attachmentsAvailable && (
-              <div className="agent-attachments-row">
-                <Upload
-                  accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
-                  multiple
-                  showUploadList={false}
-                  beforeUpload={(file) => {
-                    void uploadAttachment(file);
-                    return false;
-                  }}
-                  disabled={
-                    Boolean(running) ||
-                    busy ||
-                    uploadingAttachment ||
-                    current?.archived
-                  }
-                >
-                  <Button
-                    icon={<PaperClipOutlined />}
-                    loading={uploadingAttachment}
-                  >
-                    {ui("上传文档或图片", "Upload document or image")}
-                  </Button>
-                </Upload>
-                {attachments.map((item) => (
-                  <Tag
-                    key={item.id}
-                    closable={!running && !busy}
-                    onClose={() =>
-                      setAttachments((old) =>
-                        old.filter((entry) => entry.id !== item.id),
-                      )
-                    }
-                  >
-                    {item.fileName}
-                  </Tag>
-                ))}
-              </div>
-            )}
-            {mode === "agent" && (
-              <Select
-                mode="multiple"
-                maxCount={3}
-                allowClear
-                value={selected}
-                disabled={Boolean(running) || busy}
-                onChange={setSelected}
-                placeholder={ui(
-                  "自动发现当前项目授权数据（可选择资源缩小范围）",
-                  "Discover authorized project data, or select up to 3 resources",
-                )}
-                options={resources.map((r) => ({ value: r.id, label: r.name }))}
-                className="agent-resource-select"
-              />
-            )}
-            <div className="agent-input-row">
-              <Input.TextArea
-                aria-label={ui("输入消息", "Message")}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                autoSize={{ minRows: 2, maxRows: 6 }}
-                maxLength={bootstrap?.budgets?.maxPromptCharacters ?? 12000}
-                disabled={!canUse || current?.archived}
-                placeholder={ui(
-                  "输入问题，Enter 发送，Shift+Enter 换行",
-                  "Ask a question. Enter to send, Shift+Enter for a new line",
-                )}
-                onKeyDown={(e) => {
-                  if (
-                    e.key === "Enter" &&
-                    !e.shiftKey &&
-                    !e.nativeEvent.isComposing
-                  ) {
-                    e.preventDefault();
-                    void send();
-                  }
-                }}
-              />
-              {running ? (
-                <Button
-                  icon={<StopOutlined />}
-                  onClick={() =>
-                    void agentApi
-                      .cancel(running.id)
-                      .then((r) =>
-                        setRuns((old) =>
-                          old.map((item) => (item.id === r.id ? r : item)),
-                        ),
-                      )
-                      .catch(report)
-                  }
-                >
-                  {ui("停止", "Stop")}
-                </Button>
-              ) : (
-                <Button
-                  type="primary"
-                  icon={<SendOutlined />}
-                  loading={busy}
-                  disabled={
-                    !canUse ||
-                    !modelOnline ||
-                    !bootstrap?.workerOnline ||
-                    !prompt.trim() ||
-                    current?.archived
-                  }
-                  onClick={() => void send()}
-                >
-                  {ui("发送", "Send")}
-                </Button>
-              )}
-            </div>
-            {bootstrap?.budgets?.enabled && selectedModel && (
-              <TaskBudgetControl
-                options={bootstrap.budgets}
-                profile={budgetProfile}
-                output={outputOverride}
-                serviceWindow={selectedModel.contextWindowTokens}
-                disabled={Boolean(running) || busy}
-                onProfile={(value) => {
-                  setBudgetProfile(value);
-                  setOutputOverride(undefined);
-                }}
-                onOutput={setOutputOverride}
-              />
-            )}
-            <div className="agent-thinking-row">
-              <Typography.Text type="secondary">
-                {ui("回答模式", "Answer mode")}
-              </Typography.Text>
-              <Segmented
-                value={thinkingMode}
-                disabled={Boolean(running) || busy || !deepThinkingAvailable}
-                onChange={(value) => {
-                  const next = value as "fast" | "deep";
-                  setThinkingMode(next);
-                  localStorage.setItem(
-                    `agent-thinking:${user?.id}:${mode}`,
-                    next,
-                  );
-                }}
-                options={[
-                  { value: "fast", label: ui("快速回答", "Fast") },
-                  {
-                    value: "deep",
-                    label: ui("深度思考", "Deep thinking"),
-                  },
-                ]}
-              />
-              {!deepThinkingAvailable && (
-                <Typography.Text type="secondary">
-                  {ui(
-                    "当前模型或管理员策略未开启",
-                    "Unavailable for this model or policy",
-                  )}
-                </Typography.Text>
-              )}
-              {thinkingMode === "deep" && deepThinkingAvailable && (
-                <ReasoningEffortControl
-                  value={effortOverride ?? defaultEffort}
-                  overridden={effortOverride !== undefined}
-                  disabled={Boolean(running) || busy}
-                  onChange={setEffortOverride}
+            {bootstrap?.canManage &&
+              events.some((e) => e.kind.startsWith("tool_")) && (
+                <Collapse
+                  size="small"
+                  items={[
+                    {
+                      key: "actions",
+                      label: ui("本次执行步骤", "Actions in this run"),
+                      children: events
+                        .filter(
+                          (e) =>
+                            ![
+                              "text",
+                              "thinking",
+                              "parameters",
+                              "usage",
+                            ].includes(e.kind),
+                        )
+                        .map((e) => <p key={e.id}>{e.text}</p>),
+                    },
+                  ]}
                 />
               )}
-            </div>
-            <div className="agent-thinking-row">
-              <Switch
-                size="small"
-                checked={internetEnabled}
-                disabled={!internetAvailable || Boolean(running) || busy}
-                onChange={setInternetEnabled}
-              />
-              <Typography.Text type="secondary">
-                {ui("联网检索", "Internet retrieval")}
-              </Typography.Text>
-              {!internetAvailable && (
-                <Typography.Text type="secondary">
-                  {ui("管理员未开启", "Disabled by administrator")}
-                </Typography.Text>
-              )}
-            </div>
-            <div className="agent-model-row">
-              <Select
-                aria-label={ui("选择模型", "Choose model")}
-                value={model || undefined}
-                disabled={Boolean(running) || busy}
-                onChange={(value) => {
-                  setModel(value);
-                  const nextModel = models.find((item) => item.alias === value);
-                  if (!nextModel?.supportsThinking) {
-                    setThinkingMode("fast");
-                  }
-                  localStorage.setItem(
-                    `agent-model:${user?.id}:${mode}`,
-                    value,
-                  );
-                }}
-                placeholder={ui("选择模型", "Choose model")}
-                options={models.map((m) => ({
-                  value: m.alias,
-                  label: `${m.name} · ${m.status === "online" ? ui("在线", "Online") : m.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${m.supportsVision ? ` · ${ui("支持图片", "Vision")}` : ""}`,
-                }))}
-              />
-              {mode === "agent" && (
-                <span>
-                  {ui(
-                    "只读分析 · 答案附数据依据",
-                    "Read-only analysis · Inspect supporting data",
-                  )}
-                </span>
-              )}
-            </div>
           </div>
-        </main>
-        {mode === "agent" && (
-          <aside className="agent-evidence">
-            <Typography.Title level={5}>
-              {ui("本次数据与依据", "Data and evidence")}
-            </Typography.Title>
-            {evidence.length ? (
-              <Collapse
-                items={evidence.map(({ run, item }) => ({
-                  key: `${run}-${item.id}`,
-                  label: `[${item.id}] ${item.name} · ${item.tool}`,
-                  children: <Evidence item={item} />,
-                }))}
-              />
-            ) : (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={ui(
-                  "分析后将在此显示来源和统计口径",
-                  "Sources and statistics will appear here",
+          {canUse && (
+            <div className="agent-composer">
+              {attachmentsAvailable && (
+                <div className="agent-attachments-row">
+                  <Upload
+                    accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
+                    multiple
+                    showUploadList={false}
+                    beforeUpload={(file) => {
+                      void uploadAttachment(file);
+                      return false;
+                    }}
+                    disabled={
+                      Boolean(running) ||
+                      busy ||
+                      uploadingAttachment ||
+                      current?.archived
+                    }
+                  >
+                    <Button
+                      icon={<PaperClipOutlined />}
+                      loading={uploadingAttachment}
+                    >
+                      {ui("上传文档或图片", "Upload document or image")}
+                    </Button>
+                  </Upload>
+                  {attachments.map((item) => (
+                    <Tag
+                      key={item.id}
+                      closable={!running && !busy}
+                      onClose={() =>
+                        setAttachments((old) =>
+                          old.filter((entry) => entry.id !== item.id),
+                        )
+                      }
+                    >
+                      {item.fileName}
+                    </Tag>
+                  ))}
+                </div>
+              )}
+              {mode === "agent" && (
+                <Select
+                  mode="multiple"
+                  maxCount={3}
+                  allowClear
+                  value={selected}
+                  disabled={Boolean(running) || busy}
+                  onChange={setSelected}
+                  placeholder={ui(
+                    "自动发现当前项目授权数据（可选择资源缩小范围）",
+                    "Discover authorized project data, or select up to 3 resources",
+                  )}
+                  options={resources.map((r) => ({
+                    value: r.id,
+                    label: r.name,
+                  }))}
+                  className="agent-resource-select"
+                />
+              )}
+              <div className="agent-input-row">
+                <Input.TextArea
+                  aria-label={ui("输入消息", "Message")}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  autoSize={{ minRows: 2, maxRows: 6 }}
+                  maxLength={bootstrap?.budgets?.maxPromptCharacters ?? 12000}
+                  disabled={!canUse || current?.archived}
+                  placeholder={ui(
+                    "输入问题，Enter 发送，Shift+Enter 换行",
+                    "Ask a question. Enter to send, Shift+Enter for a new line",
+                  )}
+                  onKeyDown={(e) => {
+                    if (
+                      e.key === "Enter" &&
+                      !e.shiftKey &&
+                      !e.nativeEvent.isComposing
+                    ) {
+                      e.preventDefault();
+                      void send();
+                    }
+                  }}
+                />
+                {running ? (
+                  <Button
+                    icon={<StopOutlined />}
+                    onClick={() =>
+                      void agentApi
+                        .cancel(running.id)
+                        .then((r) =>
+                          setRuns((old) =>
+                            old.map((item) => (item.id === r.id ? r : item)),
+                          ),
+                        )
+                        .catch(report)
+                    }
+                  >
+                    {ui("停止", "Stop")}
+                  </Button>
+                ) : (
+                  <Button
+                    type="primary"
+                    icon={<SendOutlined />}
+                    loading={busy}
+                    disabled={
+                      !canUse ||
+                      !modelOnline ||
+                      !bootstrap?.workerOnline ||
+                      !prompt.trim() ||
+                      current?.archived
+                    }
+                    onClick={() => void send()}
+                  >
+                    {ui("发送", "Send")}
+                  </Button>
                 )}
-              />
-            )}
-          </aside>
-        )}
+              </div>
+              {bootstrap?.budgets?.enabled && selectedModel && (
+                <TaskBudgetControl
+                  canManage={Boolean(bootstrap.canManage)}
+                  options={bootstrap.budgets}
+                  profile={budgetProfile}
+                  output={outputOverride}
+                  serviceWindow={selectedModel.contextWindowTokens}
+                  disabled={Boolean(running) || busy}
+                  onProfile={(value) => {
+                    setBudgetProfile(value);
+                    setOutputOverride(undefined);
+                    setEffortOverride(undefined);
+                    if (value === "reasoning" && deepThinkingAvailable) {
+                      setThinkingMode("deep");
+                      localStorage.setItem(
+                        `agent-thinking:${user?.id}:${mode}`,
+                        "deep",
+                      );
+                    }
+                  }}
+                  onOutput={setOutputOverride}
+                />
+              )}
+              {deepThinkingAvailable && (
+                <div className="agent-thinking-row">
+                  <Typography.Text type="secondary">
+                    {ui("回答模式", "Answer mode")}
+                  </Typography.Text>
+                  <Segmented
+                    value={thinkingMode}
+                    disabled={
+                      Boolean(running) || busy || !deepThinkingAvailable
+                    }
+                    onChange={(value) => {
+                      const next = value as "fast" | "deep";
+                      setThinkingMode(next);
+                      localStorage.setItem(
+                        `agent-thinking:${user?.id}:${mode}`,
+                        next,
+                      );
+                    }}
+                    options={[
+                      { value: "fast", label: ui("快速回答", "Fast") },
+                      {
+                        value: "deep",
+                        label: ui("深度思考", "Deep thinking"),
+                      },
+                    ]}
+                  />
+                  {thinkingMode === "deep" && deepThinkingAvailable && (
+                    <ReasoningEffortControl
+                      value={effortOverride ?? defaultEffort}
+                      overridden={effortOverride !== undefined}
+                      disabled={Boolean(running) || busy}
+                      onChange={setEffortOverride}
+                    />
+                  )}
+                </div>
+              )}
+              {internetAvailable && (
+                <div className="agent-thinking-row">
+                  <Switch
+                    size="small"
+                    checked={internetEnabled}
+                    disabled={!internetAvailable || Boolean(running) || busy}
+                    onChange={setInternetEnabled}
+                  />
+                  <Typography.Text type="secondary">
+                    {ui("联网检索", "Internet retrieval")}
+                  </Typography.Text>
+                </div>
+              )}
+              <div className="agent-model-row">
+                <Select
+                  aria-label={ui("选择模型", "Choose model")}
+                  value={model || undefined}
+                  disabled={Boolean(running) || busy}
+                  onChange={(value) => {
+                    setModel(value);
+                    const nextModel = models.find(
+                      (item) => item.alias === value,
+                    );
+                    if (!nextModel?.supportsThinking) {
+                      setThinkingMode("fast");
+                    }
+                    localStorage.setItem(
+                      `agent-model:${user?.id}:${mode}`,
+                      value,
+                    );
+                  }}
+                  placeholder={ui("选择模型", "Choose model")}
+                  options={models.map((m) => ({
+                    value: m.alias,
+                    label: `${m.name} · ${m.status === "online" ? ui("在线", "Online") : m.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${m.supportsVision ? ` · ${ui("支持图片", "Vision")}` : ""}`,
+                  }))}
+                />
+              </div>
+            </div>
+          )}
+        </main>
       </div>
       <Modal
         open={Boolean(rename)}
