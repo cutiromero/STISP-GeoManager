@@ -37,7 +37,7 @@ import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { platformBrand } from "../config/platformBrand";
@@ -53,7 +53,7 @@ import type {
   ResourceListItem,
 } from "../types";
 import {
-  isNonGeographicResource,
+  isGeographicResource,
   resourceCategoryName,
   resourceFormatLabel,
 } from "../utils/resources";
@@ -63,15 +63,26 @@ import NonGeoScatter, { isMeasurement } from "./NonGeoScatter";
 import { useComputeText } from "../compute/ui";
 import "../styles/nongeo-simple.css";
 
-type ResourceTypeFilter = "all" | "table" | "gene";
-type NonGeoDomainType = Extract<DataDomainType, "molecular" | "genome">;
+type ResourceTypeFilter = "all" | "spatial" | "non_spatial";
+
 type CategoricalDistribution =
   NonGeoAnalytics["categoricalDistributions"][number];
 type NumericDistribution = NonGeoAnalytics["numericDistributions"][number];
 type FieldProfile = NonGeoFieldProfile;
 type TableRow = NonGeoTableRow;
 
-const nonGeoDomainTypes = new Set<DataDomainType>(["molecular", "genome"]);
+const analysisDomains = new Set<DataDomainType>([
+  "germplasm",
+  "genome",
+  "individual",
+  "community",
+  "population",
+  "field_survey",
+  "remote_sensing",
+  "molecular",
+  "vector",
+  "other",
+]);
 
 const analyticsPalette = [
   "#357487",
@@ -87,6 +98,7 @@ const analyticsPalette = [
 export default function NonGeoPage() {
   const { user } = useAppContext();
   const ui = useComputeText();
+  const navigate = useNavigate();
   const { message } = App.useApp();
   const { t, i18n: translationI18n } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -113,10 +125,10 @@ export default function NonGeoPage() {
   const [selectedMetricField, setSelectedMetricField] = useState<
     string | undefined
   >();
-  const selectedDomainType = useMemo<NonGeoDomainType | null>(() => {
+  const selectedDomainType = useMemo<DataDomainType | null>(() => {
     const value = searchParams.get("domainType");
-    return nonGeoDomainTypes.has(value as DataDomainType)
-      ? (value as NonGeoDomainType)
+    return analysisDomains.has(value as DataDomainType)
+      ? (value as DataDomainType)
       : null;
   }, [searchParams]);
   const selectedCategoryCode = searchParams.get("categoryCode") || undefined;
@@ -135,8 +147,8 @@ export default function NonGeoPage() {
   );
   const nonGeoTypeOptions = [
     { label: t("nonGeo.filterAll"), value: "all" },
-    { label: t("nonGeo.ecologicalTable"), value: "table" },
-    { label: t("nonGeo.genetics"), value: "gene" },
+    { label: ui("地理", "Spatial"), value: "spatial" },
+    { label: ui("非地理", "Non-spatial"), value: "non_spatial" },
   ];
   const selectedResource = useMemo(
     () =>
@@ -147,8 +159,12 @@ export default function NonGeoPage() {
 
   const filteredResources = useMemo(() => {
     const keyword = resourceKeyword.trim().toLowerCase();
-    return effectiveResources.filter((resource) => {
-      if (resourceType !== "all" && resource.dataType !== resourceType) {
+    return resources.filter((resource) => {
+      if (
+        resourceType !== "all" &&
+        (isGeographicResource(resource) ? "spatial" : "non_spatial") !==
+          resourceType
+      ) {
         return false;
       }
       if (!keyword) {
@@ -166,17 +182,21 @@ export default function NonGeoPage() {
         .toLowerCase();
       return haystack.includes(keyword);
     });
-  }, [effectiveResources, resourceKeyword, resourceType]);
+  }, [resources, resourceKeyword, resourceType]);
 
   const tableData = tableResult ?? analytics?.tablePreview ?? null;
-  const primaryCategory = analytics?.categoricalDistributions[0] ?? null;
-  const secondaryCategory = analytics?.categoricalDistributions[1] ?? null;
-  const lifeFormDistribution =
-    analytics?.categoricalDistributions.find((item) =>
-      item.field.includes("生活型"),
-    ) ??
-    analytics?.categoricalDistributions[2] ??
+  const [categoryField, setCategoryField] = useState<string>();
+  const categories = analytics?.categoricalDistributions ?? [];
+  const primaryCategory =
+    categories.find((item) => item.field === categoryField) ??
+    categories[0] ??
     null;
+  const secondaryCategory =
+    categories.find((item) => item.field !== primaryCategory?.field) ?? null;
+  const compositionCategory = primaryCategory;
+  const canAnalyzeSelected =
+    selectedResource?.dataType === "table" ||
+    selectedResource?.dataType === "gene";
   const numericDistributions = (analytics?.numericDistributions ?? []).filter(
     (item) => {
       const profile = analytics?.fields.find(
@@ -200,11 +220,10 @@ export default function NonGeoPage() {
     setLoadingResources(true);
     try {
       const response = await api.resources({
-        spatialClass: "non_spatial",
         ...(selectedDomainType ? { domainType: selectedDomainType } : {}),
         ...(selectedCategoryCode ? { categoryCode: selectedCategoryCode } : {}),
       });
-      const items = response.items.filter(isNonGeographicResource);
+      const items = response.items;
       if (requestSequence === resourceRequestSequenceRef.current) {
         setResources(items);
         setActiveResourceId((current) => {
@@ -216,20 +235,15 @@ export default function NonGeoPage() {
           if (currentStillExists) {
             return current;
           }
-          if (!canQueryData && demoAvailable) {
-            return NON_GEO_DEMO_RESOURCE_ID;
-          }
-          return (
-            items[0]?.id ?? (demoAvailable ? NON_GEO_DEMO_RESOURCE_ID : null)
-          );
+          return items[0]?.id ?? null;
         });
       }
     } catch (error) {
       if (requestSequence === resourceRequestSequenceRef.current) {
         setResources([]);
-        setActiveResourceId(demoAvailable ? NON_GEO_DEMO_RESOURCE_ID : null);
+        setActiveResourceId(null);
         if (demoAvailable) {
-          message.warning(t("nonGeo.resourcesUnavailableDemo"));
+          message.warning(t("nonGeo.resourcesLoadFailed"));
         } else {
           message.error(
             error instanceof Error
@@ -280,15 +294,13 @@ export default function NonGeoPage() {
         setLoadingAnalytics(false);
         return;
       }
-      if (!canQueryData) {
-        if (demoAvailable) {
-          setActiveResourceId(NON_GEO_DEMO_RESOURCE_ID);
-          setAnalytics(demoBundle.analytics);
-          setAnalyticsError("");
-        } else {
-          setAnalytics(null);
-          setAnalyticsError(t("nonGeo.noQueryPermission"));
-        }
+      if (!canQueryData || !canAnalyzeSelected) {
+        setAnalytics(null);
+        setAnalyticsError(
+          canAnalyzeSelected && !canQueryData
+            ? t("nonGeo.noQueryPermission")
+            : "",
+        );
         setLoadingAnalytics(false);
         return;
       }
@@ -311,7 +323,7 @@ export default function NonGeoPage() {
         }
       }
     },
-    [canQueryData, demoAvailable, demoBundle.analytics, t],
+    [canQueryData, canAnalyzeSelected, demoAvailable, demoBundle.analytics, t],
   );
 
   const queryTable = useCallback(async () => {
@@ -371,11 +383,15 @@ export default function NonGeoPage() {
   }, [loadResources]);
 
   useEffect(() => {
-    if (!selectedDomainType) {
-      return;
-    }
-    setResourceType("gene");
-  }, [selectedDomainType]);
+    setActiveResourceId((current) => {
+      if (
+        current === NON_GEO_DEMO_RESOURCE_ID ||
+        filteredResources.some((item) => item.id === current)
+      )
+        return current;
+      return filteredResources[0]?.id ?? null;
+    });
+  }, [filteredResources]);
 
   useEffect(() => {
     tableQueryRequestSequenceRef.current += 1;
@@ -421,7 +437,9 @@ export default function NonGeoPage() {
             primaryCategory={primaryCategory}
             secondaryCategory={secondaryCategory}
             primaryNumeric={primaryNumeric}
-            lifeFormDistribution={lifeFormDistribution}
+            compositionCategory={compositionCategory}
+            categories={categories}
+            onCategory={setCategoryField}
             metrics={numericDistributions}
             onMetric={setSelectedMetricField}
           />
@@ -469,13 +487,14 @@ export default function NonGeoPage() {
     ],
     [
       analytics,
-      lifeFormDistribution,
+      compositionCategory,
       primaryCategory,
       primaryNumeric,
       queryTable,
       queryingTable,
       secondaryCategory,
       numericDistributions,
+      categories,
       tableColumns,
       tableData,
       t,
@@ -483,10 +502,10 @@ export default function NonGeoPage() {
   );
 
   const dataTypeLabel =
-    resourceType === "table"
-      ? t("nonGeo.ecologicalTables")
-      : resourceType === "gene"
-        ? t("nonGeo.geneticData")
+    resourceType === "spatial"
+      ? ui("地理数据", "Spatial data")
+      : resourceType === "non_spatial"
+        ? ui("非地理数据", "Non-spatial data")
         : t("nonGeo.allResources");
 
   const leftPanelContent = (
@@ -557,6 +576,19 @@ export default function NonGeoPage() {
           />
         )}
       </div>
+      {canBrowseData && demoAvailable && (
+        <section className="analysis-example-entry">
+          <Typography.Text type="secondary">
+            {ui("示例", "Example")}
+          </Typography.Text>
+          <Button
+            block
+            onClick={() => setActiveResourceId(NON_GEO_DEMO_RESOURCE_ID)}
+          >
+            {ui("查看胡杨数据示例", "View the poplar example")}
+          </Button>
+        </section>
+      )}
     </>
   );
 
@@ -590,16 +622,20 @@ export default function NonGeoPage() {
                   ) : null}
                 </div>
               </div>
-              <Space className="nongeo-analysis-tools">
-                <Button
-                  aria-label={t("nonGeo.queryDetails")}
-                  icon={<FileSearchOutlined />}
-                  loading={queryingTable}
-                  onClick={() => void queryTable()}
-                >
-                  {t("nonGeo.queryDetails")}
-                </Button>
-              </Space>
+              {canAnalyzeSelected &&
+                (canQueryData ||
+                  activeResourceId === NON_GEO_DEMO_RESOURCE_ID) && (
+                  <Space className="nongeo-analysis-tools">
+                    <Button
+                      aria-label={t("nonGeo.queryDetails")}
+                      icon={<FileSearchOutlined />}
+                      loading={queryingTable}
+                      onClick={() => void queryTable()}
+                    >
+                      {t("nonGeo.queryDetails")}
+                    </Button>
+                  </Space>
+                )}
             </div>
 
             {activeResourceId === NON_GEO_DEMO_RESOURCE_ID && (
@@ -612,6 +648,50 @@ export default function NonGeoPage() {
             )}
             {!canBrowseData ? (
               <PermissionEmpty />
+            ) : selectedResource && !canAnalyzeSelected ? (
+              <section className="analysis-resource-guide">
+                <Tag>
+                  {isGeographicResource(selectedResource)
+                    ? ui("地理数据", "Spatial data")
+                    : ui("非地理数据", "Non-spatial data")}{" "}
+                  · {resourceFormatLabel(selectedResource)}
+                </Tag>
+                <Typography.Title level={4}>
+                  {ui("选择分析方式", "Choose an analysis workflow")}
+                </Typography.Title>
+                <p>
+                  {isGeographicResource(selectedResource)
+                    ? ui(
+                        "空间分布与图层属性在地理工作台查看；裁剪、转换等处理在计算中心进行。",
+                        "Explore spatial patterns and layer attributes in the map workspace; use the compute center for clipping, conversion and other processing.",
+                      )
+                    : ui(
+                        "文档、图片等文件可在数据资源中查看。需要统计分析时，可将其中的结构化记录整理为表格后导入。",
+                        "View documents, images and other files in data resources. Import structured records as a table to analyze them statistically.",
+                      )}
+                </p>
+                <Space wrap>
+                  {isGeographicResource(selectedResource) && (
+                    <Button
+                      onClick={() =>
+                        navigate(
+                          `/map?resourceQ=${encodeURIComponent(selectedResource.name)}`,
+                        )
+                      }
+                    >
+                      {ui("在地理工作台查找", "Find in map workspace")}
+                    </Button>
+                  )}
+                  {isGeographicResource(selectedResource) && (
+                    <Button onClick={() => navigate("/compute")}>
+                      {ui("查看计算工具", "Browse compute tools")}
+                    </Button>
+                  )}
+                  <Button onClick={() => navigate("/resources/catalog")}>
+                    {ui("查看数据资源", "Open data resources")}
+                  </Button>
+                </Space>
+              </section>
             ) : loadingAnalytics ? (
               <div className="nongeo-loading">
                 <Skeleton active paragraph={{ rows: 12 }} />
@@ -667,15 +747,19 @@ function OverviewContent({
   primaryCategory,
   secondaryCategory,
   primaryNumeric,
-  lifeFormDistribution,
+  compositionCategory,
   metrics,
   onMetric,
+  categories,
+  onCategory,
 }: {
   analytics: NonGeoAnalytics | null;
   primaryCategory: CategoricalDistribution | null;
   secondaryCategory: CategoricalDistribution | null;
   primaryNumeric: NumericDistribution | null;
-  lifeFormDistribution: CategoricalDistribution | null;
+  compositionCategory: CategoricalDistribution | null;
+  categories: CategoricalDistribution[];
+  onCategory: (field: string) => void;
   metrics: NumericDistribution[];
   onMetric: (field: string) => void;
 }) {
@@ -716,6 +800,18 @@ function OverviewContent({
       <div className="nongeo-chart-grid nongeo-chart-grid-2">
         <ChartBox
           title={primaryCategory?.label ?? t("nonGeo.categoryDistribution")}
+          extra={
+            <Select
+              aria-label={t("nonGeo.categoryDimensions")}
+              style={{ minWidth: 130 }}
+              value={primaryCategory?.field}
+              onChange={onCategory}
+              options={categories.map((item) => ({
+                value: item.field,
+                label: item.label,
+              }))}
+            />
+          }
           icon={<BarChartOutlined />}
         >
           {primaryCategory ? (
@@ -725,11 +821,11 @@ function OverviewContent({
           )}
         </ChartBox>
         <ChartBox
-          title={lifeFormDistribution?.label ?? t("nonGeo.compositionAnalysis")}
+          title={`${t("nonGeo.structureShare")}${compositionCategory ? ` · ${compositionCategory.label}` : ""}`}
           icon={<DotChartOutlined />}
         >
-          {lifeFormDistribution ? (
-            <DonutChart data={lifeFormDistribution} />
+          {compositionCategory ? (
+            <DonutChart data={compositionCategory} />
           ) : (
             <ChartEmpty />
           )}
@@ -931,6 +1027,10 @@ function nonGeoResourceTypeLabel(
   t: TFunction,
 ) {
   switch (dataType) {
+    case "vector":
+      return i18n.language.startsWith("en") ? "Vector" : "矢量";
+    case "raster":
+      return i18n.language.startsWith("en") ? "Raster" : "栅格";
     case "table":
       return t("nonGeo.tableType");
     case "gene":

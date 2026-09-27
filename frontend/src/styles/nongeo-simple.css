@@ -231,3 +231,23 @@
     flex-wrap: wrap;
   }
 }
+
+.analysis-example-entry {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid #e3e9e7;
+}
+.analysis-resource-guide {
+  margin: 24px;
+  padding: 28px;
+  border: 1px solid #dce7e4;
+  border-radius: 12px;
+  background: #f7faf9;
+}
+.analysis-resource-guide p {
+  max-width: 680px;
+  line-height: 1.8;
+  color: #536760;
+  margin-bottom: 24px;
+}

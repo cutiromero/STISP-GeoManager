@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.22] - 2026-09-27
+
+### Changed
+- 数据分析统一展示当前项目可见资源，支持全部、地理、非地理筛选；胡杨演示改为独立的主动入口。
+- 表格按实际字段显示分类分布、数值分布和指标关系，分类维度可选，中英文文案使用通用表达。
+- 栅格、矢量提供地理工作台与计算工具入口，文档、图片提供查看及结构化表格导入指引。
+
 ## [0.1.21] - 2026-09-27
 
 ### Changed
