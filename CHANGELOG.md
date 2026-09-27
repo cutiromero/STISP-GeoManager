@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.23] - 2026-09-27
+
+### Fixed
+- 数据分析限定为胡杨展示案例，默认打开，不再加载项目资源和算法测试数据。
+- 保留通用的分类分布、数值分布、指标关系和字段选择，移除资源目录筛选与地理处理跳转。
+
 ## [0.1.22] - 2026-09-27
 
 ### Changed

@@ -9,23 +9,18 @@ import {
   NumberOutlined,
   RadarChartOutlined,
   ReloadOutlined,
-  SearchOutlined,
   TableOutlined,
   TagsOutlined,
 } from "@ant-design/icons";
 import {
   Alert,
   Collapse,
-  App,
   Badge,
   Button,
   Empty,
-  Input,
   Layout,
   Progress,
-  Segmented,
   Select,
-  Skeleton,
   Space,
   Table,
   Tabs,
@@ -35,54 +30,30 @@ import {
 import type { TableProps } from "antd";
 import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { platformBrand } from "../config/platformBrand";
 import { useAppContext } from "../contexts/AppContext";
 import i18n, { currentLocale } from "../i18n";
 import type {
-  DataDomainType,
-  DataSchemaSummary,
   NonGeoAnalytics,
   NonGeoFieldProfile,
   NonGeoTableQueryResult,
   NonGeoTableRow,
   ResourceListItem,
 } from "../types";
-import {
-  isGeographicResource,
-  resourceCategoryName,
-  resourceFormatLabel,
-} from "../utils/resources";
-import { taxonomyLeafOptions } from "../utils/taxonomy";
+import { resourceCategoryName, resourceFormatLabel } from "../utils/resources";
 import { createNonGeoDemo, NON_GEO_DEMO_RESOURCE_ID } from "./nonGeoDemoData";
 import NonGeoScatter, { isMeasurement } from "./NonGeoScatter";
 import { useComputeText } from "../compute/ui";
 import "../styles/nongeo-simple.css";
-
-type ResourceTypeFilter = "all" | "spatial" | "non_spatial";
 
 type CategoricalDistribution =
   NonGeoAnalytics["categoricalDistributions"][number];
 type NumericDistribution = NonGeoAnalytics["numericDistributions"][number];
 type FieldProfile = NonGeoFieldProfile;
 type TableRow = NonGeoTableRow;
-
-const analysisDomains = new Set<DataDomainType>([
-  "germplasm",
-  "genome",
-  "individual",
-  "community",
-  "population",
-  "field_survey",
-  "remote_sensing",
-  "molecular",
-  "vector",
-  "other",
-]);
 
 const analyticsPalette = [
   "#357487",
@@ -98,93 +69,20 @@ const analyticsPalette = [
 export default function NonGeoPage() {
   const { user } = useAppContext();
   const ui = useComputeText();
-  const navigate = useNavigate();
-  const { message } = App.useApp();
   const { t, i18n: translationI18n } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const permissions = user?.permissions;
-  const canBrowseData = Boolean(permissions?.canBrowseData);
-  const canQueryData = Boolean(permissions?.canQueryData);
-  const [resources, setResources] = useState<ResourceListItem[]>([]);
-  const [dataSchema, setDataSchema] = useState<DataSchemaSummary | null>(null);
-  const [resourceKeyword, setResourceKeyword] = useState("");
-  const [resourceType, setResourceType] = useState<ResourceTypeFilter>("all");
-  const [activeResourceId, setActiveResourceId] = useState<number | null>(null);
-  const [loadingResources, setLoadingResources] = useState(false);
-  const resourceRequestSequenceRef = useRef(0);
-  const analyticsRequestSequenceRef = useRef(0);
-  const tableQueryRequestSequenceRef = useRef(0);
-  const [analytics, setAnalytics] = useState<NonGeoAnalytics | null>(null);
-  const [analyticsError, setAnalyticsError] = useState("");
-  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
-  const [tableResult, setTableResult] = useState<NonGeoTableQueryResult | null>(
-    null,
-  );
-  const [queryingTable, setQueryingTable] = useState(false);
-  const [analysisTab, setAnalysisTab] = useState("overview");
-  const [selectedMetricField, setSelectedMetricField] = useState<
-    string | undefined
-  >();
-  const selectedDomainType = useMemo<DataDomainType | null>(() => {
-    const value = searchParams.get("domainType");
-    return analysisDomains.has(value as DataDomainType)
-      ? (value as DataDomainType)
-      : null;
-  }, [searchParams]);
-  const selectedCategoryCode = searchParams.get("categoryCode") || undefined;
-  const demoAvailable = !selectedDomainType && !selectedCategoryCode;
+  const canBrowseData = Boolean(user?.permissions?.canBrowseData);
+  // This page is a curated showcase, independent of the project resource catalog.
   const demoBundle = useMemo(
     () => createNonGeoDemo(currentLocale()),
     [translationI18n.resolvedLanguage],
   );
-  const effectiveResources = useMemo(
-    () => (demoAvailable ? [...resources, demoBundle.resource] : resources),
-    [demoAvailable, demoBundle.resource, resources],
-  );
-  const categoryOptions = useMemo(
-    () => taxonomyLeafOptions(dataSchema),
-    [dataSchema],
-  );
-  const nonGeoTypeOptions = [
-    { label: t("nonGeo.filterAll"), value: "all" },
-    { label: ui("地理", "Spatial"), value: "spatial" },
-    { label: ui("非地理", "Non-spatial"), value: "non_spatial" },
-  ];
-  const selectedResource = useMemo(
-    () =>
-      effectiveResources.find((resource) => resource.id === activeResourceId) ??
-      null,
-    [activeResourceId, effectiveResources],
-  );
-
-  const filteredResources = useMemo(() => {
-    const keyword = resourceKeyword.trim().toLowerCase();
-    return resources.filter((resource) => {
-      if (
-        resourceType !== "all" &&
-        (isGeographicResource(resource) ? "spatial" : "non_spatial") !==
-          resourceType
-      ) {
-        return false;
-      }
-      if (!keyword) {
-        return true;
-      }
-      const haystack = [
-        resource.name,
-        resource.code,
-        resource.source,
-        resource.provider,
-        resource.description,
-        resourceCategoryName(resource) ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(keyword);
-    });
-  }, [resources, resourceKeyword, resourceType]);
-
-  const tableData = tableResult ?? analytics?.tablePreview ?? null;
+  const analytics = canBrowseData ? demoBundle.analytics : null;
+  const selectedResource = canBrowseData ? demoBundle.resource : null;
+  const tableData = canBrowseData ? demoBundle.table : null;
+  const [analysisTab, setAnalysisTab] = useState("overview");
+  const [selectedMetricField, setSelectedMetricField] = useState<string>();
+  const queryingTable = false;
+  const queryTable = useCallback(() => setAnalysisTab("table"), []);
   const [categoryField, setCategoryField] = useState<string>();
   const categories = analytics?.categoricalDistributions ?? [];
   const primaryCategory =
@@ -194,9 +92,6 @@ export default function NonGeoPage() {
   const secondaryCategory =
     categories.find((item) => item.field !== primaryCategory?.field) ?? null;
   const compositionCategory = primaryCategory;
-  const canAnalyzeSelected =
-    selectedResource?.dataType === "table" ||
-    selectedResource?.dataType === "gene";
   const numericDistributions = (analytics?.numericDistributions ?? []).filter(
     (item) => {
       const profile = analytics?.fields.find(
@@ -209,204 +104,6 @@ export default function NonGeoPage() {
     numericDistributions.find((item) => item.field === selectedMetricField) ??
     numericDistributions[0] ??
     null;
-  const loadResources = useCallback(async () => {
-    const requestSequence = ++resourceRequestSequenceRef.current;
-    if (!canBrowseData) {
-      setResources([]);
-      setActiveResourceId(null);
-      setLoadingResources(false);
-      return;
-    }
-    setLoadingResources(true);
-    try {
-      const response = await api.resources({
-        ...(selectedDomainType ? { domainType: selectedDomainType } : {}),
-        ...(selectedCategoryCode ? { categoryCode: selectedCategoryCode } : {}),
-      });
-      const items = response.items;
-      if (requestSequence === resourceRequestSequenceRef.current) {
-        setResources(items);
-        setActiveResourceId((current) => {
-          const currentStillExists =
-            current === NON_GEO_DEMO_RESOURCE_ID
-              ? demoAvailable
-              : current !== null &&
-                items.some((resource) => resource.id === current);
-          if (currentStillExists) {
-            return current;
-          }
-          return items[0]?.id ?? null;
-        });
-      }
-    } catch (error) {
-      if (requestSequence === resourceRequestSequenceRef.current) {
-        setResources([]);
-        setActiveResourceId(null);
-        if (demoAvailable) {
-          message.warning(t("nonGeo.resourcesLoadFailed"));
-        } else {
-          message.error(
-            error instanceof Error
-              ? error.message
-              : t("nonGeo.resourcesLoadFailed"),
-          );
-        }
-      }
-    } finally {
-      if (requestSequence === resourceRequestSequenceRef.current) {
-        setLoadingResources(false);
-      }
-    }
-  }, [
-    canBrowseData,
-    canQueryData,
-    demoAvailable,
-    message,
-    selectedCategoryCode,
-    selectedDomainType,
-    t,
-  ]);
-
-  useEffect(() => {
-    if (!canBrowseData) return;
-    let ignore = false;
-    api
-      .dataSchemaSummary()
-      .then((result) => {
-        if (!ignore) setDataSchema(result);
-      })
-      .catch(() => {
-        if (!ignore) setDataSchema(null);
-      });
-    return () => {
-      ignore = true;
-    };
-  }, [canBrowseData]);
-
-  const loadAnalytics = useCallback(
-    async (resourceId: number) => {
-      const requestSequence = ++analyticsRequestSequenceRef.current;
-      setLoadingAnalytics(true);
-      setAnalyticsError("");
-      setTableResult(null);
-      if (resourceId === NON_GEO_DEMO_RESOURCE_ID && demoAvailable) {
-        setAnalytics(demoBundle.analytics);
-        setLoadingAnalytics(false);
-        return;
-      }
-      if (!canQueryData || !canAnalyzeSelected) {
-        setAnalytics(null);
-        setAnalyticsError(
-          canAnalyzeSelected && !canQueryData
-            ? t("nonGeo.noQueryPermission")
-            : "",
-        );
-        setLoadingAnalytics(false);
-        return;
-      }
-      try {
-        const result = await api.nonGeoAnalysis(resourceId);
-        if (requestSequence === analyticsRequestSequenceRef.current) {
-          setAnalytics(result);
-          setAnalyticsError("");
-        }
-      } catch (error) {
-        if (requestSequence === analyticsRequestSequenceRef.current) {
-          setAnalytics(null);
-          setAnalyticsError(
-            error instanceof Error ? error.message : t("nonGeo.analysisFailed"),
-          );
-        }
-      } finally {
-        if (requestSequence === analyticsRequestSequenceRef.current) {
-          setLoadingAnalytics(false);
-        }
-      }
-    },
-    [canQueryData, canAnalyzeSelected, demoAvailable, demoBundle.analytics, t],
-  );
-
-  const queryTable = useCallback(async () => {
-    if (activeResourceId === null) {
-      return;
-    }
-    if (activeResourceId === NON_GEO_DEMO_RESOURCE_ID && demoAvailable) {
-      setQueryingTable(true);
-      setTableResult(demoBundle.table);
-      setAnalysisTab("table");
-      setQueryingTable(false);
-      return;
-    }
-    if (!canQueryData) {
-      message.warning(t("nonGeo.noQueryPermission"));
-      return;
-    }
-    const requestSequence = ++tableQueryRequestSequenceRef.current;
-    setQueryingTable(true);
-    try {
-      const result = await api.nonGeoQuery(activeResourceId, {
-        limit: 80,
-        offset: 0,
-        ...(primaryNumeric
-          ? { sortField: primaryNumeric.field, sortDirection: "desc" as const }
-          : {}),
-      });
-      if (requestSequence === tableQueryRequestSequenceRef.current) {
-        setTableResult(result);
-        setAnalysisTab("table");
-      }
-    } catch (error) {
-      if (requestSequence === tableQueryRequestSequenceRef.current) {
-        message.error(
-          error instanceof Error
-            ? error.message
-            : t("nonGeo.detailsQueryFailed"),
-        );
-      }
-    } finally {
-      if (requestSequence === tableQueryRequestSequenceRef.current) {
-        setQueryingTable(false);
-      }
-    }
-  }, [
-    activeResourceId,
-    canQueryData,
-    demoAvailable,
-    demoBundle.table,
-    message,
-    primaryNumeric,
-    t,
-  ]);
-
-  useEffect(() => {
-    void loadResources();
-  }, [loadResources]);
-
-  useEffect(() => {
-    setActiveResourceId((current) => {
-      if (
-        current === NON_GEO_DEMO_RESOURCE_ID ||
-        filteredResources.some((item) => item.id === current)
-      )
-        return current;
-      return filteredResources[0]?.id ?? null;
-    });
-  }, [filteredResources]);
-
-  useEffect(() => {
-    tableQueryRequestSequenceRef.current += 1;
-    setQueryingTable(false);
-    setTableResult(null);
-    if (activeResourceId !== null) {
-      void loadAnalytics(activeResourceId);
-      return;
-    }
-    analyticsRequestSequenceRef.current += 1;
-    setAnalytics(null);
-    setAnalyticsError("");
-    setLoadingAnalytics(false);
-  }, [activeResourceId, loadAnalytics]);
-
   const tableColumns = useMemo<TableProps<TableRow>["columns"]>(() => {
     const fields = tableData?.fields.slice(0, 8) ?? [];
     return fields.map((field) => ({
@@ -501,104 +198,33 @@ export default function NonGeoPage() {
     ],
   );
 
-  const dataTypeLabel =
-    resourceType === "spatial"
-      ? ui("地理数据", "Spatial data")
-      : resourceType === "non_spatial"
-        ? ui("非地理数据", "Non-spatial data")
-        : t("nonGeo.allResources");
-
   const leftPanelContent = (
     <>
       <PanelTitle
         icon={<DatabaseOutlined />}
         title={t("nonGeo.dataResources")}
-        extra={
-          <Button
-            size="small"
-            type="text"
-            aria-label={t("nonGeo.refreshResources")}
-            icon={<ReloadOutlined />}
-            loading={loadingResources}
-            onClick={() => void loadResources()}
-          />
-        }
-      />
-      <Input
-        prefix={<SearchOutlined />}
-        placeholder={t("nonGeo.searchPlaceholder")}
-        allowClear
-        value={resourceKeyword}
-        onChange={(event) => setResourceKeyword(event.target.value)}
-      />
-      <Select
-        allowClear
-        showSearch
-        optionFilterProp="label"
-        placeholder={t("nonGeo.categoryPlaceholder")}
-        value={selectedCategoryCode}
-        options={categoryOptions}
-        onChange={(categoryCode) => {
-          const next = new URLSearchParams(searchParams);
-          if (categoryCode) next.set("categoryCode", categoryCode);
-          else next.delete("categoryCode");
-          setSearchParams(next, { replace: true });
-        }}
-      />
-      <Segmented
-        block
-        options={nonGeoTypeOptions}
-        value={resourceType}
-        onChange={(value) => setResourceType(value as ResourceTypeFilter)}
       />
       <div className="nongeo-resource-count">
         <span>
-          {t("nonGeo.resourceCount", { count: filteredResources.length })}
+          {t("nonGeo.resourceCount", { count: selectedResource ? 1 : 0 })}
         </span>
-        <Tag color="cyan">{dataTypeLabel}</Tag>
+        <Tag color="cyan">{ui("展示数据", "Showcase")}</Tag>
       </div>
       <div className="nongeo-resource-list">
-        {loadingResources ? (
-          <Skeleton active paragraph={{ rows: 7 }} title={false} />
-        ) : filteredResources.length > 0 ? (
-          filteredResources.map((resource) => (
-            <ResourceRow
-              key={resourceKey(resource)}
-              resource={resource}
-              active={resource.id === activeResourceId}
-              onSelect={() => setActiveResourceId(resource.id)}
-            />
-          ))
-        ) : (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={t("nonGeo.noAnalyzableResources")}
+        {selectedResource && (
+          <ResourceRow
+            resource={selectedResource}
+            active
+            onSelect={() => setAnalysisTab("overview")}
           />
         )}
       </div>
-      {canBrowseData && demoAvailable && (
-        <section className="analysis-example-entry">
-          <Typography.Text type="secondary">
-            {ui("示例", "Example")}
-          </Typography.Text>
-          <Button
-            block
-            onClick={() => setActiveResourceId(NON_GEO_DEMO_RESOURCE_ID)}
-          >
-            {ui("查看胡杨数据示例", "View the poplar example")}
-          </Button>
-        </section>
-      )}
     </>
   );
 
   return (
     <Layout className="workspace">
-      <WorkspaceHeader
-        activeTab="nongeo"
-        canBrowseData={canBrowseData}
-        dataSchema={dataSchema}
-      />
+      <WorkspaceHeader activeTab="nongeo" canBrowseData={canBrowseData} />
       <div className="workspace-body workspace-body-nongeo nongeo-simple">
         <main className="nongeo-stage" aria-label={t("nonGeo.workbenchLabel")}>
           <aside className="nongeo-panel nongeo-resource-panel">
@@ -617,28 +243,26 @@ export default function NonGeoPage() {
                       selectedResource?.name ??
                       t("nonGeo.selectResource")}
                   </Typography.Title>
-                  {activeResourceId === NON_GEO_DEMO_RESOURCE_ID ? (
+                  {canBrowseData ? (
                     <Tag color="gold">{t("nonGeo.demoBadge")}</Tag>
                   ) : null}
                 </div>
               </div>
-              {canAnalyzeSelected &&
-                (canQueryData ||
-                  activeResourceId === NON_GEO_DEMO_RESOURCE_ID) && (
-                  <Space className="nongeo-analysis-tools">
-                    <Button
-                      aria-label={t("nonGeo.queryDetails")}
-                      icon={<FileSearchOutlined />}
-                      loading={queryingTable}
-                      onClick={() => void queryTable()}
-                    >
-                      {t("nonGeo.queryDetails")}
-                    </Button>
-                  </Space>
-                )}
+              {canBrowseData && (
+                <Space className="nongeo-analysis-tools">
+                  <Button
+                    aria-label={t("nonGeo.queryDetails")}
+                    icon={<FileSearchOutlined />}
+                    loading={queryingTable}
+                    onClick={() => void queryTable()}
+                  >
+                    {t("nonGeo.queryDetails")}
+                  </Button>
+                </Space>
+              )}
             </div>
 
-            {activeResourceId === NON_GEO_DEMO_RESOURCE_ID && (
+            {canBrowseData && (
               <p className="nongeo-demo-note">
                 {ui(
                   "内置示例，用于体验图表和明细查询。",
@@ -648,61 +272,6 @@ export default function NonGeoPage() {
             )}
             {!canBrowseData ? (
               <PermissionEmpty />
-            ) : selectedResource && !canAnalyzeSelected ? (
-              <section className="analysis-resource-guide">
-                <Tag>
-                  {isGeographicResource(selectedResource)
-                    ? ui("地理数据", "Spatial data")
-                    : ui("非地理数据", "Non-spatial data")}{" "}
-                  · {resourceFormatLabel(selectedResource)}
-                </Tag>
-                <Typography.Title level={4}>
-                  {ui("选择分析方式", "Choose an analysis workflow")}
-                </Typography.Title>
-                <p>
-                  {isGeographicResource(selectedResource)
-                    ? ui(
-                        "空间分布与图层属性在地理工作台查看；裁剪、转换等处理在计算中心进行。",
-                        "Explore spatial patterns and layer attributes in the map workspace; use the compute center for clipping, conversion and other processing.",
-                      )
-                    : ui(
-                        "文档、图片等文件可在数据资源中查看。需要统计分析时，可将其中的结构化记录整理为表格后导入。",
-                        "View documents, images and other files in data resources. Import structured records as a table to analyze them statistically.",
-                      )}
-                </p>
-                <Space wrap>
-                  {isGeographicResource(selectedResource) && (
-                    <Button
-                      onClick={() =>
-                        navigate(
-                          `/map?resourceQ=${encodeURIComponent(selectedResource.name)}`,
-                        )
-                      }
-                    >
-                      {ui("在地理工作台查找", "Find in map workspace")}
-                    </Button>
-                  )}
-                  {isGeographicResource(selectedResource) && (
-                    <Button onClick={() => navigate("/compute")}>
-                      {ui("查看计算工具", "Browse compute tools")}
-                    </Button>
-                  )}
-                  <Button onClick={() => navigate("/resources/catalog")}>
-                    {ui("查看数据资源", "Open data resources")}
-                  </Button>
-                </Space>
-              </section>
-            ) : loadingAnalytics ? (
-              <div className="nongeo-loading">
-                <Skeleton active paragraph={{ rows: 12 }} />
-              </div>
-            ) : analyticsError ? (
-              <Alert
-                type="warning"
-                showIcon
-                title={t("nonGeo.analysisUnavailable")}
-                description={analyticsError}
-              />
             ) : analytics ? (
               <Tabs
                 className="nongeo-tabs"
@@ -1353,10 +922,6 @@ function PermissionEmpty() {
       description={t("nonGeo.noBrowsePermissionDescription")}
     />
   );
-}
-
-function resourceKey(resource: ResourceListItem) {
-  return `${resource.dataType}-${String(resource.id)}-${resource.name}`;
 }
 
 function stableRowKey(row: TableRow) {
