@@ -1,0 +1,233 @@
+/* A quiet, two-column analysis workspace; chart controls stay beside their chart. */
+.workspace-body-nongeo.nongeo-simple {
+  background: #f3f6f8;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-stage {
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 20px;
+  inset: 86px 24px 20px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-panel {
+  background: #fff;
+  border: 1px solid #e0e7ed;
+  box-shadow: none;
+  backdrop-filter: none;
+  border-radius: 12px;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-resource-panel {
+  display: block;
+  padding: 18px 14px;
+  overflow: auto;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-left-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: visible;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-resource-list {
+  overflow: visible;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-resource-row {
+  background: #fff;
+  box-shadow: none;
+  padding: 14px 12px;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-resource-row-active {
+  background: #edf5f7;
+  border-color: #6d9eaa;
+  box-shadow: none;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-analysis-panel {
+  display: block;
+  padding: 24px;
+  overflow: auto;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-analysis-head {
+  align-items: flex-start;
+  padding-bottom: 16px;
+  gap: 18px;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-analysis-head h2.ant-typography {
+  font-size: clamp(20px, 1.6vw, 28px);
+  line-height: 1.4;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-kicker {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #64808e;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-demo-note {
+  margin: 0 0 18px;
+  color: #74818b;
+  font-size: 12px;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-tabs {
+  overflow: visible;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-tabs .ant-tabs-content-holder,
+.workspace-body-nongeo.nongeo-simple .nongeo-tabs .ant-tabs-tabpane {
+  overflow: visible;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-chart-grid {
+  overflow: visible;
+  gap: 20px;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-chart-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-chart-grid-3 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-metric-grid {
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-metric-card {
+  background: #f7f9fa;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-metric-icon {
+  background: #e5eff2;
+  color: #357487;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-chart-box {
+  min-height: 250px;
+  padding: 18px;
+  background: #fff;
+  border: 1px solid #e3eaef;
+  box-shadow: none;
+  border-radius: 10px;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-chart-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-bar-row i {
+  background: #357487;
+  box-shadow: none;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-histogram-bars span {
+  border-radius: 4px 4px 0 0;
+  box-shadow: none;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-details {
+  margin-top: 24px;
+  border-top: 1px solid #e3eaef;
+}
+.workspace-body-nongeo.nongeo-simple .nongeo-details .ant-collapse-body {
+  color: #627583;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-axis-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-axis-controls label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: #627583;
+  font-size: 12px;
+  flex: 1;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-axis-controls .ant-select {
+  min-width: 140px;
+  flex: 1;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-scatter svg {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-scatter text {
+  font-size: 11px;
+  fill: #627583;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-grid-line {
+  stroke: #e8eef2;
+  stroke-width: 1;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-axis-line {
+  fill: none;
+  stroke: #a8bac5;
+  stroke-width: 1;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-point {
+  fill: #357487;
+  fill-opacity: 0.68;
+  stroke: #fff;
+  stroke-width: 0.7;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-point:hover {
+  fill-opacity: 1;
+  stroke: #244d5b;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-chart-note {
+  font-size: 12px;
+  line-height: 1.65;
+  color: #7a8994;
+  margin: 12px 0 0;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-correlation {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 4px;
+  table-layout: fixed;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-correlation th {
+  font-size: 11px;
+  font-weight: 500;
+  color: #627583;
+  padding: 4px;
+  overflow-wrap: anywhere;
+}
+.workspace-body-nongeo.nongeo-simple .analysis-correlation td {
+  text-align: center;
+  font-size: 12px;
+  padding: 12px 4px;
+  border-radius: 4px;
+  color: #29434c;
+}
+@media (max-width: 1100px) {
+  .workspace-body-nongeo.nongeo-simple .nongeo-stage {
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 12px;
+    inset: 82px 12px 12px;
+  }
+  .workspace-body-nongeo.nongeo-simple .nongeo-analysis-panel {
+    padding: 16px;
+  }
+  .workspace-body-nongeo.nongeo-simple .nongeo-chart-grid-2,
+  .workspace-body-nongeo.nongeo-simple .nongeo-chart-grid-3 {
+    grid-template-columns: 1fr;
+  }
+  .workspace-body-nongeo.nongeo-simple .nongeo-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .workspace-body-nongeo.nongeo-simple .nongeo-stage {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+  .workspace-body-nongeo.nongeo-simple .nongeo-resource-panel {
+    max-height: 280px;
+  }
+  .workspace-body-nongeo.nongeo-simple .nongeo-analysis-panel {
+    overflow: visible;
+  }
+  .workspace-body-nongeo.nongeo-simple .nongeo-analysis-head {
+    flex-wrap: wrap;
+  }
+}

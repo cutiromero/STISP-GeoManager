@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.21] - 2026-09-27
+
+### Changed
+- 简化数据分析布局，移除静态分析资产及重复入口，字段说明改为按需展开。
+- 分布指标与图表就近对应，地点编号作为标识字段；二维图使用可选的数值指标、统一小点、坐标刻度和单位。
+- 相关矩阵补充字段标签与颜色说明；真实资源分析失败时保留错误，不再自动替换为演示。
+
 ## [0.1.20] - 2026-09-27
 
 ### Changed

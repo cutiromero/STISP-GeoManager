@@ -350,7 +350,10 @@ export function createNonGeoDemo(locale: AppLocale): DemoBundle {
       label: l(field.zh, field.en),
       description: l(`${field.zh}数值指标`, `${field.en} measurement`),
       unit: field.unit,
-      role: "measure" as const,
+      role:
+        field.name === "plot_number"
+          ? ("identifier" as const)
+          : ("measure" as const),
       nullable: index % 5 === 0,
       nonNullCount: index % 5 === 0 ? 2_385 : 2_411,
       nullCount: index % 5 === 0 ? 26 : 0,
@@ -460,7 +463,9 @@ export function createNonGeoDemo(locale: AppLocale): DemoBundle {
       ratio: item[2] / 2_411,
     })),
   }));
-  const distributionMeasures = measureDefinitions.slice(0, 6);
+  const distributionMeasures = measureDefinitions
+    .filter((field) => field.name !== "plot_number")
+    .slice(0, 6);
   const numericDistributions = distributionMeasures.map((field, index) => {
     const span = field.max - field.min;
     const counts = [215, 388, 476, 562, 438, 332];
@@ -494,7 +499,7 @@ export function createNonGeoDemo(locale: AppLocale): DemoBundle {
       analyzedRowCount: 2_411,
       sampled: false,
       fieldCount: 31,
-      numericFieldCount: 21,
+      numericFieldCount: 20,
       textFieldCount: 6,
       categoricalFieldCount: 4,
       completeness: 0.996,
@@ -506,7 +511,7 @@ export function createNonGeoDemo(locale: AppLocale): DemoBundle {
     numericDistributions,
     correlation: {
       fields: distributionMeasures
-        .slice(1, 5)
+        .slice(0, 4)
         .map((field) => l(field.zh, field.en)),
       values: [
         [1, 0.82, 0.71, 0.28],
@@ -530,8 +535,8 @@ export function createNonGeoDemo(locale: AppLocale): DemoBundle {
         "Average field completeness is approximately 99.6%.",
       ),
       l(
-        "提供 21 个数值指标，可用于分布、相关性和性状关系分析。",
-        "Twenty-one numeric indicators support distribution, correlation, and trait-relationship analysis.",
+        "提供 20 个数值指标，可用于分布、相关性和性状关系分析。",
+        "Twenty numeric indicators support distribution, correlation, and trait-relationship analysis.",
       ),
     ],
   };
