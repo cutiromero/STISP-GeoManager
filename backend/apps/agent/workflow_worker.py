@@ -40,7 +40,7 @@ def recover():
     # terminal state and resume the workflow.  Marking it interrupted here
     # would restart the graph and could submit the same operator twice.
     AgentWorkflow.objects.filter(status="running", heartbeat__lt=stale).update(
-        status="interrupted", detail="工作流进程中断，请重试", updated_at=timezone.now()
+        status="queued", detail="正在从已保存计划恢复", updated_at=timezone.now()
     )
 
 

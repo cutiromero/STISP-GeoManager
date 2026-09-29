@@ -542,7 +542,7 @@ def test_http_stream_cancellation(setup_agent, settings):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_workflow_claim_executes_plan_and_persists_checkpoints(setup_agent):
+def test_workflow_claim_reports_missing_algorithm_without_fabricated_plan(setup_agent):
     s = setup_agent
     response = s["client"].post(
         "/api/agent/workflows/",
@@ -567,13 +567,9 @@ def test_workflow_claim_executes_plan_and_persists_checkpoints(setup_agent):
     run_workflow_once()
 
     workflow = AgentWorkflow.objects.get(pk=workflow_id)
-    assert workflow.status == "succeeded", workflow.detail
-    assert [step.kind for step in workflow.steps.all()] == [
-        "discover_inputs",
-        "build_plan",
-        "finalize",
-    ]
-    assert workflow.checkpoints.count() == 2
+    assert workflow.status == "failed", workflow.detail
+    assert "没有可调用算法" in workflow.detail
+    assert workflow.checkpoints.count() == 0
     assert workflow.resource_ids == [s["resource"].id]
 
 

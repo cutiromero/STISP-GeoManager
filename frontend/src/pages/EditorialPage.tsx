@@ -31,11 +31,23 @@ import "../styles/editorial.css";
 
 const knowledgeCategories = [
   "遥感基础",
-  "GIS 与地图制图",
+  "地图与位置",
   "空间智能感知",
   "时序与时空分析",
-  "地理知识与基础模型",
-  "应用案例",
+  "遥感基础模型",
+  "空间推断与验证",
+  "水体变化",
+  "农业用水",
+];
+const knowledgeQuestions = [
+  "卫星记录了什么，一格影像能看多细？",
+  "怎样确认前后比较的是同一处地方？",
+  "AI 找到农田后，为什么还要核对田界？",
+  "一季的变化怎样帮助辨认作物？",
+  "基础模型会读图，就会读变化吗？",
+  "卫星看不见地下，土壤图从何而来？",
+  "同一处地面出现过几次水？",
+  "果树下套种玉米，用水能直接相加吗？",
 ];
 const newsCategories = ["学术会议", "学术交流", "科研进展", "团队活动"];
 
@@ -222,19 +234,44 @@ export default function EditorialPage({
           </span>
           <h1>
             {kind === "knowledge"
-              ? ui("理解时空，探索智能")
+              ? ui("时空智能怎样读懂地表变化")
               : ui("团队新闻动态")}
           </h1>
+          {kind === "knowledge" && (
+            <h2 className="editorial-hero-subtitle">
+              从卫星观测到农田和河流的判断
+            </h2>
+          )}
           <p>
             {kind === "knowledge"
               ? ui(
-                  "从遥感观测、地图表达，到空间感知与时空推理。用图文认识基础知识，沿学习链接继续探索。",
+                  "同一块田，春天露着土，夏天一片绿，秋天收获后又变了颜色。只看一天的卫星图，很难说清它经历了什么。下面从这块田出发，看看怎样把位置、时间和地面证据连起来。八篇可以顺读，也可以单独读。",
                 )
               : ui(
                   "记录学术交流、研究进展与团队活动，分享研究中的发现与思考。",
                 )}
           </p>
         </section>
+        {kind === "knowledge" && !articleId && (
+          <section className="editorial-science-intro">
+            <h2>时空智能从哪里开始</h2>
+            <p>
+              时空智能处理带有地点和时间的信息。先确定每次观测对应哪块地，再把不同日期的记录放到一起，识别变化，并用地形、农时或现场调查解释和核查。卫星提供观测，地图确定位置，模型帮助找规律；每一步都要问数据是否足以支持结论。
+            </p>
+            <details>
+              <summary>沿着八个问题往下读</summary>
+              <ol>
+                {knowledgeQuestions.map((question) => (
+                  <li key={question}>{question}</li>
+                ))}
+              </ol>
+            </details>
+            <p className="editorial-reading-note">
+              <strong>读图说明：</strong>
+              配图取自课件，原图讲次和页码见图注。曲线和算例用于说明方法，不代表实地测量；遇到具体地块，还要核对当地资料。
+            </p>
+          </section>
+        )}
         <div className="editorial-toolbar">
           <Space wrap>
             <Button
@@ -327,6 +364,17 @@ export default function EditorialPage({
                 alt={article.title}
               />
             )}
+            {kind === "knowledge" &&
+              article.assets.find((asset) => asset.url === article.coverUrl)
+                ?.caption && (
+                <p className="editorial-cover-caption">
+                  {
+                    article.assets.find(
+                      (asset) => asset.url === article.coverUrl,
+                    )?.caption
+                  }
+                </p>
+              )}
             <ArticleBody body={article.body} />
             {article.assets.some(
               (a) =>

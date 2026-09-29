@@ -1,0 +1,117 @@
+{
+  "GET /api/knowledge/entries/": {
+    "200": {
+      "items": [
+        {
+          "title": "霞石与石英：限定平衡体系中的组合复核",
+          "category": "矿物平衡",
+          "subject": "霞石",
+          "predicate": "在限定平衡体系中与其反应",
+          "object": "石英",
+          "statement": "在适用的平衡火成岩体系中，霞石与石英反应形成钠长石：NaAlSiO4 + 2 SiO2 → NaAlSi3O8。同一样本中记录到二者时，应先判断它们是否属于同一成因阶段和同一平衡域。",
+          "explanation": "该知识用于复核矿物组合。只有明确达到平衡且体系与规则匹配时才提示组合冲突；提示不修改原始观测，也不能替代薄片和成分鉴定。",
+          "conditions": [
+            "两种矿物属于同一成因阶段和同一平衡域",
+            "矿物鉴定可信，成分和温压条件适合该体系",
+            "自动校核要求 equilibrium 为 true 且 system 为 silica_undersaturated_equilibrium_igneous"
+          ],
+          "exceptions": [
+            "混合样本、不同岩屑、捕虏晶和后期裂隙充填不直接套用",
+            "反应未完成或非平衡组合需结合岩相证据解释"
+          ],
+          "aliases": [
+            "nepheline",
+            "quartz",
+            "霞石石英共生",
+            "钠长石",
+            "albite"
+          ],
+          "sources": [
+            {
+              "title": "Perkins 等：Mineralogy，6.4.4 Feldspathoids",
+              "url": "https://geo.libretexts.org/Bookshelves/Geology/Mineralogy_(Perkins_et_al.)/06%3A_Igneous_Rocks_and_Silicate_Minerals/6.04%3A_Silicate_Minerals/6.4.04%3A_Feldspathoids",
+              "locator": "图 6.58–6.61 后正文与似长石反应式",
+              "excerpt": "nepheline + 2 quartz = albite"
+            }
+          ],
+          "status": "published",
+          "ruleKind": "mineral_equilibrium",
+          "ruleConfig": {
+            "minerals": [
+              "霞石",
+              "石英"
+            ],
+            "system": "silica_undersaturated_equilibrium_igneous"
+          },
+          "id": 1,
+          "projectTagId": 1,
+          "revision": 1,
+          "updatedAt": "2026-09-29T08:00:00Z"
+        }
+      ],
+      "total": 1,
+      "categories": [
+        "矿物平衡"
+      ],
+      "canEdit": true
+    }
+  },
+  "GET /api/knowledge/entries/{entryId}/": {
+    "200": {
+      "title": "霞石与石英：限定平衡体系中的组合复核",
+      "category": "矿物平衡",
+      "subject": "霞石",
+      "predicate": "在限定平衡体系中与其反应",
+      "object": "石英",
+      "statement": "在适用的平衡火成岩体系中，霞石与石英反应形成钠长石：NaAlSiO4 + 2 SiO2 → NaAlSi3O8。同一样本中记录到二者时，应先判断它们是否属于同一成因阶段和同一平衡域。",
+      "explanation": "该知识用于复核矿物组合。只有明确达到平衡且体系与规则匹配时才提示组合冲突；提示不修改原始观测，也不能替代薄片和成分鉴定。",
+      "conditions": [
+        "两种矿物属于同一成因阶段和同一平衡域",
+        "矿物鉴定可信，成分和温压条件适合该体系",
+        "自动校核要求 equilibrium 为 true 且 system 为 silica_undersaturated_equilibrium_igneous"
+      ],
+      "exceptions": [
+        "混合样本、不同岩屑、捕虏晶和后期裂隙充填不直接套用",
+        "反应未完成或非平衡组合需结合岩相证据解释"
+      ],
+      "aliases": [
+        "nepheline",
+        "quartz",
+        "霞石石英共生",
+        "钠长石",
+        "albite"
+      ],
+      "sources": [
+        {
+          "title": "Perkins 等：Mineralogy，6.4.4 Feldspathoids",
+          "url": "https://geo.libretexts.org/Bookshelves/Geology/Mineralogy_(Perkins_et_al.)/06%3A_Igneous_Rocks_and_Silicate_Minerals/6.04%3A_Silicate_Minerals/6.4.04%3A_Feldspathoids",
+          "locator": "图 6.58–6.61 后正文与似长石反应式",
+          "excerpt": "nepheline + 2 quartz = albite"
+        }
+      ],
+      "status": "published",
+      "ruleKind": "mineral_equilibrium",
+      "ruleConfig": {
+        "minerals": [
+          "霞石",
+          "石英"
+        ],
+        "system": "silica_undersaturated_equilibrium_igneous"
+      },
+      "id": 1,
+      "projectTagId": 1,
+      "revision": 1,
+      "updatedAt": "2026-09-29T08:00:00Z"
+    }
+  },
+  "GET /api/agent/workflows/": {
+    "200": {
+      "items": []
+    }
+  },
+  "GET /api/agent/runs/{runId}/compute-tasks/": {
+    "200": {
+      "items": []
+    }
+  }
+}

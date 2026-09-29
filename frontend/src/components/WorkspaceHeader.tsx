@@ -3,6 +3,7 @@ import { resetProjectSession } from "../projects/session";
 import { ProjectSelector } from "../projects/ProjectContext";
 import {
   AlertOutlined,
+  ApartmentOutlined,
   FolderOpenOutlined,
   LogoutOutlined,
   QuestionCircleOutlined,
@@ -71,6 +72,7 @@ export type WorkspaceTab =
   | "admin"
   | "news"
   | "knowledge"
+  | "knowledgeBase"
   | "about";
 
 const platformChineseName = platformBrand.chineseName;
@@ -523,6 +525,7 @@ export default function WorkspaceHeader({
       }
       if (layoutMeasureFrameRef.current !== null) {
         window.cancelAnimationFrame(layoutMeasureFrameRef.current);
+        layoutMeasureFrameRef.current = null;
       }
     };
   }, []);
@@ -1303,6 +1306,21 @@ export default function WorkspaceHeader({
             onMouseLeave={collapseTabHover}
             title={t("navigation.warning")}
           />
+          <Button
+            type="text"
+            data-nav-key="knowledgeBase"
+            className={tabClass(
+              activeTab === "knowledgeBase",
+              expandedTabId === "knowledgeBase",
+            )}
+            onClick={() => navigateFromHeader("/knowledge-base")}
+            onMouseEnter={() => scheduleTabHoverExpand("knowledgeBase")}
+            onMouseLeave={collapseTabHover}
+            title={t("navigation.knowledgeBase")}
+          >
+            <ApartmentOutlined style={{ fontSize: 16 }} />
+            <span className="tab-text">{t("navigation.knowledgeBase")}</span>
+          </Button>
           {showAdminTab && (
             <Dropdown
               menu={{ items: adminMenuItems }}

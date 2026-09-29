@@ -16,6 +16,10 @@ const operations: Record<string, [string, string]> = {
   get_system_info: ["运行环境", "Runtime environment"],
   execute_operator: ["计算任务", "Compute task"],
   import_compute_result: ["结果入库", "Result import"],
+  get_compute_task: ["计算实时状态", "Current compute status"],
+  list_compute_tasks: ["计算任务列表", "Compute tasks"],
+  search_knowledge: ["知识依据", "Knowledge sources"],
+  check_knowledge_constraints: ["知识规则检查", "Knowledge checks"],
   web_search: ["网页检索", "Web search"],
   web_fetch: ["网页摘录", "Web excerpt"],
 };
@@ -112,8 +116,8 @@ export default function RunEvidence({
             <>
               <Typography.Paragraph type="secondary">
                 {ui(
-                  "对应本条回答中的引用编号。",
-                  "Numbers match the citations in this answer.",
+                  "对应本条回答中的引用编号，记录工具调用时的状态；计算当前进度以实时任务卡为准。",
+                  "Numbers match this answer. These are records from the time of each tool call; live task cards show current progress.",
                 )}
               </Typography.Paragraph>
               <Collapse

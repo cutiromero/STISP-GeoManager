@@ -911,6 +911,103 @@
         }
       }
     },
+    "/api/auth/access/": {
+      "get": {
+        "tags": [
+          "认证授权"
+        ],
+        "summary": "读取本人可用功能和科研用户申请",
+        "description": "只返回本人有效功能及智能体实际开放操作，升级差异按当前科研角色配置计算。",
+        "operationId": "getAccountAccess",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "当前账号功能和申请状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountAccess"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/auth/research-application/": {
+      "post": {
+        "tags": [
+          "认证授权"
+        ],
+        "summary": "普通用户申请科研用户",
+        "description": "仅普通用户本人可提交；待审核不可重复，拒绝后可重提。提交不会授予权限，由超级管理员审核。",
+        "operationId": "applyResearchRole",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "申请人资料及理由",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResearchApplicationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "当前账号功能和申请状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountAccess"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "资料不完整或无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "已有待审核申请",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/me/": {
       "get": {
         "tags": [
@@ -1059,7 +1156,7 @@
           "管理后台"
         ],
         "summary": "获取当前用户后台资料",
-        "description": "返回当前登录用户的个人资料、已授予权限、主动关闭权限和有效权限。",
+        "description": "返回当前登录用户的个人资料、已授予权限、主动关闭权限和有效权限。个人权限目录仅列出当前有效项。",
         "operationId": "getAdminProfile",
         "security": [
           {
@@ -3110,6 +3207,29 @@
                       "usedBytes": 420000000000,
                       "freeBytes": 580000000000,
                       "usagePercent": 42
+                    },
+                    "gpu": {
+                      "available": true,
+                      "count": 2,
+                      "totalMemoryMiB": 49152,
+                      "usedMemoryMiB": 12288,
+                      "utilizationPercent": 25,
+                      "devices": [
+                        {
+                          "index": 0,
+                          "name": "NVIDIA RTX 4090",
+                          "memoryTotalMiB": 24576,
+                          "memoryUsedMiB": 6144,
+                          "utilizationPercent": 25
+                        },
+                        {
+                          "index": 1,
+                          "name": "NVIDIA RTX 4090",
+                          "memoryTotalMiB": 24576,
+                          "memoryUsedMiB": 6144,
+                          "utilizationPercent": 25
+                        }
+                      ]
                     }
                   }
                 }
@@ -5048,7 +5168,7 @@
           "管理后台"
         ],
         "summary": "查询角色申请",
-        "description": "查询当前主体可见的科研用户角色申请，默认返回全部状态，可通过 `status` 筛选。\n需要 `core.manage_auth`；非超级管理员主体仍受用户可见范围限制。\n",
+        "description": "仅超级管理员可查询科研用户角色申请，默认返回全部状态，可通过 `status` 筛选。\n需要 `core.manage_auth`；非超级管理员主体仍受用户可见范围限制。\n",
         "operationId": "listRoleApplications",
         "security": [
           {
@@ -5145,7 +5265,7 @@
           "管理后台"
         ],
         "summary": "审核角色申请",
-        "description": "审核待处理的科研用户角色申请。通过后移除申请用户的普通用户角色并加入科研用户角色，同时保留其他自定义角色；拒绝后继续保留普通用户角色。\n申请只能审核一次，审核人不能审核自己的申请。需要 `core.manage_auth`。\n",
+        "description": "仅超级管理员可审核待处理的科研用户角色申请。通过后移除申请用户的普通用户角色并加入科研用户角色，同时保留其他自定义角色；拒绝后继续保留普通用户角色。\n申请只能审核一次，审核人不能审核自己的申请。需要 `core.manage_auth`。\n",
         "operationId": "reviewRoleApplication",
         "security": [
           {
@@ -18769,11 +18889,17 @@
                   "canAgent": true,
                   "canManage": false,
                   "workerOnline": true,
+                  "thinkingEnabled": true,
+                  "internetEnabled": false,
+                  "allowAttachments": true,
                   "models": [
                     {
                       "alias": "mock",
                       "name": "本地开发模拟模型",
                       "allowAgent": true,
+                      "contextWindowTokens": 32768,
+                      "supportsThinking": true,
+                      "supportsVision": true,
                       "status": "online",
                       "checkedAt": "2026-09-20T12:00:00Z"
                     }
@@ -19640,6 +19766,128 @@
         }
       }
     },
+    "/api/agent/attachments/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "uploadAgentAttachment",
+        "summary": "上传智能体分析附件",
+        "description": "上传当前用户可用于智能体分析的文档或图片。服务端按当前项目、文件类型和大小限制保存并提取安全元信息；附件在提交任务时通过 attachmentIds 引用。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "description": "项目 ID",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "待分析的文档或图片",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "description": "智能体附件",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "PDF、DOCX、TXT、Markdown、CSV 或常见图片文件"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "附件已上传并完成基础识别",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAttachment"
+                },
+                "example": {
+                  "id": 1,
+                  "fileName": "sample.png",
+                  "mediaType": "image/png",
+                  "sizeBytes": 2048,
+                  "kind": "image",
+                  "previewUrl": "",
+                  "extractedText": "",
+                  "createdAt": "2026-09-21T10:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "文件格式、大小或内容无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "无权使用智能体或当前项目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "文件超过智能体附件大小限制",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "附件识别服务暂不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agent/runs/{runId}/": {
       "get": {
         "tags": [
@@ -20012,6 +20260,848 @@
             }
           }
         ]
+      }
+    },
+    "/api/agent/runs/{runId}/compute-tasks/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "getAgentComputeTasks",
+        "summary": "读取智能体关联计算的实时状态",
+        "description": "读取智能体关联计算的实时状态；重新核对当前项目、本人记录及实际计算权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "本人智能体运行 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentComputeTaskList"
+                },
+                "example": {
+                  "items": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/confirm/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "confirmAgentWorkflow",
+        "summary": "确认当前预览计划并执行",
+        "description": "确认当前预览计划并执行；重新核对当前项目、本人记录及实际计算权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "工作流 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflow"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "已审核计划的内容哈希",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "确认执行的计划",
+                "properties": {
+                  "planHash": {
+                    "type": "string",
+                    "description": "预览返回的计划哈希",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "planHash"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/entries/": {
+      "get": {
+        "tags": [
+          "知识库"
+        ],
+        "operationId": "listKnowledgeEntries",
+        "summary": "检索可见知识条目",
+        "description": "检索可见知识条目。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "关键词、别名、条件检索",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "领域分类",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "起始位置，默认0",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "每页数量，默认100，最多200",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "manage",
+            "in": "query",
+            "description": "true时包含本人当前项目草稿与下架项，须维护权限",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeEntryList"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "title": "霞石与石英：限定平衡体系中的组合复核",
+                      "category": "矿物平衡",
+                      "subject": "霞石",
+                      "predicate": "在限定平衡体系中与其反应",
+                      "object": "石英",
+                      "statement": "在适用的平衡火成岩体系中，霞石与石英反应形成钠长石：NaAlSiO4 + 2 SiO2 → NaAlSi3O8。同一样本中记录到二者时，应先判断它们是否属于同一成因阶段和同一平衡域。",
+                      "explanation": "该知识用于复核矿物组合。只有明确达到平衡且体系与规则匹配时才提示组合冲突；提示不修改原始观测，也不能替代薄片和成分鉴定。",
+                      "conditions": [
+                        "两种矿物属于同一成因阶段和同一平衡域",
+                        "矿物鉴定可信，成分和温压条件适合该体系",
+                        "自动校核要求 equilibrium 为 true 且 system 为 silica_undersaturated_equilibrium_igneous"
+                      ],
+                      "exceptions": [
+                        "混合样本、不同岩屑、捕虏晶和后期裂隙充填不直接套用",
+                        "反应未完成或非平衡组合需结合岩相证据解释"
+                      ],
+                      "aliases": [
+                        "nepheline",
+                        "quartz",
+                        "霞石石英共生",
+                        "钠长石",
+                        "albite"
+                      ],
+                      "sources": [
+                        {
+                          "title": "Perkins 等：Mineralogy，6.4.4 Feldspathoids",
+                          "url": "https://geo.libretexts.org/Bookshelves/Geology/Mineralogy_(Perkins_et_al.)/06%3A_Igneous_Rocks_and_Silicate_Minerals/6.04%3A_Silicate_Minerals/6.4.04%3A_Feldspathoids",
+                          "locator": "图 6.58–6.61 后正文与似长石反应式",
+                          "excerpt": "nepheline + 2 quartz = albite"
+                        }
+                      ],
+                      "status": "published",
+                      "ruleKind": "mineral_equilibrium",
+                      "ruleConfig": {
+                        "minerals": [
+                          "霞石",
+                          "石英"
+                        ],
+                        "system": "silica_undersaturated_equilibrium_igneous"
+                      },
+                      "id": 1,
+                      "projectTagId": 1,
+                      "revision": 1,
+                      "updatedAt": "2026-09-29T08:00:00Z"
+                    }
+                  ],
+                  "total": 1,
+                  "categories": [
+                    "矿物平衡"
+                  ],
+                  "canEdit": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "知识库"
+        ],
+        "operationId": "createKnowledgeEntry",
+        "summary": "创建当前项目知识条目",
+        "description": "创建当前项目知识条目。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "格式化输入",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeEntryInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/entries/{entryId}/": {
+      "get": {
+        "tags": [
+          "知识库"
+        ],
+        "operationId": "getKnowledgeEntry",
+        "summary": "读取知识条目与来源",
+        "description": "读取知识条目与来源。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "entryId",
+            "in": "path",
+            "required": true,
+            "description": "知识条目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeEntry"
+                },
+                "example": {
+                  "title": "霞石与石英：限定平衡体系中的组合复核",
+                  "category": "矿物平衡",
+                  "subject": "霞石",
+                  "predicate": "在限定平衡体系中与其反应",
+                  "object": "石英",
+                  "statement": "在适用的平衡火成岩体系中，霞石与石英反应形成钠长石：NaAlSiO4 + 2 SiO2 → NaAlSi3O8。同一样本中记录到二者时，应先判断它们是否属于同一成因阶段和同一平衡域。",
+                  "explanation": "该知识用于复核矿物组合。只有明确达到平衡且体系与规则匹配时才提示组合冲突；提示不修改原始观测，也不能替代薄片和成分鉴定。",
+                  "conditions": [
+                    "两种矿物属于同一成因阶段和同一平衡域",
+                    "矿物鉴定可信，成分和温压条件适合该体系",
+                    "自动校核要求 equilibrium 为 true 且 system 为 silica_undersaturated_equilibrium_igneous"
+                  ],
+                  "exceptions": [
+                    "混合样本、不同岩屑、捕虏晶和后期裂隙充填不直接套用",
+                    "反应未完成或非平衡组合需结合岩相证据解释"
+                  ],
+                  "aliases": [
+                    "nepheline",
+                    "quartz",
+                    "霞石石英共生",
+                    "钠长石",
+                    "albite"
+                  ],
+                  "sources": [
+                    {
+                      "title": "Perkins 等：Mineralogy，6.4.4 Feldspathoids",
+                      "url": "https://geo.libretexts.org/Bookshelves/Geology/Mineralogy_(Perkins_et_al.)/06%3A_Igneous_Rocks_and_Silicate_Minerals/6.04%3A_Silicate_Minerals/6.4.04%3A_Feldspathoids",
+                      "locator": "图 6.58–6.61 后正文与似长石反应式",
+                      "excerpt": "nepheline + 2 quartz = albite"
+                    }
+                  ],
+                  "status": "published",
+                  "ruleKind": "mineral_equilibrium",
+                  "ruleConfig": {
+                    "minerals": [
+                      "霞石",
+                      "石英"
+                    ],
+                    "system": "silica_undersaturated_equilibrium_igneous"
+                  },
+                  "id": 1,
+                  "projectTagId": 1,
+                  "revision": 1,
+                  "updatedAt": "2026-09-29T08:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "知识库"
+        ],
+        "operationId": "updateKnowledgeEntry",
+        "summary": "更新知识条目并递增版本",
+        "description": "更新知识条目并递增版本。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "entryId",
+            "in": "path",
+            "required": true,
+            "description": "知识条目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "格式化输入",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeEntryInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/knowledge/check/": {
+      "post": {
+        "tags": [
+          "知识库"
+        ],
+        "operationId": "checkKnowledgeConstraints",
+        "summary": "按适用条件核查显式观测事实",
+        "description": "按适用条件核查显式观测事实。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeCheckResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "格式化输入",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeCheckInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "listAgentWorkflows",
+        "summary": "恢复本人科研编排记录",
+        "description": "返回当前项目内本人最近三十个工作流；重新检查账号、项目和智能体访问权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "工作流列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowList"
+                },
+                "example": {
+                  "items": []
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "createAgentWorkflow",
+        "summary": "创建科研工作流",
+        "description": "创建项目内科研编排预览，校验授权输入、固定算法版本与参数后进入待确认状态；executeOperators=true 的直接执行请求返回400（策略禁止时403）。通过 confirm 接口确认 planHash 后执行并按 importResults 跟踪入库。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "科研工作流目标与受控输入",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentWorkflowInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "已进入工作流队列",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflow"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "getAgentWorkflow",
+        "summary": "查询科研工作流",
+        "description": "查询当前用户在当前项目内的工作流、步骤、证据和结果引用。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "工作流 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflow"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/cancel/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "cancelAgentWorkflow",
+        "summary": "取消科研工作流",
+        "description": "请求在安全边界停止当前用户的科研工作流。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "工作流 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflow"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
       }
     },
     "/api/agent/admin/": {
@@ -20493,10 +21583,232 @@
         ],
         "additionalProperties": false
       },
+      "AgentBudgetProfileId": {
+        "type": "string",
+        "description": "普通分析、长材料、长推理",
+        "enum": [
+          "normal",
+          "materials",
+          "reasoning"
+        ]
+      },
+      "AgentBudgetPreset": {
+        "type": "object",
+        "description": "每种任务的默认预算",
+        "additionalProperties": false,
+        "properties": {
+          "maxOutputTokens": {
+            "type": "integer",
+            "description": "思考与正文生成额度",
+            "minimum": 128,
+            "maximum": 261632
+          },
+          "maxRunSeconds": {
+            "type": "integer",
+            "description": "任务时限，秒",
+            "minimum": 60,
+            "maximum": 7200
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "description": "深度模式下的思考强度",
+            "enum": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          }
+        },
+        "required": [
+          "maxOutputTokens",
+          "maxRunSeconds",
+          "reasoningEffort"
+        ]
+      },
+      "AgentBudgetLimit": {
+        "type": "object",
+        "description": "当前角色允许范围",
+        "additionalProperties": false,
+        "properties": {
+          "contextWindowTokens": {
+            "type": "integer",
+            "description": "角色允许的总窗口，实际仍受模型服务约束",
+            "minimum": 1024,
+            "maximum": 262144
+          },
+          "maxOutputTokens": {
+            "type": "integer",
+            "description": "思考与正文生成额度",
+            "minimum": 128,
+            "maximum": 261632
+          },
+          "maxRunSeconds": {
+            "type": "integer",
+            "description": "任务时限，秒",
+            "minimum": 60,
+            "maximum": 7200
+          }
+        },
+        "required": [
+          "contextWindowTokens",
+          "maxOutputTokens",
+          "maxRunSeconds"
+        ]
+      },
+      "AgentBudgetChoice": {
+        "type": "object",
+        "description": "受用户额度限制后的默认值；提交时核对所选模型",
+        "additionalProperties": false,
+        "properties": {
+          "budgetProfile": {
+            "$ref": "#/components/schemas/AgentBudgetProfileId"
+          },
+          "tier": {
+            "type": "string",
+            "description": "服务器判定的额度级别",
+            "enum": [
+              "standard",
+              "superadmin"
+            ]
+          },
+          "contextWindowTokens": {
+            "type": "integer",
+            "description": "角色允许的总窗口，实际仍受模型服务约束",
+            "minimum": 1024,
+            "maximum": 262144
+          },
+          "maxOutputTokens": {
+            "type": "integer",
+            "description": "思考与正文生成额度",
+            "minimum": 128,
+            "maximum": 261632
+          },
+          "maxRunSeconds": {
+            "type": "integer",
+            "description": "任务时限，秒",
+            "minimum": 60,
+            "maximum": 7200
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "description": "深度模式下的思考强度",
+            "enum": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          "requestedMaxOutputTokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "显式要求的额度，未设置为null"
+          }
+        },
+        "required": [
+          "budgetProfile",
+          "tier",
+          "contextWindowTokens",
+          "maxOutputTokens",
+          "maxRunSeconds",
+          "reasoningEffort",
+          "requestedMaxOutputTokens"
+        ]
+      },
+      "AgentBudgetOptions": {
+        "type": "object",
+        "description": "当前用户可用方案和额度",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "是否开启任务预算"
+          },
+          "tier": {
+            "type": "string",
+            "description": "服务器判定的额度级别",
+            "enum": [
+              "standard",
+              "superadmin"
+            ]
+          },
+          "defaultProfile": {
+            "$ref": "#/components/schemas/AgentBudgetProfileId"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AgentBudgetLimit"
+          },
+          "profiles": {
+            "type": "array",
+            "description": "三种任务的默认值",
+            "items": {
+              "$ref": "#/components/schemas/AgentBudgetChoice"
+            }
+          },
+          "maxPromptCharacters": {
+            "type": "integer",
+            "description": "文字长度保护；仍需对完整输入分词校验"
+          }
+        },
+        "required": [
+          "enabled",
+          "tier",
+          "defaultProfile",
+          "limits",
+          "profiles",
+          "maxPromptCharacters"
+        ]
+      },
       "AgentPolicy": {
         "type": "object",
-        "description": "超级管理员控制策略；首期无执行或写入能力",
+        "description": "超级管理员控制策略；工具执行仍受项目与功能权限约束",
         "properties": {
+          "taskBudgetsEnabled": {
+            "type": "boolean",
+            "description": "启用按任务与角色分配预算，关闭时使用旧版全局配置"
+          },
+          "defaultBudgetProfile": {
+            "$ref": "#/components/schemas/AgentBudgetProfileId"
+          },
+          "budgetProfiles": {
+            "type": "object",
+            "description": "三种任务的默认值",
+            "additionalProperties": false,
+            "properties": {
+              "normal": {
+                "$ref": "#/components/schemas/AgentBudgetPreset"
+              },
+              "materials": {
+                "$ref": "#/components/schemas/AgentBudgetPreset"
+              },
+              "reasoning": {
+                "$ref": "#/components/schemas/AgentBudgetPreset"
+              }
+            },
+            "required": [
+              "normal",
+              "materials",
+              "reasoning"
+            ]
+          },
+          "budgetLimits": {
+            "type": "object",
+            "description": "服务端鉴权决定额度",
+            "additionalProperties": false,
+            "properties": {
+              "standard": {
+                "$ref": "#/components/schemas/AgentBudgetLimit"
+              },
+              "superadmin": {
+                "$ref": "#/components/schemas/AgentBudgetLimit"
+              }
+            },
+            "required": [
+              "standard",
+              "superadmin"
+            ]
+          },
           "enabled": {
             "type": "boolean",
             "description": "模块总开关"
@@ -20508,6 +21820,42 @@
           "agentEnabled": {
             "type": "boolean",
             "description": "数据智能体开关"
+          },
+          "thinkingEnabled": {
+            "type": "boolean",
+            "description": "允许 Qwen 深度思考"
+          },
+          "workflowEnabled": {
+            "type": "boolean",
+            "description": "科研工作流计划与恢复开关"
+          },
+          "operatorEnabled": {
+            "type": "boolean",
+            "description": "允许智能体实际提交已登记算子；仍受算法和计算权限约束"
+          },
+          "systemInfoEnabled": {
+            "type": "boolean",
+            "description": "允许智能体读取平台运行参数和资源摘要"
+          },
+          "internetEnabled": {
+            "type": "boolean",
+            "description": "允许用户在提交任务时请求受控互联网检索"
+          },
+          "allowAttachments": {
+            "type": "boolean",
+            "description": "允许上传文档和图片供多模态模型分析"
+          },
+          "maxAttachmentBytes": {
+            "type": "integer",
+            "description": "单个智能体附件大小上限（字节）",
+            "minimum": 1024,
+            "maximum": 200000000
+          },
+          "maxAttachments": {
+            "type": "integer",
+            "description": "单次任务最多引用附件数",
+            "minimum": 1,
+            "maximum": 20
           },
           "chatAudience": {
             "$ref": "#/components/schemas/AgentAudience"
@@ -20529,23 +21877,80 @@
             "minimum": 1,
             "maximum": 1000
           },
+          "maxContextBytes": {
+            "type": "integer",
+            "description": "输入文本大小保护上限（UTF-8字节）；实际窗口另外通过模型分词器核验",
+            "minimum": 8000,
+            "maximum": 500000
+          },
           "maxOutputTokens": {
             "type": "integer",
-            "description": "回答 token 上限",
+            "description": "单次模型调用的思考与正文合计生成 token 上限",
             "minimum": 128,
-            "maximum": 4096
+            "maximum": 32768
+          },
+          "maxContextTokens": {
+            "type": "integer",
+            "description": "输入 token 预算；同时受实际模型窗口减去生成预留和256 token安全余量限制",
+            "minimum": 1024,
+            "maximum": 262144
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "description": "Qwen深度思考强度，通过chat_template_kwargs传至推理服务",
+            "enum": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          "temperature": {
+            "type": "number",
+            "description": "采样温度",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "topP": {
+            "type": "number",
+            "description": "核采样阈值",
+            "minimum": 0,
+            "maximum": 1
           },
           "maxSteps": {
             "type": "integer",
             "description": "最多工具动作",
             "minimum": 1,
-            "maximum": 8
+            "maximum": 64
           },
           "maxResources": {
             "type": "integer",
             "description": "最多详细读取资源数",
             "minimum": 1,
             "maximum": 3
+          },
+          "maxIterations": {
+            "type": "integer",
+            "description": "科研工作流最大迭代轮次",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "maxOperatorSteps": {
+            "type": "integer",
+            "description": "科研工作流最大算子步骤数",
+            "minimum": 1,
+            "maximum": 64
+          },
+          "maxProtocolRetries": {
+            "type": "integer",
+            "description": "协议纠错次数",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "maxRunSeconds": {
+            "type": "integer",
+            "description": "单次运行最长秒数",
+            "minimum": 60,
+            "maximum": 1800
           },
           "allowDocuments": {
             "type": "boolean",
@@ -20587,17 +21992,38 @@
           }
         },
         "required": [
+          "taskBudgetsEnabled",
+          "defaultBudgetProfile",
+          "budgetProfiles",
+          "budgetLimits",
           "enabled",
           "chatEnabled",
           "agentEnabled",
+          "thinkingEnabled",
+          "workflowEnabled",
+          "operatorEnabled",
+          "systemInfoEnabled",
+          "internetEnabled",
+          "allowAttachments",
+          "maxAttachmentBytes",
+          "maxAttachments",
           "chatAudience",
           "agentAudience",
           "defaultChatModel",
           "defaultAgentModel",
           "dailyRuns",
+          "maxContextBytes",
           "maxOutputTokens",
+          "maxContextTokens",
+          "reasoningEffort",
+          "temperature",
+          "topP",
           "maxSteps",
           "maxResources",
+          "maxIterations",
+          "maxOperatorSteps",
+          "maxProtocolRetries",
+          "maxRunSeconds",
           "allowDocuments",
           "allowCompare",
           "dataTypes",
@@ -20622,6 +22048,19 @@
             "type": "boolean",
             "description": "支持并获准智能体协议"
           },
+          "contextWindowTokens": {
+            "type": "integer",
+            "description": "模型上下文窗口 token 数",
+            "minimum": 1
+          },
+          "supportsThinking": {
+            "type": "boolean",
+            "description": "是否支持 Qwen 深度思考"
+          },
+          "supportsVision": {
+            "type": "boolean",
+            "description": "是否通过实际服务探测支持图片输入"
+          },
           "status": {
             "type": "string",
             "description": "最近健康状态",
@@ -20640,6 +22079,9 @@
           "alias",
           "name",
           "allowAgent",
+          "contextWindowTokens",
+          "supportsThinking",
+          "supportsVision",
           "status",
           "checkedAt"
         ],
@@ -20649,6 +22091,18 @@
         "type": "object",
         "description": "当前用户智能体入口和能力",
         "properties": {
+          "defaultReasoningEffort": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "xhigh"
+            ],
+            "description": "后台默认思考强度；开启任务预算时以当前方案默认值为准"
+          },
+          "budgets": {
+            "$ref": "#/components/schemas/AgentBudgetOptions"
+          },
           "canChat": {
             "type": "boolean",
             "description": "允许聊天"
@@ -20660,6 +22114,18 @@
           "canManage": {
             "type": "boolean",
             "description": "超级管理员"
+          },
+          "thinkingEnabled": {
+            "type": "boolean",
+            "description": "是否允许深度思考"
+          },
+          "internetEnabled": {
+            "type": "boolean",
+            "description": "当前用户可请求受控互联网检索"
+          },
+          "allowAttachments": {
+            "type": "boolean",
+            "description": "当前用户可上传附件"
           },
           "workerOnline": {
             "type": "boolean",
@@ -20693,6 +22159,8 @@
           "canChat",
           "canAgent",
           "canManage",
+          "internetEnabled",
+          "allowAttachments",
           "workerOnline",
           "models",
           "defaultChatModel",
@@ -20789,10 +22257,89 @@
         ],
         "additionalProperties": false
       },
+      "AgentGenerationParameters": {
+        "type": "object",
+        "description": "最近一次模型调用实际采用的参数；旧运行为空对象，生成用量汇总本轮各次调用",
+        "additionalProperties": false,
+        "properties": {
+          "serviceContextWindowTokens": {
+            "type": "integer",
+            "description": "模型服务报告的真实总窗口"
+          },
+          "budgetProfile": {
+            "type": "string",
+            "description": "实际预算方案，旧任务为空"
+          },
+          "maxRunSeconds": {
+            "type": "integer",
+            "description": "任务时限，秒",
+            "minimum": 60,
+            "maximum": 7200
+          },
+          "lastGeneratedTokens": {
+            "type": "integer",
+            "description": "最近一次模型调用实际生成token，含思考和正文"
+          },
+          "modelCalls": {
+            "type": "integer",
+            "description": "已收到用量回报的模型调用次数"
+          },
+          "contextWindowTokens": {
+            "type": "integer",
+            "description": "本次可用窗口，取服务窗口与用户额度的较小值"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "description": "完整请求经模型分词器计算的输入token"
+          },
+          "maxContextTokens": {
+            "type": "integer",
+            "description": "本轮配置的输入token预算"
+          },
+          "maxOutputTokens": {
+            "type": "integer",
+            "description": "本轮每次调用的生成上限"
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "description": "本轮思考强度，仅深度模式生效",
+            "enum": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          "temperature": {
+            "type": "number",
+            "description": "本轮采样温度"
+          },
+          "topP": {
+            "type": "number",
+            "description": "本轮核采样阈值"
+          },
+          "generatedTokens": {
+            "type": "integer",
+            "description": "模型回报的本轮生成token总数，含思考与正文"
+          }
+        }
+      },
       "AgentRun": {
         "type": "object",
         "description": "持久运行记录；引用失权时返回 403，不返回旧内容",
         "properties": {
+          "budgetProfile": {
+            "type": "string",
+            "description": "实际方案，旧任务为空",
+            "enum": [
+              "",
+              "normal",
+              "materials",
+              "reasoning"
+            ]
+          },
+          "generationParameters": {
+            "$ref": "#/components/schemas/AgentGenerationParameters"
+          },
           "id": {
             "type": "integer",
             "description": "运行 ID"
@@ -20804,6 +22351,27 @@
           "model": {
             "type": "string",
             "description": "实际模型别名"
+          },
+          "thinkingMode": {
+            "type": "string",
+            "description": "思考模式",
+            "enum": [
+              "fast",
+              "deep"
+            ]
+          },
+          "thinkingText": {
+            "type": "string",
+            "description": "已持久化的模型思考摘要或思考片段；仅在模型真实返回时提供"
+          },
+          "thinkingDurationMs": {
+            "type": "integer",
+            "description": "深度思考耗时（毫秒）",
+            "minimum": 0
+          },
+          "internetEnabled": {
+            "type": "boolean",
+            "description": "本轮是否请求并实际使用受控互联网检索"
           },
           "status": {
             "type": "string",
@@ -20836,6 +22404,13 @@
               "$ref": "#/components/schemas/AgentEvidence"
             }
           },
+          "attachments": {
+            "type": "array",
+            "description": "本轮使用的用户附件",
+            "items": {
+              "$ref": "#/components/schemas/AgentAttachment"
+            }
+          },
           "createdAt": {
             "type": "string",
             "description": "创建时间"
@@ -20858,6 +22433,7 @@
           "answer",
           "detail",
           "evidence",
+          "attachments",
           "createdAt",
           "updatedAt",
           "contextTruncated"
@@ -20866,7 +22442,7 @@
       },
       "AgentEvent": {
         "type": "object",
-        "description": "操作状态事件，不含模型内部思维链",
+        "description": "操作状态事件；thinking 仅来自模型返回的思考片段",
         "properties": {
           "id": {
             "type": "integer",
@@ -20878,9 +22454,12 @@
             "enum": [
               "status",
               "text",
+              "thinking",
               "tool_started",
               "tool_completed",
-              "context"
+              "context",
+              "parameters",
+              "usage"
             ]
           },
           "text": {
@@ -20992,6 +22571,24 @@
         "type": "object",
         "description": "提交任务",
         "properties": {
+          "reasoningEffort": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "xhigh"
+            ],
+            "description": "深度思考时用户选择的强度，优先于任务预算和后台默认值；快速模式不可传入"
+          },
+          "budgetProfile": {
+            "$ref": "#/components/schemas/AgentBudgetProfileId"
+          },
+          "maxOutputTokens": {
+            "type": "integer",
+            "description": "思考与正文生成额度",
+            "minimum": 128,
+            "maximum": 261632
+          },
           "model": {
             "type": "string",
             "description": "可见模型别名"
@@ -21000,13 +22597,21 @@
             "type": "string",
             "description": "问题",
             "minLength": 1,
-            "maxLength": 12000
+            "maxLength": 1048576
           },
           "idempotencyKey": {
             "type": "string",
             "description": "每次用户操作唯一键，网络重试复用",
             "minLength": 8,
             "maxLength": 80
+          },
+          "thinkingMode": {
+            "type": "string",
+            "description": "思考模式",
+            "enum": [
+              "fast",
+              "deep"
+            ]
           },
           "resourceIds": {
             "type": "array",
@@ -21016,12 +22621,81 @@
               "description": "对象 ID",
               "minimum": 1
             }
+          },
+          "attachmentIds": {
+            "type": "array",
+            "description": "当前用户已上传且授权的附件 ID",
+            "items": {
+              "type": "integer",
+              "description": "附件 ID",
+              "minimum": 1
+            },
+            "maxItems": 10
+          },
+          "internetEnabled": {
+            "type": "boolean",
+            "description": "是否允许本轮使用受控互联网检索；服务端仍按策略和权限复核"
           }
         },
         "required": [
           "model",
           "prompt",
           "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "AgentAttachment": {
+        "type": "object",
+        "description": "当前用户上传并可供智能体分析的文档或图片",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "附件 ID",
+            "minimum": 1
+          },
+          "fileName": {
+            "type": "string",
+            "description": "原始文件名"
+          },
+          "mediaType": {
+            "type": "string",
+            "description": "检测到的 MIME 类型"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "description": "文件大小（字节）",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "description": "文档或图片",
+            "enum": [
+              "document",
+              "image"
+            ]
+          },
+          "previewUrl": {
+            "type": "string",
+            "description": "可选的受控预览地址"
+          },
+          "extractedText": {
+            "type": "string",
+            "description": "文档提取出的可分析文本摘要；图片通常为空"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "上传时间"
+          }
+        },
+        "required": [
+          "id",
+          "fileName",
+          "mediaType",
+          "sizeBytes",
+          "kind",
+          "previewUrl",
+          "extractedText",
+          "createdAt"
         ],
         "additionalProperties": false
       },
@@ -21051,6 +22725,812 @@
           "name",
           "dataType",
           "description"
+        ],
+        "additionalProperties": false
+      },
+      "AgentComputeTaskList": {
+        "type": "object",
+        "description": "关联计算和入库跟踪",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "当前运行提交或关联的任务",
+            "items": {
+              "$ref": "#/components/schemas/AgentComputeTaskTracking"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "AgentComputeTaskTracking": {
+        "type": "object",
+        "description": "实时计算状态和入库意图",
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/ComputeTask"
+          },
+          "autoImport": {
+            "type": "boolean",
+            "description": "完成后是否自动申请入库"
+          },
+          "trackingStatus": {
+            "type": "string",
+            "description": "跟踪状态"
+          },
+          "detail": {
+            "type": "string",
+            "description": "状态说明"
+          }
+        },
+        "required": [
+          "task",
+          "autoImport",
+          "trackingStatus",
+          "detail"
+        ],
+        "additionalProperties": false
+      },
+      "AgentWorkflowList": {
+        "type": "object",
+        "description": "本人当前项目工作流",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "最近三十个工作流",
+            "items": {
+              "$ref": "#/components/schemas/AgentWorkflow"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "KnowledgeSource": {
+        "type": "object",
+        "description": "可核查的公开或项目内知识来源",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "来源标题",
+            "maxLength": 300
+          },
+          "url": {
+            "type": "string",
+            "description": "公开来源 HTTP(S) 链接或空字符串",
+            "maxLength": 1000
+          },
+          "locator": {
+            "type": "string",
+            "description": "章节、页码或段落定位",
+            "maxLength": 500
+          },
+          "excerpt": {
+            "type": "string",
+            "description": "与条目对应的短证据摘录",
+            "maxLength": 1200
+          }
+        },
+        "required": [
+          "title",
+          "url",
+          "locator",
+          "excerpt"
+        ],
+        "additionalProperties": false
+      },
+      "KnowledgeEntry": {
+        "type": "object",
+        "description": "格式化、有来源的地学知识",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "条目标题",
+            "minLength": 1,
+            "maxLength": 180
+          },
+          "category": {
+            "type": "string",
+            "description": "领域分类",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "subject": {
+            "type": "string",
+            "description": "关系主体",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "predicate": {
+            "type": "string",
+            "description": "带语义的关系名称",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "object": {
+            "type": "string",
+            "description": "关系客体",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "statement": {
+            "type": "string",
+            "description": "知识陈述",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "explanation": {
+            "type": "string",
+            "description": "解释与使用方法",
+            "maxLength": 8000
+          },
+          "conditions": {
+            "type": "array",
+            "description": "适用条件",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exceptions": {
+            "type": "array",
+            "description": "例外和核验条件",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aliases": {
+            "type": "array",
+            "description": "别名与检索关键词",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "description": "支撑知识的来源",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeSource"
+            },
+            "maxItems": 20
+          },
+          "status": {
+            "type": "string",
+            "description": "发布状态",
+            "enum": [
+              "draft",
+              "published",
+              "retired"
+            ]
+          },
+          "ruleKind": {
+            "type": "string",
+            "description": "程序化核查类型",
+            "enum": [
+              "none",
+              "mineral_equilibrium",
+              "numeric_range",
+              "required_fields"
+            ]
+          },
+          "ruleConfig": {
+            "type": "object",
+            "description": "核查器参数；仅允许内置规则的结构化配置",
+            "additionalProperties": true
+          },
+          "id": {
+            "type": "integer",
+            "description": "条目 ID"
+          },
+          "projectTagId": {
+            "type": "integer",
+            "description": "所属项目；1 为公共基础资料"
+          },
+          "revision": {
+            "type": "integer",
+            "description": "知识版本",
+            "minimum": 1
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "更新时间",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "title",
+          "category",
+          "subject",
+          "predicate",
+          "object",
+          "statement",
+          "explanation",
+          "conditions",
+          "exceptions",
+          "aliases",
+          "sources",
+          "status",
+          "ruleKind",
+          "ruleConfig",
+          "id",
+          "projectTagId",
+          "revision",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "KnowledgeEntryInput": {
+        "type": "object",
+        "description": "编辑当前项目知识；发布必须带有效来源",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "条目标题",
+            "minLength": 1,
+            "maxLength": 180
+          },
+          "category": {
+            "type": "string",
+            "description": "领域分类",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "subject": {
+            "type": "string",
+            "description": "关系主体",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "predicate": {
+            "type": "string",
+            "description": "带语义的关系名称",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "object": {
+            "type": "string",
+            "description": "关系客体",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "statement": {
+            "type": "string",
+            "description": "知识陈述",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "explanation": {
+            "type": "string",
+            "description": "解释与使用方法",
+            "maxLength": 8000
+          },
+          "conditions": {
+            "type": "array",
+            "description": "适用条件",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exceptions": {
+            "type": "array",
+            "description": "例外和核验条件",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aliases": {
+            "type": "array",
+            "description": "别名与检索关键词",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sources": {
+            "type": "array",
+            "description": "支撑知识的来源",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeSource"
+            },
+            "maxItems": 20
+          },
+          "status": {
+            "type": "string",
+            "description": "发布状态",
+            "enum": [
+              "draft",
+              "published",
+              "retired"
+            ]
+          },
+          "ruleKind": {
+            "type": "string",
+            "description": "程序化核查类型",
+            "enum": [
+              "none",
+              "mineral_equilibrium",
+              "numeric_range",
+              "required_fields"
+            ]
+          },
+          "ruleConfig": {
+            "type": "object",
+            "description": "核查器参数；仅允许内置规则的结构化配置",
+            "additionalProperties": true
+          },
+          "revision": {
+            "type": "integer",
+            "description": "修改需提供上次读取版本；创建省略",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "title",
+          "category",
+          "subject",
+          "predicate",
+          "object",
+          "statement",
+          "explanation",
+          "conditions",
+          "exceptions",
+          "aliases",
+          "sources",
+          "status",
+          "ruleKind",
+          "ruleConfig"
+        ],
+        "additionalProperties": false
+      },
+      "KnowledgeEntryList": {
+        "type": "object",
+        "description": "当前项目与公共已发布基础知识",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "匹配的知识条目",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeEntry"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "匹配总数"
+          },
+          "categories": {
+            "type": "array",
+            "description": "可见领域分类",
+            "items": {
+              "type": "string"
+            }
+          },
+          "canEdit": {
+            "type": "boolean",
+            "description": "是否具有知识维护权限"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "categories",
+          "canEdit"
+        ],
+        "additionalProperties": false
+      },
+      "KnowledgeFinding": {
+        "type": "object",
+        "description": "规则核查结果",
+        "properties": {
+          "entryId": {
+            "type": "integer",
+            "description": "规则条目 ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "规则标题"
+          },
+          "status": {
+            "type": "string",
+            "description": "结果状态",
+            "enum": [
+              "conflict",
+              "pass",
+              "needs_context"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "判定理由或缺少的条件"
+          },
+          "revision": {
+            "type": "integer",
+            "description": "所用规则版本"
+          },
+          "sources": {
+            "type": "array",
+            "description": "规则证据",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeSource"
+            }
+          }
+        },
+        "required": [
+          "entryId",
+          "title",
+          "status",
+          "detail",
+          "revision",
+          "sources"
+        ],
+        "additionalProperties": false
+      },
+      "KnowledgeCheckInput": {
+        "type": "object",
+        "description": "对显式事实进行条件化核查",
+        "properties": {
+          "facts": {
+            "type": "object",
+            "description": "观测事实：minerals/equilibrium/system/values/fields 等；未知条件不自动补全",
+            "additionalProperties": true
+          },
+          "entryIds": {
+            "type": "array",
+            "description": "可选已发布规则 ID；省略则使用可见规则",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "facts"
+        ],
+        "additionalProperties": false
+      },
+      "KnowledgeCheckResult": {
+        "type": "object",
+        "description": "核查结果和覆盖条数",
+        "properties": {
+          "findings": {
+            "type": "array",
+            "description": "冲突、通过或缺少上下文",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeFinding"
+            }
+          },
+          "checked": {
+            "type": "integer",
+            "description": "已检查条目数"
+          }
+        },
+        "required": [
+          "findings",
+          "checked"
+        ],
+        "additionalProperties": false
+      },
+      "AgentWorkflowStep": {
+        "type": "object",
+        "description": "科研工作流的可审计步骤",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "步骤 ID"
+          },
+          "sequence": {
+            "type": "integer",
+            "description": "步骤序号"
+          },
+          "kind": {
+            "type": "string",
+            "description": "节点类型"
+          },
+          "status": {
+            "type": "string",
+            "description": "步骤状态"
+          },
+          "message": {
+            "type": "string",
+            "description": "用户可见简要状态"
+          },
+          "action": {
+            "type": "object",
+            "description": "已校验的结构化动作",
+            "additionalProperties": true
+          },
+          "inputRefs": {
+            "type": "object",
+            "description": "输入引用",
+            "additionalProperties": true
+          },
+          "outputRefs": {
+            "type": "object",
+            "description": "输出引用",
+            "additionalProperties": true
+          },
+          "metrics": {
+            "type": "object",
+            "description": "质量指标摘要",
+            "additionalProperties": true
+          },
+          "computeTaskId": {
+            "type": "string",
+            "description": "关联的计算任务 UUID"
+          },
+          "errorCode": {
+            "type": "string",
+            "description": "结构化错误码"
+          },
+          "startedAt": {
+            "type": "string",
+            "description": "开始时间"
+          },
+          "finishedAt": {
+            "type": "string",
+            "description": "完成时间"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "kind",
+          "status",
+          "message",
+          "action",
+          "inputRefs",
+          "outputRefs",
+          "metrics",
+          "computeTaskId",
+          "errorCode",
+          "startedAt",
+          "finishedAt"
+        ],
+        "additionalProperties": false
+      },
+      "AgentWorkflow": {
+        "type": "object",
+        "description": "可恢复的项目科研工作流",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "工作流 UUID"
+          },
+          "projectId": {
+            "type": "integer",
+            "description": "所属项目"
+          },
+          "workflowType": {
+            "type": "string",
+            "description": "工作流类型"
+          },
+          "goal": {
+            "type": "string",
+            "description": "用户目标"
+          },
+          "model": {
+            "type": "string",
+            "description": "本地模型别名"
+          },
+          "status": {
+            "type": "string",
+            "description": "工作流状态",
+            "enum": [
+              "queued",
+              "running",
+              "waiting_compute",
+              "waiting_approval",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "可读状态"
+          },
+          "currentStep": {
+            "type": "string",
+            "description": "当前节点"
+          },
+          "iteration": {
+            "type": "integer",
+            "description": "当前迭代轮次"
+          },
+          "operatorSteps": {
+            "type": "integer",
+            "description": "已提交算子步骤数"
+          },
+          "maxIterations": {
+            "type": "integer",
+            "description": "最大迭代轮次"
+          },
+          "maxOperatorSteps": {
+            "type": "integer",
+            "description": "最大算子步骤数"
+          },
+          "executeOperators": {
+            "type": "boolean",
+            "description": "是否请求执行算子"
+          },
+          "resourceIds": {
+            "type": "array",
+            "description": "授权输入资源 ID",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "algorithmVersionId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "固定算法版本 ID"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "已校验参数",
+            "additionalProperties": true
+          },
+          "resultIds": {
+            "type": "array",
+            "description": "结果引用 ID",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "description": "证据摘要",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "runtime": {
+            "type": "string",
+            "description": "实际运行时或离线兼容状态"
+          },
+          "steps": {
+            "type": "array",
+            "description": "工作流步骤",
+            "items": {
+              "$ref": "#/components/schemas/AgentWorkflowStep"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "创建时间"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "更新时间"
+          },
+          "plan": {
+            "type": "object",
+            "description": "经预检的输入、算法、参数与知识依据",
+            "additionalProperties": true
+          },
+          "planHash": {
+            "type": "string",
+            "description": "确认计划时校验的内容哈希"
+          },
+          "importResults": {
+            "type": "boolean",
+            "description": "执行完成后自动登记结果"
+          },
+          "resultResourceIds": {
+            "type": "array",
+            "description": "实际完成入库的数据资源 ID",
+            "items": {
+              "type": "integer"
+            }
+          }
+        },
+        "required": [
+          "plan",
+          "planHash",
+          "importResults",
+          "resultResourceIds",
+          "id",
+          "projectId",
+          "workflowType",
+          "goal",
+          "model",
+          "status",
+          "detail",
+          "currentStep",
+          "iteration",
+          "operatorSteps",
+          "maxIterations",
+          "maxOperatorSteps",
+          "executeOperators",
+          "resourceIds",
+          "algorithmVersionId",
+          "parameters",
+          "resultIds",
+          "evidence",
+          "runtime",
+          "steps",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "AgentWorkflowInput": {
+        "type": "object",
+        "description": "创建科研工作流的输入",
+        "properties": {
+          "workflowType": {
+            "type": "string",
+            "description": "工作流类型，默认 hyperspectral_interpretation",
+            "default": "hyperspectral_interpretation",
+            "maxLength": 40
+          },
+          "goal": {
+            "type": "string",
+            "description": "目标，例如识别矿物并按成矿理论迭代",
+            "minLength": 1,
+            "maxLength": 12000
+          },
+          "model": {
+            "type": "string",
+            "description": "已配置的本地模型别名"
+          },
+          "resourceIds": {
+            "type": "array",
+            "description": "可选授权输入；为空时自主发现",
+            "maxItems": 3,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "algorithmVersionId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "可选的已发布智能体算法版本"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "算子参数候选；服务端按 manifest 校验",
+            "additionalProperties": true
+          },
+          "executeOperators": {
+            "type": "boolean",
+            "description": "创建时为 false；实际执行须通过 confirm 接口确认冻结计划",
+            "default": false
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "网络重试复用的幂等键",
+            "minLength": 8,
+            "maxLength": 80
+          },
+          "inputs": {
+            "type": "object",
+            "description": "输入端口到授权资源 ID 的明确绑定",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "importResults": {
+            "type": "boolean",
+            "description": "完成后自动登记计算结果",
+            "default": true
+          }
+        },
+        "required": [
+          "goal",
+          "model",
+          "idempotencyKey"
         ],
         "additionalProperties": false
       },
@@ -22280,6 +24760,82 @@
           "rejected"
         ],
         "description": "角色申请状态"
+      },
+      "AccountAccess": {
+        "type": "object",
+        "required": [
+          "permissions",
+          "agentActions",
+          "researchEligible",
+          "researchAdditionalPermissions",
+          "application"
+        ],
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "description": "本人当前可用功能，不含未授予或关闭项",
+            "items": {
+              "$ref": "#/components/schemas/AdminPermissionItem"
+            }
+          },
+          "agentActions": {
+            "type": "array",
+            "description": "当前智能体策略开放的附加操作",
+            "items": {
+              "type": "string"
+            }
+          },
+          "researchEligible": {
+            "type": "boolean",
+            "description": "是否满足科研用户申请条件"
+          },
+          "researchAdditionalPermissions": {
+            "type": "array",
+            "description": "成为科研用户后新增的功能，单独展示",
+            "items": {
+              "$ref": "#/components/schemas/AdminPermissionItem"
+            }
+          },
+          "application": {
+            "description": "本人最新申请，尚未申请为null",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RoleApplication"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ResearchApplicationRequest": {
+        "type": "object",
+        "required": [
+          "displayName",
+          "department",
+          "reason"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 150,
+            "description": "申请人姓名"
+          },
+          "department": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "单位或部门"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "科研使用需求和申请理由"
+          }
+        }
       },
       "RoleApplication": {
         "type": "object",
@@ -23752,6 +26308,9 @@
           },
           "disks": {
             "$ref": "#/components/schemas/AdminDashboardDiskInfo"
+          },
+          "gpu": {
+            "$ref": "#/components/schemas/AdminDashboardGpuInfo"
           }
         },
         "description": "按当前用户卡片权限返回的服务器监控卡片数据；未授权卡片字段会被省略。"
@@ -23904,6 +26463,87 @@
           "size": {
             "type": "string",
             "description": "硬盘容量文本"
+          }
+        }
+      },
+      "AdminDashboardGpuInfo": {
+        "type": "object",
+        "required": [
+          "count",
+          "devices",
+          "totalMemoryBytes",
+          "usedMemoryBytes",
+          "usagePercent"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "可识别的 GPU 数量，支持单卡和多卡服务器"
+          },
+          "devices": {
+            "type": "array",
+            "description": "每张 GPU 的型号、显存和利用率",
+            "items": {
+              "$ref": "#/components/schemas/AdminDashboardGpuDevice"
+            }
+          },
+          "totalMemoryBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "所有 GPU 显存总容量，单位字节"
+          },
+          "usedMemoryBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "所有 GPU 已用显存，单位字节"
+          },
+          "usagePercent": {
+            "type": "number",
+            "format": "float",
+            "description": "按显存计算的总使用率百分比"
+          }
+        }
+      },
+      "AdminDashboardGpuDevice": {
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "memoryTotalBytes",
+          "memoryUsedBytes",
+          "usagePercent",
+          "temperatureC"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "GPU 设备序号"
+          },
+          "name": {
+            "type": "string",
+            "description": "GPU 型号"
+          },
+          "memoryTotalBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "本卡显存总容量，单位字节"
+          },
+          "memoryUsedBytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "本卡已用显存，单位字节"
+          },
+          "usagePercent": {
+            "type": "number",
+            "format": "float",
+            "description": "本卡 GPU 利用率百分比"
+          },
+          "temperatureC": {
+            "type": "number",
+            "format": "float",
+            "description": "本卡温度，单位摄氏度"
           }
         }
       },
@@ -25978,6 +28618,7 @@
           "itemCount",
           "status",
           "inventoryGroupId",
+          "ownerOnly",
           "accessGroups",
           "canManageAccess",
           "maintainer",
@@ -26114,6 +28755,10 @@
               "null"
             ],
             "description": "存量数据自定义内容组别 ID；为 null 时表示未加入自定义组，资源仍会出现在“全部数据”和对应业务类型系统分组中"
+          },
+          "ownerOnly": {
+            "type": "boolean",
+            "description": "是否仅上传者本人可见；关闭时项目内所有成员可见，超级管理员始终可见"
           },
           "accessGroups": {
             "type": "array",
@@ -26466,6 +29111,10 @@
             "items": {
               "type": "integer"
             }
+          },
+          "ownerOnly": {
+            "type": "boolean",
+            "description": "update 或 updateAccess 时设置为 true 可改为仅上传者本人可见；超级管理员始终可见"
           },
           "inventoryGroupId": {
             "type": [
@@ -31611,7 +34260,8 @@
               "vector",
               "table",
               "image",
-              "report"
+              "report",
+              "archive"
             ]
           },
           "file": {
@@ -31692,6 +34342,20 @@
           "deterministic": {
             "type": "boolean",
             "description": "中断后是否可安全重做一次"
+          },
+          "agent": {
+            "type": "object",
+            "description": "可选智能体调用策略；旧清单省略时保持原权限行为，显式false禁止智能体调用",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "是否允许受平台策略与用户权限控制的智能体调用"
+              }
+            },
+            "required": [
+              "enabled"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

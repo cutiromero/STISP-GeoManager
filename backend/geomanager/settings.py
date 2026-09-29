@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.projects",
     "apps.content",
+    "apps.knowledge",
     "apps.catalog",
     "apps.raster",
     "apps.standards",

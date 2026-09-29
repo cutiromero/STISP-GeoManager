@@ -15,6 +15,32 @@
 .editorial-hero-news {
   background: linear-gradient(115deg, #123955, #268c9c);
 }
+.editorial-hero-subtitle {
+  margin: 0 0 18px;
+  font-size: 21px;
+  font-weight: 500;
+  color: #e1effb;
+}
+.editorial-science-intro {
+  max-width: 1040px;
+  margin: 28px 0;
+  color: #334c61;
+  line-height: 1.9;
+}
+.editorial-science-intro h2 {
+  color: #163c5c;
+  font-size: 23px;
+}
+.editorial-science-intro summary {
+  cursor: pointer;
+  color: #176ca5;
+}
+.editorial-reading-note,
+.editorial-cover-caption {
+  font-size: 14px;
+  color: #64788a;
+  line-height: 1.8;
+}
 .editorial-eyebrow {
   font-size: 12px;
   letter-spacing: 3px;

@@ -11,6 +11,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from html.parser import HTMLParser
 import json
+import hashlib
 import math
 import ipaddress
 import platform
@@ -23,7 +24,6 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 import pandas as pd
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -107,14 +107,45 @@ TOOLS = {
         ToolSpec(
             "execute_operator",
             "execute_operator",
-            "提交已发布计算算法；versionId、inputs、parameters、name、idempotencyKey",
-            ("versionId", "inputs", "parameters", "name", "idempotencyKey"),
+            "提交已发布计算算法；versionId、inputs、parameters、name；用户要求结果入库时设置autoImport=true。返回taskId后用get_compute_task查询真实状态",
+            (
+                "versionId",
+                "inputs",
+                "parameters",
+                "name",
+                "idempotencyKey",
+                "autoImport",
+            ),
+        ),
+        ToolSpec(
+            "get_compute_task",
+            "read_data",
+            "查询计算任务真实状态及outputs和入库结果；taskId是UUID",
+            ("taskId",),
+        ),
+        ToolSpec(
+            "list_compute_tasks",
+            "read_data",
+            "查找本人当前项目最近计算任务，可用query筛选名称",
+            ("query",),
         ),
         ToolSpec(
             "import_compute_result",
             "write_data",
-            "申请将已完成计算结果登记为平台数据资源；outputId、name",
-            ("outputId", "name"),
+            "按taskId自动查找真实输出并入库，也可传整数outputId（两者互斥）；尚在计算时登记完成后自动入库。可选outputKeys、name。只有ready才表示已入库",
+            ("taskId", "outputId", "outputKeys", "name"),
+        ),
+        ToolSpec(
+            "search_knowledge",
+            "read_data",
+            "检索当前项目及公共已审核知识，返回来源、适用条件和版本；query",
+            ("query",),
+        ),
+        ToolSpec(
+            "check_knowledge_constraints",
+            "analyze_data",
+            "按知识规则检查结构化facts，返回conflict/pass/needs_context；可选entryIds，缺条件时不能断言通过",
+            ("facts", "entryIds"),
         ),
         ToolSpec(
             "search_web",
@@ -167,14 +198,50 @@ def check_evidence(run, user, p):
             p, "systemInfoEnabled", "allowSystemInfo"
         ):
             raise PermissionDenied("系统参数访问权限已关闭")
-        if ev.get("tool") in {"execute_operator", "import_compute_result"} and not p.get(
-            "operatorEnabled", False
-        ):
+        if ev.get("tool") in {
+            "execute_operator",
+            "import_compute_result",
+        } and not p.get("operatorEnabled", False):
             raise PermissionDenied("智能体算子权限已关闭")
         if ev["tool"] == "read_document" and not p["allowDocuments"]:
             raise PermissionDenied("文档读取权限已关闭")
         if ev["tool"] == "compare_summaries" and not p["allowCompare"]:
             raise PermissionDenied("跨资源比较权限已关闭")
+        result = ev.get("result", {})
+        if ev.get("tool") in {
+            "execute_operator",
+            "get_compute_task",
+            "import_compute_result",
+            "list_compute_tasks",
+        }:
+            from .compute_tools import authorized_task
+
+            entries = (
+                result.get("items", [])
+                if ev["tool"] == "list_compute_tasks"
+                else [result]
+            )
+            for item in entries:
+                if isinstance(item, dict) and item.get("taskId"):
+                    authorized_task(user, item["taskId"], p)
+        if ev.get("tool") in {"search_knowledge", "check_knowledge_constraints"}:
+            from apps.knowledge.services import visible_entries
+
+            entries = (
+                result.get("items", [])
+                if ev["tool"] == "search_knowledge"
+                else result.get("findings", [])
+            )
+            for item in entries:
+                if (
+                    not visible_entries(user)
+                    .filter(
+                        pk=item.get("id", item.get("entryId")),
+                        revision=item.get("revision"),
+                    )
+                    .exists()
+                ):
+                    raise PermissionDenied("知识依据已更新或访问权限已变化，请重新检索")
 
 
 def _q(name):
@@ -438,14 +505,13 @@ def _system_info(user, policy_value):
 
 
 def _algorithm_list(user):
-    from apps.compute.models import AlgorithmResource
+    from apps.compute.services import allowed_algorithms, agent_algorithm_allowed
     from apps.compute.access import project_id, permission
 
     project = project_id()
     query = (
-        AlgorithmResource.objects.filter(
-            project_tag_id__in={1, project}, enabled=True, versions__status="published"
-        )
+        allowed_algorithms()
+        .filter(enabled=True, versions__status="published")
         .prefetch_related("versions")
         .distinct()
         .order_by("name", "id")[:50]
@@ -467,7 +533,14 @@ def _algorithm_list(user):
                     "inputs": [
                         {
                             key: item.get(key)
-                            for key in ("key", "label", "kind", "required", "minBands", "geometryTypes")
+                            for key in (
+                                "key",
+                                "label",
+                                "kind",
+                                "required",
+                                "minBands",
+                                "geometryTypes",
+                            )
                             if key in item
                         }
                         for item in manifest.get("inputs", [])[:32]
@@ -489,7 +562,7 @@ def _algorithm_list(user):
                         }
                         for item in manifest.get("parameters", [])[:64]
                     ],
-                    "agentEnabled": manifest.get("agent", {}).get("enabled") is True,
+                    "agentEnabled": agent_algorithm_allowed(version),
                 }
             )
         items.append(
@@ -518,12 +591,21 @@ def _validate_web_host(url):
     if host in {"localhost", "localhost.localdomain"} or host.endswith(".localhost"):
         raise ValidationError("网页地址不允许访问本机服务")
     try:
-        addresses = {item[4][0] for item in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)}
+        addresses = {
+            item[4][0]
+            for item in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        }
     except OSError as exc:
         raise ValidationError("网页地址无法解析") from exc
     for address in addresses:
         ip = ipaddress.ip_address(address)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        ):
             raise ValidationError("网页地址解析到受限网络，已拒绝访问")
     return parsed
 
@@ -572,7 +654,12 @@ def _web_fetch(url, max_results):
     try:
         with opener.open(request, timeout=WEB_TIMEOUT_SECONDS) as response:
             content_type = response.headers.get_content_type().lower()
-            if content_type not in {"text/html", "text/plain", "application/json", "text/xml"}:
+            if content_type not in {
+                "text/html",
+                "text/plain",
+                "application/json",
+                "text/xml",
+            }:
                 raise ValidationError("网页内容类型不受支持，仅能读取文本或HTML")
             payload = response.read(MAX_WEB_BYTES + 1)
             if len(payload) > MAX_WEB_BYTES:
@@ -594,7 +681,10 @@ def _web_fetch(url, max_results):
     parser.feed(text)
     clean_text = " ".join(parser.parts)
     title = parser.parts[0][:240] if parser.parts else url
-    snippets = [clean_text[i : i + 500] for i in range(0, min(len(clean_text), max_results * 500), 500)]
+    snippets = [
+        clean_text[i : i + 500]
+        for i in range(0, min(len(clean_text), max_results * 500), 500)
+    ]
     links = []
     for link in parser.links:
         absolute = urljoin(url, link)
@@ -620,24 +710,53 @@ def _web_search(query, max_results):
         "query": query,
         "source": endpoint,
         "items": [
-            {"title": f"公开网页结果 {index + 1}", "url": link, "snippet": snippets[index] if index < len(snippets) else ""}
+            {
+                "title": f"公开网页结果 {index + 1}",
+                "url": link,
+                "snippet": snippets[index] if index < len(snippets) else "",
+            }
             for index, link in enumerate(links[:max_results])
         ],
     }
 
 
-def _operator_submit(user, p, args):
+def _operator_submit(run, user, p, args):
     from apps.compute.services import submit as submit_compute
     from apps.compute.access import project_id
+    from apps.compute.services import allowed_algorithms, agent_algorithm_allowed
+    from apps.compute.models import AlgorithmVersion
+    from .compute_tools import track, compact_task
 
     version_id = args.get("versionId")
     if type(version_id) is not int or version_id < 1:
         raise ValidationError("versionId 必须为有效算法版本 ID")
+    version = AlgorithmVersion.objects.filter(
+        pk=version_id, status="published", algorithm__in=allowed_algorithms()
+    ).first()
+    if not version or not agent_algorithm_allowed(version):
+        raise PermissionDenied("算法未发布或未允许智能体调用")
     inputs, parameters = args.get("inputs", {}), args.get("parameters", {})
     if not isinstance(inputs, dict) or not isinstance(parameters, dict):
         raise ValidationError("inputs 与 parameters 必须为对象")
     name = args.get("name") or "智能体计算任务"
-    key = args.get("idempotencyKey") or f"agent-{int(time.time() * 1000)}"
+    auto_import = args.get("autoImport", False)
+    if type(auto_import) is not bool:
+        raise ValidationError("autoImport 必须为布尔值")
+    if auto_import:
+        from apps.compute.access import require_actor
+
+        require_actor(user, project_id(), "catalog.add_dataresource")
+    for resource_id in inputs.values():
+        resolve_resource(user, p, resource_id, run.resource_ids)
+    # Model retries cannot create a second calculation with an invented key.
+    digest = hashlib.sha256(
+        json.dumps([version_id, inputs, parameters], sort_keys=True).encode()
+    ).hexdigest()[:32]
+    key = f"agent-{run.id}-{digest}"
+    from apps.compute.models import ComputeTask
+    if (run.compute_followups.count() >= p["maxOperatorSteps"]
+            and not ComputeTask.objects.filter(owner=user, idempotency_key=key).exists()):
+        raise ValidationError("已达到本轮算子步骤上限")
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 160:
         raise ValidationError("任务名称无效")
     if not isinstance(key, str) or not 1 <= len(key) <= 80:
@@ -653,6 +772,7 @@ def _operator_submit(user, p, args):
             "trial": False,
         },
     )
+    track(run, task, auto_import=auto_import)
     # The compute service performs full validation and rechecks project/data
     # authorization.  Pair input resources with the evidence for audit/history.
     pairs = []
@@ -660,53 +780,15 @@ def _operator_submit(user, p, args):
         if type(resource_id) is int:
             resource = resources(user, p).filter(pk=resource_id).first()
             if resource:
-                pairs.append((resource, {"taskId": str(task.id), "status": task.status}))
+                pairs.append(
+                    (resource, {"taskId": str(task.id), "status": task.status})
+                )
     result = {
-        "taskId": str(task.id),
-        "status": task.status,
-        "stage": task.stage,
-        "detail": "计算任务已提交，结果可通过计算中心查看或调用 import_compute_result 入库",
+        **compact_task(task),
+        "autoImport": auto_import,
         "projectTagId": project_id(),
     }
-    return result, pairs or [(None, result)]
-
-
-def _operator_import(user, args):
-    from apps.compute.access import project_id, require_actor, permission
-    from apps.compute.models import ComputeImport, ComputeOutput
-    from apps.compute.serializers import output_data
-    output_id = args.get("outputId")
-    if type(output_id) is not int or output_id < 1:
-        raise ValidationError("outputId 必须为有效结果 ID")
-    output = (
-        ComputeOutput.objects.select_related("task__owner", "task__version__algorithm")
-        .filter(pk=output_id, task__project_tag_id=project_id())
-        .first()
-    )
-    if not output or output.task.owner_id != user.id and not permission(user, "manage_tasks"):
-        raise PermissionDenied("计算结果不存在或无权访问")
-    if output.task.status != "succeeded":
-        raise ValidationError("计算任务尚未成功完成")
-    require_actor(user, output.task.project_tag_id, "catalog.add_dataresource")
-    name = args.get("name") or output.task.name + " · " + output.label
-    if not isinstance(name, str) or not 1 <= len(name.strip()) <= 160:
-        raise ValidationError("入库名称无效")
-    with transaction.atomic():
-        record, created = ComputeImport.objects.get_or_create(
-            output=output,
-            defaults={"name": name.strip(), "requested_by": user},
-        )
-        if not created and record.status == "failed":
-            record.status = "queued"
-            record.error = ""
-            record.requested_by = user
-            record.name = name.strip()
-            record.save(update_fields=["status", "error", "requested_by", "name"])
-    return {
-        "output": output_data(output),
-        "importStatus": record.status,
-        "detail": "已申请结果入库，后台计算工作进程将继续处理",
-    }, []
+    return result, [(resource, result) for resource, _ in pairs] or [(None, result)]
 
 
 def execute(run, name, args):
@@ -730,7 +812,11 @@ def execute(run, name, args):
         ):
             raise ValidationError("sections 必须为最多5项文字数组")
         # Avoid putting a request-specific selector into persisted policy.
-        selected = sections if sections is not None else ["platform", "resources", "limits", "models", "compute"]
+        selected = (
+            sections
+            if sections is not None
+            else ["platform", "resources", "limits", "models", "compute"]
+        )
         allowed_sections = {"platform", "resources", "limits", "models", "compute"}
         if any(value not in allowed_sections for value in selected):
             raise ValidationError("不支持的系统信息分区")
@@ -743,9 +829,38 @@ def execute(run, name, args):
             raise ValidationError("算法清单过大，请缩小当前项目范围")
         return result, [(None, result)]
     if name == "execute_operator":
-        return _operator_submit(user, p, args)
+        return _operator_submit(run, user, p, args)
     if name == "import_compute_result":
-        result, _ = _operator_import(user, args)
+        from .compute_tools import import_result
+
+        return import_result(run, user, p, args)
+    if name in {"get_compute_task", "list_compute_tasks"}:
+        from .compute_tools import query_task, list_tasks
+
+        return (query_task if name == "get_compute_task" else list_tasks)(
+            run, user, p, args
+        )
+    if name == "search_knowledge":
+        from apps.knowledge.services import search_entries
+
+        query = args.get("query", "")
+        if not isinstance(query, str) or not 1 <= len(query.strip()) <= 300:
+            raise ValidationError("query 必须为1至300字")
+        result = search_entries(user, query.strip(), limit=8)
+        return result, [(None, result)]
+    if name == "check_knowledge_constraints":
+        from apps.knowledge.services import check_constraints
+
+        facts, ids = args.get("facts"), args.get("entryIds")
+        if not isinstance(facts, dict) or len(json.dumps(facts)) > 24000:
+            raise ValidationError("facts 必须为有界结构化对象")
+        if ids is not None and (
+            not isinstance(ids, list)
+            or len(ids) > 30
+            or any(type(i) is not int for i in ids)
+        ):
+            raise ValidationError("entryIds 必须为知识ID数组")
+        result = check_constraints(user, facts, entry_ids=ids)
         return result, [(None, result)]
     if name == "search_web":
         query, url = args.get("query"), args.get("url")
@@ -771,15 +886,22 @@ def execute(run, name, args):
         normalized_query = query.strip().lower()
         table_query = any(
             marker in normalized_query
-            for marker in ("table", "csv", "tsv", "xls", "xlsx", "excel", "表格", "数据表")
+            for marker in (
+                "table",
+                "csv",
+                "tsv",
+                "xls",
+                "xlsx",
+                "excel",
+                "表格",
+                "数据表",
+            )
         )
         text_query = Q(name__icontains=query) | Q(description__icontains=query)
         if table_query:
             text_query |= Q(data_type=DataResource.DataType.TABLE)
         found = list(
-            resources(user, p, run.resource_ids)
-            .filter(text_query)
-            .order_by("id")[:21]
+            resources(user, p, run.resource_ids).filter(text_query).order_by("id")[:21]
         )
         return {
             "items": [brief(r) for r in found[:20]],

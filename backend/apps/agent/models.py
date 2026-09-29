@@ -150,6 +150,10 @@ class AgentWorkflow(ProjectScopedModel):
     result_ids = models.JSONField(default=list)
     evidence = models.JSONField(default=list)
     policy_snapshot = models.JSONField(default=dict)
+    plan = models.JSONField(default=dict, db_default={})
+    plan_hash = models.CharField(max_length=64, blank=True, db_default="")
+    import_results = models.BooleanField(default=True, db_default=True)
+    result_resource_ids = models.JSONField(default=list, db_default=[])
     cancel_requested = models.BooleanField(default=False)
     idempotency_key = models.CharField(max_length=80)
     heartbeat = models.DateTimeField(null=True)
@@ -207,3 +211,20 @@ class AgentCheckpoint(models.Model):
 
     class Meta:
         ordering = ("-id",)
+
+
+class AgentComputeFollowup(models.Model):
+    """Durable compute/import intent; the task remains the source of truth."""
+
+    run = models.ForeignKey(
+        AgentRun, on_delete=models.CASCADE, related_name="compute_followups"
+    )
+    task = models.OneToOneField(
+        "compute.ComputeTask", on_delete=models.CASCADE, related_name="agent_followup"
+    )
+    auto_import = models.BooleanField(default=False)
+    output_keys = models.JSONField(default=list)
+    import_name = models.CharField(max_length=160, blank=True)
+    status = models.CharField(max_length=24, default="waiting_compute", db_index=True)
+    detail = models.CharField(max_length=300, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)

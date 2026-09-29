@@ -262,6 +262,8 @@ def clean_expired(*, force=False):
 
 
 def process_import(record):
+    from apps.agent.compute_tools import validate_import_intent
+
     if not ComputeImport.objects.filter(pk=record.pk, status="queued").update(
         status="running", heartbeat=timezone.now()
     ):
@@ -272,6 +274,7 @@ def process_import(record):
             record.output.task.project_tag_id,
             "catalog.add_dataresource",
         )
+        validate_import_intent(record)
         resource = import_output(record)
         record.refresh_from_db()
         if record.status == "failed":

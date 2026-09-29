@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.24] - 2026-09-29
+
+### Added
+- 新增独立知识库入口、可交互关系网络、带来源和适用条件的地学知识条目及版本维护。
+- 智能体接入知识检索与条件核查，科研编排支持明确输入、计划预览确认、实际计算跟踪和结果自动入库。
+
+### Changed
+- 时空科普替换为新版文档的八篇图文，保留旧内容归档与人工文章。
+
+### Fixed
+- 计算状态卡随实际任务更新；按任务自动找到真实输出，用户无需查找 outputId。
+- 自动入库在取消或授权失效后停止，重复请求复用入库记录。
+
 ## [0.1.23] - 2026-09-27
 
 ### Fixed

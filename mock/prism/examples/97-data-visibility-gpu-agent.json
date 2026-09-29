@@ -1,9 +1,0 @@
-{
-  "POST /api/admin/data/resources/42/": {
-    "200": {
-      "id": 42,
-      "ownerOnly": true,
-      "detail": "数据资源已更新"
-    }
-  }
-}

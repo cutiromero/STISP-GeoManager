@@ -39,7 +39,6 @@ import type {
   AgentRun,
   AgentResource,
   AgentEvent,
-  AgentWorkflow,
   AgentAttachment,
 } from "../api/generated/types.gen";
 import { createUuid } from "../utils/uuid";
@@ -47,6 +46,8 @@ import { useAgentBootstrap } from "./useAgentBootstrap";
 import SafeMarkdown from "./SafeMarkdown";
 import TaskBudgetControl from "./TaskBudgetControl";
 import RunEvidence from "./RunEvidence";
+import RunComputeTasks from "./RunComputeTasks";
+import WorkflowPanel from "./WorkflowPanel";
 import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "./ReasoningEffortControl";
@@ -70,6 +71,7 @@ export default function AgentPage() {
 function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const ui = useComputeText();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAppContext();
   const project = useProjectContext();
   const { message } = App.useApp();
@@ -79,6 +81,13 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [prompt, setPrompt] = useState("");
+  useEffect(() => {
+    const prefill = location.state?.query;
+    if (mode === "agent" && typeof prefill === "string" && prefill.trim()) {
+      setPrompt(prefill);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [mode, location.state, location.pathname, navigate]);
   const [model, setModel] = useState("");
   const [thinkingMode, setThinkingMode] = useState<"fast" | "deep">("fast");
   const [budgetProfile, setBudgetProfile] =
@@ -104,9 +113,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [attachments, setAttachments] = useState<AgentAttachment[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [internetEnabled, setInternetEnabled] = useState(false);
-  const [workflowGoal, setWorkflowGoal] = useState("");
-  const [workflow, setWorkflow] = useState<AgentWorkflow | null>(null);
-  const [workflowBusy, setWorkflowBusy] = useState(false);
   const [rename, setRename] = useState<AgentConversation | null>(null);
   const [renameText, setRenameText] = useState("");
   const [showHistory, setShowHistory] = useState(false);
@@ -221,38 +227,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       })
       .catch(report);
   }, [mode, canUse]);
-  useEffect(() => {
-    if (mode !== "agent" || !workflow) return;
-    if (
-      !["queued", "running", "waiting_compute", "waiting_approval"].includes(
-        workflow.status,
-      )
-    )
-      return;
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      try {
-        const next = await agentApi.workflow(workflow.id);
-        if (disposed) return;
-        setWorkflow(next);
-        if (
-          ["queued", "running", "waiting_compute", "waiting_approval"].includes(
-            next.status,
-          )
-        ) {
-          timer = setTimeout(poll, document.hidden ? 3000 : 1200);
-        }
-      } catch (e) {
-        if (!disposed) report(e);
-      }
-    };
-    timer = setTimeout(poll, 600);
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, [mode, workflow?.id, workflow?.status]);
   useEffect(() => {
     if (!running) return;
     let disposed = false;
@@ -463,42 +437,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     setPrompt("");
     setAttachments([]);
     setInternetEnabled(false);
-    setWorkflowGoal("");
-    setWorkflow(null);
     failedSubmission.current = null;
     try {
       sessionStorage.removeItem(conversationStorageKey);
     } catch {
       // Ignore unavailable browser storage.
-    }
-  };
-  const submitWorkflow = async () => {
-    if (
-      mode !== "agent" ||
-      !canUse ||
-      workflowBusy ||
-      !workflowGoal.trim() ||
-      !modelOnline
-    )
-      return;
-    setWorkflowBusy(true);
-    setError("");
-    try {
-      const created = await agentApi.createWorkflow({
-        workflowType: "hyperspectral_interpretation",
-        goal: workflowGoal.trim(),
-        model,
-        resourceIds: selected,
-        parameters: {},
-        executeOperators: false,
-        idempotencyKey: createUuid(),
-      });
-      setWorkflow(created);
-      setWorkflowGoal("");
-    } catch (e) {
-      report(e);
-    } finally {
-      setWorkflowBusy(false);
     }
   };
   const uploadAttachment = async (file: File) => {
@@ -517,16 +460,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     } finally {
       setUploadingAttachment(false);
     }
-  };
-  const workflowStatus: Record<string, string> = {
-    queued: ui("排队中", "Queued"),
-    running: ui("规划中", "Planning"),
-    waiting_compute: ui("等待计算", "Waiting for compute"),
-    waiting_approval: ui("等待审核", "Waiting for approval"),
-    succeeded: ui("已完成", "Completed"),
-    failed: ui("未完成", "Incomplete"),
-    cancelled: ui("已停止", "Stopped"),
-    interrupted: ui("已中断", "Interrupted"),
   };
   const copy = async (text: string) => {
     try {
@@ -715,71 +648,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
             />
           )}
           {mode === "agent" && canUse && (
-            <Collapse
-              size="small"
-              className="agent-workflow-panel"
-              items={[
-                {
-                  key: "workflow",
-                  label: ui(
-                    "科研工作流（算法计划预览）",
-                    "Research workflow (algorithm plan preview)",
-                  ),
-                  children: (
-                    <Space direction="vertical" style={{ width: "100%" }}>
-                      <Typography.Text type="secondary">
-                        {ui(
-                          "按当前项目资源与已开放算法生成一次执行计划。此入口用于计划预览；实际计算可在计算中心选择算法、输入和参数后提交。",
-                          "Build one execution plan from project resources and enabled algorithms. This entry previews the plan; submit an actual calculation with selected inputs and parameters in the compute center.",
-                        )}
-                      </Typography.Text>
-                      <Input.TextArea
-                        value={workflowGoal}
-                        onChange={(e) => setWorkflowGoal(e.target.value)}
-                        maxLength={12000}
-                        autoSize={{ minRows: 2, maxRows: 4 }}
-                        placeholder={ui(
-                          "例如：整理当前项目可用的影像处理算法与输入数据。",
-                          "Example: organize available image-processing algorithms and project inputs.",
-                        )}
-                      />
-                      <Button
-                        type="primary"
-                        loading={workflowBusy}
-                        disabled={!workflowGoal.trim() || !modelOnline}
-                        onClick={() => void submitWorkflow()}
-                      >
-                        {ui("生成算法计划", "Preview algorithm plan")}
-                      </Button>
-                      {workflow && (
-                        <div className="agent-workflow-status">
-                          <Space wrap>
-                            <Tag
-                              color={
-                                workflow.status === "succeeded"
-                                  ? "green"
-                                  : workflow.status === "failed"
-                                    ? "red"
-                                    : "blue"
-                              }
-                            >
-                              {workflowStatus[workflow.status] ??
-                                workflow.status}
-                            </Tag>
-                            <span>{workflow.detail}</span>
-                          </Space>
-                          {workflow.steps.map((item) => (
-                            <p key={item.id}>
-                              {item.sequence}. {item.message}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </Space>
-                  ),
-                },
-              ]}
-            />
+            <WorkflowPanel model={model} resourceIds={selected} />
           )}
           <div className="agent-messages" ref={viewport}>
             {!runs.length && (
@@ -911,6 +780,16 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     />
                   )}
                   <SafeMarkdown text={r.answer} />
+                  {mode === "agent" &&
+                    r.evidence.some((item) =>
+                      [
+                        "execute_operator",
+                        "get_compute_task",
+                        "import_compute_result",
+                      ].includes(item.tool),
+                    ) && (
+                      <RunComputeTasks runId={r.id} refreshKey={r.updatedAt} />
+                    )}
                   <RunEvidence
                     items={r.evidence}
                     canManage={Boolean(bootstrap?.canManage)}

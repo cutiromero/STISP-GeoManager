@@ -26,7 +26,6 @@ from .models import (
     AlgorithmVersion,
     ComputeTask,
     ComputeOutput,
-    ComputeImport,
 )
 from .packages import ComputeError, IDENTIFIER, checksum, clean_text, inspect_package
 from .serializers import algorithm_data, version_data, task_data, output_data
@@ -175,7 +174,11 @@ def algorithms(request):
         query = query.filter(enabled=True, versions__status="published").distinct()
     if request.GET.get("q"):
         term = request.GET["q"][:160]
-        translated = [zh for zh, en in builtin_search_labels().items() if term.casefold() in en.casefold()]
+        translated = [
+            zh
+            for zh, en in builtin_search_labels().items()
+            if term.casefold() in en.casefold()
+        ]
         query = query.filter(Q(name__icontains=term) | Q(name__in=translated))
     if request.GET.get("category"):
         query = query.filter(category=request.GET["category"])
@@ -462,6 +465,8 @@ def output_preview(request, output_id):
 
 @endpoint(["POST"])
 def output_import(request, output_id):
+    from .services import request_output_import
+
     output = authorized_output(request, output_id)
     require_actor(request.user, project_id(), "catalog.add_dataresource")
     if output.kind == "archive":
@@ -470,14 +475,6 @@ def output_import(request, output_id):
     name = clean_text(
         body.get("name") or output.task.name + " · " + output.label, 160, "入库名称"
     )
-    with transaction.atomic():
-        record, created = ComputeImport.objects.get_or_create(
-            output=output, defaults={"name": name, "requested_by": request.user}
-        )
-        if not created and record.status == "failed":
-            record.status = "queued"
-            record.error = ""
-            record.requested_by = request.user
-            record.save(update_fields=["status", "error", "requested_by"])
+    request_output_import(request.user, output, name)
     audit(request, "计算结果申请入库", name)
     return JsonResponse(output_data(output))

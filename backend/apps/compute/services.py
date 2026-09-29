@@ -68,6 +68,58 @@ def allowed_algorithms():
     )
 
 
+def agent_algorithm_allowed(version):
+    """Missing flags retain legacy published algorithm behavior."""
+    return version.manifest.get("agent", {}).get("enabled", True) is True
+
+
+def request_output_import(user, output, name="", *, request_source=""):
+    from .access import task_access
+    from .models import ComputeImport
+    from apps.audit.service import log_operation
+
+    task_access(output.task, user)
+    require_actor(user, output.task.project_tag_id, "catalog.add_dataresource")
+    if output.task.status != "succeeded":
+        raise ComputeError("计算任务尚未成功完成")
+    if output.expired or output.kind == "archive":
+        raise ComputeError("结果已过期或为多文件压缩包，不能自动入库")
+    name = clean_text(name or output.task.name + " · " + output.label, 160, "入库名称")
+    with transaction.atomic():
+        record, created = ComputeImport.objects.get_or_create(
+            output=output,
+            defaults={
+                "name": name,
+                "requested_by": user,
+                "request_source": request_source,
+            },
+        )
+        if not created and record.status in {"queued", "failed"}:
+            record.status, record.error = "queued", ""
+            record.requested_by, record.name = user, name
+            record.request_source = request_source
+            record.save(
+                update_fields=[
+                    "status",
+                    "error",
+                    "requested_by",
+                    "name",
+                    "request_source",
+                ]
+            )
+    if created:
+        log_operation(
+            user,
+            "compute",
+            "import",
+            "success",
+            target_type="compute_output",
+            target_id=output.id,
+            message=name,
+        )
+    return record
+
+
 def validate_submission(user, body):
     require_actor(user, project_id(), "submit_task", "core.browse_data")
     name = clean_text(body.get("name"), 160, "任务名称")

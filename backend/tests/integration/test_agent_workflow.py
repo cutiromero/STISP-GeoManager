@@ -28,7 +28,7 @@ def create_workflow(env, **overrides):
 
 
 @pytest.mark.django_db
-def test_workflow_plan_is_persisted_and_does_not_execute_operator(setup_agent):
+def test_workflow_without_algorithm_requests_selection_and_does_not_execute(setup_agent):
     env = setup_agent
     response = create_workflow(env)
     assert response.status_code == 202, response.content
@@ -36,13 +36,9 @@ def test_workflow_plan_is_persisted_and_does_not_execute_operator(setup_agent):
     workflow = AgentWorkflow.objects.get(pk=workflow_id)
     run_workflow(workflow.id)
     workflow.refresh_from_db()
-    assert workflow.status == "succeeded"
-    assert workflow.current_step == "finalize"
-    assert [step.kind for step in workflow.steps.all()] == [
-        "discover_inputs",
-        "build_plan",
-        "finalize",
-    ]
+    assert workflow.status == "failed"
+    assert "没有可调用算法" in workflow.detail
+    assert not workflow.plan_hash
     assert not workflow.execute_operators
     assert workflow.steps.filter(compute_task_id__isnull=False).count() == 0
 

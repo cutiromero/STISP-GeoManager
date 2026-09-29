@@ -66,6 +66,15 @@ def validate_manifest(manifest):
         runtime=manifest["runtime"],
         deterministic=manifest.get("deterministic", False) is True,
     )
+    if "agent" in manifest:
+        agent = manifest["agent"]
+        if (
+            not isinstance(agent, dict)
+            or set(agent) != {"enabled"}
+            or type(agent["enabled"]) is not bool
+        ):
+            raise ComputeError("agent 配置只接受布尔值 enabled")
+        result["agent"] = {"enabled": agent["enabled"]}
     timeout = manifest.get("timeoutSeconds", 1800)
     if type(timeout) is not int or not 1 <= timeout <= 7200:
         raise ComputeError("timeoutSeconds 必须为1至7200的整数")

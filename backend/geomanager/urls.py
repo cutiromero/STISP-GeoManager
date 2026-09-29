@@ -6,6 +6,7 @@ from apps.core.views import frontend_app
 
 
 urlpatterns = [
+    path("api/knowledge/", include("apps.knowledge.urls")),
     path("api/agent/", include("apps.agent.urls")),
     path("api/compute/", include("apps.compute.urls")),
     path("api/", include("apps.projects.urls")),

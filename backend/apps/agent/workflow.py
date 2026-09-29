@@ -1,57 +1,44 @@
-"""Durable research-workflow runtime.
-
-The graph is deliberately small and explicit.  LangGraph is used when it is
-installed in the deployment environment; the same node contract has a local
-fallback so development and migrations can be verified while the offline
-package cache is unavailable.  Neither implementation executes an operator
-directly: operator work is submitted through ``apps.compute.services``.
-"""
+"""Durable preview, confirmed calculation, knowledge check and result import."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, TypedDict
+import re
 
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import timezone
 
-from apps.compute.models import AlgorithmVersion, ComputeTask
-from apps.compute.services import ComputeError, submit as submit_compute
+from apps.compute.models import AlgorithmVersion, ComputeImport
+from apps.compute.services import (
+    ComputeError,
+    allowed_algorithms,
+    agent_algorithm_allowed,
+    validate_submission,
+    submit as submit_compute,
+    request_output_import,
+)
+from apps.compute.access import require_actor
 from apps.projects.context import ProjectScope, project_scope
 from .models import AgentCheckpoint, AgentWorkflow, AgentWorkflowStep
 from .policy import fresh_user, require_access
 from .tools import resources, resolve_resource
 
-try:  # Optional during the offline local bootstrap; required for server rollout.
-    from langgraph.graph import END, START, StateGraph
+try:
+    import langgraph  # noqa: F401
 
     HAS_LANGGRAPH = True
-except ImportError:  # pragma: no cover - exercised by the local offline runtime
-    END = START = StateGraph = None
+except ImportError:
     HAS_LANGGRAPH = False
 
 
-class WorkflowState(TypedDict, total=False):
-    workflow_id: str
-    node: str
-    status: str
-    resource_ids: list[int]
-    algorithm_version_id: int | None
-    parameters: dict[str, Any]
-    action: dict[str, Any]
-    result_ids: list[int]
-    evidence: list[dict[str, Any]]
-    detail: str
-
-
-def _scope(workflow: AgentWorkflow) -> ProjectScope:
+def _scope(workflow):
     return ProjectScope(
         (workflow.project_tag_id,), workflow.project_tag_id, workflow.owner_id
     )
 
 
-def _state_hash(state: dict[str, Any]) -> str:
+def _state_hash(state):
     return hashlib.sha256(
         json.dumps(
             state, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -59,37 +46,28 @@ def _state_hash(state: dict[str, Any]) -> str:
     ).hexdigest()
 
 
-def checkpoint(workflow: AgentWorkflow, node: str, state: dict[str, Any]) -> None:
-    safe = {
-        key: value
-        for key, value in state.items()
-        if key not in {"raw_rows", "raw_text", "prompt", "full_result"}
-    }
+def checkpoint(workflow, node, state):
     AgentCheckpoint.objects.create(
-        workflow=workflow,
-        node=node,
-        state=safe,
-        state_hash=_state_hash(safe),
+        workflow=workflow, node=node, state=state, state_hash=_state_hash(state)
     )
 
 
 def step(
-    workflow: AgentWorkflow,
-    kind: str,
+    workflow,
+    kind,
     *,
-    message: str = "",
-    status: str = "succeeded",
-    action: dict[str, Any] | None = None,
-    input_refs: dict[str, Any] | None = None,
-    output_refs: dict[str, Any] | None = None,
-    metrics: dict[str, Any] | None = None,
+    message="",
+    status="succeeded",
+    action=None,
+    input_refs=None,
+    output_refs=None,
+    metrics=None,
     compute_task_id=None,
-    error_code: str = "",
-) -> AgentWorkflowStep:
-    sequence = workflow.steps.count() + 1
+    error_code="",
+):
     return AgentWorkflowStep.objects.create(
         workflow=workflow,
-        sequence=sequence,
+        sequence=workflow.steps.count() + 1,
         kind=kind,
         status=status,
         message=message[:500],
@@ -103,279 +81,320 @@ def step(
     )
 
 
-def _resources_for(workflow: AgentWorkflow, user, p) -> list[int]:
-    if workflow.resource_ids:
-        for resource_id in workflow.resource_ids:
-            resolve_resource(user, p, resource_id)
-        return sorted(set(workflow.resource_ids))
-    # Autonomous discovery is scoped to the current project and the live
-    # resource authorization service.  Prefer raster inputs for this workflow.
-    candidates = list(resources(user, p).order_by("name")[:100])
-    raster = [r.id for r in candidates if r.data_type == "raster"]
-    chosen = raster or [r.id for r in candidates if r.data_type in {"table", "vector"}]
-    return chosen[: p["maxResources"]]
+def _authorize(workflow):
+    user = fresh_user(workflow.owner_id)
+    p = require_access(user, "agent", workflow.model)
+    if not p.get("workflowEnabled", True):
+        raise PermissionDenied("科研工作流功能已关闭")
+    for rid in workflow.resource_ids:
+        resolve_resource(user, p, rid)
+    validate_knowledge(workflow, user)
+    return user, p
 
 
-def _agent_algorithm(workflow: AgentWorkflow):
-    if workflow.algorithm_version_id:
-        version = (
-            AlgorithmVersion.objects.select_related("algorithm")
-            .filter(pk=workflow.algorithm_version_id, status="published")
-            .first()
+def validate_knowledge(workflow, user):
+    from apps.knowledge.services import visible_entries
+
+    for entry in workflow.evidence:
+        if (
+            not visible_entries(user)
+            .filter(pk=entry.get("id"), revision=entry.get("revision"))
+            .exists()
+        ):
+            raise PermissionDenied("知识依据已变化或无权访问，请重新生成计划")
+
+
+def _algorithm(workflow):
+    versions = list(
+        AlgorithmVersion.objects.select_related("algorithm").filter(
+            status="published", algorithm__in=allowed_algorithms().filter(enabled=True)
         )
-        if version and version.algorithm.project_tag_id in {1, workflow.project_tag_id}:
-            if version.manifest.get("agent", {}).get("enabled") is True:
-                return version
-        raise ComputeError("指定算法不存在、未发布或未开放给智能体")
-    versions = AlgorithmVersion.objects.select_related("algorithm").filter(
-        status="published"
     )
-    for version in versions.order_by("id"):
-        if version.algorithm.project_tag_id not in {1, workflow.project_tag_id}:
-            continue
-        if version.manifest.get("agent", {}).get("enabled") is True:
-            return version
-    return None
+    versions = [v for v in versions if agent_algorithm_allowed(v)]
+    if workflow.algorithm_version_id:
+        chosen = next(
+            (v for v in versions if v.id == workflow.algorithm_version_id), None
+        )
+        if chosen:
+            return chosen
+        raise ComputeError("指定算法未发布、已停用或未允许智能体调用")
+    goal = workflow.goal.casefold()
+    matches = []
+    for version in versions:
+        algorithm = version.algorithm
+        tokens = {algorithm.identifier.casefold(), algorithm.name.casefold()}
+        tokens.update(re.findall(r"[a-z][a-z0-9]{2,}", algorithm.name.casefold()))
+        score = max(
+            (len(token) for token in tokens if token and token in goal), default=0
+        )
+        if score:
+            matches.append((score, version))
+    if not matches:
+        names = "、".join(sorted({v.algorithm.name for v in versions})[:8])
+        raise ComputeError(
+            "目标未唯一匹配已发布算法，请在目标中写明算法名称"
+            + ("：" + names if names else "；当前没有可调用算法")
+        )
+    best = max(score for score, _ in matches)
+    winners = [version for score, version in matches if score == best]
+    if len(winners) != 1:
+        raise ComputeError("目标匹配多个算法或版本，请指定一个算法版本")
+    return winners[0]
 
 
-def _plan(workflow: AgentWorkflow, resource_ids: list[int], version) -> dict[str, Any]:
-    manifest = version.manifest if version else {}
-    parameters = dict(workflow.parameters or {})
-    for item in manifest.get("parameters", []):
-        if item["key"] not in parameters and "default" in item:
-            parameters[item["key"]] = item["default"]
-    inputs = {}
-    for spec, resource_id in zip(manifest.get("inputs", []), resource_ids):
-        inputs[spec["key"]] = resource_id
+def _body(workflow, plan):
     return {
-        "workflowType": workflow.workflow_type,
-        "goal": workflow.goal,
-        "algorithmVersionId": version.id if version else None,
-        "algorithm": version.algorithm.name if version else "待管理员登记并开放的算法",
-        "inputs": inputs,
-        "parameters": parameters,
-        "operatorExecution": "enabled" if workflow.execute_operators else "dry_run",
-        "iteration": workflow.iteration,
-        "maxIterations": workflow.max_iterations,
-    }
-
-
-def _submit_operator(
-    workflow: AgentWorkflow, user, plan: dict[str, Any]
-) -> ComputeTask:
-    version = AlgorithmVersion.objects.select_related("algorithm").get(
-        pk=plan["algorithmVersionId"]
-    )
-    body = {
         "name": f"智能体：{workflow.goal[:120]}",
-        "versionId": version.id,
+        "versionId": plan["algorithmVersionId"],
         "inputs": plan["inputs"],
         "parameters": plan["parameters"],
         "idempotencyKey": f"agent-workflow-{workflow.id}-{workflow.iteration}",
         "trial": False,
     }
-    return submit_compute(user, body)
 
 
-def _run_fallback(workflow: AgentWorkflow) -> dict[str, Any]:
-    """Execute the graph contract without importing optional LangGraph."""
-    user = fresh_user(workflow.owner_id)
-    p = require_access(user, "agent", workflow.model)
-    if not p.get("workflowEnabled", True):
-        raise PermissionDenied("科研工作流功能已关闭")
-    with project_scope(_scope(workflow)):
-        resource_ids = _resources_for(workflow, user, p)
-        workflow.current_step = "discover_inputs"
-        workflow.resource_ids = resource_ids
-        workflow.save(update_fields=["current_step", "resource_ids", "updated_at"])
-        step(
-            workflow,
-            "discover_inputs",
-            message=f"已发现 {len(resource_ids)} 个当前项目授权资源",
-            output_refs={"resourceIds": resource_ids},
-        )
-        checkpoint(workflow, "discover_inputs", {"resource_ids": resource_ids})
+def _prepare(workflow, user, p):
+    from apps.knowledge.services import search_entries
 
-        version = _agent_algorithm(workflow)
-        plan = _plan(workflow, resource_ids, version)
-        workflow.current_step = "validate_plan"
-        workflow.algorithm_version_id = plan["algorithmVersionId"]
-        workflow.parameters = plan["parameters"]
-        workflow.save(
-            update_fields=[
-                "current_step",
-                "algorithm_version_id",
-                "parameters",
-                "updated_at",
-            ]
-        )
-        step(
-            workflow,
-            "build_plan",
-            message="已生成结构化科研任务计划",
-            action=plan,
-            output_refs={"algorithmVersionId": plan["algorithmVersionId"]},
-        )
-        checkpoint(workflow, "validate_plan", {"action": plan})
-
-        if not workflow.execute_operators:
-            workflow.status = "succeeded"
-            workflow.detail = "已生成计划；当前策略仍为只读/预览，未提交算子"
-            workflow.current_step = "finalize"
-            workflow.save(
-                update_fields=["status", "detail", "current_step", "updated_at"]
-            )
-            step(
-                workflow,
-                "finalize",
-                message=workflow.detail,
-                output_refs={"plan": plan},
-            )
-            return {"plan": plan, "status": workflow.status}
-
-        if not p.get("operatorEnabled", False):
-            raise PermissionDenied("智能体自动调用算子尚未由超级管理员开启")
-        if not version:
-            raise ComputeError("当前项目没有已发布且允许智能体调用的算法")
-        if workflow.operator_steps >= workflow.max_operator_steps:
-            raise ComputeError("已达到智能体算子步骤上限")
-
-        task = _submit_operator(workflow, user, plan)
-        workflow.operator_steps += 1
-        workflow.status = "waiting_compute"
-        workflow.current_step = "wait_operator"
-        workflow.detail = "算子任务已提交，等待计算中心返回结果"
-        workflow.save(
-            update_fields=[
-                "operator_steps",
-                "status",
-                "current_step",
-                "detail",
-                "updated_at",
-            ]
-        )
-        step(
-            workflow,
-            "submit_operator",
-            message=workflow.detail,
-            action=plan,
-            input_refs={"resourceIds": resource_ids},
-            compute_task_id=task.id,
-            status="waiting",
-        )
-        checkpoint(workflow, "wait_operator", {"computeTaskId": str(task.id)})
-        return {"status": workflow.status, "computeTaskId": str(task.id)}
-
-
-def build_graph():
-    """Build the explicit graph when LangGraph is available.
-
-    The node functions intentionally call the same side-effect boundary as the
-    fallback.  This keeps local replay and the server runtime behaviorally
-    equivalent and avoids LangGraph's generic ToolNode bypassing permissions.
-    """
-    if not HAS_LANGGRAPH:
-        return None
-    graph = StateGraph(WorkflowState)
-    graph.add_node("load_context", lambda state: {"node": "load_context"})
-    graph.add_node("discover_inputs", lambda state: {"node": "discover_inputs"})
-    graph.add_node("build_plan", lambda state: {"node": "build_plan"})
-    graph.add_node("validate_plan", lambda state: {"node": "validate_plan"})
-    graph.add_node(
-        "finalize", lambda state: {"node": "finalize", "status": "succeeded"}
+    version = _algorithm(workflow)
+    selected = list(
+        resources(user, p, workflow.resource_ids)
+        .filter(status="active")
+        .order_by("id")[:100]
     )
-    graph.add_edge(START, "load_context")
-    graph.add_edge("load_context", "discover_inputs")
-    graph.add_edge("discover_inputs", "build_plan")
-    graph.add_edge("build_plan", "validate_plan")
-    graph.add_edge("validate_plan", "finalize")
-    graph.add_edge("finalize", END)
-    return graph.compile()
+    inputs = dict(workflow.plan.get("inputs", {}))
+    for spec in version.manifest.get("inputs", []):
+        if spec["key"] in inputs:
+            resolve_resource(user, p, inputs[spec["key"]], workflow.resource_ids)
+            continue
+        candidates = [r for r in selected if r.data_type == spec["kind"]]
+        named = [r for r in candidates if r.name.casefold() in workflow.goal.casefold()]
+        candidates = named or candidates
+        if len(candidates) == 1:
+            inputs[spec["key"]] = candidates[0].id
+        elif spec.get("required", True):
+            raise ComputeError(
+                f"请明确选择 {spec['label']} 的一个输入，当前有 {len(candidates)} 个兼容候选"
+            )
+    plan = {
+        "algorithmVersionId": version.id,
+        "algorithm": version.algorithm.name,
+        "inputs": inputs,
+        "parameters": workflow.parameters,
+        "goal": workflow.goal,
+    }
+    validated = validate_submission(user, _body(workflow, plan))
+    plan["parameters"] = validated["parameters"]
+    if (
+        len({resource.id for _, resource, _ in validated["resources"]})
+        > p["maxResources"]
+    ):
+        raise ComputeError("计划使用的数据资源超过当前策略上限")
+    plan["inputNames"] = {
+        key: resource.name for key, resource, _ in validated["resources"]
+    }
+    plan["inputRevisions"] = {
+        key: resource.updated_at.isoformat()
+        for key, resource, _ in validated["resources"]
+    }
+    plan["algorithmChecksum"] = version.checksum
+    knowledge = search_entries(user, workflow.goal[:300], limit=8)
+    plan["knowledge"] = knowledge["items"]
+    plan["importResults"] = workflow.import_results
+    workflow.plan, workflow.plan_hash = plan, _state_hash(plan)
+    workflow.resource_ids = sorted(set(inputs.values()))
+    workflow.algorithm_version_id, workflow.parameters = version.id, plan["parameters"]
+    workflow.evidence = knowledge["items"]
+    workflow.status, workflow.current_step = "waiting_approval", "review_plan"
+    workflow.detail = (
+        "计划和输入已校验，请确认后执行；结果将自动入库"
+        if workflow.import_results
+        else "计划已校验，请确认后执行"
+    )
+    workflow.save()
+    step(
+        workflow,
+        "discover_inputs",
+        message=f"已匹配 {len(inputs)} 项授权输入",
+        output_refs={"resourceIds": workflow.resource_ids},
+    )
+    step(workflow, "build_plan", message="已按算法输入及参数规范校验计划", action=plan)
+    checkpoint(workflow, "review_plan", {"planHash": workflow.plan_hash})
 
 
-def run_workflow(workflow_id) -> None:
+def validate_confirmed_plan(workflow, user, p):
+    validate_knowledge(workflow, user)
+    if not p.get("operatorEnabled", False):
+        raise PermissionDenied("智能体调用算子尚未由管理员开启")
+    if not workflow.plan_hash or _state_hash(workflow.plan) != workflow.plan_hash:
+        raise ComputeError("执行计划已变化，请重新预览")
+    version = _algorithm(workflow)
+    if version.checksum != workflow.plan.get("algorithmChecksum"):
+        raise ComputeError("算法版本已变化，请重新预览")
+    validated = validate_submission(user, _body(workflow, workflow.plan))
+    for key, resource, _ in validated["resources"]:
+        if resource.updated_at.isoformat() != workflow.plan["inputRevisions"].get(key):
+            raise ComputeError("输入数据已变化，请重新预览")
+    if workflow.import_results:
+        require_actor(user, workflow.project_tag_id, "catalog.add_dataresource")
+
+
+def run_workflow(workflow_id):
     workflow = AgentWorkflow.objects.get(pk=workflow_id)
-    # ``claim`` marks a row as running before releasing the transaction.  The
-    # worker must therefore accept that state as well as a direct retry of an
-    # interrupted workflow.  Rejecting it here leaves every claimed task
-    # permanently stuck in ``running``.
     if workflow.status not in {"queued", "running", "interrupted"}:
         return
-    if workflow.cancel_requested:
-        workflow.status, workflow.detail = "cancelled", "已取消"
-        workflow.save(update_fields=["status", "detail", "updated_at"])
-        return
-    workflow.status = "running"
-    workflow.heartbeat = timezone.now()
-    workflow.save(update_fields=["status", "heartbeat", "updated_at"])
-    try:
-        if HAS_LANGGRAPH:
-            # The graph is the control-plane runtime.  Side effects remain in
-            # the guarded adapter below so permissions are rechecked there.
-            build_graph().invoke({"workflow_id": str(workflow.id)})
-        _run_fallback(workflow)
-    except PermissionDenied as exc:
-        workflow.status, workflow.detail = "interrupted", str(exc)
-        workflow.save(update_fields=["status", "detail", "updated_at"])
-    except Exception as exc:  # keep user output free from paths/upstream bodies
-        workflow.status, workflow.detail = "failed", str(exc)[:300]
-        workflow.save(update_fields=["status", "detail", "updated_at"])
-
-
-def resume_waiting() -> int:
-    count = 0
-    for workflow in AgentWorkflow.objects.filter(status="waiting_compute")[:30]:
+    with project_scope(_scope(workflow)):
+        try:
+            user, p = _authorize(workflow)
+            if workflow.cancel_requested:
+                workflow.status, workflow.detail = "cancelled", "已取消"
+            elif not workflow.execute_operators:
+                _prepare(workflow, user, p)
+                return
+            else:
+                validate_confirmed_plan(workflow, user, p)
+                if workflow.operator_steps >= workflow.max_operator_steps:
+                    raise ComputeError("已达到算子步骤上限")
+                task = submit_compute(user, _body(workflow, workflow.plan))
+                if not workflow.steps.filter(compute_task_id=task.id).exists():
+                    step(
+                        workflow,
+                        "submit_operator",
+                        message="已提交计算中心",
+                        compute_task_id=task.id,
+                        status="waiting",
+                    )
+                workflow.operator_steps = 1
+                workflow.status, workflow.current_step = (
+                    "waiting_compute",
+                    "wait_operator",
+                )
+                workflow.detail = "等待计算结果，平台将自动跟踪后续处理"
+                checkpoint(workflow, "wait_operator", {"computeTaskId": str(task.id)})
+        except PermissionDenied as exc:
+            workflow.status, workflow.detail = "interrupted", str(exc)[:300]
+        except (ComputeError, ValidationError) as exc:
+            workflow.status, workflow.detail = "failed", str(exc)[:300]
         workflow.heartbeat = timezone.now()
-        current = (
-            workflow.steps.filter(kind="submit_operator").order_by("-sequence").first()
+        workflow.save()
+
+
+def _collect(workflow, user, p, task):
+    from apps.knowledge.services import check_constraints
+
+    outputs = list(task.outputs.all())
+    if not outputs:
+        raise ComputeError("计算未提供任何有效输出")
+    workflow.result_ids = [output.id for output in outputs]
+    existing_check = workflow.steps.filter(kind="check_knowledge").first()
+    if not existing_check:
+        ids = [entry["id"] for entry in workflow.evidence]
+        checks = {"findings": [], "checked": 0}
+        for output in outputs:
+            supplied = output.metadata.get("knowledgeFacts")
+            if supplied is not None and not isinstance(supplied, dict):
+                raise ComputeError("计算结果的知识事实格式无效，已停止自动入库")
+            result = (
+                check_constraints(user, supplied or {}, entry_ids=ids)
+                if ids
+                else {"findings": [], "checked": 0}
+            )
+            checks["checked"] += result["checked"]
+            checks["findings"].extend(
+                {**finding, "outputId": output.id} for finding in result["findings"]
+            )
+        existing_check = step(
+            workflow,
+            "check_knowledge",
+            message="已检查结果知识约束；缺少适用条件的规则保留待核验状态",
+            output_refs=checks,
         )
-        if not current or not current.compute_task_id:
-            workflow.status, workflow.detail = "failed", "缺少计算任务引用"
-            workflow.save(update_fields=["status", "detail", "updated_at"])
-            continue
-        task = ComputeTask.objects.filter(pk=current.compute_task_id).first()
-        if not task or task.status in {"queued", "validating", "running", "cancelling"}:
-            workflow.save(update_fields=["heartbeat", "updated_at"])
-            continue
-        if task.status != "succeeded":
-            workflow.status, workflow.detail = (
-                "failed",
-                f"算子任务未完成：{task.status}",
+    if any(
+        finding["status"] == "conflict"
+        for finding in existing_check.output_refs.get("findings", [])
+    ):
+        raise ComputeError(
+            "结果存在知识冲突，已保留原始输出；请调整参数或选择校正算法后重新计算，尚未自动入库"
+        )
+    if not workflow.import_results:
+        workflow.status, workflow.current_step, workflow.detail = (
+            "succeeded",
+            "finalize",
+            "计算完成，结果已保留",
+        )
+        return
+    require_actor(user, workflow.project_tag_id, "catalog.add_dataresource")
+    importable = [output for output in outputs if output.kind != "archive"]
+    if not importable:
+        raise ComputeError("结果均为压缩包，请下载后按文件类型分别入库")
+    records = []
+    for output in importable:
+        record = ComputeImport.objects.filter(output=output).first()
+        records.append(
+            record
+            or request_output_import(
+                user, output, request_source=f"workflow:{workflow.id}"
             )
-            workflow.current_step = "finalize"
-            workflow.save(
-                update_fields=["status", "detail", "current_step", "updated_at"]
-            )
-            step(
-                workflow,
-                "collect_result",
-                status="failed",
-                message=workflow.detail,
-                error_code="operator_failed",
-            )
-            count += 1
-            continue
-        output_ids = list(task.outputs.values_list("id", flat=True))
-        workflow.result_ids = output_ids
-        workflow.status = "succeeded"
-        workflow.current_step = "finalize"
-        workflow.detail = "算子结果已返回；已完成基础结果登记，专业规则评估待配置"
-        workflow.save(
-            update_fields=[
-                "result_ids",
-                "status",
-                "current_step",
-                "detail",
-                "heartbeat",
-                "updated_at",
-            ]
+        )
+    if any(record.status == "failed" for record in records):
+        raise ComputeError("计算完成但入库失败，请到计算中心重试入库")
+    workflow.current_step = "wait_import"
+    workflow.detail = "计算完成，等待结果入库"
+    if all(record.status == "ready" for record in records):
+        workflow.result_resource_ids = [record.resource_id for record in records]
+        workflow.status, workflow.current_step = "succeeded", "finalize"
+        workflow.detail = f"{len(records)} 项结果已入库" + (
+            "；压缩包保留供下载" if len(importable) != len(outputs) else ""
         )
         step(
             workflow,
-            "collect_result",
+            "finalize",
             message=workflow.detail,
-            output_refs={"outputIds": output_ids},
+            output_refs={
+                "resourceIds": workflow.result_resource_ids,
+                "outputIds": workflow.result_ids,
+            },
         )
-        checkpoint(workflow, "finalize", {"result_ids": output_ids})
-        count += 1
+        checkpoint(workflow, "finalize", {"resourceIds": workflow.result_resource_ids})
+
+
+def resume_waiting():
+    from .compute_tools import authorized_task
+    from apps.compute.services import task_action
+
+    count = 0
+    for workflow in AgentWorkflow.objects.filter(status="waiting_compute")[:30]:
+        with project_scope(_scope(workflow)):
+            try:
+                user, p = _authorize(workflow)
+                current = (
+                    workflow.steps.filter(kind="submit_operator")
+                    .order_by("-sequence")
+                    .first()
+                )
+                if not current or not current.compute_task_id:
+                    raise ComputeError("缺少计算任务引用")
+                task = authorized_task(user, current.compute_task_id, p)
+                if workflow.cancel_requested:
+                    if task.status in {"queued", "validating", "running"}:
+                        task_action(task, user, "cancel")
+                    workflow.status, workflow.detail = (
+                        "cancelled",
+                        "已停止工作流后续处理",
+                    )
+                elif not p.get("operatorEnabled", False):
+                    raise PermissionDenied("自动执行及入库策略已关闭")
+                elif task.status in {"queued", "validating", "running", "cancelling"}:
+                    workflow.detail = "计算中心：" + task.stage
+                elif task.status != "succeeded":
+                    raise ComputeError("计算未成功：" + task.status)
+                else:
+                    _collect(workflow, user, p, task)
+            except PermissionDenied as exc:
+                workflow.status, workflow.detail = "interrupted", str(exc)[:300]
+            except (ComputeError, ValidationError) as exc:
+                workflow.status, workflow.detail = "failed", str(exc)[:300]
+            workflow.heartbeat = timezone.now()
+            workflow.save()
+            count += 1
     return count

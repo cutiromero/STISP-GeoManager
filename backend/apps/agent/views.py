@@ -14,6 +14,7 @@ from apps.audit.service import log_operation
 from apps.core.api import api_login_required
 from apps.core.initialization import GUEST_GROUP_NAME
 from apps.projects.context import is_superadmin
+from apps.compute.services import ComputeError
 from .config import registry
 from .models import (
     AgentPolicy,
@@ -36,7 +37,6 @@ from .policy import (
 )
 from .tools import check_evidence, resources, resolve_resource, brief
 from .attachments import delete_attachment, serialize_attachment, store_attachment
-from .workflow import HAS_LANGGRAPH
 from .budgets import budget_options, resolve_budget
 
 
@@ -58,6 +58,8 @@ def endpoint(methods):
                 return func(request, *args, **kwargs)
             except ApiProblem as e:
                 return JsonResponse({"detail": e.detail}, status=e.status)
+            except ComputeError as e:
+                return JsonResponse({"detail": str(e)}, status=e.status)
             except PermissionDenied as e:
                 return JsonResponse({"detail": str(e)}, status=403)
             except Http404:
@@ -538,12 +540,21 @@ def cancel(request, run_id):
         AgentRun.objects.select_related("conversation"), pk=run_id, owner=request.user
     )
     # Ownership is enough to stop consumption, even after usage permission revocation.
-    AgentRun.objects.filter(pk=r.id, status__in=ACTIVE).update(cancel_requested=True)
+    AgentRun.objects.filter(pk=r.id).update(cancel_requested=True)
     AgentRun.objects.filter(pk=r.id, status="queued").update(
         status="cancelled", detail="已取消", updated_at=timezone.now()
     )
     r.refresh_from_db()
     return JsonResponse(run_json(r, request.user))
+
+
+@endpoint(["GET"])
+def compute_tasks(request, run_id):
+    from .compute_tools import run_tasks
+
+    run = get_object_or_404(AgentRun.objects, pk=run_id, owner=request.user)
+    p = require_access(request.user, "agent", run.model)
+    return JsonResponse(run_tasks(run, request.user, p))
 
 
 @endpoint(["GET"])
@@ -576,11 +587,15 @@ def workflow_json(workflow, include_steps=True):
         "resourceIds": workflow.resource_ids,
         "algorithmVersionId": workflow.algorithm_version_id,
         "parameters": workflow.parameters,
+        "plan": workflow.plan,
+        "planHash": workflow.plan_hash,
+        "importResults": workflow.import_results,
+        "resultResourceIds": workflow.result_resource_ids,
         "resultIds": workflow.result_ids,
         "evidence": workflow.evidence,
         "createdAt": workflow.created_at.isoformat(),
         "updatedAt": workflow.updated_at.isoformat(),
-        "runtime": "langgraph" if HAS_LANGGRAPH else "graph-compatibility",
+        "runtime": "durable_state_machine",
     }
     if include_steps:
         data["steps"] = [
@@ -606,8 +621,22 @@ def workflow_json(workflow, include_steps=True):
     return data
 
 
-@endpoint(["POST"])
+@endpoint(["GET", "POST"])
 def workflow_submit(request):
+    if request.method == "GET":
+        from .workflow import _authorize
+
+        require_access(request.user, "agent")
+        visible = []
+        for workflow in AgentWorkflow.objects.filter(owner=request.user).order_by(
+            "-created_at"
+        )[:30]:
+            try:
+                _authorize(workflow)
+                visible.append(workflow_json(workflow))
+            except PermissionDenied:
+                continue
+        return JsonResponse({"items": visible})
     value = body(
         request,
         [
@@ -619,6 +648,8 @@ def workflow_submit(request):
             "parameters",
             "executeOperators",
             "idempotencyKey",
+            "inputs",
+            "importResults",
         ],
     )
     p = require_access(request.user, "agent", value.get("model"))
@@ -632,6 +663,8 @@ def workflow_submit(request):
     parameters = value.get("parameters", {})
     execute_operators = value.get("executeOperators", False)
     algorithm_id = value.get("algorithmVersionId")
+    inputs = value.get("inputs", {})
+    import_results = value.get("importResults", True)
     if (
         not isinstance(goal, str)
         or not 1 <= len(goal.strip()) <= 12000
@@ -647,10 +680,19 @@ def workflow_submit(request):
         or len(parameters) > 60
         or type(execute_operators) is not bool
         or (algorithm_id is not None and type(algorithm_id) is not int)
+        or not isinstance(inputs, dict)
+        or len(inputs) > 30
+        or any(
+            not isinstance(k, str) or type(v) is not int or v < 1
+            for k, v in inputs.items()
+        )
+        or type(import_results) is not bool
     ):
         raise ApiProblem("科研工作流参数无效")
     if execute_operators and not p.get("operatorEnabled", False):
         raise ApiProblem("智能体自动调用算子尚未由超级管理员开启", 403)
+    if execute_operators:
+        raise ApiProblem("请先生成计划，再使用确认执行入口")
     resources_selected = sorted(set(resources_selected))
     with transaction.atomic():
         existing = AgentWorkflow._base_manager.filter(
@@ -659,7 +701,11 @@ def workflow_submit(request):
             idempotency_key=key,
         ).first()
         if existing:
-            if existing.goal != goal.strip() or existing.model != model:
+            if (
+                existing.goal != goal.strip()
+                or existing.model != model
+                or existing.policy_snapshot.get("request") != value
+            ):
                 raise ApiProblem("幂等键已用于不同科研工作流", 409)
             return JsonResponse(workflow_json(existing), status=202)
         if AgentWorkflow._base_manager.filter(
@@ -677,8 +723,11 @@ def workflow_submit(request):
             resource_ids=resources_selected,
             algorithm_version_id=algorithm_id,
             parameters=parameters,
+            plan={"inputs": inputs},
+            import_results=import_results,
             idempotency_key=key,
             policy_snapshot={
+                "request": value,
                 "revision": AgentPolicy.objects.filter(pk=1)
                 .values_list("updated_at", flat=True)
                 .first()
@@ -693,12 +742,46 @@ def workflow_submit(request):
     return JsonResponse(workflow_json(workflow), status=202)
 
 
+@endpoint(["POST"])
+def workflow_confirm(request, workflow_id):
+    from .workflow import validate_confirmed_plan
+
+    value = body(request, ["planHash"])
+    with transaction.atomic():
+        workflow = get_object_or_404(
+            AgentWorkflow.objects.select_for_update(),
+            pk=workflow_id,
+            owner=request.user,
+        )
+        p = require_access(request.user, "agent", workflow.model)
+        if not p.get("workflowEnabled", True):
+            raise ApiProblem("科研工作流功能已关闭", 403)
+        if (
+            not isinstance(value.get("planHash"), str)
+            or value["planHash"] != workflow.plan_hash
+        ):
+            raise ApiProblem("执行计划已变化，请刷新后确认", 409)
+        if workflow.execute_operators and workflow.status in WORKFLOW_ACTIVE:
+            return JsonResponse(workflow_json(workflow))
+        if workflow.status != "waiting_approval" or workflow.cancel_requested:
+            raise ApiProblem("此计划当前不能确认执行", 409)
+        validate_confirmed_plan(workflow, request.user, p)
+        workflow.execute_operators = True
+        workflow.status, workflow.detail = "queued", "已确认，等待计算中心执行"
+        workflow.save(
+            update_fields=["execute_operators", "status", "detail", "updated_at"]
+        )
+    return JsonResponse(workflow_json(workflow))
+
+
 @endpoint(["GET"])
 def workflow_detail(request, workflow_id):
+    from .workflow import _authorize
+
     workflow = get_object_or_404(
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
     )
-    require_access(request.user, "agent", workflow.model)
+    _authorize(workflow)
     return JsonResponse(workflow_json(workflow))
 
 
@@ -713,9 +796,9 @@ def workflow_cancel(request, workflow_id):
     )
     # A queued item is not claimable after cancellation, so close it here
     # instead of leaving an invisible forever-queued record.
-    AgentWorkflow.objects.filter(pk=workflow.id, status="queued").update(
-        status="cancelled", detail="已取消", updated_at=timezone.now()
-    )
+    AgentWorkflow.objects.filter(
+        pk=workflow.id, status__in=["queued", "waiting_approval"]
+    ).update(status="cancelled", detail="已取消", updated_at=timezone.now())
     workflow.refresh_from_db()
     return JsonResponse(workflow_json(workflow))
 

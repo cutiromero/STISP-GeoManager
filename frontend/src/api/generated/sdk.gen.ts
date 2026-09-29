@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { ActComputeTaskData, ActComputeTaskErrors, ActComputeTaskResponses, ApplyResearchRoleData, ApplyResearchRoleErrors, ApplyResearchRoleResponses, CancelAgentRunData, CancelAgentRunErrors, CancelAgentRunResponses, CancelAgentWorkflowData, CancelAgentWorkflowErrors, CancelAgentWorkflowResponses, ChangeComputeVersionData, ChangeComputeVersionErrors, ChangeComputeVersionResponses, CommitVectorImportData, CommitVectorImportErrors, CommitVectorImportResponses, CreateAdminBackupRunData, CreateAdminBackupRunErrors, CreateAdminBackupRunResponses, CreateAdminDataResourceGroupData, CreateAdminDataResourceGroupErrors, CreateAdminDataResourceGroupResponses, CreateAgentConversationData, CreateAgentConversationErrors, CreateAgentConversationResponses, CreateAgentRunData, CreateAgentRunErrors, CreateAgentRunResponses, CreateAgentWorkflowData, CreateAgentWorkflowErrors, CreateAgentWorkflowResponses, CreateCatalogWorkspaceData, CreateCatalogWorkspaceErrors, CreateCatalogWorkspaceResponses, CreateComputeAlgorithmData, CreateComputeAlgorithmErrors, CreateComputeAlgorithmResponses, CreateComputeCategoryData, CreateComputeCategoryErrors, CreateComputeCategoryResponses, CreateComputeTaskData, CreateComputeTaskErrors, CreateComputeTaskResponses, CreateContentArticleData, CreateContentArticleErrors, CreateContentArticleResponses, CreateGroupData, CreateGroupErrors, CreateGroupResponses, CreateMapCompositionData, CreateMapCompositionErrors, CreateMapCompositionResponses, CreateMapCompositionVersionData, CreateMapCompositionVersionErrors, CreateMapCompositionVersionResponses, CreateProjectTagData, CreateProjectTagErrors, CreateProjectTagResponses, CreateResultArtifactData, CreateResultArtifactErrors, CreateResultArtifactResponses, CreateUserData, CreateUserErrors, CreateUserResponses, DeleteAgentConversationData, DeleteAgentConversationErrors, DeleteAgentConversationResponses, DeleteComputeAlgorithmData, DeleteComputeAlgorithmErrors, DeleteComputeAlgorithmResponses, DiscardContentAssetData, DiscardContentAssetErrors, DiscardContentAssetResponses, DownloadAdminBackupRunData, DownloadAdminBackupRunErrors, DownloadAdminBackupRunResponses, DownloadComputeOutputData, DownloadComputeOutputErrors, DownloadComputeOutputResponses, DownloadComputePackageData, DownloadComputePackageErrors, DownloadComputePackageResponses, DownloadComputeTemplateData, DownloadComputeTemplateErrors, DownloadComputeTemplateResponses, DownloadContentAssetData, DownloadContentAssetErrors, DownloadContentAssetResponses, DownloadExportData, DownloadExportErrors, DownloadExportResponses, DownloadMapCompositionVersionData, DownloadMapCompositionVersionErrors, DownloadMapCompositionVersionResponses, DownloadResultArtifactData, DownloadResultArtifactErrors, DownloadResultArtifactResponses, ExportAdminDataResourcesData, ExportAdminDataResourcesErrors, ExportAdminDataResourcesResponses, ExportLayersAsyncData, ExportLayersAsyncErrors, ExportLayersAsyncResponses, ExportLayersData, ExportLayersErrors, ExportLayersResponses, GetAccountAccessData, GetAccountAccessErrors, GetAccountAccessResponses, GetAdminBackupOverviewData, GetAdminBackupOverviewErrors, GetAdminBackupOverviewResponses, GetAdminBackupRunData, GetAdminBackupRunErrors, GetAdminBackupRunResponses, GetAdminBackupSettingsData, GetAdminBackupSettingsErrors, GetAdminBackupSettingsResponses, GetAdminDashboardData, GetAdminDashboardErrors, GetAdminDashboardResponses, GetAdminDashboardServerData, GetAdminDashboardServerErrors, GetAdminDashboardServerResponses, GetAdminProfileData, GetAdminProfileErrors, GetAdminProfileResponses, GetAdminSettingsData, GetAdminSettingsErrors, GetAdminSettingsResponses, GetAgentAdminData, GetAgentAdminErrors, GetAgentAdminResponses, GetAgentBootstrapData, GetAgentBootstrapErrors, GetAgentBootstrapResponses, GetAgentConversationData, GetAgentConversationErrors, GetAgentConversationResponses, GetAgentRunData, GetAgentRunErrors, GetAgentRunResponses, GetAgentWorkflowData, GetAgentWorkflowErrors, GetAgentWorkflowResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetCatalogWorkspaceData, GetCatalogWorkspaceErrors, GetCatalogWorkspaceResponses, GetComputeRuntimeData, GetComputeRuntimeErrors, GetComputeRuntimeResponses, GetComputeTaskData, GetComputeTaskErrors, GetComputeTaskResponses, GetContentArticleData, GetContentArticleErrors, GetContentArticleResponses, GetCsrfCookieData, GetCsrfCookieErrors, GetCsrfCookieResponses, GetCurrentUserData, GetCurrentUserErrors, GetCurrentUserResponses, GetDataSchemaSummaryData, GetDataSchemaSummaryErrors, GetDataSchemaSummaryResponses, GetDirectoriesData, GetDirectoriesErrors, GetDirectoriesResponses, GetHealthData, GetHealthErrors, GetHealthResponses, GetJobStatusData, GetJobStatusErrors, GetJobStatusResponses, GetLayersData, GetLayersErrors, GetLayersResponses, GetLoginOverviewData, GetLoginOverviewErrors, GetLoginOverviewResponses, GetMapCompositionData, GetMapCompositionErrors, GetMapCompositionResponses, GetMapThumbnailTileData, GetMapThumbnailTileErrors, GetMapThumbnailTileResponses, GetProjectAssignmentData, GetProjectAssignmentErrors, GetProjectAssignmentResponses, GetRasterDatasetsData, GetRasterDatasetsErrors, GetRasterDatasetsResponses, GetResourceNonGeoAnalysisData, GetResourceNonGeoAnalysisErrors, GetResourceNonGeoAnalysisResponses, GetResourceProfileData, GetResourceProfileErrors, GetResourceProfileResponses, GetResourcesData, GetResourcesErrors, GetResourcesResponses, GetResourceVisualizationSummaryData, GetResourceVisualizationSummaryErrors, GetResourceVisualizationSummaryResponses, GetResultArtifactData, GetResultArtifactErrors, GetResultArtifactResponses, GetTileData, GetTileErrors, GetTileResponses, GetUniqueValuesData, GetUniqueValuesErrors, GetUniqueValuesResponses, GetUserAvatarData, GetUserAvatarErrors, GetUserAvatarResponses, GuestLoginData, GuestLoginErrors, GuestLoginResponses, ImportCommitData, ImportCommitErrors, ImportCommitResponses, ImportComputeOutputData, ImportComputeOutputErrors, ImportComputeOutputResponses, ImportPreviewData, ImportPreviewErrors, ImportPreviewResponses, ImportRasterData, ImportRasterErrors, ImportRasterResponses, ImportValidateData, ImportValidateErrors, ImportValidateResponses, ListAdminBackupRunsData, ListAdminBackupRunsErrors, ListAdminBackupRunsResponses, ListAdminDataResourcesData, ListAdminDataResourcesErrors, ListAdminDataResourcesResponses, ListAdminOperationLogsData, ListAdminOperationLogsErrors, ListAdminOperationLogsResponses, ListAdminSystemLogsData, ListAdminSystemLogsErrors, ListAdminSystemLogsResponses, ListAdminWorkspacesData, ListAdminWorkspacesErrors, ListAdminWorkspacesResponses, ListAgentConversationsData, ListAgentConversationsErrors, ListAgentConversationsResponses, ListAgentResourcesData, ListAgentResourcesErrors, ListAgentResourcesResponses, ListCatalogWorkspacesData, ListCatalogWorkspacesErrors, ListCatalogWorkspacesResponses, ListComputeAlgorithmsData, ListComputeAlgorithmsErrors, ListComputeAlgorithmsResponses, ListComputeCategoriesData, ListComputeCategoriesErrors, ListComputeCategoriesResponses, ListComputeInputsData, ListComputeInputsErrors, ListComputeInputsResponses, ListComputeTasksData, ListComputeTasksErrors, ListComputeTasksResponses, ListContentArticlesData, ListContentArticlesErrors, ListContentArticlesResponses, ListGermplasmAccessionsData, ListGermplasmAccessionsErrors, ListGermplasmAccessionsResponses, ListGroupsData, ListGroupsErrors, ListGroupsResponses, ListMapCompositionsData, ListMapCompositionsErrors, ListMapCompositionsResponses, ListProjectTagsData, ListProjectTagsErrors, ListProjectTagsResponses, ListResultArtifactsData, ListResultArtifactsErrors, ListResultArtifactsResponses, ListRoleApplicationsData, ListRoleApplicationsErrors, ListRoleApplicationsResponses, ListUsersData, ListUsersErrors, ListUsersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, PreflightComputeTaskData, PreflightComputeTaskErrors, PreflightComputeTaskResponses, PreviewComputeOutputData, PreviewComputeOutputErrors, PreviewComputeOutputResponses, PreviewRasterImportData, PreviewRasterImportErrors, PreviewRasterImportResponses, PreviewVectorImportData, PreviewVectorImportErrors, PreviewVectorImportResponses, PublishMapCompositionData, PublishMapCompositionErrors, PublishMapCompositionResponses, QueryResourceData, QueryResourceErrors, QueryResourceNonGeoTableData, QueryResourceNonGeoTableErrors, QueryResourceNonGeoTableResponses, QueryResourceResponses, RegisterData, RegisterErrors, RegisterResponses, RenderRasterAsyncData, RenderRasterAsyncErrors, RenderRasterAsyncResponses, RenderRasterData, RenderRasterErrors, RenderRasterResponses, ResetUserPasswordData, ResetUserPasswordErrors, ResetUserPasswordResponses, RestoreMapCompositionProjectData, RestoreMapCompositionProjectErrors, RestoreMapCompositionProjectResponses, ReviewRoleApplicationData, ReviewRoleApplicationErrors, ReviewRoleApplicationResponses, ScanCatalogSourcesData, ScanCatalogSourcesErrors, ScanCatalogSourcesResponses, ScanRasterSourcesData, ScanRasterSourcesErrors, ScanRasterSourcesResponses, SearchData, SearchErrors, SearchResponses, SetProjectAssignmentData, SetProjectAssignmentErrors, SetProjectAssignmentResponses, TestAdminBackupTargetData, TestAdminBackupTargetErrors, TestAdminBackupTargetResponses, UnpublishMapCompositionData, UnpublishMapCompositionErrors, UnpublishMapCompositionResponses, UpdateAdminBackupSettingsData, UpdateAdminBackupSettingsErrors, UpdateAdminBackupSettingsResponses, UpdateAdminDataResourceData, UpdateAdminDataResourceErrors, UpdateAdminDataResourceGroupData, UpdateAdminDataResourceGroupErrors, UpdateAdminDataResourceGroupResponses, UpdateAdminDataResourceResponses, UpdateAdminProfileData, UpdateAdminProfileErrors, UpdateAdminProfilePasswordData, UpdateAdminProfilePasswordErrors, UpdateAdminProfilePasswordResponses, UpdateAdminProfilePermissionsData, UpdateAdminProfilePermissionsErrors, UpdateAdminProfilePermissionsResponses, UpdateAdminProfileResponses, UpdateAdminSettingsData, UpdateAdminSettingsErrors, UpdateAdminSettingsResponses, UpdateAdminWorkspaceData, UpdateAdminWorkspaceErrors, UpdateAdminWorkspaceResponses, UpdateAgentAdminData, UpdateAgentAdminErrors, UpdateAgentAdminResponses, UpdateAgentConversationData, UpdateAgentConversationErrors, UpdateAgentConversationResponses, UpdateCatalogWorkspaceData, UpdateCatalogWorkspaceErrors, UpdateCatalogWorkspaceResponses, UpdateComputeAlgorithmData, UpdateComputeAlgorithmErrors, UpdateComputeAlgorithmResponses, UpdateContentArticleData, UpdateContentArticleErrors, UpdateContentArticleResponses, UpdateMapCompositionData, UpdateMapCompositionErrors, UpdateMapCompositionResponses, UpdateOrDeleteGroupData, UpdateOrDeleteGroupErrors, UpdateOrDeleteGroupResponses, UpdateProjectTagData, UpdateProjectTagErrors, UpdateProjectTagResponses, UpdateResultArtifactData, UpdateResultArtifactErrors, UpdateResultArtifactResponses, UpdateUserGroupsData, UpdateUserGroupsErrors, UpdateUserGroupsResponses, UpdateUserOrDeleteData, UpdateUserOrDeleteErrors, UpdateUserOrDeleteResponses, UpdateUserPermissionsData, UpdateUserPermissionsErrors, UpdateUserPermissionsResponses, UploadAdminProfileAvatarData, UploadAdminProfileAvatarErrors, UploadAdminProfileAvatarResponses, UploadAgentAttachmentData, UploadAgentAttachmentErrors, UploadAgentAttachmentResponses, UploadComputeVersionData, UploadComputeVersionErrors, UploadComputeVersionResponses, UploadContentAssetData, UploadContentAssetErrors, UploadContentAssetResponses, ValidateVectorImportData, ValidateVectorImportErrors, ValidateVectorImportResponses } from './types.gen';
+import type { ActComputeTaskData, ActComputeTaskErrors, ActComputeTaskResponses, ApplyResearchRoleData, ApplyResearchRoleErrors, ApplyResearchRoleResponses, CancelAgentRunData, CancelAgentRunErrors, CancelAgentRunResponses, CancelAgentWorkflowData, CancelAgentWorkflowErrors, CancelAgentWorkflowResponses, ChangeComputeVersionData, ChangeComputeVersionErrors, ChangeComputeVersionResponses, CheckKnowledgeConstraintsData, CheckKnowledgeConstraintsErrors, CheckKnowledgeConstraintsResponses, CommitVectorImportData, CommitVectorImportErrors, CommitVectorImportResponses, ConfirmAgentWorkflowData, ConfirmAgentWorkflowErrors, ConfirmAgentWorkflowResponses, CreateAdminBackupRunData, CreateAdminBackupRunErrors, CreateAdminBackupRunResponses, CreateAdminDataResourceGroupData, CreateAdminDataResourceGroupErrors, CreateAdminDataResourceGroupResponses, CreateAgentConversationData, CreateAgentConversationErrors, CreateAgentConversationResponses, CreateAgentRunData, CreateAgentRunErrors, CreateAgentRunResponses, CreateAgentWorkflowData, CreateAgentWorkflowErrors, CreateAgentWorkflowResponses, CreateCatalogWorkspaceData, CreateCatalogWorkspaceErrors, CreateCatalogWorkspaceResponses, CreateComputeAlgorithmData, CreateComputeAlgorithmErrors, CreateComputeAlgorithmResponses, CreateComputeCategoryData, CreateComputeCategoryErrors, CreateComputeCategoryResponses, CreateComputeTaskData, CreateComputeTaskErrors, CreateComputeTaskResponses, CreateContentArticleData, CreateContentArticleErrors, CreateContentArticleResponses, CreateGroupData, CreateGroupErrors, CreateGroupResponses, CreateKnowledgeEntryData, CreateKnowledgeEntryErrors, CreateKnowledgeEntryResponses, CreateMapCompositionData, CreateMapCompositionErrors, CreateMapCompositionResponses, CreateMapCompositionVersionData, CreateMapCompositionVersionErrors, CreateMapCompositionVersionResponses, CreateProjectTagData, CreateProjectTagErrors, CreateProjectTagResponses, CreateResultArtifactData, CreateResultArtifactErrors, CreateResultArtifactResponses, CreateUserData, CreateUserErrors, CreateUserResponses, DeleteAgentConversationData, DeleteAgentConversationErrors, DeleteAgentConversationResponses, DeleteComputeAlgorithmData, DeleteComputeAlgorithmErrors, DeleteComputeAlgorithmResponses, DiscardContentAssetData, DiscardContentAssetErrors, DiscardContentAssetResponses, DownloadAdminBackupRunData, DownloadAdminBackupRunErrors, DownloadAdminBackupRunResponses, DownloadComputeOutputData, DownloadComputeOutputErrors, DownloadComputeOutputResponses, DownloadComputePackageData, DownloadComputePackageErrors, DownloadComputePackageResponses, DownloadComputeTemplateData, DownloadComputeTemplateErrors, DownloadComputeTemplateResponses, DownloadContentAssetData, DownloadContentAssetErrors, DownloadContentAssetResponses, DownloadExportData, DownloadExportErrors, DownloadExportResponses, DownloadMapCompositionVersionData, DownloadMapCompositionVersionErrors, DownloadMapCompositionVersionResponses, DownloadResultArtifactData, DownloadResultArtifactErrors, DownloadResultArtifactResponses, ExportAdminDataResourcesData, ExportAdminDataResourcesErrors, ExportAdminDataResourcesResponses, ExportLayersAsyncData, ExportLayersAsyncErrors, ExportLayersAsyncResponses, ExportLayersData, ExportLayersErrors, ExportLayersResponses, GetAccountAccessData, GetAccountAccessErrors, GetAccountAccessResponses, GetAdminBackupOverviewData, GetAdminBackupOverviewErrors, GetAdminBackupOverviewResponses, GetAdminBackupRunData, GetAdminBackupRunErrors, GetAdminBackupRunResponses, GetAdminBackupSettingsData, GetAdminBackupSettingsErrors, GetAdminBackupSettingsResponses, GetAdminDashboardData, GetAdminDashboardErrors, GetAdminDashboardResponses, GetAdminDashboardServerData, GetAdminDashboardServerErrors, GetAdminDashboardServerResponses, GetAdminProfileData, GetAdminProfileErrors, GetAdminProfileResponses, GetAdminSettingsData, GetAdminSettingsErrors, GetAdminSettingsResponses, GetAgentAdminData, GetAgentAdminErrors, GetAgentAdminResponses, GetAgentBootstrapData, GetAgentBootstrapErrors, GetAgentBootstrapResponses, GetAgentComputeTasksData, GetAgentComputeTasksErrors, GetAgentComputeTasksResponses, GetAgentConversationData, GetAgentConversationErrors, GetAgentConversationResponses, GetAgentRunData, GetAgentRunErrors, GetAgentRunResponses, GetAgentWorkflowData, GetAgentWorkflowErrors, GetAgentWorkflowResponses, GetBootstrapData, GetBootstrapErrors, GetBootstrapResponses, GetCatalogWorkspaceData, GetCatalogWorkspaceErrors, GetCatalogWorkspaceResponses, GetComputeRuntimeData, GetComputeRuntimeErrors, GetComputeRuntimeResponses, GetComputeTaskData, GetComputeTaskErrors, GetComputeTaskResponses, GetContentArticleData, GetContentArticleErrors, GetContentArticleResponses, GetCsrfCookieData, GetCsrfCookieErrors, GetCsrfCookieResponses, GetCurrentUserData, GetCurrentUserErrors, GetCurrentUserResponses, GetDataSchemaSummaryData, GetDataSchemaSummaryErrors, GetDataSchemaSummaryResponses, GetDirectoriesData, GetDirectoriesErrors, GetDirectoriesResponses, GetHealthData, GetHealthErrors, GetHealthResponses, GetJobStatusData, GetJobStatusErrors, GetJobStatusResponses, GetKnowledgeEntryData, GetKnowledgeEntryErrors, GetKnowledgeEntryResponses, GetLayersData, GetLayersErrors, GetLayersResponses, GetLoginOverviewData, GetLoginOverviewErrors, GetLoginOverviewResponses, GetMapCompositionData, GetMapCompositionErrors, GetMapCompositionResponses, GetMapThumbnailTileData, GetMapThumbnailTileErrors, GetMapThumbnailTileResponses, GetProjectAssignmentData, GetProjectAssignmentErrors, GetProjectAssignmentResponses, GetRasterDatasetsData, GetRasterDatasetsErrors, GetRasterDatasetsResponses, GetResourceNonGeoAnalysisData, GetResourceNonGeoAnalysisErrors, GetResourceNonGeoAnalysisResponses, GetResourceProfileData, GetResourceProfileErrors, GetResourceProfileResponses, GetResourcesData, GetResourcesErrors, GetResourcesResponses, GetResourceVisualizationSummaryData, GetResourceVisualizationSummaryErrors, GetResourceVisualizationSummaryResponses, GetResultArtifactData, GetResultArtifactErrors, GetResultArtifactResponses, GetTileData, GetTileErrors, GetTileResponses, GetUniqueValuesData, GetUniqueValuesErrors, GetUniqueValuesResponses, GetUserAvatarData, GetUserAvatarErrors, GetUserAvatarResponses, GuestLoginData, GuestLoginErrors, GuestLoginResponses, ImportCommitData, ImportCommitErrors, ImportCommitResponses, ImportComputeOutputData, ImportComputeOutputErrors, ImportComputeOutputResponses, ImportPreviewData, ImportPreviewErrors, ImportPreviewResponses, ImportRasterData, ImportRasterErrors, ImportRasterResponses, ImportValidateData, ImportValidateErrors, ImportValidateResponses, ListAdminBackupRunsData, ListAdminBackupRunsErrors, ListAdminBackupRunsResponses, ListAdminDataResourcesData, ListAdminDataResourcesErrors, ListAdminDataResourcesResponses, ListAdminOperationLogsData, ListAdminOperationLogsErrors, ListAdminOperationLogsResponses, ListAdminSystemLogsData, ListAdminSystemLogsErrors, ListAdminSystemLogsResponses, ListAdminWorkspacesData, ListAdminWorkspacesErrors, ListAdminWorkspacesResponses, ListAgentConversationsData, ListAgentConversationsErrors, ListAgentConversationsResponses, ListAgentResourcesData, ListAgentResourcesErrors, ListAgentResourcesResponses, ListAgentWorkflowsData, ListAgentWorkflowsErrors, ListAgentWorkflowsResponses, ListCatalogWorkspacesData, ListCatalogWorkspacesErrors, ListCatalogWorkspacesResponses, ListComputeAlgorithmsData, ListComputeAlgorithmsErrors, ListComputeAlgorithmsResponses, ListComputeCategoriesData, ListComputeCategoriesErrors, ListComputeCategoriesResponses, ListComputeInputsData, ListComputeInputsErrors, ListComputeInputsResponses, ListComputeTasksData, ListComputeTasksErrors, ListComputeTasksResponses, ListContentArticlesData, ListContentArticlesErrors, ListContentArticlesResponses, ListGermplasmAccessionsData, ListGermplasmAccessionsErrors, ListGermplasmAccessionsResponses, ListGroupsData, ListGroupsErrors, ListGroupsResponses, ListKnowledgeEntriesData, ListKnowledgeEntriesErrors, ListKnowledgeEntriesResponses, ListMapCompositionsData, ListMapCompositionsErrors, ListMapCompositionsResponses, ListProjectTagsData, ListProjectTagsErrors, ListProjectTagsResponses, ListResultArtifactsData, ListResultArtifactsErrors, ListResultArtifactsResponses, ListRoleApplicationsData, ListRoleApplicationsErrors, ListRoleApplicationsResponses, ListUsersData, ListUsersErrors, ListUsersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, PreflightComputeTaskData, PreflightComputeTaskErrors, PreflightComputeTaskResponses, PreviewComputeOutputData, PreviewComputeOutputErrors, PreviewComputeOutputResponses, PreviewRasterImportData, PreviewRasterImportErrors, PreviewRasterImportResponses, PreviewVectorImportData, PreviewVectorImportErrors, PreviewVectorImportResponses, PublishMapCompositionData, PublishMapCompositionErrors, PublishMapCompositionResponses, QueryResourceData, QueryResourceErrors, QueryResourceNonGeoTableData, QueryResourceNonGeoTableErrors, QueryResourceNonGeoTableResponses, QueryResourceResponses, RegisterData, RegisterErrors, RegisterResponses, RenderRasterAsyncData, RenderRasterAsyncErrors, RenderRasterAsyncResponses, RenderRasterData, RenderRasterErrors, RenderRasterResponses, ResetUserPasswordData, ResetUserPasswordErrors, ResetUserPasswordResponses, RestoreMapCompositionProjectData, RestoreMapCompositionProjectErrors, RestoreMapCompositionProjectResponses, ReviewRoleApplicationData, ReviewRoleApplicationErrors, ReviewRoleApplicationResponses, ScanCatalogSourcesData, ScanCatalogSourcesErrors, ScanCatalogSourcesResponses, ScanRasterSourcesData, ScanRasterSourcesErrors, ScanRasterSourcesResponses, SearchData, SearchErrors, SearchResponses, SetProjectAssignmentData, SetProjectAssignmentErrors, SetProjectAssignmentResponses, TestAdminBackupTargetData, TestAdminBackupTargetErrors, TestAdminBackupTargetResponses, UnpublishMapCompositionData, UnpublishMapCompositionErrors, UnpublishMapCompositionResponses, UpdateAdminBackupSettingsData, UpdateAdminBackupSettingsErrors, UpdateAdminBackupSettingsResponses, UpdateAdminDataResourceData, UpdateAdminDataResourceErrors, UpdateAdminDataResourceGroupData, UpdateAdminDataResourceGroupErrors, UpdateAdminDataResourceGroupResponses, UpdateAdminDataResourceResponses, UpdateAdminProfileData, UpdateAdminProfileErrors, UpdateAdminProfilePasswordData, UpdateAdminProfilePasswordErrors, UpdateAdminProfilePasswordResponses, UpdateAdminProfilePermissionsData, UpdateAdminProfilePermissionsErrors, UpdateAdminProfilePermissionsResponses, UpdateAdminProfileResponses, UpdateAdminSettingsData, UpdateAdminSettingsErrors, UpdateAdminSettingsResponses, UpdateAdminWorkspaceData, UpdateAdminWorkspaceErrors, UpdateAdminWorkspaceResponses, UpdateAgentAdminData, UpdateAgentAdminErrors, UpdateAgentAdminResponses, UpdateAgentConversationData, UpdateAgentConversationErrors, UpdateAgentConversationResponses, UpdateCatalogWorkspaceData, UpdateCatalogWorkspaceErrors, UpdateCatalogWorkspaceResponses, UpdateComputeAlgorithmData, UpdateComputeAlgorithmErrors, UpdateComputeAlgorithmResponses, UpdateContentArticleData, UpdateContentArticleErrors, UpdateContentArticleResponses, UpdateKnowledgeEntryData, UpdateKnowledgeEntryErrors, UpdateKnowledgeEntryResponses, UpdateMapCompositionData, UpdateMapCompositionErrors, UpdateMapCompositionResponses, UpdateOrDeleteGroupData, UpdateOrDeleteGroupErrors, UpdateOrDeleteGroupResponses, UpdateProjectTagData, UpdateProjectTagErrors, UpdateProjectTagResponses, UpdateResultArtifactData, UpdateResultArtifactErrors, UpdateResultArtifactResponses, UpdateUserGroupsData, UpdateUserGroupsErrors, UpdateUserGroupsResponses, UpdateUserOrDeleteData, UpdateUserOrDeleteErrors, UpdateUserOrDeleteResponses, UpdateUserPermissionsData, UpdateUserPermissionsErrors, UpdateUserPermissionsResponses, UploadAdminProfileAvatarData, UploadAdminProfileAvatarErrors, UploadAdminProfileAvatarResponses, UploadAgentAttachmentData, UploadAgentAttachmentErrors, UploadAgentAttachmentResponses, UploadComputeVersionData, UploadComputeVersionErrors, UploadComputeVersionResponses, UploadContentAssetData, UploadContentAssetErrors, UploadContentAssetResponses, ValidateVectorImportData, ValidateVectorImportErrors, ValidateVectorImportResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -2174,9 +2174,145 @@ export const listAgentResources = <ThrowOnError extends boolean = false>(options
 });
 
 /**
+ * 读取智能体关联计算的实时状态
+ *
+ * 读取智能体关联计算的实时状态；重新核对当前项目、本人记录及实际计算权限。
+ */
+export const getAgentComputeTasks = <ThrowOnError extends boolean = false>(options: Options<GetAgentComputeTasksData, ThrowOnError>): RequestResult<GetAgentComputeTasksResponses, GetAgentComputeTasksErrors, ThrowOnError> => (options.client ?? client).get<GetAgentComputeTasksResponses, GetAgentComputeTasksErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'sessionid',
+            type: 'apiKey'
+        }],
+    url: '/api/agent/runs/{runId}/compute-tasks/',
+    ...options
+});
+
+/**
+ * 确认当前预览计划并执行
+ *
+ * 确认当前预览计划并执行；重新核对当前项目、本人记录及实际计算权限。
+ */
+export const confirmAgentWorkflow = <ThrowOnError extends boolean = false>(options: Options<ConfirmAgentWorkflowData, ThrowOnError>): RequestResult<ConfirmAgentWorkflowResponses, ConfirmAgentWorkflowErrors, ThrowOnError> => (options.client ?? client).post<ConfirmAgentWorkflowResponses, ConfirmAgentWorkflowErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'sessionid',
+            type: 'apiKey'
+        }],
+    url: '/api/agent/workflows/{workflowId}/confirm/',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * 检索可见知识条目
+ *
+ * 检索可见知识条目。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。
+ */
+export const listKnowledgeEntries = <ThrowOnError extends boolean = false>(options: Options<ListKnowledgeEntriesData, ThrowOnError>): RequestResult<ListKnowledgeEntriesResponses, ListKnowledgeEntriesErrors, ThrowOnError> => (options.client ?? client).get<ListKnowledgeEntriesResponses, ListKnowledgeEntriesErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'sessionid',
+            type: 'apiKey'
+        }],
+    url: '/api/knowledge/entries/',
+    ...options
+});
+
+/**
+ * 创建当前项目知识条目
+ *
+ * 创建当前项目知识条目。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。
+ */
+export const createKnowledgeEntry = <ThrowOnError extends boolean = false>(options: Options<CreateKnowledgeEntryData, ThrowOnError>): RequestResult<CreateKnowledgeEntryResponses, CreateKnowledgeEntryErrors, ThrowOnError> => (options.client ?? client).post<CreateKnowledgeEntryResponses, CreateKnowledgeEntryErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'sessionid',
+            type: 'apiKey'
+        }],
+    url: '/api/knowledge/entries/',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * 读取知识条目与来源
+ *
+ * 读取知识条目与来源。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。
+ */
+export const getKnowledgeEntry = <ThrowOnError extends boolean = false>(options: Options<GetKnowledgeEntryData, ThrowOnError>): RequestResult<GetKnowledgeEntryResponses, GetKnowledgeEntryErrors, ThrowOnError> => (options.client ?? client).get<GetKnowledgeEntryResponses, GetKnowledgeEntryErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'sessionid',
+            type: 'apiKey'
+        }],
+    url: '/api/knowledge/entries/{entryId}/',
+    ...options
+});
+
+/**
+ * 更新知识条目并递增版本
+ *
+ * 更新知识条目并递增版本。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。
+ */
+export const updateKnowledgeEntry = <ThrowOnError extends boolean = false>(options: Options<UpdateKnowledgeEntryData, ThrowOnError>): RequestResult<UpdateKnowledgeEntryResponses, UpdateKnowledgeEntryErrors, ThrowOnError> => (options.client ?? client).patch<UpdateKnowledgeEntryResponses, UpdateKnowledgeEntryErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'sessionid',
+            type: 'apiKey'
+        }],
+    url: '/api/knowledge/entries/{entryId}/',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * 按适用条件核查显式观测事实
+ *
+ * 按适用条件核查显式观测事实。登录用户只读当前项目及公共已发布基础知识；修改仅限当前项目并须知识变更权限或超级管理员，修改须带revision。
+ */
+export const checkKnowledgeConstraints = <ThrowOnError extends boolean = false>(options: Options<CheckKnowledgeConstraintsData, ThrowOnError>): RequestResult<CheckKnowledgeConstraintsResponses, CheckKnowledgeConstraintsErrors, ThrowOnError> => (options.client ?? client).post<CheckKnowledgeConstraintsResponses, CheckKnowledgeConstraintsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'sessionid',
+            type: 'apiKey'
+        }],
+    url: '/api/knowledge/check/',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * 恢复本人科研编排记录
+ *
+ * 返回当前项目内本人最近三十个工作流；重新检查账号、项目和智能体访问权限。
+ */
+export const listAgentWorkflows = <ThrowOnError extends boolean = false>(options: Options<ListAgentWorkflowsData, ThrowOnError>): RequestResult<ListAgentWorkflowsResponses, ListAgentWorkflowsErrors, ThrowOnError> => (options.client ?? client).get<ListAgentWorkflowsResponses, ListAgentWorkflowsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'sessionid',
+            type: 'apiKey'
+        }],
+    url: '/api/agent/workflows/',
+    ...options
+});
+
+/**
  * 创建科研工作流
  *
- * 创建项目内的高光谱解译或其他科研编排任务。默认只生成计划；算子执行必须由超级管理员策略和请求同时允许。
+ * 创建项目内科研编排预览，校验授权输入、固定算法版本与参数后进入待确认状态；executeOperators=true 的直接执行请求返回400（策略禁止时403）。通过 confirm 接口确认 planHash 后执行并按 importResults 跟踪入库。
  */
 export const createAgentWorkflow = <ThrowOnError extends boolean = false>(options: Options<CreateAgentWorkflowData, ThrowOnError>): RequestResult<CreateAgentWorkflowResponses, CreateAgentWorkflowErrors, ThrowOnError> => (options.client ?? client).post<CreateAgentWorkflowResponses, CreateAgentWorkflowErrors, ThrowOnError>({
     security: [{

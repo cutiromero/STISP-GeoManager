@@ -153,6 +153,9 @@ class ComputeImport(models.Model):
     )
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     name = models.CharField(max_length=160)
+    request_source = models.CharField(
+        max_length=100, blank=True, default="", db_default=""
+    )
     status = models.CharField(max_length=16, default="queued")
     error = models.TextField(blank=True)
     resource = models.ForeignKey(

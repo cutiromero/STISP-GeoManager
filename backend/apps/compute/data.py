@@ -382,6 +382,9 @@ def import_output(record):
         actor = get_user_model().objects.get(pk=record.requested_by_id)
         try:
             require_actor(actor, output.task.project_tag_id, "catalog.add_dataresource")
+            from apps.agent.compute_tools import validate_import_intent
+
+            validate_import_intent(record)
         except ComputeError:
             resource.status = "inactive"
             resource.save(update_fields=["status"])

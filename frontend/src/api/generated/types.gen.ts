@@ -791,6 +791,297 @@ export type AgentResource = {
 };
 
 /**
+ * 关联计算和入库跟踪
+ */
+export type AgentComputeTaskList = {
+    /**
+     * 当前运行提交或关联的任务
+     */
+    items: Array<AgentComputeTaskTracking>;
+};
+
+/**
+ * 实时计算状态和入库意图
+ */
+export type AgentComputeTaskTracking = {
+    task: ComputeTask;
+    /**
+     * 完成后是否自动申请入库
+     */
+    autoImport: boolean;
+    /**
+     * 跟踪状态
+     */
+    trackingStatus: string;
+    /**
+     * 状态说明
+     */
+    detail: string;
+};
+
+/**
+ * 本人当前项目工作流
+ */
+export type AgentWorkflowList = {
+    /**
+     * 最近三十个工作流
+     */
+    items: Array<AgentWorkflow>;
+};
+
+/**
+ * 可核查的公开或项目内知识来源
+ */
+export type KnowledgeSource = {
+    /**
+     * 来源标题
+     */
+    title: string;
+    /**
+     * 公开来源 HTTP(S) 链接或空字符串
+     */
+    url: string;
+    /**
+     * 章节、页码或段落定位
+     */
+    locator: string;
+    /**
+     * 与条目对应的短证据摘录
+     */
+    excerpt: string;
+};
+
+/**
+ * 格式化、有来源的地学知识
+ */
+export type KnowledgeEntry = {
+    /**
+     * 条目标题
+     */
+    title: string;
+    /**
+     * 领域分类
+     */
+    category: string;
+    /**
+     * 关系主体
+     */
+    subject: string;
+    /**
+     * 带语义的关系名称
+     */
+    predicate: string;
+    /**
+     * 关系客体
+     */
+    object: string;
+    /**
+     * 知识陈述
+     */
+    statement: string;
+    /**
+     * 解释与使用方法
+     */
+    explanation: string;
+    /**
+     * 适用条件
+     */
+    conditions: Array<string>;
+    /**
+     * 例外和核验条件
+     */
+    exceptions: Array<string>;
+    /**
+     * 别名与检索关键词
+     */
+    aliases: Array<string>;
+    /**
+     * 支撑知识的来源
+     */
+    sources: Array<KnowledgeSource>;
+    /**
+     * 发布状态
+     */
+    status: 'draft' | 'published' | 'retired';
+    /**
+     * 程序化核查类型
+     */
+    ruleKind: 'none' | 'mineral_equilibrium' | 'numeric_range' | 'required_fields';
+    /**
+     * 核查器参数；仅允许内置规则的结构化配置
+     */
+    ruleConfig: {
+        [key: string]: unknown;
+    };
+    /**
+     * 条目 ID
+     */
+    id: number;
+    /**
+     * 所属项目；1 为公共基础资料
+     */
+    projectTagId: number;
+    /**
+     * 知识版本
+     */
+    revision: number;
+    /**
+     * 更新时间
+     */
+    updatedAt: string;
+};
+
+/**
+ * 编辑当前项目知识；发布必须带有效来源
+ */
+export type KnowledgeEntryInput = {
+    /**
+     * 条目标题
+     */
+    title: string;
+    /**
+     * 领域分类
+     */
+    category: string;
+    /**
+     * 关系主体
+     */
+    subject: string;
+    /**
+     * 带语义的关系名称
+     */
+    predicate: string;
+    /**
+     * 关系客体
+     */
+    object: string;
+    /**
+     * 知识陈述
+     */
+    statement: string;
+    /**
+     * 解释与使用方法
+     */
+    explanation: string;
+    /**
+     * 适用条件
+     */
+    conditions: Array<string>;
+    /**
+     * 例外和核验条件
+     */
+    exceptions: Array<string>;
+    /**
+     * 别名与检索关键词
+     */
+    aliases: Array<string>;
+    /**
+     * 支撑知识的来源
+     */
+    sources: Array<KnowledgeSource>;
+    /**
+     * 发布状态
+     */
+    status: 'draft' | 'published' | 'retired';
+    /**
+     * 程序化核查类型
+     */
+    ruleKind: 'none' | 'mineral_equilibrium' | 'numeric_range' | 'required_fields';
+    /**
+     * 核查器参数；仅允许内置规则的结构化配置
+     */
+    ruleConfig: {
+        [key: string]: unknown;
+    };
+    /**
+     * 修改需提供上次读取版本；创建省略
+     */
+    revision?: number;
+};
+
+/**
+ * 当前项目与公共已发布基础知识
+ */
+export type KnowledgeEntryList = {
+    /**
+     * 匹配的知识条目
+     */
+    items: Array<KnowledgeEntry>;
+    /**
+     * 匹配总数
+     */
+    total: number;
+    /**
+     * 可见领域分类
+     */
+    categories: Array<string>;
+    /**
+     * 是否具有知识维护权限
+     */
+    canEdit: boolean;
+};
+
+/**
+ * 规则核查结果
+ */
+export type KnowledgeFinding = {
+    /**
+     * 规则条目 ID
+     */
+    entryId: number;
+    /**
+     * 规则标题
+     */
+    title: string;
+    /**
+     * 结果状态
+     */
+    status: 'conflict' | 'pass' | 'needs_context';
+    /**
+     * 判定理由或缺少的条件
+     */
+    detail: string;
+    /**
+     * 所用规则版本
+     */
+    revision: number;
+    /**
+     * 规则证据
+     */
+    sources: Array<KnowledgeSource>;
+};
+
+/**
+ * 对显式事实进行条件化核查
+ */
+export type KnowledgeCheckInput = {
+    /**
+     * 观测事实：minerals/equilibrium/system/values/fields 等；未知条件不自动补全
+     */
+    facts: {
+        [key: string]: unknown;
+    };
+    /**
+     * 可选已发布规则 ID；省略则使用可见规则
+     */
+    entryIds?: Array<number>;
+};
+
+/**
+ * 核查结果和覆盖条数
+ */
+export type KnowledgeCheckResult = {
+    /**
+     * 冲突、通过或缺少上下文
+     */
+    findings: Array<KnowledgeFinding>;
+    /**
+     * 已检查条目数
+     */
+    checked: number;
+};
+
+/**
  * 科研工作流的可审计步骤
  */
 export type AgentWorkflowStep = {
@@ -952,6 +1243,24 @@ export type AgentWorkflow = {
      * 更新时间
      */
     updatedAt: string;
+    /**
+     * 经预检的输入、算法、参数与知识依据
+     */
+    plan: {
+        [key: string]: unknown;
+    };
+    /**
+     * 确认计划时校验的内容哈希
+     */
+    planHash: string;
+    /**
+     * 执行完成后自动登记结果
+     */
+    importResults: boolean;
+    /**
+     * 实际完成入库的数据资源 ID
+     */
+    resultResourceIds: Array<number>;
 };
 
 /**
@@ -985,13 +1294,23 @@ export type AgentWorkflowInput = {
         [key: string]: unknown;
     };
     /**
-     * 是否请求实际提交算子；默认 false
+     * 创建时为 false；实际执行须通过 confirm 接口确认冻结计划
      */
     executeOperators?: boolean;
     /**
      * 网络重试复用的幂等键
      */
     idempotencyKey: string;
+    /**
+     * 输入端口到授权资源 ID 的明确绑定
+     */
+    inputs?: {
+        [key: string]: number;
+    };
+    /**
+     * 完成后自动登记计算结果
+     */
+    importResults?: boolean;
 };
 
 /**
@@ -7362,6 +7681,15 @@ export type ComputeManifest = {
      * 中断后是否可安全重做一次
      */
     deterministic: boolean;
+    /**
+     * 可选智能体调用策略；旧清单省略时保持原权限行为，显式false禁止智能体调用
+     */
+    agent?: {
+        /**
+         * 是否允许受平台策略与用户权限控制的智能体调用
+         */
+        enabled: boolean;
+    };
 };
 
 /**
@@ -15386,6 +15714,428 @@ export type ListAgentResourcesResponses = {
 };
 
 export type ListAgentResourcesResponse = ListAgentResourcesResponses[keyof ListAgentResourcesResponses];
+
+export type GetAgentComputeTasksData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人智能体运行 ID
+         */
+        runId: number;
+    };
+    query?: never;
+    url: '/api/agent/runs/{runId}/compute-tasks/';
+};
+
+export type GetAgentComputeTasksErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type GetAgentComputeTasksError = GetAgentComputeTasksErrors[keyof GetAgentComputeTasksErrors];
+
+export type GetAgentComputeTasksResponses = {
+    /**
+     * 操作成功
+     */
+    200: AgentComputeTaskList;
+};
+
+export type GetAgentComputeTasksResponse = GetAgentComputeTasksResponses[keyof GetAgentComputeTasksResponses];
+
+export type ConfirmAgentWorkflowData = {
+    /**
+     * 确认执行的计划
+     */
+    body: {
+        /**
+         * 预览返回的计划哈希
+         */
+        planHash: string;
+    };
+    headers: {
+        /**
+         * 唯一当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 工作流 UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/confirm/';
+};
+
+export type ConfirmAgentWorkflowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type ConfirmAgentWorkflowError = ConfirmAgentWorkflowErrors[keyof ConfirmAgentWorkflowErrors];
+
+export type ConfirmAgentWorkflowResponses = {
+    /**
+     * 操作成功
+     */
+    200: AgentWorkflow;
+};
+
+export type ConfirmAgentWorkflowResponse = ConfirmAgentWorkflowResponses[keyof ConfirmAgentWorkflowResponses];
+
+export type ListKnowledgeEntriesData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: {
+        /**
+         * 关键词、别名、条件检索
+         */
+        q?: string;
+        /**
+         * 领域分类
+         */
+        category?: string;
+        /**
+         * 起始位置，默认0
+         */
+        offset?: number;
+        /**
+         * 每页数量，默认100，最多200
+         */
+        limit?: number;
+        /**
+         * true时包含本人当前项目草稿与下架项，须维护权限
+         */
+        manage?: boolean;
+    };
+    url: '/api/knowledge/entries/';
+};
+
+export type ListKnowledgeEntriesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type ListKnowledgeEntriesError = ListKnowledgeEntriesErrors[keyof ListKnowledgeEntriesErrors];
+
+export type ListKnowledgeEntriesResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeEntryList;
+};
+
+export type ListKnowledgeEntriesResponse = ListKnowledgeEntriesResponses[keyof ListKnowledgeEntriesResponses];
+
+export type CreateKnowledgeEntryData = {
+    /**
+     * 格式化输入
+     */
+    body: KnowledgeEntryInput;
+    headers: {
+        /**
+         * 当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/entries/';
+};
+
+export type CreateKnowledgeEntryErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type CreateKnowledgeEntryError = CreateKnowledgeEntryErrors[keyof CreateKnowledgeEntryErrors];
+
+export type CreateKnowledgeEntryResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeEntry;
+};
+
+export type CreateKnowledgeEntryResponse = CreateKnowledgeEntryResponses[keyof CreateKnowledgeEntryResponses];
+
+export type GetKnowledgeEntryData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 知识条目 ID
+         */
+        entryId: number;
+    };
+    query?: never;
+    url: '/api/knowledge/entries/{entryId}/';
+};
+
+export type GetKnowledgeEntryErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type GetKnowledgeEntryError = GetKnowledgeEntryErrors[keyof GetKnowledgeEntryErrors];
+
+export type GetKnowledgeEntryResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeEntry;
+};
+
+export type GetKnowledgeEntryResponse = GetKnowledgeEntryResponses[keyof GetKnowledgeEntryResponses];
+
+export type UpdateKnowledgeEntryData = {
+    /**
+     * 格式化输入
+     */
+    body: KnowledgeEntryInput;
+    headers: {
+        /**
+         * 当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 知识条目 ID
+         */
+        entryId: number;
+    };
+    query?: never;
+    url: '/api/knowledge/entries/{entryId}/';
+};
+
+export type UpdateKnowledgeEntryErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type UpdateKnowledgeEntryError = UpdateKnowledgeEntryErrors[keyof UpdateKnowledgeEntryErrors];
+
+export type UpdateKnowledgeEntryResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeEntry;
+};
+
+export type UpdateKnowledgeEntryResponse = UpdateKnowledgeEntryResponses[keyof UpdateKnowledgeEntryResponses];
+
+export type CheckKnowledgeConstraintsData = {
+    /**
+     * 格式化输入
+     */
+    body: KnowledgeCheckInput;
+    headers: {
+        /**
+         * 当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/check/';
+};
+
+export type CheckKnowledgeConstraintsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type CheckKnowledgeConstraintsError = CheckKnowledgeConstraintsErrors[keyof CheckKnowledgeConstraintsErrors];
+
+export type CheckKnowledgeConstraintsResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeCheckResult;
+};
+
+export type CheckKnowledgeConstraintsResponse = CheckKnowledgeConstraintsResponses[keyof CheckKnowledgeConstraintsResponses];
+
+export type ListAgentWorkflowsData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflows/';
+};
+
+export type ListAgentWorkflowsErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type ListAgentWorkflowsError = ListAgentWorkflowsErrors[keyof ListAgentWorkflowsErrors];
+
+export type ListAgentWorkflowsResponses = {
+    /**
+     * 工作流列表
+     */
+    200: AgentWorkflowList;
+};
+
+export type ListAgentWorkflowsResponse = ListAgentWorkflowsResponses[keyof ListAgentWorkflowsResponses];
 
 export type CreateAgentWorkflowData = {
     /**

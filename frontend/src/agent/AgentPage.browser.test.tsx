@@ -3,6 +3,7 @@ import { App as AntApp } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { agentApi } from "../api/agent";
+import { computeApi } from "../api/compute";
 import type { AgentBootstrap, AgentRun } from "../api/generated/types.gen";
 import AgentPage from "./AgentPage";
 
@@ -104,9 +105,18 @@ beforeEach(() => {
     runs: [run(1, "旧问题", "很长的历史回答。\n".repeat(180))],
   });
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [] });
+  vi.spyOn(computeApi, "algorithms").mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(computeApi, "inputs").mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(agentApi, "submit").mockImplementation(async (_id, input) =>
     run(2, input.prompt),
   );
+});
+
+it("prefills a knowledge handoff without sending it automatically", async () => {
+  render(<AntApp><MemoryRouter initialEntries={[{ pathname: "/agent/workbench", state: { query: "核查霞石与石英的适用条件", knowledgeEntryIds: [12] } }]}><AgentPage /></MemoryRouter></AntApp>);
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "输入消息" })).toHaveValue("核查霞石与石英的适用条件"));
+  expect(agentApi.submit).not.toHaveBeenCalled();
 });
 
 it.each(["chat", "workbench"])(

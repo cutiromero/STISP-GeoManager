@@ -13,6 +13,8 @@ import type {
   AgentAdminUpdate,
   AgentWorkflow,
   AgentWorkflowInput,
+  AgentWorkflowList,
+  AgentComputeTaskList,
   AgentAttachment,
 } from "./generated/types.gen";
 
@@ -55,6 +57,8 @@ export const agentApi = {
     requestJson<AgentRunPoll>(`/api/agent/runs/${id}/?after=${after}`),
   cancel: (id: number) =>
     requestJson<AgentRun>(`/api/agent/runs/${id}/cancel/`, { method: "POST" }),
+  computeTasks: (id: number) =>
+    requestJson<AgentComputeTaskList>(`/api/agent/runs/${id}/compute-tasks/`),
   resources: (q = "") =>
     requestJson<AgentResourceList>(
       `/api/agent/resources/?q=${encodeURIComponent(q)}`,
@@ -69,6 +73,12 @@ export const agentApi = {
     }),
   workflow: (id: string) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/`),
+  workflows: () => requestJson<AgentWorkflowList>("/api/agent/workflows/"),
+  confirmWorkflow: (id: string, planHash: string) =>
+    requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/confirm/`, {
+      method: "POST",
+      body: { planHash },
+    }),
   cancelWorkflow: (id: string) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/cancel/`, {
       method: "POST",

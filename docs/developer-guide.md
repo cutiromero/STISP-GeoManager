@@ -2542,7 +2542,7 @@ maxOutputTokens为每次调用的思考与正文合计上限；maxContextTokens�
 
 实际参数位于 generationParameters：contextWindowTokens 为用户本次可用窗口，serviceContextWindowTokens 为服务报告窗口；inputTokens 为最近请求计数，lastGeneratedTokens 为最近一次服务回报生成量，generatedTokens 为累计生成量，modelCalls 为收到用量回报的调用次数。思考和正文共同计入生成额度，预留量不等于消耗量。服务未提供 usage 时不伪造用量。
 
-本次预算作用于对话和数据智能体。科研工作流规划继续采用已有全局预算。附件仍有独立格式、大小和数量限制；扩大文本提取量不会令图片、栅格或整个数据库自动变成模型输入。
+本次预算作用于对话和数据智能体。科研工作流使用持久化状态机生成和执行可确认计划，算法调用受现有策略、权限及计算配额控制。附件仍有独立格式、大小和数量限制；扩大文本提取量不会令图片、栅格或整个数据库自动变成模型输入。
 
 
 ### MHGDAL多文件结果（2026-09-24）
@@ -2551,3 +2551,12 @@ maxOutputTokens为每次调用的思考与正文合计上限；maxContextTokens�
 
 ### 本人功能与科研用户申请
 登录后通过 `/api/auth/access/` 展示本人功能及智能体开放操作；升级差异按现有科研角色计算，单独展示。普通用户通过 `/api/auth/research-application/` 提交姓名、单位和理由；pending不可重复，rejected可重提。超级管理员在角色申请列表审核，申请人可读取本人状态及审核意见。个人资料权限目录只列当前有效项。
+### 2026-09-29 知识库与编排接口
+
+`GET/POST /api/knowledge/entries/`、`GET/PATCH /api/knowledge/entries/{entryId}/` 提供格式化知识检索与维护。读取需登录；范围为当前项目和公共已发布基础知识。维护要求超级管理员或 `knowledge.change_knowledgeentry`，且只能修改当前项目内容。发布需要来源，修改携带最后读取的 revision；冲突返回 409。检索支持 q/category/offset/limit（最多200）与 manage=true（维护者查看当前项目未发布条目）。
+
+`POST /api/knowledge/check/` 以 facts 和可选 entryIds 核查显式事实，返回 conflict/pass/needs_context 及条目版本和来源。矿物共存核查要求明确 minerals、equilibrium 和体系 system；缺失条件返回 needs_context。来源权限与图谱页面使用同一知识服务。知识图谱由条目关系派生，当前检索方式为关键词/别名匹配。
+
+`GET /api/agent/runs/{runId}/compute-tasks/` 返回本人运行关联计算的实时状态和自动入库跟踪；复用 ComputeTask 契约。`GET /api/agent/workflows/` 恢复当前项目本人最近30个工作流。预览可传 inputs（端口到资源ID）与 importResults；`POST /api/agent/workflows/{workflowId}/confirm/` 以 planHash 确认冻结计划，重新校验权限、输入、算法与预算后执行。plan、planHash、importResults、resultResourceIds 在工作流响应中始终返回。
+
+跨模块分工：根任务负责知识服务、OpenAPI/生成类型及集成；编排子任务负责 agent/compute 与其前端；科普/知识界面子任务负责内容刷新与知识页面。详见 [知识库与编排说明](knowledge-orchestration-20260929.md)。

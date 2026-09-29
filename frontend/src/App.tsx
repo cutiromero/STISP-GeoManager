@@ -59,6 +59,7 @@ const AdminTopicCompositionManagementPage = lazy(
 );
 const AboutPage = lazy(() => import("./pages/AboutV2Page"));
 const EditorialPage = lazy(() => import("./pages/EditorialPage"));
+const KnowledgeBasePage = lazy(() => import("./knowledge/KnowledgePage"));
 const ProjectManagementPage = lazy(
   () => import("./pages/ProjectManagementPage"),
 );
@@ -234,6 +235,7 @@ export default function App({
 
             {/* 需要登录才能访问的页面 */}
             <Route element={<RequireAuth />}>
+              <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
               <Route
                 path="/projects/manage"
                 element={<Navigate to="/admin/projects" replace />}
