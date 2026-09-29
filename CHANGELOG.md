@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - 计算状态卡随实际任务更新；按任务自动找到真实输出，用户无需查找 outputId。
 - 自动入库在取消或授权失效后停止，重复请求复用入库记录。
+- 默认结果名称带稳定输出标识，同一分析重复执行可分别入库，用户自定名称保持。
 
 ## [0.1.23] - 2026-09-27
 

@@ -84,7 +84,14 @@ def request_output_import(user, output, name="", *, request_source=""):
         raise ComputeError("计算任务尚未成功完成")
     if output.expired or output.kind == "archive":
         raise ComputeError("结果已过期或为多文件压缩包，不能自动入库")
-    name = clean_text(name or output.task.name + " · " + output.label, 160, "入库名称")
+    explicit_name = name not in ("", None)
+    legacy_default_name = output.task.name + " · " + output.label
+    if not explicit_name:
+        # An output has a stable, unique ID even when tasks and labels repeat.
+        # Keep it outside the clipped human-readable part of a long name.
+        suffix = f" [{output.task_id.hex[:8]}/{output.id}]"
+        name = legacy_default_name[: 160 - len(suffix)].rstrip() + suffix
+    name = clean_text(name, 160, "入库名称")
     with transaction.atomic():
         record, created = ComputeImport.objects.get_or_create(
             output=output,
@@ -96,6 +103,10 @@ def request_output_import(user, output, name="", *, request_source=""):
         )
         if not created and record.status in {"queued", "failed"}:
             record.status, record.error = "queued", ""
+            if not explicit_name and record.name != legacy_default_name:
+                # Omitted names preserve an earlier custom name. Legacy automatic
+                # names are upgraded so a duplicate-name failure can be retried.
+                name = record.name
             record.requested_by, record.name = user, name
             record.request_source = request_source
             record.save(
