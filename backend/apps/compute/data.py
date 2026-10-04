@@ -8,6 +8,7 @@ from contextlib import closing
 
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
+from django.utils import timezone
 
 from apps.catalog.models import DataResource
 from apps.catalog.permissions import user_can_access
@@ -20,6 +21,7 @@ from apps.core.storage import (
 )
 from apps.raster.models import RasterDataset
 from .config import config
+from .models import ComputeImport
 from .packages import ComputeError, checksum
 
 
@@ -379,6 +381,9 @@ def import_output(record):
     with transaction.atomic():
         from django.contrib.auth import get_user_model
 
+        # Reserve SQLite's writer before reading current permissions. Otherwise
+        # a concurrent heartbeat can invalidate this read snapshot before save.
+        ComputeImport.objects.filter(pk=record.pk).update(heartbeat=timezone.now())
         actor = get_user_model().objects.get(pk=record.requested_by_id)
         try:
             require_actor(actor, output.task.project_tag_id, "catalog.add_dataresource")

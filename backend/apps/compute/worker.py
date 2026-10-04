@@ -3,12 +3,13 @@
 import json
 import logging
 import shutil
+import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
 from datetime import timedelta
 
-from django.db import close_old_connections, transaction
+from django.db import OperationalError, close_old_connections, transaction
 from django.utils import timezone
 
 from apps.core.heavy_work import heavy_work
@@ -31,6 +32,7 @@ from .services import ACTIVE, check_live_task
 
 logger = logging.getLogger(__name__)
 _last_cleanup = 0.0
+IMPORT_BUSY_BACKOFF = (0.2, 0.5, 1.0)
 
 
 @contextmanager
@@ -264,39 +266,80 @@ def clean_expired(*, force=False):
                 shutil.rmtree(target, ignore_errors=True)
 
 
+def _sqlite_contention(exc):
+    """Use SQLite result codes, including BUSY_SNAPSHOT; never error wording."""
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, (OperationalError, sqlite3.OperationalError)):
+            code = getattr(exc, "sqlite_errorcode", 0)
+            if code & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                return True
+        exc = exc.__cause__
+    return False
+
+
 def process_import(record):
     from apps.agent.compute_tools import validate_import_intent
 
-    if not ComputeImport.objects.filter(pk=record.pk, status="queued").update(
-        status="running", heartbeat=timezone.now()
-    ):
-        return
-    try:
-        require_actor(
-            record.requested_by,
-            record.output.task.project_tag_id,
-            "catalog.add_dataresource",
-        )
-        validate_import_intent(record)
-        resource = import_output(record)
-        record.refresh_from_db()
-        if record.status == "failed":
+    # The worker still owns the heavy-work lock during this bounded retry loop.
+    # Each attempt reuses storage_key, refreshes intent/permissions and claims the
+    # same queue row; a successful partial import never creates another layer.
+    for attempt in range(len(IMPORT_BUSY_BACKOFF) + 1):
+        if not ComputeImport.objects.filter(pk=record.pk, status="queued").update(
+            status="running", heartbeat=timezone.now()
+        ):
             return
-        # import_output may return an already committed resource after interruption.
-        ComputeImport.objects.filter(pk=record.pk).update(
-            status="ready", resource=resource, error="", heartbeat=timezone.now()
-        )
-    except Exception as exc:
-        message = (
-            str(exc)
-            if isinstance(exc, ComputeError)
-            else "结果入库失败，请检查数据条件并重试；无需重新计算"
-        )
-        if not isinstance(exc, ComputeError):
-            logger.exception("Compute import %s failed", record.pk)
-        ComputeImport.objects.filter(pk=record.pk).update(
-            status="failed", error=message, heartbeat=timezone.now()
-        )
+        try:
+            record = ComputeImport.objects.select_related(
+                "output__task__version__algorithm", "requested_by"
+            ).get(pk=record.pk)
+            require_actor(
+                record.requested_by,
+                record.output.task.project_tag_id,
+                "catalog.add_dataresource",
+            )
+            validate_import_intent(record)
+            resource = import_output(record)
+            record.refresh_from_db()
+            if record.status == "failed":
+                return
+            ComputeImport.objects.filter(pk=record.pk).update(
+                status="ready", resource=resource, error="", heartbeat=timezone.now()
+            )
+            return
+        except Exception as exc:
+            busy = _sqlite_contention(exc)
+            if busy and attempt < len(IMPORT_BUSY_BACKOFF):
+                if not ComputeImport.objects.filter(
+                    pk=record.pk, status="running"
+                ).update(
+                    status="queued",
+                    error="入库数据库暂忙，正在自动重试；无需重新计算",
+                    heartbeat=timezone.now(),
+                ):
+                    return
+                logger.warning(
+                    "Compute import %s database busy; retry %s/%s",
+                    record.pk,
+                    attempt + 1,
+                    len(IMPORT_BUSY_BACKOFF),
+                )
+                time.sleep(IMPORT_BUSY_BACKOFF[attempt])
+                continue
+            message = (
+                "入库数据库持续繁忙，自动重试已用完；可重试入库，无需重新计算"
+                if busy
+                else str(exc)
+                if isinstance(exc, ComputeError)
+                else "结果入库失败，请检查数据条件并重试；无需重新计算"
+            )
+            if not isinstance(exc, ComputeError):
+                logger.exception("Compute import %s failed", record.pk)
+            ComputeImport.objects.filter(pk=record.pk).update(
+                status="failed", error=message, heartbeat=timezone.now()
+            )
+            return
 
 
 def worker_tick(*, recovered=False):
