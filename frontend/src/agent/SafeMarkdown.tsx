@@ -1,14 +1,20 @@
 import { Fragment, type ReactNode } from "react";
+import SafeMath from "./SafeMath";
 
 type WikiLinkRenderer = (target: string, label: string) => ReactNode;
 
 // Render a small Markdown subset as React text. No HTML, remote images or code execution.
-function inline(text: string, wikiLink?: WikiLinkRenderer): ReactNode[] {
+function inline(
+  text: string,
+  wikiLink?: WikiLinkRenderer,
+  math = false,
+): ReactNode[] {
   const output: ReactNode[] = [];
   let cursor = 0;
-  for (const match of text.matchAll(
-    /\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*([^*]+)\*\*|`([^`]+)`/g,
-  )) {
+  const pattern = math
+    ? /\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*([^*]+)\*\*|`([^`]+)`|(?<!\\)\$(?!\$)((?:\\.|[^$\\\n])+)\$(?!\$)/g
+    : /\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*([^*]+)\*\*|`([^`]+)`/g;
+  for (const match of text.matchAll(pattern)) {
     output.push(text.slice(cursor, match.index));
     output.push(
       match[1] ? (
@@ -16,9 +22,13 @@ function inline(text: string, wikiLink?: WikiLinkRenderer): ReactNode[] {
           {wikiLink ? wikiLink(match[1], match[2] || match[1]) : match[0]}
         </Fragment>
       ) : match[3] ? (
-        <strong key={`s${match.index}`}>{inline(match[3], wikiLink)}</strong>
-      ) : (
+        <strong key={`s${match.index}`}>
+          {inline(match[3], wikiLink, math)}
+        </strong>
+      ) : match[4] ? (
         <code key={`c${match.index}`}>{match[4]}</code>
+      ) : (
+        <SafeMath key={`m${match.index}`} expression={match[5] ?? ""} />
       ),
     );
     cursor = match.index + match[0].length;
@@ -30,9 +40,11 @@ function inline(text: string, wikiLink?: WikiLinkRenderer): ReactNode[] {
 export default function SafeMarkdown({
   text,
   wikiLink,
+  math = false,
 }: {
   text: string;
   wikiLink?: WikiLinkRenderer;
+  math?: boolean;
 }) {
   const lines = text.split("\n");
   const result: ReactNode[] = [];
@@ -54,6 +66,25 @@ export default function SafeMarkdown({
         <pre key={key}>
           <code>{code.join("\n")}</code>
         </pre>,
+      );
+    } else if (math && /^\s*\$\$.*\$\$\s*$/.test(line)) {
+      result.push(
+        <SafeMath key={key} expression={line.trim().slice(2, -2)} display />,
+      );
+    } else if (
+      math &&
+      line.trim() === "$$" &&
+      lines.some((row) => row.trim() === "$$")
+    ) {
+      const formula: string[] = [];
+      while (lines.length && lines[0]?.trim() !== "$$") {
+        const row = lines.shift() ?? "";
+        formula.push(row);
+        offset += row.length + 1;
+      }
+      offset += (lines.shift()?.length ?? 0) + 1;
+      result.push(
+        <SafeMath key={key} expression={formula.join("\n")} display />,
       );
     } else if (line.includes("|") && /^\s*\|?\s*:?-{3,}/.test(lines[0] ?? "")) {
       const split = (row: string) => {
@@ -83,9 +114,9 @@ export default function SafeMarkdown({
           const cellKey = `cell-${cellOffset}`;
           cellOffset += cell.length + 1;
           return tag === "th" ? (
-            <th key={cellKey}>{inline(cell, wikiLink)}</th>
+            <th key={cellKey}>{inline(cell, wikiLink, math)}</th>
           ) : (
-            <td key={cellKey}>{inline(cell, wikiLink)}</td>
+            <td key={cellKey}>{inline(cell, wikiLink, math)}</td>
           );
         });
       };
@@ -114,17 +145,17 @@ export default function SafeMarkdown({
         <ul key={key}>
           {items.map((item) => (
             <li key={item.key}>
-              {inline(item.text.replace(/^\s*[-*] /, ""), wikiLink)}
+              {inline(item.text.replace(/^\s*[-*] /, ""), wikiLink, math)}
             </li>
           ))}
         </ul>,
       );
     } else if (/^#{1,4} /.test(line)) {
       result.push(
-        <h3 key={key}>{inline(line.replace(/^#+ /, ""), wikiLink)}</h3>,
+        <h3 key={key}>{inline(line.replace(/^#+ /, ""), wikiLink, math)}</h3>,
       );
     } else if (line.trim()) {
-      result.push(<p key={key}>{inline(line, wikiLink)}</p>);
+      result.push(<p key={key}>{inline(line, wikiLink, math)}</p>);
     }
   }
   return <div className="agent-markdown">{result}</div>;

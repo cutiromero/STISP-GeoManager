@@ -34,6 +34,9 @@ importers:
       i18next:
         specifier: ^26.3.6
         version: 26.3.6(typescript@6.0.3)
+      katex:
+        specifier: 0.19.0
+        version: 0.19.0
       mapbox-gl:
         specifier: ^3.25.0
         version: 3.25.0(patch_hash=5942ed89d4d2bf34e2db3155bb021f3f08248ecc9a97391e3e70c7d665154bea)
@@ -1966,6 +1969,10 @@ packages:
 
   jsonrepair@3.14.0:
     resolution: {integrity: sha512-tWPGKMZf/8UPim+fcW2EfcQ/d/7aKUrP6IECz9G3Tu6Q5dX0orSleqJ9z6sSw7qrQkjF8/Edo4DvsWBZ8H+HNg==}
+    hasBin: true
+
+  katex@0.19.0:
+    resolution: {integrity: sha512-v6Tznz3zJ7u3niRCoDTsumM2+HA2XXcCu+WAacCeHD2z3p9A9Ks987o5FzfTGBN0e8A0vjEgIDvLbICrXpdw/Q==}
     hasBin: true
 
   lerc@3.0.0:
@@ -4799,6 +4806,10 @@ snapshots:
       jsep: 1.4.0
 
   jsonrepair@3.14.0: {}
+
+  katex@0.19.0:
+    dependencies:
+      commander: 15.0.0
 
   lerc@3.0.0: {}
 

@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import SafeMarkdown from "../agent/SafeMarkdown";
 import type { KnowledgeWikiPage } from "../api/generated/types.gen";
 const api = vi.hoisted(() => ({
   documents: vi.fn(),
@@ -284,6 +285,91 @@ it("renders asterisk lists as lists and keeps HTML and code as inert text", asyn
     "[[method|代码中的链接]]",
   );
   expect(within(content).queryAllByRole("button")).toHaveLength(0);
+});
+it("typesets Wiki chemical formulas and inline and display mathematics", async () => {
+  const chemistry = String.raw`$\text{Al}_{2}\text{O}_{3}$`;
+  const content = await openWiki([
+    wikiPage(
+      "1:formulas",
+      "矿物公式",
+      [
+        `化学成分为 ${chemistry}，用于比较样本。`,
+        String.raw`行内能量公式 $E=mc^{2}$。`,
+        "$$",
+        String.raw`\frac{a+b}{c}=d`,
+        "$$",
+        String.raw`$$\text{SiO}_{2}$$`,
+      ].join("\n"),
+    ),
+  ]);
+  await waitFor(() =>
+    expect(content.querySelectorAll(".katex")).toHaveLength(4),
+  );
+  expect(content.querySelectorAll(".katex-display")).toHaveLength(2);
+  for (const formula of content.querySelectorAll(".katex-html")) {
+    expect(formula).toBeVisible();
+  }
+  expect(content.innerText).not.toContain(chemistry);
+  expect(content.innerText).not.toContain(String.raw`\frac{a+b}{c}`);
+  expect(content.innerText).toContain("化学成分为");
+  expect(content.innerText).toContain("用于比较样本。");
+});
+it("keeps formulas inside Wiki inline code and fenced code unchanged", async () => {
+  const inlineCode = "$E=mc^2$";
+  const fencedCode = String.raw`$$\text{SiO}_{2}$$`;
+  const content = await openWiki([
+    wikiPage(
+      "1:code",
+      "公式代码示例",
+      [
+        "显示公式 $x^{2}$。",
+        `行内代码 \`${inlineCode}\`。`,
+        "```latex",
+        fencedCode,
+        "```",
+      ].join("\n"),
+    ),
+  ]);
+  await waitFor(() =>
+    expect(content.querySelectorAll(".katex")).toHaveLength(1),
+  );
+  expect(content.querySelector("p code")).toHaveTextContent(inlineCode);
+  expect(content.querySelector("pre code")).toHaveTextContent(fencedCode);
+  expect(content.querySelector("code .katex")).toBeNull();
+});
+it("does not create executable links or injected HTML from Wiki formulas", async () => {
+  const content = await openWiki([
+    wikiPage(
+      "1:untrusted",
+      "公式内容安全",
+      [
+        String.raw`$\href{javascript:alert(1)}{click}$`,
+        String.raw`$\htmlClass{wiki-injected}{x}$`,
+        String.raw`$\htmlId{wiki-injected}{x}$`,
+        String.raw`$\includegraphics{https://example.org/tracker.png}$`,
+        "$x^{2}$",
+      ].join("\n"),
+    ),
+  ]);
+  await waitFor(() =>
+    expect(content.querySelectorAll(".katex, .katex-error")).toHaveLength(5),
+  );
+  expect(
+    content.querySelector(
+      "a, script, img, iframe, [onclick], [onerror], .wiki-injected, #wiki-injected",
+    ),
+  ).toBeNull();
+  expect(within(content).queryAllByRole("link")).toHaveLength(0);
+});
+it("preserves formula text in the default agent Markdown mode", () => {
+  const inlineFormula = String.raw`$\text{SiO}_{2}$`;
+  const blockFormula = "$$E=mc^{2}$$";
+  const { container } = render(
+    <SafeMarkdown text={`${inlineFormula}\n${blockFormula}`} />,
+  );
+  expect(screen.getByText(inlineFormula)).toBeVisible();
+  expect(screen.getByText(blockFormula)).toBeVisible();
+  expect(container.querySelector(".katex")).toBeNull();
 });
 it("retries a failed document and shows the updated state", async () => {
   api.documents.mockResolvedValueOnce({

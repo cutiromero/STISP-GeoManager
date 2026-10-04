@@ -506,6 +506,7 @@ export default function KnowledgeLibrary({
             <div className="knowledge-wiki-content">
               <SafeMarkdown
                 text={page.content}
+                math
                 wikiLink={(target, label) => {
                   const scope = page.id.slice(0, page.id.indexOf(":"));
                   const id = `${scope}:${target.trim()}`;
