@@ -1,0 +1,9 @@
+# Merge into an existing app.toml. Keep keys and engine data outside the Git tree.
+[application.knowledge.weknora]
+enabled = false
+base_url = "http://127.0.0.1:19020"
+api_key_file = "/path/to/private/weknora-api-key"
+tenant_id = 1
+embedding_model_id = "configured-weknora-embedding-model-id"
+chat_model_id = "configured-weknora-chat-model-id"
+timeout_seconds = 30

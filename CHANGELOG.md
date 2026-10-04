@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.25] - 2026-10-05
+
+### Added
+- 知识库增加资料上传、带来源的语义检索与自动 Wiki，主题关系可视化延伸至自动整理内容。
+- 接入独立 WeKnora Lite 和 BGE-M3 向量服务，项目共享资料与本人私有资料分别索引、整理和鉴权。
+- 新增面几何修复算法、逐要素审计与原件保留，通用质量报告控制结果自动入库。
+
+### Fixed
+- 知识和算法检索不再占用数据资源访问额度，知识引用编号与实际证据一致。
+- 智能体回答附带最新计算与入库状态，算法发现可按目标关键词筛选。
+- 需要审核或质量报告无效的计算结果暂停自动入库，保留可复核输出。
+
 ## [0.1.24] - 2026-09-29
 
 ### Added

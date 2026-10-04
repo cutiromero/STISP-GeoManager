@@ -324,6 +324,10 @@ def _collect(workflow, user, p, task):
         )
         return
     require_actor(user, workflow.project_tag_id, "catalog.add_dataresource")
+    from apps.compute.quality import require_automatic_quality
+
+    for output in outputs:
+        require_automatic_quality(output)
     importable = [output for output in outputs if output.kind != "archive"]
     if not importable:
         raise ComputeError("结果均为压缩包，请下载后按文件类型分别入库")

@@ -164,6 +164,49 @@ def test_explicit_algorithm_deny_and_public_discovery(env):
         )
 
 
+def test_algorithm_goal_search_keeps_complete_manifest_and_empty_fallback(env):
+    from apps.compute.models import AlgorithmResource, AlgorithmVersion
+
+    version = env["version"]
+    algorithm = version.algorithm
+    algorithm.name = "矢量面积与周长"
+    algorithm.description = "WGS84 椭球量测，保留孔洞"
+    algorithm.identifier = "vector-metrics"
+    with project_scope(
+        ProjectScope(
+            (algorithm.project_tag_id,), algorithm.project_tag_id, env["admin"].id
+        )
+    ):
+        algorithm.save(update_fields=["name", "description", "identifier"])
+    other = AlgorithmResource.objects.create(
+        identifier="raster-classifier", name="影像分类", created_by=env["owner"]
+    )
+    AlgorithmVersion.objects.create(
+        algorithm=other,
+        version="1",
+        status="published",
+        manifest=version.manifest,
+        checksum="b" * 64,
+        package_path="unused.zip",
+    )
+    for query in ["面积 周长", "量测", "vector-metrics", "未命中词 面积"]:
+        result, _ = execute(env["run"], "list_compute_algorithms", {"query": query})
+        assert [item["id"] for item in result["items"]] == [algorithm.id]
+        selected = result["items"][0]["versions"][0]
+        assert selected["manifest"] == version.manifest
+        assert selected["manifest"]["inputs"] == version.manifest["inputs"]
+        assert selected["manifest"]["parameters"] == version.manifest["parameters"]
+        assert selected["manifest"]["outputs"] == version.manifest["outputs"]
+    all_items, _ = execute(env["run"], "list_compute_algorithms", {})
+    assert {item["id"] for item in all_items["items"]} == {algorithm.id, other.id}
+    missing, _ = execute(
+        env["run"], "list_compute_algorithms", {"query": "完全不存在的算法"}
+    )
+    assert missing["items"] == [] and not missing["truncated"]
+    with pytest.raises(ValidationError, match="算法关键词"):
+        execute(env["run"], "list_compute_algorithms", {"query": ["面积"]})
+
+
 def test_model_changed_keys_cannot_repeat_calculation(env):
     args = {
         "versionId": env["version"].id,

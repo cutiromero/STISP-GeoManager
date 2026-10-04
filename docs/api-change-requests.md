@@ -1,5 +1,16 @@
 # API Change Requests
 
+## API-20261004-001 - 文档检索、自动Wiki与计算质量门控
+
+- Status: Verified
+- Owner: Root契约/前端；WeKnora子任务后端；几何子任务计算执行与门控。
+- Endpoints: /api/knowledge/documents/; /api/knowledge/documents/{documentId}/retry/; /api/knowledge/documents/search/; /api/knowledge/wiki/; ComputeManifest。
+- Change: 增加文档上传、状态、混合检索、自动Wiki及来源关系；manifest新增qualityReport声明。
+- Frontend reason: 用户可直接积累资料、查原文、读自动Wiki；需要复核的计算结果暂停自动入库。
+- Mock examples: mock/prism/examples/99-knowledge-library.json。
+- Backend notes: 主平台鉴权，项目/本人空间分开索引与合成，原始文档保留；报告校验与入库时双重检查。
+- Verification: 本地知识后端41项、智能体集成69项通过；开发候选的真实资料检索、Wiki、前端浏览器和几何计算已验证。正式发布另以冻结提交的候选与生产回执为准。
+
 This document is the frontend-to-backend handoff queue for API contract changes.
 
 Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever frontend changes an endpoint, response field, request body, status code, permission behavior, or mock example that requires backend implementation, add or update one API change entry here. Backend uses these entries to update Django behavior and tests.
@@ -22,6 +33,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261004-001 | Verified | /api/knowledge/documents/; /api/knowledge/wiki/; ComputeManifest | document retrieval; automatic Wiki; quality gate | Updated | Added | Passed | Passed | Real development candidate; project and owner scopes isolated |
 | API-20260924-001 | Verified | /api/agent/admin/; /api/agent/bootstrap/; /api/agent/conversations/{id}/runs/ | role ceilings; task budgets; usage | Updated | HTTP model fixtures | Passed | Passed | Local browser; backend request capture; v0.1.15 |
 | API-20260922-001 | Verified | /api/agent/*; /api/compute/algorithms/ | generation controls; stable order | Updated | HTTP model fixtures | Passed | Passed | v0.1.13 server receipt; actual token accounting and two published algorithms |
 | API-20260920-002 | Verified | `DELETE /api/compute/algorithms/{algorithmId}/` | management operation | Updated | Updated | Implemented | Passed | Deletes registrations without task history and protects algorithms referenced by task history |

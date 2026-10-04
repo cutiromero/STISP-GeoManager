@@ -84,6 +84,10 @@ def request_output_import(user, output, name="", *, request_source=""):
         raise ComputeError("计算任务尚未成功完成")
     if output.expired or output.kind == "archive":
         raise ComputeError("结果已过期或为多文件压缩包，不能自动入库")
+    if request_source:
+        from .quality import require_automatic_quality
+
+        require_automatic_quality(output)
     explicit_name = name not in ("", None)
     legacy_default_name = output.task.name + " · " + output.label
     if not explicit_name:

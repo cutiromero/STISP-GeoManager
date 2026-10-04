@@ -1000,6 +1000,216 @@ export type KnowledgeEntryInput = {
 };
 
 /**
+ * 已上传资料；上游ID与密钥只在服务端保存
+ */
+export type KnowledgeDocument = {
+    /**
+     * 平台资料ID
+     */
+    id: number;
+    /**
+     * 资料名称
+     */
+    title: string;
+    /**
+     * 原始文件名
+     */
+    filename: string;
+    /**
+     * 原始来源地址；可以为空
+     */
+    sourceUrl: string;
+    /**
+     * 所属项目
+     */
+    projectTagId: number;
+    /**
+     * 可见范围
+     */
+    visibility: 'project' | 'owner_only';
+    /**
+     * 本地处理及上游索引状态
+     */
+    status: 'pending' | 'processing' | 'finalizing' | 'completed' | 'failed' | 'cancelled';
+    /**
+     * 处理状态或可行动错误说明
+     */
+    detail: string;
+    /**
+     * 上传时间
+     */
+    createdAt: string;
+    /**
+     * 可重试处理
+     */
+    canManage: boolean;
+    /**
+     * 原始资料SHA256
+     */
+    sha256: string;
+};
+
+/**
+ * 当前项目、公共项目及本人私有资料
+ */
+export type KnowledgeDocumentList = {
+    /**
+     * 资料，最多200份
+     */
+    items: Array<KnowledgeDocument>;
+    /**
+     * 文档服务已配置
+     */
+    enabled: boolean;
+    /**
+     * 当前用户有知识维护权限
+     */
+    canUpload: boolean;
+    /**
+     * 服务状态说明
+     */
+    detail: string;
+};
+
+/**
+ * 经本地权限重新校验的检索原文
+ */
+export type KnowledgePassage = {
+    /**
+     * 平台资料ID
+     */
+    documentId: number;
+    /**
+     * 资料标题
+     */
+    title: string;
+    /**
+     * 来源地址
+     */
+    sourceUrl: string;
+    /**
+     * 匹配原文，保留页号标记
+     */
+    content: string;
+    /**
+     * 该次上游相似度得分，不是事实正确率
+     */
+    score: number;
+    /**
+     * 检索方式
+     */
+    matchType: 'vector' | 'keyword';
+    /**
+     * 引用片段标识
+     */
+    chunkId: string;
+};
+
+/**
+ * 真实混合检索结果
+ */
+export type KnowledgeDocumentSearch = {
+    /**
+     * 原文依据
+     */
+    items: Array<KnowledgePassage>;
+    /**
+     * 检索服务可用
+     */
+    available: boolean;
+    /**
+     * 状态说明
+     */
+    detail: string;
+};
+
+/**
+ * Wiki引用的本地可见原文
+ */
+export type KnowledgeWikiSource = {
+    /**
+     * 资料ID
+     */
+    documentId: number;
+    /**
+     * 标题
+     */
+    title: string;
+    /**
+     * 来源地址
+     */
+    sourceUrl: string;
+};
+
+/**
+ * 由文档自动整理的Wiki页面；生成内容不自动成为已审规则
+ */
+export type KnowledgeWikiPage = {
+    /**
+     * 平台范围内稳定页面标识
+     */
+    id: string;
+    /**
+     * 标题
+     */
+    title: string;
+    /**
+     * 摘要
+     */
+    summary: string;
+    /**
+     * Markdown正文
+     */
+    content: string;
+    /**
+     * 上游页面状态
+     */
+    status: string;
+    /**
+     * 修订版本
+     */
+    version: number;
+    /**
+     * 已校验引用来源
+     */
+    sources: Array<KnowledgeWikiSource>;
+    /**
+     * 当前可见知识空间的关联页面
+     */
+    links: Array<string>;
+    /**
+     * 所属项目
+     */
+    projectTagId: number;
+};
+
+/**
+ * 可见空间的自动Wiki及图谱
+ */
+export type KnowledgeWikiList = {
+    /**
+     * 最多100页，正文按需查看
+     */
+    items: Array<KnowledgeWikiPage>;
+    /**
+     * 待生成任务数
+     */
+    pendingTasks: number;
+    /**
+     * 正在生成
+     */
+    active: boolean;
+    /**
+     * 服务可用
+     */
+    available: boolean;
+    /**
+     * 服务状态说明
+     */
+    detail: string;
+};
+
+/**
  * 当前项目与公共已发布基础知识
  */
 export type KnowledgeEntryList = {
@@ -7689,6 +7899,15 @@ export type ComputeManifest = {
          * 是否允许受平台策略与用户权限控制的智能体调用
          */
         enabled: boolean;
+    };
+    /**
+     * 可选质量报告声明；worker验证并传播到输出。声明但缺失/无效或needs_review时阻止自动入库，报告最大64KiB
+     */
+    qualityReport?: {
+        /**
+         * 单层ASCII JSON文件名，与普通输出不重名
+         */
+        file: string;
     };
 };
 
@@ -15826,6 +16045,298 @@ export type ConfirmAgentWorkflowResponses = {
 };
 
 export type ConfirmAgentWorkflowResponse = ConfirmAgentWorkflowResponses[keyof ConfirmAgentWorkflowResponses];
+
+export type ListKnowledgeDocumentsData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前项目ID；后端验证项目成员关系
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/documents/';
+};
+
+export type ListKnowledgeDocumentsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 知识引擎暂不可用，原资料保留，可重试
+     */
+    503: ErrorResponse;
+};
+
+export type ListKnowledgeDocumentsError = ListKnowledgeDocumentsErrors[keyof ListKnowledgeDocumentsErrors];
+
+export type ListKnowledgeDocumentsResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeDocumentList;
+};
+
+export type ListKnowledgeDocumentsResponse = ListKnowledgeDocumentsResponses[keyof ListKnowledgeDocumentsResponses];
+
+export type UploadKnowledgeDocumentData = {
+    /**
+     * 最多20MiB；PDF/DOCX先提取带页号/段号文本，扫描PDF须先有可提取文字
+     */
+    body: {
+        /**
+         * PDF、DOCX、TXT、MD、CSV或JSON文件
+         */
+        file: Blob | File;
+        /**
+         * 标题，最多180字
+         */
+        title: string;
+        /**
+         * 来源HTTP(S)地址，不触发下载
+         */
+        sourceUrl?: string;
+        /**
+         * 可见范围
+         */
+        visibility: 'project' | 'owner_only';
+    };
+    headers: {
+        /**
+         * 当前项目ID；后端验证项目成员关系
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/documents/';
+};
+
+export type UploadKnowledgeDocumentErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 知识引擎暂不可用，原资料保留，可重试
+     */
+    503: ErrorResponse;
+};
+
+export type UploadKnowledgeDocumentError = UploadKnowledgeDocumentErrors[keyof UploadKnowledgeDocumentErrors];
+
+export type UploadKnowledgeDocumentResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeDocument;
+};
+
+export type UploadKnowledgeDocumentResponse = UploadKnowledgeDocumentResponses[keyof UploadKnowledgeDocumentResponses];
+
+export type RetryKnowledgeDocumentData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前项目ID；后端验证项目成员关系
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本地资料ID
+         */
+        documentId: number;
+    };
+    query?: never;
+    url: '/api/knowledge/documents/{documentId}/retry/';
+};
+
+export type RetryKnowledgeDocumentErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 知识引擎暂不可用，原资料保留，可重试
+     */
+    503: ErrorResponse;
+};
+
+export type RetryKnowledgeDocumentError = RetryKnowledgeDocumentErrors[keyof RetryKnowledgeDocumentErrors];
+
+export type RetryKnowledgeDocumentResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeDocument;
+};
+
+export type RetryKnowledgeDocumentResponse = RetryKnowledgeDocumentResponses[keyof RetryKnowledgeDocumentResponses];
+
+export type SearchKnowledgeDocumentsData = {
+    /**
+     * 检索输入
+     */
+    body: {
+        /**
+         * 自然语言问题
+         */
+        query: string;
+        /**
+         * 最多返回数量
+         */
+        limit?: number;
+    };
+    headers: {
+        /**
+         * 当前项目ID；后端验证项目成员关系
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/documents/search/';
+};
+
+export type SearchKnowledgeDocumentsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 知识引擎暂不可用，原资料保留，可重试
+     */
+    503: ErrorResponse;
+};
+
+export type SearchKnowledgeDocumentsError = SearchKnowledgeDocumentsErrors[keyof SearchKnowledgeDocumentsErrors];
+
+export type SearchKnowledgeDocumentsResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeDocumentSearch;
+};
+
+export type SearchKnowledgeDocumentsResponse = SearchKnowledgeDocumentsResponses[keyof SearchKnowledgeDocumentsResponses];
+
+export type ListKnowledgeWikiData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前项目ID；后端验证项目成员关系
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/knowledge/wiki/';
+};
+
+export type ListKnowledgeWikiErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 知识引擎暂不可用，原资料保留，可重试
+     */
+    503: ErrorResponse;
+};
+
+export type ListKnowledgeWikiError = ListKnowledgeWikiErrors[keyof ListKnowledgeWikiErrors];
+
+export type ListKnowledgeWikiResponses = {
+    /**
+     * 操作成功
+     */
+    200: KnowledgeWikiList;
+};
+
+export type ListKnowledgeWikiResponse = ListKnowledgeWikiResponses[keyof ListKnowledgeWikiResponses];
 
 export type ListKnowledgeEntriesData = {
     body?: never;

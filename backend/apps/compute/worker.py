@@ -25,6 +25,7 @@ from .models import (
     RuntimeLease,
 )
 from .packages import ComputeError, checksum, inspect_package
+from .quality import quality_metadata, read_quality_report
 from .runtime import execute, inspect_runtime, stop_container, stop_native
 from .services import ACTIVE, check_live_task
 
@@ -124,11 +125,13 @@ def run_task(task):
             pk=task.pk, attempt_token=token, status="running"
         ).update(stage="检查并登记结果", progress=85)
         output_rows = []
+        quality = quality_metadata(read_quality_report(results, manifest))
         for spec in manifest["outputs"]:
             path = results / spec["file"]
             if not path.exists() and not spec["required"]:
                 continue
             metadata = inspect_output(path, spec["kind"])
+            metadata.update(quality)
             heartbeat(True)
             output_rows.append((spec, path, metadata, checksum(path)))
         if not output_rows:

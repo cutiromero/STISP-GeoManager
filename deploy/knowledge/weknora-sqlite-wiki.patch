@@ -1,0 +1,263 @@
+--- a/internal/application/repository/wiki_page.go
++++ b/internal/application/repository/wiki_page.go
+@@ -365,12 +365,16 @@
+ 		query = query.Where("status = ?", req.Status)
+ 	}
+ 	if req.Query != "" {
+-		// Use PostgreSQL full-text search + ILIKE for aliases
+-		query = query.Where(
+-			"(to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(content, '')) @@ plainto_tsquery('simple', ?) OR aliases::text ILIKE ?)",
+-			req.Query,
+-			"%"+req.Query+"%",
+-		)
++		if r.db.Dialector.Name() == "sqlite" {
++			query = query.Where("lower(coalesce(title, '') || ' ' || coalesce(content, '') || ' ' || coalesce(aliases, '')) LIKE ? ESCAPE '\\'", "%"+escapeLikePattern(strings.ToLower(req.Query))+"%")
++		} else {
++			// Use PostgreSQL full-text search + ILIKE for aliases
++			query = query.Where(
++				"(to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(content, '')) @@ plainto_tsquery('simple', ?) OR aliases::text ILIKE ?)",
++				req.Query,
++				"%"+req.Query+"%",
++			)
++		}
+ 	}
+ 	// Directory filters are pushed to SQL so the DB does the counting and
+ 	// pagination instead of loading every page of the type into memory. `depth`
+@@ -498,6 +502,12 @@
+ // ListBySourceRef retrieves all wiki pages that reference a given source knowledge ID.
+ // Handles both old format ("knowledgeID") and new format ("knowledgeID|title") in source_refs JSON array.
+ func (r *wikiPageRepository) ListBySourceRef(ctx context.Context, kbID string, sourceKnowledgeID string) ([]*types.WikiPage, error) {
++	if r.db.Dialector.Name() == "sqlite" {
++		var pages []*types.WikiPage
++		err := r.db.WithContext(ctx).Where("knowledge_base_id = ?", kbID).
++			Where(wikiSQLiteSourcePredicate, sourceKnowledgeID, sourceKnowledgeID+"|").Find(&pages).Error
++		return pages, err
++	}
+ 	// Build the JSON needle safely so arbitrary IDs cannot break out of the
+ 	// quoted string (e.g. ids containing quotes or backslashes).
+ 	needle, err := json.Marshal([]string{sourceKnowledgeID})
+@@ -544,6 +554,12 @@
+ // containment branch and idx_wiki_pages_source_refs_text for the legacy
+ // text-LIKE branch — both added in migration 000041.
+ func (r *wikiPageRepository) ListSlugsBySourceRef(ctx context.Context, kbID string, sourceKnowledgeID string) ([]string, error) {
++	if r.db.Dialector.Name() == "sqlite" {
++		var slugs []string
++		err := r.db.WithContext(ctx).Model(&types.WikiPage{}).Where("knowledge_base_id = ?", kbID).
++			Where(wikiSQLiteSourcePredicate, sourceKnowledgeID, sourceKnowledgeID+"|").Pluck("slug", &slugs).Error
++		return slugs, err
++	}
+ 	needle, err := json.Marshal([]string{sourceKnowledgeID})
+ 	if err != nil {
+ 		return nil, fmt.Errorf("marshal source ref needle: %w", err)
+@@ -858,6 +874,11 @@
+ 		if kid == "" {
+ 			continue
+ 		}
++		if r.db.Dialector.Name() == "sqlite" {
++			clauses = append(clauses, wikiSQLiteSourcePredicate)
++			args = append(args, kid, kid+"|")
++			continue
++		}
+ 		needle, err := json.Marshal([]string{kid})
+ 		if err != nil {
+ 			return nil, fmt.Errorf("marshal kid needle: %w", err)
+@@ -1067,6 +1088,9 @@
+ 	}
+ 
+ 	q := strings.ToLower(strings.TrimSpace(query))
++	if r.db.Dialector.Name() == "sqlite" {
++		return r.findSimilarPagesSQLite(ctx, kbID, q, pageTypes, limit)
++	}
+ 
+ 	var rows []types.WikiPageLite
+ 	if err := r.db.WithContext(ctx).
+@@ -1338,6 +1362,17 @@
+ 		limit = 50
+ 	}
+ 
++	if r.db.Dialector.Name() == "sqlite" {
++		pattern := "%" + escapeLikePattern(strings.ToLower(query)) + "%"
++		rank := "CASE WHEN lower(title) LIKE ? ESCAPE '\\' THEN 4 WHEN lower(slug) LIKE ? ESCAPE '\\' THEN 3 WHEN lower(summary) LIKE ? ESCAPE '\\' THEN 2 ELSE 1 END AS match_rank"
++		var pages []*types.WikiPage
++		err := r.db.WithContext(ctx).Select("*, "+rank, pattern, pattern, pattern).
++			Where("knowledge_base_id = ? AND status != ?", kbID, "archived").
++			Where("lower(coalesce(title,'') || ' ' || coalesce(slug,'') || ' ' || coalesce(summary,'') || ' ' || coalesce(content,'')) LIKE ? ESCAPE '\\'", pattern).
++			Order("match_rank DESC, updated_at DESC").Limit(limit).Find(&pages).Error
++		return pages, err
++	}
++
+ 	// CASE expression is evaluated per-row during SELECT; we order by the
+ 	// alias so the DB only computes the rank once. Parameterized four
+ 	// times with the same regex to avoid coupling to GORM's positional
+--- /dev/null
++++ b/internal/application/repository/wiki_sqlite_compat.go
+@@ -0,0 +1,84 @@
++package repository
++
++import (
++	"context"
++	"sort"
++	"strings"
++	"unicode"
++
++	"github.com/Tencent/WeKnora/internal/types"
++)
++
++// SQLite JSON1 implements both source formats without PostgreSQL casts or
++// wildcard ambiguity: exact knowledge ID, or knowledge ID followed by '|'.
++const wikiSQLiteSourcePredicate = "EXISTS (SELECT 1 FROM json_each(COALESCE(source_refs, '[]')) WHERE value = ? OR instr(value, ?) = 1)"
++
++// Lite has no pg_trgm. Score a bounded, KB-scoped candidate set in Go, keeping
++// PostgreSQL's indexed path unchanged. This is a merge prefilter, not a decision:
++// the existing Wiki semantic merge and source attribution still run afterward.
++func (r *wikiPageRepository) findSimilarPagesSQLite(ctx context.Context, kbID, query string, pageTypes []string, limit int) ([]*types.WikiPageLite, error) {
++	var rows []types.WikiPageLite
++	err := r.db.WithContext(ctx).Model(&types.WikiPage{}).
++		Select("slug, title, page_type, status, aliases, out_links").
++		Where("knowledge_base_id = ? AND page_type IN ? AND status <> ?", kbID, pageTypes, types.WikiPageStatusArchived).
++		Order("updated_at DESC, slug ASC").Limit(2000).Scan(&rows).Error
++	if err != nil {
++		return nil, err
++	}
++	type scored struct {
++		page  *types.WikiPageLite
++		score float64
++	}
++	matches := make([]scored, 0)
++	for i := range rows {
++		page := &rows[i]
++		score := wikiTrigramSimilarity(query, page.Title)
++		for _, alias := range page.Aliases {
++			if value := wikiTrigramSimilarity(query, alias); value > score {
++				score = value
++			}
++		}
++		if score >= 0.1 {
++			matches = append(matches, scored{page, score})
++		}
++	}
++	sort.Slice(matches, func(i, j int) bool {
++		if matches[i].score == matches[j].score {
++			return matches[i].page.Slug < matches[j].page.Slug
++		}
++		return matches[i].score > matches[j].score
++	})
++	if len(matches) > limit {
++		matches = matches[:limit]
++	}
++	out := make([]*types.WikiPageLite, len(matches))
++	for i, match := range matches {
++		out[i] = match.page
++	}
++	return out, nil
++}
++
++func wikiTrigramSimilarity(a, b string) float64 {
++	grams := func(value string) map[string]bool {
++		out := map[string]bool{}
++		for _, word := range strings.FieldsFunc(strings.ToLower(value), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) }) {
++			runes := []rune("  " + word + " ")
++			for i := 0; i+3 <= len(runes); i++ {
++				out[string(runes[i:i+3])] = true
++			}
++		}
++		return out
++	}
++	x, y := grams(a), grams(b)
++	intersection := 0
++	for gram := range x {
++		if y[gram] {
++			intersection++
++		}
++	}
++	union := len(x) + len(y) - intersection
++	if union == 0 {
++		return 0
++	}
++	return float64(intersection) / float64(union)
++}
+--- /dev/null
++++ b/internal/application/repository/wiki_sqlite_compat_test.go
+@@ -0,0 +1,64 @@
++package repository
++
++import (
++	"context"
++	"testing"
++
++	"github.com/Tencent/WeKnora/internal/types"
++	"gorm.io/driver/sqlite"
++	"gorm.io/gorm"
++)
++
++func TestLiteWikiSQLiteCompatibility(t *testing.T) {
++	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
++	if err != nil {
++		t.Fatal(err)
++	}
++	sqlDB, _ := db.DB()
++	sqlDB.SetMaxOpenConns(1)
++	defer sqlDB.Close()
++	err = db.Exec(`CREATE TABLE wiki_pages(id TEXT, knowledge_base_id TEXT, slug TEXT, title TEXT, page_type TEXT, status TEXT, aliases TEXT, out_links TEXT, source_refs TEXT, content TEXT, summary TEXT, updated_at DATETIME, deleted_at DATETIME)`).Error
++	if err != nil {
++		t.Fatal(err)
++	}
++	rows := []struct{ kb, slug, title, alias, refs string }{
++		{"kb-a", "nepheline", "霞石", "[\"nepheline\"]", "[\"doc-1|Mineralogy\"]"},
++		{"kb-a", "quartz", "石英", "[\"quartz\"]", "[\"doc-2\"]"},
++		{"kb-b", "secret", "霞石", "[]", "[\"doc-1\"]"},
++	}
++	for _, r := range rows {
++		if err = db.Exec(`INSERT INTO wiki_pages VALUES(?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,NULL)`, r.slug, r.kb, r.slug, r.title, "entity", "published", r.alias, "[]", r.refs, "矿物平衡资料", "测试摘要").Error; err != nil {
++			t.Fatal(err)
++		}
++	}
++	repo := &wikiPageRepository{db: db}
++	ctx := context.Background()
++	similar, err := repo.FindSimilarPages(ctx, "kb-a", "NEPHELINE", nil, 5)
++	if err != nil || len(similar) != 1 || similar[0].Slug != "nepheline" {
++		t.Fatalf("alias dedup: %v %v", similar, err)
++	}
++	exact, err := repo.FindSimilarPages(ctx, "kb-a", "霞石", nil, 5)
++	if err != nil || len(exact) != 1 || exact[0].Slug != "nepheline" {
++		t.Fatalf("Chinese title: %v %v", exact, err)
++	}
++	pages, err := repo.ListBySourceRef(ctx, "kb-a", "doc-1")
++	if err != nil || len(pages) != 1 || pages[0].Slug != "nepheline" {
++		t.Fatalf("source prefix: %v %v", pages, err)
++	}
++	slugs, err := repo.ListSlugsBySourceRef(ctx, "kb-a", "doc-2")
++	if err != nil || len(slugs) != 1 || slugs[0] != "quartz" {
++		t.Fatalf("source ID: %v %v", slugs, err)
++	}
++	pages, err = repo.ListBySourceRef(ctx, "kb-a", "doc-%")
++	if err != nil || len(pages) != 0 {
++		t.Fatalf("source wildcard escaped: %v %v", pages, err)
++	}
++	pages, err = repo.Search(ctx, "kb-a", "矿物", 10)
++	if err != nil || len(pages) != 2 {
++		t.Fatalf("SQLite content search: %v %v", pages, err)
++	}
++	if wikiTrigramSimilarity("霞石", "霞石") != 1 || wikiTrigramSimilarity("quartz", "nepheline") >= .1 {
++		t.Fatal("trigram similarity semantics")
++	}
++	_ = types.WikiPageTypeEntity
++}
+--- a/internal/types/session.go
++++ b/internal/types/session.go
+@@ -302,8 +302,13 @@
+ 	if value == nil {
+ 		return nil
+ 	}
+-	b, ok := value.([]byte)
+-	if !ok {
++	var b []byte
++	switch v := value.(type) {
++	case []byte:
++		b = v
++	case string:
++		b = []byte(v)
++	default:
+ 		return nil
+ 	}
+ 	return json.Unmarshal(b, c)

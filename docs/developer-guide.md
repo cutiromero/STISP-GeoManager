@@ -2560,3 +2560,19 @@ maxOutputTokens为每次调用的思考与正文合计上限；maxContextTokens�
 `GET /api/agent/runs/{runId}/compute-tasks/` 返回本人运行关联计算的实时状态和自动入库跟踪；复用 ComputeTask 契约。`GET /api/agent/workflows/` 恢复当前项目本人最近30个工作流。预览可传 inputs（端口到资源ID）与 importResults；`POST /api/agent/workflows/{workflowId}/confirm/` 以 planHash 确认冻结计划，重新校验权限、输入、算法与预算后执行。plan、planHash、importResults、resultResourceIds 在工作流响应中始终返回。
 
 跨模块分工：根任务负责知识服务、OpenAPI/生成类型及集成；编排子任务负责 agent/compute 与其前端；科普/知识界面子任务负责内容刷新与知识页面。详见 [知识库与编排说明](knowledge-orchestration-20260929.md)。
+
+### 2026-10-04 文档检索、自动 Wiki 与质量报告
+
+知识库增加 `GET/POST /api/knowledge/documents/`、`POST /api/knowledge/documents/{documentId}/retry/`、`POST /api/knowledge/documents/search/` 与 `GET /api/knowledge/wiki/`。上传使用 multipart：file/title/visibility/sourceUrl，最大20MiB；PDF按页、DOCX按段提取可检索文字。原件和SHA256保留，WeKnora负责向量/关键词混合检索、资料索引及自动Wiki。扫描PDF须先提供可提取文字。重试处理限有知识维护权限者及当前项目。
+
+每个项目的共享资料和各用户的owner_only资料使用独立知识空间；服务端核实当前项目和成员关系，检索只传入授权文档。公共资料来自公开项目；私有空间只对本人开放。Wiki合成在空间内进行，每页引用再映射到本地文档，未通过可见性校验的内容不返回。前端仅收到平台资料ID，不接触WeKnora凭据。配置见 `config/knowledge.example.toml`，模型与索引文件独立于源码和业务数据库，备份时一并保留。
+
+Wiki为自动整理内容，保留来源、修订号及主题关联；既有格式化知识及可执行条件规则维持独立审核。`KnowledgeDocumentSearch.score` 表示该次匹配得分，不是知识正确率。引擎不可用时返回明确状态，结构化知识仍可使用。
+
+智能体继续使用 `search_knowledge`：结果的items为结构化条目、documents为真实检索原文、documentSearch说明引擎可用状态。每项citation对应本轮实际证据序号，documentId/entryId仅作为平台标识。每段最多1400字，总返回不超过24KB；截断会标记。历史资料证据按可见性及文档SHA重新检查。纯知识问题直接检索知识，涉及数据才发现数据资源。回答结束时平台追加当时计算及入库状态，使用确定性查询，不增加一次模型调用；后续状态由任务卡继续刷新。
+
+资料检索仅将原文 `text/parent_text` 分块作为证据，生成摘要、实体及 Wiki 不冒充原文；目录点线和出版联系信息降权。智能体可用 `read_knowledge_document(documentId, offset, limit)` 分页读知识资料原文，每次最多8000字，返回真实引用和续读位置。此工具使用知识资料编号，与数据目录的 `read_document(resourceId)` 分开；读取时重新核对资料权限、SHA及文档读取开关。`list_compute_algorithms` 可按目标查询并返回完整算法清单；总结果超过48KB时要求缩小检索范围。
+
+用户明确请求字段清单而正文遗漏时，平台依据本轮数据概况证据补齐真实字段和引用号，不增加模型调用。原文检索成功与模型转述准确性分别验收；当前真实模型测试仍观察到自行补充作者首字母、矿物译名的错误，来源面板提供原文复核依据。
+
+计算清单增加可选 `qualityReport: {file: "quality.json"}`；报告最大64KiB，字段为version=1、status=passed|needs_review、summary、metrics与knowledgeFacts。worker验证报告并将qualityCheck/knowledgeFacts写入输出元数据。声明的报告缺失、格式无效或需要复核时，直接智能体、后续计算、工作流和导入worker均阻止自动入库，原件与审计成果仍可下载。人工显式入库沿用权限控制。模板7提供面几何修复，先真实试运行再发布；算子接收已登记数据，保留原输入，输出逐要素修复日志、汇总及审核包。

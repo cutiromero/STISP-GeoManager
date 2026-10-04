@@ -1,13 +1,31 @@
-import { requestJson } from "./client";
+import { requestForm, requestJson } from "./client";
 import type {
   KnowledgeCheckInput,
   KnowledgeCheckResult,
   KnowledgeEntry,
   KnowledgeEntryInput,
   KnowledgeEntryList,
+  KnowledgeDocument,
+  KnowledgeDocumentList,
+  KnowledgeDocumentSearch,
+  KnowledgeWikiList,
 } from "./generated/types.gen";
 
 export const knowledgeApi = {
+  documents: () =>
+    requestJson<KnowledgeDocumentList>("/api/knowledge/documents/"),
+  uploadDocument: (body: FormData) =>
+    requestForm<KnowledgeDocument>("/api/knowledge/documents/", body),
+  retryDocument: (id: number) =>
+    requestJson<KnowledgeDocument>(`/api/knowledge/documents/${id}/retry/`, {
+      method: "POST",
+    }),
+  searchDocuments: (query: string) =>
+    requestJson<KnowledgeDocumentSearch>("/api/knowledge/documents/search/", {
+      method: "POST",
+      body: { query, limit: 6 },
+    }),
+  wiki: () => requestJson<KnowledgeWikiList>("/api/knowledge/wiki/"),
   entries: (
     options: {
       q?: string;

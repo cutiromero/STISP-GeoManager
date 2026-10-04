@@ -432,6 +432,8 @@ def execute(attempt, package, inputs, destination, manifest, heartbeat):
         # Read the live mount through the fixed container tar binary: Docker's
         # archive/cp endpoint can omit tmpfs contents. Never dereference links.
         expected = {o["file"] for o in manifest["outputs"]}
+        if manifest.get("qualityReport"):
+            expected.add(manifest["qualityReport"]["file"])
         proc = subprocess.Popen(
             [
                 *cfg.command,

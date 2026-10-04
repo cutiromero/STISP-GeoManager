@@ -15,6 +15,7 @@ import hashlib
 import math
 import ipaddress
 import platform
+import re
 import sqlite3
 import socket
 import time
@@ -89,7 +90,7 @@ TOOLS = {
         ToolSpec(
             "read_document",
             "read_data",
-            "读取资源文本片段，resourceId,offset字符位置；暂支持纯文本",
+            "读取数据目录中的纯文本资源，resourceId须来自search_resources或用户选定数据；offset字符位置。知识库documentId不能用于此工具，知识文献使用search_knowledge检索",
             ("resourceId", "offset"),
         ),
         ToolSpec(
@@ -101,8 +102,8 @@ TOOLS = {
         ToolSpec(
             "list_compute_algorithms",
             "read_data",
-            "查看当前项目可用的已发布计算算法和参数清单",
-            (),
+            "按query目标关键词查找已发布算法，空格分词（如面积 周长）；返回具体版本完整manifest，先核对输入/参数/输出再执行。query可省略以列出目录",
+            ("query",),
         ),
         ToolSpec(
             "execute_operator",
@@ -138,8 +139,14 @@ TOOLS = {
         ToolSpec(
             "search_knowledge",
             "read_data",
-            "检索当前项目及公共已审核知识，返回来源、适用条件和版本；query",
+            "联合检索已审核知识规则与当前可见文档原文（语义+关键词），返回citation引用、来源和适用条件；query",
             ("query",),
+        ),
+        ToolSpec(
+            "read_knowledge_document",
+            "read_data",
+            "按search_knowledge返回的documentId读取知识文献原文；offset从0开始，limit为1至8000字符；返回nextOffset供继续阅读。documentId属于知识库，不是数据resourceId",
+            ("documentId", "offset", "limit"),
         ),
         ToolSpec(
             "check_knowledge_constraints",
@@ -184,6 +191,7 @@ def brief(r):
 
 def check_evidence(run, user, p):
     # Reauthorize ALL accumulated evidence before revealing history or reusing it.
+    knowledge_refs, document_refs = set(), set()
     for ev in run.evidence:
         # System, algorithm, compute and web evidence intentionally have no
         # DataResource.  Their permissions are rechecked by the capability
@@ -203,7 +211,10 @@ def check_evidence(run, user, p):
             "import_compute_result",
         } and not p.get("operatorEnabled", False):
             raise PermissionDenied("智能体算子权限已关闭")
-        if ev["tool"] == "read_document" and not p["allowDocuments"]:
+        if (
+            ev["tool"] in {"read_document", "read_knowledge_document"}
+            and not p["allowDocuments"]
+        ):
             raise PermissionDenied("文档读取权限已关闭")
         if ev["tool"] == "compare_summaries" and not p["allowCompare"]:
             raise PermissionDenied("跨资源比较权限已关闭")
@@ -225,23 +236,34 @@ def check_evidence(run, user, p):
                 if isinstance(item, dict) and item.get("taskId"):
                     authorized_task(user, item["taskId"], p)
         if ev.get("tool") in {"search_knowledge", "check_knowledge_constraints"}:
-            from apps.knowledge.services import visible_entries
-
             entries = (
                 result.get("items", [])
                 if ev["tool"] == "search_knowledge"
                 else result.get("findings", [])
             )
             for item in entries:
-                if (
-                    not visible_entries(user)
-                    .filter(
-                        pk=item.get("id", item.get("entryId")),
-                        revision=item.get("revision"),
-                    )
-                    .exists()
-                ):
-                    raise PermissionDenied("知识依据已更新或访问权限已变化，请重新检索")
+                knowledge_refs.add(
+                    (item.get("id", item.get("entryId")), item.get("revision"))
+                )
+        if ev.get("tool") in {"search_knowledge", "read_knowledge_document"}:
+            document_refs.update(
+                (item.get("documentId"), item.get("documentSha256"))
+                for item in result.get("documents", [])
+            )
+    if knowledge_refs:
+        from apps.knowledge.services import visible_entries
+
+        visible = set(
+            visible_entries(user)
+            .filter(pk__in=[identity for identity, _ in knowledge_refs])
+            .values_list("id", "revision")
+        )
+        if not knowledge_refs <= visible:
+            raise PermissionDenied("知识依据已更新或访问权限已变化，请重新检索")
+    if document_refs:
+        from .knowledge_tools import check_document_evidence
+
+        check_document_evidence(user, document_refs)
 
 
 def _q(name):
@@ -504,7 +526,7 @@ def _system_info(user, policy_value):
     return clean(result)
 
 
-def _algorithm_list(user):
+def _algorithm_list(user, search=""):
     from apps.compute.services import allowed_algorithms, agent_algorithm_allowed
     from apps.compute.access import project_id, permission
 
@@ -514,11 +536,22 @@ def _algorithm_list(user):
         .filter(enabled=True, versions__status="published")
         .prefetch_related("versions")
         .distinct()
-        .order_by("name", "id")[:50]
+        .order_by("name", "id")
     )
+    terms = re.split(r"[\s,，、;；/]+", search.strip()) if search.strip() else []
+    if terms:
+        matches = Q()
+        for term in terms:
+            matches |= (
+                Q(name__icontains=term)
+                | Q(description__icontains=term)
+                | Q(identifier__icontains=term)
+            )
+        query = query.filter(matches)
+    found = list(query[:51])
     manage = permission(user, "manage_algorithms")
     items = []
-    for algorithm in query:
+    for algorithm in found[:50]:
         versions = []
         for version in algorithm.versions.all():
             if version.status != "published":
@@ -529,6 +562,7 @@ def _algorithm_list(user):
                     "id": version.id,
                     "version": version.version,
                     "status": version.status,
+                    "manifest": manifest,
                     "description": manifest.get("description", ""),
                     "inputs": [
                         {
@@ -578,7 +612,12 @@ def _algorithm_list(user):
                 "versions": versions,
             }
         )
-    return {"items": items, "projectTagId": project}
+    return {
+        "items": items,
+        "projectTagId": project,
+        "query": search,
+        "truncated": len(found) > 50,
+    }
 
 
 def _validate_web_host(url):
@@ -754,8 +793,11 @@ def _operator_submit(run, user, p, args):
     ).hexdigest()[:32]
     key = f"agent-{run.id}-{digest}"
     from apps.compute.models import ComputeTask
-    if (run.compute_followups.count() >= p["maxOperatorSteps"]
-            and not ComputeTask.objects.filter(owner=user, idempotency_key=key).exists()):
+
+    if (
+        run.compute_followups.count() >= p["maxOperatorSteps"]
+        and not ComputeTask.objects.filter(owner=user, idempotency_key=key).exists()
+    ):
         raise ValidationError("已达到本轮算子步骤上限")
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= 160:
         raise ValidationError("任务名称无效")
@@ -824,9 +866,12 @@ def execute(run, name, args):
         result = _system_info(user, scoped_policy)
         return result, [(None, result)]
     if name == "list_compute_algorithms":
-        result = clean(_algorithm_list(user))
-        if len(json.dumps(result, ensure_ascii=False).encode()) > MAX_RESULT_BYTES:
-            raise ValidationError("算法清单过大，请缩小当前项目范围")
+        query = args.get("query", "")
+        if not isinstance(query, str) or len(query) > 200:
+            raise ValidationError("query 必须为不超过200字的算法关键词")
+        result = clean(_algorithm_list(user, query.strip()))
+        if len(json.dumps(result, ensure_ascii=False).encode()) > MAX_RESULT_BYTES * 2:
+            raise ValidationError("算法清单过大，请用query目标关键词缩小范围")
         return result, [(None, result)]
     if name == "execute_operator":
         return _operator_submit(run, user, p, args)
@@ -841,13 +886,18 @@ def execute(run, name, args):
             run, user, p, args
         )
     if name == "search_knowledge":
-        from apps.knowledge.services import search_entries
+        from .knowledge_tools import search_knowledge
 
         query = args.get("query", "")
         if not isinstance(query, str) or not 1 <= len(query.strip()) <= 300:
             raise ValidationError("query 必须为1至300字")
-        result = search_entries(user, query.strip(), limit=8)
-        return result, [(None, result)]
+        return search_knowledge(run, user, query.strip())
+    if name == "read_knowledge_document":
+        from .knowledge_tools import read_knowledge_document
+
+        if not p["allowDocuments"]:
+            raise PermissionDenied("文档正文读取未开启")
+        return read_knowledge_document(run, user, args)
     if name == "check_knowledge_constraints":
         from apps.knowledge.services import check_constraints
 
@@ -937,7 +987,9 @@ def execute(run, name, args):
         ]
     resource = resolve_resource(user, p, args.get("resourceId"), run.resource_ids)
     touched = {
-        ev["resourceId"] for ev in run.evidence if ev["tool"] != "search_resources"
+        ev["resourceId"]
+        for ev in run.evidence
+        if ev["tool"] != "search_resources" and ev.get("resourceId") is not None
     }
     if resource.id not in touched and len(touched) >= p["maxResources"]:
         raise ValidationError("本次读取资源数已达上限，请缩小问题")

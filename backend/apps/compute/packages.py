@@ -75,6 +75,18 @@ def validate_manifest(manifest):
         ):
             raise ComputeError("agent 配置只接受布尔值 enabled")
         result["agent"] = {"enabled": agent["enabled"]}
+    if "qualityReport" in manifest:
+        quality = manifest["qualityReport"]
+        if (
+            not isinstance(quality, dict)
+            or set(quality) != {"file"}
+            or not isinstance(quality["file"], str)
+            or not re.fullmatch(
+                r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,145}\.json", quality["file"]
+            )
+        ):
+            raise ComputeError("qualityReport 只接受安全单层 JSON 文件名 file")
+        result["qualityReport"] = {"file": quality["file"]}
     timeout = manifest.get("timeoutSeconds", 1800)
     if type(timeout) is not int or not 1 <= timeout <= 7200:
         raise ComputeError("timeoutSeconds 必须为1至7200的整数")
@@ -174,6 +186,8 @@ def validate_manifest(manifest):
     files = [x["file"] for x in result["outputs"]]
     if len(files) != len(set(files)):
         raise ComputeError("输出文件名不能重复")
+    if result.get("qualityReport", {}).get("file") in files:
+        raise ComputeError("质量报告文件名不能与普通输出重复")
     try:
         serialized = json.dumps(result, allow_nan=False)
     except (ValueError, TypeError, RecursionError) as exc:

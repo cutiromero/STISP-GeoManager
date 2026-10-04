@@ -9,6 +9,7 @@ from apps.compute.access import project_id, task_access, require_actor
 from apps.compute.models import ComputeTask, ComputeOutput, ComputeImport
 from apps.compute.services import ACTIVE, ComputeError, request_output_import
 from apps.compute.serializers import output_data, task_data
+from apps.compute.quality import require_automatic_quality
 from apps.projects.context import ProjectScope, project_scope
 from .models import AgentComputeFollowup
 from .policy import fresh_user, require_access
@@ -132,6 +133,10 @@ def import_result(run, user, p, args):
         raise ValidationError("请选择算法声明的可入库输出；压缩包须分别导入")
     if task.status not in (*ACTIVE, "succeeded"):
         raise ValidationError("任务未成功，不能申请结果入库")
+    if task.status == "succeeded":
+        for output in task.outputs.exclude(kind="archive"):
+            if not keys or output.key in keys:
+                require_automatic_quality(output)
     item = track(run, task, auto_import=True, keys=keys, name=name.strip())
     if task.status == "succeeded":
         for output in task.outputs.exclude(kind="archive"):
@@ -179,6 +184,8 @@ def advance(item, user, p, task):
             raise ComputeError("所选输出缺失，未自动入库")
         records = []
         for output in outputs:
+            require_automatic_quality(output)
+        for output in outputs:
             record = ComputeImport.objects.filter(output=output).first()
             if record is None:
                 suffix = " · " + output.label if len(outputs) > 1 else ""
@@ -203,6 +210,7 @@ def validate_import_intent(record):
     record.refresh_from_db(fields=["request_source"])
     if not record.request_source:
         return
+    require_automatic_quality(record.output)
     from .models import AgentRun, AgentWorkflow
     from .workflow import _authorize
 

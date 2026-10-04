@@ -3,6 +3,133 @@
   background: #f4f7f7;
   color: #183a48;
 }
+.knowledge-library {
+  padding: 16px 0 32px;
+}
+.knowledge-library > .ant-alert {
+  margin-bottom: 20px;
+}
+.knowledge-library-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 28px 0 14px;
+}
+.knowledge-search-results {
+  margin-top: 22px;
+}
+.knowledge-passage {
+  border-left: 3px solid #4f999c;
+  padding: 22px;
+  background: #fff;
+  margin-bottom: 12px;
+  border-radius: 0 8px 8px 0;
+}
+.knowledge-passage blockquote {
+  white-space: pre-wrap;
+  line-height: 1.9;
+  margin: 14px 0;
+  color: #365967;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.knowledge-document-list {
+  border-top: 1px solid #cadcde;
+}
+.knowledge-document-list article {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 20px;
+  padding: 24px 12px;
+  border-bottom: 1px solid #dbe5e6;
+}
+.knowledge-document-icon {
+  color: #40858c;
+  font-size: 27px;
+  padding-top: 4px;
+}
+.knowledge-document-list h3 {
+  margin: 0 0 7px;
+  overflow-wrap: anywhere;
+}
+.knowledge-document-list p {
+  margin: 0 0 6px;
+  color: #637c83;
+  overflow-wrap: anywhere;
+}
+.knowledge-document-list small {
+  display: block;
+  color: #637c83;
+  margin-bottom: 5px;
+}
+.knowledge-wiki-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #3b787c;
+}
+.knowledge-wiki-content {
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+.knowledge-wiki-content pre {
+  overflow: auto;
+  padding: 16px;
+  background: #f3f6f6;
+}
+.knowledge-wiki-content table {
+  border-collapse: collapse;
+  display: block;
+  overflow: auto;
+}
+.knowledge-wiki-content td,
+.knowledge-wiki-content th {
+  border: 1px solid #d9e5e5;
+  padding: 8px;
+}
+.knowledge-wiki-node {
+  cursor: pointer;
+  animation: wiki-drift 6s ease-in-out infinite alternate;
+}
+.knowledge-wiki-node:focus circle,
+.knowledge-wiki-node:hover circle {
+  stroke: #fff;
+  stroke-width: 2px;
+}
+.knowledge-wiki-network.is-paused .knowledge-wiki-node {
+  animation-play-state: paused;
+}
+.knowledge-wiki-network-note {
+  padding: 0 32px 20px;
+  color: #b9d7db;
+}
+@keyframes wiki-drift {
+  from {
+    transform: translateY(-3px);
+  }
+  to {
+    transform: translateY(3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .knowledge-wiki-node {
+    animation: none;
+  }
+}
+@media (max-width: 640px) {
+  .knowledge-library-result-heading {
+    flex-wrap: wrap;
+  }
+  .knowledge-document-list article {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .knowledge-document-list article > .ant-space {
+    grid-column: 2;
+    align-items: start;
+  }
+}
 .knowledge-main {
   width: min(1440px, 94vw);
   margin: 92px auto 80px;

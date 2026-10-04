@@ -1,0 +1,11 @@
+{
+  "GET /api/knowledge/documents/": {
+    "200": {"items": [], "enabled": true, "canUpload": true, "detail": "资料原件保留，索引与 Wiki 在后台生成"}
+  },
+  "POST /api/knowledge/documents/search/": {
+    "200": {"items": [], "available": true, "detail": "尚未找到相关原文"}
+  },
+  "GET /api/knowledge/wiki/": {
+    "200": {"items": [], "pendingTasks": 0, "active": false, "available": true, "detail": "添加资料后自动生成 Wiki"}
+  }
+}

@@ -11,6 +11,7 @@ TEMPLATES = {
     4: "raster-ndvi",
     5: "raster-ndwi",
     6: "vector-metrics",
+    7: "vector-geometry-repair",
 }
 
 

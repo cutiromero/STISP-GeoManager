@@ -344,6 +344,37 @@ def test_scoped_selection_and_compare_policy(setup_agent):
             execute(r, "compare_summaries", {"evidenceIds": [1, 2]})
 
 
+@pytest.mark.parametrize("allow_compare", [False, True])
+def test_nondataset_evidence_does_not_consume_resource_budget(
+    setup_agent, allow_compare
+):
+    s = setup_agent
+    p = default_policy()
+    p.update(allowCompare=allow_compare, maxResources=1)
+    AgentPolicy.objects.create(value=p)
+    with project_scope(s["scope"]):
+        r = new_run(s)
+        # Knowledge/algorithm responses are evidence but are not data resources.
+        r.evidence = evidence_items(r, "search_knowledge", [(None, {"items": []})])
+        r.evidence += evidence_items(
+            r, "list_compute_algorithms", [(None, {"items": []})]
+        )
+        result, pairs = execute(
+            r, "describe_resource", {"resourceId": s["resource"].id}
+        )
+        assert result["resource"]["id"] == s["resource"].id
+        r.evidence += evidence_items(r, "describe_resource", pairs)
+        other = DataResource.objects.create(
+            name="另一份样地",
+            code="agent-second",
+            data_type="table",
+            file_format="SQLITE",
+            storage_path="samples",
+        )
+        with pytest.raises(ValidationError, match="读取资源数已达上限"):
+            execute(r, "describe_resource", {"resourceId": other.id})
+
+
 def test_registry_rejects_arbitrary_addresses(settings):
     settings.AGENT_MODELS = [
         {

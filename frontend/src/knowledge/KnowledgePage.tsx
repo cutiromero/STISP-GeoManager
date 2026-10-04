@@ -11,6 +11,7 @@ import {
   Space,
   Spin,
   Switch,
+  Tabs,
   Tag,
 } from "antd";
 import {
@@ -34,6 +35,7 @@ import type {
 import KnowledgeNetwork from "./KnowledgeNetwork";
 import KnowledgeEditor, { ruleLabels, stateLabels } from "./KnowledgeEditor";
 import KnowledgeCheck from "./KnowledgeCheck";
+import KnowledgeLibrary from "./KnowledgeLibrary";
 import "./knowledge.css";
 
 function sourceLink(url: string) {
@@ -115,6 +117,7 @@ export default function KnowledgePage() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>();
   const [manage, setManage] = useState(false);
+  const [section, setSection] = useState("rules");
   const [page, setPage] = useState(1);
   const [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -204,7 +207,7 @@ export default function KnowledgePage() {
             <span>知识库</span>
             <strong>
               {data?.total ?? "—"}
-              <small>条知识</small>
+              <small>条格式化知识</small>
             </strong>
             <p>
               当前页 {sourceCount} 项来源
@@ -213,166 +216,195 @@ export default function KnowledgePage() {
             </p>
           </div>
         </header>
-        <div className="knowledge-toolbar">
-          <Input.Search
-            aria-label="检索知识"
-            placeholder="搜索矿物、条件、方法或关键词"
-            prefix={<SearchOutlined />}
-            allowClear
-            maxLength={300}
-            onSearch={(value) => {
-              setQuery(value);
-              setPage(1);
-            }}
-          />
-          <Select
-            aria-label="知识领域"
-            value={category}
-            allowClear
-            placeholder="全部领域"
-            options={(data?.categories ?? []).map((value) => ({
-              value,
-              label: value,
-            }))}
-            onChange={(value) => {
-              setCategory(value);
-              setPage(1);
-            }}
-          />
-          {data?.canEdit && (
-            <Space wrap>
-              <Switch
-                checked={manage}
-                onChange={(value) => {
-                  setManage(value);
-                  setPage(1);
-                }}
-                checkedChildren="维护视图"
-                unCheckedChildren="已发布"
-                aria-label="维护视图"
-              />
-              <Button icon={<PlusOutlined />} onClick={() => setEditing("new")}>
-                新建知识
-              </Button>
-            </Space>
-          )}
-        </div>
-        {loading ? (
-          <div className="knowledge-loading">
-            <Spin />
-            <span>正在读取知识与来源…</span>
-          </div>
-        ) : error ? (
-          <Alert
-            showIcon
-            type="error"
-            title="知识库暂时无法读取"
-            description={error}
-            action={
-              <Button onClick={() => setReload((value) => value + 1)}>
-                重新加载
-              </Button>
-            }
+        <Tabs
+          activeKey={section}
+          onChange={setSection}
+          items={[
+            { key: "rules", label: "格式化知识" },
+            { key: "library", label: "资料检索" },
+            { key: "wiki", label: "自动 Wiki" },
+          ]}
+        />
+        {section !== "rules" ? (
+          <KnowledgeLibrary
+            key={`${currentProject}:${user?.id}`}
+            mode={section === "wiki" ? "wiki" : "library"}
           />
         ) : (
           <>
-            <KnowledgeNetwork
-              entries={items}
-              selected={node}
-              onSelect={setNode}
-              onOpen={setDetail}
-            />
-            <section className="knowledge-records" aria-label="格式化知识条目">
-              <div className="knowledge-records-heading">
-                <div>
-                  <span className="knowledge-section-index">
-                    02 / KNOWLEDGE RECORDS
-                  </span>
-                  <h2>读懂一条知识，再使用它</h2>
-                  <p>
-                    陈述、条件和来源一起构成依据。点击条目查看解释、例外与核查方式。
-                  </p>
-                </div>
-                <div>
-                  {node && (
-                    <Tag closable onClose={() => setNode(null)}>
-                      {node}
-                    </Tag>
-                  )}
-                  <span className="knowledge-muted">
-                    当前显示 {visible.length} 条
-                  </span>
-                </div>
+            <div className="knowledge-toolbar">
+              <Input.Search
+                aria-label="检索知识"
+                placeholder="搜索矿物、条件、方法或关键词"
+                prefix={<SearchOutlined />}
+                allowClear
+                maxLength={300}
+                onSearch={(value) => {
+                  setQuery(value);
+                  setPage(1);
+                }}
+              />
+              <Select
+                aria-label="知识领域"
+                value={category}
+                allowClear
+                placeholder="全部领域"
+                options={(data?.categories ?? []).map((value) => ({
+                  value,
+                  label: value,
+                }))}
+                onChange={(value) => {
+                  setCategory(value);
+                  setPage(1);
+                }}
+              />
+              {data?.canEdit && (
+                <Space wrap>
+                  <Switch
+                    checked={manage}
+                    onChange={(value) => {
+                      setManage(value);
+                      setPage(1);
+                    }}
+                    checkedChildren="维护视图"
+                    unCheckedChildren="已发布"
+                    aria-label="维护视图"
+                  />
+                  <Button
+                    icon={<PlusOutlined />}
+                    onClick={() => setEditing("new")}
+                  >
+                    新建知识
+                  </Button>
+                </Space>
+              )}
+            </div>
+            {loading ? (
+              <div className="knowledge-loading">
+                <Spin />
+                <span>正在读取知识与来源…</span>
               </div>
-              {visible.length ? (
-                <div className="knowledge-record-grid">
-                  {visible.map((entry) => (
-                    <article className="knowledge-record" key={entry.id}>
-                      <div className="knowledge-record-meta">
-                        <Tag>{entry.category}</Tag>
-                        <span>
-                          {entry.projectTagId === 1
-                            ? "公共基础资料"
-                            : "当前项目"}{" "}
-                          · v{entry.revision}
-                        </span>
-                        {entry.status !== "published" && (
-                          <Tag>{stateLabels[entry.status]}</Tag>
-                        )}
-                      </div>
-                      <h3>
-                        <button onClick={() => setDetail(entry)}>
-                          {entry.title}
-                        </button>
-                      </h3>
-                      <div className="knowledge-relation">
-                        <span>{entry.subject}</span>
-                        <em>{entry.predicate}</em>
-                        <span>{entry.object}</span>
-                      </div>
-                      <p className="knowledge-statement">{entry.statement}</p>
-                      <dl>
-                        <dt>适用条件</dt>
-                        <dd>
-                          {entry.conditions.join("；") ||
-                            "使用前核对研究对象与观测条件"}
-                        </dd>
-                        <dt>核查方式</dt>
-                        <dd>{ruleLabels[entry.ruleKind]}</dd>
-                      </dl>
-                      <footer>
-                        <span>
-                          {entry.sources.length} 项来源
-                          {entry.exceptions.length
-                            ? ` · ${entry.exceptions.length} 项例外 / 核验条件`
-                            : ""}
-                        </span>
-                        <Button type="text" onClick={() => setDetail(entry)}>
-                          查看依据 <ArrowRightOutlined />
-                        </Button>
-                      </footer>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <Empty
-                  description={
-                    node
-                      ? "当前页没有关联的知识条目"
-                      : "没有匹配的知识，试试其他关键词或领域"
-                  }
+            ) : error ? (
+              <Alert
+                showIcon
+                type="error"
+                title="知识库暂时无法读取"
+                description={error}
+                action={
+                  <Button onClick={() => setReload((value) => value + 1)}>
+                    重新加载
+                  </Button>
+                }
+              />
+            ) : (
+              <>
+                <KnowledgeNetwork
+                  entries={items}
+                  selected={node}
+                  onSelect={setNode}
+                  onOpen={setDetail}
                 />
-              )}
-              {(data?.total ?? 0) > 100 && (
-                <Pagination
-                  current={page}
-                  pageSize={100}
-                  total={data?.total}
-                  showSizeChanger={false}
-                  onChange={setPage}
-                />
-              )}
-            </section>
+                <section
+                  className="knowledge-records"
+                  aria-label="格式化知识条目"
+                >
+                  <div className="knowledge-records-heading">
+                    <div>
+                      <span className="knowledge-section-index">
+                        02 / KNOWLEDGE RECORDS
+                      </span>
+                      <h2>读懂一条知识，再使用它</h2>
+                      <p>
+                        陈述、条件和来源一起构成依据。点击条目查看解释、例外与核查方式。
+                      </p>
+                    </div>
+                    <div>
+                      {node && (
+                        <Tag closable onClose={() => setNode(null)}>
+                          {node}
+                        </Tag>
+                      )}
+                      <span className="knowledge-muted">
+                        当前显示 {visible.length} 条
+                      </span>
+                    </div>
+                  </div>
+                  {visible.length ? (
+                    <div className="knowledge-record-grid">
+                      {visible.map((entry) => (
+                        <article className="knowledge-record" key={entry.id}>
+                          <div className="knowledge-record-meta">
+                            <Tag>{entry.category}</Tag>
+                            <span>
+                              {entry.projectTagId === 1
+                                ? "公共基础资料"
+                                : "当前项目"}{" "}
+                              · v{entry.revision}
+                            </span>
+                            {entry.status !== "published" && (
+                              <Tag>{stateLabels[entry.status]}</Tag>
+                            )}
+                          </div>
+                          <h3>
+                            <button onClick={() => setDetail(entry)}>
+                              {entry.title}
+                            </button>
+                          </h3>
+                          <div className="knowledge-relation">
+                            <span>{entry.subject}</span>
+                            <em>{entry.predicate}</em>
+                            <span>{entry.object}</span>
+                          </div>
+                          <p className="knowledge-statement">
+                            {entry.statement}
+                          </p>
+                          <dl>
+                            <dt>适用条件</dt>
+                            <dd>
+                              {entry.conditions.join("；") ||
+                                "使用前核对研究对象与观测条件"}
+                            </dd>
+                            <dt>核查方式</dt>
+                            <dd>{ruleLabels[entry.ruleKind]}</dd>
+                          </dl>
+                          <footer>
+                            <span>
+                              {entry.sources.length} 项来源
+                              {entry.exceptions.length
+                                ? ` · ${entry.exceptions.length} 项例外 / 核验条件`
+                                : ""}
+                            </span>
+                            <Button
+                              type="text"
+                              onClick={() => setDetail(entry)}
+                            >
+                              查看依据 <ArrowRightOutlined />
+                            </Button>
+                          </footer>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <Empty
+                      description={
+                        node
+                          ? "当前页没有关联的知识条目"
+                          : "没有匹配的知识，试试其他关键词或领域"
+                      }
+                    />
+                  )}
+                  {(data?.total ?? 0) > 100 && (
+                    <Pagination
+                      current={page}
+                      pageSize={100}
+                      total={data?.total}
+                      showSizeChanger={false}
+                      onChange={setPage}
+                    />
+                  )}
+                </section>
+              </>
+            )}
           </>
         )}
       </main>
