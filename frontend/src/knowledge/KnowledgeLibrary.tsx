@@ -504,7 +504,27 @@ export default function KnowledgeLibrary({
             <Tag>自动整理 · v{page.version}</Tag>
             <h2>{page.title}</h2>
             <div className="knowledge-wiki-content">
-              <SafeMarkdown text={page.content} />
+              <SafeMarkdown
+                text={page.content}
+                wikiLink={(target, label) => {
+                  const scope = page.id.slice(0, page.id.indexOf(":"));
+                  const id = `${scope}:${target.trim()}`;
+                  const linked = wiki?.items.find(
+                    (item) => item.id === id && page.links.includes(id),
+                  );
+                  return linked ? (
+                    <button
+                      type="button"
+                      className="knowledge-inline-topic"
+                      onClick={() => setPage(linked)}
+                    >
+                      {label}
+                    </button>
+                  ) : (
+                    label
+                  );
+                }}
+              />
             </div>
             <h3>引用资料</h3>
             {page.sources.map((source) => (

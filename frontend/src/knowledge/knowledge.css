@@ -88,6 +88,20 @@
   border: 1px solid #d9e5e5;
   padding: 8px;
 }
+.knowledge-inline-topic {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #287e8d;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.knowledge-inline-topic:focus-visible {
+  outline: 2px solid #287e8d;
+  outline-offset: 3px;
+}
 .knowledge-wiki-node {
   cursor: pointer;
   animation: wiki-drift 6s ease-in-out infinite alternate;

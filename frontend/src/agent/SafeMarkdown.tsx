@@ -1,16 +1,24 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
+
+type WikiLinkRenderer = (target: string, label: string) => ReactNode;
 
 // Render a small Markdown subset as React text. No HTML, remote images or code execution.
-function inline(text: string): ReactNode[] {
+function inline(text: string, wikiLink?: WikiLinkRenderer): ReactNode[] {
   const output: ReactNode[] = [];
   let cursor = 0;
-  for (const match of text.matchAll(/\*\*([^*]+)\*\*|`([^`]+)`/g)) {
+  for (const match of text.matchAll(
+    /\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*([^*]+)\*\*|`([^`]+)`/g,
+  )) {
     output.push(text.slice(cursor, match.index));
     output.push(
       match[1] ? (
-        <strong key={`s${match.index}`}>{match[1]}</strong>
+        <Fragment key={`w${match.index}`}>
+          {wikiLink ? wikiLink(match[1], match[2] || match[1]) : match[0]}
+        </Fragment>
+      ) : match[3] ? (
+        <strong key={`s${match.index}`}>{inline(match[3], wikiLink)}</strong>
       ) : (
-        <code key={`c${match.index}`}>{match[2]}</code>
+        <code key={`c${match.index}`}>{match[4]}</code>
       ),
     );
     cursor = match.index + match[0].length;
@@ -19,7 +27,13 @@ function inline(text: string): ReactNode[] {
   return output;
 }
 
-export default function SafeMarkdown({ text }: { text: string }) {
+export default function SafeMarkdown({
+  text,
+  wikiLink,
+}: {
+  text: string;
+  wikiLink?: WikiLinkRenderer;
+}) {
   const lines = text.split("\n");
   const result: ReactNode[] = [];
   let offset = 0;
@@ -42,12 +56,19 @@ export default function SafeMarkdown({ text }: { text: string }) {
         </pre>,
       );
     } else if (line.includes("|") && /^\s*\|?\s*:?-{3,}/.test(lines[0] ?? "")) {
-      const split = (row: string) =>
-        row
-          .trim()
-          .replace(/^\||\|$/g, "")
-          .split("|")
-          .map((c) => c.trim());
+      const split = (row: string) => {
+        const content = row.trim().replace(/^\||\|$/g, "");
+        const cells: string[] = [];
+        let start = 0;
+        for (const match of content.matchAll(/\[\[[^\]\n]+\]\]|\|/g)) {
+          if (match[0] === "|") {
+            cells.push(content.slice(start, match.index).trim());
+            start = match.index + 1;
+          }
+        }
+        cells.push(content.slice(start).trim());
+        return cells;
+      };
       const headers = split(line);
       offset += (lines.shift()?.length ?? 0) + 1;
       const rows: Array<{ key: string; cells: string[] }> = [];
@@ -62,9 +83,9 @@ export default function SafeMarkdown({ text }: { text: string }) {
           const cellKey = `cell-${cellOffset}`;
           cellOffset += cell.length + 1;
           return tag === "th" ? (
-            <th key={cellKey}>{inline(cell)}</th>
+            <th key={cellKey}>{inline(cell, wikiLink)}</th>
           ) : (
-            <td key={cellKey}>{inline(cell)}</td>
+            <td key={cellKey}>{inline(cell, wikiLink)}</td>
           );
         });
       };
@@ -82,10 +103,28 @@ export default function SafeMarkdown({ text }: { text: string }) {
           </table>
         </div>,
       );
+    } else if (/^\s*[-*] /.test(line)) {
+      const items: Array<{ key: string; text: string }> = [{ key, text: line }];
+      while (/^\s*[-*] /.test(lines[0] ?? "")) {
+        const row = lines.shift() ?? "";
+        items.push({ key: `item-${offset}`, text: row });
+        offset += row.length + 1;
+      }
+      result.push(
+        <ul key={key}>
+          {items.map((item) => (
+            <li key={item.key}>
+              {inline(item.text.replace(/^\s*[-*] /, ""), wikiLink)}
+            </li>
+          ))}
+        </ul>,
+      );
     } else if (/^#{1,4} /.test(line)) {
-      result.push(<h3 key={key}>{inline(line.replace(/^#+ /, ""))}</h3>);
+      result.push(
+        <h3 key={key}>{inline(line.replace(/^#+ /, ""), wikiLink)}</h3>,
+      );
     } else if (line.trim()) {
-      result.push(<p key={key}>{inline(line)}</p>);
+      result.push(<p key={key}>{inline(line, wikiLink)}</p>);
     }
   }
   return <div className="agent-markdown">{result}</div>;
