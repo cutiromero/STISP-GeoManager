@@ -1,5 +1,4 @@
 import { ProjectProvider } from "./projects/ProjectContext";
-import { LoginAccessNotice } from "./components/AccountAccess";
 import { App as AntApp, Spin } from "antd";
 import type { ReactNode } from "react";
 import {
@@ -183,7 +182,6 @@ export default function App({
 
   return (
     <AppContext.Provider value={{ bootstrap, user, setBootstrap, setUser }}>
-      <LoginAccessNotice />
       <ProjectProvider>
         <Suspense fallback={<RouteLoading />}>
           <Routes>

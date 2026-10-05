@@ -55,14 +55,15 @@ const article: ContentArticle = {
     },
   ],
 };
-function show() {
+function show(kind: "knowledge" | "news" = "news") {
+  const base = kind === "knowledge" ? "/knowledge" : "/news";
   return render(
     <AntApp>
-      <MemoryRouter initialEntries={["/news/1"]}>
+      <MemoryRouter initialEntries={[`${base}/1`]}>
         <Routes>
           <Route
-            path="/news/:articleId"
-            element={<EditorialPage kind="news" />}
+            path={`${base}/:articleId`}
+            element={<EditorialPage kind={kind} />}
           />
         </Routes>
       </MemoryRouter>
@@ -79,6 +80,46 @@ beforeEach(async () => {
   api.discardAsset.mockResolvedValue({ detail: "已撤销" });
 });
 describe("editorial content management", () => {
+  it.each(["knowledge", "news"] as const)(
+    "keeps internal source notes out of the %s reader while preserving captions and reading links",
+    async (kind) => {
+      const source =
+        "《时空智能科普栏目.docx》第 8 篇；正文、配图与延伸阅读依照原文。";
+      const figure = "图 8｜左为果树下套种，右为纯果园。保留具体图像解释。";
+      const item = {
+        ...article,
+        kind,
+        source,
+        category: kind === "knowledge" ? "农业用水" : article.category,
+        links: [
+          { title: "继续阅读原始研究", url: "https://example.org/research" },
+        ],
+        assets: [{ ...article.assets[0], caption: figure }],
+      };
+      api.articles.mockResolvedValue({
+        items: [item],
+        total: 1,
+        canEdit: true,
+      });
+      api.article.mockResolvedValue(item);
+      const view = show(kind);
+      await screen.findByText("原有正文");
+      expect(screen.queryByText(source)).not.toBeInTheDocument();
+      expect(document.querySelector(".editorial-source")).toBeNull();
+      expect(screen.getByText(figure)).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /继续阅读原始研究/ }),
+      ).toHaveAttribute("href", "https://example.org/research");
+      fireEvent.click(screen.getByRole("button", { name: "编辑内容" }));
+      expect(screen.getByLabelText("编辑备注（仅内部保存）")).toHaveValue(
+        source,
+      );
+      expect(screen.getByLabelText("图片或附件说明: 封面.png")).toHaveValue(
+        figure,
+      );
+      view.unmount();
+    },
+  );
   it("preserves unsaved text, caption and revision while uploading an attachment", async () => {
     const view = show();
     fireEvent.click(

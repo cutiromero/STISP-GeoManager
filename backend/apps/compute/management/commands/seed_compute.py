@@ -10,6 +10,14 @@ from apps.compute.views import store_version
 from apps.projects.context import ProjectScope, project_scope, is_superadmin
 
 
+NDVI_DESCRIPTION = (
+    "选择同一幅多波段反射率影像的红光、近红外波段，"
+    "按 (近红外−红光)/(近红外＋红光) 计算 NDVI，用于植被覆盖与长势的辅助分析。"
+    "输出单波段 Float32 GeoTIFF，保留坐标系、分辨率及范围；"
+    "无效像元与零分母标记为 NoData（−9999）。"
+)
+
+
 class Command(BaseCommand):
     help = "Register compute example packages as public drafts, never auto-publish"
 
@@ -53,7 +61,11 @@ class Command(BaseCommand):
                     defaults={
                         "name": name,
                         "category": category,
-                        "description": "平台提供的算法接入示例，须在隔离环境试运行后发布。",
+                        "description": (
+                            NDVI_DESCRIPTION
+                            if identifier == "raster-ndvi"
+                            else "平台提供的算法接入示例，须在隔离环境试运行后发布。"
+                        ),
                         "author": "平台示例算法",
                         "created_by": user,
                     },

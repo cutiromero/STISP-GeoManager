@@ -2,13 +2,20 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import type { AgentBootstrap, AgentRun } from "../api/generated/types.gen";
 import AgentPage from "./AgentPage";
 
 vi.mock("../components/WorkspaceHeader", () => ({
-  default: () => <header>STISP</header>,
+  default: () => (
+    <header
+      style={{ position: "absolute", top: 8, left: 8, right: 8, height: 50 }}
+    >
+      STISP
+    </header>
+  ),
 }));
 vi.mock("../contexts/AppContext", () => ({
   useAppContext: () => ({ user: { id: 99, permissions: {} } }),
@@ -71,6 +78,15 @@ function run(id: number, prompt: string, answer = ""): AgentRun {
     updatedAt: "2026-09-24",
   };
 }
+function showAgent(mode: "chat" | "workbench" = "chat") {
+  return render(
+    <AntApp>
+      <MemoryRouter initialEntries={[`/agent/${mode}`]}>
+        <AgentPage />
+      </MemoryRouter>
+    </AntApp>,
+  );
+}
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
@@ -114,8 +130,28 @@ beforeEach(() => {
 });
 
 it("prefills a knowledge handoff without sending it automatically", async () => {
-  render(<AntApp><MemoryRouter initialEntries={[{ pathname: "/agent/workbench", state: { query: "核查霞石与石英的适用条件", knowledgeEntryIds: [12] } }]}><AgentPage /></MemoryRouter></AntApp>);
-  await waitFor(() => expect(screen.getByRole("textbox", { name: "输入消息" })).toHaveValue("核查霞石与石英的适用条件"));
+  render(
+    <AntApp>
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/agent/workbench",
+            state: {
+              query: "核查霞石与石英的适用条件",
+              knowledgeEntryIds: [12],
+            },
+          },
+        ]}
+      >
+        <AgentPage />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "输入消息" })).toHaveValue(
+      "核查霞石与石英的适用条件",
+    ),
+  );
   expect(agentApi.submit).not.toHaveBeenCalled();
 });
 
@@ -318,3 +354,224 @@ it("hides unavailable agent navigation and enables deep thinking for long reason
     ),
   );
 });
+
+it("drags the sidebar and input, stops on cancel, and remembers their sizes", async () => {
+  vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(
+    () => {},
+  );
+  const first = showAgent();
+  await screen.findByText("旧问题");
+  const sidebarHandle = screen.getByRole("separator", {
+    name: "调整会话侧栏宽度",
+  });
+  const inputHandle = screen.getByRole("separator", { name: "调整输入框高度" });
+  fireEvent.pointerDown(sidebarHandle, {
+    button: 0,
+    pointerId: 1,
+    clientX: 260,
+  });
+  fireEvent.pointerMove(sidebarHandle, { pointerId: 1, clientX: 340 });
+  fireEvent.pointerUp(sidebarHandle, { pointerId: 1 });
+  expect(
+    screen
+      .getByRole("complementary", { name: "会话侧栏" })
+      .getBoundingClientRect().width,
+  ).toBe(340);
+  fireEvent.pointerDown(inputHandle, { button: 0, pointerId: 2, clientY: 500 });
+  fireEvent.pointerMove(inputHandle, { pointerId: 2, clientY: 420 });
+  await waitFor(() =>
+    expect(inputHandle).toHaveAttribute("aria-valuenow", "176"),
+  );
+  fireEvent.pointerCancel(inputHandle, { pointerId: 2 });
+  fireEvent.pointerMove(inputHandle, { pointerId: 2, clientY: 200 });
+  expect(
+    screen.getByRole("textbox", { name: "输入消息" }).getBoundingClientRect()
+      .height,
+  ).toBe(176);
+  expect(agentApi.submit).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(
+      JSON.parse(localStorage.getItem("agent-layout:99:chat") ?? "null"),
+    ).toEqual({ sidebar: 340, input: 176 }),
+  );
+  first.unmount();
+  showAgent();
+  expect(
+    screen.getByRole("separator", { name: "调整会话侧栏宽度" }),
+  ).toHaveAttribute("aria-valuenow", "340");
+  expect(
+    screen.getByRole("textbox", { name: "输入消息" }).getBoundingClientRect()
+      .height,
+  ).toBe(176);
+  fireEvent.doubleClick(
+    screen.getByRole("separator", { name: "调整输入框高度" }),
+  );
+  expect(
+    screen.getByRole("textbox", { name: "输入消息" }).getBoundingClientRect()
+      .height,
+  ).toBe(96);
+});
+
+it("supports keyboard resizing within bounds and preserves a readable conversation", async () => {
+  const { container } = showAgent("workbench");
+  await screen.findByText("旧问题");
+  const sidebarHandle = screen.getByRole("separator", {
+    name: "调整会话侧栏宽度",
+  });
+  const inputHandle = screen.getByRole("separator", { name: "调整输入框高度" });
+  expect(sidebarHandle).toHaveAttribute("tabindex", "0");
+  expect(sidebarHandle).toHaveAttribute("aria-orientation", "vertical");
+  expect(inputHandle).toHaveAttribute("aria-orientation", "horizontal");
+  fireEvent.keyDown(sidebarHandle, { key: "Home" });
+  fireEvent.keyDown(sidebarHandle, { key: "ArrowLeft" });
+  expect(sidebarHandle).toHaveAttribute("aria-valuenow", "216");
+  fireEvent.keyDown(sidebarHandle, { key: "ArrowRight" });
+  expect(sidebarHandle).toHaveAttribute("aria-valuenow", "232");
+  fireEvent.keyDown(inputHandle, { key: "End" });
+  fireEvent.keyDown(inputHandle, { key: "ArrowUp" });
+  expect(inputHandle.getAttribute("aria-valuenow")).toBe(
+    inputHandle.getAttribute("aria-valuemax"),
+  );
+  const messages = container.querySelector<HTMLElement>(".agent-messages")!;
+  expect(messages.getBoundingClientRect().height).toBeGreaterThanOrEqual(120);
+  expect(
+    screen.getByRole("textbox", { name: "输入消息" }).getBoundingClientRect()
+      .bottom,
+  ).toBeLessThanOrEqual(window.innerHeight);
+  fireEvent.keyDown(inputHandle, { key: "Home" });
+  fireEvent.keyDown(inputHandle, { key: "ArrowUp", shiftKey: true });
+  expect(inputHandle).toHaveAttribute("aria-valuenow", "96");
+  fireEvent.keyDown(sidebarHandle, { key: "Enter" });
+  expect(sidebarHandle).toHaveAttribute("aria-valuenow", "260");
+});
+
+it("keeps narrow screens usable with a dismissible sidebar and bounded input", async () => {
+  try {
+    localStorage.setItem(
+      "agent-layout:99:agent",
+      JSON.stringify({ sidebar: 400, input: 320 }),
+    );
+    const { container } = showAgent("workbench");
+    await screen.findByText("旧问题");
+    expect(
+      screen.getByRole("separator", { name: "调整会话侧栏宽度" }),
+    ).toHaveAttribute("aria-valuenow", "400");
+    await page.viewport(390, 844);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("separator", { name: "调整会话侧栏宽度" }),
+      ).toBeNull(),
+    );
+    const input = screen.getByRole("textbox", { name: "输入消息" });
+    const handle = screen.getByRole("separator", { name: "调整输入框高度" });
+    expect(input.getBoundingClientRect().height).toBeLessThanOrEqual(270);
+    fireEvent.keyDown(handle, { key: "Home" });
+    const main = container.querySelector<HTMLElement>(".agent-main")!;
+    expect(main.scrollWidth).toBeLessThanOrEqual(main.clientWidth);
+    const history = screen.getByRole("button", { name: /^会\s*话$/ });
+    fireEvent.click(history);
+    const sidebar = screen.getByRole("complementary", { name: "会话侧栏" });
+    expect(sidebar).toBeVisible();
+    expect(screen.getByRole("button", { name: "关闭会话列表" })).toHaveFocus();
+    expect(main).toHaveAttribute("inert");
+    expect(sidebar.getBoundingClientRect().width).toBeLessThan(
+      window.innerWidth,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "关闭会话列表" }));
+    expect(sidebar).not.toBeVisible();
+    fireEvent.click(history);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(sidebar).not.toBeVisible();
+    expect(history).toHaveFocus();
+    fireEvent.change(input, { target: { value: "窄屏问题" } });
+    fireEvent.click(screen.getByRole("button", { name: /发送/ }));
+    await waitFor(() =>
+      expect(agentApi.submit).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ prompt: "窄屏问题" }),
+      ),
+    );
+  } finally {
+    await page.viewport(1600, 900);
+  }
+});
+
+it.each([
+  [1366, 768],
+  [1024, 600],
+])(
+  "keeps an expanded workflow and maximum input usable at %s by %s",
+  async (width, height) => {
+    await page.viewport(width, height);
+    try {
+      const { container } = showAgent("workbench");
+      await screen.findByText("旧问题");
+      fireEvent.click(screen.getByText("科研工作流 · 计划、执行与入库"));
+      const goal = await screen.findByRole("textbox", { name: "工作流目标" });
+      const handle = screen.getByRole("separator", { name: "调整输入框高度" });
+      fireEvent.keyDown(handle, { key: "End" });
+      const main = container.querySelector<HTMLElement>(".agent-main")!;
+      const messages = container.querySelector<HTMLElement>(".agent-messages")!;
+      const composer = container.querySelector<HTMLElement>(".agent-composer")!;
+      const content = container.querySelector<HTMLElement>(
+        ".agent-composer-content",
+      )!;
+      const workflow = container.querySelector<HTMLElement>(
+        ".agent-workflow-panel",
+      )!;
+      await waitFor(() => {
+        expect(main.scrollHeight).toBeLessThanOrEqual(main.clientHeight + 1);
+        expect(composer.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          main.getBoundingClientRect().bottom,
+        );
+        expect(workflow.scrollHeight).toBeGreaterThan(workflow.clientHeight);
+        expect(messages.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+          height <= 600 ? 80 : 120,
+        );
+        expect(main.getBoundingClientRect().top).toBeGreaterThan(
+          screen.getByRole("banner").getBoundingClientRect().bottom,
+        );
+      });
+      const expectWithin = (element: HTMLElement, area: HTMLElement) => {
+        const bounds = element.getBoundingClientRect();
+        const areaBounds = area.getBoundingClientRect();
+        expect(bounds.top).toBeGreaterThanOrEqual(areaBounds.top - 1);
+        expect(bounds.bottom).toBeLessThanOrEqual(areaBounds.bottom + 1);
+      };
+      await waitFor(() => {
+        goal.scrollIntoView({ block: "nearest" });
+        expectWithin(goal, workflow);
+      });
+      fireEvent.change(goal, { target: { value: "核查研究区数据" } });
+      expect(goal).toHaveValue("核查研究区数据");
+      const profile = screen.getByRole("combobox", { name: "分析方案" });
+      profile.scrollIntoView({ block: "nearest" });
+      expectWithin(profile, content);
+      fireEvent.mouseDown(profile);
+      fireEvent.click(
+        await screen.findByText("长材料", {
+          selector: ".ant-select-item-option-content",
+        }),
+      );
+      fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+        target: { value: "低高度窗口问题" },
+      });
+      const sendButton = screen.getByRole("button", { name: /发送/ });
+      sendButton.scrollIntoView({ block: "nearest" });
+      expectWithin(sendButton, content);
+      expectWithin(sendButton, main);
+      fireEvent.click(sendButton);
+      await waitFor(() =>
+        expect(agentApi.submit).toHaveBeenCalledWith(
+          1,
+          expect.objectContaining({
+            prompt: "低高度窗口问题",
+            budgetProfile: "materials",
+          }),
+        ),
+      );
+    } finally {
+      await page.viewport(1600, 900);
+    }
+  },
+);

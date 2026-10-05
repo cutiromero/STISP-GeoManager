@@ -13,7 +13,7 @@ vi.mock("../contexts/AppContext", () => ({
     setUser,
   }),
 }));
-import { AccountAccessCard, LoginAccessNotice } from "./AccountAccess";
+import { AccountAccessCard } from "./AccountAccess";
 const access = {
   permissions: [
     { id: "compute.submit_task", label: "提交计算任务", group: "计算权限" },
@@ -61,18 +61,5 @@ it("shows own capabilities and a separate application that confirms submission",
       expect.objectContaining({ method: "POST" }),
     ),
   );
-  view.unmount();
-});
-it("explains available permissions after login without listing upgrade permissions", async () => {
-  sessionStorage.setItem("show-account-access", "1");
-  const view = render(
-    <AntApp>
-      <LoginAccessNotice />
-    </AntApp>,
-  );
-  await screen.findByText("提交计算任务");
-  expect(screen.queryByText("上传数据")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "我知道了" }));
-  expect(sessionStorage.getItem("show-account-access")).toBeNull();
   view.unmount();
 });

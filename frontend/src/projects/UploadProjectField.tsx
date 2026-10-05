@@ -51,12 +51,14 @@ export function UploadProjectField({
         </Form.Item>
       </Form>
       <Space orientation="vertical" style={{ width: "100%" }}>
-        <Typography.Text type="secondary">
-          {l(
-            "超管可选择全部项目；其他用户仅可选择公开及获授权项目。选择文件后锁定归属，修改请先重新选择文件。",
-            "Super admins can select any project; other users can select Public or their assigned projects. The destination is locked once a file is selected. Reset the file to change it.",
-          )}
-        </Typography.Text>
+        {locked && (
+          <Typography.Text type="secondary">
+            {l(
+              "重新选择文件后可修改所属项目。",
+              "Reset the selected file to change its project.",
+            )}
+          </Typography.Text>
+        )}
         <Alert
           showIcon
           type={value === 1 ? "warning" : "info"}
@@ -67,8 +69,8 @@ export function UploadProjectField({
                   "Public project: accessible to everyone. Confirm this data can be public.",
                 )
               : l(
-                  "仅该项目成员和超管可访问，上传归属不受顶部浏览项目影响。",
-                  "Only members of this project and super admins can access it. The browsing project does not change the upload destination.",
+                  "仅该项目成员和超管可访问。",
+                  "Only project members and super admins can access it.",
                 )
           }
         />

@@ -93,6 +93,8 @@ def test_refresh_retains_legacy_news_and_manual_content_and_is_idempotent(
         assert article.body == "\n\n".join(item["paragraphs"])
         assert article.links == item["links"]
         assert article.cover_asset.caption == item["images"][0]["caption"]
+        if item["images"][0].get("source"):
+            assert item["images"][0]["source"] in article.source
         assert (output / article.cover_asset.path).is_file()
     stable = list(current.values())
     assert run_refresh(folder) == {

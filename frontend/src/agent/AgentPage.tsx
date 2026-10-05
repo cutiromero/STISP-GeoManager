@@ -25,6 +25,8 @@ import {
   EditOutlined,
   DeleteOutlined,
   PaperClipOutlined,
+  MenuOutlined,
+  CloseOutlined,
 } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -48,6 +50,8 @@ import TaskBudgetControl from "./TaskBudgetControl";
 import RunEvidence from "./RunEvidence";
 import RunComputeTasks from "./RunComputeTasks";
 import WorkflowPanel from "./WorkflowPanel";
+import AgentResizeHandle from "./AgentResizeHandle";
+import useAgentLayout from "./useAgentLayout";
 import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "./ReasoningEffortControl";
@@ -74,6 +78,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const location = useLocation();
   const { user } = useAppContext();
   const project = useProjectContext();
+  const layout = useAgentLayout(`agent-layout:${user?.id ?? "anon"}:${mode}`);
   const { message } = App.useApp();
   const bootstrap = useAgentBootstrap();
   const [conversations, setConversations] = useState<AgentConversation[]>([]);
@@ -116,6 +121,20 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [rename, setRename] = useState<AgentConversation | null>(null);
   const [renameText, setRenameText] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const historyButton = useRef<HTMLButtonElement>(null);
+  const historyCloseButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!showHistory || !layout.narrow) return;
+    historyCloseButton.current?.focus();
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowHistory(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("keydown", close);
+      historyButton.current?.focus();
+    };
+  }, [showHistory, layout.narrow]);
   const alive = useRef(true);
   const sequence = useRef(0);
   const listSequence = useRef(0);
@@ -485,33 +504,65 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         canBrowseData={Boolean(user?.permissions.canBrowseData)}
       />
       <div className="agent-workspace">
+        {showHistory && layout.narrow && (
+          <button
+            className="agent-history-backdrop"
+            tabIndex={-1}
+            aria-label={ui("收起会话侧栏", "Dismiss conversation sidebar")}
+            onClick={() => setShowHistory(false)}
+          />
+        )}
         <aside
+          id="agent-conversation-sidebar"
+          aria-label={ui("会话侧栏", "Conversation sidebar")}
           className={`agent-sidebar ${showHistory ? "agent-sidebar-open" : ""}`}
+          style={{ width: layout.narrow ? undefined : layout.sidebar }}
         >
-          <Typography.Title level={4}>{ui("智能体", "Agent")}</Typography.Title>
-          {bootstrap?.canChat && (
+          <div className="agent-sidebar-heading">
+            <span className="agent-sidebar-symbol">
+              <RobotOutlined />
+            </span>
+            <div>
+              <Typography.Title level={4}>
+                {ui("智能体", "Agent")}
+              </Typography.Title>
+              <span>{ui("项目研究助手", "Research workspace")}</span>
+            </div>
             <Button
-              block
-              icon={<MessageOutlined />}
-              type={mode === "chat" ? "primary" : "text"}
-              disabled={!bootstrap?.canChat}
-              onClick={() => navigate("/agent/chat")}
-            >
-              {ui("模型对话", "Model chat")}
-            </Button>
-          )}
-          {bootstrap?.canAgent && (
-            <Button
-              block
-              icon={<RobotOutlined />}
-              type={mode === "agent" ? "primary" : "text"}
-              disabled={!bootstrap?.canAgent}
-              onClick={() => navigate("/agent/workbench")}
-            >
-              {ui("数据智能体", "Data agent")}
-            </Button>
-          )}
+              ref={historyCloseButton}
+              className="agent-sidebar-close"
+              type="text"
+              icon={<CloseOutlined />}
+              aria-label={ui("关闭会话列表", "Close conversations")}
+              onClick={() => setShowHistory(false)}
+            />
+          </div>
+          <div className="agent-mode-nav">
+            {bootstrap?.canChat && (
+              <Button
+                block
+                icon={<MessageOutlined />}
+                type={mode === "chat" ? "primary" : "text"}
+                disabled={!bootstrap?.canChat}
+                onClick={() => navigate("/agent/chat")}
+              >
+                {ui("模型对话", "Model chat")}
+              </Button>
+            )}
+            {bootstrap?.canAgent && (
+              <Button
+                block
+                icon={<RobotOutlined />}
+                type={mode === "agent" ? "primary" : "text"}
+                disabled={!bootstrap?.canAgent}
+                onClick={() => navigate("/agent/workbench")}
+              >
+                {ui("数据智能体", "Data agent")}
+              </Button>
+            )}
+          </div>
           <Button
+            className="agent-new-conversation"
             block
             icon={<PlusOutlined />}
             disabled={!canUse || busy}
@@ -525,10 +576,18 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <Space>
-            <Switch size="small" checked={archived} onChange={setArchived} />
-            {ui("已归档", "Archived")}
-          </Space>
+          <div className="agent-history-heading">
+            <span>{ui("会话记录", "Conversations")}</span>
+            <Space size={6}>
+              <Switch
+                size="small"
+                aria-label={ui("查看已归档会话", "Show archived conversations")}
+                checked={archived}
+                onChange={setArchived}
+              />
+              {ui("已归档", "Archived")}
+            </Space>
+          </div>
           <div className="agent-history">
             {conversations.map((c) => (
               <div
@@ -537,12 +596,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               >
                 <button
                   className="agent-history-title"
+                  title={c.title}
+                  aria-current={current?.id === c.id ? "true" : undefined}
                   disabled={busy}
                   onClick={() => void open(c)}
                 >
                   {c.title}
                 </button>
-                <Space size={0}>
+                <Space size={0} className="agent-history-actions">
                   <Button
                     size="small"
                     type="text"
@@ -601,21 +662,52 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
             </Button>
           )}
         </aside>
-        <main className="agent-main">
+        {!layout.narrow && (
+          <AgentResizeHandle
+            orientation="vertical"
+            label={ui("调整会话侧栏宽度", "Resize conversation sidebar")}
+            hint={ui(
+              "左右拖动或按方向键调整，双击恢复",
+              "Drag or use arrow keys to resize; double-click to reset",
+            )}
+            controls="agent-conversation-sidebar"
+            value={layout.sidebar}
+            min={layout.sidebarMin}
+            max={layout.sidebarMax}
+            defaultValue={layout.defaults.sidebar}
+            onChange={layout.setSidebar}
+          />
+        )}
+        <main className="agent-main" inert={showHistory && layout.narrow}>
           <div className="agent-toolbar">
-            <Button
-              className="agent-history-toggle"
-              onClick={() => setShowHistory(!showHistory)}
-            >
-              {ui("会话", "History")}
-            </Button>
-            <strong>
-              {current?.title ??
-                (mode === "chat"
-                  ? ui("模型对话", "Model chat")
-                  : ui("数据智能体", "Data agent"))}
-            </strong>
-            <Tag>
+            <div className="agent-toolbar-heading">
+              <Button
+                ref={historyButton}
+                className="agent-history-toggle"
+                type="text"
+                icon={<MenuOutlined />}
+                aria-label={ui("会话", "Conversations")}
+                aria-expanded={showHistory}
+                aria-controls="agent-conversation-sidebar"
+                onClick={() => setShowHistory(!showHistory)}
+              >
+                {ui("会话", "History")}
+              </Button>
+              <div className="agent-conversation-heading">
+                <span>
+                  {mode === "chat"
+                    ? ui("模型对话", "Model chat")
+                    : ui("数据智能体", "Data agent")}
+                </span>
+                <strong title={current?.title}>
+                  {current?.title ??
+                    (mode === "chat"
+                      ? ui("模型对话", "Model chat")
+                      : ui("数据智能体", "Data agent"))}
+                </strong>
+              </div>
+            </div>
+            <Tag className="agent-project-badge">
               {project?.projects.find((p) => String(p.id) === project.current)
                 ?.name ?? ui("当前项目", "Current project")}
             </Tag>
@@ -693,7 +785,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               <section className="agent-turn" key={r.id} data-run-id={r.id}>
                 <div className="agent-user-message">{r.prompt}</div>
                 <div className="agent-assistant-message">
-                  <Space>
+                  <Space className="agent-answer-heading">
                     <RobotOutlined />
                     <strong>
                       {bootstrap?.models.find((m) => m.alias === r.model)
@@ -834,7 +926,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     )}
                   {r.detail && r.status !== "succeeded" && <p>{r.detail}</p>}
                   {!active(r) && (
-                    <Space>
+                    <Space className="agent-answer-actions">
                       <Button
                         size="small"
                         icon={<CopyOutlined />}
@@ -883,217 +975,239 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
           </div>
           {canUse && (
             <div className="agent-composer">
-              {attachmentsAvailable && (
-                <div className="agent-attachments-row">
-                  <Upload
-                    accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
-                    multiple
-                    showUploadList={false}
-                    beforeUpload={(file) => {
-                      void uploadAttachment(file);
-                      return false;
-                    }}
-                    disabled={
-                      Boolean(running) ||
-                      busy ||
-                      uploadingAttachment ||
-                      current?.archived
-                    }
-                  >
-                    <Button
-                      icon={<PaperClipOutlined />}
-                      loading={uploadingAttachment}
-                    >
-                      {ui("上传文档或图片", "Upload document or image")}
-                    </Button>
-                  </Upload>
-                  {attachments.map((item) => (
-                    <Tag
-                      key={item.id}
-                      closable={!running && !busy}
-                      onClose={() =>
-                        setAttachments((old) =>
-                          old.filter((entry) => entry.id !== item.id),
-                        )
+              <AgentResizeHandle
+                orientation="horizontal"
+                label={ui("调整输入框高度", "Resize message input")}
+                hint={ui(
+                  "上下拖动或按方向键调整，双击恢复",
+                  "Drag or use arrow keys to resize; double-click to reset",
+                )}
+                controls="agent-message-input"
+                value={layout.input}
+                min={layout.inputMin}
+                max={layout.inputMax}
+                defaultValue={layout.defaults.input}
+                onChange={layout.setInput}
+              />
+              <div className="agent-composer-content">
+                {attachmentsAvailable && (
+                  <div className="agent-attachments-row">
+                    <Upload
+                      accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
+                      multiple
+                      showUploadList={false}
+                      beforeUpload={(file) => {
+                        void uploadAttachment(file);
+                        return false;
+                      }}
+                      disabled={
+                        Boolean(running) ||
+                        busy ||
+                        uploadingAttachment ||
+                        current?.archived
                       }
                     >
-                      {item.fileName}
-                    </Tag>
-                  ))}
-                </div>
-              )}
-              {mode === "agent" && (
-                <Select
-                  mode="multiple"
-                  maxCount={3}
-                  allowClear
-                  value={selected}
-                  disabled={Boolean(running) || busy}
-                  onChange={setSelected}
-                  placeholder={ui(
-                    "自动发现当前项目授权数据（可选择资源缩小范围）",
-                    "Discover authorized project data, or select up to 3 resources",
-                  )}
-                  options={resources.map((r) => ({
-                    value: r.id,
-                    label: r.name,
-                  }))}
-                  className="agent-resource-select"
-                />
-              )}
-              <div className="agent-input-row">
-                <Input.TextArea
-                  aria-label={ui("输入消息", "Message")}
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  autoSize={{ minRows: 2, maxRows: 6 }}
-                  maxLength={bootstrap?.budgets?.maxPromptCharacters ?? 12000}
-                  disabled={!canUse || current?.archived}
-                  placeholder={ui(
-                    "输入问题，Enter 发送，Shift+Enter 换行",
-                    "Ask a question. Enter to send, Shift+Enter for a new line",
-                  )}
-                  onKeyDown={(e) => {
-                    if (
-                      e.key === "Enter" &&
-                      !e.shiftKey &&
-                      !e.nativeEvent.isComposing
-                    ) {
-                      e.preventDefault();
-                      void send();
-                    }
-                  }}
-                />
-                {running ? (
-                  <Button
-                    icon={<StopOutlined />}
-                    onClick={() =>
-                      void agentApi
-                        .cancel(running.id)
-                        .then((r) =>
-                          setRuns((old) =>
-                            old.map((item) => (item.id === r.id ? r : item)),
-                          ),
-                        )
-                        .catch(report)
-                    }
-                  >
-                    {ui("停止", "Stop")}
-                  </Button>
-                ) : (
-                  <Button
-                    type="primary"
-                    icon={<SendOutlined />}
-                    loading={busy}
-                    disabled={
-                      !canUse ||
-                      !modelOnline ||
-                      !bootstrap?.workerOnline ||
-                      !prompt.trim() ||
-                      current?.archived
-                    }
-                    onClick={() => void send()}
-                  >
-                    {ui("发送", "Send")}
-                  </Button>
+                      <Button
+                        icon={<PaperClipOutlined />}
+                        loading={uploadingAttachment}
+                      >
+                        {ui("上传文档或图片", "Upload document or image")}
+                      </Button>
+                    </Upload>
+                    {attachments.map((item) => (
+                      <Tag
+                        key={item.id}
+                        closable={!running && !busy}
+                        onClose={() =>
+                          setAttachments((old) =>
+                            old.filter((entry) => entry.id !== item.id),
+                          )
+                        }
+                      >
+                        {item.fileName}
+                      </Tag>
+                    ))}
+                  </div>
                 )}
-              </div>
-              {bootstrap?.budgets?.enabled && selectedModel && (
-                <TaskBudgetControl
-                  canManage={Boolean(bootstrap.canManage)}
-                  options={bootstrap.budgets}
-                  profile={budgetProfile}
-                  output={outputOverride}
-                  serviceWindow={selectedModel.contextWindowTokens}
-                  disabled={Boolean(running) || busy}
-                  onProfile={(value) => {
-                    setBudgetProfile(value);
-                    setOutputOverride(undefined);
-                    setEffortOverride(undefined);
-                    if (value === "reasoning" && deepThinkingAvailable) {
-                      setThinkingMode("deep");
-                      localStorage.setItem(
-                        `agent-thinking:${user?.id}:${mode}`,
-                        "deep",
-                      );
-                    }
-                  }}
-                  onOutput={setOutputOverride}
-                />
-              )}
-              {deepThinkingAvailable && (
-                <div className="agent-thinking-row">
-                  <Typography.Text type="secondary">
-                    {ui("回答模式", "Answer mode")}
-                  </Typography.Text>
-                  <Segmented
-                    value={thinkingMode}
-                    disabled={
-                      Boolean(running) || busy || !deepThinkingAvailable
-                    }
-                    onChange={(value) => {
-                      const next = value as "fast" | "deep";
-                      setThinkingMode(next);
-                      localStorage.setItem(
-                        `agent-thinking:${user?.id}:${mode}`,
-                        next,
-                      );
-                    }}
-                    options={[
-                      { value: "fast", label: ui("快速回答", "Fast") },
-                      {
-                        value: "deep",
-                        label: ui("深度思考", "Deep thinking"),
-                      },
-                    ]}
+                {mode === "agent" && (
+                  <Select
+                    aria-label={ui("限定数据资源", "Limit data resources")}
+                    mode="multiple"
+                    maxCount={3}
+                    allowClear
+                    value={selected}
+                    disabled={Boolean(running) || busy}
+                    onChange={setSelected}
+                    placeholder={ui(
+                      "自动发现当前项目授权数据（可选择资源缩小范围）",
+                      "Discover authorized project data, or select up to 3 resources",
+                    )}
+                    options={resources.map((r) => ({
+                      value: r.id,
+                      label: r.name,
+                    }))}
+                    className="agent-resource-select"
                   />
-                  {thinkingMode === "deep" && deepThinkingAvailable && (
-                    <ReasoningEffortControl
-                      value={effortOverride ?? defaultEffort}
-                      overridden={effortOverride !== undefined}
+                )}
+                <div className="agent-input-row">
+                  <Input.TextArea
+                    id="agent-message-input"
+                    aria-label={ui("输入消息", "Message")}
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    style={{ height: layout.input, resize: "none" }}
+                    maxLength={bootstrap?.budgets?.maxPromptCharacters ?? 12000}
+                    disabled={!canUse || current?.archived}
+                    placeholder={ui(
+                      "输入问题，Enter 发送，Shift+Enter 换行",
+                      "Ask a question. Enter to send, Shift+Enter for a new line",
+                    )}
+                    onKeyDown={(e) => {
+                      if (
+                        e.key === "Enter" &&
+                        !e.shiftKey &&
+                        !e.nativeEvent.isComposing
+                      ) {
+                        e.preventDefault();
+                        void send();
+                      }
+                    }}
+                  />
+                  {running ? (
+                    <Button
+                      icon={<StopOutlined />}
+                      onClick={() =>
+                        void agentApi
+                          .cancel(running.id)
+                          .then((r) =>
+                            setRuns((old) =>
+                              old.map((item) => (item.id === r.id ? r : item)),
+                            ),
+                          )
+                          .catch(report)
+                      }
+                    >
+                      {ui("停止", "Stop")}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="primary"
+                      icon={<SendOutlined />}
+                      loading={busy}
+                      disabled={
+                        !canUse ||
+                        !modelOnline ||
+                        !bootstrap?.workerOnline ||
+                        !prompt.trim() ||
+                        current?.archived
+                      }
+                      onClick={() => void send()}
+                    >
+                      {ui("发送", "Send")}
+                    </Button>
+                  )}
+                </div>
+                <div className="agent-composer-options">
+                  {bootstrap?.budgets?.enabled && selectedModel && (
+                    <TaskBudgetControl
+                      canManage={Boolean(bootstrap.canManage)}
+                      options={bootstrap.budgets}
+                      profile={budgetProfile}
+                      output={outputOverride}
+                      serviceWindow={selectedModel.contextWindowTokens}
                       disabled={Boolean(running) || busy}
-                      onChange={setEffortOverride}
+                      onProfile={(value) => {
+                        setBudgetProfile(value);
+                        setOutputOverride(undefined);
+                        setEffortOverride(undefined);
+                        if (value === "reasoning" && deepThinkingAvailable) {
+                          setThinkingMode("deep");
+                          localStorage.setItem(
+                            `agent-thinking:${user?.id}:${mode}`,
+                            "deep",
+                          );
+                        }
+                      }}
+                      onOutput={setOutputOverride}
                     />
                   )}
+                  {deepThinkingAvailable && (
+                    <div className="agent-thinking-row">
+                      <Typography.Text type="secondary">
+                        {ui("回答模式", "Answer mode")}
+                      </Typography.Text>
+                      <Segmented
+                        value={thinkingMode}
+                        disabled={
+                          Boolean(running) || busy || !deepThinkingAvailable
+                        }
+                        onChange={(value) => {
+                          const next = value as "fast" | "deep";
+                          setThinkingMode(next);
+                          localStorage.setItem(
+                            `agent-thinking:${user?.id}:${mode}`,
+                            next,
+                          );
+                        }}
+                        options={[
+                          { value: "fast", label: ui("快速回答", "Fast") },
+                          {
+                            value: "deep",
+                            label: ui("深度思考", "Deep thinking"),
+                          },
+                        ]}
+                      />
+                      {thinkingMode === "deep" && deepThinkingAvailable && (
+                        <ReasoningEffortControl
+                          value={effortOverride ?? defaultEffort}
+                          overridden={effortOverride !== undefined}
+                          disabled={Boolean(running) || busy}
+                          onChange={setEffortOverride}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {internetAvailable && (
+                    <div className="agent-thinking-row">
+                      <Switch
+                        size="small"
+                        checked={internetEnabled}
+                        disabled={
+                          !internetAvailable || Boolean(running) || busy
+                        }
+                        onChange={setInternetEnabled}
+                      />
+                      <Typography.Text type="secondary">
+                        {ui("联网检索", "Internet retrieval")}
+                      </Typography.Text>
+                    </div>
+                  )}
+                  <div className="agent-model-row">
+                    <Select
+                      aria-label={ui("选择模型", "Choose model")}
+                      value={model || undefined}
+                      disabled={Boolean(running) || busy}
+                      onChange={(value) => {
+                        setModel(value);
+                        const nextModel = models.find(
+                          (item) => item.alias === value,
+                        );
+                        if (!nextModel?.supportsThinking) {
+                          setThinkingMode("fast");
+                        }
+                        localStorage.setItem(
+                          `agent-model:${user?.id}:${mode}`,
+                          value,
+                        );
+                      }}
+                      placeholder={ui("选择模型", "Choose model")}
+                      options={models.map((m) => ({
+                        value: m.alias,
+                        label: `${m.name} · ${m.status === "online" ? ui("在线", "Online") : m.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${m.supportsVision ? ` · ${ui("支持图片", "Vision")}` : ""}`,
+                      }))}
+                    />
+                  </div>
                 </div>
-              )}
-              {internetAvailable && (
-                <div className="agent-thinking-row">
-                  <Switch
-                    size="small"
-                    checked={internetEnabled}
-                    disabled={!internetAvailable || Boolean(running) || busy}
-                    onChange={setInternetEnabled}
-                  />
-                  <Typography.Text type="secondary">
-                    {ui("联网检索", "Internet retrieval")}
-                  </Typography.Text>
-                </div>
-              )}
-              <div className="agent-model-row">
-                <Select
-                  aria-label={ui("选择模型", "Choose model")}
-                  value={model || undefined}
-                  disabled={Boolean(running) || busy}
-                  onChange={(value) => {
-                    setModel(value);
-                    const nextModel = models.find(
-                      (item) => item.alias === value,
-                    );
-                    if (!nextModel?.supportsThinking) {
-                      setThinkingMode("fast");
-                    }
-                    localStorage.setItem(
-                      `agent-model:${user?.id}:${mode}`,
-                      value,
-                    );
-                  }}
-                  placeholder={ui("选择模型", "Choose model")}
-                  options={models.map((m) => ({
-                    value: m.alias,
-                    label: `${m.name} · ${m.status === "online" ? ui("在线", "Online") : m.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${m.supportsVision ? ` · ${ui("支持图片", "Vision")}` : ""}`,
-                  }))}
-                />
               </div>
             </div>
           )}

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.26] - 2026-10-05
+
+### Changed
+- 取消登录后的权限清单自动弹窗，精简项目选择与上传页面的权限说明；新闻和科普阅读页移除课件来源页脚、图注中的讲次页码。
+- 补齐 NDVI 算法简介，说明输入波段、计算方式与结果用途，保留已发布算法版本。
+- 智能体采用更清晰的会话、消息和输入布局，支持拖动及键盘调整会话侧栏宽度、输入框高度，并记住尺寸。
+
 ## [0.1.25] - 2026-10-05
 
 ### Added

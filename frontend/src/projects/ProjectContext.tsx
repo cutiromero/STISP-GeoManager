@@ -1,7 +1,6 @@
 import ColumnIcon from "../components/ColumnIcon";
 import { useAuditText } from "../i18n/auditUi";
-import { useComputeText } from "../compute/ui";
-import { App, Select, Space, Tag, Tooltip } from "antd";
+import { App, Select, Space, Tag } from "antd";
 import {
   createContext,
   useCallback,
@@ -134,45 +133,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
 export function ProjectSelector() {
   const ui = useAuditText();
-  const text = useComputeText();
   const value = useProjectContext();
   if (!value) return null;
   return (
     <Space size={6} className="project-selector">
-      <Tooltip
-        title={text(
-          "项目决定当前数据、计算任务和成果的范围。除公开项目外，还可访问分配给你的项目；具体操作取决于账号权限。",
-          "Projects organize your data, compute tasks and results. You can access Public and projects assigned to you; available actions depend on your account permissions.",
-        )}
-      >
-        <Tag tabIndex={0} color="blue" icon={<ColumnIcon name="project" />}>
-          {ui("项目")}
-        </Tag>
-      </Tooltip>
+      <Tag color="blue" icon={<ColumnIcon name="project" />}>
+        {ui("项目")}
+      </Tag>
       <Select
         aria-label={ui("当前项目标签")}
         value={value.current}
         onChange={(id) => value.choose(id)}
         style={{ width: 150 }}
         popupMatchSelectWidth={230}
-        popupRender={(menu) => (
-          <>
-            {menu}
-            <div
-              style={{ padding: "8px 12px", color: "#66758a", fontSize: 12 }}
-            >
-              {value.projects.length === 1 && value.projects[0]?.isDefault
-                ? text(
-                    "当前仅分配了公开项目。加入课题项目请联系超级管理员。",
-                    "Only Public is assigned. Contact the super administrator to join a research project.",
-                  )
-                : text(
-                    "选择本次工作所属项目。",
-                    "Choose the project for your current work.",
-                  )}
-            </div>
-          </>
-        )}
         options={value.projects.map((p) => ({
           value: String(p.id),
           label: `${p.isDefault ? ui("公开") : p.name}${p.isActive ? "" : ui("（停用）")}`,

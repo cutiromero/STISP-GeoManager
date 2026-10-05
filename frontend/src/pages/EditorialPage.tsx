@@ -268,7 +268,7 @@ export default function EditorialPage({
             </details>
             <p className="editorial-reading-note">
               <strong>读图说明：</strong>
-              配图取自课件，原图讲次和页码见图注。曲线和算例用于说明方法，不代表实地测量；遇到具体地块，还要核对当地资料。
+              曲线和算例用于说明方法，不代表实地测量；遇到具体地块，还要核对当地资料。
             </p>
           </section>
         )}
@@ -428,11 +428,6 @@ export default function EditorialPage({
                 ))}
               </section>
             )}
-            {kind === "knowledge" && (
-              <footer className="editorial-source">
-                {ui("素材来源、课件页码")}：{article.source || ui("团队整理")}
-              </footer>
-            )}
           </article>
         ) : (
           <>
@@ -585,12 +580,7 @@ export default function EditorialPage({
           >
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item
-            name="source"
-            label={ui(
-              kind === "news" ? "编辑备注（仅内部保存）" : "素材来源、课件页码",
-            )}
-          >
+          <Form.Item name="source" label={ui("编辑备注（仅内部保存）")}>
             <Input.TextArea rows={2} />
           </Form.Item>
           {editing && editing !== "new" ? (

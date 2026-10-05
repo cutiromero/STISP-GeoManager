@@ -54,61 +54,6 @@ export function OwnedPermissions({
   );
 }
 
-export function LoginAccessNotice() {
-  const { user } = useAppContext();
-  const { i18n } = useTranslation();
-  const en = i18n.language.startsWith("en");
-  const [access, setAccess] = useState<AccountAccess | null>(null);
-  const [error, setError] = useState("");
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!user || sessionStorage.getItem("show-account-access") !== "1") return;
-    let active = true;
-    sessionStorage.removeItem("show-account-access");
-    setAccess(null);
-    setError("");
-    setOpen(true);
-    readAccess()
-      .then((value) => {
-        if (active) setAccess(value);
-      })
-      .catch((e) => {
-        if (active) setError(String(e));
-      });
-    return () => {
-      active = false;
-    };
-  }, [user?.id]);
-  return (
-    <Modal
-      title={en ? "Your available features" : "当前账号可用功能"}
-      open={open && !!user}
-      onCancel={() => setOpen(false)}
-      footer={
-        <Button type="primary" onClick={() => setOpen(false)}>
-          {en ? "Got it" : "我知道了"}
-        </Button>
-      }
-      width={720}
-    >
-      <Typography.Paragraph>
-        {en
-          ? "These are your current tool and agent permissions. You can review them in your profile."
-          : "以下是你当前可使用的工具和智能体功能，可在个人设置中随时查看。"}
-      </Typography.Paragraph>
-      {error && <Alert type="error" title={error} />}
-      <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
-        {access && (
-          <OwnedPermissions
-            items={access.permissions}
-            actions={access.agentActions}
-          />
-        )}
-      </div>
-    </Modal>
-  );
-}
-
 export function AccountAccessCard() {
   const { user, setUser } = useAppContext();
   const { i18n } = useTranslation();

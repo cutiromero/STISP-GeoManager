@@ -123,7 +123,16 @@ class Command(BaseCommand):
                             "category": item["category"],
                             "summary": item["summary"],
                             "body": "\n\n".join(item["paragraphs"]),
-                            "source": f"《{manifest['sourceName']}》第 {item['number']} 篇；正文、配图与延伸阅读依照原文。",
+                            "source": "\n".join(
+                                [
+                                    f"《{manifest['sourceName']}》第 {item['number']} 篇；正文、配图与延伸阅读依照原文。"
+                                ]
+                                + [
+                                    f"配图来源：{image['source']}"
+                                    for image in item["images"]
+                                    if image.get("source")
+                                ]
+                            ),
                             "links": item["links"],
                             "status": "published",
                             "cover_asset_id": cover.pk,

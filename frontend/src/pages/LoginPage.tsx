@@ -201,7 +201,6 @@ export default function LoginPage() {
         values.password,
         Boolean(values.remember),
       );
-      sessionStorage.setItem("show-account-access", "1");
       setUser(response.user);
     } catch (error) {
       message.error(
@@ -217,7 +216,6 @@ export default function LoginPage() {
       await api.csrf();
       const response = await api.register(values);
       message.success(response.detail);
-      sessionStorage.setItem("show-account-access", "1");
       setUser(response.user);
     } catch (error) {
       message.error(
@@ -240,7 +238,6 @@ export default function LoginPage() {
     try {
       await api.csrf();
       const response = await api.guestLogin();
-      sessionStorage.setItem("show-account-access", "1");
       setUser(response.user);
     } catch (error) {
       message.error(

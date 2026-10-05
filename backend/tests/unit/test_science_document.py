@@ -14,6 +14,10 @@ def test_frozen_document_contains_eight_articles_and_actual_links():
         manifest["articles"][6]["links"][0]["url"]
         == "https://global-surface-water.appspot.com/"
     )
+    for item in manifest["articles"]:
+        assert "图源：课件" not in item["images"][0]["caption"]
+    assert manifest["articles"][6]["images"][0]["source"] == "课件第 8 讲，第 21 页。"
+    assert manifest["articles"][7]["images"][0]["source"] == "课件第 8 讲，第 3 页。"
 
 
 def test_extracts_fields_images_and_captions_in_document_order(tmp_path):
