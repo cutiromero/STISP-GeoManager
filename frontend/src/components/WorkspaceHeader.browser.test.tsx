@@ -9,6 +9,7 @@ import { App as AntApp, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { AppContext } from "../contexts/AppContext";
 import { appTheme } from "../theme";
 import type {
@@ -19,6 +20,7 @@ import type {
   WorkspaceScene,
 } from "../types";
 import WorkspaceHeader from "./WorkspaceHeader";
+import headerStyles from "../styles.css?inline";
 
 const { clearCachedLayerGroupsMock, mockApi } = vi.hoisted(() => ({
   clearCachedLayerGroupsMock: vi.fn(),
@@ -199,10 +201,12 @@ function renderHeader(
   contextUser: User = user,
   setUser: (user: User | null) => void = vi.fn(),
   initialPath = "/",
+  withStyles = false,
 ) {
   return render(
     <ConfigProvider locale={zhCN} theme={appTheme}>
       <AntApp>
+        {withStyles && <style>{headerStyles}</style>}
         <AppContext.Provider
           value={{
             bootstrap,
@@ -521,5 +525,142 @@ describe("WorkspaceHeader", () => {
     expect(clearCachedLayerGroupsMock.mock.invocationCallOrder[0]).toBeLessThan(
       setUser.mock.invocationCallOrder[0],
     );
+  });
+
+  it.each([1500, 1280, 1024])(
+    "keeps compressed navigation hit regions fixed at %s pixels",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const { container } = renderHeader({}, user, vi.fn(), "/", true);
+        const header =
+          container.querySelector<HTMLElement>(".workspace-header")!;
+        await waitFor(() =>
+          expect(header).toHaveClass("workspace-header-nav-measured"),
+        );
+        const about = container.querySelector<HTMLButtonElement>(
+          '.header-primary-actions button[title="关于我们"]',
+        )!;
+        const elements = [
+          ...container.querySelectorAll<HTMLElement>(
+            ".header-primary-actions button, .workspace-global-search",
+          ),
+        ];
+        const rects = () =>
+          elements.map((element) => {
+            const box = element.getBoundingClientRect();
+            return [box.x, box.y, box.width, box.height];
+          });
+        await userEvent.hover(
+          screen.getByRole("button", { name: "返回地理工作台" }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        const active = container.querySelector<HTMLButtonElement>(
+          ".workspace-switch-card-active",
+        )!;
+        for (const edge of ["left", "right", "activeBottom"] as const) {
+          const target = edge === "activeBottom" ? active : about;
+          const initial = rects();
+          const bounds = target.getBoundingClientRect();
+          await userEvent.hover(target, {
+            position: {
+              // Playwright positions are relative to the padding box, inside the border.
+              x:
+                edge === "activeBottom"
+                  ? bounds.width / 2 - 1
+                  : edge === "left"
+                    ? 0
+                    : bounds.width - 2,
+              y:
+                edge === "activeBottom"
+                  ? bounds.height - 1.5
+                  : bounds.height / 2 - 1,
+            },
+          });
+          let maxDrift = 0;
+          for (let sample = 0; sample < 18; sample++) {
+            await new Promise((resolve) => setTimeout(resolve, 70));
+            rects().forEach((box, index) =>
+              box.forEach((value, coordinate) => {
+                maxDrift = Math.max(
+                  maxDrift,
+                  Math.abs(value - initial[index]![coordinate]!),
+                );
+              }),
+            );
+          }
+          expect(maxDrift).toBeLessThanOrEqual(0.6);
+          expect(target.matches(":hover")).toBe(true);
+          await userEvent.hover(
+            screen.getByRole("button", { name: "返回地理工作台" }),
+          );
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+      } finally {
+        await page.viewport(1600, 900);
+      }
+    },
+  );
+
+  it("shows a focus label without moving the navigation and supports keyboard activation", async () => {
+    await page.viewport(1024, 900);
+    try {
+      const { container } = renderHeader({}, user, vi.fn(), "/", true);
+      const header = container.querySelector<HTMLElement>(".workspace-header")!;
+      await waitFor(() =>
+        expect(header).toHaveClass("workspace-header-nav-measured"),
+      );
+      const compute = container.querySelector<HTMLButtonElement>(
+        '[data-nav-key="compute"]',
+      )!;
+      const before = compute.getBoundingClientRect();
+      compute.focus();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        compute.title,
+      );
+      expect(compute).toHaveFocus();
+      expect(compute.getBoundingClientRect().x).toBe(before.x);
+      expect(compute.getBoundingClientRect().width).toBe(before.width);
+      await userEvent.keyboard("{Enter}");
+      await waitFor(() =>
+        expect(screen.getByTestId("location-path")).toHaveTextContent(
+          "/compute",
+        ),
+      );
+    } finally {
+      await page.viewport(1600, 900);
+    }
+  });
+
+  it("preserves narrow-screen navigation and the mobile search entry", async () => {
+    await page.viewport(390, 844);
+    try {
+      const { container } = renderHeader({}, user, vi.fn(), "/", true);
+      const header = container.querySelector<HTMLElement>(".workspace-header")!;
+      await waitFor(() =>
+        expect(header).toHaveClass("workspace-header-nav-measured"),
+      );
+      expect(screen.queryByRole("button", { name: "智能体" })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "打开全局搜索" }),
+      ).toBeVisible();
+      expect(header.getBoundingClientRect().right).toBeLessThanOrEqual(
+        window.innerWidth,
+      );
+      const about = container.querySelector<HTMLButtonElement>(
+        '.header-primary-actions button[title="关于我们"]',
+      )!;
+      about.focus();
+      expect(about).toHaveFocus();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent("关于我们");
+      await userEvent.keyboard("{Enter}");
+      await waitFor(() =>
+        expect(screen.getByTestId("location-path")).toHaveTextContent(
+          "/about/system",
+        ),
+      );
+    } finally {
+      await page.viewport(1600, 900);
+    }
   });
 });

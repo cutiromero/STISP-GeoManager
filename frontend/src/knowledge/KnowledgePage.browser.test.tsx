@@ -86,13 +86,26 @@ beforeEach(() => {
   });
 });
 afterEach(cleanup);
+afterEach(() => vi.restoreAllMocks());
 
 describe("knowledge network and records", () => {
   it("filters records by pointer and keyboard and resets the network", async () => {
-    show();
+    const { container } = show();
     const node = await screen.findByRole("button", { name: "筛选节点：石英" });
-    fireEvent.click(screen.getByRole("button", { name: /暂停浮动/ }));
+    const pause = screen.queryByRole("button", { name: /暂停浮动/ });
+    if (pause) fireEvent.click(pause);
     await userEvent.click(node);
+    const feedback = container.querySelector(".knowledge-network-feedback");
+    expect(feedback).toHaveClass("is-node");
+    expect(feedback).toHaveAttribute("aria-hidden", "true");
+    expect(getComputedStyle(feedback!).pointerEvents).toBe("none");
+    expect(
+      getComputedStyle(feedback!.querySelector("circle")!).animationName,
+    ).toBe(
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "none"
+        : "knowledge-click-pulse",
+    );
     expect(
       screen.getByRole("button", { name: publicEntry.title, exact: true }),
     ).toBeVisible();
@@ -100,14 +113,132 @@ describe("knowledge network and records", () => {
       screen.queryByRole("button", { name: privateEntry.title, exact: true }),
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重置知识网络" }));
+    expect(container.querySelector(".knowledge-network-feedback")).toBeNull();
     expect(
       screen.getByRole("button", { name: privateEntry.title, exact: true }),
     ).toBeVisible();
     fireEvent.keyDown(node, { key: "Enter" });
-    expect(screen.queryByRole("button", { name: privateEntry.title, exact: true })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: privateEntry.title, exact: true }),
+    ).not.toBeInTheDocument();
+    expect(
+      container.querySelectorAll(".knowledge-network-feedback"),
+    ).toHaveLength(1);
     expect(
       screen.queryByRole("button", { name: "新建知识" }),
     ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        container.querySelector(".knowledge-network-feedback"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("opens relation evidence while its short feedback clears", async () => {
+    const { container } = show();
+    const edge = await screen.findByRole("button", {
+      name: `查看关系：${publicEntry.title}`,
+    });
+    fireEvent.click(edge);
+    expect(container.querySelector(".knowledge-network-feedback")).toHaveClass(
+      "is-edge",
+    );
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("link", { name: /核查资料/ })).toHaveAttribute(
+      "href",
+      publicEntry.sources[0]!.url,
+    );
+    await waitFor(() =>
+      expect(
+        container.querySelector(".knowledge-network-feedback"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("keeps canvas feedback aligned after zoom without changing the node filter", async () => {
+    vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(
+      () => {},
+    );
+    const { container } = show();
+    const node = await screen.findByRole("button", { name: "筛选节点：石英" });
+    fireEvent.click(screen.getByRole("button", { name: /暂停浮动/ }));
+    fireEvent.keyDown(node, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "放大知识网络" }));
+    const svg = container.querySelector<SVGSVGElement>(
+      ".knowledge-network-svg",
+    )!;
+    const canvas = container.querySelector(".knowledge-network-canvas")!;
+    const location = new DOMPoint(200, 120).matrixTransform(
+      svg.getScreenCTM()!,
+    );
+    for (let pointerId = 1; pointerId <= 4; pointerId += 1) {
+      const pointer = {
+        pointerId,
+        button: 0,
+        clientX: location.x,
+        clientY: location.y,
+      };
+      fireEvent.pointerDown(canvas, pointer);
+      fireEvent.pointerUp(svg, pointer);
+    }
+    const feedback = container.querySelector<SVGGElement>(
+      ".knowledge-network-feedback",
+    )!;
+    expect(feedback).toHaveClass("is-canvas");
+    expect(
+      container.querySelectorAll(".knowledge-network-feedback"),
+    ).toHaveLength(1);
+    const actual = new DOMPoint(0, 0).matrixTransform(feedback.getScreenCTM()!);
+    expect(actual.x).toBeCloseTo(location.x, 1);
+    expect(actual.y).toBeCloseTo(location.y, 1);
+    expect(node).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.queryByRole("button", { name: privateEntry.title, exact: true }),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        container.querySelector(".knowledge-network-feedback"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("moves nodes without click feedback and discards cancelled gestures", async () => {
+    vi.spyOn(Element.prototype, "setPointerCapture").mockImplementation(
+      () => {},
+    );
+    const { container } = show();
+    const node = await screen.findByRole("button", { name: "筛选节点：石英" });
+    fireEvent.click(screen.getByRole("button", { name: /暂停浮动/ }));
+    const svg = container.querySelector<SVGSVGElement>(
+      ".knowledge-network-svg",
+    )!;
+    const start = node.getAttribute("transform");
+    fireEvent.pointerDown(node, {
+      pointerId: 7,
+      button: 0,
+      clientX: 400,
+      clientY: 300,
+    });
+    fireEvent.pointerMove(svg, { pointerId: 7, clientX: 470, clientY: 340 });
+    fireEvent.pointerUp(svg, { pointerId: 7, clientX: 470, clientY: 340 });
+    expect(node.getAttribute("transform")).not.toBe(start);
+    expect(node).toHaveAttribute("aria-pressed", "false");
+    expect(container.querySelector(".knowledge-network-feedback")).toBeNull();
+    const moved = node.getAttribute("transform");
+    fireEvent.pointerDown(node, {
+      pointerId: 8,
+      button: 0,
+      clientX: 470,
+      clientY: 340,
+    });
+    fireEvent.pointerCancel(svg, { pointerId: 8 });
+    fireEvent.pointerMove(svg, { pointerId: 8, clientX: 700, clientY: 500 });
+    fireEvent.pointerUp(svg, { pointerId: 8 });
+    expect(node.getAttribute("transform")).toBe(moved);
+    expect(container.querySelector(".knowledge-network-feedback")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /启用浮动/ }));
+    expect(screen.getByRole("button", { name: /暂停浮动/ })).toBeVisible();
   });
 
   it("sends explicit search words to the server", async () => {

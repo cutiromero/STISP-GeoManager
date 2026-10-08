@@ -31,9 +31,19 @@ export default function KnowledgeNetwork({
   const [zoom, setZoom] = useState(1);
   const [selectedEdge, setSelectedEdge] = useState<number | null>(null);
   const [time, setTime] = useState(0);
+  const [feedback, setFeedback] = useState<{
+    key: number;
+    kind: "node" | "edge" | "canvas";
+    x: number;
+    y: number;
+    radius: number;
+  } | null>(null);
+  const feedbackSequence = useRef(0);
   const svg = useRef<SVGSVGElement>(null);
+  const canvas = useRef<SVGRectElement>(null);
   const drag = useRef<{
-    id: string;
+    id: string | null;
+    pointer: number;
     x: number;
     y: number;
     moved: boolean;
@@ -42,7 +52,13 @@ export default function KnowledgeNetwork({
     setPositions({});
     setZoom(1);
     setSelectedEdge(null);
+    setFeedback(null);
   }, [network]);
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = window.setTimeout(() => setFeedback(null), 640);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => {
@@ -86,6 +102,19 @@ export default function KnowledgeNetwork({
     );
     return { x: (local.x - 550) / zoom + 550, y: (local.y - 250) / zoom + 250 };
   }
+  function showFeedback(
+    kind: "node" | "edge" | "canvas",
+    point: { x: number; y: number },
+    radius: number,
+  ) {
+    setFeedback({
+      key: ++feedbackSequence.current,
+      kind,
+      x: point.x,
+      y: point.y,
+      radius,
+    });
+  }
   return (
     <section className="knowledge-network" aria-label="知识关系网络">
       <div className="knowledge-network-heading">
@@ -118,6 +147,7 @@ export default function KnowledgeNetwork({
               setPositions({});
               setZoom(1);
               setSelectedEdge(null);
+              setFeedback(null);
               onSelect(null);
             }}
           />
@@ -129,8 +159,24 @@ export default function KnowledgeNetwork({
           className="knowledge-network-svg"
           viewBox="0 0 1100 500"
           aria-label="可交互知识图谱"
+          onPointerDown={(event) => {
+            if (
+              event.button !== 0 ||
+              drag.current ||
+              (event.target !== canvas.current && event.target !== svg.current)
+            )
+              return;
+            drag.current = {
+              id: null,
+              pointer: event.pointerId,
+              x: event.clientX,
+              y: event.clientY,
+              moved: false,
+            };
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
           onPointerMove={(event) => {
-            if (!drag.current) return;
+            if (drag.current?.pointer !== event.pointerId) return;
             if (
               Math.hypot(
                 event.clientX - drag.current.x,
@@ -138,22 +184,39 @@ export default function KnowledgeNetwork({
               ) > 4
             )
               drag.current.moved = true;
-            const point = coordinate(event.clientX, event.clientY);
             const id = drag.current.id;
+            if (id === null || !drag.current.moved) return;
+            const point = coordinate(event.clientX, event.clientY);
             setPositions((current) => ({
               ...current,
               [id]: point,
             }));
           }}
           onPointerUp={(event) => {
-            if (drag.current && !drag.current.moved)
-              onSelect(selected === drag.current.id ? null : drag.current.id);
+            const start = drag.current;
+            if (start?.pointer !== event.pointerId) return;
+            if (!start.moved) {
+              const node = start.id === null ? null : points.get(start.id);
+              if (node) {
+                showFeedback("node", node, 25 + Math.min(node.degree, 5) * 2);
+                onSelect(selected === node.id ? null : node.id);
+              } else if (start.id === null) {
+                showFeedback(
+                  "canvas",
+                  coordinate(event.clientX, event.clientY),
+                  18,
+                );
+              }
+            }
             drag.current = null;
             if (svg.current?.hasPointerCapture(event.pointerId))
               svg.current.releasePointerCapture(event.pointerId);
           }}
-          onPointerCancel={() => {
-            drag.current = null;
+          onPointerCancel={(event) => {
+            if (drag.current?.pointer === event.pointerId) drag.current = null;
+          }}
+          onLostPointerCapture={(event) => {
+            if (drag.current?.pointer === event.pointerId) drag.current = null;
           }}
         >
           <defs>
@@ -166,7 +229,13 @@ export default function KnowledgeNetwork({
               <circle cx="1" cy="1" r="1" fill="#244657" />
             </pattern>
           </defs>
-          <rect width="1100" height="500" fill="url(#knowledge-grid)" />
+          <rect
+            ref={canvas}
+            className="knowledge-network-canvas"
+            width="1100"
+            height="500"
+            fill="url(#knowledge-grid)"
+          />
           <g
             transform={`translate(550 250) scale(${zoom}) translate(-550 -250)`}
           >
@@ -184,12 +253,22 @@ export default function KnowledgeNetwork({
                   aria-label={`查看关系：${entry.title}`}
                   aria-pressed={selectedEdge === entry.id}
                   onClick={() => {
+                    showFeedback(
+                      "edge",
+                      { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 },
+                      15,
+                    );
                     setSelectedEdge(entry.id);
                     onOpen(entry);
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
+                      showFeedback(
+                        "edge",
+                        { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 },
+                        15,
+                      );
                       setSelectedEdge(entry.id);
                       onOpen(entry);
                     }
@@ -232,10 +311,12 @@ export default function KnowledgeNetwork({
                 className={`knowledge-network-node ${selected === node.id ? "is-selected" : ""}`}
                 transform={`translate(${node.x} ${node.y})`}
                 onPointerDown={(event) => {
+                  if (event.button !== 0 || drag.current) return;
                   event.preventDefault();
                   setPaused(true);
                   drag.current = {
                     id: node.id,
+                    pointer: event.pointerId,
                     x: event.clientX,
                     y: event.clientY,
                     moved: false,
@@ -245,6 +326,11 @@ export default function KnowledgeNetwork({
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
+                    showFeedback(
+                      "node",
+                      node,
+                      25 + Math.min(node.degree, 5) * 2,
+                    );
                     onSelect(selected === node.id ? null : node.id);
                   }
                   const shift: Record<string, [number, number]> = {
@@ -285,6 +371,16 @@ export default function KnowledgeNetwork({
                 </title>
               </g>
             ))}
+            {feedback && (
+              <g
+                key={feedback.key}
+                className={`knowledge-network-feedback is-${feedback.kind}`}
+                transform={`translate(${feedback.x} ${feedback.y})`}
+                aria-hidden="true"
+              >
+                <circle r={feedback.radius} />
+              </g>
+            )}
           </g>
         </svg>
       ) : (

@@ -229,7 +229,10 @@
 .knowledge-network {
   border-radius: 12px;
   overflow: hidden;
-  background: #102d3d;
+  background:
+    radial-gradient(ellipse at 78% 22%, #397a8a18, transparent 58%),
+    radial-gradient(ellipse at 18% 84%, #2d85851a, transparent 62%),
+    linear-gradient(125deg, #102d3d, #123342 58%, #102c3c);
   color: #dcebef;
   box-shadow: 0 10px 28px #163a4312;
 }
@@ -337,6 +340,38 @@
   stroke: #d3ffff;
   stroke-width: 2;
   fill: #78dedb32;
+}
+.knowledge-network-feedback {
+  pointer-events: none;
+}
+.knowledge-network-feedback circle {
+  fill: none;
+  stroke: #a2e8e7;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: knowledge-click-pulse 600ms ease-out both;
+}
+.knowledge-network-feedback.is-canvas circle {
+  stroke: #70c1d1;
+  stroke-width: 1.2;
+}
+@keyframes knowledge-click-pulse {
+  from {
+    opacity: 0.65;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .knowledge-network-feedback circle {
+    animation: none;
+    opacity: 0.5;
+  }
 }
 .knowledge-network-legend {
   padding: 10px 30px 24px;

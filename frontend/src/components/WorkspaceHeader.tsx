@@ -21,9 +21,10 @@ import {
   Popover,
   Tag,
   Tour,
+  Tooltip,
   Typography,
 } from "antd";
-import type { MouseEvent, ReactNode } from "react";
+import type { ComponentPropsWithRef, MouseEvent, ReactNode } from "react";
 import {
   useCallback,
   useEffect,
@@ -76,38 +77,44 @@ export type WorkspaceTab =
   | "about";
 
 const platformChineseName = platformBrand.chineseName;
-const hoverExpandDelayMs = 100;
 const searchOpenDelayMs = 400;
+
+function NavigationButton(props: ComponentPropsWithRef<typeof Button>) {
+  return (
+    <Tooltip
+      title={props.title}
+      trigger={["hover", "focus"]}
+      mouseEnterDelay={0.1}
+      mouseLeaveDelay={0}
+    >
+      <Button {...props} />
+    </Tooltip>
+  );
+}
 
 function AgentNavigationButton({
   className,
   onNavigate,
-  onMouseEnter,
-  onMouseLeave,
   title,
 }: {
   className: string;
   onNavigate: (path: string) => void;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
   title: string;
 }) {
   const access = useAgentBootstrap();
   if (!access?.canChat && !access?.canAgent) return null;
   return (
-    <Button
+    <NavigationButton
       type="text"
       className={className}
       onClick={() =>
         onNavigate(access.canChat ? "/agent/chat" : "/agent/workbench")
       }
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
       title={title}
     >
       <AlertOutlined aria-hidden="true" style={{ fontSize: 16 }} />
       <span className="tab-text">{title}</span>
-    </Button>
+    </NavigationButton>
   );
 }
 
@@ -166,7 +173,6 @@ export default function WorkspaceHeader({
   const [searchCompact, setSearchCompact] = useState(false);
   const [navCompressed, setNavCompressed] = useState(false);
   const [navMeasured, setNavMeasured] = useState(false);
-  const [expandedTabId, setExpandedTabId] = useState<string | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
   const [userPopoverOpen, setUserPopoverOpen] = useState(false);
   const [searchPopoverWidth, setSearchPopoverWidth] = useState<
@@ -182,7 +188,6 @@ export default function WorkspaceHeader({
   const aboutTabRef = useRef<HTMLButtonElement | null>(null);
   const userButtonRef = useRef<HTMLButtonElement | null>(null);
   const searchOpenTimerRef = useRef<number | null>(null);
-  const tabHoverTimerRef = useRef<number | null>(null);
   const navMeasureTimerRef = useRef<number | null>(null);
   const layoutMeasureFrameRef = useRef<number | null>(null);
   const fullPrimaryNavWidthRef = useRef(0);
@@ -444,32 +449,8 @@ export default function WorkspaceHeader({
     }
     setSearchOpen(false);
     setSearchExpanded(false);
-    setExpandedTabId(null);
     scheduleLayoutMeasure();
   }, [scheduleLayoutMeasure]);
-
-  const clearTabHoverTimer = useCallback(() => {
-    if (tabHoverTimerRef.current !== null) {
-      window.clearTimeout(tabHoverTimerRef.current);
-      tabHoverTimerRef.current = null;
-    }
-  }, []);
-
-  const scheduleTabHoverExpand = useCallback(
-    (tabId: string) => {
-      clearTabHoverTimer();
-      tabHoverTimerRef.current = window.setTimeout(() => {
-        setExpandedTabId(tabId);
-        tabHoverTimerRef.current = null;
-      }, hoverExpandDelayMs);
-    },
-    [clearTabHoverTimer],
-  );
-
-  const collapseTabHover = useCallback(() => {
-    clearTabHoverTimer();
-    setExpandedTabId(null);
-  }, [clearTabHoverTimer]);
 
   useLayoutEffect(() => {
     const container = searchContainerRef.current;
@@ -516,9 +497,6 @@ export default function WorkspaceHeader({
     return () => {
       if (searchOpenTimerRef.current !== null) {
         window.clearTimeout(searchOpenTimerRef.current);
-      }
-      if (tabHoverTimerRef.current !== null) {
-        window.clearTimeout(tabHoverTimerRef.current);
       }
       if (navMeasureTimerRef.current !== null) {
         window.clearTimeout(navMeasureTimerRef.current);
@@ -988,21 +966,16 @@ export default function WorkspaceHeader({
       placement="bottom"
       classNames={{ root: "workspace-management-dropdown" }}
     >
-      <Button
+      <NavigationButton
         ref={resourcesTabRef}
         type="text"
-        className={`${tabClass(
-          activeTab === "resources",
-          expandedTabId === "resource",
-        )} workspace-switch-card-data-management`}
+        className={`${tabClass(activeTab === "resources")} workspace-switch-card-data-management`}
         onClick={handleResourceCenter}
-        onMouseEnter={() => scheduleTabHoverExpand("resource")}
-        onMouseLeave={collapseTabHover}
         title={t("navigation.dataResources")}
       >
         <ColumnIcon name="data" style={{ fontSize: 16 }} />
         <span className="tab-text">{t("navigation.dataResources")}</span>
-      </Button>
+      </NavigationButton>
     </Dropdown>
   );
 
@@ -1214,13 +1187,11 @@ export default function WorkspaceHeader({
             placement="bottom"
             classNames={{ root: "workspace-management-dropdown" }}
           >
-            <Button
+            <NavigationButton
               ref={mapTabRef}
               type="text"
-              className={tabClass(activeTab === "map", expandedTabId === "map")}
+              className={tabClass(activeTab === "map")}
               onClick={() => navigateFromHeader("/map")}
-              onMouseEnter={() => scheduleTabHoverExpand("map")}
-              onMouseLeave={collapseTabHover}
               title={t("navigation.mapWorkspace")}
             >
               <ColumnIcon
@@ -1229,19 +1200,14 @@ export default function WorkspaceHeader({
                 style={{ fontSize: 16 }}
               />
               <span className="tab-text">{t("navigation.mapWorkspace")}</span>
-            </Button>
+            </NavigationButton>
           </Dropdown>
           {dataButton}
-          <Button
+          <NavigationButton
             type="text"
             data-nav-key="compute"
-            className={tabClass(
-              activeTab === "compute",
-              expandedTabId === "compute",
-            )}
+            className={tabClass(activeTab === "compute")}
             onClick={() => navigateFromHeader("/compute")}
-            onMouseEnter={() => scheduleTabHoverExpand("compute")}
-            onMouseLeave={collapseTabHover}
             title={t("navigation.compute")}
           >
             <ColumnIcon
@@ -1250,23 +1216,18 @@ export default function WorkspaceHeader({
               style={{ fontSize: 16 }}
             />
             <span className="tab-text">{t("navigation.compute")}</span>
-          </Button>
+          </NavigationButton>
           <Dropdown
             menu={{ items: analysisCategoryMenuItems }}
             trigger={["hover"]}
             placement="bottom"
             classNames={{ root: "workspace-management-dropdown" }}
           >
-            <Button
+            <NavigationButton
               ref={nonGeoTabRef}
               type="text"
-              className={tabClass(
-                activeTab === "nongeo",
-                expandedTabId === "nongeo",
-              )}
+              className={tabClass(activeTab === "nongeo")}
               onClick={() => navigateFromHeader("/nongeo")}
-              onMouseEnter={() => scheduleTabHoverExpand("nongeo")}
-              onMouseLeave={collapseTabHover}
               title={t("navigation.analytics")}
             >
               <ColumnIcon
@@ -1275,18 +1236,13 @@ export default function WorkspaceHeader({
                 style={{ fontSize: 16 }}
               />
               <span className="tab-text">{t("navigation.analytics")}</span>
-            </Button>
+            </NavigationButton>
           </Dropdown>
-          <Button
+          <NavigationButton
             type="text"
             data-nav-key="results"
-            className={tabClass(
-              activeTab === "results",
-              expandedTabId === "results",
-            )}
+            className={tabClass(activeTab === "results")}
             onClick={() => navigateFromHeader("/results")}
-            onMouseEnter={() => scheduleTabHoverExpand("results")}
-            onMouseLeave={collapseTabHover}
             title={t("navigation.results")}
           >
             <ColumnIcon
@@ -1295,32 +1251,22 @@ export default function WorkspaceHeader({
               style={{ fontSize: 16 }}
             />
             <span className="tab-text">{t("navigation.results")}</span>
-          </Button>
+          </NavigationButton>
           <AgentNavigationButton
-            className={tabClass(
-              activeTab === "warning",
-              expandedTabId === "warning",
-            )}
+            className={tabClass(activeTab === "warning")}
             onNavigate={navigateFromHeader}
-            onMouseEnter={() => scheduleTabHoverExpand("warning")}
-            onMouseLeave={collapseTabHover}
             title={t("navigation.warning")}
           />
-          <Button
+          <NavigationButton
             type="text"
             data-nav-key="knowledgeBase"
-            className={tabClass(
-              activeTab === "knowledgeBase",
-              expandedTabId === "knowledgeBase",
-            )}
+            className={tabClass(activeTab === "knowledgeBase")}
             onClick={() => navigateFromHeader("/knowledge-base")}
-            onMouseEnter={() => scheduleTabHoverExpand("knowledgeBase")}
-            onMouseLeave={collapseTabHover}
             title={t("navigation.knowledgeBase")}
           >
             <ApartmentOutlined style={{ fontSize: 16 }} />
             <span className="tab-text">{t("navigation.knowledgeBase")}</span>
-          </Button>
+          </NavigationButton>
           {showAdminTab && (
             <Dropdown
               menu={{ items: adminMenuItems }}
@@ -1328,16 +1274,11 @@ export default function WorkspaceHeader({
               placement="bottom"
               classNames={{ root: "workspace-management-dropdown" }}
             >
-              <Button
+              <NavigationButton
                 ref={adminTabRef}
                 type="text"
-                className={tabClass(
-                  activeTab === "admin",
-                  expandedTabId === "admin",
-                )}
+                className={tabClass(activeTab === "admin")}
                 onClick={() => navigateFromHeader("/admin")}
-                onMouseEnter={() => scheduleTabHoverExpand("admin")}
-                onMouseLeave={collapseTabHover}
                 title={t("navigation.administration")}
               >
                 <ColumnIcon
@@ -1348,18 +1289,13 @@ export default function WorkspaceHeader({
                 <span className="tab-text">
                   {t("navigation.administration")}
                 </span>
-              </Button>
+              </NavigationButton>
             </Dropdown>
           )}
-          <Button
+          <NavigationButton
             type="text"
-            className={tabClass(
-              activeTab === "knowledge",
-              expandedTabId === "knowledge",
-            )}
+            className={tabClass(activeTab === "knowledge")}
             onClick={() => navigateFromHeader("/knowledge")}
-            onMouseEnter={() => scheduleTabHoverExpand("knowledge")}
-            onMouseLeave={collapseTabHover}
             title={t("navigation.knowledge")}
           >
             <ColumnIcon
@@ -1368,33 +1304,28 @@ export default function WorkspaceHeader({
               style={{ fontSize: 16 }}
             />
             <span className="tab-text">{t("navigation.knowledge")}</span>
-          </Button>
-          <Button
+          </NavigationButton>
+          <NavigationButton
             type="text"
             data-nav-key="news"
-            className={tabClass(activeTab === "news", expandedTabId === "news")}
+            className={tabClass(activeTab === "news")}
             onClick={() => navigateFromHeader("/news")}
             title={t("navigation.news")}
           >
             <ColumnIcon name="news" />
             <span className="tab-text">{t("navigation.news")}</span>
-          </Button>
+          </NavigationButton>
           <Dropdown
             menu={{ items: aboutMenuItems }}
             trigger={["hover"]}
             placement="bottom"
             classNames={{ root: "workspace-management-dropdown" }}
           >
-            <Button
+            <NavigationButton
               ref={aboutTabRef}
               type="text"
-              className={tabClass(
-                activeTab === "about",
-                expandedTabId === "about",
-              )}
+              className={tabClass(activeTab === "about")}
               onClick={() => navigateFromHeader("/about/system")}
-              onMouseEnter={() => scheduleTabHoverExpand("about")}
-              onMouseLeave={collapseTabHover}
               title={t("navigation.about")}
             >
               <ColumnIcon
@@ -1403,7 +1334,7 @@ export default function WorkspaceHeader({
                 style={{ fontSize: 16 }}
               />
               <span className="tab-text">{t("navigation.about")}</span>
-            </Button>
+            </NavigationButton>
           </Dropdown>
         </nav>
       </div>
@@ -1550,12 +1481,8 @@ function workspaceCategoryMenuItems(
   ];
 }
 
-function tabClass(active: boolean, hoverExpanded = false) {
-  return [
-    "workspace-switch-card",
-    active ? "workspace-switch-card-active" : "",
-    hoverExpanded ? "workspace-switch-card-hover-expanded" : "",
-  ]
+function tabClass(active: boolean) {
+  return ["workspace-switch-card", active ? "workspace-switch-card-active" : ""]
     .filter(Boolean)
     .join(" ");
 }

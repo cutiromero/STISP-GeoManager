@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.27] - 2026-10-08
+
+### Fixed
+- 修复顶部导航悬停展开时按钮和搜索框位移导致的反复展开、收起，压缩导航使用固定命中区域与浮层名称提示。
+
+### Changed
+- 知识关系网络增加轻微蓝青渐变背景，点击节点、关系与空白画布显示短暂反馈，并适配减少动态效果设置。
+
 ## [0.1.26] - 2026-10-05
 
 ### Changed
