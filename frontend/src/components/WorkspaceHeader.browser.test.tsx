@@ -602,6 +602,63 @@ describe("WorkspaceHeader", () => {
     },
   );
 
+  it.each([
+    ["地理工作台", "/map"],
+    ["数据资源", "/resources/catalog"],
+    ["数据分析", "/nongeo"],
+    ["后台管理", "/admin/dashboard"],
+    ["关于我们", "/about/system"],
+  ])(
+    "keeps the %s tooltip clear of its usable dropdown",
+    async (title, path) => {
+      await page.viewport(1024, 900);
+      try {
+        const { container } = renderHeader({}, user, vi.fn(), "/", true);
+        const header =
+          container.querySelector<HTMLElement>(".workspace-header")!;
+        await waitFor(() =>
+          expect(header).toHaveClass("workspace-header-nav-measured"),
+        );
+        await userEvent.hover(
+          screen.getByRole("button", { name: "返回地理工作台" }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        const trigger = container.querySelector<HTMLButtonElement>(
+          `.header-primary-actions button[title="${title}"]`,
+        )!;
+        await userEvent.hover(trigger);
+        const tooltip = await screen.findByRole("tooltip");
+        const menu = await screen.findByRole("menu");
+        expect(tooltip).toHaveTextContent(title);
+        const tooltipRoot = tooltip.closest<HTMLElement>(".ant-tooltip")!;
+        const dropdownRoot = menu.closest<HTMLElement>(
+          ".workspace-management-dropdown",
+        )!;
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        const labelBounds = tooltipRoot.getBoundingClientRect();
+        const menuBounds = dropdownRoot.getBoundingClientRect();
+        const overlapWidth = Math.max(
+          0,
+          Math.min(labelBounds.right, menuBounds.right) -
+            Math.max(labelBounds.left, menuBounds.left),
+        );
+        const overlapHeight = Math.max(
+          0,
+          Math.min(labelBounds.bottom, menuBounds.bottom) -
+            Math.max(labelBounds.top, menuBounds.top),
+        );
+        expect(overlapWidth * overlapHeight).toBe(0);
+        expect(getComputedStyle(tooltipRoot).pointerEvents).toBe("none");
+        await userEvent.click(within(menu).getAllByRole("menuitem")[0]!);
+        await waitFor(() =>
+          expect(screen.getByTestId("location-path")).toHaveTextContent(path),
+        );
+      } finally {
+        await page.viewport(1600, 900);
+      }
+    },
+  );
+
   it("shows a focus label without moving the navigation and supports keyboard activation", async () => {
     await page.viewport(1024, 900);
     try {

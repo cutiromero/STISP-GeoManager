@@ -79,13 +79,18 @@ export type WorkspaceTab =
 const platformChineseName = platformBrand.chineseName;
 const searchOpenDelayMs = 400;
 
-function NavigationButton(props: ComponentPropsWithRef<typeof Button>) {
+function NavigationButton({
+  menuTrigger = false,
+  ...props
+}: ComponentPropsWithRef<typeof Button> & { menuTrigger?: boolean }) {
   return (
     <Tooltip
       title={props.title}
+      placement={menuTrigger ? "right" : "top"}
       trigger={["hover", "focus"]}
       mouseEnterDelay={0.1}
       mouseLeaveDelay={0}
+      styles={{ root: { pointerEvents: "none" } }}
     >
       <Button {...props} />
     </Tooltip>
@@ -968,6 +973,7 @@ export default function WorkspaceHeader({
     >
       <NavigationButton
         ref={resourcesTabRef}
+        menuTrigger
         type="text"
         className={`${tabClass(activeTab === "resources")} workspace-switch-card-data-management`}
         onClick={handleResourceCenter}
@@ -1189,6 +1195,7 @@ export default function WorkspaceHeader({
           >
             <NavigationButton
               ref={mapTabRef}
+              menuTrigger
               type="text"
               className={tabClass(activeTab === "map")}
               onClick={() => navigateFromHeader("/map")}
@@ -1225,6 +1232,7 @@ export default function WorkspaceHeader({
           >
             <NavigationButton
               ref={nonGeoTabRef}
+              menuTrigger
               type="text"
               className={tabClass(activeTab === "nongeo")}
               onClick={() => navigateFromHeader("/nongeo")}
@@ -1276,6 +1284,7 @@ export default function WorkspaceHeader({
             >
               <NavigationButton
                 ref={adminTabRef}
+                menuTrigger
                 type="text"
                 className={tabClass(activeTab === "admin")}
                 onClick={() => navigateFromHeader("/admin")}
@@ -1323,6 +1332,7 @@ export default function WorkspaceHeader({
           >
             <NavigationButton
               ref={aboutTabRef}
+              menuTrigger
               type="text"
               className={tabClass(activeTab === "about")}
               onClick={() => navigateFromHeader("/about/system")}
