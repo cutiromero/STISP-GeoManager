@@ -2,11 +2,11 @@ import { ProjectLabel } from "../projects/ProjectLabel";
 import { resetProjectSession } from "../projects/session";
 import { ProjectSelector } from "../projects/ProjectContext";
 import {
-  AlertOutlined,
   ApartmentOutlined,
   FolderOpenOutlined,
   LogoutOutlined,
   QuestionCircleOutlined,
+  RobotOutlined,
   SearchOutlined,
   UserOutlined,
 } from "@ant-design/icons";
@@ -59,7 +59,10 @@ import {
 import { clearCachedLayerGroups } from "../utils/layerWorkspaceStorage";
 import { taxonomyTree } from "../utils/taxonomy";
 import { aboutNavigationSections } from "../about/aboutSections";
-import { useAgentBootstrap } from "../agent/useAgentBootstrap";
+import {
+  clearAgentBootstrap,
+  useAgentBootstrap,
+} from "../agent/useAgentBootstrap";
 import LanguageSwitcher from "./LanguageSwitcher";
 
 export type WorkspaceTab =
@@ -117,7 +120,7 @@ function AgentNavigationButton({
       }
       title={title}
     >
-      <AlertOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+      <RobotOutlined aria-hidden="true" style={{ fontSize: 16 }} />
       <span className="tab-text">{title}</span>
     </NavigationButton>
   );
@@ -193,10 +196,7 @@ export default function WorkspaceHeader({
   const aboutTabRef = useRef<HTMLButtonElement | null>(null);
   const userButtonRef = useRef<HTMLButtonElement | null>(null);
   const searchOpenTimerRef = useRef<number | null>(null);
-  const navMeasureTimerRef = useRef<number | null>(null);
   const layoutMeasureFrameRef = useRef<number | null>(null);
-  const fullPrimaryNavWidthRef = useRef(0);
-  const lastMeasuredLanguageRef = useRef(translationI18n.resolvedLanguage);
   useEffect(() => {
     if (!user?.permissions.canViewWorkspaces || !searchText.trim()) return;
     let active = true;
@@ -336,19 +336,6 @@ export default function WorkspaceHeader({
     };
   }, [canBrowseData, dataSchema]);
 
-  useEffect(() => {
-    navMeasureTimerRef.current = window.setTimeout(() => {
-      setNavMeasured(true);
-      navMeasureTimerRef.current = null;
-    }, 120);
-    return () => {
-      if (navMeasureTimerRef.current !== null) {
-        window.clearTimeout(navMeasureTimerRef.current);
-        navMeasureTimerRef.current = null;
-      }
-    };
-  }, []);
-
   const syncSearchPopoverWidth = useCallback(() => {
     const width = searchContainerRef.current?.getBoundingClientRect().width;
     if (width && Number.isFinite(width)) {
@@ -362,13 +349,11 @@ export default function WorkspaceHeader({
     const primaryNav = primaryNavRef.current;
     if (!nav || !search || !primaryNav) return;
 
-    const primaryNavWidth = primaryNav.scrollWidth;
-    if (!navCompressed || !searchExpanded) {
-      fullPrimaryNavWidthRef.current = Math.max(
-        fullPrimaryNavWidthRef.current,
-        primaryNavWidth,
-      );
-    }
+    // Measure complete labels independently of compact or active button styles.
+    // Restore immediately so the measuring layout is never painted.
+    primaryNav.classList.add("header-primary-actions-measuring");
+    const fullTabsWidth = primaryNav.scrollWidth;
+    primaryNav.classList.remove("header-primary-actions-measuring");
 
     const navStyle = window.getComputedStyle(nav);
     const navGap =
@@ -393,7 +378,6 @@ export default function WorkspaceHeader({
       0.44 * navWidth,
       22 * rootFontSize,
     );
-    const fullTabsWidth = fullPrimaryNavWidthRef.current;
     const expandedFits =
       fullTabsWidth + searchMaxWidth + navGap <= navWidth + 1;
     const compactFits = fullTabsWidth + searchMinWidth + navGap <= navWidth + 1;
@@ -406,7 +390,7 @@ export default function WorkspaceHeader({
     setNavCompressed((current) =>
       current === shouldCompressTabs ? current : shouldCompressTabs,
     );
-  }, [navCompressed, searchExpanded]);
+  }, [searchExpanded]);
 
   const scheduleLayoutMeasure = useCallback(() => {
     if (layoutMeasureFrameRef.current !== null) {
@@ -481,30 +465,16 @@ export default function WorkspaceHeader({
   }, [scheduleLayoutMeasure]);
 
   useLayoutEffect(() => {
-    scheduleLayoutMeasure();
-  }, [scheduleLayoutMeasure]);
-
-  useLayoutEffect(() => {
-    if (lastMeasuredLanguageRef.current === translationI18n.resolvedLanguage) {
-      return;
-    }
-    lastMeasuredLanguageRef.current = translationI18n.resolvedLanguage;
-    fullPrimaryNavWidthRef.current = 0;
-    setNavCompressed(false);
-    setSearchCompact(false);
-    const frame = window.requestAnimationFrame(() => {
-      scheduleLayoutMeasure();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [scheduleLayoutMeasure, translationI18n.resolvedLanguage]);
+    // Resolve the initial layout before the browser paints a new page's header.
+    measureNavFit();
+    syncSearchPopoverWidth();
+    setNavMeasured(true);
+  }, [measureNavFit, syncSearchPopoverWidth, translationI18n.resolvedLanguage]);
 
   useEffect(() => {
     return () => {
       if (searchOpenTimerRef.current !== null) {
         window.clearTimeout(searchOpenTimerRef.current);
-      }
-      if (navMeasureTimerRef.current !== null) {
-        window.clearTimeout(navMeasureTimerRef.current);
       }
       if (layoutMeasureFrameRef.current !== null) {
         window.cancelAnimationFrame(layoutMeasureFrameRef.current);
@@ -514,7 +484,7 @@ export default function WorkspaceHeader({
   }, []);
 
   useEffect(() => {
-    function handlePointerDown(event: PointerEvent) {
+    function handleOutsideClick(event: Event) {
       const targetNode = event.target instanceof Node ? event.target : null;
       const targetElement =
         event.target instanceof Element ? event.target : null;
@@ -527,8 +497,8 @@ export default function WorkspaceHeader({
       closeSearchPanel();
     }
 
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
   }, [closeSearchPanel]);
 
   const searchQuery = searchText.trim().toLocaleLowerCase("zh-CN");
@@ -574,7 +544,10 @@ export default function WorkspaceHeader({
         console.warn("清理本地图层缓存失败", error);
       }
       resetProjectSession();
-      if (user) sessionStorage.removeItem(`project:${user.id}`);
+      if (user) {
+        clearAgentBootstrap(user);
+        sessionStorage.removeItem(`project:${user.id}`);
+      }
       setUser(null);
       navigate("/login", { replace: true });
     }

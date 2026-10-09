@@ -1,4 +1,5 @@
 import { Collapse, Typography } from "antd";
+import { FileSearchOutlined } from "@ant-design/icons";
 import { useMemo } from "react";
 import type { AgentEvidence } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
@@ -118,16 +119,27 @@ export default function RunEvidence({
       items={[
         {
           key: "sources",
-          label: `${ui("数据来源与分析", "Sources and analysis")} · ${items.length}`,
+          label: (
+            <span className="agent-sources-trigger">
+              <FileSearchOutlined />
+              <span>{ui("数据来源与分析", "Sources and analysis")}</span>
+              <span className="agent-source-count">{items.length}</span>
+            </span>
+          ),
           children: (
             <>
-              <Typography.Paragraph type="secondary">
+              <Typography.Paragraph
+                type="secondary"
+                className="agent-sources-note"
+              >
                 {ui(
-                  "对应本条回答中的引用编号，记录工具调用时的状态；计算当前进度以实时任务卡为准。",
-                  "Numbers match this answer. These are records from the time of each tool call; live task cards show current progress.",
+                  "按引用编号查看资料与分析结果。计算进度见任务卡。",
+                  "Explore sources and results by citation number. Task cards show live progress.",
                 )}
               </Typography.Paragraph>
               <Collapse
+                ghost
+                className="agent-source-records"
                 size="small"
                 items={items.map((item) => {
                   const operation = operations[item.tool];
@@ -136,7 +148,19 @@ export default function RunEvidence({
                     : ui("分析记录", "Analysis record");
                   return {
                     key: item.id,
-                    label: `[${item.id}] ${item.resourceId ? `${item.name} · ` : ""}${title}`,
+                    label: (
+                      <span className="agent-source-heading">
+                        <span className="agent-source-number">[{item.id}]</span>
+                        <span className="agent-source-name">
+                          {item.name || title}
+                        </span>
+                        {item.name && (
+                          <span className="agent-source-operation">
+                            {title}
+                          </span>
+                        )}
+                      </span>
+                    ),
                     children: (
                       <>
                         <div className="agent-source-result">
@@ -144,6 +168,7 @@ export default function RunEvidence({
                         </div>
                         {canManage && (
                           <Collapse
+                            className="agent-source-technical"
                             ghost
                             size="small"
                             items={[

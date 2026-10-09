@@ -28,27 +28,55 @@ export function OwnedPermissions({
   items: AdminPermissionItem[];
   actions?: string[];
 }) {
+  const { i18n } = useTranslation();
+  const en = i18n.language.startsWith("en");
   const groups = [...new Set(items.map((p) => p.group))];
+  if (!items.length && !actions.length) {
+    return (
+      <Typography.Text type="secondary">
+        {en ? "No available features" : "暂无可用功能"}
+      </Typography.Text>
+    );
+  }
   return (
     <div className="account-owned-permissions">
-      {groups.map((group) => (
-        <section key={group} style={{ marginBottom: 16 }}>
-          <Typography.Text strong>{group}</Typography.Text>
-          <ul>
-            {items
-              .filter((p) => p.group === group)
-              .map((p) => (
+      {groups.map((group) => {
+        const permissions = items.filter((item) => item.group === group);
+        return (
+          <section
+            key={group}
+            className="account-permission-group"
+            aria-label={group}
+          >
+            <header>
+              <h3>{group}</h3>
+              <span className="account-permission-count">
+                {permissions.length}
+              </span>
+            </header>
+            <ul>
+              {permissions.map((p) => (
                 <li key={p.id}>{p.label}</li>
               ))}
+            </ul>
+          </section>
+        );
+      })}
+      {actions.length > 0 && (
+        <section
+          className="account-permission-group"
+          aria-label={en ? "Agent actions" : "智能体操作"}
+        >
+          <header>
+            <h3>{en ? "Agent actions" : "智能体操作"}</h3>
+            <span className="account-permission-count">{actions.length}</span>
+          </header>
+          <ul>
+            {actions.map((action) => (
+              <li key={action}>{action}</li>
+            ))}
           </ul>
         </section>
-      ))}
-      {actions.length > 0 && (
-        <ul>
-          {actions.map((action) => (
-            <li key={action}>{action}</li>
-          ))}
-        </ul>
       )}
     </div>
   );
@@ -100,6 +128,7 @@ export function AccountAccessCard() {
   return (
     <>
       <Card
+        className="account-access-card"
         title={en ? "My available features" : "我的可用功能"}
         extra={<Button onClick={refresh}>{en ? "Refresh" : "刷新权限"}</Button>}
       >

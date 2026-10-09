@@ -3,12 +3,13 @@ import {
   Alert,
   Button,
   Collapse,
+  Drawer,
   Input,
   Layout,
   Modal,
   Popconfirm,
+  Popover,
   Select,
-  Segmented,
   Space,
   Switch,
   Tag,
@@ -27,6 +28,9 @@ import {
   PaperClipOutlined,
   MenuOutlined,
   CloseOutlined,
+  BulbOutlined,
+  DownOutlined,
+  NodeIndexOutlined,
 } from "@ant-design/icons";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -42,6 +46,7 @@ import type {
   AgentResource,
   AgentEvent,
   AgentAttachment,
+  AgentWorkflow,
 } from "../api/generated/types.gen";
 import { createUuid } from "../utils/uuid";
 import { useAgentBootstrap } from "./useAgentBootstrap";
@@ -121,6 +126,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [rename, setRename] = useState<AgentConversation | null>(null);
   const [renameText, setRenameText] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [workflowStatus, setWorkflowStatus] =
+    useState<AgentWorkflow["status"]>();
   const historyButton = useRef<HTMLButtonElement>(null);
   const historyCloseButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -137,6 +147,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   }, [showHistory, layout.narrow]);
   const alive = useRef(true);
   const sequence = useRef(0);
+  const attachmentConversation = useRef<{
+    sequence: number;
+    request: Promise<AgentConversation>;
+  } | null>(null);
+  const pendingAttachmentUploads = useRef(0);
   const listSequence = useRef(0);
   const restoredConversation = useRef(false);
   const viewport = useRef<HTMLDivElement>(null);
@@ -373,7 +388,15 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     if (preferred) void open(preferred);
   }, [canUse, conversationStorageKey, conversations, current]);
   const send = async (text = prompt) => {
-    if (!canUse || busy || running || !text.trim() || !modelOnline) return;
+    if (
+      !canUse ||
+      busy ||
+      running ||
+      uploadingAttachment ||
+      !text.trim() ||
+      !modelOnline
+    )
+      return;
     setBusy(true);
     setError("");
     const seq = sequence.current;
@@ -464,20 +487,46 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     }
   };
   const uploadAttachment = async (file: File) => {
-    if (!attachmentsAvailable || uploadingAttachment) return;
+    if (
+      !attachmentsAvailable ||
+      uploadingAttachment ||
+      !canUse ||
+      current?.archived
+    )
+      return;
     setUploadingAttachment(true);
+    pendingAttachmentUploads.current++;
+    const seq = sequence.current;
     try {
-      if (!current) return;
-      const item = await agentApi.uploadAttachment(current.id, file);
+      if (!current && attachmentConversation.current?.sequence !== seq) {
+        attachmentConversation.current = {
+          sequence: seq,
+          request: agentApi.create(mode),
+        };
+      }
+      const conversation =
+        current ?? (await attachmentConversation.current!.request);
+      if (!alive.current || seq !== sequence.current) return;
+      if (!current) {
+        setCurrent(conversation);
+        void refreshList();
+      }
+      const item = await agentApi.uploadAttachment(conversation.id, file);
+      if (!alive.current || seq !== sequence.current) return;
       setAttachments((old) => [
         ...old.filter((entry) => entry.id !== item.id),
         item,
       ]);
+      setToolsOpen(false);
       message.success(ui("附件已上传", "Attachment uploaded"));
     } catch (e) {
       report(e);
     } finally {
-      setUploadingAttachment(false);
+      pendingAttachmentUploads.current--;
+      if (!pendingAttachmentUploads.current) {
+        attachmentConversation.current = null;
+        setUploadingAttachment(false);
+      }
     }
   };
   const copy = async (text: string) => {
@@ -739,9 +788,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               )}
             />
           )}
-          {mode === "agent" && canUse && (
-            <WorkflowPanel model={model} resourceIds={selected} />
-          )}
           <div className="agent-messages" ref={viewport}>
             {!runs.length && (
               <div className="agent-welcome">
@@ -791,17 +837,13 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       {bootstrap?.models.find((m) => m.alias === r.model)
                         ?.name ?? r.model}
                     </strong>
-                    <Tag
-                      color={
-                        r.status === "succeeded"
-                          ? "green"
-                          : active(r)
-                            ? "blue"
-                            : "orange"
-                      }
-                    >
-                      {statusLabel[r.status]}
-                    </Tag>
+                    {r.status !== "succeeded" && (
+                      <span
+                        className={`agent-answer-status${active(r) ? " is-active" : ""}`}
+                      >
+                        {statusLabel[r.status]}
+                      </span>
+                    )}
                   </Space>
                   {r.attachments.length > 0 && (
                     <div className="agent-run-attachments">
@@ -872,6 +914,22 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     />
                   )}
                   <SafeMarkdown text={r.answer} />
+                  {active(r) && !r.answer && (
+                    <p className="agent-live-progress" role="status">
+                      <span aria-hidden="true" />
+                      {r.status === "queued"
+                        ? ui("正在等待模型…", "Waiting for the model…")
+                        : r.id === running?.id &&
+                            events.some((event) =>
+                              event.kind.startsWith("tool_"),
+                            )
+                          ? ui(
+                              "正在查阅资料并处理数据…",
+                              "Reviewing sources and processing data…",
+                            )
+                          : ui("正在组织回答…", "Preparing your answer…")}
+                    </p>
+                  )}
                   {mode === "agent" &&
                     r.evidence.some((item) =>
                       [
@@ -886,45 +944,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     items={r.evidence}
                     canManage={Boolean(bootstrap?.canManage)}
                   />
-                  {bootstrap?.canManage &&
-                    r.generationParameters?.inputTokens !== undefined && (
-                      <Collapse
-                        ghost
-                        size="small"
-                        items={[
-                          {
-                            key: "parameters",
-                            label: ui("运行详情", "Run details"),
-                            children: (
-                              <Typography.Paragraph type="secondary">
-                                {ui("本轮参数", "Run parameters")}:{" "}
-                                {ui("窗口", "Window")}{" "}
-                                {r.generationParameters.contextWindowTokens} ·{" "}
-                                {ui("最近调用输入", "Last call input")}{" "}
-                                {r.generationParameters.inputTokens} ·{" "}
-                                {ui(
-                                  "每次生成上限",
-                                  "Generation limit per call",
-                                )}{" "}
-                                {r.generationParameters.maxOutputTokens} token
-                                {r.generationParameters.lastGeneratedTokens !==
-                                  undefined &&
-                                  ` · ${ui("最近生成", "Last generated")} ${r.generationParameters.lastGeneratedTokens}`}
-                                {r.generationParameters.modelCalls !==
-                                  undefined &&
-                                  ` · ${ui("调用次数", "Model calls")} ${r.generationParameters.modelCalls}`}
-                                {r.generationParameters.generatedTokens !==
-                                  undefined &&
-                                  ` · ${ui("累计生成", "Generated total")} ${r.generationParameters.generatedTokens}`}
-                                {r.thinkingMode === "deep" &&
-                                  ` · ${ui("思考强度", "Effort")} ${r.generationParameters.reasoningEffort}`}
-                              </Typography.Paragraph>
-                            ),
-                          },
-                        ]}
-                      />
-                    )}
-                  {r.detail && r.status !== "succeeded" && <p>{r.detail}</p>}
+                  {r.detail && r.status !== "succeeded" && (
+                    <Alert
+                      className="agent-run-notice"
+                      type={r.status === "failed" ? "error" : "info"}
+                      title={r.detail}
+                      showIcon
+                    />
+                  )}
                   {!active(r) && (
                     <Space className="agent-answer-actions">
                       <Button
@@ -949,29 +976,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 </div>
               </section>
             ))}
-            {bootstrap?.canManage &&
-              events.some((e) => e.kind.startsWith("tool_")) && (
-                <Collapse
-                  size="small"
-                  items={[
-                    {
-                      key: "actions",
-                      label: ui("本次执行步骤", "Actions in this run"),
-                      children: events
-                        .filter(
-                          (e) =>
-                            ![
-                              "text",
-                              "thinking",
-                              "parameters",
-                              "usage",
-                            ].includes(e.kind),
-                        )
-                        .map((e) => <p key={e.id}>{e.text}</p>),
-                    },
-                  ]}
-                />
-              )}
           </div>
           {canUse && (
             <div className="agent-composer">
@@ -990,30 +994,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 onChange={layout.setInput}
               />
               <div className="agent-composer-content">
-                {attachmentsAvailable && (
+                {attachments.length > 0 && (
                   <div className="agent-attachments-row">
-                    <Upload
-                      accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
-                      multiple
-                      showUploadList={false}
-                      beforeUpload={(file) => {
-                        void uploadAttachment(file);
-                        return false;
-                      }}
-                      disabled={
-                        Boolean(running) ||
-                        busy ||
-                        uploadingAttachment ||
-                        current?.archived
-                      }
-                    >
-                      <Button
-                        icon={<PaperClipOutlined />}
-                        loading={uploadingAttachment}
-                      >
-                        {ui("上传文档或图片", "Upload document or image")}
-                      </Button>
-                    </Upload>
                     {attachments.map((item) => (
                       <Tag
                         key={item.id}
@@ -1028,26 +1010,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       </Tag>
                     ))}
                   </div>
-                )}
-                {mode === "agent" && (
-                  <Select
-                    aria-label={ui("限定数据资源", "Limit data resources")}
-                    mode="multiple"
-                    maxCount={3}
-                    allowClear
-                    value={selected}
-                    disabled={Boolean(running) || busy}
-                    onChange={setSelected}
-                    placeholder={ui(
-                      "自动发现当前项目授权数据（可选择资源缩小范围）",
-                      "Discover authorized project data, or select up to 3 resources",
-                    )}
-                    options={resources.map((r) => ({
-                      value: r.id,
-                      label: r.name,
-                    }))}
-                    className="agent-resource-select"
-                  />
                 )}
                 <div className="agent-input-row">
                   <Input.TextArea
@@ -1073,8 +1035,263 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       }
                     }}
                   />
+                </div>
+                <div className="agent-composer-footer">
+                  <div className="agent-composer-tools">
+                    {(attachmentsAvailable ||
+                      internetAvailable ||
+                      mode === "agent") && (
+                      <Popover
+                        trigger="click"
+                        placement="topLeft"
+                        title={ui("工具与数据", "Tools and data")}
+                        open={toolsOpen}
+                        onOpenChange={setToolsOpen}
+                        content={
+                          <div
+                            className="agent-tools-panel"
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape") setToolsOpen(false);
+                            }}
+                          >
+                            {attachmentsAvailable && (
+                              <Upload
+                                accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
+                                multiple
+                                showUploadList={false}
+                                beforeUpload={(file) => {
+                                  void uploadAttachment(file);
+                                  return false;
+                                }}
+                                disabled={
+                                  Boolean(running) ||
+                                  busy ||
+                                  uploadingAttachment ||
+                                  current?.archived
+                                }
+                              >
+                                <Button
+                                  icon={<PaperClipOutlined />}
+                                  loading={uploadingAttachment}
+                                >
+                                  {ui(
+                                    "上传文档或图片",
+                                    "Upload document or image",
+                                  )}
+                                </Button>
+                              </Upload>
+                            )}
+                            {mode === "agent" && (
+                              <div className="agent-tool-field">
+                                <strong>{ui("数据范围", "Data scope")}</strong>
+                                <p>
+                                  {ui(
+                                    "默认自动发现当前项目的授权数据。",
+                                    "Discover authorized project data automatically.",
+                                  )}
+                                </p>
+                                <Select
+                                  aria-label={ui(
+                                    "限定数据资源",
+                                    "Limit data resources",
+                                  )}
+                                  mode="multiple"
+                                  maxCount={3}
+                                  allowClear
+                                  value={selected}
+                                  disabled={Boolean(running) || busy}
+                                  onChange={setSelected}
+                                  placeholder={ui(
+                                    "选择资源缩小范围（最多 3 项）",
+                                    "Select up to 3 resources",
+                                  )}
+                                  options={resources.map((resource) => ({
+                                    value: resource.id,
+                                    label: resource.name,
+                                  }))}
+                                  className="agent-resource-select"
+                                />
+                              </div>
+                            )}
+                            {internetAvailable && (
+                              <label className="agent-tool-switch">
+                                <span>
+                                  {ui("联网检索", "Internet retrieval")}
+                                </span>
+                                <Switch
+                                  aria-label={ui(
+                                    "联网检索",
+                                    "Internet retrieval",
+                                  )}
+                                  size="small"
+                                  checked={internetEnabled}
+                                  disabled={Boolean(running) || busy}
+                                  onChange={setInternetEnabled}
+                                />
+                              </label>
+                            )}
+                          </div>
+                        }
+                      >
+                        <Button
+                          type="text"
+                          icon={<PlusOutlined />}
+                          aria-label={ui("工具与数据", "Tools and data")}
+                          aria-expanded={toolsOpen}
+                        >
+                          {ui("工具", "Tools")}
+                          {selected.length > 0 ? ` · ${selected.length}` : ""}
+                          {internetEnabled && (
+                            <span
+                              className="agent-tool-indicator"
+                              aria-label={ui("已联网", "Internet on")}
+                            />
+                          )}
+                        </Button>
+                      </Popover>
+                    )}
+                    <Popover
+                      trigger="click"
+                      placement="topLeft"
+                      title={ui("模型与回答设置", "Model and answer settings")}
+                      open={settingsOpen}
+                      onOpenChange={setSettingsOpen}
+                      content={
+                        <div
+                          className="agent-settings-panel"
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") setSettingsOpen(false);
+                          }}
+                        >
+                          <label className="agent-tool-field">
+                            <strong>{ui("使用模型", "Model")}</strong>
+                            <Select
+                              aria-label={ui("选择模型", "Choose model")}
+                              value={model || undefined}
+                              disabled={Boolean(running) || busy}
+                              onChange={(value) => {
+                                setModel(value);
+                                if (
+                                  !models.find((item) => item.alias === value)
+                                    ?.supportsThinking
+                                )
+                                  setThinkingMode("fast");
+                                localStorage.setItem(
+                                  `agent-model:${user?.id}:${mode}`,
+                                  value,
+                                );
+                              }}
+                              placeholder={ui("选择模型", "Choose model")}
+                              options={models.map((item) => ({
+                                value: item.alias,
+                                label: `${item.name} · ${item.status === "online" ? ui("在线", "Online") : item.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${item.supportsVision ? ` · ${ui("支持图片", "Vision")}` : ""}`,
+                              }))}
+                            />
+                          </label>
+                          {bootstrap?.budgets?.enabled && selectedModel && (
+                            <TaskBudgetControl
+                              canManage={Boolean(bootstrap.canManage)}
+                              options={bootstrap.budgets}
+                              profile={budgetProfile}
+                              output={outputOverride}
+                              serviceWindow={selectedModel.contextWindowTokens}
+                              disabled={Boolean(running) || busy}
+                              onProfile={(value) => {
+                                setBudgetProfile(value);
+                                setOutputOverride(undefined);
+                                setEffortOverride(undefined);
+                                if (
+                                  value === "reasoning" &&
+                                  deepThinkingAvailable
+                                ) {
+                                  setThinkingMode("deep");
+                                  localStorage.setItem(
+                                    `agent-thinking:${user?.id}:${mode}`,
+                                    "deep",
+                                  );
+                                }
+                              }}
+                              onOutput={setOutputOverride}
+                            />
+                          )}
+                        </div>
+                      }
+                    >
+                      <Button
+                        type="text"
+                        className="agent-model-trigger"
+                        aria-label={ui(
+                          "模型与回答设置",
+                          "Model and answer settings",
+                        )}
+                        aria-expanded={settingsOpen}
+                      >
+                        <span>
+                          {selectedModel?.name ??
+                            ui("选择模型", "Choose model")}
+                        </span>
+                        <DownOutlined />
+                      </Button>
+                    </Popover>
+                    {deepThinkingAvailable && (
+                      <>
+                        <Button
+                          type="text"
+                          icon={<BulbOutlined />}
+                          className={
+                            thinkingMode === "deep" ? "agent-tool-active" : ""
+                          }
+                          aria-pressed={thinkingMode === "deep"}
+                          disabled={Boolean(running) || busy}
+                          onClick={() => {
+                            const next =
+                              thinkingMode === "deep" ? "fast" : "deep";
+                            setThinkingMode(next);
+                            localStorage.setItem(
+                              `agent-thinking:${user?.id}:${mode}`,
+                              next,
+                            );
+                          }}
+                        >
+                          {ui("深度思考", "Deep thinking")}
+                        </Button>
+                        {thinkingMode === "deep" && (
+                          <ReasoningEffortControl
+                            value={effortOverride ?? defaultEffort}
+                            overridden={effortOverride !== undefined}
+                            disabled={Boolean(running) || busy}
+                            onChange={setEffortOverride}
+                          />
+                        )}
+                      </>
+                    )}
+                    {mode === "agent" && (
+                      <Button
+                        type="text"
+                        icon={<NodeIndexOutlined />}
+                        className={
+                          workflowStatus === "waiting_approval"
+                            ? "agent-workflow-attention"
+                            : ""
+                        }
+                        onClick={() => setWorkflowOpen(true)}
+                      >
+                        {ui("科研工作流", "Workflow")}
+                        {workflowStatus === "waiting_approval" && (
+                          <span>{ui("待确认", "Review")}</span>
+                        )}
+                        {workflowStatus &&
+                          ["queued", "running", "waiting_compute"].includes(
+                            workflowStatus,
+                          ) && <span>{ui("进行中", "Running")}</span>}
+                      </Button>
+                    )}
+                  </div>
                   {running ? (
                     <Button
+                      className="agent-send-button"
+                      aria-label={ui("停止", "Stop")}
+                      title={ui("停止", "Stop")}
                       icon={<StopOutlined />}
                       onClick={() =>
                         void agentApi
@@ -1086,133 +1303,49 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                           )
                           .catch(report)
                       }
-                    >
-                      {ui("停止", "Stop")}
-                    </Button>
+                    />
                   ) : (
                     <Button
                       type="primary"
+                      className="agent-send-button"
+                      aria-label={ui("发送", "Send")}
+                      title={ui("发送", "Send")}
                       icon={<SendOutlined />}
                       loading={busy}
                       disabled={
                         !canUse ||
+                        uploadingAttachment ||
                         !modelOnline ||
                         !bootstrap?.workerOnline ||
                         !prompt.trim() ||
                         current?.archived
                       }
                       onClick={() => void send()}
-                    >
-                      {ui("发送", "Send")}
-                    </Button>
-                  )}
-                </div>
-                <div className="agent-composer-options">
-                  {bootstrap?.budgets?.enabled && selectedModel && (
-                    <TaskBudgetControl
-                      canManage={Boolean(bootstrap.canManage)}
-                      options={bootstrap.budgets}
-                      profile={budgetProfile}
-                      output={outputOverride}
-                      serviceWindow={selectedModel.contextWindowTokens}
-                      disabled={Boolean(running) || busy}
-                      onProfile={(value) => {
-                        setBudgetProfile(value);
-                        setOutputOverride(undefined);
-                        setEffortOverride(undefined);
-                        if (value === "reasoning" && deepThinkingAvailable) {
-                          setThinkingMode("deep");
-                          localStorage.setItem(
-                            `agent-thinking:${user?.id}:${mode}`,
-                            "deep",
-                          );
-                        }
-                      }}
-                      onOutput={setOutputOverride}
                     />
                   )}
-                  {deepThinkingAvailable && (
-                    <div className="agent-thinking-row">
-                      <Typography.Text type="secondary">
-                        {ui("回答模式", "Answer mode")}
-                      </Typography.Text>
-                      <Segmented
-                        value={thinkingMode}
-                        disabled={
-                          Boolean(running) || busy || !deepThinkingAvailable
-                        }
-                        onChange={(value) => {
-                          const next = value as "fast" | "deep";
-                          setThinkingMode(next);
-                          localStorage.setItem(
-                            `agent-thinking:${user?.id}:${mode}`,
-                            next,
-                          );
-                        }}
-                        options={[
-                          { value: "fast", label: ui("快速回答", "Fast") },
-                          {
-                            value: "deep",
-                            label: ui("深度思考", "Deep thinking"),
-                          },
-                        ]}
-                      />
-                      {thinkingMode === "deep" && deepThinkingAvailable && (
-                        <ReasoningEffortControl
-                          value={effortOverride ?? defaultEffort}
-                          overridden={effortOverride !== undefined}
-                          disabled={Boolean(running) || busy}
-                          onChange={setEffortOverride}
-                        />
-                      )}
-                    </div>
-                  )}
-                  {internetAvailable && (
-                    <div className="agent-thinking-row">
-                      <Switch
-                        size="small"
-                        checked={internetEnabled}
-                        disabled={
-                          !internetAvailable || Boolean(running) || busy
-                        }
-                        onChange={setInternetEnabled}
-                      />
-                      <Typography.Text type="secondary">
-                        {ui("联网检索", "Internet retrieval")}
-                      </Typography.Text>
-                    </div>
-                  )}
-                  <div className="agent-model-row">
-                    <Select
-                      aria-label={ui("选择模型", "Choose model")}
-                      value={model || undefined}
-                      disabled={Boolean(running) || busy}
-                      onChange={(value) => {
-                        setModel(value);
-                        const nextModel = models.find(
-                          (item) => item.alias === value,
-                        );
-                        if (!nextModel?.supportsThinking) {
-                          setThinkingMode("fast");
-                        }
-                        localStorage.setItem(
-                          `agent-model:${user?.id}:${mode}`,
-                          value,
-                        );
-                      }}
-                      placeholder={ui("选择模型", "Choose model")}
-                      options={models.map((m) => ({
-                        value: m.alias,
-                        label: `${m.name} · ${m.status === "online" ? ui("在线", "Online") : m.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${m.supportsVision ? ` · ${ui("支持图片", "Vision")}` : ""}`,
-                      }))}
-                    />
-                  </div>
                 </div>
               </div>
             </div>
           )}
         </main>
       </div>
+      {mode === "agent" && canUse && (
+        <Drawer
+          title={ui("科研工作流", "Research workflow")}
+          open={workflowOpen}
+          onClose={() => setWorkflowOpen(false)}
+          forceRender
+          size={640}
+          classNames={{ root: "agent-workflow-drawer" }}
+        >
+          <WorkflowPanel
+            model={model}
+            resourceIds={selected}
+            embedded
+            onStatusChange={setWorkflowStatus}
+          />
+        </Drawer>
+      )}
       <Modal
         open={Boolean(rename)}
         title={ui("重命名会话", "Rename conversation")}

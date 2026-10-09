@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-const defaults = { sidebar: 260, input: 96 };
+const defaults = { sidebar: 260, input: 64 };
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 

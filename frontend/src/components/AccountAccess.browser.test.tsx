@@ -2,6 +2,8 @@ import { App as AntApp } from "antd";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { setLocale } from "../i18n";
+import { page, userEvent } from "vitest/browser";
+import accountStyles from "../styles.css?inline";
 const { request, setUser } = vi.hoisted(() => ({
   request: vi.fn(),
   setUser: vi.fn(),
@@ -63,3 +65,41 @@ it("shows own capabilities and a separate application that confirms submission",
   );
   view.unmount();
 });
+
+it.each([1200, 390])(
+  "keeps available feature groups readable at %s pixels without changing grants",
+  async (width) => {
+    await page.viewport(width, 900);
+    try {
+      const { container } = render(
+        <AntApp>
+          <style>{accountStyles}</style>
+          <AccountAccessCard />
+        </AntApp>,
+      );
+      expect(
+        await screen.findByRole("heading", { name: "计算权限" }),
+      ).toBeVisible();
+      expect(screen.getByRole("heading", { name: "智能体操作" })).toBeVisible();
+      expect(screen.getByText("提交计算任务")).toBeVisible();
+      expect(screen.getByText("读取有权访问的数据")).toBeVisible();
+      expect(screen.queryByText("compute.submit_task")).toBeNull();
+      expect(screen.queryByRole("switch")).toBeNull();
+      for (const group of container.querySelectorAll<HTMLElement>(
+        ".account-permission-group",
+      )) {
+        expect(group.scrollWidth).toBeLessThanOrEqual(group.clientWidth + 1);
+        expect(group.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      }
+      await userEvent.click(screen.getByRole("button", { name: "刷新权限" }));
+      await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+      expect(
+        request.mock.calls.every(
+          ([url, options]) => url === "/api/auth/access/" && !options,
+        ),
+      ).toBe(true);
+    } finally {
+      await page.viewport(1600, 900);
+    }
+  },
+);

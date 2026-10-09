@@ -2901,6 +2901,77 @@ body:has(.login-shell),
 }
 
 /* PermissionPanel — shared card-based permission editor */
+.account-owned-permissions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 14px;
+}
+
+.account-permission-group {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #dce7f0;
+  border-radius: 12px;
+  background: #f7fafd;
+}
+
+.account-permission-group header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.account-permission-group h3 {
+  margin: 0;
+  color: #2c506b;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.account-permission-count {
+  min-width: 24px;
+  padding: 1px 7px;
+  color: #416985;
+  background: #e6eff6;
+  border-radius: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.account-permission-group ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-permission-group li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 9px;
+  color: #3b566b;
+  background: #fff;
+  border: 1px solid #e0e8ef;
+  border-radius: 6px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.account-permission-group li::before {
+  content: "✓";
+  flex: 0 0 auto;
+  color: #42769b;
+  font-weight: 700;
+}
+
 .perm-panel {
   display: grid;
   gap: 12px;
@@ -6174,11 +6245,6 @@ body:has(.login-shell),
   align-items: stretch;
   height: var(--workspace-search-height);
   overflow: hidden;
-  transition:
-    flex 0.72s cubic-bezier(0.22, 1, 0.36, 1),
-    width 0.72s cubic-bezier(0.22, 1, 0.36, 1),
-    min-width 0.72s cubic-bezier(0.22, 1, 0.36, 1),
-    max-width 0.72s cubic-bezier(0.22, 1, 0.36, 1);
 
   & .workspace-global-input {
     flex: 1;
@@ -6619,24 +6685,31 @@ body:has(.login-shell),
   overflow: hidden;
   opacity: 1;
   text-overflow: ellipsis;
-  transition:
-    max-width 0.72s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1),
-    margin 0.72s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.header-primary-actions {
-  transition:
-    flex 0.72s cubic-bezier(0.22, 1, 0.36, 1),
-    margin-left 0.72s cubic-bezier(0.22, 1, 0.36, 1),
-    gap 0.72s cubic-bezier(0.22, 1, 0.36, 1);
+.workspace-header nav.header-primary-actions.header-primary-actions-measuring {
+  width: max-content;
+  gap: 6px;
+  padding-left: clamp(2px, 0.3vw, 8px);
+  padding-right: clamp(4px, 0.5vw, 10px);
 }
 
-.workspace-header-nav-measuring .workspace-global-search,
-.workspace-header-nav-measuring .header-primary-actions,
-.workspace-header-nav-measuring .header-primary-actions .workspace-switch-card,
-.workspace-header-nav-measuring .header-primary-actions .tab-text {
-  transition: none;
+.workspace-header
+  nav.header-primary-actions.header-primary-actions-measuring
+  .workspace-switch-card {
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  padding-inline: 7px;
+  gap: 5px;
+}
+
+.workspace-header
+  nav.header-primary-actions.header-primary-actions-measuring
+  .workspace-switch-card
+  .tab-text {
+  max-width: none;
+  margin-inline: 0;
 }
 
 .workspace-header.workspace-header-search-active
@@ -22012,7 +22085,7 @@ body:has(.login-shell),
   padding: 14px 16px;
   border: 1px solid rgba(234, 244, 250, 0.28);
   border-radius: 12px;
-  background: rgba(5, 27, 32, 0.46);
+  background: rgba(7, 27, 49, 0.46);
   backdrop-filter: blur(10px);
 }
 
@@ -22154,7 +22227,7 @@ body:has(.login-shell),
 .results-overview-chart {
   min-width: 0;
   padding: 18px 20px;
-  border: 1px solid #e0ebe6;
+  border: 1px solid #e0e8ef;
   border-radius: 15px;
   background: rgba(255, 255, 255, 0.9);
 }
@@ -22166,17 +22239,17 @@ body:has(.login-shell),
 
 .results-chart-title h3.ant-typography {
   margin: 0 0 3px;
-  color: #25493e;
+  color: #2c506b;
   font-size: 16px;
 }
 
 .results-chart-title .ant-typography-secondary {
-  color: #829089;
+  color: #798b99;
   font-size: 12px;
 }
 
 .results-trend-chart > .results-chart-title > .anticon {
-  color: #90b8a8;
+  color: #8aaeca;
   font-size: 25px;
 }
 
@@ -22251,8 +22324,8 @@ body:has(.login-shell),
 
 .results-source-legend button:hover,
 .results-source-legend button.is-selected {
-  border-color: #cfe2d9;
-  background: #f1f8f5;
+  border-color: #cfdfea;
+  background: #f1f6fb;
   transform: translateX(2px);
 }
 
@@ -22271,7 +22344,7 @@ body:has(.login-shell),
 
 .results-source-legend small {
   overflow: hidden;
-  color: #687a73;
+  color: #687b89;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -22279,13 +22352,13 @@ body:has(.login-shell),
 
 .results-source-legend strong,
 .results-source-legend b {
-  color: #274d41;
+  color: #2c506b;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
 .results-source-legend b {
-  color: #77877f;
+  color: #748899;
   font-weight: 600;
 }
 

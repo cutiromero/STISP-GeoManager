@@ -1,6 +1,5 @@
 import {
   ArrowRightOutlined,
-  DatabaseOutlined,
   FileTextOutlined,
   GlobalOutlined,
   InfoCircleOutlined,
@@ -245,7 +244,9 @@ function TeamIntroduction({ en }: { en: boolean }) {
           {focusAreas.map(([id, title, description]) => (
             <article key={id}>
               <span>{id}</span>
-              <h3>{title}</h3>
+              <h3>
+                <strong>{title}</strong>
+              </h3>
               <p>{description}</p>
             </article>
           ))}
@@ -421,8 +422,9 @@ function PlatformOverview({ en, onTeam }: { en: boolean; onTeam: () => void }) {
         <div className="air-research-grid">
           {capabilities.map(([title, description]) => (
             <article key={title}>
-              <DatabaseOutlined />
-              <h3>{title}</h3>
+              <h3>
+                <strong>{title}</strong>
+              </h3>
               <p>{description}</p>
             </article>
           ))}

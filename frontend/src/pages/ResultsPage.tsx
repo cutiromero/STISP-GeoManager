@@ -82,7 +82,7 @@ type ResultsOverviewData = {
 };
 
 const sourceOverviewMeta = [
-  { key: "mapping", color: "#287b63" },
+  { key: "mapping", color: "#355f93" },
   { key: "analysis", color: "#4f86c6" },
   { key: "imported", color: "#d99a3d" },
 ] as const;
@@ -229,11 +229,11 @@ export default function ResultsPage() {
         <section
           className="portal-hero results-page-hero"
           style={{
-            backgroundImage: `linear-gradient(90deg, rgba(5, 31, 31, 0.88) 0%, rgba(8, 42, 38, 0.62) 42%, rgba(13, 38, 34, 0.2) 70%, rgba(5, 24, 27, 0.4) 100%), url(${resultsShowcaseImage})`,
+            backgroundImage: `linear-gradient(90deg, rgba(7, 27, 49, 0.88) 0%, rgba(12, 42, 70, 0.62) 42%, rgba(18, 43, 66, 0.2) 70%, rgba(7, 24, 43, 0.4) 100%), url(${resultsShowcaseImage})`,
           }}
         >
           <div>
-            <Tag color="green">{t("results.heroTag")}</Tag>
+            <Tag color="blue">{t("results.heroTag")}</Tag>
             <Typography.Title level={1}>{t("results.title")}</Typography.Title>
             <Typography.Paragraph>{t("results.summary")}</Typography.Paragraph>
           </div>
@@ -382,7 +382,7 @@ function ResultsOverview({
           </Typography.Paragraph>
         </div>
         <Space wrap>
-          <Tag color="green">{t("results.realtime")}</Tag>
+          <Tag color="blue">{t("results.realtime")}</Tag>
           <Typography.Text type="secondary">
             {data.latestPublishedAt
               ? t("results.recentPublished", {
@@ -657,7 +657,7 @@ function monthKey(date: Date) {
 }
 
 function buildDonutBackground(sources: SourceOverview[], total: number) {
-  if (!total) return "conic-gradient(#dfe9e4 0 100%)";
+  if (!total) return "conic-gradient(#dfe7ef 0 100%)";
   let start = 0;
   const segments = sources.map((source) => {
     const end = start + (source.count / total) * 100;
@@ -779,7 +779,7 @@ function ResultCover({ item }: { item: PublishedResult }) {
           <span>{sourceLabel(item, t)}</span>
         </div>
       )}
-      <Tag color="green">{t("results.published")}</Tag>
+      <Tag color="blue">{t("results.published")}</Tag>
     </div>
   );
 }
@@ -862,7 +862,7 @@ function sourceLabel(item: PublishedResult, t: TFunction) {
 }
 
 function sourceTagColor(source: Exclude<ResultSource, "all">) {
-  if (source === "mapping") return "green";
+  if (source === "mapping") return "blue";
   if (source === "analysis") return "blue";
   return "gold";
 }

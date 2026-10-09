@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { AppContext } from "../contexts/AppContext";
 import { appTheme } from "../theme";
+import { clearAgentBootstrap } from "../agent/useAgentBootstrap";
 import type {
   Bootstrap,
   MapComposition,
@@ -22,15 +23,18 @@ import type {
 import WorkspaceHeader from "./WorkspaceHeader";
 import headerStyles from "../styles.css?inline";
 
-const { clearCachedLayerGroupsMock, mockApi } = vi.hoisted(() => ({
-  clearCachedLayerGroupsMock: vi.fn(),
-  mockApi: {
-    logout: vi.fn(),
-    resources: vi.fn(),
-    workspaces: vi.fn(),
-    mapCompositions: vi.fn(),
-  },
-}));
+const { agentBootstrapMock, clearCachedLayerGroupsMock, mockApi } = vi.hoisted(
+  () => ({
+    agentBootstrapMock: vi.fn(),
+    clearCachedLayerGroupsMock: vi.fn(),
+    mockApi: {
+      logout: vi.fn(),
+      resources: vi.fn(),
+      workspaces: vi.fn(),
+      mapCompositions: vi.fn(),
+    },
+  }),
+);
 
 vi.mock("../api/platform", () => ({
   platformApi: {
@@ -42,7 +46,7 @@ vi.mock("../api/platform", () => ({
 
 vi.mock("../api/client", () => ({
   api: mockApi,
-  requestJson: vi.fn().mockResolvedValue({ canChat: false, canAgent: false }),
+  requestJson: agentBootstrapMock,
   requestForm: vi.fn(),
 }));
 
@@ -202,7 +206,16 @@ function renderHeader(
   setUser: (user: User | null) => void = vi.fn(),
   initialPath = "/",
   withStyles = false,
+  remountOnNavigation = false,
 ) {
+  const headerProps: React.ComponentProps<typeof WorkspaceHeader> = {
+    activeTab: "map",
+    canBrowseData: true,
+    resources: [resource],
+    workspaceScenes: [scene(1, "project", "塔里木河监测工程")],
+    mapCompositions: [topicComposition],
+    ...props,
+  };
   return render(
     <ConfigProvider locale={zhCN} theme={appTheme}>
       <AntApp>
@@ -216,20 +229,29 @@ function renderHeader(
           }}
         >
           <MemoryRouter initialEntries={[initialPath]}>
-            <WorkspaceHeader
-              activeTab="map"
-              canBrowseData
-              resources={[resource]}
-              workspaceScenes={[scene(1, "project", "塔里木河监测工程")]}
-              mapCompositions={[topicComposition]}
-              {...props}
-            />
+            {remountOnNavigation ? (
+              <RoutedHeader {...headerProps} />
+            ) : (
+              <WorkspaceHeader {...headerProps} />
+            )}
             <CurrentPath />
           </MemoryRouter>
         </AppContext.Provider>
       </AntApp>
     </ConfigProvider>,
   );
+}
+
+function RoutedHeader(props: React.ComponentProps<typeof WorkspaceHeader>) {
+  const { pathname } = useLocation();
+  const activeTab = pathname.startsWith("/about")
+    ? "about"
+    : pathname === "/compute"
+      ? "compute"
+      : pathname === "/knowledge"
+        ? "knowledge"
+        : "map";
+  return <WorkspaceHeader key={pathname} {...props} activeTab={activeTab} />;
 }
 
 function CurrentPath() {
@@ -245,6 +267,9 @@ function sectionByTitle(title: string) {
 
 describe("WorkspaceHeader", () => {
   beforeEach(() => {
+    clearAgentBootstrap(user);
+    agentBootstrapMock.mockReset();
+    agentBootstrapMock.mockResolvedValue({ canChat: false, canAgent: false });
     for (const fn of Object.values(mockApi)) {
       fn.mockReset();
     }
@@ -595,6 +620,116 @@ describe("WorkspaceHeader", () => {
             screen.getByRole("button", { name: "返回地理工作台" }),
           );
           await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+      } finally {
+        await page.viewport(1600, 900);
+      }
+    },
+  );
+
+  it.each([1500, 1280, 1024, 900])(
+    "paints stable navigation immediately after real route clicks at %s pixels",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        agentBootstrapMock.mockResolvedValue({ canChat: true, canAgent: true });
+        const { container } = renderHeader(
+          {},
+          user,
+          vi.fn(),
+          "/map",
+          true,
+          true,
+        );
+        const agentEntry = await screen.findByRole("button", {
+          name: "智能体",
+        });
+        expect(agentEntry.querySelector(".anticon-robot")).not.toBeNull();
+        // Subsequent page mounts keep the confirmed entry while access is checked.
+        agentBootstrapMock.mockReturnValue(new Promise(() => {}));
+        const geometry = () =>
+          [
+            ...container.querySelectorAll<HTMLElement>(
+              ".header-primary-actions button, .workspace-global-search",
+            ),
+          ].map((element) => {
+            const box = element.getBoundingClientRect();
+            return [box.x, box.y, box.width, box.height];
+          });
+        for (const [title, targetPath] of [
+          ["计算中心", "/compute"],
+          ["时空科普", "/knowledge"],
+          ["关于我们", "/about/system"],
+        ]) {
+          if (targetPath === "/knowledge") {
+            await userEvent.click(
+              screen.getByPlaceholderText("搜索数据、工程、专题"),
+            );
+            const focusFrames: { classes: string; boxes: number[][] }[] = [];
+            for (let frame = 0; frame < 12; frame++) {
+              await new Promise(requestAnimationFrame);
+              focusFrames.push({
+                classes:
+                  container.querySelector(".workspace-header")!.className,
+                boxes: geometry(),
+              });
+            }
+            expect(
+              new Set(focusFrames.map((frame) => JSON.stringify(frame.boxes)))
+                .size,
+              JSON.stringify(focusFrames),
+            ).toBe(1);
+          }
+          const samples: { path: string; boxes: number[][] }[] = [];
+          const observeFrames = new Promise<void>((resolve) => {
+            const capture = () => {
+              samples.push({
+                path: screen.getByTestId("location-path").textContent ?? "",
+                boxes: geometry(),
+              });
+              if (
+                samples.filter((sample) => sample.path === targetPath).length <
+                  40 &&
+                samples.length < 360
+              )
+                requestAnimationFrame(capture);
+              else resolve();
+            };
+            requestAnimationFrame(capture);
+          });
+          await userEvent.click(
+            container.querySelector<HTMLButtonElement>(
+              `.header-primary-actions button[title="${title}"]`,
+            )!,
+          );
+          await observeFrames;
+          const arrived = samples.filter(
+            (sample) => sample.path === targetPath,
+          );
+          expect(arrived.length).toBeGreaterThan(5);
+          expect(arrived.every((sample) => sample.boxes.length === 12)).toBe(
+            true,
+          );
+          let drift = 0;
+          for (const sample of arrived) {
+            sample.boxes.forEach((box, index) =>
+              box.forEach((value, coordinate) => {
+                drift = Math.max(
+                  drift,
+                  Math.abs(value - arrived[0]!.boxes[index]![coordinate]!),
+                );
+              }),
+            );
+          }
+          expect(drift).toBeLessThanOrEqual(0.6);
+          const header =
+            container.querySelector<HTMLElement>(".workspace-header")!;
+          expect(header.scrollWidth).toBeLessThanOrEqual(
+            header.clientWidth + 1,
+          );
+          expect(header.getBoundingClientRect().right).toBeLessThanOrEqual(
+            width,
+          );
         }
       } finally {
         await page.viewport(1600, 900);

@@ -9,14 +9,27 @@ from apps.knowledge.models import KnowledgeEntry, KnowledgeRevision
 from apps.knowledge.services import serialize, validate_entry
 
 
+BATCH_FILES = {
+    "base": "seed_entries.json",
+    "geology-20261009": "seed_entries_20261009.json",
+}
+
+
 class Command(BaseCommand):
     help = "载入带公开来源的地学基础知识；已有条目及人工修订保持不变。"
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument(
+            "--batch",
+            choices=tuple(BATCH_FILES),
+            default="base",
+            help="base 保持原有种子范围；geology-20261009 仅补充本批 30 条。",
+        )
 
     def handle(self, *args, **options):
-        path = Path(__file__).parents[2] / "seed_entries.json"
+        batch = options["batch"]
+        path = Path(__file__).parents[2] / BATCH_FILES[batch]
         seeds = json.loads(path.read_text(encoding="utf-8"))
         validated = []
         keys = set()
@@ -45,6 +58,7 @@ class Command(BaseCommand):
         self.stdout.write(
             json.dumps(
                 {
+                    "batch": batch,
                     "dryRun": options["dry_run"],
                     "created": created,
                     "preserved": len(validated) - created,

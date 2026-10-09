@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.28] - 2026-10-09
+
+### Fixed
+- 导航在绘制前完成尺寸适配，保持智能体入口稳定；搜索在点击完成后收起，消除换页弹动及按下时按钮移位。
+- 修复智能体新会话首次附件上传及多附件建会话问题。
+
+### Changed
+- 智能体扩大消息区域，采用灰蓝聊天布局和紧凑输入工具按钮；科研工作流移入抽屉，保留草稿和审批提示，移除聊天运行详情并简化来源展示。
+- 系统简介四个功能块去图标并加粗标题，团队研究方向标题加粗；个人可用功能按组整理，成果展示改为蓝色装饰，导航统一使用机器人图标。
+- 增补30条带公开来源、条件及例外的地矿知识，已有知识和修订保持。
+
 ## [0.1.27] - 2026-10-08
 
 ### Fixed

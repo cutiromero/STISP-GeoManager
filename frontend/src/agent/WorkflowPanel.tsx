@@ -91,9 +91,13 @@ function ParameterField({
 export default function WorkflowPanel({
   model,
   resourceIds,
+  embedded = false,
+  onStatusChange,
 }: {
   model: string;
   resourceIds: number[];
+  embedded?: boolean;
+  onStatusChange?: (status: AgentWorkflow["status"] | undefined) => void;
 }) {
   const ui = useComputeText();
   const [goal, setGoal] = useState("");
@@ -198,11 +202,213 @@ export default function WorkflowPanel({
       setBusy(false);
     }
   };
+  useEffect(() => {
+    onStatusChange?.(workflow?.status);
+  }, [workflow?.status, onStatusChange]);
   const fields = (value: unknown) =>
     value && typeof value === "object" && !Array.isArray(value)
       ? Object.entries(value)
       : [];
-  return (
+  const content = (
+    <Space direction="vertical" style={{ width: "100%" }}>
+      <Typography.Text type="secondary">
+        {ui(
+          "描述目标，核对数据与算法后确认执行。平台持续跟踪计算、知识检查和结果入库，离开页面后仍可恢复查看。",
+          "Describe a goal, review the data and algorithm, then confirm. The platform tracks calculation, knowledge checks and import even after you leave.",
+        )}
+      </Typography.Text>
+      <Input.TextArea
+        aria-label={ui("工作流目标", "Workflow goal")}
+        value={goal}
+        onChange={(e) => setGoal(e.target.value)}
+        maxLength={12000}
+        autoSize={{ minRows: 2, maxRows: 4 }}
+        placeholder={ui(
+          "例如：使用 NDVI 算法处理所选影像并将结果入库。",
+          "Example: calculate NDVI for the selected image and import the result.",
+        )}
+      />
+      <Select
+        aria-label={ui("指定算法", "Select algorithm")}
+        style={{ width: "100%" }}
+        allowClear
+        showSearch
+        optionFilterProp="label"
+        value={versionId}
+        placeholder={ui(
+          "自动按目标匹配，或指定算法与参数",
+          "Match the goal automatically or choose an algorithm",
+        )}
+        options={algorithms.flatMap((a) =>
+          a.versions
+            .filter((v) => v.status === "published")
+            .map((v) => ({
+              value: v.id,
+              label: `${a.name} · ${v.version}`,
+            })),
+        )}
+        onChange={(id) => {
+          setVersionId(id);
+          setInputs({});
+          setParameters({});
+        }}
+      />
+      {version?.manifest.inputs.map((spec) => (
+        <Space key={spec.key} wrap>
+          <Typography.Text>{spec.label}</Typography.Text>
+          <Select
+            aria-label={spec.label}
+            style={{ minWidth: 220 }}
+            value={inputs[spec.key]}
+            allowClear
+            options={candidates
+              .filter((c) => c.kind === spec.kind)
+              .map((c) => ({ value: c.id, label: c.name }))}
+            onChange={(id) =>
+              setInputs((old) => {
+                const next = { ...old };
+                if (id === undefined) delete next[spec.key];
+                else next[spec.key] = id;
+                return next;
+              })
+            }
+          />
+        </Space>
+      ))}
+      {version?.manifest.parameters
+        .filter(
+          (spec) =>
+            !spec.when ||
+            (parameters[String(spec.when.key)] ??
+              version.manifest.parameters.find((p) => p.key === spec.when?.key)
+                ?.default) === spec.when.equals,
+        )
+        .map((spec) => (
+          <Space key={spec.key} wrap>
+            <Typography.Text>{spec.label}</Typography.Text>
+            <ParameterField
+              spec={spec}
+              value={parameters[spec.key] ?? spec.default}
+              candidate={
+                spec.input
+                  ? candidates.find((c) => c.id === inputs[spec.input ?? ""])
+                  : undefined
+              }
+              onChange={(value) =>
+                setParameters((old) => ({ ...old, [spec.key]: value }))
+              }
+            />
+          </Space>
+        ))}
+      <Button
+        type="primary"
+        loading={busy}
+        disabled={
+          !goal.trim() ||
+          !model ||
+          Boolean(workflow && active.includes(workflow.status))
+        }
+        onClick={() => void preview()}
+      >
+        {ui("生成执行计划", "Preview plan")}
+      </Button>
+      {error && <Alert type="error" title={error} />}
+      {history.length > 1 && (
+        <Select
+          aria-label={ui("历史工作流", "Workflow history")}
+          style={{ width: "100%" }}
+          value={workflow?.id}
+          options={history.map((item) => ({
+            value: item.id,
+            label: item.goal,
+          }))}
+          onChange={(id) => {
+            void agentApi.workflow(id).then(setWorkflow).catch(report);
+          }}
+        />
+      )}
+      {workflow && (
+        <div className="agent-workflow-status">
+          <Space wrap>
+            <Tag
+              color={
+                workflow.status === "succeeded"
+                  ? "green"
+                  : workflow.status === "failed"
+                    ? "red"
+                    : "blue"
+              }
+            >
+              {ui(labels[workflow.status] ?? workflow.status)}
+            </Tag>
+            <span>{workflow.detail}</span>
+          </Space>
+          {workflow.planHash && (
+            <dl className="agent-plan-summary">
+              <dt>{ui("算法", "Algorithm")}</dt>
+              <dd>{String(workflow.plan.algorithm ?? "")}</dd>
+              <dt>{ui("输入数据", "Input data")}</dt>
+              <dd>
+                {fields(workflow.plan.inputNames).map(([key, value]) => (
+                  <div key={key}>{String(value)}</div>
+                ))}
+              </dd>
+              <dt>{ui("执行参数", "Parameters")}</dt>
+              <dd>
+                {fields(workflow.plan.parameters).map(([key, value]) => (
+                  <div key={key}>
+                    {key}：{String(value)}
+                  </div>
+                ))}
+              </dd>
+              <dt>{ui("知识依据", "Knowledge references")}</dt>
+              <dd>
+                {workflow.evidence.length
+                  ? workflow.evidence.map((entry) => (
+                      <div key={String(entry.id)}>
+                        {String(entry.title)} · {ui("版本", "Revision")}{" "}
+                        {String(entry.revision)}
+                      </div>
+                    ))
+                  : ui(
+                      "未匹配到相关知识规则，将保留算法原始结果",
+                      "No matching rules; the original calculation will be preserved",
+                    )}
+              </dd>
+            </dl>
+          )}
+          {workflow.status === "waiting_approval" && (
+            <Button
+              type="primary"
+              loading={busy}
+              onClick={() => void action(true)}
+            >
+              {ui("确认执行并自动入库", "Confirm and import automatically")}
+            </Button>
+          )}
+          {active.includes(workflow.status) && (
+            <Button loading={busy} onClick={() => void action(false)}>
+              {ui("停止此工作流", "Stop workflow")}
+            </Button>
+          )}
+          {workflow.steps.map((item) => (
+            <p key={item.id}>
+              {item.sequence}. {item.message}
+            </p>
+          ))}
+          {!!workflow.resultResourceIds.length && (
+            <Alert
+              type="success"
+              title={`${ui("结果已入库，资源编号", "Results imported, resource IDs")}: ${workflow.resultResourceIds.join("、")}`}
+            />
+          )}
+        </div>
+      )}
+    </Space>
+  );
+  return embedded ? (
+    <section className="agent-workflow-content">{content}</section>
+  ) : (
     <Collapse
       size="small"
       className="agent-workflow-panel"
@@ -213,213 +419,7 @@ export default function WorkflowPanel({
             "科研工作流 · 计划、执行与入库",
             "Research workflow · plan, execute and import",
           ),
-          children: (
-            <Space direction="vertical" style={{ width: "100%" }}>
-              <Typography.Text type="secondary">
-                {ui(
-                  "描述目标，核对数据与算法后确认执行。平台持续跟踪计算、知识检查和结果入库，离开页面后仍可恢复查看。",
-                  "Describe a goal, review the data and algorithm, then confirm. The platform tracks calculation, knowledge checks and import even after you leave.",
-                )}
-              </Typography.Text>
-              <Input.TextArea
-                aria-label={ui("工作流目标", "Workflow goal")}
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                maxLength={12000}
-                autoSize={{ minRows: 2, maxRows: 4 }}
-                placeholder={ui(
-                  "例如：使用 NDVI 算法处理所选影像并将结果入库。",
-                  "Example: calculate NDVI for the selected image and import the result.",
-                )}
-              />
-              <Select
-                aria-label={ui("指定算法", "Select algorithm")}
-                style={{ width: "100%" }}
-                allowClear
-                showSearch
-                optionFilterProp="label"
-                value={versionId}
-                placeholder={ui(
-                  "自动按目标匹配，或指定算法与参数",
-                  "Match the goal automatically or choose an algorithm",
-                )}
-                options={algorithms.flatMap((a) =>
-                  a.versions
-                    .filter((v) => v.status === "published")
-                    .map((v) => ({
-                      value: v.id,
-                      label: `${a.name} · ${v.version}`,
-                    })),
-                )}
-                onChange={(id) => {
-                  setVersionId(id);
-                  setInputs({});
-                  setParameters({});
-                }}
-              />
-              {version?.manifest.inputs.map((spec) => (
-                <Space key={spec.key} wrap>
-                  <Typography.Text>{spec.label}</Typography.Text>
-                  <Select
-                    aria-label={spec.label}
-                    style={{ minWidth: 220 }}
-                    value={inputs[spec.key]}
-                    allowClear
-                    options={candidates
-                      .filter((c) => c.kind === spec.kind)
-                      .map((c) => ({ value: c.id, label: c.name }))}
-                    onChange={(id) =>
-                      setInputs((old) => {
-                        const next = { ...old };
-                        if (id === undefined) delete next[spec.key];
-                        else next[spec.key] = id;
-                        return next;
-                      })
-                    }
-                  />
-                </Space>
-              ))}
-              {version?.manifest.parameters
-                .filter(
-                  (spec) =>
-                    !spec.when ||
-                    (parameters[String(spec.when.key)] ??
-                      version.manifest.parameters.find(
-                        (p) => p.key === spec.when?.key,
-                      )?.default) === spec.when.equals,
-                )
-                .map((spec) => (
-                  <Space key={spec.key} wrap>
-                    <Typography.Text>{spec.label}</Typography.Text>
-                    <ParameterField
-                      spec={spec}
-                      value={parameters[spec.key] ?? spec.default}
-                      candidate={
-                        spec.input
-                          ? candidates.find(
-                              (c) => c.id === inputs[spec.input ?? ""],
-                            )
-                          : undefined
-                      }
-                      onChange={(value) =>
-                        setParameters((old) => ({ ...old, [spec.key]: value }))
-                      }
-                    />
-                  </Space>
-                ))}
-              <Button
-                type="primary"
-                loading={busy}
-                disabled={
-                  !goal.trim() ||
-                  !model ||
-                  Boolean(workflow && active.includes(workflow.status))
-                }
-                onClick={() => void preview()}
-              >
-                {ui("生成执行计划", "Preview plan")}
-              </Button>
-              {error && <Alert type="error" title={error} />}
-              {history.length > 1 && (
-                <Select
-                  aria-label={ui("历史工作流", "Workflow history")}
-                  style={{ width: "100%" }}
-                  value={workflow?.id}
-                  options={history.map((item) => ({
-                    value: item.id,
-                    label: item.goal,
-                  }))}
-                  onChange={(id) => {
-                    void agentApi.workflow(id).then(setWorkflow).catch(report);
-                  }}
-                />
-              )}
-              {workflow && (
-                <div className="agent-workflow-status">
-                  <Space wrap>
-                    <Tag
-                      color={
-                        workflow.status === "succeeded"
-                          ? "green"
-                          : workflow.status === "failed"
-                            ? "red"
-                            : "blue"
-                      }
-                    >
-                      {ui(labels[workflow.status] ?? workflow.status)}
-                    </Tag>
-                    <span>{workflow.detail}</span>
-                  </Space>
-                  {workflow.planHash && (
-                    <dl className="agent-plan-summary">
-                      <dt>{ui("算法", "Algorithm")}</dt>
-                      <dd>{String(workflow.plan.algorithm ?? "")}</dd>
-                      <dt>{ui("输入数据", "Input data")}</dt>
-                      <dd>
-                        {fields(workflow.plan.inputNames).map(
-                          ([key, value]) => (
-                            <div key={key}>{String(value)}</div>
-                          ),
-                        )}
-                      </dd>
-                      <dt>{ui("执行参数", "Parameters")}</dt>
-                      <dd>
-                        {fields(workflow.plan.parameters).map(
-                          ([key, value]) => (
-                            <div key={key}>
-                              {key}：{String(value)}
-                            </div>
-                          ),
-                        )}
-                      </dd>
-                      <dt>{ui("知识依据", "Knowledge references")}</dt>
-                      <dd>
-                        {workflow.evidence.length
-                          ? workflow.evidence.map((entry) => (
-                              <div key={String(entry.id)}>
-                                {String(entry.title)} · {ui("版本", "Revision")}{" "}
-                                {String(entry.revision)}
-                              </div>
-                            ))
-                          : ui(
-                              "未匹配到相关知识规则，将保留算法原始结果",
-                              "No matching rules; the original calculation will be preserved",
-                            )}
-                      </dd>
-                    </dl>
-                  )}
-                  {workflow.status === "waiting_approval" && (
-                    <Button
-                      type="primary"
-                      loading={busy}
-                      onClick={() => void action(true)}
-                    >
-                      {ui(
-                        "确认执行并自动入库",
-                        "Confirm and import automatically",
-                      )}
-                    </Button>
-                  )}
-                  {active.includes(workflow.status) && (
-                    <Button loading={busy} onClick={() => void action(false)}>
-                      {ui("停止此工作流", "Stop workflow")}
-                    </Button>
-                  )}
-                  {workflow.steps.map((item) => (
-                    <p key={item.id}>
-                      {item.sequence}. {item.message}
-                    </p>
-                  ))}
-                  {!!workflow.resultResourceIds.length && (
-                    <Alert
-                      type="success"
-                      title={`${ui("结果已入库，资源编号", "Results imported, resource IDs")}: ${workflow.resultResourceIds.join("、")}`}
-                    />
-                  )}
-                </div>
-              )}
-            </Space>
-          ),
+          children: content,
         },
       ]}
     />
