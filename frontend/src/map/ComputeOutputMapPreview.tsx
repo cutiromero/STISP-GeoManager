@@ -60,21 +60,20 @@ async function readPreviewImage(url: string, signal: AbortSignal) {
     !parsed.pathname.startsWith("/api/compute/outputs/")
   )
     throw new Error("结果预览地址无效");
-  const response = await fetch(
-    projectUrl(`${parsed.pathname}${parsed.search}`),
-    {
-      credentials: "include",
-      headers: { "X-Project-Id": getActiveProject() },
-      signal,
-    },
-  );
+  const scopedUrl = projectUrl(`${parsed.pathname}${parsed.search}`);
+  const response = await fetch(scopedUrl, {
+    credentials: "include",
+    headers: { "X-Project-Id": getActiveProject() },
+    signal,
+  });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(body?.detail || "无法读取结果预览");
   }
   if (!response.headers.get("Content-Type")?.startsWith("image/png"))
     throw new Error("结果预览图片尚未就绪");
-  return URL.createObjectURL(await response.blob());
+  await response.blob();
+  return scopedUrl;
 }
 
 export default function ComputeOutputMapPreview({
@@ -123,11 +122,7 @@ export default function ComputeOutputMapPreview({
         if (disposed) return;
         if (next.imageUrl !== currentUrl || !imageUrl) {
           const image = await readPreviewImage(next.imageUrl, signal);
-          if (disposed) {
-            URL.revokeObjectURL(image);
-            return;
-          }
-          if (imageUrl) URL.revokeObjectURL(imageUrl);
+          if (disposed) return;
           imageUrl = image;
           currentUrl = next.imageUrl;
           setPreview({ data: next, image });
@@ -147,7 +142,6 @@ export default function ComputeOutputMapPreview({
       disposed = true;
       controller.abort();
       clearTimeout(timer);
-      if (imageUrl) URL.revokeObjectURL(imageUrl);
     };
   }, [outputId, projectTagId, revision]);
   useEffect(() => {

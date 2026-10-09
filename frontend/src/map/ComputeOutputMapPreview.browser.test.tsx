@@ -11,7 +11,10 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { computeApi } from "../api/compute";
 import type { ComputeMapPreview } from "../api/generated/types.gen";
-import { resetProjectSession } from "../projects/session";
+import {
+  projectTransformRequest,
+  resetProjectSession,
+} from "../projects/session";
 import ComputeOutputMapPreview from "./ComputeOutputMapPreview";
 
 const preview: ComputeMapPreview = {
@@ -89,6 +92,8 @@ beforeEach(() => {
 it("renders the server image as a temporary map layer without creating a data resource", async () => {
   const map = mapMock();
   const importOutput = vi.spyOn(computeApi, "importOutput");
+  const createObjectUrl = vi.spyOn(URL, "createObjectURL");
+  const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL");
   const { onClose, unmount } = show(map.value);
   await screen.findByText(preview.name);
   await waitFor(() => expect(map.api.addSource).toHaveBeenCalledOnce());
@@ -103,6 +108,7 @@ it("renders the server image as a temporary map layer without creating a data re
     "compute-output-preview-source",
     expect.objectContaining({
       type: "image",
+      url: preview.imageUrl,
       coordinates: preview.imageCoordinates,
     }),
   );
@@ -123,6 +129,39 @@ it("renders the server image as a temporary map layer without creating a data re
   expect(map.api.removeSource).toHaveBeenCalledWith(
     "compute-output-preview-source",
   );
+  expect(createObjectUrl).not.toHaveBeenCalled();
+  expect(revokeObjectUrl).not.toHaveBeenCalled();
+});
+
+it("uses a same-origin PNG API source with project context and Mapbox credentials", async () => {
+  vi.spyOn(computeApi, "mapPreview").mockResolvedValue({
+    ...preview,
+    imageUrl: "/api/compute/outputs/30/map-preview/image/",
+  });
+  const map = mapMock();
+  show(map.value);
+  await waitFor(() => expect(map.api.addSource).toHaveBeenCalledOnce());
+  const url = preview.imageUrl;
+  expect(map.api.addSource).toHaveBeenCalledWith(
+    "compute-output-preview-source",
+    expect.objectContaining({ url }),
+  );
+  expect(projectTransformRequest(url)).toEqual({
+    url: new URL(url, window.location.origin).href,
+    credentials: "include",
+  });
+});
+
+it("rejects an external preview image before requesting or adding it to the map", async () => {
+  vi.spyOn(computeApi, "mapPreview").mockResolvedValue({
+    ...preview,
+    imageUrl: "https://untrusted.example/api/compute/outputs/30/image/",
+  });
+  const map = mapMock();
+  show(map.value);
+  await screen.findByText("结果预览地址无效");
+  expect(window.fetch).not.toHaveBeenCalled();
+  expect(map.api.addSource).not.toHaveBeenCalled();
 });
 
 it("restores the preview after a basemap style change and keeps the camera unchanged", async () => {
@@ -225,25 +264,28 @@ it("refuses a result from another project and does not issue a preview request",
   expect(window.fetch).not.toHaveBeenCalled();
 });
 
-it("clears the private image when repeated authorization fails", async () => {
-  const timeout = vi.spyOn(window, "setTimeout");
-  const map = mapMock();
-  show(map.value);
-  await screen.findByText(preview.name);
-  await waitFor(() => expect(map.api.addSource).toHaveBeenCalledOnce());
-  const reauthorize = timeout.mock.calls.find((call) => call[1] === 15000)?.[0];
-  expect(reauthorize).toBeTypeOf("function");
-  vi.spyOn(computeApi, "mapPreview").mockRejectedValue(
-    new Error("无权查看此计算结果"),
-  );
-  await act(async () => {
-    (reauthorize as () => void)();
-    await Promise.resolve();
-  });
-  await screen.findByText("无权查看此计算结果");
-  expect(map.sources.size).toBe(0);
-  expect(map.layers.size).toBe(0);
-});
+it.each(["无权查看此计算结果", "计算结果已过期"])(
+  "clears the private image when repeated authorization reports %s",
+  async (reason) => {
+    const timeout = vi.spyOn(window, "setTimeout");
+    const map = mapMock();
+    show(map.value);
+    await screen.findByText(preview.name);
+    await waitFor(() => expect(map.api.addSource).toHaveBeenCalledOnce());
+    const reauthorize = timeout.mock.calls.find(
+      (call) => call[1] === 15000,
+    )?.[0];
+    expect(reauthorize).toBeTypeOf("function");
+    vi.spyOn(computeApi, "mapPreview").mockRejectedValue(new Error(reason));
+    await act(async () => {
+      (reauthorize as () => void)();
+      await Promise.resolve();
+    });
+    await screen.findByText(reason);
+    expect(map.sources.size).toBe(0);
+    expect(map.layers.size).toBe(0);
+  },
+);
 
 it("returns to the agent so the user can choose whether to import", async () => {
   show(mapMock().value);
