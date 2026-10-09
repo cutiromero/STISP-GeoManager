@@ -2578,3 +2578,9 @@ Wiki为自动整理内容，保留来源、修订号及主题关联；既有格�
 计算清单增加可选 `qualityReport: {file: "quality.json"}`；报告最大64KiB，字段为version=1、status=passed|needs_review、summary、metrics与knowledgeFacts。worker验证报告并将qualityCheck/knowledgeFacts写入输出元数据。声明的报告缺失、格式无效或需要复核时，直接智能体、后续计算、工作流和导入worker均阻止自动入库，原件与审计成果仍可下载。人工显式入库沿用权限控制。模板7提供面几何修复，先真实试运行再发布；算子接收已登记数据，保留原输入，输出逐要素修复日志、汇总及审核包。
 
 入库worker仅对SQLite的BUSY/LOCKED结果码（含BUSY_SNAPSHOT）按0.2/0.5/1秒退避重试，最多额外3次；每次刷新账号、权限及自动入库意图，并按原storage_key复用资源和图层。最后登记事务先取得写锁，再读取当前权限，避免读快照升级写锁与心跳竞争。普通格式/权限/IO错误仍直接失败；持续繁忙时保留原计算成果，用户可重试入库，无需重算。未新增HTTP字段或状态。
+
+## 聊天计算闭环（2026-10-09）
+
+AgentRun.computeIntent 保存算法版本、输入、已确认参数和修订摘要。GET/POST `/api/agent/runs/{runId}/compute-intent/` 仅允许本用户原项目操作。POST action 为 update/submit/cancel，必须带 planRevision；资源或版本变更、后续消息替代计划返回409。band参数须由用户文字或参数卡确认。提交幂等，真实任务与会话绑定，默认完成后由用户选择入库。查询和入库仅使用本会话关联任务，不猜测最近相似任务。
+
+GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84四角，image子路径返回PNG。两者必须带projectTagId，每次检查用户、项目、任务、输入与文件身份，临时过期则404。前端仅放置临时图层，不入库、不保存工程。

@@ -21750,6 +21750,522 @@
           }
         }
       }
+    },
+    "/api/agent/runs/{runId}/compute-intent/": {
+      "get": {
+        "operationId": "getAgentComputeIntent",
+        "tags": [
+          "Agent"
+        ],
+        "summary": "getAgentComputeIntent",
+        "description": "同一用户、当前项目及真实任务绑定；所有引用每次重新授权，变更计划409，临时过期404",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRun"
+                },
+                "example": {
+                  "id": 91,
+                  "conversationId": 21,
+                  "model": "Qwen3.8-27B",
+                  "status": "succeeded",
+                  "prompt": "计算影像NDVI",
+                  "answer": "请选择红光和近红外波段",
+                  "detail": "等待参数",
+                  "evidence": [],
+                  "attachments": [],
+                  "createdAt": "2026-10-09T08:00:00Z",
+                  "updatedAt": "2026-10-09T08:00:00Z",
+                  "contextTruncated": false,
+                  "computeIntent": {
+                    "status": "collecting",
+                    "message": "请选择波段",
+                    "algorithm": null,
+                    "inputs": {
+                      "image": 10
+                    },
+                    "inputCandidates": [],
+                    "parameters": {},
+                    "missingInputs": [],
+                    "missingParameters": [
+                      "red",
+                      "nir"
+                    ],
+                    "warnings": [],
+                    "knowledgeEvidenceIds": [],
+                    "taskId": null,
+                    "autoImport": false,
+                    "planRevision": "plan-example"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限撤回",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "对象不存在、无权访问或过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "计划或文件身份变更",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务暂不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "原会话运行",
+            "schema": {
+              "type": "integer",
+              "description": "标识",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前单个项目",
+            "schema": {
+              "type": "integer",
+              "description": "标识",
+              "minimum": 1
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "updateAgentComputeIntent",
+        "tags": [
+          "Agent"
+        ],
+        "summary": "updateAgentComputeIntent",
+        "description": "同一用户、当前项目及真实任务绑定；所有引用每次重新授权，变更计划409，临时过期404",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限撤回",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "对象不存在、无权访问或过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "计划或文件身份变更",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务暂不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "原会话运行",
+            "schema": {
+              "type": "integer",
+              "description": "标识",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前单个项目",
+            "schema": {
+              "type": "integer",
+              "description": "标识",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "计划操作",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentComputeIntentUpdate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compute/outputs/{outputId}/map-preview/": {
+      "get": {
+        "operationId": "previewComputeOutputMap",
+        "tags": [
+          "Compute"
+        ],
+        "summary": "previewComputeOutputMap",
+        "description": "同一用户、当前项目及真实任务绑定；所有引用每次重新授权，变更计划409，临时过期404",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeMapPreview"
+                },
+                "example": {
+                  "name": "影像 · NDVI",
+                  "kind": "raster",
+                  "metadata": {
+                    "bands": 1
+                  },
+                  "temporary": true,
+                  "imageUrl": "/api/compute/outputs/50/map-preview/image/?projectTagId=1",
+                  "imageCoordinates": [
+                    [
+                      88,
+                      41
+                    ],
+                    [
+                      89,
+                      41
+                    ],
+                    [
+                      89,
+                      40
+                    ],
+                    [
+                      88,
+                      40
+                    ]
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限撤回",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "对象不存在、无权访问或过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "计划或文件身份变更",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务暂不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "outputId",
+            "in": "path",
+            "required": true,
+            "description": "计算输出",
+            "schema": {
+              "type": "integer",
+              "description": "标识",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "projectTagId",
+            "in": "query",
+            "required": true,
+            "description": "所属项目，与请求头冲突则400",
+            "schema": {
+              "type": "integer",
+              "description": "标识",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/compute/outputs/{outputId}/map-preview/image/": {
+      "get": {
+        "operationId": "renderComputeOutputMap",
+        "tags": [
+          "Compute"
+        ],
+        "summary": "renderComputeOutputMap",
+        "description": "同一用户、当前项目及真实任务绑定；所有引用每次重新授权，变更计划409，临时过期404",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "description": "PNG图像",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限撤回",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "对象不存在、无权访问或过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "计划或文件身份变更",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "服务暂不可用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "outputId",
+            "in": "path",
+            "required": true,
+            "description": "计算输出",
+            "schema": {
+              "type": "integer",
+              "description": "标识",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "projectTagId",
+            "in": "query",
+            "required": true,
+            "description": "所属项目，与请求头冲突则400",
+            "schema": {
+              "type": "integer",
+              "description": "标识",
+              "minimum": 1
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -22741,10 +23257,234 @@
           }
         }
       },
+      "AgentComputeIntent": {
+        "type": "object",
+        "description": "当前聊天持久计算计划；缺波段语义暂停选择，成功状态绑定真实任务",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "计划状态",
+            "enum": [
+              "collecting",
+              "ready",
+              "submitted",
+              "blocked",
+              "superseded",
+              "cancelled"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "当前操作说明"
+          },
+          "algorithm": {
+            "description": "实际已发布算法版本",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComputeVersion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inputs": {
+            "type": "object",
+            "description": "清单输入键与授权资源",
+            "additionalProperties": {
+              "type": "integer",
+              "description": "资源标识"
+            }
+          },
+          "inputCandidates": {
+            "type": "array",
+            "description": "授权计算资源候选",
+            "items": {
+              "$ref": "#/components/schemas/ComputeCandidate"
+            }
+          },
+          "parameters": {
+            "type": "object",
+            "description": "已确认清单参数",
+            "additionalProperties": true
+          },
+          "missingInputs": {
+            "type": "array",
+            "description": "待选择输入",
+            "items": {
+              "type": "string",
+              "description": "元素"
+            }
+          },
+          "missingParameters": {
+            "type": "array",
+            "description": "待确认参数",
+            "items": {
+              "type": "string",
+              "description": "元素"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "description": "适用条件",
+            "items": {
+              "type": "string",
+              "description": "元素"
+            }
+          },
+          "knowledgeEvidenceIds": {
+            "type": "array",
+            "description": "知识证据标识",
+            "items": {
+              "type": "integer",
+              "description": "元素"
+            }
+          },
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "真实任务回执"
+          },
+          "autoImport": {
+            "type": "boolean",
+            "description": "用户授权自动入库，默认false"
+          },
+          "planRevision": {
+            "type": "string",
+            "description": "版本与资源参数修订摘要"
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "algorithm",
+          "inputs",
+          "inputCandidates",
+          "parameters",
+          "missingInputs",
+          "missingParameters",
+          "warnings",
+          "knowledgeEvidenceIds",
+          "taskId",
+          "autoImport",
+          "planRevision"
+        ],
+        "additionalProperties": false
+      },
+      "AgentComputeIntentUpdate": {
+        "type": "object",
+        "description": "修改、提交或取消当前持久计划",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "操作",
+            "enum": [
+              "update",
+              "submit",
+              "cancel"
+            ]
+          },
+          "planRevision": {
+            "type": "string",
+            "description": "版本与资源参数修订摘要"
+          },
+          "inputs": {
+            "type": "object",
+            "description": "清单输入键与授权资源",
+            "additionalProperties": {
+              "type": "integer",
+              "description": "资源标识"
+            }
+          },
+          "parameters": {
+            "type": "object",
+            "description": "已确认清单参数",
+            "additionalProperties": true
+          },
+          "autoImport": {
+            "type": "boolean",
+            "description": "用户授权自动入库，默认false"
+          }
+        },
+        "required": [
+          "action",
+          "planRevision"
+        ],
+        "additionalProperties": false
+      },
+      "ComputeMapPreview": {
+        "type": "object",
+        "description": "后端渲染的临时栅格；不登记资源，不保存工程",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "结果名称"
+          },
+          "kind": {
+            "type": "string",
+            "description": "输出类型",
+            "enum": [
+              "raster"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "description": "真实输出元信息",
+            "additionalProperties": true
+          },
+          "temporary": {
+            "type": "boolean",
+            "description": "临时图层",
+            "const": true
+          },
+          "imageUrl": {
+            "type": "string",
+            "description": "私有PNG地址，每次重新授权"
+          },
+          "imageCoordinates": {
+            "type": "array",
+            "description": "WGS84左上右上右下左下",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": {
+              "type": "array",
+              "description": "经纬度",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number",
+                "description": "坐标"
+              }
+            }
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "metadata",
+          "temporary",
+          "imageUrl",
+          "imageCoordinates"
+        ],
+        "additionalProperties": false
+      },
       "AgentRun": {
         "type": "object",
         "description": "持久运行记录；引用失权时返回 403，不返回旧内容",
         "properties": {
+          "computeIntent": {
+            "description": "Persistent computation plan",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentComputeIntent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "budgetProfile": {
             "type": "string",
             "description": "实际方案，旧任务为空",
@@ -35455,6 +36195,18 @@
           "previewUrl": {
             "type": "string",
             "description": "文字"
+          },
+          "resourceName": {
+            "type": "string",
+            "description": "Authorized registered resource name"
+          },
+          "resourceLocation": {
+            "type": "string",
+            "description": "Project and catalog location"
+          },
+          "mapUrl": {
+            "type": "string",
+            "description": "Direct geographic workspace link when registered"
           }
         },
         "required": [

@@ -1,0 +1,67 @@
+{
+  "GET /api/agent/runs/{runId}/compute-intent/": {
+    "200": {
+      "id": 91,
+      "conversationId": 21,
+      "model": "Qwen3.8-27B",
+      "status": "succeeded",
+      "prompt": "计算影像NDVI",
+      "answer": "请选择红光和近红外波段",
+      "detail": "等待参数",
+      "evidence": [],
+      "attachments": [],
+      "createdAt": "2026-10-09T08:00:00Z",
+      "updatedAt": "2026-10-09T08:00:00Z",
+      "contextTruncated": false,
+      "computeIntent": {
+        "status": "collecting",
+        "message": "请选择波段",
+        "algorithm": null,
+        "inputs": {
+          "image": 10
+        },
+        "inputCandidates": [],
+        "parameters": {},
+        "missingInputs": [],
+        "missingParameters": [
+          "red",
+          "nir"
+        ],
+        "warnings": [],
+        "knowledgeEvidenceIds": [],
+        "taskId": null,
+        "autoImport": false,
+        "planRevision": "plan-example"
+      }
+    }
+  },
+  "GET /api/compute/outputs/{outputId}/map-preview/": {
+    "200": {
+      "name": "影像 · NDVI",
+      "kind": "raster",
+      "metadata": {
+        "bands": 1
+      },
+      "temporary": true,
+      "imageUrl": "/api/compute/outputs/50/map-preview/image/?projectTagId=1",
+      "imageCoordinates": [
+        [
+          88,
+          41
+        ],
+        [
+          89,
+          41
+        ],
+        [
+          89,
+          40
+        ],
+        [
+          88,
+          40
+        ]
+      ]
+    }
+  }
+}

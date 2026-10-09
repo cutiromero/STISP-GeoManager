@@ -537,9 +537,154 @@ export type AgentGenerationParameters = {
 };
 
 /**
+ * 当前聊天持久计算计划；缺波段语义暂停选择，成功状态绑定真实任务
+ */
+export type AgentComputeIntent = {
+    /**
+     * 计划状态
+     */
+    status: 'collecting' | 'ready' | 'submitted' | 'blocked' | 'superseded' | 'cancelled';
+    /**
+     * 当前操作说明
+     */
+    message: string;
+    /**
+     * 实际已发布算法版本
+     */
+    algorithm: ComputeVersion | null;
+    /**
+     * 清单输入键与授权资源
+     */
+    inputs: {
+        [key: string]: number;
+    };
+    /**
+     * 授权计算资源候选
+     */
+    inputCandidates: Array<ComputeCandidate>;
+    /**
+     * 已确认清单参数
+     */
+    parameters: {
+        [key: string]: unknown;
+    };
+    /**
+     * 待选择输入
+     */
+    missingInputs: Array<string>;
+    /**
+     * 待确认参数
+     */
+    missingParameters: Array<string>;
+    /**
+     * 适用条件
+     */
+    warnings: Array<string>;
+    /**
+     * 知识证据标识
+     */
+    knowledgeEvidenceIds: Array<number>;
+    /**
+     * 真实任务回执
+     */
+    taskId: string | null;
+    /**
+     * 用户授权自动入库，默认false
+     */
+    autoImport: boolean;
+    /**
+     * 版本与资源参数修订摘要
+     */
+    planRevision: string;
+};
+
+/**
+ * 修改、提交或取消当前持久计划
+ */
+export type AgentComputeIntentUpdate = {
+    /**
+     * 操作
+     */
+    action: 'update' | 'submit' | 'cancel';
+    /**
+     * 版本与资源参数修订摘要
+     */
+    planRevision: string;
+    /**
+     * 清单输入键与授权资源
+     */
+    inputs?: {
+        [key: string]: number;
+    };
+    /**
+     * 已确认清单参数
+     */
+    parameters?: {
+        [key: string]: unknown;
+    };
+    /**
+     * 用户授权自动入库，默认false
+     */
+    autoImport?: boolean;
+};
+
+/**
+ * 后端渲染的临时栅格；不登记资源，不保存工程
+ */
+export type ComputeMapPreview = {
+    /**
+     * 结果名称
+     */
+    name: string;
+    /**
+     * 输出类型
+     */
+    kind: 'raster';
+    /**
+     * 真实输出元信息
+     */
+    metadata: {
+        [key: string]: unknown;
+    };
+    /**
+     * 临时图层
+     */
+    temporary: true;
+    /**
+     * 私有PNG地址，每次重新授权
+     */
+    imageUrl: string;
+    /**
+     * WGS84左上右上右下左下
+     */
+    imageCoordinates: [
+        [
+            number,
+            number
+        ],
+        [
+            number,
+            number
+        ],
+        [
+            number,
+            number
+        ],
+        [
+            number,
+            number
+        ]
+    ];
+};
+
+/**
  * 持久运行记录；引用失权时返回 403，不返回旧内容
  */
 export type AgentRun = {
+    /**
+     * Persistent computation plan
+     */
+    computeIntent?: AgentComputeIntent | null;
     /**
      * 实际方案，旧任务为空
      */
@@ -8178,6 +8323,18 @@ export type ComputeOutput = {
      * 文字
      */
     previewUrl: string;
+    /**
+     * Authorized registered resource name
+     */
+    resourceName?: string;
+    /**
+     * Project and catalog location
+     */
+    resourceLocation?: string;
+    /**
+     * Direct geographic workspace link when registered
+     */
+    mapUrl?: string;
 };
 
 /**
@@ -16898,3 +17055,228 @@ export type UpdateAgentAdminResponses = {
 };
 
 export type UpdateAgentAdminResponse = UpdateAgentAdminResponses[keyof UpdateAgentAdminResponses];
+
+export type GetAgentComputeIntentData = {
+    body?: never;
+    headers: {
+        /**
+         * 标识
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 标识
+         */
+        runId: number;
+    };
+    query?: never;
+    url: '/api/agent/runs/{runId}/compute-intent/';
+};
+
+export type GetAgentComputeIntentErrors = {
+    /**
+     * 参数错误
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 权限撤回
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在、无权访问或过期
+     */
+    404: ErrorResponse;
+    /**
+     * 计划或文件身份变更
+     */
+    409: ErrorResponse;
+    /**
+     * 服务暂不可用
+     */
+    503: ErrorResponse;
+};
+
+export type GetAgentComputeIntentError = GetAgentComputeIntentErrors[keyof GetAgentComputeIntentErrors];
+
+export type GetAgentComputeIntentResponses = {
+    /**
+     * 成功
+     */
+    200: AgentRun;
+};
+
+export type GetAgentComputeIntentResponse = GetAgentComputeIntentResponses[keyof GetAgentComputeIntentResponses];
+
+export type UpdateAgentComputeIntentData = {
+    /**
+     * 计划操作
+     */
+    body: AgentComputeIntentUpdate;
+    headers: {
+        /**
+         * 标识
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 标识
+         */
+        runId: number;
+    };
+    query?: never;
+    url: '/api/agent/runs/{runId}/compute-intent/';
+};
+
+export type UpdateAgentComputeIntentErrors = {
+    /**
+     * 参数错误
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 权限撤回
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在、无权访问或过期
+     */
+    404: ErrorResponse;
+    /**
+     * 计划或文件身份变更
+     */
+    409: ErrorResponse;
+    /**
+     * 服务暂不可用
+     */
+    503: ErrorResponse;
+};
+
+export type UpdateAgentComputeIntentError = UpdateAgentComputeIntentErrors[keyof UpdateAgentComputeIntentErrors];
+
+export type UpdateAgentComputeIntentResponses = {
+    /**
+     * 成功
+     */
+    200: AgentRun;
+};
+
+export type UpdateAgentComputeIntentResponse = UpdateAgentComputeIntentResponses[keyof UpdateAgentComputeIntentResponses];
+
+export type PreviewComputeOutputMapData = {
+    body?: never;
+    path: {
+        /**
+         * 标识
+         */
+        outputId: number;
+    };
+    query: {
+        /**
+         * 标识
+         */
+        projectTagId: number;
+    };
+    url: '/api/compute/outputs/{outputId}/map-preview/';
+};
+
+export type PreviewComputeOutputMapErrors = {
+    /**
+     * 参数错误
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 权限撤回
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在、无权访问或过期
+     */
+    404: ErrorResponse;
+    /**
+     * 计划或文件身份变更
+     */
+    409: ErrorResponse;
+    /**
+     * 服务暂不可用
+     */
+    503: ErrorResponse;
+};
+
+export type PreviewComputeOutputMapError = PreviewComputeOutputMapErrors[keyof PreviewComputeOutputMapErrors];
+
+export type PreviewComputeOutputMapResponses = {
+    /**
+     * 成功
+     */
+    200: ComputeMapPreview;
+};
+
+export type PreviewComputeOutputMapResponse = PreviewComputeOutputMapResponses[keyof PreviewComputeOutputMapResponses];
+
+export type RenderComputeOutputMapData = {
+    body?: never;
+    path: {
+        /**
+         * 标识
+         */
+        outputId: number;
+    };
+    query: {
+        /**
+         * 标识
+         */
+        projectTagId: number;
+    };
+    url: '/api/compute/outputs/{outputId}/map-preview/image/';
+};
+
+export type RenderComputeOutputMapErrors = {
+    /**
+     * 参数错误
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 权限撤回
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在、无权访问或过期
+     */
+    404: ErrorResponse;
+    /**
+     * 计划或文件身份变更
+     */
+    409: ErrorResponse;
+    /**
+     * 服务暂不可用
+     */
+    503: ErrorResponse;
+};
+
+export type RenderComputeOutputMapError = RenderComputeOutputMapErrors[keyof RenderComputeOutputMapErrors];
+
+export type RenderComputeOutputMapResponses = {
+    /**
+     * PNG图像
+     */
+    200: Blob | File;
+};
+
+export type RenderComputeOutputMapResponse = RenderComputeOutputMapResponses[keyof RenderComputeOutputMapResponses];

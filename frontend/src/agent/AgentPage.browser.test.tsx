@@ -11,6 +11,11 @@ import type {
   AgentWorkflow,
 } from "../api/generated/types.gen";
 import AgentPage from "./AgentPage";
+import {
+  computeIntent,
+  computeRun,
+  liveComputeTask,
+} from "./computeFlow.testFixtures";
 
 vi.mock("../components/WorkspaceHeader", () => ({
   default: () => (
@@ -121,6 +126,91 @@ function showAgent(mode: "chat" | "workbench" = "chat") {
     </AntApp>,
   );
 }
+
+it("restores the parameter card and starts a real task from the same conversation turn", async () => {
+  vi.spyOn(agentApi, "detail").mockResolvedValue({
+    conversation,
+    runs: [computeRun({ ...computeIntent, parameters: { red: 3, nir: 8 } })],
+  });
+  const updated = computeRun({
+    ...computeIntent,
+    status: "submitted",
+    parameters: { red: 3, nir: 8 },
+    taskId: "real-task",
+    planRevision: "submitted-plan",
+  });
+  const submitIntent = vi
+    .spyOn(agentApi, "updateComputeIntent")
+    .mockResolvedValue(updated);
+  const task = liveComputeTask("succeeded");
+  vi.spyOn(agentApi, "computeTasks").mockResolvedValue({
+    items: [
+      { task, autoImport: false, trackingStatus: "completed", detail: "" },
+    ],
+  });
+  showAgent("workbench");
+  const start = await screen.findByRole("button", { name: "开始计算" });
+  await page.screenshot({
+    path: "../../test-results/agent-compute-config.png",
+  });
+  fireEvent.click(start);
+  await screen.findByText("计算完成，结果已保存。");
+  expect(submitIntent).toHaveBeenCalledWith(
+    8,
+    expect.objectContaining({
+      parameters: { red: 3, nir: 8 },
+      autoImport: false,
+    }),
+  );
+  expect(agentApi.submit).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("region", { name: "计算配置" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "在地理工作台查看" }),
+  ).toBeInTheDocument();
+  await page.screenshot({
+    path: "../../test-results/agent-compute-complete.png",
+  });
+});
+
+it("immediately tracks an automatic task returned from explicit bands in the input", async () => {
+  const intent = {
+    ...computeIntent,
+    status: "submitted" as const,
+    parameters: { red: 3, nir: 8 },
+    missingParameters: [],
+    taskId: "real-task",
+  };
+  vi.spyOn(agentApi, "submit").mockResolvedValue({
+    ...computeRun(intent),
+    prompt: "计算NDVI，红光第三波段，近红外第八波段",
+  });
+  vi.spyOn(agentApi, "computeTasks").mockResolvedValue({
+    items: [
+      {
+        task: liveComputeTask("succeeded"),
+        autoImport: false,
+        trackingStatus: "completed",
+        detail: "",
+      },
+    ],
+  });
+  showAgent("workbench");
+  await screen.findByText("旧问题");
+  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+    target: { value: "计算NDVI，红光第三波段，近红外第八波段" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText("计算完成，结果已保存。");
+  expect(agentApi.submit).toHaveBeenCalledOnce();
+  expect(
+    screen.queryByRole("region", { name: "计算配置" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("运行详情", { exact: true }),
+  ).not.toBeInTheDocument();
+});
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();

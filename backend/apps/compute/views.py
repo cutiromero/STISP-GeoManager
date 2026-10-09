@@ -10,7 +10,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Case, When, Value, IntegerField, Q
 from django.conf import settings
 from django.db.models.deletion import ProtectedError
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 
@@ -461,6 +461,52 @@ def output_file(request, output_id):
 def output_preview(request, output_id):
     output = authorized_output(request, output_id)
     return JsonResponse(preview(output))
+
+
+def authorized_map_output(request, output_id):
+    output = authorized_output(request, output_id)
+    require_actor(request.user, project_id(), "core.browse_data")
+    resources = [item.resource_id for item in output.task.input_records.all()]
+    visible = filter_accessible(
+        DataResource.objects.filter(pk__in=resources, status="active"),
+        request.user,
+    ).values_list("id", flat=True)
+    if set(resources) != set(visible):
+        raise ComputeError(
+            "\u8ba1\u7b97\u8f93\u5165\u7684\u8bbf\u95ee\u6743\u9650\u5df2\u64a4\u56de",
+            403,
+        )
+    return output
+
+
+@endpoint(["GET"])
+def output_map_preview(request, output_id):
+    from .map_preview import ensure_map_preview
+
+    output = authorized_map_output(request, output_id)
+    _, metadata = ensure_map_preview(output)
+    return JsonResponse(
+        {
+            "name": output.task.name + " \u00b7 " + output.label,
+            "kind": "raster",
+            "metadata": {**output.metadata, **metadata},
+            "temporary": True,
+            "imageUrl": f"/api/compute/outputs/{output.id}/map-preview/image/?projectTagId={output.task.project_tag_id}",
+            "imageCoordinates": metadata["imageCoordinates"],
+        }
+    )
+
+
+@endpoint(["GET"])
+def output_map_image(request, output_id):
+    from .map_preview import ensure_map_preview
+
+    output = authorized_map_output(request, output_id)
+    image, _ = ensure_map_preview(output)
+    response = HttpResponse(image, content_type="image/png")
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @endpoint(["POST"])

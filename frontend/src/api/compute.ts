@@ -11,6 +11,7 @@ import type {
   ComputeOutput,
   ComputePreflight,
   ComputePreview,
+  ComputeMapPreview,
   ComputeRuntimeStatus,
   ComputeTask,
   ComputeTaskCreate,
@@ -88,6 +89,8 @@ export const computeApi = {
     }),
   preview: (id: number) =>
     requestJson<ComputePreview>(`/api/compute/outputs/${id}/preview/`),
+  mapPreview: (id: number) =>
+    requestJson<ComputeMapPreview>(`/api/compute/outputs/${id}/map-preview/`),
   upload: async (id: number, file: File): Promise<ComputeVersion> => {
     const body = new FormData();
     body.set("file", file);

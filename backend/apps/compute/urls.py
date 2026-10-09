@@ -16,5 +16,7 @@ urlpatterns = [
     path("tasks/<uuid:task_id>/", views.task_detail),
     path("outputs/<int:output_id>/file/", views.output_file),
     path("outputs/<int:output_id>/preview/", views.output_preview),
+    path("outputs/<int:output_id>/map-preview/", views.output_map_preview),
+    path("outputs/<int:output_id>/map-preview/image/", views.output_map_image),
     path("outputs/<int:output_id>/import/", views.output_import),
 ]

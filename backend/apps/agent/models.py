@@ -89,6 +89,7 @@ class AgentRun(ProjectScopedModel):
     attachment_ids = models.JSONField(default=list)
     internet_enabled = models.BooleanField(default=False)
     evidence = models.JSONField(default=list)
+    compute_intent = models.JSONField(default=dict, db_default={})
     context_truncated = models.BooleanField(default=False)
     cancel_requested = models.BooleanField(default=False)
     heartbeat = models.DateTimeField(null=True)

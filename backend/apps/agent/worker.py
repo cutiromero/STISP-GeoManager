@@ -134,7 +134,7 @@ def input_prompt(run):
 SYSTEM_CHAT = "你是平台的本地模型助手。使用用户的语言回答。普通聊天不能访问平台数据，不要声称已读取数据、运行代码或执行操作。"
 SYSTEM_AGENT = """你是当前项目的数据分析智能体。按问题选择必要工具：纯知识问题直接查知识；数据分析先发现数据、读取字段，再计算和检查。需要更多信息可在final中向用户询问。
 计算状态必须通过get_compute_task实时查询；历史queued证据只代表提交时状态。taskId为UUID，outputId为outputs中的正整数，二者绝不能互换或猜测。
-用户要求计算并入库时，execute_operator设置autoImport=true；已有任务可直接以taskId调用import_compute_result，不要求用户查outputId。跟踪由平台后台完成，不反复忙等。
+计算完成后默认由用户在结果卡选择入库；仅用户明确要求自动入库时设置autoImport=true。追问进度、入库、结果位置时只使用本会话真实工具记录中的任务，禁止从全库旧任务猜测。没有本轮真实提交工具返回时不能说已提交或完成。
 查找算法时优先给list_compute_algorithms传1至3个目标关键词query（空格分隔）；没找到可换词或省略query看目录。执行前必须核对所选具体版本返回的完整manifest，按真实输入key、参数约束和输出声明操作。
 仅在任务succeeded且输出importStatus=ready时说明已入库；排队、计算中、入库中需准确说明，后台会继续更新任务卡。
 专业判断先search_knowledge核对来源和适用条件，结构化事实可用check_knowledge_constraints；needs_context表示条件不足。不能依据理论直接改写原始数据。
@@ -156,63 +156,23 @@ final逐项回答本轮用户明确要求；用户问有哪些字段时列出des
 
 
 def append_compute_status(answer, run, user, policy_value):
-    """Refresh status after generation without another model round trip."""
+    """Platform reports use durable tasks, independently of model wording."""
     from .compute_tools import run_tasks
+    from .compute_intents import report, match_version
+    from .compute_intent_text import computation_requested, followup_question
 
     cards = run_tasks(run, user, policy_value)["items"]
-    if not cards:
-        return answer
-    labels = {
-        "queued": "等待计算资源",
-        "running": "正在计算",
-        "preparing": "准备计算",
-        "succeeded": "计算完成",
-        "failed": "计算失败",
-        "cancelled": "计算已取消",
-        "cancelling": "正在取消",
-        "expired": "结果已过期",
-    }
-    lines = [
-        answer,
-        "",
-        "---",
-        "",
-        "**答复结束时的任务状态**",
-        "",
-        "以下为平台实时核验结果，更新生成过程中的状态记录。",
-        "",
-    ]
-    for card in cards:
-        task = card["task"]
-        state = labels.get(task["status"], "任务状态：" + task["status"])
-        outputs = task.get("outputs", [])
-        ready = [
-            output
-            for output in outputs
-            if output.get("importStatus") == "ready"
-            and type(output.get("resourceId")) is int
-        ]
-        if task["status"] == "succeeded":
-            if ready:
-                ids = "、".join(str(output["resourceId"]) for output in ready)
-                state += f"；{len(ready)} 项结果已入库（数据编号：{ids}）"
-            elif card["trackingStatus"] == "blocked":
-                state += "；自动入库已暂停，结果保留，请查看任务卡说明"
-            elif card["trackingStatus"] == "waiting_import":
-                state += "；结果正在入库"
-            else:
-                state += "；结果尚未入库"
-        elif card["autoImport"] and task["status"] in {
-            "queued",
-            "running",
-            "preparing",
-        }:
-            state += "；完成并通过检查后自动入库"
-        lines.append(f"- 任务 `{task['id']}`：{state}。")
-    lines.extend(
-        ["", "核验时间：" + timezone.localtime().strftime("%Y-%m-%d %H:%M:%S %z")]
+    if cards:
+        return report(run, user, policy_value)
+    if run.compute_intent:
+        return run.compute_intent["message"] + "。请使用下方计算卡片选择参数并运行。"
+    attempted = any(item.get("tool") == "execute_operator" for item in run.evidence)
+    requested = computation_requested(run.prompt) and (
+        match_version(run) is not None or attempted
     )
-    return "\n".join(lines)
+    if requested or followup_question(run.prompt):
+        return "本轮没有实际提交或入库的计算记录。请在计算卡片中核对输入和参数后运行。"
+    return answer
 
 
 def append_requested_fields(answer, run):
@@ -387,6 +347,16 @@ def run_task(run_id):
             p = require_access(
                 fresh_user(run.owner_id), run.conversation.mode, run.model
             )
+            if run.conversation.mode == "agent":
+                from .compute_intents import process
+
+                deterministic_answer = process(run, fresh_user(run.owner_id), p)
+                if deterministic_answer is not None:
+                    check()
+                    run.answer = deterministic_answer
+                    AgentRun.objects.filter(pk=run.id).update(answer=run.answer)
+                    event(run, "text", run.answer)
+                    return
             model = registry()[run.model]
             deadline = time.monotonic() + p["maxRunSeconds"]
             service_window = model_window(model)

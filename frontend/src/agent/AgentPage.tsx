@@ -54,6 +54,7 @@ import SafeMarkdown from "./SafeMarkdown";
 import TaskBudgetControl from "./TaskBudgetControl";
 import RunEvidence from "./RunEvidence";
 import RunComputeTasks from "./RunComputeTasks";
+import ComputeIntentCard from "./ComputeIntentCard";
 import WorkflowPanel from "./WorkflowPanel";
 import AgentResizeHandle from "./AgentResizeHandle";
 import useAgentLayout from "./useAgentLayout";
@@ -834,8 +835,10 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                   <Space className="agent-answer-heading">
                     <RobotOutlined />
                     <strong>
-                      {bootstrap?.models.find((m) => m.alias === r.model)
-                        ?.name ?? r.model}
+                      {r.computeIntent
+                        ? ui("平台计算助手", "Platform compute assistant")
+                        : (bootstrap?.models.find((m) => m.alias === r.model)
+                            ?.name ?? r.model)}
                     </strong>
                     {r.status !== "succeeded" && (
                       <span
@@ -877,43 +880,57 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       )}
                     </p>
                   )}
-                  {(r.thinkingMode === "deep" || r.thinkingText) && (
-                    <Collapse
-                      size="small"
-                      className="agent-thinking-panel"
-                      defaultActiveKey={active(r) ? ["thinking"] : []}
-                      items={[
-                        {
-                          key: "thinking",
-                          label: active(r)
-                            ? ui(
-                                "模型思考过程（生成中）",
-                                "Model reasoning (generating)",
-                              )
-                            : `${ui("模型思考过程", "Model reasoning")}${r.thinkingDurationMs ? ` · ${(r.thinkingDurationMs / 1000).toFixed(1)}s` : ""}`,
-                          children: (
-                            <pre className="agent-thinking-content">
-                              {r.id === running?.id
-                                ? events
-                                    .filter((e) => e.kind === "thinking")
-                                    .map((e) => e.text)
-                                    .join("") ||
-                                  ui(
-                                    "正在等待模型返回思考内容…",
-                                    "Waiting for the model reasoning stream…",
-                                  )
-                                : r.thinkingText ||
-                                  ui(
-                                    "本次未保存到思考片段，请结合运行状态查看原因。",
-                                    "No reasoning segments were saved. See the run status below.",
-                                  )}
-                            </pre>
+                  {!r.computeIntent &&
+                    (r.thinkingMode === "deep" || r.thinkingText) && (
+                      <Collapse
+                        size="small"
+                        className="agent-thinking-panel"
+                        defaultActiveKey={active(r) ? ["thinking"] : []}
+                        items={[
+                          {
+                            key: "thinking",
+                            label: active(r)
+                              ? ui(
+                                  "模型思考过程（生成中）",
+                                  "Model reasoning (generating)",
+                                )
+                              : `${ui("模型思考过程", "Model reasoning")}${r.thinkingDurationMs ? ` · ${(r.thinkingDurationMs / 1000).toFixed(1)}s` : ""}`,
+                            children: (
+                              <pre className="agent-thinking-content">
+                                {r.id === running?.id
+                                  ? events
+                                      .filter((e) => e.kind === "thinking")
+                                      .map((e) => e.text)
+                                      .join("") ||
+                                    ui(
+                                      "正在等待模型返回思考内容…",
+                                      "Waiting for the model reasoning stream…",
+                                    )
+                                  : r.thinkingText ||
+                                    ui(
+                                      "本次未保存到思考片段，请结合运行状态查看原因。",
+                                      "No reasoning segments were saved. See the run status below.",
+                                    )}
+                              </pre>
+                            ),
+                          },
+                        ]}
+                      />
+                    )}
+                  <SafeMarkdown text={r.answer} />
+                  {mode === "agent" && r.computeIntent && (
+                    <ComputeIntentCard
+                      runId={r.id}
+                      intent={r.computeIntent}
+                      onChanged={(next) =>
+                        setRuns((old) =>
+                          old.map((item) =>
+                            item.id === next.id ? next : item,
                           ),
-                        },
-                      ]}
+                        )
+                      }
                     />
                   )}
-                  <SafeMarkdown text={r.answer} />
                   {active(r) && !r.answer && (
                     <p className="agent-live-progress" role="status">
                       <span aria-hidden="true" />
@@ -931,13 +948,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     </p>
                   )}
                   {mode === "agent" &&
-                    r.evidence.some((item) =>
-                      [
-                        "execute_operator",
-                        "get_compute_task",
-                        "import_compute_result",
-                      ].includes(item.tool),
-                    ) && (
+                    (r.computeIntent?.taskId ||
+                      r.evidence.some((item) =>
+                        [
+                          "execute_operator",
+                          "get_compute_task",
+                          "import_compute_result",
+                        ].includes(item.tool),
+                      )) && (
                       <RunComputeTasks runId={r.id} refreshKey={r.updatedAt} />
                     )}
                   <RunEvidence
@@ -952,7 +970,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       showIcon
                     />
                   )}
-                  {!active(r) && (
+                  {!active(r) && !r.computeIntent && (
                     <Space className="agent-answer-actions">
                       <Button
                         size="small"

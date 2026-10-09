@@ -1,0 +1,69 @@
+.compute-map-preview-bar {
+  position: absolute;
+  z-index: 12;
+  top: 102px;
+  left: 50%;
+  width: min(480px, calc(100% - 32px));
+  transform: translateX(-50%);
+  border: 1px solid #c8dce9;
+  border-radius: 16px;
+  padding: 14px 16px 10px;
+  background: #f8fcfff5;
+  box-shadow: 0 8px 28px #193e6326;
+  backdrop-filter: blur(12px);
+  color: #315269;
+}
+.compute-map-preview-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.compute-map-preview-title > .anticon {
+  margin-top: 4px;
+  color: #477d9e;
+}
+.compute-map-preview-title > div {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+}
+.compute-map-preview-title strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.compute-map-preview-title span,
+.compute-map-preview-opacity,
+.compute-map-preview-bar > .ant-btn {
+  font-size: 12px;
+  color: #698195;
+}
+.compute-map-preview-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  font-size: 13px;
+}
+.compute-map-preview-opacity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 12px 0 0;
+}
+.compute-map-preview-opacity > .ant-slider {
+  flex: 1;
+}
+.compute-map-preview-bar > .ant-alert {
+  margin: 10px 0;
+}
+.compute-map-preview-bar > .ant-btn {
+  height: auto;
+  white-space: normal;
+  padding: 5px 0;
+}
+@media (max-width: 700px) {
+  .compute-map-preview-bar {
+    top: 160px;
+  }
+}

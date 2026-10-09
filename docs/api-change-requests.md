@@ -33,6 +33,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261009-001 | BackendReady | /api/agent/runs/{runId}/compute-intent/; /api/compute/outputs/{outputId}/map-preview/ | persistent plan; authorized preview | Updated | Added | In progress | Pending | Real execution and user-controlled import |
 | API-20261004-001 | Verified | /api/knowledge/documents/; /api/knowledge/wiki/; ComputeManifest | document retrieval; automatic Wiki; quality gate | Updated | Added | Passed | Passed | Real development candidate; project and owner scopes isolated |
 | API-20260924-001 | Verified | /api/agent/admin/; /api/agent/bootstrap/; /api/agent/conversations/{id}/runs/ | role ceilings; task budgets; usage | Updated | HTTP model fixtures | Passed | Passed | Local browser; backend request capture; v0.1.15 |
 | API-20260922-001 | Verified | /api/agent/*; /api/compute/algorithms/ | generation controls; stable order | Updated | HTTP model fixtures | Passed | Passed | v0.1.13 server receipt; actual token accounting and two published algorithms |
@@ -913,3 +914,16 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Mock examples: `mock/prism/examples/98-knowledge-workflow.json`；知识样例来自已核查的种子条目，编排和关联任务默认返回空列表。
 - ComputeManifest 可选 `agent.enabled` 控制算法是否接受智能体调用；未配置仍沿用发布状态、平台策略与权限约束。
 - 修正原有 mock 构建失败：移除误把具体资源 ID 写作路由、且与 `20-admin-dashboard-data.json` 重复的资源更新样例，统一使用契约中的 `{id}` 路由及现有响应。
+
+## API-20261009-001 - 聊天计算计划与临时地图结果
+
+- Status: BackendReady
+- Owner: Root契约；executor后端；compute_flow_frontend前端。
+- Endpoints: /api/agent/runs/{runId}/compute-intent/; /api/compute/outputs/{outputId}/map-preview/; map-preview/image/。
+- Change type: 持久参数交互与真实执行闭环。
+- OpenAPI change: AgentRun.computeIntent、计划操作与ComputeMapPreview。
+- Mock examples: mock/prism/examples/100-agent-compute-intent.json。
+- Frontend reason: 波段选择、真实进度、预览和入库。
+- Backend implementation notes: 本人/项目/输入授权、计划修订校验、幂等与后端受限PNG渲染。
+- Verification: 参数提取、目标切换、执行证据、错任务、恢复、撤权、地图和真实数值。
+- Result: 待本地与候选验收。

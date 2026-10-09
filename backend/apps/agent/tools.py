@@ -25,6 +25,7 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 import pandas as pd
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -108,7 +109,7 @@ TOOLS = {
         ToolSpec(
             "execute_operator",
             "execute_operator",
-            "提交已发布计算算法；versionId、inputs、parameters、name；用户要求结果入库时设置autoImport=true。返回taskId后用get_compute_task查询真实状态",
+            "提交已发布计算算法；versionId、inputs、parameters、name；默认计算后让用户选择入库，仅明确要求自动入库设置autoImport=true。缺少已确认波段/字段时生成计算卡片而不提交。返回taskId才代表实际提交",
             (
                 "versionId",
                 "inputs",
@@ -766,6 +767,10 @@ def _operator_submit(run, user, p, args):
     from apps.compute.models import AlgorithmVersion
     from .compute_tools import track, compact_task
 
+    run.refresh_from_db(fields=["compute_intent", "cancel_requested"])
+    if run.cancel_requested:
+        raise PermissionDenied("本轮已停止，不能提交计算")
+
     version_id = args.get("versionId")
     if type(version_id) is not int or version_id < 1:
         raise ValidationError("versionId 必须为有效算法版本 ID")
@@ -787,6 +792,33 @@ def _operator_submit(run, user, p, args):
         require_actor(user, project_id(), "catalog.add_dataresource")
     for resource_id in inputs.values():
         resolve_resource(user, p, resource_id, run.resource_ids)
+    from .compute_intents import prepare_from_tool
+
+    if run.compute_intent.get("status") in {"superseded", "cancelled"}:
+        raise ValidationError("本轮计算计划已被替代或取消")
+    if run.compute_intent.get("taskId"):
+        if run.compute_intent.get("versionId") != version.id:
+            raise ValidationError("本轮计算已经提交，请从新的请求发起其他算法")
+        pending = None
+    else:
+        pending = prepare_from_tool(run, user, p, version, inputs)
+    if pending is not None:
+        return pending, [(None, pending)]
+    if run.compute_intent and run.compute_intent.get("versionId") == version.id:
+        if (
+            inputs != run.compute_intent["inputs"]
+            or parameters != run.compute_intent["parameters"]
+            or auto_import != run.compute_intent["autoImport"]
+        ):
+            raise ValidationError("请使用用户在计算卡片或当前消息中明确选择的参数")
+    elif auto_import and not re.search(r"(?<!不)(?<!不要)自动.{0,4}入库", run.prompt):
+        raise ValidationError("自动入库需要用户明确选择，默认先查看计算结果")
+    if run.compute_intent.get("taskId"):
+        from .compute_tools import authorized_task
+
+        task = authorized_task(user, run.compute_intent["taskId"], p)
+        result = {**compact_task(task), "autoImport": auto_import}
+        return result, [(None, result)]
     # Model retries cannot create a second calculation with an invented key.
     digest = hashlib.sha256(
         json.dumps([version_id, inputs, parameters], sort_keys=True).encode()
@@ -803,18 +835,19 @@ def _operator_submit(run, user, p, args):
         raise ValidationError("任务名称无效")
     if not isinstance(key, str) or not 1 <= len(key) <= 80:
         raise ValidationError("幂等键无效")
-    task = submit_compute(
-        user,
-        {
-            "name": name.strip(),
-            "versionId": version_id,
-            "inputs": inputs,
-            "parameters": parameters,
-            "idempotencyKey": key,
-            "trial": False,
-        },
-    )
-    track(run, task, auto_import=auto_import)
+    with transaction.atomic():
+        task = submit_compute(
+            user,
+            {
+                "name": name.strip(),
+                "versionId": version_id,
+                "inputs": inputs,
+                "parameters": parameters,
+                "idempotencyKey": key,
+                "trial": False,
+            },
+        )
+        track(run, task, auto_import=auto_import)
     # The compute service performs full validation and rechecks project/data
     # authorization.  Pair input resources with the evidence for audit/history.
     pairs = []
@@ -830,6 +863,18 @@ def _operator_submit(run, user, p, args):
         "autoImport": auto_import,
         "projectTagId": project_id(),
     }
+    if run.compute_intent and run.compute_intent.get("versionId") == version.id:
+        from .compute_intents import _save
+
+        _save(
+            run,
+            {
+                **run.compute_intent,
+                "status": "submitted",
+                "taskId": str(task.id),
+                "message": "计算已提交，进度会自动更新",
+            },
+        )
     return result, [(resource, result) for resource, _ in pairs] or [(None, result)]
 
 

@@ -41,6 +41,27 @@ def algorithm_data(algorithm, user):
 def output_data(output):
     record = ComputeImport.objects.filter(output=output).first()
     suffix = f"?projectTagId={output.task.project_tag_id}"
+    resource = None
+    if record and record.resource_id and record.status == "ready":
+        from django.contrib.auth import get_user_model
+        from apps.catalog.models import DataResource
+        from apps.catalog.permissions import filter_accessible
+        from apps.projects.context import current_scope
+
+        scope = current_scope.get()
+        actor = (
+            get_user_model().objects.filter(pk=scope.user_id).first() if scope else None
+        )
+        if actor:
+            resource = filter_accessible(
+                DataResource.objects.filter(pk=record.resource_id, status="active"),
+                actor,
+            ).first()
+    location = (
+        output.task.project_tag.name + " / \u6570\u636e\u8d44\u6e90 / " + resource.name
+        if resource
+        else ""
+    )
     return {
         "id": output.id,
         "key": output.key,
@@ -53,6 +74,11 @@ def output_data(output):
         "expired": output.expired,
         "importStatus": record.status if record else "none",
         "resourceId": record.resource_id if record else None,
+        "resourceName": resource.name if resource else "",
+        "resourceLocation": location,
+        "mapUrl": f"/map?resourceId={resource.id}&projectTagId={output.task.project_tag_id}"
+        if resource
+        else "",
         "importError": record.error if record else "",
         "downloadUrl": f"/api/compute/outputs/{output.id}/file/{suffix}",
         "previewUrl": f"/api/compute/outputs/{output.id}/preview/{suffix}",

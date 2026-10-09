@@ -230,8 +230,18 @@ def task_card(status="succeeded", import_status="ready", tracking="completed"):
     return {
         "task": {
             "id": "task-id",
+            "name": "真实计算结果",
             "status": status,
-            "outputs": [{"importStatus": import_status, "resourceId": 88}],
+            "stage": "等待计算资源",
+            "progress": 0,
+            "outputs": [
+                {
+                    "importStatus": import_status,
+                    "resourceId": 88,
+                    "resourceName": "真实结果",
+                    "resourceLocation": "研究项目 / 数据资源 / 真实结果",
+                }
+            ],
         },
         "autoImport": True,
         "trackingStatus": tracking,
@@ -267,7 +277,7 @@ def test_field_list_fills_only_an_explicit_request_from_current_evidence():
 @pytest.mark.parametrize(
     "card, expected, forbidden",
     [
-        (task_card(), "1 项结果已入库", "尚未入库"),
+        (task_card(), "已保存至", "尚未入库"),
         (task_card("queued", "none", "waiting_compute"), "等待计算资源", "已入库"),
         (task_card("succeeded", "none", "blocked"), "自动入库已暂停", "已入库"),
     ],
@@ -302,4 +312,4 @@ def test_final_refresh_needs_no_second_model_call(setup_agent, monkeypatch):  # 
     run.refresh_from_db()
     assert run.status == "succeeded", run.detail
     assert calls == [True]
-    assert "1 项结果已入库" in run.answer
+    assert "已保存至" in run.answer

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { beforeEach, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import type {
@@ -95,18 +96,16 @@ beforeEach(() => {
 });
 
 it("replaces queued evidence with live finished and imported task status", async () => {
-  const poll = vi
-    .spyOn(agentApi, "computeTasks")
-    .mockResolvedValueOnce({
-      items: [
-        {
-          task,
-          autoImport: true,
-          trackingStatus: "waiting_compute",
-          detail: "等待完成后入库",
-        },
-      ],
-    });
+  const poll = vi.spyOn(agentApi, "computeTasks").mockResolvedValueOnce({
+    items: [
+      {
+        task,
+        autoImport: true,
+        trackingStatus: "waiting_compute",
+        detail: "等待完成后入库",
+      },
+    ],
+  });
   poll.mockResolvedValue({
     items: [
       {
@@ -128,6 +127,8 @@ it("replaces queued evidence with live finished and imported task status", async
               expired: false,
               importStatus: "ready",
               resourceId: 42,
+              resourceName: "研究区NDVI",
+              resourceLocation: "公开 / 数据资源 / 研究区NDVI",
               importError: "",
               downloadUrl: "",
               previewUrl: "",
@@ -142,7 +143,9 @@ it("replaces queued evidence with live finished and imported task status", async
   });
   render(
     <AntApp>
-      <RunComputeTasks runId={7} refreshKey="1" />
+      <MemoryRouter>
+        <RunComputeTasks runId={7} refreshKey="1" />
+      </MemoryRouter>
     </AntApp>,
   );
   await screen.findByText("排队中");
@@ -151,19 +154,18 @@ it("replaces queued evidence with live finished and imported task status", async
     { timeout: 5000 },
   );
   expect(screen.getByText("已入库")).toBeInTheDocument();
-  expect(screen.getByText("数据资源 #42")).toBeInTheDocument();
+  expect(screen.getByText("公开 / 数据资源 / 研究区NDVI")).toBeInTheDocument();
+  expect(screen.queryByText("数据资源 #42")).not.toBeInTheDocument();
 });
 
 it("restores a saved plan and only executes after confirmation", async () => {
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [workflow] });
-  const confirm = vi
-    .spyOn(agentApi, "confirmWorkflow")
-    .mockResolvedValue({
-      ...workflow,
-      status: "succeeded",
-      resultResourceIds: [42],
-      detail: "1 项结果已入库",
-    });
+  const confirm = vi.spyOn(agentApi, "confirmWorkflow").mockResolvedValue({
+    ...workflow,
+    status: "succeeded",
+    resultResourceIds: [42],
+    detail: "1 项结果已入库",
+  });
   const create = vi.spyOn(agentApi, "createWorkflow");
   render(
     <AntApp>

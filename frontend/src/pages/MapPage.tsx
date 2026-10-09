@@ -44,6 +44,7 @@ import { useRasterRender } from "../hooks/useRasterRender";
 import { useWorkspaceScenes } from "../hooks/useWorkspaceScenes";
 import { workspaceSnapshot } from "../workspace/workspaceSnapshot";
 import { effectiveMapLayers } from "../map/effectiveMapLayers";
+import ComputeOutputMapPreview from "../map/ComputeOutputMapPreview";
 import { clearFeatureState, getMapState } from "../map/mapState";
 import {
   claimMapErrorNotification,
@@ -416,7 +417,7 @@ export default function MapPage() {
   const { i18n } = useTranslation();
   const english =
     i18n.resolvedLanguage?.toLowerCase().startsWith("en") ?? false;
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialGeoInsightCache = lastGeoInsightCache;
 
   const [resources, setResources] = useState<ResourceListItem[]>([]);
@@ -502,6 +503,7 @@ export default function MapPage() {
   const latestResourceFiltersRef = useRef<ResourceFilters>({});
   const loadedSceneIdRef = useRef<number | null>(null);
   const loadedCompositionIdRef = useRef<number | null>(null);
+  const loadedUrlResourceRef = useRef<string | null>(null);
   const mapErrorNotificationHistoryRef = useRef(new Map<string, number>());
   const permissions = {
     ...(user?.permissions ?? emptyPermissions),
@@ -1184,6 +1186,61 @@ export default function MapPage() {
       });
     }
   }
+
+  const quickLoadResourceRef = useRef(handleQuickLoadResource);
+  quickLoadResourceRef.current = handleQuickLoadResource;
+  useEffect(() => {
+    const rawId = searchParams.get("resourceId");
+    if (!rawId || !/^[1-9]\d*$/.test(rawId) || !mapObject || loadingResources)
+      return;
+    const requestedProject = searchParams.get("projectTagId");
+    const requestKey = `${getActiveProject()}:${rawId}`;
+    if (loadedUrlResourceRef.current === requestKey) return;
+    loadedUrlResourceRef.current = requestKey;
+    if (requestedProject && requestedProject !== getActiveProject()) {
+      message.warning(
+        english
+          ? "Select the result's project before viewing"
+          : "请切换到结果所属项目后查看",
+      );
+      return;
+    }
+    const resource = resources.find((item) => item.id === Number(rawId));
+    if (!resource) {
+      message.warning(
+        english
+          ? "This data is unavailable in the current project"
+          : "当前项目中没有可查看的这项数据",
+      );
+      return;
+    }
+    const existingGroup = layerGroups.groups.find((group) =>
+      group.children.some((layer) => layer.sourceResource.id === resource.id),
+    );
+    const existing = existingGroup?.children.find(
+      (layer) => layer.sourceResource.id === resource.id,
+    );
+    setActiveLeftPanel("layers");
+    setMobileMapPanel("map");
+    if (existing && existingGroup) {
+      layerGroups.setGroupVisibility(existingGroup.id, true);
+      layerGroups.setLayerVisibility(existingGroup.id, existing.id, true);
+      setSelectedLayerId(existing.id);
+      void locateLayer(existingGroup.id, existing.id);
+      return;
+    }
+    void quickLoadResourceRef.current(resource).catch((reason) => {
+      message.error(reason instanceof Error ? reason.message : "结果加载失败");
+    });
+  }, [
+    searchParams,
+    mapObject,
+    loadingResources,
+    resources,
+    layerGroups.groups,
+    english,
+    message,
+  ]);
 
   async function handleLoadRaster(reportProgress: DataResourceLoadReporter) {
     if (!permissions.canLoadRasterLayer) {
@@ -2428,6 +2485,19 @@ export default function MapPage() {
               onBasemapSwitchingChange={setBasemapSwitching}
             />
           </Suspense>
+          {/^[1-9]\d*$/.test(searchParams.get("computeOutputId") ?? "") && (
+            <ComputeOutputMapPreview
+              key={searchParams.get("computeOutputId")}
+              outputId={Number(searchParams.get("computeOutputId"))}
+              projectTagId={searchParams.get("projectTagId")}
+              map={mapObject}
+              onClose={() => {
+                const next = new URLSearchParams(searchParams);
+                next.delete("computeOutputId");
+                setSearchParams(next, { replace: true });
+              }}
+            />
+          )}
         </main>
         <aside
           className={`floating-panel floating-panel-left ${

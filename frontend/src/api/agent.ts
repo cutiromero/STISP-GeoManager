@@ -16,6 +16,7 @@ import type {
   AgentWorkflowList,
   AgentComputeTaskList,
   AgentAttachment,
+  AgentComputeIntentUpdate,
 } from "./generated/types.gen";
 
 export const agentApi = {
@@ -59,6 +60,13 @@ export const agentApi = {
     requestJson<AgentRun>(`/api/agent/runs/${id}/cancel/`, { method: "POST" }),
   computeTasks: (id: number) =>
     requestJson<AgentComputeTaskList>(`/api/agent/runs/${id}/compute-tasks/`),
+  computeIntent: (id: number) =>
+    requestJson<AgentRun>(`/api/agent/runs/${id}/compute-intent/`),
+  updateComputeIntent: (id: number, body: AgentComputeIntentUpdate) =>
+    requestJson<AgentRun>(`/api/agent/runs/${id}/compute-intent/`, {
+      method: "POST",
+      body,
+    }),
   resources: (q = "") =>
     requestJson<AgentResourceList>(
       `/api/agent/resources/?q=${encodeURIComponent(q)}`,

@@ -118,6 +118,7 @@ def run_json(r, user):
         "answer": r.answer,
         "detail": r.detail,
         "evidence": r.evidence,
+        "computeIntent": _compute_intent(r, user, p),
         "createdAt": r.created_at.isoformat(),
         "updatedAt": r.updated_at.isoformat(),
         "contextTruncated": r.context_truncated,
@@ -134,6 +135,12 @@ def run_json(r, user):
             )
         ],
     }
+
+
+def _compute_intent(run, user, p):
+    from .compute_intents import serialize
+
+    return serialize(run, user, p) if run.conversation.mode == "agent" else None
 
 
 def _run_parameters(run):
@@ -555,6 +562,35 @@ def compute_tasks(request, run_id):
     run = get_object_or_404(AgentRun.objects, pk=run_id, owner=request.user)
     p = require_access(request.user, "agent", run.model)
     return JsonResponse(run_tasks(run, request.user, p))
+
+
+@endpoint(["GET", "POST"])
+def compute_intent(request, run_id):
+    from .compute_intents import update
+
+    run = get_object_or_404(
+        AgentRun.objects.select_related("conversation"), pk=run_id, owner=request.user
+    )
+    p = require_access(request.user, "agent", run.model)
+    if run.conversation.mode != "agent":
+        raise ApiProblem("普通对话没有计算计划")
+    check_evidence(run, request.user, p)
+    if request.method == "POST":
+        value = body(
+            request, ["action", "planRevision", "inputs", "parameters", "autoImport"]
+        )
+        update(run, request.user, p, value)
+        run.refresh_from_db()
+        log_operation(
+            request.user,
+            "agent",
+            "compute_intent",
+            "success",
+            target_type="agent_run",
+            target_id=run.id,
+            message=value["action"],
+        )
+    return JsonResponse(run_json(run, request.user))
 
 
 @endpoint(["GET"])

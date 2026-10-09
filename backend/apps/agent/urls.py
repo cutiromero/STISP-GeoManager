@@ -18,6 +18,7 @@ urlpatterns = [
     path("runs/<int:run_id>/", views.run_detail),
     path("runs/<int:run_id>/cancel/", views.cancel),
     path("runs/<int:run_id>/compute-tasks/", views.compute_tasks),
+    path("runs/<int:run_id>/compute-intent/", views.compute_intent),
     path("resources/", views.resource_list),
     path("workflows/", views.workflow_submit),
     path("workflows/<uuid:workflow_id>/", views.workflow_detail),

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.29] - 2026-10-09
+
+### Fixed
+- 聊天计算绑定本会话真实任务，模型文字无法代替提交、完成或入库记录；查询进度不再猜测旧相似任务。
+- 用户已确认波段时直接校验与执行，禁止模型替换确认值或将默认波段视为已确认。
+
+### Added
+- 注册清单驱动的输入与参数选择卡，持续计算进度、友好结果报告、选择入库及数据目录位置。
+- 未入库栅格的授权地图预览，以及已登记结果直接打开地理工作台。
+
+### Changed
+- 持久保存聊天计算计划，重复提交幂等、刷新恢复；版本及资源修订变化重新校验。
+- 新增兼容旧应用的计算计划字段迁移；同步API契约、生成类型、Mock和开发说明。
+
 ## [0.1.28] - 2026-10-09
 
 ### Fixed

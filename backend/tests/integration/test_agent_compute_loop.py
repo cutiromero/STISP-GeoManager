@@ -208,6 +208,8 @@ def test_algorithm_goal_search_keeps_complete_manifest_and_empty_fallback(env):
 
 
 def test_model_changed_keys_cannot_repeat_calculation(env):
+    env["run"].prompt = "计算表格统计，group=region value=value method=mean，自动入库"
+    env["run"].save(update_fields=["prompt"])
     args = {
         "versionId": env["version"].id,
         "inputs": env["body"]["inputs"],
