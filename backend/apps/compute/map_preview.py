@@ -6,7 +6,6 @@ import hashlib
 import io
 import json
 import math
-import os
 from collections import OrderedDict
 from pathlib import Path
 import subprocess
@@ -16,7 +15,7 @@ import threading
 
 from PIL import Image
 
-from apps.core.cli import popen_cli
+from apps.core.cli import cli_environment, popen_cli
 from apps.core.runtime_config import (
     runtime_max_raster_side_pixels,
     runtime_symbolizer_timeout_seconds,
@@ -147,7 +146,7 @@ def clear_preview_cache() -> None:
 
 
 def _render(source: Path, png: Path, side: int, rules: dict) -> dict:
-    environment = dict(os.environ, GDAL_PAM_ENABLED="NO", PYTHONUTF8="1")
+    environment = {**cli_environment(), "GDAL_PAM_ENABLED": "NO", "PYTHONUTF8": "1"}
     process = popen_cli(
         [sys.executable, str(SYMBOLIZER)],
         env=environment,

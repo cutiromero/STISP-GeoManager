@@ -303,3 +303,21 @@ def test_memory_cache_is_bounded_and_never_keeps_png_files(output):
     assert not list(root.rglob("*.png"))
     assert not list(root.rglob("render-*"))
     assert source_path(output).read_bytes() == original
+
+
+def test_preview_uses_running_environment_without_activation_variables(
+    output, monkeypatch
+):
+    """A server virtualenv has sys.prefix even when its shell was not activated."""
+    monkeypatch.delenv("CONDA_PREFIX", raising=False)
+    monkeypatch.delenv("PIXI_PROJECT_MANIFEST", raising=False)
+    with patch.object(
+        map_preview, "popen_cli", wraps=map_preview.popen_cli
+    ) as launcher:
+        png, metadata = map_preview.ensure_map_preview(output)
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    assert metadata["outputId"] == output.id
+    environment = launcher.call_args.kwargs["env"]
+    assert environment["CONDA_PREFIX"]
+    assert environment["GDAL_PAM_ENABLED"] == "NO"
+    assert environment["PYTHONUTF8"] == "1"
