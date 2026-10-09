@@ -211,6 +211,38 @@ it("immediately tracks an automatic task returned from explicit bands in the inp
     screen.queryByText("运行详情", { exact: true }),
   ).not.toBeInTheDocument();
 });
+
+it("uses the live report instead of the initial queued answer and retains later status answers", async () => {
+  const initial = {
+    ...computeRun({
+      ...computeIntent,
+      status: "submitted",
+      taskId: "real-task",
+      parameters: { red: 3, nir: 8 },
+      missingParameters: [],
+    }),
+    answer: "计算已提交，当前等待计算资源（0%）。",
+  };
+  const followup = run(9, "跑完了吗", "已完成，结果可以在下方查看。");
+  vi.spyOn(agentApi, "detail").mockResolvedValue({
+    conversation,
+    runs: [initial, followup],
+  });
+  vi.spyOn(agentApi, "computeTasks").mockResolvedValue({
+    items: [
+      {
+        task: liveComputeTask("succeeded"),
+        autoImport: false,
+        trackingStatus: "completed",
+        detail: "",
+      },
+    ],
+  });
+  showAgent("workbench");
+  await screen.findByText("计算完成，结果已保存。");
+  expect(screen.queryByText(/当前等待计算资源/)).not.toBeInTheDocument();
+  expect(screen.getByText(followup.answer)).toBeVisible();
+});
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();

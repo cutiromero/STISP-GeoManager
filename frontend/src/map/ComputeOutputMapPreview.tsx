@@ -5,7 +5,7 @@ import {
 } from "@ant-design/icons";
 import { Alert, Button, Slider, Spin } from "antd";
 import type { Map as MapboxMap } from "mapbox-gl";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { computeApi } from "../api/compute";
 import type { ComputeMapPreview } from "../api/generated/types.gen";
@@ -98,6 +98,8 @@ export default function ComputeOutputMapPreview({
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const [opacity, setOpacity] = useState(100);
+  const opacityRef = useRef(opacity);
+  opacityRef.current = opacity;
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -152,8 +154,9 @@ export default function ComputeOutputMapPreview({
     if (!map || !preview) return;
     let fitted = false;
     const restore = () => {
+      if (map.getLayer(layerId) && map.getSource(sourceId)) return;
       if (!addComputePreview(map, preview.data, preview.image)) return;
-      map.setPaintProperty(layerId, "raster-opacity", opacity / 100);
+      map.setPaintProperty(layerId, "raster-opacity", opacityRef.current / 100);
       if (fitted) return;
       fitted = true;
       const coordinates = preview.data.imageCoordinates;
@@ -167,10 +170,12 @@ export default function ComputeOutputMapPreview({
         { padding: 90, maxZoom: 19, bearing: 0, pitch: 0, duration: 500 },
       );
     };
-    restore();
     map.on("style.load", restore);
+    map.on("idle", restore);
+    restore();
     return () => {
       map.off("style.load", restore);
+      map.off("idle", restore);
       removeComputePreview(map);
     };
   }, [map, preview]);

@@ -139,6 +139,66 @@ it("restores the preview after a basemap style change and keeps the camera uncha
   expect(map.api.fitBounds).toHaveBeenCalledOnce();
 });
 
+it("adds a PNG received after style.load when the remaining basemap tiles become idle", async () => {
+  const map = mapMock();
+  map.api.isStyleLoaded.mockReturnValue(false);
+  const { unmount } = show(map.value);
+  await screen.findByText(preview.name);
+  expect(map.api.addSource).not.toHaveBeenCalled();
+  map.api.isStyleLoaded.mockReturnValue(true);
+  act(() => map.events.get("idle")?.());
+  expect(map.api.addSource).toHaveBeenCalledOnce();
+  expect(map.api.fitBounds).toHaveBeenCalledOnce();
+  const paintCalls = map.api.setPaintProperty.mock.calls.length;
+  act(() => map.events.get("idle")?.());
+  expect(map.api.setPaintProperty).toHaveBeenCalledTimes(paintCalls);
+  expect(map.api.fitBounds).toHaveBeenCalledOnce();
+  unmount();
+  expect(map.events.size).toBe(0);
+});
+
+it("adds a PNG received before style.load and does not repeat it on idle", async () => {
+  const map = mapMock();
+  map.api.isStyleLoaded.mockReturnValue(false);
+  show(map.value);
+  await screen.findByText(preview.name);
+  expect(map.api.addSource).not.toHaveBeenCalled();
+  map.api.isStyleLoaded.mockReturnValue(true);
+  act(() => map.events.get("style.load")?.());
+  act(() => map.events.get("idle")?.());
+  expect(map.api.addSource).toHaveBeenCalledOnce();
+  expect(map.api.fitBounds).toHaveBeenCalledOnce();
+});
+
+it("restores a later basemap style on idle with the user's current opacity", async () => {
+  const map = mapMock();
+  show(map.value);
+  await screen.findByText(preview.name);
+  await waitFor(() => expect(map.api.addSource).toHaveBeenCalledOnce());
+  const slider = screen.getByRole("slider");
+  fireEvent.keyDown(slider, {
+    key: "ArrowLeft",
+    code: "ArrowLeft",
+    keyCode: 37,
+    which: 37,
+  });
+  await waitFor(() => expect(slider).toHaveAttribute("aria-valuenow", "99"));
+  map.sources.clear();
+  map.layers.clear();
+  map.api.isStyleLoaded.mockReturnValue(false);
+  act(() => map.events.get("style.load")?.());
+  expect(map.api.addSource).toHaveBeenCalledOnce();
+  map.api.isStyleLoaded.mockReturnValue(true);
+  act(() => map.events.get("idle")?.());
+  expect(map.api.addSource).toHaveBeenCalledTimes(2);
+  expect(map.api.setPaintProperty).toHaveBeenLastCalledWith(
+    "compute-output-preview-layer",
+    "raster-opacity",
+    0.99,
+  );
+  expect(map.api.fitBounds).toHaveBeenCalledOnce();
+});
+
 it("drops an unfinished response when the preview is closed", async () => {
   let resolve!: (value: ComputeMapPreview) => void;
   vi.spyOn(computeApi, "mapPreview").mockReturnValue(

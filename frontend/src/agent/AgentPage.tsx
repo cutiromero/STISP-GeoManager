@@ -917,7 +917,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         ]}
                       />
                     )}
-                  <SafeMarkdown text={r.answer} />
+                  {!(mode === "agent" && r.computeIntent?.taskId) && (
+                    <SafeMarkdown text={r.answer} />
+                  )}
                   {mode === "agent" && r.computeIntent && (
                     <ComputeIntentCard
                       runId={r.id}
