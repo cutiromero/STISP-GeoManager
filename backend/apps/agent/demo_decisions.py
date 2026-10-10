@@ -100,6 +100,54 @@ def validate_decision(
     return {**value, "evidenceRefs": canonical, "resultSummary": summary}
 
 
+def _previous_decision(value) -> dict:
+    # Observations are already supplied as complete actual result rows.
+    return {key: item for key, item in value.items() if key != "findings"}
+
+
+def decision_payload(workflow, stage, context, results) -> dict:
+    """Remove repeated request content while keeping persisted evidence intact."""
+    prior = [
+        _previous_decision(item["decision"])
+        for item in workflow.plan["stages"]
+        if item.get("decision")
+    ]
+    previous = workflow.plan.get("previousAnalysis")
+    if previous is not None:
+        old_results = previous.get("actualResults")
+        available = {
+            (str(item.get("taskId")), str(item.get("outputId"))): item
+            for item in results
+        }
+        if not isinstance(old_results, list) or any(
+            not isinstance(item, dict)
+            or item
+            != available.get((str(item.get("taskId")), str(item.get("outputId"))))
+            for item in old_results
+        ):
+            raise ComputeError("前次结果与本次完整读取结果不一致，已保留完整流程记录")
+        previous = {
+            key: item for key, item in previous.items() if key != "actualResults"
+        }
+        previous["actualResultOutputIds"] = [item["outputId"] for item in old_results]
+        if previous.get("oldDecision"):
+            previous["oldDecision"] = _previous_decision(previous["oldDecision"])
+    return {
+        "goal": workflow.goal,
+        "stage": stage["name"],
+        "allowedAction": stage["identifier"],
+        "parameters": stage.get("parameters", {}),
+        "inputBindings": stage.get("bindings", {}),
+        "allowedAlgorithm": workflow.plan["algorithms"].get(stage["identifier"], {}),
+        "inputRoles": context,
+        "knowledge": workflow.evidence,
+        "actualResults": results,
+        "previousAnalysis": previous,
+        "previousDecisions": prior[-4:],
+        "availableEvidence": evidence_refs(workflow, context, results),
+    }
+
+
 def decide(workflow, user, policy, stage, results, guard) -> tuple[dict, list]:
     model = registry()[workflow.model]
     context = resource_context(workflow, user, policy)
@@ -118,30 +166,13 @@ def decide(workflow, user, policy, stage, results, guard) -> tuple[dict, list]:
         "必须引用output。nextAction只能为allowedAction或request_review；不能跳步、虚构计算/入库。"
         "knowledge非空时必须至少引用一个实际知识条目，并说明适用条件如何影响动作或为何不适用。"
         "previousAnalysis存在时比较旧判断、新增观测与更新统计，说明排序变化依据。"
+        "其中旧结果由actualResultOutputIds指向actualResults中的完整记录。"
         "最后分析必须引用当前流程最近一次调查排序或复查的统计输出，不能只引用旧结果。"
         "需要编辑时edits只提出最近一次检查issues中status=repairable的明确属性修改，"
         "不可重复采用初始检查中已被几何修复改变的旧问题。逐项包含feature_id,field,"
         "old_value,new_value,evidence_id,rule_id,reason；证据不足/geometry事项保留，不猜新值。"
     )
-    prior = [
-        item.get("decision", {})
-        for item in workflow.plan["stages"]
-        if item.get("decision")
-    ]
-    payload = {
-        "goal": workflow.goal,
-        "stage": stage["name"],
-        "allowedAction": stage["identifier"],
-        "parameters": stage.get("parameters", {}),
-        "inputBindings": stage.get("bindings", {}),
-        "allowedAlgorithm": workflow.plan["algorithms"].get(stage["identifier"], {}),
-        "inputRoles": context,
-        "knowledge": workflow.evidence,
-        "actualResults": results,
-        "previousAnalysis": workflow.plan.get("previousAnalysis"),
-        "previousDecisions": prior[-4:],
-        "availableEvidence": refs,
-    }
+    payload = decision_payload(workflow, stage, context, results)
     messages = [
         {"role": "system", "content": instruction},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
