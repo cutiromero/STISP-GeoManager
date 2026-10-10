@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import zipfile
+from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
@@ -18,9 +19,10 @@ from apps.catalog.importer import import_plain_table
 from apps.catalog.models import DataResource, VectorDataset
 from apps.catalog.services import upsert_vector_catalog_record
 from apps.catalog.vector_importer import commit_vector_import, frame_summary
-from apps.compute.models import AlgorithmResource
+from apps.compute.models import AlgorithmResource, AlgorithmVersion
+from apps.compute.packages import checksum
 from apps.compute.views import store_version
-from apps.core.storage import vector_geopackage_path
+from apps.core.storage import app_path, vector_geopackage_path
 from apps.core.initialization import is_superadmin_user
 from apps.knowledge.models import KnowledgeEntry, KnowledgeRevision
 from apps.knowledge.services import serialize
@@ -36,14 +38,56 @@ ALGORITHMS = [
     "geology-check",
     "geology-edit",
 ]
+PACKAGE_FILES = ("main.py", "operator.yaml", "README.md")
 
 
 def package(directory):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for name in ("main.py", "operator.yaml", "README.md"):
+        for name in PACKAGE_FILES:
             archive.writestr(name, (directory / name).read_bytes())
     return SimpleUploadedFile(directory.name + ".zip", buffer.getvalue())
+
+
+def demo_project(user, code: str, title: str) -> Project:
+    if title == "地质逻辑推理":
+        matches = list(Project.objects.filter(name=title, is_active=True)[:2])
+        if len(matches) > 1:
+            raise CommandError("存在多个活动的地质逻辑推理项目，请先明确保留的项目")
+        if matches:
+            return matches[0]
+    project, _ = Project.objects.get_or_create(
+        code=code,
+        defaults={
+            "name": title,
+            "created_by": user,
+            "description": "可重复演示项目，资料明确标注模拟；实际计算与结果保存。",
+        },
+    )
+    if not project.is_active:
+        raise CommandError("已登记的演示项目已停用，请先核对项目状态")
+    return project
+
+
+def verify_version_source(version: AlgorithmVersion, directory: Path) -> None:
+    path = app_path(version.package_path)
+    try:
+        if checksum(path) != version.checksum:
+            raise CommandError("已登记算法包校验失败，请恢复原包或登记新版本")
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            matches = all(
+                names.count(name) == 1
+                and archive.read(name) == (directory / name).read_bytes()
+                for name in PACKAGE_FILES
+            )
+    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+        raise CommandError("已登记算法包无法核验，请恢复原包或登记新版本") from exc
+    if not matches:
+        raise CommandError(
+            f"算法 {version.algorithm.identifier} {version.version} 的源码已变化；"
+            "请提高 operator.yaml 的版本号并登记新版本，原版本保持不变"
+        )
 
 
 def import_table(user, path, code, name):
@@ -207,14 +251,7 @@ class Command(BaseCommand):
             ("demo-arid-ecology", "干旱区生态风险评估分析决策", "ecology"),
             ("demo-geology-reasoning", "地质逻辑推理", "geology"),
         ]:
-            project, _ = Project.objects.get_or_create(
-                code=code,
-                defaults={
-                    "name": title,
-                    "created_by": user,
-                    "description": "可重复演示项目，资料明确标注模拟；实际计算与结果保存。",
-                },
-            )
+            project = demo_project(user, code, title)
             ProjectMembership.objects.get_or_create(
                 project=project, user=user, defaults={"assigned_by": user}
             )
@@ -388,6 +425,8 @@ class Command(BaseCommand):
                 version = algorithm.versions.filter(version=manifest["version"]).first()
                 if version is None:
                     version = store_version(algorithm, package(directory))
+                else:
+                    verify_version_source(version, directory)
                 record["algorithmVersions"][algorithm.identifier] = version.id
         path = settings.PROGRAM_ROOT / ".runtime/dual-demo-20261010/objects.json"
         path.write_text(

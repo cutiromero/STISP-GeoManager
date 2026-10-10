@@ -116,6 +116,14 @@ def freeze_input(record, directory):
             raise ComputeError("矢量计算首期最多支持50万个要素")
         frame = gpd.read_file(source, layer=resource.storage_path)
         frame.to_file(target, layer="data", driver="GPKG")
+        # The driver stamps each export with its creation time. Normalize only
+        # this new snapshot so unchanged data keeps the same real file SHA256.
+        with closing(sqlite3.connect(target)) as connection:
+            connection.execute(
+                "UPDATE gpkg_contents SET last_change = ?",
+                ("1970-01-01T00:00:00.000Z",),
+            )
+            connection.commit()
     else:
         if resource.file_format.upper() == "SQLITE":
             table = '"' + resource.storage_path.replace('"', '""') + '"'
