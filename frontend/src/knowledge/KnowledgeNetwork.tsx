@@ -95,7 +95,7 @@ export default function KnowledgeNetwork({
   }, [entryKey, size]);
   useEffect(() => {
     if (!feedback) return;
-    const timer = window.setTimeout(() => setFeedback(null), 640);
+    const timer = window.setTimeout(() => setFeedback(null), 800);
     return () => window.clearTimeout(timer);
   }, [feedback]);
   useEffect(() => {
@@ -153,7 +153,7 @@ export default function KnowledgeNetwork({
   }
   function selectNode(id: string) {
     const node = points.get(id)!;
-    showFeedback("node", node, nodeRadius(node.degree) + 9);
+    showFeedback("node", node, nodeRadius(node.degree) + 12);
     onSelect(selected === id ? null : id);
   }
   function locateNode(id: string) {
@@ -166,7 +166,7 @@ export default function KnowledgeNetwork({
       x: size.width / 2 - node.x * zoom,
       y: size.height / 2 - node.y * zoom,
     });
-    showFeedback("node", node, nodeRadius(node.degree) + 9);
+    showFeedback("node", node, nodeRadius(node.degree) + 12);
   }
   function openRelation(entry: KnowledgeEntry) {
     const from = points.get(entry.subject)!,
@@ -174,7 +174,7 @@ export default function KnowledgeNetwork({
     showFeedback(
       "edge",
       { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 },
-      13,
+      19,
     );
     setSelectedEdge(entry.id);
     onOpen(entry);
@@ -354,6 +354,7 @@ export default function KnowledgeNetwork({
         </div>
         <Select
           className="knowledge-network-search"
+          classNames={{ popup: { root: "knowledge-network-search-popup" } }}
           aria-label="查找图中节点"
           placeholder="搜索图中节点"
           allowClear
@@ -489,7 +490,13 @@ export default function KnowledgeNetwork({
                 height="28"
                 patternUnits="userSpaceOnUse"
               >
-                <circle cx="1" cy="1" r="0.65" fill="#dce6ef" />
+                <circle
+                  cx="1"
+                  cy="1"
+                  r="0.65"
+                  fill="#72a0b0"
+                  fillOpacity="0.2"
+                />
               </pattern>
             </defs>
             <rect
@@ -615,7 +622,8 @@ export default function KnowledgeNetwork({
                         : node.id}
                     </text>
                     <title>
-                      {node.id} · {node.degree} 条关系。Enter 筛选，方向键移动。
+                      {node.id} · {node.category} · {node.degree} 条关系。Enter
+                      筛选，方向键移动。
                     </title>
                   </g>
                 );
@@ -626,6 +634,7 @@ export default function KnowledgeNetwork({
                 );
                 const fullLabel = domain?.label ?? anchor.label;
                 const activate = () => {
+                  showFeedback("node", anchor, anchor.radius + 12);
                   onSelect(null);
                   if (anchor.domain === null) onDomainSelect?.(undefined);
                   else if (anchor.domain !== "unclassified")
@@ -676,7 +685,14 @@ export default function KnowledgeNetwork({
                   transform={`translate(${feedback.x} ${feedback.y})`}
                   aria-hidden="true"
                 >
-                  <circle r={feedback.radius} />
+                  <circle
+                    className="knowledge-click-inner"
+                    r={feedback.radius}
+                  />
+                  <circle
+                    className="knowledge-click-outer"
+                    r={feedback.radius + 6}
+                  />
                 </g>
               )}
             </g>

@@ -107,7 +107,7 @@ describe("knowledge network and records", () => {
     ).toBe(
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
         ? "none"
-        : "knowledge-click-pulse",
+        : "knowledge-atlas-click-pulse",
     );
     expect(
       screen.getByRole("button", { name: publicEntry.title, exact: true }),

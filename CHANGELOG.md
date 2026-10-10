@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.33] - 2026-10-10
+
+### Changed
+- 参照用户视频恢复“让知识连成线”的深青蓝至藏蓝背景及柔和的多色知识节点，加入静态微渐变与淡光晕。
+- 增强节点、连线和专题导航的点击扩散反馈，统一深色画布内的文字、搜索和工具栏配色。
+- 保持现有小节点、整体连线布局、标签避让及缩放拖动功能；减少动画模式使用静态反馈。
+
 ## [0.1.32] - 2026-10-10
 
 ### Changed

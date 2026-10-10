@@ -5,6 +5,7 @@ import { layoutNetwork, type Point } from "./networkLayout";
 export type NetworkNode = Point & {
   id: string;
   domain: string;
+  category: string;
   degree: number;
   color: string;
   primary: boolean;
@@ -29,7 +30,7 @@ const networkDomains = [
     shortLabel: ["遥感基础", "油气管道", "地质填图推理", "干旱区生态治理"][
       index
     ]!,
-    color: ["#4489d5", "#dc984f", "#8d79b8", "#43a58c"][index]!,
+    color: ["#8ab5ec", "#dfb29c", "#b6a9dc", "#96ccb0"][index]!,
   })),
   {
     id: "unclassified" as const,
@@ -37,6 +38,14 @@ const networkDomains = [
     shortLabel: "未分区",
     color: "#92a2b2",
   },
+];
+export const networkColors = [
+  "#65c8c6",
+  "#8ab5ec",
+  "#d6bd82",
+  "#96ccb0",
+  "#b6a9dc",
+  "#dfb29c",
 ];
 export const nodeRadius = (degree: number) =>
   6 + Math.min(4, Math.sqrt(Math.max(0, degree - 1)) * 1.4);
@@ -89,6 +98,8 @@ export function buildNetwork(
   height = 580,
 ) {
   const edges = [...entries].sort((a, b) => a.id - b.id);
+  const categories = [...new Set(edges.map((entry) => entry.category))];
+  const nodeCategories = new Map<string, string>();
   const votes = new Map<string, Map<string, number>>();
   const neighbors = new Map<string, Set<string>>();
   for (const entry of edges) {
@@ -96,6 +107,7 @@ export function buildNetwork(
       [entry.subject, entry.object],
       [entry.object, entry.subject],
     ] as const) {
+      if (!nodeCategories.has(id)) nodeCategories.set(id, entry.category);
       const domains = votes.get(id) ?? new Map<string, number>();
       const domain = entry.domain ?? "unclassified";
       domains.set(domain, (domains.get(domain) ?? 0) + 1);
@@ -113,8 +125,12 @@ export function buildNetwork(
       return {
         id,
         domain,
+        category: nodeCategories.get(id)!,
         degree: [...domains.values()].reduce((sum, count) => sum + count, 0),
-        color: networkDomains.find((item) => item.id === domain)!.color,
+        color:
+          networkColors[
+            categories.indexOf(nodeCategories.get(id)!) % networkColors.length
+          ]!,
         x: 0,
         y: 0,
         primary: false,
@@ -145,7 +161,7 @@ export function buildNetwork(
           id: rootId,
           domain: null,
           label: "时空知识库",
-          color: "#4d78b3",
+          color: "#8ab5ec",
           radius: 13,
           x: 0,
           y: 0,
