@@ -1553,6 +1553,73 @@ export type KnowledgeCheckResult = {
 };
 
 /**
+ * 模型在行动时形成的可核对判断摘要；绑定实际证据与计算，不包含隐藏思维链
+ */
+export type AgentWorkflowDecision = {
+    /**
+     * 本步骤要解决的问题
+     */
+    problem: string;
+    /**
+     * 来自实际数据或计算的发现
+     */
+    findings: Array<string>;
+    /**
+     * 当前判断及适用范围
+     */
+    judgement: string;
+    /**
+     * 尚待核实的问题或需要补充的资料
+     */
+    uncertainties: Array<string>;
+    /**
+     * 模型选择的下一步受限动作
+     */
+    nextAction: string;
+    /**
+     * 为什么选择该算法、输入角色及参数
+     */
+    algorithmReason: string;
+    /**
+     * 本次授权数据、知识修订、真实任务及输出引用
+     */
+    evidenceRefs: Array<{
+        /**
+         * 引用类型
+         */
+        kind: 'resource' | 'knowledge' | 'output' | 'task';
+        /**
+         * 真实对象标识，界面使用对应友好标题
+         */
+        id: string;
+        /**
+         * 实际知识修订（知识引用提供时）
+         */
+        revision?: number;
+        /**
+         * 前期影像、后期影像、初始图或修复图等输入角色
+         */
+        role?: string;
+        /**
+         * 用户可见的证据标题
+         */
+        title: string;
+    }>;
+    /**
+     * 读取本次实际结果后的简短说明
+     */
+    resultSummary?: string;
+    /**
+     * 实际调用的模型模式，模拟验证单独标识
+     */
+    modelMode: 'real' | 'mock';
+    /**
+     * 实际模型的公开名称
+     */
+    modelName: string;
+} | null;
+
+/**
  * 科研工作流的可审计步骤
  */
 export type AgentWorkflowStep = {
@@ -1582,6 +1649,7 @@ export type AgentWorkflowStep = {
     action: {
         [key: string]: unknown;
     };
+    decision: AgentWorkflowDecision;
     /**
      * 输入引用
      */
@@ -1739,7 +1807,7 @@ export type AgentWorkflow = {
  */
 export type AgentWorkflowInput = {
     /**
-     * 工作流类型，默认 hyperspectral_interpretation
+     * 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 为填图检查纠偏；默认 hyperspectral_interpretation
      */
     workflowType?: string;
     /**
@@ -1773,15 +1841,20 @@ export type AgentWorkflowInput = {
      */
     idempotencyKey: string;
     /**
-     * 输入端口到授权资源 ID 的明确绑定
+     * 输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质使用 initial_map、surveys、rules。真实计算输出入库后按持久来源接入后续步骤。
      */
     inputs?: {
         [key: string]: number;
     };
+    knowledgeSelection?: AgentKnowledgeSelection;
     /**
      * 完成后自动登记计算结果
      */
     importResults?: boolean;
+    /**
+     * 可选的本人当前项目已完成生态分析；仅替换观测证据，复用实际变化结果并保存旧判断与新增证据，用于更新调查建议。
+     */
+    previousWorkflowId?: string;
 };
 
 /**

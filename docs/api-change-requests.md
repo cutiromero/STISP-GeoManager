@@ -59,6 +59,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261010-003 | BackendReady | /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | evidence decisions; multi-stage scenarios; observational updates | Updated | HTTP/browser fixtures | Passed | Focused passed | Local real compute; mock decisions separately labelled; remote deployment separate |
 | API-20261010-002 | BackendReady | /api/data-schema/summary/; /api/catalog/resources/; /api/admin/data/resources/; /api/compute/outputs/{outputId}/import/ | compute result classification | Updated | Updated | Passed | Focused passed | Exact historical import links; candidate publication pending |
 | API-20261010-001 | BackendReady | /api/knowledge/*; /api/agent/bootstrap/; /api/agent/conversations/{id}/runs/ | domain filters; persistent tool selection | Updated | Updated | Passed | Focused passed | Server-enforced selectors; candidate publication pending |
 | API-20261009-001 | BackendReady | /api/agent/runs/{runId}/compute-intent/; /api/compute/outputs/{outputId}/map-preview/ | persistent plan; authorized preview | Updated | Added | In progress | Pending | Real execution and user-controlled import |
@@ -955,3 +956,16 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation notes: 本人/项目/输入授权、计划修订校验、幂等与后端受限PNG渲染。
 - Verification: 参数提取、目标切换、执行证据、错任务、恢复、撤权、地图和真实数值。
 - Result: 待本地与候选验收。
+
+## API-20261010-003 - 双Demo持久判断与多阶段输入
+
+- Status: BackendReady
+- Owner: Root契约与序列化；backend多阶段编排；frontend展示与地图。
+- Endpoints: /api/agent/workflows/; /api/agent/workflows/{workflowId}/; /confirm/。
+- Change type: 新增可空 step.decision，新增场景类型 ecology_investigation / geology_correction；inputs按角色绑定，knowledgeSelection沿用知识分区选择协议。
+- OpenAPI change: AgentWorkflowDecision绑定实际资源、知识修订、输出与任务引用；maxResources可配置上限12，默认仍3。
+- Mock examples: 既有98-knowledge-workflow空历史样例保持；新字段由 backend/tests/integration/test_demo_workflow.py、test_dual_demo_workflow.py 与 DemoWorkflow.browser.test.tsx 验证真实序列化及可空兼容。
+- Frontend reason: 展示发现、依据、行动、真实结果及模型模式；支持角色明确选择、历史恢复、矢量结果和多图层地图对比。
+- Backend implementation notes: plan固定输入修订和算法校验和，实际输出入库后接下一阶段；人工分析批准与产物质量批准分开。参考图和设错清单仅科研目录独立验收。
+- Verification: 模型结构响应、假引用/假修改拒绝、恢复/取消/撤权/质量审核、多阶段结果衔接；实际算法数值与本机真实任务分别记录。
+- Result: 本机演示验证记录见 docs/dual-demo-20261010.md；服务器部署另行安排。

@@ -3,6 +3,20 @@
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 > 版本：v0.1.0
 
+## 双Demo科研工作流（2026-10-10）
+
+POST /api/agent/workflows/ 支持 ecology_investigation（植被变化与调查排序）和 geology_correction（初图检查、几何候选、受约束编辑与复核）。同样要求本人智能体权限、当前单项目范围和幂等键。创建先生成可确认计划，不直接执行。
+
+inputs 使用明确资源角色。生态为 early_image、late_image、valid_mask、zones、context；地质为 initial_map、surveys、rules。resourceIds覆盖角色资源，后台maxResources默认3、可调上限12。knowledgeSelection支持auto/manual/all/none，manual领域沿用知识分区协议。两期日期、波段、阈值和权重放parameters，按实际算法manifest验证。
+
+AgentWorkflowStep.decision 为可空公开判断摘要，包含问题、发现、当前判断、待核实项、下一动作、算法理由和实际引用；modelMode区分real/mock。知识引用带整数revision，资源/任务/输出通过实际对象及内部内容校验和核验。摘要用于回查依据，不保存或公开模型内部思维链。
+
+确认入口仍提交planHash。输入修订、知识版本、算法checksum及下游入库资源在执行前重新授权。needs_review候选会暂停并更新计划哈希；人工批准分析与批准质量产物分别记录，避免跨步骤复用批准。计算成功后完整读取有限统计表，将真实结果保存为下一步输入，再形成下一判断。刷新/重试复用持久步骤和原taskId。
+
+生态更新可传previousWorkflowId，必须引用本人同项目已成功的生态分析。两期影像、掩膜、分区、日期及计算参数保持原绑定；新的context保留原观测并增加证据。更新核实原change产物及入库资源，只重新执行调查排序，plan.previousAnalysis保存旧判断、原统计和新增证据。操作说明见[双Demo本机演示](dual-demo-20261010.md)。
+
+地图支持 /map?resourceIds=资源列表&projectTagId=项目，使用已授权项目切换和既有后端栅格渲染。矢量结果从计算卡进入已入库图层；原始地质图和修正图可一起加载。模拟地图中的参考图及设错清单不登记为业务资源，不进入模型和算子。
+
 ## 用户思考强度（2026-09-24）
 
 智能体 bootstrap 返回 `defaultReasoningEffort`。提交接口在 `thinkingMode=deep` 时接受可选 `reasoningEffort`（`low/medium/xhigh`）。显式选择优先于预算方案强度和后台默认强度；省略时沿用原默认策略。快速模式传入强度返回 400。强度持久化到本轮任务并参与幂等校验，worker 在预算解析后、上下文计数及模型请求前应用。后台深度思考开关与模型能力检查继续生效。

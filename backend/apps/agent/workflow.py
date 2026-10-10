@@ -241,6 +241,11 @@ def validate_confirmed_plan(workflow, user, p):
 
 def run_workflow(workflow_id):
     workflow = AgentWorkflow.objects.get(pk=workflow_id)
+    from .demo_workflow import DEMO_TYPES, advance_demo
+
+    if workflow.workflow_type in DEMO_TYPES:
+        advance_demo(workflow_id)
+        return
     if workflow.status not in {"queued", "running", "interrupted"}:
         return
     with project_scope(_scope(workflow)):
@@ -368,6 +373,12 @@ def resume_waiting():
 
     count = 0
     for workflow in AgentWorkflow.objects.filter(status="waiting_compute")[:30]:
+        from .demo_workflow import DEMO_TYPES, advance_demo
+
+        if workflow.workflow_type in DEMO_TYPES:
+            advance_demo(workflow.id)
+            count += 1
+            continue
         with project_scope(_scope(workflow)):
             try:
                 user, p = _authorize(workflow)

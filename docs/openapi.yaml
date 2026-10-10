@@ -8160,7 +8160,7 @@ components:
           type: integer
           description: 最多详细读取资源数
           minimum: 1
-          maximum: 3
+          maximum: 12
         maxIterations:
           type: integer
           description: 科研工作流最大迭代轮次
@@ -9291,6 +9291,69 @@ components:
       - findings
       - checked
       additionalProperties: false
+    AgentWorkflowDecision:
+      type: [object, 'null']
+      description: 模型在行动时形成的可核对判断摘要；绑定实际证据与计算，不包含隐藏思维链
+      properties:
+        problem:
+          type: string
+          description: 本步骤要解决的问题
+        findings:
+          type: array
+          description: 来自实际数据或计算的发现
+          items:
+            type: string
+        judgement:
+          type: string
+          description: 当前判断及适用范围
+        uncertainties:
+          type: array
+          description: 尚待核实的问题或需要补充的资料
+          items:
+            type: string
+        nextAction:
+          type: string
+          description: 模型选择的下一步受限动作
+        algorithmReason:
+          type: string
+          description: 为什么选择该算法、输入角色及参数
+        evidenceRefs:
+          type: array
+          description: 本次授权数据、知识修订、真实任务及输出引用
+          items:
+            type: object
+            description: 可回查的实际证据引用
+            properties:
+              kind:
+                type: string
+                description: 引用类型
+                enum: [resource, knowledge, output, task]
+              id:
+                type: string
+                description: 真实对象标识，界面使用对应友好标题
+              revision:
+                type: integer
+                description: 实际知识修订（知识引用提供时）
+              role:
+                type: string
+                description: 前期影像、后期影像、初始图或修复图等输入角色
+              title:
+                type: string
+                description: 用户可见的证据标题
+            required: [kind, id, title]
+            additionalProperties: false
+        resultSummary:
+          type: string
+          description: 读取本次实际结果后的简短说明
+        modelMode:
+          type: string
+          description: 实际调用的模型模式，模拟验证单独标识
+          enum: [real, mock]
+        modelName:
+          type: string
+          description: 实际模型的公开名称
+      required: [problem, findings, judgement, uncertainties, nextAction, algorithmReason, evidenceRefs, modelMode, modelName]
+      additionalProperties: false
     AgentWorkflowStep:
       type: object
       description: 科研工作流的可审计步骤
@@ -9314,6 +9377,8 @@ components:
           type: object
           description: 已校验的结构化动作
           additionalProperties: true
+        decision:
+          $ref: '#/components/schemas/AgentWorkflowDecision'
         inputRefs:
           type: object
           description: 输入引用
@@ -9345,6 +9410,7 @@ components:
       - status
       - message
       - action
+      - decision
       - inputRefs
       - outputRefs
       - metrics
@@ -9492,7 +9558,7 @@ components:
       properties:
         workflowType:
           type: string
-          description: 工作流类型，默认 hyperspectral_interpretation
+          description: 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 为填图检查纠偏；默认 hyperspectral_interpretation
           default: hyperspectral_interpretation
           maxLength: 40
         goal:
@@ -9506,7 +9572,7 @@ components:
         resourceIds:
           type: array
           description: 可选授权输入；为空时自主发现
-          maxItems: 3
+          maxItems: 12
           items:
             type: integer
             minimum: 1
@@ -9528,14 +9594,20 @@ components:
           maxLength: 80
         inputs:
           type: object
-          description: 输入端口到授权资源 ID 的明确绑定
+          description: 输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质使用 initial_map、surveys、rules。真实计算输出入库后按持久来源接入后续步骤。
           additionalProperties:
             type: integer
             minimum: 1
+        knowledgeSelection:
+          $ref: '#/components/schemas/AgentKnowledgeSelection'
         importResults:
           type: boolean
           description: 完成后自动登记计算结果
           default: true
+        previousWorkflowId:
+          type: string
+          format: uuid
+          description: 可选的本人当前项目已完成生态分析；仅替换观测证据，复用实际变化结果并保存旧判断与新增证据，用于更新调查建议。
       required:
       - goal
       - model

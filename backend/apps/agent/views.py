@@ -690,6 +690,7 @@ def workflow_json(workflow, include_steps=True):
                 "status": item.status,
                 "message": item.message,
                 "action": item.action,
+                "decision": item.action.get("decision"),
                 "inputRefs": item.input_refs,
                 "outputRefs": item.output_refs,
                 "metrics": item.metrics,
@@ -734,6 +735,8 @@ def workflow_submit(request):
             "idempotencyKey",
             "inputs",
             "importResults",
+            "knowledgeSelection",
+            "previousWorkflowId",
         ],
     )
     p = require_access(request.user, "agent", value.get("model"))
@@ -749,6 +752,19 @@ def workflow_submit(request):
     algorithm_id = value.get("algorithmVersionId")
     inputs = value.get("inputs", {})
     import_results = value.get("importResults", True)
+    previous_workflow = value.get("previousWorkflowId")
+    if previous_workflow is not None:
+        from uuid import UUID
+
+        try:
+            UUID(previous_workflow)
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ApiProblem("原分析记录无效") from exc
+        if workflow_type != "ecology_investigation":
+            raise ApiProblem("补充证据更新目前适用于生态分析")
+    from .selections import normalize
+
+    knowledge_selection = normalize(value, resources_selected)["knowledge_selection"]
     if (
         not isinstance(goal, str)
         or not 1 <= len(goal.strip()) <= 12000
@@ -807,7 +823,15 @@ def workflow_submit(request):
             resource_ids=resources_selected,
             algorithm_version_id=algorithm_id,
             parameters=parameters,
-            plan={"inputs": inputs},
+            plan={
+                "inputs": inputs,
+                "knowledgeSelection": knowledge_selection,
+                **(
+                    {"previousWorkflowId": value["previousWorkflowId"]}
+                    if value.get("previousWorkflowId")
+                    else {}
+                ),
+            },
             import_results=import_results,
             idempotency_key=key,
             policy_snapshot={
@@ -845,6 +869,11 @@ def workflow_confirm(request, workflow_id):
             or value["planHash"] != workflow.plan_hash
         ):
             raise ApiProblem("执行计划已变化，请刷新后确认", 409)
+        if workflow.workflow_type in {"ecology_investigation", "geology_correction"}:
+            from .demo_workflow import confirm_demo
+
+            confirm_demo(workflow, request.user, p, value["planHash"])
+            return JsonResponse(workflow_json(workflow))
         if workflow.execute_operators and workflow.status in WORKFLOW_ACTIVE:
             return JsonResponse(workflow_json(workflow))
         if workflow.status != "waiting_approval" or workflow.cancel_requested:

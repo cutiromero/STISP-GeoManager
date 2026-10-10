@@ -227,7 +227,7 @@ def validate_policy(value):
         ("maxOutputTokens", 128, 32768),
         ("maxContextTokens", 1024, 262144),
         ("maxSteps", 1, 64),
-        ("maxResources", 1, 3),
+        ("maxResources", 1, 12),
         ("maxIterations", 1, 20),
         ("maxOperatorSteps", 1, 64),
         ("maxProtocolRetries", 0, 3),
