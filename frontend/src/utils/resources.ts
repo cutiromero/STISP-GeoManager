@@ -21,6 +21,17 @@ export function resourceCategory(resource: ResourceListItem) {
   return resource.category;
 }
 
+export function isComputeResult(resource: Pick<ResourceListItem, "category">) {
+  return resource.category?.code === "compute_results";
+}
+
+export function resourceSourceLabel(
+  resource: Pick<ResourceListItem, "category" | "source">,
+  computeLabel: string,
+) {
+  return isComputeResult(resource) ? computeLabel : resource.source;
+}
+
 export function resourceFormatLabel(resource: ResourceListItem) {
   return resource.fileFormat || resource.dataType;
 }

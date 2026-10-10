@@ -58,7 +58,7 @@ def output_data(output):
                 actor,
             ).first()
     location = (
-        output.task.project_tag.name + " / \u6570\u636e\u8d44\u6e90 / " + resource.name
+        output.task.project_tag.name + " / 数据资源 / 计算结果 / " + resource.name
         if resource
         else ""
     )

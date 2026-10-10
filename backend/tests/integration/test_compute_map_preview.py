@@ -133,7 +133,7 @@ def test_registered_location_is_authorized_and_friendly(map_result):
         assert value["resourceName"] == resource.name
         assert (
             value["resourceLocation"]
-            == env["project"].name + " / \u6570\u636e\u8d44\u6e90 / " + resource.name
+            == env["project"].name + " / 数据资源 / 计算结果 / " + resource.name
         )
         assert f"resourceId={resource.id}" in value["mapUrl"]
         resource.maintainer = env["outsider"]

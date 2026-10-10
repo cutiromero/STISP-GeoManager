@@ -2594,3 +2594,11 @@ GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84
 算法与数据支持 auto/manual。算法manual须选择1至3个实际已发布安全版本，数据manual须选择1至3项resourceIds；auto对应列表为空。旧客户端非空resourceIds兼容为手选。手选范围由服务端同时限定工具返回、输入读取、执行和计算卡候选。手选一个算法后，用户用“处理/运行/计算”即可进入该算法参数卡；多选且未明确算法时提示选择，不猜测执行。知识none模式仍可按计算清单完成计算，既有质量报告和入库验证继续生效。
 
 偏好保存于每轮AgentRun；会话详情的runs及运行轮询可恢复，幂等比较包含所有偏好。bootstrap新增knowledgeDomains（id/label/description/count）与algorithmOptions（versionId/algorithmId/name/version/description）。普通模型聊天继续无平台工具，应在智能体模式呈现选择控件。
+
+## 计算结果目录与统一参数表单（2026-10-10）
+
+`GET /api/data-schema/summary/` 返回地理数据、非地理数据和计算结果三个根节点，目录版本为 `2026.10`。`compute_results` 节点的 `selectable=false`、`spatialClass=null`：普通上传不能选择该类别，计算结果自身的空间属性和数据类型保持。`GET /api/catalog/resources/?categoryCode=compute_results` 筛选当前项目可访问的已入库计算结果，空间结果继续可在地理工作台查看；未入库成果仍在原任务中。
+
+内部 `DataResource.is_compute_result` 标记由计算入库维护，不作为客户端可写字段。栅格、矢量、表格、图片和报告入库均归入计算结果；历史回填只依据 `ComputeImport.resource` 的真实关联并核对任务与资源项目一致，不按名称或来源文字推断。迁移仅新增分类、结果标记并更新匹配资源的分类，保留原始文件、资源状态、时间戳、隐私与项目权限。计算输出 `resourceLocation` 返回项目下的“数据资源 / 计算结果 / 资源名称”。
+
+计算中心和智能体参数卡共用 `ComputeAlgorithmFields`，按已发布算法清单展示输入数据、算法参数和结果概览。两处采用相同的波段名称、帮助说明、默认参考值和范围提示；更换输入后清空关联波段或字段。智能体仍要求用户明确确认波段，展示默认参考值不等于授权使用默认波段。

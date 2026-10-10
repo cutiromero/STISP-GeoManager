@@ -37,6 +37,7 @@ import type {
   AdminDataResourceList,
 } from "../types";
 import { downloadBlob } from "../utils/download";
+import { isComputeResult, resourceSourceLabel } from "../utils/resources";
 import DataSchemaOverview from "./DataSchemaOverview";
 import {
   fallbackTaxonomyTree,
@@ -845,9 +846,18 @@ export default function AdminDataInventoryPage() {
           className="inventory-table-stack-cell"
         >
           <Typography.Text
-            ellipsis={{ tooltip: record.source || l("未记录", "Not recorded") }}
+            ellipsis={{
+              tooltip:
+                resourceSourceLabel(
+                  record,
+                  l("平台算法计算", "Platform algorithm computation"),
+                ) || l("未记录", "Not recorded"),
+            }}
           >
-            {record.source || l("未记录", "Not recorded")}
+            {resourceSourceLabel(
+              record,
+              l("平台算法计算", "Platform algorithm computation"),
+            ) || l("未记录", "Not recorded")}
           </Typography.Text>
           <Typography.Text
             type="secondary"
@@ -1284,6 +1294,14 @@ export default function AdminDataInventoryPage() {
           },
           { label: l("类型", "Type"), value: dataTypeText(resource.dataType) },
           {
+            label: l("数据来源", "Data source"),
+            value:
+              resourceSourceLabel(
+                resource,
+                l("平台算法计算", "Platform algorithm computation"),
+              ) || l("未记录", "Not recorded"),
+          },
+          {
             label: l("状态", "Status"),
             value: (
               <Tag color={statusLabels[resource.status].color}>
@@ -1351,10 +1369,7 @@ export default function AdminDataInventoryPage() {
             </Typography.Title>
             <Form.Item
               name="categoryCode"
-              label={l(
-                "按坐标信息自动分类",
-                "Geographic or non-geographic data",
-              )}
+              label={l("自动分类结果", "Automatic classification")}
               rules={[
                 {
                   required: true,
@@ -1370,7 +1385,12 @@ export default function AdminDataInventoryPage() {
                 optionFilterProp="label"
                 disabled
                 options={flattenTaxonomy(localizedTaxonomy)
-                  .filter((node) => node.selectable)
+                  .filter(
+                    (node) =>
+                      node.selectable ||
+                      (isComputeResult(resource) &&
+                        node.categoryCode === "compute_results"),
+                  )
                   .map((node) => ({
                     value: node.categoryCode,
                     label: node.path.join(" / "),

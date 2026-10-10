@@ -1958,7 +1958,7 @@ paths:
       tags:
       - 数据目录
       summary: 获取甲方数据分类与数据库架子摘要
-      description: 返回甲方确认的地理/非地理两类权威业务分类树、兼容业务标签、数据库分层和核心实体摘要。分类树来自数据库父子词表；地理/非地理不再作为业务一级分类。需要 `core.browse_data`，接口只读。
+      description: 返回地理数据、非地理数据和计算结果三类目录、兼容业务标签、数据库分层和核心实体摘要。分类树来自数据库词表；计算结果仅由计算输出入库自动归类，普通上传不可选择。需要 `core.browse_data`，接口只读。
         公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。
       operationId: getDataSchemaSummary
       security: []
@@ -2086,7 +2086,7 @@ paths:
       tags:
       - 管理后台
       summary: 获取存量数据管理列表
-      description: 返回已导入或已登记的数据资源列表，支持启用和停用数据、多条件检索、访问用户组、存量数据内容分组和默认可视化方案查看。系统分组及全量统计按四个权威一级大类、十五个可挂接小类和未分组（其他）数据生成；用户自定义分组继续用于内容归档。具备
+      description: 返回已导入或已登记的数据资源列表，支持启用和停用数据、多条件检索、访问用户组、存量数据内容分组和默认可视化方案查看。系统分组及全量统计按地理数据、非地理数据、计算结果和未分组（其他）数据生成；用户自定义分组继续用于内容归档。具备
         `catalog.view_dataresource`、`catalog.change_dataresource`、`catalog.delete_dataresource` 或 `catalog.export_dataresource`
         时，仅返回当前用户可见或本人上传且符合筛选条件的资源；超级管理员可查看全部资源；仅具备 `catalog.add_dataresource` 时只返回当前用户上传的数据资源，用于管理自己的数据可见范围。可手动配置的数据访问角色列表不会返回超级管理员角色，后端仍会强制保留超级管理员访问范围。
       operationId: listAdminDataResources
@@ -2749,7 +2749,7 @@ paths:
       tags:
       - 数据目录
       summary: 获取数据资源列表
-      description: 支持按甲方业务分类、资源形态、空间属性和兼容业务标签筛选。categoryCode 是权威业务主分类，父节点默认包含全部后代；dataType/spatialClass 只描述存储和展示能力，domainType
+      description: 支持按目录分类、资源形态、空间属性和兼容业务标签筛选。categoryCode=compute_results 返回计算中心或智能体计算后已入库的结果，父节点默认包含全部后代；dataType/spatialClass 继续描述存储和展示能力，domainType
         为兼容标签。需要 `core.browse_data`。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。
       operationId: getResources
       security: []
@@ -6261,7 +6261,7 @@ paths:
   "/api/compute/tasks/{taskId}/": {"get": {"operationId": "getComputeTask", "tags": ["Compute"], "summary": "getComputeTask", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "taskId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "string", "description": "文字"}}, {"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeTask"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}, "post": {"operationId": "actComputeTask", "tags": ["Compute"], "summary": "actComputeTask", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "taskId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "string", "description": "文字"}}, {"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeTask"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAction"}}}}}}
   "/api/compute/outputs/{outputId}/file/": {"get": {"operationId": "downloadComputeOutput", "tags": ["Compute"], "summary": "downloadComputeOutput", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "outputId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "integer", "description": "标识"}}, {"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/octet-stream": {"schema": {"type": "string", "description": "二进制文件", "format": "binary"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
   "/api/compute/outputs/{outputId}/preview/": {"get": {"operationId": "previewComputeOutput", "tags": ["Compute"], "summary": "previewComputeOutput", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "outputId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "integer", "description": "标识"}}, {"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputePreview"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
-  "/api/compute/outputs/{outputId}/import/": {"post": {"operationId": "importComputeOutput", "tags": ["Compute"], "summary": "importComputeOutput", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "outputId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "integer", "description": "标识"}}, {"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeOutput"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeImportRequest"}}}}}}
+  "/api/compute/outputs/{outputId}/import/": {"post": {"operationId": "importComputeOutput", "tags": ["Compute"], "summary": "importComputeOutput", "description": "计算输出异步入库，统一归入计算结果目录。服务端重新检查原项目、功能权限及输入可见性；写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "outputId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "integer", "description": "标识"}}, {"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeOutput"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeImportRequest"}}}}}}
   /api/agent/bootstrap/:
     get:
       tags:
@@ -12613,7 +12613,7 @@ components:
       properties:
         taxonomyVersion:
           type: string
-          description: 当前甲方业务分类版本，V1 固定为 2026.07。
+          description: 当前目录分类版本为 2026.10。
         domains:
           type: array
           description: 甲方确认数据类型定义。
@@ -12635,7 +12635,7 @@ components:
           items:
             $ref: '#/components/schemas/DataSchemaCatalogNode'
     DataSchemaCatalogNode:
-      description: 分类为 spatial（具有地理坐标信息）与 non_spatial（无地理坐标信息），两个根节点均可挂接；资源导入由坐标解析结果自动归类。
+      description: 三类根节点为 spatial（地理数据）、non_spatial（非地理数据）和 compute_results（计算结果）。普通上传按坐标解析结果自动归类；计算输出入库统一归入计算结果，资源自身空间属性保持。
       type: object
       required:
       - code
@@ -12657,7 +12657,7 @@ components:
           description: 可用于资源筛选和分类提交的稳定业务分类编码。
         selectable:
           type: boolean
-          description: 是否允许数据资源直接挂接；四个一级节点为 false。
+          description: 是否允许普通上传选择；spatial 和 non_spatial 为 true，compute_results 为 false。
         description:
           type: string
           description: 分类边界和适用范围说明。
@@ -12675,7 +12675,7 @@ components:
           oneOf:
           - $ref: '#/components/schemas/SpatialClass'
           - type: 'null'
-          description: 节点空间属性，分组节点可为 null。
+          description: 节点空间属性；计算结果包含多种类型，compute_results 节点为 null。
         children:
           type: array
           items:
@@ -13159,7 +13159,7 @@ components:
           description: 数据分类，未分类时为 null
         categoryPath:
           type: array
-          description: 从地理/非地理两类一级节点到资源主分类的完整路径；待归类时为空数组
+          description: 从地理数据、非地理数据或计算结果根节点到资源分类的完整路径；待归类时为空数组
           items:
             $ref: '#/components/schemas/DataCategoryPathItem'
         classificationStatus:
@@ -13365,7 +13365,7 @@ components:
           description: 数据分类，未分类时为 null
         categoryPath:
           type: array
-          description: 从地理/非地理两类一级节点到资源主分类的完整路径；待归类时为空数组
+          description: 从地理数据、非地理数据或计算结果根节点到资源分类的完整路径；待归类时为空数组
           items:
             $ref: "#/components/schemas/DataCategoryPathItem"
         classificationStatus:
@@ -13533,7 +13533,7 @@ components:
           type:
           - string
           - 'null'
-          description: 权威分类编码；一级大类和十五个小类分组返回对应编码，其他分组为 null
+          description: 目录分类编码；地理数据、非地理数据和计算结果分组返回对应编码，其他分组为 null
         inventoryGroupId:
           type:
           - integer
@@ -13587,7 +13587,7 @@ components:
           deprecated: true
         inventoryGroups:
           type: array
-          description: 用户新建的持久化自定义组别列表；“全部数据”、四个一级大类、十五个小类和“未分组（其他）”由权威分类体系生成，不在该数组中
+          description: 用户新建的持久化自定义组别列表；“全部数据”、地理数据、非地理数据、计算结果和“未分组（其他）”由目录分类体系生成，不在该数组中
           items:
             $ref: "#/components/schemas/AdminDataResourceGroup"
     AdminDataResourceGroup:
@@ -17356,7 +17356,7 @@ components:
     "ComputeCategory": {"type": "object", "description": "算法用途分类", "properties": {"id": {"type": "integer", "description": "标识"}, "name": {"type": "string", "description": "文字"}, "sortOrder": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "sortOrder"]}
     "ComputeCandidate": {"type": "object", "description": "当前项目可计算数据；元数据不代表已固定输入", "properties": {"id": {"type": "integer", "description": "标识"}, "name": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "fields": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "bands": {"type": "integer", "description": "标识"}, "crs": {"type": "string", "description": "文字"}, "geometryTypes": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "sizeBytes": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "kind", "projectTagId", "fields", "bands", "crs", "geometryTypes", "sizeBytes"]}
     "ComputeTaskCreate": {"type": "object", "description": "创建任务；相同幂等键只能用于同一请求", "properties": {"name": {"type": "string", "description": "任务名称"}, "versionId": {"type": "integer", "description": "固定算法版本"}, "inputs": {"type": "object", "description": "输入名到资源 ID", "additionalProperties": {"type": "integer", "description": "标识"}}, "parameters": {"type": "object", "description": "按版本声明校验的参数", "additionalProperties": true}, "idempotencyKey": {"type": "string", "description": "客户端生成唯一键，最长80字符"}, "trial": {"type": "boolean", "description": "管理员试运行草稿版本"}}, "required": ["name", "versionId", "inputs", "parameters", "idempotencyKey"]}
-    "ComputeOutput": {"type": "object", "description": "验证后的实际结果及独立入库状态", "properties": {"id": {"type": "integer", "description": "标识"}, "key": {"type": "string", "description": "文字"}, "label": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "fileName": {"type": "string", "description": "文字"}, "sizeBytes": {"type": "integer", "description": "标识"}, "checksum": {"type": "string", "description": "文字"}, "metadata": {"type": "object", "description": "波段/字段/CRS/行数等结果检查信息", "additionalProperties": true}, "expired": {"type": "boolean", "description": "是否"}, "importStatus": {"type": "string", "description": "入库状态", "enum": ["none", "queued", "running", "ready", "failed"]}, "resourceId": {"type": ["integer", "null"], "description": "已入库资源"}, "importError": {"type": "string", "description": "文字"}, "downloadUrl": {"type": "string", "description": "文字"}, "previewUrl": {"type": "string", "description": "文字"}, "resourceName": {"type": "string", "description": "Authorized registered resource name"}, "resourceLocation": {"type": "string", "description": "Project and catalog location"}, "mapUrl": {"type": "string", "description": "Direct geographic workspace link when registered"}}, "required": ["id", "key", "label", "kind", "fileName", "sizeBytes", "checksum", "metadata", "expired", "importStatus", "resourceId", "importError", "downloadUrl", "previewUrl"]}
+    "ComputeOutput": {"type": "object", "description": "验证后的实际结果及独立入库状态", "properties": {"id": {"type": "integer", "description": "标识"}, "key": {"type": "string", "description": "文字"}, "label": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "fileName": {"type": "string", "description": "文字"}, "sizeBytes": {"type": "integer", "description": "标识"}, "checksum": {"type": "string", "description": "文字"}, "metadata": {"type": "object", "description": "波段/字段/CRS/行数等结果检查信息", "additionalProperties": true}, "expired": {"type": "boolean", "description": "是否"}, "importStatus": {"type": "string", "description": "入库状态", "enum": ["none", "queued", "running", "ready", "failed"]}, "resourceId": {"type": ["integer", "null"], "description": "已入库资源"}, "importError": {"type": "string", "description": "文字"}, "downloadUrl": {"type": "string", "description": "文字"}, "previewUrl": {"type": "string", "description": "文字"}, "resourceName": {"type": "string", "description": "Authorized registered resource name"}, "resourceLocation": {"type": "string", "description": "项目下数据资源 / 计算结果 / 资源名称"}, "mapUrl": {"type": "string", "description": "Direct geographic workspace link when registered"}}, "required": ["id", "key", "label", "kind", "fileName", "sizeBytes", "checksum", "metadata", "expired", "importStatus", "resourceId", "importError", "downloadUrl", "previewUrl"]}
     "ComputeTask": {"type": "object", "description": "一个项目内的任务记录；日志/未入库成果仅本人和有权管理员可见", "properties": {"id": {"type": "string", "description": "UUID"}, "name": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "ownerName": {"type": "string", "description": "文字"}, "algorithmName": {"type": "string", "description": "文字"}, "version": {"$ref": "#/components/schemas/ComputeVersion"}, "status": {"type": "string", "description": "任务状态", "enum": ["queued", "validating", "running", "cancelling", "succeeded", "failed", "cancelled", "interrupted"]}, "stage": {"type": "string", "description": "平台阶段说明"}, "progress": {"type": "integer", "description": "0至100"}, "error": {"type": "string", "description": "可行动错误信息，不包含主机路径"}, "parameters": {"type": "object", "description": "任务参数快照", "additionalProperties": true}, "inputs": {"type": "array", "description": "列表", "items": {"type": "object", "description": "输入资源ID/名称/固定SHA256/元数据", "additionalProperties": true}}, "outputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeOutput"}}, "createdAt": {"type": "string", "description": "文字"}, "startedAt": {"type": ["string", "null"], "description": "开始时间"}, "finishedAt": {"type": ["string", "null"], "description": "结束时间"}, "trial": {"type": "boolean", "description": "是否"}, "unread": {"type": "boolean", "description": "是否"}, "retryOf": {"type": ["string", "null"], "description": "前序任务"}, "attemptCount": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "projectTagId", "ownerName", "algorithmName", "version", "status", "stage", "progress", "error", "parameters", "inputs", "outputs", "createdAt", "startedAt", "finishedAt", "trial", "unread", "retryOf", "attemptCount"]}
     "ComputeRuntimeStatus": {"type": "object", "description": "运行环境和当前用户的能力，不包含主机命令/路径", "properties": {"available": {"type": "boolean", "description": "隔离执行环境和worker均可用"}, "detail": {"type": "string", "description": "状态说明"}, "workerOnline": {"type": "boolean", "description": "是否"}, "runtimes": {"type": "array", "description": "列表", "items": {"type": "object", "description": "ID、名称、imageDigest、ready", "additionalProperties": true}}, "limits": {"type": "object", "description": "配额", "additionalProperties": true}, "permissions": {"type": "object", "description": "计算功能权限", "additionalProperties": {"type": "boolean", "description": "是否"}}}, "required": ["available", "detail", "workerOnline", "runtimes", "limits", "permissions"]}
     "ComputePreview": {"type": "object", "description": "最多100行的表格/矢量属性或栅格元数据预览", "properties": {"kind": {"type": "string", "description": "文字"}, "metadata": {"type": "object", "description": "元数据", "additionalProperties": true}, "columns": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "rows": {"type": "array", "description": "列表", "items": {"type": "array", "description": "列表", "items": {"description": "单元格值"}}}}, "required": ["kind", "metadata", "columns", "rows"]}

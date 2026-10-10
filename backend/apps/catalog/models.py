@@ -156,6 +156,13 @@ class DataResource(ProjectScopedModel):
         verbose_name="仅上传者可见",
         help_text="启用后仅上传者和超级管理员可访问；默认项目成员可见。",
     )
+    is_compute_result = models.BooleanField(
+        default=False,
+        db_default=False,
+        editable=False,
+        verbose_name="计算结果",
+        help_text="由计算结果入库流程登记；用户上传保留地理/非地理分类。",
+    )
     inventory_group = models.ForeignKey(
         DataResourceGroup,
         null=True,
@@ -207,11 +214,15 @@ class DataResource(ProjectScopedModel):
             return self.SpatialClass.SPATIAL
         return self.SpatialClass.NON_SPATIAL
 
+    @property
+    def classification_category_code(self) -> str:
+        return "compute_results" if self.is_compute_result else self.spatial_class
+
     def save(self, *args, **kwargs):
         # All import/scan paths use this same classification after coordinates are parsed.
         category = DictionaryItem.objects.filter(
             dict_type=DictionaryItem.DictType.DATA_CATEGORY,
-            code=self.spatial_class,
+            code=self.classification_category_code,
             is_active=True,
         ).first()
         if category is not None:

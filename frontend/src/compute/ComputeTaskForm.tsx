@@ -1,92 +1,27 @@
 import {
   App,
   Alert,
+  Button,
   Form,
   Input,
-  InputNumber,
   Modal,
-  Select,
   Space,
-  Switch,
   Typography,
 } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   computeApi,
   type ComputeCandidate,
-  type ComputeParameterSpec,
   type ComputeTask,
   type ComputeTaskCreate,
   type ComputeVersion,
 } from "../api/compute";
 import { createUuid } from "../utils/uuid";
+import ComputeAlgorithmFields, {
+  resetLinkedComputeParameters,
+  type ComputeFieldValues,
+} from "./ComputeAlgorithmFields";
 import { useComputeText } from "./ui";
-
-function ParameterControl({
-  parameter,
-  inputs,
-  id,
-  value,
-  checked,
-  onChange,
-}: {
-  parameter: ComputeParameterSpec;
-  inputs: Record<string, ComputeCandidate | undefined>;
-  id?: string;
-  value?: unknown;
-  checked?: boolean;
-  onChange?: (value: unknown) => void;
-}) {
-  const ui = useComputeText();
-  const data = parameter.input ? inputs[parameter.input] : undefined;
-  if (parameter.type === "boolean")
-    return <Switch id={id} checked={checked} onChange={onChange} />;
-  if (
-    parameter.type === "enum" ||
-    parameter.type === "field" ||
-    parameter.type === "band"
-  ) {
-    const values =
-      parameter.type === "enum"
-        ? (parameter.choices ?? [])
-        : parameter.type === "field"
-          ? (data?.fields ?? [])
-          : Array.from({ length: data?.bands ?? 0 }, (_, index) => index + 1);
-    return (
-      <Select
-        id={id}
-        value={value as string | number | undefined}
-        onChange={onChange}
-        showSearch
-        options={values.map((value) => ({
-          value,
-          label: parameter.type === "enum" ? ui(String(value)) : String(value),
-        }))}
-        style={{ minWidth: 180 }}
-      />
-    );
-  }
-  if (parameter.type === "number" || parameter.type === "integer")
-    return (
-      <InputNumber
-        id={id}
-        value={typeof value === "number" ? value : null}
-        onChange={onChange}
-        min={parameter.min}
-        max={parameter.max}
-        precision={parameter.type === "integer" ? 0 : undefined}
-        style={{ width: "100%" }}
-      />
-    );
-  return (
-    <Input
-      id={id}
-      value={typeof value === "string" ? value : ""}
-      onChange={(event) => onChange?.(event.target.value)}
-      maxLength={2000}
-    />
-  );
-}
 
 export default function ComputeTaskForm({
   version,
@@ -149,19 +84,7 @@ export default function ComputeTaskForm({
       live = false;
     };
   }, [resourceId, initial, version, form]);
-  const values = Form.useWatch([], form) as
-    | { inputs?: Record<string, number>; parameters?: Record<string, unknown> }
-    | undefined;
-  const selected = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(values?.inputs ?? {}).map(([name, id]) => [
-          name,
-          candidates.find((c) => c.id === id),
-        ]),
-      ),
-    [values?.inputs, candidates],
-  );
+  const values = Form.useWatch([], form) as ComputeFieldValues | undefined;
   useEffect(() => {
     let mounted = true;
     setLoading(true);
@@ -239,13 +162,21 @@ export default function ComputeTaskForm({
       okText={ui("检查并提交", "Validate and submit")}
       cancelText={ui("取消", "Cancel")}
       destroyOnHidden
+      styles={{
+        body: {
+          maxHeight: "min(70vh, 760px)",
+          overflowY: "auto",
+          overscrollBehavior: "contain",
+          paddingRight: 4,
+        },
+      }}
     >
       <Alert
         type="info"
         showIcon
         title={ui(
-          "只使用当前项目内有权访问的数据，无需先加载到地图。结果仍属于当前项目。",
-          "Use authorized data in the current project. Map loading is not required; results stay in this project.",
+          "使用当前项目的数据，计算结果也保存在当前项目。",
+          "Use this project's data; results are saved to the same project.",
         )}
         style={{ marginBottom: 20 }}
       />
@@ -260,6 +191,10 @@ export default function ComputeTaskForm({
       <Form
         form={form}
         layout="vertical"
+        disabled={busy}
+        onValuesChange={(changed) =>
+          resetLinkedComputeParameters(form, version.manifest, changed)
+        }
         initialValues={{
           name: initial?.name ?? ui(version.manifest.name),
           inputs: initial
@@ -283,97 +218,59 @@ export default function ComputeTaskForm({
         >
           <Input maxLength={160} />
         </Form.Item>
-        {version.manifest.inputs.length > 0 && (
-          <Form.Item
-            label={ui("查找输入数据", "Find input data")}
-            extra={ui(
-              "按名称筛选下方输入数据选项，再选择算法需要的数据。",
-              "Filter the input choices below by name, then select the data for this algorithm.",
-            )}
-          >
-            <Input.Search
-              aria-label={ui("查找输入数据", "Find input data")}
-              placeholder={ui(
-                "输入数据名称，按 Enter 搜索",
-                "Enter a data name and press Enter",
+        <ComputeAlgorithmFields
+          manifest={version.manifest}
+          candidates={candidates}
+          values={values}
+          loading={loading}
+          searchControls={
+            <>
+              {version.manifest.inputs.length > 0 && (
+                <Form.Item label={ui("查找输入数据", "Find input data")}>
+                  <Input.Search
+                    aria-label={ui("查找输入数据", "Find input data")}
+                    placeholder={ui(
+                      "输入数据名称，按 Enter 搜索",
+                      "Enter a data name and press Enter",
+                    )}
+                    onSearch={(text) => {
+                      setKeyword(text);
+                      setPage(1);
+                    }}
+                    allowClear
+                  />
+                </Form.Item>
               )}
-              onSearch={(text) => {
-                setKeyword(text);
-                setPage(1);
-              }}
-              allowClear
-            />
-          </Form.Item>
-        )}
-        {version.manifest.inputs.map((input) => (
-          <Form.Item
-            key={input.key}
-            name={["inputs", input.key]}
-            label={`${ui(input.label)} · ${input.kind}`}
-            rules={[{ required: input.required }]}
-          >
-            <Select
-              showSearch
-              loading={loading}
-              optionFilterProp="label"
-              placeholder={ui("选择输入数据", "Select input data")}
-              options={candidates
-                .filter((c) => c.kind === input.kind)
-                .map((c) => ({
-                  value: c.id,
-                  label: c.name,
-                  disabled:
-                    input.minBands !== undefined && c.bands < input.minBands,
-                }))}
-            />
-          </Form.Item>
-        ))}
-        {total > 30 && (
-          <Space style={{ marginBottom: 16 }}>
-            <Typography.Text>
-              {ui("数据候选页", "Data page")} {page}/{Math.ceil(total / 30)}
-            </Typography.Text>
-            <a onClick={() => setPage(Math.max(1, page - 1))}>
-              {ui("上一页", "Previous")}
-            </a>
-            <a
-              onClick={() => setPage(Math.min(Math.ceil(total / 30), page + 1))}
-            >
-              {ui("下一页", "Next")}
-            </a>
-          </Space>
-        )}
-        {version.manifest.parameters.map((parameter) => {
-          const when = parameter.when;
-          if (when && values?.parameters?.[String(when.key)] !== when.equals)
-            return null;
-          return (
-            <Form.Item
-              key={parameter.key}
-              name={["parameters", parameter.key]}
-              label={ui(parameter.label)}
-              help={parameter.help ? ui(parameter.help) : undefined}
-              rules={[{ required: parameter.required }]}
-              valuePropName={parameter.type === "boolean" ? "checked" : "value"}
-              preserve={false}
-            >
-              <ParameterControl parameter={parameter} inputs={selected} />
-            </Form.Item>
-          );
-        })}
+              {total > 30 && (
+                <Space style={{ marginBottom: 16 }} wrap>
+                  <Typography.Text type="secondary">
+                    {ui("数据候选页", "Data page")} {page}/
+                    {Math.ceil(total / 30)}
+                  </Typography.Text>
+                  <Button
+                    size="small"
+                    type="text"
+                    disabled={page === 1}
+                    onClick={() => setPage(Math.max(1, page - 1))}
+                  >
+                    {ui("上一页", "Previous")}
+                  </Button>
+                  <Button
+                    size="small"
+                    type="text"
+                    disabled={page === Math.ceil(total / 30)}
+                    onClick={() =>
+                      setPage(Math.min(Math.ceil(total / 30), page + 1))
+                    }
+                  >
+                    {ui("下一页", "Next")}
+                  </Button>
+                </Space>
+              )}
+            </>
+          }
+        />
       </Form>
-      <Typography.Paragraph type="secondary">
-        {ui("输出：", "Outputs: ")}
-        {version.manifest.outputs
-          .map((o) => `${ui(o.label)} (${o.kind})`)
-          .join("、")}
-      </Typography.Paragraph>
-      <Typography.Paragraph type="secondary">
-        {ui(
-          "结果由系统自动保存，无需填写服务器路径。完成后在任务详情查看；有相应权限时可下载或存入当前项目的数据资源。",
-          "Results are saved automatically; no server path is needed. View them in task details, and download or import them into this project's data resources when authorized.",
-        )}
-      </Typography.Paragraph>
     </Modal>
   );
 }

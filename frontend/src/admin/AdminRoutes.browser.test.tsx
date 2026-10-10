@@ -111,7 +111,8 @@ vi.mock("../api/platform", () => ({
   },
 }));
 
-vi.mock("../api/client", () => ({
+vi.mock("../api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/client")>()),
   ApiError: class ApiError extends Error {},
   api: mockApi,
 }));
@@ -2364,14 +2365,19 @@ describe("admin routes", () => {
 
     expect(await screen.findByText("胡杨林样地点")).toBeInTheDocument();
     expect(screen.getAllByText("全部数据").length).toBeGreaterThan(0);
-    for (const groupName of ["地理数据", "非地理数据", "未分组（其他）"]) {
+    for (const groupName of [
+      "地理数据",
+      "非地理数据",
+      "计算结果",
+      "未分组（其他）",
+    ]) {
       expect(
         screen.getByRole("button", { name: `删除系统分组${groupName}` }),
       ).toBeDisabled();
     }
     expect(
       document.querySelectorAll('button[aria-label^="删除系统分组"]'),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
     expect(
       screen.queryByRole("button", { name: "删除系统分组LUCC" }),
     ).not.toBeInTheDocument();
@@ -2400,7 +2406,7 @@ describe("admin routes", () => {
     expect(screen.queryByText("populus_plots")).not.toBeInTheDocument();
   });
 
-  it("keeps the two coordinate categories flat", async () => {
+  it("keeps the coordinate and computation-result categories flat", async () => {
     renderAdminRoute("/resources/data/inventory");
     expect(await screen.findByText("胡杨林样地点")).toBeInTheDocument();
     expect(
@@ -2408,6 +2414,9 @@ describe("admin routes", () => {
     ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "删除系统分组非地理数据" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "删除系统分组计算结果" }),
     ).toBeDisabled();
     expect(
       document.querySelector(".inventory-category-child-table"),
@@ -2438,6 +2447,40 @@ describe("admin routes", () => {
         name: "未分组（其他）资料夹状态",
       }),
     ).toBeChecked();
+  });
+
+  it("groups stored algorithm results separately and displays a friendly source", async () => {
+    const result = {
+      ...(await mockApi.adminDataResources()).items[0],
+      name: "绿洲 NDVI 计算结果",
+      category: {
+        id: 3,
+        type: "data_category",
+        code: "compute_results",
+        name: "计算结果",
+        parentId: null,
+        selectable: false,
+      },
+      categoryPath: [{ id: 3, code: "compute_results", name: "计算结果" }],
+      source: "compute-output:internal-storage-key",
+    };
+    mockApi.adminDataResources.mockResolvedValueOnce({
+      items: [result],
+      total: 1,
+      ...inventoryResponseMeta({
+        total: 1,
+        categoryCode: "compute_results",
+        rootCategoryCode: "compute_results",
+      }),
+      availableAccessGroups: [],
+    });
+    renderAdminRoute("/resources/data/inventory");
+    expect(await screen.findByText(result.name)).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "计算结果资料夹状态" }),
+    ).toBeChecked();
+    expect(screen.getByText("平台算法计算")).toBeInTheDocument();
+    expect(screen.queryByText(result.source)).not.toBeInTheDocument();
   });
 
   it("switches the data import page to the independent result artifact workflow", async () => {

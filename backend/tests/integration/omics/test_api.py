@@ -35,16 +35,17 @@ class DataSchemaSummaryApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["taxonomyVersion"], "2026.09")
+        self.assertEqual(payload["taxonomyVersion"], "2026.10")
         self.assertEqual(
             [item["code"] for item in payload["catalogTree"]],
-            ["spatial", "non_spatial"],
+            ["spatial", "non_spatial", "compute_results"],
         )
         self.assertEqual(
             [item["name"] for item in payload["catalogTree"]],
-            ["地理数据", "非地理数据"],
+            ["地理数据", "非地理数据", "计算结果"],
         )
-        self.assertTrue(all(item["selectable"] for item in payload["catalogTree"]))
+        self.assertTrue(all(item["selectable"] for item in payload["catalogTree"][:2]))
+        self.assertFalse(payload["catalogTree"][2]["selectable"])
         self.assertTrue(
             any(
                 entity["name"] == "GermplasmAccession" for entity in payload["entities"]

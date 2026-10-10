@@ -41,6 +41,7 @@ import type {
   ResourceListItem,
 } from "../types";
 import { findTaxonomyNode, taxonomyTree } from "../utils/taxonomy";
+import { isComputeResult, resourceSourceLabel } from "../utils/resources";
 
 type CatalogView = "cards" | "list";
 
@@ -381,6 +382,7 @@ function ResourceCard({
   dataTypeLabel: string;
   t: (key: string) => string;
 }) {
+  const ui = useComputeText();
   const primaryAction = resource.availableViews.includes("map")
     ? t("catalog.enterMap")
     : resource.availableViews.includes("table")
@@ -397,14 +399,18 @@ function ResourceCard({
           <Tag>{dataTypeLabel}</Tag>
           <Tag
             color={
-              resource.classificationStatus === "classified"
-                ? "green"
-                : "orange"
+              isComputeResult(resource)
+                ? "blue"
+                : resource.classificationStatus === "classified"
+                  ? "green"
+                  : "orange"
             }
           >
-            {resource.classificationStatus === "classified"
-              ? t("catalog.classified")
-              : t("catalog.pending")}
+            {isComputeResult(resource)
+              ? ui("计算结果", "Computation result")
+              : resource.classificationStatus === "classified"
+                ? t("catalog.classified")
+                : t("catalog.pending")}
           </Tag>
         </Space>
         <Typography.Title level={4}>{resource.name}</Typography.Title>
@@ -421,7 +427,7 @@ function ResourceCard({
           className="data-resource-card-description"
           ellipsis={{ rows: 2 }}
         >
-          {catalogResourceSummary(resource, t("catalog.noDescription"), t)}
+          {catalogResourceSummary(resource, t("catalog.noDescription"), t, ui)}
         </Typography.Paragraph>
         <Space className="data-resource-card-actions" wrap>
           <Button type="primary" onClick={onOpen}>
@@ -445,6 +451,7 @@ function ResourceDetails({
   dataTypeLabel: string;
   t: (key: string) => string;
 }) {
+  const ui = useComputeText();
   return (
     <Descriptions bordered size="small" column={1}>
       <Descriptions.Item label={t("catalog.businessCategory")}>
@@ -462,7 +469,10 @@ function ResourceDetails({
         </Space>
       </Descriptions.Item>
       <Descriptions.Item label={t("common.source")}>
-        {resource.source || t("catalog.notRecorded")}
+        {resourceSourceLabel(
+          resource,
+          ui("平台算法计算", "Platform algorithm computation"),
+        ) || t("catalog.notRecorded")}
       </Descriptions.Item>
       <Descriptions.Item label={t("map.provider")}>
         {resource.provider || t("catalog.notRecorded")}
@@ -474,7 +484,7 @@ function ResourceDetails({
         {resource.spatialExtent || t("catalog.notApplicable")}
       </Descriptions.Item>
       <Descriptions.Item label={t("common.description")}>
-        {catalogResourceSummary(resource, t("catalog.notRecorded"), t)}
+        {catalogResourceSummary(resource, t("catalog.notRecorded"), t, ui)}
       </Descriptions.Item>
     </Descriptions>
   );
@@ -484,7 +494,14 @@ function catalogResourceSummary(
   resource: ResourceListItem,
   fallback: string,
   t: (key: string) => string,
+  ui: (zh: string, en: string) => string,
 ) {
+  if (isComputeResult(resource)) {
+    return ui(
+      "已入库的算法输出，可查看结果或继续用于计算。",
+      "Stored algorithm output, ready to view or use in further computation.",
+    );
+  }
   const summary = (resource.description || resource.source).trim();
   if (!summary) return fallback;
   if (/^由 Excel\/CSV 导入的地理表[：:]\s*import_data_/i.test(summary)) {
@@ -517,7 +534,9 @@ function taxonomyTreeData(nodes: DataSchemaCatalogNode[]): DataNode[] {
     key: node.categoryCode,
     title: (
       <Space size={6}>
-        {node.code === "distribution" ? (
+        {node.code === "compute_results" ? (
+          <DatabaseOutlined />
+        ) : node.code === "distribution" ? (
           <FileImageOutlined />
         ) : (
           <ApartmentOutlined />

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ResourceListItem } from "../types";
-import { isGeographicResource, isNonGeographicResource } from "./resources";
+import {
+  isComputeResult,
+  isGeographicResource,
+  isNonGeographicResource,
+  resourceSourceLabel,
+} from "./resources";
 
 function resource(dataType: ResourceListItem["dataType"]): ResourceListItem {
   const spatialClass =
@@ -48,4 +53,28 @@ describe("resource workspace classification", () => {
       expect(isNonGeographicResource(item)).toBe(true);
     },
   );
+
+  it("recognizes computation results without changing their map capability", () => {
+    const item = {
+      ...resource("raster"),
+      category: {
+        id: 3,
+        type: "data_category",
+        code: "compute_results",
+        name: "计算结果",
+        parentId: null,
+        selectable: false,
+      },
+      source: "compute-output:internal-storage-key",
+    };
+    expect(isComputeResult(item)).toBe(true);
+    expect(isGeographicResource(item)).toBe(true);
+    expect(resourceSourceLabel(item, "平台算法计算")).toBe("平台算法计算");
+  });
+
+  it("keeps original data sources and does not infer result classification from text", () => {
+    const item = { ...resource("table"), source: "compute-output:user-text" };
+    expect(isComputeResult(item)).toBe(false);
+    expect(resourceSourceLabel(item, "平台算法计算")).toBe(item.source);
+  });
 });

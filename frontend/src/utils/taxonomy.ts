@@ -10,6 +10,10 @@ const englishTaxonomy: Record<string, { name: string; description: string }> = {
     name: "Non-geographic data",
     description: "Tables, documents and images without geographic coordinates.",
   },
+  compute_results: {
+    name: "Computation results",
+    description: "Stored results produced by platform algorithms.",
+  },
 };
 export const fallbackTaxonomyTree: DataSchemaCatalogNode[] = [
   taxonomyLeaf(
@@ -21,6 +25,12 @@ export const fallbackTaxonomyTree: DataSchemaCatalogNode[] = [
     "non_spatial",
     "非地理数据",
     "没有地理坐标信息的表格、文档、图片等资料。",
+  ),
+  taxonomyLeaf(
+    "compute_results",
+    "计算结果",
+    "计算中心或智能体调用平台算法后入库的结果。",
+    false,
   ),
 ];
 
@@ -101,12 +111,13 @@ function taxonomyLeaf(
   code: string,
   name: string,
   description: string,
+  selectable = true,
 ): DataSchemaCatalogNode {
   return {
     code,
     name,
     categoryCode: code,
-    selectable: true,
+    selectable,
     description,
     path: [name],
     domainType: null,

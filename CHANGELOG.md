@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.31] - 2026-10-10
+
+### Added
+- 数据资源新增“计算结果”目录，统一归类计算中心和智能体已入库的栅格、矢量、表格、图片与报告。
+- 根据真实入库关联调整历史计算成果分类，保留原始上传数据、文件与可见范围。
+
+### Changed
+- 两处计算入口共用输入数据、算法参数和结果概览表单，统一波段选项、帮助说明、默认参考和范围提示。
+- 参数采用响应式双列布局，更换输入后清空关联波段或字段；智能体继续要求用户明确确认波段。
+- 结果展示使用友好来源与项目目录位置，具有地理坐标的计算结果继续支持地图查看。
+
 ## [0.1.30] - 2026-10-10
 
 ### Added

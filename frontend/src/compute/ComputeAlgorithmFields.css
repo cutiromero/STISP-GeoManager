@@ -1,0 +1,142 @@
+.compute-algorithm-fields {
+  container-type: inline-size;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin: 8px 0 18px;
+  color: #29475f;
+}
+
+.compute-field-section {
+  min-width: 0;
+  padding: 16px 18px 4px;
+  border: 1px solid #dbe6ef;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.compute-field-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 15px;
+}
+
+.compute-field-heading > span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 8px;
+  background: #edf4fb;
+  color: #4779a4;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.compute-field-heading h3 {
+  margin: 0;
+  color: #284a68;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 650;
+}
+
+.compute-field-heading small {
+  margin-left: auto;
+  color: #8797a6;
+  font-size: 11px;
+}
+
+.compute-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+}
+
+.compute-field-grid:has(> .ant-form-item:only-child) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.compute-algorithm-fields .ant-form-item {
+  min-width: 0;
+  margin-bottom: 15px;
+}
+
+.compute-algorithm-fields .ant-form-item-label > label {
+  height: auto;
+  color: #385b78;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.compute-algorithm-fields .ant-input-number {
+  width: 100%;
+}
+
+.compute-algorithm-fields .ant-form-item-extra {
+  min-height: 0;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.compute-parameter-help {
+  display: grid;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+
+.compute-field-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  color: #8494a3;
+}
+
+.compute-output-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compute-output-chips > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #dce9f3;
+  border-radius: 8px;
+  background: #f6faff;
+  overflow-wrap: anywhere;
+}
+
+.compute-output-chips strong {
+  color: #345d80;
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.compute-output-chips small {
+  color: #8295a6;
+  font-size: 11px;
+}
+
+.compute-field-note {
+  margin: 9px 0 11px;
+  color: #8494a3;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+@container (max-width: 480px) {
+  .compute-field-section {
+    padding: 13px 13px 1px;
+  }
+  .compute-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

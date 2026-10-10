@@ -412,9 +412,20 @@
           "domainType": null,
           "spatialClass": "non_spatial",
           "children": []
+        },
+        {
+          "code": "compute_results",
+          "name": "计算结果",
+          "categoryCode": "compute_results",
+          "selectable": false,
+          "description": "计算中心和智能体计算后入库的结果，保留各自的地理属性和数据类型。",
+          "path": ["计算结果"],
+          "domainType": null,
+          "spatialClass": null,
+          "children": []
         }
       ],
-      "taxonomyVersion": "2026.09"
+      "taxonomyVersion": "2026.10"
     }
   },
   "GET /api/germplasm/accessions/": {

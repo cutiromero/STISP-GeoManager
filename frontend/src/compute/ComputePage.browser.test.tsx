@@ -160,7 +160,7 @@ describe("通用计算界面", () => {
     fireEvent.click(await screen.findByText("2.1.0"));
     fireEvent.click(await screen.findByRole("button", { name: /执\s*行/ }));
     expect(await screen.findByLabelText("缩放倍数")).toBeTruthy();
-    expect(screen.getByLabelText("计算用表格 · table")).toBeTruthy();
+    expect(screen.getByLabelText("计算用表格")).toBeTruthy();
     view.unmount();
   });
   it("隔离环境不可用时阻止提交并显示原因", async () => {

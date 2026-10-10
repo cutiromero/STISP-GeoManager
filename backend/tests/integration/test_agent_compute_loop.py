@@ -110,6 +110,43 @@ def test_task_id_import_waits_and_resumes_once(env):
     assert ComputeImport.objects.count() == 1
 
 
+def test_real_agent_result_import_uses_compute_category(env):
+    from apps.compute.data import inspect_output
+    from apps.compute.packages import checksum
+    from apps.compute.worker import process_import
+    from apps.core.storage import app_path
+
+    t = task(env)
+    o = output(t)
+    path = app_path(
+        "projects",
+        str(t.project_tag_id),
+        "compute",
+        "outputs",
+        str(t.id),
+        "summary.csv",
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("region,value\nA,3\n", encoding="utf-8")
+    o.path = path.relative_to(app_path()).as_posix()
+    o.size_bytes = path.stat().st_size
+    o.checksum = checksum(path)
+    o.metadata = inspect_output(path, "table")
+    o.save()
+    execute(env["run"], "import_compute_result", {"taskId": str(t.id)})
+    record = ComputeImport.objects.get(output=o)
+    assert record.request_source == f"agent_run:{env['run'].id}"
+    process_import(record)
+    record.refresh_from_db()
+    assert record.status == "ready", record.error
+    assert record.resource.is_compute_result
+    assert record.resource.category.code == "compute_results"
+    assert record.resource.project_tag_id == env["project"].id
+    assert not env["resource"].is_compute_result
+    value, _ = execute(env["run"], "get_compute_task", {"taskId": str(t.id)})
+    assert " / 数据资源 / 计算结果 / " in value["outputs"][0]["resourceLocation"]
+
+
 def test_multiple_outputs_and_repeated_import_do_not_duplicate(env):
     t = task(env)
     output(t, "first")

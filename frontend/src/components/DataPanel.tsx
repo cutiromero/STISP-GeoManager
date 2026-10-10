@@ -21,6 +21,7 @@ import {
 } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useComputeText } from "../compute/ui";
 import type {
   AttributeFilter,
   DataResourceProfile,
@@ -29,9 +30,11 @@ import type {
   User,
 } from "../types";
 import {
+  isComputeResult,
   resourceCategoryName,
   resourceFormatLabel,
   resourceProvider,
+  resourceSourceLabel,
   resourceSpatialExtent,
 } from "../utils/resources";
 
@@ -87,6 +90,7 @@ export default function DataPanel({
   onLoadRaster,
 }: Props) {
   const { t } = useTranslation();
+  const ui = useComputeText();
   const [resourceFilters, setResourceFilters] = useState<ResourceFilters>({});
   const [attributeFilters, setAttributeFilters] = useState<AttributeFilter[]>(
     [],
@@ -335,6 +339,11 @@ export default function DataPanel({
                 <div className="resource-row-content">
                   <Typography.Text strong className="resource-row-title">
                     {resource.name}
+                    {isComputeResult(resource) && (
+                      <Tag color="blue">
+                        {ui("计算结果", "Computation result")}
+                      </Tag>
+                    )}
                     {!resource.isQueryable && !resource.isRenderable && (
                       <Tag>{t("common.metadataOnly")}</Tag>
                     )}
@@ -406,7 +415,10 @@ export default function DataPanel({
           </div>
           <Descriptions size="small" column={1} bordered>
             <Descriptions.Item label={t("map.dataSource")}>
-              {profile.resource.source || "-"}
+              {resourceSourceLabel(
+                profile.resource,
+                ui("平台算法计算", "Platform algorithm computation"),
+              ) || "-"}
             </Descriptions.Item>
             <Descriptions.Item label={t("map.provider")}>
               {resourceProvider(profile.resource) || "-"}

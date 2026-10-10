@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261010-002 - 计算结果目录分类
+
+- Status: BackendReady
+- Owner: Root契约；result_classification_backend后端；catalog_ui_paths及unified_compute_forms前端。
+- Endpoints: /api/data-schema/summary/; /api/catalog/resources/; /api/admin/data/resources/; /api/compute/outputs/{outputId}/import/。
+- Change type: 既有目录节点与入库归类语义，HTTP字段形状保持。
+- OpenAPI change: 三类目录、taxonomyVersion=2026.10、compute_results不可用于普通上传，已入库结果路径包含计算结果。
+- Mock examples: mock/prism/examples/45-domain-schema.json。
+- Frontend reason: 区分上传数据与已入库成果，同时保持地图能力和参数表单一致。
+- Backend implementation notes: 内部结果标记由入库维护；历史根据真实ComputeImport关联并核对项目回填，保留权限、状态和原始文件。
+- Verification: 五类输出入库、历史保留、跨项目及隐私、普通上传拒绝结果类别、两入口参数控件和窄屏。
+- Result: 待候选与正式验收。
+
 ## API-20261010-001 - 知识领域与持久工具选择
 
 - Status: BackendReady
@@ -46,6 +59,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261010-002 | BackendReady | /api/data-schema/summary/; /api/catalog/resources/; /api/admin/data/resources/; /api/compute/outputs/{outputId}/import/ | compute result classification | Updated | Updated | Passed | Focused passed | Exact historical import links; candidate publication pending |
 | API-20261010-001 | BackendReady | /api/knowledge/*; /api/agent/bootstrap/; /api/agent/conversations/{id}/runs/ | domain filters; persistent tool selection | Updated | Updated | Passed | Focused passed | Server-enforced selectors; candidate publication pending |
 | API-20261009-001 | BackendReady | /api/agent/runs/{runId}/compute-intent/; /api/compute/outputs/{outputId}/map-preview/ | persistent plan; authorized preview | Updated | Added | In progress | Pending | Real execution and user-controlled import |
 | API-20261004-001 | Verified | /api/knowledge/documents/; /api/knowledge/wiki/; ComputeManifest | document retrieval; automatic Wiki; quality gate | Updated | Added | Passed | Passed | Real development candidate; project and owner scopes isolated |

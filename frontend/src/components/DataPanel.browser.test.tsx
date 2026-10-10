@@ -558,6 +558,50 @@ describe("DataPanel", () => {
 
     expect(onLoadRaster).toHaveBeenCalledOnce();
   });
+
+  it("filters stored computation results while keeping raster viewing available", () => {
+    const result = {
+      ...rasterResource,
+      category: {
+        id: 3,
+        type: "data_category",
+        code: "compute_results",
+        name: "计算结果",
+        parentId: null,
+        selectable: false,
+      },
+      categoryPath: [{ id: 3, code: "compute_results", name: "计算结果" }],
+      source: "compute-output:internal-storage-key",
+    };
+    const onFilterResources = vi.fn();
+    const onLoadRaster = vi.fn();
+    renderWithAntd(
+      <DataPanel
+        resources={[result]}
+        profile={{ ...rasterProfile, resource: result }}
+        selectedResourceId={result.id}
+        queryResult={null}
+        loadingProfile={false}
+        querying={false}
+        permissions={permissions}
+        categoryOptions={[{ value: "compute_results", label: "计算结果" }]}
+        selectedCategoryCode="compute_results"
+        onFilterResources={onFilterResources}
+        onSelectResource={vi.fn()}
+        onQuickLoadResource={vi.fn()}
+        onQueryAndLoad={vi.fn()}
+        onLoadRaster={onLoadRaster}
+      />,
+    );
+    expect(screen.getByText("平台算法计算")).toBeInTheDocument();
+    expect(screen.queryByText(result.source)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /筛选数据/ }));
+    expect(onFilterResources).toHaveBeenCalledWith({
+      categoryCode: "compute_results",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "加载栅格" }));
+    expect(onLoadRaster).toHaveBeenCalledOnce();
+  });
 });
 
 describe("VectorSymbolizationEditor", () => {

@@ -23,7 +23,7 @@ class TaxonomyNodeDefinition:
     children: tuple["TaxonomyNodeDefinition", ...] = ()
 
 
-DATA_TAXONOMY_VERSION = "2026.09"
+DATA_TAXONOMY_VERSION = "2026.10"
 DATA_TAXONOMY = (
     TaxonomyNodeDefinition(
         "spatial", "地理数据", "具有已解析地理坐标的矢量、栅格和坐标表格数据。", 10
@@ -31,8 +31,15 @@ DATA_TAXONOMY = (
     TaxonomyNodeDefinition(
         "non_spatial", "非地理数据", "没有地理坐标的表格、文档、图片及其他资料。", 20
     ),
+    TaxonomyNodeDefinition(
+        "compute_results",
+        "计算结果",
+        "计算中心和智能体计算后入库的结果，保留各自的地理属性和数据类型。",
+        30,
+        selectable=False,
+    ),
 )
-ROOT_CATEGORY_CODES = frozenset(node.code for node in DATA_TAXONOMY)
+ROOT_CATEGORY_CODES = frozenset(DataResource.SpatialClass.values)
 SAFE_LEGACY_DOMAIN_CATEGORY_MAP = {}
 
 
@@ -55,6 +62,10 @@ def resolve_data_category(code: str, *, selectable: bool = True) -> DictionaryIt
     except DictionaryItem.DoesNotExist as exc:
         raise TaxonomyError("数据分类不存在或已停用") from exc
     if selectable and not category.is_selectable:
+        if category.code == "compute_results":
+            raise TaxonomyError(
+                "计算结果分类由结果入库流程自动登记；上传请选择地理/非地理分类"
+            )
         raise TaxonomyError("请选择可挂接的地理/非地理分类")
     return category
 
@@ -140,9 +151,9 @@ def taxonomy_tree() -> list[dict]:
 def assign_resource_category(
     resource: DataResource, category_code: str
 ) -> DictionaryItem:
-    category = resolve_data_category(category_code)
-    if category.code != resource.spatial_class:
-        raise TaxonomyError("分类须与资源实际地理坐标信息一致")
+    category = resolve_data_category(category_code, selectable=False)
+    if category.code != resource.classification_category_code:
+        raise TaxonomyError("分类须与资源实际来源和地理坐标信息一致")
     if resource.category_id != category.id:
         resource.category = category
         resource.save(update_fields=["category", "updated_at"])

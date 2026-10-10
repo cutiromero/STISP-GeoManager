@@ -311,6 +311,8 @@ def import_output(record):
     marker = f"compute-output:{record.storage_key}"
     existing = DataResource.objects.filter(source=marker).first()
     if existing:
+        existing.is_compute_result = True
+        existing.save(update_fields=["is_compute_result"])
         return existing
     if output.kind == "raster":
         from apps.raster.services.importer import import_raster_file
@@ -377,7 +379,9 @@ def import_output(record):
             size_bytes=output.size_bytes,
             maintainer=record.requested_by,
             source=marker,
+            is_compute_result=True,
         )
+    resource.is_compute_result = True
     with transaction.atomic():
         from django.contrib.auth import get_user_model
 
@@ -392,7 +396,7 @@ def import_output(record):
             validate_import_intent(record)
         except ComputeError:
             resource.status = "inactive"
-            resource.save(update_fields=["status"])
+            resource.save(update_fields=["status", "is_compute_result"])
             # Keep the imported resource hidden and preserve its provenance for review.
             record.resource = resource
             record.status = "failed"
@@ -402,7 +406,9 @@ def import_output(record):
         resource.source = marker
         resource.status = "active"
         resource.description = f"计算结果；任务 {output.task_id}；算法 {output.task.version.algorithm.name} {output.task.version.version}；SHA256 {output.checksum}"
-        resource.save(update_fields=["source", "description", "status"])
+        resource.save(
+            update_fields=["source", "description", "status", "is_compute_result"]
+        )
         record.resource = resource
         record.status = "ready"
         record.error = ""

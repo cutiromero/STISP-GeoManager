@@ -1,91 +1,18 @@
 import { PlayCircleOutlined, ExperimentOutlined } from "@ant-design/icons";
-import {
-  Alert,
-  Button,
-  Checkbox,
-  Form,
-  Input,
-  InputNumber,
-  Select,
-  Switch,
-} from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Checkbox, Form } from "antd";
+import { useEffect, useRef, useState } from "react";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
-import type {
-  AgentComputeIntent,
-  AgentRun,
-  ComputeCandidate,
-  ComputeParameterSpec,
-} from "../api/generated/types.gen";
+import type { AgentComputeIntent, AgentRun } from "../api/generated/types.gen";
+import ComputeAlgorithmFields, {
+  resetLinkedComputeParameters,
+} from "../compute/ComputeAlgorithmFields";
 import { useComputeText } from "../compute/ui";
 
 type Values = {
   inputs: Record<string, number>;
   parameters: Record<string, unknown>;
 };
-
-function ParameterInput({
-  parameter,
-  candidate,
-  value,
-  checked,
-  onChange,
-  id,
-}: {
-  parameter: ComputeParameterSpec;
-  candidate?: ComputeCandidate;
-  value?: unknown;
-  checked?: boolean;
-  onChange?: (value: unknown) => void;
-  id?: string;
-}) {
-  const ui = useComputeText();
-  if (parameter.type === "boolean")
-    return <Switch id={id} checked={checked} onChange={onChange} />;
-  if (["band", "field", "enum"].includes(parameter.type)) {
-    const options: { value: string | number; label: string }[] =
-      parameter.type === "band"
-        ? Array.from({ length: candidate?.bands ?? 0 }, (_, index) => ({
-            value: index + 1,
-            label: ui(`第 ${index + 1} 波段`, `Band ${index + 1}`),
-          }))
-        : (parameter.type === "field"
-            ? (candidate?.fields ?? [])
-            : (parameter.choices ?? [])
-          ).map((entry) => ({ value: entry, label: ui(entry) }));
-    return (
-      <Select
-        id={id}
-        value={value as string | number | undefined}
-        onChange={onChange}
-        options={options}
-        disabled={parameter.type !== "enum" && !candidate}
-        placeholder={ui("请选择", "Select")}
-        aria-label={ui(parameter.label)}
-      />
-    );
-  }
-  if (parameter.type === "integer" || parameter.type === "number")
-    return (
-      <InputNumber
-        id={id}
-        value={typeof value === "number" ? value : null}
-        onChange={onChange}
-        min={parameter.min}
-        max={parameter.max}
-        precision={parameter.type === "integer" ? 0 : undefined}
-      />
-    );
-  return (
-    <Input
-      id={id}
-      value={typeof value === "string" ? value : ""}
-      maxLength={2000}
-      onChange={(event) => onChange?.(event.target.value)}
-    />
-  );
-}
 
 export default function ComputeIntentCard({
   runId,
@@ -154,16 +81,6 @@ export default function ComputeIntentCard({
       clearTimeout(timer);
     };
   }, [keyword, editable]);
-  const selected = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(values?.inputs ?? intent.inputs).map(([key, id]) => [
-          key,
-          candidates.find((candidate) => candidate.id === id),
-        ]),
-      ),
-    [values?.inputs, intent.inputs, candidates],
-  );
   const act = async (action: "submit" | "cancel") => {
     if (actionPending.current) return;
     actionPending.current = true;
@@ -237,84 +154,25 @@ export default function ComputeIntentCard({
           name={`compute-intent-${runId}`}
           form={form}
           layout="vertical"
+          initialValues={{
+            inputs: intent.inputs,
+            parameters: intent.parameters,
+          }}
           disabled={busy}
           className="agent-compute-form"
-          onValuesChange={(changed) => {
-            for (const inputKey of Object.keys(changed.inputs ?? {})) {
-              for (const parameter of algorithm.manifest.parameters)
-                if (
-                  parameter.input === inputKey &&
-                  ["band", "field"].includes(parameter.type)
-                )
-                  form.setFieldValue(["parameters", parameter.key], undefined);
-            }
-          }}
+          onValuesChange={(changed) =>
+            resetLinkedComputeParameters(form, algorithm.manifest, changed)
+          }
         >
-          {algorithm.manifest.inputs.map((input) => (
-            <Form.Item
-              key={input.key}
-              name={["inputs", input.key]}
-              label={ui(input.label)}
-              rules={[
-                {
-                  required: input.required,
-                  message: ui("请选择输入数据", "Select input data"),
-                },
-              ]}
-            >
-              <Select
-                showSearch
-                onSearch={setKeyword}
-                loading={searching}
-                optionFilterProp="label"
-                placeholder={ui("选择要处理的数据", "Choose data to process")}
-                aria-label={ui(input.label)}
-                options={candidates
-                  .filter((candidate) => candidate.kind === input.kind)
-                  .map((candidate) => ({
-                    value: candidate.id,
-                    label: `${candidate.name}${candidate.bands ? ui(` · ${candidate.bands} 波段`, ` · ${candidate.bands} bands`) : ""}`,
-                    disabled:
-                      input.minBands !== undefined &&
-                      candidate.bands < input.minBands,
-                  }))}
-              />
-            </Form.Item>
-          ))}
-          <div className="agent-compute-parameters">
-            {algorithm.manifest.parameters.map((parameter) => {
-              if (
-                parameter.when &&
-                values?.parameters?.[String(parameter.when.key)] !==
-                  parameter.when.equals
-              )
-                return null;
-              return (
-                <Form.Item
-                  key={parameter.key}
-                  name={["parameters", parameter.key]}
-                  label={ui(parameter.label)}
-                  valuePropName={
-                    parameter.type === "boolean" ? "checked" : "value"
-                  }
-                  preserve={false}
-                  rules={[
-                    {
-                      required: parameter.required,
-                      message: ui("请补充此参数", "Complete this parameter"),
-                    },
-                  ]}
-                >
-                  <ParameterInput
-                    parameter={parameter}
-                    candidate={
-                      parameter.input ? selected[parameter.input] : undefined
-                    }
-                  />
-                </Form.Item>
-              );
-            })}
-          </div>
+          <ComputeAlgorithmFields
+            manifest={algorithm.manifest}
+            candidates={candidates}
+            values={
+              values ?? { inputs: intent.inputs, parameters: intent.parameters }
+            }
+            loading={searching}
+            onSearch={setKeyword}
+          />
           <div className="agent-compute-intent-actions">
             <Button
               type="primary"

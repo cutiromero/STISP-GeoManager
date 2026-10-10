@@ -4280,7 +4280,7 @@ export type DataSchemaEntity = {
 
 export type DataSchemaSummaryResponse = {
     /**
-     * 当前甲方业务分类版本，V1 固定为 2026.07。
+     * 当前目录分类版本为 2026.10。
      */
     taxonomyVersion: string;
     /**
@@ -4302,7 +4302,7 @@ export type DataSchemaSummaryResponse = {
 };
 
 /**
- * 分类为 spatial（具有地理坐标信息）与 non_spatial（无地理坐标信息），两个根节点均可挂接；资源导入由坐标解析结果自动归类。
+ * 三类根节点为 spatial（地理数据）、non_spatial（非地理数据）和 compute_results（计算结果）。普通上传按坐标解析结果自动归类；计算输出入库统一归入计算结果，资源自身空间属性保持。
  */
 export type DataSchemaCatalogNode = {
     /**
@@ -4318,7 +4318,7 @@ export type DataSchemaCatalogNode = {
      */
     categoryCode: string;
     /**
-     * 是否允许数据资源直接挂接；四个一级节点为 false。
+     * 是否允许普通上传选择；spatial 和 non_spatial 为 true，compute_results 为 false。
      */
     selectable: boolean;
     /**
@@ -4334,7 +4334,7 @@ export type DataSchemaCatalogNode = {
      */
     domainType?: DataDomainType | null;
     /**
-     * 节点空间属性，分组节点可为 null。
+     * 节点空间属性；计算结果包含多种类型，compute_results 节点为 null。
      */
     spatialClass?: SpatialClass | null;
     /**
@@ -4708,7 +4708,7 @@ export type DataResource = {
      */
     category: DictionaryItem | null;
     /**
-     * 从地理/非地理两类一级节点到资源主分类的完整路径；待归类时为空数组
+     * 从地理数据、非地理数据或计算结果根节点到资源分类的完整路径；待归类时为空数组
      */
     categoryPath: Array<DataCategoryPathItem>;
     classificationStatus: ClassificationStatus;
@@ -4870,7 +4870,7 @@ export type AdminDataResource = {
      */
     category: DictionaryItem | null;
     /**
-     * 从地理/非地理两类一级节点到资源主分类的完整路径；待归类时为空数组
+     * 从地理数据、非地理数据或计算结果根节点到资源分类的完整路径；待归类时为空数组
      */
     categoryPath: Array<DataCategoryPathItem>;
     classificationStatus: ClassificationStatus;
@@ -5026,7 +5026,7 @@ export type AdminDataResourceGroupSummary = {
      */
     domainType: DataDomainType | null;
     /**
-     * 权威分类编码；一级大类和十五个小类分组返回对应编码，其他分组为 null
+     * 目录分类编码；地理数据、非地理数据和计算结果分组返回对应编码，其他分组为 null
      */
     categoryCode: string | null;
     /**
@@ -5076,7 +5076,7 @@ export type AdminDataResourceListResponse = {
      */
     availableAccessGroups: Array<AdminDataResourceAccessGroup>;
     /**
-     * 用户新建的持久化自定义组别列表；“全部数据”、四个一级大类、十五个小类和“未分组（其他）”由权威分类体系生成，不在该数组中
+     * 用户新建的持久化自定义组别列表；“全部数据”、地理数据、非地理数据、计算结果和“未分组（其他）”由目录分类体系生成，不在该数组中
      */
     inventoryGroups: Array<AdminDataResourceGroup>;
 };
@@ -8444,7 +8444,7 @@ export type ComputeOutput = {
      */
     resourceName?: string;
     /**
-     * Project and catalog location
+     * 项目下数据资源 / 计算结果 / 资源名称
      */
     resourceLocation?: string;
     /**

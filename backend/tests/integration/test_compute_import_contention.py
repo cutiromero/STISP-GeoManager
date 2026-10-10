@@ -67,10 +67,9 @@ def test_busy_after_vector_commit_reuses_resource_and_physical_layer(setup_compu
     before_tasks = ComputeTask.objects.count()
 
     def block_first_finalization(resource, *args, **kwargs):
-        if (
-            kwargs.get("update_fields") == ["source", "description", "status"]
-            and not partial
-        ):
+        if {"source", "description", "status"} <= set(
+            kwargs.get("update_fields") or []
+        ) and not partial:
             row = DataResource.objects.get(pk=resource.pk)
             assert row.source == "用户导入"
             assert row.storage_path == table_name
@@ -96,6 +95,8 @@ def test_busy_after_vector_commit_reuses_resource_and_physical_layer(setup_compu
         assert record.status == "ready", record.error
         assert record.resource_id == partial[0][0]
         assert record.resource.source == f"compute-output:{record.storage_key}"
+        assert record.resource.is_compute_result
+        assert record.resource.category.code == "compute_results"
         assert (
             DataResource.objects.filter(storage_path__startswith=table_name).count()
             == 1

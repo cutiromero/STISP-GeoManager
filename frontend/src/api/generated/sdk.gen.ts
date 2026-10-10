@@ -697,7 +697,7 @@ export const downloadAdminBackupRun = <ThrowOnError extends boolean = false>(opt
 /**
  * 获取甲方数据分类与数据库架子摘要
  *
- * 返回甲方确认的地理/非地理两类权威业务分类树、兼容业务标签、数据库分层和核心实体摘要。分类树来自数据库父子词表；地理/非地理不再作为业务一级分类。需要 `core.browse_data`，接口只读。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。
+ * 返回地理数据、非地理数据和计算结果三类目录、兼容业务标签、数据库分层和核心实体摘要。分类树来自数据库词表；计算结果仅由计算输出入库自动归类，普通上传不可选择。需要 `core.browse_data`，接口只读。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。
  */
 export const getDataSchemaSummary = <ThrowOnError extends boolean = false>(options?: Options<GetDataSchemaSummaryData, ThrowOnError>): RequestResult<GetDataSchemaSummaryResponses, GetDataSchemaSummaryErrors, ThrowOnError> => (options?.client ?? client).get<GetDataSchemaSummaryResponses, GetDataSchemaSummaryErrors, ThrowOnError>({ url: '/api/data-schema/summary/', ...options });
 
@@ -719,7 +719,7 @@ export const listGermplasmAccessions = <ThrowOnError extends boolean = false>(op
 /**
  * 获取存量数据管理列表
  *
- * 返回已导入或已登记的数据资源列表，支持启用和停用数据、多条件检索、访问用户组、存量数据内容分组和默认可视化方案查看。系统分组及全量统计按四个权威一级大类、十五个可挂接小类和未分组（其他）数据生成；用户自定义分组继续用于内容归档。具备 `catalog.view_dataresource`、`catalog.change_dataresource`、`catalog.delete_dataresource` 或 `catalog.export_dataresource` 时，仅返回当前用户可见或本人上传且符合筛选条件的资源；超级管理员可查看全部资源；仅具备 `catalog.add_dataresource` 时只返回当前用户上传的数据资源，用于管理自己的数据可见范围。可手动配置的数据访问角色列表不会返回超级管理员角色，后端仍会强制保留超级管理员访问范围。
+ * 返回已导入或已登记的数据资源列表，支持启用和停用数据、多条件检索、访问用户组、存量数据内容分组和默认可视化方案查看。系统分组及全量统计按地理数据、非地理数据、计算结果和未分组（其他）数据生成；用户自定义分组继续用于内容归档。具备 `catalog.view_dataresource`、`catalog.change_dataresource`、`catalog.delete_dataresource` 或 `catalog.export_dataresource` 时，仅返回当前用户可见或本人上传且符合筛选条件的资源；超级管理员可查看全部资源；仅具备 `catalog.add_dataresource` 时只返回当前用户上传的数据资源，用于管理自己的数据可见范围。可手动配置的数据访问角色列表不会返回超级管理员角色，后端仍会强制保留超级管理员访问范围。
  */
 export const listAdminDataResources = <ThrowOnError extends boolean = false>(options?: Options<ListAdminDataResourcesData, ThrowOnError>): RequestResult<ListAdminDataResourcesResponses, ListAdminDataResourcesErrors, ThrowOnError> => (options?.client ?? client).get<ListAdminDataResourcesResponses, ListAdminDataResourcesErrors, ThrowOnError>({
     security: [{
@@ -847,7 +847,7 @@ export const getDirectories = <ThrowOnError extends boolean = false>(options?: O
 /**
  * 获取数据资源列表
  *
- * 支持按甲方业务分类、资源形态、空间属性和兼容业务标签筛选。categoryCode 是权威业务主分类，父节点默认包含全部后代；dataType/spatialClass 只描述存储和展示能力，domainType 为兼容标签。需要 `core.browse_data`。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。
+ * 支持按目录分类、资源形态、空间属性和兼容业务标签筛选。categoryCode=compute_results 返回计算中心或智能体计算后已入库的结果，父节点默认包含全部后代；dataType/spatialClass 继续描述存储和展示能力，domainType 为兼容标签。需要 `core.browse_data`。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。
  */
 export const getResources = <ThrowOnError extends boolean = false>(options?: Options<GetResourcesData, ThrowOnError>): RequestResult<GetResourcesResponses, GetResourcesErrors, ThrowOnError> => (options?.client ?? client).get<GetResourcesResponses, GetResourcesErrors, ThrowOnError>({ url: '/api/catalog/resources/', ...options });
 
@@ -1975,7 +1975,7 @@ export const previewComputeOutput = <ThrowOnError extends boolean = false>(optio
 /**
  * importComputeOutput
  *
- * 计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。
+ * 计算输出异步入库，统一归入计算结果目录。服务端重新检查原项目、功能权限及输入可见性；写入必须显式传当前项目。
  */
 export const importComputeOutput = <ThrowOnError extends boolean = false>(options: Options<ImportComputeOutputData, ThrowOnError>): RequestResult<ImportComputeOutputResponses, ImportComputeOutputErrors, ThrowOnError> => (options.client ?? client).post<ImportComputeOutputResponses, ImportComputeOutputErrors, ThrowOnError>({
     security: [{

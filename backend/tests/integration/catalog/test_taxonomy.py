@@ -23,12 +23,19 @@ class DataTaxonomyTests(TestCase):
         grant(self.user, ("core", "browse_data"), ("catalog", "change_dataresource"))
         self.client.force_login(self.user)
 
-    def test_two_selectable_coordinate_categories(self):
+    def test_coordinate_categories_and_automatic_compute_results(self):
         tree = taxonomy_tree()
-        self.assertEqual([node["code"] for node in tree], ["spatial", "non_spatial"])
-        self.assertTrue(
-            all(node["selectable"] and not node["children"] for node in tree)
+        self.assertEqual(
+            [node["code"] for node in tree],
+            ["spatial", "non_spatial", "compute_results"],
         )
+        self.assertTrue(
+            all(node["selectable"] and not node["children"] for node in tree[:2])
+        )
+        self.assertFalse(tree[2]["selectable"])
+        self.assertIsNone(tree[2]["spatialClass"])
+        with self.assertRaises(TaxonomyError):
+            resolve_data_category("compute_results")
 
     def test_retired_categories_are_not_assignable(self):
         with self.assertRaises(TaxonomyError):

@@ -1417,10 +1417,12 @@ def admin_data_resource_detail(request, resource_id: int):
 
     if action in {"update", "updateClassification"} and "categoryCode" in payload:
         try:
-            resource.category = resolve_data_category(payload.get("categoryCode"))
-            if resource.category.code != resource.spatial_class:
+            resource.category = resolve_data_category(
+                payload.get("categoryCode"), selectable=False
+            )
+            if resource.category.code != resource.classification_category_code:
                 raise TaxonomyError(
-                    "数据分类由地理坐标信息自动确定，不能手动改为不匹配的类别"
+                    "数据分类由来源和地理坐标信息自动确定，不能手动改为不匹配的类别"
                 )
         except TaxonomyError as exc:
             return JsonResponse({"detail": str(exc)}, status=400)
