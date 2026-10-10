@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "identifier": "ndvi-change",
+  "name": "NDVI变化与候选区提取",
+  "version": "1.0.0",
+  "description": "核对两期日期、相同网格和共同有效掩膜，在[-1,1]NDVI尺度上计算后期减前期，提取下降像元的四邻接聚合面，输出统计表及质量说明。阈值为可配置演示参数，结果表达植被变化线索。",
+  "author": "STISP",
+  "runtime": "python-geospatial-v1",
+  "agent": {"enabled": true},
+  "qualityReport": {"file": "quality.json"},
+  "inputs": [
+    {"key": "early_ndvi", "label": "前期单波段NDVI", "kind": "raster", "minBands": 1},
+    {"key": "late_ndvi", "label": "后期单波段NDVI", "kind": "raster", "minBands": 1},
+    {"key": "valid_mask", "label": "两期共同有效掩膜（1或2波段）", "kind": "raster", "minBands": 1}
+  ],
+  "parameters": [
+    {"key": "early_date", "label": "前期日期（YYYY-MM-DD）", "type": "string", "required": true},
+    {"key": "late_date", "label": "后期日期（YYYY-MM-DD）", "type": "string", "required": true},
+    {"key": "decline_threshold", "label": "下降阈值（NDVI差值，演示参数）", "type": "number", "default": -0.15, "min": -2, "max": -0.000001}
+  ],
+  "outputs": [
+    {"key": "change", "label": "植被变化线索栅格", "kind": "raster", "file": "change.tif"},
+    {"key": "candidates", "label": "下降像元聚合候选区", "kind": "vector", "file": "candidates.gpkg"},
+    {"key": "statistics", "label": "变化统计与有效面积", "kind": "table", "file": "statistics.csv"}
+  ],
+  "deterministic": true,
+  "timeoutSeconds": 1800
+}

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "identifier": "ecology-priority",
+  "name": "生态分区统计与调查优先级",
+  "version": "1.0.0",
+  "description": "统计分区总面积、共同有效面积、覆盖率、NDVI平均变化及下降面积比例；覆盖不足单列优先补资料。按明确的演示权重结合分区、时期、来源与可信度匹配观测，形成可核对的调查排序和理由。",
+  "author": "STISP",
+  "runtime": "python-geospatial-v1",
+  "agent": {"enabled": true},
+  "qualityReport": {"file": "quality.json"},
+  "inputs": [
+    {"key": "change", "label": "两期NDVI变化栅格（含日期标签）", "kind": "raster", "minBands": 1},
+    {"key": "zones", "label": "调查分区（唯一zone_id）", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"]},
+    {"key": "context", "label": "生态背景与观测记录CSV", "kind": "table"}
+  ],
+  "parameters": [
+    {"key": "min_coverage", "label": "最低共同有效覆盖率（演示参数）", "type": "number", "default": 0.65, "min": 0, "max": 1},
+    {"key": "decline_threshold", "label": "下降阈值（NDVI差值）", "type": "number", "default": -0.15, "min": -2, "max": -0.000001},
+    {"key": "decline_weight", "label": "下降面积占比权重（演示参数）", "type": "number", "default": 0.7, "min": 0, "max": 1},
+    {"key": "mean_weight", "label": "平均下降幅度权重（演示参数）", "type": "number", "default": 0.3, "min": 0, "max": 1},
+    {"key": "context_weight", "label": "干旱/缺水观测加权（演示参数）", "type": "number", "default": 0.15, "min": 0, "max": 1},
+    {"key": "harvest_discount", "label": "可信农田收获解释减分强度（演示参数）", "type": "number", "default": 0.75, "min": 0, "max": 1},
+    {"key": "min_confidence", "label": "观测最低可信度（演示参数）", "type": "number", "default": 0.7, "min": 0, "max": 1},
+    {"key": "early_date", "label": "前期日期（无栅格标签时提供）", "type": "string", "default": "", "required": false},
+    {"key": "late_date", "label": "后期日期（无栅格标签时提供）", "type": "string", "default": "", "required": false}
+  ],
+  "outputs": [
+    {"key": "priority", "label": "调查优先区及逐区证据", "kind": "vector", "file": "priority.gpkg"},
+    {"key": "statistics", "label": "分区统计与调查理由", "kind": "table", "file": "zone-statistics.csv"}
+  ],
+  "deterministic": true,
+  "timeoutSeconds": 1800
+}

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1, "identifier": "geology-edit", "name": "地质调查一致性受约束编辑",
+  "version": "1.0.0", "description": "逐项验证地图内容校验和、稳定要素编号、原值、新值、允许字段、结构化规则和空间匹配的可信调查证据。全部计划核验后输出保留原几何及其他要素的新地图和修改记录，供再次检查。", "author": "STISP",
+  "runtime": "python-geospatial-v1", "agent": {"enabled": true}, "qualityReport": {"file": "quality.json"},
+  "inputs": [
+    {"key": "features", "label": "当前待修改地图", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"]},
+    {"key": "changes", "label": "模型提出的有限修改计划CSV", "kind": "table"},
+    {"key": "surveys", "label": "实际调查证据CSV", "kind": "table"},
+    {"key": "rules", "label": "允许属性操作的结构化规则CSV", "kind": "table"}
+  ],
+  "parameters": [
+    {"key": "working_epsg", "label": "调查坐标与编辑核验工作投影EPSG", "type": "integer", "default": 32645, "min": 1, "max": 999999},
+    {"key": "tolerance_m", "label": "调查位置容差（米）", "type": "number", "default": 1, "min": 0, "max": 100}
+  ],
+  "outputs": [
+    {"key": "corrected", "label": "属性修改图及地图点击说明", "kind": "vector", "file": "corrected.gpkg"},
+    {"key": "changes", "label": "实际修改与核实证据记录", "kind": "table", "file": "changes.csv"},
+    {"key": "statistics", "label": "编辑统计与前后内容校验和", "kind": "table", "file": "statistics.csv"}
+  ], "deterministic": true, "timeoutSeconds": 300
+}
