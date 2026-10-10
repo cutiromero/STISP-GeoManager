@@ -433,5 +433,5 @@ class Command(BaseCommand):
             json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         self.stdout.write(
-            "两个Demo项目与输入已登记；算法仍待实际试运行和发布。对象清单已保存到私有运行目录。"
+            "两个Demo项目与输入已准备；复用已有算法状态，新登记版本需试运行通过后发布。对象清单已保存到私有运行目录。"
         )
