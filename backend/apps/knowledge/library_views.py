@@ -28,10 +28,12 @@ def service_errors(view):
 @service_errors
 def documents(request):
     if request.method == "GET":
-        return JsonResponse(library.list_documents(request.user))
+        return JsonResponse(
+            library.list_documents(request.user, domains=_domains(request))
+        )
     if not {"title", "visibility"}.issubset(request.POST):
         raise ValidationError("请明确填写标题和资料可见范围")
-    if set(request.POST) - {"title", "sourceUrl", "visibility"} or set(
+    if set(request.POST) - {"title", "sourceUrl", "visibility", "domain"} or set(
         request.FILES
     ) != {"file"}:
         raise ValidationError("上传字段无效，请选择一份资料")
@@ -41,6 +43,7 @@ def documents(request):
         title=request.POST.get("title", ""),
         source_url=request.POST.get("sourceUrl", ""),
         visibility=request.POST.get("visibility", "project"),
+        domain=request.POST.get("domain", "geology"),
     )
     log_operation(
         request.user,
@@ -74,16 +77,43 @@ def retry(request, document_id):
     return JsonResponse(library.serialize_document(request.user, doc))
 
 
+@require_http_methods(["PATCH"])
+@api_login_required
+@errors
+@service_errors
+def classify(request, document_id):
+    data = body(request)
+    if not isinstance(data, dict) or set(data) != {"domain"}:
+        raise ValidationError("请提供资料所属知识分区")
+    doc = library.classify_document(request.user, document_id, data["domain"])
+    log_operation(
+        request.user,
+        "knowledge",
+        "classify",
+        "success",
+        request=request,
+        target_type="knowledge_document",
+        target_id=doc.id,
+        target_name=doc.title,
+    )
+    return JsonResponse(library.serialize_document(request.user, doc))
+
+
 @require_http_methods(["POST"])
 @api_login_required
 @errors
 @service_errors
 def search(request):
     data = body(request)
-    if not isinstance(data, dict) or set(data) - {"query", "limit"}:
+    if not isinstance(data, dict) or set(data) - {"query", "limit", "domains"}:
         raise ValidationError("检索输入无效")
     return JsonResponse(
-        library.search_documents(request.user, data.get("query"), data.get("limit", 6))
+        library.search_documents(
+            request.user,
+            data.get("query"),
+            data.get("limit", 6),
+            domains=data.get("domains"),
+        )
     )
 
 
@@ -92,4 +122,8 @@ def search(request):
 @errors
 @service_errors
 def wiki(request):
-    return JsonResponse(library.list_wiki(request.user))
+    return JsonResponse(library.list_wiki(request.user, domains=_domains(request)))
+
+
+def _domains(request):
+    return [request.GET["domain"]] if "domain" in request.GET else None

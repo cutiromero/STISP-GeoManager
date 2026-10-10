@@ -20,7 +20,7 @@ from .policy import fresh_user, require_access, policy
 from .provider import stream, check_model, model_window, ModelError
 from .context import prepare_context
 from .budgets import apply_budget, check_budget_access
-from .tools import TOOLS, execute, evidence_items, check_evidence
+from .tools import TOOLS, execute, evidence_items
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,8 @@ def live_window(model):
 
 
 def tool_enabled(tool, policy_value, run):
+    from .selections import KNOWLEDGE_TOOLS, knowledge_selection
+
     switches = {
         "internet": policy_value["internetEnabled"] and run.internet_enabled,
         "system_info": policy_value["systemInfoEnabled"],
@@ -45,6 +47,10 @@ def tool_enabled(tool, policy_value, run):
     }
     return (
         switches.get(tool.capability, True)
+        and (
+            tool.name not in KNOWLEDGE_TOOLS
+            or knowledge_selection(run)["mode"] != "none"
+        )
         and (
             tool.name not in {"read_document", "read_knowledge_document"}
             or policy_value["allowDocuments"]
@@ -68,8 +74,11 @@ def guard(run_id, deadline):
         p = require_access(user, run.conversation.mode, run.model)
         check_budget_access(user, p, run.budget_snapshot)
         if run.conversation.mode == "agent":
+            from .selections import check_history_evidence, history_compatible
+
             for previous in run.conversation.runs.all():
-                check_evidence(previous, user, p)
+                if previous.pk == run.pk or history_compatible(previous, run):
+                    check_history_evidence(previous, user, p)
 
 
 def event(run, kind, text):
@@ -83,6 +92,7 @@ def context_budget_bytes(policy_value, model):
 
 def context_messages(run, policy_value, model):
     messages = []
+    context_ids = set()
     # UTF-8 bytes are a conservative upper bound, not an exact tokenizer count.
     budget = context_budget_bytes(policy_value, model) - len(run.prompt.encode("utf-8"))
     if budget < 0:
@@ -94,8 +104,16 @@ def context_messages(run, policy_value, model):
         id__lt=run.id, status="succeeded"
     ).order_by("-id"):
         if run.conversation.mode == "agent":
+            from .selections import (
+                check_history_evidence,
+                history_compatible,
+                history_sources,
+            )
+
+            if not history_compatible(previous, run):
+                continue
             try:
-                check_evidence(previous, fresh_user(run.owner_id), policy_value)
+                check_history_evidence(previous, fresh_user(run.owner_id), policy_value)
             except (PermissionDenied, ValidationError, ValueError):
                 # Revoked evidence is omitted from subsequent model context.
                 continue
@@ -113,10 +131,20 @@ def context_messages(run, policy_value, model):
             {"role": "assistant", "content": content},
         ]
         budget -= size
+        if run.conversation.mode == "agent":
+            context_ids.update(s.id for s in history_sources(previous))
     if truncated:
         AgentRun.objects.filter(pk=run.id).update(context_truncated=True)
         event(run, "context", "为控制上下文长度，部分较早对话未发送给模型")
     messages.append({"role": "user", "content": input_prompt(run)})
+    if run.conversation.mode == "agent":
+        run.knowledge_selection = {
+            **(run.knowledge_selection or {}),
+            "_contextRunIds": sorted(context_ids),
+        }
+        AgentRun.objects.filter(pk=run.id).update(
+            knowledge_selection=run.knowledge_selection
+        )
     return messages
 
 
@@ -128,7 +156,16 @@ def input_prompt(run):
         if run.resource_ids
         else "本轮未指定资源。问题涉及平台数据时先发现当前可见数据；纯知识问题直接查知识。对象不明确时询问用户。"
     )
-    return selection + "\n本轮用户问题：\n" + run.prompt
+    from .selections import serialize
+
+    preferences = json.dumps(serialize(run), ensure_ascii=False)
+    return (
+        selection
+        + "\n本轮工具选择（服务器限定范围）："
+        + preferences
+        + "\n本轮用户问题：\n"
+        + run.prompt
+    )
 
 
 SYSTEM_CHAT = "你是平台的本地模型助手。使用用户的语言回答。普通聊天不能访问平台数据，不要声称已读取数据、运行代码或执行操作。"
@@ -137,7 +174,7 @@ SYSTEM_AGENT = """你是当前项目的数据分析智能体。按问题选择�
 计算完成后默认由用户在结果卡选择入库；仅用户明确要求自动入库时设置autoImport=true。追问进度、入库、结果位置时只使用本会话真实工具记录中的任务，禁止从全库旧任务猜测。没有本轮真实提交工具返回时不能说已提交或完成。
 查找算法时优先给list_compute_algorithms传1至3个目标关键词query（空格分隔）；没找到可换词或省略query看目录。执行前必须核对所选具体版本返回的完整manifest，按真实输入key、参数约束和输出声明操作。
 仅在任务succeeded且输出importStatus=ready时说明已入库；排队、计算中、入库中需准确说明，后台会继续更新任务卡。
-专业判断先search_knowledge核对来源和适用条件，结构化事实可用check_knowledge_constraints；needs_context表示条件不足。不能依据理论直接改写原始数据。
+本轮启用知识库时，专业判断先search_knowledge核对来源和适用条件，结构化事实可用check_knowledge_constraints；needs_context表示条件不足。知识选择为none时，依照当前数据与注册算法处理，不调用知识工具或沿用此前知识引用。不能依据理论直接改写原始数据。
 search_knowledge中的documents是可追溯原文，items是结构化规则；只引用其中明确给出的citation。documentSearch.available=false表示文档检索暂不可用，不等于没有相关资料。
 知识库文献与数据目录是两套编号：documentId不能当resourceId传给read_document。需要更多文献原文时使用read_knowledge_document(documentId,offset,limit)分页读取，或以具体主题或中英文专业词再次search_knowledge；优先引用支撑结论的正文，目录或标题不支撑专业结论。
 按原文和结构化证据转述：专业名称仅有英文时保留英文，只有证据明确给出的中文名才作对照。文献作者、首字母、年份、页码按来源逐字核对，未返回的信息省略或用read_knowledge_document核实，不能凭记忆补写。

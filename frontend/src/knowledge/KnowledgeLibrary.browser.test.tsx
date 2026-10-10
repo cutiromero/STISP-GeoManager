@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   searchDocuments: vi.fn(),
   uploadDocument: vi.fn(),
   retryDocument: vi.fn(),
+  classifyDocument: vi.fn(),
 }));
 vi.mock("../api/knowledge", () => ({ knowledgeApi: api }));
 import KnowledgeLibrary from "./KnowledgeLibrary";
@@ -45,6 +46,7 @@ function wikiPage(
     version: 1,
     sources: [],
     projectTagId: 1,
+    domain: "geology",
   };
 }
 async function openWiki(pages: KnowledgeWikiPage[]) {
@@ -80,6 +82,7 @@ beforeEach(() => {
         canManage: false,
         detail: "索引已完成",
         sourceUrl: "https://doi.org/10.3133/sim3190",
+        domain: "geology",
       },
     ],
     enabled: true,
@@ -124,6 +127,104 @@ it("shows semantic evidence and its source, with upload gated by capability", as
   expect(screen.getByRole("link", { name: /查看原始来源/ })).toHaveAttribute(
     "href",
     "https://doi.org/10.3133/sim3190",
+  );
+});
+
+it("scopes document, Wiki and original-text retrieval to the selected knowledge zone", async () => {
+  api.searchDocuments.mockResolvedValue({
+    available: true,
+    detail: "",
+    items: [],
+  });
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <KnowledgeLibrary mode="library" domain="arid_ecology" />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await screen.findByText("method.pdf · 公共资料 · 项目成员可见");
+  expect(api.documents).toHaveBeenCalledWith("arid_ecology");
+  expect(api.wiki).toHaveBeenCalledWith("arid_ecology");
+  fireEvent.change(screen.getByRole("searchbox", { name: "检索资料原文" }), {
+    target: { value: "NDVI生态变化" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "检索原文" }));
+  await waitFor(() =>
+    expect(api.searchDocuments).toHaveBeenCalledWith("NDVI生态变化", [
+      "arid_ecology",
+    ]),
+  );
+});
+
+it("saves an uploaded document in the selected knowledge zone", async () => {
+  api.documents.mockResolvedValue({
+    enabled: true,
+    canUpload: true,
+    detail: "",
+    items: [],
+  });
+  api.uploadDocument.mockResolvedValue({
+    status: "pending",
+    detail: "正在整理",
+  });
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <KnowledgeLibrary mode="library" domain="arid_ecology" />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: /添加资料/ }));
+  const file = new File(["NDVI用于观察植被变化"], "生态资料.md", {
+    type: "text/markdown",
+  });
+  fireEvent.change(
+    document.querySelector<HTMLInputElement>('input[type="file"]')!,
+    { target: { files: [file] } },
+  );
+  await screen.findByDisplayValue("生态资料");
+  fireEvent.click(screen.getByRole("button", { name: "保存并整理" }));
+  await waitFor(() => expect(api.uploadDocument).toHaveBeenCalledOnce());
+  const body = api.uploadDocument.mock.calls[0]![0] as FormData;
+  expect(body.get("domain")).toBe("arid_ecology");
+  expect(body.get("title")).toBe("生态资料");
+  expect(body.get("file")).toBe(file);
+});
+
+it("lets a document maintainer change its zone without changing source content", async () => {
+  api.documents.mockResolvedValue({
+    enabled: true,
+    canUpload: true,
+    detail: "",
+    items: [
+      {
+        id: 7,
+        title: "待分类资料",
+        filename: "source.md",
+        visibility: "project",
+        projectTagId: 1,
+        status: "completed",
+        canManage: true,
+        detail: "",
+        sourceUrl: "",
+        domain: "geology",
+      },
+    ],
+  });
+  api.classifyDocument.mockResolvedValue({ id: 7, domain: "arid_ecology" });
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "调整分区" }));
+  fireEvent.mouseDown(
+    screen.getByRole("combobox", { name: "调整知识分区：待分类资料" }),
+  );
+  fireEvent.click(
+    await screen.findByText("干旱区生态安全治理", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  await waitFor(() =>
+    expect(api.classifyDocument).toHaveBeenCalledWith(7, "arid_ecology"),
   );
 });
 it("opens Wiki through the relation graph and renders generated text safely", async () => {

@@ -13,6 +13,7 @@ from apps.compute.quality import require_automatic_quality
 from apps.projects.context import ProjectScope, project_scope
 from .models import AgentComputeFollowup
 from .policy import fresh_user, require_access
+from .selections import require_task_selection
 
 
 def authorized_task(user, task_id, policy_value):
@@ -38,6 +39,7 @@ def authorized_task(user, task_id, policy_value):
 def compact_task(task):
     return {
         "taskId": str(task.id),
+        "versionId": task.version_id,
         "name": task.name,
         "status": task.status,
         "stage": task.stage,
@@ -51,6 +53,7 @@ def compact_task(task):
 
 def query_task(run, user, p, args):
     task = authorized_task(user, args.get("taskId"), p)
+    require_task_selection(run, task)
     result = compact_task(task)
     followup = AgentComputeFollowup.objects.filter(task=task).first()
     if followup:
@@ -74,6 +77,7 @@ def list_tasks(run, user, p, args):
     for task in tasks:
         try:
             task = authorized_task(user, task.id, p)
+            require_task_selection(run, task)
         except (PermissionDenied, ComputeError):
             continue
         result["items"].append(compact_task(task))
@@ -120,6 +124,7 @@ def import_result(run, user, p, args):
             raise PermissionDenied("结果不存在或无权访问")
         task_id, keys = output.task_id, [output.key]
     task = authorized_task(user, task_id, p)
+    require_task_selection(run, task)
     require_actor(user, task.project_tag_id, "catalog.add_dataresource")
     name = args.get("name", "")
     if not isinstance(name, str) or len(name) > 160:
@@ -288,6 +293,7 @@ def run_tasks(run, user, p):
     for task_id in sorted(ids)[:30]:
         try:
             task = authorized_task(user, task_id, p)
+            require_task_selection(run, task)
         except (PermissionDenied, ValidationError, ComputeError):
             continue
         followup = AgentComputeFollowup.objects.filter(task=task).first()

@@ -5,6 +5,9 @@ from apps.projects.scoping import ProjectScopedModel
 
 
 class KnowledgeEntry(ProjectScopedModel):
+    domain = models.CharField(
+        max_length=32, default="geology", db_default="geology", db_index=True
+    )
     seed_key = models.CharField(max_length=100, blank=True)
     title = models.CharField(max_length=180)
     category = models.CharField(max_length=80)
@@ -68,6 +71,9 @@ class KnowledgeLibrary(ProjectScopedModel):
 
 
 class KnowledgeDocument(ProjectScopedModel):
+    domain = models.CharField(
+        max_length=32, default="geology", db_default="geology", db_index=True
+    )
     library = models.ForeignKey(KnowledgeLibrary, on_delete=models.PROTECT)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     title = models.CharField(max_length=180)

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.30] - 2026-10-10
+
+### Added
+- 四类知识分区及40条附公开来源、适用条件和例外的基础知识；原内容和细分类保留。
+- 智能体显式算法、数据、知识选择入口，自动与手选范围由后台执行并持久恢复。
+- 知识支持自动、手选分区、全部及不参考模式，资料和Wiki按领域筛选。
+
+### Changed
+- 关系图采用稳定紧凑分区布局、小节点和重点标签，支持滚轮缩放、平移和关联聚焦。
+- 历史知识引用按本轮范围隔离，手选算法及数据与计算参数卡联动。
+
 ## [0.1.29] - 2026-10-09
 
 ### Fixed

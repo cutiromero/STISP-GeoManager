@@ -358,9 +358,81 @@ export type AgentModel = {
 };
 
 /**
+ * 独立知识领域，细分类category保持原值
+ */
+export type KnowledgeDomain = 'remote_sensing' | 'pipelines' | 'geology' | 'arid_ecology';
+
+/**
+ * 可用知识分区与可见条目数量
+ */
+export type KnowledgeDomainOption = {
+    id: KnowledgeDomain;
+    /**
+     * 中文名称
+     */
+    label: string;
+    /**
+     * 领域范围
+     */
+    description: string;
+    /**
+     * 当前用户可见的已发布结构化知识数
+     */
+    count: number;
+};
+
+/**
+ * 本轮知识调用方式；auto按本轮主题筛选，manual限定选定领域，all使用所有可见知识，none禁用知识工具
+ */
+export type AgentKnowledgeSelection = {
+    /**
+     * 知识调用方式
+     */
+    mode: 'auto' | 'manual' | 'all' | 'none';
+    /**
+     * manual必须选择至少一个领域，其余模式为空
+     */
+    domains: Array<KnowledgeDomain>;
+};
+
+/**
+ * 已发布且允许智能体调用的算法版本
+ */
+export type AgentAlgorithmOption = {
+    /**
+     * 真实已发布版本
+     */
+    versionId: number;
+    /**
+     * 算法标识
+     */
+    algorithmId: number;
+    /**
+     * 算法名称
+     */
+    name: string;
+    /**
+     * 版本名称
+     */
+    version: string;
+    /**
+     * 算法简介
+     */
+    description: string;
+};
+
+/**
  * 当前用户智能体入口和能力
  */
 export type AgentBootstrap = {
+    /**
+     * 知识分区选项
+     */
+    knowledgeDomains?: Array<KnowledgeDomainOption>;
+    /**
+     * 当前项目与公开可用的已发布安全算法版本
+     */
+    algorithmOptions?: Array<AgentAlgorithmOption>;
     /**
      * 后台默认思考强度；开启任务预算时以当前方案默认值为准
      */
@@ -681,6 +753,27 @@ export type ComputeMapPreview = {
  * 持久运行记录；引用失权时返回 403，不返回旧内容
  */
 export type AgentRun = {
+    knowledgeSelection?: AgentKnowledgeSelection;
+    /**
+     * 自动发现或限定用户手选的算法版本
+     */
+    algorithmSelectionMode?: 'auto' | 'manual';
+    /**
+     * manual必须选择1至3个实际已发布版本，auto为空
+     */
+    algorithmVersionIds?: Array<number>;
+    /**
+     * 自动发现或限定resourceIds；manual必须选择至少一项
+     */
+    dataSelectionMode?: 'auto' | 'manual';
+    /**
+     * 本轮选择的数据范围
+     */
+    resourceIds?: Array<number>;
+    /**
+     * 本轮实际检索的领域；none为空
+     */
+    resolvedKnowledgeDomains?: Array<KnowledgeDomain>;
     /**
      * Persistent computation plan
      */
@@ -836,6 +929,19 @@ export type AgentConversationUpdate = {
  * 提交任务
  */
 export type AgentRunInput = {
+    knowledgeSelection?: AgentKnowledgeSelection;
+    /**
+     * 自动发现或限定用户手选的算法版本
+     */
+    algorithmSelectionMode?: 'auto' | 'manual';
+    /**
+     * manual必须选择1至3个实际已发布版本，auto为空
+     */
+    algorithmVersionIds?: Array<number>;
+    /**
+     * 自动发现或限定resourceIds；manual必须选择至少一项
+     */
+    dataSelectionMode?: 'auto' | 'manual';
     /**
      * 深度思考时用户选择的强度，优先于任务预算和后台默认值；快速模式不可传入
      */
@@ -1000,6 +1106,7 @@ export type KnowledgeSource = {
  * 格式化、有来源的地学知识
  */
 export type KnowledgeEntry = {
+    domain?: KnowledgeDomain;
     /**
      * 条目标题
      */
@@ -1080,6 +1187,7 @@ export type KnowledgeEntry = {
  * 编辑当前项目知识；发布必须带有效来源
  */
 export type KnowledgeEntryInput = {
+    domain?: KnowledgeDomain;
     /**
      * 条目标题
      */
@@ -1192,6 +1300,7 @@ export type KnowledgeDocument = {
      * 原始资料SHA256
      */
     sha256: string;
+    domain?: KnowledgeDomain;
 };
 
 /**
@@ -1248,6 +1357,7 @@ export type KnowledgePassage = {
      * 引用片段标识
      */
     chunkId: string;
+    domain?: KnowledgeDomain;
 };
 
 /**
@@ -1284,6 +1394,7 @@ export type KnowledgeWikiSource = {
      * 来源地址
      */
     sourceUrl: string;
+    domain?: KnowledgeDomain;
 };
 
 /**
@@ -1326,6 +1437,7 @@ export type KnowledgeWikiPage = {
      * 所属项目
      */
     projectTagId: number;
+    domain?: KnowledgeDomain;
 };
 
 /**
@@ -1358,6 +1470,10 @@ export type KnowledgeWikiList = {
  * 当前项目与公共已发布基础知识
  */
 export type KnowledgeEntryList = {
+    /**
+     * 四个知识分区与可见数量
+     */
+    domains?: Array<KnowledgeDomainOption>;
     /**
      * 匹配的知识条目
      */
@@ -16212,7 +16328,12 @@ export type ListKnowledgeDocumentsData = {
         'X-Project-Id': number;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * 限定知识领域；省略读取全部可见领域
+         */
+        domain?: KnowledgeDomain;
+    };
     url: '/api/knowledge/documents/';
 };
 
@@ -16275,6 +16396,7 @@ export type UploadKnowledgeDocumentData = {
          * 可见范围
          */
         visibility: 'project' | 'owner_only';
+        domain?: KnowledgeDomain;
     };
     headers: {
         /**
@@ -16394,6 +16516,10 @@ export type SearchKnowledgeDocumentsData = {
          * 最多返回数量
          */
         limit?: number;
+        /**
+         * 限定文档领域，省略为所有可见领域
+         */
+        domains?: Array<KnowledgeDomain>;
     };
     headers: {
         /**
@@ -16453,7 +16579,12 @@ export type ListKnowledgeWikiData = {
         'X-Project-Id': number;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * 限定知识领域；省略读取全部可见领域
+         */
+        domain?: KnowledgeDomain;
+    };
     url: '/api/knowledge/wiki/';
 };
 
@@ -16495,6 +16626,59 @@ export type ListKnowledgeWikiResponses = {
 
 export type ListKnowledgeWikiResponse = ListKnowledgeWikiResponses[keyof ListKnowledgeWikiResponses];
 
+export type ClassifyKnowledgeDocumentData = {
+    /**
+     * 新领域
+     */
+    body: {
+        domain: KnowledgeDomain;
+    };
+    headers: {
+        /**
+         * 当前项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 资料标识
+         */
+        documentId: number;
+    };
+    query?: never;
+    url: '/api/knowledge/documents/{documentId}/';
+};
+
+export type ClassifyKnowledgeDocumentErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type ClassifyKnowledgeDocumentError = ClassifyKnowledgeDocumentErrors[keyof ClassifyKnowledgeDocumentErrors];
+
+export type ClassifyKnowledgeDocumentResponses = {
+    /**
+     * 分类更新
+     */
+    200: KnowledgeDocument;
+};
+
+export type ClassifyKnowledgeDocumentResponse = ClassifyKnowledgeDocumentResponses[keyof ClassifyKnowledgeDocumentResponses];
+
 export type ListKnowledgeEntriesData = {
     body?: never;
     headers: {
@@ -16505,6 +16689,10 @@ export type ListKnowledgeEntriesData = {
     };
     path?: never;
     query?: {
+        /**
+         * 限定知识分区；省略时读取全部可见领域
+         */
+        domain?: KnowledgeDomain;
         /**
          * 关键词、别名、条件检索
          */

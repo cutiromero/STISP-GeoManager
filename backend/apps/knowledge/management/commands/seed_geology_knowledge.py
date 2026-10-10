@@ -12,6 +12,7 @@ from apps.knowledge.services import serialize, validate_entry
 BATCH_FILES = {
     "base": "seed_entries.json",
     "geology-20261009": "seed_entries_20261009.json",
+    "knowledge-zones-20261010": "seed_entries_20261010.json",
 }
 
 
@@ -24,7 +25,7 @@ class Command(BaseCommand):
             "--batch",
             choices=tuple(BATCH_FILES),
             default="base",
-            help="base 保持原有种子范围；geology-20261009 仅补充本批 30 条。",
+            help="base 保持原有范围；按日期选择对应的知识补充批次。",
         )
 
     def handle(self, *args, **options):

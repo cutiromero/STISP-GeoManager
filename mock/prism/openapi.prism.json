@@ -18910,7 +18910,34 @@
                     "chat",
                     "read_data",
                     "analyze_data"
-                  ]
+                  ],
+                  "knowledgeDomains": [
+                    {
+                      "id": "remote_sensing",
+                      "label": "遥感基础",
+                      "description": "传感器、波段、反射率与指数",
+                      "count": 0
+                    },
+                    {
+                      "id": "pipelines",
+                      "label": "油气管道相关",
+                      "description": "管道监测与沿线风险",
+                      "count": 0
+                    },
+                    {
+                      "id": "geology",
+                      "label": "遥感地质填图逻辑推理",
+                      "description": "矿物、岩性、构造与证据推理",
+                      "count": 0
+                    },
+                    {
+                      "id": "arid_ecology",
+                      "label": "干旱区生态安全治理",
+                      "description": "植被、水资源与生态治理",
+                      "count": 0
+                    }
+                  ],
+                  "algorithmOptions": []
                 }
               }
             }
@@ -20440,6 +20467,14 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "description": "限定知识领域；省略读取全部可见领域",
+            "schema": {
+              "$ref": "#/components/schemas/KnowledgeDomain"
+            }
           }
         ],
         "responses": {
@@ -20577,6 +20612,9 @@
                       "owner_only"
                     ],
                     "default": "project"
+                  },
+                  "domain": {
+                    "$ref": "#/components/schemas/KnowledgeDomain"
                   }
                 },
                 "required": [
@@ -20752,6 +20790,14 @@
                     "default": 6,
                     "minimum": 1,
                     "maximum": 12
+                  },
+                  "domains": {
+                    "type": "array",
+                    "description": "限定文档领域，省略为所有可见领域",
+                    "maxItems": 4,
+                    "items": {
+                      "$ref": "#/components/schemas/KnowledgeDomain"
+                    }
                   }
                 },
                 "required": [
@@ -20786,6 +20832,14 @@
             "schema": {
               "type": "integer",
               "minimum": 1
+            }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "description": "限定知识领域；省略读取全部可见领域",
+            "schema": {
+              "$ref": "#/components/schemas/KnowledgeDomain"
             }
           }
         ],
@@ -20835,6 +20889,102 @@
         }
       }
     },
+    "/api/knowledge/documents/{documentId}/": {
+      "patch": {
+        "tags": [
+          "知识库"
+        ],
+        "operationId": "classifyKnowledgeDocument",
+        "summary": "修改资料知识分区",
+        "description": "保留原件与原文，仅调整知识领域；当前项目知识维护权限及owner_only边界均复核，检索和Wiki读取即时按新领域限定。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前项目",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "documentId",
+            "in": "path",
+            "required": true,
+            "description": "资料标识",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分类更新",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeDocument"
+                },
+                "example": {
+                  "id": 12,
+                  "domain": "arid_ecology",
+                  "title": "植被监测资料",
+                  "filename": "vegetation.md",
+                  "sourceUrl": "https://www.usgs.gov/landsat-missions/landsat-normalized-difference-vegetation-index",
+                  "projectTagId": 1,
+                  "visibility": "project",
+                  "status": "completed",
+                  "detail": "索引完成",
+                  "createdAt": "2026-10-10T02:00:00Z",
+                  "canManage": true,
+                  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "领域分类",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "新领域",
+                "properties": {
+                  "domain": {
+                    "$ref": "#/components/schemas/KnowledgeDomain"
+                  }
+                },
+                "required": [
+                  "domain"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/knowledge/entries/": {
       "get": {
         "tags": [
@@ -20849,6 +20999,14 @@
           }
         ],
         "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "description": "限定知识分区；省略时读取全部可见领域",
+            "schema": {
+              "$ref": "#/components/schemas/KnowledgeDomain"
+            }
+          },
           {
             "name": "X-Project-Id",
             "in": "header",
@@ -20954,14 +21112,41 @@
                       "id": 1,
                       "projectTagId": 1,
                       "revision": 1,
-                      "updatedAt": "2026-09-29T08:00:00Z"
+                      "updatedAt": "2026-09-29T08:00:00Z",
+                      "domain": "geology"
                     }
                   ],
                   "total": 1,
                   "categories": [
                     "矿物平衡"
                   ],
-                  "canEdit": true
+                  "canEdit": true,
+                  "domains": [
+                    {
+                      "id": "remote_sensing",
+                      "label": "遥感基础",
+                      "description": "传感器、波段、反射率与指数",
+                      "count": 0
+                    },
+                    {
+                      "id": "pipelines",
+                      "label": "油气管道相关",
+                      "description": "管道监测与沿线风险",
+                      "count": 0
+                    },
+                    {
+                      "id": "geology",
+                      "label": "遥感地质填图逻辑推理",
+                      "description": "矿物、岩性、构造与证据推理",
+                      "count": 1
+                    },
+                    {
+                      "id": "arid_ecology",
+                      "label": "干旱区生态安全治理",
+                      "description": "植被、水资源与生态治理",
+                      "count": 0
+                    }
+                  ]
                 }
               }
             }
@@ -21804,7 +21989,21 @@
                     "taskId": null,
                     "autoImport": false,
                     "planRevision": "plan-example"
-                  }
+                  },
+                  "knowledgeSelection": {
+                    "mode": "auto",
+                    "domains": []
+                  },
+                  "resolvedKnowledgeDomains": [
+                    "remote_sensing",
+                    "arid_ecology"
+                  ],
+                  "algorithmSelectionMode": "auto",
+                  "algorithmVersionIds": [],
+                  "dataSelectionMode": "manual",
+                  "resourceIds": [
+                    10
+                  ]
                 }
               }
             }
@@ -23021,10 +23220,127 @@
         ],
         "additionalProperties": false
       },
+      "KnowledgeDomain": {
+        "type": "string",
+        "description": "独立知识领域，细分类category保持原值",
+        "enum": [
+          "remote_sensing",
+          "pipelines",
+          "geology",
+          "arid_ecology"
+        ]
+      },
+      "KnowledgeDomainOption": {
+        "type": "object",
+        "description": "可用知识分区与可见条目数量",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/KnowledgeDomain"
+          },
+          "label": {
+            "type": "string",
+            "description": "中文名称"
+          },
+          "description": {
+            "type": "string",
+            "description": "领域范围"
+          },
+          "count": {
+            "type": "integer",
+            "description": "当前用户可见的已发布结构化知识数",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "AgentKnowledgeSelection": {
+        "type": "object",
+        "description": "本轮知识调用方式；auto按本轮主题筛选，manual限定选定领域，all使用所有可见知识，none禁用知识工具",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "description": "知识调用方式",
+            "enum": [
+              "auto",
+              "manual",
+              "all",
+              "none"
+            ]
+          },
+          "domains": {
+            "type": "array",
+            "description": "manual必须选择至少一个领域，其余模式为空",
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeDomain"
+            }
+          }
+        },
+        "required": [
+          "mode",
+          "domains"
+        ],
+        "additionalProperties": false
+      },
+      "AgentAlgorithmOption": {
+        "type": "object",
+        "description": "已发布且允许智能体调用的算法版本",
+        "properties": {
+          "versionId": {
+            "type": "integer",
+            "description": "真实已发布版本"
+          },
+          "algorithmId": {
+            "type": "integer",
+            "description": "算法标识"
+          },
+          "name": {
+            "type": "string",
+            "description": "算法名称"
+          },
+          "version": {
+            "type": "string",
+            "description": "版本名称"
+          },
+          "description": {
+            "type": "string",
+            "description": "算法简介"
+          }
+        },
+        "required": [
+          "versionId",
+          "algorithmId",
+          "name",
+          "version",
+          "description"
+        ],
+        "additionalProperties": false
+      },
       "AgentBootstrap": {
         "type": "object",
         "description": "当前用户智能体入口和能力",
         "properties": {
+          "knowledgeDomains": {
+            "type": "array",
+            "description": "知识分区选项",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeDomainOption"
+            }
+          },
+          "algorithmOptions": {
+            "type": "array",
+            "description": "当前项目与公开可用的已发布安全算法版本",
+            "items": {
+              "$ref": "#/components/schemas/AgentAlgorithmOption"
+            }
+          },
           "defaultReasoningEffort": {
             "type": "string",
             "enum": [
@@ -23474,6 +23790,51 @@
         "type": "object",
         "description": "持久运行记录；引用失权时返回 403，不返回旧内容",
         "properties": {
+          "knowledgeSelection": {
+            "$ref": "#/components/schemas/AgentKnowledgeSelection"
+          },
+          "algorithmSelectionMode": {
+            "type": "string",
+            "description": "自动发现或限定用户手选的算法版本",
+            "enum": [
+              "auto",
+              "manual"
+            ]
+          },
+          "algorithmVersionIds": {
+            "type": "array",
+            "description": "manual必须选择1至3个实际已发布版本，auto为空",
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "description": "算法版本",
+              "minimum": 1
+            }
+          },
+          "dataSelectionMode": {
+            "type": "string",
+            "description": "自动发现或限定resourceIds；manual必须选择至少一项",
+            "enum": [
+              "auto",
+              "manual"
+            ]
+          },
+          "resourceIds": {
+            "type": "array",
+            "description": "本轮选择的数据范围",
+            "items": {
+              "type": "integer",
+              "description": "数据资源"
+            }
+          },
+          "resolvedKnowledgeDomains": {
+            "type": "array",
+            "description": "本轮实际检索的领域；none为空",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeDomain"
+            }
+          },
           "computeIntent": {
             "description": "Persistent computation plan",
             "anyOf": [
@@ -23729,6 +24090,36 @@
         "type": "object",
         "description": "提交任务",
         "properties": {
+          "knowledgeSelection": {
+            "$ref": "#/components/schemas/AgentKnowledgeSelection"
+          },
+          "algorithmSelectionMode": {
+            "type": "string",
+            "description": "自动发现或限定用户手选的算法版本",
+            "enum": [
+              "auto",
+              "manual"
+            ]
+          },
+          "algorithmVersionIds": {
+            "type": "array",
+            "description": "manual必须选择1至3个实际已发布版本，auto为空",
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "description": "算法版本",
+              "minimum": 1
+            }
+          },
+          "dataSelectionMode": {
+            "type": "string",
+            "description": "自动发现或限定resourceIds；manual必须选择至少一项",
+            "enum": [
+              "auto",
+              "manual"
+            ]
+          },
           "reasoningEffort": {
             "type": "string",
             "enum": [
@@ -23985,6 +24376,9 @@
         "type": "object",
         "description": "格式化、有来源的地学知识",
         "properties": {
+          "domain": {
+            "$ref": "#/components/schemas/KnowledgeDomain"
+          },
           "title": {
             "type": "string",
             "description": "条目标题",
@@ -24124,6 +24518,9 @@
         "type": "object",
         "description": "编辑当前项目知识；发布必须带有效来源",
         "properties": {
+          "domain": {
+            "$ref": "#/components/schemas/KnowledgeDomain"
+          },
           "title": {
             "type": "string",
             "description": "条目标题",
@@ -24301,6 +24698,9 @@
           "sha256": {
             "type": "string",
             "description": "原始资料SHA256"
+          },
+          "domain": {
+            "$ref": "#/components/schemas/KnowledgeDomain"
           }
         },
         "required": [
@@ -24385,6 +24785,9 @@
           "chunkId": {
             "type": "string",
             "description": "引用片段标识"
+          },
+          "domain": {
+            "$ref": "#/components/schemas/KnowledgeDomain"
           }
         },
         "required": [
@@ -24440,6 +24843,9 @@
           "sourceUrl": {
             "type": "string",
             "description": "来源地址"
+          },
+          "domain": {
+            "$ref": "#/components/schemas/KnowledgeDomain"
           }
         },
         "required": [
@@ -24495,6 +24901,9 @@
           "projectTagId": {
             "type": "integer",
             "description": "所属项目"
+          },
+          "domain": {
+            "$ref": "#/components/schemas/KnowledgeDomain"
           }
         },
         "required": [
@@ -24551,6 +24960,13 @@
         "type": "object",
         "description": "当前项目与公共已发布基础知识",
         "properties": {
+          "domains": {
+            "type": "array",
+            "description": "四个知识分区与可见数量",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeDomainOption"
+            }
+          },
           "items": {
             "type": "array",
             "description": "匹配的知识条目",

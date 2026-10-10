@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -253,6 +259,48 @@ beforeEach(() => {
   bootstrap.allowAttachments = false;
   bootstrap.internetEnabled = false;
   bootstrap.workerOnline = true;
+  bootstrap.algorithmOptions = [
+    {
+      versionId: 4,
+      algorithmId: 1,
+      name: "NDVI植被指数",
+      version: "1.0.0",
+      description: "植被指数",
+    },
+    {
+      versionId: 5,
+      algorithmId: 2,
+      name: "NDWI水体指数",
+      version: "1.0.0",
+      description: "水体指数",
+    },
+  ];
+  bootstrap.knowledgeDomains = [
+    {
+      id: "remote_sensing",
+      label: "遥感基础",
+      description: "遥感方法",
+      count: 12,
+    },
+    {
+      id: "pipelines",
+      label: "油气管道相关",
+      description: "管道监测",
+      count: 12,
+    },
+    {
+      id: "geology",
+      label: "遥感地质填图逻辑推理",
+      description: "地质知识",
+      count: 60,
+    },
+    {
+      id: "arid_ecology",
+      label: "干旱区生态安全治理",
+      description: "生态安全",
+      count: 12,
+    },
+  ];
   bootstrap.budgets = {
     enabled: true,
     tier: "standard",
@@ -299,6 +347,7 @@ it("prefills a knowledge handoff without sending it automatically", async () => 
             state: {
               query: "核查霞石与石英的适用条件",
               knowledgeEntryIds: [12],
+              knowledgeSelection: { mode: "manual", domains: ["geology"] },
             },
           },
         ]}
@@ -312,6 +361,26 @@ it("prefills a knowledge handoff without sending it automatically", async () => 
       "核查霞石与石英的适用条件",
     ),
   );
+  expect(agentApi.submit).not.toHaveBeenCalled();
+  await screen.findByText("旧问题");
+  fireEvent.click(screen.getByRole("button", { name: "知识库" }));
+  expect(screen.getByRole("radio", { name: "手选分区" })).toBeChecked();
+  expect(
+    screen.getByText("遥感地质填图逻辑推理", {
+      selector: ".ant-select-selection-item-content",
+    }),
+  ).toBeInTheDocument();
+});
+
+it("shows the authorization message and hides tool controls for a restricted account", async () => {
+  bootstrap.canAgent = false;
+  showAgent("workbench");
+  expect(
+    await screen.findByText("当前账号未获准使用此功能，请联系超级管理员。"),
+  ).toBeVisible();
+  for (const name of ["调用算法", "选择数据", "知识库"])
+    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  expect(agentApi.resources).not.toHaveBeenCalled();
   expect(agentApi.submit).not.toHaveBeenCalled();
 });
 
@@ -826,13 +895,20 @@ it("submits resources, internet and an attachment selected from the tools menu",
   });
   showAgent("workbench");
   await screen.findByText("旧问题");
-  fireEvent.click(screen.getByRole("button", { name: "工具与数据" }));
+  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
+  fireEvent.click(
+    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
+      "radio",
+      { name: "手动选择" },
+    ),
+  );
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "限定数据资源" }));
   fireEvent.click(
     await screen.findByText("研究区影像", {
       selector: ".ant-select-item-option-content",
     }),
   );
+  fireEvent.click(screen.getByRole("button", { name: "工具与数据" }));
   fireEvent.click(screen.getByRole("switch", { name: "联网检索" }));
   const file = new File(["测试资料"], "资料.txt", { type: "text/plain" });
   fireEvent.change(
@@ -882,6 +958,266 @@ it("shows an error with a retry action without exposing run details", async () =
       expect.objectContaining({ prompt: "重试问题" }),
     ),
   );
+});
+
+it("submits manual algorithm, data and multiple knowledge zones through explicit buttons", async () => {
+  vi.mocked(agentApi.resources).mockResolvedValue({
+    items: [
+      { id: 10, name: "研究区影像", dataType: "raster", description: "" },
+    ],
+  });
+  showAgent("workbench");
+  await screen.findByText("旧问题");
+  fireEvent.click(screen.getByRole("button", { name: "调用算法" }));
+  fireEvent.click(
+    within(screen.getByRole("radiogroup", { name: "算法选择方式" })).getByRole(
+      "radio",
+      { name: "手动选择" },
+    ),
+  );
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "选择调用算法" }));
+  fireEvent.click(
+    await screen.findByText("NDVI植被指数 · 1.0.0", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
+  fireEvent.click(
+    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
+      "radio",
+      { name: "手动选择" },
+    ),
+  );
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "限定数据资源" }));
+  fireEvent.click(
+    await screen.findByText("研究区影像", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "知识库" }));
+  fireEvent.click(screen.getByRole("radio", { name: "手选分区" }));
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "选择知识分区" }));
+  fireEvent.click(
+    await screen.findByText("遥感基础", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  fireEvent.click(
+    await screen.findByText("干旱区生态安全治理", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+    target: { value: "分析这张影像的NDVI" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() =>
+    expect(agentApi.submit).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        algorithmSelectionMode: "manual",
+        algorithmVersionIds: [4],
+        dataSelectionMode: "manual",
+        resourceIds: [10],
+        knowledgeSelection: {
+          mode: "manual",
+          domains: ["remote_sensing", "arid_ecology"],
+        },
+      }),
+    ),
+  );
+});
+
+it.each([
+  ["自动筛选", "auto"],
+  ["全部知识库", "all"],
+  ["不参考知识库", "none"],
+])(
+  "persists the %s knowledge mode in the submitted turn",
+  async (label, mode) => {
+    showAgent("workbench");
+    await screen.findByText("旧问题");
+    fireEvent.click(screen.getByRole("button", { name: "知识库" }));
+    fireEvent.click(screen.getByRole("radio", { name: label }));
+    fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+      target: { value: "分析当前数据" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() =>
+      expect(agentApi.submit).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          knowledgeSelection: { mode, domains: [] },
+          algorithmSelectionMode: "auto",
+          dataSelectionMode: "auto",
+          resourceIds: [],
+        }),
+      ),
+    );
+  },
+);
+
+it("restores saved tool choices from the latest server turn after reopening", async () => {
+  const saved = {
+    ...run(2, "保存的选择"),
+    resourceIds: [10],
+    dataSelectionMode: "manual" as const,
+    algorithmSelectionMode: "manual" as const,
+    algorithmVersionIds: [4],
+    knowledgeSelection: {
+      mode: "manual" as const,
+      domains: ["arid_ecology" as const],
+    },
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [run(1, "旧问题"), saved],
+  });
+  vi.mocked(agentApi.resources).mockResolvedValue({
+    items: [
+      { id: 10, name: "研究区影像", dataType: "raster", description: "" },
+    ],
+  });
+  const first = showAgent("workbench");
+  await screen.findByText("保存的选择");
+  first.unmount();
+  showAgent("workbench");
+  await screen.findByText("保存的选择");
+  fireEvent.click(screen.getByRole("button", { name: "知识库" }));
+  expect(screen.getByRole("radio", { name: "手选分区" })).toBeChecked();
+  await waitFor(() =>
+    expect(
+      screen.getByText("干旱区生态安全治理", {
+        selector: ".ant-select-selection-item-content",
+      }),
+    ).toBeVisible(),
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+    target: { value: "继续分析" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() =>
+    expect(agentApi.submit).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        algorithmSelectionMode: "manual",
+        algorithmVersionIds: [4],
+        dataSelectionMode: "manual",
+        resourceIds: [10],
+        knowledgeSelection: saved.knowledgeSelection,
+      }),
+    ),
+  );
+});
+
+it.each([
+  ["自动筛选", "auto"],
+  ["全部知识库", "all"],
+  ["不参考知识库", "none"],
+])(
+  "clears manual restrictions when changing knowledge to %s and other tools to automatic",
+  async (label, mode) => {
+    vi.mocked(agentApi.detail).mockResolvedValue({
+      conversation,
+      runs: [
+        {
+          ...run(1, "已手选的任务"),
+          resourceIds: [10],
+          dataSelectionMode: "manual",
+          algorithmSelectionMode: "manual",
+          algorithmVersionIds: [4],
+          knowledgeSelection: { mode: "manual", domains: ["arid_ecology"] },
+        },
+      ],
+    });
+    showAgent("workbench");
+    await screen.findByText("已手选的任务");
+    fireEvent.click(screen.getByRole("button", { name: "调用算法" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "算法选择方式" }),
+      ).getByRole("radio", { name: "自动筛选" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "数据选择方式" }),
+      ).getByRole("radio", { name: "自动筛选" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "知识库" }));
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "知识库参考方式" }),
+      ).getByRole("radio", { name: label }),
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+      target: { value: "重新自动分析" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() =>
+      expect(agentApi.submit).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          algorithmSelectionMode: "auto",
+          algorithmVersionIds: [],
+          dataSelectionMode: "auto",
+          resourceIds: [],
+          knowledgeSelection: { mode, domains: [] },
+        }),
+      ),
+    );
+  },
+);
+
+it("asks for a manual selection before creating a run", async () => {
+  showAgent("workbench");
+  await screen.findByText("旧问题");
+  fireEvent.click(screen.getByRole("button", { name: "调用算法" }));
+  fireEvent.click(
+    within(screen.getByRole("radiogroup", { name: "算法选择方式" })).getByRole(
+      "radio",
+      { name: "手动选择" },
+    ),
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+    target: { value: "计算NDVI" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  expect(
+    await screen.findByText("请选择至少一个算法，或切换为自动筛选。"),
+  ).toBeVisible();
+  expect(agentApi.submit).not.toHaveBeenCalled();
+});
+
+it("keeps all three tool buttons and knowledge selection inside a 390px screen", async () => {
+  await page.viewport(390, 844);
+  try {
+    const { container } = showAgent("workbench");
+    await screen.findByText("旧问题");
+    for (const name of ["调用算法", "选择数据", "知识库"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toBeVisible();
+      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    }
+    fireEvent.click(screen.getByRole("button", { name: "知识库" }));
+    fireEvent.click(screen.getByRole("radio", { name: "手选分区" }));
+    const panel = document.querySelector(".agent-selection-panel")!;
+    expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+    expect(
+      container.querySelector(".agent-composer")!.getBoundingClientRect().width,
+    ).toBeLessThanOrEqual(390);
+    await waitFor(() =>
+      expect(panel.closest(".ant-popover")!.className).not.toMatch(
+        /(?:-enter|-appear|-leave)/,
+      ),
+    );
+    expect(panel.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+    await page.screenshot({
+      path: "../../test-results/agent-knowledge-zones-mobile.png",
+    });
+  } finally {
+    await page.viewport(1600, 900);
+  }
 });
 
 it("creates one conversation when the first action uploads multiple documents", async () => {

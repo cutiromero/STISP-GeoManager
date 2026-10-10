@@ -46,14 +46,41 @@
           "id": 1,
           "projectTagId": 1,
           "revision": 1,
-          "updatedAt": "2026-09-29T08:00:00Z"
+          "updatedAt": "2026-09-29T08:00:00Z",
+          "domain": "geology"
         }
       ],
       "total": 1,
       "categories": [
         "矿物平衡"
       ],
-      "canEdit": true
+      "canEdit": true,
+      "domains": [
+        {
+          "id": "remote_sensing",
+          "label": "遥感基础",
+          "description": "传感器、波段、反射率与指数",
+          "count": 0
+        },
+        {
+          "id": "pipelines",
+          "label": "油气管道相关",
+          "description": "管道监测与沿线风险",
+          "count": 0
+        },
+        {
+          "id": "geology",
+          "label": "遥感地质填图逻辑推理",
+          "description": "矿物、岩性、构造与证据推理",
+          "count": 1
+        },
+        {
+          "id": "arid_ecology",
+          "label": "干旱区生态安全治理",
+          "description": "植被、水资源与生态治理",
+          "count": 0
+        }
+      ]
     }
   },
   "GET /api/knowledge/entries/{entryId}/": {

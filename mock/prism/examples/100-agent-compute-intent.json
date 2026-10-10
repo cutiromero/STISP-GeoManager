@@ -32,7 +32,21 @@
         "taskId": null,
         "autoImport": false,
         "planRevision": "plan-example"
-      }
+      },
+      "knowledgeSelection": {
+        "mode": "auto",
+        "domains": []
+      },
+      "resolvedKnowledgeDomains": [
+        "remote_sensing",
+        "arid_ecology"
+      ],
+      "algorithmSelectionMode": "auto",
+      "algorithmVersionIds": [],
+      "dataSelectionMode": "manual",
+      "resourceIds": [
+        10
+      ]
     }
   },
   "GET /api/compute/outputs/{outputId}/map-preview/": {

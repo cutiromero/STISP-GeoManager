@@ -21,6 +21,7 @@ from django.utils import timezone
 
 from .models import KnowledgeDocument, KnowledgeLibrary
 from .services import can_edit, require_project
+from .domains import validate_domain, validate_domains
 from .weknora_client import WeKnoraClient, WeKnoraError, configured_weknora
 
 MAX_BYTES = 20 * 1024 * 1024
@@ -28,15 +29,18 @@ MAX_TEXT = 1_000_000
 STATUSES = {"pending", "processing", "finalizing", "completed", "failed", "cancelled"}
 
 
-def visible_documents(user):
+def visible_documents(user, domains=None):
     if not get_user_model().objects.filter(pk=user.pk, is_active=True).exists():
         raise PermissionDenied("账号已停用")
     pid = require_project(user)
     # Explicit public inclusion: default manager is scoped to the selected project.
-    return (
+    qs = (
         KnowledgeDocument._base_manager.select_related("library")
         .filter(Q(project_tag_id=pid) | Q(project_tag_id=1, visibility="project"))
         .filter(Q(visibility="project") | Q(visibility="owner_only", owner_id=user.pk))
+    )
+    return (
+        qs.filter(domain__in=validate_domains(domains)) if domains is not None else qs
     )
 
 
@@ -51,6 +55,7 @@ def _can_manage(user, doc):
 def serialize_document(user, doc):
     return {
         "id": doc.id,
+        "domain": doc.domain,
         "title": doc.title,
         "filename": doc.filename,
         "sourceUrl": doc.source_url,
@@ -64,10 +69,13 @@ def serialize_document(user, doc):
     }
 
 
-def _library(user, visibility):
+def _library(user, visibility, domain="geology"):
     pid = require_project(user)
     owner_id = user.pk if visibility == "owner_only" else None
     scope_key = f"project:{pid}:{visibility}:{owner_id or 0}"
+    # Retain the legacy geological library; new areas get separate upstream Wiki spaces.
+    if domain != "geology":
+        scope_key += f":{domain}"
     library, _ = KnowledgeLibrary.objects.get_or_create(
         scope_key=scope_key,
         defaults={
@@ -244,8 +252,11 @@ def _submit(doc, user):
     return doc
 
 
-def upload_document(user, file, *, title, source_url="", visibility="project"):
+def upload_document(
+    user, file, *, title, source_url="", visibility="project", domain="geology"
+):
     pid = require_project(user)
+    domain = validate_domain(domain)
     if not can_edit(user):
         raise PermissionDenied("需要知识维护权限")
     title = title.strip()
@@ -267,7 +278,7 @@ def upload_document(user, file, *, title, source_url="", visibility="project"):
         raise ValidationError("请上传PDF、DOCX、TXT、MD、CSV或JSON资料")
     if file.size > MAX_BYTES:
         raise ValidationError("知识资料不能超过20MiB")
-    library = _library(user, visibility)
+    library = _library(user, visibility, domain)
     relative = f"{pid}/{uuid4().hex}{suffix}"
     path = _safe_path(relative)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -293,6 +304,7 @@ def upload_document(user, file, *, title, source_url="", visibility="project"):
                 library=library,
                 owner=user,
                 title=title,
+                domain=domain,
                 filename=filename,
                 source_url=source_url,
                 visibility=visibility,
@@ -324,8 +336,20 @@ def retry_document(user, doc_id):
     return _submit(doc, user)
 
 
-def list_documents(user):
-    query = visible_documents(user)
+def classify_document(user, doc_id, domain):
+    domain = validate_domain(domain)
+    doc = visible_documents(user).filter(pk=doc_id).first()
+    if doc is None:
+        raise WeKnoraError("资料不存在或无权访问", status=404)
+    if not _can_manage(user, doc):
+        raise PermissionDenied("只能维护当前项目中有权访问的资料")
+    doc.domain = domain
+    doc.save(update_fields=["domain", "updated_at"])
+    return doc
+
+
+def list_documents(user, domains=None):
+    query = visible_documents(user, domains)
     # A terminated upload process has no upstream task to poll. Preserve the
     # original and make it retryable once its bounded request window expired.
     query.filter(
@@ -381,7 +405,7 @@ def list_documents(user):
     }
 
 
-def read_document(user, document_id, offset=0, limit=8000):
+def read_document(user, document_id, offset=0, limit=8000, domains=None):
     """Read an authorized local extraction, with stable character pagination."""
     if type(document_id) is not int or document_id < 1:
         raise ValidationError("资料编号无效")
@@ -389,7 +413,7 @@ def read_document(user, document_id, offset=0, limit=8000):
         raise ValidationError("原文起始位置须为非负整数")
     if type(limit) is not int or not 1 <= limit <= 8000:
         raise ValidationError("单次读取须为1至8000字")
-    doc = visible_documents(user).filter(pk=document_id).first()
+    doc = visible_documents(user, domains).filter(pk=document_id).first()
     if doc is None:
         raise WeKnoraError("资料不存在或无权访问", status=404)
     if not doc.extracted_path:
@@ -398,12 +422,17 @@ def read_document(user, document_id, offset=0, limit=8000):
         text = _safe_path(doc.extracted_path).read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise WeKnoraError("原文暂时无法读取，请联系资料维护者", status=409) from exc
-    if not visible_documents(user).filter(pk=document_id).exists():
+    if (
+        not visible_documents(user, domains)
+        .filter(pk=document_id, sha256=doc.sha256)
+        .exists()
+    ):
         raise WeKnoraError("资料不存在或无权访问", status=404)
     start = min(offset, len(text))
     end = min(start + limit, len(text))
     return {
         "documentId": doc.id,
+        "domain": doc.domain,
         "title": doc.title,
         "sourceUrl": doc.source_url,
         "documentSha256": doc.sha256,
@@ -440,12 +469,12 @@ def _source_quality(content):
     return 1.0
 
 
-def search_documents(user, query, limit=6):
+def search_documents(user, query, limit=6, domains=None):
     if not isinstance(query, str) or not query.strip() or len(query) > 1000:
         raise ValidationError("检索问题须为1至1000字")
     if type(limit) is not int or not 1 <= limit <= 12:
         raise ValidationError("检索数量须为1至12")
-    docs = list(visible_documents(user).exclude(upstream_document_id=""))
+    docs = list(visible_documents(user, domains).exclude(upstream_document_id=""))
     mapping = {d.upstream_document_id: d for d in docs}
     groups = {}
     for doc in docs:
@@ -476,6 +505,7 @@ def search_documents(user, query, limit=6):
                 items.append(
                     {
                         "documentId": doc.id,
+                        "domain": doc.domain,
                         "title": doc.title,
                         "sourceUrl": doc.source_url,
                         "content": content,
@@ -489,7 +519,7 @@ def search_documents(user, query, limit=6):
     except WeKnoraError as exc:
         return {"items": [], "available": False, "detail": str(exc)}
     # Recheck local access after upstream I/O, including project/account revocation.
-    allowed = set(visible_documents(user).values_list("id", flat=True))
+    allowed = set(visible_documents(user, domains).values_list("id", flat=True))
     items = [x for x in items if x["documentId"] in allowed]
     items.sort(key=lambda x: x["score"], reverse=True)
     return {
@@ -499,8 +529,8 @@ def search_documents(user, query, limit=6):
     }
 
 
-def list_wiki(user):
-    docs = list(visible_documents(user).exclude(upstream_document_id=""))
+def list_wiki(user, domains=None):
+    docs = list(visible_documents(user, domains).exclude(upstream_document_id=""))
     mapping = {d.upstream_document_id: d for d in docs}
     libraries = {d.library_id: d.library for d in docs if d.library.upstream_kb_id}
     result = {
@@ -541,6 +571,7 @@ def list_wiki(user):
                 sources = [
                     {
                         "documentId": mapping[ref].id,
+                        "domain": mapping[ref].domain,
                         "title": mapping[ref].title,
                         "sourceUrl": mapping[ref].source_url,
                     }
@@ -549,6 +580,7 @@ def list_wiki(user):
                 result["items"].append(
                     {
                         "id": f"{library.id}:{slug}",
+                        "domain": mapping[refs[0]].domain,
                         "title": page.get("title", ""),
                         "summary": page.get("summary") or "",
                         "content": (page.get("content") or "")[:50000],
@@ -563,7 +595,7 @@ def list_wiki(user):
                 )
     except WeKnoraError as exc:
         return {**result, "items": [], "available": False, "detail": str(exc)}
-    allowed = set(visible_documents(user).values_list("id", flat=True))
+    allowed = set(visible_documents(user, domains).values_list("id", flat=True))
     result["items"] = [
         p
         for p in result["items"]

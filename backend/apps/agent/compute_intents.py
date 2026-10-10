@@ -23,6 +23,7 @@ from .compute_intent_text import (
 )
 from .models import AgentRun
 from .tools import execute, evidence_items, resources, resolve_resource
+from .selections import algorithm_ids, knowledge_selection, require_algorithm
 
 OPEN = {"collecting", "ready", "blocked"}
 
@@ -35,7 +36,9 @@ def record_tool(run, name, arguments):
     return result, [item["id"] for item in additions]
 
 
-def _version(version_id):
+def _version(version_id, run=None):
+    if run is not None:
+        require_algorithm(run, version_id)
     version = (
         AlgorithmVersion.objects.select_related("algorithm")
         .filter(
@@ -60,6 +63,16 @@ def _history(run):
 def previous_plan(run):
     for previous in _history(run)[:30]:
         if previous.compute_intent and previous.compute_intent.get("status") in OPEN:
+            selected = algorithm_ids(run)
+            if (
+                selected is not None
+                and previous.compute_intent["versionId"] not in selected
+            ):
+                continue
+            if run.resource_ids and not set(
+                previous.compute_intent["inputs"].values()
+            ) <= set(run.resource_ids):
+                continue
             return previous
     return None
 
@@ -67,6 +80,8 @@ def previous_plan(run):
 def _selected(run):
     if run.resource_ids:
         return list(run.resource_ids)
+    if run.data_selection_mode == "manual":
+        return []
     if not re.search(
         r"这个|这张|这幅|这份|该影像|该数据|同一|继续|对啊|就是|它", run.prompt
     ):
@@ -89,21 +104,36 @@ def match_version(run):
     if not computation_requested(run.prompt):
         return None
     found = []
+    selected = algorithm_ids(run)
+    if selected is not None and len(selected) == 1:
+        chosen = _version(selected[0], run)
+        if not algorithm_match(run.prompt, chosen.algorithm) and any(
+            a.id != chosen.algorithm_id and algorithm_match(run.prompt, a)
+            for a in allowed_algorithms().filter(enabled=True)
+        ):
+            raise ValidationError("问题中的算法与手选算法不一致，请调整算法选择或问题")
+        return chosen
     for algorithm in (
         allowed_algorithms().filter(enabled=True).prefetch_related("versions")
     ):
         if not algorithm_match(run.prompt, algorithm):
             continue
-        version = next(
-            (
-                v
-                for v in algorithm.versions.all()
-                if v.status == "published" and agent_algorithm_allowed(v)
-            ),
-            None,
-        )
-        if version:
-            found.append(version)
+        versions = [
+            v
+            for v in algorithm.versions.all()
+            if v.status == "published"
+            and agent_algorithm_allowed(v)
+            and (selected is None or v.id in selected)
+        ]
+        found.extend(versions if selected is not None else versions[:1])
+    if len(found) > 1 and selected is not None:
+        named_versions = [
+            v
+            for v in found
+            if re.search(rf"(?<![\d.]){re.escape(v.version)}(?![\d.])", run.prompt)
+        ]
+        if len(named_versions) == 1:
+            return named_versions[0]
     return found[0] if len(found) == 1 else None
 
 
@@ -130,7 +160,7 @@ def _save(run, intent):
 
 def _refresh(run, user, p, *, validate_snapshot=False):
     intent = dict(run.compute_intent)
-    version = _version(intent["versionId"])
+    version = _version(intent["versionId"], run)
     if version.checksum != intent["algorithmChecksum"]:
         raise ValidationError("算法版本内容已变化，请重新发起计算")
     manifest = version.manifest
@@ -139,7 +169,7 @@ def _refresh(run, user, p, *, validate_snapshot=False):
     if set(inputs) - {spec["key"] for spec in manifest["inputs"]}:
         raise ValidationError("包含算法未声明的输入")
     for key, resource_id in inputs.items():
-        resource = resolve_resource(user, p, resource_id)
+        resource = resolve_resource(user, p, resource_id, run.resource_ids)
         if (
             validate_snapshot
             and intent.get("inputSnapshots", {}).get(key)
@@ -218,7 +248,8 @@ def _prepare(run, user, p, version, inherited=None):
         inputs = dict(inherited.compute_intent["inputs"])
     if selected:
         selected_resources = [
-            resolve_resource(user, p, resource_id) for resource_id in selected
+            resolve_resource(user, p, resource_id, run.resource_ids)
+            for resource_id in selected
         ]
         for spec in manifest["inputs"]:
             matches = [r for r in selected_resources if r.data_type == spec["kind"]]
@@ -228,7 +259,7 @@ def _prepare(run, user, p, version, inherited=None):
         for spec in manifest["inputs"]:
             matches = [
                 r
-                for r in resources(user, p)
+                for r in resources(user, p, run.resource_ids)
                 .filter(data_type=spec["kind"])
                 .order_by("id")[:100]
                 if r.name and r.name.casefold() in run.prompt.casefold()
@@ -289,12 +320,14 @@ def _prepare(run, user, p, version, inherited=None):
     _, evidence_ids = record_tool(
         run, "list_compute_algorithms", {"query": version.algorithm.identifier}
     )
-    try:
-        _, knowledge_ids = record_tool(
-            run, "search_knowledge", {"query": version.algorithm.name}
-        )
-    except (ValidationError, ComputeError):
-        knowledge_ids = []
+    knowledge_ids = []
+    if knowledge_selection(run)["mode"] != "none":
+        try:
+            _, knowledge_ids = record_tool(
+                run, "search_knowledge", {"query": version.algorithm.name}
+            )
+        except (ValidationError, ComputeError):
+            knowledge_ids = []
     _save(run, {**run.compute_intent, "knowledgeEvidenceIds": knowledge_ids})
     return evidence_ids
 
@@ -303,12 +336,12 @@ def serialize(run, user, p):
     intent = run.compute_intent
     if not intent:
         return None
-    version = _version(intent["versionId"])
+    version = _version(intent["versionId"], run)
     for resource_id in intent["inputs"].values():
-        resolve_resource(user, p, resource_id)
+        resolve_resource(user, p, resource_id, run.resource_ids)
     candidates = []
     kinds = {spec["kind"] for spec in version.manifest["inputs"]}
-    eligible = resources(user, p).filter(data_type__in=kinds)
+    eligible = resources(user, p, run.resource_ids).filter(data_type__in=kinds)
     chosen = set(intent["inputs"].values())
     visible_candidates = [
         *eligible.filter(pk__in=chosen).order_by("id"),
@@ -357,9 +390,9 @@ def submit_plan(run, user, p):
     intent = run.compute_intent
     if intent["status"] != "ready":
         raise ValidationError("请先选择缺少的输入数据和参数")
-    version = _version(intent["versionId"])
+    version = _version(intent["versionId"], run)
     names = [
-        resolve_resource(user, p, resource_id).name
+        resolve_resource(user, p, resource_id, run.resource_ids).name
         for resource_id in intent["inputs"].values()
     ]
     name = ("、".join(names) + " · " + version.algorithm.name)[:160]
@@ -454,7 +487,7 @@ def update(run, user, p, value):
             requested_inputs = value.get("inputs", intent["inputs"])
             for key, resource_id in intent["inputs"].items():
                 if requested_inputs.get(key) == resource_id:
-                    resource = resolve_resource(user, p, resource_id)
+                    resource = resolve_resource(user, p, resource_id, run.resource_ids)
                     if (
                         intent.get("inputSnapshots", {}).get(key)
                         != resource.updated_at.isoformat()
@@ -484,11 +517,20 @@ def process(run, user, p):
     version = match_version(run)
     prior = previous_plan(run)
     if not version and prior:
-        previous_version = _version(prior.compute_intent["versionId"])
+        previous_version = _version(prior.compute_intent["versionId"], run)
         explicit, _ = explicit_parameters(run.prompt, previous_version.manifest)
         if explicit:
             version = previous_version
     if version:
+        # This deterministic reply uses real calls and parameter plans, rather
+        # than model history. Keep its provenance independent of older answers.
+        run.knowledge_selection = {
+            **(run.knowledge_selection or {}),
+            "_contextRunIds": [],
+        }
+        AgentRun.objects.filter(pk=run.id).update(
+            knowledge_selection=run.knowledge_selection
+        )
         if not p.get("operatorEnabled", False):
             raise PermissionDenied("智能体算子调用尚未开启")
         try:
@@ -516,9 +558,20 @@ def process(run, user, p):
             run.compute_intent["message"]
             + "。请在下方计算卡片中选择；进度和结果会在这里持续更新。"
         )
+    if computation_requested(run.prompt) and len(algorithm_ids(run) or []) > 1:
+        return "本轮选择了多个算法版本，请在算法按钮中保留一个，或在问题中明确要运行的算法名称和版本。"
     if followup_question(run.prompt):
+        run.knowledge_selection = {
+            **(run.knowledge_selection or {}),
+            "_contextRunIds": [],
+        }
+        AgentRun.objects.filter(pk=run.id).update(
+            knowledge_selection=run.knowledge_selection
+        )
         task_ids = conversation_tasks(run)
         if not task_ids:
+            if algorithm_ids(run) is not None or run.resource_ids:
+                return "当前算法和数据选择范围内没有本会话的已提交计算；请调整选择或从对应任务卡查看结果。"
             return (
                 "本会话还没有实际提交的计算。请在计算卡片中选择输入数据和波段后运行。"
             )
@@ -534,6 +587,8 @@ def process(run, user, p):
 
 
 def conversation_tasks(run):
+    from .selections import scoped_task_ids
+
     ids = set()
     for item in run.conversation.runs.filter(owner_id=run.owner_id, id__lte=run.id):
         ids.update(
@@ -549,7 +604,7 @@ def conversation_tasks(run):
                 result = evidence.get("result", {})
                 if isinstance(result, dict) and isinstance(result.get("taskId"), str):
                     ids.add(result["taskId"])
-    return sorted(ids)
+    return sorted(scoped_task_ids(run, ids))
 
 
 def report(run, user, p):

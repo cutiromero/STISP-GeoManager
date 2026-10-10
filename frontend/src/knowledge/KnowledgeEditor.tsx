@@ -13,13 +13,16 @@ import type {
   KnowledgeEntry,
   KnowledgeEntryInput,
   KnowledgeSource,
+  KnowledgeDomain,
 } from "../api/generated/types.gen";
 import { knowledgeApi } from "../api/knowledge";
+import { KNOWLEDGE_DOMAINS } from "./domains";
 
 type EditorFields = Pick<
   KnowledgeEntryInput,
   | "title"
   | "category"
+  | "domain"
   | "subject"
   | "predicate"
   | "object"
@@ -60,11 +63,13 @@ export const stateLabels = {
 export default function KnowledgeEditor({
   entry,
   categories,
+  defaultDomain,
   onClose,
   onSaved,
 }: {
   entry: KnowledgeEntry | null;
   categories: string[];
+  defaultDomain?: KnowledgeDomain;
   onClose: () => void;
   onSaved: (entry: KnowledgeEntry) => void;
 }) {
@@ -75,6 +80,7 @@ export default function KnowledgeEditor({
   const config = entry?.ruleConfig ?? {};
   const initial = {
     ...entry,
+    domain: entry?.domain ?? defaultDomain ?? "geology",
     conditions: entry?.conditions.join("\n"),
     exceptions: entry?.exceptions.join("\n"),
     aliases: entry?.aliases.join("\n"),
@@ -109,6 +115,7 @@ export default function KnowledgeEditor({
       const body: KnowledgeEntryInput = {
         title: value.title,
         category: value.category,
+        domain: value.domain,
         subject: value.subject,
         predicate: value.predicate,
         object: value.object,
@@ -171,8 +178,20 @@ export default function KnowledgeEditor({
         </Form.Item>
         <div className="knowledge-form-pair">
           <Form.Item
+            name="domain"
+            label="知识分区"
+            rules={[{ required: true }]}
+          >
+            <Select
+              options={KNOWLEDGE_DOMAINS.map((item) => ({
+                value: item.id,
+                label: item.label,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
             name="category"
-            label="领域分类"
+            label="细分类"
             rules={[{ required: true, whitespace: true }]}
           >
             <Input maxLength={80} list="knowledge-category-options" />

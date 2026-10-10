@@ -2584,3 +2584,13 @@ Wiki为自动整理内容，保留来源、修订号及主题关联；既有格�
 AgentRun.computeIntent 保存算法版本、输入、已确认参数和修订摘要。GET/POST `/api/agent/runs/{runId}/compute-intent/` 仅允许本用户原项目操作。POST action 为 update/submit/cancel，必须带 planRevision；资源或版本变更、后续消息替代计划返回409。band参数须由用户文字或参数卡确认。提交幂等，真实任务与会话绑定，默认完成后由用户选择入库。查询和入库仅使用本会话关联任务，不猜测最近相似任务。
 
 GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84四角，image子路径返回PNG。两者必须带projectTagId，每次检查用户、项目、任务、输入与文件身份，临时过期则404。前端仅放置临时图层，不入库、不保存工程。
+
+## 知识领域与智能体工具选择（2026-10-10）
+
+独立 `domain` 将结构化条目与文档分为 remote_sensing（遥感基础）、pipelines（油气管道相关）、geology（遥感地质填图逻辑推理）、arid_ecology（干旱区生态安全治理）。原 `category` 细分类保持。历史资料迁移只补领域，不改原文、文件、来源或版本。条目、文档、Wiki列表支持可选 `domain` 查询；文档检索支持 `domains` 数组。上传资料可带 domain；`PATCH /api/knowledge/documents/{documentId}/` 以 `{domain}` 调整资料分区，复核当前项目知识维护权限及本人隐私边界。新领域上传使用独立上游Wiki空间，旧空间中的页面只在全部引用通过当前领域与权限校验时返回。
+
+运行提交及返回新增 `knowledgeSelection:{mode,domains}`、`algorithmSelectionMode`、`algorithmVersionIds`、`dataSelectionMode`，返回也包含 `resourceIds` 与 `resolvedKnowledgeDomains`。知识支持 auto/manual/all/none；manual须选择1至4个领域，其他模式domains为空。auto实际按本轮主题和所选算法限定检索领域；NDVI/NDMI/EVI/SAVI覆盖遥感基础与干旱生态，管道场景可同时匹配管道领域。无明确主题时使用可见领域。none关闭知识检索、原文读取与规则核查工具，并排除含历史知识证据的上下文。分区选择不扩展项目、发布状态或owner_only权限。
+
+算法与数据支持 auto/manual。算法manual须选择1至3个实际已发布安全版本，数据manual须选择1至3项resourceIds；auto对应列表为空。旧客户端非空resourceIds兼容为手选。手选范围由服务端同时限定工具返回、输入读取、执行和计算卡候选。手选一个算法后，用户用“处理/运行/计算”即可进入该算法参数卡；多选且未明确算法时提示选择，不猜测执行。知识none模式仍可按计算清单完成计算，既有质量报告和入库验证继续生效。
+
+偏好保存于每轮AgentRun；会话详情的runs及运行轮询可恢复，幂等比较包含所有偏好。bootstrap新增knowledgeDomains（id/label/description/count）与algorithmOptions（versionId/algorithmId/name/version/description）。普通模型聊天继续无平台工具，应在智能体模式呈现选择控件。

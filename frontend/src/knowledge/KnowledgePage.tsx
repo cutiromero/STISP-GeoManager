@@ -21,7 +21,7 @@ import {
   PlusOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useProjectContext } from "../projects/ProjectContext";
@@ -31,11 +31,13 @@ import type {
   KnowledgeEntry,
   KnowledgeEntryList,
   KnowledgeSource,
+  KnowledgeDomain,
 } from "../api/generated/types.gen";
 import KnowledgeNetwork from "./KnowledgeNetwork";
 import KnowledgeEditor, { ruleLabels, stateLabels } from "./KnowledgeEditor";
 import KnowledgeCheck from "./KnowledgeCheck";
 import KnowledgeLibrary from "./KnowledgeLibrary";
+import { KNOWLEDGE_DOMAINS, domainLabel } from "./domains";
 import "./knowledge.css";
 
 function sourceLink(url: string) {
@@ -116,6 +118,7 @@ export default function KnowledgePage() {
   const [data, setData] = useState<KnowledgeEntryList | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>();
+  const [domain, setDomain] = useState<KnowledgeDomain>();
   const [manage, setManage] = useState(false);
   const [section, setSection] = useState("rules");
   const [page, setPage] = useState(1);
@@ -135,6 +138,7 @@ export default function KnowledgePage() {
       .entries({
         q: query,
         category,
+        domain,
         manage,
         offset: (page - 1) * 100,
         limit: 100,
@@ -156,7 +160,7 @@ export default function KnowledgePage() {
     return () => {
       sequence.current += 1;
     };
-  }, [query, category, manage, page, reload, currentProject, user?.id]);
+  }, [query, category, domain, manage, page, reload, currentProject, user?.id]);
   const items = data?.items ?? [];
   const visible = node
     ? items.filter((entry) => entry.subject === node || entry.object === node)
@@ -171,7 +175,14 @@ export default function KnowledgePage() {
       ? `请结合知识条目 #${entry.id}「${entry.title}」（版本 ${entry.revision}）及其来源核查当前项目数据。适用条件：${entry.conditions.join("；") || "请先确认适用条件"}。请先检索并核对最新条目、实际数据及算法，再提出处理计划。`
       : `请结合平台知识库检索${query ? `“${query}”的相关知识，并核查` : "相关规则，核查"}当前项目的数据与可用算法，提出有依据的处理计划。`;
     navigate("/agent/workbench", {
-      state: { query: prompt, knowledgeEntryIds: entry ? [entry.id] : [] },
+      state: {
+        query: prompt,
+        knowledgeEntryIds: entry ? [entry.id] : [],
+        knowledgeSelection:
+          entry?.domain || domain
+            ? { mode: "manual", domains: [entry?.domain ?? domain] }
+            : { mode: "all", domains: [] },
+      },
     });
   }
   function saved(entry: KnowledgeEntry) {
@@ -216,6 +227,49 @@ export default function KnowledgePage() {
             </p>
           </div>
         </header>
+        <section className="knowledge-domains" aria-label="知识分区">
+          <div className="knowledge-domains-heading">
+            <h2>按研究方向探索</h2>
+            <Button
+              type={domain ? "text" : "primary"}
+              aria-pressed={!domain}
+              onClick={() => {
+                setDomain(undefined);
+                setCategory(undefined);
+                setPage(1);
+              }}
+            >
+              全部知识
+            </Button>
+          </div>
+          <div className="knowledge-domain-grid">
+            {KNOWLEDGE_DOMAINS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`knowledge-domain${domain === item.id ? " is-selected" : ""}`}
+                aria-pressed={domain === item.id}
+                onClick={() => {
+                  setDomain(item.id);
+                  setCategory(undefined);
+                  setPage(1);
+                }}
+                style={{ "--domain-color": item.color } as CSSProperties}
+              >
+                <span className="knowledge-domain-index">
+                  {String(KNOWLEDGE_DOMAINS.indexOf(item) + 1).padStart(2, "0")}
+                </span>
+                <strong>{item.label}</strong>
+                <p>{item.description}</p>
+                <span className="knowledge-domain-count">
+                  {data?.domains?.find((value) => value.id === item.id)
+                    ?.count ?? "—"}{" "}
+                  条知识 <ArrowRightOutlined />
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
         <Tabs
           activeKey={section}
           onChange={setSection}
@@ -227,8 +281,9 @@ export default function KnowledgePage() {
         />
         {section !== "rules" ? (
           <KnowledgeLibrary
-            key={`${currentProject}:${user?.id}`}
+            key={`${currentProject}:${user?.id}:${domain ?? "all"}`}
             mode={section === "wiki" ? "wiki" : "library"}
+            domain={domain}
           />
         ) : (
           <>
@@ -248,7 +303,7 @@ export default function KnowledgePage() {
                 aria-label="知识领域"
                 value={category}
                 allowClear
-                placeholder="全部领域"
+                placeholder="全部细分类"
                 options={(data?.categories ?? []).map((value) => ({
                   value,
                   label: value,
@@ -303,6 +358,14 @@ export default function KnowledgePage() {
                   selected={node}
                   onSelect={setNode}
                   onOpen={setDetail}
+                  domain={domain}
+                  onDomainSelect={(id) => {
+                    if (KNOWLEDGE_DOMAINS.some((item) => item.id === id)) {
+                      setDomain(id as KnowledgeDomain);
+                      setCategory(undefined);
+                      setPage(1);
+                    }
+                  }}
                 />
                 <section
                   className="knowledge-records"
@@ -334,6 +397,7 @@ export default function KnowledgePage() {
                       {visible.map((entry) => (
                         <article className="knowledge-record" key={entry.id}>
                           <div className="knowledge-record-meta">
+                            <Tag>{domainLabel(entry.domain)}</Tag>
                             <Tag>{entry.category}</Tag>
                             <span>
                               {entry.projectTagId === 1
@@ -425,6 +489,7 @@ export default function KnowledgePage() {
         {detail && (
           <>
             <Space wrap>
+              <Tag>{domainLabel(detail.domain)}</Tag>
               <Tag>{detail.category}</Tag>
               <Tag>{stateLabels[detail.status]}</Tag>
               <span className="knowledge-muted">
@@ -489,6 +554,7 @@ export default function KnowledgePage() {
           key={editing === "new" ? "new" : `${editing.id}:${editing.revision}`}
           entry={editing === "new" ? null : editing}
           categories={data?.categories ?? []}
+          defaultDomain={domain}
           onClose={() => setEditing(null)}
           onSaved={saved}
         />

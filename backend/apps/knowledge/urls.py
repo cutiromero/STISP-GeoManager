@@ -8,6 +8,11 @@ urlpatterns = [
     path("documents/", library_views.documents, name="knowledge_documents"),
     path("documents/search/", library_views.search, name="knowledge_documents_search"),
     path(
+        "documents/<int:document_id>/",
+        library_views.classify,
+        name="knowledge_document_classify",
+    ),
+    path(
         "documents/<int:document_id>/retry/",
         library_views.retry,
         name="knowledge_document_retry",

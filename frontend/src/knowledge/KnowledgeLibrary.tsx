@@ -8,6 +8,7 @@ import {
   Form,
   Input,
   Modal,
+  Popover,
   Select,
   Space,
   Spin,
@@ -27,9 +28,11 @@ import type {
   KnowledgeDocumentSearch,
   KnowledgeWikiList,
   KnowledgeWikiPage,
+  KnowledgeDomain,
 } from "../api/generated/types.gen";
 import SafeMarkdown from "../agent/SafeMarkdown";
 import WikiNetwork from "./WikiNetwork";
+import { KNOWLEDGE_DOMAINS, domainLabel } from "./domains";
 
 const statusNames: Record<string, string> = {
   pending: "等待处理",
@@ -57,8 +60,10 @@ function safeUrl(value: string) {
 
 export default function KnowledgeLibrary({
   mode,
+  domain,
 }: {
   mode: "library" | "wiki";
+  domain?: KnowledgeDomain;
 }) {
   const { message } = App.useApp();
   const navigate = useNavigate();
@@ -76,14 +81,15 @@ export default function KnowledgeLibrary({
   const [file, setFile] = useState<File | null>(null);
   const [page, setPage] = useState<KnowledgeWikiPage | null>(null);
   const [retrying, setRetrying] = useState<number | null>(null);
+  const [classifying, setClassifying] = useState<number | null>(null);
   const [form] = Form.useForm<{
     title: string;
     sourceUrl: string;
     visibility: string;
+    domain: KnowledgeDomain;
   }>();
   const alive = useRef(true);
   const request = useRef(0);
-  const refreshing = useRef(false);
   const searchSequence = useRef(0);
   useEffect(() => {
     alive.current = true;
@@ -94,13 +100,11 @@ export default function KnowledgeLibrary({
     };
   }, []);
   const refresh = useCallback(async () => {
-    if (refreshing.current) return;
-    refreshing.current = true;
     const sequence = ++request.current;
     try {
       const [docs, pages] = await Promise.all([
-        knowledgeApi.documents(),
-        knowledgeApi.wiki(),
+        knowledgeApi.documents(domain),
+        knowledgeApi.wiki(domain),
       ]);
       if (!alive.current || sequence !== request.current) return;
       setDocuments(docs);
@@ -115,11 +119,14 @@ export default function KnowledgeLibrary({
         setSearch(null);
       }
     } finally {
-      refreshing.current = false;
       if (alive.current && sequence === request.current) setLoading(false);
     }
-  }, []);
+  }, [domain]);
   useEffect(() => {
+    setLoading(true);
+    setSearch(null);
+    setPage(null);
+    searchSequence.current++;
     void refresh();
   }, [refresh]);
   const processing =
@@ -147,7 +154,9 @@ export default function KnowledgeLibrary({
     setSearching(true);
     setQuery(trimmed);
     try {
-      const result = await knowledgeApi.searchDocuments(trimmed);
+      const result = domain
+        ? await knowledgeApi.searchDocuments(trimmed, [domain])
+        : await knowledgeApi.searchDocuments(trimmed);
       if (alive.current && sequence === searchSequence.current)
         setSearch(result);
     } catch (failure) {
@@ -169,6 +178,7 @@ export default function KnowledgeLibrary({
     body.append("title", values.title);
     body.append("visibility", values.visibility);
     body.append("sourceUrl", values.sourceUrl || "");
+    body.append("domain", values.domain);
     setUploading(true);
     try {
       const result = await knowledgeApi.uploadDocument(body);
@@ -199,10 +209,26 @@ export default function KnowledgeLibrary({
       if (alive.current) setRetrying(null);
     }
   }
+  async function classify(id: number, nextDomain: KnowledgeDomain) {
+    setClassifying(id);
+    try {
+      await knowledgeApi.classifyDocument(id, nextDomain);
+      if (!alive.current) return;
+      await refresh();
+      void message.success("资料分区已更新");
+    } catch (failure) {
+      if (alive.current) void message.error(detailOf(failure));
+    } finally {
+      if (alive.current) setClassifying(null);
+    }
+  }
   const handoff = (text: string) =>
     navigate("/agent/workbench", {
       state: {
         query: `请检索平台知识库的资料原文，结合来源回答：${text}。涉及平台数据时再查找对应数据和算法。`,
+        knowledgeSelection: domain
+          ? { mode: "manual", domains: [domain] }
+          : { mode: "all", domains: [] },
       },
     });
   return (
@@ -291,6 +317,7 @@ export default function KnowledgeLibrary({
                   key={`${item.documentId}:${item.chunkId}`}
                 >
                   <Space wrap>
+                    <Tag>{domainLabel(item.domain)}</Tag>
                     <Tag>
                       {item.matchType === "vector" ? "语义匹配" : "关键词匹配"}
                     </Tag>
@@ -330,6 +357,7 @@ export default function KnowledgeLibrary({
                         ? "仅本人"
                         : "项目成员可见"}
                     </p>
+                    <Tag>{domainLabel(item.domain)}</Tag>
                     <small>{item.detail}</small>
                     {safeUrl(item.sourceUrl) && (
                       <a
@@ -353,6 +381,39 @@ export default function KnowledgeLibrary({
                     >
                       {statusNames[item.status]}
                     </Tag>
+                    {item.canManage && (
+                      <Popover
+                        trigger="click"
+                        title="资料所属知识分区"
+                        content={
+                          <Select
+                            aria-label={`调整知识分区：${item.title}`}
+                            value={item.domain}
+                            style={{
+                              width: 260,
+                              maxWidth: "calc(100vw - 64px)",
+                            }}
+                            loading={classifying === item.id}
+                            disabled={classifying !== null}
+                            options={KNOWLEDGE_DOMAINS.map((zone) => ({
+                              value: zone.id,
+                              label: zone.label,
+                            }))}
+                            onChange={(nextDomain) =>
+                              void classify(item.id, nextDomain)
+                            }
+                          />
+                        }
+                      >
+                        <Button
+                          type="text"
+                          size="small"
+                          loading={classifying === item.id}
+                        >
+                          调整分区
+                        </Button>
+                      </Popover>
+                    )}
                     {item.canManage &&
                       ["failed", "cancelled"].includes(item.status) && (
                         <Button
@@ -390,6 +451,7 @@ export default function KnowledgeLibrary({
             {wiki?.items.map((item) => (
               <article className="knowledge-record" key={item.id}>
                 <div className="knowledge-record-meta">
+                  <Tag>{domainLabel(item.domain)}</Tag>
                   <Tag>自动整理</Tag>
                   <span>
                     v{item.version} · {item.sources.length} 项来源
@@ -434,7 +496,7 @@ export default function KnowledgeLibrary({
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ visibility: "project" }}
+          initialValues={{ visibility: "project", domain: domain ?? "geology" }}
         >
           <Form.Item label="资料文件" required>
             <Upload
@@ -490,6 +552,18 @@ export default function KnowledgeLibrary({
               ]}
             />
           </Form.Item>
+          <Form.Item
+            name="domain"
+            label="知识分区"
+            rules={[{ required: true }]}
+          >
+            <Select
+              options={KNOWLEDGE_DOMAINS.map((item) => ({
+                value: item.id,
+                label: item.label,
+              }))}
+            />
+          </Form.Item>
         </Form>
       </Modal>
       <Drawer
@@ -502,6 +576,7 @@ export default function KnowledgeLibrary({
         {page && (
           <>
             <Tag>自动整理 · v{page.version}</Tag>
+            <Tag>{domainLabel(page.domain)}</Tag>
             <h2>{page.title}</h2>
             <div className="knowledge-wiki-content">
               <SafeMarkdown

@@ -86,6 +86,14 @@ class AgentRun(ProjectScopedModel):
     detail = models.CharField(max_length=300, blank=True)
     idempotency_key = models.CharField(max_length=80)
     resource_ids = models.JSONField(default=list)
+    knowledge_selection = models.JSONField(default=dict, db_default={})
+    algorithm_selection_mode = models.CharField(
+        max_length=8, default="auto", db_default="auto"
+    )
+    algorithm_version_ids = models.JSONField(default=list, db_default=[])
+    data_selection_mode = models.CharField(
+        max_length=8, default="auto", db_default="auto"
+    )
     attachment_ids = models.JSONField(default=list)
     internet_enabled = models.BooleanField(default=False)
     evidence = models.JSONField(default=list)

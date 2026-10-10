@@ -103,11 +103,14 @@ def conversation_json(c):
 
 
 def run_json(r, user):
+    from .selections import check_history_evidence, serialize as selection_json
+
     p = require_access(user, r.conversation.mode)
     if r.conversation.mode == "agent":
-        check_evidence(r, user, p)
+        check_history_evidence(r, user, p)
     return {
         "id": r.id,
+        **selection_json(r),
         "conversationId": r.conversation_id,
         "model": r.model,
         "thinkingMode": r.thinking_mode,
@@ -172,12 +175,18 @@ def own_conversation(user, pk):
 
 @endpoint(["GET"])
 def bootstrap(request):
+    from .selections import algorithm_options
+    from apps.knowledge.domains import domain_options
+    from apps.knowledge.services import visible_entries
+
     p = policy()
     chat, agent = allowed(request.user, "chat", p), allowed(request.user, "agent", p)
     return JsonResponse(
         {
             "canChat": chat,
             "canAgent": agent,
+            "knowledgeDomains": domain_options(visible_entries(request.user)),
+            "algorithmOptions": algorithm_options() if agent else [],
             "canManage": is_superadmin(request.user),
             "budgets": budget_options(request.user, p),
             "thinkingEnabled": bool(p.get("thinkingEnabled", True)),
@@ -279,6 +288,10 @@ def submit(request, conversation_id):
             "internetEnabled",
             "budgetProfile",
             "maxOutputTokens",
+            "knowledgeSelection",
+            "algorithmSelectionMode",
+            "algorithmVersionIds",
+            "dataSelectionMode",
         ],
         max_bytes=max(256000, prompt_limit * 6 + 8192),
     )
@@ -324,6 +337,9 @@ def submit(request, conversation_id):
     ):
         raise ApiProblem("最多选择8个附件")
     selected = sorted(set(selected))
+    from .selections import knowledge_selection, normalize, validate_selected_versions
+
+    selections = normalize(value, selected)
     attachment_ids = sorted(set(attachment_ids))
     with transaction.atomic():
         Conversation.objects.filter(pk=c.pk).update(updated_at=timezone.now())
@@ -339,6 +355,10 @@ def submit(request, conversation_id):
                 existing.internet_enabled,
                 existing.budget_profile,
                 existing.budget_snapshot.get("requestedMaxOutputTokens"),
+                knowledge_selection(existing),
+                existing.algorithm_selection_mode,
+                existing.algorithm_version_ids,
+                existing.data_selection_mode,
             ) != (
                 alias,
                 prompt.strip(),
@@ -349,6 +369,10 @@ def submit(request, conversation_id):
                 internet_enabled,
                 budget_profile,
                 output_tokens,
+                selections["knowledge_selection"],
+                selections["algorithm_selection_mode"],
+                selections["algorithm_version_ids"],
+                selections["data_selection_mode"],
             ):
                 raise ApiProblem("幂等键已用于不同请求", 409)
             return JsonResponse(run_json(existing, request.user), status=202)
@@ -364,6 +388,12 @@ def submit(request, conversation_id):
                 raise ApiProblem("当前模型不支持深度思考", 400)
         if c.mode == "chat" and selected:
             raise ApiProblem("普通聊天不访问平台数据")
+        if c.mode == "chat" and (
+            selections["algorithm_version_ids"]
+            or selections["knowledge_selection"]["mode"] in {"manual", "all"}
+        ):
+            raise ApiProblem("普通聊天不调用平台算法或知识库，请切换智能体")
+        validate_selected_versions(selections)
         if internet_enabled and not p.get("internetEnabled", False):
             raise ApiProblem("联网检索尚未由管理员开启", 403)
         for resource_id in selected:
@@ -385,9 +415,20 @@ def submit(request, conversation_id):
             and not model_config.vision
         ):
             raise ApiProblem("当前模型未验收图片分析能力", 400)
+        from .selections import check_history_evidence, history_compatible
+
+        current_selection = AgentRun(
+            conversation=c,
+            owner=request.user,
+            project_tag_id=c.project_tag_id,
+            prompt=prompt.strip(),
+            resource_ids=selected,
+            **selections,
+        )
         for previous in c.runs.all():
             if c.mode == "agent":
-                check_evidence(previous, request.user, p)
+                if history_compatible(previous, current_selection):
+                    check_history_evidence(previous, request.user, p)
         if not worker_online():
             raise ApiProblem("模型工作进程未就绪，请联系管理员", 503)
         available = visible_models(request.user, c.mode, p)
@@ -418,6 +459,13 @@ def submit(request, conversation_id):
             prompt=prompt.strip(),
             idempotency_key=key,
             resource_ids=selected,
+            **{
+                **selections,
+                "knowledge_selection": {
+                    **selections["knowledge_selection"],
+                    "_contextRunIds": [],
+                },
+            },
             attachment_ids=attachment_ids,
             internet_enabled=internet_enabled,
             budget_profile=budget_profile,

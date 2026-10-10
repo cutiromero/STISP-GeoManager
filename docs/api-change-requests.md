@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261010-001 - 知识领域与持久工具选择
+
+- Status: BackendReady
+- Owner: knowledge_backend（后端及明确授权契约）；knowledge_frontend（界面）；root（来源种子与发布）。
+- Endpoints: /api/knowledge/entries/; /api/knowledge/documents/; /api/knowledge/documents/{documentId}/; /api/knowledge/documents/search/; /api/knowledge/wiki/; /api/agent/bootstrap/; /api/agent/conversations/{conversationId}/runs/。
+- Change type: 领域字段与过滤；每轮工具选择字段；资料分类接口。
+- OpenAPI change: KnowledgeDomain、KnowledgeDomainOption、AgentKnowledgeSelection、AgentAlgorithmOption与关联请求/响应；生成类型已同步。
+- Mock examples: mock/prism/examples/96-agent.json; 98-knowledge-workflow.json; 99-knowledge-library.json; 100-agent-compute-intent.json。
+- Frontend reason: 按四个主题查知识，显式选择知识、算法和数据，刷新会话后恢复选择。
+- Backend implementation notes: 领域独立于项目权限；读取/搜索/Wiki/计算卡/执行服务端限定；none排除旧知识上下文；旧正文和来源保留。
+- Verification: 知识与智能体全部相关188项通过；新增边界与多版本选择复验由root记录；契约lint、生成一致性、Prism与迁移检查通过。
+- Result: 后端实现就绪，正式发布以本轮冻结候选及服务器回执为准。
+
 ## API-20261004-001 - 文档检索、自动Wiki与计算质量门控
 
 - Status: Verified
@@ -33,6 +46,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261010-001 | BackendReady | /api/knowledge/*; /api/agent/bootstrap/; /api/agent/conversations/{id}/runs/ | domain filters; persistent tool selection | Updated | Updated | Passed | Focused passed | Server-enforced selectors; candidate publication pending |
 | API-20261009-001 | BackendReady | /api/agent/runs/{runId}/compute-intent/; /api/compute/outputs/{outputId}/map-preview/ | persistent plan; authorized preview | Updated | Added | In progress | Pending | Real execution and user-controlled import |
 | API-20261004-001 | Verified | /api/knowledge/documents/; /api/knowledge/wiki/; ComputeManifest | document retrieval; automatic Wiki; quality gate | Updated | Added | Passed | Passed | Real development candidate; project and owner scopes isolated |
 | API-20260924-001 | Verified | /api/agent/admin/; /api/agent/bootstrap/; /api/agent/conversations/{id}/runs/ | role ceilings; task budgets; usage | Updated | HTTP model fixtures | Passed | Passed | Local browser; backend request capture; v0.1.15 |

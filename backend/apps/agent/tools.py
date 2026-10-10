@@ -191,6 +191,9 @@ def brief(r):
 
 
 def check_evidence(run, user, p):
+    from .selections import knowledge_domains, require_task_selection
+
+    domains = knowledge_domains(run) if run.knowledge_selection else None
     # Reauthorize ALL accumulated evidence before revealing history or reusing it.
     knowledge_refs, document_refs = set(), set()
     for ev in run.evidence:
@@ -235,7 +238,9 @@ def check_evidence(run, user, p):
             )
             for item in entries:
                 if isinstance(item, dict) and item.get("taskId"):
-                    authorized_task(user, item["taskId"], p)
+                    require_task_selection(
+                        run, authorized_task(user, item["taskId"], p)
+                    )
         if ev.get("tool") in {"search_knowledge", "check_knowledge_constraints"}:
             entries = (
                 result.get("items", [])
@@ -255,7 +260,7 @@ def check_evidence(run, user, p):
         from apps.knowledge.services import visible_entries
 
         visible = set(
-            visible_entries(user)
+            visible_entries(user, domains=domains)
             .filter(pk__in=[identity for identity, _ in knowledge_refs])
             .values_list("id", "revision")
         )
@@ -264,7 +269,7 @@ def check_evidence(run, user, p):
     if document_refs:
         from .knowledge_tools import check_document_evidence
 
-        check_document_evidence(user, document_refs)
+        check_document_evidence(user, document_refs, domains=domains)
 
 
 def _q(name):
@@ -527,7 +532,7 @@ def _system_info(user, policy_value):
     return clean(result)
 
 
-def _algorithm_list(user, search=""):
+def _algorithm_list(user, search="", version_ids=None):
     from apps.compute.services import allowed_algorithms, agent_algorithm_allowed
     from apps.compute.access import project_id, permission
 
@@ -540,6 +545,8 @@ def _algorithm_list(user, search=""):
         .order_by("name", "id")
     )
     terms = re.split(r"[\s,，、;；/]+", search.strip()) if search.strip() else []
+    if version_ids is not None:
+        query = query.filter(versions__id__in=version_ids)
     if terms:
         matches = Q()
         for term in terms:
@@ -555,7 +562,9 @@ def _algorithm_list(user, search=""):
     for algorithm in found[:50]:
         versions = []
         for version in algorithm.versions.all():
-            if version.status != "published":
+            if version.status != "published" or (
+                version_ids is not None and version.id not in version_ids
+            ):
                 continue
             manifest = version.manifest or {}
             versions.append(
@@ -772,6 +781,9 @@ def _operator_submit(run, user, p, args):
         raise PermissionDenied("本轮已停止，不能提交计算")
 
     version_id = args.get("versionId")
+    from .selections import require_algorithm
+
+    require_algorithm(run, version_id)
     if type(version_id) is not int or version_id < 1:
         raise ValidationError("versionId 必须为有效算法版本 ID")
     version = AlgorithmVersion.objects.filter(
@@ -879,6 +891,13 @@ def _operator_submit(run, user, p, args):
 
 
 def execute(run, name, args):
+    from .selections import (
+        KNOWLEDGE_TOOLS,
+        algorithm_ids,
+        knowledge_domains,
+        require_knowledge,
+    )
+
     spec = TOOLS.get(name)
     if not spec or not CAPABILITIES.get(spec.capability):
         raise ValidationError("未开放该工具或能力")
@@ -888,6 +907,8 @@ def execute(run, name, args):
     p = require_access(user, "agent", run.model)
     check_evidence(run, user, p)
     _check_special_capability(spec, p)
+    if name in KNOWLEDGE_TOOLS:
+        require_knowledge(run)
     if name == "search_web" and not getattr(run, "internet_enabled", False):
         raise PermissionDenied("本轮未开启联网检索")
     if name == "get_system_info":
@@ -914,7 +935,9 @@ def execute(run, name, args):
         query = args.get("query", "")
         if not isinstance(query, str) or len(query) > 200:
             raise ValidationError("query 必须为不超过200字的算法关键词")
-        result = clean(_algorithm_list(user, query.strip()))
+        result = clean(
+            _algorithm_list(user, query.strip(), version_ids=algorithm_ids(run))
+        )
         if len(json.dumps(result, ensure_ascii=False).encode()) > MAX_RESULT_BYTES * 2:
             raise ValidationError("算法清单过大，请用query目标关键词缩小范围")
         return result, [(None, result)]
@@ -955,7 +978,9 @@ def execute(run, name, args):
             or any(type(i) is not int for i in ids)
         ):
             raise ValidationError("entryIds 必须为知识ID数组")
-        result = check_constraints(user, facts, entry_ids=ids)
+        result = check_constraints(
+            user, facts, entry_ids=ids, domains=knowledge_domains(run)
+        )
         return result, [(None, result)]
     if name == "search_web":
         query, url = args.get("query"), args.get("url")

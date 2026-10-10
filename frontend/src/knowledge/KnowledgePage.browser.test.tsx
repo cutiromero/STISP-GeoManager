@@ -5,10 +5,11 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { KnowledgeEntry } from "../api/generated/types.gen";
 
 const api = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ vi.mock("../components/WorkspaceHeader", () => ({
   default: () => <div>平台导航</div>,
 }));
 import KnowledgePage from "./KnowledgePage";
+import { KNOWLEDGE_DOMAINS } from "./domains";
 
 const publicEntry: KnowledgeEntry = {
   id: 1,
@@ -35,6 +37,7 @@ const publicEntry: KnowledgeEntry = {
   updatedAt: "2026-09-29T08:00:00Z",
   title: "矿物组合的条件核查",
   category: "矿物学",
+  domain: "geology",
   subject: "石英",
   predicate: "条件互斥",
   object: "霞石",
@@ -61,6 +64,7 @@ const privateEntry: KnowledgeEntry = {
   projectTagId: 2,
   title: "植被指数的数值范围",
   category: "遥感",
+  domain: "arid_ecology",
   subject: "NDVI",
   predicate: "有效范围",
   object: "归一化指数",
@@ -82,6 +86,7 @@ beforeEach(() => {
     items: [publicEntry, privateEntry],
     total: 2,
     categories: ["矿物学", "遥感"],
+    domains: KNOWLEDGE_DOMAINS.map((item) => ({ ...item, count: 1 })),
     canEdit: false,
   });
 });
@@ -92,8 +97,6 @@ describe("knowledge network and records", () => {
   it("filters records by pointer and keyboard and resets the network", async () => {
     const { container } = show();
     const node = await screen.findByRole("button", { name: "筛选节点：石英" });
-    const pause = screen.queryByRole("button", { name: /暂停浮动/ });
-    if (pause) fireEvent.click(pause);
     await userEvent.click(node);
     const feedback = container.querySelector(".knowledge-network-feedback");
     expect(feedback).toHaveClass("is-node");
@@ -162,7 +165,6 @@ describe("knowledge network and records", () => {
     );
     const { container } = show();
     const node = await screen.findByRole("button", { name: "筛选节点：石英" });
-    fireEvent.click(screen.getByRole("button", { name: /暂停浮动/ }));
     fireEvent.keyDown(node, { key: "Enter" });
     fireEvent.click(screen.getByRole("button", { name: "放大知识网络" }));
     const svg = container.querySelector<SVGSVGElement>(
@@ -209,7 +211,6 @@ describe("knowledge network and records", () => {
     );
     const { container } = show();
     const node = await screen.findByRole("button", { name: "筛选节点：石英" });
-    fireEvent.click(screen.getByRole("button", { name: /暂停浮动/ }));
     const svg = container.querySelector<SVGSVGElement>(
       ".knowledge-network-svg",
     )!;
@@ -237,8 +238,9 @@ describe("knowledge network and records", () => {
     fireEvent.pointerUp(svg, { pointerId: 8 });
     expect(node.getAttribute("transform")).toBe(moved);
     expect(container.querySelector(".knowledge-network-feedback")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /启用浮动/ }));
-    expect(screen.getByRole("button", { name: /暂停浮动/ })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /浮动/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("sends explicit search words to the server", async () => {
@@ -252,6 +254,77 @@ describe("knowledge network and records", () => {
         expect.objectContaining({ q: "石英", offset: 0 }),
       ),
     );
+  });
+
+  it("filters the server records by research zone while retaining fine categories", async () => {
+    api.entries.mockImplementation(async (options) => ({
+      items: options.domain ? [privateEntry] : [publicEntry, privateEntry],
+      total: options.domain ? 1 : 2,
+      categories: ["遥感"],
+      domains: KNOWLEDGE_DOMAINS.map((item) => ({ ...item, count: 1 })),
+      canEdit: false,
+    }));
+    show();
+    await screen.findByRole("button", { name: publicEntry.title, exact: true });
+    const zone = within(
+      screen.getByRole("region", { name: "知识分区" }),
+    ).getByRole("button", { name: /干旱区生态安全治理/ });
+    fireEvent.click(zone);
+    await waitFor(() =>
+      expect(api.entries).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          domain: "arid_ecology",
+          category: undefined,
+          offset: 0,
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: publicEntry.title, exact: true }),
+      ).toBeNull(),
+    );
+    expect(zone).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: privateEntry.title, exact: true }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "全部知识" }));
+    await waitFor(() =>
+      expect(api.entries).toHaveBeenLastCalledWith(
+        expect.objectContaining({ domain: undefined }),
+      ),
+    );
+    expect(
+      await screen.findByRole("button", {
+        name: publicEntry.title,
+        exact: true,
+      }),
+    ).toBeVisible();
+  });
+
+  it("keeps four zone controls readable and within the mobile viewport", async () => {
+    await page.viewport(390, 844);
+    try {
+      show();
+      await screen.findByRole("button", {
+        name: publicEntry.title,
+        exact: true,
+      });
+      for (const item of KNOWLEDGE_DOMAINS) {
+        const zone = within(
+          screen.getByRole("region", { name: "知识分区" }),
+        ).getByRole("button", {
+          name: new RegExp(item.label),
+        });
+        expect(zone).toBeVisible();
+        expect(zone.getBoundingClientRect().right).toBeLessThanOrEqual(390);
+      }
+      await page.screenshot({
+        path: "../../test-results/knowledge-zones-mobile.png",
+      });
+    } finally {
+      await page.viewport(1600, 900);
+    }
   });
 
   it("offers editing only for current-project records", async () => {

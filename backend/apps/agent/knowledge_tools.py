@@ -9,16 +9,27 @@ MAX_BYTES = 24000
 
 def search_knowledge(run, user, query):
     from apps.knowledge.library import search_documents, visible_documents
-    from apps.knowledge.services import search_entries
+    from apps.knowledge.services import search_entries, visible_entries
     from apps.knowledge.weknora_client import WeKnoraError
+    from .selections import knowledge_domains, require_knowledge
 
-    structured = search_entries(user, query, limit=8)
+    require_knowledge(run)
+    domains = knowledge_domains(run, query)
+    structured = search_entries(user, query, limit=8, domains=domains)
     try:
-        document_search = search_documents(user, query, limit=6)
+        document_search = search_documents(user, query, limit=6, domains=domains)
     except WeKnoraError as exc:
         document_search = {"items": [], "available": False, "detail": str(exc)}
+    references = {(e["id"], e["revision"]) for e in structured["items"]}
+    if references and not references <= set(
+        visible_entries(user, domains=domains)
+        .filter(pk__in=[identity for identity, _ in references])
+        .values_list("id", "revision")
+    ):
+        raise PermissionDenied("知识依据或分区已变化，请重新检索")
     result = {
         "items": [],
+        "domains": domains,
         "documents": [],
         "documentSearch": {
             "available": bool(document_search["available"]),
@@ -46,7 +57,7 @@ def search_knowledge(run, user, query):
         add(entry, "items", structured_limit)
     documents = {
         doc.id: doc
-        for doc in visible_documents(user).filter(
+        for doc in visible_documents(user, domains).filter(
             pk__in=[item["documentId"] for item in document_search["items"]]
         )
     }
@@ -72,19 +83,25 @@ def search_knowledge(run, user, query):
 def read_knowledge_document(run, user, args):
     from apps.knowledge.library import read_document
     from apps.knowledge.weknora_client import WeKnoraError
+    from .selections import knowledge_domains, require_knowledge
 
+    require_knowledge(run)
+    domains = knowledge_domains(run)
     try:
         result = read_document(
             user,
             args.get("documentId"),
             offset=args.get("offset", 0),
             limit=args.get("limit", 8000),
+            domains=domains,
         )
     except WeKnoraError as exc:
         if exc.status in {403, 404}:
             raise PermissionDenied(str(exc)) from exc
         raise ValidationError(str(exc)) from exc
-    check_document_evidence(user, [(result["documentId"], result["documentSha256"])])
+    check_document_evidence(
+        user, [(result["documentId"], result["documentSha256"])], domains=domains
+    )
     number = len(run.evidence) + 1
     item = {
         **result,
@@ -96,14 +113,14 @@ def read_knowledge_document(run, user, args):
     return response, [(None, response)]
 
 
-def check_document_evidence(user, document_refs):
+def check_document_evidence(user, document_refs, domains=None):
     from apps.knowledge.library import visible_documents
 
     expected = set(document_refs)
     if not expected:
         return
     actual = set(
-        visible_documents(user)
+        visible_documents(user, domains)
         .filter(pk__in=[identity for identity, _ in expected])
         .exclude(status__in=["failed", "cancelled"])
         .values_list("id", "sha256")

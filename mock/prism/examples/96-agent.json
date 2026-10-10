@@ -8,13 +8,74 @@
       "thinkingEnabled": true,
       "internetEnabled": false,
       "allowAttachments": true,
-      "models": [{"alias": "mock", "name": "本地开发模拟模型", "allowAgent": true, "contextWindowTokens": 32768, "supportsThinking": true, "supportsVision": true, "status": "online", "checkedAt": "2026-09-20T12:00:00Z"}],
+      "models": [
+        {
+          "alias": "mock",
+          "name": "本地开发模拟模型",
+          "allowAgent": true,
+          "contextWindowTokens": 32768,
+          "supportsThinking": true,
+          "supportsVision": true,
+          "status": "online",
+          "checkedAt": "2026-09-20T12:00:00Z"
+        }
+      ],
       "defaultChatModel": "mock",
       "defaultAgentModel": "mock",
-      "capabilities": ["chat", "read_data", "analyze_data"]
+      "capabilities": [
+        "chat",
+        "read_data",
+        "analyze_data"
+      ],
+      "knowledgeDomains": [
+        {
+          "id": "remote_sensing",
+          "label": "遥感基础",
+          "description": "传感器、波段、反射率与指数",
+          "count": 0
+        },
+        {
+          "id": "pipelines",
+          "label": "油气管道相关",
+          "description": "管道监测与沿线风险",
+          "count": 0
+        },
+        {
+          "id": "geology",
+          "label": "遥感地质填图逻辑推理",
+          "description": "矿物、岩性、构造与证据推理",
+          "count": 0
+        },
+        {
+          "id": "arid_ecology",
+          "label": "干旱区生态安全治理",
+          "description": "植被、水资源与生态治理",
+          "count": 0
+        }
+      ],
+      "algorithmOptions": []
     }
   },
-  "GET /api/agent/conversations/": {"200": {"items": []}},
-  "GET /api/agent/resources/": {"200": {"items": []}},
-  "POST /api/agent/attachments/": {"201": {"id": 1, "fileName": "sample.png", "mediaType": "image/png", "sizeBytes": 2048, "kind": "image", "previewUrl": "", "extractedText": "", "createdAt": "2026-09-21T10:00:00Z"}}
+  "GET /api/agent/conversations/": {
+    "200": {
+      "items": []
+    }
+  },
+  "GET /api/agent/resources/": {
+    "200": {
+      "items": []
+    }
+  },
+  "POST /api/agent/attachments/": {
+    "201": {
+      "id": 1,
+      "fileName": "sample.png",
+      "mediaType": "image/png",
+      "sizeBytes": 2048,
+      "kind": "image",
+      "previewUrl": "",
+      "extractedText": "",
+      "createdAt": "2026-09-21T10:00:00Z"
+    }
+  }
 }

@@ -73,6 +73,7 @@ def entries(request):
                 category=request.GET.get("category", ""),
                 offset=offset,
                 manage=request.GET.get("manage", "false") == "true",
+                domains=[request.GET["domain"]] if "domain" in request.GET else None,
             )
         )
     require_project(request.user)
@@ -114,6 +115,8 @@ def detail(request, entry_id):
     if not can_edit(request.user) or entry.project_tag_id != selected_project_id():
         raise PermissionDenied("只能维护当前项目知识；公共基础资料请切换到公开项目维护")
     payload = body(request)
+    if isinstance(payload, dict):
+        payload.setdefault("domain", entry.domain)
     data = validate_entry(payload)
     revision = payload.get("revision")
     if type(revision) is not int or revision != entry.revision:

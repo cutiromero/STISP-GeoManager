@@ -1,7 +1,6 @@
 """Project-aware, source-grounded retrieval; no external index is implied."""
 
 import json
-import re
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import URLValidator
@@ -10,6 +9,7 @@ from django.db.models import Q
 from apps.projects.context import is_superadmin, selected_project_id
 from apps.projects.models import Project, ProjectMembership
 from .models import KnowledgeEntry
+from .domains import domain_options, search_terms, validate_domain, validate_domains
 
 TEXT_FIELDS = {
     "title": 180,
@@ -47,14 +47,17 @@ def require_project(user):
     return pid
 
 
-def visible_entries(user, manage=False):
+def visible_entries(user, manage=False, domains=None):
     pid = require_project(user)
     own = Q(project_tag_id=pid)
     if not (manage and can_edit(user)):
         own &= Q(status="published")
     # Public material is an explicit reusable source, not an all-project query.
-    return KnowledgeEntry._base_manager.filter(
+    qs = KnowledgeEntry._base_manager.filter(
         own | Q(project_tag_id=1, status="published")
+    )
+    return (
+        qs.filter(domain__in=validate_domains(domains)) if domains is not None else qs
     )
 
 
@@ -74,20 +77,24 @@ def serialize(entry):
             )
         },
         "projectTagId": entry.project_tag_id,
+        "domain": entry.domain,
         "ruleKind": entry.rule_kind,
         "ruleConfig": entry.rule_config,
         "updatedAt": entry.updated_at.isoformat(),
     }
 
 
-def search_entries(user, query="", limit=8, category="", offset=0, manage=False):
+def search_entries(
+    user, query="", limit=8, category="", offset=0, manage=False, domains=None
+):
     if not isinstance(query, str) or len(query) > 300:
         raise ValidationError("检索词最多 300 个字符")
-    qs = visible_entries(user, manage)
+    all_visible = visible_entries(user, manage)
+    qs = visible_entries(user, manage, domains)
     categories = sorted(set(qs.values_list("category", flat=True)))
     if category:
         qs = qs.filter(category=category)
-    terms = [t.casefold() for t in re.split(r"[\s,，;；、]+", query.strip()) if t]
+    terms = search_terms(query)
     if terms:
         match = Q()
         for term in terms:
@@ -136,6 +143,7 @@ def search_entries(user, query="", limit=8, category="", offset=0, manage=False)
         "items": [serialize(e) for e in rows],
         "total": total,
         "categories": categories,
+        "domains": domain_options(all_visible),
         "canEdit": can_edit(user),
     }
 
@@ -153,10 +161,11 @@ def validate_entry(data):
         "ruleKind",
         "ruleConfig",
         "revision",
+        "domain",
     }
     if set(data) - allowed:
         raise ValidationError("包含未知知识字段")
-    clean = {}
+    clean = {"domain": validate_domain(data.get("domain", "geology"))}
     for field, maximum in TEXT_FIELDS.items():
         value = data.get(field, "")
         if not isinstance(value, str) or len(value) > maximum:
@@ -218,7 +227,7 @@ def validate_entry(data):
     return clean
 
 
-def check_constraints(user, facts, entry_ids=None):
+def check_constraints(user, facts, entry_ids=None, domains=None):
     from .rules import evaluate
 
     try:
@@ -227,7 +236,7 @@ def check_constraints(user, facts, entry_ids=None):
         raise ValidationError("事实包含无效数值或过深嵌套") from exc
     if not isinstance(facts, dict) or size > 20000:
         raise ValidationError("事实须为不超过 20000 字符的对象")
-    qs = visible_entries(user).exclude(rule_kind="none")
+    qs = visible_entries(user, domains=domains).exclude(rule_kind="none")
     if entry_ids is not None:
         if (
             not isinstance(entry_ids, list)
@@ -236,7 +245,9 @@ def check_constraints(user, facts, entry_ids=None):
         ):
             raise ValidationError("entryIds 须为最多 50 个知识 ID")
         accessible = set(
-            visible_entries(user).filter(pk__in=entry_ids).values_list("pk", flat=True)
+            visible_entries(user, domains=domains)
+            .filter(pk__in=entry_ids)
+            .values_list("pk", flat=True)
         )
         if set(entry_ids) != accessible:
             raise PermissionDenied("知识不存在或无权访问")

@@ -9,27 +9,39 @@ import type {
   KnowledgeDocumentList,
   KnowledgeDocumentSearch,
   KnowledgeWikiList,
+  KnowledgeDomain,
 } from "./generated/types.gen";
 
 export const knowledgeApi = {
-  documents: () =>
-    requestJson<KnowledgeDocumentList>("/api/knowledge/documents/"),
+  documents: (domain?: KnowledgeDomain) =>
+    requestJson<KnowledgeDocumentList>(
+      `/api/knowledge/documents/${domain ? `?domain=${domain}` : ""}`,
+    ),
   uploadDocument: (body: FormData) =>
     requestForm<KnowledgeDocument>("/api/knowledge/documents/", body),
+  classifyDocument: (id: number, domain: KnowledgeDomain) =>
+    requestJson<KnowledgeDocument>(`/api/knowledge/documents/${id}/`, {
+      method: "PATCH",
+      body: { domain },
+    }),
   retryDocument: (id: number) =>
     requestJson<KnowledgeDocument>(`/api/knowledge/documents/${id}/retry/`, {
       method: "POST",
     }),
-  searchDocuments: (query: string) =>
+  searchDocuments: (query: string, domains?: KnowledgeDomain[]) =>
     requestJson<KnowledgeDocumentSearch>("/api/knowledge/documents/search/", {
       method: "POST",
-      body: { query, limit: 6 },
+      body: { query, limit: 6, ...(domains ? { domains } : {}) },
     }),
-  wiki: () => requestJson<KnowledgeWikiList>("/api/knowledge/wiki/"),
+  wiki: (domain?: KnowledgeDomain) =>
+    requestJson<KnowledgeWikiList>(
+      `/api/knowledge/wiki/${domain ? `?domain=${domain}` : ""}`,
+    ),
   entries: (
     options: {
       q?: string;
       category?: string;
+      domain?: KnowledgeDomain;
       offset?: number;
       limit?: number;
       manage?: boolean;

@@ -57,6 +57,12 @@ import RunComputeTasks from "./RunComputeTasks";
 import ComputeIntentCard from "./ComputeIntentCard";
 import WorkflowPanel from "./WorkflowPanel";
 import AgentResizeHandle from "./AgentResizeHandle";
+import AgentToolSelection, {
+  defaultToolPreferences,
+  preferencesFromRun,
+  selectionError,
+  type ToolPreferences,
+} from "./AgentToolSelection";
 import useAgentLayout from "./useAgentLayout";
 import ReasoningEffortControl, {
   type ReasoningEffort,
@@ -121,6 +127,15 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [busy, setBusy] = useState(false);
   const [resources, setResources] = useState<AgentResource[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
+  const [toolPreferences, setToolPreferences] = useState<ToolPreferences>(
+    location.state?.knowledgeSelection
+      ? {
+          ...defaultToolPreferences,
+          knowledgeSelection: location.state.knowledgeSelection,
+        }
+      : defaultToolPreferences,
+  );
+  const handoffSelection = useRef(location.state?.knowledgeSelection);
   const [attachments, setAttachments] = useState<AgentAttachment[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [internetEnabled, setInternetEnabled] = useState(false);
@@ -169,6 +184,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     internetEnabled: boolean;
     budgetProfile?: AgentBudgetProfileId;
     maxOutputTokens?: number;
+    toolPreferences: ToolPreferences;
   } | null>(null);
   const running = runs.find(active);
   const canUse = mode === "agent" ? bootstrap?.canAgent : bootstrap?.canChat;
@@ -354,6 +370,16 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       if (alive.current && seq === sequence.current) {
         setCurrent(detail.conversation);
         setRuns(detail.runs);
+        if (mode === "agent") {
+          const latest = detail.runs[detail.runs.length - 1];
+          const restored = preferencesFromRun(latest);
+          setToolPreferences(
+            handoffSelection.current
+              ? { ...restored, knowledgeSelection: handoffSelection.current }
+              : restored,
+          );
+          setSelected(latest?.resourceIds ?? []);
+        }
         try {
           sessionStorage.setItem(
             conversationStorageKey,
@@ -398,6 +424,12 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       !modelOnline
     )
       return;
+    const invalidSelection =
+      mode === "agent" ? selectionError(toolPreferences, selected) : "";
+    if (invalidSelection) {
+      setError(invalidSelection);
+      return;
+    }
     setBusy(true);
     setError("");
     const seq = sequence.current;
@@ -424,7 +456,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         previous.budgetProfile ===
           (bootstrap?.budgets?.enabled ? budgetProfile : undefined) &&
         previous.maxOutputTokens ===
-          (bootstrap?.budgets?.enabled ? outputOverride : undefined);
+          (bootstrap?.budgets?.enabled ? outputOverride : undefined) &&
+        JSON.stringify(previous.toolPreferences) ===
+          JSON.stringify(toolPreferences);
       const submission = same
         ? previous
         : {
@@ -443,6 +477,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
             maxOutputTokens: bootstrap?.budgets?.enabled
               ? outputOverride
               : undefined,
+            toolPreferences,
           };
       failedSubmission.current = submission;
       const run = await agentApi.submit(c.id, {
@@ -454,7 +489,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
           : {}),
         thinkingMode,
         reasoningEffort: requestedEffort,
-        resourceIds: mode === "agent" ? selected : [],
+        resourceIds:
+          mode === "agent" && toolPreferences.dataSelectionMode === "manual"
+            ? selected
+            : [],
+        ...(mode === "agent" ? toolPreferences : {}),
         attachmentIds: attachments.map((item) => item.id),
         internetEnabled: internetEnabled && internetAvailable,
       });
@@ -464,6 +503,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       setPrompt("");
       setEvents([]);
       failedSubmission.current = null;
+      handoffSelection.current = null;
       void refreshList();
     } catch (e) {
       report(e);
@@ -480,6 +520,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     setPrompt("");
     setAttachments([]);
     setInternetEnabled(false);
+    setSelected([]);
+    setToolPreferences(defaultToolPreferences);
+    handoffSelection.current = null;
     failedSubmission.current = null;
     try {
       sessionStorage.removeItem(conversationStorageKey);
@@ -1058,9 +1101,23 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 </div>
                 <div className="agent-composer-footer">
                   <div className="agent-composer-tools">
-                    {(attachmentsAvailable ||
-                      internetAvailable ||
-                      mode === "agent") && (
+                    {mode === "agent" && bootstrap && (
+                      <AgentToolSelection
+                        bootstrap={bootstrap}
+                        resources={resources}
+                        selected={selected}
+                        value={toolPreferences}
+                        disabled={
+                          Boolean(running) ||
+                          busy ||
+                          !canUse ||
+                          Boolean(current?.archived)
+                        }
+                        onChange={setToolPreferences}
+                        onResources={setSelected}
+                      />
+                    )}
+                    {(attachmentsAvailable || internetAvailable) && (
                       <Popover
                         trigger="click"
                         placement="topLeft"
@@ -1101,38 +1158,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                                 </Button>
                               </Upload>
                             )}
-                            {mode === "agent" && (
-                              <div className="agent-tool-field">
-                                <strong>{ui("数据范围", "Data scope")}</strong>
-                                <p>
-                                  {ui(
-                                    "默认自动发现当前项目的授权数据。",
-                                    "Discover authorized project data automatically.",
-                                  )}
-                                </p>
-                                <Select
-                                  aria-label={ui(
-                                    "限定数据资源",
-                                    "Limit data resources",
-                                  )}
-                                  mode="multiple"
-                                  maxCount={3}
-                                  allowClear
-                                  value={selected}
-                                  disabled={Boolean(running) || busy}
-                                  onChange={setSelected}
-                                  placeholder={ui(
-                                    "选择资源缩小范围（最多 3 项）",
-                                    "Select up to 3 resources",
-                                  )}
-                                  options={resources.map((resource) => ({
-                                    value: resource.id,
-                                    label: resource.name,
-                                  }))}
-                                  className="agent-resource-select"
-                                />
-                              </div>
-                            )}
                             {internetAvailable && (
                               <label className="agent-tool-switch">
                                 <span>
@@ -1160,7 +1185,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                           aria-expanded={toolsOpen}
                         >
                           {ui("工具", "Tools")}
-                          {selected.length > 0 ? ` · ${selected.length}` : ""}
                           {internetEnabled && (
                             <span
                               className="agent-tool-indicator"
