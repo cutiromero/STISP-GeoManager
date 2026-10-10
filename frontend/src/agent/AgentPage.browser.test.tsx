@@ -863,9 +863,7 @@ it("keeps pending approval visible while the drawer is closed and confirms the f
   });
   expect(agentApi.workflow).toHaveBeenCalledWith("workflow-1");
   fireEvent.click(pending);
-  fireEvent.click(
-    await screen.findByRole("button", { name: "确认执行并自动入库" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "确认执行" }));
   await waitFor(() =>
     expect(agentApi.confirmWorkflow).toHaveBeenCalledWith(
       "workflow-1",

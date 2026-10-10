@@ -91,6 +91,19 @@ const workflow: AgentWorkflow = {
 };
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(agentApi, "bootstrap").mockResolvedValue({
+    canChat: true,
+    canAgent: true,
+    canManage: false,
+    internetEnabled: false,
+    allowAttachments: false,
+    workerOnline: true,
+    models: [],
+    defaultChatModel: "mock",
+    defaultAgentModel: "mock",
+    capabilities: [],
+  });
+  vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
   vi.spyOn(computeApi, "algorithms").mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(computeApi, "inputs").mockResolvedValue({ items: [], total: 0 });
 });
@@ -176,11 +189,14 @@ it("restores a saved plan and only executes after confirmation", async () => {
   await screen.findByText("研究区影像");
   expect(confirm).not.toHaveBeenCalled();
   expect(create).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "确认执行并自动入库" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认执行" }));
   await waitFor(() =>
     expect(confirm).toHaveBeenCalledWith("wf-1", "verified-plan"),
   );
-  await screen.findByText("结果已入库，资源编号: 42");
+  await screen.findByText("成果已保存到本项目的数据资源");
+  expect(
+    screen.getByRole("link", { name: "在地理工作台对比成果图层" }),
+  ).toHaveAttribute("href", "/map?resources=42&projectTagId=1");
 });
 
 it("shows confirmation failure without claiming successful execution", async () => {
@@ -194,9 +210,7 @@ it("shows confirmation failure without claiming successful execution", async () 
     </AntApp>,
   );
   fireEvent.click(screen.getByText("科研工作流 · 计划、执行与入库"));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "确认执行并自动入库" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "确认执行" }));
   await screen.findByText("输入数据已变化，请重新预览");
   expect(screen.queryByText("已完成", { exact: true })).not.toBeInTheDocument();
 });

@@ -371,11 +371,11 @@ export default function AgentAdmin() {
               [
                 ["dailyRuns", "每人每日次数", "Daily runs per user", 1, 1000],
                 ["maxSteps", "最多工具步骤", "Tool step limit", 1, 64],
-                ["maxResources", "最多详细资源", "Resource limit", 1, 3],
+                ["maxResources", "最多详细资源", "Resource limit", 1, 12],
                 [
                   "maxIterations",
-                  "迭代上限（后续扩展预留）",
-                  "Iteration limit (reserved)",
+                  "工作流判断次数上限",
+                  "Workflow decision limit",
                   1,
                   20,
                 ],
@@ -389,11 +389,7 @@ export default function AgentAdmin() {
               ] as const
             ).map(([key, zh, en, min, max]) => (
               <Form.Item key={key} name={key} label={ui(zh, en)}>
-                <InputNumber
-                  min={min}
-                  max={max}
-                  disabled={key === "maxIterations"}
-                />
+                <InputNumber min={min} max={max} />
               </Form.Item>
             ))}
           </Space>

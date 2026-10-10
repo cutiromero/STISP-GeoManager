@@ -25,7 +25,10 @@ vi.mock("../api/platform", () => ({
   },
 }));
 
-vi.mock("../api/client", () => ({ api: mockApi }));
+vi.mock("../api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/client")>()),
+  api: mockApi,
+}));
 vi.mock("../utils/download", () => ({ downloadBlob: mockDownloadBlob }));
 
 import { useLayerExport } from "./MapPage";

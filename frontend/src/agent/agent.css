@@ -812,6 +812,10 @@
 .agent-workflow-drawer .ant-drawer-body {
   background: #f4f7fa;
 }
+.agent-workflow-drawer .ant-drawer-content-wrapper {
+  max-width: 100vw;
+  transition-property: transform;
+}
 .agent-selection-trigger.ant-btn {
   gap: 5px;
   padding-inline: 8px;
@@ -1065,4 +1069,235 @@
 .agent-plan-summary dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.agent-workflow-selectors,
+.agent-demo-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  width: 100%;
+}
+.agent-workflow-selectors > label,
+.agent-demo-fields > label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  color: #496b82;
+}
+.agent-workflow-selectors .ant-select,
+.agent-demo-fields .ant-select,
+.agent-demo-fields .ant-input-number {
+  width: 100%;
+}
+.agent-demo-form {
+  padding: 16px;
+  border: 1px solid #dce8f1;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f7fafc, #eef5fa);
+}
+.agent-demo-form-heading,
+.agent-decision-step-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.agent-demo-form-heading strong {
+  color: #365c77;
+  font-size: 14px;
+}
+.agent-demo-parameters {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #dce8f1;
+}
+.agent-demo-hint {
+  margin: 12px 0;
+  color: #6b8294;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.agent-demo-source-notes {
+  display: grid;
+  gap: 9px;
+  margin: 14px 0;
+  color: #688195;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.agent-demo-source-notes strong {
+  color: #496b82;
+  font-weight: 600;
+}
+.agent-demo-source-notes p {
+  margin: 3px 0 0;
+  line-height: 1.6;
+}
+.agent-decision-timeline {
+  margin-top: 24px;
+}
+.agent-decision-timeline h3 {
+  font-size: 15px;
+  color: #365c77;
+  margin: 0 0 18px;
+}
+.agent-decision-step {
+  padding: 14px 16px;
+  border: 1px solid #dce7ef;
+  border-radius: 12px;
+  background: #f8fbfd;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #516d82;
+  overflow-wrap: anywhere;
+}
+.agent-decision-step-heading {
+  margin-bottom: 4px;
+  color: #365c77;
+}
+.agent-decision-step-heading .ant-tag {
+  flex-shrink: 0;
+  margin: 0;
+}
+.agent-decision-model {
+  font-size: 11px;
+  color: #7c91a0;
+}
+.agent-decision-step p {
+  margin: 10px 0 0;
+}
+.agent-decision-step p > strong,
+.agent-decision-uncertainties > strong,
+.agent-decision-findings > span {
+  display: block;
+  color: #54768e;
+  font-size: 12px;
+  font-weight: 600;
+}
+.agent-decision-findings,
+.agent-decision-uncertainties {
+  margin-top: 10px;
+}
+.agent-decision-step ul {
+  padding-left: 18px;
+  margin: 2px 0 0;
+}
+.agent-decision-judgement,
+.agent-decision-result {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #eaf2f8;
+}
+.agent-decision-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #dde8ef;
+}
+.agent-decision-evidence > span {
+  color: #6b8294;
+  font-size: 11px;
+}
+.agent-decision-error {
+  color: #b45252;
+}
+.agent-evidence-update {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #cadae8;
+  border-radius: 14px;
+  background: #f2f7fb;
+  color: #496b82;
+  font-size: 13px;
+}
+.agent-workflow-knowledge .ant-collapse-header {
+  padding: 3px 0;
+}
+.agent-workflow-knowledge article {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #496b82;
+  overflow-wrap: anywhere;
+}
+.agent-workflow-knowledge article p {
+  margin: 6px 0;
+}
+.agent-workflow-knowledge article ul {
+  margin: 5px 0 10px;
+  padding-left: 18px;
+}
+.agent-workflow-knowledge article blockquote {
+  padding-left: 10px;
+  margin: 8px 0;
+  border-left: 2px solid #b8ccdc;
+  color: #657f91;
+}
+.agent-evidence-update h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  color: #365c77;
+}
+.agent-evidence-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.agent-evidence-comparison article {
+  padding: 12px;
+  border-radius: 9px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+.agent-evidence-comparison p {
+  margin: 8px 0 0;
+  line-height: 1.7;
+}
+.agent-evidence-source {
+  display: block;
+  margin-top: 3px;
+  color: #738c9e;
+  font-size: 11px;
+}
+.agent-added-evidence {
+  margin-top: 14px;
+}
+.agent-added-evidence dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 0;
+  margin: 8px 0 0;
+  border-top: 1px solid #dce7ef;
+}
+.agent-added-evidence dl > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.agent-added-evidence dt {
+  font-size: 11px;
+  color: #738c9e;
+}
+.agent-added-evidence dd {
+  margin: 3px 0 0;
+}
+@media (max-width: 600px) {
+  .agent-workflow-selectors,
+  .agent-demo-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .agent-evidence-comparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .agent-demo-form,
+  .agent-decision-step {
+    padding: 12px;
+  }
+  .agent-demo-form-heading {
+    flex-wrap: wrap;
+  }
 }

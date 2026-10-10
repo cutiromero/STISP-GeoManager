@@ -89,7 +89,168 @@ export function vectorSymbolizationWithDefaultTemplate({
 }): VectorSymbolization {
   const next = base ? { ...base } : cloneDefaultVectorSymbolization();
   if (next.renderer?.updatedByUser) return next;
-  return applyBusinessDefaultTemplate(resource, fields, geojson, next) ?? next;
+  return (
+    applyAnalysisResultTemplate(fields, geojson, next) ??
+    applyBusinessDefaultTemplate(resource, fields, geojson, next) ??
+    next
+  );
+}
+
+function applyAnalysisResultTemplate(
+  fields: ResourceField[],
+  geojson: GeoJsonFeatureCollection,
+  base: VectorSymbolization,
+) {
+  const names = new Set(fields.map((field) => field.name));
+  const classes: UniqueValueSymbolClass[] = [];
+  let fieldName = "",
+    templateId = "",
+    defaultLabel = "待核实/未分类";
+  const add = (value: string, label: string, color: string, count: number) => {
+    classes.push({
+      id: stableClassId(value, classes.length),
+      values: [value],
+      label,
+      color,
+      iconImage: "gm-marker",
+      size: 1,
+      visible: true,
+      count,
+    });
+  };
+  if (names.has("priority_rank") && names.has("priority_class")) {
+    fieldName = "priority_rank";
+    templateId = "analysis.investigation-priority.v1";
+    defaultLabel = "优先补资料/未排序";
+    for (const [rank, count] of countFeatureValues(
+      geojson.features,
+      fieldName,
+    )) {
+      const numeric = Number(rank);
+      if (!Number.isInteger(numeric) || numeric < 1) continue;
+      const color =
+        numeric === 1 ? "#245A91" : numeric === 2 ? "#E09A43" : "#A9CBE6";
+      add(rank, `调查优先级 ${rank}`, color, count);
+    }
+    classes.sort(
+      (left, right) => Number(left.values[0]) - Number(right.values[0]),
+    );
+  } else if (
+    names.has("change_status") ||
+    names.has("check_status") ||
+    names.has("change_fields") ||
+    names.has("change_field")
+  ) {
+    fieldName = [
+      "change_status",
+      "check_status",
+      "change_fields",
+      "change_field",
+    ].find((name) => names.has(name))!;
+    templateId = "analysis.geology-changes.v1";
+    defaultLabel = "未修改/待核实";
+    for (const [value, count] of countFeatureValues(
+      geojson.features,
+      fieldName,
+    )) {
+      const status = value.toLowerCase();
+      const changed =
+        fieldName.startsWith("change_field") ||
+        [
+          "corrected",
+          "changed",
+          "edited",
+          "applied",
+          "modified",
+          "已修改",
+        ].includes(status);
+      const pending = /review|pending|uncertain|unresolved|待复核|待核实/.test(
+        status,
+      );
+      add(
+        value,
+        changed ? "已修改" : pending ? "待复核" : "保留原值",
+        changed ? "#245A91" : pending ? "#E09A43" : "#BBCEDA",
+        count,
+      );
+    }
+  } else if (
+    names.has("status") &&
+    names.has("evidence_id") &&
+    names.has("old_value")
+  ) {
+    fieldName = "status";
+    templateId = "analysis.geology-issues.v1";
+    for (const [value, count] of countFeatureValues(
+      geojson.features,
+      fieldName,
+    ))
+      add(
+        value,
+        value === "repairable" ? "有依据可修正" : "待复核",
+        value === "repairable" ? "#245A91" : "#E09A43",
+        count,
+      );
+  } else if (names.has("contact_type")) {
+    fieldName = "contact_type";
+    templateId = "analysis.geology-contact.v1";
+    const contacts: Record<string, [string, string]> = {
+      conformable: ["整合接触", "#84B4D5"],
+      fault: ["断层接触", "#E09A43"],
+      unconformable: ["不整合接触", "#8B86BE"],
+      unconformity: ["不整合接触", "#8B86BE"],
+      uncertain: ["接触待核实", "#A2ADB8"],
+      unknown: ["接触待核实", "#A2ADB8"],
+      整合: ["整合接触", "#84B4D5"],
+      整合接触: ["整合接触", "#84B4D5"],
+      断层: ["断层接触", "#E09A43"],
+      断层接触: ["断层接触", "#E09A43"],
+      不整合: ["不整合接触", "#8B86BE"],
+      不整合接触: ["不整合接触", "#8B86BE"],
+      未知: ["接触待核实", "#A2ADB8"],
+      待核实: ["接触待核实", "#A2ADB8"],
+    };
+    for (const [value, count] of countFeatureValues(
+      geojson.features,
+      fieldName,
+    )) {
+      const [label, color] = contacts[value.toLowerCase()] ?? [
+        value,
+        "#A2ADB8",
+      ];
+      add(value, label, color, count);
+    }
+  } else return null;
+  const renderer: UniqueValueRenderer = {
+    type: "uniqueValue",
+    field: fieldName,
+    templateId,
+    updatedByUser: false,
+    classes,
+    defaultClass: {
+      ...defaultUniqueValueClass,
+      label: defaultLabel,
+      color: "#A2ADB8",
+      count: Math.max(
+        0,
+        geojson.features.length -
+          classes.reduce((sum, item) => sum + item.count, 0),
+      ),
+    },
+    normalizationNotes: [],
+  };
+  return {
+    ...base,
+    renderer,
+    circle: { ...base.circle, circleColor: "#84B4D5" },
+    line: { ...base.line, lineColor: "#365D7A", lineWidth: 1.6 },
+    fill: {
+      ...base.fill,
+      fillColor: "#84B4D5",
+      fillOpacity: 0.62,
+      fillOutlineColor: "#365D7A",
+    },
+  };
 }
 
 export function germplasmDnaSexRenderer(

@@ -6,10 +6,12 @@ import { cloneDefaultVectorSymbolization } from "../symbolization";
 import { appTheme } from "../theme";
 import type {
   DataResourceProfile,
+  FeatureInfo,
   LoadedVectorLayer,
   ResourceListItem,
 } from "../types";
 import RightSidePanel from "./RightSidePanel";
+import "../styles.css";
 
 const rasterResource = {
   id: 31,
@@ -131,7 +133,7 @@ describe("RightSidePanel raster insight", () => {
 });
 
 describe("RightSidePanel vector insight", () => {
-  it("keeps field-matrix keys unique when a numeric field is also categorical", async () => {
+  it("keeps field keys unique and selected details readable in a narrow sidebar", async () => {
     const resource = {
       ...rasterResource,
       id: 41,
@@ -182,33 +184,98 @@ describe("RightSidePanel vector insight", () => {
       .spyOn(console, "error")
       .mockImplementation(() => {});
 
-    render(
+    const panel = (feature: FeatureInfo | null) => (
       <ConfigProvider locale={zhCN} theme={appTheme}>
         <AntApp>
-          <RightSidePanel
-            currentView={null}
-            mapConfig={{
-              defaultBasemap: "osm",
-              defaultCenter: [88, 40],
-              defaultZoom: 6,
-              mapboxAccessToken: "",
-            }}
-            selectedFeature={null}
-            selectedLayer={layer}
-            selectedResource={resource}
-            selectedResourceProfile={null}
-            visualizationSummary={null}
-            visualizationSummaryError={null}
-            visualizationSummaryLoading={false}
-          />
+          <div style={{ width: 300, height: 950 }}>
+            <RightSidePanel
+              currentView={null}
+              mapConfig={{
+                defaultBasemap: "osm",
+                defaultCenter: [88, 40],
+                defaultZoom: 6,
+                mapboxAccessToken: "",
+              }}
+              selectedFeature={feature}
+              selectedLayer={layer}
+              selectedResource={resource}
+              selectedResourceProfile={null}
+              visualizationSummary={null}
+              visualizationSummaryError={null}
+              visualizationSummaryLoading={false}
+            />
+          </div>
         </AntApp>
-      </ConfigProvider>,
+      </ConfigProvider>
     );
+    const { container, rerender } = render(panel(null));
 
     fireEvent.click(screen.getByRole("tab", { name: /要素/ }));
     expect(
       await screen.findByLabelText("字段可视化热力矩阵"),
     ).toBeInTheDocument();
+    const factor = container.querySelector(".eco-factor-panel");
+    expect(factor?.lastElementChild).toHaveClass("eco-feature-detail-shell");
+    const layout = container.querySelector(".eco-factor-layout");
+    const recommendation = container.querySelector(
+      ".eco-recommend-list > span",
+    );
+    const description = recommendation?.querySelector("small");
+    expect(layout).not.toBeNull();
+    expect(recommendation).not.toBeNull();
+    expect(getComputedStyle(layout!).gridTemplateColumns).toMatch(/^[\d.]+px$/);
+    expect(getComputedStyle(recommendation!).gridTemplateColumns).toMatch(
+      /^[\d.]+px$/,
+    );
+    expect(getComputedStyle(description!).gridColumnStart).toBe("auto");
+    expect(description!.getBoundingClientRect().width).toBeGreaterThan(180);
+
+    rerender(
+      panel({
+        layerId: layer.id,
+        layerName: layer.name,
+        properties: {
+          feature_id: "F06",
+          change_reason: "调查证据一致",
+          change_old: "contact_type=整合",
+          change_new: "contact_type=断层",
+        },
+      }),
+    );
+    expect(factor?.firstElementChild).toHaveClass("eco-feature-detail-shell");
+    expect(factor?.querySelectorAll(".eco-feature-detail-shell")).toHaveLength(
+      1,
+    );
+    expect(screen.getByText("contact_type=整合")).toBeInTheDocument();
+    expect(screen.getByText("contact_type=断层")).toBeInTheDocument();
+    expect(screen.getByText("调查证据一致")).toBeInTheDocument();
+    const reason = "NDVI下降且缺水证据置信度较高，建议优先实地调查";
+    const evidence = "observation-drought; knowledge-vegetation-stress";
+    rerender(
+      panel({
+        layerId: layer.id,
+        layerName: "调查顺序分析 · 调查优先分区及逐区证据 · 1010-115752",
+        properties: {
+          region: "decline",
+          coverage: 0.9999999999999636,
+          mean_change: -0.24201412010006607,
+          decline_fraction: 0.800048828125,
+          evidence_sources: evidence,
+          reason,
+          priority_rank: 1,
+          priority_class: "调查排序",
+        },
+      }),
+    );
+    const reasonLabel = screen.getByText("判断原因");
+    const evidenceLabel = screen.getByText("证据来源");
+    expect(reasonLabel.getBoundingClientRect().bottom).toBeLessThan(900);
+    expect(evidenceLabel.getBoundingClientRect().bottom).toBeLessThan(900);
+    expect(screen.getByText(reason)).toBeInTheDocument();
+    expect(screen.getByText(evidence)).toBeInTheDocument();
+    const labelCell = reasonLabel.closest("th")!;
+    expect(labelCell.getBoundingClientRect().width).toBeGreaterThanOrEqual(80);
+    expect(getComputedStyle(labelCell).paddingTop).toBe("6px");
     expect(
       consoleError.mock.calls.some((args) =>
         args.some((arg) => typeof arg === "string" && arg.includes("same key")),

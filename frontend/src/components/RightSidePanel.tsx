@@ -1484,6 +1484,11 @@ function EcologyFactorPanel({
 
   return (
     <div className="eco-tab-panel eco-factor-panel">
+      {feature ? (
+        <div className="eco-feature-detail-shell">
+          <FeatureDetailPanel feature={feature} />
+        </div>
+      ) : null}
       <div className="eco-factor-card">
         <div className="right-panel-heading">
           <Typography.Text strong>{plan.title}</Typography.Text>
@@ -1587,9 +1592,11 @@ function EcologyFactorPanel({
       <div className="eco-field-profile-card">
         <FieldProfileList insight={insight} />
       </div>
-      <div className="eco-feature-detail-shell">
-        <FeatureDetailPanel feature={feature} />
-      </div>
+      {!feature ? (
+        <div className="eco-feature-detail-shell">
+          <FeatureDetailPanel feature={feature} />
+        </div>
+      ) : null}
     </div>
   );
 }

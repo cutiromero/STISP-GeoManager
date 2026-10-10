@@ -1,5 +1,6 @@
 import { selectedMapBasemap, restoreMapBasemap } from "../map/basemapSnapshot";
 import { getActiveProject } from "../projects/session";
+import { useProjectContext } from "../projects/ProjectContext";
 import {
   AimOutlined,
   ApartmentOutlined,
@@ -9,7 +10,16 @@ import {
   FolderOpenOutlined,
   UpOutlined,
 } from "@ant-design/icons";
-import { App, Button, ConfigProvider, Layout, Spin, Tabs, Tooltip } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  ConfigProvider,
+  Layout,
+  Spin,
+  Tabs,
+  Tooltip,
+} from "antd";
 import type { LngLatBounds, Map as MapboxMap } from "mapbox-gl";
 import {
   lazy,
@@ -411,8 +421,205 @@ interface LastGeoInsightCache {
 
 let lastGeoInsightCache: LastGeoInsightCache | null = null;
 
+export function mapUrlResourceIds(params: URLSearchParams) {
+  return [
+    ...new Set(
+      (params.get("resources") || params.get("resourceId") || "")
+        .split(",")
+        .filter((value) => /^[1-9]\d*$/.test(value))
+        .map(Number),
+    ),
+  ]
+    .filter(Number.isSafeInteger)
+    .slice(0, 12);
+}
+
+export function useMapUrlResources(options: {
+  params: URLSearchParams;
+  currentProject: string;
+  projects: { id: number }[];
+  chooseProject?: (id: string) => void;
+  ready: boolean;
+  loadingResources: boolean;
+  resources: ResourceListItem[];
+  english: boolean;
+  showExisting: (id: number) => Promise<boolean>;
+  load: (resource: ResourceListItem) => Promise<boolean>;
+  onStart: () => void;
+}) {
+  const latest = useRef(options);
+  latest.current = options;
+  const ids = mapUrlResourceIds(options.params);
+  const key = `${options.currentProject}:${options.params.get("projectTagId") ?? ""}:${ids.join(",")}`;
+  const currentKey = useRef(key);
+  currentKey.current = key;
+  const loaded = useRef(new Set<string>());
+  const attempted = useRef("");
+  const loading = useRef(false);
+  const mounted = useRef(true);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const [completed, setCompleted] = useState<{ key: string; ids: number[] }>({
+    key: "",
+    ids: [],
+  });
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (
+      !ids.length ||
+      !options.ready ||
+      options.loadingResources ||
+      attempted.current === key ||
+      loading.current
+    )
+      return;
+    const requestedProject = options.params.get("projectTagId");
+    if (requestedProject && requestedProject !== options.currentProject) {
+      if (!options.projects.length && options.chooseProject) return;
+      attempted.current = key;
+      if (
+        options.projects.some(
+          (entry) => String(entry.id) === requestedProject,
+        ) &&
+        options.chooseProject
+      ) {
+        setError(
+          options.english
+            ? "Switch to the result's project to load these layers."
+            : "切换到成果所属项目后，将自动加载这些图层。",
+        );
+        options.chooseProject(requestedProject);
+      } else
+        setError(
+          options.english
+            ? "You cannot access the result's project."
+            : "当前账号不能访问成果所属项目，请检查项目权限。",
+        );
+      return;
+    }
+    attempted.current = key;
+    loading.current = true;
+    setError("");
+    options.onStart();
+    void (async () => {
+      const unavailable: string[] = [];
+      for (const id of ids) {
+        if (
+          !mounted.current ||
+          currentKey.current !== key ||
+          !latest.current.ready
+        )
+          break;
+        const resourceKey = `${options.currentProject}:${id}`;
+        if (loaded.current.has(resourceKey)) continue;
+        const resource = latest.current.resources.find(
+          (entry) => entry.id === id,
+        );
+        if (!resource) {
+          unavailable.push(
+            options.english ? "Unavailable data" : "不可访问的数据",
+          );
+          continue;
+        }
+        if (resource.dataType !== "raster" && !resource.isQueryable) continue;
+        try {
+          if (
+            (await latest.current.showExisting(id)) ||
+            (await latest.current.load(resource))
+          )
+            loaded.current.add(resourceKey);
+          else unavailable.push(resource.name);
+        } catch {
+          unavailable.push(resource.name);
+        }
+      }
+      if (mounted.current && currentKey.current === key && unavailable.length)
+        setError(
+          `${options.english ? "Some layers could not be loaded" : "部分图层未能加载"}：${unavailable.join("、")}`,
+        );
+      if (mounted.current && currentKey.current === key)
+        setCompleted({
+          key,
+          ids: ids.filter((id) =>
+            loaded.current.has(`${options.currentProject}:${id}`),
+          ),
+        });
+    })()
+      .catch((reason) => {
+        if (mounted.current && currentKey.current === key)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : options.english
+                ? "Failed to load result layers"
+                : "成果图层加载失败",
+          );
+      })
+      .finally(() => {
+        loading.current = false;
+        if (mounted.current && currentKey.current !== key)
+          setRevision((value) => value + 1);
+      });
+  }, [
+    key,
+    revision,
+    options.ready,
+    options.loadingResources,
+    options.resources,
+    options.projects,
+  ]);
+  const retry = () => {
+    attempted.current = "";
+    setRevision((value) => value + 1);
+  };
+  return {
+    error,
+    retry,
+    loadedResourceIds: completed.key === key ? completed.ids : [],
+  };
+}
+
+export function mapUrlResourceBounds(
+  layers: LoadedLayer[],
+  resourceIds: number[],
+) {
+  if (resourceIds.length < 2) return null;
+  const requested = new Set(resourceIds);
+  const selected = layers.filter((layer) =>
+    requested.has(layer.sourceResource.id),
+  );
+  if (
+    resourceIds.some(
+      (id) => !selected.some((layer) => layer.sourceResource.id === id),
+    )
+  )
+    return null;
+  let bounds = combinedFeatureBounds(
+    selected.flatMap((layer) =>
+      layer.layerType === "vector" ? [layer.geojson] : [],
+    ),
+  );
+  for (const layer of selected) {
+    if (layer.layerType !== "raster" || !layer.imageCoordinates) continue;
+    const extent = boundsFromImageCoordinates(layer.imageCoordinates);
+    if (!extent) continue;
+    if (!bounds) bounds = extent;
+    else {
+      bounds.extend(extent.getSouthWest());
+      bounds.extend(extent.getNorthEast());
+    }
+  }
+  return bounds;
+}
+
 export default function MapPage() {
   const { bootstrap, user } = useAppContext();
+  const projectContext = useProjectContext();
   const { message, notification } = App.useApp();
   const { i18n } = useTranslation();
   const english =
@@ -503,7 +710,6 @@ export default function MapPage() {
   const latestResourceFiltersRef = useRef<ResourceFilters>({});
   const loadedSceneIdRef = useRef<number | null>(null);
   const loadedCompositionIdRef = useRef<number | null>(null);
-  const loadedUrlResourceRef = useRef<string | null>(null);
   const mapErrorNotificationHistoryRef = useRef(new Map<string, number>());
   const permissions = {
     ...(user?.permissions ?? emptyPermissions),
@@ -1165,11 +1371,10 @@ export default function MapPage() {
     });
     const profile = await fetchResourceProfile(resource);
     if (!profile) {
-      return;
+      return false;
     }
     if (resource.isRenderable && resource.dataType === "raster") {
-      await loadRasterResource(resource, profile, reportProgress);
-      return;
+      return await loadRasterResource(resource, profile, reportProgress);
     }
     if (resource.isQueryable) {
       reportProgress({
@@ -1178,69 +1383,68 @@ export default function MapPage() {
           ? "Querying and building vector layer"
           : "正在查询并构建矢量图层",
       });
-      await loadVectorResource(resource, profile, [], {
+      return await loadVectorResource(resource, profile, [], {
         spatialFilter: null,
         errorMessage: english ? "Quick load failed" : "快速加载失败",
         trackQuerying: false,
         reportProgress,
       });
     }
+    return false;
   }
 
   const quickLoadResourceRef = useRef(handleQuickLoadResource);
   quickLoadResourceRef.current = handleQuickLoadResource;
-  useEffect(() => {
-    const rawId = searchParams.get("resourceId");
-    if (!rawId || !/^[1-9]\d*$/.test(rawId) || !mapObject || loadingResources)
-      return;
-    const requestedProject = searchParams.get("projectTagId");
-    const requestKey = `${getActiveProject()}:${rawId}`;
-    if (loadedUrlResourceRef.current === requestKey) return;
-    loadedUrlResourceRef.current = requestKey;
-    if (requestedProject && requestedProject !== getActiveProject()) {
-      message.warning(
-        english
-          ? "Select the result's project before viewing"
-          : "请切换到结果所属项目后查看",
-      );
-      return;
-    }
-    const resource = resources.find((item) => item.id === Number(rawId));
-    if (!resource) {
-      message.warning(
-        english
-          ? "This data is unavailable in the current project"
-          : "当前项目中没有可查看的这项数据",
-      );
-      return;
-    }
-    const existingGroup = layerGroups.groups.find((group) =>
-      group.children.some((layer) => layer.sourceResource.id === resource.id),
-    );
-    const existing = existingGroup?.children.find(
-      (layer) => layer.sourceResource.id === resource.id,
-    );
-    setActiveLeftPanel("layers");
-    setMobileMapPanel("map");
-    if (existing && existingGroup) {
-      layerGroups.setGroupVisibility(existingGroup.id, true);
-      layerGroups.setLayerVisibility(existingGroup.id, existing.id, true);
-      setSelectedLayerId(existing.id);
-      void locateLayer(existingGroup.id, existing.id);
-      return;
-    }
-    void quickLoadResourceRef.current(resource).catch((reason) => {
-      message.error(reason instanceof Error ? reason.message : "结果加载失败");
-    });
-  }, [
-    searchParams,
-    mapObject,
+  const urlResources = useMapUrlResources({
+    params: searchParams,
+    currentProject: getActiveProject(),
+    projects: projectContext?.projects ?? [],
+    chooseProject: projectContext?.choose,
+    ready: Boolean(mapObject),
     loadingResources,
     resources,
-    layerGroups.groups,
     english,
-    message,
-  ]);
+    onStart: () => {
+      setActiveLeftPanel("layers");
+      setMobileMapPanel("map");
+    },
+    load: async (resource) =>
+      (await quickLoadResourceRef.current(resource)) === true,
+    showExisting: async (id) => {
+      const group = layerGroups.groups.find((entry) =>
+        entry.children.some((layer) => layer.sourceResource.id === id),
+      );
+      const layer = group?.children.find(
+        (entry) => entry.sourceResource.id === id,
+      );
+      if (!group || !layer) return false;
+      layerGroups.setGroupVisibility(group.id, true);
+      layerGroups.setLayerVisibility(group.id, layer.id, true);
+      setSelectedLayerId(layer.id);
+      await locateLayer(group.id, layer.id);
+      return true;
+    },
+  });
+  const fittedUrlResources = useRef("");
+  useEffect(() => {
+    if (!mapObject || urlResources.loadedResourceIds.length < 2) return;
+    const fitKey = `${getActiveProject()}:${urlResources.loadedResourceIds.join(",")}`;
+    if (fittedUrlResources.current === fitKey) return;
+    const bounds = mapUrlResourceBounds(
+      layerGroups.groups.flatMap((group) => group.children),
+      urlResources.loadedResourceIds,
+    );
+    if (!bounds) return;
+    let disposed = false;
+    void mapFitBoundsOptions(mapObject).then((options) => {
+      if (disposed) return;
+      fittedUrlResources.current = fitKey;
+      mapObject.fitBounds(bounds, options);
+    });
+    return () => {
+      disposed = true;
+    };
+  }, [mapObject, layerGroups.groups, urlResources.loadedResourceIds]);
 
   async function handleLoadRaster(reportProgress: DataResourceLoadReporter) {
     if (!permissions.canLoadRasterLayer) {
@@ -1265,7 +1469,7 @@ export default function MapPage() {
   ) {
     if (!permissions.canLoadRasterLayer) {
       message.warning(permissionDeniedMessage);
-      return;
+      return false;
     }
     const group = createRasterLayerGroup(resource, profile);
     if (!group) {
@@ -1274,7 +1478,7 @@ export default function MapPage() {
           ? "Raster metadata is incomplete and cannot be loaded"
           : "栅格元信息不完整，无法加载",
       );
-      return;
+      return false;
     }
     const pendingLayer = group.children[0] as LoadedRasterLayer;
     reportProgress({
@@ -1289,7 +1493,7 @@ export default function MapPage() {
         reportProgress(rasterDataLoadProgress(job, english));
       });
     } catch (error) {
-      if (isAbortError(error)) return;
+      if (isAbortError(error)) return false;
       message.error(
         error instanceof Error
           ? error.message
@@ -1297,7 +1501,7 @@ export default function MapPage() {
             ? "Failed to load raster"
             : "栅格加载失败",
       );
-      return;
+      return false;
     }
     reportProgress({
       percent: 98,
@@ -1322,6 +1526,7 @@ export default function MapPage() {
         ? "Raster imagery loaded on the 3D globe"
         : "栅格影像已加载到三维地球",
     });
+    return true;
   }
 
   async function loadVectorResource(
@@ -1337,7 +1542,7 @@ export default function MapPage() {
   ) {
     if (!permissions.canQueryData || !permissions.canLoadVectorLayer) {
       message.warning(permissionDeniedMessage);
-      return;
+      return false;
     }
     const trackQuerying = options.trackQuerying !== false;
     if (trackQuerying) setQuerying(true);
@@ -1359,7 +1564,7 @@ export default function MapPage() {
         : `查询命中 ${result.totalCount} 条，返回 ${result.returnedCount} 条`;
       if (result.returnedCount === 0) {
         message.warning(resultMessage);
-        return;
+        return false;
       }
       const group = createVectorLayerGroup(resource, profile, result, {
         attributeFilters,
@@ -1374,10 +1579,12 @@ export default function MapPage() {
           : "矢量数据已加载到三维地球",
       });
       message.success(resultMessage);
+      return true;
     } catch (error) {
       message.error(
         error instanceof Error ? error.message : options.errorMessage,
       );
+      return false;
     } finally {
       if (trackQuerying) setQuerying(false);
     }
@@ -2387,7 +2594,9 @@ export default function MapPage() {
       searchKeyword={resourceSearchKeyword}
       onFilterResources={loadResources}
       onSelectResource={handleSelectResource}
-      onQuickLoadResource={handleQuickLoadResource}
+      onQuickLoadResource={async (resource, reportProgress) => {
+        await handleQuickLoadResource(resource, reportProgress);
+      }}
       onQueryAndLoad={handleQueryAndLoad}
       onLoadRaster={handleLoadRaster}
     />
@@ -2461,6 +2670,28 @@ export default function MapPage() {
           </Button>
         </div>
         <main className="map-stage">
+          {urlResources.error && (
+            <div
+              style={{
+                position: "absolute",
+                top: 16,
+                left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 8,
+                width: "min(520px, 90%)",
+              }}
+            >
+              <Alert
+                type="warning"
+                title={urlResources.error}
+                action={
+                  <Button size="small" onClick={urlResources.retry}>
+                    {english ? "Retry" : "重试加载"}
+                  </Button>
+                }
+              />
+            </div>
+          )}
           <Suspense
             fallback={
               <div className="map-canvas-loading">

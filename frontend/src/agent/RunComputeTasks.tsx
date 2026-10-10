@@ -87,9 +87,21 @@ function TaskInputs({ task }: { task: ComputeTask }) {
 
 export default function RunComputeTasks({
   runId,
+  taskIds,
+  autoImport = false,
   refreshKey,
-}: {
-  runId: number;
+}: (
+  | {
+      runId: number;
+      taskIds?: never;
+      autoImport?: never;
+    }
+  | {
+      runId?: never;
+      taskIds: string[];
+      autoImport?: boolean;
+    }
+) & {
   refreshKey: string;
 }) {
   const ui = useComputeText();
@@ -100,6 +112,7 @@ export default function RunComputeTasks({
   const [revision, setRevision] = useState(0);
   const alive = useRef(true);
   const importing = useRef(false);
+  const taskKey = [...new Set(taskIds ?? [])].sort().join(",");
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -110,9 +123,26 @@ export default function RunComputeTasks({
     let disposed = false;
     let failures = 0;
     let timer: ReturnType<typeof setTimeout>;
+    setItems([]);
+    setError("");
     const poll = async () => {
       try {
-        const result = await agentApi.computeTasks(runId);
+        const result =
+          runId !== undefined
+            ? await agentApi.computeTasks(runId)
+            : {
+                items: await Promise.all(
+                  taskKey
+                    .split(",")
+                    .filter(Boolean)
+                    .map(async (id) => ({
+                      task: await computeApi.task(id),
+                      autoImport,
+                      trackingStatus: "",
+                      detail: "",
+                    })),
+                ),
+              };
         if (disposed) return;
         failures = 0;
         setItems(result.items);
@@ -140,7 +170,7 @@ export default function RunComputeTasks({
       disposed = true;
       clearTimeout(timer);
     };
-  }, [runId, refreshKey, revision]);
+  }, [runId, taskKey, autoImport, refreshKey, revision]);
 
   const importOutput = async (output: ComputeOutput, task: ComputeTask) => {
     if (importing.current) return;
@@ -254,7 +284,9 @@ export default function RunComputeTasks({
                 {task.status === "succeeded" &&
                   (!output.expired ||
                     Boolean(output.resourceId && output.mapUrl)) &&
-                  output.kind === "raster" && (
+                  (output.kind === "raster" ||
+                    (output.kind === "vector" &&
+                      Boolean(output.resourceId && output.mapUrl))) && (
                     <Button
                       icon={<EnvironmentOutlined aria-hidden="true" />}
                       onClick={() =>
@@ -271,7 +303,7 @@ export default function RunComputeTasks({
                   <Button
                     onClick={() =>
                       navigate(
-                        `/resources/catalog?resourceId=${output.resourceId}`,
+                        `/resources/catalog?resourceId=${output.resourceId}&projectTagId=${task.projectTagId}`,
                       )
                     }
                   >
