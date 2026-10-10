@@ -360,8 +360,11 @@ export default function KnowledgePage() {
                   onOpen={setDetail}
                   domain={domain}
                   onDomainSelect={(id) => {
-                    if (KNOWLEDGE_DOMAINS.some((item) => item.id === id)) {
-                      setDomain(id as KnowledgeDomain);
+                    if (
+                      id === undefined ||
+                      KNOWLEDGE_DOMAINS.some((item) => item.id === id)
+                    ) {
+                      setDomain(id);
                       setCategory(undefined);
                       setPage(1);
                     }

@@ -8,6 +8,7 @@ import type {
   KnowledgeEntry,
 } from "../api/generated/types.gen";
 import KnowledgeNetwork from "./KnowledgeNetwork";
+import { realKnowledgeEntries } from "./network.test-fixture";
 import "./knowledge.css";
 
 const groups: {
@@ -88,7 +89,7 @@ const entries: KnowledgeEntry[] = groups.flatMap((group, groupIndex) =>
   })),
 );
 
-function show() {
+function show(shownEntries = entries) {
   const open = vi.fn(),
     domain = vi.fn();
   function Harness() {
@@ -103,7 +104,7 @@ function show() {
           }}
         >
           <KnowledgeNetwork
-            entries={entries}
+            entries={shownEntries}
             selected={selected}
             onSelect={setSelected}
             onOpen={open}
@@ -120,13 +121,31 @@ afterEach(async () => {
   await page.viewport(1600, 900);
 });
 
+it("presents the real 90-entry collection as one connected overview on desktop and mobile", async () => {
+  const { container } = show(realKnowledgeEntries);
+  await waitFor(() =>
+    expect(
+      container.querySelectorAll(".knowledge-navigation-link.is-library"),
+    ).toHaveLength(4),
+  );
+  await page.screenshot({
+    path: "../../test-results/knowledge-atlas-real-desktop.png",
+  });
+  await page.viewport(390, 844);
+  const svg = container.querySelector<SVGSVGElement>(".knowledge-network-svg")!;
+  await waitFor(() => expect(svg.viewBox.baseVal.width).toBeLessThan(390));
+  await page.screenshot({
+    path: "../../test-results/knowledge-atlas-real-mobile.png",
+  });
+});
+
 it("keeps a restrained overview, reveals labels on focus and opens real relation evidence", async () => {
   const { container, open, domain } = show();
   await screen.findByRole("button", { name: "筛选节点：NDVI" });
   await waitFor(() =>
     expect(
-      container.querySelectorAll(".knowledge-network-region"),
-    ).toHaveLength(4),
+      container.querySelectorAll(".knowledge-network-anchor"),
+    ).toHaveLength(5),
   );
   const labels = [
     ...container.querySelectorAll<SVGTextElement>(
@@ -135,7 +154,7 @@ it("keeps a restrained overview, reveals labels on focus and opens real relation
   ];
   expect(
     labels.filter((label) => getComputedStyle(label).opacity === "1").length,
-  ).toBeLessThanOrEqual(8);
+  ).toBeLessThanOrEqual(9);
   const minor = screen.getByRole("button", { name: "筛选节点：水分条件" });
   fireEvent.focus(minor);
   expect(getComputedStyle(minor.querySelector("text")!).opacity).toBe("1");
@@ -148,12 +167,12 @@ it("keeps a restrained overview, reveals labels on focus and opens real relation
   expect(open).toHaveBeenCalledWith(
     entries.find((entry) => entry.object === "水分条件"),
   );
+  fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
+  expect(screen.queryByText(/正在查看/)).not.toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("button", { name: "聚焦知识分区：遥感基础" }),
   );
   expect(domain).toHaveBeenCalledWith("remote_sensing");
-  fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
-  expect(screen.queryByText(/正在查看/)).not.toBeInTheDocument();
   fireEvent.blur(minor);
   await page.screenshot({
     path: "../../test-results/knowledge-atlas-desktop.png",
@@ -231,14 +250,72 @@ it("adapts the graph and controls to 390 pixels and keeps node positions stable"
   expect(node).toHaveAttribute("transform", start!);
   expect(container.scrollWidth).toBeLessThanOrEqual(390);
   const bounds = svg.getBoundingClientRect();
-  for (const region of container.querySelectorAll(
-    ".knowledge-network-region-boundary",
+  for (const circle of container.querySelectorAll(
+    ".knowledge-network-node > circle:not(.knowledge-node-halo)",
   )) {
-    const box = region.getBoundingClientRect();
+    const box = circle.getBoundingClientRect();
     expect(box.left).toBeGreaterThanOrEqual(bounds.left);
     expect(box.right).toBeLessThanOrEqual(bounds.right + 0.1);
   }
   await page.screenshot({
     path: "../../test-results/knowledge-atlas-mobile.png",
   });
+});
+
+it("keeps the layout stable when a densely connected node is selected and treats anchors as navigation", async () => {
+  const dense = Array.from({ length: 60 }, (_, index) => ({
+    ...entries[0]!,
+    id: 200 + index,
+    subject: "主概念",
+    object: `知识${index}`,
+  }));
+  const { container, open, domain } = show([...entries, ...dense]);
+  const svg = container.querySelector<SVGSVGElement>(".knowledge-network-svg")!;
+  await waitFor(() => expect(svg.viewBox.baseVal.width).toBeGreaterThan(1000));
+  const before = [...container.querySelectorAll(".knowledge-network-node")].map(
+    (node) => node.getAttribute("transform"),
+  );
+  fireEvent.keyDown(screen.getByRole("button", { name: "筛选节点：主概念" }), {
+    key: "Enter",
+  });
+  expect(
+    [...container.querySelectorAll(".knowledge-network-node")].map((node) =>
+      node.getAttribute("transform"),
+    ),
+  ).toEqual(before);
+  expect(
+    container.querySelectorAll(".knowledge-network-edge.is-focused").length,
+  ).toBeGreaterThan(0);
+  expect(
+    container.querySelectorAll(".knowledge-network-node.is-muted").length,
+  ).toBeGreaterThan(0);
+  fireEvent.keyDown(screen.getByRole("button", { name: "查看全部知识" }), {
+    key: "Enter",
+  });
+  expect(domain).toHaveBeenCalledWith(undefined);
+  expect(open).not.toHaveBeenCalled();
+});
+
+it("locates a searched concept in the center while preserving the network geometry", async () => {
+  const { container } = show();
+  const svg = container.querySelector<SVGSVGElement>(".knowledge-network-svg")!;
+  await waitFor(() => expect(svg.viewBox.baseVal.width).toBeGreaterThan(1000));
+  const node = screen.getByRole("button", { name: "筛选节点：NDVI" });
+  const original = node.getAttribute("transform");
+  const input = screen.getByRole("combobox", { name: "查找图中节点" });
+  fireEvent.mouseDown(input);
+  fireEvent.change(input, { target: { value: "NDVI" } });
+  const option = await screen.findByText("NDVI", {
+    selector: ".ant-select-item-option-content",
+  });
+  fireEvent.click(option);
+  expect(node).toHaveAttribute("aria-pressed", "true");
+  expect(node).toHaveAttribute("transform", original!);
+  expect(screen.getByLabelText("知识网络缩放比例")).toHaveTextContent("145%");
+  const center = new DOMPoint(0, 0).matrixTransform(
+    (node as unknown as SVGGElement).getScreenCTM()!,
+  );
+  const box = svg.getBoundingClientRect();
+  expect(center.x).toBeCloseTo(box.left + box.width / 2, 0);
+  expect(center.y).toBeCloseTo(box.top + box.height / 2, 0);
 });

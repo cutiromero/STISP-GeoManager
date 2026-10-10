@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.32] - 2026-10-10
+
+### Changed
+- “让知识连成线”采用整体自然关系网络，取消矩形分区与独立链条格子，以小节点、细连线和分层标签呈现知识。
+- 四类知识通过专题导航串联；真实知识关系与专题归属使用不同线型，点击概念突出邻接关系和条目依据。
+- 保留缩放、平移、节点拖动与分区筛选，聚焦节点时保持布局稳定。
+
 ## [0.1.31] - 2026-10-10
 
 ### Added
