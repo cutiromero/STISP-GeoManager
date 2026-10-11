@@ -232,6 +232,31 @@ def process(run, user, policy, guard, event):
     def on_request(audit):
         _save(run, {**run.research_intent, "_parserAudit": audit})
 
+    def checked_value(value):
+        if (
+            isinstance(value, dict)
+            and previous
+            and previous.research_intent.get("status") == "clarifying"
+            and value.get("scenario") == previous.research_intent.get("scenario")
+            and isinstance(value.get("action"), str)
+            and value.get("action") in {"start", "clarify"}
+            and isinstance(value.get("inputs", {}), dict)
+            and isinstance(value.get("parameters", {}), dict)
+        ):
+            # A clarification amends a saved plan instead of erasing known fields.
+            value = {
+                **value,
+                "inputs": {
+                    **previous.research_intent["inputs"],
+                    **value.get("inputs", {}),
+                },
+                "parameters": {
+                    **previous.research_intent["parameters"],
+                    **value.get("parameters", {}),
+                },
+            }
+        return validate(value, catalog, run)
+
     value, audit = interpret(
         run,
         user,
@@ -242,26 +267,11 @@ def process(run, user, policy, guard, event):
         guard,
         event,
         on_request,
+        validator=checked_value,
     )
-    if (
-        isinstance(value, dict)
-        and previous
-        and previous.research_intent.get("status") == "clarifying"
-        and value.get("scenario") == previous.research_intent.get("scenario")
-        and value.get("action") in {"start", "clarify"}
-        and isinstance(value.get("inputs", {}), dict)
-        and isinstance(value.get("parameters", {}), dict)
-    ):
-        # A clarification amends a saved plan rather than erasing its known fields.
-        value = {
-            **value,
-            "inputs": {**previous.research_intent["inputs"], **value.get("inputs", {})},
-            "parameters": {
-                **previous.research_intent["parameters"],
-                **value.get("parameters", {}),
-            },
-        }
-    value = validate(value, catalog, run)
+    on_request(audit)
+    if not audit.get("attempts") or audit["attempts"][-1].get("status") != "accepted":
+        value = checked_value(value)
     if value["action"] == "ordinary":
         return None
     scene = next(s for s in catalog["scenarios"] if s["scenario"] == value["scenario"])

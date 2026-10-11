@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import re
+from copy import deepcopy
 from datetime import date
 
 from django.core.exceptions import ValidationError
@@ -25,7 +26,10 @@ INSTRUCTION = """你是科研任务解析器。用户以自然语言发布任务
 只有用户已要求执行/分析/演示才start；只咨询方法时ordinary。拿不准的数据角色、日期、波段或关键参数用clarify并提问。
 用户回答的问题结合原目标解析，已明确的值沿用，文字明确值优先于演示默认值，不再次重复询问已回答内容。
 演示提示表示用户允许使用明确标注的模拟资料和目录中的演示默认值；普通任务不能盲用默认演示资料。
+授权使用样例默认值时，把有来源的defaults写入parameters；用户明确待回答的某个参数保持缺省并只针对它提问。
 inputs只能选目录当前场景、当前角色的候选。parameters只能使用目录parameterSpecs的键且遵循类型与范围。
+inputs必须是JSON对象，键使用responseContract中完全一致的英文inputKeys，不得改成中文显示名、列表或嵌套资源对象。
+inputs的值必须是正整数资源ID；尚未确定的角色省略该键并提问，不输出null。中文roleLabels只用于message和问题label。
 questions每项key,label,kind(choice|text|number|resource),required,options[{value:string,label,description?}]，最多8个。
 status只查询当前会话绑定的实际workflow，不能搜索全库猜任务；update只在该生态workflow成功后使用新增观测表。
 质量审核不能自动批准；看到waiting_approval/review_results时，status说明等待用户审核。message只呈现简短解析摘要，不输出内部思考。
@@ -59,7 +63,17 @@ def plausible(run, previous) -> bool:
 
 
 def interpret(
-    run, user, policy, catalog, previous, workflow, guard, event, on_request
+    run,
+    user,
+    policy,
+    catalog,
+    previous,
+    workflow,
+    guard,
+    event,
+    on_request,
+    *,
+    validator=None,
 ) -> tuple[dict, dict]:
     model = registry()[run.model]
     window = provider.model_window(model)
@@ -72,6 +86,20 @@ def interpret(
         "priorIntent": previous,
         "workflow": workflow,
         "authorizedCatalog": catalog,
+        "responseContract": {
+            "inputsType": "object",
+            "inputValueType": "positive integer; omit unresolved roles, never null",
+            "scenarios": [
+                {
+                    "scenario": scene["scenario"],
+                    "inputKeys": list(scene["inputs"]),
+                    "parameterTypes": {
+                        s["key"]: s["type"] for s in scene["parameterSpecs"]
+                    },
+                }
+                for scene in catalog["scenarios"]
+            ],
+        },
         "selections": {
             "knowledge": run.knowledge_selection,
             "dataMode": run.data_selection_mode,
@@ -80,76 +108,145 @@ def interpret(
     }
     current = {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}
     messages = [{"role": "system", "content": INSTRUCTION}, current]
-    tokens, truncated = prepare_context(
-        messages, current, model, p, budget_window, run.thinking_mode == "deep"
-    )
-    if truncated:
-        raise provider.ModelError(
-            "科研解析必须保留完整候选与用户问题，请缩小手选资料范围"
-        )
-    guard()
     audit = {
         "modelMode": "real",
         "model": model.model_id,
-        "requestSha256": hashlib.sha256(
-            json.dumps(messages, ensure_ascii=False).encode()
-        ).hexdigest(),
         "request": payload,
         "instruction": INSTRUCTION,
-        "inputTokens": tokens,
         "outputLimit": p["maxOutputTokens"],
         "usage": {},
+        "attempts": [],
     }
-    event(
-        "parameters",
-        json.dumps(
-            {
-                "contextWindowTokens": budget_window,
-                "inputTokens": tokens,
-                "maxOutputTokens": p["maxOutputTokens"],
-                "purpose": "research_intent",
-            },
-            ensure_ascii=False,
-        ),
-    )
-    on_request(audit)
-    raw = "".join(
-        provider.stream(
-            model,
-            messages,
-            p["maxOutputTokens"],
-            guard,
-            structured=True,
-            thinking=run.thinking_mode == "deep",
-            temperature=p["temperature"],
-            top_p=p["topP"],
-            reasoning_effort=p["reasoningEffort"],
-            on_usage=audit["usage"].update,
+    feedback = ""
+    for attempt in range(2):
+        tokens, truncated = prepare_context(
+            messages, current, model, p, budget_window, run.thinking_mode == "deep"
         )
-    )
-    guard()
-    event("usage", json.dumps(audit["usage"]))
-    try:
+        if truncated:
+            raise provider.ModelError(
+                "科研解析必须保留完整候选与用户问题，请缩小手选资料范围"
+            )
+        guard()
+        record = {
+            "attempt": attempt + 1,
+            "status": "requesting",
+            "feedback": feedback,
+            "requestSha256": hashlib.sha256(
+                json.dumps(messages, ensure_ascii=False).encode()
+            ).hexdigest(),
+            "inputTokens": tokens,
+            "outputLimit": p["maxOutputTokens"],
+            "usage": {},
+        }
+        audit["attempts"].append(record)
+        audit.update(requestSha256=record["requestSha256"], inputTokens=tokens)
+        event(
+            "parameters",
+            json.dumps(
+                {
+                    "contextWindowTokens": budget_window,
+                    "inputTokens": tokens,
+                    "maxOutputTokens": p["maxOutputTokens"],
+                    "purpose": "research_intent",
+                },
+                ensure_ascii=False,
+            ),
+        )
+        on_request(audit)
+        try:
+            raw = "".join(
+                provider.stream(
+                    model,
+                    messages,
+                    p["maxOutputTokens"],
+                    guard,
+                    structured=True,
+                    thinking=run.thinking_mode == "deep",
+                    temperature=p["temperature"],
+                    top_p=p["topP"],
+                    reasoning_effort=p["reasoningEffort"],
+                    on_usage=record["usage"].update,
+                )
+            )
+            guard()
+        except Exception as exc:
+            # Transport, cancellation and permission failures never trigger a re-answer.
+            record.update(status="failed", executionError=type(exc).__name__)
+            on_request(audit)
+            raise
+        event("usage", json.dumps(record["usage"]))
+        audit["usage"] = dict(record["usage"])
         from .demo_decisions import _response_text
 
-        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", _response_text(raw)).strip()
-        value = json.loads(cleaned)
-    except ValueError as exc:
-        raise provider.ModelError(
-            "科研任务解析未返回有效结构，请补充明确任务后重试"
-        ) from exc
-    audit["response"] = value
-    return value, audit
+        text = _response_text(raw)
+        record["responseText"] = text
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text).strip()
+        try:
+            value = json.loads(cleaned)
+        except ValueError:
+            value = None
+        record["response"] = deepcopy(value)
+        audit["response"] = deepcopy(value)
+        record["status"] = "received"
+        on_request(audit)
+        try:
+            if not isinstance(value, dict):
+                raise ValidationError("科研任务解析未返回有效JSON对象")
+            result = validator(value) if validator else value
+        except ValidationError as exc:
+            detail = "；".join(exc.messages)
+            record.update(status="rejected", validationError=detail)
+            on_request(audit)
+            event(
+                "research_parse",
+                json.dumps(
+                    {
+                        "attempt": attempt + 1,
+                        "status": "rejected",
+                        "validationError": detail,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            if attempt:
+                raise
+            feedback = json.dumps(
+                {
+                    "validationError": detail,
+                    "responseContract": payload["responseContract"],
+                    "instruction": "只依据完整原请求和授权目录纠正JSON一次；角色键不翻译，未知值省略并提问，不猜资料或答案。",
+                },
+                ensure_ascii=False,
+            )
+            messages.extend(
+                [
+                    {"role": "assistant", "content": text},
+                    {"role": "user", "content": feedback},
+                ]
+            )
+            continue
+        record["status"] = "accepted"
+        record["validatedResponse"] = deepcopy(result)
+        on_request(audit)
+        event(
+            "research_parse", json.dumps({"attempt": attempt + 1, "status": "accepted"})
+        )
+        return result, audit
 
 
 def validate(value, catalog, run) -> dict:
-    if not isinstance(value, dict) or value.get("action") not in {
-        "ordinary",
-        "clarify",
-        "start",
-        "update",
-        "status",
-    }:
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("action"), str)
+        or value["action"]
+        not in {
+            "ordinary",
+            "clarify",
+            "start",
+            "update",
+            "status",
+        }
+    ):
         raise ValidationError("模型返回的科研任务动作无效")
     if value["action"] == "ordinary":
         return value
@@ -166,8 +263,18 @@ def validate(value, catalog, run) -> dict:
         ):
             raise ValidationError("科研目标或解析摘要无效")
     inputs, parameters = value.get("inputs", {}), value.get("parameters", {})
-    if not isinstance(inputs, dict) or set(inputs) - set(selected["inputs"]):
-        raise ValidationError("科研输入角色无效")
+    if not isinstance(inputs, dict):
+        raise ValidationError(
+            "科研inputs必须是对象；允许角色：" + ", ".join(selected["inputs"])
+        )
+    unknown = set(inputs) - set(selected["inputs"])
+    if unknown:
+        raise ValidationError(
+            "科研输入角色无效；未知角色："
+            + ", ".join(str(k) for k in sorted(unknown))
+            + "；允许角色："
+            + ", ".join(selected["inputs"])
+        )
     for role, identity in inputs.items():
         if type(identity) is not int or identity not in {
             i["id"] for i in selected["inputs"][role]
@@ -185,9 +292,13 @@ def validate(value, catalog, run) -> dict:
         raise ValidationError("待澄清问题格式无效")
     for key, item in parameters.items():
         spec, kind = specs[key], specs[key]["type"]
+        try:
+            finite_number = type(item) in {int, float} and math.isfinite(item)
+        except OverflowError:
+            finite_number = False
         valid = (
             (kind in {"band", "integer"} and type(item) is int)
-            or (kind == "number" and type(item) in {int, float} and math.isfinite(item))
+            or (kind == "number" and finite_number)
             or (kind == "boolean" and type(item) is bool)
             or (kind in {"string", "enum", "field", "date"} and isinstance(item, str))
         )
@@ -203,9 +314,14 @@ def validate(value, catalog, run) -> dict:
         if kind == "enum" and item not in spec.get("choices", []):
             raise ValidationError("科研参数选项无效：" + key)
         if kind == "date":
-            date.fromisoformat(item)
+            try:
+                date.fromisoformat(item)
+            except ValueError as exc:
+                raise ValidationError("科研日期参数无效：" + key) from exc
     for key in conflicts:
         parameters.pop(key, None)
+        if any(isinstance(q, dict) and q.get("key") == key for q in questions):
+            continue
         questions.append(
             {
                 "key": key,
@@ -222,6 +338,7 @@ def validate(value, catalog, run) -> dict:
             or not isinstance(question["key"], str)
             or not isinstance(question["label"], str)
             or not 1 <= len(question["label"]) <= 300
+            or not isinstance(question["kind"], str)
             or question["kind"] not in {"choice", "text", "number", "resource"}
             or type(question["required"]) is not bool
             or not isinstance(question["options"], list)
