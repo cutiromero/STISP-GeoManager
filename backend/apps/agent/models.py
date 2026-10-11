@@ -98,6 +98,14 @@ class AgentRun(ProjectScopedModel):
     internet_enabled = models.BooleanField(default=False)
     evidence = models.JSONField(default=list)
     compute_intent = models.JSONField(default=dict, db_default={})
+    research_intent = models.JSONField(default=dict, db_default={})
+    research_workflow = models.ForeignKey(
+        "AgentWorkflow",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chat_runs",
+    )
     context_truncated = models.BooleanField(default=False)
     cancel_requested = models.BooleanField(default=False)
     heartbeat = models.DateTimeField(null=True)

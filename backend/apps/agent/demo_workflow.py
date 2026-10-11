@@ -185,6 +185,8 @@ def _versions(workflow, graph) -> dict:
     identifiers = {identifier for _, identifier, _ in graph}
     versions = {}
     for identifier in identifiers:
+        chat = workflow.plan.get("chatExecution", {})
+        permitted_versions = chat.get("algorithmVersionIds")
         options = (
             AlgorithmVersion.objects.select_related("algorithm")
             .filter(
@@ -195,9 +197,17 @@ def _versions(workflow, graph) -> dict:
             )
             .order_by("-created_at", "-id")
         )
+        if permitted_versions is not None:
+            options = options.filter(pk__in=permitted_versions)
         version = next((v for v in options if agent_algorithm_allowed(v)), None)
         if version is None:
             raise ComputeError("场景所需算法尚未发布或不可调用：" + identifier)
+        snapshot = chat.get("algorithmSnapshots", {}).get(identifier)
+        if snapshot is not None and snapshot != {
+            "versionId": version.id,
+            "checksum": version.checksum,
+        }:
+            raise PermissionDenied("科研算法在聊天解析后已变化，请重新匹配")
         versions[identifier] = {
             "versionId": version.id,
             "checksum": version.checksum,
@@ -292,6 +302,44 @@ def prepare_demo(workflow, user, p) -> None:
     _save(workflow)
     step(workflow, "demo_plan", action=workflow.plan, message=workflow.detail)
     checkpoint(workflow, "review_plan", {"planHash": workflow.plan_hash})
+    chat = workflow.plan.get("chatExecution")
+    if chat and chat.get("initialPlanAuthorized"):
+        from .models import AgentRun
+
+        with transaction.atomic():
+            current = AgentWorkflow.objects.select_for_update().get(pk=workflow.id)
+            source = AgentRun.objects.filter(
+                pk=chat.get("requestRunId"),
+                owner_id=workflow.owner_id,
+                project_tag_id=workflow.project_tag_id,
+                research_workflow_id=workflow.id,
+            ).first()
+            if (
+                source is None
+                or not source.research_intent.get("_executionAuthorized")
+                or source.cancel_requested
+                or source.conversation.archived
+                or source.status not in {"running", "succeeded"}
+                or source.research_intent.get("_initialExecutionAuthorization")
+                != {
+                    "revision": chat.get("revision"),
+                    "originRunId": chat.get("originRunId"),
+                    "requestRunId": chat.get("requestRunId"),
+                }
+                or source.research_intent.get("inputs") != current.plan["inputs"]
+                or source.research_intent.get("_inputRevisions")
+                != current.plan["inputSnapshots"]
+                or current.plan.get("phase") != "review_plan"
+            ):
+                raise PermissionDenied("聊天执行授权已变化，请在当前任务中重新确认")
+            confirm_demo(current, user, p, current.plan_hash)
+            step(
+                current,
+                "chat_execution_authorized",
+                action=chat,
+                message="根据用户自然语言执行请求确认初始计划；结果质量审核仍由用户确认",
+            )
+            workflow.refresh_from_db()
 
 
 def authorize_demo(workflow, user, p, *, include_previous=True) -> None:
@@ -313,6 +361,16 @@ def authorize_demo(workflow, user, p, *, include_previous=True) -> None:
         ):
             raise PermissionDenied("原始输入已变化或停用，请重新核对")
     for identifier, fixed in workflow.plan["algorithms"].items():
+        chat = workflow.plan.get("chatExecution", {})
+        if chat and (
+            fixed["versionId"] not in chat.get("algorithmVersionIds", [])
+            or (
+                chat.get("algorithmSelectionMode") == "manual"
+                and fixed["versionId"]
+                not in chat.get("selectedAlgorithmVersionIds", [])
+            )
+        ):
+            raise PermissionDenied("科研算法已超出聊天中明确选择的范围")
         version = (
             AlgorithmVersion.objects.select_related("algorithm")
             .filter(

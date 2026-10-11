@@ -189,6 +189,8 @@ def history_sources(run):
             "prompt",
             "knowledge_selection",
             "compute_intent",
+            "research_intent",
+            "research_workflow",
             "conversation_id",
             "owner_id",
             "project_tag_id",
@@ -205,6 +207,9 @@ def check_history_evidence(run, user, policy):
 
     for source in history_sources(run):
         check_evidence(source, user, policy)
+        from .research_intents import authorize_run
+
+        authorize_run(source, user, policy)
 
 
 def source_knowledge_domains(run):
@@ -241,6 +246,10 @@ def source_knowledge_domains(run):
 
 def history_compatible(previous, current):
     """Exclude entire old answers if their citations fall outside this turn."""
+    from .research_intents import history_compatible as research_compatible
+
+    if not research_compatible(previous, current):
+        return False
     sources = history_sources(previous)
     allowed_knowledge = set(knowledge_domains(current))
     for source in sources:

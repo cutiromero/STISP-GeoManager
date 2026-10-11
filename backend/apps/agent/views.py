@@ -4,8 +4,8 @@ from functools import wraps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import IntegrityError, OperationalError, connection, transaction
-from django.db.models import F, Q
+from django.db import IntegrityError, OperationalError, transaction
+from django.db.models import Q
 from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -45,7 +45,7 @@ class ApiProblem(Exception):
         self.detail, self.status = detail, status
 
 
-def endpoint(methods):
+def endpoint(methods, *, require_project=True):
     def decorate(func):
         @api_login_required
         @wraps(func)
@@ -53,7 +53,7 @@ def endpoint(methods):
             try:
                 if request.method not in methods:
                     return JsonResponse({"detail": "不支持的请求方法"}, status=405)
-                if not request.headers.get("X-Project-Id"):
+                if require_project and not request.headers.get("X-Project-Id"):
                     raise ApiProblem("请显式选择当前项目")
                 return func(request, *args, **kwargs)
             except ApiProblem as e:
@@ -122,6 +122,7 @@ def run_json(r, user):
         "detail": r.detail,
         "evidence": r.evidence,
         "computeIntent": _compute_intent(r, user, p),
+        "researchIntent": _research_intent(r, user, p),
         "createdAt": r.created_at.isoformat(),
         "updatedAt": r.updated_at.isoformat(),
         "contextTruncated": r.context_truncated,
@@ -142,6 +143,12 @@ def run_json(r, user):
 
 def _compute_intent(run, user, p):
     from .compute_intents import serialize
+
+    return serialize(run, user, p) if run.conversation.mode == "agent" else None
+
+
+def _research_intent(run, user, p):
+    from .research_intents import serialize
 
     return serialize(run, user, p) if run.conversation.mode == "agent" else None
 
@@ -292,9 +299,22 @@ def submit(request, conversation_id):
             "algorithmSelectionMode",
             "algorithmVersionIds",
             "dataSelectionMode",
+            "demoScenario",
         ],
         max_bytes=max(256000, prompt_limit * 6 + 8192),
     )
+    return submit_value(request, c, value)
+
+
+def submit_value(request, c, value, *, available_models=None):
+    """The same quota, model, scope and idempotency checks for chat answers."""
+    prompt_limit = budget_options(request.user, policy())["maxPromptCharacters"]
+    demo_scenario = value.get("demoScenario")
+    if demo_scenario is not None and (
+        demo_scenario not in {"ecology_investigation", "geology_correction"}
+        or c.mode != "agent"
+    ):
+        raise ApiProblem("演示场景无效或未使用智能体模式")
     alias, prompt, key = (
         value.get("model"),
         value.get("prompt"),
@@ -341,6 +361,10 @@ def submit(request, conversation_id):
 
     selections = normalize(value, selected)
     attachment_ids = sorted(set(attachment_ids))
+    if available_models is None and not c.runs.filter(idempotency_key=key).exists():
+        preflight_policy = require_access(request.user, c.mode, alias)
+        # Model health requests finish before acquiring a database write lock.
+        available_models = visible_models(request.user, c.mode, preflight_policy)
     with transaction.atomic():
         Conversation.objects.filter(pk=c.pk).update(updated_at=timezone.now())
         existing = c.runs.filter(idempotency_key=key).first()
@@ -359,6 +383,7 @@ def submit(request, conversation_id):
                 existing.algorithm_selection_mode,
                 existing.algorithm_version_ids,
                 existing.data_selection_mode,
+                existing.research_intent.get("_demoScenario"),
             ) != (
                 alias,
                 prompt.strip(),
@@ -373,6 +398,7 @@ def submit(request, conversation_id):
                 selections["algorithm_selection_mode"],
                 selections["algorithm_version_ids"],
                 selections["data_selection_mode"],
+                demo_scenario,
             ):
                 raise ApiProblem("幂等键已用于不同请求", 409)
             return JsonResponse(run_json(existing, request.user), status=202)
@@ -431,7 +457,7 @@ def submit(request, conversation_id):
                     check_history_evidence(previous, request.user, p)
         if not worker_online():
             raise ApiProblem("模型工作进程未就绪，请联系管理员", 503)
-        available = visible_models(request.user, c.mode, p)
+        available = available_models or []
         if not any(m["alias"] == alias and m["status"] == "online" for m in available):
             raise ApiProblem("该模型当前离线或尚未验收", 503)
         serving_window = next(
@@ -470,6 +496,7 @@ def submit(request, conversation_id):
             internet_enabled=internet_enabled,
             budget_profile=budget_profile,
             budget_snapshot=budget_snapshot,
+            research_intent={"_demoScenario": demo_scenario} if demo_scenario else {},
         )
         if c.title == "新会话":
             c.title = prompt.strip()[:60]
@@ -599,6 +626,10 @@ def cancel(request, run_id):
     AgentRun.objects.filter(pk=r.id, status="queued").update(
         status="cancelled", detail="已取消", updated_at=timezone.now()
     )
+    if r.research_workflow_id:
+        AgentWorkflow.objects.filter(
+            pk=r.research_workflow_id, owner=request.user
+        ).update(cancel_requested=True)
     r.refresh_from_db()
     return JsonResponse(run_json(r, request.user))
 
@@ -651,6 +682,22 @@ def resource_list(request):
         .order_by("name")[:50]
     )
     return JsonResponse({"items": [brief(r) for r in found]})
+
+
+@endpoint(["POST"])
+def research_intent(request, run_id):
+    from .research_actions import update
+
+    value = body(request, ["action", "revision", "answers", "answer"])
+    return update(request, run_id, value)
+
+
+@endpoint(["GET"], require_project=False)
+def research_demos(request):
+    from .research_presets import list_demos
+
+    p = require_access(request.user, "agent")
+    return JsonResponse(list_demos(request.user, p))
 
 
 def workflow_json(workflow, include_steps=True):
@@ -739,122 +786,9 @@ def workflow_submit(request):
             "previousWorkflowId",
         ],
     )
-    p = require_access(request.user, "agent", value.get("model"))
-    if not p.get("workflowEnabled", True):
-        raise ApiProblem("科研工作流功能已关闭", 403)
-    goal = value.get("goal")
-    model = value.get("model")
-    workflow_type = value.get("workflowType", "hyperspectral_interpretation")
-    key = value.get("idempotencyKey")
-    resources_selected = value.get("resourceIds", [])
-    parameters = value.get("parameters", {})
-    execute_operators = value.get("executeOperators", False)
-    algorithm_id = value.get("algorithmVersionId")
-    inputs = value.get("inputs", {})
-    import_results = value.get("importResults", True)
-    previous_workflow = value.get("previousWorkflowId")
-    if previous_workflow is not None:
-        from uuid import UUID
+    from .workflow_creation import create_workflow
 
-        try:
-            UUID(previous_workflow)
-        except (ValueError, TypeError, AttributeError) as exc:
-            raise ApiProblem("原分析记录无效") from exc
-        if workflow_type != "ecology_investigation":
-            raise ApiProblem("补充证据更新目前适用于生态分析")
-    from .selections import normalize
-
-    knowledge_selection = normalize(value, resources_selected)["knowledge_selection"]
-    if (
-        not isinstance(goal, str)
-        or not 1 <= len(goal.strip()) <= 12000
-        or not isinstance(workflow_type, str)
-        or not 1 <= len(workflow_type) <= 40
-        or not isinstance(model, str)
-        or not isinstance(key, str)
-        or not 8 <= len(key) <= 80
-        or not isinstance(resources_selected, list)
-        or len(resources_selected) > p["maxResources"]
-        or any(type(i) is not int or i < 1 for i in resources_selected)
-        or not isinstance(parameters, dict)
-        or len(parameters) > 60
-        or type(execute_operators) is not bool
-        or (algorithm_id is not None and type(algorithm_id) is not int)
-        or not isinstance(inputs, dict)
-        or len(inputs) > 30
-        or any(
-            not isinstance(k, str) or type(v) is not int or v < 1
-            for k, v in inputs.items()
-        )
-        or type(import_results) is not bool
-    ):
-        raise ApiProblem("科研工作流参数无效")
-    if execute_operators and not p.get("operatorEnabled", False):
-        raise ApiProblem("智能体自动调用算子尚未由超级管理员开启", 403)
-    if execute_operators:
-        raise ApiProblem("请先生成计划，再使用确认执行入口")
-    resources_selected = sorted(set(resources_selected))
-    with transaction.atomic():
-        if connection.vendor == "sqlite":
-            # Reserve the writer before any reads establish a WAL snapshot.
-            # An empty/no-op UPDATE also reserves it without altering state.
-            AgentWorkflow._base_manager.filter(
-                owner=request.user,
-                project_tag_id=request.headers.get("X-Project-Id"),
-                idempotency_key=key,
-            ).update(idempotency_key=F("idempotency_key"))
-        existing = AgentWorkflow._base_manager.filter(
-            owner=request.user,
-            project_tag_id=request.headers.get("X-Project-Id"),
-            idempotency_key=key,
-        ).first()
-        if existing:
-            if (
-                existing.goal != goal.strip()
-                or existing.model != model
-                or existing.policy_snapshot.get("request") != value
-            ):
-                raise ApiProblem("幂等键已用于不同科研工作流", 409)
-            return JsonResponse(workflow_json(existing), status=202)
-        if AgentWorkflow._base_manager.filter(
-            owner=request.user, status__in=WORKFLOW_ACTIVE
-        ).exists():
-            raise ApiProblem("您已有活动科研工作流，请等待完成", 409)
-        workflow = AgentWorkflow.objects.create(
-            owner=request.user,
-            workflow_type=workflow_type,
-            goal=goal.strip(),
-            model=model,
-            max_iterations=p["maxIterations"],
-            max_operator_steps=p["maxOperatorSteps"],
-            execute_operators=execute_operators,
-            resource_ids=resources_selected,
-            algorithm_version_id=algorithm_id,
-            parameters=parameters,
-            plan={
-                "inputs": inputs,
-                "knowledgeSelection": knowledge_selection,
-                **(
-                    {"previousWorkflowId": value["previousWorkflowId"]}
-                    if value.get("previousWorkflowId")
-                    else {}
-                ),
-            },
-            import_results=import_results,
-            idempotency_key=key,
-            policy_snapshot={
-                "request": value,
-                "revision": AgentPolicy.objects.filter(pk=1)
-                .values_list("updated_at", flat=True)
-                .first()
-                .isoformat()
-                if AgentPolicy.objects.filter(pk=1).exists()
-                else "",
-                "maxIterations": p["maxIterations"],
-                "maxOperatorSteps": p["maxOperatorSteps"],
-                "operatorEnabled": p.get("operatorEnabled", False),
-            },
-        )
+    workflow = create_workflow(request.user, request.headers.get("X-Project-Id"), value)
     return JsonResponse(workflow_json(workflow), status=202)
 
 

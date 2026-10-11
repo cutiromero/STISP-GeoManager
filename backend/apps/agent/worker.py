@@ -384,10 +384,25 @@ def run_task(run_id):
             p = require_access(
                 fresh_user(run.owner_id), run.conversation.mode, run.model
             )
+            deadline = time.monotonic() + run.budget_snapshot.get(
+                "maxRunSeconds", p["maxRunSeconds"]
+            )
             if run.conversation.mode == "agent":
                 from .compute_intents import process
+                from .research_intents import process as research_process
 
-                deterministic_answer = process(run, fresh_user(run.owner_id), p)
+                research_answer = research_process(
+                    run,
+                    fresh_user(run.owner_id),
+                    p,
+                    check,
+                    lambda kind, text: event(run, kind, text),
+                )
+                deterministic_answer = (
+                    research_answer
+                    if research_answer is not None
+                    else process(run, fresh_user(run.owner_id), p)
+                )
                 if deterministic_answer is not None:
                     check()
                     run.answer = deterministic_answer
@@ -604,6 +619,8 @@ def run_task(run_id):
         status, detail = "interrupted", str(exc) or "当前操作未获授权"
     except ModelError as exc:
         status, detail = "failed", str(exc)
+    except ValidationError as exc:
+        status, detail = "failed", "；".join(exc.messages)
     except Exception:
         # Do not put file paths, data rows, prompts or upstream bodies in logs.
         logger.error("agent run %s failed (%s)", run.id, run.model)
