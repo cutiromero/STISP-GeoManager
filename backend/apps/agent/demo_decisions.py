@@ -106,6 +106,79 @@ def _previous_decision(value) -> dict:
     return {key: item for key, item in value.items() if key != "findings"}
 
 
+def _result_reviews(workflow, results) -> list[dict]:
+    """Bind actual review events to their frozen stage and exact output scope."""
+    steps = getattr(workflow, "steps", None)
+    reviews = (
+        list(
+            steps.filter(kind="human_review", status="succeeded")
+            .order_by("sequence")
+            .values("sequence", "action")
+        )
+        if steps is not None
+        else []
+    )
+    states = []
+    for stage in workflow.plan["stages"]:
+        task_id = str(stage.get("taskId", ""))
+        if not task_id:
+            continue
+        frozen = [
+            item
+            for item in stage.get("results", [])
+            if str(item.get("taskId")) == task_id
+        ] + stage.get("outputs", [])
+        bound = {
+            (item.get("outputId"), item.get("key"), item.get("kind")) for item in frozen
+        }
+        for result in results:
+            identity = (result["outputId"], result["key"], result.get("kind"))
+            if str(result.get("taskId")) != task_id or identity not in bound:
+                continue
+            original = result.get("metadata", {}).get("qualityCheck", {}).get("status")
+            sequences = []
+            if stage.get("manualApproved") is True and result.get("kind") != "archive":
+                for review in reviews:
+                    action = review["action"]
+                    approved = (
+                        action.get("approvedOutputs", [])
+                        if isinstance(action, dict)
+                        else []
+                    )
+                    if not isinstance(approved, list):
+                        continue
+                    if any(
+                        isinstance(item, dict)
+                        and type(item.get("outputId")) is int
+                        and (item.get("outputId"), item.get("key"), item.get("kind"))
+                        == identity
+                        for item in approved
+                    ):
+                        sequences.append(review["sequence"])
+            if original == "needs_review" or stage.get("manualApproved") is True:
+                states.append(
+                    {
+                        "stage": stage.get("name"),
+                        "taskId": task_id,
+                        "outputId": result["outputId"],
+                        "key": result["key"],
+                        "kind": result.get("kind"),
+                        "originalQualityStatus": original,
+                        "approvalStatus": (
+                            "reference_only"
+                            if result.get("kind") == "archive"
+                            else "approved"
+                            if sequences
+                            else "pending"
+                            if original == "needs_review"
+                            else "not_required"
+                        ),
+                        "humanReviewStepSequences": sequences,
+                    }
+                )
+    return states
+
+
 def _execution_state(workflow, stage, results, old_results) -> dict:
     old_keys = {(str(item["taskId"]), str(item["outputId"])) for item in old_results}
     tasks = list(
@@ -169,6 +242,7 @@ def _execution_state(workflow, stage, results, old_results) -> dict:
             if (str(item.get("taskId")), str(item.get("outputId"))) not in old_keys
             and str(item.get("taskId")) not in tasks
         ],
+        "resultReviews": _result_reviews(workflow, current),
     }
 
 
@@ -341,6 +415,13 @@ def decide(
         "currentStage.kind=final_analysis表示前序计算结束后的分析动作，"
         "其本身无需taskId；最终分析须引用currentRun.latestStatisticsOutputIds中的"
         "本轮最新实际统计，不能把previousAnalysis旧统计当作更新统计。"
+        "executionState.resultReviews按stage、taskId与outputId给出真实结果审核状态；"
+        "approvalStatus=approved表示对应输出已由humanReviewStepSequences记录的用户审核批准继续，"
+        "不能继续写成等待用户审核；批准只适用于该输出，不扩展到其他步骤或结果。"
+        "originalQualityStatus仍保留原始质量标记，人工批准不等于自动检查passed或地学真实性已证实。"
+        "pending才表示该结果尚待审核；reference_only为归档审计附件，不能据其原始标记断言工作流仍待审核。"
+        "原始几何无效或原始面积基准不可靠时，area_change_pct=0等数值不能证明面积保真或修复无损；"
+        "依据真实修复日志说明有效性、降维片段及已批准范围，保留需专业复核的科学边界。"
         "只有allowedAction=geology-edit且nextAction=geology-edit时才提出edits，"
         "其他算法步骤或request_review时edits=[]；提前讨论修改不代表已生成可执行修改表。"
         "编辑阶段editTask.changesInputState=requires_model_proposal表示model_changes尚待"
