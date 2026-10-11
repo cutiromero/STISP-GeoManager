@@ -4,8 +4,8 @@ from functools import wraps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import IntegrityError, OperationalError, transaction
-from django.db.models import Q
+from django.db import IntegrityError, OperationalError, connection, transaction
+from django.db.models import F, Q
 from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -795,6 +795,14 @@ def workflow_submit(request):
         raise ApiProblem("请先生成计划，再使用确认执行入口")
     resources_selected = sorted(set(resources_selected))
     with transaction.atomic():
+        if connection.vendor == "sqlite":
+            # Reserve the writer before any reads establish a WAL snapshot.
+            # An empty/no-op UPDATE also reserves it without altering state.
+            AgentWorkflow._base_manager.filter(
+                owner=request.user,
+                project_tag_id=request.headers.get("X-Project-Id"),
+                idempotency_key=key,
+            ).update(idempotency_key=F("idempotency_key"))
         existing = AgentWorkflow._base_manager.filter(
             owner=request.user,
             project_tag_id=request.headers.get("X-Project-Id"),

@@ -1,3 +1,4 @@
+from contextvars import copy_context
 import http.client
 import json
 import socket
@@ -139,7 +140,12 @@ def stream(
             # Native-window prefill can exceed the short connect timeout.
             # The guard monitor still interrupts cancellation and run deadlines.
             sock.settimeout(300)
-        thread = threading.Thread(target=monitor, daemon=True)
+        # Authorization in the monitor must retain the selected project while
+        # still reading fresh account, membership and knowledge revisions.
+        monitor_context = copy_context()
+        thread = threading.Thread(
+            target=monitor_context.run, args=(monitor,), daemon=True
+        )
         thread.start()
         conn.request(
             "POST",
