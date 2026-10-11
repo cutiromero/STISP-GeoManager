@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.35] - 2026-10-11
+
+### Added
+- 成果展示中的智能科研体验入口，切换到授权项目后以自然语言在新会话启动生态调查与地质纠偏案例。
+- 聊天中的模型任务解析、必要澄清及选项/文字回答，关联真实多步工作流、判断说明、进度、报告和地图成果。
+- 聊天科研意图与实际工作流关联持久化，支持刷新恢复、补证据更新及明确的质量审核。
+
+### Changed
+- 原科研工作流参数入口保留；聊天中的资料与参数摘要可展开查看，优先呈现判断与实际成果。
+- 多步科研请求先交给模型理解，再复用已有计算与结果解释，避免被单NDVI快捷流程截走。
+
+### Fixed
+- 重复提交与重复答案复用实际记录，新任务重新建立起点，进度询问保持原执行授权。
+- 手选数据、算法版本及知识范围同时约束当前解析、历史引用和后续执行；结果质量审核保留显式确认。
+
 ## [0.1.34] - 2026-10-11
 
 ### Added
