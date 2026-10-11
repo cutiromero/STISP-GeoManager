@@ -26,6 +26,10 @@ def knowledge_domains(run, query=""):
         return validate_domains(value["domains"])
     if value["mode"] == "all":
         return list(DOMAINS)
+    resolved = (getattr(run, "knowledge_selection", None) or {}).get("_resolvedDomains")
+    if resolved is not None:
+        # Only the server records a research task's actual automatic routing.
+        return validate_domains(resolved)
     # The current user topic sets a ceiling. Tool queries cannot expand it.
     topic = run.prompt
     version_ids = algorithm_ids(run) or []

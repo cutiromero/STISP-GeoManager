@@ -76,6 +76,45 @@ def previous_run(run):
     return next((r for r in rows if r.research_intent.get("originRunId")), None)
 
 
+def _auto_continuation_selection(previous, current):
+    if (
+        (current.knowledge_selection or {}).get("mode", "auto") != "auto"
+        or previous.owner_id != current.owner_id
+        or previous.project_tag_id != current.project_tag_id
+        or previous.conversation_id != current.conversation_id
+    ):
+        return None
+    intent = previous.research_intent
+    if (
+        intent.get("status") != "clarifying"
+        and current.research_intent.get("_resumeSourceRunId") != previous.id
+        and not re.search(
+            r"接着|继续|补充|新增|更新|新证据|进度|跑完|完成|结果|报告|地图|确认|同意|取消|停止",
+            current.prompt,
+        )
+    ):
+        return None
+    from apps.knowledge.domains import query_domains, validate_domains
+
+    workflow = previous.research_workflow
+    if workflow:
+        from .demo_workflow import _domains
+
+        inherited = set(_domains(workflow)) | {
+            e["domain"] for e in workflow.evidence if e.get("domain")
+        }
+    else:
+        inherited = set(query_domains(intent.get("goal", "") + " " + previous.prompt))
+    topic = set(query_domains(current.prompt))
+    if not inherited or (topic and not topic.intersection(inherited)):
+        return None
+    return {
+        **current.knowledge_selection,
+        "_resolvedDomains": validate_domains(sorted(inherited | topic)),
+        "_researchSourceRunId": previous.id,
+    }
+
+
 def authorize_run(run, user, policy) -> None:
     intent = run.research_intent or {}
     if not intent.get("originRunId"):
@@ -207,8 +246,14 @@ def _execution_requested(run, previous) -> bool:
 
 def process(run, user, policy, guard, event):
     previous = previous_run(run)
+    selection_before = run.knowledge_selection
+    if previous:
+        continuation_selection = _auto_continuation_selection(previous, run)
+        if continuation_selection:
+            run.knowledge_selection = continuation_selection
     if previous and not history_compatible(previous, run):
         previous = None
+        run.knowledge_selection = selection_before
     if not plausible(run, previous):
         return None
     if not policy.get("workflowEnabled", True) or not policy.get(
@@ -221,6 +266,11 @@ def process(run, user, policy, guard, event):
     if previous:
         authorize_run(previous, user, policy)
         workflow = previous.research_workflow
+        if run.knowledge_selection != selection_before:
+            guard()
+            AgentRun.objects.filter(pk=run.pk).update(
+                knowledge_selection=run.knowledge_selection
+            )
     from .research_presets import discover
 
     catalog = discover(user, policy, run=run)
@@ -273,6 +323,11 @@ def process(run, user, policy, guard, event):
     if not audit.get("attempts") or audit["attempts"][-1].get("status") != "accepted":
         value = checked_value(value)
     if value["action"] == "ordinary":
+        if run.knowledge_selection != selection_before:
+            run.knowledge_selection = selection_before
+            AgentRun.objects.filter(pk=run.pk).update(
+                knowledge_selection=run.knowledge_selection
+            )
         return None
     scene = next(s for s in catalog["scenarios"] if s["scenario"] == value["scenario"])
     if value["action"] in {"status", "update"} and (
@@ -410,6 +465,16 @@ def process(run, user, policy, guard, event):
         created = create_workflow(
             user, run.project_tag_id, request, chat_execution=chat_execution
         )
+        if run.knowledge_selection.get("mode", "auto") == "auto":
+            from .demo_workflow import _domains
+
+            run.knowledge_selection = {
+                **run.knowledge_selection,
+                "_resolvedDomains": _domains(created),
+            }
+            AgentRun.objects.filter(pk=run.pk).update(
+                knowledge_selection=run.knowledge_selection
+            )
         intent["workflowId"] = str(created.id)
         _save(run, intent, created)
     return (
