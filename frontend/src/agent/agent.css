@@ -1376,3 +1376,40 @@
     gap: 5px;
   }
 }
+.agent-quality-summary {
+  display: grid;
+  gap: 10px;
+  margin: 13px 0;
+}
+.agent-quality-summary .ant-alert-description p {
+  margin: 0 0 10px;
+}
+.agent-quality-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+  margin: 0;
+}
+.agent-quality-metrics dt {
+  color: #738594;
+  font-size: 11px;
+}
+.agent-quality-metrics dd {
+  margin: 4px 0 0;
+  color: #254b68;
+  font-size: 15px;
+  font-weight: 600;
+}
+.agent-quality-details article {
+  display: grid;
+  gap: 6px;
+  padding: 7px 0;
+  line-height: 1.65;
+  font-size: 12px;
+}
+.agent-quality-details p {
+  margin: 0;
+}
+.agent-quality-details span {
+  color: #607b90;
+}

@@ -156,19 +156,6 @@ export default function WorkflowResults({
         ) : (
           settingsSummary
         ))}
-      {workflow.status === "waiting_approval" && onConfirm && (
-        <Button type="primary" loading={busy} onClick={onConfirm}>
-          {Array.isArray(workflow.plan.reviewOutputs) &&
-          workflow.plan.reviewOutputs.length
-            ? ui("审核并继续", "Review and continue")
-            : ui("确认执行", "Confirm execution")}
-        </Button>
-      )}
-      {active.includes(workflow.status) && onCancel && (
-        <Button loading={busy} onClick={onCancel}>
-          {ui("停止此工作流", "Stop workflow")}
-        </Button>
-      )}
       <WorkflowEvidenceUpdate
         previousAnalysis={workflow.plan.previousAnalysis}
         steps={workflow.steps}
@@ -185,8 +172,26 @@ export default function WorkflowResults({
             .map((step) => step.computeTaskId)
             .filter(Boolean)}
           autoImport={workflow.importResults}
+          reviewing={
+            workflow.status === "waiting_approval" &&
+            Array.isArray(workflow.plan.reviewOutputs) &&
+            workflow.plan.reviewOutputs.length > 0
+          }
           refreshKey={`${workflow.id}:${workflow.status}`}
         />
+      )}
+      {workflow.status === "waiting_approval" && onConfirm && (
+        <Button type="primary" loading={busy} onClick={onConfirm}>
+          {Array.isArray(workflow.plan.reviewOutputs) &&
+          workflow.plan.reviewOutputs.length
+            ? ui("审核并继续", "Review and continue")
+            : ui("确认执行", "Confirm execution")}
+        </Button>
+      )}
+      {active.includes(workflow.status) && onCancel && (
+        <Button loading={busy} onClick={onCancel}>
+          {ui("停止此工作流", "Stop workflow")}
+        </Button>
       )}
       {!!workflow.resultResourceIds.length && (
         <Alert

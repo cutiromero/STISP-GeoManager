@@ -14,6 +14,7 @@ import type {
   ComputeTask,
 } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
+import ComputeQualitySummary from "./ComputeQualitySummary";
 
 const activeStates = ["queued", "validating", "running", "cancelling"];
 const statusNames: Record<string, [string, string]> = {
@@ -90,6 +91,7 @@ export default function RunComputeTasks({
   taskIds,
   autoImport = false,
   refreshKey,
+  reviewing = false,
 }: (
   | {
       runId: number;
@@ -103,6 +105,7 @@ export default function RunComputeTasks({
     }
 ) & {
   refreshKey: string;
+  reviewing?: boolean;
 }) {
   const ui = useComputeText();
   const navigate = useNavigate();
@@ -249,6 +252,7 @@ export default function RunComputeTasks({
               {ui("计算完成，结果已保存。", "Computed and saved.")}
             </p>
           )}
+          <ComputeQualitySummary task={task} />
           {task.outputs.map((output) => (
             <div className="agent-compute-output" key={output.id}>
               <div className="agent-compute-output-title">
@@ -309,7 +313,8 @@ export default function RunComputeTasks({
                   >
                     {ui("打开入库数据", "Open imported data")}
                   </Button>
-                ) : task.status === "succeeded" &&
+                ) : !reviewing &&
+                  task.status === "succeeded" &&
                   !output.expired &&
                   output.kind !== "archive" &&
                   ["none", "failed"].includes(output.importStatus) ? (
@@ -333,12 +338,17 @@ export default function RunComputeTasks({
                 output.importStatus === "none" &&
                 !output.expired && (
                   <span className="agent-compute-muted">
-                    {autoImport
-                      ? ui("已按您的要求安排入库", "Import was requested")
-                      : ui(
-                          "可先预览，选择入库后会登记到数据资源。",
-                          "Preview first; import when you are ready.",
-                        )}
+                    {reviewing
+                      ? ui(
+                          "等待审核确认后继续保存成果",
+                          "Results will be saved after your review",
+                        )
+                      : autoImport
+                        ? ui("已按您的要求安排入库", "Import was requested")
+                        : ui(
+                            "可先预览，选择入库后会登记到数据资源。",
+                            "Preview first; import when you are ready.",
+                          )}
                   </span>
                 )}
             </div>
