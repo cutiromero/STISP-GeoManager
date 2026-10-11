@@ -2611,6 +2611,8 @@ GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84
 
 偏好保存于每轮AgentRun；会话详情的runs及运行轮询可恢复，幂等比较包含所有偏好。bootstrap新增knowledgeDomains（id/label/description/count）与algorithmOptions（versionId/algorithmId/name/version/description）。普通模型聊天继续无平台工具，应在智能体模式呈现选择控件。
 
+科研会话的auto模式还结合已绑定任务的实际知识依据：同用户、同项目、同会话的流程重新授权后，将自动使用领域保存为本轮有效范围，补证据和短进度询问持续关联原流程。manual、none及数据和算法手选范围继续逐轮核验；一般聊天保持原有主题筛选。
+
 ## 计算结果目录与统一参数表单（2026-10-10）
 
 `GET /api/data-schema/summary/` 返回地理数据、非地理数据和计算结果三个根节点，目录版本为 `2026.10`。`compute_results` 节点的 `selectable=false`、`spatialClass=null`：普通上传不能选择该类别，计算结果自身的空间属性和数据类型保持。`GET /api/catalog/resources/?categoryCode=compute_results` 筛选当前项目可访问的已入库计算结果，空间结果继续可在地理工作台查看；未入库成果仍在原任务中。
