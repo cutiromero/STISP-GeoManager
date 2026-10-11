@@ -753,6 +753,10 @@ export type ComputeMapPreview = {
  * 持久运行记录；引用失权时返回 403，不返回旧内容
  */
 export type AgentRun = {
+    /**
+     * 与真实科研任务关联的持久意图；缺省或null为普通对话
+     */
+    researchIntent?: AgentResearchIntent | null;
     knowledgeSelection?: AgentKnowledgeSelection;
     /**
      * 自动发现或限定用户手选的算法版本
@@ -929,6 +933,7 @@ export type AgentConversationUpdate = {
  * 提交任务
  */
 export type AgentRunInput = {
+    demoScenario?: AgentResearchScenario;
     knowledgeSelection?: AgentKnowledgeSelection;
     /**
      * 自动发现或限定用户手选的算法版本
@@ -979,6 +984,182 @@ export type AgentRunInput = {
      * 是否允许本轮使用受控互联网检索；服务端仍按策略和权限复核
      */
     internetEnabled?: boolean;
+};
+
+/**
+ * 使用当前授权项目内已登记模拟资料的演示场景；仍由模型解析用户目标和参数
+ */
+export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction';
+
+/**
+ * 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
+ */
+export type AgentResearchQuestion = {
+    /**
+     * 稳定问题键
+     */
+    key: string;
+    /**
+     * 面向用户的问题
+     */
+    label: string;
+    /**
+     * 答案控件
+     */
+    kind: 'choice' | 'text' | 'number' | 'resource';
+    /**
+     * 是否必须回答
+     */
+    required: boolean;
+    /**
+     * 可选回答；resource值为平台资源标识的字符串
+     */
+    options: Array<{
+        /**
+         * 提交值
+         */
+        value: string;
+        /**
+         * 展示文字
+         */
+        label: string;
+        /**
+         * 选择含义
+         */
+        description?: string;
+    }>;
+};
+
+/**
+ * 跨聊天轮次保存的科研任务意图、澄清和工作流关联；不以聊天文字冒充计算完成
+ */
+export type AgentResearchIntent = {
+    /**
+     * 原科研请求运行
+     */
+    originRunId: number;
+    /**
+     * 当前计划修订，回答与审核须精确匹配
+     */
+    revision: string;
+    scenario: AgentResearchScenario;
+    /**
+     * 科研任务状态，独立于聊天运行生成状态
+     */
+    status: 'clarifying' | 'planning' | 'running' | 'waiting_approval' | 'succeeded' | 'failed' | 'cancelled';
+    /**
+     * 解析后的用户目标
+     */
+    goal: string;
+    /**
+     * 当前进度或需要回答的问题
+     */
+    message: string;
+    /**
+     * 当前待回答问题，已明确时为空
+     */
+    questions: Array<AgentResearchQuestion>;
+    /**
+     * 明确输入角色到已授权资源标识
+     */
+    inputs: {
+        [key: string]: number;
+    };
+    /**
+     * 已解析并验证的任务参数；由场景受控校验
+     */
+    parameters: {
+        [key: string]: unknown;
+    };
+    /**
+     * 面向用户的数据角色、名称及模拟说明
+     */
+    inputSummary: Array<{
+        /**
+         * 输入角色键
+         */
+        role: string;
+        /**
+         * 可读角色
+         */
+        label: string;
+        /**
+         * 已授权资源
+         */
+        resourceId: number;
+        /**
+         * 数据名称
+         */
+        name: string;
+        /**
+         * 模拟资料或真实来源说明
+         */
+        sourceNote: string;
+    }>;
+    /**
+     * 关联真实工作流，尚未创建时为空
+     */
+    workflowId: string | null;
+};
+
+/**
+ * 回答或确认当前计划；自由文本与结构化选项由模型共同解析
+ */
+export type AgentResearchIntentUpdate = {
+    /**
+     * 回答、明确审核确认或取消
+     */
+    action: 'answer' | 'confirm' | 'cancel';
+    /**
+     * 最后读取的意图修订
+     */
+    revision: string;
+    /**
+     * 问题键到用户答案，不把选项标题当作代码执行
+     */
+    answers?: {
+        [key: string]: string;
+    };
+    /**
+     * 用户自由补充说明
+     */
+    answer?: string;
+};
+
+/**
+ * 当前用户授权范围内的体验入口
+ */
+export type AgentResearchDemoList = {
+    /**
+     * 可进入项目的案例；未就绪条目显示为不可启动
+     */
+    items: Array<{
+        scenario: AgentResearchScenario;
+        /**
+         * 已授权项目标签
+         */
+        projectId: number;
+        /**
+         * 当前项目名称
+         */
+        projectName: string;
+        /**
+         * 案例标题
+         */
+        title: string;
+        /**
+         * 启动用自然语言，明确模拟资料、预设与成果保存目标
+         */
+        prompt: string;
+        /**
+         * 本轮案例使用明确标注的模拟样例
+         */
+        sampleNature: 'synthetic';
+        /**
+         * 资料、已发布算法与模型等必要服务是否就绪
+         */
+        available: boolean;
+    }>;
 };
 
 /**
@@ -15612,6 +15793,98 @@ export type ImportComputeOutputResponses = {
 };
 
 export type ImportComputeOutputResponse = ImportComputeOutputResponses[keyof ImportComputeOutputResponses];
+
+export type ListAgentResearchDemosData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agent/research-demos/';
+};
+
+export type ListAgentResearchDemosErrors = {
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 无智能体权限
+     */
+    403: ErrorResponse;
+};
+
+export type ListAgentResearchDemosError = ListAgentResearchDemosErrors[keyof ListAgentResearchDemosErrors];
+
+export type ListAgentResearchDemosResponses = {
+    /**
+     * 本人可见的案例入口与就绪状态
+     */
+    200: AgentResearchDemoList;
+};
+
+export type ListAgentResearchDemosResponse = ListAgentResearchDemosResponses[keyof ListAgentResearchDemosResponses];
+
+export type UpdateAgentResearchIntentData = {
+    /**
+     * 对当前修订的明确回答、审核或取消
+     */
+    body: AgentResearchIntentUpdate;
+    headers: {
+        /**
+         * 已授权项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 原运行标识
+         */
+        runId: number;
+    };
+    query?: never;
+    url: '/api/agent/runs/{runId}/research-intent/';
+};
+
+export type UpdateAgentResearchIntentErrors = {
+    /**
+     * 答案或操作格式错误
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 权限撤回
+     */
+    403: ErrorResponse;
+    /**
+     * 原运行不存在或不可访问
+     */
+    404: ErrorResponse;
+    /**
+     * 修订、输入或审核计划已变化，请刷新后回答
+     */
+    409: ErrorResponse;
+    /**
+     * 模型或计算服务暂不可用
+     */
+    503: ErrorResponse;
+};
+
+export type UpdateAgentResearchIntentError = UpdateAgentResearchIntentErrors[keyof UpdateAgentResearchIntentErrors];
+
+export type UpdateAgentResearchIntentResponses = {
+    /**
+     * 已确认审核或取消，返回原运行最新状态
+     */
+    200: AgentRun;
+    /**
+     * 已排队后续模型解析，返回后续运行
+     */
+    202: AgentRun;
+};
+
+export type UpdateAgentResearchIntentResponse = UpdateAgentResearchIntentResponses[keyof UpdateAgentResearchIntentResponses];
 
 export type GetAgentBootstrapData = {
     body?: never;

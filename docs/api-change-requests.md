@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261011-001 - 自然语言科研案例与在线澄清
+
+- Status: ContractReady
+- Owner: chat_demo_frontend 契约与界面；chat_demo_backend 模型解析与持久关联；root 授权案例目录及发布。
+- Endpoints: GET /api/agent/research-demos/; POST /api/agent/conversations/{conversationId}/runs/; POST /api/agent/runs/{runId}/research-intent/; AgentRun。
+- Change type: 新增授权案例目录与持久科研意图接口。
+- OpenAPI change: 可选 demoScenario 与 researchIntent；答案返回202后续模型解析运行，审核/取消返回200；以 originRunId、revision 和 workflowId 保存真实关联。
+- Frontend reason: 成果展示一键进入独立智能体会话，必要时在线回答问题，自动展示判断、计算、报告和地图，刷新恢复已有任务。
+- Mock examples: mock/prism/examples/101-agent-research-demo.json。
+- Backend implementation notes: 仅本人原项目；每次重新授权；相同修订与答案幂等；用户变更预设由真实模型解析；几何审核仍需明确确认。
+- Verification: 项目授权、答案及冲突、重复提交、旧会话隔离、刷新不重复启动、在线澄清、真实工作流成果展示与窄屏。
+- Result: 本轮开发，服务器是否生效以冻结验收回执为准。
+
 ## API-20261010-002 - 计算结果目录分类
 
 - Status: BackendReady
@@ -59,6 +72,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261011-001 | ContractReady | /api/agent/research-demos/; /api/agent/runs/{runId}/research-intent/; AgentRun | natural language demo and online clarification | Updated | Updated | In progress | Frontend focused passed | Real backend and candidate validation pending |
 | API-20261010-003 | BackendReady | /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | evidence decisions; multi-stage scenarios; observational updates | Updated | HTTP/browser fixtures | Passed | Focused passed | Local real compute; mock decisions separately labelled; remote deployment separate |
 | API-20261010-002 | BackendReady | /api/data-schema/summary/; /api/catalog/resources/; /api/admin/data/resources/; /api/compute/outputs/{outputId}/import/ | compute result classification | Updated | Updated | Passed | Focused passed | Exact historical import links; candidate publication pending |
 | API-20261010-001 | BackendReady | /api/knowledge/*; /api/agent/bootstrap/; /api/agent/conversations/{id}/runs/ | domain filters; persistent tool selection | Updated | Updated | Passed | Focused passed | Server-enforced selectors; candidate publication pending |

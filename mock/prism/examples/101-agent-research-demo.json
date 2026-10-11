@@ -1,0 +1,58 @@
+{
+  "GET /api/agent/research-demos/": {
+    "200": {
+      "items": [
+        {
+          "scenario": "ecology_investigation",
+          "projectId": 8,
+          "projectName": "干旱区生态风险评估分析决策",
+          "title": "从植被变化到调查建议",
+          "prompt": "使用本项目已标注的模拟两期影像与预设波段，分析植被变化，结合知识和辅助观测安排调查优先区，执行计算并保存报告与地图成果。",
+          "sampleNature": "synthetic",
+          "available": true
+        },
+        {
+          "scenario": "geology_correction",
+          "projectId": 3,
+          "projectName": "核地院逻辑推理",
+          "title": "从填图检查到纠偏复核",
+          "prompt": "使用本项目模拟填图、调查和规则，检查地图，修正有明确依据的问题，重新检查并保存原图、修改图和原因。需要审核时请向我提问。",
+          "sampleNature": "synthetic",
+          "available": true
+        }
+      ]
+    }
+  },
+  "POST /api/agent/runs/{runId}/research-intent/": {
+    "202": {
+      "id": 102,
+      "conversationId": 31,
+      "model": "qwen27b",
+      "status": "queued",
+      "prompt": "我希望按照实际变化和辅助观测排序，使用演示预设。",
+      "answer": "",
+      "detail": "正在解析补充回答",
+      "evidence": [],
+      "attachments": [],
+      "createdAt": "2026-10-11T04:00:00Z",
+      "updatedAt": "2026-10-11T04:00:00Z",
+      "contextTruncated": false,
+      "researchIntent": {
+        "originRunId": 101,
+        "revision": "demo-research-v2",
+        "scenario": "ecology_investigation",
+        "status": "planning",
+        "goal": "解释模拟区域植被变化并安排调查",
+        "message": "已收到回答，正在结合可用数据和算法制定计划",
+        "questions": [],
+        "inputs": {"early_image": 165, "late_image": 166},
+        "parameters": {},
+        "inputSummary": [
+          {"role": "early_image", "label": "前期影像", "resourceId": 165, "name": "模拟前期影像", "sourceNote": "明确标注的模拟资料"},
+          {"role": "late_image", "label": "后期影像", "resourceId": 166, "name": "模拟后期影像", "sourceNote": "明确标注的模拟资料"}
+        ],
+        "workflowId": null
+      }
+    }
+  }
+}

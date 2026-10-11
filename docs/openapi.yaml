@@ -6262,6 +6262,94 @@ paths:
   "/api/compute/outputs/{outputId}/file/": {"get": {"operationId": "downloadComputeOutput", "tags": ["Compute"], "summary": "downloadComputeOutput", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "outputId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "integer", "description": "标识"}}, {"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/octet-stream": {"schema": {"type": "string", "description": "二进制文件", "format": "binary"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
   "/api/compute/outputs/{outputId}/preview/": {"get": {"operationId": "previewComputeOutput", "tags": ["Compute"], "summary": "previewComputeOutput", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "outputId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "integer", "description": "标识"}}, {"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputePreview"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
   "/api/compute/outputs/{outputId}/import/": {"post": {"operationId": "importComputeOutput", "tags": ["Compute"], "summary": "importComputeOutput", "description": "计算输出异步入库，统一归入计算结果目录。服务端重新检查原项目、功能权限及输入可见性；写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "outputId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "integer", "description": "标识"}}, {"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeOutput"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeImportRequest"}}}}}}
+  /api/agent/research-demos/:
+    get:
+      operationId: listAgentResearchDemos
+      tags: [Agent]
+      summary: 获取可体验的科研案例
+      description: 仅返回当前登录用户已获授权且具备智能体能力的项目入口；不扩展项目或本人资料权限。无需切换当前项目即可读取目录。
+      security: [{sessionAuth: []}]
+      responses:
+        '200':
+          description: 本人可见的案例入口与就绪状态
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentResearchDemoList'}
+        '401':
+          description: 请先登录
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '403':
+          description: 无智能体权限
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+  /api/agent/runs/{runId}/research-intent/:
+    post:
+      operationId: updateAgentResearchIntent
+      tags: [Agent]
+      summary: 回答科研任务澄清或确认审核
+      description: 仅原用户在原项目操作，重新核对资料、算法与权限。answer创建后续模型解析运行并返回202；confirm只明确确认当前审核计划，不代替模型判断；cancel停止关联任务。相同revision与相同答案重试复用运行，不重复提交计算。
+      security: [{sessionAuth: []}]
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        description: 原科研意图所属运行
+        schema: {type: integer, minimum: 1, description: 原运行标识}
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 当前单个项目
+        schema: {type: integer, minimum: 1, description: 已授权项目}
+      requestBody:
+        required: true
+        description: 对当前修订的明确回答、审核或取消
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AgentResearchIntentUpdate'}
+      responses:
+        '200':
+          description: 已确认审核或取消，返回原运行最新状态
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentRun'}
+        '202':
+          description: 已排队后续模型解析，返回后续运行
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentRun'}
+        '400':
+          description: 答案或操作格式错误
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '401':
+          description: 请先登录
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '403':
+          description: 权限撤回
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '404':
+          description: 原运行不存在或不可访问
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '409':
+          description: 修订、输入或审核计划已变化，请刷新后回答
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '503':
+          description: 模型或计算服务暂不可用
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
   /api/agent/bootstrap/:
     get:
       tags:
@@ -8544,6 +8632,11 @@ components:
       type: object
       description: 持久运行记录；引用失权时返回 403，不返回旧内容
       properties:
+        researchIntent:
+          description: 与真实科研任务关联的持久意图；缺省或null为普通对话
+          anyOf:
+          - $ref: '#/components/schemas/AgentResearchIntent'
+          - type: 'null'
         knowledgeSelection:
           $ref: '#/components/schemas/AgentKnowledgeSelection'
         algorithmSelectionMode:
@@ -8761,6 +8854,8 @@ components:
       type: object
       description: 提交任务
       properties:
+        demoScenario:
+          $ref: '#/components/schemas/AgentResearchScenario'
         knowledgeSelection:
           $ref: '#/components/schemas/AgentKnowledgeSelection'
         algorithmSelectionMode:
@@ -8832,6 +8927,106 @@ components:
       - model
       - prompt
       - idempotencyKey
+      additionalProperties: false
+    AgentResearchScenario:
+      type: string
+      description: 使用当前授权项目内已登记模拟资料的演示场景；仍由模型解析用户目标和参数
+      enum: [ecology_investigation, geology_correction]
+    AgentResearchQuestion:
+      type: object
+      description: 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
+      properties:
+        key: {type: string, description: 稳定问题键}
+        label: {type: string, description: 面向用户的问题}
+        kind: {type: string, enum: [choice, text, number, resource], description: 答案控件}
+        required: {type: boolean, description: 是否必须回答}
+        options:
+          type: array
+          description: 可选回答；resource值为平台资源标识的字符串
+          items:
+            type: object
+            description: 可读选项
+            properties:
+              value: {type: string, description: 提交值}
+              label: {type: string, description: 展示文字}
+              description: {type: string, description: 选择含义}
+            required: [value, label]
+            additionalProperties: false
+      required: [key, label, kind, required, options]
+      additionalProperties: false
+    AgentResearchIntent:
+      type: object
+      description: 跨聊天轮次保存的科研任务意图、澄清和工作流关联；不以聊天文字冒充计算完成
+      properties:
+        originRunId: {type: integer, minimum: 1, description: 原科研请求运行}
+        revision: {type: string, description: 当前计划修订，回答与审核须精确匹配}
+        scenario: {$ref: '#/components/schemas/AgentResearchScenario'}
+        status:
+          type: string
+          description: 科研任务状态，独立于聊天运行生成状态
+          enum: [clarifying, planning, running, waiting_approval, succeeded, failed, cancelled]
+        goal: {type: string, description: 解析后的用户目标}
+        message: {type: string, description: 当前进度或需要回答的问题}
+        questions:
+          type: array
+          description: 当前待回答问题，已明确时为空
+          items: {$ref: '#/components/schemas/AgentResearchQuestion'}
+        inputs:
+          type: object
+          description: 明确输入角色到已授权资源标识
+          additionalProperties: {type: integer, minimum: 1, description: 当前项目资源}
+        parameters: {type: object, description: 已解析并验证的任务参数；由场景受控校验, additionalProperties: true}
+        inputSummary:
+          type: array
+          description: 面向用户的数据角色、名称及模拟说明
+          items:
+            type: object
+            description: 一个确定的输入角色
+            properties:
+              role: {type: string, description: 输入角色键}
+              label: {type: string, description: 可读角色}
+              resourceId: {type: integer, minimum: 1, description: 已授权资源}
+              name: {type: string, description: 数据名称}
+              sourceNote: {type: string, description: 模拟资料或真实来源说明}
+            required: [role, label, resourceId, name, sourceNote]
+            additionalProperties: false
+        workflowId: {type: [string, 'null'], format: uuid, description: 关联真实工作流，尚未创建时为空}
+      required: [originRunId, revision, scenario, status, goal, message, questions, inputs, parameters, inputSummary, workflowId]
+      additionalProperties: false
+    AgentResearchIntentUpdate:
+      type: object
+      description: 回答或确认当前计划；自由文本与结构化选项由模型共同解析
+      properties:
+        action: {type: string, enum: [answer, confirm, cancel], description: 回答、明确审核确认或取消}
+        revision: {type: string, minLength: 1, description: 最后读取的意图修订}
+        answers:
+          type: object
+          description: 问题键到用户答案，不把选项标题当作代码执行
+          additionalProperties: {type: string, description: 用户选择或输入的文字}
+        answer: {type: string, maxLength: 12000, description: 用户自由补充说明}
+      required: [action, revision]
+      additionalProperties: false
+    AgentResearchDemoList:
+      type: object
+      description: 当前用户授权范围内的体验入口
+      properties:
+        items:
+          type: array
+          description: 可进入项目的案例；未就绪条目显示为不可启动
+          items:
+            type: object
+            description: 项目内科研演示入口，不包含内部路径与凭据
+            properties:
+              scenario: {$ref: '#/components/schemas/AgentResearchScenario'}
+              projectId: {type: integer, minimum: 1, description: 已授权项目标签}
+              projectName: {type: string, description: 当前项目名称}
+              title: {type: string, description: 案例标题}
+              prompt: {type: string, description: 启动用自然语言，明确模拟资料、预设与成果保存目标}
+              sampleNature: {type: string, const: synthetic, description: 本轮案例使用明确标注的模拟样例}
+              available: {type: boolean, description: 资料、已发布算法与模型等必要服务是否就绪}
+            required: [scenario, projectId, projectName, title, prompt, sampleNature, available]
+            additionalProperties: false
+      required: [items]
       additionalProperties: false
     AgentAttachment:
       type: object
