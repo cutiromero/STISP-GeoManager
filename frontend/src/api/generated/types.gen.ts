@@ -382,7 +382,7 @@ export type KnowledgeDomainOption = {
 };
 
 /**
- * 本轮知识调用方式；auto按本轮主题筛选，manual限定选定领域，all使用所有可见知识，none禁用知识工具
+ * 本轮知识调用方式；auto按本轮主题及已授权科研会话上下文筛选，manual限定选定领域，all使用所有可见知识，none禁用知识工具
  */
 export type AgentKnowledgeSelection = {
     /**
