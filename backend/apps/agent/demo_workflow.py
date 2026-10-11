@@ -299,14 +299,16 @@ def prepare_demo(workflow, user, p) -> None:
     workflow.evidence = knowledge
     workflow.status, workflow.current_step = "waiting_approval", "review_plan"
     workflow.detail = "输入角色与算法已匹配，请确认场景计划后执行"
-    _save(workflow)
-    step(workflow, "demo_plan", action=workflow.plan, message=workflow.detail)
-    checkpoint(workflow, "review_plan", {"planHash": workflow.plan_hash})
-    chat = workflow.plan.get("chatExecution")
-    if chat and chat.get("initialPlanAuthorized"):
-        from .models import AgentRun
+    # A failed automatic confirmation must leave the worker's running state
+    # recoverable, rather than publishing a partially prepared waiting plan.
+    with transaction.atomic():
+        _save(workflow)
+        step(workflow, "demo_plan", action=workflow.plan, message=workflow.detail)
+        checkpoint(workflow, "review_plan", {"planHash": workflow.plan_hash})
+        chat = workflow.plan.get("chatExecution")
+        if chat and chat.get("initialPlanAuthorized"):
+            from .models import AgentRun
 
-        with transaction.atomic():
             current = AgentWorkflow.objects.select_for_update().get(pk=workflow.id)
             source = AgentRun.objects.filter(
                 pk=chat.get("requestRunId"),
