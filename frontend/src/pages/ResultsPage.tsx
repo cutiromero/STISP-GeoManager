@@ -48,6 +48,7 @@ import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useAppContext } from "../contexts/AppContext";
 import type { MapComposition, ResultArtifact } from "../types";
 import { downloadBlob } from "../utils/download";
+import ResearchDemoShowcase from "./ResearchDemoShowcase";
 
 type ResultSource = "all" | "mapping" | "analysis" | "imported";
 type ResultView = "cards" | "list";
@@ -255,6 +256,8 @@ export default function ResultsPage() {
             />
           </div>
         </section>
+
+        <ResearchDemoShowcase />
 
         {!canViewResults && (
           <Alert

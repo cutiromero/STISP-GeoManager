@@ -7,7 +7,6 @@ import {
   Select,
   Space,
   Switch,
-  Tag,
   Typography,
 } from "antd";
 import { useEffect, useRef, useState } from "react";
@@ -31,65 +30,9 @@ import DemoWorkflowForm, {
   demoInputsReady,
   type DemoWorkflowType,
 } from "./DemoWorkflowForm";
-import WorkflowDecisionTimeline, {
-  WorkflowEvidenceUpdate,
-} from "./WorkflowDecisionTimeline";
-import RunComputeTasks from "./RunComputeTasks";
-import WorkflowKnowledgeReferences from "./WorkflowKnowledgeReferences";
+import WorkflowResults from "./WorkflowResults";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
-const labels: Record<string, string> = {
-  queued: "等待处理",
-  running: "准备计划",
-  waiting_compute: "执行与入库",
-  waiting_approval: "等待确认",
-  succeeded: "已完成",
-  failed: "未完成",
-  cancelled: "已停止",
-  interrupted: "已中断",
-};
-
-function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
-  if (!workflow) return [];
-  const record = (value: unknown): Record<string, unknown> =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
-  const demo = ["ecology_investigation", "geology_correction"].includes(
-    workflow.workflowType,
-  );
-  const stages = Array.isArray(workflow.plan.stages)
-    ? workflow.plan.stages
-    : [];
-  const results = demo
-    ? stages.flatMap((stage) => {
-        const outputs = record(stage).outputs;
-        return Array.isArray(outputs)
-          ? outputs.flatMap((value) => {
-              const output = record(value);
-              return ["raster", "vector"].includes(String(output.kind))
-                ? [output.resourceId]
-                : [];
-            })
-          : [];
-      })
-    : workflow.resultResourceIds;
-  const original =
-    workflow.workflowType === "geology_correction"
-      ? record(workflow.plan.inputs).initial_map
-      : undefined;
-  const previousChange = demo
-    ? record(workflow.plan.previousChange).resourceId
-    : undefined;
-  return [
-    ...new Set(
-      [original, previousChange, ...results].filter(
-        (value): value is number =>
-          typeof value === "number" && Number.isInteger(value) && value > 0,
-      ),
-    ),
-  ];
-}
 
 function ParameterField({
   spec,
@@ -377,11 +320,6 @@ export default function WorkflowPanel({
   useEffect(() => {
     onStatusChange?.(workflow?.status);
   }, [workflow?.status, onStatusChange]);
-  const fields = (value: unknown) =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? Object.entries(value)
-      : [];
-  const mapResourceIds = workflowMapResourceIds(workflow);
   const content = (
     <Space orientation="vertical" style={{ width: "100%" }}>
       <Typography.Text type="secondary">
@@ -647,134 +585,20 @@ export default function WorkflowPanel({
         />
       )}
       {workflow && (
-        <div className="agent-workflow-status">
-          <Space wrap>
-            <Tag
-              color={
-                workflow.status === "succeeded"
-                  ? "green"
-                  : workflow.status === "failed"
-                    ? "red"
-                    : "blue"
-              }
-            >
-              {ui(labels[workflow.status] ?? workflow.status)}
-            </Tag>
-            <span>{workflow.detail}</span>
-          </Space>
-          {workflow.planHash && (
-            <dl className="agent-plan-summary">
-              <dt>{ui("算法", "Algorithm")}</dt>
-              <dd>
-                {workflow.plan.algorithm
-                  ? String(workflow.plan.algorithm)
-                  : fields(workflow.plan.algorithms).map(([key, value]) => (
-                      <div key={key}>
-                        {value && typeof value === "object" && "name" in value
-                          ? String(value.name)
-                          : key}
-                      </div>
-                    ))}
-              </dd>
-              <dt>{ui("输入数据", "Input data")}</dt>
-              <dd>
-                {fields(workflow.plan.inputNames).map(([key, value]) => (
-                  <div key={key}>{String(value)}</div>
-                ))}
-              </dd>
-              <dt>{ui("执行参数", "Parameters")}</dt>
-              <dd>
-                {fields(workflow.plan.parameters ?? workflow.parameters).map(
-                  ([key, value]) => (
-                    <div key={key}>
-                      {key}：{String(value)}
-                    </div>
-                  ),
-                )}
-              </dd>
-              <dt>{ui("知识依据", "Knowledge references")}</dt>
-              <dd>
-                {workflow.evidence.length ? (
-                  <WorkflowKnowledgeReferences items={workflow.evidence} />
-                ) : (
-                  ui(
-                    "未匹配到相关知识规则，将保留算法原始结果",
-                    "No matching rules; the original calculation will be preserved",
-                  )
-                )}
-              </dd>
-            </dl>
-          )}
-          {workflow.status === "waiting_approval" && (
-            <Button
-              type="primary"
-              loading={busy}
-              onClick={() => void action(true)}
-            >
-              {Array.isArray(workflow.plan.reviewOutputs) &&
-              workflow.plan.reviewOutputs.length
-                ? ui("审核并继续", "Review and continue")
-                : ui("确认执行", "Confirm execution")}
-            </Button>
-          )}
-          {active.includes(workflow.status) && (
-            <Button loading={busy} onClick={() => void action(false)}>
-              {ui("停止此工作流", "Stop workflow")}
-            </Button>
-          )}
-          <WorkflowEvidenceUpdate
-            previousAnalysis={workflow.plan.previousAnalysis}
-            steps={workflow.steps}
-          />
-          <WorkflowDecisionTimeline steps={workflow.steps} />
-          {workflow.workflowType === "ecology_investigation" &&
-            workflow.status === "succeeded" &&
-            !previousWorkflowId && (
-              <Button
-                onClick={() => {
+        <WorkflowResults
+          workflow={workflow}
+          busy={busy}
+          onConfirm={() => void action(true)}
+          onCancel={() => void action(false)}
+          onEvidenceUpdate={
+            !previousWorkflowId
+              ? () => {
                   restore(workflow);
                   setPreviousWorkflowId(workflow.id);
-                }}
-              >
-                补充观测后更新判断
-              </Button>
-            )}
-          {workflow.steps.some((step) => step.computeTaskId) && (
-            <RunComputeTasks
-              taskIds={workflow.steps
-                .map((step) => step.computeTaskId)
-                .filter(Boolean)}
-              autoImport={workflow.importResults}
-              refreshKey={`${workflow.id}:${workflow.status}`}
-            />
-          )}
-          {!!workflow.resultResourceIds.length && (
-            <Alert
-              type="success"
-              title={ui(
-                "成果已保存到本项目的数据资源",
-                "Results saved in this project's data resources",
-              )}
-              description={
-                mapResourceIds.length ? (
-                  <a
-                    href={`/map?resources=${mapResourceIds.join(",")}&projectTagId=${workflow.projectId}`}
-                  >
-                    {ui(
-                      "在地理工作台对比成果图层",
-                      "Compare result layers in the map workspace",
-                    )}
-                  </a>
-                ) : (
-                  ui(
-                    "可在本项目的数据资源中查看成果",
-                    "View the results in this project's data resources",
-                  )
-                )
-              }
-            />
-          )}
-        </div>
+                }
+              : undefined
+          }
+        />
       )}
     </Space>
   );

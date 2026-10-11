@@ -17,9 +17,18 @@ import type {
   AgentComputeTaskList,
   AgentAttachment,
   AgentComputeIntentUpdate,
+  AgentResearchDemoList,
+  AgentResearchIntentUpdate,
 } from "./generated/types.gen";
 
 export const agentApi = {
+  researchDemos: () =>
+    requestJson<AgentResearchDemoList>("/api/agent/research-demos/"),
+  updateResearchIntent: (id: number, body: AgentResearchIntentUpdate) =>
+    requestJson<AgentRun>(`/api/agent/runs/${id}/research-intent/`, {
+      method: "POST",
+      body,
+    }),
   bootstrap: () => requestJson<AgentBootstrap>("/api/agent/bootstrap/"),
   conversations: (mode: "chat" | "agent", q = "", archived = false) =>
     requestJson<AgentConversationList>(

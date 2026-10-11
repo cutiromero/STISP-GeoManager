@@ -25,7 +25,11 @@ type ProjectContextValue = {
   canManage: boolean;
   canAssign: boolean;
   refresh: () => Promise<void>;
-  choose: (id: string, afterChoose?: () => void) => void;
+  choose: (
+    id: string,
+    afterChoose?: () => void,
+    options?: { confirm?: boolean },
+  ) => void;
 };
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 export const useProjectContext = () => useContext(ProjectContext);
@@ -85,13 +89,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     window.addEventListener("focus", revalidate);
     return () => window.removeEventListener("focus", revalidate);
   }, [refresh]);
-  const choose = (id: string, afterChoose?: () => void) => {
+  const choose: ProjectContextValue["choose"] = (id, afterChoose, options) => {
     if (!projects.some((project) => String(project.id) === id)) {
       message.error(ui("请选择一个可访问的项目"));
       return;
     }
     if (id === current) {
       afterChoose?.();
+      return;
+    }
+    const apply = () => {
+      if (user) sessionStorage.setItem(`project:${user.id}`, id);
+      setActiveProject(id);
+      setCurrent(id);
+      afterChoose?.();
+    };
+    if (options?.confirm === false) {
+      apply();
       return;
     }
     modal.confirm({
@@ -101,12 +115,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       ),
       okText: ui("切换项目"),
       cancelText: ui("保留当前项目"),
-      onOk: () => {
-        if (user) sessionStorage.setItem(`project:${user.id}`, id);
-        setActiveProject(id);
-        setCurrent(id);
-        afterChoose?.();
-      },
+      onOk: apply,
     });
   };
   return (

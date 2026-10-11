@@ -1301,3 +1301,78 @@
     flex-wrap: wrap;
   }
 }
+.agent-research-intent {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border: 1px solid #dce8f1;
+  border-radius: 18px;
+  background: linear-gradient(130deg, #f4f8fc, #fff 65%);
+}
+.agent-research-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+.agent-research-heading strong {
+  color: #234b6c;
+  line-height: 1.7;
+}
+.agent-research-message {
+  color: #637d92;
+  line-height: 1.75;
+  margin: 9px 0 13px;
+}
+.agent-research-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.agent-research-inputs > span {
+  display: grid;
+  gap: 3px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: #edf4fa;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.agent-research-inputs small {
+  color: #7793a8;
+  font-size: 10px;
+}
+.agent-research-questions {
+  display: grid;
+  gap: 15px;
+  margin-top: 20px;
+}
+.agent-research-questions label {
+  display: grid;
+  gap: 8px;
+  color: #31546f;
+  font-size: 13px;
+}
+.agent-research-questions .ant-select,
+.agent-research-questions .ant-input-number {
+  width: 100%;
+}
+.agent-research-actions {
+  display: flex;
+  gap: 10px;
+}
+.agent-question-option-note {
+  display: block;
+  color: #7f95a5;
+  font-size: 11px;
+  white-space: normal;
+}
+@media (max-width: 680px) {
+  .agent-research-intent {
+    padding: 16px 13px;
+  }
+  .agent-research-heading {
+    flex-direction: column;
+    gap: 5px;
+  }
+}

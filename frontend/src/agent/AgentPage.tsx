@@ -47,6 +47,7 @@ import type {
   AgentEvent,
   AgentAttachment,
   AgentWorkflow,
+  AgentResearchScenario,
 } from "../api/generated/types.gen";
 import { createUuid } from "../utils/uuid";
 import { useAgentBootstrap } from "./useAgentBootstrap";
@@ -56,6 +57,8 @@ import RunEvidence from "./RunEvidence";
 import RunComputeTasks from "./RunComputeTasks";
 import ComputeIntentCard from "./ComputeIntentCard";
 import WorkflowPanel from "./WorkflowPanel";
+import ResearchIntentCard from "./ResearchIntentCard";
+import { researchDemoLaunch } from "./researchDemoLaunch";
 import AgentResizeHandle from "./AgentResizeHandle";
 import AgentToolSelection, {
   defaultToolPreferences,
@@ -70,6 +73,21 @@ import ReasoningEffortControl, {
 import "./agent.css";
 
 const active = (r: AgentRun) => r.status === "queued" || r.status === "running";
+
+function mergeRun(old: AgentRun[], next: AgentRun): AgentRun[] {
+  const updated = old.map((run) => {
+    if (run.id === next.id) return next;
+    if (
+      next.researchIntent &&
+      run.researchIntent?.originRunId === next.researchIntent.originRunId
+    )
+      return { ...run, researchIntent: next.researchIntent };
+    return run;
+  });
+  return updated.some((run) => run.id === next.id)
+    ? updated
+    : [...updated, next];
+}
 
 export default function AgentPage() {
   const project = useProjectContext();
@@ -98,6 +116,17 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [prompt, setPrompt] = useState("");
+  const demoLaunch = useRef(
+    mode === "agent"
+      ? researchDemoLaunch(location.state?.researchDemo, project?.current)
+      : null,
+  );
+  const demoStarted = useRef(false);
+  useEffect(() => {
+    if (!demoLaunch.current) return;
+    setPrompt(demoLaunch.current.prompt);
+    navigate(location.pathname, { replace: true, state: null });
+  }, []);
   useEffect(() => {
     const prefill = location.state?.query;
     if (mode === "agent" && typeof prefill === "string" && prefill.trim()) {
@@ -185,6 +214,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     budgetProfile?: AgentBudgetProfileId;
     maxOutputTokens?: number;
     toolPreferences: ToolPreferences;
+    demoScenario?: AgentResearchScenario;
   } | null>(null);
   const running = runs.find(active);
   const canUse = mode === "agent" ? bootstrap?.canAgent : bootstrap?.canChat;
@@ -251,10 +281,20 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       mode === "agent"
         ? bootstrap.defaultAgentModel
         : bootstrap.defaultChatModel;
+    const demoModel = demoLaunch.current
+      ? (candidates.find(
+          (entry) => entry.alias === preferred && entry.status === "online",
+        ) ??
+        candidates.find(
+          (entry) => entry.alias === defaultModel && entry.status === "online",
+        ) ??
+        candidates.find((entry) => entry.status === "online"))
+      : undefined;
     setModel(
-      candidates.some((m) => m.alias === preferred)
-        ? preferred!
-        : defaultModel || candidates[0]?.alias || "",
+      demoModel?.alias ??
+        (candidates.some((m) => m.alias === preferred)
+          ? preferred!
+          : defaultModel || candidates[0]?.alias || ""),
     );
   }, [bootstrap, mode, model, user?.id]);
   useEffect(() => {
@@ -288,7 +328,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         const data = await agentApi.poll(running.id, cursor);
         if (disposed) return;
         cursor = data.cursor;
-        setRuns((old) => old.map((r) => (r.id === data.run.id ? data.run : r)));
+        setRuns((old) => mergeRun(old, data.run));
         setEvents((old) =>
           [
             ...old,
@@ -396,6 +436,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   useEffect(() => {
     if (
       !canUse ||
+      demoLaunch.current ||
       restoredConversation.current ||
       current ||
       conversations.length === 0
@@ -414,7 +455,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       conversations.find((item) => item.id === preferredId) ?? conversations[0];
     if (preferred) void open(preferred);
   }, [canUse, conversationStorageKey, conversations, current]);
-  const send = async (text = prompt) => {
+  const send = async (text = prompt, demoScenario?: AgentResearchScenario) => {
     if (
       !canUse ||
       busy ||
@@ -424,8 +465,16 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       !modelOnline
     )
       return;
+    const clarification = !demoScenario
+      ? [...runs]
+          .reverse()
+          .find((run) => run.researchIntent?.status === "clarifying")
+          ?.researchIntent
+      : undefined;
     const invalidSelection =
-      mode === "agent" ? selectionError(toolPreferences, selected) : "";
+      mode === "agent" && !clarification
+        ? selectionError(toolPreferences, selected)
+        : "";
     if (invalidSelection) {
       setError(invalidSelection);
       return;
@@ -434,7 +483,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     setError("");
     const seq = sequence.current;
     try {
-      const c = current ?? (await agentApi.create(mode));
+      const c = demoScenario
+        ? await agentApi.create(mode)
+        : (current ?? (await agentApi.create(mode)));
       if (!alive.current || seq !== sequence.current) return;
       setCurrent(c);
       try {
@@ -443,10 +494,28 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         // Session storage is only a UX hint; the server remains authoritative.
       }
       const previous = failedSubmission.current;
+      if (clarification) {
+        const run = await agentApi.updateResearchIntent(
+          clarification.originRunId,
+          {
+            action: "answer",
+            revision: clarification.revision,
+            answer: text,
+          },
+        );
+        if (!alive.current || seq !== sequence.current) return;
+        pendingScroll.current = run.id;
+        setRuns((old) => mergeRun(old, run));
+        setPrompt("");
+        setEvents([]);
+        void refreshList();
+        return;
+      }
       const same =
         previous?.id === c.id &&
         previous.prompt === text &&
         previous.model === model &&
+        previous.demoScenario === demoScenario &&
         JSON.stringify(previous.selected) === JSON.stringify(selected) &&
         previous.thinkingMode === thinkingMode &&
         previous.reasoningEffort === requestedEffort &&
@@ -463,7 +532,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         ? previous
         : {
             id: c.id,
-            key: createUuid(),
+            key: demoScenario
+              ? (demoLaunch.current?.token ?? createUuid())
+              : createUuid(),
             prompt: text,
             model,
             selected,
@@ -478,12 +549,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               ? outputOverride
               : undefined,
             toolPreferences,
+            demoScenario,
           };
       failedSubmission.current = submission;
       const run = await agentApi.submit(c.id, {
         model,
         prompt: text,
         idempotencyKey: submission.key,
+        ...(demoScenario ? { demoScenario } : {}),
         ...(bootstrap?.budgets?.enabled
           ? { budgetProfile, maxOutputTokens: outputOverride }
           : {}),
@@ -499,7 +572,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       });
       if (!alive.current || seq !== sequence.current) return;
       pendingScroll.current = run.id;
-      setRuns((old) => [...old.filter((r) => r.id !== run.id), run]);
+      setRuns((old) => mergeRun(demoScenario ? [] : old, run));
       setPrompt("");
       setEvents([]);
       failedSubmission.current = null;
@@ -511,8 +584,22 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       if (alive.current) setBusy(false);
     }
   };
+  useEffect(() => {
+    if (
+      !demoLaunch.current ||
+      demoStarted.current ||
+      !canUse ||
+      !modelOnline ||
+      busy
+    )
+      return;
+    demoStarted.current = true;
+    restoredConversation.current = true;
+    void send(demoLaunch.current.prompt, demoLaunch.current.scenario);
+  }, [canUse, modelOnline, busy]);
   const reset = () => {
     sequence.current++;
+    demoLaunch.current = null;
     setCurrent(null);
     setRuns([]);
     setEvents([]);
@@ -924,6 +1011,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     </p>
                   )}
                   {!r.computeIntent &&
+                    !r.researchIntent &&
                     (r.thinkingMode === "deep" || r.thinkingText) && (
                       <Collapse
                         size="small"
@@ -976,6 +1064,28 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       }
                     />
                   )}
+                  {mode === "agent" &&
+                    r.researchIntent &&
+                    !runs.some(
+                      (later) =>
+                        later.id > r.id &&
+                        later.researchIntent?.originRunId ===
+                          r.researchIntent?.originRunId,
+                    ) && (
+                      <ResearchIntentCard
+                        run={{ ...r, researchIntent: r.researchIntent }}
+                        onChanged={(next) => {
+                          if (
+                            next.id !== r.id &&
+                            !runs.some((old) => old.id === next.id)
+                          ) {
+                            pendingScroll.current = next.id;
+                            void refreshList();
+                          }
+                          setRuns((old) => mergeRun(old, next));
+                        }}
+                      />
+                    )}
                   {active(r) && !r.answer && (
                     <p className="agent-live-progress" role="status">
                       <span aria-hidden="true" />
@@ -1015,7 +1125,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       showIcon
                     />
                   )}
-                  {!active(r) && !r.computeIntent && (
+                  {!active(r) && !r.computeIntent && !r.researchIntent && (
                     <Space className="agent-answer-actions">
                       <Button
                         size="small"
