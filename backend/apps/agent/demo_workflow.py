@@ -671,7 +671,51 @@ def advance_demo(workflow_id) -> None:
                 for previous in stages[:index]:
                     task = authorized_task(user, previous["taskId"], p)
                     results.extend(read_results(workflow, user, p, task))
-                decision, edits = decide(workflow, user, p, stage, results, guard)
+
+                def record_attempt(attempt):
+                    # Persist rejection before another network request; the final
+                    # stage already belongs to plan.finalStage when not in stages.
+                    blocked = False
+                    with transaction.atomic():
+                        if attempt["status"] == "requesting":
+                            calls = workflow.plan.get("actualModelCallCount", 0)
+                            if calls >= workflow.max_iterations:
+                                blocked = True
+                                attempt.update(
+                                    status="budget_blocked",
+                                    accepted=False,
+                                    validationError="已达到场景真实模型请求次数上限",
+                                )
+                            else:
+                                workflow.plan["actualModelCallCount"] = calls + 1
+                                attempt["requested"] = True
+                        _save(workflow)
+                        if attempt["status"] != "requesting":
+                            step(
+                                workflow,
+                                "analysis_model_attempt",
+                                status="succeeded" if attempt["accepted"] else "failed",
+                                message=attempt.get(
+                                    "validationError", "模型响应通过实际证据校验"
+                                ),
+                                action={
+                                    "stage": stage["name"],
+                                    "attempt": attempt["attempt"],
+                                    "accepted": attempt["accepted"],
+                                    "requestSha256": attempt["requestSha256"],
+                                },
+                                metrics={
+                                    "inputTokens": attempt["inputTokens"],
+                                    "contentBytes": attempt["contentBytes"],
+                                    "usage": attempt["usage"],
+                                },
+                            )
+                    if blocked:
+                        raise ComputeError("已达到场景真实模型请求次数上限")
+
+                decision, edits = decide(
+                    workflow, user, p, stage, results, guard, record_attempt
+                )
                 guard()
                 stage.update(decision=decision, edits=edits)
                 with transaction.atomic():

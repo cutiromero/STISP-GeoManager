@@ -336,7 +336,10 @@ def test_real_provider_final_cannot_only_cite_old_statistics(demo, settings):
         patch("apps.agent.context.count_tokens", return_value=300),
         patch(
             "apps.agent.demo_decisions.provider.stream",
-            return_value=iter([json.dumps({"decision": value, "edits": []})]),
+            side_effect=[
+                iter([json.dumps({"decision": value, "edits": []})]),
+                iter([json.dumps({"decision": value, "edits": []})]),
+            ],
         ),
     ):
         with pytest.raises(ComputeError, match="最近一次"):

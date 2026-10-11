@@ -11,6 +11,8 @@ inputs 使用明确资源角色。生态为 early_image、late_image、valid_mas
 
 AgentWorkflowStep.decision 为可空公开判断摘要，包含问题、发现、当前判断、待核实项、下一动作、算法理由和实际引用；modelMode区分real/mock。知识引用带整数revision，资源/任务/输出通过实际对象及内部内容校验和核验。摘要用于回查依据，不保存或公开模型内部思维链。
 
+真实模型的结构、最新统计引用或受约束修改校验失败时，每步最多追加一次具体错误反馈，由模型重新作答。plan 保存初始完整请求与各次响应审计；每次请求重新核对完整上下文和权限，actualModelCallCount 累计受原 maxIterations 预算限制，网络、取消和权限异常直接停止。
+
 确认入口仍提交planHash。输入修订、知识版本、算法checksum及下游入库资源在执行前重新授权。needs_review候选会暂停并更新计划哈希；人工批准分析与批准质量产物分别记录，避免跨步骤复用批准。计算成功后完整读取有限统计表，将真实结果保存为下一步输入，再形成下一判断。刷新/重试复用持久步骤和原taskId。
 
 生态更新可传previousWorkflowId，必须引用本人同项目已成功的生态分析。两期影像、掩膜、分区、日期及计算参数保持原绑定；新的context保留原观测并增加证据。更新核实原change产物及入库资源，只重新执行调查排序，plan.previousAnalysis保存旧判断、原统计和新增证据。操作说明见[双Demo本机演示](dual-demo-20261010.md)。

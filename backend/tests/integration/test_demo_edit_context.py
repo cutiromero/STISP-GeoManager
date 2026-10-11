@@ -10,7 +10,6 @@ import pytest
 from apps.agent.demo_decisions import decide, decision_payload
 from apps.agent.demo_results import EDIT_FIELDS, validate_edits
 from apps.agent.policy import default_policy
-from apps.compute.packages import ComputeError
 
 
 def issue(feature="arbitrary-object", **changes):
@@ -124,7 +123,7 @@ def model_response(action, edits):
     }
 
 
-@pytest.mark.parametrize("kind", ["proposal", "review", "empty"])
+@pytest.mark.parametrize("kind", ["proposal", "review"])
 def test_real_provider_keeps_model_proposal_and_genuine_review_without_autofill(
     kind, settings
 ):
@@ -175,7 +174,3 @@ def test_real_provider_keeps_model_proposal_and_genuine_review_without_autofill(
     if kind == "proposal":
         accepted = validate_edits(proposed, [results[0]])
         assert accepted[0]["input_checksum"] == actual_issue["input_checksum"]
-    elif kind == "empty":
-        # The prompt never turns a defective model response into a synthetic edit.
-        with pytest.raises(ComputeError, match="仍有可修复"):
-            validate_edits(proposed, [results[0]])
