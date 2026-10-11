@@ -151,6 +151,9 @@ def test_directory_checks_membership_and_live_services(demo):  # noqa: F811
     AgentRuntime.objects.update_or_create(
         name="worker", defaults={"heartbeat": timezone.now()}
     )
+    AgentRuntime.objects.update_or_create(
+        name="workflow-worker", defaults={"heartbeat": timezone.now()}
+    )
     with patch(
         "apps.agent.research_presets.visible_models",
         return_value=[{"status": "online"}],
@@ -159,6 +162,14 @@ def test_directory_checks_membership_and_live_services(demo):  # noqa: F811
         assert {i["projectId"] for i in items} == {env["project"].id}
         assert all(i["available"] for i in items)
         assert all(i["sampleNature"] == "synthetic" for i in items)
+        limited = {**env["policy"], "maxOperatorSteps": 1}
+        assert not any(
+            i["available"] for i in list_demos(env["owner"], limited)["items"]
+        )
+        AgentRuntime.objects.filter(name="workflow-worker").delete()
+        assert not any(
+            i["available"] for i in list_demos(env["owner"], env["policy"])["items"]
+        )
         assert not list_demos(env["outsider"], env["policy"])["items"]
         ProjectMembership.objects.filter(
             project=env["project"], user=env["owner"]

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
+from django.utils import timezone
+
 from apps.compute.models import AlgorithmVersion
 from apps.compute.services import (
     agent_algorithm_allowed,
@@ -13,6 +17,7 @@ from apps.projects.middleware import models_q
 from apps.projects.models import Project
 
 from .demo_workflow import GRAPHS, ROLES
+from .models import AgentRuntime
 from .policy import allowed, visible_models, worker_online
 from .tools import resources
 
@@ -186,12 +191,21 @@ def list_demos(user, p: dict) -> dict:
     models_ready = any(
         m["status"] == "online" for m in visible_models(user, "agent", p)
     )
+    runtime = runtime_state(user)
+    workflow_ready = AgentRuntime.objects.filter(
+        name="workflow-worker",
+        heartbeat__gt=timezone.now() - timedelta(seconds=120),
+    ).exists()
     shared_ready = bool(
         p.get("workflowEnabled")
         and p.get("operatorEnabled")
         and worker_online()
+        and workflow_ready
         and models_ready
-        and runtime_state(user)["available"]
+        and runtime["available"]
+        and runtime["permissions"]["submit_task"]
+        and runtime["permissions"]["view_own_task"]
+        and runtime["permissions"]["import_outputs"]
     )
     items = []
     for project in projects.order_by("id"):
@@ -210,7 +224,13 @@ def list_demos(user, p: dict) -> dict:
                         "title": scene["title"],
                         "prompt": PROMPTS[scene["scenario"]],
                         "sampleNature": "synthetic",
-                        "available": bool(shared_ready and scene["available"]),
+                        "available": bool(
+                            shared_ready
+                            and scene["available"]
+                            and len(scene["inputs"]) <= p["maxResources"]
+                            and len(GRAPHS[scene["scenario"]]) <= p["maxOperatorSteps"]
+                            and len(GRAPHS[scene["scenario"]]) + 1 <= p["maxIterations"]
+                        ),
                     }
                 )
     return {"items": items}
