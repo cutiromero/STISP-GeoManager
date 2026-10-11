@@ -59,8 +59,12 @@ def serve(stop=None, once=False):
                 run_workflow(workflow_id)
             if once:
                 break
-        except OperationalError:
-            logger.warning("workflow queue busy; retrying next heartbeat")
+        except OperationalError as exc:
+            logger.warning(
+                "workflow queue busy (%s, database code=%s); retrying next heartbeat",
+                type(exc).__name__,
+                getattr(exc.__cause__, "sqlite_errorname", "unavailable"),
+            )
         except Exception:
             logger.exception("workflow worker tick failed")
         stop.wait(1)

@@ -697,7 +697,11 @@ def advance_demo(workflow_id) -> None:
             ):
                 raise ComputeError("已达到场景算子步骤上限")
             if not stage.get("decision"):
-                if workflow.iteration >= workflow.max_iterations:
+                recovering_response = bool(stage.get("modelAttempts"))
+                if (
+                    not recovering_response
+                    and workflow.iteration >= workflow.max_iterations
+                ):
                     raise ComputeError("已达到场景模型决策次数上限")
                 deadline, heartbeat_at = time.monotonic() + p["maxRunSeconds"], [0.0]
 
@@ -718,7 +722,8 @@ def advance_demo(workflow_id) -> None:
                         heartbeat_at[0] = time.monotonic()
 
                 # Reserve the decision count before contacting the configured model.
-                workflow.iteration += 1
+                if not recovering_response:
+                    workflow.iteration += 1
                 workflow.status = "running"
                 _save(workflow)
                 results = []
