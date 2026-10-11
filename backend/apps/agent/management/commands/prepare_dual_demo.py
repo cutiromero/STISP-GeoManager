@@ -39,6 +39,11 @@ ALGORITHMS = [
     "geology-edit",
 ]
 PACKAGE_FILES = ("main.py", "operator.yaml", "README.md")
+SCENARIOS = (
+    ("demo-arid-ecology", "干旱区生态风险评估分析决策", "ecology"),
+    ("demo-geology-reasoning", "地质逻辑推理", "geology"),
+)
+MINIMUM_BUDGETS = {"maxResources": 12, "maxIterations": 10, "maxOperatorSteps": 12}
 
 
 def package(directory):
@@ -49,13 +54,28 @@ def package(directory):
     return SimpleUploadedFile(directory.name + ".zip", buffer.getvalue())
 
 
-def demo_project(user, code: str, title: str) -> Project:
+def existing_demo_project(code: str, title: str, project_id=None):
+    if project_id is not None:
+        project = Project.objects.filter(pk=project_id, is_active=True).first()
+        if project is None:
+            raise CommandError("指定演示项目不存在或已停用")
+        return project
     if title == "地质逻辑推理":
         matches = list(Project.objects.filter(name=title, is_active=True)[:2])
         if len(matches) > 1:
             raise CommandError("存在多个活动的地质逻辑推理项目，请先明确保留的项目")
         if matches:
             return matches[0]
+    project = Project.objects.filter(code=code).first()
+    if project is not None and not project.is_active:
+        raise CommandError("已登记的演示项目已停用，请先核对项目状态")
+    return project
+
+
+def demo_project(user, code: str, title: str, *, project_id=None) -> Project:
+    existing = existing_demo_project(code, title, project_id)
+    if existing is not None:
+        return existing
     project, _ = Project.objects.get_or_create(
         code=code,
         defaults={
@@ -69,7 +89,7 @@ def demo_project(user, code: str, title: str) -> Project:
     return project
 
 
-def verify_version_source(version: AlgorithmVersion, directory: Path) -> None:
+def version_source_matches(version: AlgorithmVersion, directory: Path) -> bool:
     path = app_path(version.package_path)
     try:
         if checksum(path) != version.checksum:
@@ -83,11 +103,67 @@ def verify_version_source(version: AlgorithmVersion, directory: Path) -> None:
             )
     except (OSError, zipfile.BadZipFile, KeyError) as exc:
         raise CommandError("已登记算法包无法核验，请恢复原包或登记新版本") from exc
-    if not matches:
+    return matches
+
+
+def verify_version_source(version: AlgorithmVersion, directory: Path) -> None:
+    if not version_source_matches(version, directory):
         raise CommandError(
             f"算法 {version.algorithm.identifier} {version.version} 的源码已变化；"
             "请提高 operator.yaml 的版本号并登记新版本，原版本保持不变"
         )
+
+
+def demo_policy_value(saved_value):
+    value = {**default_policy(), **saved_value}
+    for key, minimum in MINIMUM_BUDGETS.items():
+        if not isinstance(value[key], int) or isinstance(value[key], bool):
+            raise CommandError(f"现有策略 {key} 不是有效整数，请先核对策略")
+        value[key] = max(value[key], minimum)
+    return value
+
+
+def preflight_algorithm_sources(program_root, projects):
+    shared = []
+    for name in ALGORITHMS:
+        scenario = (
+            "ecology"
+            if name
+            in {
+                "raster-ndvi",
+                "ndvi-change-candidates",
+                "ecology-investigation-priority",
+            }
+            else "geology"
+        )
+        directory = program_root / "examples/compute" / name
+        # Read all package members before any project, policy or resource writes.
+        for filename in PACKAGE_FILES:
+            (directory / filename).read_bytes()
+        manifest = json.loads((directory / "operator.yaml").read_text(encoding="utf-8"))
+        project = projects[scenario]
+        if project is not None:
+            version = AlgorithmVersion.objects.filter(
+                algorithm__project_tag_id=project.id,
+                algorithm__identifier=manifest["identifier"],
+                version=manifest["version"],
+            ).first()
+            if version is not None:
+                verify_version_source(version, directory)
+        for version in AlgorithmVersion.objects.filter(
+            algorithm__project_tag_id=1,
+            algorithm__identifier=manifest["identifier"],
+            version=manifest["version"],
+        ):
+            shared.append(
+                {
+                    "identifier": manifest["identifier"],
+                    "version": version.version,
+                    "versionId": version.id,
+                    "sourceMatches": version_source_matches(version, directory),
+                }
+            )
+    return shared
 
 
 def import_table(user, path, code, name):
@@ -207,30 +283,50 @@ def knowledge(user, key, domain, title, statement, conditions, sources):
 class Command(BaseCommand):
     help = "准备双Demo本机项目、合成资料、必要知识及草稿算法；不自动发布"
 
+    def add_arguments(self, parser):
+        parser.add_argument("--geology-project-id", type=int)
+        parser.add_argument("--user-id", type=int)
+
     def handle(self, **options):
+        actors = get_user_model().objects.filter(is_active=True)
+        if options.get("user_id") is not None:
+            actors = actors.filter(pk=options["user_id"])
         user = next(
             (
                 actor
-                for actor in get_user_model().objects.filter(is_active=True)
+                for actor in actors
                 if actor.is_superuser or is_superadmin_user(actor)
             ),
             None,
         )
         if user is None:
-            raise CommandError("先配置有效超级管理员")
-        saved, _ = AgentPolicy.objects.get_or_create(
-            pk=1, defaults={"value": default_policy()}
-        )
-        saved.value = {
-            **default_policy(),
-            **saved.value,
-            "operatorEnabled": True,
-            "maxResources": 12,
-            "maxIterations": 10,
-            "maxOperatorSteps": 12,
-        }
-        saved.save()
+            raise CommandError("先配置或指定有效超级管理员")
         base = settings.PROGRAM_ROOT / "examples/demos/dual-demo"
+        projects = {
+            scenario: existing_demo_project(
+                code,
+                title,
+                options.get("geology_project_id") if scenario == "geology" else None,
+            )
+            for code, title, scenario in SCENARIOS
+        }
+        shared = preflight_algorithm_sources(settings.PROGRAM_ROOT, projects)
+        for item in shared:
+            if not item["sourceMatches"]:
+                self.stderr.write(
+                    f"公开算法 {item['identifier']} {item['version']} "
+                    f"（版本 {item['versionId']}）源码与Demo不同；保留原版本和包，仅登记项目内副本。"
+                )
+        previous = AgentPolicy.objects.filter(pk=1).first()
+        next_policy = demo_policy_value(
+            previous.value if previous else {"operatorEnabled": True}
+        )
+        saved, _ = AgentPolicy.objects.get_or_create(
+            pk=1, defaults={"value": next_policy}
+        )
+        if saved.value != next_policy:
+            saved.value = next_policy
+            saved.save(update_fields=["value", "updated_at"])
         spec = importlib.util.spec_from_file_location(
             "dual_samples", base / "generate_samples.py"
         )
@@ -246,12 +342,15 @@ class Command(BaseCommand):
             "sampleRoot": str(sample_root),
             "projects": {},
             "algorithmVersions": {},
+            "sharedAlgorithmSources": shared,
         }
-        for code, title, scenario in [
-            ("demo-arid-ecology", "干旱区生态风险评估分析决策", "ecology"),
-            ("demo-geology-reasoning", "地质逻辑推理", "geology"),
-        ]:
-            project = demo_project(user, code, title)
+        for code, title, scenario in SCENARIOS:
+            project = demo_project(
+                user,
+                code,
+                title,
+                project_id=projects[scenario].id if projects[scenario] else None,
+            )
             ProjectMembership.objects.get_or_create(
                 project=project, user=user, defaults={"assigned_by": user}
             )
@@ -429,6 +528,7 @@ class Command(BaseCommand):
                     verify_version_source(version, directory)
                 record["algorithmVersions"][algorithm.identifier] = version.id
         path = settings.PROGRAM_ROOT / ".runtime/dual-demo-20261010/objects.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8"
         )

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.34] - 2026-10-11
+
+### Added
+- 两个可重复展示的科研工作流：两期植被变化与调查优先区、地质填图检查与受约束纠正。
+- 保存与实际输入、知识修订和计算成果对应的分析说明；支持补充观测后的前后判断对照、历史恢复及原图/修正图地图比较。
+- NDVI变化、调查排序、填图检查和受约束属性编辑算法，以及明确标注模拟性质的小样例准备入口。
+
+### Changed
+- 工作流任务卡支持矢量成果地图入口，地图按实际调查排序与修改字段分色；点选对象优先显示理由、依据和修改前后值。
+- 后台可配置多步判断与资源预算，保持现有权限、数据存储与后端栅格呈图方式。
+
+### Fixed
+- 修改表来源路径与矢量临时导出校验，保证后续算法读取实际成果并避免重复提交。
+- 模型请求去除重复结果表示，同时保留完整统计、观测、知识与来源校验。
+
 ## [0.1.33] - 2026-10-10
 
 ### Changed
