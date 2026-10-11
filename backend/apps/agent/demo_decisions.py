@@ -9,7 +9,7 @@ from apps.compute.packages import ComputeError
 from . import provider
 from .config import registry
 from .context import prepare_context
-from .demo_results import resource_context
+from .demo_results import EDIT_FIELDS, resource_context
 
 FIELDS = {
     "problem",
@@ -171,6 +171,39 @@ def _execution_state(workflow, stage, results, old_results) -> dict:
     }
 
 
+def _edit_task(workflow, stage, results) -> dict | None:
+    """Point to actual latest issues; the model must still author every edit."""
+    if stage["identifier"] != "geology-edit":
+        return None
+    latest = next(
+        (
+            item
+            for item in reversed(workflow.plan["stages"])
+            if item.get("identifier") == "geology-check" and item.get("taskId")
+        ),
+        None,
+    )
+    task_id = str(latest["taskId"]) if latest else None
+    issues = [
+        item
+        for item in results
+        if item["key"] == "issues" and str(item.get("taskId")) == task_id
+    ]
+    return {
+        "changesInputState": "requires_model_proposal",
+        "latestCheckTaskId": task_id,
+        "issuesOutputIds": [item["outputId"] for item in issues],
+        "repairableAttributeRows": [
+            {"outputId": item["outputId"], "rowIndex": index}
+            for item in issues
+            for index, row in enumerate(item.get("rows", []))
+            if row.get("status") == "repairable" and row.get("field") != "geometry"
+        ],
+        "requiredFields": [*EDIT_FIELDS, "reason"],
+        "inputChecksumSource": "executor_binds_actual_issue",
+    }
+
+
 def decision_payload(workflow, stage, context, results) -> dict:
     """Remove repeated request content while keeping persisted evidence intact."""
     prior = [
@@ -210,6 +243,7 @@ def decision_payload(workflow, stage, context, results) -> dict:
         "knowledge": workflow.evidence,
         "actualResults": results,
         "executionState": _execution_state(workflow, stage, results, old_results),
+        "editTask": _edit_task(workflow, stage, results),
         "previousAnalysis": previous,
         "previousDecisions": prior[-4:],
         "availableEvidence": evidence_refs(workflow, context, results),
@@ -228,11 +262,14 @@ def decide(workflow, user, policy, stage, results, guard) -> tuple[dict, list]:
         "面向用户的正文优先使用资料实际标题和中文分区名，已有名称时不把资源或输出编号写入正文；"
         "编号用于evidenceRefs，没有名称时沿用原资料称谓，不编造名称。"
         "模拟资料须按其来源性质描述，NDVI变化是线索，不能直接断言长期退化或因果。"
+        "收获等辅助记录可支持一种变化解释，并按明示规则调整调查分；"
+        "调查排序改变不等于原因被证实，也不能排除同时存在的生态风险。"
+        "解释使用支持、可能或待现场验证，结合实际证据说明，不将关联写成排他因果。"
         "知识不足或覆盖不足须说明。前后期、初始修复图的角色不能混淆。"
-        '只能输出一个JSON对象：{"decision":{"problem":"…","findings":["…"],'
+        '只能输出一个JSON对象，顶层仅包含decision对象和edits数组。decision结构：{"problem":"…","findings":["…"],'
         '"judgement":"…","uncertainties":["…"],"nextAction":"允许的下一动作",'
         '"algorithmReason":"…","evidenceRefs":[{"kind":"output","id":"实际编号"}],'
-        '"resultSummary":"…"},"edits":[]}。引用只从availableEvidence选择，实际结果已经读取时'
+        '"resultSummary":"…"}。引用只从availableEvidence选择，实际结果已经读取时'
         "必须引用output。nextAction只能为allowedAction或request_review；不能跳步、虚构计算/入库。"
         "knowledge非空时必须至少引用一个实际知识条目，并说明适用条件如何影响动作或为何不适用。"
         "executionState明确当前步骤执行状态及旧结果、本轮结果的来源组，"
@@ -245,9 +282,20 @@ def decide(workflow, user, policy, stage, results, guard) -> tuple[dict, list]:
         "currentStage.kind=final_analysis表示前序计算结束后的分析动作，"
         "其本身无需taskId；最终分析须引用currentRun.latestStatisticsOutputIds中的"
         "本轮最新实际统计，不能把previousAnalysis旧统计当作更新统计。"
-        "需要编辑时edits只提出最近一次检查issues中status=repairable的明确属性修改，"
-        "不可重复采用初始检查中已被几何修复改变的旧问题。逐项包含feature_id,field,"
-        "old_value,new_value,evidence_id,rule_id,reason；证据不足/geometry事项保留，不猜新值。"
+        "只有allowedAction=geology-edit且nextAction=geology-edit时才提出edits，"
+        "其他算法步骤或request_review时edits=[]；提前讨论修改不代表已生成可执行修改表。"
+        "编辑阶段editTask.changesInputState=requires_model_proposal表示model_changes尚待"
+        "本次模型提出，inputBindings中的model_changes是绑定名称，不是已有修改表。"
+        "依据editTask.issuesOutputIds对应actualResults中的最近一次实际检查清单，"
+        "repairableAttributeRows的rowIndex从0开始，只指出可选行位置，不是编辑指令。"
+        "逐项判断status=repairable且field不是geometry的明确属性问题，"
+        "每个采纳项由模型在edits中输出editTask.requiredFields全部字段；"
+        "feature_id,field,old_value,new_value,evidence_id,rule_id须对应实际问题行，reason说明依据。"
+        "input_checksum由执行器从该真实问题行绑定，模型不输出或编造它。"
+        "当可修复属性行非空而选择geology-edit时，edits不能留空或只在正文描述修改；"
+        "无法提出有据修改时选择request_review并说明具体原因。"
+        "不可重复采用初始检查中已被几何修复改变的旧问题；"
+        "证据不足、needs_review或geometry事项保留，不猜新值。"
     )
     payload = decision_payload(workflow, stage, context, results)
     messages = [
