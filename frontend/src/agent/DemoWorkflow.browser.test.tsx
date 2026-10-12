@@ -8,6 +8,7 @@ import {
 import { App as AntApp } from "antd";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import type {
@@ -19,8 +20,10 @@ import type {
 import WorkflowPanel from "./WorkflowPanel";
 import RunComputeTasks from "./RunComputeTasks";
 import WorkflowResults from "./WorkflowResults";
+import WorkflowDecisionTimeline from "./WorkflowDecisionTimeline";
 import { liveComputeTask } from "./computeFlow.testFixtures";
 import "./agent.css";
+import { workflowReport } from "./workflowReport.testFixtures";
 
 const candidates: ComputeCandidate[] = [
   [101, "模拟前期影像", "raster"],
@@ -165,6 +168,9 @@ async function select(label: string, option: string) {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue(
+    workflowReport(),
+  );
   vi.spyOn(computeApi, "algorithms").mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(computeApi, "inputs").mockResolvedValue({
     items: candidates,
@@ -210,6 +216,167 @@ beforeEach(() => {
       },
     ],
   });
+});
+
+it("expands only the current step and allows earlier evidence to be opened on demand", async () => {
+  const previous = decisionStep();
+  const current = {
+    ...decisionStep(),
+    id: 2,
+    sequence: 2,
+    status: "running",
+    decision: {
+      ...decisionStep().decision!,
+      problem: "结合新观测更新判断",
+      findings: ["新增调查记录已读取"],
+    },
+  };
+  const mounted = render(
+    <WorkflowDecisionTimeline steps={[previous, current]} />,
+  );
+  await waitFor(() =>
+    expect(screen.getByText("新增调查记录已读取")).toBeVisible(),
+  );
+  expect(
+    screen.getByText("西区平均变化为 -0.21，覆盖率 0.93"),
+  ).not.toBeVisible();
+  fireEvent.click(screen.getByText("1. 哪些区域值得优先调查？"));
+  await waitFor(() =>
+    expect(screen.getByText("西区平均变化为 -0.21，覆盖率 0.93")).toBeVisible(),
+  );
+  mounted.rerender(
+    <WorkflowDecisionTimeline
+      steps={[previous, { ...current, status: "succeeded" }]}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByText("新增调查记录已读取")).not.toBeVisible(),
+  );
+});
+
+it("confirms a workflow stop before invoking the mutation", async () => {
+  const stop = vi.fn();
+  render(
+    <AntApp>
+      <WorkflowResults
+        workflow={savedWorkflow({ status: "running" })}
+        onCancel={stop}
+      />
+    </AntApp>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "停止此工作流" }));
+  expect(stop).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByRole("button", { name: "确认停止" }));
+  expect(stop).toHaveBeenCalledOnce();
+});
+
+it("presents the completed ecological workflow as a conclusion and a compact real-file list", async () => {
+  const change = liveComputeTask("succeeded");
+  change.id = "change-task";
+  change.outputs = [
+    {
+      ...change.outputs[0]!,
+      label: "两期植被变化图",
+      fileName: "ndvi_change.tif",
+      importStatus: "ready",
+      resourceId: 201,
+      resourceLocation: "生态项目 / 数据资源 / 计算结果 / 两期植被变化图",
+      mapUrl: "/map?resourceId=201&projectTagId=2",
+      downloadUrl: "/api/compute/outputs/30/download/",
+    },
+  ];
+  const priority = {
+    ...change,
+    id: "priority-task",
+    algorithmName: "生态调查优先区",
+    outputs: [
+      {
+        ...change.outputs[0]!,
+        id: 31,
+        label: "调查优先区",
+        fileName: "investigation_priority.gpkg",
+        kind: "vector",
+        metadata: { features: 4, crs: "EPSG:32645" },
+        resourceId: 202,
+        resourceLocation: "生态项目 / 数据资源 / 计算结果 / 调查优先区",
+        mapUrl: "/map?resourceId=202&projectTagId=2",
+      },
+      {
+        ...change.outputs[0]!,
+        id: 32,
+        label: "分区统计表",
+        fileName: "zone_statistics.csv",
+        kind: "table",
+        metadata: { rows: 4 },
+        resourceId: 203,
+        resourceLocation: "生态项目 / 数据资源 / 计算结果 / 分区统计表",
+        mapUrl: "",
+      },
+      {
+        ...change.outputs[0]!,
+        id: 33,
+        label: "调查建议表",
+        fileName: "investigation_advice.csv",
+        kind: "table",
+        metadata: { rows: 4 },
+        resourceId: 204,
+        resourceLocation: "生态项目 / 数据资源 / 计算结果 / 调查建议表",
+        mapUrl: "",
+      },
+    ],
+  };
+  vi.spyOn(computeApi, "task").mockImplementation(async (id) =>
+    id === change.id ? change : priority,
+  );
+  const workflow = savedWorkflow({
+    steps: [
+      decisionStep(),
+      {
+        ...decisionStep(),
+        id: 2,
+        computeTaskId: change.id,
+        decision: undefined,
+      },
+      {
+        ...decisionStep(),
+        id: 3,
+        computeTaskId: priority.id,
+        decision: undefined,
+      },
+    ],
+    plan: {
+      ...savedWorkflow().plan,
+      stages: [
+        { name: "change", taskId: change.id },
+        { name: "priority", taskId: priority.id },
+      ],
+    },
+  });
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <div
+          className="agent-research-intent"
+          style={{ maxWidth: 860, margin: "24px auto" }}
+        >
+          <h2>干旱区生态风险调查</h2>
+          <WorkflowResults workflow={workflow} compact />
+        </div>
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await screen.findByText("ecology-analysis-report.md · 2.0 KB");
+  await screen.findByText("investigation_advice.csv");
+  expect(screen.queryByLabelText("分析说明与决策依据")).not.toBeInTheDocument();
+  expect(screen.getByText("分区统计表")).toBeVisible();
+  await page.viewport(1600, 1400);
+  try {
+    await page.screenshot({
+      path: "../../test-results/workflow-final-deliverables.png",
+    });
+  } finally {
+    await page.viewport(1600, 900);
+  }
 });
 
 it("binds ecological input roles, lets the user choose the evidence version, and submits actual parameters", async () => {
@@ -268,6 +435,10 @@ it("restores a saved multi-stage judgement and scoped knowledge without creating
   const confirm = vi.spyOn(agentApi, "confirmWorkflow");
   showWorkflow();
   await screen.findByText("初步优先调查西区");
+  expect(
+    screen.queryByText("西区平均变化为 -0.21，覆盖率 0.93"),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("查看分析过程 · 1 步"));
   expect(
     screen.getByText("西区平均变化为 -0.21，覆盖率 0.93"),
   ).toBeInTheDocument();
@@ -328,6 +499,7 @@ it("uses a real model label for real decisions and clears previous evidence when
     Object.assign(new Error("项目权限已撤销"), { status: 403 }),
   );
   showWorkflow();
+  fireEvent.click(await screen.findByText("查看分析过程 · 1 步"));
   await screen.findByText("Qwen 分析模型");
   await select("历史工作流", "另一次调查");
   await screen.findByText("项目权限已撤销");
@@ -543,64 +715,64 @@ it.each([
   "ecology_investigation",
   "geology_correction",
   "geology_age_correction",
-])(
-  "names the initial and final age task cards only for %s",
-  async (workflowType) => {
-    const stageNames = ["check", "edit", "recheck"];
-    const taskIds = [
-      "ffffffff-0000-4000-8000-000000000001",
-      "11111111-0000-4000-8000-000000000002",
-      "aaaaaaaa-0000-4000-8000-000000000003",
-    ];
-    const taskNames = ["原有初查任务名", "原有编辑任务名", "原有复查任务名"];
-    vi.spyOn(computeApi, "task").mockImplementation(async (id) => ({
-      ...liveComputeTask("succeeded"),
-      id,
-      name: taskNames[taskIds.indexOf(id)]!,
-      outputs: [],
-    }));
-    const workflow = savedWorkflow({
-      workflowType,
-      steps: taskIds.map((id, index) => ({
-        ...decisionStep(),
-        id: index + 1,
-        sequence: index + 1,
-        computeTaskId: id,
-        decision: undefined,
+])("uses clear stage names for %s", async (workflowType) => {
+  const stageNames = ["check", "edit", "recheck"];
+  const taskIds = [
+    "ffffffff-0000-4000-8000-000000000001",
+    "11111111-0000-4000-8000-000000000002",
+    "aaaaaaaa-0000-4000-8000-000000000003",
+  ];
+  const taskNames = ["原有初查任务名", "原有编辑任务名", "原有复查任务名"];
+  vi.spyOn(computeApi, "task").mockImplementation(async (id) => ({
+    ...liveComputeTask("succeeded"),
+    id,
+    name: taskNames[taskIds.indexOf(id)]!,
+    outputs: [],
+  }));
+  const workflow = savedWorkflow({
+    workflowType,
+    steps: taskIds.map((id, index) => ({
+      ...decisionStep(),
+      id: index + 1,
+      sequence: index + 1,
+      computeTaskId: id,
+      decision: undefined,
+    })),
+    plan: {
+      stages: stageNames.map((name, index) => ({
+        name,
+        taskId: taskIds[index],
+        outputs: [],
       })),
-      plan: {
-        stages: stageNames.map((name, index) => ({
-          name,
-          taskId: taskIds[index],
-          outputs: [],
-        })),
-      },
-    });
-    render(
-      <AntApp>
-        <MemoryRouter>
-          <WorkflowResults workflow={workflow} />
-        </MemoryRouter>
-      </AntApp>,
-    );
-    const expected =
-      workflowType === "geology_age_correction"
-        ? ["初始时代属性检查", "地层时代属性纠偏", "最终时代属性复查"]
+    },
+  });
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <WorkflowResults workflow={workflow} />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  const expected =
+    workflowType === "geology_age_correction"
+      ? ["初始时代属性检查", "地层时代属性纠偏", "最终时代属性复查"]
+      : workflowType === "geology_correction"
+        ? ["修复后检查", "调查证据属性编辑", "最终填图复查"]
         : taskNames;
-    for (const title of expected)
-      expect(
-        await screen.findByRole("region", { name: title }),
-      ).toBeInTheDocument();
+  fireEvent.click(await screen.findByText("计算任务 · 3 项"));
+  for (const title of expected)
     expect(
-      Array.from(document.querySelectorAll(".agent-compute-result"), (card) =>
-        card.getAttribute("aria-label"),
-      ),
-    ).toEqual(expected);
-    if (workflowType === "geology_age_correction")
-      for (const title of taskNames)
-        expect(screen.queryByText(title)).not.toBeInTheDocument();
-  },
-);
+      await screen.findByRole("region", { name: title }),
+    ).toBeInTheDocument();
+  expect(
+    Array.from(document.querySelectorAll(".agent-compute-result"), (card) =>
+      card.getAttribute("aria-label"),
+    ),
+  ).toEqual(expected);
+  if (workflowType === "geology_age_correction")
+    for (const title of taskNames)
+      expect(screen.queryByText(title)).not.toBeInTheDocument();
+});
 
 it("opens only spatial outputs and the retained change image when comparing an evidence update", async () => {
   vi.spyOn(agentApi, "workflows").mockResolvedValue({
@@ -705,6 +877,7 @@ it("restores the earlier judgement, new observation evidence and updated conclus
   });
   const create = vi.spyOn(agentApi, "createWorkflow");
   showWorkflow();
+  fireEvent.click(await screen.findByText("查看分析过程 · 1 步"));
   const comparison = await screen.findByLabelText("补充观测后的判断更新");
   expect(within(comparison).getByText("初步优先调查西区")).toBeInTheDocument();
   expect(

@@ -22,7 +22,7 @@ def claim():
         )
         candidate = (
             AgentWorkflow.objects.select_for_update()
-            .filter(status="queued", cancel_requested=False)
+            .filter(status="queued", cancel_requested=False, pause_requested=False)
             .order_by("created_at")
             .first()
         )
@@ -39,9 +39,17 @@ def recover():
     # A waiting compute task is durable: the next worker tick can observe its
     # terminal state and resume the workflow.  Marking it interrupted here
     # would restart the graph and could submit the same operator twice.
-    AgentWorkflow.objects.filter(status="running", heartbeat__lt=stale).update(
-        status="queued", detail="正在从已保存计划恢复", updated_at=timezone.now()
+    AgentWorkflow.objects.filter(
+        status="running", heartbeat__lt=stale, pause_requested=True
+    ).update(
+        status="paused",
+        paused_from="running",
+        detail="已暂停，可从已保存步骤继续",
+        updated_at=timezone.now(),
     )
+    AgentWorkflow.objects.filter(
+        status="running", heartbeat__lt=stale, pause_requested=False
+    ).update(status="queued", detail="正在从已保存计划恢复", updated_at=timezone.now())
 
 
 def serve(stop=None, once=False):

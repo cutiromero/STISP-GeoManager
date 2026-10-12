@@ -1,5 +1,5 @@
-import { Tag, Timeline } from "antd";
-import { useState } from "react";
+import { Collapse, Tag } from "antd";
+import { useEffect, useState } from "react";
 import type { AgentWorkflowStep } from "../api/generated/types.gen";
 
 const stepNames: Record<string, string> = {
@@ -46,36 +46,53 @@ export default function WorkflowDecisionTimeline({
   const [restoredDecisions] = useState(
     () => new Set(steps.filter((step) => step.decision).map((step) => step.id)),
   );
+  const activeSteps = steps
+    .filter((step) =>
+      ["running", "waiting", "waiting_approval", "failed"].includes(
+        step.status,
+      ),
+    )
+    .map((step) => String(step.id));
+  const activeKey = activeSteps.join(",");
+  const [expanded, setExpanded] = useState<string[]>(activeSteps);
+  useEffect(() => {
+    setExpanded(activeKey ? activeKey.split(",") : []);
+  }, [activeKey]);
   if (!steps.length) return null;
   return (
     <section
       className="agent-decision-timeline"
       aria-label="分析说明与决策依据"
     >
-      <h3>分析说明与决策依据</h3>
-      <Timeline
+      <Collapse
+        ghost
+        size="small"
+        activeKey={expanded}
+        onChange={(keys) => setExpanded(Array.isArray(keys) ? keys : [keys])}
+        className="agent-decision-steps"
         items={steps.map((step) => {
           const decision = step.decision;
           const fresh = Boolean(decision && !restoredDecisions.has(step.id));
           return {
-            key: step.id,
-            color:
-              step.status === "failed"
-                ? "red"
-                : step.status === "running"
-                  ? "blue"
-                  : "gray",
-            content: (
+            key: String(step.id),
+            label: (
+              <div className="agent-decision-step-heading">
+                <strong>
+                  {step.sequence}. {decision?.problem || step.message}
+                </strong>
+                <Tag
+                  color={step.status === "running" ? "processing" : undefined}
+                >
+                  {stepNames[step.status] ?? step.status}
+                </Tag>
+              </div>
+            ),
+            forceRender: true,
+            children: (
               <article
                 className={`agent-decision-step${fresh ? " is-new-decision" : ""}`}
                 data-step-id={step.id}
               >
-                <div className="agent-decision-step-heading">
-                  <strong>
-                    {step.sequence}. {decision?.problem || step.message}
-                  </strong>
-                  <Tag>{stepNames[step.status] ?? step.status}</Tag>
-                </div>
                 {decision ? (
                   <>
                     <span className="agent-decision-model">

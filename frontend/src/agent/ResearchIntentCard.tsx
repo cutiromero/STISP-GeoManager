@@ -1,4 +1,12 @@
-import { Alert, Button, Input, InputNumber, Select, Tag } from "antd";
+import {
+  Alert,
+  Button,
+  Input,
+  InputNumber,
+  Popconfirm,
+  Select,
+  Tag,
+} from "antd";
 import { useEffect, useRef, useState } from "react";
 import { agentApi } from "../api/agent";
 import type {
@@ -39,6 +47,7 @@ export default function ResearchIntentCard({
   const [workflow, setWorkflow] = useState<AgentWorkflow>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [workflowRevision, setWorkflowRevision] = useState(0);
   const inFlight = useRef(false);
   const onUpdate = useRef(onChanged);
   onUpdate.current = onChanged;
@@ -109,7 +118,31 @@ export default function ResearchIntentCard({
       clearTimeout(timer);
       onWorkflow.current?.(undefined);
     };
-  }, [intent.workflowId, run.id]);
+  }, [intent.workflowId, run.id, workflowRevision]);
+  const controlWorkflow = async (action: "pause" | "resume") => {
+    if (!workflow || inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const next =
+        action === "pause"
+          ? await agentApi.pauseWorkflow(workflow.id)
+          : await agentApi.resumeWorkflow(workflow.id);
+      if (!alive.current) return;
+      setWorkflow(next);
+      onWorkflow.current?.(next);
+      if (action === "resume") setWorkflowRevision((value) => value + 1);
+    } catch (reason) {
+      if (alive.current)
+        setError(
+          reason instanceof Error ? reason.message : "暂时无法更新任务状态",
+        );
+    } finally {
+      inFlight.current = false;
+      if (alive.current) setBusy(false);
+    }
+  };
   const update = async (action: AgentResearchIntentUpdate["action"]) => {
     if (inFlight.current) return;
     if (
@@ -251,9 +284,18 @@ export default function ResearchIntentCard({
             >
               {ui("继续分析", "Continue")}
             </Button>
-            <Button disabled={busy} onClick={() => void update("cancel")}>
-              {ui("停止任务", "Stop task")}
-            </Button>
+            <Popconfirm
+              title={ui("停止此任务？", "Stop this task?")}
+              description={ui(
+                "已选资料会保留，任务不再继续分析。",
+                "Selected data is preserved; the task will stop.",
+              )}
+              okText={ui("确认停止", "Stop")}
+              cancelText={ui("继续回答", "Keep answering")}
+              onConfirm={() => void update("cancel")}
+            >
+              <Button disabled={busy}>{ui("停止任务", "Stop task")}</Button>
+            </Popconfirm>
           </div>
         </div>
       )}
@@ -265,6 +307,8 @@ export default function ResearchIntentCard({
           busy={busy}
           onConfirm={() => void update("confirm")}
           onCancel={() => void update("cancel")}
+          onPause={() => void controlWorkflow("pause")}
+          onResume={() => void controlWorkflow("resume")}
         />
       )}
     </section>

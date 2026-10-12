@@ -85,6 +85,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261012-002 | BackendReady | /api/agent/workflows/{workflowId}/pause/; resume/; report/* | persistent MD reports and resumable pause | Updated | HTTP/browser fixtures | Passed | Focused passed | Real files and safe checkpoints; publication pending |
 | API-20261012-001 | ContractReady | /api/agent/research-demos/; /api/catalog/results/ | real-map age correction; authorized result links | Updated | Updated | In progress | Pending | Original synthetic cases preserved; injected errors clearly labelled |
 | API-20261011-001 | ContractReady | /api/agent/research-demos/; /api/agent/runs/{runId}/research-intent/; AgentRun | natural language demo and online clarification | Updated | Updated | In progress | Frontend focused passed | Real backend and candidate validation pending |
 | API-20261010-003 | BackendReady | /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | evidence decisions; multi-stage scenarios; observational updates | Updated | HTTP/browser fixtures | Passed | Focused passed | Local real compute; mock decisions separately labelled; remote deployment separate |
@@ -997,3 +998,16 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation notes: plan固定输入修订和算法校验和，实际输出入库后接下一阶段；人工分析批准与产物质量批准分开。参考图和设错清单仅科研目录独立验收。
 - Verification: 模型结构响应、假引用/假修改拒绝、恢复/取消/撤权/质量审核、多阶段结果衔接；实际算法数值与本机真实任务分别记录。
 - Result: 本机演示验证记录见 docs/dual-demo-20261010.md；服务器部署另行安排。
+
+## API-20261012-002 - 工作流报告文件与可恢复暂停
+
+- Status: BackendReady
+- Owner: Root契约；workflow_report_backend报告；workflow_pause_backend控制；workflow_frontend界面。
+- Endpoints: /api/agent/workflows/{workflowId}/pause/、resume/、report/、report/preview/、report/download/、report/import/。
+- Change type: 新增持久Markdown文件与暂停控制，AgentWorkflow新增paused状态及可选pauseRequested/pausedFrom。
+- OpenAPI change: AgentWorkflowReport、AgentWorkflowReportPreview；下载text/markdown。
+- Mock examples: 后端报告/暂停集成测试与前端DemoWorkflow/ResearchChatDemo真实字段fixtures；旧98样例可省略可选字段。
+- Frontend reason: 完成过程收起、末尾统一成果、在线预览下载入库、确认暂停与继续。
+- Backend implementation notes: 本人/单项目/输入/真实关联任务权限重查；报告文件SHA与幂等登记；暂停保留taskId和人工审核。
+- Verification: 持久文件预览/下载一致、CSV/地图动作、入库幂等/撤权、暂停安全点/恢复不重复提交、刷新恢复。
+- Result: 相关后端257项、最终暂停/准备25项、最终报告22项及前端相关浏览器验证通过；两个已有Demo的真实报告预览/下载/幂等入库通过。服务器发布见同SHA独立验收回执。

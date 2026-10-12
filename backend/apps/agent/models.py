@@ -140,7 +140,7 @@ class RunEvent(models.Model):
         ordering = ("id",)
 
 
-WORKFLOW_ACTIVE = ("queued", "running", "waiting_compute", "waiting_approval")
+WORKFLOW_ACTIVE = ("queued", "running", "waiting_compute", "waiting_approval", "paused")
 
 
 class AgentWorkflow(ProjectScopedModel):
@@ -172,6 +172,8 @@ class AgentWorkflow(ProjectScopedModel):
     import_results = models.BooleanField(default=True, db_default=True)
     result_resource_ids = models.JSONField(default=list, db_default=[])
     cancel_requested = models.BooleanField(default=False)
+    pause_requested = models.BooleanField(default=False, db_default=False)
+    paused_from = models.CharField(max_length=24, blank=True, default="", db_default="")
     idempotency_key = models.CharField(max_length=80)
     heartbeat = models.DateTimeField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)

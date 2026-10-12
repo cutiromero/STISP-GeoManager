@@ -11,6 +11,7 @@ import type {
 } from "../api/generated/types.gen";
 import RunComputeTasks from "./RunComputeTasks";
 import WorkflowPanel from "./WorkflowPanel";
+import { workflowReport } from "./workflowReport.testFixtures";
 
 const version: ComputeVersion = {
   id: 3,
@@ -91,6 +92,9 @@ const workflow: AgentWorkflow = {
 };
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue(
+    workflowReport(),
+  );
   vi.spyOn(agentApi, "bootstrap").mockResolvedValue({
     canChat: true,
     canAgent: true,
@@ -182,7 +186,9 @@ it("restores a saved plan and only executes after confirmation", async () => {
   const create = vi.spyOn(agentApi, "createWorkflow");
   render(
     <AntApp>
-      <WorkflowPanel model="mock" resourceIds={[12]} />
+      <MemoryRouter>
+        <WorkflowPanel model="mock" resourceIds={[12]} />
+      </MemoryRouter>
     </AntApp>,
   );
   fireEvent.click(screen.getByText("科研工作流 · 计划、执行与入库"));
@@ -206,7 +212,9 @@ it("shows confirmation failure without claiming successful execution", async () 
   );
   render(
     <AntApp>
-      <WorkflowPanel model="mock" resourceIds={[12]} />
+      <MemoryRouter>
+        <WorkflowPanel model="mock" resourceIds={[12]} />
+      </MemoryRouter>
     </AntApp>,
   );
   fireEvent.click(screen.getByText("科研工作流 · 计划、执行与入库"));

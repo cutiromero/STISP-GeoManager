@@ -30,6 +30,10 @@ function record(value: unknown): Record<string, unknown> {
 
 export function workflowActivity(workflow: AgentWorkflow): LiveActivity {
   const { status, plan, detail } = workflow;
+  if (status === "paused")
+    return { state: "waiting", label: "科研任务已暂停", detail };
+  if (workflow.pauseRequested)
+    return { state: "working", label: "正在保存进度并暂停", detail };
   if (status === "waiting_approval")
     return { state: "waiting", label: "等待您确认", detail };
   if (status === "succeeded")

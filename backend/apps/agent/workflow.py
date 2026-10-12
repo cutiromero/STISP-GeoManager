@@ -7,6 +7,7 @@ import json
 import re
 
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.utils import timezone
 
 from apps.compute.models import AlgorithmVersion, ComputeImport
@@ -23,6 +24,12 @@ from apps.projects.context import ProjectScope, project_scope
 from .models import AgentCheckpoint, AgentWorkflow, AgentWorkflowStep
 from .policy import fresh_user, require_access
 from .tools import resources, resolve_resource
+from .workflow_controls import (
+    WorkflowPaused,
+    check_pause,
+    locked_workflow,
+    save_workflow_state,
+)
 
 try:
     import langgraph  # noqa: F401
@@ -211,15 +218,24 @@ def _prepare(workflow, user, p):
         if workflow.import_results
         else "计划已校验，请确认后执行"
     )
-    workflow.save()
-    step(
-        workflow,
-        "discover_inputs",
-        message=f"已匹配 {len(inputs)} 项授权输入",
-        output_refs={"resourceIds": workflow.resource_ids},
-    )
-    step(workflow, "build_plan", message="已按算法输入及参数规范校验计划", action=plan)
-    checkpoint(workflow, "review_plan", {"planHash": workflow.plan_hash})
+    # Publish the approval/pause checkpoint only after its entire evidence
+    # packet is durable. Failure leaves the old running plan recoverable.
+    with transaction.atomic():
+        locked_workflow(workflow.id)
+        step(
+            workflow,
+            "discover_inputs",
+            message=f"已匹配 {len(inputs)} 项授权输入",
+            output_refs={"resourceIds": workflow.resource_ids},
+        )
+        step(
+            workflow,
+            "build_plan",
+            message="已按算法输入及参数规范校验计划",
+            action=plan,
+        )
+        checkpoint(workflow, "review_plan", {"planHash": workflow.plan_hash})
+        save_workflow_state(workflow, acknowledge_pause=True)
 
 
 def validate_confirmed_plan(workflow, user, p):
@@ -250,6 +266,7 @@ def run_workflow(workflow_id):
         return
     with project_scope(_scope(workflow)):
         try:
+            check_pause(workflow)
             user, p = _authorize(workflow)
             if workflow.cancel_requested:
                 workflow.status, workflow.detail = "cancelled", "已取消"
@@ -260,33 +277,47 @@ def run_workflow(workflow_id):
                 validate_confirmed_plan(workflow, user, p)
                 if workflow.operator_steps >= workflow.max_operator_steps:
                     raise ComputeError("已达到算子步骤上限")
-                task = submit_compute(user, _body(workflow, workflow.plan))
-                if not workflow.steps.filter(compute_task_id=task.id).exists():
-                    step(
-                        workflow,
-                        "submit_operator",
-                        message="已提交计算中心",
-                        compute_task_id=task.id,
-                        status="waiting",
-                    )
-                workflow.operator_steps = 1
-                workflow.status, workflow.current_step = (
-                    "waiting_compute",
-                    "wait_operator",
-                )
-                workflow.detail = "等待计算结果，平台将自动跟踪后续处理"
-                checkpoint(workflow, "wait_operator", {"computeTaskId": str(task.id)})
+                with transaction.atomic():
+                    current = locked_workflow(workflow.id)
+                    check_pause(workflow)
+                    if current.cancel_requested:
+                        workflow.status, workflow.detail = "cancelled", "已取消"
+                    else:
+                        task = submit_compute(user, _body(workflow, workflow.plan))
+                        if not workflow.steps.filter(compute_task_id=task.id).exists():
+                            step(
+                                workflow,
+                                "submit_operator",
+                                message="已提交计算中心",
+                                compute_task_id=task.id,
+                                status="waiting",
+                            )
+                        workflow.operator_steps = 1
+                        workflow.status, workflow.current_step = (
+                            "waiting_compute",
+                            "wait_operator",
+                        )
+                        workflow.detail = "等待计算结果，平台将自动跟踪后续处理"
+                        checkpoint(
+                            workflow, "wait_operator", {"computeTaskId": str(task.id)}
+                        )
+                    save_workflow_state(workflow, acknowledge_pause=True)
+                return
+        except WorkflowPaused:
+            save_workflow_state(workflow, acknowledge_pause=True)
+            return
         except PermissionDenied as exc:
             workflow.status, workflow.detail = "interrupted", str(exc)[:300]
         except (ComputeError, ValidationError) as exc:
             workflow.status, workflow.detail = "failed", str(exc)[:300]
         workflow.heartbeat = timezone.now()
-        workflow.save()
+        save_workflow_state(workflow, acknowledge_pause=True)
 
 
 def _collect(workflow, user, p, task):
     from apps.knowledge.services import check_constraints
 
+    check_pause(workflow)
     outputs = list(task.outputs.all())
     if not outputs:
         raise ComputeError("计算未提供任何有效输出")
@@ -338,13 +369,19 @@ def _collect(workflow, user, p, task):
         raise ComputeError("结果均为压缩包，请下载后按文件类型分别入库")
     records = []
     for output in importable:
-        record = ComputeImport.objects.filter(output=output).first()
-        records.append(
-            record
-            or request_output_import(
-                user, output, request_source=f"workflow:{workflow.id}"
+        with transaction.atomic():
+            current = locked_workflow(workflow.id)
+            check_pause(workflow)
+            if current.cancel_requested:
+                workflow.status, workflow.detail = "cancelled", "已停止工作流后续处理"
+                return
+            record = ComputeImport.objects.filter(output=output).first()
+            records.append(
+                record
+                or request_output_import(
+                    user, output, request_source=f"workflow:{workflow.id}"
+                )
             )
-        )
     if any(record.status == "failed" for record in records):
         raise ComputeError("计算完成但入库失败，请到计算中心重试入库")
     workflow.current_step = "wait_import"
@@ -381,6 +418,7 @@ def resume_waiting():
             continue
         with project_scope(_scope(workflow)):
             try:
+                check_pause(workflow)
                 user, p = _authorize(workflow)
                 current = (
                     workflow.steps.filter(kind="submit_operator")
@@ -405,11 +443,15 @@ def resume_waiting():
                     raise ComputeError("计算未成功：" + task.status)
                 else:
                     _collect(workflow, user, p, task)
+            except WorkflowPaused:
+                save_workflow_state(workflow, acknowledge_pause=True)
+                count += 1
+                continue
             except PermissionDenied as exc:
                 workflow.status, workflow.detail = "interrupted", str(exc)[:300]
             except (ComputeError, ValidationError) as exc:
                 workflow.status, workflow.detail = "failed", str(exc)[:300]
             workflow.heartbeat = timezone.now()
-            workflow.save()
+            save_workflow_state(workflow, acknowledge_pause=True)
             count += 1
     return count

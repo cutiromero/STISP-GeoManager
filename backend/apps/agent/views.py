@@ -709,6 +709,8 @@ def workflow_json(workflow, include_steps=True):
         "goal": workflow.goal,
         "model": workflow.model,
         "status": workflow.status,
+        "pauseRequested": workflow.pause_requested,
+        "pausedFrom": workflow.paused_from or None,
         "detail": workflow.detail,
         "currentStep": workflow.current_step,
         "iteration": workflow.iteration,
@@ -821,6 +823,8 @@ def workflow_confirm(request, workflow_id):
 
             confirm_demo(workflow, request.user, p, value["planHash"])
             return JsonResponse(workflow_json(workflow))
+        if workflow.status == "paused" or workflow.pause_requested:
+            raise ApiProblem("请先继续科研任务，再确认执行", 409)
         if workflow.execute_operators and workflow.status in WORKFLOW_ACTIVE:
             return JsonResponse(workflow_json(workflow))
         if workflow.status != "waiting_approval" or workflow.cancel_requested:
@@ -846,6 +850,87 @@ def workflow_detail(request, workflow_id):
 
 
 @endpoint(["POST"])
+def workflow_pause(request, workflow_id):
+    from .workflow import _authorize
+    from .workflow_controls import locked_workflow
+
+    if request.body:
+        body(request, [])
+    with transaction.atomic():
+        get_object_or_404(AgentWorkflow.objects, pk=workflow_id, owner=request.user)
+        workflow = locked_workflow(workflow_id)
+        _authorize(workflow)
+        if workflow.status not in WORKFLOW_ACTIVE or workflow.cancel_requested:
+            raise ApiProblem("此科研任务当前不能暂停", 409)
+        if workflow.pause_requested or workflow.status == "paused":
+            return JsonResponse(workflow_json(workflow))
+        workflow.pause_requested = True
+        workflow.paused_from = workflow.status
+        if workflow.status != "running":
+            workflow.status, workflow.detail = "paused", "已暂停，可从当前步骤继续"
+        else:
+            workflow.detail = "正在暂停；当前步骤到达保存点后停止后续处理"
+        workflow.save(
+            update_fields=[
+                "pause_requested",
+                "paused_from",
+                "status",
+                "detail",
+                "updated_at",
+            ]
+        )
+    return JsonResponse(workflow_json(workflow))
+
+
+@endpoint(["POST"])
+def workflow_resume(request, workflow_id):
+    from .workflow import _authorize, validate_confirmed_plan
+    from .workflow_controls import locked_workflow
+
+    if request.body:
+        body(request, [])
+    with transaction.atomic():
+        get_object_or_404(AgentWorkflow.objects, pk=workflow_id, owner=request.user)
+        workflow = locked_workflow(workflow_id)
+        user, p = _authorize(workflow)
+        if workflow.cancel_requested:
+            raise ApiProblem("已取消的科研任务不能继续", 409)
+        if workflow.plan.get("scenarioVersion"):
+            from .demo_workflow import authorize_demo
+
+            authorize_demo(workflow, user, p)
+        elif workflow.plan.get("algorithmVersionId"):
+            validate_confirmed_plan(workflow, user, p)
+        if workflow.status != "paused":
+            if (
+                workflow.paused_from
+                and not workflow.pause_requested
+                and workflow.status in WORKFLOW_ACTIVE
+            ):
+                return JsonResponse(workflow_json(workflow))
+            raise ApiProblem("此科研任务当前没有可继续的暂停点", 409)
+        continuation = workflow.paused_from
+        if continuation not in {
+            "queued",
+            "running",
+            "waiting_compute",
+            "waiting_approval",
+        }:
+            raise ApiProblem("暂停点无效，请重新创建任务", 409)
+        workflow.status = "queued" if continuation == "running" else continuation
+        workflow.pause_requested = False
+        workflow.detail = (
+            "已继续，等待用户确认原审核计划"
+            if continuation == "waiting_approval"
+            else "已继续，将复用已有计算与结果接着处理"
+        )
+        workflow.save(
+            update_fields=["status", "pause_requested", "detail", "updated_at"]
+        )
+    return JsonResponse(workflow_json(workflow))
+
+
+@endpoint(["POST"])
 def workflow_cancel(request, workflow_id):
     workflow = get_object_or_404(
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
@@ -857,8 +942,13 @@ def workflow_cancel(request, workflow_id):
     # A queued item is not claimable after cancellation, so close it here
     # instead of leaving an invisible forever-queued record.
     AgentWorkflow.objects.filter(
-        pk=workflow.id, status__in=["queued", "waiting_approval"]
-    ).update(status="cancelled", detail="已取消", updated_at=timezone.now())
+        pk=workflow.id, status__in=["queued", "waiting_approval", "paused"]
+    ).update(
+        status="cancelled",
+        pause_requested=False,
+        detail="已取消后续处理",
+        updated_at=timezone.now(),
+    )
     workflow.refresh_from_db()
     return JsonResponse(workflow_json(workflow))
 

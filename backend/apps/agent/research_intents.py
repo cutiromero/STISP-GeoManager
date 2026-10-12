@@ -156,6 +156,7 @@ def serialize(run, user, policy):
             status={
                 "queued": "planning",
                 "waiting_compute": "running",
+                "paused": "running",
                 "interrupted": "failed",
             }.get(workflow.status, workflow.status),
             message=workflow.detail,

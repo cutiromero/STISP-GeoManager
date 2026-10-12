@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.39] - 2026-10-12
+
+### Added
+- 科研工作流完成后生成持久 Markdown 报告，提供在线预览、下载和手动入库；报告关联真实判断、知识引用、参数与计算统计。
+- 可确认暂停、继续科研任务，保留已提交计算与原审核位置；停止模型回答和科研后续处理前增加确认。
+
+### Changed
+- 已完成分析步骤默认折叠，当前步骤展开；末尾集中展示报告、表格和空间成果，支持实际预览、下载、地图查看和入库。
+- 原生态及地质模拟案例按真实阶段区分前后期和初查、修正、复查产物，过程文件收起，最终成果优先显示。
+
 ## [0.1.38] - 2026-10-12
 
 ### Fixed

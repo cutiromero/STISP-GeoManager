@@ -549,11 +549,9 @@
   background: #f8fafb;
 }
 .agent-workflow-status {
-  padding: 8px 10px;
-  border: 1px solid #e4e9f1;
-  border-radius: 6px;
-  background: #fafcff;
-  font-size: 12px;
+  padding: 10px 0;
+  font-size: 13px;
+  color: #405c72;
 }
 .agent-workflow-status p {
   margin: 4px 0 0;
@@ -1147,7 +1145,7 @@
   line-height: 1.6;
 }
 .agent-decision-timeline {
-  margin-top: 24px;
+  margin-top: 4px;
 }
 .agent-decision-timeline h3 {
   font-size: 15px;
@@ -1155,9 +1153,8 @@
   margin: 0 0 18px;
 }
 .agent-decision-step {
-  padding: 14px 16px;
-  border: 1px solid #dce7ef;
-  border-radius: 12px;
+  padding: 8px 12px 12px;
+  border-left: 2px solid #dce7ef;
   background: #f8fbfd;
   font-size: 13px;
   line-height: 1.7;
@@ -1165,7 +1162,7 @@
   overflow-wrap: anywhere;
 }
 .agent-decision-step-heading {
-  margin-bottom: 4px;
+  margin: 0;
   color: #365c77;
 }
 .agent-decision-step-heading .ant-tag {
@@ -1608,6 +1605,177 @@
 .agent-workflow-meta {
   font-size: 11px;
   color: #72899a;
+}
+.agent-workflow-process,
+.agent-task-history {
+  margin: 8px 0;
+}
+.agent-workflow-process > .ant-collapse-item > .ant-collapse-header,
+.agent-task-history > .ant-collapse-item > .ant-collapse-header {
+  padding: 8px 0;
+  color: #657f92;
+  font-size: 13px;
+}
+.agent-workflow-process .ant-collapse-body,
+.agent-task-history .ant-collapse-body {
+  padding: 0;
+}
+.agent-decision-steps > .ant-collapse-item > .ant-collapse-header {
+  padding: 10px 0;
+}
+.agent-decision-steps .ant-collapse-body {
+  padding: 0 0 6px 18px;
+}
+.agent-decision-step-heading > strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.agent-decision-step-heading .ant-tag {
+  color: #7790a1;
+  background: transparent;
+  border-color: transparent;
+  font-size: 11px;
+}
+.agent-workflow-conclusion {
+  padding: 8px 0 14px;
+  line-height: 1.8;
+}
+.agent-workflow-conclusion h3,
+.agent-deliverables h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #315a76;
+}
+.agent-workflow-conclusion p {
+  color: #496779;
+}
+.agent-compute-cards.is-compact {
+  display: block;
+}
+.agent-compute-cards.is-compact .agent-compute-result {
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid #e3ebf1;
+  border-radius: 0;
+  background: transparent;
+}
+.agent-compute-cards.is-compact .agent-compute-result-heading strong {
+  font-size: 13px;
+}
+.agent-deliverables {
+  margin: 14px 0;
+}
+.agent-file-list {
+  display: grid;
+  gap: 2px;
+}
+.agent-file-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 0;
+  border-bottom: 1px solid #e2ebf1;
+}
+.agent-file-row:last-child {
+  border-bottom: 0;
+}
+.agent-file-icon {
+  padding-top: 2px;
+  flex-shrink: 0;
+  color: #4a82aa;
+  font-size: 22px;
+  line-height: 1.2;
+}
+.agent-file-row.is-table .agent-file-icon {
+  color: #448a8f;
+}
+.agent-file-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+.agent-file-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+}
+.agent-file-title strong {
+  color: #3e7195;
+  font-size: 14px;
+  font-weight: 600;
+}
+.agent-file-title > span,
+.agent-file-name,
+.agent-file-source,
+.agent-file-location {
+  color: #758d9c;
+  font-size: 11px;
+}
+.agent-file-source {
+  color: #547b94;
+}
+.agent-file-caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+.agent-intermediate-files > .ant-collapse-item > .ant-collapse-header {
+  padding: 8px 0;
+  color: #71899a;
+  font-size: 12px;
+}
+.agent-intermediate-files .ant-collapse-body {
+  padding: 0;
+}
+.agent-file-location {
+  color: #4d7893;
+}
+.agent-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 2px;
+}
+.agent-file-actions .ant-btn {
+  padding: 0;
+  height: auto;
+  color: #4f7b99;
+  font-size: 12px;
+}
+.agent-workflow-actions {
+  margin: 6px 0 12px;
+}
+.agent-workflow-saved {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  padding: 8px 0;
+  color: #6f8798;
+  font-size: 12px;
+}
+.agent-report-preview {
+  max-height: 65vh;
+  overflow: auto;
+  padding: 0 8px;
+  color: #405c72;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.agent-report-preview h1 {
+  font-size: 22px;
+  color: #315a76;
+}
+.agent-report-preview h2 {
+  margin-top: 22px;
+  font-size: 17px;
+  color: #315a76;
+}
+.agent-report-preview h3 {
+  font-size: 15px;
 }
 .agent-workflow-status > .agent-activity {
   margin: 0 0 10px;

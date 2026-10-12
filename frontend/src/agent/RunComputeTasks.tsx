@@ -1,11 +1,6 @@
-import {
-  CheckCircleOutlined,
-  EnvironmentOutlined,
-  DatabaseOutlined,
-} from "@ant-design/icons";
-import { Alert, Button, Progress, Tag } from "antd";
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { CheckCircleOutlined } from "@ant-design/icons";
+import { Alert, Collapse, Progress, Tag } from "antd";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import type {
@@ -16,6 +11,7 @@ import type {
 import { useComputeText } from "../compute/ui";
 import type { LiveActivity } from "./agentActivity";
 import ComputeQualitySummary from "./ComputeQualitySummary";
+import WorkflowDeliverables from "./WorkflowDeliverables";
 
 const activeStates = ["queued", "validating", "running", "cancelling"];
 const statusNames: Record<string, [string, string]> = {
@@ -27,13 +23,6 @@ const statusNames: Record<string, [string, string]> = {
   succeeded: ["计算完成", "Computed"],
   failed: ["计算失败", "Failed"],
   interrupted: ["已中断", "Interrupted"],
-};
-const importNames: Record<string, [string, string]> = {
-  none: ["待入库", "Not imported"],
-  queued: ["等待入库", "Import queued"],
-  running: ["正在入库", "Importing"],
-  ready: ["已入库", "Imported"],
-  failed: ["入库失败", "Import failed"],
 };
 
 function shouldPoll(items: AgentComputeTaskTracking[]) {
@@ -130,24 +119,6 @@ export function computeTasksActivity(
   );
 }
 
-function ResultMetadata({ output }: { output: ComputeOutput }) {
-  const ui = useComputeText();
-  const data = output.metadata;
-  const parts: string[] = [];
-  if (typeof data.width === "number" && typeof data.height === "number")
-    parts.push(`${data.width} × ${data.height}`);
-  if (typeof data.bands === "number")
-    parts.push(ui(`${data.bands} 波段`, `${data.bands} band(s)`));
-  if (typeof data.crs === "string") parts.push(data.crs);
-  if (typeof data.features === "number")
-    parts.push(ui(`${data.features} 个要素`, `${data.features} features`));
-  if (typeof data.rows === "number")
-    parts.push(ui(`${data.rows} 行`, `${data.rows} rows`));
-  return parts.length ? (
-    <span className="agent-compute-muted">{parts.join(" · ")}</span>
-  ) : null;
-}
-
 function TaskInputs({ task }: { task: ComputeTask }) {
   const ui = useComputeText();
   const names = task.inputs
@@ -179,6 +150,9 @@ export default function RunComputeTasks({
   taskDisplayNames,
   activityTaskId,
   onActivityChange,
+  compact = false,
+  report,
+  primaryTaskIds,
 }: (
   | {
       runId: number;
@@ -196,18 +170,25 @@ export default function RunComputeTasks({
   taskDisplayNames?: Record<string, string>;
   activityTaskId?: string;
   onActivityChange?: (activity: LiveActivity) => void;
+  compact?: boolean;
+  report?: ReactNode;
+  primaryTaskIds?: string[];
 }) {
   const ui = useComputeText();
-  const navigate = useNavigate();
   const [items, setItems] = useState<AgentComputeTaskTracking[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<number>();
   const [revision, setRevision] = useState(0);
+  const [tasksExpanded, setTasksExpanded] = useState(true);
   const alive = useRef(true);
   const importing = useRef(false);
   const activityCallback = useRef(onActivityChange);
   activityCallback.current = onActivityChange;
   const taskKey = [...new Set(taskIds ?? [])].join(",");
+  const tasksActive = items.some(({ task }) =>
+    activeStates.includes(task.status),
+  );
+  useEffect(() => setTasksExpanded(tasksActive), [tasksActive]);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -307,11 +288,71 @@ export default function RunComputeTasks({
       if (alive.current) setBusy(undefined);
     }
   };
+  const taskCards = items.map(({ task, autoImport }) => (
+    <section
+      className="agent-compute-result"
+      key={task.id}
+      aria-label={taskDisplayNames?.[task.id] ?? task.name}
+    >
+      <div className="agent-compute-result-heading">
+        <div>
+          <span className="agent-compute-eyebrow">
+            {ui(task.algorithmName)}
+          </span>
+          <strong>{taskDisplayNames?.[task.id] ?? task.name}</strong>
+        </div>
+        <Tag
+          color={
+            task.status === "succeeded"
+              ? "blue"
+              : task.status === "failed"
+                ? "error"
+                : "processing"
+          }
+        >
+          {ui(...(statusNames[task.status] ?? [task.status, task.status]))}
+        </Tag>
+      </div>
+      <TaskInputs task={task} />
+      {activeStates.includes(task.status) && (
+        <div className="agent-compute-live" role="status">
+          <span>{task.stage}</span>
+          <Progress
+            percent={task.progress}
+            size="small"
+            strokeColor="#407ca6"
+          />
+        </div>
+      )}
+      {task.error && <Alert type="error" title={task.error} showIcon />}
+      {task.status === "succeeded" && (
+        <p className="agent-compute-complete">
+          <CheckCircleOutlined aria-hidden="true" />
+          {ui("计算完成，结果已保存。", "Computed and saved.")}
+        </p>
+      )}
+      <ComputeQualitySummary task={task} />
+      {!compact && (
+        <WorkflowDeliverables
+          items={[{ task, autoImport, trackingStatus: "", detail: "" }]}
+          busy={busy}
+          reviewing={reviewing}
+          heading={false}
+          taskDisplayNames={taskDisplayNames}
+          onImport={(output, current) => void importOutput(output, current)}
+        />
+      )}
+    </section>
+  ));
   if (!items.length)
-    return error ? <Alert type="warning" title={error} /> : null;
+    return error ? (
+      <Alert type="warning" title={error} />
+    ) : report ? (
+      <WorkflowDeliverables items={[]} report={report} onImport={() => {}} />
+    ) : null;
   return (
     <div
-      className="agent-compute-cards"
+      className={`agent-compute-cards${compact ? " is-compact" : ""}`}
       aria-label={ui("实时计算任务", "Live compute tasks")}
     >
       {error && (
@@ -324,152 +365,39 @@ export default function RunComputeTasks({
           )}
         />
       )}
-      {items.map(({ task, autoImport }) => (
-        <section
-          className="agent-compute-result"
-          key={task.id}
-          aria-label={taskDisplayNames?.[task.id] ?? task.name}
-        >
-          <div className="agent-compute-result-heading">
-            <div>
-              <span className="agent-compute-eyebrow">
-                {ui(task.algorithmName)}
-              </span>
-              <strong>{taskDisplayNames?.[task.id] ?? task.name}</strong>
-            </div>
-            <Tag
-              color={
-                task.status === "succeeded"
-                  ? "blue"
-                  : task.status === "failed"
-                    ? "error"
-                    : "processing"
-              }
-            >
-              {ui(...(statusNames[task.status] ?? [task.status, task.status]))}
-            </Tag>
-          </div>
-          <TaskInputs task={task} />
-          {activeStates.includes(task.status) && (
-            <div className="agent-compute-live" role="status">
-              <span>{task.stage}</span>
-              <Progress
-                percent={task.progress}
-                size="small"
-                strokeColor="#407ca6"
-              />
-            </div>
-          )}
-          {task.error && <Alert type="error" title={task.error} showIcon />}
-          {task.status === "succeeded" && (
-            <p className="agent-compute-complete">
-              <CheckCircleOutlined aria-hidden="true" />
-              {ui("计算完成，结果已保存。", "Computed and saved.")}
-            </p>
-          )}
-          <ComputeQualitySummary task={task} />
-          {task.outputs.map((output) => (
-            <div className="agent-compute-output" key={output.id}>
-              <div className="agent-compute-output-title">
-                <strong>{ui(output.label)}</strong>
-                <span>
-                  {output.expired
-                    ? ui("临时结果已过期", "Temporary result expired")
-                    : ui(
-                        ...(importNames[output.importStatus] ?? [
-                          output.importStatus,
-                          output.importStatus,
-                        ]),
-                      )}
-                </span>
-              </div>
-              <ResultMetadata output={output} />
-              {output.importStatus === "ready" && (
-                <div className="agent-compute-location">
-                  <DatabaseOutlined aria-hidden="true" />
-                  <div>
-                    <strong>{output.resourceName || task.name}</strong>
-                    <span>
-                      {output.resourceLocation ||
-                        ui(
-                          "已存入当前项目的数据资源",
-                          "Saved in this project's data resources",
-                        )}
-                    </span>
-                  </div>
-                </div>
-              )}
-              <div className="agent-compute-result-actions">
-                {task.status === "succeeded" &&
-                  (!output.expired ||
-                    Boolean(output.resourceId && output.mapUrl)) &&
-                  (output.kind === "raster" ||
-                    (output.kind === "vector" &&
-                      Boolean(output.resourceId && output.mapUrl))) && (
-                    <Button
-                      icon={<EnvironmentOutlined aria-hidden="true" />}
-                      onClick={() =>
-                        navigate(
-                          output.mapUrl ||
-                            `/map?computeOutputId=${output.id}&projectTagId=${task.projectTagId}`,
-                        )
-                      }
-                    >
-                      {ui("在地理工作台查看", "View in map workspace")}
-                    </Button>
-                  )}
-                {output.resourceId ? (
-                  <Button
-                    onClick={() =>
-                      navigate(
-                        `/resources/catalog?resourceId=${output.resourceId}&projectTagId=${task.projectTagId}`,
-                      )
-                    }
-                  >
-                    {ui("打开入库数据", "Open imported data")}
-                  </Button>
-                ) : !reviewing &&
-                  task.status === "succeeded" &&
-                  !output.expired &&
-                  output.kind !== "archive" &&
-                  ["none", "failed"].includes(output.importStatus) ? (
-                  <Button
-                    type="primary"
-                    icon={<DatabaseOutlined aria-hidden="true" />}
-                    loading={busy === output.id}
-                    disabled={busy !== undefined && busy !== output.id}
-                    onClick={() => void importOutput(output, task)}
-                  >
-                    {output.importStatus === "failed"
-                      ? ui("重试入库", "Retry import")
-                      : ui("将结果入库", "Import result")}
-                  </Button>
-                ) : null}
-              </div>
-              {output.importError && (
-                <Alert title={output.importError} type="error" showIcon />
-              )}
-              {!output.resourceId &&
-                output.importStatus === "none" &&
-                !output.expired && (
-                  <span className="agent-compute-muted">
-                    {reviewing
-                      ? ui(
-                          "等待审核确认后继续保存成果",
-                          "Results will be saved after your review",
-                        )
-                      : autoImport
-                        ? ui("已按您的要求安排入库", "Import was requested")
-                        : ui(
-                            "可先预览，选择入库后会登记到数据资源。",
-                            "Preview first; import when you are ready.",
-                          )}
-                  </span>
-                )}
-            </div>
-          ))}
-        </section>
-      ))}
+      {compact ? (
+        <>
+          <Collapse
+            ghost
+            size="small"
+            className="agent-task-history"
+            activeKey={tasksExpanded ? ["tasks"] : []}
+            onChange={(keys) => setTasksExpanded(keys.includes("tasks"))}
+            items={[
+              {
+                key: "tasks",
+                label: ui(
+                  `计算任务 · ${items.length} 项${tasksActive ? " · 正在执行" : ""}`,
+                  `Compute tasks · ${items.length}${tasksActive ? " · Running" : ""}`,
+                ),
+                forceRender: true,
+                children: taskCards,
+              },
+            ]}
+          />
+          <WorkflowDeliverables
+            items={items}
+            report={report}
+            taskDisplayNames={taskDisplayNames}
+            primaryTaskIds={primaryTaskIds}
+            busy={busy}
+            reviewing={reviewing}
+            onImport={(output, task) => void importOutput(output, task)}
+          />
+        </>
+      ) : (
+        taskCards
+      )}
     </div>
   );
 }

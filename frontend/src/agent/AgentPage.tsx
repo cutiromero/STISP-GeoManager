@@ -116,7 +116,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const { user } = useAppContext();
   const project = useProjectContext();
   const layout = useAgentLayout(`agent-layout:${user?.id ?? "anon"}:${mode}`);
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const bootstrap = useAgentBootstrap();
   const [conversations, setConversations] = useState<AgentConversation[]>([]);
   const [current, setCurrent] = useState<AgentConversation | null>(null);
@@ -249,9 +249,13 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       : undefined;
   const sidebarWorkflow =
     manualWorkflow &&
-    ["queued", "running", "waiting_compute", "waiting_approval"].includes(
-      manualWorkflow.status,
-    )
+    [
+      "queued",
+      "running",
+      "waiting_compute",
+      "waiting_approval",
+      "paused",
+    ].includes(manualWorkflow.status)
       ? manualWorkflow
       : sidebarRun?.id === latestResearch?.id
         ? currentResearchWorkflow
@@ -1555,6 +1559,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         {workflowStatus === "waiting_approval" && (
                           <span>{ui("待确认", "Review")}</span>
                         )}
+                        {workflowStatus === "paused" && (
+                          <span>{ui("已暂停", "Paused")}</span>
+                        )}
                         {workflowStatus &&
                           ["queued", "running", "waiting_compute"].includes(
                             workflowStatus,
@@ -1565,19 +1572,35 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                   {running ? (
                     <Button
                       className="agent-send-button"
-                      aria-label={ui("停止", "Stop")}
-                      title={ui("停止", "Stop")}
+                      aria-label={ui("停止回答", "Stop response")}
+                      title={ui("停止回答", "Stop response")}
                       icon={<StopOutlined />}
-                      onClick={() =>
-                        void agentApi
-                          .cancel(running.id)
-                          .then((r) =>
-                            setRuns((old) =>
-                              old.map((item) => (item.id === r.id ? r : item)),
-                            ),
-                          )
-                          .catch(report)
-                      }
+                      onClick={() => {
+                        const runId = running.id;
+                        const activeSequence = sequence.current;
+                        modal.confirm({
+                          title: ui("停止这次回答？", "Stop this response?"),
+                          content: ui(
+                            "已生成的内容会保留。停止后可以发送新消息。",
+                            "Generated content will be retained. You can send a new message after stopping.",
+                          ),
+                          okText: ui("停止回答", "Stop response"),
+                          cancelText: ui("继续回答", "Keep responding"),
+                          onOk: async () => {
+                            try {
+                              const result = await agentApi.cancel(runId);
+                              if (
+                                alive.current &&
+                                activeSequence === sequence.current
+                              )
+                                setRuns((old) => mergeRun(old, result));
+                            } catch (error) {
+                              report(error);
+                              throw error;
+                            }
+                          },
+                        });
+                      }}
                     />
                   ) : (
                     <Button

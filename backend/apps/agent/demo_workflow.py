@@ -34,6 +34,12 @@ from .compute_tools import authorized_task
 from .demo_decisions import decide
 from .demo_results import create_changes, read_results
 from .workflow import _authorize, _scope, _state_hash, checkpoint, step
+from .workflow_controls import (
+    WorkflowPaused,
+    check_pause,
+    locked_workflow,
+    save_workflow_state,
+)
 
 DEMO_TYPES = {"ecology_investigation", "geology_correction", "geology_age_correction"}
 STAGE_TITLES = {
@@ -160,42 +166,9 @@ def stage_title(workflow, stage: dict) -> str:
     return STAGE_TITLES.get(stage["name"], stage["name"])
 
 
-def _save(workflow) -> None:
-    # Closing/queuing a stage and user cancellation share one locked row.
-    if workflow.status in {"queued", "waiting_approval", "succeeded"}:
-        with transaction.atomic():
-            current = AgentWorkflow.objects.select_for_update().get(pk=workflow.id)
-            if current.cancel_requested:
-                workflow.status, workflow.detail = "cancelled", "已停止场景后续处理"
-                workflow.plan["phase"] = "cancelled"
-            _save_fields(workflow)
-    else:
-        _save_fields(workflow)
-
-
-def _save_fields(workflow) -> None:
+def _save(workflow, *, acknowledge_pause=False) -> None:
     workflow.plan_hash = _state_hash(workflow.plan)
-    workflow.heartbeat = timezone.now()
-    # User cancellation can arrive while the model is streaming. Do not overwrite it.
-    workflow.save(
-        update_fields=[
-            "plan",
-            "plan_hash",
-            "heartbeat",
-            "updated_at",
-            "resource_ids",
-            "evidence",
-            "status",
-            "current_step",
-            "detail",
-            "execute_operators",
-            "import_results",
-            "operator_steps",
-            "iteration",
-            "result_ids",
-            "result_resource_ids",
-        ]
-    )
+    save_workflow_state(workflow, acknowledge_pause=acknowledge_pause)
 
 
 def _domains(workflow) -> list[str]:
@@ -352,7 +325,7 @@ def prepare_demo(workflow, user, p) -> None:
         step(workflow, "demo_plan", action=workflow.plan, message=workflow.detail)
         checkpoint(workflow, "review_plan", {"planHash": workflow.plan_hash})
         chat = workflow.plan.get("chatExecution")
-        if chat and chat.get("initialPlanAuthorized"):
+        if chat and chat.get("initialPlanAuthorized") and workflow.status != "paused":
             from .models import AgentRun
 
             current = AgentWorkflow.objects.select_for_update().get(pk=workflow.id)
@@ -526,6 +499,15 @@ def _pause(workflow, stage, reason, outputs=None) -> None:
 
 
 def _submit_stage(workflow, user, p, stage) -> None:
+    with transaction.atomic():
+        current = locked_workflow(workflow.id)
+        check_pause(workflow)
+        if current.cancel_requested or current.status not in {"queued", "running"}:
+            raise ModelError("场景已停止，未提交下一步计算")
+        _submit_stage_locked(workflow, user, p, stage)
+
+
+def _submit_stage_locked(workflow, user, p, stage) -> None:
     if stage["name"] == "edit" and not workflow.plan.get("model_changes"):
         check = next(
             item for item in workflow.plan["stages"] if item["name"] == "check"
@@ -547,7 +529,8 @@ def _submit_stage(workflow, user, p, stage) -> None:
     }
     validate_submission(user, body)
     with transaction.atomic():
-        current = AgentWorkflow.objects.select_for_update().get(pk=workflow.id)
+        current = locked_workflow(workflow.id)
+        check_pause(workflow)
         if current.cancel_requested or current.status not in {"queued", "running"}:
             raise ModelError("场景已停止，未提交下一步计算")
         AgentWorkflow.objects.filter(pk=workflow.id).update(heartbeat=timezone.now())
@@ -576,7 +559,8 @@ def _submit_stage(workflow, user, p, stage) -> None:
 
 def _collection_cancelled(workflow) -> bool:
     """Call inside a transaction before imports or re-queuing the next stage."""
-    current = AgentWorkflow.objects.select_for_update().get(pk=workflow.id)
+    current = locked_workflow(workflow.id)
+    check_pause(workflow)
     if not current.cancel_requested and current.status != "cancelled":
         return False
     workflow.status, workflow.detail = "cancelled", "已停止场景后续处理"
@@ -706,6 +690,7 @@ def advance_demo(workflow_id) -> None:
         return
     with project_scope(_scope(workflow)):
         try:
+            check_pause(workflow)
             user, p = _authorize(workflow)
             if workflow.cancel_requested:
                 for submitted in workflow.steps.filter(kind="submit_operator"):
@@ -754,6 +739,7 @@ def advance_demo(workflow_id) -> None:
                 deadline, heartbeat_at = time.monotonic() + p["maxRunSeconds"], [0.0]
 
                 def guard():
+                    check_pause(workflow)
                     current = AgentWorkflow.objects.get(pk=workflow.id)
                     if (
                         current.cancel_requested
@@ -861,13 +847,16 @@ def advance_demo(workflow_id) -> None:
                 )
                 return
             _submit_stage(workflow, user, p, stage)
+        except WorkflowPaused:
+            _save(workflow, acknowledge_pause=True)
+            return
         except PermissionDenied as exc:
             workflow.status, workflow.detail = "interrupted", str(exc)[:300]
-            _save(workflow)
+            _save(workflow, acknowledge_pause=True)
         except (ComputeError, ValidationError, ModelError, NonGeoAnalysisError) as exc:
             cancelled = AgentWorkflow.objects.filter(
                 pk=workflow.id, cancel_requested=True
             ).exists()
             workflow.status = "cancelled" if cancelled else "failed"
             workflow.detail = "已停止场景后续处理" if cancelled else str(exc)[:300]
-            _save(workflow)
+            _save(workflow, acknowledge_pause=True)

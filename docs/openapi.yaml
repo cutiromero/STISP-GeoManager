@@ -7666,6 +7666,209 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/agent/workflows/{workflowId}/pause/:
+    post:
+      tags: [智能体]
+      operationId: pauseAgentWorkflow
+      summary: 暂停科研工作流
+      description: 空请求体。本人当前项目工作流在安全边界暂停；已提交计算可完成并保留任务引用。重复请求幂等，结束的工作流返回409。要求智能体、计算及输入访问权限。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID，禁止 all
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 本人工作流 UUID
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: 最新持久工作流状态，running阶段可先返回pauseRequested=true
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWorkflow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/agent/workflows/{workflowId}/resume/:
+    post:
+      tags: [智能体]
+      operationId: resumeAgentWorkflow
+      summary: 继续科研工作流
+      description: 空请求体。重新核验本人、项目、输入和固定算法版本后恢复暂停位置；复用已提交计算任务，等待审核的阶段仍需原确认。重复请求幂等，结束的工作流返回409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID，禁止 all
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 本人工作流 UUID
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: 恢复后的持久工作流状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWorkflow'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/agent/workflows/{workflowId}/report/:
+    post:
+      tags: [智能体]
+      operationId: prepareAgentWorkflowReport
+      summary: 生成科研报告文件
+      description: 空请求体或空对象。将成功工作流的公开判断、真实输入、知识引用、计算参数与结果整理成持久Markdown报告，重复请求返回同一文件；不重跑模型或计算。要求本人、当前项目、智能体和所有关联数据访问权限，未成功工作流或文件校验异常返回409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID，禁止 all
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 本人工作流 UUID
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: 真实报告文件及当前权限下的操作能力
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWorkflowReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/agent/workflows/{workflowId}/report/preview/:
+    get:
+      tags: [智能体]
+      operationId: previewAgentWorkflowReport
+      summary: 在线预览科研报告
+      description: 读取已生成文件的UTF8文本，最多200000字符；前端以受控Markdown渲染。每次核对本人、项目、输入及关联任务与结果访问权限。缺报告返回404，身份或文件内容变化返回409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID，禁止 all
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 本人工作流 UUID
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: 保存文件的Markdown正文
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWorkflowReportPreview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/agent/workflows/{workflowId}/report/download/:
+    get:
+      tags: [智能体]
+      operationId: downloadAgentWorkflowReport
+      summary: 下载科研报告
+      description: 下载已保存真实Markdown文件；重新核验本人、项目、输入与关联结果权限，并要求数据导出权限。返回attachment、nosniff和no-store头。缺文件404，校验失败409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID，禁止 all
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 本人工作流 UUID
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: UTF8 Markdown文件内容
+          content:
+            text/markdown:
+              schema: {type: string, description: 持久报告文件内容}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/agent/workflows/{workflowId}/report/import/:
+    post:
+      tags: [智能体]
+      operationId: importAgentWorkflowReport
+      summary: 将科研报告入库
+      description: 空请求体或空对象。将已生成报告登记为当前项目的MD文档资源并归入计算结果，重复请求复用同一资源。要求本人、智能体、关联数据访问及数据新增权限；文件须通过保存校验。缺报告404，文件或身份变化409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID，禁止 all
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 本人工作流 UUID
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: 已入库报告的文件与目录位置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentWorkflowReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /api/agent/admin/:
     get:
       tags:
@@ -9614,6 +9817,69 @@ components:
       - startedAt
       - finishedAt
       additionalProperties: false
+    AgentWorkflowReport:
+      type: object
+      description: 已生成并持久保存的科研Markdown报告，操作能力根据当前权限返回
+      additionalProperties: false
+      properties:
+        fileName:
+          type: string
+          description: 可下载的真实文件名
+        label:
+          type: string
+          description: 用户可读的报告标题
+        contentType:
+          type: string
+          enum: [text/markdown]
+          description: 报告文件类型
+        sizeBytes:
+          type: integer
+          minimum: 0
+          description: 实际文件字节数
+        checksum:
+          type: string
+          description: 已保存文件的SHA256
+        previewUrl:
+          type: string
+          description: 受授权保护的报告预览接口
+        downloadUrl:
+          type: string
+          description: 受授权及数据导出权限保护的下载地址
+        resourceId:
+          type: [integer, 'null']
+          description: 已登记文档资源ID，未入库为null
+        resourceName:
+          type: string
+          description: 入库资源名称，未入库为空字符串
+        resourceLocation:
+          type: string
+          description: 用户可读的项目与计算结果目录位置，未入库为空字符串
+        canDownload:
+          type: boolean
+          description: 当前用户具有下载所需权限
+        canImport:
+          type: boolean
+          description: 当前用户具有入库所需权限
+      required: [fileName, label, contentType, sizeBytes, checksum, previewUrl, downloadUrl, resourceId, resourceName, resourceLocation, canDownload, canImport]
+    AgentWorkflowReportPreview:
+      type: object
+      description: 持久报告的受控在线预览正文
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+          description: 已保存Markdown文本，前端受控渲染
+        fileName:
+          type: string
+          description: 已保存报告文件名
+        contentType:
+          type: string
+          enum: [text/markdown]
+          description: 文件类型
+        truncated:
+          type: boolean
+          description: 正文超过预览字符上限时为true，下载仍为完整文件
+      required: [content, fileName, contentType, truncated]
     AgentWorkflow:
       type: object
       description: 可恢复的项目科研工作流
@@ -9642,6 +9908,7 @@ components:
           - running
           - waiting_compute
           - waiting_approval
+          - paused
           - succeeded
           - failed
           - cancelled
@@ -9649,6 +9916,12 @@ components:
         detail:
           type: string
           description: 可读状态
+        pauseRequested:
+          type: boolean
+          description: 已请求暂停，运行中的判断在保存进度后进入paused
+        pausedFrom:
+          type: [string, 'null']
+          description: 暂停前阶段，恢复保留原计算或审核位置
         currentStep:
           type: string
           description: 当前节点

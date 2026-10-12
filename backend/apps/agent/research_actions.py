@@ -150,10 +150,17 @@ def update(request, run_id, value):
                     pk=source.research_workflow_id, owner=request.user
                 )
                 workflow.cancel_requested = True
-                if workflow.status in {"queued", "waiting_approval"}:
+                if workflow.status in {"queued", "waiting_approval", "paused"}:
                     workflow.status, workflow.detail = "cancelled", "用户已取消科研任务"
+                    workflow.pause_requested = False
                 workflow.save(
-                    update_fields=["cancel_requested", "status", "detail", "updated_at"]
+                    update_fields=[
+                        "cancel_requested",
+                        "pause_requested",
+                        "status",
+                        "detail",
+                        "updated_at",
+                    ]
                 )
             source.research_intent.update(
                 status="cancelled", message="用户已取消科研任务", questions=[]

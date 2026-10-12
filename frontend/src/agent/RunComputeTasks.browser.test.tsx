@@ -437,3 +437,127 @@ it("ignores the previous run response after the task card changes", async () => 
     expect.objectContaining({ state: "working" }),
   );
 });
+
+it("groups real output files below collapsed completed calculations and previews the actual CSV", async () => {
+  const task = liveComputeTask("succeeded");
+  const output = {
+    ...task.outputs[0]!,
+    kind: "table",
+    label: "分区统计表",
+    fileName: "zone_statistics.csv",
+    downloadUrl: "/api/compute/outputs/30/download/",
+    metadata: { rows: 2 },
+  };
+  const load = vi
+    .spyOn(agentApi, "computeTasks")
+    .mockResolvedValue(result({ ...task, outputs: [output] }));
+  const preview = vi.spyOn(computeApi, "preview").mockResolvedValue({
+    kind: "table",
+    metadata: { rows: 2 },
+    columns: ["分区", "平均变化"],
+    rows: [
+      ["东区", -0.18],
+      ["西区", -0.03],
+    ],
+  });
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <RunComputeTasks runId={8} refreshKey="files" compact />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await screen.findByText("zone_statistics.csv");
+  expect(screen.getByText("计算完成，结果已保存。")).not.toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "在线预览" }));
+  await screen.findByText("东区");
+  await waitFor(() => expect(screen.getByText("-0.18")).toBeVisible());
+  expect(preview).toHaveBeenCalledWith(output.id);
+  expect(load).toHaveBeenCalledOnce();
+});
+
+it("downloads a generated CSV with its real filename through the authenticated output link", async () => {
+  const task = liveComputeTask("succeeded");
+  task.outputs = [
+    {
+      ...task.outputs[0]!,
+      kind: "table",
+      fileName: "statistics.csv",
+      downloadUrl: "/api/compute/outputs/30/download/",
+    },
+  ];
+  vi.spyOn(agentApi, "computeTasks").mockResolvedValue(result(task));
+  const fetchFile = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("zone,mean\neast,-0.18", {
+      headers: { "content-type": "text/csv" },
+    }),
+  );
+  let filename = "";
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+    function (this: HTMLAnchorElement) {
+      filename = this.download;
+    },
+  );
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "下载" }));
+  await waitFor(() => expect(filename).toBe("statistics.csv"));
+  expect(fetchFile).toHaveBeenCalledWith(
+    "/api/compute/outputs/30/download/",
+    expect.objectContaining({
+      credentials: "include",
+      headers: expect.objectContaining({ "X-Project-Id": expect.any(String) }),
+    }),
+  );
+});
+
+it("keeps final deliverables first and distinguishes earlier and later index files inside the folded intermediate list", async () => {
+  const early = { ...liveComputeTask("succeeded"), id: "early-task" };
+  const late = {
+    ...liveComputeTask("succeeded"),
+    id: "late-task",
+    outputs: [{ ...early.outputs[0]!, id: 31 }],
+  };
+  const final = {
+    ...liveComputeTask("succeeded"),
+    id: "final-task",
+    outputs: [
+      {
+        ...early.outputs[0]!,
+        id: 32,
+        kind: "table",
+        label: "调查排序表",
+        fileName: "priorities.csv",
+      },
+    ],
+  };
+  vi.spyOn(agentApi, "computeTasks").mockResolvedValue({
+    items: [early, late, final].map((task) => result(task).items[0]!),
+  });
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <RunComputeTasks
+          runId={8}
+          refreshKey="roles"
+          compact
+          primaryTaskIds={[final.id]}
+          taskDisplayNames={{
+            [early.id]: "前期植被指数",
+            [late.id]: "后期植被指数",
+            [final.id]: "调查顺序分析",
+          }}
+        />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await screen.findByText("priorities.csv");
+  expect(screen.queryByText("ndvi.tif")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("中间过程文件 · 2 个"));
+  expect(
+    await screen.findByText("前期植被指数", { selector: ".agent-file-source" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("后期植被指数", { selector: ".agent-file-source" }),
+  ).toBeInTheDocument();
+  expect(screen.getAllByText("ndvi.tif")).toHaveLength(2);
+});

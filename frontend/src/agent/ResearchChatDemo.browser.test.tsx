@@ -19,6 +19,7 @@ import type {
 } from "../api/generated/types.gen";
 import AgentPage from "./AgentPage";
 import { liveComputeTask } from "./computeFlow.testFixtures";
+import { workflowReport } from "./workflowReport.testFixtures";
 
 vi.mock("../components/WorkspaceHeader", () => ({
   default: () => <header>STISP</header>,
@@ -204,6 +205,9 @@ function show(state?: object) {
 }
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue(
+    workflowReport(),
+  );
   localStorage.clear();
   sessionStorage.clear();
   vi.spyOn(agentApi, "conversations").mockResolvedValue({
@@ -338,6 +342,7 @@ it("shows a live research cursor, pauses for approval and restores without repla
   ).not.toBeInTheDocument();
   mounted.unmount();
   show();
+  fireEvent.click(await screen.findByText(/查看分析过程/));
   await screen.findByLabelText("分析说明与决策依据");
   expect(document.querySelectorAll(".is-new-decision")).toHaveLength(0);
   expect(
@@ -420,6 +425,7 @@ it("accepts an online selection plus free explanation, continues and shows actua
     target: { value: "质量不足处请单列补资料。" },
   });
   fireEvent.click(screen.getByRole("button", { name: "继续分析" }));
+  fireEvent.click(await screen.findByText(/查看分析过程/));
   await screen.findByLabelText("分析说明与决策依据");
   expect(agentApi.updateResearchIntent).toHaveBeenCalledWith(101, {
     action: "answer",
@@ -428,10 +434,15 @@ it("accepts an online selection plus free explanation, continues and shows actua
     answer: "质量不足处请单列补资料。",
   });
   expect(screen.getAllByLabelText("科研任务")).toHaveLength(1);
-  expect(screen.getByText("实际计算得到 4 个分区")).toBeInTheDocument();
+  expect(
+    within(screen.getByLabelText("研究结论")).getByText(
+      "实际计算得到 4 个分区",
+    ),
+  ).toBeInTheDocument();
   expect(
     screen.getByRole("link", { name: "在地理工作台对比成果图层" }),
   ).toHaveAttribute("href", "/map?resources=204&projectTagId=1");
+  fireEvent.click(screen.getByText(/查看分析过程/));
   await page.screenshot({
     path: "../../test-results/research-chat-demo-desktop.png",
   });
@@ -458,6 +469,60 @@ it("parses a normal chat reply as an answer to the active clarification", async 
       answer: "按实际变化和观测排序",
     }),
   );
+  expect(agentApi.submit).not.toHaveBeenCalled();
+});
+
+it("pauses the research task after confirmation and resumes into review without bypassing approval", async () => {
+  const currentIntent = intent({
+    status: "running",
+    questions: [],
+    workflowId: "workflow-actual",
+  });
+  let currentWorkflow = workflow("running");
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation: newConversation,
+    runs: [run(101, { researchIntent: currentIntent })],
+  });
+  vi.mocked(agentApi.poll).mockResolvedValue({
+    run: run(101, { researchIntent: currentIntent }),
+    events: [],
+    cursor: 0,
+  });
+  vi.mocked(agentApi.workflow).mockImplementation(async () => currentWorkflow);
+  const pause = vi
+    .spyOn(agentApi, "pauseWorkflow")
+    .mockImplementation(async () => {
+      currentWorkflow = {
+        ...currentWorkflow,
+        status: "paused",
+        pausedFrom: "waiting_approval",
+      };
+      return currentWorkflow;
+    });
+  const resume = vi
+    .spyOn(agentApi, "resumeWorkflow")
+    .mockImplementation(async () => {
+      currentWorkflow = {
+        ...currentWorkflow,
+        status: "waiting_approval",
+        plan: { ...currentWorkflow.plan, reviewOutputs: [31] },
+      };
+      return currentWorkflow;
+    });
+  const confirm = vi.spyOn(agentApi, "confirmWorkflow");
+  show();
+  const task = await screen.findByLabelText("科研任务");
+  fireEvent.click(
+    await within(task).findByRole("button", { name: "暂停任务" }),
+  );
+  expect(pause).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByRole("button", { name: "确认暂停" }));
+  await within(task).findByRole("button", { name: "继续任务" });
+  expect(pause).toHaveBeenCalledWith("workflow-actual");
+  fireEvent.click(within(task).getByRole("button", { name: "继续任务" }));
+  await within(task).findByRole("button", { name: "审核并继续" });
+  expect(resume).toHaveBeenCalledWith("workflow-actual");
+  expect(confirm).not.toHaveBeenCalled();
   expect(agentApi.submit).not.toHaveBeenCalled();
 });
 

@@ -2634,3 +2634,13 @@ GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84
 科研场景新增 `geology_age_correction`，输入角色仍为 `initial_map`、`surveys`、`rules`；其中 surveys 为空间背景与资料说明，实际编辑依据为有地区及地层适用条件的辞书规则。流程调用已发布的地层时代检查、受约束编辑和复查算法。入口 `sampleNature=real_map_with_demonstration_errors` 明示真实图件副本和少量演示录入错误。原生态及地质模拟案例保持独立，模型只读取初图、资料和知识；人工精修、正确参考及设错清单用于独立验收。
 
 成果创建 multipart payload 可带 `resourceIds`；成果详情的 publish 请求也可更新该数组。关联限当前项目可读数据资源，最多30个且不重复；创建省略为无关联，publish省略保留原关联、空数组清除关联，其他动作不接受关联更新。响应 `relatedResources` 为 `{id,name,dataType}` 列表，读取时重新过滤项目、资源状态和 owner_only 权限。成果详情据此打开地理工作台或数据资源，成果文件本身的预览、下载与发布权限保持原规则。
+
+## 科研工作流成果文件与暂停（2026-10-12）
+
+原生态、地质模拟案例采用预设阶段图；模型在每阶段依据真实输入、知识引用、统计与计算结果判断，并在允许的操作内选择执行或请求复核。前端已完成步骤默认折叠，计算历史与最终文件分开呈现。
+
+新增 POST `/api/agent/workflows/{workflowId}/pause/`、`resume/`，空请求体。本人/原项目与输入权限保持。paused 和 pauseRequested 为持久状态；已有计算允许完成，暂停停止后续调度，继续复用原taskId。waiting_approval恢复后仍需原确认，结束任务返回409。科研意图仍映射为running，前端使用所关联真实workflow.status展示已暂停。
+
+新增 POST `.../report/` 生成成功工作流的持久Markdown报告，幂等且不调用模型或计算；GET `.../report/preview/` 返回UTF8文本；GET `.../report/download/` 需数据导出权限，返回真实attachment；POST `.../report/import/` 需数据新增权限，幂等登记document/MD、is_compute_result。所有接口检查本人、当前单项目、所有输入及关联任务/结果可见性，文件和伴随清单在TOML指定研究目录保存并核对SHA256。原始模型请求和内部思考不进入报告。缺报告404，未完成或校验异常409。前端预览受控Markdown，禁用原始HTML。
+
+报告汇总多个真实任务，不伪造ComputeOutput或挂到单一计算任务。已有CSV输出继续真实预览、下载和登记为表格；地图动作沿用既有栅格/矢量链路。本轮规范Markdown与CSV输出，未新增算法清单的DOCX/XLSX格式。

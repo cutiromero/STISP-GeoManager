@@ -141,7 +141,9 @@ export default function WorkflowPanel({
     workflowType === "ecology_investigation" ||
     workflowType === "geology_correction" ||
     workflowType === "geology_age_correction";
-  const locked = Boolean(workflow && active.includes(workflow.status));
+  const locked = Boolean(
+    workflow && [...active, "paused"].includes(workflow.status),
+  );
   const version = algorithms
     .flatMap((algorithm) => algorithm.versions)
     .find((v) => v.id === versionId);
@@ -344,6 +346,24 @@ export default function WorkflowPanel({
       );
     } catch (e) {
       report(e);
+    } finally {
+      mutationInFlight.current = false;
+      setBusy(false);
+    }
+  };
+  const controlWorkflow = async (action: "pause" | "resume") => {
+    if (!workflow || mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      setWorkflow(
+        action === "pause"
+          ? await agentApi.pauseWorkflow(workflow.id)
+          : await agentApi.resumeWorkflow(workflow.id),
+      );
+    } catch (reason) {
+      report(reason);
     } finally {
       mutationInFlight.current = false;
       setBusy(false);
@@ -647,6 +667,8 @@ export default function WorkflowPanel({
           busy={busy}
           onConfirm={() => void action(true)}
           onCancel={() => void action(false)}
+          onPause={() => void controlWorkflow("pause")}
+          onResume={() => void controlWorkflow("resume")}
           onEvidenceUpdate={
             !previousWorkflowId
               ? () => {

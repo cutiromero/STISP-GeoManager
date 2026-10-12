@@ -19,6 +19,8 @@ import type {
   AgentComputeIntentUpdate,
   AgentResearchDemoList,
   AgentResearchIntentUpdate,
+  AgentWorkflowReport,
+  AgentWorkflowReportPreview,
 } from "./generated/types.gen";
 
 export const agentApi = {
@@ -100,4 +102,27 @@ export const agentApi = {
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/cancel/`, {
       method: "POST",
     }),
+  pauseWorkflow: (id: string) =>
+    requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/pause/`, {
+      method: "POST",
+    }),
+  resumeWorkflow: (id: string) =>
+    requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/resume/`, {
+      method: "POST",
+    }),
+  prepareWorkflowReport: (id: string) =>
+    requestJson<AgentWorkflowReport>(`/api/agent/workflows/${id}/report/`, {
+      method: "POST",
+    }),
+  previewWorkflowReport: (id: string) =>
+    requestJson<AgentWorkflowReportPreview>(
+      `/api/agent/workflows/${id}/report/preview/`,
+    ),
+  importWorkflowReport: (id: string) =>
+    requestJson<AgentWorkflowReport>(
+      `/api/agent/workflows/${id}/report/import/`,
+      {
+        method: "POST",
+      },
+    ),
 };

@@ -1868,6 +1868,82 @@ export type AgentWorkflowStep = {
 };
 
 /**
+ * 已生成并持久保存的科研Markdown报告，操作能力根据当前权限返回
+ */
+export type AgentWorkflowReport = {
+    /**
+     * 可下载的真实文件名
+     */
+    fileName: string;
+    /**
+     * 用户可读的报告标题
+     */
+    label: string;
+    /**
+     * 报告文件类型
+     */
+    contentType: 'text/markdown';
+    /**
+     * 实际文件字节数
+     */
+    sizeBytes: number;
+    /**
+     * 已保存文件的SHA256
+     */
+    checksum: string;
+    /**
+     * 受授权保护的报告预览接口
+     */
+    previewUrl: string;
+    /**
+     * 受授权及数据导出权限保护的下载地址
+     */
+    downloadUrl: string;
+    /**
+     * 已登记文档资源ID，未入库为null
+     */
+    resourceId: number | null;
+    /**
+     * 入库资源名称，未入库为空字符串
+     */
+    resourceName: string;
+    /**
+     * 用户可读的项目与计算结果目录位置，未入库为空字符串
+     */
+    resourceLocation: string;
+    /**
+     * 当前用户具有下载所需权限
+     */
+    canDownload: boolean;
+    /**
+     * 当前用户具有入库所需权限
+     */
+    canImport: boolean;
+};
+
+/**
+ * 持久报告的受控在线预览正文
+ */
+export type AgentWorkflowReportPreview = {
+    /**
+     * 已保存Markdown文本，前端受控渲染
+     */
+    content: string;
+    /**
+     * 已保存报告文件名
+     */
+    fileName: string;
+    /**
+     * 文件类型
+     */
+    contentType: 'text/markdown';
+    /**
+     * 正文超过预览字符上限时为true，下载仍为完整文件
+     */
+    truncated: boolean;
+};
+
+/**
  * 可恢复的项目科研工作流
  */
 export type AgentWorkflow = {
@@ -1894,11 +1970,19 @@ export type AgentWorkflow = {
     /**
      * 工作流状态
      */
-    status: 'queued' | 'running' | 'waiting_compute' | 'waiting_approval' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
+    status: 'queued' | 'running' | 'waiting_compute' | 'waiting_approval' | 'paused' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
     /**
      * 可读状态
      */
     detail: string;
+    /**
+     * 已请求暂停，运行中的判断在保存进度后进入paused
+     */
+    pauseRequested?: boolean;
+    /**
+     * 暂停前阶段，恢复保留原计算或审核位置
+     */
+    pausedFrom?: string | null;
     /**
      * 当前节点
      */
@@ -17501,6 +17585,294 @@ export type CancelAgentWorkflowResponses = {
 };
 
 export type CancelAgentWorkflowResponse = CancelAgentWorkflowResponses[keyof CancelAgentWorkflowResponses];
+
+export type PauseAgentWorkflowData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目 ID，禁止 all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人工作流 UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/pause/';
+};
+
+export type PauseAgentWorkflowErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type PauseAgentWorkflowError = PauseAgentWorkflowErrors[keyof PauseAgentWorkflowErrors];
+
+export type PauseAgentWorkflowResponses = {
+    /**
+     * 最新持久工作流状态，running阶段可先返回pauseRequested=true
+     */
+    200: AgentWorkflow;
+};
+
+export type PauseAgentWorkflowResponse = PauseAgentWorkflowResponses[keyof PauseAgentWorkflowResponses];
+
+export type ResumeAgentWorkflowData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目 ID，禁止 all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人工作流 UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/resume/';
+};
+
+export type ResumeAgentWorkflowErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type ResumeAgentWorkflowError = ResumeAgentWorkflowErrors[keyof ResumeAgentWorkflowErrors];
+
+export type ResumeAgentWorkflowResponses = {
+    /**
+     * 恢复后的持久工作流状态
+     */
+    200: AgentWorkflow;
+};
+
+export type ResumeAgentWorkflowResponse = ResumeAgentWorkflowResponses[keyof ResumeAgentWorkflowResponses];
+
+export type PrepareAgentWorkflowReportData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目 ID，禁止 all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人工作流 UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/report/';
+};
+
+export type PrepareAgentWorkflowReportErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type PrepareAgentWorkflowReportError = PrepareAgentWorkflowReportErrors[keyof PrepareAgentWorkflowReportErrors];
+
+export type PrepareAgentWorkflowReportResponses = {
+    /**
+     * 真实报告文件及当前权限下的操作能力
+     */
+    200: AgentWorkflowReport;
+};
+
+export type PrepareAgentWorkflowReportResponse = PrepareAgentWorkflowReportResponses[keyof PrepareAgentWorkflowReportResponses];
+
+export type PreviewAgentWorkflowReportData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目 ID，禁止 all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人工作流 UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/report/preview/';
+};
+
+export type PreviewAgentWorkflowReportErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type PreviewAgentWorkflowReportError = PreviewAgentWorkflowReportErrors[keyof PreviewAgentWorkflowReportErrors];
+
+export type PreviewAgentWorkflowReportResponses = {
+    /**
+     * 保存文件的Markdown正文
+     */
+    200: AgentWorkflowReportPreview;
+};
+
+export type PreviewAgentWorkflowReportResponse = PreviewAgentWorkflowReportResponses[keyof PreviewAgentWorkflowReportResponses];
+
+export type DownloadAgentWorkflowReportData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目 ID，禁止 all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人工作流 UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/report/download/';
+};
+
+export type DownloadAgentWorkflowReportErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type DownloadAgentWorkflowReportError = DownloadAgentWorkflowReportErrors[keyof DownloadAgentWorkflowReportErrors];
+
+export type DownloadAgentWorkflowReportResponses = {
+    /**
+     * 持久报告文件内容
+     */
+    200: string;
+};
+
+export type DownloadAgentWorkflowReportResponse = DownloadAgentWorkflowReportResponses[keyof DownloadAgentWorkflowReportResponses];
+
+export type ImportAgentWorkflowReportData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目 ID，禁止 all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人工作流 UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/report/import/';
+};
+
+export type ImportAgentWorkflowReportErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type ImportAgentWorkflowReportError = ImportAgentWorkflowReportErrors[keyof ImportAgentWorkflowReportErrors];
+
+export type ImportAgentWorkflowReportResponses = {
+    /**
+     * 已入库报告的文件与目录位置
+     */
+    200: AgentWorkflowReport;
+};
+
+export type ImportAgentWorkflowReportResponse = ImportAgentWorkflowReportResponses[keyof ImportAgentWorkflowReportResponses];
 
 export type GetAgentAdminData = {
     body?: never;

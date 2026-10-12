@@ -133,6 +133,43 @@ function showAgent(mode: "chat" | "workbench" = "chat") {
   );
 }
 
+it("requires confirmation before stopping a streamed response", async () => {
+  const responding = {
+    ...run(5, "分析影像", "已生成部分回答"),
+    status: "running" as const,
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [responding],
+  });
+  vi.spyOn(agentApi, "poll").mockResolvedValue({
+    run: responding,
+    events: [],
+    cursor: 0,
+  });
+  const cancel = vi
+    .spyOn(agentApi, "cancel")
+    .mockResolvedValue({ ...responding, status: "cancelled" });
+  showAgent();
+  fireEvent.click(await screen.findByRole("button", { name: "停止回答" }));
+  const dialog = await screen.findByRole("dialog", { name: "停止这次回答？" });
+  expect(cancel).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole("button", { name: "继续回答" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(cancel).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "停止回答" }));
+  fireEvent.click(
+    within(await screen.findByRole("dialog")).getByRole("button", {
+      name: "停止回答",
+    }),
+  );
+  await waitFor(() => expect(cancel).toHaveBeenCalledExactlyOnceWith(5));
+  await screen.findByRole("button", { name: "发送" });
+  expect(screen.getByText("已生成部分回答")).toBeInTheDocument();
+});
+
 it("restores the parameter card and starts a real task from the same conversation turn", async () => {
   vi.spyOn(agentApi, "detail").mockResolvedValue({
     conversation,
@@ -340,6 +377,20 @@ beforeEach(() => {
   });
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue({
+    fileName: "科研工作流报告.md",
+    label: "科研工作流报告",
+    contentType: "text/markdown",
+    sizeBytes: 300,
+    checksum: "verified-report",
+    previewUrl: "/api/agent/workflows/workflow-1/report/preview/",
+    downloadUrl: "/api/agent/workflows/workflow-1/report/download/",
+    resourceId: null,
+    resourceName: "",
+    resourceLocation: "",
+    canDownload: true,
+    canImport: true,
+  });
   vi.spyOn(computeApi, "algorithms").mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(computeApi, "inputs").mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(agentApi, "submit").mockImplementation(async (_id, input) =>

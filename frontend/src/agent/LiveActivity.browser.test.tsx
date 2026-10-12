@@ -123,6 +123,16 @@ it("uses actual phase and model request, then stops motion for review and comple
   expect(workflowActivity(workflow("waiting_compute")).label).toBe(
     "算法正在计算",
   );
+  mounted.rerender(
+    <LiveActivity activity={workflowActivity(workflow("paused"))} />,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent("科研任务已暂停");
+  expect(
+    document.querySelector(".agent-activity-mark.is-working"),
+  ).not.toBeInTheDocument();
+  expect(workflowActivity({ ...running, pauseRequested: true }).label).toBe(
+    "正在保存进度并暂停",
+  );
 });
 
 it("keeps a research task active after its initial chat run finishes", () => {
