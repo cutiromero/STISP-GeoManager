@@ -75,6 +75,7 @@ export function workflowActivity(workflow: AgentWorkflow): LiveActivity {
 export function runActivity(
   run: AgentRun,
   events: AgentEvent[] = [],
+  computeActivity?: LiveActivity,
 ): LiveActivity {
   const intent = run.researchIntent;
   if (intent) {
@@ -100,18 +101,24 @@ export function runActivity(
   }
   if (run.computeIntent) {
     const compute = run.computeIntent;
+    if (compute.status === "submitted")
+      return (
+        computeActivity ?? {
+          state: "working",
+          label: "正在读取计算进度",
+          detail: compute.message,
+        }
+      );
     return {
       state: ["blocked", "superseded", "cancelled"].includes(compute.status)
         ? "stopped"
         : "waiting",
       label:
-        compute.status === "submitted"
-          ? "计算进度见任务卡"
-          : compute.status === "collecting"
-            ? "等待选择计算参数"
-            : compute.status === "ready"
-              ? "等待开始计算"
-              : "请查看计算设置",
+        compute.status === "collecting"
+          ? "等待选择计算参数"
+          : compute.status === "ready"
+            ? "等待开始计算"
+            : "请查看计算设置",
       detail: compute.message,
     };
   }

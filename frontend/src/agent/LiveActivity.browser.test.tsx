@@ -9,7 +9,7 @@ import LiveActivity from "./LiveActivity";
 import ThinkingStream from "./ThinkingStream";
 import WorkflowDecisionTimeline from "./WorkflowDecisionTimeline";
 import { runActivity, workflowActivity } from "./agentActivity";
-import { computeRun } from "./computeFlow.testFixtures";
+import { computeIntent, computeRun } from "./computeFlow.testFixtures";
 import "./agent.css";
 
 function workflow(status: AgentWorkflow["status"]): AgentWorkflow {
@@ -145,6 +145,31 @@ it("keeps a research task active after its initial chat run finishes", () => {
   expect(runActivity(run).state).toBe("working");
   run.researchIntent.status = "waiting_approval";
   expect(runActivity(run).state).toBe("waiting");
+});
+
+it("follows verified compute progress instead of keeping submitted calculations waiting", () => {
+  const run = computeRun({
+    ...computeIntent,
+    status: "submitted",
+    taskId: "verified-task",
+  });
+  expect(run.status).toBe("succeeded");
+  expect(runActivity(run)).toMatchObject({
+    state: "working",
+    label: "正在读取计算进度",
+  });
+  for (const state of ["working", "complete", "stopped"] as const) {
+    const activity = { state, label: "真实计算状态", detail: "实际任务回执" };
+    expect(runActivity(run, [], activity)).toBe(activity);
+  }
+  run.computeIntent!.status = "collecting";
+  expect(
+    runActivity(run, [], {
+      state: "complete",
+      label: "旧计算完成",
+      detail: "",
+    }),
+  ).toMatchObject({ state: "waiting", label: "等待选择计算参数" });
 });
 
 it("reveals only newly verified decisions and restores old explanations without replay", () => {

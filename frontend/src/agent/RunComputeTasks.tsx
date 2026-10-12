@@ -14,6 +14,7 @@ import type {
   ComputeTask,
 } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
+import type { LiveActivity } from "./agentActivity";
 import ComputeQualitySummary from "./ComputeQualitySummary";
 
 const activeStates = ["queued", "validating", "running", "cancelling"];
@@ -37,12 +38,95 @@ const importNames: Record<string, [string, string]> = {
 
 function shouldPoll(items: AgentComputeTaskTracking[]) {
   return items.some(
-    ({ task, trackingStatus }) =>
-      activeStates.includes(task.status) ||
-      ["waiting_compute", "waiting_import"].includes(trackingStatus) ||
-      task.outputs.some((output) =>
-        ["queued", "running"].includes(output.importStatus),
-      ),
+    (item) =>
+      activeStates.includes(item.task.status) ||
+      (item.task.status === "succeeded" &&
+        item.task.outputs.some((output) =>
+          ["queued", "running"].includes(output.importStatus),
+        )) ||
+      computeTasksActivity([item]).state === "working",
+  );
+}
+
+export function computeTasksActivity(
+  items: AgentComputeTaskTracking[],
+  activityTaskId?: string,
+): LiveActivity {
+  const selected = activityTaskId
+    ? items.filter(({ task }) => task.id === activityTaskId)
+    : items;
+  if (!selected.length)
+    return { state: "working", label: "正在读取计算进度", detail: "" };
+  const activities = selected.map(
+    ({ task, trackingStatus, autoImport, detail }) => {
+      if (["failed", "cancelled", "interrupted"].includes(task.status))
+        return {
+          state: "stopped" as const,
+          label: task.status === "failed" ? "计算失败" : "计算已停止",
+          detail: task.error || detail,
+        };
+      if (["blocked", "failed"].includes(trackingStatus))
+        return {
+          state: "stopped" as const,
+          label: "任务需要处理",
+          detail,
+        };
+      if (activeStates.includes(task.status))
+        return {
+          state: "working" as const,
+          label:
+            task.status === "queued"
+              ? "正在等待计算"
+              : task.status === "validating"
+                ? "正在检查输入"
+                : task.status === "cancelling"
+                  ? "正在停止计算"
+                  : "算法正在计算",
+          detail: task.stage || detail,
+        };
+      if (task.status !== "succeeded")
+        return { state: "working" as const, label: "正在读取计算进度", detail };
+      const failedImport = task.outputs.find(
+        (output) => output.importStatus === "failed",
+      );
+      if (failedImport)
+        return {
+          state: "stopped" as const,
+          label: "计算完成，入库失败",
+          detail: failedImport.importError || detail,
+        };
+      if (
+        task.outputs.length &&
+        task.outputs.every((output) => output.importStatus === "ready")
+      )
+        return {
+          state: "complete" as const,
+          label: "计算与入库已完成",
+          detail,
+        };
+      if (
+        task.outputs.some((output) =>
+          ["queued", "running"].includes(output.importStatus),
+        ) ||
+        (autoImport &&
+          ["waiting_compute", "waiting_import"].includes(trackingStatus))
+      )
+        return {
+          state: "working" as const,
+          label: "正在保存计算成果",
+          detail,
+        };
+      return {
+        state: "complete" as const,
+        label: "计算已完成",
+        detail,
+      };
+    },
+  );
+  return (
+    activities.find(({ state }) => state === "stopped") ??
+    activities.find(({ state }) => state === "working") ??
+    activities[0]!
   );
 }
 
@@ -93,6 +177,8 @@ export default function RunComputeTasks({
   refreshKey,
   reviewing = false,
   taskDisplayNames,
+  activityTaskId,
+  onActivityChange,
 }: (
   | {
       runId: number;
@@ -108,6 +194,8 @@ export default function RunComputeTasks({
   refreshKey: string;
   reviewing?: boolean;
   taskDisplayNames?: Record<string, string>;
+  activityTaskId?: string;
+  onActivityChange?: (activity: LiveActivity) => void;
 }) {
   const ui = useComputeText();
   const navigate = useNavigate();
@@ -117,6 +205,8 @@ export default function RunComputeTasks({
   const [revision, setRevision] = useState(0);
   const alive = useRef(true);
   const importing = useRef(false);
+  const activityCallback = useRef(onActivityChange);
+  activityCallback.current = onActivityChange;
   const taskKey = [...new Set(taskIds ?? [])].join(",");
   useEffect(() => {
     alive.current = true;
@@ -130,6 +220,11 @@ export default function RunComputeTasks({
     let timer: ReturnType<typeof setTimeout>;
     setItems([]);
     setError("");
+    activityCallback.current?.({
+      state: "working",
+      label: "正在读取计算进度",
+      detail: "",
+    });
     const poll = async () => {
       try {
         const result =
@@ -152,7 +247,14 @@ export default function RunComputeTasks({
         failures = 0;
         setItems(result.items);
         setError("");
-        if (shouldPoll(result.items))
+        activityCallback.current?.(
+          computeTasksActivity(result.items, activityTaskId),
+        );
+        if (
+          shouldPoll(result.items) ||
+          (activityTaskId &&
+            !result.items.some(({ task }) => task.id === activityTaskId))
+        )
           timer = setTimeout(poll, document.hidden ? 6000 : 1800);
       } catch (reason) {
         if (disposed) return;
@@ -164,8 +266,19 @@ export default function RunComputeTasks({
           [401, 403].includes(Number(reason.status))
         ) {
           setItems([]);
+          activityCallback.current?.({
+            state: "stopped",
+            label: "计算状态不可用",
+            detail:
+              reason instanceof Error ? reason.message : "无权查看计算任务",
+          });
           return;
         }
+        activityCallback.current?.({
+          state: "working",
+          label: "正在重新核对计算状态",
+          detail: reason instanceof Error ? reason.message : "读取任务状态失败",
+        });
         failures += 1;
         timer = setTimeout(poll, Math.min(15000, 3000 * failures));
       }
@@ -175,7 +288,7 @@ export default function RunComputeTasks({
       disposed = true;
       clearTimeout(timer);
     };
-  }, [runId, taskKey, autoImport, refreshKey, revision]);
+  }, [runId, taskKey, autoImport, refreshKey, revision, activityTaskId]);
 
   const importOutput = async (output: ComputeOutput, task: ComputeTask) => {
     if (importing.current) return;

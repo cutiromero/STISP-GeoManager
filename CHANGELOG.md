@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.38] - 2026-10-12
+
+### Fixed
+- 智能体左侧会话图标和当前任务提示复用计算卡真实状态，计算及入库完成后正确停止活动提示；刷新恢复保持一致。
+- 自动入库等待继续跟踪，自主待入库显示计算完成，读取失败及撤权按实际情况提示；切换会话隔离旧状态。
+- 已完成的历史科研任务不再遮住后续普通计算的状态。
+
 ## [0.1.37] - 2026-10-12
 
 ### Added

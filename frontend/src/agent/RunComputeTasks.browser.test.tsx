@@ -10,9 +10,13 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
-import type { ComputeTask } from "../api/generated/types.gen";
+import type {
+  AgentComputeTaskTracking,
+  ComputeTask,
+} from "../api/generated/types.gen";
+import type { LiveActivity } from "./agentActivity";
 import { liveComputeTask } from "./computeFlow.testFixtures";
-import RunComputeTasks from "./RunComputeTasks";
+import RunComputeTasks, { computeTasksActivity } from "./RunComputeTasks";
 import "./agent.css";
 
 function Location() {
@@ -24,11 +28,16 @@ function Location() {
     </output>
   );
 }
-function show() {
+function show(onActivityChange?: (activity: LiveActivity) => void) {
   return render(
     <AntApp>
       <MemoryRouter>
-        <RunComputeTasks runId={8} refreshKey="1" />
+        <RunComputeTasks
+          runId={8}
+          refreshKey="1"
+          activityTaskId={liveComputeTask().id}
+          onActivityChange={onActivityChange}
+        />
         <Location />
       </MemoryRouter>
     </AntApp>,
@@ -110,15 +119,22 @@ it("polls by interval and stops when the computation reaches a terminal state", 
   const poll = vi
     .spyOn(agentApi, "computeTasks")
     .mockResolvedValue(result(liveComputeTask()));
-  const { unmount } = show();
+  const activity = vi.fn<(activity: LiveActivity) => void>();
+  const { unmount } = show(activity);
   await screen.findByText("排队中");
   expect(poll).toHaveBeenCalledOnce();
+  expect(activity).toHaveBeenLastCalledWith(
+    expect.objectContaining({ state: "working" }),
+  );
   poll.mockResolvedValue(result(liveComputeTask("succeeded")));
   await waitFor(
     () => expect(screen.getByText("计算完成")).toBeInTheDocument(),
     { timeout: 5000 },
   );
   expect(poll).toHaveBeenCalledTimes(2);
+  expect(activity).toHaveBeenLastCalledWith(
+    expect.objectContaining({ state: "complete", label: "计算已完成" }),
+  );
   vi.useFakeTimers();
   await act(async () => {
     await vi.advanceTimersByTimeAsync(20000);
@@ -127,27 +143,39 @@ it("polls by interval and stops when the computation reaches a terminal state", 
   unmount();
 });
 
-it("removes stale result cards after permission revocation", async () => {
-  const poll = vi
-    .spyOn(agentApi, "computeTasks")
-    .mockResolvedValue(result(liveComputeTask()));
-  const { rerender } = show();
-  await screen.findByText("排队中");
-  const denied = Object.assign(new Error("无权查看此任务"), { status: 403 });
-  poll.mockRejectedValue(denied);
-  rerender(
-    <AntApp>
-      <MemoryRouter>
-        <RunComputeTasks runId={8} refreshKey="2" />
-        <Location />
-      </MemoryRouter>
-    </AntApp>,
-  );
-  await screen.findByText("无权查看此任务");
-  expect(
-    screen.queryByRole("region", { name: "研究区影像 · NDVI" }),
-  ).not.toBeInTheDocument();
-});
+it.each([401, 403])(
+  "removes stale result cards after permission revocation (%s)",
+  async (status) => {
+    const poll = vi
+      .spyOn(agentApi, "computeTasks")
+      .mockResolvedValue(result(liveComputeTask()));
+    const activity = vi.fn<(activity: LiveActivity) => void>();
+    const { rerender } = show(activity);
+    await screen.findByText("排队中");
+    const denied = Object.assign(new Error("无权查看此任务"), { status });
+    poll.mockRejectedValue(denied);
+    rerender(
+      <AntApp>
+        <MemoryRouter>
+          <RunComputeTasks
+            runId={8}
+            refreshKey="2"
+            activityTaskId={liveComputeTask().id}
+            onActivityChange={activity}
+          />
+          <Location />
+        </MemoryRouter>
+      </AntApp>,
+    );
+    await screen.findByText("无权查看此任务");
+    expect(
+      screen.queryByRole("region", { name: "研究区影像 · NDVI" }),
+    ).not.toBeInTheDocument();
+    expect(activity).toHaveBeenLastCalledWith(
+      expect.objectContaining({ state: "stopped", label: "计算状态不可用" }),
+    );
+  },
+);
 
 it("opens the permanent resource even when its temporary output has expired", async () => {
   const task = liveComputeTask("succeeded");
@@ -173,5 +201,239 @@ it("opens the permanent resource even when its temporary output has expired", as
   );
   expect(screen.getByRole("status", { name: "当前位置" })).toHaveTextContent(
     "/map?resourceId=180&projectTagId=1",
+  );
+});
+
+it("maps only the bound task and treats optional import as completed computation", () => {
+  const task = liveComputeTask("succeeded");
+  const item = result(task).items[0]!;
+  const other = result({ ...liveComputeTask("running"), id: "other" })
+    .items[0]!;
+  expect(computeTasksActivity([other, item], task.id)).toMatchObject({
+    state: "complete",
+    label: "计算已完成",
+  });
+  expect(computeTasksActivity([other], task.id)).toMatchObject({
+    state: "working",
+    label: "正在读取计算进度",
+  });
+  expect(
+    computeTasksActivity([{ ...item, trackingStatus: "waiting_compute" }]),
+  ).toMatchObject({ state: "complete" });
+  expect(
+    computeTasksActivity([{ ...item, trackingStatus: "waiting_import" }]),
+  ).toMatchObject({ state: "complete" });
+});
+
+it("keeps actual calculations and requested imports active until their terminal state", () => {
+  for (const status of [
+    "queued",
+    "validating",
+    "running",
+    "cancelling",
+  ] as const)
+    expect(
+      computeTasksActivity(result(liveComputeTask(status)).items).state,
+    ).toBe("working");
+  const task = liveComputeTask("succeeded");
+  const item = result(task).items[0]!;
+  for (const trackingStatus of ["waiting_compute", "waiting_import"])
+    expect(
+      computeTasksActivity([{ ...item, autoImport: true, trackingStatus }]),
+    ).toMatchObject({ state: "working", label: "正在保存计算成果" });
+  for (const importStatus of ["queued", "running", "ready"] as const)
+    expect(
+      computeTasksActivity([
+        {
+          ...item,
+          task: {
+            ...task,
+            outputs: [{ ...task.outputs[0]!, importStatus }],
+          },
+        },
+      ]),
+    ).toMatchObject({
+      state: importStatus === "ready" ? "complete" : "working",
+      label: importStatus === "ready" ? "计算与入库已完成" : "正在保存计算成果",
+    });
+  for (const trackingStatus of ["waiting_compute", "waiting_import"])
+    expect(
+      computeTasksActivity([
+        {
+          ...item,
+          autoImport: true,
+          trackingStatus,
+          task: {
+            ...task,
+            outputs: [{ ...task.outputs[0]!, importStatus: "ready" }],
+          },
+        },
+      ]),
+    ).toMatchObject({ state: "complete", label: "计算与入库已完成" });
+});
+
+it("stops failed, cancelled, interrupted or blocked computation without masking it as success", () => {
+  for (const status of ["failed", "cancelled", "interrupted"] as const)
+    expect(
+      computeTasksActivity(result(liveComputeTask(status)).items).state,
+    ).toBe("stopped");
+  const task = liveComputeTask("succeeded");
+  const item = result(task).items[0]!;
+  for (const trackingStatus of ["blocked", "failed"])
+    expect(computeTasksActivity([{ ...item, trackingStatus }]).state).toBe(
+      "stopped",
+    );
+  expect(
+    computeTasksActivity([
+      {
+        ...item,
+        task: {
+          ...task,
+          outputs: [{ ...task.outputs[0]!, importStatus: "failed" }],
+        },
+      },
+    ]),
+  ).toMatchObject({ state: "stopped", label: "计算完成，入库失败" });
+});
+
+it("does not restart polling when the parent passes a new activity callback", async () => {
+  const poll = vi
+    .spyOn(agentApi, "computeTasks")
+    .mockResolvedValue(result(liveComputeTask()));
+  const first = vi.fn<(activity: LiveActivity) => void>();
+  const next = vi.fn<(activity: LiveActivity) => void>();
+  const { rerender } = show(first);
+  await screen.findByText("排队中");
+  rerender(
+    <AntApp>
+      <MemoryRouter>
+        <RunComputeTasks
+          runId={8}
+          refreshKey="1"
+          activityTaskId={liveComputeTask().id}
+          onActivityChange={next}
+        />
+        <Location />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  expect(poll).toHaveBeenCalledOnce();
+  poll.mockResolvedValue(result(liveComputeTask("succeeded")));
+  await waitFor(
+    () =>
+      expect(next).toHaveBeenCalledWith(
+        expect.objectContaining({ state: "complete" }),
+      ),
+    { timeout: 5000 },
+  );
+  expect(poll).toHaveBeenCalledTimes(2);
+  expect(next).toHaveBeenLastCalledWith(
+    expect.objectContaining({ state: "complete" }),
+  );
+});
+
+it("rechecks transient read failures rather than reporting completion", async () => {
+  vi.spyOn(agentApi, "computeTasks").mockRejectedValue(new Error("暂时离线"));
+  const activity = vi.fn<(activity: LiveActivity) => void>();
+  show(activity);
+  await screen.findByText("暂时离线");
+  expect(activity).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      state: "working",
+      label: "正在重新核对计算状态",
+    }),
+  );
+});
+
+it("keeps the requested import active, then reports the imported result as complete", async () => {
+  const task = liveComputeTask("succeeded");
+  const output = task.outputs[0]!;
+  const poll = vi
+    .spyOn(agentApi, "computeTasks")
+    .mockResolvedValue(
+      result({ ...task, outputs: [{ ...output, importStatus: "running" }] }),
+    );
+  const activity = vi.fn<(activity: LiveActivity) => void>();
+  show(activity);
+  await screen.findByText("正在入库");
+  expect(activity).toHaveBeenLastCalledWith(
+    expect.objectContaining({ state: "working", label: "正在保存计算成果" }),
+  );
+  poll.mockResolvedValue(
+    result({ ...task, outputs: [{ ...output, importStatus: "ready" }] }),
+  );
+  await waitFor(
+    () =>
+      expect(activity).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          state: "complete",
+          label: "计算与入库已完成",
+        }),
+      ),
+    { timeout: 5000 },
+  );
+  expect(poll).toHaveBeenCalledTimes(2);
+});
+
+it("rechecks an initially missing bound task without using a historical task status", async () => {
+  const poll = vi
+    .spyOn(agentApi, "computeTasks")
+    .mockResolvedValue({ items: [] });
+  const activity = vi.fn<(activity: LiveActivity) => void>();
+  show(activity);
+  await waitFor(() => expect(poll).toHaveBeenCalledOnce());
+  expect(activity).toHaveBeenLastCalledWith(
+    expect.objectContaining({ state: "working", label: "正在读取计算进度" }),
+  );
+  poll.mockResolvedValue(result(liveComputeTask("succeeded")));
+  await waitFor(
+    () =>
+      expect(activity).toHaveBeenLastCalledWith(
+        expect.objectContaining({ state: "complete" }),
+      ),
+    { timeout: 5000 },
+  );
+  expect(poll).toHaveBeenCalledTimes(2);
+});
+
+it("ignores an in-flight response after unmount", async () => {
+  let resolve!: (value: { items: AgentComputeTaskTracking[] }) => void;
+  vi.spyOn(agentApi, "computeTasks").mockImplementation(
+    () => new Promise((done) => (resolve = done)),
+  );
+  const activity = vi.fn<(activity: LiveActivity) => void>();
+  const { unmount } = show(activity);
+  expect(activity).toHaveBeenCalledOnce();
+  unmount();
+  await act(async () => resolve(result(liveComputeTask("succeeded"))));
+  expect(activity).toHaveBeenCalledOnce();
+});
+
+it("ignores the previous run response after the task card changes", async () => {
+  let resolve!: (value: { items: AgentComputeTaskTracking[] }) => void;
+  vi.spyOn(agentApi, "computeTasks")
+    .mockImplementationOnce(() => new Promise((done) => (resolve = done)))
+    .mockResolvedValue(result(liveComputeTask()));
+  const activity = vi.fn<(activity: LiveActivity) => void>();
+  const { rerender } = show(activity);
+  rerender(
+    <AntApp>
+      <MemoryRouter>
+        <RunComputeTasks
+          runId={9}
+          refreshKey="1"
+          activityTaskId={liveComputeTask().id}
+          onActivityChange={activity}
+        />
+        <Location />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await screen.findByText("排队中");
+  const calls = activity.mock.calls.length;
+  await act(async () => resolve(result(liveComputeTask("succeeded"))));
+  expect(activity).toHaveBeenCalledTimes(calls);
+  expect(activity).toHaveBeenLastCalledWith(
+    expect.objectContaining({ state: "working" }),
   );
 });

@@ -142,7 +142,7 @@ it("restores the parameter card and starts a real task from the same conversatio
     ...computeIntent,
     status: "submitted",
     parameters: { red: 3, nir: 8 },
-    taskId: "real-task",
+    taskId: liveComputeTask().id,
     planRevision: "submitted-plan",
   });
   const submitIntent = vi
@@ -161,6 +161,11 @@ it("restores the parameter card and starts a real task from the same conversatio
   });
   fireEvent.click(start);
   await screen.findByText("计算完成，结果已保存。");
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByRole("status"),
+    ).toHaveAttribute("data-activity-state", "complete"),
+  );
   expect(submitIntent).toHaveBeenCalledWith(
     8,
     expect.objectContaining({
@@ -186,7 +191,7 @@ it("immediately tracks an automatic task returned from explicit bands in the inp
     status: "submitted" as const,
     parameters: { red: 3, nir: 8 },
     missingParameters: [],
-    taskId: "real-task",
+    taskId: liveComputeTask().id,
   };
   vi.spyOn(agentApi, "submit").mockResolvedValue({
     ...computeRun(intent),
@@ -210,6 +215,11 @@ it("immediately tracks an automatic task returned from explicit bands in the inp
   fireEvent.click(screen.getByRole("button", { name: "发送" }));
   await screen.findByText("计算完成，结果已保存。");
   expect(agentApi.submit).toHaveBeenCalledOnce();
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByRole("status"),
+    ).toHaveTextContent("计算已完成"),
+  );
   expect(
     screen.queryByRole("region", { name: "计算配置" }),
   ).not.toBeInTheDocument();
@@ -223,7 +233,7 @@ it("uses the live report instead of the initial queued answer and retains later 
     ...computeRun({
       ...computeIntent,
       status: "submitted",
-      taskId: "real-task",
+      taskId: liveComputeTask().id,
       parameters: { red: 3, nir: 8 },
       missingParameters: [],
     }),
@@ -335,6 +345,221 @@ beforeEach(() => {
   vi.spyOn(agentApi, "submit").mockImplementation(async (_id, input) =>
     run(2, input.prompt),
   );
+});
+
+it("synchronizes running calculation and terminal status without a second polling request", async () => {
+  const task = liveComputeTask("running");
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [
+      computeRun({ ...computeIntent, status: "submitted", taskId: task.id }),
+    ],
+  });
+  const computeTasks = vi
+    .spyOn(agentApi, "computeTasks")
+    .mockResolvedValueOnce({
+      items: [
+        {
+          task,
+          autoImport: false,
+          trackingStatus: "waiting_compute",
+          detail: "",
+        },
+      ],
+    })
+    .mockResolvedValue({
+      items: [
+        {
+          task: liveComputeTask("succeeded"),
+          autoImport: false,
+          trackingStatus: "completed",
+          detail: "",
+        },
+      ],
+    });
+  showAgent("workbench");
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByRole("status"),
+    ).toHaveTextContent("算法正在计算"),
+  );
+  await waitFor(
+    () =>
+      expect(
+        within(screen.getByLabelText("当前任务")).getByRole("status"),
+      ).toHaveAttribute("data-activity-state", "complete"),
+    { timeout: 5000 },
+  );
+  expect(computeTasks).toHaveBeenCalledTimes(2);
+  expect(
+    screen
+      .getByRole("button", { name: "历史会话" })
+      .querySelector(".is-complete"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByLabelText("当前任务").querySelector(".agent-activity-track"),
+  ).not.toBeInTheDocument();
+});
+
+it("synchronizes automatic import progress and restores completion after remount", async () => {
+  const importing = liveComputeTask("succeeded");
+  importing.outputs[0].importStatus = "running";
+  const imported = liveComputeTask("succeeded");
+  imported.outputs[0].importStatus = "ready";
+  imported.outputs[0].resourceId = 163;
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [
+      computeRun({
+        ...computeIntent,
+        status: "submitted",
+        taskId: importing.id,
+        autoImport: true,
+      }),
+    ],
+  });
+  const computeTasks = vi
+    .spyOn(agentApi, "computeTasks")
+    .mockResolvedValueOnce({
+      items: [
+        {
+          task: importing,
+          autoImport: true,
+          trackingStatus: "waiting_import",
+          detail: "",
+        },
+      ],
+    })
+    .mockResolvedValue({
+      items: [
+        {
+          task: imported,
+          autoImport: true,
+          trackingStatus: "completed",
+          detail: "",
+        },
+      ],
+    });
+  const mounted = showAgent("workbench");
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByRole("status"),
+    ).toHaveTextContent("正在保存计算成果"),
+  );
+  await waitFor(
+    () =>
+      expect(
+        within(screen.getByLabelText("当前任务")).getByRole("status"),
+      ).toHaveTextContent("计算与入库已完成"),
+    { timeout: 5000 },
+  );
+  expect(computeTasks).toHaveBeenCalledTimes(2);
+  mounted.unmount();
+  showAgent("workbench");
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByRole("status"),
+    ).toHaveAttribute("data-activity-state", "complete"),
+  );
+  expect(computeTasks).toHaveBeenCalledTimes(3);
+});
+
+it("ignores an old computation response after switching conversations", async () => {
+  const second = { ...conversation, id: 2, title: "另一会话" };
+  vi.mocked(agentApi.conversations).mockResolvedValue({
+    items: [conversation, second],
+  });
+  vi.mocked(agentApi.detail).mockImplementation(async (id) => ({
+    conversation: id === 1 ? conversation : second,
+    runs:
+      id === 1
+        ? [
+            computeRun({
+              ...computeIntent,
+              status: "submitted",
+              taskId: liveComputeTask().id,
+            }),
+          ]
+        : [{ ...run(20, "另一问题", "另一回答"), conversationId: 2 }],
+  }));
+  let resolveOld!: (
+    value: Awaited<ReturnType<typeof agentApi.computeTasks>>,
+  ) => void;
+  vi.spyOn(agentApi, "computeTasks").mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+  );
+  showAgent("workbench");
+  await waitFor(() => expect(agentApi.computeTasks).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "另一会话" }));
+  await screen.findByText("另一回答");
+  resolveOld({
+    items: [
+      {
+        task: liveComputeTask("succeeded"),
+        autoImport: true,
+        trackingStatus: "completed",
+        detail: "",
+      },
+    ],
+  });
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByRole("status"),
+    ).toHaveTextContent("回答已完成"),
+  );
+  expect(screen.queryByText("计算与入库已完成")).not.toBeInTheDocument();
+});
+
+it("shows a later calculation instead of an older completed research task", async () => {
+  const earlier = {
+    ...run(7, "研究旧资料"),
+    researchIntent: {
+      originRunId: 7,
+      revision: "saved",
+      scenario: "ecology_investigation" as const,
+      status: "succeeded" as const,
+      goal: "已完成的旧研究",
+      message: "研究完成",
+      questions: [],
+      inputs: {},
+      parameters: {},
+      workflowId: null,
+      inputSummary: [],
+    },
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [
+      earlier,
+      computeRun({
+        ...computeIntent,
+        status: "submitted",
+        taskId: liveComputeTask().id,
+      }),
+    ],
+  });
+  vi.spyOn(agentApi, "computeTasks").mockResolvedValue({
+    items: [
+      {
+        task: liveComputeTask("succeeded"),
+        autoImport: false,
+        trackingStatus: "completed",
+        detail: "",
+      },
+    ],
+  });
+  showAgent("workbench");
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByRole("status"),
+    ).toHaveTextContent("计算已完成"),
+  );
+  expect(
+    within(screen.getByLabelText("当前任务")).queryByText("研究已完成"),
+  ).not.toBeInTheDocument();
 });
 
 it("prefills a knowledge handoff without sending it automatically", async () => {

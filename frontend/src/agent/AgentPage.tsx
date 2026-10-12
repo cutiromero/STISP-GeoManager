@@ -60,7 +60,11 @@ import WorkflowPanel from "./WorkflowPanel";
 import ResearchIntentCard from "./ResearchIntentCard";
 import LiveActivity, { ActivityMark } from "./LiveActivity";
 import ThinkingStream from "./ThinkingStream";
-import { runActivity, workflowActivity } from "./agentActivity";
+import {
+  runActivity,
+  workflowActivity,
+  type LiveActivity as ActivityState,
+} from "./agentActivity";
 import { researchDemoLaunch } from "./researchDemoLaunch";
 import AgentResizeHandle from "./AgentResizeHandle";
 import AgentToolSelection, {
@@ -117,6 +121,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [conversations, setConversations] = useState<AgentConversation[]>([]);
   const [current, setCurrent] = useState<AgentConversation | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [computeActivities, setComputeActivities] = useState<
+    Record<number, ActivityState>
+  >({});
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [prompt, setPrompt] = useState("");
   const demoLaunch = useRef(
@@ -228,7 +235,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   } | null>(null);
   const running = runs.find(active);
   const latestResearch = [...runs].reverse().find((run) => run.researchIntent);
-  const sidebarRun = running ?? latestResearch ?? runs[runs.length - 1];
+  const pendingResearch = [...runs]
+    .reverse()
+    .find(
+      (run) =>
+        run.researchIntent &&
+        ["working", "waiting"].includes(runActivity(run).state),
+    );
+  const sidebarRun = running ?? pendingResearch ?? runs[runs.length - 1];
   const currentResearchWorkflow =
     researchWorkflow?.runId === latestResearch?.id
       ? researchWorkflow?.workflow
@@ -239,12 +253,19 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       manualWorkflow.status,
     )
       ? manualWorkflow
-      : currentResearchWorkflow;
+      : sidebarRun?.id === latestResearch?.id
+        ? currentResearchWorkflow
+        : undefined;
   const sidebarActivity = sidebarWorkflow
     ? workflowActivity(sidebarWorkflow)
     : sidebarRun
-      ? runActivity(sidebarRun, sidebarRun.id === running?.id ? events : [])
+      ? runActivity(
+          sidebarRun,
+          sidebarRun.id === running?.id ? events : [],
+          computeActivities[sidebarRun.id],
+        )
       : undefined;
+  const conversationSequence = sequence.current;
   const sidebarTitle =
     sidebarWorkflow?.goal ?? sidebarRun?.researchIntent?.goal;
   const canUse = mode === "agent" ? bootstrap?.canAgent : bootstrap?.canChat;
@@ -294,6 +315,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       setResearchWorkflow(undefined);
       setWorkflowStatus(undefined);
       setRuns([]);
+      setComputeActivities({});
       setEvents([]);
       setCurrent(null);
       setConversations([]);
@@ -378,6 +400,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         if (disposed) return;
         // Do not retain restricted content after any authorization/read failure.
         setRuns([]);
+        setComputeActivities({});
         setEvents([]);
         report(e);
       }
@@ -399,6 +422,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       } catch (e) {
         if (!disposed) {
           setRuns([]);
+          setComputeActivities({});
           setEvents([]);
           report(e);
         }
@@ -449,6 +473,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     setResearchWorkflow(undefined);
     followLatest.current = true;
     setRuns([]);
+    setComputeActivities({});
     setEvents([]);
     setError("");
     setShowHistory(false);
@@ -652,6 +677,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     setResearchWorkflow(undefined);
     followLatest.current = true;
     setRuns([]);
+    setComputeActivities({});
     setEvents([]);
     setError("");
     setPrompt("");
@@ -1185,7 +1211,28 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                           "import_compute_result",
                         ].includes(item.tool),
                       )) && (
-                      <RunComputeTasks runId={r.id} refreshKey={r.updatedAt} />
+                      <RunComputeTasks
+                        runId={r.id}
+                        refreshKey={r.updatedAt}
+                        activityTaskId={r.computeIntent?.taskId ?? undefined}
+                        onActivityChange={(activity) => {
+                          if (
+                            !alive.current ||
+                            conversationSequence !== sequence.current
+                          )
+                            return;
+                          setComputeActivities((old) => {
+                            const previous = old[r.id];
+                            if (
+                              previous?.state === activity.state &&
+                              previous.label === activity.label &&
+                              previous.detail === activity.detail
+                            )
+                              return old;
+                            return { ...old, [r.id]: activity };
+                          });
+                        }}
+                      />
                     )}
                   <RunEvidence
                     items={r.evidence}
