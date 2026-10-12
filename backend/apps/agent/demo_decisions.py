@@ -316,8 +316,8 @@ def decision_payload(workflow, stage, context, results) -> dict:
         "allowedAlgorithm": workflow.plan["algorithms"].get(stage["identifier"], {}),
         "inputRoles": context,
         "knowledge": workflow.evidence,
-        "actualResults": results,
         "executionState": _execution_state(workflow, stage, results, old_results),
+        "actualResults": results,
         "editTask": _edit_task(workflow, stage, results),
         "previousAnalysis": previous,
         "previousDecisions": prior[-4:],
@@ -329,7 +329,129 @@ def _response_text(raw: str) -> str:
     return re.sub(r"<think>.*?(?:</think>|$)", "", raw, flags=re.S | re.I).strip()
 
 
-def _validate_response(raw, workflow, stage, results, refs) -> tuple[dict, list]:
+def _approved_final_outputs(stage, execution_state):
+    if stage["identifier"] != "finish":
+        return []
+    states = execution_state["resultReviews"]
+    reviewed = [
+        item
+        for item in states
+        if item["kind"] != "archive" and item["originalQualityStatus"] == "needs_review"
+    ]
+    if not reviewed or any(item["approvalStatus"] != "approved" for item in reviewed):
+        return []
+    return reviewed
+
+
+_APPROVAL_ACK = re.compile(
+    r"(?:用户|人工)(?:已|已经)(?:批准|确认|同意)"
+    r"|(?:已|已经)(?:由|经)(?:用户|人工)(?:批准|确认|同意)"
+    r"|(?:已|已经)(?:获得|获)(?:用户|人工)(?:批准|确认)"
+)
+_WAITING_REVIEW = re.compile(
+    r"(?:仍|尚|还|依然)?(?:需要|需|等待|待)(?:由)?(?:用户|人工)?(?:审核|批准|确认)"
+    r"|(?:尚未|还未|未获|未被|未经|没有).{0,6}(?:用户|人工)?(?:批准|确认)"
+    r"|(?:用户|人工)(?:尚未|还未|未)(?:批准|确认)"
+)
+_CANDIDATE_SCOPE = re.compile(r"候选|修复|几何|降维|本(?:次|步)(?:输出|结果)|计算结果")
+_EXCESS_APPROVAL_SCOPE = re.compile(
+    r"归档|审计附件|(?:全部|所有)(?:的)?(?:结果|输出|成果)"
+)
+_OBJECT_SUFFIX = r"(?:结果|输出|成果|地图|图|面|片段|候选|几何|修复|附件|审计|归档|的|均|都|现|当前|\s)*$"
+
+
+def _approval_matches(clause):
+    for match in _APPROVAL_ACK.finditer(clause):
+        before = clause[: match.start()]
+        if not re.search(
+            r"尚未|还未|未曾|没有|并未|未被|不曾|不是|并非|不能说", before[-8:]
+        ):
+            yield before, clause[match.end() :]
+
+
+def _approval_object(before, after, scope):
+    if re.search("(?:" + scope.pattern + ")" + _OBJECT_SUFFIX, before):
+        return True
+    after = re.sub(r"^(?:了|对|这些|该|本次|本步|相关|对应|的|\s)*", "", after)
+    objects = re.split(
+        r"继续处理|完成|结束|保留|保持|有效|无需|仍|待|需|且|但|并", after
+    )[0]
+    if scope is _CANDIDATE_SCOPE:
+        return bool(re.fullmatch("(?:" + scope.pattern + ")" + _OBJECT_SUFFIX, objects))
+    return bool(scope.search(objects))
+
+
+def _positive_approval(text, *, require_scope=False):
+    for clause in re.split(r"[。；;，,\n]", text):
+        for before, after in _approval_matches(clause):
+            if not require_scope or _approval_object(before, after, _CANDIDATE_SCOPE):
+                return True
+    return False
+
+
+def _validate_final_review_report(decision, stage, execution_state):
+    if not _approved_final_outputs(stage, execution_state):
+        return
+    report = [
+        *decision["findings"],
+        decision["judgement"],
+        decision["resultSummary"],
+        *decision["uncertainties"],
+    ]
+    for text in report:
+        for sentence in re.split(r"[。；;\n]", text):
+            ack = _positive_approval(sentence)
+            previous_scope = False
+            for clause in re.split(r"[，,]", sentence):
+                if any(
+                    _approval_object(before, after, _EXCESS_APPROVAL_SCOPE)
+                    for before, after in _approval_matches(clause)
+                ):
+                    raise ComputeError(
+                        "最终报告把用户批准范围扩大到了全部结果或归档附件，请按实际输出范围说明"
+                    )
+                for match in _WAITING_REVIEW.finditer(clause):
+                    before = clause[: match.start()]
+                    after = clause[match.end() :]
+                    scope = _CANDIDATE_SCOPE.search(before + after)
+                    if not scope and not (
+                        previous_scope
+                        and re.fullmatch(
+                            r"\s*(?:但|但是|且|并|因此|目前|现|则)*\s*", before
+                        )
+                        and re.fullmatch(
+                            r"\s*(?:后|才能|方可|继续|处理|执行|。)*\s*", after
+                        )
+                    ):
+                        continue
+                    if re.search(
+                        r"(?:现场|专业|地学|外业|补充调查|后续).{0,12}$", before
+                    ):
+                        continue
+                    historical = re.search(
+                        r"(?:原(?:始)?(?:质量|标记|候选)?|曾|此前|当时|最初|审核前).{0,18}$",
+                        before,
+                    )
+                    if (
+                        historical
+                        and ack
+                        and not re.search(r"仍|尚|还|依然|等待", match.group())
+                    ):
+                        continue
+                    raise ComputeError(
+                        "最终报告仍将已由用户批准的候选结果描述为待审核，请区分平台批准与后续专业复核"
+                    )
+                previous_scope = bool(_CANDIDATE_SCOPE.search(clause))
+    summary = decision["judgement"] + "\n" + decision["resultSummary"]
+    if not _positive_approval(summary, require_scope=True):
+        raise ComputeError(
+            "最终报告未明确说明本次候选输出已由用户批准，请在判断或结果摘要准确交代当前批准状态"
+        )
+
+
+def _validate_response(
+    raw, workflow, stage, results, refs, *, execution_state=None
+) -> tuple[dict, list]:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
     try:
         value = json.loads(cleaned)
@@ -378,6 +500,10 @@ def _validate_response(raw, workflow, stage, results, refs) -> tuple[dict, list]
         )
     elif value["edits"]:
         raise ComputeError("当前算法或人工复核动作不得提前提交属性修改计划")
+    if execution_state is None:
+        old = (workflow.plan.get("previousAnalysis") or {}).get("actualResults", [])
+        execution_state = _execution_state(workflow, stage, results, old)
+    _validate_final_review_report(decision, stage, execution_state)
     return decision, value["edits"]
 
 
@@ -415,9 +541,14 @@ def decide(
         "currentStage.kind=final_analysis表示前序计算结束后的分析动作，"
         "其本身无需taskId；最终分析须引用currentRun.latestStatisticsOutputIds中的"
         "本轮最新实际统计，不能把previousAnalysis旧统计当作更新统计。"
+        "previousDecisions中的每项及previousAnalysis.oldDecision都是历史时点的说明，"
+        "其中审核前的文字不代表当前等待状态；当前平台状态以executionState实际批准记录为准。"
         "executionState.resultReviews按stage、taskId与outputId给出真实结果审核状态；"
         "approvalStatus=approved表示对应输出已由humanReviewStepSequences记录的用户审核批准继续，"
         "不能继续写成等待用户审核；批准只适用于该输出，不扩展到其他步骤或结果。"
+        "当本轮原needs_review的非归档输出非空且均为approved时，"
+        "最终报告的judgement或resultSummary须明确说明这些候选输出已由用户批准继续处理，"
+        "findings与uncertainties也须准确区分当前平台批准和后续专业复核。"
         "originalQualityStatus仍保留原始质量标记，人工批准不等于自动检查passed或地学真实性已证实。"
         "pending才表示该结果尚待审核；reference_only为归档审计附件，不能据其原始标记断言工作流仍待审核。"
         "原始几何无效或原始面积基准不可靠时，area_change_pct=0等数值不能证明面积保真或修复无损；"
@@ -515,7 +646,14 @@ def decide(
         record["response"] = raw
         guard()
         try:
-            decision, edits = _validate_response(raw, workflow, stage, results, refs)
+            decision, edits = _validate_response(
+                raw,
+                workflow,
+                stage,
+                results,
+                refs,
+                execution_state=payload["executionState"],
+            )
         except ComputeError as exc:
             record.update(status="rejected", accepted=False, validationError=str(exc))
             if on_attempt:
@@ -538,20 +676,27 @@ def decide(
 
 
 def _repair_feedback(stage, payload, error):
-    return json.dumps(
-        {
-            "validationError": str(error),
-            "allowedAction": stage["identifier"],
-            "latestStatisticsOutputIds": payload["executionState"]["currentRun"][
-                "latestStatisticsOutputIds"
-            ],
-            "editTask": payload["editTask"],
-            "instruction": "依据完整原资料修正响应，重新输出同一decision/edits结构；"
-            "引用实际最新统计；编辑逐项对应真实问题，证据不足可request_review。"
-            "平台不会代补引用或修改计划。",
-        },
-        ensure_ascii=False,
-    )
+    feedback = {
+        "validationError": str(error),
+        "allowedAction": stage["identifier"],
+        "latestStatisticsOutputIds": payload["executionState"]["currentRun"][
+            "latestStatisticsOutputIds"
+        ],
+        "editTask": payload["editTask"],
+        "instruction": "依据完整原资料修正响应，重新输出同一decision/edits结构；"
+        "引用实际最新统计；编辑逐项对应真实问题，证据不足可request_review。"
+        "平台不会代补引用或修改计划。",
+    }
+    approved = _approved_final_outputs(stage, payload["executionState"])
+    if approved:
+        feedback.update(
+            approvedResultScope=approved,
+            reviewInstruction="approvedResultScope是本次真实用户批准的阶段、任务、输出与审核步骤。"
+            "这些候选已批准继续，原needs_review标记仍保留；最终judgement或resultSummary明确用户已批准，"
+            "其他字段不能仍声称对应候选等待用户审核。历史审核前说明不是当前状态。"
+            "批准不扩展到全部结果或归档；低置信证据、后续专业复核和原无效面积限制继续如实说明。",
+        )
+    return json.dumps(feedback, ensure_ascii=False)
 
 
 def _recover_decision(
@@ -611,7 +756,14 @@ def _recover_decision(
         if index:
             previous = attempts[index - 1]
             try:
-                _validate_response(previous["response"], workflow, stage, results, refs)
+                _validate_response(
+                    previous["response"],
+                    workflow,
+                    stage,
+                    results,
+                    refs,
+                    execution_state=payload["executionState"],
+                )
             except ComputeError as exc:
                 feedback = _repair_feedback(stage, payload, exc)
             else:
@@ -642,7 +794,12 @@ def _recover_decision(
             reject()
     last = attempts[-1]
     decision, edits = _validate_response(
-        last["response"], workflow, stage, results, refs
+        last["response"],
+        workflow,
+        stage,
+        results,
+        refs,
+        execution_state=payload["executionState"],
     )
     decision.update(modelMode="real", modelName=model.name)
     stage["recoveredModelAttempt"] = last["attempt"]
