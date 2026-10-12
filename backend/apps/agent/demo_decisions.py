@@ -358,6 +358,20 @@ _EXCESS_APPROVAL_SCOPE = re.compile(
     r"归档|审计附件|(?:全部|所有)(?:的)?(?:结果|输出|成果)"
 )
 _OBJECT_SUFFIX = r"(?:结果|输出|成果|地图|图|面|片段|候选|几何|修复|附件|审计|归档|的|均|都|现|当前|\s)*$"
+_NEGATED_REVIEW_PREFIX = re.compile(
+    r"(?:不再|不必(?:再)?|(?:不需要?|无需)(?:再)?|不|无)\s*$"
+)
+_INVERTED_NEGATION_PREFIX = re.compile(
+    r"(?:并非|并不是|不是|不代表|不等于|不得|不可以|不可|不能(?:说|认为|认定|声称|表示|断言)?"
+    r"|没有(?:说|确认)?|未(?:曾)?(?:确认|认定|表示))\s*$"
+)
+
+
+def _negated_review(before):
+    negation = _NEGATED_REVIEW_PREFIX.search(before)
+    return bool(
+        negation and not _INVERTED_NEGATION_PREFIX.search(before[: negation.start()])
+    )
 
 
 def _approval_matches(clause):
@@ -413,6 +427,8 @@ def _validate_final_review_report(decision, stage, execution_state):
                 for match in _WAITING_REVIEW.finditer(clause):
                     before = clause[: match.start()]
                     after = clause[match.end() :]
+                    if _negated_review(before):
+                        continue
                     scope = _CANDIDATE_SCOPE.search(before + after)
                     if not scope and not (
                         previous_scope

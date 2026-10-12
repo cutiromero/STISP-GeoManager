@@ -197,6 +197,56 @@ def test_explicit_new_subject_and_sentence_end_stop_scope_inheritance(phrase):
     _validate_final_review_report(value, {"identifier": "finish"}, states())
 
 
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "平台不再等待用户审核该几何候选",
+        "几何候选无需人工审核",
+        "修复结果不需用户批准",
+        "候选不需要用户确认",
+        "候选不必再等待人工审核",
+        "几何候选无需再等待用户批准",
+    ],
+)
+def test_direct_negation_of_waiting_review_is_not_a_pending_status(phrase):
+    value = report()
+    value["findings"].append(phrase)
+    _validate_final_review_report(value, {"identifier": "finish"}, states())
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "不能说无需人工审核该几何候选",
+        "几何候选并非不再等待用户审核",
+        "不是不需要人工确认修复结果",
+        "没有说不再等待用户批准几何候选",
+        "不能认定不需用户确认该修复结果",
+        "几何候选不得不等待用户审核",
+        "几何候选不可以不等待用户审核",
+        "几何候选不可不等待用户审核",
+        "候选无需人工审核，但修复面仍需人工审核",
+        "修复面仍需人工审核，候选无需人工审核",
+    ],
+)
+def test_negation_cannot_mask_double_negation_or_another_pending_statement(phrase):
+    value = report()
+    value["findings"].append(phrase)
+    with pytest.raises(ComputeError, match="待审核"):
+        _validate_final_review_report(value, {"identifier": "finish"}, states())
+
+
+def test_actual_corrected_finding_distinguishes_approval_and_original_quality():
+    value = report()
+    value["findings"] = [
+        "几何修复阶段已完成自相交修复，修复后6个要素均有效。"
+        "其中一个要素因包含降维片段，原始质量标记为needs_review，"
+        "但该组输出已由用户批准继续处理，平台不再等待用户审核该几何候选；"
+        "地学真实性及降维片段影响仍需后续专业复核。"
+    ]
+    _validate_final_review_report(value, {"identifier": "finish"}, states())
+
+
 @pytest.mark.parametrize("mode", ["nonfinal", "no_review", "pending", "archive"])
 def test_ordinary_feedback_does_not_invent_user_approval(mode):
     execution = states()
@@ -262,6 +312,7 @@ def model_context(env):
         },
         "edits": [],
     }
+    answer["decision"]["findings"].append("平台不再等待用户审核该几何候选")
     return workflow, stage, results, answer
 
 
