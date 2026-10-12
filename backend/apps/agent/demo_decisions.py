@@ -357,7 +357,22 @@ _CANDIDATE_SCOPE = re.compile(r"候选|修复|几何|降维|本(?:次|步)(?:输
 _EXCESS_APPROVAL_SCOPE = re.compile(
     r"归档|审计附件|(?:全部|所有)(?:的)?(?:结果|输出|成果)"
 )
-_OBJECT_SUFFIX = r"(?:结果|输出|成果|地图|图|面|片段|候选|几何|修复|附件|审计|归档|的|均|都|现|当前|\s)*$"
+_OUTPUT_NUMBERS = (
+    r"\s*(?:(?:output(?:Ids?)?|输出(?:编号|IDs?)?|结果(?:编号|IDs?)?|编号)\s*[:=：]?\s*)?"
+    r"\d+(?:\s*[,，、;；]\s*\d+)*\s*"
+)
+_OUTPUT_ANNOTATION = re.compile(
+    "|".join(
+        re.escape(opening) + _OUTPUT_NUMBERS + re.escape(closing)
+        for opening, closing in (("(", ")"), ("（", "）"), ("[", "]"), ("【", "】"))
+    ),
+    re.I,
+)
+_OBJECT_SUFFIX = (
+    r"(?:结果|输出|成果|地图|图|面|片段|候选|几何|修复|附件|审计|归档|的|均|都|现|当前|\s|"
+    + _OUTPUT_ANNOTATION.pattern
+    + r")*$"
+)
 _NEGATED_REVIEW_PREFIX = re.compile(
     r"(?:不再|不必(?:再)?|(?:不需要?|无需)(?:再)?|不|无)\s*$"
 )
@@ -374,6 +389,23 @@ def _negated_review(before):
     )
 
 
+def _report_parts(text, separators):
+    pairs = {"(": ")", "（": "）", "[": "]", "【": "】"}
+    stack, parts, start = [], [], 0
+    for index, char in enumerate(text):
+        if char in pairs:
+            stack.append(pairs[char])
+        elif char in pairs.values():
+            if not stack or stack.pop() != char:
+                return re.split("[" + re.escape(separators) + "]", text)
+        elif char in separators and not stack:
+            parts.append(text[start:index])
+            start = index + 1
+    if stack:
+        return re.split("[" + re.escape(separators) + "]", text)
+    return [*parts, text[start:]]
+
+
 def _approval_matches(clause):
     for match in _APPROVAL_ACK.finditer(clause):
         before = clause[: match.start()]
@@ -383,29 +415,47 @@ def _approval_matches(clause):
             yield before, clause[match.end() :]
 
 
-def _approval_object(before, after, scope):
-    if re.search("(?:" + scope.pattern + ")" + _OBJECT_SUFFIX, before):
-        return True
-    after = re.sub(r"^(?:了|对|这些|该|本次|本步|相关|对应|的|\s)*", "", after)
-    objects = re.split(
-        r"继续处理|完成|结束|保留|保持|有效|无需|仍|待|需|且|但|并", after
-    )[0]
-    if scope is _CANDIDATE_SCOPE:
-        return bool(re.fullmatch("(?:" + scope.pattern + ")" + _OBJECT_SUFFIX, objects))
-    return bool(scope.search(objects))
+def _approval_object(before, after, scope, *, approved_output_ids=None):
+    pattern = "(?:" + scope.pattern + ")" + _OBJECT_SUFFIX
+    match = re.search(pattern, before, flags=re.I)
+    if not match:
+        after = re.sub(r"^(?:了|对|这些|该|本次|本步|相关|对应|的|\s)*", "", after)
+        objects = re.split(
+            r"继续处理|完成|结束|保留|保持|有效|无需|仍|待|需|且|但|并", after
+        )[0]
+        match = (
+            re.fullmatch(pattern, objects, flags=re.I)
+            if scope is _CANDIDATE_SCOPE
+            else scope.search(objects)
+        )
+    if match and scope is _CANDIDATE_SCOPE and approved_output_ids is not None:
+        output_ids = {
+            int(number)
+            for annotation in _OUTPUT_ANNOTATION.finditer(match.group())
+            for number in re.findall(r"\d+", annotation.group())
+        }
+        if not output_ids <= approved_output_ids:
+            raise ComputeError(
+                "最终报告将未批准或归档输出写入批准范围，请绑定实际已批准输出"
+            )
+    return bool(match)
 
 
-def _positive_approval(text, *, require_scope=False):
-    for clause in re.split(r"[。；;，,\n]", text):
+def _positive_approval(text, *, require_scope=False, approved_output_ids=None):
+    for clause in _report_parts(text, "。；;，,\n"):
         for before, after in _approval_matches(clause):
-            if not require_scope or _approval_object(before, after, _CANDIDATE_SCOPE):
+            if not require_scope or _approval_object(
+                before, after, _CANDIDATE_SCOPE, approved_output_ids=approved_output_ids
+            ):
                 return True
     return False
 
 
 def _validate_final_review_report(decision, stage, execution_state):
-    if not _approved_final_outputs(stage, execution_state):
+    approved = _approved_final_outputs(stage, execution_state)
+    if not approved:
         return
+    approved_output_ids = {int(item["outputId"]) for item in approved}
     report = [
         *decision["findings"],
         decision["judgement"],
@@ -413,16 +463,23 @@ def _validate_final_review_report(decision, stage, execution_state):
         *decision["uncertainties"],
     ]
     for text in report:
-        for sentence in re.split(r"[。；;\n]", text):
+        for sentence in _report_parts(text, "。；;\n"):
             ack = _positive_approval(sentence)
             previous_scope = False
-            for clause in re.split(r"[，,]", sentence):
+            for clause in _report_parts(sentence, "，,"):
                 if any(
                     _approval_object(before, after, _EXCESS_APPROVAL_SCOPE)
                     for before, after in _approval_matches(clause)
                 ):
                     raise ComputeError(
                         "最终报告把用户批准范围扩大到了全部结果或归档附件，请按实际输出范围说明"
+                    )
+                for before, after in _approval_matches(clause):
+                    _approval_object(
+                        before,
+                        after,
+                        _CANDIDATE_SCOPE,
+                        approved_output_ids=approved_output_ids,
                     )
                 for match in _WAITING_REVIEW.finditer(clause):
                     before = clause[: match.start()]
@@ -459,7 +516,9 @@ def _validate_final_review_report(decision, stage, execution_state):
                     )
                 previous_scope = bool(_CANDIDATE_SCOPE.search(clause))
     summary = decision["judgement"] + "\n" + decision["resultSummary"]
-    if not _positive_approval(summary, require_scope=True):
+    if not _positive_approval(
+        summary, require_scope=True, approved_output_ids=approved_output_ids
+    ):
         raise ComputeError(
             "最终报告未明确说明本次候选输出已由用户批准，请在判断或结果摘要准确交代当前批准状态"
         )

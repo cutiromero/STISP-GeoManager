@@ -54,6 +54,33 @@ def report():
     }
 
 
+def numbered_states():
+    execution = states()
+    original = execution["resultReviews"][0]
+    execution["resultReviews"].extend(
+        [{**original, "outputId": 405}, {**original, "outputId": 406}]
+    )
+    execution["resultReviews"].extend(
+        [
+            {
+                **original,
+                "outputId": 407,
+                "kind": "archive",
+                "approvalStatus": "reference_only",
+                "humanReviewStepSequences": [],
+            },
+            {
+                **original,
+                "outputId": 408,
+                "originalQualityStatus": "passed",
+                "approvalStatus": "not_required",
+                "humanReviewStepSequences": [],
+            },
+        ]
+    )
+    return execution
+
+
 @pytest.mark.parametrize(
     "field", ["findings", "judgement", "resultSummary", "uncertainties"]
 )
@@ -247,6 +274,83 @@ def test_actual_corrected_finding_distinguishes_approval_and_original_quality():
     _validate_final_review_report(value, {"identifier": "finish"}, states())
 
 
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "几何修复候选输出（404, 405, 406）已由用户批准继续处理",
+        "修复候选结果(404,405,406)已由用户批准继续处理",
+        "用户已批准修复候选输出（404, 405, 406）继续处理",
+        "用户已批准几何候选输出(404,405,406)继续处理",
+        "候选输出（404，405、406）已由用户确认",
+        "候选输出[404,405,406]已由用户批准",
+        "修复候选输出【404,405,406】已由用户批准",
+        "修复候选输出（outputIds=404, 405, 406）已由用户批准",
+        "几何候选输出（输出编号：404,405,406）已由用户批准",
+        "修复地图（404）已由用户批准继续处理",
+        "用户已批准修复候选输出（404,405）继续处理",
+    ],
+)
+def test_approval_annotations_stay_in_one_clause_and_bind_real_output_subset(phrase):
+    value = report()
+    value["judgement"] = value["resultSummary"] = phrase
+    _validate_final_review_report(value, {"identifier": "finish"}, numbered_states())
+
+
+@pytest.mark.parametrize(
+    "field", ["findings", "judgement", "resultSummary", "uncertainties"]
+)
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "几何修复候选输出（404,999）已由用户批准",
+        "用户已批准几何修复候选输出（404,999）继续处理",
+        "修复候选输出（404,407）已由用户批准",
+        "用户已批准修复候选输出（404,408）继续处理",
+    ],
+)
+def test_other_positive_ack_cannot_mask_unknown_archive_or_unapproved_output_ids(
+    field, phrase
+):
+    value = report()
+    value[field] = [phrase] if field in {"findings", "uncertainties"} else phrase
+    with pytest.raises(ComputeError, match="未批准或归档输出"):
+        _validate_final_review_report(
+            value, {"identifier": "finish"}, numbered_states()
+        )
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        "用户已批准计划（候选结果404）",
+        "计划（候选结果）已由用户批准",
+        "用户已批准修复计划（404,405,406）",
+        "修复参数（404,405）已由用户确认",
+        "修复候选输出（404,405)已由用户批准",
+        "修复候选输出（404,405已由用户批准",
+    ],
+)
+def test_annotation_does_not_turn_plan_parameters_or_malformed_objects_into_approval(
+    phrase,
+):
+    value = report()
+    value["judgement"] = value["resultSummary"] = phrase
+    with pytest.raises(ComputeError, match="未明确说明"):
+        _validate_final_review_report(
+            value, {"identifier": "finish"}, numbered_states()
+        )
+
+
+def test_actual_numbered_approval_keeps_scope_limits_and_separate_followup():
+    value = report()
+    value["resultSummary"] = (
+        "几何修复候选输出（404, 405, 406）已由用户批准继续处理，"
+        "原needs_review标记保留，批准不扩展至归档或全部结果。"
+        "F04待现场核实，降维片段仍需专业复核。"
+    )
+    _validate_final_review_report(value, {"identifier": "finish"}, numbered_states())
+
+
 @pytest.mark.parametrize("mode", ["nonfinal", "no_review", "pending", "archive"])
 def test_ordinary_feedback_does_not_invent_user_approval(mode):
     execution = states()
@@ -313,6 +417,16 @@ def model_context(env):
         "edits": [],
     }
     answer["decision"]["findings"].append("平台不再等待用户审核该几何候选")
+    reviewed_ids = [
+        str(item["outputId"])
+        for item in workflow.plan["stages"][1]["results"]
+        if item["kind"] != "archive"
+    ]
+    answer["decision"]["resultSummary"] = (
+        "修复候选输出（"
+        + ", ".join(reviewed_ids)
+        + "）已由用户批准继续处理，原质量标记保留"
+    )
     return workflow, stage, results, answer
 
 
