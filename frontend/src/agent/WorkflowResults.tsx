@@ -86,6 +86,26 @@ export default function WorkflowResults({
       ? Object.entries(value)
       : [];
   const mapResourceIds = workflowMapResourceIds(workflow);
+  const taskDisplayNames =
+    workflow.workflowType === "geology_age_correction" &&
+    Array.isArray(workflow.plan.stages)
+      ? Object.fromEntries(
+          workflow.plan.stages.flatMap((stage) => {
+            if (!stage || typeof stage !== "object" || Array.isArray(stage))
+              return [];
+            const data = stage as Record<string, unknown>;
+            const stageName = String(data.name);
+            const stageLabels: Record<string, string> = {
+              check: ui("初始时代属性检查", "Initial geologic age check"),
+              edit: ui("地层时代属性纠偏", "Geologic age correction"),
+              recheck: ui("最终时代属性复查", "Final geologic age recheck"),
+            };
+            return typeof data.taskId === "string" && stageLabels[stageName]
+              ? [[data.taskId, stageLabels[stageName]]]
+              : [];
+          }),
+        )
+      : undefined;
   const settingsSummary = (
     <dl className="agent-plan-summary">
       <dt>{ui("算法", "Algorithm")}</dt>
@@ -182,6 +202,7 @@ export default function WorkflowResults({
             workflow.plan.reviewOutputs.length > 0
           }
           refreshKey={`${workflow.id}:${workflow.status}`}
+          taskDisplayNames={taskDisplayNames}
         />
       )}
       {workflow.status === "waiting_approval" && onConfirm && (

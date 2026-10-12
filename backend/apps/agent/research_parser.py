@@ -63,6 +63,18 @@ def plausible(run, previous) -> bool:
     return (ecological or geological) and multistep
 
 
+def intent_catalog(catalog: dict) -> dict:
+    """Keep every choice and constraint; defer full execution manifests to planning."""
+    result = deepcopy(catalog)
+    for scene in result["scenarios"]:
+        for algorithm in scene.get("algorithms", []):
+            # Role candidates and parameterSpecs already carry the parser's
+            # complete selection contract. Full package manifests are frozen
+            # and validated by prepare_demo before any calculation is submitted.
+            algorithm.pop("manifest", None)
+    return result
+
+
 def interpret(
     run,
     user,
@@ -86,7 +98,7 @@ def interpret(
         "demoScenario": run.research_intent.get("_demoScenario"),
         "priorIntent": previous,
         "workflow": workflow,
-        "authorizedCatalog": catalog,
+        "authorizedCatalog": intent_catalog(catalog),
         "responseContract": {
             "inputsType": "object",
             "inputValueType": "positive integer; omit unresolved roles, never null",
@@ -107,7 +119,10 @@ def interpret(
             "algorithmMode": run.algorithm_selection_mode,
         },
     }
-    current = {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}
+    current = {
+        "role": "user",
+        "content": json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+    }
     messages = [{"role": "system", "content": INSTRUCTION}, current]
     audit = {
         "modelMode": "real",

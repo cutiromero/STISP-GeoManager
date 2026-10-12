@@ -150,6 +150,16 @@ GRAPHS = {
 }
 
 
+def stage_title(workflow, stage: dict) -> str:
+    if workflow.workflow_type == "geology_age_correction":
+        return {
+            "check": "初始时代属性检查",
+            "edit": "地层时代属性纠偏",
+            "recheck": "最终时代属性复查",
+        }.get(stage["name"], stage["name"])
+    return STAGE_TITLES.get(stage["name"], stage["name"])
+
+
 def _save(workflow) -> None:
     # Closing/queuing a stage and user cancellation share one locked row.
     if workflow.status in {"queued", "waiting_approval", "succeeded"}:
@@ -255,11 +265,12 @@ def prepare_demo(workflow, user, p) -> None:
     snapshots, names = {}, {}
     for role, kind in roles.items():
         resource = resolve_resource(user, p, inputs[role], workflow.resource_ids)
-        if (
-            workflow.workflow_type == "geology_age_correction"
-            and is_reference_resource(resource)
+        if workflow.workflow_type == "geology_age_correction" and is_reference_resource(
+            resource
         ):
-            raise ComputeError("人工精修、验收参考及设错清单仅作独立对照，不可作为纠偏场景输入")
+            raise ComputeError(
+                "人工精修、验收参考及设错清单仅作独立对照，不可作为纠偏场景输入"
+            )
         if resource.status != "active" or resource.data_type != kind:
             raise ComputeError("场景角色的数据类型或状态不匹配：" + role)
         snapshots[role], names[role] = resource.updated_at.isoformat(), resource.name
@@ -527,7 +538,7 @@ def _submit_stage(workflow, user, p, stage) -> None:
     for identity in inputs.values():
         resolve_resource(user, p, identity)
     body = {
-        "name": f"{workflow.goal[:90]} · {STAGE_TITLES.get(stage['name'], stage['name'])}",
+        "name": f"{workflow.goal[:90]} · {stage_title(workflow, stage)}",
         "versionId": workflow.plan["algorithms"][stage["identifier"]]["versionId"],
         "inputs": inputs,
         "parameters": stage["parameters"],
@@ -631,7 +642,7 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
                 source = (
                     "" if stage.get("manualApproved") else f"workflow:{workflow.id}"
                 )
-                name = f"{STAGE_TITLES.get(stage['name'], stage['name'])} · {output.label} · {workflow.created_at:%m%d-%H%M%S}"
+                name = f"{stage_title(workflow, stage)} · {output.label} · {workflow.created_at:%m%d-%H%M%S}"
                 record = request_output_import(
                     user, output, name=name, request_source=source
                 )

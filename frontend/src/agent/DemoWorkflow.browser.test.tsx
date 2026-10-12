@@ -18,6 +18,7 @@ import type {
 } from "../api/generated/types.gen";
 import WorkflowPanel from "./WorkflowPanel";
 import RunComputeTasks from "./RunComputeTasks";
+import WorkflowResults from "./WorkflowResults";
 import { liveComputeTask } from "./computeFlow.testFixtures";
 import "./agent.css";
 
@@ -505,14 +506,12 @@ it("binds real-map age roles and uses published manifest parameters in the manua
       description: "真实底图副本，少量演示录入错误",
     })),
   });
-  const create = vi
-    .spyOn(agentApi, "createWorkflow")
-    .mockResolvedValue(
-      savedWorkflow({
-        workflowType: "geology_age_correction",
-        status: "queued",
-      }),
-    );
+  const create = vi.spyOn(agentApi, "createWorkflow").mockResolvedValue(
+    savedWorkflow({
+      workflowType: "geology_age_correction",
+      status: "queued",
+    }),
+  );
   showWorkflow();
   await select("研究场景", "真实底图 · 地层时代录入纠偏");
   expect(screen.getByText("真实底图 · 演示录入错误")).toBeInTheDocument();
@@ -539,6 +538,69 @@ it("binds real-map age roles and uses published manifest parameters in the manua
     }),
   );
 });
+
+it.each([
+  "ecology_investigation",
+  "geology_correction",
+  "geology_age_correction",
+])(
+  "names the initial and final age task cards only for %s",
+  async (workflowType) => {
+    const stageNames = ["check", "edit", "recheck"];
+    const taskIds = [
+      "ffffffff-0000-4000-8000-000000000001",
+      "11111111-0000-4000-8000-000000000002",
+      "aaaaaaaa-0000-4000-8000-000000000003",
+    ];
+    const taskNames = ["原有初查任务名", "原有编辑任务名", "原有复查任务名"];
+    vi.spyOn(computeApi, "task").mockImplementation(async (id) => ({
+      ...liveComputeTask("succeeded"),
+      id,
+      name: taskNames[taskIds.indexOf(id)]!,
+      outputs: [],
+    }));
+    const workflow = savedWorkflow({
+      workflowType,
+      steps: taskIds.map((id, index) => ({
+        ...decisionStep(),
+        id: index + 1,
+        sequence: index + 1,
+        computeTaskId: id,
+        decision: undefined,
+      })),
+      plan: {
+        stages: stageNames.map((name, index) => ({
+          name,
+          taskId: taskIds[index],
+          outputs: [],
+        })),
+      },
+    });
+    render(
+      <AntApp>
+        <MemoryRouter>
+          <WorkflowResults workflow={workflow} />
+        </MemoryRouter>
+      </AntApp>,
+    );
+    const expected =
+      workflowType === "geology_age_correction"
+        ? ["初始时代属性检查", "地层时代属性纠偏", "最终时代属性复查"]
+        : taskNames;
+    for (const title of expected)
+      expect(
+        await screen.findByRole("region", { name: title }),
+      ).toBeInTheDocument();
+    expect(
+      Array.from(document.querySelectorAll(".agent-compute-result"), (card) =>
+        card.getAttribute("aria-label"),
+      ),
+    ).toEqual(expected);
+    if (workflowType === "geology_age_correction")
+      for (const title of taskNames)
+        expect(screen.queryByText(title)).not.toBeInTheDocument();
+  },
+);
 
 it("opens only spatial outputs and the retained change image when comparing an evidence update", async () => {
   vi.spyOn(agentApi, "workflows").mockResolvedValue({

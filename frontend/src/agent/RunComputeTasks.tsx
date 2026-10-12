@@ -92,6 +92,7 @@ export default function RunComputeTasks({
   autoImport = false,
   refreshKey,
   reviewing = false,
+  taskDisplayNames,
 }: (
   | {
       runId: number;
@@ -106,6 +107,7 @@ export default function RunComputeTasks({
 ) & {
   refreshKey: string;
   reviewing?: boolean;
+  taskDisplayNames?: Record<string, string>;
 }) {
   const ui = useComputeText();
   const navigate = useNavigate();
@@ -115,7 +117,7 @@ export default function RunComputeTasks({
   const [revision, setRevision] = useState(0);
   const alive = useRef(true);
   const importing = useRef(false);
-  const taskKey = [...new Set(taskIds ?? [])].sort().join(",");
+  const taskKey = [...new Set(taskIds ?? [])].join(",");
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -213,14 +215,14 @@ export default function RunComputeTasks({
         <section
           className="agent-compute-result"
           key={task.id}
-          aria-label={task.name}
+          aria-label={taskDisplayNames?.[task.id] ?? task.name}
         >
           <div className="agent-compute-result-heading">
             <div>
               <span className="agent-compute-eyebrow">
                 {ui(task.algorithmName)}
               </span>
-              <strong>{task.name}</strong>
+              <strong>{taskDisplayNames?.[task.id] ?? task.name}</strong>
             </div>
             <Tag
               color={

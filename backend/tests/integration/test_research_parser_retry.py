@@ -10,7 +10,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from apps.agent.models import AgentRun, AgentWorkflow
 from apps.agent.provider import ModelError
 from apps.agent.research_intents import process
-from apps.agent.research_parser import validate
+from apps.agent.research_parser import intent_catalog, validate
 from apps.agent.worker import Cancelled
 from apps.compute.models import ComputeTask
 from tests.integration.test_chat_research_intent import catalog, parsed, run
@@ -18,6 +18,42 @@ from tests.integration.test_compute import setup_compute  # noqa: F401
 from tests.integration.test_demo_workflow import demo  # noqa: F401
 
 pytestmark = pytest.mark.django_db
+
+
+def test_intent_catalog_preserves_candidates_and_parameter_constraints():
+    original = {
+        "scenarios": [
+            {
+                "scenario": "geology_age_correction",
+                "inputs": {"initial_map": [{"id": 76, "description": "辞书演示条件"}]},
+                "parameterSpecs": [
+                    {"key": "max_changes", "type": "integer", "max": 10}
+                ],
+                "sourceNote": "地区未核实",
+                "algorithms": [
+                    {
+                        "versionId": 14,
+                        "checksum": "abc",
+                        "identifier": "geology-age-check",
+                        "manifest": {
+                            "inputs": [],
+                            "outputs": [],
+                            "runtime": "runtime-contract",
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+    compact = intent_catalog(original)
+    scene, source = compact["scenarios"][0], original["scenarios"][0]
+    assert scene["inputs"] == source["inputs"]
+    assert scene["parameterSpecs"] == source["parameterSpecs"]
+    assert scene["sourceNote"] == source["sourceNote"]
+    assert scene["algorithms"] == [
+        {"versionId": 14, "checksum": "abc", "identifier": "geology-age-check"}
+    ]
+    assert "manifest" in source["algorithms"][0]
 
 
 def execute(env, item, responses, *, before_response=None, tokens=256):
