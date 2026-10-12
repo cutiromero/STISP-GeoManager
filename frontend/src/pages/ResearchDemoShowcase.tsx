@@ -67,7 +67,7 @@ export default function ResearchDemoShowcase() {
           </p>
         </div>
         <Tag color="blue">
-          {ui("模拟资料 · 真实计算", "Synthetic inputs · real computation")}
+          {ui("实际计算 · 可追溯依据", "Real computation · traceable evidence")}
         </Tag>
       </div>
       {error && <Alert type="warning" title={error} />}
@@ -82,16 +82,32 @@ export default function ResearchDemoShowcase() {
             </span>
             <div className="research-demo-entry-body">
               <h3>{item.title}</h3>
-              <p>
-                {item.scenario === "ecology_investigation"
+              <Tag color="blue">
+                {item.sampleNature === "real_map_with_demonstration_errors"
                   ? ui(
-                      "发现植被变化，解释线索，安排调查；补充观测后更新建议。",
-                      "Discover vegetation changes, explain evidence and update investigation priorities.",
+                      "真实底图 · 演示录入错误",
+                      "Real map · demonstration entry errors",
                     )
                   : ui(
-                      "检查填图问题，依据调查与规则纠偏，复核并对照地图。",
-                      "Check mapping issues, correct them using evidence and compare the maps.",
+                      "模拟资料 · 真实计算",
+                      "Synthetic inputs · real computation",
                     )}
+              </Tag>
+              <p>
+                {item.scenario === "geology_age_correction"
+                  ? ui(
+                      "读取真实地质图副本，按辞书与适用条件修正时代录入，复核并查看前后地图。",
+                      "Check age entries in a real-map copy using dictionary conditions, then review the before and after maps.",
+                    )
+                  : item.scenario === "ecology_investigation"
+                    ? ui(
+                        "发现植被变化，解释线索，安排调查；补充观测后更新建议。",
+                        "Discover vegetation changes, explain evidence and update investigation priorities.",
+                      )
+                    : ui(
+                        "检查填图问题，依据调查与规则纠偏，复核并对照地图。",
+                        "Check mapping issues, correct them using evidence and compare the maps.",
+                      )}
               </p>
               <span className="research-demo-project">{item.projectName}</span>
             </div>

@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppContext } from "../contexts/AppContext";
 import { appTheme } from "../theme";
-import type { Bootstrap, MapComposition, User } from "../types";
+import type { Bootstrap, MapComposition, ResultArtifact, User } from "../types";
 import ResultsPage from "./ResultsPage";
 
 const mockApi = vi.hoisted(() => ({
@@ -245,4 +245,78 @@ describe("ResultsPage published map compositions", () => {
       ),
     );
   });
+
+  it.each([true, false])(
+    "opens only the currently visible related data, linked=%s",
+    async (linked) => {
+      const artifact: ResultArtifact = {
+        id: 57,
+        projectTagId: 3,
+        name: "布喀达坂峰幅人工精修岩性图",
+        description: "师弟人工修改成果，与本次重算面积表关联。",
+        sourceType: "direct_import",
+        resultType: "map",
+        status: "published",
+        category: {
+          id: 1,
+          type: "data_category",
+          code: "spatial",
+          name: "地理数据",
+        },
+        categoryPath: [],
+        provider: "地质解译组",
+        fileName: "lithology.png",
+        fileFormat: "png",
+        sizeBytes: 1024,
+        previewUrl:
+          "/api/catalog/results/57/file/?variant=preview&projectTagId=3",
+        downloadUrl:
+          "/api/catalog/results/57/file/?variant=artifact&projectTagId=3",
+        owner: publishedComposition.owner,
+        accessGroups: [],
+        relatedResources: linked
+          ? [
+              { id: 301, name: "人工精修对照图", dataType: "vector" },
+              { id: 302, name: "当前面积统计", dataType: "table" },
+            ]
+          : [],
+        canPreview: true,
+        canDownload: true,
+        canPublish: false,
+        canUnpublish: false,
+        canDelete: false,
+        publishedAt: "2026-10-12T09:00:00+08:00",
+        publishedBy: publishedComposition.owner,
+        createdAt: "2026-10-12T09:00:00+08:00",
+        updatedAt: "2026-10-12T09:00:00+08:00",
+      };
+      mockApi.mapCompositions.mockResolvedValue({
+        items: [],
+        availableAudienceGroups: [],
+      });
+      mockApi.resultArtifacts.mockResolvedValue({
+        items: [artifact],
+        availableAccessGroups: [],
+      });
+      renderResultsPage();
+      fireEvent.click(await screen.findByRole("button", { name: /查看详情/ }));
+      if (linked) {
+        expect(await screen.findByText("关联数据")).toBeInTheDocument();
+        expect(
+          await screen.findByRole("link", { name: "人工精修对照图" }),
+        ).toHaveAttribute("href", "/map?resources=301&projectTagId=3");
+        expect(
+          screen.getByRole("link", { name: "当前面积统计" }),
+        ).toHaveAttribute(
+          "href",
+          `/resources/catalog?resourceId=302&q=${encodeURIComponent("当前面积统计")}`,
+        );
+      } else {
+        expect(screen.queryByText("关联数据")).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole("link", { name: "人工精修对照图" }),
+        ).not.toBeInTheDocument();
+      }
+    },
+  );
 });

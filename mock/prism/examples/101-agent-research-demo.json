@@ -19,6 +19,15 @@
           "prompt": "使用本项目模拟填图、调查和规则，检查地图，修正有明确依据的问题，重新检查并保存原图、修改图和原因。需要审核时请向我提问。",
           "sampleNature": "synthetic",
           "available": true
+        },
+        {
+          "scenario": "geology_age_correction",
+          "projectId": 3,
+          "projectName": "核地院逻辑推理",
+          "title": "真实底图 · 地层时代录入纠偏",
+          "prompt": "请使用本项目真实地质图的演示副本，检查明确标注的少量时代录入错误，检索辞书及地区和地层适用条件，调用已发布算法进行受约束编辑和复查，保存前后地图及修改理由。",
+          "sampleNature": "real_map_with_demonstration_errors",
+          "available": true
         }
       ]
     }

@@ -18,6 +18,8 @@ const actionNames: Record<string, string> = {
   "geology-check": "检查地质规则与调查证据",
   "vector-geometry-repair": "修复并核验地图几何",
   "geology-edit": "按核实证据修正填图",
+  "geology-age-check": "检查地层时代与辞书适用条件",
+  "geology-age-edit": "按适用规则修正时代录入",
   finish: "查看分析结果与后续建议",
   request_review: "人工复核",
 };

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1, "identifier": "geology-age-edit", "name": "真实地层时代属性受约束纠偏",
+  "version": "1.0.2", "description": "独立重新核对地层、地区、辞书条目和真实空间上下文，对通过验证的少量时代属性执行计划；原值、新值、校验和、规则和证据须逐项匹配，全部核验后才写出新地图。class、岩性与几何保留。", "author": "STISP",
+  "runtime": "python-geospatial-v1", "agent": {"enabled": true}, "qualityReport": {"file": "quality.json"},
+  "inputs": [
+    {"key": "features", "label": "当前真实局部地图", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"]},
+    {"key": "changes", "label": "模型提出的有限时代修改计划", "kind": "table"},
+    {"key": "surveys", "label": "真实候选空间上下文（非野外定年）", "kind": "table"},
+    {"key": "rules", "label": "带来源地区条件的辞书时代规则", "kind": "table"}
+  ],
+  "parameters": [
+    {"key": "working_epsg", "label": "面积与空间核对工作投影EPSG", "type": "integer", "default": 32646, "min": 1, "max": 999999},
+    {"key": "screen_area_m2", "label": "小图斑筛查提示阈值（平方米，仅作提示）", "type": "number", "default": 200000, "min": 0, "max": 10000000},
+    {"key": "max_changes", "label": "每轮允许修改对象上限", "type": "integer", "default": 5, "min": 1, "max": 10}
+  ],
+  "outputs": [
+    {"key": "corrected", "label": "时代属性纠偏地图及修改说明", "kind": "vector", "file": "corrected.gpkg"},
+    {"key": "changes", "label": "实际修改与知识引用记录", "kind": "table", "file": "changes.csv"},
+    {"key": "statistics", "label": "修改统计与未改区域检查", "kind": "table", "file": "statistics.csv"}
+  ], "timeoutSeconds": 300, "deterministic": true
+}

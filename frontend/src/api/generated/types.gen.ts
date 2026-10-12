@@ -987,9 +987,9 @@ export type AgentRunInput = {
 };
 
 /**
- * 使用当前授权项目内已登记模拟资料的演示场景；仍由模型解析用户目标和参数
+ * 当前授权项目内已登记科研场景；地质时代纠偏使用真实图件副本和明确标注的演示录入错误，由模型解析目标与参数
  */
-export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction';
+export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction' | 'geology_age_correction';
 
 /**
  * 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
@@ -1148,13 +1148,13 @@ export type AgentResearchDemoList = {
          */
         title: string;
         /**
-         * 启动用自然语言，明确模拟资料、预设与成果保存目标
+         * 启动用自然语言，明确资料性质、预设与成果保存目标
          */
         prompt: string;
         /**
-         * 本轮案例使用明确标注的模拟样例
+         * synthetic为模拟样例；real_map_with_demonstration_errors为真实图件副本上设置明确标注的少量时代录入错误，用于验证辞书一致性纠偏
          */
-        sampleNature: 'synthetic';
+        sampleNature: 'synthetic' | 'real_map_with_demonstration_errors';
         /**
          * 资料、已发布算法与模型等必要服务是否就绪
          */
@@ -1988,7 +1988,7 @@ export type AgentWorkflow = {
  */
 export type AgentWorkflowInput = {
     /**
-     * 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 为填图检查纠偏；默认 hyperspectral_interpretation
+     * 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 为模拟填图检查纠偏，geology_age_correction 为真实底图副本的地层时代录入纠偏；默认 hyperspectral_interpretation
      */
     workflowType?: string;
     /**
@@ -4793,6 +4793,10 @@ export type ResultArtifactCreatePayload = {
      */
     provider?: string;
     /**
+     * 关联的当前项目可读数据资源；省略为无关联，服务端核验项目及owner_only权限
+     */
+    resourceIds?: Array<number>;
+    /**
      * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
      *
      * @deprecated
@@ -4805,6 +4809,10 @@ export type ResultArtifactUpdateRequest = {
      * publish 发布或更新访问范围；unpublish 下架为仅管理主体可见；delete 永久删除记录和文件
      */
     action: 'publish' | 'unpublish' | 'delete';
+    /**
+     * publish时更新关联的同项目可读数据；省略保留原关联，空数组清除关联；其他动作不接受此字段
+     */
+    resourceIds?: Array<number>;
     /**
      * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
      *
@@ -4880,6 +4888,23 @@ export type ResultArtifact = {
      * @deprecated
      */
     accessGroups: Array<AdminDataResourceAccessGroup>;
+    /**
+     * 当前用户仍可读的同项目关联数据；撤权、停用或owner_only不可见资源不返回
+     */
+    relatedResources: Array<{
+        /**
+         * 数据资源标识
+         */
+        id: number;
+        /**
+         * 数据资源名称
+         */
+        name: string;
+        /**
+         * 数据资源类型
+         */
+        dataType: 'vector' | 'raster' | 'gene' | 'table' | 'document' | 'image';
+    }>;
     /**
      * 当前用户是否可以在线预览该成果格式
      */

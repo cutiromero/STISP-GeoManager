@@ -13,6 +13,7 @@ import { computeApi } from "../api/compute";
 import type {
   AgentWorkflow,
   AgentWorkflowStep,
+  ComputeAlgorithm,
   ComputeCandidate,
 } from "../api/generated/types.gen";
 import WorkflowPanel from "./WorkflowPanel";
@@ -408,30 +409,135 @@ it("keeps the same request key after a lost response and prevents duplicate prev
   );
 });
 
-it("opens both the original geological map and the imported corrected layers for comparison", async () => {
-  vi.spyOn(agentApi, "workflows").mockResolvedValue({
-    items: [
-      savedWorkflow({
-        workflowType: "geology_correction",
-        plan: {
-          inputs: { initial_map: 301, surveys: 302, rules: 303 },
-          stages: [
+it.each(["geology_correction", "geology_age_correction"])(
+  "opens the original and corrected maps for %s",
+  async (workflowType) => {
+    vi.spyOn(agentApi, "workflows").mockResolvedValue({
+      items: [
+        savedWorkflow({
+          workflowType,
+          plan: {
+            inputs: { initial_map: 301, surveys: 302, rules: 303 },
+            stages: [
+              {
+                outputs: [
+                  { kind: "vector", resourceId: 304 },
+                  { kind: "table", resourceId: 305 },
+                ],
+              },
+            ],
+          },
+          resultResourceIds: [304, 305],
+        }),
+      ],
+    });
+    showWorkflow();
+    expect(
+      await screen.findByRole("link", { name: "在地理工作台对比成果图层" }),
+    ).toHaveAttribute("href", "/map?resources=301,304&projectTagId=2");
+  },
+);
+
+it("binds real-map age roles and uses published manifest parameters in the manual workflow", async () => {
+  const realCandidates: ComputeCandidate[] = [
+    { ...candidates[3]!, id: 301, name: "时代纠偏初始地质图副本" },
+    { ...candidates[4]!, id: 302, name: "空间背景与资料说明" },
+    { ...candidates[5]!, id: 303, name: "地层时代适用规则" },
+  ];
+  const algorithm: ComputeAlgorithm = {
+    id: 41,
+    projectTagId: 2,
+    identifier: "geology-age-check",
+    name: "地层时代辞书检查",
+    description: "基于实际辞书条件检查",
+    category: "地质",
+    author: "STISP",
+    enabled: true,
+    canManage: true,
+    versions: [
+      {
+        id: 51,
+        version: "1.0.0",
+        status: "published",
+        checksum: "a".repeat(64),
+        runtimeDigest: "verified",
+        validated: true,
+        createdAt: "",
+        manifest: {
+          schemaVersion: 1,
+          identifier: "geology-age-check",
+          name: "地层时代辞书检查",
+          version: "1.0.0",
+          description: "辞书适用条件核验",
+          author: "STISP",
+          runtime: "python-geospatial-v1",
+          inputs: [],
+          outputs: [],
+          timeoutSeconds: 300,
+          deterministic: true,
+          parameters: [
             {
-              outputs: [
-                { kind: "vector", resourceId: 304 },
-                { kind: "table", resourceId: 305 },
-              ],
+              key: "working_epsg",
+              label: "工作投影EPSG",
+              type: "integer",
+              default: 32646,
+              min: 1,
+              max: 999999,
             },
           ],
         },
-        resultResourceIds: [304, 305],
-      }),
+      },
     ],
+  };
+  vi.mocked(computeApi.inputs).mockResolvedValue({
+    items: realCandidates,
+    total: 3,
   });
+  vi.mocked(computeApi.algorithms).mockResolvedValue({
+    items: [algorithm],
+    total: 1,
+  });
+  vi.mocked(agentApi.resources).mockResolvedValue({
+    items: realCandidates.map((item) => ({
+      id: item.id,
+      name: item.name,
+      dataType: item.kind,
+      description: "真实底图副本，少量演示录入错误",
+    })),
+  });
+  const create = vi
+    .spyOn(agentApi, "createWorkflow")
+    .mockResolvedValue(
+      savedWorkflow({
+        workflowType: "geology_age_correction",
+        status: "queued",
+      }),
+    );
   showWorkflow();
+  await select("研究场景", "真实底图 · 地层时代录入纠偏");
+  expect(screen.getByText("真实底图 · 演示录入错误")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "按名称匹配资料" }));
   expect(
-    await screen.findByRole("link", { name: "在地理工作台对比成果图层" }),
-  ).toHaveAttribute("href", "/map?resources=301,304&projectTagId=2");
+    screen.getByRole("combobox", { name: "空间背景与资料说明" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", { name: "调查证据" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("spinbutton", { name: "工作投影EPSG" })).toHaveValue(
+    "32646",
+  );
+  fireEvent.change(screen.getByRole("spinbutton", { name: "工作投影EPSG" }), {
+    target: { value: "32647" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "生成执行计划" }));
+  await waitFor(() => expect(create).toHaveBeenCalledOnce());
+  expect(create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      workflowType: "geology_age_correction",
+      inputs: { initial_map: 301, surveys: 302, rules: 303 },
+      parameters: { working_epsg: 32647 },
+    }),
+  );
 });
 
 it("opens only spatial outputs and the retained change image when comparing an evidence update", async () => {

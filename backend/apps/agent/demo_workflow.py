@@ -27,6 +27,7 @@ from apps.knowledge.domains import DOMAINS, validate_domains
 from apps.knowledge.services import search_entries, visible_entries
 from apps.projects.context import project_scope
 from .models import AgentWorkflow
+from .geology_reference import is_reference_resource
 from .provider import ModelError
 from .tools import resolve_resource
 from .compute_tools import authorized_task
@@ -34,7 +35,7 @@ from .demo_decisions import decide
 from .demo_results import create_changes, read_results
 from .workflow import _authorize, _scope, _state_hash, checkpoint, step
 
-DEMO_TYPES = {"ecology_investigation", "geology_correction"}
+DEMO_TYPES = {"ecology_investigation", "geology_correction", "geology_age_correction"}
 STAGE_TITLES = {
     "early_ndvi": "前期植被指数",
     "late_ndvi": "后期植被指数",
@@ -59,8 +60,35 @@ ROLES = {
         "surveys": "table",
         "rules": "table",
     },
+    "geology_age_correction": {
+        "initial_map": "vector",
+        "surveys": "table",
+        "rules": "table",
+    },
 }
 GRAPHS = {
+    "geology_age_correction": [
+        (
+            "check",
+            "geology-age-check",
+            {"features": "initial_map", "surveys": "surveys", "rules": "rules"},
+        ),
+        (
+            "edit",
+            "geology-age-edit",
+            {
+                "features": "initial_map",
+                "changes": "model_changes",
+                "surveys": "surveys",
+                "rules": "rules",
+            },
+        ),
+        (
+            "recheck",
+            "geology-age-check",
+            {"features": "edit/corrected", "surveys": "surveys", "rules": "rules"},
+        ),
+    ],
     "ecology_investigation": [
         ("early_ndvi", "raster-ndvi", {"image": "early_image"}),
         ("late_ndvi", "raster-ndvi", {"image": "late_image"}),
@@ -227,6 +255,11 @@ def prepare_demo(workflow, user, p) -> None:
     snapshots, names = {}, {}
     for role, kind in roles.items():
         resource = resolve_resource(user, p, inputs[role], workflow.resource_ids)
+        if (
+            workflow.workflow_type == "geology_age_correction"
+            and is_reference_resource(resource)
+        ):
+            raise ComputeError("人工精修、验收参考及设错清单仅作独立对照，不可作为纠偏场景输入")
         if resource.status != "active" or resource.data_type != kind:
             raise ComputeError("场景角色的数据类型或状态不匹配：" + role)
         snapshots[role], names[role] = resource.updated_at.isoformat(), resource.name
@@ -275,7 +308,9 @@ def prepare_demo(workflow, user, p) -> None:
         )
     domains = _domains(workflow)
     query = (
-        "NDVI 植被 物候 有效像元"
+        (workflow.goal[:260] + " 地层 时代 辞书 一致性")
+        if workflow.workflow_type == "geology_age_correction"
+        else "NDVI 植被 物候 有效像元"
         if workflow.workflow_type == "ecology_investigation"
         else "地质 接触 几何 观测"
     )

@@ -14,9 +14,11 @@ export function researchDemoLaunch(
   if (!value || typeof value !== "object") return null;
   const data = value as Record<string, unknown>;
   if (
-    !["ecology_investigation", "geology_correction"].includes(
-      String(data.scenario),
-    ) ||
+    ![
+      "ecology_investigation",
+      "geology_correction",
+      "geology_age_correction",
+    ].includes(String(data.scenario)) ||
     !Number.isInteger(data.projectId) ||
     String(data.projectId) !== projectId ||
     typeof data.prompt !== "string" ||

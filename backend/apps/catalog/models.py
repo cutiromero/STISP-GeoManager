@@ -436,6 +436,12 @@ class ResultArtifact(ProjectScopedModel):
         related_name="result_artifacts",
         verbose_name="创建者",
     )
+    related_resources = models.ManyToManyField(
+        DataResource,
+        blank=True,
+        related_name="result_artifacts",
+        verbose_name="关联数据",
+    )
     name = models.CharField(max_length=160, verbose_name="成果名称")
     description = models.TextField(blank=True, verbose_name="成果说明")
     source_type = models.CharField(

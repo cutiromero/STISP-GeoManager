@@ -24,6 +24,34 @@ function labels(container: HTMLElement) {
 }
 
 describe("FeatureDetailPanel result properties", () => {
+  it("shows real-map age changes and their source without changing values", () => {
+    const { container } = renderProperties({
+      feature_id: "pred-00231",
+      formation: "八宝山组",
+      geologic_age: "T3",
+      source_kind: "真实预测图局部副本；预置少量时代录入演示错误",
+      area_m2: 42000,
+      change_old: "J3",
+      change_new: "T3",
+      change_reason: "地层名称、东昆仑南坡位置与辞书条件相符",
+    });
+
+    expect(labels(container)).toEqual([
+      "修改前值",
+      "修改后值",
+      "修改原因",
+      "地层名称",
+      "地层时代",
+      "资料性质",
+      "面积（平方米）",
+      "feature_id",
+    ]);
+    expect(screen.getByText("J3")).toBeInTheDocument();
+    expect(screen.getAllByText("T3")).toHaveLength(2);
+    expect(screen.getByText("42000")).toBeInTheDocument();
+    expect(screen.getByText("pred-00231")).toBeInTheDocument();
+  });
+
   it("prioritizes real change details while preserving other fields and values", () => {
     const { container } = renderProperties({
       feature_id: "F06",

@@ -17,12 +17,20 @@ from apps.projects.middleware import models_q
 from apps.projects.models import Project
 
 from .demo_workflow import GRAPHS, ROLES
+from .geology_reference import REFERENCE_SOURCE_PREFIX
 from .models import AgentRuntime
 from .policy import allowed, visible_models, worker_online
 from .tools import resources
 
 SOURCE_NOTE = (
     "明确标注的模拟资料；参数来自样例说明及已发布算法，结论由实际计算和模型判断产生。"
+)
+REAL_SOURCE_NOTE = (
+    "师弟提供的真实地质图件局部副本；少量时代录入错误明确标注，依据辞书条件检查和受约束修改。"
+    "构造与蚀变提供空间背景，人工精修仅作独立对照。"
+    "formation、region、geologic_age为依据辞书补录的演示条件属性，并非师弟原图实测字段；"
+    "地区细分未经野外核实，本轮恢复演示字段一致性。"
+    "本轮独立验证八宝山组3项；闹仓坚沟组辞书地区为青海玛多县一带，当前当地适用尚未核实。"
 )
 ROLE_LABELS = {
     "early_image": "前期影像",
@@ -44,11 +52,26 @@ MARKERS = {
     "surveys": ("code", "demo-geology-surveys"),
     "rules": ("code", "demo-geology-rules"),
 }
+AGE_MARKERS = {
+    "initial_map": ("code", "real-geology-age-initial"),
+    "surveys": ("code", "real-geology-age-context"),
+    "rules": ("code", "real-geology-age-rules"),
+}
 TITLES = {
+    "geology_age_correction": "真实地质图件 · 地层时代一致性纠偏",
     "ecology_investigation": "干旱区生态风险评估分析决策",
     "geology_correction": "地质逻辑推理与填图纠偏",
 }
 PROMPTS = {
+    "geology_age_correction": (
+        "请检查师弟提供的真实地质图件局部副本，检索八宝山组等地层辞书知识，"
+        "结合地区条件、真实构造与蚀变空间背景，检查明确标注的时代属性录入错误。"
+        "自动调用允许的检查和时代编辑算法，只修正规则明确支持的时代字段，"
+        "保留类别、岩性和边界，再复核，保存报告并在地理工作台对照修改位置。"
+        "人工精修图不作为算法或模型输入；必要问题在对话中问我。"
+        "地层标识、地区、时代为辞书补录的演示条件属性，地区细分未经野外核实；"
+        "本轮验证预置时代字段一致性，不将其解释为真实定年纠正。"
+    ),
     "ecology_investigation": (
         "请使用这个项目中已标注的模拟演示资料和样例参数，分析前后两期植被变化，"
         "结合初始观测与知识库说明变化线索，选出调查优先区和优先补资料区。"
@@ -88,8 +111,9 @@ def _algorithms(run) -> list[dict]:
     return list(versions.values())
 
 
-def _candidate(resource, role: str) -> dict:
-    marker_field, marker = MARKERS[role]
+def _candidate(resource, role: str, scenario: str) -> dict:
+    age = scenario == "geology_age_correction"
+    marker_field, marker = (AGE_MARKERS if age else MARKERS)[role]
     simulated = getattr(resource, marker_field) == marker or (
         role == "context" and resource.code == "demo-ecology-context-updated"
     )
@@ -99,7 +123,9 @@ def _candidate(resource, role: str) -> dict:
         "dataType": resource.data_type,
         "revision": resource.updated_at.isoformat(),
         "description": resource.description[:800],
-        "sourceNote": SOURCE_NOTE if simulated else resource.source[:160],
+        "sourceNote": (REAL_SOURCE_NOTE if age else SOURCE_NOTE)
+        if simulated
+        else resource.source[:160],
         "isUpdate": resource.code == "demo-ecology-context-updated",
         "isPreset": simulated,
     }
@@ -139,10 +165,16 @@ def discover(user, p: dict, run=None) -> dict:
     available_algorithms = _algorithms(run)
     scenarios = []
     for scenario, roles in ROLES.items():
+        age = scenario == "geology_age_correction"
+        markers = AGE_MARKERS if age else MARKERS
         inputs, preferred = {}, {}
         for role, kind in roles.items():
-            field, marker = MARKERS[role]
+            field, marker = markers[role]
             candidates = query.filter(data_type=kind)
+            if age:
+                candidates = candidates.exclude(
+                    source__startswith=REFERENCE_SOURCE_PREFIX
+                )
             if not manual:
                 from django.db.models import Q
 
@@ -151,7 +183,7 @@ def discover(user, p: dict, run=None) -> dict:
                     condition |= Q(code="demo-ecology-context-updated")
                 candidates = candidates.filter(condition)
             rows = list(candidates.order_by("id")[:25])
-            inputs[role] = [_candidate(resource, role) for resource in rows]
+            inputs[role] = [_candidate(resource, role, scenario) for resource in rows]
             matches = [
                 resource for resource in rows if getattr(resource, field) == marker
             ]
@@ -166,7 +198,12 @@ def discover(user, p: dict, run=None) -> dict:
                 "scenario": scenario,
                 "workflowType": scenario,
                 "title": TITLES[scenario],
-                "roleLabels": {role: ROLE_LABELS[role] for role in roles},
+                "roleLabels": {
+                    role: "空间背景与资料说明"
+                    if age and role == "surveys"
+                    else ROLE_LABELS[role]
+                    for role in roles
+                },
                 "inputs": inputs,
                 "preferredInputs": preferred,
                 "defaults": defaults,
@@ -174,7 +211,7 @@ def discover(user, p: dict, run=None) -> dict:
                 "algorithms": algorithms,
                 "available": all(inputs.values())
                 and len(algorithms) == len(identifiers),
-                "sourceNote": SOURCE_NOTE,
+                "sourceNote": REAL_SOURCE_NOTE if age else SOURCE_NOTE,
             }
         )
     return {"scenarios": scenarios}
@@ -223,7 +260,11 @@ def list_demos(user, p: dict) -> dict:
                         "projectName": project.name,
                         "title": scene["title"],
                         "prompt": PROMPTS[scene["scenario"]],
-                        "sampleNature": "synthetic",
+                        "sampleNature": (
+                            "real_map_with_demonstration_errors"
+                            if scene["scenario"] == "geology_age_correction"
+                            else "synthetic"
+                        ),
                         "available": bool(
                             shared_ready
                             and scene["available"]

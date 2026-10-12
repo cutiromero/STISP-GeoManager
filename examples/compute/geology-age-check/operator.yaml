@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1, "identifier": "geology-age-check", "name": "真实地层时代属性一致性检查",
+  "version": "1.0.2", "description": "基于地层名、地区、辞书条目条件检查时代属性一致性；真实构造距离和蚀变命中仅作解释上下文，小面积仅作筛查提示，不改岩性与边界。不读取人工精修或设错清单。", "author": "STISP",
+  "runtime": "python-geospatial-v1", "agent": {"enabled": true}, "qualityReport": {"file": "quality.json"},
+  "inputs": [
+    {"key": "features", "label": "真实局部初始或修改地图", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"]},
+    {"key": "surveys", "label": "候选图斑真实空间上下文（非野外定年）", "kind": "table"},
+    {"key": "rules", "label": "带来源地区条件的辞书时代规则", "kind": "table"}
+  ],
+  "parameters": [
+    {"key": "working_epsg", "label": "面积与空间核对工作投影EPSG", "type": "integer", "default": 32646, "min": 1, "max": 999999},
+    {"key": "screen_area_m2", "label": "小图斑筛查提示阈值（平方米，仅作提示）", "type": "number", "default": 200000, "min": 0, "max": 10000000},
+    {"key": "max_changes", "label": "每轮允许修改对象上限", "type": "integer", "default": 5, "min": 1, "max": 10}
+  ],
+  "outputs": [
+    {"key": "issues", "label": "时代属性问题与修改条件", "kind": "table", "file": "issues.csv"},
+    {"key": "issues_map", "label": "待纠偏图斑位置与引用", "kind": "vector", "file": "issues.gpkg", "required": false},
+    {"key": "statistics", "label": "实际检查统计", "kind": "table", "file": "statistics.csv"}
+  ], "timeoutSeconds": 300, "deterministic": true
+}

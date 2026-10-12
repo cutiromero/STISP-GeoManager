@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261012-001 - 真实地质材料案例与成果数据关联
+
+- Status: ContractReady
+- Owner: geology_platform_paths 契约与前端；root 编排、成果关联及验收。
+- Endpoints: /api/agent/research-demos/; /api/agent/conversations/{conversationId}/runs/; /api/agent/workflows/; /api/catalog/results/; /api/catalog/results/{resultId}/。
+- Change type: 新增地质时代纠偏场景枚举与可读成果数据关联，沿用既有接口。
+- OpenAPI change: geology_age_correction；sampleNature 增加 real_map_with_demonstration_errors；成果创建及publish可选resourceIds，响应relatedResources。
+- Mock examples: mock/prism/examples/101-agent-research-demo.json；成果关联由浏览器与后端权限测试验证。
+- Frontend reason: 保留原两个模拟入口，新增真实图件副本上的少量时代录入纠偏；成果详情可打开对应地图或数据表。
+- Backend implementation notes: 三阶段检查、受约束编辑、复查；论文及辞书依据保留适用范围；精修和设错清单独立验收。成果关联限同项目可读资源，撤权及owner_only不可见项不序列化，省略更新字段保留原关联。
+- Verification: 三入口导航、手选资料、算法参数、公开判断标题、地图前后对比、成果关联及权限过滤；类型生成与必要浏览器检查。
+- Result: 本轮开发；真实算法和服务器验证由交付回执记录。
+
 ## API-20261011-001 - 自然语言科研案例与在线澄清
 
 - Status: ContractReady
@@ -72,6 +85,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261012-001 | ContractReady | /api/agent/research-demos/; /api/catalog/results/ | real-map age correction; authorized result links | Updated | Updated | In progress | Pending | Original synthetic cases preserved; injected errors clearly labelled |
 | API-20261011-001 | ContractReady | /api/agent/research-demos/; /api/agent/runs/{runId}/research-intent/; AgentRun | natural language demo and online clarification | Updated | Updated | In progress | Frontend focused passed | Real backend and candidate validation pending |
 | API-20261010-003 | BackendReady | /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | evidence decisions; multi-stage scenarios; observational updates | Updated | HTTP/browser fixtures | Passed | Focused passed | Local real compute; mock decisions separately labelled; remote deployment separate |
 | API-20261010-002 | BackendReady | /api/data-schema/summary/; /api/catalog/resources/; /api/admin/data/resources/; /api/compute/outputs/{outputId}/import/ | compute result classification | Updated | Updated | Passed | Focused passed | Exact historical import links; candidate publication pending |

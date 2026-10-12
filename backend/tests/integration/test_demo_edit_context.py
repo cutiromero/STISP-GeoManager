@@ -104,6 +104,18 @@ def test_other_stages_have_no_edit_task(identifier):
     assert decision_payload(workflow, stage, [], results)["editTask"] is None
 
 
+def test_age_edit_context_uses_its_own_check_and_preserves_original_fields():
+    workflow, stage, results = geology()
+    stage["identifier"] = "geology-age-edit"
+    workflow.plan["algorithms"] = {"geology-age-edit": {"versionId": 66}}
+    workflow.plan["stages"][2]["identifier"] = "geology-age-check"
+    results[0]["rows"][1].update(field="geologic_age", old_value="J3", new_value="T3")
+    payload = decision_payload(workflow, stage, [], results)
+    assert payload["editTask"]["issuesOutputIds"] == [101]
+    assert payload["editTask"]["latestCheckTaskId"] == "latest-check"
+    assert payload["actualResults"][0]["rows"][1]["field"] == "geologic_age"
+
+
 def model_response(action, edits):
     return {
         "decision": {

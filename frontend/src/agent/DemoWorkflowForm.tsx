@@ -4,7 +4,10 @@ import type {
   ComputeCandidate,
 } from "../api/generated/types.gen";
 
-export type DemoWorkflowType = "ecology_investigation" | "geology_correction";
+export type DemoWorkflowType =
+  | "ecology_investigation"
+  | "geology_correction"
+  | "geology_age_correction";
 type Role = { key: string; label: string; kind: string; match: RegExp };
 export const demoRoles: Record<DemoWorkflowType, Role[]> = {
   ecology_investigation: [
@@ -59,6 +62,26 @@ export const demoRoles: Record<DemoWorkflowType, Role[]> = {
       match: /规则|rules/i,
     },
   ],
+  geology_age_correction: [
+    {
+      key: "initial_map",
+      label: "初始地质图副本",
+      kind: "vector",
+      match: /时代.*初始|初始.*时代|演示.*设错|age.*initial/i,
+    },
+    {
+      key: "surveys",
+      label: "空间背景与资料说明",
+      kind: "table",
+      match: /空间背景|资料说明|age.*context/i,
+    },
+    {
+      key: "rules",
+      label: "地层时代适用规则",
+      kind: "table",
+      match: /时代.*规则|age.*rules/i,
+    },
+  ],
 };
 
 export const demoGoals: Record<DemoWorkflowType, string> = {
@@ -66,6 +89,8 @@ export const demoGoals: Record<DemoWorkflowType, string> = {
     "分析两期植被变化，结合生态背景和观测证据确定调查优先区，说明依据与待补资料。",
   geology_correction:
     "检查初始填图，结合调查证据与规则修正明确问题，输出修改图和依据并再次复核。",
+  geology_age_correction:
+    "检查真实地质图副本中明确标注的少量时代录入错误，结合辞书、地区及地层条件进行受约束编辑，保存前后地图、理由和复查结果。",
 };
 
 function matchingCandidates(role: Role, candidates: ComputeCandidate[]) {
@@ -150,6 +175,13 @@ export default function DemoWorkflowForm({
           按名称匹配资料
         </Button>
       </div>
+      {type === "geology_age_correction" && (
+        <Alert
+          type="info"
+          title="真实底图 · 演示录入错误"
+          description="本案例核对地层名称、地区和辞书中的时代定义，修改副本中的少量时代属性。人工精修图用于独立对照，岩性和边界保留。"
+        />
+      )}
       <div className="agent-demo-fields">
         {roles.map((role) => (
           <label key={role.key}>

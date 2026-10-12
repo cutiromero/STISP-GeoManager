@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.37] - 2026-10-12
+
+### Added
+- 师弟真实地质材料的幂等知识与成果导入工具，保留条目来源、论文页码、适用条件与修订记录。
+- 真实地图局部副本的时代属性一致性案例，检查、受约束编辑和复查算法以实际输出逐步连接。
+- 成果关联数据入口；真实地质案例从成果展示进入智能体，并可在地图对照原图、问题位置和修改图。
+
+### Changed
+- 预测栅格重建和面积统计按稳定 class 编号处理，同名不同编号保持分开；原资料与历史报告独立保存。
+- 人工精修及对照统计带独立参考标记，在本案例候选发现和输入绑定中排除；演示字段来源与实际验证范围明确显示。
+
 ## [0.1.36] - 2026-10-12
 
 ### Changed

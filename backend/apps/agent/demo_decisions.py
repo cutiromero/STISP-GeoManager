@@ -23,6 +23,8 @@ FIELDS = {
     "resultSummary",
 }
 
+EDIT_CHECKS = {"geology-edit": "geology-check", "geology-age-edit": "geology-age-check"}
+
 
 def evidence_refs(workflow, context, results) -> list[dict]:
     refs = [
@@ -248,13 +250,14 @@ def _execution_state(workflow, stage, results, old_results) -> dict:
 
 def _edit_task(workflow, stage, results) -> dict | None:
     """Point to actual latest issues; the model must still author every edit."""
-    if stage["identifier"] != "geology-edit":
+    check_identifier = EDIT_CHECKS.get(stage["identifier"])
+    if check_identifier is None:
         return None
     latest = next(
         (
             item
             for item in reversed(workflow.plan["stages"])
-            if item.get("identifier") == "geology-check" and item.get("taskId")
+            if item.get("identifier") == check_identifier and item.get("taskId")
         ),
         None,
     )
@@ -561,8 +564,8 @@ def _validate_response(
     if not isinstance(value["edits"], list) or len(value["edits"]) > 30:
         raise ComputeError("模型提出的修改计划超出允许范围")
     if (
-        stage["identifier"] == "geology-edit"
-        and decision["nextAction"] == "geology-edit"
+        stage["identifier"] in EDIT_CHECKS
+        and decision["nextAction"] == stage["identifier"]
     ):
         edit_task = _edit_task(workflow, stage, results)
         validate_edits(
@@ -628,7 +631,7 @@ def decide(
         "pending才表示该结果尚待审核；reference_only为归档审计附件，不能据其原始标记断言工作流仍待审核。"
         "原始几何无效或原始面积基准不可靠时，area_change_pct=0等数值不能证明面积保真或修复无损；"
         "依据真实修复日志说明有效性、降维片段及已批准范围，保留需专业复核的科学边界。"
-        "只有allowedAction=geology-edit且nextAction=geology-edit时才提出edits，"
+        "只有allowedAction为geology-edit或geology-age-edit且nextAction与其相同时才提出edits，"
         "其他算法步骤或request_review时edits=[]；提前讨论修改不代表已生成可执行修改表。"
         "编辑阶段editTask.changesInputState=requires_model_proposal表示model_changes尚待"
         "本次模型提出，inputBindings中的model_changes是绑定名称，不是已有修改表。"
@@ -638,10 +641,17 @@ def decide(
         "每个采纳项由模型在edits中输出editTask.requiredFields全部字段；"
         "feature_id,field,old_value,new_value,evidence_id,rule_id须对应实际问题行，reason说明依据。"
         "input_checksum由执行器从该真实问题行绑定，模型不输出或编造它。"
-        "当可修复属性行非空而选择geology-edit时，edits不能留空或只在正文描述修改；"
+        "当可修复属性行非空而选择当前编辑算法时，edits不能留空或只在正文描述修改；"
         "无法提出有据修改时选择request_review并说明具体原因。"
         "不可重复采用初始检查中已被几何修复改变的旧问题；"
         "证据不足、needs_review或geometry事项保留，不猜新值。"
+        "真实地图副本上标注的时代录入错误属于属性一致性演示，不能称为真实岩性纠正或精度提升。"
+        "geology-age-edit仅允许规则明确支持的geologic_age字段；辞书定义不是当地测年，"
+        "地区、地层名称、条目定位均应满足。构造邻近和蚀变指示只提供背景，不能据此定年。"
+        "geology_age_correction样例的formation、region、geologic_age为辞书补录演示条件，"
+        "地区细分未经独立野外核实。本轮只独立验证八宝山组三项预置时代错误；"
+        "闹仓坚沟组辞书限定青海玛多县一带，其当前当地适用尚未核实，"
+        "不能将演示字段一致解释为真实地层归属确认。"
     )
     payload = decision_payload(workflow, stage, context, results)
     messages = [
@@ -943,7 +953,7 @@ def _final_mock_summary(workflow, results) -> str:
         if result.get("taskId") == latest["taskId"]
         for row in result.get("rows", [])
     ]
-    if workflow.workflow_type == "geology_correction":
+    if workflow.workflow_type in {"geology_correction", "geology_age_correction"}:
         statistics = next((row for row in rows if "issue_count" in row), None)
         if statistics:
             return (
@@ -1018,7 +1028,7 @@ def _mock_decision(model, stage, refs, results, workflow) -> tuple[dict, list]:
         )
         findings = [knowledge_note[:1800], *findings]
     edits = []
-    if stage["identifier"] == "geology-edit":
+    if stage["identifier"] in EDIT_CHECKS:
         # Earlier checks may contain the same issue on the unrepaired map.
         latest_issues = [output for output in results if output["key"] == "issues"]
         for output in latest_issues[-1:]:
@@ -1044,7 +1054,10 @@ def _mock_decision(model, stage, refs, results, workflow) -> tuple[dict, list]:
     knowledge_refs = [ref for ref in refs if ref["kind"] == "knowledge"]
     if knowledge_refs:
         selected = [knowledge_refs[0], *selected[:29]]
-    geological = workflow.workflow_type == "geology_correction"
+    geological = workflow.workflow_type in {
+        "geology_correction",
+        "geology_age_correction",
+    }
     judgement = (
         "模拟分析：按调查证据修复明确问题，证据不足的项目保留待核实。"
         if geological

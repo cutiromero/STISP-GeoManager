@@ -17,9 +17,10 @@ from django.views.decorators.http import require_GET, require_http_methods
 from PIL import Image, UnidentifiedImageError
 
 from apps.audit.service import log_operation
-from apps.catalog.models import ResultArtifact
+from apps.catalog.models import DataResource, ResultArtifact
 from apps.catalog.permissions import (
     project_access_filter,
+    resource_access_filter,
     user_has_full_data_access,
 )
 from apps.catalog.taxonomy import (
@@ -140,6 +141,9 @@ def _create_result_artifact(request):
     group_ids = _positive_integer_list(payload.get("accessGroupIds", []))
     if isinstance(group_ids, JsonResponse):
         return group_ids
+    related = _related_resources(payload.get("resourceIds", []), request.user)
+    if isinstance(related, JsonResponse):
+        return related
     selectable_ids = set(
         selectable_access_groups_for(
             Group.objects.filter(id__in=group_ids).only("id", "name"), request.user
@@ -192,6 +196,7 @@ def _create_result_artifact(request):
                 published_at=now,
             )
             artifact.access_groups.set(group_ids)
+            artifact.related_resources.set(related)
     except Exception:
         destination.unlink(missing_ok=True)
         raise
@@ -237,6 +242,13 @@ def result_artifact_detail(request, result_id: int):
         group_error = _validate_access_groups(group_ids, request.user)
         if group_error:
             return JsonResponse({"detail": group_error}, status=400)
+        related = None
+        if "resourceIds" in payload:
+            related = _related_resources(
+                payload["resourceIds"], request.user, artifact.project_tag_id
+            )
+            if isinstance(related, JsonResponse):
+                return related
         with transaction.atomic():
             artifact.status = ResultArtifact.Status.PUBLISHED
             artifact.published_by = request.user
@@ -250,8 +262,12 @@ def result_artifact_detail(request, result_id: int):
                 ]
             )
             artifact.access_groups.set(group_ids)
+            if related is not None:
+                artifact.related_resources.set(related)
         operation = "发布成果文件"
     elif action == "unpublish":
+        if "resourceIds" in payload:
+            return JsonResponse({"detail": "关联数据仅在发布操作中更新"}, status=400)
         if not has_feature_perm(request.user, "catalog.publish_resultartifact"):
             return feature_denied_response(request.user)
         if artifact.status != ResultArtifact.Status.PUBLISHED:
@@ -260,6 +276,8 @@ def result_artifact_detail(request, result_id: int):
         artifact.save(update_fields=["status", "updated_at"])
         operation = "下架成果文件"
     elif action == "delete":
+        if "resourceIds" in payload:
+            return JsonResponse({"detail": "关联数据仅在发布操作中更新"}, status=400)
         if not has_feature_perm(request.user, "catalog.delete_resultartifact"):
             return feature_denied_response(request.user)
         artifact_id = artifact.id
@@ -443,6 +461,36 @@ def _user_can_manage_result(artifact: ResultArtifact, user) -> bool:
     return bool(user_has_full_data_access(user) or artifact.owner_id == user.id)
 
 
+def _related_resources(value, user, project_id=None):
+    """Association cannot bypass resource privacy or the current project boundary."""
+    from apps.projects.context import current_scope
+
+    if (
+        not isinstance(value, list)
+        or len(value) > 30
+        or any(type(item) is not int or item < 1 for item in value)
+    ):
+        return JsonResponse({"detail": "关联数据须为最多30个正整数编号"}, status=400)
+    scope = current_scope.get()
+    if project_id is None:
+        project_id = scope.selected if scope else 1
+    if project_id is None:
+        return JsonResponse({"detail": "请先选择一个项目"}, status=400)
+    rows = list(
+        DataResource.objects.filter(
+            resource_access_filter(user),
+            pk__in=set(value),
+            project_tag_id=project_id,
+            status="active",
+        )
+    )
+    if len(rows) != len(set(value)):
+        return JsonResponse(
+            {"detail": "关联数据不存在、不可访问或不属于当前项目"}, status=400
+        )
+    return rows
+
+
 def _serialize_result(artifact: ResultArtifact, request_user) -> dict[str, Any]:
     extension = Path(artifact.file_name).suffix.lower().lstrip(".")
     base = f"/api/catalog/results/{artifact.id}/file/"
@@ -452,6 +500,16 @@ def _serialize_result(artifact: ResultArtifact, request_user) -> dict[str, Any]:
         "projectTagId": artifact.project_tag_id,
         "name": artifact.name,
         "description": artifact.description,
+        "relatedResources": [
+            {"id": resource.id, "name": resource.name, "dataType": resource.data_type}
+            for resource in artifact.related_resources.filter(
+                resource_access_filter(request_user),
+                project_tag_id=artifact.project_tag_id,
+                status="active",
+            ).order_by("id")
+        ]
+        if has_feature_perm(request_user, "catalog.view_dataresource")
+        else [],
         "sourceType": artifact.source_type,
         "resultType": artifact.result_type,
         "status": artifact.status,

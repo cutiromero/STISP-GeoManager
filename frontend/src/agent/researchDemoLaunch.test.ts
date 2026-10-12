@@ -12,6 +12,9 @@ it("accepts only a supported case in the current authorized project", () => {
   expect(
     researchDemoLaunch({ ...launch, scenario: "geology_correction" }, "8"),
   ).toMatchObject({ scenario: "geology_correction" });
+  expect(
+    researchDemoLaunch({ ...launch, scenario: "geology_age_correction" }, "8"),
+  ).toMatchObject({ scenario: "geology_age_correction" });
 });
 it("rejects stale cross-project and malformed navigation state", () => {
   for (const value of [

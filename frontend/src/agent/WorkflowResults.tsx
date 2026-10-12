@@ -26,9 +26,11 @@ function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
     value && typeof value === "object" && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
-  const demo = ["ecology_investigation", "geology_correction"].includes(
-    workflow.workflowType,
-  );
+  const demo = [
+    "ecology_investigation",
+    "geology_correction",
+    "geology_age_correction",
+  ].includes(workflow.workflowType);
   const stages = Array.isArray(workflow.plan.stages)
     ? workflow.plan.stages
     : [];
@@ -45,10 +47,11 @@ function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
           : [];
       })
     : workflow.resultResourceIds;
-  const original =
-    workflow.workflowType === "geology_correction"
-      ? record(workflow.plan.inputs).initial_map
-      : undefined;
+  const original = ["geology_correction", "geology_age_correction"].includes(
+    workflow.workflowType,
+  )
+    ? record(workflow.plan.inputs).initial_map
+    : undefined;
   const previousChange = demo
     ? record(workflow.plan.previousChange).resourceId
     : undefined;

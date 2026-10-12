@@ -12,7 +12,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from PIL import Image
 
-from apps.catalog.models import DictionaryItem, ResultArtifact
+from apps.catalog.models import DataResource, DictionaryItem, ResultArtifact
 from apps.core.initialization import GUEST_GROUP_NAME, ensure_guest_user
 
 
@@ -54,6 +54,75 @@ class ResultArtifactApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"], "成果导入必须直接发布")
         self.assertFalse(ResultArtifact.objects.exists())
+
+    def test_related_resources_follow_privacy_and_publish_preserves_links(self):
+        grant(self.owner, ("catalog", "view_dataresource"))
+        grant(self.viewer, ("catalog", "view_dataresource"))
+        resource = DataResource.objects.create(
+            name="真实图件",
+            code="real-related",
+            data_type="vector",
+            maintainer=self.owner,
+            owner_only=True,
+            status="active",
+        )
+        with self.result_storage():
+            response = self.create_result(
+                file=uploaded("real.png", valid_png(), "image/png"),
+                resource_ids=[resource.id],
+            )
+            self.assertEqual(response.status_code, 201)
+            artifact_id = response.json()["id"]
+            self.assertEqual(
+                response.json()["relatedResources"],
+                [{"id": resource.id, "name": "真实图件", "dataType": "vector"}],
+            )
+            self.client.force_login(self.viewer)
+            hidden = self.client.get(f"/api/catalog/results/{artifact_id}/")
+            self.assertEqual(hidden.json()["relatedResources"], [])
+            self.client.force_login(self.owner)
+            preserved = self.client.post(
+                f"/api/catalog/results/{artifact_id}/",
+                data=json.dumps({"action": "publish"}),
+                content_type="application/json",
+            )
+            self.assertEqual(preserved.status_code, 200)
+            self.assertEqual(len(preserved.json()["relatedResources"]), 1)
+            cleared = self.client.post(
+                f"/api/catalog/results/{artifact_id}/",
+                data=json.dumps({"action": "publish", "resourceIds": []}),
+                content_type="application/json",
+            )
+            self.assertEqual(cleared.status_code, 200)
+            self.assertEqual(cleared.json()["relatedResources"], [])
+
+    def test_related_resources_reject_cross_project_private_and_invalid_ids(self):
+        from apps.projects.models import Project
+
+        other = Project.objects.create(name="其他项目", code="other-result-project")
+        resource = DataResource.objects.create(
+            name="其他项目图件",
+            code="cross-related",
+            data_type="vector",
+            project_tag=other,
+            maintainer=self.owner,
+        )
+        private = DataResource.objects.create(
+            name="其他人私有图件",
+            code="private-related",
+            data_type="vector",
+            maintainer=self.viewer,
+            owner_only=True,
+        )
+        with self.result_storage():
+            for ids in ([resource.id], [private.id], [True], [999999], "wrong"):
+                with self.subTest(ids=ids):
+                    response = self.create_result(
+                        file=uploaded("rejected.png", valid_png(), "image/png"),
+                        resource_ids=ids,
+                    )
+                    self.assertEqual(response.status_code, 400)
+            self.assertFalse(ResultArtifact.objects.exists())
 
     def test_published_default_result_is_public(self):
         outsider = get_user_model().objects.create_user(
@@ -318,6 +387,7 @@ class ResultArtifactApiTests(TestCase):
         source_type: str = "direct_import",
         result_type: str = "other",
         category_code: str | None = None,
+        resource_ids=None,
     ):
         return self.client.post(
             "/api/catalog/results/",
@@ -332,6 +402,11 @@ class ResultArtifactApiTests(TestCase):
                         "categoryCode": category_code or self.category.code,
                         "provider": "测试单位",
                         "accessGroupIds": [self.audience.id],
+                        **(
+                            {"resourceIds": resource_ids}
+                            if resource_ids is not None
+                            else {}
+                        ),
                         **({"publish": publish} if publish is not None else {}),
                     },
                     ensure_ascii=False,

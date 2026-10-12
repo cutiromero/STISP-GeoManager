@@ -2628,3 +2628,9 @@ GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84
 `AgentRun.researchIntent` 保存原运行、修订、目标、输入角色和真实工作流关联。尚未创建 `workflowId` 为 null；普通聊天字段缺省或 null。澄清问题可选 choice/text/number/resource；前端以可读标签展示，按问题键提交字符串答案。`POST /api/agent/runs/{runId}/research-intent/` 带 `action` 与 `revision`，answer 可附 `answers` 和自由文本 `answer`，返回202后续模型解析运行；confirm 和 cancel 返回200原运行最新状态。重复相同修订和答案复用已有解析及计算，不从聊天文字猜测任务。
 
 接口要求 Session、CSRF、原用户和原单项目 `X-Project-Id`；引用每次重新授权，修订或输入变化返回409。确认用于用户明确批准当前真实审核结果，几何质量审核继续暂停至确认。聊天通过已有工作流详情展示实际判断、计算、入库与地图；刷新只恢复关联，不再次提交启动指令。
+
+## 真实底图地质时代纠偏与成果关联（2026-10-12）
+
+科研场景新增 `geology_age_correction`，输入角色仍为 `initial_map`、`surveys`、`rules`；其中 surveys 为空间背景与资料说明，实际编辑依据为有地区及地层适用条件的辞书规则。流程调用已发布的地层时代检查、受约束编辑和复查算法。入口 `sampleNature=real_map_with_demonstration_errors` 明示真实图件副本和少量演示录入错误。原生态及地质模拟案例保持独立，模型只读取初图、资料和知识；人工精修、正确参考及设错清单用于独立验收。
+
+成果创建 multipart payload 可带 `resourceIds`；成果详情的 publish 请求也可更新该数组。关联限当前项目可读数据资源，最多30个且不重复；创建省略为无关联，publish省略保留原关联、空数组清除关联，其他动作不接受关联更新。响应 `relatedResources` 为 `{id,name,dataType}` 列表，读取时重新过滤项目、资源状态和 owner_only 权限。成果详情据此打开地理工作台或数据资源，成果文件本身的预览、下载与发布权限保持原规则。

@@ -8930,8 +8930,8 @@ components:
       additionalProperties: false
     AgentResearchScenario:
       type: string
-      description: 使用当前授权项目内已登记模拟资料的演示场景；仍由模型解析用户目标和参数
-      enum: [ecology_investigation, geology_correction]
+      description: 当前授权项目内已登记科研场景；地质时代纠偏使用真实图件副本和明确标注的演示录入错误，由模型解析目标与参数
+      enum: [ecology_investigation, geology_correction, geology_age_correction]
     AgentResearchQuestion:
       type: object
       description: 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
@@ -9021,8 +9021,8 @@ components:
               projectId: {type: integer, minimum: 1, description: 已授权项目标签}
               projectName: {type: string, description: 当前项目名称}
               title: {type: string, description: 案例标题}
-              prompt: {type: string, description: 启动用自然语言，明确模拟资料、预设与成果保存目标}
-              sampleNature: {type: string, const: synthetic, description: 本轮案例使用明确标注的模拟样例}
+              prompt: {type: string, description: 启动用自然语言，明确资料性质、预设与成果保存目标}
+              sampleNature: {type: string, enum: [synthetic, real_map_with_demonstration_errors], description: synthetic为模拟样例；real_map_with_demonstration_errors为真实图件副本上设置明确标注的少量时代录入错误，用于验证辞书一致性纠偏}
               available: {type: boolean, description: 资料、已发布算法与模型等必要服务是否就绪}
             required: [scenario, projectId, projectName, title, prompt, sampleNature, available]
             additionalProperties: false
@@ -9753,7 +9753,7 @@ components:
       properties:
         workflowType:
           type: string
-          description: 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 为填图检查纠偏；默认 hyperspectral_interpretation
+          description: 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 为模拟填图检查纠偏，geology_age_correction 为真实底图副本的地层时代录入纠偏；默认 hyperspectral_interpretation
           default: hyperspectral_interpretation
           maxLength: 40
         goal:
@@ -13189,6 +13189,15 @@ components:
         provider:
           type: string
           description: 成果提供单位或团队
+        resourceIds:
+          type: array
+          maxItems: 30
+          uniqueItems: true
+          description: 关联的当前项目可读数据资源；省略为无关联，服务端核验项目及owner_only权限
+          items:
+            type: integer
+            minimum: 1
+            description: 同项目数据资源标识
         accessGroupIds:
           deprecated: true
           type: array
@@ -13208,6 +13217,15 @@ components:
             - unpublish
             - delete
           description: publish 发布或更新访问范围；unpublish 下架为仅管理主体可见；delete 永久删除记录和文件
+        resourceIds:
+          type: array
+          maxItems: 30
+          uniqueItems: true
+          description: publish时更新关联的同项目可读数据；省略保留原关联，空数组清除关联；其他动作不接受此字段
+          items:
+            type: integer
+            minimum: 1
+            description: 同项目数据资源标识
         accessGroupIds:
           deprecated: true
           type: array
@@ -13251,6 +13269,7 @@ components:
         - downloadUrl
         - owner
         - accessGroups
+        - relatedResources
         - canPreview
         - canDownload
         - canPublish
@@ -13309,6 +13328,18 @@ components:
           items:
             $ref: "#/components/schemas/AdminDataResourceAccessGroup"
           deprecated: true
+        relatedResources:
+          type: array
+          description: 当前用户仍可读的同项目关联数据；撤权、停用或owner_only不可见资源不返回
+          items:
+            type: object
+            description: 可在地图或数据资源中打开的关联数据
+            required: [id, name, dataType]
+            properties:
+              id: {type: integer, minimum: 1, description: 数据资源标识}
+              name: {type: string, description: 数据资源名称}
+              dataType: {type: string, enum: [vector, raster, gene, table, document, image], description: 数据资源类型}
+            additionalProperties: false
         canPreview:
           type: boolean
           description: 当前用户是否可以在线预览该成果格式

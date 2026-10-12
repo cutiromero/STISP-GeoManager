@@ -49,6 +49,7 @@ import { useAppContext } from "../contexts/AppContext";
 import type { MapComposition, ResultArtifact } from "../types";
 import { downloadBlob } from "../utils/download";
 import ResearchDemoShowcase from "./ResearchDemoShowcase";
+import { useComputeText } from "../compute/ui";
 
 type ResultSource = "all" | "mapping" | "analysis" | "imported";
 type ResultView = "cards" | "list";
@@ -789,6 +790,7 @@ function ResultCover({ item }: { item: PublishedResult }) {
 
 function ResultDetail({ item }: { item: PublishedResult }) {
   const { t, i18n } = useTranslation();
+  const ui = useComputeText();
   const locale = i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN";
   const format = resultFormat(item);
   const previewUrl = resultPreviewUrl(item);
@@ -822,6 +824,31 @@ function ResultDetail({ item }: { item: PublishedResult }) {
       <Typography.Paragraph>
         {resultDescription(item) || t("results.noDescription")}
       </Typography.Paragraph>
+      {item.kind === "artifact" && item.item.relatedResources.length > 0 && (
+        <Space orientation="vertical" size={10} className="full-width">
+          <Typography.Text strong>
+            {ui("关联数据", "Related data")}
+          </Typography.Text>
+          <Space wrap>
+            {item.item.relatedResources.map((resource) => {
+              const spatial = ["vector", "raster"].includes(resource.dataType);
+              const destination = spatial
+                ? `/map?resources=${resource.id}&projectTagId=${item.item.projectTagId}`
+                : `/resources/catalog?resourceId=${resource.id}&q=${encodeURIComponent(resource.name)}`;
+              return (
+                <Button
+                  key={resource.id}
+                  aria-label={resource.name}
+                  href={destination}
+                  icon={spatial ? <GlobalOutlined /> : <DatabaseOutlined />}
+                >
+                  {resource.name}
+                </Button>
+              );
+            })}
+          </Space>
+        </Space>
+      )}
       <div className="result-detail-grid">
         <span>
           <small>{t("results.source")}</small>

@@ -311,7 +311,8 @@ def submit_value(request, c, value, *, available_models=None):
     prompt_limit = budget_options(request.user, policy())["maxPromptCharacters"]
     demo_scenario = value.get("demoScenario")
     if demo_scenario is not None and (
-        demo_scenario not in {"ecology_investigation", "geology_correction"}
+        demo_scenario
+        not in {"ecology_investigation", "geology_correction", "geology_age_correction"}
         or c.mode != "agent"
     ):
         raise ApiProblem("演示场景无效或未使用智能体模式")
@@ -811,7 +812,11 @@ def workflow_confirm(request, workflow_id):
             or value["planHash"] != workflow.plan_hash
         ):
             raise ApiProblem("执行计划已变化，请刷新后确认", 409)
-        if workflow.workflow_type in {"ecology_investigation", "geology_correction"}:
+        if workflow.workflow_type in {
+            "ecology_investigation",
+            "geology_correction",
+            "geology_age_correction",
+        }:
             from .demo_workflow import confirm_demo
 
             confirm_demo(workflow, request.user, p, value["planHash"])

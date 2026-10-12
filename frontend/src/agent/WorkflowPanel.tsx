@@ -39,14 +39,22 @@ function ParameterField({
   value,
   candidate,
   onChange,
+  disabled = false,
 }: {
   spec: ComputeParameterSpec;
   value: unknown;
   candidate?: ComputeCandidate;
   onChange: (value: unknown) => void;
+  disabled?: boolean;
 }) {
   if (spec.type === "boolean")
-    return <Switch checked={value === true} onChange={onChange} />;
+    return (
+      <Switch
+        checked={value === true}
+        onChange={onChange}
+        disabled={disabled}
+      />
+    );
   if (["enum", "field", "band"].includes(spec.type)) {
     const values =
       spec.type === "enum"
@@ -60,6 +68,7 @@ function ParameterField({
     return (
       <Select
         aria-label={spec.label}
+        disabled={disabled}
         style={{ minWidth: 180 }}
         value={value as string | number | undefined}
         onChange={onChange}
@@ -71,6 +80,7 @@ function ParameterField({
     return (
       <InputNumber
         aria-label={spec.label}
+        disabled={disabled}
         min={spec.min}
         max={spec.max}
         precision={spec.type === "integer" ? 0 : undefined}
@@ -81,6 +91,7 @@ function ParameterField({
   return (
     <Input
       aria-label={spec.label}
+      disabled={disabled}
       maxLength={2000}
       value={typeof value === "string" ? value : ""}
       onChange={(e) => onChange(e.target.value)}
@@ -128,11 +139,30 @@ export default function WorkflowPanel({
   >(undefined);
   const isDemo =
     workflowType === "ecology_investigation" ||
-    workflowType === "geology_correction";
+    workflowType === "geology_correction" ||
+    workflowType === "geology_age_correction";
   const locked = Boolean(workflow && active.includes(workflow.status));
   const version = algorithms
     .flatMap((algorithm) => algorithm.versions)
     .find((v) => v.id === versionId);
+  const ageParameterSpecs = Array.from(
+    new Map(
+      algorithms
+        .filter((algorithm) =>
+          ["geology-age-check", "geology-age-edit"].includes(
+            algorithm.identifier,
+          ),
+        )
+        .flatMap((algorithm) =>
+          algorithm.versions
+            .filter((item) => item.status === "published")
+            .sort((left, right) => right.id - left.id)
+            .slice(0, 1)
+            .flatMap((item) => item.manifest.parameters),
+        )
+        .map((spec) => [spec.key, spec] as const),
+    ).values(),
+  );
   const report = (e: unknown) => {
     setError(e instanceof Error ? e.message : "请求失败");
     if (
@@ -350,6 +380,10 @@ export default function WorkflowPanel({
                 value: "geology_correction",
                 label: "地质填图 · 检查、纠正与复核",
               },
+              {
+                value: "geology_age_correction",
+                label: "真实底图 · 地层时代录入纠偏",
+              },
             ]}
             onChange={(value) => {
               setWorkflowType(value);
@@ -489,6 +523,24 @@ export default function WorkflowPanel({
             ))}
         </>
       )}
+      {workflowType === "geology_age_correction" &&
+        ageParameterSpecs.length > 0 && (
+          <div className="agent-demo-fields agent-demo-parameters">
+            {ageParameterSpecs.map((spec) => (
+              <label key={spec.key}>
+                <span>{spec.label}</span>
+                <ParameterField
+                  spec={spec}
+                  value={parameters[spec.key] ?? spec.default}
+                  disabled={locked || busy}
+                  onChange={(value) =>
+                    setParameters((old) => ({ ...old, [spec.key]: value }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        )}
       <div className="agent-workflow-selectors">
         <label>
           <span>知识依据</span>

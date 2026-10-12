@@ -32,6 +32,16 @@ const items: AgentResearchDemoList["items"] = [
     sampleNature: "synthetic",
     available: true,
   },
+  {
+    scenario: "geology_age_correction",
+    projectId: 3,
+    projectName: "核地院逻辑推理",
+    title: "真实底图 · 地层时代录入纠偏",
+    prompt:
+      "使用真实图件副本检查标注的时代录入错误，检索辞书并实际计算、复查和保存地图",
+    sampleNature: "real_map_with_demonstration_errors",
+    available: true,
+  },
 ];
 function Destination() {
   const project = useProjectContext();
@@ -73,7 +83,7 @@ beforeEach(() => {
   vi.spyOn(agentApi, "researchDemos").mockResolvedValue({ items });
 });
 
-it.each([0, 1])(
+it.each([0, 1, 2])(
   "switches only to the authorized project and sends a separate launch intent for case %i",
   async (index) => {
     show();
@@ -100,6 +110,18 @@ it.each([0, 1])(
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   },
 );
+
+it("clearly distinguishes the real-map entry from the preserved synthetic cases", async () => {
+  show();
+  expect(
+    await screen.findByText("真实底图 · 演示录入错误"),
+  ).toBeInTheDocument();
+  expect(screen.getAllByText("模拟资料 · 真实计算")).toHaveLength(2);
+  expect(screen.getByText(/按辞书与适用条件修正时代录入/)).toBeInTheDocument();
+  await page.screenshot({
+    path: "../../test-results/research-demo-showcase-desktop.png",
+  });
+});
 
 it("keeps unavailable and inaccessible entries from launching", async () => {
   vi.mocked(agentApi.researchDemos).mockResolvedValue({
