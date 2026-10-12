@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.36] - 2026-10-12
+
+### Changed
+- 智能体与科研工作流以轻蓝色活动光标、流光状态和当前步骤呈现实际运行过程，等待用户及结束状态保持静态。
+- 普通模型思考按实际换行与累计内容显示；科研分析说明按已保存的发现、判断、依据和结果逐行呈现。
+- 历史恢复直接显示已有内容，新说明渐入；减少动态效果模式保留清晰的静态状态提示。
+
+### Fixed
+- 运行中的长思考使用服务器完整累计文本，避免仅展示最近80条事件而丢掉前文。
+
 ## [0.1.35] - 2026-10-11
 
 ### Added

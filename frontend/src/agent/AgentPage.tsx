@@ -32,7 +32,7 @@ import {
   DownOutlined,
   NodeIndexOutlined,
 } from "@ant-design/icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useAppContext } from "../contexts/AppContext";
@@ -58,6 +58,9 @@ import RunComputeTasks from "./RunComputeTasks";
 import ComputeIntentCard from "./ComputeIntentCard";
 import WorkflowPanel from "./WorkflowPanel";
 import ResearchIntentCard from "./ResearchIntentCard";
+import LiveActivity, { ActivityMark } from "./LiveActivity";
+import ThinkingStream from "./ThinkingStream";
+import { runActivity, workflowActivity } from "./agentActivity";
 import { researchDemoLaunch } from "./researchDemoLaunch";
 import AgentResizeHandle from "./AgentResizeHandle";
 import AgentToolSelection, {
@@ -176,6 +179,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [workflowStatus, setWorkflowStatus] =
     useState<AgentWorkflow["status"]>();
+  const [manualWorkflow, setManualWorkflow] = useState<AgentWorkflow>();
+  const [researchWorkflow, setResearchWorkflow] = useState<{
+    runId: number;
+    workflow: AgentWorkflow;
+  }>();
   const historyButton = useRef<HTMLButtonElement>(null);
   const historyCloseButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -200,6 +208,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const listSequence = useRef(0);
   const restoredConversation = useRef(false);
   const viewport = useRef<HTMLDivElement>(null);
+  const followLatest = useRef(true);
+  const lastScrollTop = useRef(0);
   const pendingScroll = useRef<number | null>(null);
   const failedSubmission = useRef<{
     id: number;
@@ -217,6 +227,26 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     demoScenario?: AgentResearchScenario;
   } | null>(null);
   const running = runs.find(active);
+  const latestResearch = [...runs].reverse().find((run) => run.researchIntent);
+  const sidebarRun = running ?? latestResearch ?? runs[runs.length - 1];
+  const currentResearchWorkflow =
+    researchWorkflow?.runId === latestResearch?.id
+      ? researchWorkflow?.workflow
+      : undefined;
+  const sidebarWorkflow =
+    manualWorkflow &&
+    ["queued", "running", "waiting_compute", "waiting_approval"].includes(
+      manualWorkflow.status,
+    )
+      ? manualWorkflow
+      : currentResearchWorkflow;
+  const sidebarActivity = sidebarWorkflow
+    ? workflowActivity(sidebarWorkflow)
+    : sidebarRun
+      ? runActivity(sidebarRun, sidebarRun.id === running?.id ? events : [])
+      : undefined;
+  const sidebarTitle =
+    sidebarWorkflow?.goal ?? sidebarRun?.researchIntent?.goal;
   const canUse = mode === "agent" ? bootstrap?.canAgent : bootstrap?.canChat;
   const models = (bootstrap?.models ?? []).filter(
     (m) => mode === "chat" || m.allowAgent,
@@ -260,6 +290,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   };
   useEffect(() => {
     if (!canUse) {
+      setManualWorkflow(undefined);
+      setResearchWorkflow(undefined);
+      setWorkflowStatus(undefined);
       setRuns([]);
       setEvents([]);
       setCurrent(null);
@@ -378,7 +411,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       clearTimeout(timer);
     };
   }, [current?.id, running?.id, canUse]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const box = viewport.current;
     if (box && pendingScroll.current !== null) {
       const question = box.querySelector<HTMLElement>(
@@ -390,16 +423,31 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
           box.getBoundingClientRect().top -
           16;
         pendingScroll.current = null;
+        followLatest.current =
+          box.scrollHeight - box.scrollTop - box.clientHeight < 96;
         return;
       }
     }
-    if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 250)
-      box.scrollTop = box.scrollHeight;
+    if (box && followLatest.current) box.scrollTop = box.scrollHeight;
   }, [runs, events]);
+  useEffect(() => {
+    const container = viewport.current;
+    if (!container) return;
+    const observer = new ResizeObserver(() => {
+      const box = viewport.current;
+      if (box && followLatest.current) box.scrollTop = box.scrollHeight;
+    });
+    observer.observe(container);
+    for (const turn of container.querySelectorAll(".agent-turn"))
+      observer.observe(turn);
+    return () => observer.disconnect();
+  }, [runs.length]);
 
   const open = async (c: AgentConversation) => {
     const seq = ++sequence.current;
     setCurrent(c);
+    setResearchWorkflow(undefined);
+    followLatest.current = true;
     setRuns([]);
     setEvents([]);
     setError("");
@@ -601,6 +649,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     sequence.current++;
     demoLaunch.current = null;
     setCurrent(null);
+    setResearchWorkflow(undefined);
+    followLatest.current = true;
     setRuns([]);
     setEvents([]);
     setError("");
@@ -781,6 +831,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                   disabled={busy}
                   onClick={() => void open(c)}
                 >
+                  {current?.id === c.id && sidebarActivity && (
+                    <ActivityMark state={sidebarActivity.state} />
+                  )}
                   {c.title}
                 </button>
                 <Space size={0} className="agent-history-actions">
@@ -836,6 +889,16 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               </div>
             ))}
           </div>
+          {canUse && sidebarActivity && (
+            <section className="agent-sidebar-task" aria-label="当前任务">
+              <span className="agent-sidebar-task-eyebrow">当前任务</span>
+              <LiveActivity
+                activity={sidebarActivity}
+                title={sidebarTitle}
+                compact
+              />
+            </section>
+          )}
           {bootstrap?.canManage && (
             <Button onClick={() => navigate("/admin/agent")}>
               {ui("智能体管理", "Agent settings")}
@@ -919,7 +982,18 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               )}
             />
           )}
-          <div className="agent-messages" ref={viewport}>
+          <div
+            className="agent-messages"
+            ref={viewport}
+            onScroll={(event) => {
+              const box = event.currentTarget;
+              if (box.scrollTop < lastScrollTop.current - 1)
+                followLatest.current = false;
+              if (box.scrollHeight - box.scrollTop - box.clientHeight < 96)
+                followLatest.current = true;
+              lastScrollTop.current = box.scrollTop;
+            }}
+          >
             {!runs.length && (
               <div className="agent-welcome">
                 <RobotOutlined />
@@ -1027,22 +1101,25 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                                 )
                               : `${ui("模型思考过程", "Model reasoning")}${r.thinkingDurationMs ? ` · ${(r.thinkingDurationMs / 1000).toFixed(1)}s` : ""}`,
                             children: (
-                              <pre className="agent-thinking-content">
-                                {r.id === running?.id
-                                  ? events
-                                      .filter((e) => e.kind === "thinking")
-                                      .map((e) => e.text)
-                                      .join("") ||
-                                    ui(
-                                      "正在等待模型返回思考内容…",
-                                      "Waiting for the model reasoning stream…",
-                                    )
-                                  : r.thinkingText ||
-                                    ui(
-                                      "本次未保存到思考片段，请结合运行状态查看原因。",
-                                      "No reasoning segments were saved. See the run status below.",
-                                    )}
-                              </pre>
+                              <ThinkingStream
+                                working={active(r)}
+                                text={
+                                  r.thinkingText ||
+                                  (r.id === running?.id
+                                    ? events
+                                        .filter((e) => e.kind === "thinking")
+                                        .map((e) => e.text)
+                                        .join("") ||
+                                      ui(
+                                        "正在等待模型返回思考内容…",
+                                        "Waiting for the model reasoning stream…",
+                                      )
+                                    : ui(
+                                        "本次未保存到思考片段，请结合运行状态查看原因。",
+                                        "No reasoning segments were saved. See the run status below.",
+                                      ))
+                                }
+                              />
                             ),
                           },
                         ]}
@@ -1074,6 +1151,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     ) && (
                       <ResearchIntentCard
                         run={{ ...r, researchIntent: r.researchIntent }}
+                        onWorkflowChange={(workflow) =>
+                          setResearchWorkflow(
+                            workflow ? { runId: r.id, workflow } : undefined,
+                          )
+                        }
                         onChanged={(next) => {
                           if (
                             next.id !== r.id &&
@@ -1086,21 +1168,13 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         }}
                       />
                     )}
-                  {active(r) && !r.answer && (
-                    <p className="agent-live-progress" role="status">
-                      <span aria-hidden="true" />
-                      {r.status === "queued"
-                        ? ui("正在等待模型…", "Waiting for the model…")
-                        : r.id === running?.id &&
-                            events.some((event) =>
-                              event.kind.startsWith("tool_"),
-                            )
-                          ? ui(
-                              "正在查阅资料并处理数据…",
-                              "Reviewing sources and processing data…",
-                            )
-                          : ui("正在组织回答…", "Preparing your answer…")}
-                    </p>
+                  {active(r) && !r.computeIntent && !r.researchIntent && (
+                    <LiveActivity
+                      activity={runActivity(
+                        r,
+                        r.id === running?.id ? events : [],
+                      )}
+                    />
                   )}
                   {mode === "agent" &&
                     (r.computeIntent?.taskId ||
@@ -1497,6 +1571,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
             resourceIds={selected}
             embedded
             onStatusChange={setWorkflowStatus}
+            onWorkflowChange={setManualWorkflow}
           />
         </Drawer>
       )}

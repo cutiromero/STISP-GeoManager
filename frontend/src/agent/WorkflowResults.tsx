@@ -6,6 +6,8 @@ import WorkflowDecisionTimeline, {
 } from "./WorkflowDecisionTimeline";
 import RunComputeTasks from "./RunComputeTasks";
 import WorkflowKnowledgeReferences from "./WorkflowKnowledgeReferences";
+import LiveActivity from "./LiveActivity";
+import { workflowActivity } from "./agentActivity";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 const labels: Record<string, string> = {
@@ -126,7 +128,7 @@ export default function WorkflowResults({
   );
   return (
     <div className="agent-workflow-status">
-      <Space wrap>
+      <Space wrap className="agent-workflow-meta">
         <Tag
           color={
             workflow.status === "succeeded"
@@ -138,7 +140,6 @@ export default function WorkflowResults({
         >
           {ui(labels[workflow.status] ?? workflow.status)}
         </Tag>
-        <span>{workflow.detail}</span>
       </Space>
       {workflow.planHash &&
         (compact ? (
@@ -160,7 +161,7 @@ export default function WorkflowResults({
         previousAnalysis={workflow.plan.previousAnalysis}
         steps={workflow.steps}
       />
-      <WorkflowDecisionTimeline steps={workflow.steps} />
+      <WorkflowDecisionTimeline key={workflow.id} steps={workflow.steps} />
       {workflow.workflowType === "ecology_investigation" &&
         workflow.status === "succeeded" &&
         onEvidenceUpdate && (
@@ -219,6 +220,7 @@ export default function WorkflowResults({
           }
         />
       )}
+      <LiveActivity activity={workflowActivity(workflow)} />
     </div>
   );
 }

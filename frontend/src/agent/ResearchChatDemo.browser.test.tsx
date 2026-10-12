@@ -229,6 +229,124 @@ beforeEach(() => {
   vi.spyOn(computeApi, "task").mockResolvedValue(liveComputeTask("succeeded"));
 });
 
+it("shows a live research cursor, pauses for approval and restores without replaying decisions", async () => {
+  let currentIntent = intent({
+    status: "running",
+    questions: [],
+    workflowId: "workflow-actual",
+  });
+  let currentWorkflow: AgentWorkflow = {
+    ...workflow("running"),
+    currentStep: "review_plan",
+    detail: "已完成变化统计，模型正在读取结果",
+    plan: {
+      phase: "decide",
+      stageIndex: 0,
+      stages: [
+        {
+          identifier: "ecology-priority",
+          modelAttempts: [
+            { status: "requesting", response: "未经校验的JSON响应" },
+          ],
+        },
+      ],
+    },
+  };
+  vi.mocked(agentApi.detail).mockImplementation(async () => ({
+    conversation: newConversation,
+    runs: [run(101, { researchIntent: currentIntent })],
+  }));
+  vi.mocked(agentApi.poll).mockImplementation(async () => ({
+    run: run(101, { researchIntent: currentIntent }),
+    cursor: 0,
+    events: [],
+  }));
+  vi.mocked(agentApi.workflow).mockImplementation(async () => currentWorkflow);
+  const mounted = show();
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByText("模型正在分析"),
+    ).toBeVisible(),
+  );
+  expect(
+    document.querySelector(
+      ".agent-sidebar-task .agent-activity-mark.is-working",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("未经校验的JSON响应")).not.toBeInTheDocument();
+  expect(document.querySelectorAll(".is-new-decision")).toHaveLength(0);
+  await page.screenshot({
+    path: "../../test-results/agent-live-research-desktop.png",
+  });
+  await page.viewport(390, 844);
+  try {
+    const activity = screen
+      .getByLabelText("科研任务")
+      .querySelector(".agent-activity")!;
+    await waitFor(() =>
+      expect(activity.getBoundingClientRect().right).toBeLessThanOrEqual(390),
+    );
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    await page.screenshot({
+      path: "../../test-results/agent-live-research-mobile.png",
+    });
+  } finally {
+    await page.viewport(1600, 900);
+  }
+  currentIntent = {
+    ...currentIntent,
+    status: "waiting_approval",
+    revision: "review-2",
+  };
+  currentWorkflow = {
+    ...currentWorkflow,
+    status: "waiting_approval",
+    detail: "请审核实际计算成果",
+  };
+  await waitFor(
+    () =>
+      expect(
+        within(screen.getByLabelText("当前任务")).getByText("等待您确认"),
+      ).toBeVisible(),
+    { timeout: 5000 },
+  );
+  expect(
+    document.querySelector(
+      ".agent-sidebar-task .agent-activity-mark.is-working",
+    ),
+  ).not.toBeInTheDocument();
+  const review = screen.getByLabelText("科研任务");
+  expect(
+    review.querySelector(".agent-activity.is-working"),
+  ).not.toBeInTheDocument();
+  currentIntent = { ...currentIntent, status: "succeeded", revision: "done-3" };
+  currentWorkflow = {
+    ...currentWorkflow,
+    status: "succeeded",
+    currentStep: "done",
+    detail: "报告和成果已保存",
+  };
+  await waitFor(
+    () =>
+      expect(
+        within(screen.getByLabelText("当前任务")).getByText("研究已完成"),
+      ).toBeVisible(),
+    { timeout: 5000 },
+  );
+  expect(
+    document.querySelector(".agent-sidebar-task .agent-activity-track"),
+  ).not.toBeInTheDocument();
+  mounted.unmount();
+  show();
+  await screen.findByLabelText("分析说明与决策依据");
+  expect(document.querySelectorAll(".is-new-decision")).toHaveLength(0);
+  expect(
+    document.querySelector(
+      ".agent-sidebar-task .agent-activity-mark.is-working",
+    ),
+  ).not.toBeInTheDocument();
+});
+
 it("starts in a new conversation once, consumes the entry state, and restores on refresh", async () => {
   sessionStorage.setItem("agent-conversation:99:1:agent", "1");
   const mounted = show({

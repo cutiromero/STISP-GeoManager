@@ -9,6 +9,8 @@ import type {
 } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
 import WorkflowResults from "./WorkflowResults";
+import LiveActivity from "./LiveActivity";
+import { runActivity } from "./agentActivity";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 const labels: Record<AgentResearchIntent["status"], [string, string]> = {
@@ -24,9 +26,11 @@ const labels: Record<AgentResearchIntent["status"], [string, string]> = {
 export default function ResearchIntentCard({
   run,
   onChanged,
+  onWorkflowChange,
 }: {
   run: AgentRun & { researchIntent: AgentResearchIntent };
   onChanged: (next: AgentRun) => void;
+  onWorkflowChange?: (next: AgentWorkflow | undefined) => void;
 }) {
   const ui = useComputeText();
   const intent = run.researchIntent;
@@ -38,6 +42,8 @@ export default function ResearchIntentCard({
   const inFlight = useRef(false);
   const onUpdate = useRef(onChanged);
   onUpdate.current = onChanged;
+  const onWorkflow = useRef(onWorkflowChange);
+  onWorkflow.current = onWorkflowChange;
   const currentIntent = useRef(intent);
   currentIntent.current = intent;
   const alive = useRef(true);
@@ -68,6 +74,7 @@ export default function ResearchIntentCard({
         const latest = await agentApi.poll(intent.originRunId);
         if (disposed) return;
         setWorkflow(next);
+        onWorkflow.current?.(next);
         if (
           JSON.stringify(latest.run.researchIntent) !==
           JSON.stringify(currentIntent.current)
@@ -89,6 +96,7 @@ export default function ResearchIntentCard({
           [401, 403, 404].includes(Number(reason.status))
         ) {
           setWorkflow(undefined);
+          onWorkflow.current?.(undefined);
           return;
         }
         failures++;
@@ -99,6 +107,7 @@ export default function ResearchIntentCard({
     return () => {
       disposed = true;
       clearTimeout(timer);
+      onWorkflow.current?.(undefined);
     };
   }, [intent.workflowId, run.id]);
   const update = async (action: AgentResearchIntentUpdate["action"]) => {
@@ -150,9 +159,7 @@ export default function ResearchIntentCard({
         <strong>{intent.goal}</strong>
         <Tag color="blue">{ui(...status)}</Tag>
       </div>
-      <p className="agent-research-message" role="status">
-        {intent.message}
-      </p>
+      {!workflow && <LiveActivity activity={runActivity(run)} />}
       {!!intent.inputSummary.length && (
         <div
           className="agent-research-inputs"

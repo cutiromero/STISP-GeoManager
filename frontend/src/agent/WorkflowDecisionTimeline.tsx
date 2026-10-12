@@ -1,4 +1,5 @@
 import { Tag, Timeline } from "antd";
+import { useState } from "react";
 import type { AgentWorkflowStep } from "../api/generated/types.gen";
 
 const stepNames: Record<string, string> = {
@@ -40,6 +41,9 @@ export default function WorkflowDecisionTimeline({
 }: {
   steps: AgentWorkflowStep[];
 }) {
+  const [restoredDecisions] = useState(
+    () => new Set(steps.filter((step) => step.decision).map((step) => step.id)),
+  );
   if (!steps.length) return null;
   return (
     <section
@@ -50,6 +54,7 @@ export default function WorkflowDecisionTimeline({
       <Timeline
         items={steps.map((step) => {
           const decision = step.decision;
+          const fresh = Boolean(decision && !restoredDecisions.has(step.id));
           return {
             key: step.id,
             color:
@@ -59,7 +64,10 @@ export default function WorkflowDecisionTimeline({
                   ? "blue"
                   : "gray",
             content: (
-              <article className="agent-decision-step">
+              <article
+                className={`agent-decision-step${fresh ? " is-new-decision" : ""}`}
+                data-step-id={step.id}
+              >
                 <div className="agent-decision-step-heading">
                   <strong>
                     {step.sequence}. {decision?.problem || step.message}

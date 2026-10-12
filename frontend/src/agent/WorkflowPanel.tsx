@@ -93,11 +93,13 @@ export default function WorkflowPanel({
   resourceIds,
   embedded = false,
   onStatusChange,
+  onWorkflowChange,
 }: {
   model: string;
   resourceIds: number[];
   embedded?: boolean;
   onStatusChange?: (status: AgentWorkflow["status"] | undefined) => void;
+  onWorkflowChange?: (workflow: AgentWorkflow | undefined) => void;
 }) {
   const ui = useComputeText();
   const [goal, setGoal] = useState("");
@@ -320,6 +322,9 @@ export default function WorkflowPanel({
   useEffect(() => {
     onStatusChange?.(workflow?.status);
   }, [workflow?.status, onStatusChange]);
+  useEffect(() => {
+    onWorkflowChange?.(workflow);
+  }, [workflow, onWorkflowChange]);
   const content = (
     <Space orientation="vertical" style={{ width: "100%" }}>
       <Typography.Text type="secondary">

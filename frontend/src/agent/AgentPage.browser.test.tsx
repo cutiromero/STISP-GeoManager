@@ -1270,3 +1270,80 @@ it("creates one conversation when the first action uploads multiple documents", 
     ),
   );
 });
+
+it("keeps all saved reasoning when the incremental event window is shorter", async () => {
+  const text = [
+    "最初已经核实的数据依据",
+    ...Array.from({ length: 110 }, (_, n) => `逐条核对记录 ${n}`),
+    "当前最新的分析",
+  ].join("\n");
+  const activeRun: AgentRun = {
+    ...run(19, "分析研究数据"),
+    status: "running",
+    thinkingMode: "deep",
+    thinkingText: text,
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [activeRun],
+  });
+  vi.spyOn(agentApi, "poll").mockResolvedValue({
+    run: activeRun,
+    cursor: 100,
+    events: [
+      {
+        id: 100,
+        kind: "thinking",
+        text: "当前最新的分析",
+        data: {},
+        createdAt: "",
+      },
+    ],
+  });
+  showAgent();
+  await screen.findByText("最初已经核实的数据依据");
+  expect(screen.getByLabelText("模型思考内容")).toHaveTextContent(
+    "逐条核对记录 0",
+  );
+  expect(screen.getByLabelText("模型思考内容")).toHaveTextContent(
+    "当前最新的分析",
+  );
+  expect(
+    within(screen.getByLabelText("当前任务")).getByText("正在思考"),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "../../test-results/agent-live-thinking-desktop.png",
+  });
+});
+
+it("removes recovered workflow activity when agent permission is revoked", async () => {
+  vi.mocked(agentApi.workflows).mockResolvedValue({
+    items: [{ ...workflow("running"), goal: "撤权后不可保留的研究任务" }],
+  });
+  const mounted = showAgent("workbench");
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByText("正在推进研究"),
+    ).toBeInTheDocument(),
+  );
+  bootstrap.canAgent = false;
+  try {
+    mounted.rerender(
+      <AntApp>
+        <MemoryRouter initialEntries={["/agent/workbench"]}>
+          <AgentPage />
+        </MemoryRouter>
+      </AntApp>,
+    );
+    await screen.findByText("当前账号未获准使用此功能，请联系超级管理员。");
+    expect(screen.queryByLabelText("当前任务")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("撤权后不可保留的研究任务"),
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".agent-activity-mark.is-working"),
+    ).not.toBeInTheDocument();
+  } finally {
+    bootstrap.canAgent = true;
+  }
+});
