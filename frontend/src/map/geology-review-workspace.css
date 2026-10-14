@@ -157,6 +157,37 @@
   border: 1px solid #dce6f1;
   border-radius: 12px;
 }
+.geology-review-workspace-report .agent-file-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.geology-review-workspace-report .agent-file-icon {
+  color: #397ecc;
+  font-size: 24px;
+}
+.geology-review-workspace-report .agent-file-main {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+.geology-review-workspace-report .agent-file-title,
+.geology-review-workspace-report .agent-file-actions {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.geology-review-workspace-report .agent-file-name,
+.geology-review-workspace-report .agent-file-title > span,
+.geology-review-workspace-report .agent-file-location {
+  color: #64758a;
+  font-size: 12px;
+}
+.geology-review-workspace-report .agent-file-actions .ant-btn {
+  padding: 0;
+}
 .geology-review-workspace-loading {
   padding: 100px 20px;
   display: flex;
