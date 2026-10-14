@@ -6,12 +6,14 @@ import logging
 import re
 import threading
 import time
+import traceback
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import close_old_connections, transaction, OperationalError
 from django.utils import timezone
 
 from apps.audit.service import log_operation
+from apps.compute.packages import ComputeError
 from apps.projects.context import ProjectScope, project_scope
 from apps.core.storage import app_path
 from .config import registry
@@ -621,9 +623,21 @@ def run_task(run_id):
         status, detail = "failed", str(exc)
     except ValidationError as exc:
         status, detail = "failed", "；".join(exc.messages)
-    except Exception:
+    except ComputeError as exc:
+        status, detail = "failed", str(exc)
+    except Exception as exc:
         # Do not put file paths, data rows, prompts or upstream bodies in logs.
-        logger.error("agent run %s failed (%s)", run.id, run.model)
+        frames = [
+            f"{frame.f_globals.get('__name__', '')}.{frame.f_code.co_name}:{line}"
+            for frame, line in traceback.walk_tb(exc.__traceback__)
+        ]
+        logger.error(
+            "agent run %s failed (%s): %s at %s",
+            run.id,
+            run.model,
+            type(exc).__name__,
+            " -> ".join(frames[-12:]),
+        )
         status, detail = "failed", "运行未能完成，请稍后重试或联系管理员"
     finally:
         with project_scope(scope_for(run)):

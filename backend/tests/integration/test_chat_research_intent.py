@@ -13,6 +13,7 @@ from apps.agent.research_intents import process, serialize, history_compatible
 from apps.agent.research_parser import plausible, validate
 from apps.catalog.models import DataResource
 from apps.compute.models import ComputeTask
+from apps.compute.packages import ComputeError
 from tests.integration.test_demo_workflow import demo  # noqa: F401
 from tests.integration.test_compute import setup_compute  # noqa: F401
 
@@ -154,6 +155,48 @@ def test_single_ndvi_keeps_existing_fast_path(demo):  # noqa: F811
             is None
         )
     model.assert_not_called()
+
+
+def test_workflow_creation_business_error_is_reported_in_chat(demo):  # noqa: F811
+    from apps.agent.worker import run_task
+
+    item = run(demo)
+    item.status = "running"
+    item.save()
+    reason = "您已有活动科研工作流，请等待完成"
+    with (
+        patch("apps.agent.worker.guard"),
+        patch(
+            "apps.agent.research_intents.process",
+            side_effect=ComputeError(reason, 409),
+        ),
+    ):
+        run_task(item.id)
+    item.refresh_from_db()
+    assert item.status == "failed" and item.detail == reason
+    assert item.events.filter(kind="status", text=reason).exists()
+    assert not item.research_workflow_id
+
+
+def test_unknown_failure_logs_code_location_without_private_error(demo, caplog):  # noqa: F811
+    from apps.agent.worker import run_task
+
+    item = run(demo)
+    item.status = "running"
+    item.save()
+    private = "private-user-prompt path=C:/private/data.txt upstream-token=secret"
+    with (
+        patch("apps.agent.worker.guard"),
+        patch("apps.agent.research_intents.process", side_effect=RuntimeError(private)),
+    ):
+        run_task(item.id)
+    item.refresh_from_db()
+    assert item.status == "failed"
+    assert item.detail == "运行未能完成，请稍后重试或联系管理员"
+    assert "RuntimeError" in caplog.text
+    assert "apps.agent.worker.run_task:" in caplog.text
+    assert private not in caplog.text
+    assert "C:/private" not in caplog.text
 
 
 def test_real_binding_initial_autoconfirm_and_idempotent_recovery(demo):  # noqa: F811
