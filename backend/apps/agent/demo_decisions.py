@@ -278,7 +278,7 @@ def _edit_task(workflow, stage, results) -> dict | None:
         for item in results
         if item["key"] == "issues" and str(item.get("taskId")) == task_id
     ]
-    return {
+    task = {
         "changesInputState": "requires_model_proposal",
         "latestCheckTaskId": task_id,
         "issuesOutputIds": [item["outputId"] for item in issues],
@@ -291,6 +291,11 @@ def _edit_task(workflow, stage, results) -> dict | None:
         "requiredFields": [*EDIT_FIELDS, "reason"],
         "inputChecksumSource": "executor_binds_actual_issue",
     }
+    if stage["identifier"] == "geology-map-correct":
+        from .geology_review import required_knowledge
+
+        task["issueKnowledgeRequirements"] = required_knowledge(workflow, issues)
+    return task
 
 
 def _human_feedback(workflow):
@@ -732,6 +737,11 @@ def decide(
             "逐项比较知识的范围、前提、例外。只采纳status=repairable且kind=fill_gap或set_age的行。"
             "每项edits输出feature_id,field,old_value,new_value,evidence_id,rule_id,reason；"
             "六个绑定字段须完全等于真实问题行，reason用短句说明知识条件如何成立。"
+            "editTask.issueKnowledgeRequirements逐行列出已实际检索且当前有效的requiredKnowledgeRefs；"
+            "每个采纳项必须在decision.evidenceRefs至少引用该行的一条匹配knowledge编号，"
+            "不能只引用规则表或其他地层的知识。逐项阅读knowledge中的前提与例外后自行决定是否采纳。"
+            "knowledgeState=not_retrieved表示该项没有匹配的实际知识，应保留该项并说明需补查知识；"
+            "若无法形成任何有据建议则request_review，不能猜造引用，也不能据规则表冒充知识检索。"
             "fill_gap填补唯一地质单元内部遗漏，不更改宿主类别；set_age更新明确知识支持的时代字段。"
             "几何范围、issue_id与签名由平台绑定，不由模型生成。提出建议后必须等用户批准选中项再编辑。"
             "其他阶段edits=[]。资料不足可request_review，说明还需要什么；不猜目标类别或范围。"
@@ -868,6 +878,13 @@ def _repair_feedback(stage, payload, error):
         "引用实际最新统计；编辑逐项对应真实问题，证据不足可request_review。"
         "平台不会代补引用或修改计划。",
     }
+    if stage["identifier"] == "geology-map-correct":
+        feedback["knowledgeCitationInstruction"] = (
+            "逐项对照editTask.issueKnowledgeRequirements；每项采纳的修改在decision.evidenceRefs"
+            "中至少引用其requiredKnowledgeRefs的一条实际knowledge编号，并依据knowledge核对条件。"
+            "没有对应知识的项目保留；不能用其他规则的知识替代。若没有有据修改则request_review。"
+            "引用与edits均由你重新输出，平台不会补入引用或决定修正答案。"
+        )
     approved = _approved_final_outputs(stage, payload["executionState"])
     if approved:
         feedback.update(

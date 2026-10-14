@@ -101,10 +101,56 @@ def validate_modifications(edits, results):
     return accepted
 
 
-def _knowledge(workflow, row, decision):
+def _matching_knowledge(workflow, seeds):
     from apps.knowledge.services import visible_entries
     from .demo_workflow import _domains
 
+    current = {
+        (entry.seed_key, str(entry.id)): entry.revision
+        for entry in visible_entries(workflow.owner, domains=_domains(workflow)).filter(
+            seed_key__in=seeds
+        )
+    }
+    return {
+        seed: [
+            {"id": entry["id"], "revision": entry["revision"], "title": entry["title"]}
+            for entry in workflow.evidence
+            if current.get((seed, str(entry["id"]))) == entry["revision"]
+        ]
+        for seed in seeds
+    }
+
+
+def required_knowledge(workflow, results):
+    """Describe actual retrieved citations per issue; never select an edit."""
+    rows = [
+        (item["outputId"], index, row)
+        for item in results
+        for index, row in enumerate(item.get("rows", []))
+        if row.get("status") == "repairable"
+        and row.get("kind") in {"fill_gap", "set_age"}
+    ]
+    matches = _matching_knowledge(
+        workflow, {row.get("knowledge_seed", "") for _, _, row in rows}
+    )
+    return [
+        {
+            "outputId": output_id,
+            "rowIndex": index,
+            "featureId": row.get("feature_id"),
+            "kind": row["kind"],
+            "ruleId": row.get("rule_id"),
+            "requiredKnowledgeRefs": matches.get(row.get("knowledge_seed"), []),
+            "knowledgeState": "available"
+            if matches.get(row.get("knowledge_seed"))
+            else "not_retrieved",
+            "citationRequirement": "at_least_one_matching_reference_per_adopted_issue",
+        }
+        for output_id, index, row in rows
+    ]
+
+
+def _knowledge(workflow, row, decision):
     cited = {
         str(ref["id"])
         for ref in decision.get("evidenceRefs", [])
@@ -112,17 +158,12 @@ def _knowledge(workflow, row, decision):
     }
     if not row.get("knowledge_seed"):
         raise ComputeError("当前检查规则缺少可核对的专家知识定位")
-    current = {
-        str(entry.id): entry.revision
-        for entry in visible_entries(workflow.owner, domains=_domains(workflow)).filter(
-            seed_key=row.get("knowledge_seed", "")
-        )
-    }
     matches = [
         entry
-        for entry in workflow.evidence
+        for entry in _matching_knowledge(workflow, [row["knowledge_seed"]])[
+            row["knowledge_seed"]
+        ]
         if str(entry["id"]) in cited
-        and current.get(str(entry["id"])) == entry["revision"]
     ]
     if not matches:
         raise ComputeError("当前建议尚未引用对应规则的实际专家知识，请重新核对知识依据")

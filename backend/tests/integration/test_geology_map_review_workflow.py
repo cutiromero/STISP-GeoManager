@@ -21,6 +21,7 @@ from apps.agent.demo_workflow import (
 from apps.agent.geology_review import (
     approved_edits,
     freeze_proposal,
+    required_knowledge,
     validate_modifications,
 )
 from apps.agent.models import AgentWorkflow
@@ -467,3 +468,172 @@ def test_model_edit_must_match_actual_repairable_issue(changed):
     row.update(changed)
     with pytest.raises(ComputeError):
         validate_modifications(edits, [{"rows": [row]}])
+
+
+def test_each_issue_exposes_only_retrieved_current_matching_knowledge(review_case):
+    env = review_case
+    wf, _, output = waiting_suggestions(env)
+    results = wf.plan["stages"][1]["results"]
+    requirements = required_knowledge(wf, results)
+    assert [item["outputId"] for item in requirements] == [output.id, output.id]
+    assert [item["rowIndex"] for item in requirements] == [0, 1]
+    assert [item["requiredKnowledgeRefs"][0]["id"] for item in requirements] == [
+        entry.id for entry in env["entries"]
+    ]
+    assert all(item["knowledgeState"] == "available" for item in requirements)
+    wf.evidence = wf.evidence[:1]
+    requirements = required_knowledge(wf, results)
+    assert requirements[1]["requiredKnowledgeRefs"] == []
+    assert requirements[1]["knowledgeState"] == "not_retrieved"
+    env["entries"][0].revision += 1
+    env["entries"][0].save()
+    assert required_knowledge(wf, results)[0]["requiredKnowledgeRefs"] == []
+
+
+@pytest.mark.parametrize("change", [{"status": "draft"}, {"domain": "pipelines"}])
+def test_issue_knowledge_locators_keep_visibility_and_domain_boundaries(
+    review_case, change
+):
+    env = review_case
+    wf, _, _ = waiting_suggestions(env)
+    KnowledgeEntry.objects.filter(pk=env["entries"][0].id).update(**change)
+    result = required_knowledge(wf, wf.plan["stages"][1]["results"])
+    assert result[0]["requiredKnowledgeRefs"] == []
+    assert result[1]["requiredKnowledgeRefs"][0]["id"] == env["entries"][1].id
+
+
+def model_proposal_case(env, settings):
+    wf, stage, output = waiting_suggestions(env)
+    settings.AGENT_MODELS[0] = {
+        **settings.AGENT_MODELS[0],
+        "model_id": "qwen-provider-test",
+    }
+    value = {
+        "decision": stage.pop("decision"),
+        "edits": stage.pop("edits"),
+    }
+    value["decision"]["evidenceRefs"].append({"kind": "output", "id": str(output.id)})
+    wf.plan.pop("modificationReview")
+    stage.pop("proposedEdits")
+    stage["status"] = "pending"
+    wf.status, wf.plan["phase"] = "queued", "decide"
+    _save(wf)
+    return wf, value
+
+
+def model_responses(responses, messages):
+    values = iter(responses)
+
+    def stream(model, request, output, guard, **options):
+        messages.append(copy.deepcopy(request))
+        return iter([json.dumps(next(values), ensure_ascii=False)])
+
+    return stream
+
+
+@pytest.mark.parametrize("remain_wrong", [False, True])
+def test_model_must_correct_each_citation_itself_with_one_shared_budget_retry(
+    review_case, settings, remain_wrong
+):
+    env = review_case
+    wf, correct = model_proposal_case(env, settings)
+    wrong = copy.deepcopy(correct)
+    wrong["decision"]["evidenceRefs"] = [
+        ref
+        for ref in wrong["decision"]["evidenceRefs"]
+        if ref["id"] != str(env["entries"][1].id) or ref["kind"] != "knowledge"
+    ]
+    messages = []
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
+        patch("apps.agent.context.count_tokens", return_value=700),
+        patch(
+            "apps.agent.demo_decisions.provider.stream",
+            side_effect=model_responses(
+                [wrong, wrong if remain_wrong else correct], messages
+            ),
+        ),
+    ):
+        advance_demo(wf.id)
+    wf.refresh_from_db()
+    assert len(messages) == wf.plan["actualModelCallCount"] == 2
+    assert ComputeTask.objects.count() == 1
+    feedback = json.loads(messages[1][-1]["content"])
+    assert "对应规则" in feedback["validationError"]
+    requirements = feedback["editTask"]["issueKnowledgeRequirements"]
+    assert requirements[1]["requiredKnowledgeRefs"][0]["id"] == env["entries"][1].id
+    assert "不会补入引用" in feedback["knowledgeCitationInstruction"]
+    assert json.loads(messages[1][-2]["content"]) == wrong
+    if remain_wrong:
+        assert wf.status == "failed" and "对应规则" in wf.detail
+        assert "modificationReview" not in wf.plan
+    else:
+        assert wf.status == "waiting_approval"
+        assert len(wf.plan["modificationReview"]["suggestions"]) == 2
+        assert wf.plan["modificationReview"]["approvedSuggestionIds"] == []
+        assert wf.plan["stages"][2]["edits"] == correct["edits"]
+
+
+def test_model_citation_retry_cannot_exceed_existing_shared_request_budget(
+    review_case, settings
+):
+    wf, wrong = model_proposal_case(review_case, settings)
+    wrong["decision"]["evidenceRefs"] = [
+        ref for ref in wrong["decision"]["evidenceRefs"] if ref["kind"] != "knowledge"
+    ]
+    wf.plan["actualModelCallCount"] = wf.max_iterations - 1
+    _save(wf)
+    messages = []
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
+        patch("apps.agent.context.count_tokens", return_value=700),
+        patch(
+            "apps.agent.demo_decisions.provider.stream",
+            side_effect=model_responses([wrong], messages),
+        ),
+    ):
+        advance_demo(wf.id)
+    wf.refresh_from_db()
+    assert len(messages) == 1
+    assert wf.plan["actualModelCallCount"] == wf.max_iterations
+    assert wf.status == "failed" and "请求次数上限" in wf.detail
+    assert ComputeTask.objects.count() == 1
+
+
+def test_missing_rule_knowledge_requires_model_review_instead_of_silent_edit(
+    review_case, settings
+):
+    wf, unsupported = model_proposal_case(review_case, settings)
+    wf.evidence = wf.evidence[:1]
+    _save(wf)
+    unsupported["decision"]["evidenceRefs"] = [
+        ref
+        for ref in unsupported["decision"]["evidenceRefs"]
+        if ref["kind"] != "knowledge" or ref["id"] == str(wf.evidence[0]["id"])
+    ]
+    review = copy.deepcopy(unsupported)
+    review["decision"].update(
+        nextAction="request_review", judgement="缺少对应时代知识，请补查后再形成建议"
+    )
+    review["edits"] = []
+    messages = []
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
+        patch("apps.agent.context.count_tokens", return_value=700),
+        patch(
+            "apps.agent.demo_decisions.provider.stream",
+            side_effect=model_responses([unsupported, review], messages),
+        ),
+    ):
+        advance_demo(wf.id)
+    wf.refresh_from_db()
+    assert wf.status == "waiting_approval" and wf.plan["phase"] == "review_results"
+    assert "modificationReview" not in wf.plan and ComputeTask.objects.count() == 1
+    feedback = json.loads(messages[1][-1]["content"])
+    missing = feedback["editTask"]["issueKnowledgeRequirements"][1]
+    assert missing["knowledgeState"] == "not_retrieved"
+    assert missing["requiredKnowledgeRefs"] == []
+    assert wf.plan["actualModelCallCount"] == 2

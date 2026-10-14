@@ -52,6 +52,27 @@ function workflow(status: AgentWorkflow["status"] = "failed"): AgentWorkflow {
 
 beforeEach(() => vi.restoreAllMocks());
 
+it("未批准和未提交编辑任务时明确显示正在形成修正建议", () => {
+  const failed = workflow();
+  failed.workflowType = "geology_map_review";
+  failed.detail = "当前建议尚未引用对应规则的实际专家知识，请重新核对知识依据";
+  failed.plan = {
+    phase: "decide",
+    stageIndex: 0,
+    stages: [{ name: "edit", status: "pending" }],
+  };
+  render(
+    <App>
+      <MemoryRouter>
+        <WorkflowResults workflow={failed} />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(screen.getByText("形成修正建议")).toBeVisible();
+  expect(screen.queryByText("正在修正地图")).not.toBeInTheDocument();
+  expect(screen.getByText(failed.detail)).toBeVisible();
+});
+
 it("shows a failed model stage, actual reason and next action without a working cursor", async () => {
   const restart = vi.fn();
   render(

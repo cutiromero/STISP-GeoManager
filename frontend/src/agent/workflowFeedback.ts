@@ -48,6 +48,21 @@ export function workflowStageLabel(workflow: AgentWorkflow): string {
       stage &&
       typeof stage === "object" &&
       "name" in stage &&
+      stage.name === "edit"
+    ) {
+      const edit = stage as Record<string, unknown>;
+      if (!edit.taskId) return "形成修正建议";
+      if (edit.status === "completed") return "已修正地图";
+      return ["failed", "paused", "cancelled", "interrupted"].includes(
+        workflow.status,
+      )
+        ? "地图修正"
+        : "正在修正地图";
+    }
+    if (
+      stage &&
+      typeof stage === "object" &&
+      "name" in stage &&
       names[String(stage.name)]
     )
       return names[String(stage.name)]!;

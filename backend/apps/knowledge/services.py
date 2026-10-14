@@ -96,6 +96,19 @@ def search_entries(
         qs = qs.filter(category=category)
     terms = search_terms(query)
     if terms:
+        query_text = query.casefold()
+
+        def concepts(entry):
+            # Match terms actually named by the query, including Chinese words
+            # inside sentences. Coordinates alone are not scientific concepts.
+            return {
+                value.casefold()
+                for value in [entry.subject, entry.object, *entry.aliases]
+                if len(value) >= 2
+                and not value.isdecimal()
+                and value.casefold() in query_text
+            }
+
         match = Q()
         for term in terms:
             for field in (
@@ -107,17 +120,12 @@ def search_entries(
                 "conditions",
             ):
                 match |= Q(**{f"{field}__icontains": term})
-        # Individual Chinese terms also match longer natural-language requests.
-        candidates = list(qs.filter(match)[:1000])
-        if not candidates and len(query) > 3:
-            candidates = [
-                e
-                for e in qs[:1000]
-                if any(
-                    len(k) >= 2 and k.casefold() in query.casefold()
-                    for k in [e.subject, e.object, *e.aliases]
-                )
-            ]
+        candidates = {entry.id: entry for entry in qs.filter(match)[:1000]}
+        # The literal search may already match incidental numbers. Supplement
+        # it regardless, within the same authorized project/domain/category.
+        for entry in qs[:1000]:
+            if concepts(entry):
+                candidates[entry.id] = entry
 
         def score(entry):
             text = " ".join(
@@ -129,11 +137,15 @@ def search_entries(
                     *entry.aliases,
                 ]
             ).casefold()
-            return sum(
+            literal = sum(
                 3 if t in entry.title.casefold() else int(t in text) for t in terms
             )
+            return sum(min(len(value), 12) for value in concepts(entry)), literal
 
-        candidates.sort(key=lambda e: (-score(e), e.id))
+        candidates = sorted(
+            candidates.values(),
+            key=lambda entry: (*(-v for v in score(entry)), entry.id),
+        )[:1000]
         total = len(candidates)
         rows = candidates[offset : offset + limit]
     else:
