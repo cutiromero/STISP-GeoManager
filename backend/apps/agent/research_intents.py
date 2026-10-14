@@ -239,7 +239,7 @@ def _execution_requested(run, previous) -> bool:
         return True
     return bool(
         re.search(
-            r"分析|评估|检查|纠偏|纠正|修复|执行|演示|开始|运行|请做|帮我|完成",
+            r"分析|评估|检查|纠偏|纠正|修正|修复|执行|演示|开始|运行|请做|帮我|完成",
             run.prompt,
         )
     )

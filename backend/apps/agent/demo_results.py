@@ -48,15 +48,19 @@ def read_output(workflow, user, policy, output) -> dict:
         "rows": [],
     }
     if output.kind == "table":
-        if path.stat().st_size > 64 * 1024:
-            raise ComputeError("Demo统计表超过64 KiB，请先整理所需统计")
+        map_review = workflow.workflow_type == "geology_map_review"
+        if path.stat().st_size > (256 if map_review else 64) * 1024:
+            limit = 256 if map_review else 64
+            raise ComputeError(f"检查统计表超过{limit} KiB，请先整理所需统计")
         with path.open(encoding="utf-8-sig", newline="") as stream:
             reader = csv.DictReader(stream)
             if not reader.fieldnames or len(reader.fieldnames) > 64:
                 raise ComputeError("Demo统计表列数无效")
             rows = list(reader)
         if len(rows) > 100 or any(
-            len(str(value)) > 2000 for row in rows for value in row.values()
+            len(str(value)) > (32768 if map_review and key == "geometry_json" else 2000)
+            for row in rows
+            for key, value in row.items()
         ):
             raise ComputeError("Demo统计表超过100行或单元格读取上限")
         result.update(
@@ -116,12 +120,24 @@ def validate_edits(edits, results) -> list[dict]:
 
 def create_changes(workflow, user, policy, edits, results) -> DataResource:
     """One private, stable CSV per confirmed workflow edit stage."""
-    rows = validate_edits(edits, results)
+    map_review = workflow.workflow_type == "geology_map_review"
+    if map_review:
+        from .geology_review import validate_modifications
+
+        rows = validate_modifications(edits, results)
+    else:
+        rows = validate_edits(edits, results)
     require_actor(user, workflow.project_tag_id, "catalog.add_dataresource")
     source = f"demo-changes:{workflow.id}"
     buffer = io.StringIO(newline="")
     writer = csv.DictWriter(
-        buffer, fieldnames=[*EDIT_FIELDS, "reason", "input_checksum"]
+        buffer,
+        fieldnames=[
+            *EDIT_FIELDS,
+            "reason",
+            "input_checksum",
+            *(["issue_id", "kind"] if map_review else []),
+        ],
     )
     writer.writeheader()
     writer.writerows(rows)
@@ -146,7 +162,7 @@ def create_changes(workflow, user, policy, edits, results) -> DataResource:
             raise ComputeError("修改计划文件已有不同内容")
         path.write_bytes(raw)
         return DataResource.objects.create(
-            name="模型提出的受约束修改表",
+            name="建议修改" if map_review else "模型提出的受约束修改表",
             code=f"demo-changes-{workflow.id.hex[:24]}",
             data_type="table",
             file_format="CSV",
@@ -172,6 +188,13 @@ def resource_context(workflow, user, policy) -> list[dict]:
             "revision": resource.updated_at.isoformat(),
             "description": resource.description[:1200],
         }
+        if (
+            workflow.workflow_type == "geology_map_review"
+            and resource.data_type == "vector"
+        ):
+            from apps.compute.data import candidate
+
+            item["metadata"] = candidate(resource)
         if resource.data_type == "table":
             data, info = frame(resource)
             if len(data) > 100 or info.get("scope") == "prefix_sample":

@@ -98,6 +98,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261014-003 | BackendReady | /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | knowledge query; selected modification approval | Updated | Browser/integration fixtures | Passed | Focused passed | Persistent proposals and exact approved scope; real-model release validation separate |
 | API-20261014-001 | BackendReady | /api/catalog/resources/delete/; /api/agent/workflows/{workflowId}/confirm/ | guarded bulk deletion; approve/reject feedback | Updated | HTTP/browser fixtures | Passed | Focused passed | Isolated real storage tests; no live business deletion |
 | API-20261012-002 | BackendReady | /api/agent/workflows/{workflowId}/pause/; resume/; report/* | persistent MD reports and resumable pause | Updated | HTTP/browser fixtures | Passed | Focused passed | Real files and safe checkpoints; publication pending |
 | API-20261012-001 | ContractReady | /api/agent/research-demos/; /api/catalog/results/ | real-map age correction; authorized result links | Updated | Updated | In progress | Pending | Original synthetic cases preserved; injected errors clearly labelled |
@@ -1025,3 +1026,16 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation notes: 本人/单项目/输入/真实关联任务权限重查；报告文件SHA与幂等登记；暂停保留taskId和人工审核。
 - Verification: 持久文件预览/下载一致、CSV/地图动作、入库幂等/撤权、暂停安全点/恢复不重复提交、刷新恢复。
 - Result: 相关后端257项、最终暂停/准备25项、最终报告22项及前端相关浏览器验证通过；两个已有Demo的真实报告预览/下载/幂等入库通过。服务器发布见同SHA独立验收回执。
+
+## API-20261014-003 - 地质成果建议选择与批准后修正
+
+- Status: BackendReady
+- Owner: Root契约、案例、地图与报告；geology_review_workflow_v2后端；compute_tasks_layout_v2前端审核。
+- Endpoints: /api/agent/workflows/、/api/agent/workflows/{workflowId}/、/confirm/、/api/agent/research-demos/。
+- Change type: 新增geology_map_review场景，AgentWorkflow可选modificationReview；confirm新增selectedSuggestionIds；公开判断可选knowledgeQuery仅知识查询阶段使用。
+- OpenAPI change: AgentModificationReview、AgentModificationSuggestion固定真实问题、图斑、实际知识修订、WGS84范围与批准子集；旧场景字段与行为保持。
+- Mock examples: 新地质工作流与批准范围后端集成测试、GeologyReviewStory前端fixtures；历史空样例可省略新可选字段。
+- Frontend reason: 观众可看短判断故事、逐项选择建议、查知识/地图范围，并在刷新后恢复批准和任务状态。
+- Backend implementation notes: 模型形成检索意图后真实搜索；编辑前强制review_modifications。planHash及proposalHash绑定实际问题/输入/版本，后端只接收选择而非编辑坐标；拒绝零编辑、漂移重确认，结果返回模型复核。
+- Verification: 真检索与引用、批准子集/拒绝/漂移/权限/恢复、实际修改和统计一致、位置变化与正常区域保护。
+- Result: 本机后端新模块组合73项、审批前端及相关回归通过；契约生成、类型一致和文档检查通过。真实模型、隔离算法、地图和发布状态分别记录于本轮服务器验收回执。

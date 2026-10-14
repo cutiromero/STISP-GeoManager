@@ -1,0 +1,207 @@
+.geology-review-story {
+  margin: 16px 0;
+  padding: 18px;
+  border: 1px solid #dce7f0;
+  border-radius: 14px;
+  background: #f8fbfe;
+  color: #27435b;
+}
+.geology-story-heading,
+.geology-suggestions-heading,
+.geology-suggestion-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.geology-story-heading > strong {
+  font-size: 16px;
+}
+.geology-story-current {
+  margin: 16px 0 12px;
+  padding-left: 12px;
+  border-left: 2px solid #72a9d2;
+}
+.geology-story-current > p {
+  margin: 5px 0 0;
+  color: #61768a;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.geology-story-history {
+  margin-bottom: 16px;
+  color: #476f90;
+  font-size: 12px;
+}
+.geology-story-history > summary {
+  cursor: pointer;
+}
+.geology-story-events {
+  display: grid;
+  gap: 0;
+  margin: 18px 0;
+  padding: 0;
+  list-style: none;
+}
+.geology-story-events > li {
+  position: relative;
+  margin-left: 5px;
+  padding: 0 0 16px 20px;
+  border-left: 1px solid #c2d9ea;
+}
+.geology-story-events > li:last-child {
+  padding-bottom: 0;
+  border-left-color: transparent;
+}
+.geology-story-events > li::before {
+  position: absolute;
+  top: 5px;
+  left: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4a8fc5;
+  content: "";
+}
+.geology-story-events p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 5px 0 0;
+  color: #61768a;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.geology-suggestions-heading {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.geology-suggestions-heading h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.geology-suggestion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 172px;
+  gap: 18px;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid #dbe7f0;
+  border-radius: 10px;
+  background: #fff;
+}
+.geology-suggestion-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.geology-suggestion-title .ant-checkbox-wrapper {
+  align-items: flex-start;
+  color: #244b6a;
+  font-weight: 600;
+}
+.geology-suggestion-states {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+.geology-suggestion-states > div {
+  padding: 9px 11px;
+  border-radius: 6px;
+  background: #f3f7fb;
+}
+.geology-suggestion-states dt {
+  color: #70849a;
+  font-size: 12px;
+}
+.geology-suggestion-states dd {
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.geology-suggestion-reason {
+  margin: 0 0 10px;
+  color: #506b83;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.geology-suggestion-reason > strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #375c7c;
+}
+.geology-suggestion-scope {
+  color: #70859a;
+}
+.geology-suggestion-evidence {
+  margin-top: 12px;
+  color: #385e80;
+  font-size: 12px;
+}
+.geology-suggestion-evidence summary {
+  cursor: pointer;
+}
+.geology-suggestion-preview {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 7px;
+  align-self: start;
+  min-width: 0;
+  color: #70859a;
+  font-size: 12px;
+  text-align: center;
+}
+.geology-suggestion-preview svg {
+  width: 100%;
+  border: 1px solid #e0eaf2;
+  border-radius: 8px;
+  background: #f1f7fc;
+}
+.geology-suggestion-preview path {
+  fill: #7db9e5;
+  fill-opacity: 0.3;
+  stroke: #347fb4;
+  stroke-width: 1.5px;
+}
+.geology-review-controls {
+  margin-top: 16px;
+}
+.geology-review-controls > p {
+  margin: 10px 0;
+  color: #6b8094;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.geology-review-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.geology-review-map-link {
+  display: inline-block;
+  margin-top: 16px;
+}
+@media (max-width: 600px) {
+  .geology-review-story {
+    padding: 14px;
+  }
+  .geology-suggestion {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+  .geology-suggestion-preview {
+    max-width: 240px;
+    justify-self: center;
+  }
+  .geology-suggestion-states {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .geology-review-buttons .ant-btn {
+    width: 100%;
+    font-size: 13px;
+  }
+}

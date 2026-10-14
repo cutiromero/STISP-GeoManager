@@ -11,6 +11,7 @@ import LiveActivity from "./LiveActivity";
 import { workflowActivity } from "./agentActivity";
 import WorkflowReportFile from "./WorkflowReportFile";
 import WorkflowDeliverables from "./WorkflowDeliverables";
+import GeologyReviewStory from "./GeologyReviewStory";
 import {
   workflowNextAction,
   workflowExecutionNote,
@@ -29,6 +30,7 @@ function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
     "ecology_investigation",
     "geology_correction",
     "geology_age_correction",
+    "geology_map_review",
   ].includes(workflow.workflowType);
   const stages = Array.isArray(workflow.plan.stages)
     ? workflow.plan.stages
@@ -46,9 +48,11 @@ function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
           : [];
       })
     : workflow.resultResourceIds;
-  const original = ["geology_correction", "geology_age_correction"].includes(
-    workflow.workflowType,
-  )
+  const original = [
+    "geology_correction",
+    "geology_age_correction",
+    "geology_map_review",
+  ].includes(workflow.workflowType)
     ? record(workflow.plan.inputs).initial_map
     : undefined;
   const previousChange = demo
@@ -82,13 +86,22 @@ export default function WorkflowResults({
   onCancel?: () => void;
   onPause?: () => void;
   onResume?: () => void;
-  onReview?: (decision: "approve" | "reject", feedback: string) => void;
+  onReview?: (
+    decision: "approve" | "reject",
+    feedback: string,
+    selectedSuggestionIds?: string[],
+  ) => void;
   onRestart?: () => void;
   onEvidenceUpdate?: () => void;
   compact?: boolean;
 }) {
   const ui = useComputeText();
   const isActive = active.includes(workflow.status);
+  const isGeologyReview = workflow.workflowType === "geology_map_review";
+  const needsModificationsReview =
+    isGeologyReview &&
+    workflow.status === "waiting_approval" &&
+    workflow.plan.phase === "review_modifications";
   const [reviewFeedback, setReviewFeedback] = useState("");
   const needsReview =
     workflow.status === "waiting_approval" &&
@@ -103,8 +116,13 @@ export default function WorkflowResults({
   const lastReview = [...workflow.steps]
     .reverse()
     .find((step) => step.kind === "review_feedback");
-  const [processExpanded, setProcessExpanded] = useState(isActive);
-  useEffect(() => setProcessExpanded(isActive), [workflow.id, isActive]);
+  const [processExpanded, setProcessExpanded] = useState(
+    isActive && !isGeologyReview,
+  );
+  useEffect(
+    () => setProcessExpanded(isActive && !isGeologyReview),
+    [workflow.id, isActive, isGeologyReview],
+  );
   const finalDecision = [...workflow.steps]
     .reverse()
     .find((step) => step.decision?.nextAction === "finish")?.decision;
@@ -135,22 +153,31 @@ export default function WorkflowResults({
             priority: ui("调查顺序分析", "Investigation priorities"),
             initial_check: ui("初始填图检查", "Initial map check"),
             geometry: ui("几何修复", "Geometry repair"),
-            ...(workflow.workflowType === "geology_age_correction"
+            ...(isGeologyReview
               ? {
-                  check: ui("初始时代属性检查", "Initial geologic age check"),
-                  edit: ui("地层时代属性纠偏", "Geologic age correction"),
-                  recheck: ui("最终时代属性复查", "Final geologic age recheck"),
+                  check: "检查地质图",
+                  edit: "生成修正后地质图",
+                  recheck: "复核修正后地质图",
                 }
-              : workflow.workflowType === "geology_correction"
+              : workflow.workflowType === "geology_age_correction"
                 ? {
-                    check: ui("修复后检查", "Check after repair"),
-                    edit: ui(
-                      "调查证据属性编辑",
-                      "Evidence-based attribute editing",
+                    check: ui("初始时代属性检查", "Initial geologic age check"),
+                    edit: ui("地层时代属性纠偏", "Geologic age correction"),
+                    recheck: ui(
+                      "最终时代属性复查",
+                      "Final geologic age recheck",
                     ),
-                    recheck: ui("最终填图复查", "Final map recheck"),
                   }
-                : {}),
+                : workflow.workflowType === "geology_correction"
+                  ? {
+                      check: ui("修复后检查", "Check after repair"),
+                      edit: ui(
+                        "调查证据属性编辑",
+                        "Evidence-based attribute editing",
+                      ),
+                      recheck: ui("最终填图复查", "Final map recheck"),
+                    }
+                  : {}),
           };
           return typeof data.taskId === "string" && stageLabels[stageName]
             ? [[data.taskId, stageLabels[stageName]]]
@@ -273,8 +300,16 @@ export default function WorkflowResults({
             {lastReview.action.feedback}
           </p>
         )}
+      {isGeologyReview && (
+        <GeologyReviewStory
+          key={`${workflow.id}:${workflow.modificationReview?.proposalHash ?? "pending"}`}
+          workflow={workflow}
+          busy={busy}
+          onReview={onReview}
+        />
+      )}
       {workflow.planHash &&
-        (compact ? (
+        (compact || isGeologyReview ? (
           <Collapse
             size="small"
             className="agent-research-settings"
@@ -321,9 +356,15 @@ export default function WorkflowResults({
       {workflow.status === "succeeded" && finalDecision && (
         <article
           className="agent-workflow-conclusion"
-          aria-label={ui("研究结论", "Research conclusion")}
+          aria-label={
+            isGeologyReview ? "检查结论" : ui("研究结论", "Research conclusion")
+          }
         >
-          <h3>{ui("研究结论", "Research conclusion")}</h3>
+          <h3>
+            {isGeologyReview
+              ? "检查结论"
+              : ui("研究结论", "Research conclusion")}
+          </h3>
           <p>{finalDecision.judgement}</p>
           {finalDecision.resultSummary &&
             finalDecision.resultSummary !== finalDecision.judgement && (
@@ -399,6 +440,7 @@ export default function WorkflowResults({
           </Space>
         </section>
       ) : (
+        !needsModificationsReview &&
         workflow.status === "waiting_approval" &&
         onConfirm && (
           <Button type="primary" loading={busy} onClick={onConfirm}>
@@ -466,7 +508,11 @@ export default function WorkflowResults({
           </span>
           {mapResourceIds.length ? (
             <a
-              href={`/map?resources=${mapResourceIds.join(",")}&projectTagId=${workflow.projectId}`}
+              href={
+                isGeologyReview
+                  ? `/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
+                  : `/map?resources=${mapResourceIds.join(",")}&projectTagId=${workflow.projectId}`
+              }
             >
               {ui(
                 "在地理工作台对比成果图层",

@@ -41,7 +41,12 @@ from .workflow_controls import (
     save_workflow_state,
 )
 
-DEMO_TYPES = {"ecology_investigation", "geology_correction", "geology_age_correction"}
+DEMO_TYPES = {
+    "ecology_investigation",
+    "geology_correction",
+    "geology_age_correction",
+    "geology_map_review",
+}
 STAGE_TITLES = {
     "early_ndvi": "前期植被指数",
     "late_ndvi": "后期植被指数",
@@ -54,6 +59,11 @@ STAGE_TITLES = {
     "recheck": "最终填图复查",
 }
 ROLES = {
+    "geology_map_review": {
+        "initial_map": "vector",
+        "coverage": "vector",
+        "rules": "table",
+    },
     "ecology_investigation": {
         "early_image": "raster",
         "late_image": "raster",
@@ -73,6 +83,28 @@ ROLES = {
     },
 }
 GRAPHS = {
+    "geology_map_review": [
+        (
+            "check",
+            "geology-map-check",
+            {"features": "initial_map", "coverage": "coverage", "rules": "rules"},
+        ),
+        (
+            "edit",
+            "geology-map-correct",
+            {
+                "features": "initial_map",
+                "coverage": "coverage",
+                "rules": "rules",
+                "changes": "model_changes",
+            },
+        ),
+        (
+            "recheck",
+            "geology-map-check",
+            {"features": "edit/corrected", "coverage": "coverage", "rules": "rules"},
+        ),
+    ],
     "geology_age_correction": [
         (
             "check",
@@ -157,6 +189,13 @@ GRAPHS = {
 
 
 def stage_title(workflow, stage: dict) -> str:
+    if workflow.workflow_type == "geology_map_review":
+        return {
+            "expert_knowledge": "查阅专家知识",
+            "check": "检查地图",
+            "edit": "修正地图",
+            "recheck": "复核地图",
+        }.get(stage["name"], "检查报告")
     if workflow.workflow_type == "geology_age_correction":
         return {
             "check": "初始时代属性检查",
@@ -238,12 +277,16 @@ def prepare_demo(workflow, user, p) -> None:
     snapshots, names = {}, {}
     for role, kind in roles.items():
         resource = resolve_resource(user, p, inputs[role], workflow.resource_ids)
-        if workflow.workflow_type == "geology_age_correction" and is_reference_resource(
-            resource
-        ):
-            raise ComputeError(
-                "人工精修、验收参考及设错清单仅作独立对照，不可作为纠偏场景输入"
+        if workflow.workflow_type in {
+            "geology_age_correction",
+            "geology_map_review",
+        } and (
+            is_reference_resource(resource)
+            or (resource.source or "").startswith(
+                ("geology-review-reference:", "geology-review-acceptance:")
             )
+        ):
+            raise ComputeError("此资料仅用于独立验收，请选择待检查地质图与适用资料")
         if resource.status != "active" or resource.data_type != kind:
             raise ComputeError("场景角色的数据类型或状态不匹配：" + role)
         snapshots[role], names[role] = resource.updated_at.isoformat(), resource.name
@@ -266,8 +309,11 @@ def prepare_demo(workflow, user, p) -> None:
         graph = prepare_update(workflow, user, p)
     versions = _versions(workflow, graph)
     required_steps = len(graph)
-    if workflow.max_iterations < required_steps + 1:
-        raise ComputeError("请将场景模型决策上限至少设为" + str(required_steps + 1))
+    decisions_required = required_steps + (
+        2 if workflow.workflow_type == "geology_map_review" else 1
+    )
+    if workflow.max_iterations < decisions_required:
+        raise ComputeError("请将场景模型决策上限至少设为" + str(decisions_required))
     if workflow.max_operator_steps < required_steps:
         raise ComputeError("请将场景算子步骤上限至少设为" + str(required_steps))
     stages = []
@@ -291,6 +337,20 @@ def prepare_demo(workflow, user, p) -> None:
             }
         )
     domains = _domains(workflow)
+    if workflow.workflow_type == "geology_map_review":
+        if not domains:
+            raise ComputeError("此演示需要专家知识，请启用地质知识分区")
+        stages.insert(
+            0,
+            {
+                "name": "expert_knowledge",
+                "identifier": "search_expert_knowledge",
+                "bindings": {},
+                "parameters": {},
+                "status": "pending",
+                "outputs": [],
+            },
+        )
     query = (
         (workflow.goal[:260] + " 地层 时代 辞书 一致性")
         if workflow.workflow_type == "geology_age_correction"
@@ -300,7 +360,7 @@ def prepare_demo(workflow, user, p) -> None:
     )
     knowledge = (
         search_entries(user, query, limit=8, domains=domains)["items"]
-        if domains
+        if domains and workflow.workflow_type != "geology_map_review"
         else []
     )
     workflow.plan = {
@@ -433,13 +493,21 @@ def authorize_demo(workflow, user, p, *, include_previous=True) -> None:
         authorize_update(workflow, user, p)
 
 
-def confirm_demo(workflow, user, p, plan_hash) -> None:
+def confirm_demo(workflow, user, p, plan_hash, selected_suggestion_ids=None) -> None:
     if workflow.status != "waiting_approval" or workflow.cancel_requested:
         raise ComputeError("此场景当前不能确认执行", 409)
     if plan_hash != workflow.plan_hash or _state_hash(workflow.plan) != plan_hash:
         raise ComputeError("场景计划已变化，请刷新后确认", 409)
     authorize_demo(workflow, user, p)
-    if workflow.plan["phase"] == "review_results":
+    if workflow.plan["phase"] == "review_modifications":
+        from .geology_review import approve_modifications
+
+        if workflow.workflow_type != "geology_map_review":
+            raise ComputeError("当前场景不支持此修改审核", 409)
+        approve_modifications(workflow, user, p, selected_suggestion_ids, plan_hash)
+        workflow.plan["phase"] = "decide"
+        workflow.status = "queued"
+    elif workflow.plan["phase"] == "review_results":
         stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
         reviewing_output = bool(stage.get("taskId"))
         stage["manualApproved" if reviewing_output else "decisionApproved"] = True
@@ -462,7 +530,12 @@ def confirm_demo(workflow, user, p, plan_hash) -> None:
         workflow.plan["phase"] = "decide"
         workflow.status = "queued"
     workflow.execute_operators = True
-    workflow.detail = "已确认场景计划，等待继续处理"
+    workflow.detail = (
+        "已批准选中的建议，等待修正地图"
+        if workflow.workflow_type == "geology_map_review"
+        and workflow.plan.get("modificationReview", {}).get("approvedSuggestionIds")
+        else "已确认场景计划，等待继续处理"
+    )
     _save(workflow)
 
 
@@ -508,19 +581,33 @@ def _submit_stage(workflow, user, p, stage) -> None:
 
 
 def _submit_stage_locked(workflow, user, p, stage) -> None:
-    if stage["name"] == "edit" and not workflow.plan.get("model_changes"):
+    edits = stage.get("edits")
+    if workflow.workflow_type == "geology_map_review" and stage["name"] == "edit":
+        from .geology_review import approved_edits
+
+        edits = approved_edits(workflow, user, p, stage)
+    if stage["name"] == "edit" and (
+        not workflow.plan.get("model_changes")
+        or workflow.workflow_type == "geology_map_review"
+    ):
         check = next(
             item for item in workflow.plan["stages"] if item["name"] == "check"
         )
-        resource = create_changes(
-            workflow, user, p, stage.get("edits"), check["results"]
-        )
+        resource = create_changes(workflow, user, p, edits, check["results"])
+        if workflow.workflow_type == "geology_map_review" and workflow.plan.get(
+            "model_changes"
+        ) not in {None, resource.id}:
+            raise ComputeError("已批准的修改表绑定已变化，已停止编辑", 409)
         workflow.plan["model_changes"] = resource.id
     inputs = _inputs(workflow, stage)
     for identity in inputs.values():
         resolve_resource(user, p, identity)
     body = {
-        "name": f"{workflow.goal[:90]} · {stage_title(workflow, stage)}",
+        "name": (
+            f"地质成果智能检查与修正 · {stage_title(workflow, stage)}"
+            if workflow.workflow_type == "geology_map_review"
+            else f"{workflow.goal[:90]} · {stage_title(workflow, stage)}"
+        ),
         "versionId": workflow.plan["algorithms"][stage["identifier"]]["versionId"],
         "inputs": inputs,
         "parameters": stage["parameters"],
@@ -713,6 +800,7 @@ def advance_demo(workflow_id) -> None:
                     "finalStage", {"name": "final_analysis", "identifier": "finish"}
                 )
             )
+            workflow.current_step = stage["name"]
             if stage.get("taskId"):
                 task = authorized_task(user, stage["taskId"], p)
                 if task.status in ACTIVE:
@@ -766,6 +854,8 @@ def advance_demo(workflow_id) -> None:
 
                     results = previous_results(workflow, user, p)
                 for previous in stages[:index]:
+                    if not previous.get("taskId"):
+                        continue
                     task = authorized_task(user, previous["taskId"], p)
                     results.extend(read_results(workflow, user, p, task))
 
@@ -838,6 +928,91 @@ def advance_demo(workflow_id) -> None:
                 if index >= len(stages):
                     workflow.plan["stages"].append(stage)
                 _pause(workflow, stage, stage["decision"]["judgement"])
+                return
+            if stage["identifier"] == "search_expert_knowledge":
+                query = stage["decision"].get("knowledgeQuery")
+                if not isinstance(query, str) or not query.strip():
+                    raise ComputeError("尚未形成实际知识检索词，请重新发起检查")
+                knowledge = search_entries(
+                    user, query, limit=8, domains=_domains(workflow)
+                )["items"]
+                with transaction.atomic():
+                    current = locked_workflow(workflow.id)
+                    check_pause(workflow)
+                    if current.cancel_requested or current.status not in {
+                        "queued",
+                        "running",
+                    }:
+                        raise ModelError("检查已停止，已保留知识查询记录")
+                    fresh, policy = _authorize(current)
+                    authorize_demo(current, fresh, policy)
+                    stage["status"] = "completed"
+                    workflow.evidence = knowledge
+                    workflow.plan["knowledgeSearch"] = {
+                        "query": query,
+                        "domains": _domains(workflow),
+                        "knowledge": [
+                            {
+                                "id": item["id"],
+                                "revision": item["revision"],
+                                "title": item["title"],
+                            }
+                            for item in knowledge
+                        ],
+                    }
+                    workflow.plan["stageIndex"] += 1
+                    workflow.status, workflow.detail = (
+                        "queued",
+                        "已查阅相关专家知识，继续检查地图",
+                    )
+                    step(
+                        workflow,
+                        "search_expert_knowledge",
+                        message=workflow.detail,
+                        action={"query": query, "model": workflow.model},
+                        output_refs={"knowledge": knowledge},
+                    )
+                    _save(workflow)
+                    checkpoint(
+                        workflow,
+                        "expert_knowledge_retrieved",
+                        workflow.plan["knowledgeSearch"],
+                    )
+                return
+            if (
+                workflow.workflow_type == "geology_map_review"
+                and stage["name"] == "edit"
+                and not stage.get("modificationsApproval")
+            ):
+                from .geology_review import freeze_proposal
+
+                with transaction.atomic():
+                    current = locked_workflow(workflow.id)
+                    check_pause(workflow)
+                    if current.cancel_requested or current.status not in {"queued", "running"}:
+                        raise ModelError("检查已停止，未生成新的修改建议")
+                    fresh, policy = _authorize(current)
+                    authorize_demo(current, fresh, policy)
+                    freeze_proposal(workflow, stage)
+                    step(
+                        workflow,
+                        "modification_suggestions",
+                        message=workflow.detail,
+                        output_refs={
+                            "modificationReview": workflow.plan["modificationReview"]
+                        },
+                    )
+                    _save(workflow)
+                    checkpoint(
+                        workflow,
+                        "review_modifications",
+                        {
+                            "planHash": workflow.plan_hash,
+                            "proposalHash": workflow.plan["modificationReview"][
+                                "proposalHash"
+                            ],
+                        },
+                    )
                 return
             if stage["identifier"] == "finish":
                 stage["status"] = "completed"

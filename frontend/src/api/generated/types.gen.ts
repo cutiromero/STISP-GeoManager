@@ -987,9 +987,9 @@ export type AgentRunInput = {
 };
 
 /**
- * 当前授权项目内已登记科研场景；地质时代纠偏使用真实图件副本和明确标注的演示录入错误，由模型解析目标与参数
+ * 当前授权项目内已登记科研场景；geology_map_review 为专家知识驱动的地质成果检查、选中建议批准、受约束修正与复核演示
  */
-export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction' | 'geology_age_correction';
+export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction' | 'geology_age_correction' | 'geology_map_review';
 
 /**
  * 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
@@ -1152,9 +1152,9 @@ export type AgentResearchDemoList = {
          */
         prompt: string;
         /**
-         * synthetic为模拟样例；real_map_with_demonstration_errors为真实图件副本上设置明确标注的少量时代录入错误，用于验证辞书一致性纠偏
+         * synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例
          */
-        sampleNature: 'synthetic' | 'real_map_with_demonstration_errors';
+        sampleNature: 'synthetic' | 'real_map_with_demonstration_errors' | 'demonstration_case';
         /**
          * 资料、已发布算法与模型等必要服务是否就绪
          */
@@ -1758,6 +1758,10 @@ export type AgentWorkflowDecision = {
      */
     nextAction: string;
     /**
+     * 仅地质成果检查的search_expert_knowledge阶段提供，由模型根据实际资料形成的专家知识检索词；其他阶段省略
+     */
+    knowledgeQuery?: string;
+    /**
      * 为什么选择该算法、输入角色及参数
      */
     algorithmReason: string;
@@ -2057,6 +2061,7 @@ export type AgentWorkflow = {
      * 确认计划时校验的内容哈希
      */
     planHash: string;
+    modificationReview?: AgentModificationReview;
     /**
      * 执行完成后自动登记结果
      */
@@ -2072,7 +2077,7 @@ export type AgentWorkflow = {
  */
 export type AgentWorkflowInput = {
     /**
-     * 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 为模拟填图检查纠偏，geology_age_correction 为真实底图副本的地层时代录入纠偏；默认 hyperspectral_interpretation
+     * 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 和 geology_age_correction 保留历史地质流程，geology_map_review 为专家知识驱动的检查、批准后修正和复核；默认 hyperspectral_interpretation
      */
     workflowType?: string;
     /**
@@ -2106,7 +2111,7 @@ export type AgentWorkflowInput = {
      */
     idempotencyKey: string;
     /**
-     * 输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质使用 initial_map、surveys、rules。真实计算输出入库后按持久来源接入后续步骤。
+     * 输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质逻辑推理使用 initial_map、surveys、rules；地质成果检查使用 initial_map、coverage、rules。真实计算输出入库后按持久来源接入后续步骤。
      */
     inputs?: {
         [key: string]: number;
@@ -5060,6 +5065,100 @@ export type AgentWorkflowConfirmation = {
      * 人工审核意见，作为判断依据保存。
      */
     feedback?: string;
+    /**
+     * 地质成果review_modifications阶段approve必填，至少一个当前planHash下的建议标识；只执行所选范围，reject省略，其他阶段不得扩大操作范围。
+     */
+    selectedSuggestionIds?: Array<string>;
+};
+
+/**
+ * 地质成果修改建议及持久批准范围；仅相应工作流提供，客户端不提交修改坐标或目标值。
+ */
+export type AgentModificationReview = {
+    /**
+     * 实际问题清单与规范化模型建议的内容哈希；方案改变必须重新批准。
+     */
+    proposalHash: string;
+    /**
+     * 由模型选择、由实际检查清单固定对象与空间范围的建议。
+     */
+    suggestions: Array<AgentModificationSuggestion>;
+    /**
+     * 后端已保存的获批建议标识；尚未批准时为空。
+     */
+    approvedSuggestionIds: Array<string>;
+};
+
+/**
+ * 一项有实际图斑、规则、知识与空间预览支持的修改建议。
+ */
+export type AgentModificationSuggestion = {
+    /**
+     * 当前问题与建议内容绑定的标识，不由客户端编造
+     */
+    id: string;
+    /**
+     * 填补有据内部漏填或更新地层时代属性
+     */
+    kind: 'fill_gap' | 'set_age';
+    /**
+     * 当前数据中的稳定图斑标识
+     */
+    featureId: string;
+    /**
+     * 简短问题标题
+     */
+    title: string;
+    /**
+     * 当前地图或属性的可读状态
+     */
+    currentState: string;
+    /**
+     * 建议修正后的可读状态
+     */
+    suggestedState: string;
+    /**
+     * 模型根据当次实际知识和结果给出的简短理由
+     */
+    reason: string;
+    /**
+     * 实际修改范围平方米面积；属性修改展示对应对象范围
+     */
+    areaM2: number;
+    /**
+     * 本次结构化专家规则标识
+     */
+    ruleId: string;
+    /**
+     * 当前检索实际返回的知识与修订，权限继续按原项目检查。
+     */
+    knowledgeRefs: Array<{
+        /**
+         * 实际知识编号
+         */
+        id: number;
+        /**
+         * 实际知识修订
+         */
+        revision: number;
+        /**
+         * 用户可读知识标题
+         */
+        title: string;
+    }>;
+    /**
+     * 从实际问题计算得到的WGS84修改范围，不是客户端编辑参数。
+     */
+    preview: GeoJsonGeometry;
+    /**
+     * WGS84西、南、东、北界，用于建议预览与定位。
+     */
+    bounds: [
+        number,
+        number,
+        number,
+        number
+    ];
 };
 
 /**

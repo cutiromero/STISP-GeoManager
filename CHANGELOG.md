@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.41] - 2026-10-14
+
+### Added
+- 地质成果智能检查与修正演示：模型实际查询专家知识，结合地图检查提出建议，用户选择批准后执行受约束修正，再读取实际结果复核。
+- 待检查与修正后地质图使用同步双图和统一类别配色，显示真实修改范围、前后状态、原因；生成可预览、下载和入库的简短检查报告。
+- 小范围案例资料与专家规则导入工具；内部验收资料独立保存，运行输入不包含参考成果或问题清单。
+
+### Changed
+- 计算中心“我的任务”改为紧凑任务列表，长标题两行展示，完整说明可展开，算法、状态、进度、时间与操作分区，支持窄屏。
+- 成果展示的地质入口转向新检查案例，保留生态入口和既有地质工作流历史。
+
 ## [0.1.40] - 2026-10-14
 
 ### Added

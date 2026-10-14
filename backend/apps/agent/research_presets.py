@@ -32,13 +32,17 @@ REAL_SOURCE_NOTE = (
     "地区细分未经野外核实，本轮恢复演示字段一致性。"
     "本轮独立验证八宝山组3项；闹仓坚沟组辞书地区为青海玛多县一带，当前当地适用尚未核实。"
 )
+REVIEW_SOURCE_NOTE = (
+    "演示案例：小范围地质图，结合专家知识检查完整覆盖与地层属性，修改前由用户批准。"
+)
 ROLE_LABELS = {
     "early_image": "前期影像",
     "late_image": "后期影像",
     "valid_mask": "两期共同有效掩膜",
     "zones": "调查分区",
     "context": "背景与观测记录",
-    "initial_map": "待检查初始填图",
+    "initial_map": "待检查地质图",
+    "coverage": "制图覆盖范围与例外",
     "surveys": "调查证据",
     "rules": "允许修改规则",
 }
@@ -57,12 +61,25 @@ AGE_MARKERS = {
     "surveys": ("code", "real-geology-age-context"),
     "rules": ("code", "real-geology-age-rules"),
 }
+REVIEW_MARKERS = {
+    "initial_map": ("code", "geology-review-initial"),
+    "coverage": ("code", "geology-review-coverage"),
+    "rules": ("code", "geology-review-rules"),
+}
 TITLES = {
+    "geology_map_review": "地质成果智能检查与修正",
     "geology_age_correction": "真实地质图件 · 地层时代一致性纠偏",
     "ecology_investigation": "干旱区生态风险评估分析决策",
     "geology_correction": "地质逻辑推理与填图纠偏",
 }
 PROMPTS = {
+    "geology_map_review": (
+        "请检查这个项目的待检查地质图，使用演示案例的制图覆盖资料和样例参数。"
+        "先检索专家知识，再核对地图的完整覆盖和地层时代属性，说明发现的问题、依据及建议修改。"
+        "把建议位置和修改范围展示给我，等我选中并批准后再调用算法修正。"
+        "修正完成后读取真实结果重新检查，在地理工作台展示前后变化，生成简短检查报告和统计。"
+        "依据不足的地方保留并告诉我需要什么资料。"
+    ),
     "geology_age_correction": (
         "请检查师弟提供的真实地质图件局部副本，检索八宝山组等地层辞书知识，"
         "结合地区条件、真实构造与蚀变空间背景，检查明确标注的时代属性录入错误。"
@@ -113,7 +130,10 @@ def _algorithms(run) -> list[dict]:
 
 def _candidate(resource, role: str, scenario: str) -> dict:
     age = scenario == "geology_age_correction"
-    marker_field, marker = (AGE_MARKERS if age else MARKERS)[role]
+    review = scenario == "geology_map_review"
+    marker_field, marker = (
+        REVIEW_MARKERS if review else AGE_MARKERS if age else MARKERS
+    )[role]
     simulated = getattr(resource, marker_field) == marker or (
         role == "context" and resource.code == "demo-ecology-context-updated"
     )
@@ -123,7 +143,9 @@ def _candidate(resource, role: str, scenario: str) -> dict:
         "dataType": resource.data_type,
         "revision": resource.updated_at.isoformat(),
         "description": resource.description[:800],
-        "sourceNote": (REAL_SOURCE_NOTE if age else SOURCE_NOTE)
+        "sourceNote": (
+            REVIEW_SOURCE_NOTE if review else REAL_SOURCE_NOTE if age else SOURCE_NOTE
+        )
         if simulated
         else resource.source[:160],
         "isUpdate": resource.code == "demo-ecology-context-updated",
@@ -166,15 +188,20 @@ def discover(user, p: dict, run=None) -> dict:
     scenarios = []
     for scenario, roles in ROLES.items():
         age = scenario == "geology_age_correction"
-        markers = AGE_MARKERS if age else MARKERS
+        review = scenario == "geology_map_review"
+        markers = REVIEW_MARKERS if review else AGE_MARKERS if age else MARKERS
         inputs, preferred = {}, {}
         for role, kind in roles.items():
             field, marker = markers[role]
             candidates = query.filter(data_type=kind)
-            if age:
+            if age or review:
                 candidates = candidates.exclude(
                     source__startswith=REFERENCE_SOURCE_PREFIX
                 )
+            if review:
+                candidates = candidates.exclude(
+                    source__startswith="geology-review-reference:"
+                ).exclude(source__startswith="geology-review-acceptance:")
             if not manual:
                 from django.db.models import Q
 
@@ -211,7 +238,11 @@ def discover(user, p: dict, run=None) -> dict:
                 "algorithms": algorithms,
                 "available": all(inputs.values())
                 and len(algorithms) == len(identifiers),
-                "sourceNote": REAL_SOURCE_NOTE if age else SOURCE_NOTE,
+                "sourceNote": REVIEW_SOURCE_NOTE
+                if review
+                else REAL_SOURCE_NOTE
+                if age
+                else SOURCE_NOTE,
             }
         )
     return {"scenarios": scenarios}
@@ -250,6 +281,12 @@ def list_demos(user, p: dict) -> dict:
             ProjectScope((project.id,), project.id, user.id, superadmin)
         ):
             for scene in discover(user, p)["scenarios"]:
+                # Historical workflows remain readable and manually selectable.
+                if scene["scenario"] in {
+                    "geology_correction",
+                    "geology_age_correction",
+                }:
+                    continue
                 # Only advertise projects with some authorized scenario inputs.
                 if not any(scene["inputs"].values()):
                     continue
@@ -261,8 +298,8 @@ def list_demos(user, p: dict) -> dict:
                         "title": scene["title"],
                         "prompt": PROMPTS[scene["scenario"]],
                         "sampleNature": (
-                            "real_map_with_demonstration_errors"
-                            if scene["scenario"] == "geology_age_correction"
+                            "demonstration_case"
+                            if scene["scenario"] == "geology_map_review"
                             else "synthetic"
                         ),
                         "available": bool(
@@ -270,7 +307,9 @@ def list_demos(user, p: dict) -> dict:
                             and scene["available"]
                             and len(scene["inputs"]) <= p["maxResources"]
                             and len(GRAPHS[scene["scenario"]]) <= p["maxOperatorSteps"]
-                            and len(GRAPHS[scene["scenario"]]) + 1 <= p["maxIterations"]
+                            and len(GRAPHS[scene["scenario"]])
+                            + (2 if scene["scenario"] == "geology_map_review" else 1)
+                            <= p["maxIterations"]
                         ),
                     }
                 )

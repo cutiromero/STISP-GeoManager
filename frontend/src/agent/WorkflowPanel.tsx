@@ -140,7 +140,8 @@ export default function WorkflowPanel({
   const isDemo =
     workflowType === "ecology_investigation" ||
     workflowType === "geology_correction" ||
-    workflowType === "geology_age_correction";
+    workflowType === "geology_age_correction" ||
+    workflowType === "geology_map_review";
   const locked = Boolean(
     workflow && [...active, "paused"].includes(workflow.status),
   );
@@ -372,6 +373,7 @@ export default function WorkflowPanel({
   const reviewWorkflow = async (
     decision: "approve" | "reject",
     feedback: string,
+    selectedSuggestionIds?: string[],
   ) => {
     if (!workflow || mutationInFlight.current) return;
     mutationInFlight.current = true;
@@ -382,6 +384,7 @@ export default function WorkflowPanel({
         await agentApi.confirmWorkflow(workflow.id, workflow.planHash, {
           decision,
           feedback,
+          ...(selectedSuggestionIds ? { selectedSuggestionIds } : {}),
         }),
       );
     } catch (reason) {
@@ -417,6 +420,10 @@ export default function WorkflowPanel({
               {
                 value: "ecology_investigation",
                 label: "干旱区生态 · 变化与调查优先区",
+              },
+              {
+                value: "geology_map_review",
+                label: "地质成果智能检查与修正",
               },
               {
                 value: "geology_correction",
@@ -691,8 +698,8 @@ export default function WorkflowPanel({
           onCancel={() => void action(false)}
           onPause={() => void controlWorkflow("pause")}
           onResume={() => void controlWorkflow("resume")}
-          onReview={(decision, feedback) =>
-            void reviewWorkflow(decision, feedback)
+          onReview={(decision, feedback, selectedSuggestionIds) =>
+            void reviewWorkflow(decision, feedback, selectedSuggestionIds)
           }
           onRestart={() => {
             restore(workflow);

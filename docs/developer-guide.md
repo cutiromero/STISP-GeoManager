@@ -2654,3 +2654,11 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 渲染和导出任务提交前，将精简的资源/图层/栅格数据集标识保存到 `RasterProcessingJob.result.inputRefs`，不保存导出的完整几何。任务排队或运行时，相关资源不可删除；ready/failed 后解除这项临时保护，其他永久引用继续生效。初始引用持久化失败时停止任务提交并反馈数据库错误。文件先隔离，SQLite/GPKG 存储表与业务元数据参加同一个数据库事务，提交成功后清理隔离文件；回滚恢复原文件。逐项反馈区分共用存储保留、隔离文件清理失败和原文件恢复失败。
 
 科研工作流 confirm 请求使用 `AgentWorkflowConfirmation`：必填 `planHash`；可选 `decision=approve|reject` 默认approve，`feedback` 最多4000字。approve延续原确认；reject仅在waiting_approval停止后续，保留计算及候选输出。审核意见保存到步骤和检查点，用于判断依据；不作为算法参数或编辑指令。原本人、项目、资源授权与计划哈希检查保持，暂停/状态冲突/旧计划409，参数无效400。
+
+### 地质成果检查与批准范围（2026-10-14）
+
+`geology_map_review`绑定`initial_map`（待检查地质图）、`coverage`（明确制图范围与排除条件）、`rules`（结构化专家规则）。初始确认仅授权检索和检查；模型以实际资料形成`decision.knowledgeQuery`，工作流调用项目范围内知识检索并保存实际条目与修订。该字段仅知识查询阶段提供。
+
+编辑前必须进入`review_modifications`，返回可选`AgentWorkflow.modificationReview`。建议包含实际图斑、当前与建议状态、理由、知识、规则、平方米面积和WGS84范围预览。批准请求在原`planHash`、`decision`、`feedback`之外提供`selectedSuggestionIds`，只允许当前方案中至少一项；后端保存确切批准范围，生成该子集的修改表。拒绝时停止后续编辑。修改建议、原输入、知识或算法版本变化需重新确认；客户端不能传入修改坐标或目标属性替换批准记录。
+
+计算在既有隔离运行器执行，真实输出和新输入继续绑定任务、校验和与资源修订；模型读取修正和复核统计形成最终说明。报告和地图沿用本人、单项目、资源与输出访问授权。建议JSON只支持预览，不替代真实差异图层。

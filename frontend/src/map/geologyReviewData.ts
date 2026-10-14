@@ -1,0 +1,183 @@
+import { requestJson } from "../api/client";
+import type {
+  AgentWorkflow,
+  GeoJsonFeatureCollection,
+  QueryResponse,
+} from "../api/generated/types.gen";
+
+export const record = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+
+export function reviewResourceIds(workflow: AgentWorkflow) {
+  const stages = Array.isArray(workflow.plan.stages)
+    ? workflow.plan.stages
+    : [];
+  const edit = stages
+    .map(record)
+    .find((stage) => stage.identifier === "geology-map-correct");
+  const outputs = Array.isArray(edit?.outputs) ? edit.outputs.map(record) : [];
+  const validId = (value: unknown) =>
+    typeof value === "number" && Number.isInteger(value) && value > 0
+      ? value
+      : null;
+  return {
+    before: validId(record(workflow.plan.inputs).initial_map),
+    after: validId(
+      outputs.find((output) => output.key === "corrected")?.resourceId,
+    ),
+    differences: validId(
+      outputs.find((output) => output.key === "changes_map")?.resourceId,
+    ),
+  };
+}
+
+export async function queryReviewMap(id: number) {
+  const result = await requestJson<QueryResponse>(
+    `/api/catalog/resources/${id}/query/`,
+    {
+      method: "POST",
+      body: { attributeFilters: [], spatialFilter: null, limit: 10000 },
+    },
+  );
+  if (result.limitExceeded)
+    throw new Error("图件超过双图预览范围，请缩小检查范围后查看");
+  if (
+    result.resourceId !== id ||
+    result.returnedCount !== result.geojson.features.length ||
+    result.totalCount > result.returnedCount
+  )
+    throw new Error("图件返回不完整，请核对资源后重新查看");
+  if (!result.geojson.features.length)
+    throw new Error("图件尚无可显示的面数据");
+  if (
+    result.geojson.features.some(
+      (feature) => !["Polygon", "MultiPolygon"].includes(feature.geometry.type),
+    )
+  )
+    throw new Error("双图预览需要完整的面图件");
+  return result.geojson;
+}
+
+export function previewSuggestions(
+  workflow: AgentWorkflow,
+): GeoJsonFeatureCollection {
+  const approved = workflow.modificationReview?.approvedSuggestionIds ?? [];
+  return {
+    type: "FeatureCollection",
+    features: (workflow.modificationReview?.suggestions ?? [])
+      .filter((item) => !approved.length || approved.includes(item.id))
+      .map((item) => ({
+        type: "Feature",
+        id: item.id,
+        geometry: item.preview,
+        properties: {
+          suggestion_id: item.id,
+          feature_id: item.featureId,
+          kind: item.kind,
+          current_label: item.currentState,
+          suggested_label: item.suggestedState,
+          reason: item.reason,
+          area_m2: item.areaM2,
+          status: workflow.modificationReview?.approvedSuggestionIds.includes(
+            item.id,
+          )
+            ? "已批准"
+            : "建议修改",
+        },
+      })),
+  };
+}
+
+export function reviewSuggestionIndex(
+  workflow: AgentWorkflow,
+  differences: GeoJsonFeatureCollection,
+  suggestionId: string | null,
+) {
+  if (!suggestionId) return -1;
+  const suggestion = workflow.modificationReview?.suggestions.find(
+    (item) => item.id === suggestionId,
+  );
+  return differences.features.findIndex(
+    ({ properties }) =>
+      properties.suggestion_id === suggestionId ||
+      (suggestion &&
+        String(properties.feature_id) === suggestion.featureId &&
+        properties.kind === suggestion.kind),
+  );
+}
+
+export function reviewBounds(collection: GeoJsonFeatureCollection) {
+  let west = Infinity,
+    south = Infinity,
+    east = -Infinity,
+    north = -Infinity;
+  const scan = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    if (
+      typeof value[0] === "number" &&
+      typeof value[1] === "number" &&
+      Number.isFinite(value[0]) &&
+      Number.isFinite(value[1])
+    ) {
+      west = Math.min(west, value[0]);
+      east = Math.max(east, value[0]);
+      south = Math.min(south, value[1]);
+      north = Math.max(north, value[1]);
+    } else value.forEach(scan);
+  };
+  collection.features.forEach((feature) =>
+    scan(record(feature.geometry).coordinates),
+  );
+  return Number.isFinite(west) &&
+    west >= -180 &&
+    east <= 180 &&
+    south >= -90 &&
+    north <= 90
+    ? ([west, south, east, north] as [number, number, number, number])
+    : null;
+}
+
+const palette = [
+  "#98bfe6",
+  "#d0b5d4",
+  "#eac58b",
+  "#c7d5ac",
+  "#b7d8e1",
+  "#cbbfb1",
+  "#aeb7dc",
+  "#e2b3b7",
+  "#c1d6e4",
+  "#e5d4a3",
+  "#b6ccc3",
+  "#bbbbe0",
+  "#eac4a6",
+  "#cfb8cc",
+  "#b4d3d1",
+  "#d6cdaf",
+];
+export function geologicalColor(value: unknown) {
+  const key = Number(value);
+  return Number.isInteger(key) && key >= 0
+    ? (palette[key % palette.length] ?? "#d4dce5")
+    : "#d4dce5";
+}
+
+export function reviewLegend(...data: GeoJsonFeatureCollection[]) {
+  const values = new Map<
+    string,
+    { key: string; name: string; color: string }
+  >();
+  data
+    .flatMap((collection) => collection.features)
+    .forEach(({ properties: p }) => {
+      const key = String(p.class);
+      values.set(key, {
+        key,
+        name: `${String(p.name ?? "地质单元")} · ${String(p.code ?? key)}`,
+        color: geologicalColor(p.class),
+      });
+    });
+  return [...values.values()].sort((a, b) => Number(a.key) - Number(b.key));
+}

@@ -1,13 +1,24 @@
 import { App as AntApp } from "antd";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import type {
   ComputeAlgorithm,
   ComputeRuntimeStatus,
+  ComputeTask,
   ComputeVersion,
 } from "../api/compute";
 import { setLocale } from "../i18n";
+import platformStyles from "../styles.css?inline";
+import computeStyles from "./compute.css?inline";
+import taskStyles from "./compute-tasks.css?inline";
 
 const { api, scope } = vi.hoisted(() => ({
   api: {
@@ -129,6 +140,7 @@ const candidate = {
 function show() {
   return render(
     <AntApp>
+      <style>{platformStyles + computeStyles + taskStyles}</style>
       <MemoryRouter>
         <ComputePage />
       </MemoryRouter>
@@ -150,6 +162,133 @@ beforeEach(async () => {
     detail: "检查通过",
   });
   api.submit.mockResolvedValue({ id: "task-new" });
+});
+
+const longTaskName =
+  "检查待提交的区域地质解译地图，查阅专家知识，说明地层时代和内部漏填问题的依据，形成建议，经用户批准后调用算法修正地图，再核对实际变化并生成检查报告和面积统计。";
+const task: ComputeTask = {
+  id: "task-map-check",
+  name: longTaskName,
+  projectTagId: 1,
+  ownerName: "科研用户",
+  algorithmName: "地质图属性与完整性检查",
+  version,
+  status: "running",
+  stage: "正在检查地图属性与空间关系",
+  progress: 42,
+  error: "",
+  parameters: { factor: 2 },
+  inputs: [],
+  outputs: [],
+  createdAt: "2026-10-14T03:25:00Z",
+  startedAt: "2026-10-14T03:25:08Z",
+  finishedAt: null,
+  trial: false,
+  unread: true,
+  retryOf: null,
+  attemptCount: 1,
+};
+
+describe("计算任务排布", () => {
+  it.each([1600, 390])(
+    "在 %s 像素下保持长任务、状态与操作在页面范围内",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        api.tasks.mockResolvedValue({
+          items: [
+            task,
+            {
+              ...task,
+              id: "task-ndvi",
+              name: "研究区植被指数计算",
+              algorithmName: "NDVI植被指数",
+              status: "succeeded",
+              stage: "计算完成",
+              progress: 100,
+              unread: false,
+            },
+            {
+              ...task,
+              id: "task-failed",
+              name: "局部地图检查",
+              status: "failed",
+              stage: "检查失败",
+              error: "缺少时代属性，请补充字段后重新提交",
+              progress: 0,
+              unread: false,
+            },
+          ],
+          total: 3,
+        });
+        const view = show();
+        const tasksTab = await screen.findByRole("tab", { name: "我的任务" });
+        fireEvent.click(tasksTab);
+        await waitFor(() =>
+          expect(tasksTab).toHaveAttribute("aria-selected", "true"),
+        );
+        const list = await screen.findByRole("region", {
+          name: "计算任务列表",
+        });
+        await within(list).findByText("共 3 项");
+        expect(within(list).getByText("42%")).toBeVisible();
+        expect(
+          within(list).getByText("缺少时代属性，请补充字段后重新提交"),
+        ).toBeVisible();
+        expect(within(list).getByLabelText("未读任务")).toBeVisible();
+        expect(
+          within(list).getAllByRole("button", { name: "查看详情" }),
+        ).toHaveLength(3);
+        for (const row of list.querySelectorAll<HTMLElement>(
+          ".compute-task-row",
+        )) {
+          expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+          expect(row.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        }
+        const title = list.querySelector<HTMLElement>(".compute-task-title");
+        expect(title?.getBoundingClientRect().height).toBeLessThan(52);
+        expect(view.container.scrollWidth).toBeLessThanOrEqual(width);
+        await page.screenshot({
+          path: `../../test-results/compute-tasks-${width}.png`,
+          animations: "disabled",
+          fullPage: true,
+        });
+        fireEvent.click(within(list).getByText("完整任务说明"));
+        expect(list.querySelector(".compute-task-description p")).toBeVisible();
+        expect(
+          list.querySelector(".compute-task-description p")?.textContent,
+        ).toBe(longTaskName);
+        expect(list.scrollWidth).toBeLessThanOrEqual(list.clientWidth + 1);
+        view.unmount();
+      } finally {
+        await page.viewport(1600, 900);
+      }
+    },
+  );
+
+  it("保留详情入口、已读操作和服务端状态筛选", async () => {
+    api.tasks.mockResolvedValue({ items: [task], total: 1 });
+    api.task.mockResolvedValue(task);
+    api.action.mockResolvedValue(task);
+    const view = show();
+    fireEvent.click(await screen.findByRole("tab", { name: "我的任务" }));
+    const list = await screen.findByRole("region", { name: "计算任务列表" });
+    fireEvent.click(
+      await within(list).findByRole("button", { name: "查看详情" }),
+    );
+    await waitFor(() => expect(api.task).toHaveBeenCalledWith(task.id));
+    expect(api.action).toHaveBeenCalledWith(task.id, "read");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.mouseDown(within(list).getByLabelText("筛选任务状态"));
+    const completed = await screen.findAllByText("已完成");
+    fireEvent.click(completed[completed.length - 1]!);
+    await waitFor(() =>
+      expect(api.tasks).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "succeeded", page: 1 }),
+      ),
+    );
+    view.unmount();
+  });
 });
 
 describe("通用计算界面", () => {

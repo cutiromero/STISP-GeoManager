@@ -18,6 +18,7 @@ export function researchDemoLaunch(
       "ecology_investigation",
       "geology_correction",
       "geology_age_correction",
+      "geology_map_review",
     ].includes(String(data.scenario)) ||
     !Number.isInteger(data.projectId) ||
     String(data.projectId) !== projectId ||

@@ -149,6 +149,7 @@ export default function ResearchIntentCard({
   const reviewWorkflow = async (
     decision: "approve" | "reject",
     feedback: string,
+    selectedSuggestionIds?: string[],
   ) => {
     if (!workflow || inFlight.current) return;
     inFlight.current = true;
@@ -158,7 +159,11 @@ export default function ResearchIntentCard({
       const next = await agentApi.confirmWorkflow(
         workflow.id,
         workflow.planHash,
-        { decision, feedback },
+        {
+          decision,
+          feedback,
+          ...(selectedSuggestionIds ? { selectedSuggestionIds } : {}),
+        },
       );
       if (!alive.current) return;
       setWorkflow(next);
@@ -347,8 +352,8 @@ export default function ResearchIntentCard({
           onCancel={() => void update("cancel")}
           onPause={() => void controlWorkflow("pause")}
           onResume={() => void controlWorkflow("resume")}
-          onReview={(decision, feedback) =>
-            void reviewWorkflow(decision, feedback)
+          onReview={(decision, feedback, selectedSuggestionIds) =>
+            void reviewWorkflow(decision, feedback, selectedSuggestionIds)
           }
           onRestart={onRestart}
         />

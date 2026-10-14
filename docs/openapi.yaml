@@ -9168,8 +9168,8 @@ components:
       additionalProperties: false
     AgentResearchScenario:
       type: string
-      description: 当前授权项目内已登记科研场景；地质时代纠偏使用真实图件副本和明确标注的演示录入错误，由模型解析目标与参数
-      enum: [ecology_investigation, geology_correction, geology_age_correction]
+      description: 当前授权项目内已登记科研场景；geology_map_review 为专家知识驱动的地质成果检查、选中建议批准、受约束修正与复核演示
+      enum: [ecology_investigation, geology_correction, geology_age_correction, geology_map_review]
     AgentResearchQuestion:
       type: object
       description: 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
@@ -9260,7 +9260,7 @@ components:
               projectName: {type: string, description: 当前项目名称}
               title: {type: string, description: 案例标题}
               prompt: {type: string, description: 启动用自然语言，明确资料性质、预设与成果保存目标}
-              sampleNature: {type: string, enum: [synthetic, real_map_with_demonstration_errors], description: synthetic为模拟样例；real_map_with_demonstration_errors为真实图件副本上设置明确标注的少量时代录入错误，用于验证辞书一致性纠偏}
+              sampleNature: {type: string, enum: [synthetic, real_map_with_demonstration_errors, demonstration_case], description: synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例}
               available: {type: boolean, description: 资料、已发布算法与模型等必要服务是否就绪}
             required: [scenario, projectId, projectName, title, prompt, sampleNature, available]
             additionalProperties: false
@@ -9747,6 +9747,11 @@ components:
         nextAction:
           type: string
           description: 模型选择的下一步受限动作
+        knowledgeQuery:
+          type: string
+          minLength: 1
+          maxLength: 300
+          description: 仅地质成果检查的search_expert_knowledge阶段提供，由模型根据实际资料形成的专家知识检索词；其他阶段省略
         algorithmReason:
           type: string
           description: 为什么选择该算法、输入角色及参数
@@ -10019,6 +10024,8 @@ components:
         planHash:
           type: string
           description: 确认计划时校验的内容哈希
+        modificationReview:
+          $ref: '#/components/schemas/AgentModificationReview'
         importResults:
           type: boolean
           description: 执行完成后自动登记结果
@@ -10061,7 +10068,7 @@ components:
       properties:
         workflowType:
           type: string
-          description: 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 为模拟填图检查纠偏，geology_age_correction 为真实底图副本的地层时代录入纠偏；默认 hyperspectral_interpretation
+          description: 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 和 geology_age_correction 保留历史地质流程，geology_map_review 为专家知识驱动的检查、批准后修正和复核；默认 hyperspectral_interpretation
           default: hyperspectral_interpretation
           maxLength: 40
         goal:
@@ -10097,7 +10104,7 @@ components:
           maxLength: 80
         inputs:
           type: object
-          description: 输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质使用 initial_map、surveys、rules。真实计算输出入库后按持久来源接入后续步骤。
+          description: 输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质逻辑推理使用 initial_map、surveys、rules；地质成果检查使用 initial_map、coverage、rules。真实计算输出入库后按持久来源接入后续步骤。
           additionalProperties:
             type: integer
             minimum: 1
@@ -13725,6 +13732,68 @@ components:
           description: 人工审核意见，作为判断依据保存。
           maxLength: 4000
           default: ''
+        selectedSuggestionIds:
+          type: array
+          description: 地质成果review_modifications阶段approve必填，至少一个当前planHash下的建议标识；只执行所选范围，reject省略，其他阶段不得扩大操作范围。
+          minItems: 1
+          maxItems: 30
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 64, description: 当前实际问题和模型建议绑定的稳定标识}
+    AgentModificationReview:
+      type: object
+      description: 地质成果修改建议及持久批准范围；仅相应工作流提供，客户端不提交修改坐标或目标值。
+      additionalProperties: false
+      required: [proposalHash, suggestions, approvedSuggestionIds]
+      properties:
+        proposalHash:
+          type: string
+          description: 实际问题清单与规范化模型建议的内容哈希；方案改变必须重新批准。
+        suggestions:
+          type: array
+          maxItems: 30
+          description: 由模型选择、由实际检查清单固定对象与空间范围的建议。
+          items: {$ref: '#/components/schemas/AgentModificationSuggestion'}
+        approvedSuggestionIds:
+          type: array
+          description: 后端已保存的获批建议标识；尚未批准时为空。
+          items: {type: string, description: 当前建议标识}
+    AgentModificationSuggestion:
+      type: object
+      description: 一项有实际图斑、规则、知识与空间预览支持的修改建议。
+      additionalProperties: false
+      required: [id, kind, featureId, title, currentState, suggestedState, reason, areaM2, ruleId, knowledgeRefs, preview, bounds]
+      properties:
+        id: {type: string, description: 当前问题与建议内容绑定的标识，不由客户端编造}
+        kind: {type: string, enum: [fill_gap, set_age], description: 填补有据内部漏填或更新地层时代属性}
+        featureId: {type: string, description: 当前数据中的稳定图斑标识}
+        title: {type: string, description: 简短问题标题}
+        currentState: {type: string, description: 当前地图或属性的可读状态}
+        suggestedState: {type: string, description: 建议修正后的可读状态}
+        reason: {type: string, description: 模型根据当次实际知识和结果给出的简短理由}
+        areaM2: {type: number, minimum: 0, description: 实际修改范围平方米面积；属性修改展示对应对象范围}
+        ruleId: {type: string, description: 本次结构化专家规则标识}
+        knowledgeRefs:
+          type: array
+          minItems: 1
+          description: 当前检索实际返回的知识与修订，权限继续按原项目检查。
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, revision, title]
+            description: 一条实际知识依据。
+            properties:
+              id: {type: integer, minimum: 1, description: 实际知识编号}
+              revision: {type: integer, minimum: 1, description: 实际知识修订}
+              title: {type: string, description: 用户可读知识标题}
+        preview:
+          $ref: '#/components/schemas/GeoJSONGeometry'
+          description: 从实际问题计算得到的WGS84修改范围，不是客户端编辑参数。
+        bounds:
+          type: array
+          minItems: 4
+          maxItems: 4
+          description: WGS84西、南、东、北界，用于建议预览与定位。
+          items: {type: number, description: 经纬度边界值}
     ResourceBulkDeleteRequest:
       type: object
       description: 当前项目待删除资源，不接受文件路径或其他项目资源。

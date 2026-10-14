@@ -4,8 +4,8 @@ from functools import wraps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import IntegrityError, OperationalError, transaction
-from django.db.models import Q
+from django.db import IntegrityError, OperationalError, transaction, connection
+from django.db.models import Q, F
 from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -312,7 +312,12 @@ def submit_value(request, c, value, *, available_models=None):
     demo_scenario = value.get("demoScenario")
     if demo_scenario is not None and (
         demo_scenario
-        not in {"ecology_investigation", "geology_correction", "geology_age_correction"}
+        not in {
+            "ecology_investigation",
+            "geology_correction",
+            "geology_age_correction",
+            "geology_map_review",
+        }
         or c.mode != "agent"
     ):
         raise ApiProblem("演示场景无效或未使用智能体模式")
@@ -753,6 +758,8 @@ def workflow_json(workflow, include_steps=True):
             }
             for item in workflow.steps.all()
         ]
+    if workflow.plan.get("modificationReview") is not None:
+        data["modificationReview"] = workflow.plan["modificationReview"]
     return data
 
 
@@ -799,8 +806,9 @@ def workflow_submit(request):
 def workflow_confirm(request, workflow_id):
     from .workflow import validate_confirmed_plan
 
-    value = body(request, ["planHash", "decision", "feedback"])
+    value = body(request, ["planHash", "decision", "feedback", "selectedSuggestionIds"])
     decision, feedback = value.get("decision", "approve"), value.get("feedback", "")
+    selected = value.get("selectedSuggestionIds")
     if (
         not isinstance(decision, str)
         or decision not in {"approve", "reject"}
@@ -808,7 +816,23 @@ def workflow_confirm(request, workflow_id):
         or len(feedback) > 4000
     ):
         raise ApiProblem("审核结论或意见无效")
+    if "selectedSuggestionIds" in value and (
+        not isinstance(selected, list)
+        or len(selected) > 30
+        or any(
+            not isinstance(identity, str) or not 1 <= len(identity) <= 64
+            for identity in selected
+        )
+        or len(set(selected)) != len(selected)
+    ):
+        raise ApiProblem("建议选择格式无效")
     with transaction.atomic():
+        if connection.vendor == "sqlite":
+            # Confirmations write approval records; reserve SQLite before reading
+            # the plan so concurrent heartbeats cannot invalidate its snapshot.
+            AgentWorkflow.objects.filter(pk=workflow_id, owner=request.user).update(
+                idempotency_key=F("idempotency_key")
+            )
         workflow = get_object_or_404(
             AgentWorkflow.objects.select_for_update(),
             pk=workflow_id,
@@ -861,10 +885,17 @@ def workflow_confirm(request, workflow_id):
             "ecology_investigation",
             "geology_correction",
             "geology_age_correction",
+            "geology_map_review",
         }:
             from .demo_workflow import confirm_demo
 
-            confirm_demo(workflow, request.user, p, value["planHash"])
+            confirm_demo(
+                workflow,
+                request.user,
+                p,
+                value["planHash"],
+                value.get("selectedSuggestionIds"),
+            )
             record_workflow_review(
                 workflow, "approve", feedback, value["planHash"], review_outputs
             )

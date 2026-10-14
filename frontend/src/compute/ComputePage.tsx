@@ -6,9 +6,9 @@ import {
   Empty,
   Input,
   Pagination,
+  Progress,
   Select,
   Space,
-  Table,
   Tabs,
   Tag,
   Typography,
@@ -18,6 +18,9 @@ import {
   ExperimentOutlined,
   ReloadOutlined,
   PlayCircleOutlined,
+  ClockCircleOutlined,
+  FileTextOutlined,
+  RightOutlined,
 } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -36,6 +39,7 @@ import ComputeTaskForm from "./ComputeTaskForm";
 import ComputeTaskDetail, { OutputTable } from "./ComputeTaskDetail";
 import { taskStatusLabels, statusText, useComputeText } from "./ui";
 import "./compute.css";
+import "./compute-tasks.css";
 
 export default function ComputePage({ admin = false }: { admin?: boolean }) {
   const project = useProjectContext();
@@ -187,9 +191,13 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
               </Tag>
             }
           >
-            <Typography.Paragraph>{ui(algorithm.description)}</Typography.Paragraph>
+            <Typography.Paragraph>
+              {ui(algorithm.description)}
+            </Typography.Paragraph>
             <Space wrap>
-              <Tag>{ui(algorithm.category) || ui("未分类", "Uncategorized")}</Tag>
+              <Tag>
+                {ui(algorithm.category) || ui("未分类", "Uncategorized")}
+              </Tag>
               {algorithm.versions[0]?.manifest.inputs.map((input) => (
                 <Tag key={input.key}>{input.kind}</Tag>
               ))}
@@ -206,7 +214,10 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
                 value={selectedVersions[algorithm.id]}
                 disabled={!runtime?.available || !permissions.submit_task}
                 onChange={(id) => {
-                  setSelectedVersions((old) => ({ ...old, [algorithm.id]: id }));
+                  setSelectedVersions((old) => ({
+                    ...old,
+                    [algorithm.id]: id,
+                  }));
                 }}
                 options={algorithm.versions.map((v) => ({
                   value: v.id,
@@ -253,13 +264,23 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
     </>
   );
   const tasksView = (
-    <>
-      <div className="compute-toolbar">
+    <section
+      className="compute-tasks"
+      aria-label={ui("计算任务列表", "Compute task list")}
+    >
+      <div className="compute-tasks-toolbar">
+        <div className="compute-tasks-heading">
+          <Typography.Text strong>
+            {ui("任务记录", "Task history")}
+          </Typography.Text>
+          <span>{ui(`共 ${taskTotal} 项`, `${taskTotal} tasks`)}</span>
+        </div>
         <Select
           allowClear
+          aria-label={ui("筛选任务状态", "Filter task status")}
           placeholder={ui("全部状态", "All statuses")}
           value={status}
-          style={{ minWidth: 180 }}
+          className="compute-tasks-filter"
           onChange={(value) => {
             setStatus(value);
             setTaskPage(1);
@@ -269,7 +290,7 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
             label: ui(...label),
           }))}
         />
-        <Typography.Text type="secondary">
+        <Typography.Text className="compute-tasks-scope" type="secondary">
           {admin
             ? ui(
                 "显示当前项目内有权管理的任务",
@@ -281,61 +302,139 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
               )}
         </Typography.Text>
       </div>
-      <Table
-        rowKey="id"
-        dataSource={tasks}
-        scroll={{ x: 760 }}
-        pagination={{
-          current: taskPage,
-          total: taskTotal,
-          pageSize: 20,
-          onChange: setTaskPage,
-        }}
-        onRow={(task) => ({ onDoubleClick: () => setSelectedTask(task.id) })}
-        columns={[
-          {
-            title: ui("任务", "Task"),
-            key: "name",
-            render: (_, task) => (
-              <Button
-                type="link"
-                onClick={() => {
-                  setSelectedTask(task.id);
-                  void computeApi.action(task.id, "read").catch(() => {});
-                }}
-              >
-                {task.name}
-                {task.unread && " •"}
-              </Button>
-            ),
-          },
-          { title: ui("算法", "Algorithm"), dataIndex: "algorithmName", render: (value: string) => ui(value) },
-          {
-            title: ui("状态", "Status"),
-            key: "status",
-            render: (_, task) => (
-              <Tag
-                color={
-                  task.status === "succeeded"
-                    ? "success"
-                    : task.status === "failed"
-                      ? "error"
-                      : "processing"
-                }
-              >
-                {statusText(ui, task.status)}
-              </Tag>
-            ),
-          },
-          { title: ui("阶段", "Stage"), dataIndex: "stage" },
-          {
-            title: ui("提交时间", "Created"),
-            key: "created",
-            render: (_, task) => new Date(task.createdAt).toLocaleString(),
-          },
-        ]}
+      {tasks.length ? (
+        <ul className="compute-task-list">
+          {tasks.map((task) => {
+            const active = [
+              "queued",
+              "validating",
+              "running",
+              "cancelling",
+            ].includes(task.status);
+            const problem = ["failed", "interrupted"].includes(task.status);
+            const openTask = () => {
+              setSelectedTask(task.id);
+              void computeApi.action(task.id, "read").catch(() => {});
+            };
+            return (
+              <li key={task.id} className="compute-task-row">
+                <div className="compute-task-subject">
+                  <div className="compute-task-title-line">
+                    {task.unread && (
+                      <span
+                        className="compute-task-unread"
+                        aria-label={ui("未读任务", "Unread task")}
+                      />
+                    )}
+                    <Button
+                      type="text"
+                      className="compute-task-title"
+                      onClick={openTask}
+                    >
+                      <span>{task.name}</span>
+                    </Button>
+                  </div>
+                  <div className="compute-task-algorithm">
+                    <ExperimentOutlined aria-hidden />
+                    <span>{ui(task.algorithmName)}</span>
+                    <span className="compute-task-version">
+                      v{task.version.version}
+                    </span>
+                    {task.trial && <Tag>{ui("试运行", "Trial")}</Tag>}
+                  </div>
+                  {task.name.length > 60 && (
+                    <details className="compute-task-description">
+                      <summary>
+                        {ui("完整任务说明", "Full task description")}
+                      </summary>
+                      <p>{task.name}</p>
+                    </details>
+                  )}
+                </div>
+                <div className="compute-task-state">
+                  <div className="compute-task-status-line">
+                    <Tag
+                      color={
+                        task.status === "succeeded"
+                          ? "success"
+                          : problem
+                            ? "error"
+                            : active
+                              ? "processing"
+                              : "default"
+                      }
+                    >
+                      {statusText(ui, task.status)}
+                    </Tag>
+                    {active && <span>{task.progress}%</span>}
+                  </div>
+                  <p
+                    className={
+                      problem
+                        ? "compute-task-stage compute-task-stage-error"
+                        : "compute-task-stage"
+                    }
+                  >
+                    {task.error || task.stage || statusText(ui, task.status)}
+                  </p>
+                  {active && (
+                    <Progress
+                      percent={task.progress}
+                      showInfo={false}
+                      size="small"
+                      status={task.status === "running" ? "active" : "normal"}
+                      strokeColor="#2879c1"
+                    />
+                  )}
+                </div>
+                <div className="compute-task-meta">
+                  <span>
+                    <ClockCircleOutlined aria-hidden />{" "}
+                    <time dateTime={task.createdAt}>
+                      {new Date(task.createdAt).toLocaleString()}
+                    </time>
+                  </span>
+                  <span>
+                    <FileTextOutlined aria-hidden />{" "}
+                    {ui(
+                      `${task.outputs.length} 个结果文件`,
+                      `${task.outputs.length} output files`,
+                    )}
+                  </span>
+                </div>
+                <Button
+                  className="compute-task-open"
+                  onClick={openTask}
+                  icon={<RightOutlined aria-hidden />}
+                  iconPlacement="end"
+                >
+                  {ui("查看详情", "View details")}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <Empty
+          className="compute-tasks-empty"
+          description={ui(
+            status ? "当前状态下没有任务" : "当前项目还没有计算任务",
+            status
+              ? "No tasks match this status"
+              : "No compute tasks in this project yet",
+          )}
+        />
+      )}
+      <Pagination
+        className="compute-tasks-pagination"
+        current={taskPage}
+        total={taskTotal}
+        pageSize={20}
+        showSizeChanger={false}
+        onChange={setTaskPage}
+        hideOnSinglePage
       />
-    </>
+    </section>
   );
   const resultView = (
     <>

@@ -27,6 +27,7 @@ CONTENT_TYPE = "text/markdown"
 PREVIEW_LIMIT = 200_000
 MAX_REPORT_BYTES = 2 * 1024 * 1024
 REPORT_NAMES = {
+    "geology_map_review": "检查报告",
     "ecology_investigation": "生态风险分析报告",
     "geology_correction": "地质纠偏分析报告",
     "geology_age_correction": "地质年代纠偏分析报告",
@@ -149,6 +150,11 @@ def _table_rows(output: ComputeOutput) -> list[str]:
 
 
 def render_report(workflow: AgentWorkflow, user, policy: dict, tasks: list) -> bytes:
+    if workflow.workflow_type == "geology_map_review":
+        from .geology_review_report import render_geology_report
+
+        return render_geology_report(workflow, tasks)
+
     from .demo_workflow import stage_title
     from .research_presets import ROLE_LABELS
 

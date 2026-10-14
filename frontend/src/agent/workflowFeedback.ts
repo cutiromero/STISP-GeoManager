@@ -30,6 +30,28 @@ const stageLabels: Record<string, string> = {
 };
 
 export function workflowStageLabel(workflow: AgentWorkflow): string {
+  if (workflow.plan.phase === "review_modifications") return "等待用户批准";
+  if (workflow.workflowType === "geology_map_review") {
+    const names: Record<string, string> = {
+      expert_knowledge: "查阅专家知识",
+      check: "正在检查地图",
+      edit: "正在修正地图",
+      recheck: "复核修正后地质图",
+      final_analysis: "整理检查报告",
+    };
+    const stages = Array.isArray(workflow.plan.stages)
+      ? workflow.plan.stages
+      : [];
+    const stage =
+      stages[Number(workflow.plan.stageIndex)] ?? workflow.plan.finalStage;
+    if (
+      stage &&
+      typeof stage === "object" &&
+      "name" in stage &&
+      names[String(stage.name)]
+    )
+      return names[String(stage.name)]!;
+  }
   if (workflow.plan.phase === "review_plan") return "核对执行计划";
   const stages = Array.isArray(workflow.plan.stages)
     ? workflow.plan.stages
@@ -60,6 +82,8 @@ export function workflowNextAction(workflow: AgentWorkflow): string {
     case "cancelled":
       return "后续步骤已停止，已有计算与文件保留；需要继续研究时可重新发起任务。";
     case "waiting_approval":
+      if (workflow.plan.phase === "review_modifications")
+        return "查看发现的问题和专家知识，选择批准的建议；平台仅修正您批准的范围。";
       return workflow.plan.phase === "review_results" ||
         (Array.isArray(workflow.plan.reviewOutputs) &&
           workflow.plan.reviewOutputs.length)

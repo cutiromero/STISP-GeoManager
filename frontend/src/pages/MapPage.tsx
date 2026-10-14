@@ -55,6 +55,7 @@ import { useWorkspaceScenes } from "../hooks/useWorkspaceScenes";
 import { workspaceSnapshot } from "../workspace/workspaceSnapshot";
 import { effectiveMapLayers } from "../map/effectiveMapLayers";
 import ComputeOutputMapPreview from "../map/ComputeOutputMapPreview";
+import GeologyReviewWorkspace from "../map/GeologyReviewWorkspace";
 import { clearFeatureState, getMapState } from "../map/mapState";
 import {
   claimMapErrorNotification,
@@ -618,6 +619,20 @@ export function mapUrlResourceBounds(
 }
 
 export default function MapPage() {
+  const [params] = useSearchParams();
+  const workflowId = params.get("geologyReview");
+  if (workflowId)
+    return (
+      <GeologyReviewWorkspace
+        workflowId={workflowId}
+        projectTagId={params.get("projectTagId")}
+        suggestionId={params.get("suggestion")}
+      />
+    );
+  return <MapWorkspace />;
+}
+
+function MapWorkspace() {
   const { bootstrap, user } = useAppContext();
   const projectContext = useProjectContext();
   const { message, notification } = App.useApp();

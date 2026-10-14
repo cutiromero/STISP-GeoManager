@@ -512,8 +512,8 @@ def test_cancellation_during_model_analysis_is_preserved(demo):
     prepare_demo(workflow, demo["owner"], demo["policy"])
     confirm_demo(workflow, demo["owner"], demo["policy"], workflow.plan_hash)
 
-    def cancel_during_decision(*args):
-        decision = actual_decide(*args)
+    def cancel_during_decision(*args, **kwargs):
+        decision = actual_decide(*args, **kwargs)
         AgentWorkflow.objects.filter(pk=workflow.id).update(cancel_requested=True)
         return decision
 
@@ -532,8 +532,8 @@ def test_decision_approval_does_not_bypass_later_output_quality_review(demo):
     prepare_demo(workflow, demo["owner"], demo["policy"])
     confirm_demo(workflow, demo["owner"], demo["policy"], workflow.plan_hash)
 
-    def ask_for_review(*args):
-        decision, edits = actual_decide(*args)
+    def ask_for_review(*args, **kwargs):
+        decision, edits = actual_decide(*args, **kwargs)
         decision["nextAction"] = "request_review"
         return decision, edits
 

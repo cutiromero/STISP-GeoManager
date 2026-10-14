@@ -83,31 +83,38 @@ export default function ResearchDemoShowcase() {
             <div className="research-demo-entry-body">
               <h3>{item.title}</h3>
               <Tag color="blue">
-                {item.sampleNature === "real_map_with_demonstration_errors"
-                  ? ui(
-                      "真实底图 · 演示录入错误",
-                      "Real map · demonstration entry errors",
-                    )
-                  : ui(
-                      "模拟资料 · 真实计算",
-                      "Synthetic inputs · real computation",
-                    )}
-              </Tag>
-              <p>
-                {item.scenario === "geology_age_correction"
-                  ? ui(
-                      "读取真实地质图副本，按辞书与适用条件修正时代录入，复核并查看前后地图。",
-                      "Check age entries in a real-map copy using dictionary conditions, then review the before and after maps.",
-                    )
-                  : item.scenario === "ecology_investigation"
+                {item.sampleNature === "demonstration_case"
+                  ? ui("演示案例", "Demonstration case")
+                  : item.sampleNature === "real_map_with_demonstration_errors"
                     ? ui(
-                        "发现植被变化，解释线索，安排调查；补充观测后更新建议。",
-                        "Discover vegetation changes, explain evidence and update investigation priorities.",
+                        "真实底图 · 演示录入错误",
+                        "Real map · demonstration entry errors",
                       )
                     : ui(
-                        "检查填图问题，依据调查与规则纠偏，复核并对照地图。",
-                        "Check mapping issues, correct them using evidence and compare the maps.",
+                        "模拟资料 · 真实计算",
+                        "Synthetic inputs · real computation",
                       )}
+              </Tag>
+              <p>
+                {item.scenario === "geology_map_review"
+                  ? ui(
+                      "查阅专家知识，检查地图并提出建议；由您批准修正，再看前后变化与检查报告。",
+                      "Check the map against expert knowledge, approve selected suggestions and review the maps and report.",
+                    )
+                  : item.scenario === "geology_age_correction"
+                    ? ui(
+                        "读取真实地质图副本，按辞书与适用条件修正时代录入，复核并查看前后地图。",
+                        "Check age entries in a real-map copy using dictionary conditions, then review the before and after maps.",
+                      )
+                    : item.scenario === "ecology_investigation"
+                      ? ui(
+                          "发现植被变化，解释线索，安排调查；补充观测后更新建议。",
+                          "Discover vegetation changes, explain evidence and update investigation priorities.",
+                        )
+                      : ui(
+                          "检查填图问题，依据调查与规则纠偏，复核并对照地图。",
+                          "Check mapping issues, correct them using evidence and compare the maps.",
+                        )}
               </p>
               <span className="research-demo-project">{item.projectName}</span>
             </div>

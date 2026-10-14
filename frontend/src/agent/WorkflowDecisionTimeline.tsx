@@ -20,6 +20,9 @@ const actionNames: Record<string, string> = {
   "geology-edit": "按核实证据修正填图",
   "geology-age-check": "检查地层时代与辞书适用条件",
   "geology-age-edit": "按适用规则修正时代录入",
+  search_expert_knowledge: "查阅专家知识",
+  "geology-map-check": "检查地质图属性与完整性",
+  "geology-map-correct": "按用户批准的建议修正地图",
   finish: "查看分析结果与后续建议",
   request_review: "人工复核",
 };
@@ -31,7 +34,7 @@ const resultNames: Record<string, string> = {
   statistics: "统计表",
   issues: "复查问题清单",
   issues_map: "问题位置图",
-  corrected: "修正后的地质图",
+  corrected: "修正后地质图",
   repaired: "几何修复图",
   repair_log: "逐要素修复记录",
   repair_summary: "修复检查汇总",

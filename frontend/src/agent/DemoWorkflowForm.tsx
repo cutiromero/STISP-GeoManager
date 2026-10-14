@@ -7,7 +7,8 @@ import type {
 export type DemoWorkflowType =
   | "ecology_investigation"
   | "geology_correction"
-  | "geology_age_correction";
+  | "geology_age_correction"
+  | "geology_map_review";
 type Role = { key: string; label: string; kind: string; match: RegExp };
 export const demoRoles: Record<DemoWorkflowType, Role[]> = {
   ecology_investigation: [
@@ -82,6 +83,26 @@ export const demoRoles: Record<DemoWorkflowType, Role[]> = {
       match: /时代.*规则|age.*rules/i,
     },
   ],
+  geology_map_review: [
+    {
+      key: "initial_map",
+      label: "待检查地质图",
+      kind: "vector",
+      match: /待检查.*地质图|geology.*review.*input/i,
+    },
+    {
+      key: "coverage",
+      label: "制图范围",
+      kind: "vector",
+      match: /制图范围|coverage/i,
+    },
+    {
+      key: "rules",
+      label: "专家规则",
+      kind: "table",
+      match: /专家规则|review.*rules/i,
+    },
+  ],
 };
 
 export const demoGoals: Record<DemoWorkflowType, string> = {
@@ -91,6 +112,8 @@ export const demoGoals: Record<DemoWorkflowType, string> = {
     "检查初始填图，结合调查证据与规则修正明确问题，输出修改图和依据并再次复核。",
   geology_age_correction:
     "检查真实地质图副本中明确标注的少量时代录入错误，结合辞书、地区及地层条件进行受约束编辑，保存前后地图、理由和复查结果。",
+  geology_map_review:
+    "请检查这张待提交的地质图，查阅专家知识，说明发现的问题和建议修改；经我批准后修正地图，复核结果并生成检查报告和统计表。",
 };
 
 function matchingCandidates(role: Role, candidates: ComputeCandidate[]) {
@@ -180,6 +203,13 @@ export default function DemoWorkflowForm({
           type="info"
           title="真实底图 · 演示录入错误"
           description="本案例核对地层名称、地区和辞书中的时代定义，修改副本中的少量时代属性。人工精修图用于独立对照，岩性和边界保留。"
+        />
+      )}
+      {type === "geology_map_review" && (
+        <Alert
+          type="info"
+          title="地质成果智能检查与修正 · 演示案例"
+          description="先检查地图并形成有知识依据的建议。您选择并批准建议后，再生成修正后地质图、修改范围和检查报告。"
         />
       )}
       <div className="agent-demo-fields">

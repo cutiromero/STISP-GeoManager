@@ -97,7 +97,10 @@ export const agentApi = {
   confirmWorkflow: (
     id: string,
     planHash: string,
-    review?: Pick<AgentWorkflowConfirmation, "decision" | "feedback">,
+    review?: Pick<
+      AgentWorkflowConfirmation,
+      "decision" | "feedback" | "selectedSuggestionIds"
+    >,
   ) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/confirm/`, {
       method: "POST",
