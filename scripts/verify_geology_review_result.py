@@ -8,13 +8,25 @@ from pathlib import Path
 import geopandas as gpd
 
 
+def measured_frame(path):
+    frame = gpd.read_file(path)
+    assert frame.crs is not None and frame.geometry.is_valid.all()
+    assert not frame.geometry.is_empty.any() and not frame.geometry.isna().any()
+    working = frame.to_crs(32646)
+    # Match the runtime checksum's micrometre grid for measurement only.
+    # CRS round trips can leave negligible rings as zero-area fragments.
+    working.geometry = working.geometry.set_precision(0.000001)
+    assert working.geometry.is_valid.all()
+    return working
+
+
 def verify(
     initial, reference, corrected, changes, statistics, differences, workflow, output
 ):
-    before = gpd.read_file(initial).to_crs(32646).set_index("feature_id")
-    truth = gpd.read_file(reference).to_crs(32646).set_index("feature_id")
-    after = gpd.read_file(corrected).to_crs(32646).set_index("feature_id")
-    diff = gpd.read_file(differences).to_crs(32646)
+    before = measured_frame(initial).set_index("feature_id")
+    truth = measured_frame(reference).set_index("feature_id")
+    after = measured_frame(corrected).set_index("feature_id")
+    diff = measured_frame(differences)
     with changes.open(encoding="utf-8-sig", newline="") as stream:
         logs = list(csv.DictReader(stream))
     with statistics.open(encoding="utf-8-sig", newline="") as stream:
@@ -115,6 +127,8 @@ def verify(
         "stableClasses": sorted(int(value) for value in grouped.index),
         "scope": "依据真实批准记录独立检验选中操作、获批问题恢复、未获批对象保持、差异图层与按class重算统计一致",
         "referenceUsedByRuntime": False,
+        "nativeGeometryValidityChecked": True,
+        "measurementGridMetres": 0.000001,
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
