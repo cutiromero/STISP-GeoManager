@@ -91,6 +91,61 @@ def test_running_pause_survives_inflight_decision_save_and_submits_nothing(demo)
     assert ComputeTask.objects.count() == 1
 
 
+@pytest.mark.parametrize("response_saved", [False, True])
+def test_real_model_pause_boundaries_preserve_response_and_never_resend(
+    demo, settings, response_saved
+):
+    from tests.integration.test_demo_edit_context import model_response
+
+    workflow = prepared(demo)
+    assert claim() == workflow.id
+    settings.AGENT_MODELS[0] = {**settings.AGENT_MODELS[0], "model_id": "qwen-fixture"}
+    value = model_response("raster-ndvi", [])
+    value["decision"]["evidenceRefs"] = [
+        {"kind": "resource", "id": str(demo["inputs"]["early_image"])}
+    ]
+
+    def stream(model, messages, output, guard, **options):
+        if response_saved:
+            yield json.dumps(value)
+        assert control(demo, workflow, "pause").status_code == 200
+        if not response_saved:
+            guard()
+
+    with (
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
+        patch("apps.agent.context.count_tokens", return_value=800),
+        patch(
+            "apps.agent.demo_decisions.provider.stream", side_effect=stream
+        ) as request,
+    ):
+        advance_demo(workflow.id)
+        workflow.refresh_from_db()
+        assert workflow.status == "paused"
+        attempt = workflow.plan["stages"][0]["modelAttempts"][0]
+        assert attempt["status"] == (
+            "response_received" if response_saved else "requesting"
+        )
+        assert bool(attempt.get("response")) is response_saved
+        assert not ComputeTask.objects.exists()
+        assert control(demo, workflow, "resume").status_code == 200
+        advance_demo(workflow.id)
+        workflow.refresh_from_db()
+        assert request.call_count == 1
+        assert workflow.plan["actualModelCallCount"] == 1
+        if response_saved:
+            assert workflow.status == "waiting_compute"
+            assert ComputeTask.objects.count() == 1
+            assert (
+                workflow.plan["stages"][0]["recoveredResponseState"]
+                == "validated_without_new_request"
+            )
+        else:
+            assert workflow.status == "failed"
+            assert "完整分析响应未保存" in workflow.detail
+            assert not ComputeTask.objects.exists()
+
+
 @pytest.mark.parametrize("save", [_save, save_workflow_state])
 def test_stale_model_state_cannot_overwrite_pause_request(demo, save):
     workflow = prepared(demo)

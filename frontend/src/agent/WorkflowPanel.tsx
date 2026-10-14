@@ -369,6 +369,28 @@ export default function WorkflowPanel({
       setBusy(false);
     }
   };
+  const reviewWorkflow = async (
+    decision: "approve" | "reject",
+    feedback: string,
+  ) => {
+    if (!workflow || mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      setWorkflow(
+        await agentApi.confirmWorkflow(workflow.id, workflow.planHash, {
+          decision,
+          feedback,
+        }),
+      );
+    } catch (reason) {
+      report(reason);
+    } finally {
+      mutationInFlight.current = false;
+      setBusy(false);
+    }
+  };
   useEffect(() => {
     onStatusChange?.(workflow?.status);
   }, [workflow?.status, onStatusChange]);
@@ -669,6 +691,14 @@ export default function WorkflowPanel({
           onCancel={() => void action(false)}
           onPause={() => void controlWorkflow("pause")}
           onResume={() => void controlWorkflow("resume")}
+          onReview={(decision, feedback) =>
+            void reviewWorkflow(decision, feedback)
+          }
+          onRestart={() => {
+            restore(workflow);
+            setWorkflow(undefined);
+            setError("");
+          }}
           onEvidenceUpdate={
             !previousWorkflowId
               ? () => {

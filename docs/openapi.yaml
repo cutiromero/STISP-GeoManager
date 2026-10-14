@@ -2476,7 +2476,7 @@ paths:
       summary: 操作单个存量数据
       description: 支持重命名数据资源、更新启停状态、保存默认可视化方案、配置访问用户组和删除确认。重命名只修改数据资源显示名称，不修改数据编号、物理存储标识或默认图层名称。目标数据必须对当前用户可见或由当前用户上传；不可见数据按不存在处理；超级管理员不受对象可见范围限制。重命名、启停、默认可视化和普通编辑需要
         `catalog.change_dataresource`；删除需要 `catalog.delete_dataresource`；数据上传者本人或具备 `catalog.change_dataresource`
-        的用户可以通过 `updateAccess` 修改可见范围。可手动配置的数据访问角色列表不会返回超级管理员角色，后端仍会强制保留超级管理员访问范围。成功操作会写入审计日志。
+        的用户可以通过 `updateAccess` 修改可见范围。可手动配置的数据访问角色列表不会返回超级管理员角色，后端仍会强制保留超级管理员访问范围。成功操作会写入审计日志。删除委托目录共享的受保护永久删除服务，任务/成果/工程/科研引用、非法存储路径或存储清理失败返回409及可读原因；独占受控文件和存储层随登记删除，共享和外部原材料保留。
       operationId: updateAdminDataResource
       security:
       - sessionAuth: []
@@ -2517,6 +2517,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: 数据仍被引用、存储路径不能安全删除或存储操作失败，资源保留并返回具体原因。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/admin/workspaces/:
     parameters:
     - name: X-Project-Id
@@ -2733,6 +2739,45 @@ paths:
         description: 与 X-Project-Id 等效，用于图片、瓦片和文件链接；同时提供时两者必须相同，否则返回 400。
         schema:
           type: string
+  /api/catalog/resources/delete/:
+    post:
+      tags:
+      - 数据目录
+      operationId: bulkDeleteResources
+      summary: 批量永久删除当前项目数据资源
+      description: 需要 catalog.delete_dataresource 权限及当前项目访问权。逐项删除资源登记、派生图层/数据集及独占的受控存储；任务、成果、工程、科研工作流引用中的资源拒绝删除。共享存储保留，外部原始文件保留。跨项目、不存在或 owner_only 不可见资源统一返回 not_found，不泄露名称；每项独立处理，部分成功返回 200。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 发起删除时选中的唯一项目 ID，切换项目后不得复用该请求。
+        schema:
+          type: integer
+          minimum: 1
+      requestBody:
+        required: true
+        description: 用户已确认永久删除的资源清单。
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceBulkDeleteRequest'
+      responses:
+        '200':
+          description: 每项实际删除或拒绝原因；重复请求的已删除项返回 not_found。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceBulkDeleteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/catalog/resources/:
     parameters:
     - name: X-Project-Id
@@ -7236,8 +7281,8 @@ paths:
       tags:
       - 智能体
       operationId: confirmAgentWorkflow
-      summary: 确认当前预览计划并执行
-      description: 确认当前预览计划并执行；重新核对当前项目、本人记录及实际计算权限。
+      summary: 提交计划或结果人工审核意见
+      description: 确认计划并执行，或在 waiting_approval 时拒绝并停止后续操作。重新核对当前项目、本人记录、实际计算权限及计划哈希。审核意见持久保存，仅作为审核依据；不是算法编辑指令。拒绝保留已有计算和候选输出。暂停、状态冲突或过期计划返回 409。
       security:
       - sessionAuth: []
       parameters:
@@ -7274,21 +7319,11 @@ paths:
           $ref: '#/components/responses/Conflict'
       requestBody:
         required: true
-        description: 已审核计划的内容哈希
+        description: 已审核计划的哈希、审核选择和可选意见。
         content:
           application/json:
             schema:
-              type: object
-              description: 确认执行的计划
-              properties:
-                planHash:
-                  type: string
-                  description: 预览返回的计划哈希
-                  minLength: 1
-                  maxLength: 64
-              required:
-              - planHash
-              additionalProperties: false
+              $ref: '#/components/schemas/AgentWorkflowConfirmation'
   "/api/knowledge/documents/": {"get": {"tags": ["知识库"], "operationId": "listKnowledgeDocuments", "summary": "列出文档与处理状态", "description": "列出文档与处理状态。需要有效登录与当前项目权限。读取当前项目、公共基础资料及本人owner_only空间；空间分开索引和生成，禁止跨权限域Wiki合成。写入须知识维护权限。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前项目ID；后端验证项目成员关系", "schema": {"type": "integer", "minimum": 1}}, {"name": "domain", "in": "query", "description": "限定知识领域；省略读取全部可见领域", "schema": {"$ref": "#/components/schemas/KnowledgeDomain"}}], "responses": {"200": {"description": "操作成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/KnowledgeDocumentList"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}, "503": {"description": "知识引擎暂不可用，原资料保留，可重试", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}, "post": {"tags": ["知识库"], "operationId": "uploadKnowledgeDocument", "summary": "上传并索引资料、自动生成Wiki", "description": "上传并索引资料、自动生成Wiki。需要有效登录与当前项目权限。读取当前项目、公共基础资料及本人owner_only空间；空间分开索引和生成，禁止跨权限域Wiki合成。写入须知识维护权限。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前项目ID；后端验证项目成员关系", "schema": {"type": "integer", "minimum": 1}}], "responses": {"200": {"description": "操作成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/KnowledgeDocument"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}, "503": {"description": "知识引擎暂不可用，原资料保留，可重试", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "提交内容", "content": {"multipart/form-data": {"schema": {"type": "object", "description": "最多20MiB；PDF/DOCX先提取带页号/段号文本，扫描PDF须先有可提取文字", "properties": {"file": {"type": "string", "description": "PDF、DOCX、TXT、MD、CSV或JSON文件", "format": "binary"}, "title": {"type": "string", "description": "标题，最多180字"}, "sourceUrl": {"type": "string", "description": "来源HTTP(S)地址，不触发下载"}, "visibility": {"type": "string", "description": "可见范围", "enum": ["project", "owner_only"], "default": "project"}, "domain": {"$ref": "#/components/schemas/KnowledgeDomain"}}, "required": ["file", "title", "visibility"], "additionalProperties": false}}}}}}
   "/api/knowledge/documents/{documentId}/retry/": {"post": {"tags": ["知识库"], "operationId": "retryKnowledgeDocument", "summary": "重新处理失败资料", "description": "重新处理失败资料。需要有效登录与当前项目权限。读取当前项目、公共基础资料及本人owner_only空间；空间分开索引和生成，禁止跨权限域Wiki合成。写入须知识维护权限。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前项目ID；后端验证项目成员关系", "schema": {"type": "integer", "minimum": 1}}, {"name": "documentId", "in": "path", "required": true, "description": "本地资料ID", "schema": {"type": "integer"}}], "responses": {"200": {"description": "操作成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/KnowledgeDocument"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}, "503": {"description": "知识引擎暂不可用，原资料保留，可重试", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
   "/api/knowledge/documents/search/": {"post": {"tags": ["知识库"], "operationId": "searchKnowledgeDocuments", "summary": "按语义和关键词检索文档原文", "description": "按语义和关键词检索文档原文。需要有效登录与当前项目权限。读取当前项目、公共基础资料及本人owner_only空间；空间分开索引和生成，禁止跨权限域Wiki合成。写入须知识维护权限。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前项目ID；后端验证项目成员关系", "schema": {"type": "integer", "minimum": 1}}], "responses": {"200": {"description": "操作成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/KnowledgeDocumentSearch"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}, "503": {"description": "知识引擎暂不可用，原资料保留，可重试", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "提交内容", "content": {"application/json": {"schema": {"type": "object", "description": "检索输入", "properties": {"query": {"type": "string", "description": "自然语言问题", "minLength": 1, "maxLength": 1000}, "limit": {"type": "integer", "description": "最多返回数量", "default": 6, "minimum": 1, "maximum": 12}, "domains": {"type": "array", "description": "限定文档领域，省略为所有可见领域", "maxItems": 4, "items": {"$ref": "#/components/schemas/KnowledgeDomain"}}}, "required": ["query"], "additionalProperties": false}}}}}}
@@ -13668,6 +13703,89 @@ components:
           items:
             $ref: "#/components/schemas/AdminDataResourceAccessGroup"
           deprecated: true
+    AgentWorkflowConfirmation:
+      type: object
+      description: 用户对当前预览计划或候选结果的审核选择。
+      additionalProperties: false
+      required:
+      - planHash
+      properties:
+        planHash:
+          type: string
+          description: 当前预览返回的计划哈希。
+          minLength: 1
+          maxLength: 64
+        decision:
+          type: string
+          description: approve 继续现有确认流程；reject 仅在等待审核时停止后续流程。
+          enum: [approve, reject]
+          default: approve
+        feedback:
+          type: string
+          description: 人工审核意见，作为判断依据保存。
+          maxLength: 4000
+          default: ''
+    ResourceBulkDeleteRequest:
+      type: object
+      description: 当前项目待删除资源，不接受文件路径或其他项目资源。
+      additionalProperties: false
+      required: [resourceIds, confirmed]
+      properties:
+        resourceIds:
+          type: array
+          description: 1 至 100 个正整数资源编号，重复编号只处理一次。
+          minItems: 1
+          maxItems: 100
+          items:
+            type: integer
+            minimum: 1
+        confirmed:
+          type: boolean
+          const: true
+          description: 用户在界面明确确认永久删除。
+    ResourceBulkDeleteItem:
+      type: object
+      description: 一项资源的真实删除结果。
+      additionalProperties: false
+      required: [resourceId, name, status, detail]
+      properties:
+        resourceId:
+          type: integer
+          description: 请求中的资源编号。
+        name:
+          type: [string, 'null']
+          description: 可访问资源名称；not_found 时为空。
+        status:
+          type: string
+          description: deleted 已删除；blocked 存在引用等保护；not_found 不存在或不可访问；failed 存储或数据库操作失败。
+          enum: [deleted, blocked, not_found, failed]
+        detail:
+          type: string
+          description: 用户可读的删除范围或拒绝原因，不返回服务器路径。
+    ResourceBulkDeleteResponse:
+      type: object
+      description: 部分成功的逐项结果及汇总。
+      additionalProperties: false
+      required: [items, deletedIds, deletedCount, failedCount]
+      properties:
+        items:
+          type: array
+          description: 按请求首次出现顺序返回每项结果。
+          items:
+            $ref: '#/components/schemas/ResourceBulkDeleteItem'
+        deletedIds:
+          type: array
+          description: 确实已删除的资源编号，供刷新目录和清理选中项。
+          items:
+            type: integer
+        deletedCount:
+          type: integer
+          description: 成功删除项数。
+          minimum: 0
+        failedCount:
+          type: integer
+          description: 未删除项数，包含 blocked、not_found 和 failed。
+          minimum: 0
     DataResource:
       type: object
       required:
@@ -15503,8 +15621,9 @@ components:
           - $ref: '#/components/schemas/RasterDataset'
           - $ref: '#/components/schemas/RasterDatasetScanResult'
           - $ref: '#/components/schemas/ExportJobResult'
+          - $ref: '#/components/schemas/RasterJobInputReferences'
           - type: 'null'
-          description: 任务完成后的结果；未完成或失败时为 null
+          description: 完成任务的结果；渲染和导出任务在排队或处理中保存精简输入引用，失败时可以保留引用，其他任务未完成时可为 null
         error:
           type: string
           description: 失败原因
@@ -15518,6 +15637,26 @@ components:
           - 'null'
           format: double
           description: 任务结束时间戳
+    RasterJobInputReferences:
+      type: object
+      required:
+      - inputRefs
+      properties:
+        inputRefs:
+          type: array
+          description: 用于保护正在使用的数据；只保存标识，不保存几何或栅格内容
+          items:
+            type: object
+            properties:
+              resourceId:
+                type: integer
+                minimum: 1
+              layerId:
+                type: integer
+                minimum: 1
+              datasetId:
+                type: integer
+                minimum: 1
     RasterDatasetScanResult:
       type: object
       required:

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.40] - 2026-10-14
+
+### Added
+- 数据资源目录提供文件管理、多选删除、文件名确认与逐项反馈；复用后台权限，删除资源登记及独占的平台文件、表和图层，保留被引用或共用的存储。
+- 科研候选结果增加人工审核意见、通过继续与不通过停止；意见随实际工作流步骤保存，刷新可核对，并传给后续模型分析。
+
+### Fixed
+- 科研任务失败、暂停、中断和停止显示实际阶段、原因与下一步；聊天卡片、输入栏和侧边状态统一，历史工作流不覆盖当前任务。
+- 模型响应在暂停前保存，恢复时校验完整已存响应并继续；尚未保存响应时明确提示未提交本步计算，保留原请求记录。
+- 胡杨群落物种功能性状演示限定公开、干旱区生态风险评估分析决策与塔大胡杨项目，其他项目直接访问演示链接也不展示。
+
 ## [0.1.39] - 2026-10-12
 
 ### Added

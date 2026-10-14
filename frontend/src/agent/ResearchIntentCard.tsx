@@ -19,6 +19,7 @@ import { useComputeText } from "../compute/ui";
 import WorkflowResults from "./WorkflowResults";
 import LiveActivity from "./LiveActivity";
 import { runActivity } from "./agentActivity";
+import { workflowStatusLabels } from "./workflowFeedback";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 const labels: Record<AgentResearchIntent["status"], [string, string]> = {
@@ -27,7 +28,7 @@ const labels: Record<AgentResearchIntent["status"], [string, string]> = {
   running: ["正在推进研究", "Research in progress"],
   waiting_approval: ["等待审核", "Review needed"],
   succeeded: ["研究已完成", "Research completed"],
-  failed: ["任务未完成", "Research incomplete"],
+  failed: ["执行失败", "Research failed"],
   cancelled: ["任务已停止", "Research stopped"],
 };
 
@@ -35,10 +36,12 @@ export default function ResearchIntentCard({
   run,
   onChanged,
   onWorkflowChange,
+  onRestart,
 }: {
   run: AgentRun & { researchIntent: AgentResearchIntent };
   onChanged: (next: AgentRun) => void;
   onWorkflowChange?: (next: AgentWorkflow | undefined) => void;
+  onRestart?: () => void;
 }) {
   const ui = useComputeText();
   const intent = run.researchIntent;
@@ -143,6 +146,39 @@ export default function ResearchIntentCard({
       if (alive.current) setBusy(false);
     }
   };
+  const reviewWorkflow = async (
+    decision: "approve" | "reject",
+    feedback: string,
+  ) => {
+    if (!workflow || inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const next = await agentApi.confirmWorkflow(
+        workflow.id,
+        workflow.planHash,
+        { decision, feedback },
+      );
+      if (!alive.current) return;
+      setWorkflow(next);
+      onWorkflow.current?.(next);
+      const latest = await agentApi.poll(intent.originRunId);
+      if (!alive.current) return;
+      onUpdate.current(latest.run);
+      setWorkflowRevision((value) => value + 1);
+    } catch (reason) {
+      if (alive.current)
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "审核反馈暂未保存，请重试。",
+        );
+    } finally {
+      inFlight.current = false;
+      if (alive.current) setBusy(false);
+    }
+  };
   const update = async (action: AgentResearchIntentUpdate["action"]) => {
     if (inFlight.current) return;
     if (
@@ -190,7 +226,9 @@ export default function ResearchIntentCard({
     >
       <div className="agent-research-heading">
         <strong>{intent.goal}</strong>
-        <Tag color="blue">{ui(...status)}</Tag>
+        <Tag color={workflow?.status === "failed" ? "red" : "blue"}>
+          {workflow ? workflowStatusLabels[workflow.status] : ui(...status)}
+        </Tag>
       </div>
       {!workflow && <LiveActivity activity={runActivity(run)} />}
       {!!intent.inputSummary.length && (
@@ -309,6 +347,10 @@ export default function ResearchIntentCard({
           onCancel={() => void update("cancel")}
           onPause={() => void controlWorkflow("pause")}
           onResume={() => void controlWorkflow("resume")}
+          onReview={(decision, feedback) =>
+            void reviewWorkflow(decision, feedback)
+          }
+          onRestart={onRestart}
         />
       )}
     </section>

@@ -41,7 +41,12 @@ export function workflowActivity(workflow: AgentWorkflow): LiveActivity {
   if (["failed", "cancelled", "interrupted"].includes(status))
     return {
       state: "stopped",
-      label: status === "failed" ? "任务未完成" : "任务已停止",
+      label:
+        status === "failed"
+          ? "执行失败"
+          : status === "interrupted"
+            ? "访问条件变化，已中断"
+            : "任务已停止",
       detail,
     };
   if (status === "queued")
@@ -94,7 +99,7 @@ export function runActivity(
     if (["failed", "cancelled"].includes(intent.status))
       return {
         state: "stopped",
-        label: intent.status === "failed" ? "任务未完成" : "任务已停止",
+        label: intent.status === "failed" ? "执行失败" : "任务已停止",
         detail: intent.message,
       };
     return {

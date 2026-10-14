@@ -6,6 +6,8 @@ import {
   DatabaseOutlined,
   FileImageOutlined,
   EyeOutlined,
+  DeleteOutlined,
+  FolderOpenOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
 import {
@@ -13,11 +15,13 @@ import {
   App,
   Button,
   Card,
+  Checkbox,
   Descriptions,
   Drawer,
   Empty,
   Input,
   Layout,
+  Modal,
   Segmented,
   Select,
   Space,
@@ -42,6 +46,7 @@ import type {
 } from "../types";
 import { findTaxonomyNode, taxonomyTree } from "../utils/taxonomy";
 import { isComputeResult, resourceSourceLabel } from "../utils/resources";
+import "../styles/catalog-file-management.css";
 
 type CatalogView = "cards" | "list";
 
@@ -63,9 +68,39 @@ export default function DataCatalogPage() {
   const [detailResource, setDetailResource] = useState<ResourceListItem | null>(
     null,
   );
+  const [managingFiles, setManagingFiles] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [deleteSelection, setDeleteSelection] = useState<{
+    projectId: string;
+    resources: ResourceListItem[];
+  } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteOutcome, setDeleteOutcome] = useState<{
+    deletedCount: number;
+    completed: { key: number; name: string; detail: string }[];
+    failures: { key: number; name: string; detail: string }[];
+  } | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const mountedRef = useRef(true);
   const resourceRequestSequenceRef = useRef(0);
   const canBrowseData =
     getActiveProject() === "1" || Boolean(user?.permissions.canBrowseData);
+  const canManageFiles =
+    canBrowseData && Boolean(user?.permissions.canDeleteDataResources);
+  const selectedResources = resources.filter((resource) =>
+    selectedIds.includes(resource.id),
+  );
+  const allSelectableSelected =
+    resources.length > 0 &&
+    resources
+      .slice(0, 100)
+      .every((resource) => selectedIds.includes(resource.id));
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const dataTypeLabels = useMemo<Record<ResourceListItem["dataType"], string>>(
     () => ({
       vector: t("common.vector"),
@@ -97,6 +132,9 @@ export default function DataCatalogPage() {
         const response = await api.resources(filters);
         if (requestSequence === resourceRequestSequenceRef.current) {
           setResources(response.items);
+          setSelectedIds((ids) =>
+            ids.filter((id) => response.items.some((item) => item.id === id)),
+          );
         }
       } catch (error) {
         if (requestSequence === resourceRequestSequenceRef.current) {
@@ -143,8 +181,87 @@ export default function DataCatalogPage() {
     classificationStatus,
     dataType,
     loadResources,
+    refreshVersion,
     searchParams,
   ]);
+
+  function toggleResourceSelection(id: number, selected: boolean) {
+    setSelectedIds((ids) => {
+      if (!selected) return ids.filter((value) => value !== id);
+      if (ids.includes(id)) return ids;
+      if (ids.length >= 100) {
+        message.warning(
+          computeUi("每次最多选择 100 项", "Select up to 100 items at a time"),
+        );
+        return ids;
+      }
+      return [...ids, id];
+    });
+  }
+
+  async function deleteSelectedResources() {
+    if (!deleteSelection || deleting) return;
+    if (getActiveProject() !== deleteSelection.projectId) {
+      setDeleteSelection(null);
+      message.warning(
+        computeUi(
+          "项目已切换，请重新选择文件",
+          "The project changed; select the files again",
+        ),
+      );
+      return;
+    }
+    setDeleting(true);
+    try {
+      const response = await api.deleteResources(
+        {
+          resourceIds: deleteSelection.resources.map((resource) => resource.id),
+          confirmed: true,
+        },
+        deleteSelection.projectId,
+      );
+      if (
+        !mountedRef.current ||
+        getActiveProject() !== deleteSelection.projectId
+      )
+        return;
+      const deleted = new Set(response.deletedIds);
+      setResources((items) => items.filter((item) => !deleted.has(item.id)));
+      setSelectedIds((ids) => ids.filter((id) => !deleted.has(id)));
+      setDetailResource((item) =>
+        item && !deleted.has(item.id) ? item : null,
+      );
+      setDeleteOutcome({
+        deletedCount: response.deletedCount,
+        completed: response.items
+          .filter((item) => item.status === "deleted")
+          .map((item) => ({
+            key: item.resourceId,
+            name: item.name ?? computeUi("已删除的资源", "Deleted resource"),
+            detail: item.detail,
+          })),
+        failures: response.items
+          .filter((item) => item.status !== "deleted")
+          .map((item) => ({
+            key: item.resourceId,
+            name:
+              item.name ?? computeUi("无法访问的资源", "Unavailable resource"),
+            detail: item.detail,
+          })),
+      });
+      setDeleteSelection(null);
+      setRefreshVersion((version) => version + 1);
+    } catch (error) {
+      if (mountedRef.current)
+        message.error(
+          error instanceof Error
+            ? error.message
+            : computeUi("删除失败，请重试", "Deletion failed; try again"),
+        );
+    } finally {
+      if (mountedRef.current) setDeleting(false);
+    }
+  }
 
   function applySearch() {
     const next = new URLSearchParams(searchParams);
@@ -261,6 +378,114 @@ export default function DataCatalogPage() {
           />
         </section>
 
+        {canManageFiles && (
+          <section
+            className="catalog-file-management"
+            aria-label={computeUi("文件管理", "File management")}
+          >
+            <Space wrap>
+              <Button
+                aria-label={
+                  managingFiles
+                    ? computeUi("完成管理", "Finish managing")
+                    : computeUi("文件管理", "File management")
+                }
+                icon={<FolderOpenOutlined />}
+                type={managingFiles ? "primary" : "default"}
+                disabled={deleting}
+                onClick={() => {
+                  setManagingFiles((value) => !value);
+                  setSelectedIds([]);
+                }}
+              >
+                {managingFiles
+                  ? computeUi("完成管理", "Finish managing")
+                  : computeUi("文件管理", "File management")}
+              </Button>
+              {managingFiles && (
+                <>
+                  <Checkbox
+                    checked={allSelectableSelected}
+                    indeterminate={
+                      selectedResources.length > 0 && !allSelectableSelected
+                    }
+                    disabled={loading || deleting || resources.length === 0}
+                    onChange={(event) =>
+                      setSelectedIds(
+                        event.target.checked
+                          ? resources.slice(0, 100).map((item) => item.id)
+                          : [],
+                      )
+                    }
+                  >
+                    {resources.length > 100
+                      ? computeUi("选择前 100 项", "Select the first 100")
+                      : computeUi("全选当前结果", "Select current results")}
+                  </Checkbox>
+                  <Typography.Text type="secondary">
+                    {computeUi(
+                      `已选择 ${selectedResources.length} 项`,
+                      `${selectedResources.length} selected`,
+                    )}
+                  </Typography.Text>
+                  <Button
+                    aria-label={computeUi("删除所选", "Delete selected")}
+                    danger
+                    icon={<DeleteOutlined />}
+                    disabled={loading || deleting || !selectedResources.length}
+                    onClick={() =>
+                      setDeleteSelection({
+                        projectId: getActiveProject(),
+                        resources: selectedResources,
+                      })
+                    }
+                  >
+                    {computeUi("删除所选", "Delete selected")}
+                  </Button>
+                </>
+              )}
+            </Space>
+            {managingFiles && (
+              <Typography.Text type="secondary">
+                {computeUi(
+                  "选择文件后可批量删除；被任务或成果引用的数据将保留并说明原因。",
+                  "Select files to delete in a batch. Data referenced by tasks or results will be retained with an explanation.",
+                )}
+              </Typography.Text>
+            )}
+          </section>
+        )}
+
+        {deleteOutcome && (
+          <Alert
+            className="catalog-delete-feedback"
+            showIcon
+            closable
+            onClose={() => setDeleteOutcome(null)}
+            type={
+              deleteOutcome.failures.length ||
+              deleteOutcome.completed.some((item) => item.detail.includes("；"))
+                ? "warning"
+                : "success"
+            }
+            title={computeUi(
+              `已删除 ${deleteOutcome.deletedCount} 项${deleteOutcome.failures.length ? `，${deleteOutcome.failures.length} 项未删除` : ""}`,
+              `Deleted ${deleteOutcome.deletedCount}${deleteOutcome.failures.length ? `; ${deleteOutcome.failures.length} retained` : ""}`,
+            )}
+            description={
+              <ul>
+                {[...deleteOutcome.failures, ...deleteOutcome.completed].map(
+                  (item) => (
+                    <li key={item.key}>
+                      <strong>{item.name}</strong>：{item.detail}
+                    </li>
+                  ),
+                )}
+              </ul>
+            }
+          />
+        )}
+
         <div className="data-catalog-body">
           <aside className="data-catalog-taxonomy">
             <div className="data-catalog-section-title">
@@ -309,6 +534,12 @@ export default function DataCatalogPage() {
                       onOpen={() => openResource(resource)}
                       onDetail={() => setDetailResource(resource)}
                       dataTypeLabel={dataTypeLabels[resource.dataType]}
+                      selecting={canManageFiles && managingFiles}
+                      selected={selectedIds.includes(resource.id)}
+                      selectionDisabled={deleting}
+                      onSelect={(selected) =>
+                        toggleResourceSelection(resource.id, selected)
+                      }
                       t={t}
                     />
                   ))}
@@ -363,6 +594,32 @@ export default function DataCatalogPage() {
           </>
         )}
       </Drawer>
+      <Modal
+        title={computeUi("确认删除所选文件", "Confirm file deletion")}
+        open={Boolean(deleteSelection)}
+        okText={computeUi("确认删除", "Confirm deletion")}
+        cancelText={computeUi("取消", "Cancel")}
+        okButtonProps={{ danger: true }}
+        confirmLoading={deleting}
+        cancelButtonProps={{ disabled: deleting }}
+        closable={!deleting}
+        mask={{ closable: !deleting }}
+        keyboard={!deleting}
+        onCancel={() => setDeleteSelection(null)}
+        onOk={() => void deleteSelectedResources()}
+      >
+        <Typography.Paragraph>
+          {computeUi(
+            "将真实删除以下资源记录及平台管理的文件。被其他任务、图层或成果引用的资源会保留，并显示原因。",
+            "The following resource records and platform-managed files will be deleted. Referenced resources will be retained with an explanation.",
+          )}
+        </Typography.Paragraph>
+        <ul className="catalog-delete-names">
+          {deleteSelection?.resources.map((resource) => (
+            <li key={resource.id}>{resource.name}</li>
+          ))}
+        </ul>
+      </Modal>
     </Layout>
   );
 }
@@ -373,6 +630,10 @@ function ResourceCard({
   onOpen,
   onDetail,
   dataTypeLabel,
+  selecting,
+  selected,
+  selectionDisabled,
+  onSelect,
   t,
 }: {
   resource: ResourceListItem;
@@ -380,6 +641,10 @@ function ResourceCard({
   onOpen: () => void;
   onDetail: () => void;
   dataTypeLabel: string;
+  selecting: boolean;
+  selected: boolean;
+  selectionDisabled: boolean;
+  onSelect: (selected: boolean) => void;
   t: (key: string) => string;
 }) {
   const ui = useComputeText();
@@ -392,8 +657,20 @@ function ResourceCard({
         : t("catalog.viewMetadata");
   return (
     <Card
-      className={`data-resource-card${compact ? " data-resource-card-compact" : ""}`}
+      className={`data-resource-card${compact ? " data-resource-card-compact" : ""}${selected ? " data-resource-card-selected" : ""}`}
     >
+      {selecting && (
+        <Checkbox
+          className="catalog-resource-select"
+          aria-label={ui(
+            `选择文件 ${resource.name}`,
+            `Select file ${resource.name}`,
+          )}
+          checked={selected}
+          disabled={selectionDisabled}
+          onChange={(event) => onSelect(event.target.checked)}
+        />
+      )}
       <Space orientation="vertical" size={10} className="full-width">
         <Space wrap>
           <Tag>{dataTypeLabel}</Tag>

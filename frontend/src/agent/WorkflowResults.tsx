@@ -1,4 +1,4 @@
-import { Button, Collapse, Popconfirm, Space, Tag } from "antd";
+import { Alert, Button, Collapse, Input, Popconfirm, Space, Tag } from "antd";
 import { useEffect, useState } from "react";
 import type { AgentWorkflow } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
@@ -11,19 +11,14 @@ import LiveActivity from "./LiveActivity";
 import { workflowActivity } from "./agentActivity";
 import WorkflowReportFile from "./WorkflowReportFile";
 import WorkflowDeliverables from "./WorkflowDeliverables";
+import {
+  workflowNextAction,
+  workflowExecutionNote,
+  workflowStageLabel,
+  workflowStatusLabels,
+} from "./workflowFeedback";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
-const labels: Record<string, string> = {
-  queued: "等待处理",
-  running: "准备计划",
-  waiting_compute: "执行与入库",
-  waiting_approval: "等待确认",
-  succeeded: "已完成",
-  failed: "未完成",
-  cancelled: "已停止",
-  interrupted: "已中断",
-  paused: "已暂停",
-};
 function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
   if (!workflow) return [];
   const record = (value: unknown): Record<string, unknown> =>
@@ -76,6 +71,8 @@ export default function WorkflowResults({
   onCancel,
   onPause,
   onResume,
+  onReview,
+  onRestart,
   onEvidenceUpdate,
   compact = false,
 }: {
@@ -85,11 +82,27 @@ export default function WorkflowResults({
   onCancel?: () => void;
   onPause?: () => void;
   onResume?: () => void;
+  onReview?: (decision: "approve" | "reject", feedback: string) => void;
+  onRestart?: () => void;
   onEvidenceUpdate?: () => void;
   compact?: boolean;
 }) {
   const ui = useComputeText();
   const isActive = active.includes(workflow.status);
+  const [reviewFeedback, setReviewFeedback] = useState("");
+  const needsReview =
+    workflow.status === "waiting_approval" &&
+    (workflow.plan.phase === "review_results" ||
+      (Array.isArray(workflow.plan.reviewOutputs) &&
+        workflow.plan.reviewOutputs.length > 0));
+  useEffect(() => setReviewFeedback(""), [workflow.id, workflow.planHash]);
+  const stopped = ["failed", "interrupted", "cancelled", "paused"].includes(
+    workflow.status,
+  );
+  const nextAction = workflowNextAction(workflow);
+  const lastReview = [...workflow.steps]
+    .reverse()
+    .find((step) => step.kind === "review_feedback");
   const [processExpanded, setProcessExpanded] = useState(isActive);
   useEffect(() => setProcessExpanded(isActive), [workflow.id, isActive]);
   const finalDecision = [...workflow.steps]
@@ -216,9 +229,50 @@ export default function WorkflowResults({
                 : "blue"
           }
         >
-          {ui(labels[workflow.status] ?? workflow.status)}
+          {ui(workflowStatusLabels[workflow.status])}
         </Tag>
       </Space>
+      {(stopped ||
+        workflow.pauseRequested ||
+        workflow.status === "waiting_approval") && (
+        <Alert
+          className="agent-workflow-feedback"
+          type={
+            workflow.status === "failed"
+              ? "error"
+              : workflow.status === "interrupted"
+                ? "warning"
+                : "info"
+          }
+          showIcon
+          title={
+            workflow.pauseRequested && workflow.status !== "paused"
+              ? "正在保存进度并暂停"
+              : workflowStatusLabels[workflow.status]
+          }
+          description={
+            <>
+              <p>
+                <strong>当前阶段：</strong>
+                {workflowStageLabel(workflow)}
+              </p>
+              <p>{workflow.detail || "当前状态已保存，请按下方操作继续。"}</p>
+              {workflowExecutionNote(workflow) && (
+                <p>{workflowExecutionNote(workflow)}</p>
+              )}
+              {nextAction && <p>{nextAction}</p>}
+            </>
+          }
+        />
+      )}
+      {lastReview &&
+        typeof lastReview.action.feedback === "string" &&
+        lastReview.action.feedback && (
+          <p className="agent-review-saved">
+            <strong>已保存的审核意见：</strong>
+            {lastReview.action.feedback}
+          </p>
+        )}
       {workflow.planHash &&
         (compact ? (
           <Collapse
@@ -303,15 +357,65 @@ export default function WorkflowResults({
       {!workflow.steps.some((step) => step.computeTaskId) && report && (
         <WorkflowDeliverables items={[]} report={report} onImport={() => {}} />
       )}
-      {workflow.status === "waiting_approval" && onConfirm && (
-        <Button type="primary" loading={busy} onClick={onConfirm}>
-          {Array.isArray(workflow.plan.reviewOutputs) &&
-          workflow.plan.reviewOutputs.length
-            ? ui("审核并继续", "Review and continue")
-            : ui("确认执行", "Confirm execution")}
-        </Button>
+      {needsReview && onReview ? (
+        <section className="agent-workflow-review" aria-label="人工审核反馈">
+          <strong>请审核候选结果</strong>
+          <p>
+            意见会保存到本次任务；确认后智能体继续处理，拒绝则停止后续步骤并保留已有成果。
+          </p>
+          <Input.TextArea
+            aria-label="审核意见"
+            placeholder="例如：已核对修改位置，允许继续；或说明需要补充核验的依据。"
+            value={reviewFeedback}
+            maxLength={4000}
+            autoSize={{ minRows: 2, maxRows: 5 }}
+            disabled={busy}
+            onChange={(event) => setReviewFeedback(event.target.value)}
+          />
+          <small>不通过需填写具体原因。意见作为审核记录保存。</small>
+          <Space wrap>
+            <Popconfirm
+              title="确认通过本次审核？"
+              description="将保存您的审核意见并继续后续处理。"
+              okText="确认通过"
+              cancelText="返回核对"
+              onConfirm={() => onReview("approve", reviewFeedback.trim())}
+            >
+              <Button type="primary" loading={busy}>
+                审核通过并继续
+              </Button>
+            </Popconfirm>
+            <Popconfirm
+              title="确认不通过并停止？"
+              description="保留候选文件和审核意见，停止后续处理。"
+              okText="确认不通过"
+              cancelText="返回核对"
+              onConfirm={() => onReview("reject", reviewFeedback.trim())}
+            >
+              <Button disabled={busy || !reviewFeedback.trim()}>
+                不通过并停止
+              </Button>
+            </Popconfirm>
+          </Space>
+        </section>
+      ) : (
+        workflow.status === "waiting_approval" &&
+        onConfirm && (
+          <Button type="primary" loading={busy} onClick={onConfirm}>
+            {Array.isArray(workflow.plan.reviewOutputs) &&
+            workflow.plan.reviewOutputs.length
+              ? ui("审核并继续", "Review and continue")
+              : ui("确认执行", "Confirm execution")}
+          </Button>
+        )
       )}
       <Space wrap className="agent-workflow-actions">
+        {["failed", "interrupted", "cancelled"].includes(workflow.status) &&
+          onRestart && (
+            <Button onClick={onRestart} disabled={busy}>
+              {ui("调整后重新发起", "Start again with revised settings")}
+            </Button>
+          )}
         {isActive && onPause && (
           <Popconfirm
             title={ui("暂停此工作流？", "Pause this workflow?")}
@@ -377,9 +481,11 @@ export default function WorkflowResults({
           )}
         </div>
       )}
-      {(isActive || workflow.status === "paused") && (
-        <LiveActivity activity={workflowActivity(workflow)} />
-      )}
+      {isActive &&
+        workflow.status !== "waiting_approval" &&
+        !workflow.pauseRequested && (
+          <LiveActivity activity={workflowActivity(workflow)} />
+        )}
     </div>
   );
 }

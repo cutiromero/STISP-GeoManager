@@ -109,6 +109,10 @@ import type {
   WorkspaceSceneUpdateRequest,
 } from "../types";
 import type * as sdkTypes from "./generated/sdk.gen";
+import type {
+  ResourceBulkDeleteRequest,
+  ResourceBulkDeleteResponse,
+} from "./generated/types.gen";
 import { filenameFromHeaders } from "./downloadFilename";
 import i18n, { currentLocale } from "../i18n";
 
@@ -710,6 +714,16 @@ export const api = {
   resources: (filters: ResourceFilters = {}) =>
     unwrap<ListResponse<ResourceListItem>>(
       sdk.getResources({ query: filters }),
+    ),
+  deleteResources: (
+    payload: ResourceBulkDeleteRequest,
+    projectTagId: string = getActiveProject(),
+  ) =>
+    unwrap<ResourceBulkDeleteResponse>(
+      sdk.bulkDeleteResources({
+        body: payload,
+        headers: { "X-Project-Id": Number(projectTagId) },
+      }),
     ),
   scanCatalogSources: () =>
     unwrap<ListResponse<ResourceListItem> & { count: number }>(

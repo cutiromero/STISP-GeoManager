@@ -1,0 +1,63 @@
+.catalog-file-management {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+  margin: -4px 0 18px;
+  padding: 12px 16px;
+  border: 1px solid #d8e5f0;
+  border-radius: 12px;
+  background: #f3f8fc;
+}
+
+.catalog-file-management > .ant-typography {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.catalog-delete-feedback {
+  margin-bottom: 18px;
+}
+
+.catalog-delete-feedback ul {
+  max-height: 260px;
+  margin: 8px 0 0;
+  padding-left: 20px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.catalog-delete-names {
+  max-height: 260px;
+  margin: 12px 0;
+  padding-left: 24px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.catalog-delete-names li + li {
+  margin-top: 6px;
+}
+
+.data-resource-card .catalog-resource-select {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+}
+
+.data-resource-card:has(.catalog-resource-select) .ant-card-body {
+  padding-top: 38px;
+}
+
+.data-resource-card.data-resource-card-selected {
+  border-color: #6aa1cc;
+  background: #f4f9fe;
+  box-shadow: 0 0 0 1px #6aa1cc;
+}
+
+@media (max-width: 700px) {
+  .catalog-file-management > .ant-typography {
+    margin-left: 0;
+  }
+}

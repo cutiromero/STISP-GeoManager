@@ -116,6 +116,45 @@ describe("api client", () => {
     });
   });
 
+  it("submits confirmed resource deletion with an explicit project and returns actual item results", async () => {
+    setActiveProject("8");
+    setTestCookie("csrftoken=delete-token");
+    const outcome = {
+      items: [
+        {
+          resourceId: 10,
+          name: "临时调查表",
+          status: "deleted",
+          detail: "已删除",
+        },
+        {
+          resourceId: 11,
+          name: "计算输入",
+          status: "blocked",
+          detail: "被任务引用",
+        },
+      ],
+      deletedIds: [10],
+      deletedCount: 1,
+      failedCount: 1,
+    };
+    fetchMock.mockResolvedValue(jsonResponse(outcome));
+    const result = await api.deleteResources(
+      { resourceIds: [10, 11], confirmed: true },
+      "6",
+    );
+    const request = capturedRequest(fetchMock);
+    expect(requestPath(request)).toBe("/api/catalog/resources/delete/");
+    expect(request.method).toBe("POST");
+    expect(request.headers.get("X-Project-Id")).toBe("6");
+    expect(request.headers.get("X-CSRFToken")).toBe("delete-token");
+    expect(JSON.parse(await request.clone().text())).toEqual({
+      resourceIds: [10, 11],
+      confirmed: true,
+    });
+    expect(result).toEqual(outcome);
+  });
+
   it("sends the selected English locale and localizes known legacy errors", async () => {
     await setLocale("en-US");
     fetchMock.mockResolvedValue(

@@ -6,11 +6,19 @@ import { api } from "../api/client";
 import NonGeoPage from "./NonGeoPage";
 import NonGeoScatter, { finiteValue, isMeasurement } from "./NonGeoScatter";
 import { createNonGeoDemo } from "./nonGeoDemoData";
+import { page } from "vitest/browser";
 import "../styles.css";
 
 const permissionState = vi.hoisted(() => ({
   canQueryData: true,
   canBrowseData: true,
+}));
+const projectState = vi.hoisted(() => ({
+  current: "1",
+  projects: [{ id: 1, code: "default", name: "公开", isActive: true }],
+}));
+vi.mock("../projects/ProjectContext", () => ({
+  useProjectContext: () => projectState,
 }));
 vi.mock("../components/WorkspaceHeader", () => ({
   default: () => <header>STISP</header>,
@@ -27,6 +35,10 @@ vi.mock("../contexts/AppContext", () => ({
 }));
 const demo = createNonGeoDemo("zh-CN");
 beforeEach(() => {
+  projectState.current = "1";
+  projectState.projects = [
+    { id: 1, code: "default", name: "公开", isActive: true },
+  ];
   permissionState.canQueryData = true;
   permissionState.canBrowseData = true;
   vi.restoreAllMocks();
@@ -87,6 +99,42 @@ it("respects the existing browse permission", () => {
   const { container } = show();
   expect(screen.getByText("当前用户暂无数据浏览权限")).toBeInTheDocument();
   expect(container.querySelectorAll(".nongeo-resource-row")).toHaveLength(0);
+});
+it.each([
+  { id: 1, code: "default", name: "公开" },
+  { id: 8, code: "demo-arid-ecology", name: "干旱区生态风险评估分析决策" },
+  { id: 6, code: "05", name: "塔大胡杨" },
+])("shows poplar data for the approved project $code", async (project) => {
+  projectState.current = String(project.id);
+  projectState.projects = [{ ...project, isActive: true }];
+  show();
+  expect(await screen.findByText("数值分布 · 株高")).toBeInTheDocument();
+});
+it("blocks direct showcase URLs in other projects even with a similar name", async () => {
+  projectState.current = "3";
+  projectState.projects = [
+    { id: 3, code: "03", name: "塔大胡杨", isActive: true },
+  ];
+  const { container } = show();
+  expect(screen.getByText("当前项目暂无演示数据")).toBeInTheDocument();
+  expect(
+    screen.queryByText("胡杨群落物种功能性状演示数据"),
+  ).not.toBeInTheDocument();
+  expect(container.querySelectorAll(".nongeo-resource-row")).toHaveLength(0);
+  expect(
+    screen.queryByRole("tab", { name: /指标关系/ }),
+  ).not.toBeInTheDocument();
+  await page.screenshot({
+    path: "../../test-results/nongeo-project-empty.png",
+  });
+});
+it("does not expose the showcase while project identity is unavailable", () => {
+  projectState.projects = [];
+  const { container } = show();
+  expect(container.querySelectorAll(".nongeo-resource-row")).toHaveLength(0);
+  expect(
+    screen.queryByText("胡杨群落物种功能性状演示数据"),
+  ).not.toBeInTheDocument();
 });
 it("removes ornamental workspace entries and keeps histogram selection in sync", async () => {
   const { container } = show();

@@ -1135,7 +1135,7 @@ it("keeps pending approval visible while the drawer is closed and confirms the f
   await screen.findByText("旧问题");
   expect(screen.queryByRole("dialog")).toBeNull();
   const pending = await screen.findByRole("button", {
-    name: /科研工作流.*待确认/,
+    name: /科研工作流.*等待您审核/,
   });
   expect(agentApi.workflow).toHaveBeenCalledWith("workflow-1");
   fireEvent.click(pending);

@@ -5044,6 +5044,82 @@ export type ResultArtifactListResponse = {
     availableAccessGroups: Array<AdminDataResourceAccessGroup>;
 };
 
+/**
+ * 用户对当前预览计划或候选结果的审核选择。
+ */
+export type AgentWorkflowConfirmation = {
+    /**
+     * 当前预览返回的计划哈希。
+     */
+    planHash: string;
+    /**
+     * approve 继续现有确认流程；reject 仅在等待审核时停止后续流程。
+     */
+    decision?: 'approve' | 'reject';
+    /**
+     * 人工审核意见，作为判断依据保存。
+     */
+    feedback?: string;
+};
+
+/**
+ * 当前项目待删除资源，不接受文件路径或其他项目资源。
+ */
+export type ResourceBulkDeleteRequest = {
+    /**
+     * 1 至 100 个正整数资源编号，重复编号只处理一次。
+     */
+    resourceIds: Array<number>;
+    /**
+     * 用户在界面明确确认永久删除。
+     */
+    confirmed: true;
+};
+
+/**
+ * 一项资源的真实删除结果。
+ */
+export type ResourceBulkDeleteItem = {
+    /**
+     * 请求中的资源编号。
+     */
+    resourceId: number;
+    /**
+     * 可访问资源名称；not_found 时为空。
+     */
+    name: string | null;
+    /**
+     * deleted 已删除；blocked 存在引用等保护；not_found 不存在或不可访问；failed 存储或数据库操作失败。
+     */
+    status: 'deleted' | 'blocked' | 'not_found' | 'failed';
+    /**
+     * 用户可读的删除范围或拒绝原因，不返回服务器路径。
+     */
+    detail: string;
+};
+
+/**
+ * 部分成功的逐项结果及汇总。
+ */
+export type ResourceBulkDeleteResponse = {
+    /**
+     * 按请求首次出现顺序返回每项结果。
+     */
+    items: Array<ResourceBulkDeleteItem>;
+    /**
+     * 确实已删除的资源编号，供刷新目录和清理选中项。
+     */
+    deletedIds: Array<number>;
+    /**
+     * 成功删除项数。
+     */
+    deletedCount: number;
+    /**
+     * 未删除项数，包含 blocked、not_found 和 failed。
+     */
+    failedCount: number;
+};
+
 export type DataResource = {
     /**
      * 数据资源 ID
@@ -6523,9 +6599,9 @@ export type AsyncJobResponse = {
      */
     messages: Array<string>;
     /**
-     * 任务完成后的结果；未完成或失败时为 null
+     * 完成任务的结果；渲染和导出任务在排队或处理中保存精简输入引用，失败时可以保留引用，其他任务未完成时可为 null
      */
-    result: RasterRenderResult | RasterDataset | RasterDatasetScanResult | ExportJobResult | null;
+    result: RasterRenderResult | RasterDataset | RasterDatasetScanResult | ExportJobResult | RasterJobInputReferences | null;
     /**
      * 失败原因
      */
@@ -6538,6 +6614,17 @@ export type AsyncJobResponse = {
      * 任务结束时间戳
      */
     finishedAt: number | null;
+};
+
+export type RasterJobInputReferences = {
+    /**
+     * 用于保护正在使用的数据；只保存标识，不保存几何或栅格内容
+     */
+    inputRefs: Array<{
+        resourceId?: number;
+        layerId?: number;
+        datasetId?: number;
+    }>;
 };
 
 export type RasterDatasetScanResult = {
@@ -11434,6 +11521,10 @@ export type UpdateAdminDataResourceErrors = {
      * 资源不存在
      */
     404: ErrorResponse;
+    /**
+     * 数据仍被引用、存储路径不能安全删除或存储操作失败，资源保留并返回具体原因。
+     */
+    409: ErrorResponse;
 };
 
 export type UpdateAdminDataResourceError = UpdateAdminDataResourceErrors[keyof UpdateAdminDataResourceErrors];
@@ -11619,6 +11710,52 @@ export type GetDirectoriesResponses = {
 };
 
 export type GetDirectoriesResponse = GetDirectoriesResponses[keyof GetDirectoriesResponses];
+
+export type BulkDeleteResourcesData = {
+    /**
+     * 用户已确认永久删除的资源清单。
+     */
+    body: ResourceBulkDeleteRequest;
+    headers: {
+        /**
+         * 发起删除时选中的唯一项目 ID，切换项目后不得复用该请求。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/catalog/resources/delete/';
+};
+
+export type BulkDeleteResourcesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type BulkDeleteResourcesError = BulkDeleteResourcesErrors[keyof BulkDeleteResourcesErrors];
+
+export type BulkDeleteResourcesResponses = {
+    /**
+     * 每项实际删除或拒绝原因；重复请求的已删除项返回 not_found。
+     */
+    200: ResourceBulkDeleteResponse;
+};
+
+export type BulkDeleteResourcesResponse = BulkDeleteResourcesResponses[keyof BulkDeleteResourcesResponses];
 
 export type GetResourcesData = {
     body?: never;
@@ -16716,14 +16853,9 @@ export type GetAgentComputeTasksResponse = GetAgentComputeTasksResponses[keyof G
 
 export type ConfirmAgentWorkflowData = {
     /**
-     * 确认执行的计划
+     * 已审核计划的哈希、审核选择和可选意见。
      */
-    body: {
-        /**
-         * 预览返回的计划哈希
-         */
-        planHash: string;
-    };
+    body: AgentWorkflowConfirmation;
     headers: {
         /**
          * 唯一当前项目 ID

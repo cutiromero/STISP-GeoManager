@@ -811,7 +811,14 @@ def advance_demo(workflow_id) -> None:
                         raise ComputeError("已达到场景真实模型请求次数上限")
 
                 decision, edits = decide(
-                    workflow, user, p, stage, results, guard, record_attempt
+                    workflow,
+                    user,
+                    p,
+                    stage,
+                    results,
+                    guard,
+                    record_attempt,
+                    on_response=lambda: _save(workflow),
                 )
                 guard()
                 stage.update(decision=decision, edits=edits)

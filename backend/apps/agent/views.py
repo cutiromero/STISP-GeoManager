@@ -799,7 +799,15 @@ def workflow_submit(request):
 def workflow_confirm(request, workflow_id):
     from .workflow import validate_confirmed_plan
 
-    value = body(request, ["planHash"])
+    value = body(request, ["planHash", "decision", "feedback"])
+    decision, feedback = value.get("decision", "approve"), value.get("feedback", "")
+    if (
+        not isinstance(decision, str)
+        or decision not in {"approve", "reject"}
+        or not isinstance(feedback, str)
+        or len(feedback) > 4000
+    ):
+        raise ApiProblem("审核结论或意见无效")
     with transaction.atomic():
         workflow = get_object_or_404(
             AgentWorkflow.objects.select_for_update(),
@@ -814,6 +822,41 @@ def workflow_confirm(request, workflow_id):
             or value["planHash"] != workflow.plan_hash
         ):
             raise ApiProblem("执行计划已变化，请刷新后确认", 409)
+        if workflow.status == "paused" or workflow.pause_requested:
+            raise ApiProblem("请先继续科研任务，再确认执行", 409)
+        review_outputs = workflow.plan.get("reviewOutputs", [])
+        if decision == "reject":
+            from .workflow import _authorize, _state_hash
+
+            if workflow.status != "waiting_approval" or workflow.cancel_requested:
+                raise ApiProblem("此计划当前不能审核", 409)
+            if _state_hash(workflow.plan) != workflow.plan_hash:
+                raise ApiProblem("执行计划已变化，请刷新后确认", 409)
+            _authorize(workflow)
+            if workflow.plan.get("scenarioVersion"):
+                from .demo_workflow import authorize_demo
+
+                authorize_demo(workflow, request.user, p)
+            else:
+                validate_confirmed_plan(workflow, request.user, p)
+            record_workflow_review(
+                workflow, "reject", feedback, value["planHash"], review_outputs
+            )
+            workflow.status, workflow.detail = (
+                "cancelled",
+                "审核未通过，已停止后续处理；候选成果与审核意见保留",
+            )
+            workflow.cancel_requested, workflow.pause_requested = True, False
+            workflow.save(
+                update_fields=[
+                    "status",
+                    "detail",
+                    "cancel_requested",
+                    "pause_requested",
+                    "updated_at",
+                ]
+            )
+            return JsonResponse(workflow_json(workflow))
         if workflow.workflow_type in {
             "ecology_investigation",
             "geology_correction",
@@ -822,6 +865,9 @@ def workflow_confirm(request, workflow_id):
             from .demo_workflow import confirm_demo
 
             confirm_demo(workflow, request.user, p, value["planHash"])
+            record_workflow_review(
+                workflow, "approve", feedback, value["planHash"], review_outputs
+            )
             return JsonResponse(workflow_json(workflow))
         if workflow.status == "paused" or workflow.pause_requested:
             raise ApiProblem("请先继续科研任务，再确认执行", 409)
@@ -835,7 +881,35 @@ def workflow_confirm(request, workflow_id):
         workflow.save(
             update_fields=["execute_operators", "status", "detail", "updated_at"]
         )
+        record_workflow_review(
+            workflow, "approve", feedback, value["planHash"], review_outputs
+        )
     return JsonResponse(workflow_json(workflow))
+
+
+def record_workflow_review(workflow, decision, feedback, plan_hash, review_outputs):
+    from .workflow import checkpoint, step
+
+    feedback = feedback.strip()
+    action = {"decision": decision, "feedback": feedback, "planHash": plan_hash}
+    stages = workflow.plan.get("stages", [])
+    index = workflow.plan.get("stageIndex", -1)
+    stage = (
+        stages[index].get("name", workflow.current_step)
+        if type(index) is int and 0 <= index < len(stages)
+        else workflow.current_step
+    )
+    step(
+        workflow,
+        "review_feedback",
+        message="用户审核通过，继续处理"
+        if decision == "approve"
+        else "用户审核未通过，停止后续处理",
+        action=action,
+        input_refs={"stage": stage},
+        output_refs={"reviewOutputs": review_outputs},
+    )
+    checkpoint(workflow, "human_review_feedback", action)
 
 
 @endpoint(["GET"])

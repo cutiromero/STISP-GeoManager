@@ -282,6 +282,33 @@ def _edit_task(workflow, stage, results) -> dict | None:
     }
 
 
+def _human_feedback(workflow):
+    steps = getattr(workflow, "steps", None)
+    if steps is None:
+        return []
+    values = []
+    for item in steps.filter(kind="review_feedback", status="succeeded").order_by(
+        "-sequence"
+    )[:4]:
+        action = item.action
+        if (
+            not isinstance(action, dict)
+            or action.get("decision") != "approve"
+            or not action.get("feedback")
+        ):
+            continue
+        values.append(
+            {
+                "stepSequence": item.sequence,
+                "decision": "approve",
+                "feedback": action["feedback"],
+                "stage": item.input_refs.get("stage"),
+                "reviewedOutputs": item.output_refs.get("reviewOutputs", []),
+            }
+        )
+    return list(reversed(values))
+
+
 def decision_payload(workflow, stage, context, results) -> dict:
     """Remove repeated request content while keeping persisted evidence intact."""
     prior = [
@@ -310,7 +337,7 @@ def decision_payload(workflow, stage, context, results) -> dict:
         previous["actualResultOutputIds"] = [item["outputId"] for item in old_results]
         if previous.get("oldDecision"):
             previous["oldDecision"] = _previous_decision(previous["oldDecision"])
-    return {
+    payload = {
         "goal": workflow.goal,
         "stage": stage["name"],
         "allowedAction": stage["identifier"],
@@ -326,6 +353,10 @@ def decision_payload(workflow, stage, context, results) -> dict:
         "previousDecisions": prior[-4:],
         "availableEvidence": evidence_refs(workflow, context, results),
     }
+    feedback = _human_feedback(workflow)
+    if feedback:
+        payload["humanReviewFeedback"] = feedback
+    return payload
 
 
 def _response_text(raw: str) -> str:
@@ -586,7 +617,7 @@ def _validate_response(
 
 
 def decide(
-    workflow, user, policy, stage, results, guard, on_attempt=None
+    workflow, user, policy, stage, results, guard, on_attempt=None, on_response=None
 ) -> tuple[dict, list]:
     model = registry()[workflow.model]
     context = resource_context(workflow, user, policy)
@@ -654,6 +685,12 @@ def decide(
         "不能将演示字段一致解释为真实地层归属确认。"
     )
     payload = decision_payload(workflow, stage, context, results)
+    if payload.get("humanReviewFeedback"):
+        instruction += (
+            "humanReviewFeedback为本任务已保存的用户审核结论和意见，绑定其原阶段及候选输出。"
+            "下一步说明应结合这些意见与实际批准状态；意见是核查说明，不是算法参数或编辑命令。"
+            "新增修改仍须满足原始规则、证据和允许操作校验；反馈不能扩大已批准的结果范围。"
+        )
     messages = [
         {"role": "system", "content": instruction},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
@@ -729,6 +766,9 @@ def decide(
             )
         )
         record["response"] = raw
+        record["status"] = "response_received"
+        if on_response:
+            on_response()
         guard()
         try:
             decision, edits = _validate_response(
@@ -793,6 +833,13 @@ def _recover_decision(
         )
 
     attempts = stage["modelAttempts"]
+    if isinstance(attempts, list) and attempts and isinstance(attempts[-1], dict):
+        last = attempts[-1]
+        if last.get("requested") and not last.get("response"):
+            raise ComputeError(
+                "本步已有模型请求记录，但完整分析响应未保存；本步尚未提交计算。"
+                "请重新发起分析，已完成的前序计算与审计记录保留。"
+            )
     limit = min(policy["maxOutputTokens"], 4096)
     calls = workflow.plan.get("actualModelCallCount", 0)
     ceiling = getattr(workflow, "max_iterations", 0)
@@ -867,14 +914,22 @@ def _recover_decision(
         request_hash = hashlib.sha256(
             json.dumps(messages, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
+        final = index == len(attempts) - 1
+        received = (
+            final
+            and attempt.get("status") == "response_received"
+            and "accepted" not in attempt
+        )
         if (
             type(attempt.get("contentBytes")) is not int
             or attempt["contentBytes"] != content_bytes
             or content_bytes > policy["maxContextBytes"]
             or attempt.get("requestSha256") != request_hash
-            or attempt.get("status")
-            != ("accepted" if index == len(attempts) - 1 else "rejected")
-            or attempt.get("accepted") is not (index == len(attempts) - 1)
+            or (
+                not received
+                and attempt.get("status") != ("accepted" if final else "rejected")
+            )
+            or (not received and attempt.get("accepted") is not final)
         ):
             reject()
     last = attempts[-1]
@@ -888,6 +943,8 @@ def _recover_decision(
     )
     decision.update(modelMode="real", modelName=model.name)
     stage["recoveredModelAttempt"] = last["attempt"]
+    if last.get("status") == "response_received":
+        stage["recoveredResponseState"] = "validated_without_new_request"
     return decision, edits
 
 

@@ -78,6 +78,7 @@ import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "./ReasoningEffortControl";
 import "./agent.css";
+import { workflowStatusLabels } from "./workflowFeedback";
 
 const active = (r: AgentRun) => r.status === "queued" || r.status === "running";
 
@@ -235,6 +236,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   } | null>(null);
   const running = runs.find(active);
   const latestResearch = [...runs].reverse().find((run) => run.researchIntent);
+  const latestResearchRunId = useRef<number | undefined>(undefined);
+  latestResearchRunId.current = latestResearch?.id;
   const pendingResearch = [...runs]
     .reverse()
     .find(
@@ -242,24 +245,32 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         run.researchIntent &&
         ["working", "waiting"].includes(runActivity(run).state),
     );
-  const sidebarRun = running ?? pendingResearch ?? runs[runs.length - 1];
+  const lastRun = runs[runs.length - 1];
+  const sidebarRun =
+    running ??
+    (latestResearch?.id === lastRun?.id ? latestResearch : pendingResearch) ??
+    lastRun;
   const currentResearchWorkflow =
     researchWorkflow?.runId === latestResearch?.id
       ? researchWorkflow?.workflow
       : undefined;
   const sidebarWorkflow =
-    manualWorkflow &&
-    [
-      "queued",
-      "running",
-      "waiting_compute",
-      "waiting_approval",
-      "paused",
-    ].includes(manualWorkflow.status)
-      ? manualWorkflow
-      : sidebarRun?.id === latestResearch?.id
-        ? currentResearchWorkflow
+    sidebarRun?.id === latestResearch?.id && currentResearchWorkflow
+      ? currentResearchWorkflow
+      : !latestResearch &&
+          manualWorkflow &&
+          [
+            "queued",
+            "running",
+            "waiting_compute",
+            "waiting_approval",
+            "paused",
+          ].includes(manualWorkflow.status)
+        ? manualWorkflow
         : undefined;
+  const composerWorkflowStatus = latestResearch
+    ? currentResearchWorkflow?.status
+    : workflowStatus;
   const sidebarActivity = sidebarWorkflow
     ? workflowActivity(sidebarWorkflow)
     : sidebarRun
@@ -1182,10 +1193,28 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       <ResearchIntentCard
                         run={{ ...r, researchIntent: r.researchIntent }}
                         onWorkflowChange={(workflow) =>
-                          setResearchWorkflow(
-                            workflow ? { runId: r.id, workflow } : undefined,
-                          )
+                          setResearchWorkflow((previous) => {
+                            if (latestResearchRunId.current !== r.id)
+                              return previous;
+                            return workflow
+                              ? { runId: r.id, workflow }
+                              : previous?.runId === r.id
+                                ? undefined
+                                : previous;
+                          })
                         }
+                        onRestart={() => {
+                          setPrompt(
+                            `请重新发起一次分析：${r.researchIntent?.goal}。先核对上次失败原因，复用可用的已有计算结果；需要重新计算的部分请说明。`,
+                          );
+                          setSelected(
+                            Object.values(r.researchIntent?.inputs ?? {}),
+                          );
+                          setToolPreferences(preferencesFromRun(r));
+                          message.info(
+                            "任务说明已放入输入框，请检查或修改后发送。原任务记录保留。",
+                          );
+                        }}
                         onChanged={(next) => {
                           if (
                             next.id !== r.id &&
@@ -1549,23 +1578,18 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         type="text"
                         icon={<NodeIndexOutlined />}
                         className={
-                          workflowStatus === "waiting_approval"
+                          composerWorkflowStatus === "waiting_approval"
                             ? "agent-workflow-attention"
                             : ""
                         }
                         onClick={() => setWorkflowOpen(true)}
                       >
                         {ui("科研工作流", "Workflow")}
-                        {workflowStatus === "waiting_approval" && (
-                          <span>{ui("待确认", "Review")}</span>
+                        {composerWorkflowStatus && (
+                          <span>
+                            {workflowStatusLabels[composerWorkflowStatus]}
+                          </span>
                         )}
-                        {workflowStatus === "paused" && (
-                          <span>{ui("已暂停", "Paused")}</span>
-                        )}
-                        {workflowStatus &&
-                          ["queued", "running", "waiting_compute"].includes(
-                            workflowStatus,
-                          ) && <span>{ui("进行中", "Running")}</span>}
                       </Button>
                     )}
                   </div>

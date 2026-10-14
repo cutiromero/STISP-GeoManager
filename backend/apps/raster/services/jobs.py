@@ -256,6 +256,7 @@ def _create_job(
     created_by_id: int | None = None,
     *,
     reconcile_restart: bool = True,
+    input_refs: list[dict[str, int]] | None = None,
 ) -> RasterJob:
     if reconcile_restart:
         reconcile_interrupted_jobs()
@@ -266,12 +267,22 @@ def _create_job(
         kind=kind,
         created_by_id=created_by_id,
         project_tag_id=selected_project_id(),
+        result={"inputRefs": input_refs} if input_refs is not None else None,
     )
     with _LOCK:
         _prune_job_caches_locked()
         _JOBS[job.id] = job
         _prune_job_caches_locked()
-    _persist_job(job, force=True)
+    try:
+        _persist_job(job, force=True, require_persisted=input_refs is not None)
+    except Exception:
+        with _LOCK:
+            _JOBS.pop(job.id, None)
+            _LAST_PERSIST.pop(job.id, None)
+        from apps.raster.services.exceptions import RasterJobError
+
+        logger.exception("Raster job input reference persistence failed")
+        raise RasterJobError("任务登记失败，数据库暂不可用，请稍后重试") from None
     return job
 
 
@@ -551,14 +562,22 @@ def start_render_job(
 ) -> RasterJob:
     from apps.catalog.models import MapLayer
     from apps.raster.models import RasterDataset
-    from apps.raster.services.exceptions import RasterRenderError
+    from apps.raster.services.exceptions import RasterJobError, RasterRenderError
     from apps.raster.services.importer import dataset_for_layer
     from apps.raster.services.renderer import (
         build_static_xyz_tile_pyramid,
         register_tile_style,
     )
 
-    job = _create_job("render", created_by_id=created_by_id)
+    refs = {
+        key: value
+        for key, value in {"layerId": layer_id, "datasetId": dataset_id}.items()
+        if type(value) is int and value > 0
+    }
+    try:
+        job = _create_job("render", created_by_id=created_by_id, input_refs=[refs])
+    except RasterJobError as exc:
+        raise RasterRenderError(str(exc)) from exc
 
     def runner() -> None:
         try:
@@ -627,10 +646,24 @@ def start_export_job(
 ) -> RasterJob:
     from tempfile import NamedTemporaryFile
 
-    from apps.catalog.export import export_layers_zip_to_path
+    from apps.catalog.export import ExportError, export_layers_zip_to_path
+    from apps.raster.services.exceptions import RasterJobError
 
     _cleanup_one_expired_export_artifact()
-    job = _create_job("export", created_by_id=created_by_id)
+    input_refs = [
+        {
+            key: value
+            for key, value in item.items()
+            if key in {"resourceId", "layerId", "datasetId"}
+            and type(value) is int
+            and value > 0
+        }
+        for item in items
+    ]
+    try:
+        job = _create_job("export", created_by_id=created_by_id, input_refs=input_refs)
+    except RasterJobError as exc:
+        raise ExportError(str(exc)) from exc
 
     def runner() -> None:
         artifact: Path | None = None
@@ -760,7 +793,9 @@ def _clear_job_artifact_record(job_id: str, expected_path: Path) -> None:
             cached.artifact_path = ""
 
 
-def _persist_job(job: RasterJob, *, force: bool = False) -> None:
+def _persist_job(
+    job: RasterJob, *, force: bool = False, require_persisted: bool = False
+) -> None:
     from apps.raster.models import RasterProcessingJob
 
     now = time.time()
@@ -797,11 +832,15 @@ def _persist_job(job: RasterJob, *, force: bool = False) -> None:
             return
         except OperationalError:
             if attempt + 1 >= attempts:
+                if require_persisted:
+                    raise
                 # 任务热状态仍保留在内存，数据库短暂繁忙不能中断 GDAL 处理。
                 return
             close_old_connections()
             time.sleep(0.05 * (attempt + 1))
         except Exception:
+            if require_persisted:
+                raise
             return
 
 

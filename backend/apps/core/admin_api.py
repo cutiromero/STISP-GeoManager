@@ -33,7 +33,6 @@ from apps.catalog.models import (
     DataResource,
     DataResourceGroup,
     MapLayer,
-    VectorDataset,
 )
 from apps.catalog.importer import ImportDataError, set_resource_access_groups
 from apps.catalog.permissions import (
@@ -127,11 +126,6 @@ from apps.core.runtime_config import runtime_system_name, runtime_upload_max_mb
 from apps.core.storage import (
     StoragePathError,
     app_path,
-    research_path,
-    table_data_path,
-    validate_vector_layer_name,
-    vector_geopackage_path,
-    vector_original_path,
 )
 from apps.raster.models import RasterDataset
 
@@ -1354,9 +1348,8 @@ def admin_data_resource_detail(request, resource_id: int):
             return feature_denied_response(request.user)
     elif not can_change:
         return feature_denied_response(request.user)
-    if (
-        ("accessGroupIds" in payload or "ownerOnly" in payload)
-        and not (can_change or can_update_access)
+    if ("accessGroupIds" in payload or "ownerOnly" in payload) and not (
+        can_change or can_update_access
     ):
         return feature_denied_response(request.user)
 
@@ -2512,101 +2505,11 @@ def _delete_admin_data_resource(
     if confirmation != resource.name:
         return JsonResponse({"detail": "删除确认名称与数据资源名称不一致"}, status=400)
 
-    name = resource.name
-    target_id = resource.id
-    target_code = resource.code
-    storage_message = _delete_imported_resource_storage(resource)
-    MapLayer.objects.filter(data_resource=resource).delete()
-    resource.delete()
-    log_operation(
-        request.user,
-        "数据管理",
-        "删除存量数据",
-        "success",
-        f"{name}；{storage_message}",
-        request,
-        target_type="data_resource",
-        target_id=target_id,
-        target_code=target_code,
-        target_name=name,
-    )
-    return JsonResponse({"detail": "数据资源已删除"})
+    from apps.catalog.resource_management import delete_resource
 
-
-def _delete_imported_resource_storage(resource: DataResource) -> str:
-    if not resource.storage_path:
-        return "未配置存储路径，仅删除资源登记"
-    if resource.data_type == DataResource.DataType.VECTOR:
-        messages = [_drop_geopackage_layer(resource.storage_path)]
-        dataset = VectorDataset.objects.filter(resource=resource).first()
-        if dataset and dataset.source_archive_path:
-            source_path = vector_original_path(dataset.source_archive_path)
-            if source_path.exists() and source_path.is_file():
-                source_path.unlink()
-                messages.append("已清理原始矢量归档")
-        return "；".join(messages)
-    if (
-        resource.data_type == DataResource.DataType.TABLE
-        and resource.file_format.upper() == "SQLITE"
-    ):
-        return _drop_sqlite_table(resource.storage_path)
-    if (
-        resource.source in {"非地理数据目录扫描", "用户导入"}
-        and "/" in resource.storage_path
-    ):
-        return _delete_research_file(resource.storage_path)
-    return "保留原始文件，仅删除资源登记"
-
-
-def _drop_geopackage_layer(layer_name: str) -> str:
-    try:
-        layer_name = validate_vector_layer_name(layer_name)
-    except StoragePathError as exc:
-        return f"跳过 GeoPackage 清理：{exc}"
-    path = vector_geopackage_path()
-    if not path.exists():
-        return "GeoPackage 文件不存在，仅删除资源登记"
-    with sqlite3.connect(path) as connection:
-        quoted_name = layer_name.replace('"', '""')
-        connection.execute(f'DROP TABLE IF EXISTS "{quoted_name}"')
-        for table_name in (
-            "gpkg_contents",
-            "gpkg_geometry_columns",
-            "gpkg_data_columns",
-            "gpkg_extensions",
-        ):
-            if _sqlite_table_exists(connection, table_name):
-                connection.execute(
-                    f"DELETE FROM {table_name} WHERE table_name = ?",
-                    (layer_name,),
-                )
-    return "已清理 GeoPackage 图层"
-
-
-def _drop_sqlite_table(table_name: str) -> str:
-    path = table_data_path("data.sqlite")
-    if not path.exists():
-        return "SQLite 文件不存在，仅删除资源登记"
-    quoted_name = str(table_name).replace('"', '""')
-    with sqlite3.connect(path) as connection:
-        connection.execute(f'DROP TABLE IF EXISTS "{quoted_name}"')
-        if _sqlite_table_exists(connection, "data_columns"):
-            connection.execute(
-                "DELETE FROM data_columns WHERE table_name = ?",
-                (table_name,),
-            )
-    return "已清理 SQLite 表"
-
-
-def _delete_research_file(relative_path: str) -> str:
-    try:
-        path = research_path(relative_path)
-    except StoragePathError as exc:
-        return f"跳过文件清理：{exc}"
-    if not path.exists() or not path.is_file():
-        return "文件不存在，仅删除资源登记"
-    path.unlink()
-    return "已删除研究数据文件"
+    result = delete_resource(request, resource.id)
+    status = {"deleted": 200, "not_found": 404, "blocked": 409, "failed": 409}
+    return JsonResponse({"detail": result["detail"]}, status=status[result["status"]])
 
 
 def _admin_resource_action_label(action: str, payload: dict[str, Any]) -> str:
@@ -3141,7 +3044,8 @@ def _serialize_profile(user) -> dict[str, Any]:
         "disabledPermissions": sorted(disabled),
         "effectivePermissions": sorted(effective),
         "availablePermissions": [
-            _serialize_permission(item) for item in FEATURE_PERMISSIONS
+            _serialize_permission(item)
+            for item in FEATURE_PERMISSIONS
             if item.perm_name in effective
         ],
     }

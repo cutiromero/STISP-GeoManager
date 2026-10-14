@@ -21,6 +21,7 @@ from apps.raster.services.jobs import (
     get_job,
     reconcile_interrupted_jobs,
     start_export_job,
+    start_render_job,
 )
 
 
@@ -130,6 +131,25 @@ class RasterJobPersistenceTests(TestCase):
         stale.refresh_from_db()
         self.assertEqual(stale.status, "failed")
 
+    def test_input_reference_persistence_failure_prevents_render_submission(self):
+        with (
+            patch(
+                "apps.raster.services.jobs.reconcile_interrupted_jobs",
+                return_value=True,
+            ),
+            patch.object(
+                RasterProcessingJob.objects,
+                "update_or_create",
+                side_effect=RuntimeError("任务数据库不可用"),
+            ),
+            patch("apps.raster.services.jobs._submit_job") as submit,
+        ):
+            with self.assertRaisesMessage(RuntimeError, "任务登记失败，数据库暂不可用"):
+                start_render_job(layer_id=1, dataset_id=None, rules={})
+        submit.assert_not_called()
+        self.assertFalse(_JOBS)
+        self.assertFalse(RasterProcessingJob.objects.exists())
+
 
 class RasterExportArtifactLifecycleTests(TransactionTestCase):
     def setUp(self):
@@ -149,9 +169,7 @@ class RasterExportArtifactLifecycleTests(TransactionTestCase):
         job = _create_job("export")
         _set_job_artifact(job.id, artifact)
         _finish_job(job.id, {"filename": "export.zip"}, "ready")
-        request = RequestFactory().get(
-            f"/api/catalog/export/jobs/{job.id}/download/"
-        )
+        request = RequestFactory().get(f"/api/catalog/export/jobs/{job.id}/download/")
         request.user = SimpleNamespace(
             id=99,
             is_authenticated=True,

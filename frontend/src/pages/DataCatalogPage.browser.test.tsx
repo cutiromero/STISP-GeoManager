@@ -12,17 +12,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ResourceListItem } from "../types";
 import { fallbackTaxonomyTree } from "../utils/taxonomy";
 import DataCatalogPage from "./DataCatalogPage";
+import { page } from "vitest/browser";
+import { resetProjectSession, setActiveProject } from "../projects/session";
+import "../styles.css";
 
 const mockApi = vi.hoisted(() => ({
   resources: vi.fn(),
   dataSchemaSummary: vi.fn(),
+  deleteResources: vi.fn(),
 }));
+const permissionState = vi.hoisted(() => ({ canDeleteDataResources: true }));
 vi.mock("../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/client")>()),
   api: mockApi,
 }));
 vi.mock("../contexts/AppContext", () => ({
-  useAppContext: () => ({ user: { permissions: { canBrowseData: true } } }),
+  useAppContext: () => ({
+    user: {
+      permissions: {
+        canBrowseData: true,
+        canDeleteDataResources: permissionState.canDeleteDataResources,
+      },
+    },
+  }),
 }));
 vi.mock("../components/WorkspaceHeader", () => ({ default: () => null }));
 
@@ -64,7 +76,7 @@ const result: ResourceListItem = {
 
 function renderCatalog() {
   return render(
-    <ConfigProvider locale={zhCN}>
+    <ConfigProvider locale={zhCN} theme={{ token: { motion: false } }}>
       <AntApp>
         <MemoryRouter initialEntries={["/data"]}>
           <Routes>
@@ -79,6 +91,9 @@ function renderCatalog() {
 
 describe("data catalog computation results", () => {
   beforeEach(() => {
+    resetProjectSession();
+    permissionState.canDeleteDataResources = true;
+    mockApi.deleteResources.mockReset();
     mockApi.resources.mockReset().mockResolvedValue({ items: [result] });
     mockApi.dataSchemaSummary
       .mockReset()
@@ -113,5 +128,143 @@ describe("data catalog computation results", () => {
     renderCatalog();
     fireEvent.click(await screen.findByRole("button", { name: "进入地图" }));
     expect(await screen.findByText("地理工作台入口")).toBeInTheDocument();
+  });
+
+  it("confirms selected names and removes only genuinely deleted resources", async () => {
+    const retained = { ...result, id: 9, name: "原始影像" };
+    mockApi.resources.mockResolvedValue({ items: [result, retained] });
+    mockApi.deleteResources.mockResolvedValue({
+      items: [
+        {
+          resourceId: 8,
+          name: result.name,
+          status: "deleted",
+          detail: "已删除",
+        },
+        {
+          resourceId: 9,
+          name: retained.name,
+          status: "blocked",
+          detail: "被计算任务引用，请先处理相关任务",
+        },
+      ],
+      deletedIds: [8],
+      deletedCount: 1,
+      failedCount: 1,
+    });
+    renderCatalog();
+    await screen.findByText(result.name);
+    fireEvent.click(screen.getByRole("button", { name: "文件管理" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "全选当前结果" }));
+    expect(screen.getByText("已选择 2 项")).toBeInTheDocument();
+    await page.screenshot({
+      path: "../../test-results/catalog-file-management.png",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(result.name)).toBeInTheDocument();
+    expect(within(dialog).getByText(retained.name)).toBeInTheDocument();
+    expect(mockApi.deleteResources).not.toHaveBeenCalled();
+    await page.screenshot({
+      path: "../../test-results/catalog-file-delete-confirmation.png",
+    });
+    mockApi.resources.mockResolvedValue({ items: [retained] });
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认删除" }));
+    await waitFor(() =>
+      expect(mockApi.deleteResources).toHaveBeenCalledWith(
+        { resourceIds: [8, 9], confirmed: true },
+        "1",
+      ),
+    );
+    expect(
+      await screen.findByText("已删除 1 项，1 项未删除"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/被计算任务引用，请先处理相关任务/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: `选择文件 ${result.name}` }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: `选择文件 ${retained.name}` }),
+    ).toBeChecked();
+    expect(screen.getByText("已选择 1 项")).toBeInTheDocument();
+  });
+
+  it("keeps files and selection when the server rejects deletion", async () => {
+    mockApi.deleteResources.mockRejectedValue(new Error("当前账号无删除权限"));
+    renderCatalog();
+    await screen.findByText(result.name);
+    fireEvent.click(screen.getByRole("button", { name: "文件管理" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: `选择文件 ${result.name}` }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "确认删除",
+      }),
+    );
+    expect(await screen.findByText("当前账号无删除权限")).toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: `选择文件 ${result.name}` }),
+    ).toBeChecked();
+    expect(screen.getByText("已选择 1 项")).toBeInTheDocument();
+  });
+
+  it("shows retained shared storage and cleanup failures on deleted registrations", async () => {
+    const detail =
+      "已删除资源登记及关联图层、数据集；其他资源共用的存储已保留；部分隔离文件清理失败，请联系管理员";
+    mockApi.deleteResources.mockResolvedValue({
+      items: [
+        { resourceId: result.id, name: result.name, status: "deleted", detail },
+      ],
+      deletedIds: [result.id],
+      deletedCount: 1,
+      failedCount: 0,
+    });
+    renderCatalog();
+    await screen.findByText(result.name);
+    fireEvent.click(screen.getByRole("button", { name: "文件管理" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: `选择文件 ${result.name}` }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    mockApi.resources.mockResolvedValue({ items: [] });
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "确认删除",
+      }),
+    );
+    const feedback = await screen.findByText(/部分隔离文件清理失败/);
+    expect(feedback).toHaveTextContent("其他资源共用的存储已保留");
+    expect(feedback.closest(".ant-alert")).toHaveClass("ant-alert-warning");
+    expect(screen.getByText("已删除 1 项")).toBeInTheDocument();
+  });
+
+  it("does not delete after switching the project during confirmation", async () => {
+    renderCatalog();
+    await screen.findByText(result.name);
+    fireEvent.click(screen.getByRole("button", { name: "文件管理" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: `选择文件 ${result.name}` }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    const dialog = await screen.findByRole("dialog");
+    setActiveProject("8");
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认删除" }));
+    expect(
+      await screen.findByText("项目已切换，请重新选择文件"),
+    ).toBeInTheDocument();
+    expect(mockApi.deleteResources).not.toHaveBeenCalled();
+  });
+
+  it("does not show file management without delete permission", async () => {
+    permissionState.canDeleteDataResources = false;
+    renderCatalog();
+    await screen.findByText(result.name);
+    expect(
+      screen.queryByRole("button", { name: "文件管理" }),
+    ).not.toBeInTheDocument();
   });
 });

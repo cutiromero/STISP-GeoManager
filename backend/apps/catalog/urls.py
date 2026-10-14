@@ -1,11 +1,16 @@
 from django.urls import path
 
-from apps.catalog import map_compositions, nongeo, results, views
+from apps.catalog import map_compositions, nongeo, resource_management, results, views
 
 
 urlpatterns = [
     path("catalog/directories/", views.directories, name="catalog-directories"),
     path("catalog/resources/", views.resources, name="catalog-resources"),
+    path(
+        "catalog/resources/delete/",
+        resource_management.bulk_delete_resources,
+        name="catalog-resources-delete",
+    ),
     path("catalog/results/", results.result_artifacts, name="catalog-results"),
     path(
         "catalog/results/<int:result_id>/",

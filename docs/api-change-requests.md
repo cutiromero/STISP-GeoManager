@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261014-001 - 数据目录批量永久删除与人工审核反馈
+
+- Status: BackendReady
+- Owner: catalog_delete_backend 契约/删除服务；catalog_files_ui 目录；workflow_feedback 人工审核。
+- Endpoints: POST /api/catalog/resources/delete/; POST /api/admin/data/resources/{id}/; POST /api/agent/workflows/{workflowId}/confirm/; POST /api/raster/render/async/; POST /api/catalog/export/async/; GET /api/raster/jobs/{job_id}/。
+- Change type: 新增批量删除接口，扩展现有审核请求。
+- OpenAPI change: ResourceBulkDeleteRequest/Response/Item；AgentWorkflowConfirmation 增加 decision 与 feedback；RasterJobInputReferences 保存运行中渲染/导出的精简输入引用。
+- Frontend reason: 目录多选真实删除并逐项说明引用阻塞；审核用户可批准、拒绝并返回意见。
+- Mock examples: 由后端临时存储集成测试与前端浏览器拦截样例验证，不新增第二份契约。
+- Backend implementation notes: 单项目、删除功能权限及 owner_only 边界；保留任务/成果/工程/科研引用、共享存储及外部原始文件。正在渲染/导出的输入标识先持久化再提交，排队及处理中阻止删除，终态解除此临时保护。审核重新验证本人、原项目、当前计划哈希；拒绝只在 waiting_approval 停止后续，意见持久化并保留已有成果。
+- Verification: 实际SQLite/GPKG/文件删除、部分成功、权限、跨项目、隐私、引用保护；审核通过/拒绝/意见保存与刷新；生成类型一致性。
+- Result: 本机隔离存储删除、既有后台/导出及raster接口和持久化回归94项、16个参数子测试通过；API生成/lint/一致性及前端类型检查通过。真实删除仅在临时测试目录和测试数据库中进行，服务器验证由发布回执记录。
+
 ## API-20261012-001 - 真实地质材料案例与成果数据关联
 
 - Status: ContractReady
@@ -85,6 +98,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261014-001 | BackendReady | /api/catalog/resources/delete/; /api/agent/workflows/{workflowId}/confirm/ | guarded bulk deletion; approve/reject feedback | Updated | HTTP/browser fixtures | Passed | Focused passed | Isolated real storage tests; no live business deletion |
 | API-20261012-002 | BackendReady | /api/agent/workflows/{workflowId}/pause/; resume/; report/* | persistent MD reports and resumable pause | Updated | HTTP/browser fixtures | Passed | Focused passed | Real files and safe checkpoints; publication pending |
 | API-20261012-001 | ContractReady | /api/agent/research-demos/; /api/catalog/results/ | real-map age correction; authorized result links | Updated | Updated | In progress | Pending | Original synthetic cases preserved; injected errors clearly labelled |
 | API-20261011-001 | ContractReady | /api/agent/research-demos/; /api/agent/runs/{runId}/research-intent/; AgentRun | natural language demo and online clarification | Updated | Updated | In progress | Frontend focused passed | Real backend and candidate validation pending |

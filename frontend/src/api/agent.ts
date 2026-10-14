@@ -21,6 +21,7 @@ import type {
   AgentResearchIntentUpdate,
   AgentWorkflowReport,
   AgentWorkflowReportPreview,
+  AgentWorkflowConfirmation,
 } from "./generated/types.gen";
 
 export const agentApi = {
@@ -93,10 +94,14 @@ export const agentApi = {
   workflow: (id: string) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/`),
   workflows: () => requestJson<AgentWorkflowList>("/api/agent/workflows/"),
-  confirmWorkflow: (id: string, planHash: string) =>
+  confirmWorkflow: (
+    id: string,
+    planHash: string,
+    review?: Pick<AgentWorkflowConfirmation, "decision" | "feedback">,
+  ) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/confirm/`, {
       method: "POST",
-      body: { planHash },
+      body: { planHash, ...review },
     }),
   cancelWorkflow: (id: string) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/cancel/`, {

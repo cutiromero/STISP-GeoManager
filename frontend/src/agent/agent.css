@@ -1749,6 +1749,33 @@
 .agent-workflow-actions {
   margin: 6px 0 12px;
 }
+.agent-workflow-feedback {
+  margin: 0 0 12px;
+}
+.agent-workflow-feedback p {
+  margin: 5px 0;
+}
+.agent-workflow-review {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  margin: 12px 0;
+  border: 1px solid #c8ddeb;
+  border-radius: 12px;
+  background: #f4f9fd;
+  color: #365b75;
+}
+.agent-workflow-review p,
+.agent-review-saved {
+  margin: 0;
+  line-height: 1.7;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.agent-review-saved {
+  margin-bottom: 12px;
+  color: #416984;
+}
 .agent-workflow-saved {
   display: flex;
   flex-wrap: wrap;

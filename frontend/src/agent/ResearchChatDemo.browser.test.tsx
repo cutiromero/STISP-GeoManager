@@ -520,13 +520,14 @@ it("pauses the research task after confirmation and resumes into review without 
   await within(task).findByRole("button", { name: "继续任务" });
   expect(pause).toHaveBeenCalledWith("workflow-actual");
   fireEvent.click(within(task).getByRole("button", { name: "继续任务" }));
-  await within(task).findByRole("button", { name: "审核并继续" });
+  await within(task).findByRole("button", { name: "审核通过并继续" });
   expect(resume).toHaveBeenCalledWith("workflow-actual");
   expect(confirm).not.toHaveBeenCalled();
   expect(agentApi.submit).not.toHaveBeenCalled();
 });
 
 it("restores an actual review, waits for explicit approval and uses its current revision", async () => {
+  vi.spyOn(agentApi, "updateResearchIntent");
   const reviewIntent = intent({
     status: "waiting_approval",
     questions: [],
@@ -548,23 +549,30 @@ it("restores an actual review, waits for explicit approval and uses its current 
     ...workflow("waiting_approval"),
     plan: { reviewOutputs: [{ label: "几何修复审核" }] },
   });
-  vi.spyOn(agentApi, "updateResearchIntent").mockResolvedValue(
-    run(101, { researchIntent: { ...reviewIntent, status: "running" } }),
-  );
+  vi.spyOn(agentApi, "confirmWorkflow").mockResolvedValue(workflow("running"));
   show();
-  const button = await screen.findByRole("button", { name: "审核并继续" });
+  const button = await screen.findByRole("button", { name: "审核通过并继续" });
   expect(agentApi.updateResearchIntent).not.toHaveBeenCalled();
   await waitFor(() =>
     expect(
-      within(screen.getByLabelText("科研任务")).getByText("等待审核"),
-    ).toBeInTheDocument(),
+      within(screen.getByLabelText("科研任务")).getAllByText("等待您审核")
+        .length,
+    ).toBeGreaterThan(0),
   );
+  fireEvent.change(screen.getByRole("textbox", { name: "审核意见" }), {
+    target: { value: "核对完成，保留原质量提示" },
+  });
   fireEvent.click(button);
+  fireEvent.click(await screen.findByRole("button", { name: "确认通过" }));
   await waitFor(() =>
-    expect(agentApi.updateResearchIntent).toHaveBeenCalledWith(101, {
-      action: "confirm",
-      revision: "review-current",
-    }),
+    expect(agentApi.confirmWorkflow).toHaveBeenCalledWith(
+      "workflow-actual",
+      "current-plan",
+      {
+        decision: "approve",
+        feedback: "核对完成，保留原质量提示",
+      },
+    ),
   );
 });
 
@@ -579,4 +587,67 @@ it("keeps clarification usable on a phone without horizontal overflow", async ()
     path: "../../test-results/research-chat-demo-phone.png",
   });
   await page.viewport(1600, 900);
+});
+
+it("keeps the latest chat workflow state when an older failed task arrives later", async () => {
+  const oldIntent = intent({
+    status: "failed",
+    workflowId: "older-flow",
+    questions: [],
+  });
+  const currentIntent = intent({
+    originRunId: 102,
+    status: "running",
+    workflowId: "current-flow",
+    questions: [],
+    goal: "当前正在分析的任务",
+  });
+  let finishOld: (value: AgentWorkflow) => void = () => {};
+  const oldResponse = new Promise<AgentWorkflow>((resolve) => {
+    finishOld = resolve;
+  });
+  const current = {
+    ...workflow("running"),
+    id: "current-flow",
+    detail: "正在读取本次证据",
+    plan: {
+      phase: "decide",
+      stageIndex: 0,
+      stages: [
+        {
+          identifier: "ecology-priority",
+          modelAttempts: [{ status: "requesting" }],
+        },
+      ],
+    },
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation: newConversation,
+    runs: [
+      run(101, { researchIntent: oldIntent }),
+      run(102, { researchIntent: currentIntent }),
+    ],
+  });
+  vi.mocked(agentApi.workflow).mockImplementation(async (id) =>
+    id === "older-flow" ? oldResponse : current,
+  );
+  vi.mocked(agentApi.poll).mockImplementation(async (id) => ({
+    run: run(id, { researchIntent: id === 101 ? oldIntent : currentIntent }),
+    events: [],
+    cursor: 0,
+  }));
+  show();
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("当前任务")).getByText("模型正在分析"),
+    ).toBeVisible(),
+  );
+  finishOld({ ...workflow("failed"), id: "older-flow", detail: "旧任务失败" });
+  await screen.findByText("旧任务失败");
+  expect(
+    within(screen.getByLabelText("当前任务")).getByText("模型正在分析"),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: /科研工作流.*正在分析/ }),
+  ).toBeVisible();
 });

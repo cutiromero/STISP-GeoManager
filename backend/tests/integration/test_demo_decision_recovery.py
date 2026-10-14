@@ -76,6 +76,49 @@ def test_complete_accepted_response_recovers_with_no_new_request(
     assert workflow.plan["actualModelCallCount"] == workflow.iteration == len(audit)
 
 
+@pytest.mark.parametrize("retry", [False, True])
+def test_saved_complete_response_is_revalidated_after_pause_without_new_request(
+    retry, retry_model
+):
+    workflow, stage, results, original = saved_response(retry=retry)
+    latest = stage["modelAttempts"][-1]
+    latest["status"] = "response_received"
+    latest.pop("accepted")
+    audit = copy.deepcopy(stage["modelAttempts"])
+    assert replay(workflow, stage, results) == original
+    assert stage["modelAttempts"] == audit
+    assert stage["recoveredResponseState"] == "validated_without_new_request"
+    assert workflow.plan["actualModelCallCount"] == len(audit)
+
+
+def test_received_response_with_invalid_evidence_never_submits_or_calls_model(
+    retry_model,
+):
+    workflow, stage, results, _ = saved_response()
+    latest = stage["modelAttempts"][-1]
+    latest["status"] = "response_received"
+    latest.pop("accepted")
+    value = json.loads(latest["response"])
+    value["decision"]["evidenceRefs"] = [{"kind": "output", "id": "fake"}]
+    latest["response"] = json.dumps(value)
+    with pytest.raises(ComputeError, match="本次授权"):
+        replay(workflow, stage, results)
+
+
+def test_request_without_saved_response_explains_missing_analysis_and_keeps_audit(
+    retry_model,
+):
+    workflow, stage, results, _ = saved_response()
+    latest = stage["modelAttempts"][-1]
+    latest["status"] = "requesting"
+    latest.pop("accepted")
+    latest.pop("response")
+    before = copy.deepcopy(stage)
+    with pytest.raises(ComputeError, match="完整分析响应未保存.*本步尚未提交计算"):
+        replay(workflow, stage, results)
+    assert stage == before
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

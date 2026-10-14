@@ -2644,3 +2644,13 @@ GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84
 新增 POST `.../report/` 生成成功工作流的持久Markdown报告，幂等且不调用模型或计算；GET `.../report/preview/` 返回UTF8文本；GET `.../report/download/` 需数据导出权限，返回真实attachment；POST `.../report/import/` 需数据新增权限，幂等登记document/MD、is_compute_result。所有接口检查本人、当前单项目、所有输入及关联任务/结果可见性，文件和伴随清单在TOML指定研究目录保存并核对SHA256。原始模型请求和内部思考不进入报告。缺报告404，未完成或校验异常409。前端预览受控Markdown，禁用原始HTML。
 
 报告汇总多个真实任务，不伪造ComputeOutput或挂到单一计算任务。已有CSV输出继续真实预览、下载和登记为表格；地图动作沿用既有栅格/矢量链路。本轮规范Markdown与CSV输出，未新增算法清单的DOCX/XLSX格式。
+
+## 目录文件管理与审核反馈（2026-10-14）
+
+POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-Id`，需要 `catalog.delete_dataresource`，前端按钮沿用 `canDeleteDataResources`。请求为 `{resourceIds:[...],confirmed:true}`，最多100项、正整数、去重后按原顺序处理。响应 `items` 包含 `resourceId/name/status/detail`，并返回 `deletedIds/deletedCount/failedCount`；200可以部分成功。引用中的资源返回 blocked，存储或数据库失败返回 failed；不存在、跨项目或 owner_only 不可见统一 not_found 且名称为 null。成功才清除选中项并刷新目录。无登录401、无功能权限403、参数或项目上下文错误400。
+
+删除清理真实资源登记、目录成员、关联地图图层、矢量/栅格数据集、独占的受控导入文件与存储层，保留统一数据库容器及其他表。受控路径由TOML及当前项目决定，不接受客户端路径。现有计算输入/入库结果、成果、已保存工程和科研工作流引用阻止删除；引用原因只返回类型，不泄露其他用户对象名称。共享检查读取所有项目登记，保守保留共享存储和外部原始材料。后台已有单项删除仍要求匹配资源名，并委托同一受保护删除服务。
+
+渲染和导出任务提交前，将精简的资源/图层/栅格数据集标识保存到 `RasterProcessingJob.result.inputRefs`，不保存导出的完整几何。任务排队或运行时，相关资源不可删除；ready/failed 后解除这项临时保护，其他永久引用继续生效。初始引用持久化失败时停止任务提交并反馈数据库错误。文件先隔离，SQLite/GPKG 存储表与业务元数据参加同一个数据库事务，提交成功后清理隔离文件；回滚恢复原文件。逐项反馈区分共用存储保留、隔离文件清理失败和原文件恢复失败。
+
+科研工作流 confirm 请求使用 `AgentWorkflowConfirmation`：必填 `planHash`；可选 `decision=approve|reject` 默认approve，`feedback` 最多4000字。approve延续原确认；reject仅在waiting_approval停止后续，保留计算及候选输出。审核意见保存到步骤和检查点，用于判断依据；不作为算法参数或编辑指令。原本人、项目、资源授权与计划哈希检查保持，暂停/状态冲突/旧计划409，参数无效400。

@@ -7,7 +7,7 @@ const stepNames: Record<string, string> = {
   waiting: "任务已提交",
   running: "执行中",
   succeeded: "已完成",
-  failed: "未完成",
+  failed: "本步失败",
   waiting_approval: "待审核",
   skipped: "已跳过",
 };
@@ -170,7 +170,8 @@ export default function WorkflowDecisionTimeline({
                 )}
                 {step.errorCode && (
                   <p className="agent-decision-error">
-                    本步骤未完成，请结合上方状态检查资料或重试。
+                    本步骤失败：
+                    {step.message || "请查看任务状态中的原因与下一步操作。"}
                   </p>
                 )}
               </article>

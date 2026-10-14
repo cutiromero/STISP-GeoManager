@@ -478,9 +478,17 @@ it("keeps quality review visible and resumes only when the user approves the can
   showWorkflow();
   await screen.findByText("几何修复影响较大，请核对候选结果");
   expect(confirm).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "审核并继续" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "审核意见" }), {
+    target: { value: "已核对候选修改位置" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "审核通过并继续" }));
+  expect(confirm).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByRole("button", { name: "确认通过" }));
   await waitFor(() =>
-    expect(confirm).toHaveBeenCalledWith("demo-workflow", "verified-plan"),
+    expect(confirm).toHaveBeenCalledWith("demo-workflow", "verified-plan", {
+      decision: "approve",
+      feedback: "已核对候选修改位置",
+    }),
   );
 });
 

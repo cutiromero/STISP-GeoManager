@@ -35,6 +35,7 @@ import { useTranslation } from "react-i18next";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { platformBrand } from "../config/platformBrand";
 import { useAppContext } from "../contexts/AppContext";
+import { useProjectContext } from "../projects/ProjectContext";
 import i18n, { currentLocale } from "../i18n";
 import type {
   NonGeoAnalytics,
@@ -65,20 +66,34 @@ const analyticsPalette = [
   "#c4bfb6",
   "#6c7985",
 ];
+// These stable codes identify the three projects selected for the poplar showcase.
+const poplarShowcaseProjectCodes = new Set([
+  "default",
+  "demo-arid-ecology",
+  "05",
+]);
 
 export default function NonGeoPage() {
   const { user } = useAppContext();
+  const projectContext = useProjectContext();
   const ui = useComputeText();
   const { t, i18n: translationI18n } = useTranslation();
   const canBrowseData = Boolean(user?.permissions?.canBrowseData);
-  // This page is a curated showcase, independent of the project resource catalog.
-  const demoBundle = useMemo(
-    () => createNonGeoDemo(currentLocale()),
-    [translationI18n.resolvedLanguage],
+  const currentProject = projectContext?.projects.find(
+    (project) => String(project.id) === projectContext.current,
   );
-  const analytics = canBrowseData ? demoBundle.analytics : null;
-  const selectedResource = canBrowseData ? demoBundle.resource : null;
-  const tableData = canBrowseData ? demoBundle.table : null;
+  const showPoplarDemo = Boolean(
+    canBrowseData &&
+    currentProject?.isActive &&
+    poplarShowcaseProjectCodes.has(currentProject.code),
+  );
+  const demoBundle = useMemo(
+    () => (showPoplarDemo ? createNonGeoDemo(currentLocale()) : null),
+    [showPoplarDemo, translationI18n.resolvedLanguage],
+  );
+  const analytics = demoBundle?.analytics ?? null;
+  const selectedResource = demoBundle?.resource ?? null;
+  const tableData = demoBundle?.table ?? null;
   const [analysisTab, setAnalysisTab] = useState("overview");
   const [selectedMetricField, setSelectedMetricField] = useState<string>();
   const queryingTable = false;
@@ -208,7 +223,7 @@ export default function NonGeoPage() {
         <span>
           {t("nonGeo.resourceCount", { count: selectedResource ? 1 : 0 })}
         </span>
-        <Tag color="cyan">{ui("展示数据", "Showcase")}</Tag>
+        {showPoplarDemo && <Tag color="cyan">{ui("展示数据", "Showcase")}</Tag>}
       </div>
       <div className="nongeo-resource-list">
         {selectedResource && (
@@ -241,14 +256,14 @@ export default function NonGeoPage() {
                   <Typography.Title level={2}>
                     {analytics?.resource.name ??
                       selectedResource?.name ??
-                      t("nonGeo.selectResource")}
+                      ui("非地理数据", "Non-spatial data")}
                   </Typography.Title>
-                  {canBrowseData ? (
+                  {showPoplarDemo ? (
                     <Tag color="gold">{t("nonGeo.demoBadge")}</Tag>
                   ) : null}
                 </div>
               </div>
-              {canBrowseData && (
+              {showPoplarDemo && (
                 <Space className="nongeo-analysis-tools">
                   <Button
                     aria-label={t("nonGeo.queryDetails")}
@@ -262,7 +277,7 @@ export default function NonGeoPage() {
               )}
             </div>
 
-            {canBrowseData && (
+            {showPoplarDemo && (
               <p className="nongeo-demo-note">
                 {ui(
                   "内置示例，用于体验图表和明细查询。",
@@ -282,7 +297,10 @@ export default function NonGeoPage() {
             ) : (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={t("nonGeo.selectLeftResource")}
+                description={ui(
+                  "当前项目暂无演示数据",
+                  "No showcase data in this project",
+                )}
               />
             )}
             {analytics && canBrowseData && (
