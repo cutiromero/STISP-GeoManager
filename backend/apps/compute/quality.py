@@ -120,5 +120,6 @@ def require_automatic_quality(output):
         ) from exc
     if report["status"] != "passed":
         raise ComputeError(
-            "结果需要审核，已保留原始输出并暂停自动入库：" + report["summary"], 409
+            "结果需要审核，已保留原始输出并暂停自动入库；请查看结果卡中的质量核查说明",
+            409,
         )

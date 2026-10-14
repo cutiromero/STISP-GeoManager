@@ -42,6 +42,33 @@ def test_direct_agent_import_stops_on_quality_review(env):  # noqa: F811
     assert not ComputeImport.objects.exists()
 
 
+def test_chat_import_feedback_omits_quality_summary_but_result_card_retains_it(env):  # noqa: F811
+    from apps.agent.worker import run_task
+    from apps.compute.serializers import output_data
+
+    t = task(env)
+    result = checked_output(t)
+    summary = "C:/private/input.gpkg upstream-token=diagnostic-secret"
+    result.metadata["qualityCheck"]["summary"] = summary
+    result.save(update_fields=["metadata"])
+    item = env["run"]
+    AgentComputeFollowup.objects.create(task=t, run=item)
+    item.prompt, item.status = "入库", "running"
+    item.save(update_fields=["prompt", "status"])
+    with patch("apps.agent.worker.guard"):
+        run_task(item.id)
+    item.refresh_from_db()
+    assert item.status == "failed"
+    assert item.detail == (
+        "结果需要审核，已保留原始输出并暂停自动入库；请查看结果卡中的质量核查说明"
+    )
+    assert summary not in item.detail
+    assert not item.events.filter(text__contains=summary).exists()
+    result.refresh_from_db()
+    assert output_data(result)["metadata"]["qualityCheck"]["summary"] == summary
+    assert not ComputeImport.objects.exists()
+
+
 def test_automatic_followup_stops_on_quality_review_and_preserves_output(env):  # noqa: F811
     t = task(env)
     execute(env["run"], "import_compute_result", {"taskId": str(t.id)})

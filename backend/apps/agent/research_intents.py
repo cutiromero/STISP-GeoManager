@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import connection, transaction
+from django.db.models import F
 from django.utils import timezone
 
 from .models import AgentRun, AgentWorkflow
@@ -463,6 +464,12 @@ def process(run, user, policy, guard, event):
     from .workflow_creation import create_workflow
 
     with transaction.atomic():
+        if connection.vendor == "sqlite":
+            # This outer transaction must own the writer before create_workflow
+            # rechecks permissions; a nested atomic block is only a savepoint.
+            AgentRun._base_manager.filter(pk=run.pk).update(
+                idempotency_key=F("idempotency_key")
+            )
         created = create_workflow(
             user, run.project_tag_id, request, chat_execution=chat_execution
         )

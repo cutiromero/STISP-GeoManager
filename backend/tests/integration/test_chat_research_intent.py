@@ -220,6 +220,28 @@ def test_real_binding_initial_autoconfirm_and_idempotent_recovery(demo):  # noqa
     assert not ComputeTask.objects.exists()
 
 
+def test_workflow_creation_and_chat_binding_roll_back_together(demo):  # noqa: F811
+    from apps.agent.research_intents import _save
+
+    item = run(demo)
+
+    def fail_binding(current, value, workflow=None):
+        if workflow is not None:
+            raise RuntimeError("diagnostic binding failure")
+        return _save(current, value)
+
+    with (
+        patch("apps.agent.research_intents._save", side_effect=fail_binding),
+        pytest.raises(RuntimeError, match="binding failure"),
+    ):
+        bridge(demo, item, parsed(demo))
+    item.refresh_from_db()
+    assert item.research_workflow_id is None
+    assert not AgentWorkflow.objects.exists()
+    assert "_parserAudit" in item.research_intent
+    assert "_initialExecutionAuthorization" not in item.research_intent
+
+
 def test_text_clarification_reuses_goal_and_creates_one_workflow(demo):  # noqa: F811
     first = run(demo)
     question = parsed(demo, "clarify")

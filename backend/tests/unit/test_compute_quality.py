@@ -120,6 +120,20 @@ def test_automatic_import_requires_pass_for_declared_checks():
             require_automatic_quality(output(metadata))
 
 
+def test_quality_gate_uses_fixed_message_and_preserves_authorized_result_details():
+    summary = "C:/private/input.gpkg upstream-token=diagnostic-secret"
+    value = {**report("needs_review"), "summary": summary}
+    item = output(quality_metadata(value))
+    with pytest.raises(ComputeError) as blocked:
+        require_automatic_quality(item)
+    assert blocked.value.status == 409
+    assert str(blocked.value) == (
+        "结果需要审核，已保留原始输出并暂停自动入库；请查看结果卡中的质量核查说明"
+    )
+    assert summary not in str(blocked.value)
+    assert item.metadata["qualityCheck"]["summary"] == summary
+
+
 def test_deep_json_is_rejected_without_recursion_failure(tmp_path):
     value = report()
     nested = {}
