@@ -292,6 +292,10 @@ def test_catalog_exact_counts_and_pages_are_not_first_twenty(setup_agent):
         assert summary["total"] == 67
         assert summary["counts"] == {"compute_results": 41, "uploaded_data": 26}
         assert sum(g["count"] for g in summary["groups"]) == 67
+        presentation, _ = execute(run, "present_resource_catalog", {})
+        assert presentation["summary"]["total"] == 67
+        assert all(f"目录资源 {index}" in presentation["answer"] for index in range(66))
+        assert "不可见" not in presentation["answer"]
         seen, offset = [], 0
         while offset is not None:
             page, _ = execute(run, "search_resources", {"offset": offset, "limit": 17})
@@ -307,6 +311,8 @@ def test_catalog_exact_counts_and_pages_are_not_first_twenty(setup_agent):
         summary, _ = execute(run, "summarize_resource_catalog", {})
         assert summary["total"] == 1
         assert summary["counts"]["uploaded_data"] == 1
+        selected, _ = execute(run, "present_resource_catalog", {})
+        assert selected["summary"]["total"] == 1
 
 
 def test_catalog_cross_project_and_page_byte_budget(setup_agent):
@@ -338,6 +344,38 @@ def test_catalog_cross_project_and_page_byte_budget(setup_agent):
     with project_scope(s["scope"]):
         summary, _ = execute(run, "summarize_resource_catalog", {})
         assert summary["total"] == 31
+
+
+def test_catalog_presentation_completes_without_model_recopy(setup_agent, monkeypatch):
+    from apps.agent import worker
+
+    s = setup_agent
+    calls = []
+
+    def choose_catalog(*args, **kwargs):
+        calls.append(True)
+        return iter(
+            [json.dumps({"action": "present_resource_catalog", "arguments": {}})]
+        )
+
+    monkeypatch.setattr(worker, "stream", choose_catalog)
+    monkeypatch.setattr(worker, "model_window", lambda model: 32768)
+    monkeypatch.setattr(worker, "prepare_context", lambda *args: (1, False))
+    with project_scope(s["scope"]):
+        resource = DataResource.objects.create(
+            name="特殊_名称|<script>[目录]", code="escaped-catalog", data_type="table"
+        )
+        run = new_run(s)
+    run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == "succeeded", run.detail
+    assert len(calls) == 1
+    assert "**2 项**" in run.answer
+    assert "&lt;script&gt;" in run.answer and "<script>" not in run.answer
+    assert "特殊\\_名称\\|" in run.answer
+    assert any(e["resourceId"] == resource.id for e in run.evidence)
+    saved = s["client"].get(f"/api/agent/runs/{run.id}/", **s["header"]).json()
+    assert saved["run"]["answer"] == run.answer
 
 
 def test_sample_is_not_population(setup_agent):

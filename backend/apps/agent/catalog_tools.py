@@ -79,3 +79,67 @@ def catalog_page(queryset, args, brief):
         "truncated": more,
         "summary": catalog_summary(queryset),
     }, [(r, {"metadata": item}) for r, item in zip(found, items)]
+
+
+def catalog_presentation(queryset, brief):
+    """Render verified names once instead of asking an LLM to recopy the list."""
+    groups = {True: [], False: []}
+    pairs, total_bytes = [], 0
+    types = {
+        "table": "表格",
+        "vector": "矢量",
+        "raster": "栅格",
+        "document": "文档",
+        "image": "图片",
+        "gene": "基因",
+    }
+
+    def cell(value):
+        return (
+            str(value)
+            .replace("\\", "\\\\")
+            .replace("|", "\\|")
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("`", "\\`")
+            .replace("[", "\\[")
+            .replace("]", "\\]")
+            .replace("*", "\\*")
+            .replace("_", "\\_")
+        )
+
+    for resource in queryset.order_by("id").iterator():
+        row = f"| {cell(resource.name)} | {types.get(resource.data_type, cell(resource.data_type))} |"
+        total_bytes += len(row.encode("utf-8"))
+        if total_bytes > 1024 * 1024:
+            raise ValidationError(
+                "目录超过单次对话展示容量，请按query或category分组查看；总数可用全量统计工具查询"
+            )
+        groups[resource.is_compute_result].append(row)
+        metadata = brief(resource)
+        metadata.pop("description", None)
+        pairs.append((resource, {"metadata": metadata}))
+    counts = {"compute_results": len(groups[True]), "uploaded_data": len(groups[False])}
+    summary = {"total": len(pairs), "counts": counts, "complete": True}
+    sections = [
+        f"当前授权范围共 **{summary['total']} 项**资源，计算成果 **{counts['compute_results']} 项**，上传/登记数据 **{counts['uploaded_data']} 项**。"
+    ]
+    for computed, title in ((True, "计算成果"), (False, "上传/登记数据")):
+        sections.append(
+            f"### {title}（{len(groups[computed])}项）\n\n"
+            + (
+                "| 名称 | 类型 |\n|---|---|\n" + "\n".join(groups[computed])
+                if groups[computed]
+                else "暂无。"
+            )
+        )
+    sections.append(
+        "分类依据平台的计算成果登记标记；上传/登记数据包括历史登记资料。以上清单由当前授权目录直接生成。"
+    )
+    return {"summary": summary, "answer": "\n\n".join(sections)}, [
+        (None, summary),
+        *pairs,
+    ]

@@ -3,6 +3,18 @@ import SafeMath from "./SafeMath";
 
 type WikiLinkRenderer = (target: string, label: string) => ReactNode;
 
+function textContent(text: string): string {
+  const entities: Record<string, string> = {
+    "&lt;": "<",
+    "&gt;": ">",
+    "&amp;": "&",
+  };
+  return text.replace(
+    /&(?:lt|gt|amp);/g,
+    (entity) => entities[entity] ?? entity,
+  );
+}
+
 // Render a small Markdown subset as React text. No HTML, remote images or code execution.
 function inline(
   text: string,
@@ -12,12 +24,14 @@ function inline(
   const output: ReactNode[] = [];
   let cursor = 0;
   const pattern = math
-    ? /\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*([^*]+)\*\*|`([^`]+)`|(?<!\\)\$(?!\$)((?:\\.|[^$\\\n])+)\$(?!\$)/g
-    : /\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*([^*]+)\*\*|`([^`]+)`/g;
+    ? /\\[\\`*_[\]()|$]|\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*((?:\\.|[^*])+)\*\*|`([^`]+)`|(?<!\\)\$(?!\$)((?:\\.|[^$\\\n])+)\$(?!\$)/g
+    : /\\[\\`*_[\]()|$]|\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]|\*\*((?:\\.|[^*])+)\*\*|`([^`]+)`/g;
   for (const match of text.matchAll(pattern)) {
-    output.push(text.slice(cursor, match.index));
+    output.push(textContent(text.slice(cursor, match.index)));
     output.push(
-      match[1] ? (
+      match[0].startsWith("\\") ? (
+        match[0].slice(1)
+      ) : match[1] ? (
         <Fragment key={`w${match.index}`}>
           {wikiLink ? wikiLink(match[1], match[2] || match[1]) : match[0]}
         </Fragment>
@@ -33,7 +47,7 @@ function inline(
     );
     cursor = match.index + match[0].length;
   }
-  output.push(text.slice(cursor));
+  output.push(textContent(text.slice(cursor)));
   return output;
 }
 
@@ -88,16 +102,20 @@ export default function SafeMarkdown({
       );
     } else if (line.includes("|") && /^\s*\|?\s*:?-{3,}/.test(lines[0] ?? "")) {
       const split = (row: string) => {
-        const content = row.trim().replace(/^\||\|$/g, "");
+        const content = row.trim();
         const cells: string[] = [];
         let start = 0;
-        for (const match of content.matchAll(/\[\[[^\]\n]+\]\]|\|/g)) {
+        for (const match of content.matchAll(
+          /\\.|\[\[[^\]\n]+\]\]|`[^`]*`|\|/g,
+        )) {
           if (match[0] === "|") {
             cells.push(content.slice(start, match.index).trim());
             start = match.index + 1;
           }
         }
         cells.push(content.slice(start).trim());
+        if (content.startsWith("|")) cells.shift();
+        if (start === content.length) cells.pop();
         return cells;
       };
       const headers = split(line);

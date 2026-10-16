@@ -65,6 +65,12 @@ TOOLS = {
             ("query", "category"),
         ),
         ToolSpec(
+            "present_resource_catalog",
+            "read_data",
+            "直接向用户展示当前项目完整分组目录和总数，计算成果与上传/登记数据自动分类；query可为空，category可筛选。平台直接格式化真实名称，无需模型逐条复述；调用后本轮完成",
+            ("query", "category"),
+        ),
+        ToolSpec(
             "describe_resource",
             "read_data",
             "查看资源说明、字段、记录范围；resourceId",
@@ -1007,13 +1013,24 @@ def execute(run, name, args):
             result = _web_fetch(url, max_results)
         result = clean(result)
         return result, [(None, result)]
-    if name in {"search_resources", "summarize_resource_catalog"}:
-        from .catalog_tools import catalog_page, catalog_query, catalog_summary
+    if name in {
+        "search_resources",
+        "summarize_resource_catalog",
+        "present_resource_catalog",
+    }:
+        from .catalog_tools import (
+            catalog_page,
+            catalog_presentation,
+            catalog_query,
+            catalog_summary,
+        )
 
         queryset = catalog_query(resources(user, p, run.resource_ids), args)
         if name == "summarize_resource_catalog":
             result = catalog_summary(queryset)
             return result, [(None, result)]
+        if name == "present_resource_catalog":
+            return catalog_presentation(queryset, brief)
         return catalog_page(queryset, args, brief)
     if name == "compare_summaries":
         if not p["allowCompare"]:
@@ -1047,7 +1064,8 @@ def execute(run, name, args):
     touched = {
         ev["resourceId"]
         for ev in run.evidence
-        if ev["tool"] != "search_resources" and ev.get("resourceId") is not None
+        if ev["tool"] not in {"search_resources", "present_resource_catalog"}
+        and ev.get("resourceId") is not None
     }
     if (
         p["maxResources"] > 0
