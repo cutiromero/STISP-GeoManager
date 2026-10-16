@@ -801,9 +801,28 @@ def _operator_submit(run, user, p, args):
     from apps.compute.models import AlgorithmVersion
     from .compute_tools import track, compact_task
 
-    run.refresh_from_db(fields=["compute_intent", "cancel_requested"])
+    run.refresh_from_db(
+        fields=["compute_intent", "cancel_requested", "interaction_history"]
+    )
     if run.cancel_requested:
         raise PermissionDenied("本轮已停止，不能提交计算")
+    from .compute_intent_text import user_cancelled_pending_compute
+
+    if user_cancelled_pending_compute(run):
+        if run.compute_intent and not run.compute_intent.get("taskId"):
+            from .compute_intents import _save
+
+            _save(
+                run,
+                {
+                    **run.compute_intent,
+                    "status": "cancelled",
+                    "message": "已按您的要求取消尚未提交的计算",
+                },
+            )
+        raise ValidationError(
+            "用户已取消计算并改为解释，不能提交新计算；请依据已有资料继续解释。已提交任务保持原状态。"
+        )
 
     version_id = args.get("versionId")
     from .selections import require_algorithm
@@ -1159,26 +1178,53 @@ def execute(run, name, args):
             }
         )
         if resource.data_type == "raster":
-            # Reuse the catalog's compact, persisted GDAL profile. This exposes
-            # dimensions and band metadata without opening pixels or running a
-            # raster operation in the agent worker.
+            # The map's display product may differ from the source that compute
+            # freezes. Keep the display cache distinct from actual input facts.
+            from apps.compute.data import candidate
             from apps.raster.services.profile import get_raster_profile
+            from apps.compute.packages import ComputeError
+            from rasterio.errors import RasterioError
 
             profile = get_raster_profile(resource)
+            result["mapDisplayMetadata"] = {
+                "source": "map_display_profile",
+                "extent": result.pop("extent"),
+                "coordinateSystem": result.pop("crs"),
+                "note": "地图显示资料，可能经过地图渲染处理；不是计算输入的尺寸和坐标系。",
+            }
             if profile:
                 metadata = profile.get("raster", {}).get("metadata", {})
-                result["rasterMetadata"] = {
-                    "size": metadata.get("size", []),
-                    "driver": metadata.get("driver", ""),
-                    "coordinateSystem": metadata.get("coordinateSystem", ""),
-                    "bands": [
-                        {
-                            key: band.get(key)
-                            for key in ("band", "type", "min", "max", "isInteger")
-                        }
-                        for band in metadata.get("bands", [])[:32]
-                    ],
+                result["mapDisplayMetadata"].update(
+                    {
+                        "size": metadata.get("size", []),
+                        "driver": metadata.get("driver", ""),
+                        "coordinateSystem": metadata.get("coordinateSystem", ""),
+                        "bands": [
+                            {
+                                key: band.get(key)
+                                for key in ("band", "type", "min", "max", "isInteger")
+                            }
+                            for band in metadata.get("bands", [])[:32]
+                        ],
+                    }
+                )
+            try:
+                actual = candidate(resource, raster_metadata=True)
+            except (ComputeError, RasterioError, OSError):
+                result["computeInput"] = {
+                    "available": False,
+                    "detail": "实际计算源文件尚不可读取，计算输入规格未知；地图显示元信息不能替代，请核查资源处理状态。",
                 }
+                result["crs"] = ""
+            else:
+                result["computeInput"] = {
+                    "available": True,
+                    "bands": actual["bands"],
+                    "crs": actual["crs"],
+                    "source": "actual_compute_input_file",
+                }
+                result["crs"] = actual["crs"]
+                result["rasterMetadata"] = actual["rasterMetadata"]
     else:
         data, info = frame(resource)
         data = filtered(data, args)

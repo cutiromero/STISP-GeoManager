@@ -437,6 +437,135 @@ def test_latest_answer_changes_auto_import_authority(
     assert run.compute_followups.get().auto_import is not cancel_import
 
 
+@pytest.mark.parametrize("red", [None, 3])
+def test_unsubmitted_compute_plan_cannot_be_marked_completed(
+    raster_env, monkeypatch, red
+):
+    env = raster_env
+    run = make_run(env, "计算NDVI，red=3 nir=8" if red else "计算NDVI")
+    from apps.agent.compute_intents import _prepare
+
+    _prepare(run, env["owner"], env["policy"], env["ndvi"])
+    captured = []
+    commands = [{"action": "final", "answer": "请使用参数卡片运行。"}]
+    commands.append(run_command(env) if red else band_question())
+    mock_model(monkeypatch, commands, captured)
+    run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == ("waiting_compute" if red else "waiting_input")
+    assert "不能用final结束" in json.dumps(captured[-1], ensure_ascii=False)
+    assert ComputeTask.objects.count() == bool(red)
+
+
+def test_conflicting_supplement_final_is_corrected_to_second_question(
+    raster_env, monkeypatch
+):
+    env = raster_env
+    run = make_run(env)
+    mock_model(monkeypatch, [band_question()])
+    run_task(run.id)
+    assert (
+        submit_answer(
+            env, run, text="更正，红光改为第5波段，近红外仍第8波段"
+        ).status_code
+        == 202
+    )
+    assert claim() == run.id
+    captured = []
+    mock_model(
+        monkeypatch,
+        [
+            run_command(env, red=5),
+            {"action": "final", "answer": "请使用下方计算卡片运行。"},
+            band_question("选项为红光3，补充文字为5，请确认最终选择"),
+        ],
+        captured,
+    )
+    run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == "waiting_input" and not ComputeTask.objects.exists()
+    assert run.interaction["revision"] == 2
+    assert "不能用final结束" in json.dumps(captured[-1], ensure_ascii=False)
+    assert (
+        submit_answer(
+            env,
+            run,
+            submissionKey="confirmed-second-card",
+            answers={"red": "5", "nir": "8"},
+        ).status_code
+        == 202
+    )
+    assert claim() == run.id
+    mock_model(monkeypatch, [run_command(env, red=5)])
+    run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == "waiting_compute"
+    assert ComputeTask.objects.get().parameters == {"red": 5, "nir": 8}
+
+
+def test_user_changes_goal_to_explanation_and_cancels_only_pending_plan(
+    raster_env, monkeypatch
+):
+    env = raster_env
+    run = make_run(env)
+    mock_model(monkeypatch, [run_command(env), band_question()])
+    run_task(run.id)
+    run.refresh_from_db()
+    assert run.compute_intent["status"] == "collecting"
+    assert (
+        submit_answer(
+            env, run, answers={}, text="取消计算，改为只解释NDVI原理"
+        ).status_code
+        == 202
+    )
+    assert claim() == run.id
+    mock_model(
+        monkeypatch,
+        [
+            run_command(env),
+            {
+                "action": "final",
+                "answer": "NDVI比较近红外与红光；已按您的要求改为原理说明。",
+            },
+        ],
+    )
+    run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == "succeeded" and run.compute_intent["status"] == "cancelled"
+    assert "NDVI比较近红外" in run.answer
+    assert not ComputeTask.objects.exists()
+
+
+@pytest.mark.parametrize("selected, expected", [("explain", True), ("compute", False)])
+def test_only_actual_selected_choice_can_cancel_pending_compute(selected, expected):
+    from types import SimpleNamespace
+    from apps.agent.compute_intent_text import user_cancelled_pending_compute
+
+    run = SimpleNamespace(
+        prompt="计算NDVI",
+        interaction_history=[
+            {
+                "status": "answered",
+                "title": "是否取消计算，只解释原理",
+                "questions": [
+                    {
+                        "key": "goal",
+                        "label": "是否取消计算，只解释原理",
+                        "options": [
+                            {"value": "explain", "label": "取消计算，只解释原理"},
+                            {"value": "compute", "label": "继续实际计算"},
+                        ],
+                    }
+                ],
+                "answer": {"answers": {"goal": selected}, "text": ""},
+            }
+        ],
+    )
+    assert user_cancelled_pending_compute(run) is expected
+    run.interaction_history[0]["answer"]["text"] = "不要取消计算，只解释当前选择的参数"
+    assert not user_cancelled_pending_compute(run)
+
+
 def test_stale_parameter_submit_cannot_restart_a_cancelled_plan(raster_env):
     from apps.agent.compute_intents import _prepare, update
     from apps.compute.packages import ComputeError

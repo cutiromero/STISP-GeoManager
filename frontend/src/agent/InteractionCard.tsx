@@ -26,6 +26,15 @@ type Props = {
   onChanged: (run: AgentRun) => void;
 };
 
+function optionLayout(question: AgentInteraction["questions"][number]) {
+  const compact =
+    (question.options?.length ?? 0) > 4 &&
+    question.options?.every(
+      (option) => !option.description && option.label.length <= 24,
+    );
+  return `agent-interaction-options${compact ? " agent-interaction-options-compact" : ""}`;
+}
+
 function answerLabel(
   card: AgentInteraction,
   key: string,
@@ -208,7 +217,7 @@ function PendingQuestion({
             {question.type === "text" ? (
               <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} />
             ) : question.type === "multiple" ? (
-              <Checkbox.Group className="agent-interaction-options">
+              <Checkbox.Group className={optionLayout(question)}>
                 {(question.options ?? []).map((option) => (
                   <Checkbox key={option.value} value={option.value}>
                     <span>{option.label}</span>
@@ -217,7 +226,7 @@ function PendingQuestion({
                 ))}
               </Checkbox.Group>
             ) : (
-              <Radio.Group className="agent-interaction-options">
+              <Radio.Group className={optionLayout(question)}>
                 {(question.options ?? []).map((option) => (
                   <Radio key={option.value} value={option.value}>
                     <span>{option.label}</span>

@@ -1940,6 +1940,15 @@
   line-height: 1.6;
 }
 
+.agent-interaction-options-compact {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.agent-interaction-options-compact > label {
+  min-width: 0;
+  padding: 7px 10px;
+}
+
 .agent-interaction-options small {
   display: block;
   margin-top: 3px;

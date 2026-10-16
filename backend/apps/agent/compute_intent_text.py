@@ -142,8 +142,48 @@ def computation_requested(prompt):
 def followup_question(prompt):
     return bool(
         re.search(
-            r"跑完|算完|计算完|完成了|完成没|进度|状态|结果在哪|结果在哪里|入库.{0,3}(?:没|吗|了)|(?:^|\s)入库(?:$|\s)",
+            r"(?:跑完|算完|计算完(?:成)?|完成)(?:了)?(?:没(?:有)?|吗|么|[？?])"
+            r"|(?:查询|查看|看看|检查|汇报|告诉我).{0,12}(?:进度|状态)"
+            r"|(?:进度|状态)(?:如何|怎样|怎么样|是什么|是啥|呢|到哪|到了哪|[？?])"
+            r"|(?:什么|啥).{0,3}(?:进度|状态)"
+            r"|^(?:(?:目前|当前|现在|最新|这项|这个|计算|任务|入库|的)\s*)*(?:进度|状态)[。?？！!\s]*$"
+            r"|结果在哪|结果在哪里|(?:是否|有没有)(?:已经)?入库"
+            r"|入库(?:了)?(?:没(?:有)?|吗|么|[？?])|(?:^|\s)入库(?:$|\s)",
             prompt,
+        )
+    )
+
+
+def user_cancelled_pending_compute(run):
+    """Only actual latest user text/selected choices can end an unsubmitted plan."""
+    content = run.prompt
+    for question in reversed(run.interaction_history):
+        if question.get("status") != "answered":
+            continue
+        answer = question["answer"]
+        parts = [answer.get("text", "")]
+        for item in question["questions"]:
+            value = answer.get("answers", {}).get(item["key"])
+            values = value if isinstance(value, list) else [value]
+            parts.extend(str(value) for value in values if value is not None)
+            parts.extend(
+                option["label"]
+                for option in item.get("options", [])
+                if option["value"] in values
+            )
+        content = "\n".join(parts)
+        break
+    if re.search(r"(?:不|不要|不用|无需|别|勿)\s*(?:取消|停止|终止|跳过)", content):
+        return False
+    return bool(
+        re.search(
+            r"(?:取消|停止|终止|跳过)(?:本次|本轮|后续|当前|这个|全部|继续)?(?:的)?(?:计算|运算)"
+            r"|(?:不再|无需|不要|先不|不需要|不重新)(?:重新|继续|进行|执行|启动)?(?:计算|运算)",
+            content,
+        )
+        and re.search(
+            r"(?:只|仅|改为|改成|转为).{0,8}(?:解释|解读|介绍|说明|回答|讨论|报告|分析已有)",
+            content,
         )
     )
 

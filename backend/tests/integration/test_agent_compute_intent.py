@@ -388,6 +388,64 @@ def test_model_false_success_is_replaced_by_platform_evidence(env, claim):
     assert "没有实际提交" in answer
 
 
+@pytest.mark.parametrize("phrase", ["NDVI计算完成后", "已完成了NDVI计算"])
+def test_user_provided_statistics_explanation_keeps_model_answer(env, phrase):
+    from apps.agent.worker import append_compute_status
+
+    item = run(
+        env,
+        f"以下是{phrase}按正常权限读取的统计摘要，mean=0.037。"
+        "这些是用户提供的补充资料；只解释它，不重新计算、不入库。"
+        "定标状态未知，没有此前时相和明确采集季节，请结合知识说明证据缺口。",
+    )
+    explanation = "依据您提供的统计，均值0.037；缺少前期观测，尚不能判断变化或归因。"
+    assert (
+        append_compute_status(explanation, item, env["owner"], env["policy"])
+        == explanation
+    )
+    assert not ComputeTask.objects.exists()
+
+
+@pytest.mark.parametrize(
+    "prompt", ["计算完了吗", "计算完成了没有", "完成没", "任务完成了么"]
+)
+def test_completion_questions_still_require_real_tasks(env, prompt):
+    from apps.agent.worker import append_compute_status
+
+    item = run(env, prompt)
+    answer = append_compute_status("已完成", item, env["owner"], env["policy"])
+    assert "没有实际提交" in answer
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "解释period assessment与status及跨期状态，不运行算法",
+        "解释这份数据的质量状态，定标状态未知，不重新计算",
+    ],
+)
+def test_knowledge_and_data_state_explanations_are_not_progress_queries(env, prompt):
+    from apps.agent.worker import append_compute_status
+
+    item = run(env, prompt)
+    explanation = "当前只解释已有信息的适用条件和证据缺口。"
+    assert (
+        append_compute_status(explanation, item, env["owner"], env["policy"])
+        == explanation
+    )
+
+
+@pytest.mark.parametrize(
+    "prompt", ["目前状态", "当前任务进度", "查看计算任务的最新状态"]
+)
+def test_short_and_explicit_task_progress_queries_keep_platform_guard(env, prompt):
+    from apps.agent.worker import append_compute_status
+
+    item = run(env, prompt)
+    answer = append_compute_status("已经计算完成", item, env["owner"], env["policy"])
+    assert "没有实际提交" in answer
+
+
 def test_explicit_bands_use_model_and_wait_for_real_compute(env, monkeypatch):
     from apps.agent.worker import run_task
     from tests.integration.test_agent_interactions import mock_model

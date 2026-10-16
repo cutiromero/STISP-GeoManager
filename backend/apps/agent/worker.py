@@ -23,6 +23,7 @@ from .provider import stream, check_model, model_window, ModelError
 from .context import prepare_context
 from .budgets import apply_budget, check_budget_access
 from .tools import TOOLS, execute, evidence_items
+from .compute_intent_text import user_cancelled_pending_compute
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,8 @@ SYSTEM_AGENT = """你是当前项目的数据分析智能体。按问题选择�
 计算状态必须通过get_compute_task实时查询；历史queued证据只代表提交时状态。taskId为UUID，outputId为outputs中的正整数，二者绝不能互换或猜测。
 计算完成后默认由用户在结果卡选择入库；仅用户明确要求自动入库时设置autoImport=true。追问进度、入库、结果位置时只使用本会话真实工具记录中的任务，禁止从全库旧任务猜测。没有本轮真实提交工具返回时不能说已提交或完成。
 查找算法时优先给list_compute_algorithms传1至3个目标关键词query（空格分隔）；没找到可换词或省略query看目录。执行前必须核对所选具体版本返回的完整manifest，按真实输入key、参数约束和输出声明操作。
+栅格describe_resource的rasterMetadata来自实际计算源文件，mapDisplayMetadata仅是地图显示资料。比较计算输入输出尺寸、波段和CRS时使用实际源文件资料；输入读取失败时保持未知。不能把显示产品与计算结果的差异说成算法重采样或投影转换，算子处理行为须有当次工具记录或具体算法说明支持。
+Byte/uint8仅说明像元存储类型，不能据此断言原始DN或未经定标；缺少产品或处理证据时说明定标状态未知，保留用户提供的自定义波段。低指数值仅是当前输入下的数值特征，植被和变化原因的结论需要产品尺度、季节及辅助证据。
 仅在任务succeeded且输出importStatus=ready时说明已入库；排队、计算中、入库中需准确说明，后台会继续更新任务卡。
 本轮启用知识库时，专业判断先search_knowledge核对来源和适用条件，结构化事实可用check_knowledge_constraints；needs_context表示条件不足。知识选择为none时，依照当前数据与注册算法处理，不调用知识工具或沿用此前知识引用。不能依据理论直接改写原始数据。
 search_knowledge中的documents是可追溯原文，items是结构化规则；只引用其中明确给出的citation。documentSearch.available=false表示文档检索暂不可用，不等于没有相关资料。
@@ -190,6 +193,7 @@ search_knowledge中的documents是可追溯原文，items是结构化规则；�
 resourceId是单个正整数，例如9；不是字符串或数组。fields是字段名数组，filters是条件数组。
 统计必须来自summarize_data或aggregate_data真实输出，不允许用样例行猜测全表统计。scope=prefix_sample仅代表前10000行，必须明确样本限制；保留筛选、有效数、空值和单位未知等限制。不自动宣称因果关系。
 final逐项回答本轮用户明确要求；用户问有哪些字段时列出describe_resource返回的字段名，不能只列参与统计的数值字段。
+面向用户用任务名称、结果名称及现有结果卡说明交付位置；除非用户明确要求内部编号，正文不罗列任务UUID和复杂ID。
 引用工具返回的真实evidenceIds或citation，如[证据 2]。条目的id/documentId/entryId均不是证据编号。final中用Markdown表格呈现关键数值。没有相关资源时明确说明，禁止虚构。
 计算查询是带时间的快照，回答中说明已提交及处理口径，最新进度由平台在答复结束时补充。避免把早先排队快照称作答复时的当前状态。
 可用工具（工具名必须完全匹配，arguments 必须是对象；没有参数的工具也要发送空对象）：
@@ -205,7 +209,11 @@ def append_compute_status(answer, run, user, policy_value):
     cards = run_tasks(run, user, policy_value)["items"]
     if cards:
         return answer + "\n\n" + report(run, user, policy_value)
-    if run.compute_intent:
+    if run.compute_intent.get(
+        "status"
+    ) == "cancelled" and user_cancelled_pending_compute(run):
+        return answer + "\n\n" + run.compute_intent["message"]
+    if run.compute_intent and run.compute_intent.get("status") != "cancelled":
         return run.compute_intent["message"] + "。请使用下方计算卡片选择参数并运行。"
     attempted = any(item.get("tool") == "execute_operator" for item in run.evidence)
     requested = computation_requested(run.prompt) and (
@@ -538,6 +546,36 @@ def run_task(run_id):
                                 "计算已经完成，请先用read_compute_output读取真实输出再解释结果；待读取outputId="
                                 + json.dumps(sorted(output_ids - read_ids))
                             )
+                        pending = run.compute_intent
+                        if (
+                            is_agent
+                            and pending.get("status") in {"collecting", "ready"}
+                            and not pending.get("taskId")
+                            and user_cancelled_pending_compute(run)
+                        ):
+                            from .compute_intents import _save
+
+                            _save(
+                                run,
+                                {
+                                    **pending,
+                                    "status": "cancelled",
+                                    "message": "已按您的要求取消尚未提交的计算",
+                                },
+                            )
+                            pending = run.compute_intent
+                            event(run, "plan", pending["message"])
+                        if (
+                            is_agent
+                            and pending.get("status") in {"collecting", "ready"}
+                            and not pending.get("taskId")
+                        ):
+                            raise ValidationError(
+                                "当前计算计划尚未提交，不能用final结束任务。"
+                                "如参数缺失或同一回答内有冲突，请用ask_user说明实际矛盾并确认最终选择；"
+                                "参数完整且已获授权时，用execute_operator继续实际计算。"
+                                "当前计划：" + json.dumps(pending, ensure_ascii=False)
+                            )
                         check()
                         run.answer = (
                             append_compute_status(
@@ -657,7 +695,8 @@ def run_task(run_id):
                                 "上一条JSON或工具参数无效，具体错误："
                                 + str(exc)[:300]
                                 + "。请仅使用列出的工具和真实字段，纠正一次；"
-                                "无法处理时以final说明限制并询问用户。"
+                                "缺少信息或需要用户选择时调用ask_user；"
+                                "只有任务已完成或已明确结束时使用final。"
                             ),
                         }
                     )

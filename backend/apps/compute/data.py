@@ -25,7 +25,7 @@ from .models import ComputeImport
 from .packages import ComputeError, checksum
 
 
-def candidate(resource):
+def candidate(resource, *, raster_metadata=False):
     result = {
         "id": resource.id,
         "name": resource.name,
@@ -47,6 +47,26 @@ def candidate(resource):
             raise ComputeError("栅格尚未处理完成")
         with rasterio.open(raster_source_path(dataset.source_relative_path)) as src:
             result.update(bands=src.count, crs=str(src.crs or ""))
+            if raster_metadata:
+                result["rasterMetadata"] = {
+                    "source": "actual_compute_input_file",
+                    "size": [src.width, src.height],
+                    "driver": src.driver,
+                    "coordinateSystem": str(src.crs or ""),
+                    "bounds": list(src.bounds),
+                    "bands": [
+                        {
+                            "band": index,
+                            "type": src.dtypes[index - 1],
+                            "scale": src.scales[index - 1],
+                            "offset": src.offsets[index - 1],
+                            "description": src.descriptions[index - 1] or "",
+                            "unit": src.units[index - 1] or "",
+                        }
+                        for index in src.indexes
+                    ],
+                    "calibrationNote": "数据类型及scale/offset是文件属性，不能仅据此确定是否完成辐射定标；未有产品或处理记录时定标状态保持未知。",
+                }
     elif resource.data_type == "vector":
         import pyogrio
 
