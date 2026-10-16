@@ -379,6 +379,21 @@ def test_supplement_conflicts_with_structured_choice_then_confirms_latest_plan(
     run_task(run.id)
     run.refresh_from_db()
     assert run.status == "waiting_input" and not ComputeTask.objects.exists()
+    pending = next(
+        item["result"] for item in run.evidence if item["tool"] == "execute_operator"
+    )
+    assert pending["needsInput"] is True and pending["submitted"] is False
+    assert pending["status"] == "collecting"
+    assert pending["inputs"] == {"image": env["raster"].id}
+    assert pending["parameters"] == {"nir": 8}
+    assert pending["missingInputs"] == []
+    assert pending["missingParameters"] == ["red"]
+    assert pending["conflictingParameters"] == ["red"]
+    assert any("不同选择" in value for value in pending["warnings"])
+    assert pending["nextAction"] == "ask_user"
+    assert "不要猜改" in pending["detail"]
+    tool_reply = json.loads(captured[-1][-1]["content"].split("：", 1)[1])
+    assert tool_reply["result"]["conflictingParameters"] == ["red"]
     assert (
         submit_answer(
             env,
@@ -394,7 +409,27 @@ def test_supplement_conflicts_with_structured_choice_then_confirms_latest_plan(
     run_task(run.id)
     run.refresh_from_db()
     assert run.status == "waiting_compute"
-    assert ComputeTask.objects.get().parameters == {"red": 5, "nir": 8}
+    task = ComputeTask.objects.get()
+    assert task.parameters == {"red": 5, "nir": 8}
+    output = raster_output(task)
+    resume_compute()
+    assert claim() == run.id
+    mock_model(
+        monkeypatch,
+        [
+            {"action": "read_compute_output", "arguments": {"outputId": output.id}},
+            {
+                "action": "final",
+                "answer": "按最终确认的红光5、近红外8计算并读取了实际输出。",
+            },
+        ],
+    )
+    run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == "succeeded" and ComputeTask.objects.count() == 1
+    assert len(run.interaction_history) == 2
+    assert run.interaction_history[0]["answer"]["answers"]["red"] == "3"
+    assert run.interaction_history[1]["answer"]["answers"]["red"] == "5"
 
 
 @pytest.mark.parametrize("cancel_import", [False, True])

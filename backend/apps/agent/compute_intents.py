@@ -543,10 +543,25 @@ def prepare_from_tool(run, user, p, version, inputs):
     _refresh(run, user, p)
     if run.compute_intent["status"] == "ready":
         return None
+    intent = run.compute_intent
     return {
         "needsInput": True,
-        "message": run.compute_intent["message"],
-        "detail": "使用计算卡片选择真实输入和参数；这不是已提交的计算任务。",
+        "submitted": False,
+        "status": intent["status"],
+        "versionId": version.id,
+        "message": intent["message"],
+        "inputs": intent["inputs"],
+        "parameters": intent["parameters"],
+        "missingInputs": intent["missingInputs"],
+        "missingParameters": intent["missingParameters"],
+        "conflictingParameters": conflicts,
+        "warnings": intent["warnings"],
+        "nextAction": "ask_user",
+        "detail": (
+            "当前计划未提交。请用ask_user澄清列出的缺项或同次回答内的冲突，"
+            "得到明确回答后再以真实参数继续。missingInputs为空表示输入已核对；"
+            "不要猜改已核对的inputs，输入值应保持资源正整数编号，不能改成字符串或对象。"
+        ),
     }
 
 
