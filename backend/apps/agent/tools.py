@@ -121,7 +121,7 @@ TOOLS = {
         ToolSpec(
             "execute_operator",
             "execute_operator",
-            "提交已发布计算算法；versionId、inputs、parameters、name；默认计算后让用户选择入库，仅明确要求自动入库设置autoImport=true。缺少已确认波段/字段时生成计算卡片而不提交。返回taskId才代表实际提交",
+            "提交已发布计算算法；versionId、inputs、parameters、name。inputs为对象，键取该版本manifest.inputs[].key、值为资源正整数ID，不能传数组或用资源编号作键；parameters为参数名到值的对象，参数名取manifest.parameters[].key。先核对完整manifest。默认计算后让用户选择入库，仅明确要求自动入库设置autoImport=true。缺少已确认波段/字段时生成计算卡片而不提交。返回taskId才代表实际提交",
             (
                 "versionId",
                 "inputs",
@@ -842,8 +842,19 @@ def _operator_submit(run, user, p, args):
             "地质地图修改须经原有逐项方案审批；通用问题卡不能替代修改批准"
         )
     inputs, parameters = args.get("inputs", {}), args.get("parameters", {})
+    input_keys = [spec["key"] for spec in version.manifest["inputs"]]
+    input_guide = (
+        "本版本允许输入键："
+        + json.dumps(input_keys, ensure_ascii=False)
+        + "。inputs必须为对象，键取manifest.inputs[].key，值为对应资源正整数ID；"
+        "parameters为参数名到值的对象。请用list_compute_algorithms核对该版本完整manifest，不要猜输入键。"
+    )
     if not isinstance(inputs, dict) or not isinstance(parameters, dict):
-        raise ValidationError("inputs 与 parameters 必须为对象")
+        raise ValidationError("inputs 与 parameters 必须为对象。" + input_guide)
+    if set(inputs) - set(input_keys):
+        raise ValidationError("inputs包含不属于该版本的输入键。" + input_guide)
+    if any(type(value) is not int or value < 1 for value in inputs.values()):
+        raise ValidationError("inputs的值必须为资源正整数ID。" + input_guide)
     name = args.get("name") or "智能体计算任务"
     auto_import = args.get("autoImport", False)
     if type(auto_import) is not bool:
