@@ -305,7 +305,10 @@ def list_demos(user, p: dict) -> dict:
                         "available": bool(
                             shared_ready
                             and scene["available"]
-                            and len(scene["inputs"]) <= p["maxResources"]
+                            and (
+                                p["maxResources"] == 0
+                                or len(scene["inputs"]) <= p["maxResources"]
+                            )
                             and len(GRAPHS[scene["scenario"]]) <= p["maxOperatorSteps"]
                             and len(GRAPHS[scene["scenario"]])
                             + (2 if scene["scenario"] == "geology_map_review" else 1)

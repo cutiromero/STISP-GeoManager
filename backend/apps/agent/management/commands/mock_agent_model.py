@@ -8,7 +8,11 @@ from django.core.management.base import BaseCommand
 
 def mock_answer(body):
     messages = body.get("messages", [])
-    if not body.get("response_format"):
+    agent_protocol = any(
+        m.get("role") == "system" and "只能返回一个JSON对象" in m.get("content", "")
+        for m in messages
+    )
+    if not body.get("response_format") and not agent_protocol:
         return "【本地开发模拟模型】已收到消息。这是用于验证界面、流式输出和取消的模拟回答。"
     previous = next(
         (m["content"] for m in reversed(messages) if m["role"] == "assistant"), ""

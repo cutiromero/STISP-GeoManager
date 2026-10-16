@@ -144,14 +144,13 @@ def normalize(value, selected):
         raise ValidationError("算法或数据选择方式无效")
     if (
         not isinstance(version_ids, list)
-        or len(version_ids) > 3
         or any(type(i) is not int or i < 1 for i in version_ids)
         or (algorithm_mode == "manual") != bool(version_ids)
         or (data_mode == "manual" and not selected)
         or (data_mode == "auto" and selected)
     ):
         raise ValidationError(
-            "手选算法须选择1至3个版本，手选数据须选择资源；自动模式请清空选择"
+            "手选算法须选择至少一个版本，手选数据须选择资源；自动模式请清空选择"
         )
     return {
         "knowledge_selection": {"mode": knowledge["mode"], "domains": domains},

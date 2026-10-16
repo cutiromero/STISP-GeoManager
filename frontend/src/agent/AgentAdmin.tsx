@@ -281,6 +281,12 @@ export default function AgentAdmin() {
               "Model cards show the serving window. Input and generation share it; generation includes reasoning and the final answer. Saved settings apply to new runs.",
             )}
           </Typography.Paragraph>
+          <Typography.Paragraph type="secondary">
+            {ui(
+              "可按研究任务调整输入、生成、工具和工作流额度，不再限制为固定档位。实际输入与生成仍须适配模型窗口；附件大小和并发保留主机保护。",
+              "Research budgets are configurable without fixed upper tiers. Input and output must fit the serving model; attachment and concurrency safeguards remain.",
+            )}
+          </Typography.Paragraph>
           <Space size="large" wrap>
             <Form.Item
               name="maxContextBytes"
@@ -293,7 +299,7 @@ export default function AgentAdmin() {
                 "Text size guard; the tokenizer checks the actual window separately",
               )}
             >
-              <InputNumber min={8000} max={500000} step={1000} />
+              <InputNumber min={8000} step={1000} />
             </Form.Item>
             <Form.Item
               name="maxOutputTokens"
@@ -302,13 +308,13 @@ export default function AgentAdmin() {
                 "Reasoning + answer token limit",
               )}
             >
-              <InputNumber min={128} max={32768} step={1024} />
+              <InputNumber min={128} step={1024} />
             </Form.Item>
             <Form.Item
               name="maxContextTokens"
               label={ui("输入预算（token）", "Input token budget")}
             >
-              <InputNumber min={1024} max={262144} step={1024} />
+              <InputNumber min={1024} step={1024} />
             </Form.Item>
             <Form.Item
               name="reasoningEffort"
@@ -339,13 +345,13 @@ export default function AgentAdmin() {
               name="maxProtocolRetries"
               label={ui("协议纠错次数", "Protocol retries")}
             >
-              <InputNumber min={0} max={3} />
+              <InputNumber min={0} />
             </Form.Item>
             <Form.Item
               name="maxRunSeconds"
               label={ui("单次最长秒数", "Max run seconds")}
             >
-              <InputNumber min={60} max={1800} step={30} />
+              <InputNumber min={60} step={30} />
             </Form.Item>
             <Form.Item
               name="maxAttachmentBytes"
@@ -358,7 +364,7 @@ export default function AgentAdmin() {
               name="maxAttachments"
               label={ui("每次最多附件数", "Max attachments per run")}
             >
-              <InputNumber min={1} max={20} />
+              <InputNumber min={1} />
             </Form.Item>
           </Space>
         </Card>
@@ -366,30 +372,45 @@ export default function AgentAdmin() {
           title={ui("额度与只读能力", "Quotas and read-only capabilities")}
           style={{ marginTop: 16 }}
         >
+          <Typography.Paragraph type="secondary">
+            {ui(
+              "每日次数、工具步骤和详细资源数设为 0 表示不限；任务仍可暂停或停止，并受已配置的运行时限约束。",
+              "Set daily runs, tool steps or detailed resources to 0 for no quota. Tasks remain pausable and cancellable, with the configured runtime deadline.",
+            )}
+          </Typography.Paragraph>
+          <Button
+            style={{ marginBottom: 16 }}
+            onClick={() =>
+              form.setFieldsValue({
+                dailyRuns: 0,
+                maxSteps: 0,
+                maxResources: 0,
+                quotas: [],
+              })
+            }
+          >
+            {ui(
+              "取消次数、步骤和资源额度",
+              "Remove run, step and resource quotas",
+            )}
+          </Button>
           <Space size="large" wrap>
             {(
               [
-                ["dailyRuns", "每人每日次数", "Daily runs per user", 1, 1000],
-                ["maxSteps", "最多工具步骤", "Tool step limit", 1, 64],
-                ["maxResources", "最多详细资源", "Resource limit", 1, 12],
+                ["dailyRuns", "每人每日次数", "Daily runs per user", 0],
+                ["maxSteps", "最多工具步骤", "Tool step limit", 0],
+                ["maxResources", "最多详细资源", "Resource limit", 0],
                 [
                   "maxIterations",
                   "工作流判断次数上限",
                   "Workflow decision limit",
                   1,
-                  20,
                 ],
-                [
-                  "maxOperatorSteps",
-                  "最大算子步骤",
-                  "Operator step limit",
-                  1,
-                  64,
-                ],
+                ["maxOperatorSteps", "最大算子步骤", "Operator step limit", 1],
               ] as const
-            ).map(([key, zh, en, min, max]) => (
+            ).map(([key, zh, en, min]) => (
               <Form.Item key={key} name={key} label={ui(zh, en)}>
-                <InputNumber min={min} max={max} />
+                <InputNumber min={min} />
               </Form.Item>
             ))}
           </Space>
@@ -472,7 +493,7 @@ export default function AgentAdmin() {
                       label={ui("每日次数", "Daily limit")}
                       rules={[{ required: true }]}
                     >
-                      <InputNumber min={1} max={1000} />
+                      <InputNumber min={0} />
                     </Form.Item>
                     <Button danger onClick={() => remove(field.name)}>
                       {ui("移除", "Remove")}

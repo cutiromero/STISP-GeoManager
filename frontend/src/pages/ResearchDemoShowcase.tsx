@@ -42,7 +42,14 @@ export default function ResearchDemoShowcase() {
       disposed = true;
     };
   }, [user?.id]);
-  if (!items.length && !error) return null;
+  const currentProject = project?.projects.find(
+    (entry) => String(entry.id) === project.current && entry.isActive,
+  );
+  const visibleItems =
+    user && currentProject
+      ? items.filter((item) => item.projectId === currentProject.id)
+      : [];
+  if (!visibleItems.length && !error) return null;
   return (
     <section
       className="research-demo-showcase"
@@ -72,7 +79,7 @@ export default function ResearchDemoShowcase() {
       </div>
       {error && <Alert type="warning" title={error} />}
       <div className="research-demo-list">
-        {items.map((item) => (
+        {visibleItems.map((item) => (
           <article
             key={`${item.projectId}:${item.scenario}`}
             className="research-demo-entry"
@@ -123,19 +130,11 @@ export default function ResearchDemoShowcase() {
               aria-label={`${item.available ? ui("开始体验", "Try it") : ui("准备中", "Preparing")}：${item.title}`}
               icon={<ArrowRightOutlined />}
               iconPlacement="end"
-              disabled={
-                !item.available ||
-                !project?.projects.some((entry) => entry.id === item.projectId)
-              }
+              disabled={!item.available}
               onClick={() =>
-                project?.choose(
-                  String(item.projectId),
-                  () =>
-                    navigate("/agent/workbench", {
-                      state: { researchDemo: { ...item, token: createUuid() } },
-                    }),
-                  { confirm: false },
-                )
+                navigate("/agent/workbench", {
+                  state: { researchDemo: { ...item, token: createUuid() } },
+                })
               }
             >
               {item.available

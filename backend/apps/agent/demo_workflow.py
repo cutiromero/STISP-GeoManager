@@ -272,7 +272,7 @@ def prepare_demo(workflow, user, p) -> None:
     inputs = workflow.plan.get("inputs", {})
     if not isinstance(inputs, dict) or set(inputs) != set(roles):
         raise ComputeError("请按场景明确选择全部输入角色")
-    if len(set(inputs.values())) > p["maxResources"]:
+    if p["maxResources"] > 0 and len(set(inputs.values())) > p["maxResources"]:
         raise ComputeError("场景输入超过当前资源上限")
     snapshots, names = {}, {}
     for role, kind in roles.items():
@@ -989,7 +989,10 @@ def advance_demo(workflow_id) -> None:
                 with transaction.atomic():
                     current = locked_workflow(workflow.id)
                     check_pause(workflow)
-                    if current.cancel_requested or current.status not in {"queued", "running"}:
+                    if current.cancel_requested or current.status not in {
+                        "queued",
+                        "running",
+                    }:
                         raise ModelError("检查已停止，未生成新的修改建议")
                     fresh, policy = _authorize(current)
                     authorize_demo(current, fresh, policy)

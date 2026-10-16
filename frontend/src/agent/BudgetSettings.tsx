@@ -50,13 +50,13 @@ export default function BudgetSettings() {
                 "Default generation limit (tokens)",
               )}
             >
-              <InputNumber min={128} max={261632} step={1024} />
+              <InputNumber min={128} step={1024} />
             </Form.Item>
             <Form.Item
               name={["budgetProfiles", value, "maxRunSeconds"]}
               label={ui("默认任务时限（秒）", "Default task timeout (seconds)")}
             >
-              <InputNumber min={60} max={7200} step={60} />
+              <InputNumber min={60} step={60} />
             </Form.Item>
             <Form.Item
               name={["budgetProfiles", value, "reasoningEffort"]}
@@ -90,34 +90,25 @@ export default function BudgetSettings() {
           <Space wrap size="large">
             <Form.Item
               name={["budgetLimits", tier, "contextWindowTokens"]}
-              label={ui(
-                "允许总窗口（1024–262144）",
-                "Allowed window (1024–262144)",
-              )}
+              label={ui("允许总窗口（token）", "Allowed window (tokens)")}
             >
-              <InputNumber min={1024} max={262144} step={1024} />
+              <InputNumber min={1024} step={1024} />
             </Form.Item>
             <Form.Item
               name={["budgetLimits", tier, "maxOutputTokens"]}
-              label={ui(
-                "允许生成上限（128–261632）",
-                "Generation ceiling (128–261632)",
-              )}
+              label={ui("允许生成上限（token）", "Generation ceiling (tokens)")}
               extra={ui(
                 "须至少给输入和安全余量留下512 token",
                 "Leave at least 512 tokens for input and safety",
               )}
             >
-              <InputNumber min={128} max={261632} step={1024} />
+              <InputNumber min={128} step={1024} />
             </Form.Item>
             <Form.Item
               name={["budgetLimits", tier, "maxRunSeconds"]}
-              label={ui(
-                "允许最长时限（60–7200秒）",
-                "Timeout ceiling (60–7200 seconds)",
-              )}
+              label={ui("允许最长时限（秒）", "Timeout ceiling (seconds)")}
             >
-              <InputNumber min={60} max={7200} step={60} />
+              <InputNumber min={60} step={60} />
             </Form.Item>
           </Space>
         </Card>

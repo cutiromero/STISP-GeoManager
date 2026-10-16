@@ -107,7 +107,10 @@ def stream(
             "enable_thinking": thinking,
             "reasoning_effort": reasoning_effort,
         }
-    if structured:
+    # Qwen's constrained JSON decoder can suppress the reasoning stream even
+    # with enable_thinking=True. Keep the prompt protocol and strict worker
+    # validation, but let deep-mode responses include their native think block.
+    if structured and not (model.qwen and thinking):
         body["response_format"] = {"type": "json_object"}
     done = threading.Event()
     failures = []
@@ -179,11 +182,15 @@ def stream(
                 prefix = inline_buffer.lstrip()
                 if not prefix:
                     return ""
+                # The opening fence may arrive one backtick at a time. Retain
+                # it until it can be distinguished from prose reasoning.
+                if len(prefix) < 3 and "```".startswith(prefix):
+                    return ""
                 structured_prefix = False
                 # JSON-constrained Qwen responses can start directly with a
                 # command, even with enable_thinking=True. Such content is not
                 # an implicit reasoning block and has no closing </think>.
-                if prefix.startswith("{"):
+                if prefix.startswith(("{", "```")):
                     implicit_thinking = False
             output = []
             while inline_buffer:

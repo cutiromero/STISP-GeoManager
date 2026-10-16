@@ -67,17 +67,17 @@ def validate_budgets(value):
         )
         if not isinstance(rule, dict) or set(rule) != keys:
             raise ValidationError("预算字段不完整或包含未知字段")
-        for key, low, high in [
-            ("maxOutputTokens", 128, 261632),
-            ("maxRunSeconds", 60, 7200),
+        for key, low in [
+            ("maxOutputTokens", 128),
+            ("maxRunSeconds", 60),
         ]:
-            if type(rule[key]) is not int or not low <= rule[key] <= high:
+            if type(rule[key]) is not int or rule[key] < low:
                 raise ValidationError(f"{name}.{key} 超出允许范围")
         if is_limit:
             window = rule["contextWindowTokens"]
             if (
                 type(window) is not int
-                or not 1024 <= window <= 262144
+                or window < 1024
                 or rule["maxOutputTokens"] > window - 512
             ):
                 raise ValidationError("用户窗口须容纳生成额度、输入和安全余量")
@@ -165,5 +165,8 @@ def budget_options(user, policy):
         else [],
         "maxPromptCharacters": policy["budgetLimits"][tier]["contextWindowTokens"] * 4
         if enabled
-        else 12000,
+        # A Unicode character may consume four UTF-8 bytes. This request-size
+        # estimate follows the configured budgets; prepare_context still counts
+        # the complete model request with the serving tokenizer.
+        else min(policy["maxContextTokens"] * 4, policy["maxContextBytes"] // 4),
     }

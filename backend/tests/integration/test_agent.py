@@ -269,6 +269,77 @@ def test_search_resources_table_keyword_matches_data_type(setup_agent):
     assert result["items"][0]["id"] == s["resource"].id
 
 
+def test_catalog_exact_counts_and_pages_are_not_first_twenty(setup_agent):
+    s = setup_agent
+    with project_scope(s["scope"]):
+        for index in range(66):
+            DataResource.objects.create(
+                name=f"目录资源 {index}",
+                code=f"catalog-{index}",
+                data_type="table" if index % 2 else "vector",
+                is_compute_result=index < 41,
+            )
+        # A private resource is excluded from both the count and listing.
+        DataResource.objects.create(
+            name="不可见",
+            code="hidden-catalog",
+            data_type="table",
+            owner_only=True,
+            maintainer=s["other"],
+        )
+        run = new_run(s)
+        summary, _ = execute(run, "summarize_resource_catalog", {})
+        assert summary["total"] == 67
+        assert summary["counts"] == {"compute_results": 41, "uploaded_data": 26}
+        assert sum(g["count"] for g in summary["groups"]) == 67
+        seen, offset = [], 0
+        while offset is not None:
+            page, _ = execute(run, "search_resources", {"offset": offset, "limit": 17})
+            assert page["total"] == 67
+            assert page["truncated"] == (page["nextOffset"] is not None)
+            seen.extend(item["id"] for item in page["items"])
+            offset = page["nextOffset"]
+        assert len(seen) == len(set(seen)) == 67
+        results, _ = execute(run, "search_resources", {"category": "compute_results"})
+        assert results["total"] == 41
+        assert all(item["isComputeResult"] for item in results["items"])
+        run.resource_ids = [s["resource"].id]
+        summary, _ = execute(run, "summarize_resource_catalog", {})
+        assert summary["total"] == 1
+        assert summary["counts"]["uploaded_data"] == 1
+
+
+def test_catalog_cross_project_and_page_byte_budget(setup_agent):
+    s = setup_agent
+    with project_scope(s["scope"]):
+        for index in range(30):
+            DataResource.objects.create(
+                name=f"长说明 {index}",
+                code=f"long-catalog-{index}",
+                description="地质说明" * 300,
+                data_type="table",
+            )
+        run = new_run(s)
+        page, _ = execute(run, "search_resources", {"limit": 100000})
+        assert page["total"] == 31
+        assert page["count"] < 31
+        assert 0 < page["nextOffset"] < 31
+        with pytest.raises(ValidationError):
+            execute(run, "search_resources", {"offset": -1})
+        with pytest.raises(ValidationError):
+            execute(run, "search_resources", {"limit": True})
+    other_project = Project.objects.create(code="catalog-other", name="Other")
+    with project_scope(
+        ProjectScope((other_project.id,), other_project.id, s["admin"].id)
+    ):
+        DataResource.objects.create(
+            name="跨项目", code="cross-project", data_type="raster"
+        )
+    with project_scope(s["scope"]):
+        summary, _ = execute(run, "summarize_resource_catalog", {})
+        assert summary["total"] == 31
+
+
 def test_sample_is_not_population(setup_agent):
     s = setup_agent
     with project_scope(s["scope"]):

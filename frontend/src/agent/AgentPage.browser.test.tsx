@@ -1235,10 +1235,20 @@ it("shows an error with a retry action without exposing run details", async () =
 });
 
 it("submits manual algorithm, data and multiple knowledge zones through explicit buttons", async () => {
+  bootstrap.algorithmOptions = Array.from({ length: 4 }, (_, index) => ({
+    versionId: index + 4,
+    algorithmId: index + 1,
+    name: `分析算法${index + 1}`,
+    version: "1.0.0",
+    description: "已发布算法",
+  }));
   vi.mocked(agentApi.resources).mockResolvedValue({
-    items: [
-      { id: 10, name: "研究区影像", dataType: "raster", description: "" },
-    ],
+    items: Array.from({ length: 4 }, (_, index) => ({
+      id: index + 10,
+      name: `研究区影像${index + 1}`,
+      dataType: "raster" as const,
+      description: "",
+    })),
   });
   showAgent("workbench");
   await screen.findByText("旧问题");
@@ -1250,11 +1260,13 @@ it("submits manual algorithm, data and multiple knowledge zones through explicit
     ),
   );
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "选择调用算法" }));
-  fireEvent.click(
-    await screen.findByText("NDVI植被指数 · 1.0.0", {
-      selector: ".ant-select-item-option-content",
-    }),
-  );
+  for (let index = 1; index <= 4; index++) {
+    fireEvent.click(
+      await screen.findByText(`分析算法${index} · 1.0.0`, {
+        selector: ".ant-select-item-option-content",
+      }),
+    );
+  }
   fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
   fireEvent.click(
     within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
@@ -1263,11 +1275,13 @@ it("submits manual algorithm, data and multiple knowledge zones through explicit
     ),
   );
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "限定数据资源" }));
-  fireEvent.click(
-    await screen.findByText("研究区影像", {
-      selector: ".ant-select-item-option-content",
-    }),
-  );
+  for (let index = 1; index <= 4; index++) {
+    fireEvent.click(
+      await screen.findByText(`研究区影像${index}`, {
+        selector: ".ant-select-item-option-content",
+      }),
+    );
+  }
   fireEvent.click(screen.getByRole("button", { name: "知识库" }));
   fireEvent.click(screen.getByRole("radio", { name: "手选分区" }));
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "选择知识分区" }));
@@ -1290,9 +1304,9 @@ it("submits manual algorithm, data and multiple knowledge zones through explicit
       1,
       expect.objectContaining({
         algorithmSelectionMode: "manual",
-        algorithmVersionIds: [4],
+        algorithmVersionIds: [4, 5, 6, 7],
         dataSelectionMode: "manual",
-        resourceIds: [10],
+        resourceIds: [10, 11, 12, 13],
         knowledgeSelection: {
           mode: "manual",
           domains: ["remote_sensing", "arid_ecology"],
@@ -1590,6 +1604,26 @@ it("keeps all saved reasoning when the incremental event window is shorter", asy
   await page.screenshot({
     path: "../../test-results/agent-live-thinking-desktop.png",
   });
+});
+
+it("explains a completed deep run without inventing reasoning", async () => {
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [
+      {
+        ...run(20, "统计计算成果", "已根据当前项目目录完成统计。"),
+        thinkingMode: "deep",
+        thinkingText: "",
+      },
+    ],
+  });
+  showAgent();
+  await screen.findByText("已根据当前项目目录完成统计。");
+  fireEvent.click(screen.getByText("模型思考过程"));
+  await screen.findByText(
+    "已开启深度思考，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
+  );
+  expect(screen.queryByText(/未保存到思考片段/)).not.toBeInTheDocument();
 });
 
 it("removes recovered workflow activity when agent permission is revoked", async () => {

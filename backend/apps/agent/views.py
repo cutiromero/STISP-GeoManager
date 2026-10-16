@@ -308,7 +308,10 @@ def submit(request, conversation_id):
 
 def submit_value(request, c, value, *, available_models=None):
     """The same quota, model, scope and idempotency checks for chat answers."""
-    prompt_limit = budget_options(request.user, policy())["maxPromptCharacters"]
+    submission_policy = policy()
+    prompt_limit = budget_options(request.user, submission_policy)[
+        "maxPromptCharacters"
+    ]
     demo_scenario = value.get("demoScenario")
     if demo_scenario is not None and (
         demo_scenario
@@ -352,16 +355,19 @@ def submit_value(request, c, value, *, available_models=None):
         raise ApiProblem("模型、问题或幂等键无效")
     if (
         not isinstance(selected, list)
-        or len(selected) > 3
+        or (
+            submission_policy["maxResources"] > 0
+            and len(selected) > submission_policy["maxResources"]
+        )
         or any(type(i) is not int or i < 1 for i in selected)
     ):
-        raise ApiProblem("最多选择3个数据资源")
+        raise ApiProblem("数据资源选择无效或超过管理员设置的资源额度")
     if (
         not isinstance(attachment_ids, list)
-        or len(attachment_ids) > int(policy().get("maxAttachments", 8))
+        or len(attachment_ids) > submission_policy["maxAttachments"]
         or any(type(item) is not int or item < 1 for item in attachment_ids)
     ):
-        raise ApiProblem("最多选择8个附件")
+        raise ApiProblem("附件选择无效或超过管理员设置的附件额度")
     selected = sorted(set(selected))
     from .selections import knowledge_selection, normalize, validate_selected_versions
 
@@ -478,9 +484,14 @@ def submit_value(request, c, value, *, available_models=None):
             raise ApiProblem("您已有排队或生成中的任务", 409)
         if AgentRun._base_manager.filter(status__in=ACTIVE).count() >= 30:
             raise ApiProblem("当前排队已满", 429)
-        if AgentRun._base_manager.filter(
-            owner=request.user, created_at__date=timezone.localdate()
-        ).count() >= daily_quota(request.user, p):
+        quota = daily_quota(request.user, p)
+        if (
+            quota > 0
+            and AgentRun._base_manager.filter(
+                owner=request.user, created_at__date=timezone.localdate()
+            ).count()
+            >= quota
+        ):
             raise ApiProblem("今日使用额度已用完", 429)
         r = AgentRun.objects.create(
             conversation=c,

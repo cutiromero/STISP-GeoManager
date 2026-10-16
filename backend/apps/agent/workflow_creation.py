@@ -44,7 +44,7 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
         or not isinstance(key, str)
         or not 8 <= len(key) <= 80
         or not isinstance(resources_selected, list)
-        or len(resources_selected) > p["maxResources"]
+        or (p["maxResources"] > 0 and len(resources_selected) > p["maxResources"])
         or any(type(i) is not int or i < 1 for i in resources_selected)
         or not isinstance(parameters, dict)
         or len(parameters) > 60

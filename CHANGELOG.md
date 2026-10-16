@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.42] - 2026-10-16
+
+### Added
+- 智能体数据目录全量汇总工具，按平台实际登记区分计算成果与上传/登记数据，汇报当前授权范围总数与类型统计。
+
+### Changed
+- 数据目录检索支持连续分页、真实总数与明确来源分类，移除原固定前20项且无法继续查询的限制。
+- 成果展示仅显示当前项目所属的科研Demo，进入体验保持当前项目。
+- 后台非安全参数解除固定校验上界；每日次数、工具步骤、详细资源数可设为0不限，手选数据与算法不再限3项。
+
+### Fixed
+- Qwen深度工具模式避开抑制思考片段的强制JSON解码，继续严格验证工具协议、权限和参数；模型片段按原事件链保存并恢复。
+- 模型未返回思考内容时显示准确说明。
+
 ## [0.1.41] - 2026-10-14
 
 ### Added

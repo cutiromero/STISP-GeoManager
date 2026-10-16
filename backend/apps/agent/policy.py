@@ -197,7 +197,8 @@ def daily_quota(user, p):
             q["kind"] == "group" and q["id"] in groups
         ):
             limits.append(q["dailyRuns"])
-    return min(limits)
+    finite = [limit for limit in limits if limit > 0]
+    return min(finite) if finite else 0
 
 
 def validate_policy(value):
@@ -221,22 +222,26 @@ def validate_policy(value):
     ):
         if type(value[k]) is not bool:
             raise ValidationError("开关必须为布尔值")
-    for k, lo, hi in [
-        ("dailyRuns", 1, 1000),
-        ("maxContextBytes", 8000, 500000),
-        ("maxOutputTokens", 128, 32768),
-        ("maxContextTokens", 1024, 262144),
-        ("maxSteps", 1, 64),
-        ("maxResources", 1, 12),
-        ("maxIterations", 1, 20),
-        ("maxOperatorSteps", 1, 64),
-        ("maxProtocolRetries", 0, 3),
-        ("maxRunSeconds", 60, 1800),
-        ("maxAttachmentBytes", 1024, 200_000_000),
-        ("maxAttachments", 1, 20),
+    for k, lo in [
+        ("dailyRuns", 0),
+        ("maxContextBytes", 8000),
+        ("maxOutputTokens", 128),
+        ("maxContextTokens", 1024),
+        ("maxSteps", 0),
+        ("maxResources", 0),
+        ("maxIterations", 1),
+        ("maxOperatorSteps", 1),
+        ("maxProtocolRetries", 0),
+        ("maxRunSeconds", 60),
+        ("maxAttachments", 1),
     ]:
-        if type(value[k]) is not int or not lo <= value[k] <= hi:
+        if type(value[k]) is not int or value[k] < lo:
             raise ValidationError(f"{k} 超出允许范围")
+    if (
+        type(value["maxAttachmentBytes"]) is not int
+        or not 1024 <= value["maxAttachmentBytes"] <= 200_000_000
+    ):
+        raise ValidationError("单个附件大小须在 1 KB 至 200 MB 之间")
     if value["reasoningEffort"] not in {"low", "medium", "xhigh"}:
         raise ValidationError("思考强度必须为 low、medium 或 xhigh")
     for k, lo, hi in (("temperature", 0.0, 2.0), ("topP", 0.0, 1.0)):
@@ -318,7 +323,7 @@ def validate_policy(value):
             or type(q["id"]) is not int
             or q["id"] < 1
             or type(q["dailyRuns"]) is not int
-            or not 1 <= q["dailyRuns"] <= 1000
+            or q["dailyRuns"] < 0
         ):
             raise ValidationError("额度策略无效")
     return value

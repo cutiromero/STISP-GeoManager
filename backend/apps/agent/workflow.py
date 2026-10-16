@@ -193,7 +193,8 @@ def _prepare(workflow, user, p):
     validated = validate_submission(user, _body(workflow, plan))
     plan["parameters"] = validated["parameters"]
     if (
-        len({resource.id for _, resource, _ in validated["resources"]})
+        p["maxResources"] > 0
+        and len({resource.id for _, resource, _ in validated["resources"]})
         > p["maxResources"]
     ):
         raise ComputeError("计划使用的数据资源超过当前策略上限")

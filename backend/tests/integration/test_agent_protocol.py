@@ -37,11 +37,12 @@ def test_resource_id_normalization_preserves_strict_validation(resource_id):
         ("reason</think>", "reason"),
     ],
 )
+@pytest.mark.parametrize("fenced", [False, True])
 def test_structured_deep_response_keeps_command_out_of_thinking(
-    monkeypatch, prefix, thought
+    monkeypatch, prefix, thought, fenced
 ):
     command = '{"action":"final","answer":"完成"}'
-    text = prefix + command
+    text = prefix + (f"```json\n{command}\n```" if fenced else command)
 
     class Connection:
         sock = None
@@ -84,17 +85,74 @@ def test_structured_deep_response_keeps_command_out_of_thinking(
             on_thinking=thoughts.append,
         )
     )
-    assert json.loads(result) == json.loads(command)
+    assert parse_agent_command(result) == json.loads(command)
     assert "".join(thoughts) == thought
 
 
+@pytest.mark.parametrize("thinking", [True, False])
+def test_qwen_json_constraint_only_applies_to_fast_mode(monkeypatch, thinking):
+    requests = []
+
+    class Connection:
+        sock = None
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def connect(self):
+            pass
+
+        def request(self, *args, **kwargs):
+            requests.append(json.loads(kwargs["body"]))
+
+        def close(self):
+            pass
+
+        def getresponse(self):
+            response = io.BytesIO(b"data: [DONE]\n")
+            response.status = 200
+            return response
+
+    monkeypatch.setattr("apps.agent.provider.http.client.HTTPConnection", Connection)
+    model = ModelConfig("q", "Q", "http://127.0.0.1:1/v1", "q", qwen=True)
+    list(stream(model, [], 512, lambda: None, structured=True, thinking=thinking))
+    assert ("response_format" in requests[0]) is not thinking
+    assert requests[0]["chat_template_kwargs"]["enable_thinking"] is thinking
+
+
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("fenced", [False, True])
 def test_deep_agent_direct_json_executes_tools_and_keeps_current_selection(
     setup_agent,  # noqa: F811
     settings,
+    monkeypatch,
+    fenced,
 ):
     env = setup_agent
     captured = []
+    if fenced:
+        from apps.agent.management.commands import mock_agent_model
+
+        original_answer = mock_agent_model.mock_answer
+
+        def fenced_answer(body):
+            body = {
+                **body,
+                "messages": [
+                    {
+                        **message,
+                        "content": message["content"]
+                        .removeprefix("```json\n")
+                        .removesuffix("\n```"),
+                    }
+                    if message["role"] == "assistant"
+                    else message
+                    for message in body["messages"]
+                ],
+            }
+            return f"```json\n{original_answer(body)}\n```"
+
+        monkeypatch.setattr(mock_agent_model, "mock_answer", fenced_answer)
 
     class Handler(MockHandler):
         def do_POST(self):
@@ -164,6 +222,7 @@ def test_deep_agent_direct_json_executes_tools_and_keeps_current_selection(
         assert run.answer and run.evidence
         assert all(e["resourceId"] == env["resource"].id for e in run.evidence)
         assert all(b["chat_template_kwargs"]["enable_thinking"] for b in captured)
+        assert all("response_format" not in body for body in captured)
         assert (
             f"本轮明确选择的资源ID：[{env['resource'].id}]"
             in captured[0]["messages"][-1]["content"]

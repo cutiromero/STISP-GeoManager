@@ -66,7 +66,7 @@ export type AgentQuota = {
      */
     id: number;
     /**
-     * 当日运行上限；多个匹配策略取最小值
+     * 当日运行上限；0表示本规则不限制，多个正数策略取最小值
      */
     dailyRuns: number;
 };
@@ -246,7 +246,7 @@ export type AgentPolicy = {
      */
     defaultAgentModel: string;
     /**
-     * 单用户每日运行上限
+     * 单用户每日运行上限；0表示不限，用户或组的正数额度仍生效
      */
     dailyRuns: number;
     /**
@@ -274,11 +274,11 @@ export type AgentPolicy = {
      */
     topP: number;
     /**
-     * 最多工具动作
+     * 最多工具动作；0表示不限，仍受运行时限与权限约束
      */
     maxSteps: number;
     /**
-     * 最多详细读取资源数
+     * 最多详细读取资源数；0表示不限，仍限当前项目可见资源
      */
     maxResources: number;
     /**
@@ -763,7 +763,7 @@ export type AgentRun = {
      */
     algorithmSelectionMode?: 'auto' | 'manual';
     /**
-     * manual必须选择1至3个实际已发布版本，auto为空
+     * manual必须选择至少一个实际已发布版本，auto为空；逐个核验算法权限
      */
     algorithmVersionIds?: Array<number>;
     /**
@@ -940,7 +940,7 @@ export type AgentRunInput = {
      */
     algorithmSelectionMode?: 'auto' | 'manual';
     /**
-     * manual必须选择1至3个实际已发布版本，auto为空
+     * manual必须选择至少一个实际已发布版本，auto为空；逐个核验算法权限
      */
     algorithmVersionIds?: Array<number>;
     /**
@@ -973,7 +973,7 @@ export type AgentRunInput = {
      */
     thinkingMode?: 'fast' | 'deep';
     /**
-     * 空数组表示自主发现；非空进一步缩小数据范围
+     * 空数组表示自主发现；非空进一步缩小数据范围，数量服从管理员maxResources策略（0不限）
      */
     resourceIds?: Array<number>;
     /**

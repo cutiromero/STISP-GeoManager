@@ -55,8 +55,14 @@ TOOLS = {
         ToolSpec(
             "search_resources",
             "read_data",
-            "查找当前项目数据，query 可为空；最多20项",
-            ("query",),
+            "分页查找当前项目数据，query可为空；category为all/compute_results/uploaded_data；offset从0开始，limit默认50，按nextOffset继续；total是真实总数",
+            ("query", "category", "offset", "limit"),
+        ),
+        ToolSpec(
+            "summarize_resource_catalog",
+            "read_data",
+            "全量统计当前授权项目的计算成果与上传/登记数据数量、类型及大小，不读取样本；query可为空，category可筛选",
+            ("query", "category"),
         ),
         ToolSpec(
             "describe_resource",
@@ -186,6 +192,8 @@ def brief(r):
         "id": r.id,
         "name": r.name,
         "dataType": r.data_type,
+        "isComputeResult": r.is_compute_result,
+        "origin": "compute_results" if r.is_compute_result else "uploaded_data",
         "description": r.description[:800],
     }
 
@@ -999,34 +1007,14 @@ def execute(run, name, args):
             result = _web_fetch(url, max_results)
         result = clean(result)
         return result, [(None, result)]
-    if name == "search_resources":
-        query = args.get("query", "")
-        if not isinstance(query, str) or len(query) > 200:
-            raise ValidationError("搜索词过长或无效")
-        normalized_query = query.strip().lower()
-        table_query = any(
-            marker in normalized_query
-            for marker in (
-                "table",
-                "csv",
-                "tsv",
-                "xls",
-                "xlsx",
-                "excel",
-                "表格",
-                "数据表",
-            )
-        )
-        text_query = Q(name__icontains=query) | Q(description__icontains=query)
-        if table_query:
-            text_query |= Q(data_type=DataResource.DataType.TABLE)
-        found = list(
-            resources(user, p, run.resource_ids).filter(text_query).order_by("id")[:21]
-        )
-        return {
-            "items": [brief(r) for r in found[:20]],
-            "truncated": len(found) > 20,
-        }, [(r, {"metadata": brief(r)}) for r in found[:20]]
+    if name in {"search_resources", "summarize_resource_catalog"}:
+        from .catalog_tools import catalog_page, catalog_query, catalog_summary
+
+        queryset = catalog_query(resources(user, p, run.resource_ids), args)
+        if name == "summarize_resource_catalog":
+            result = catalog_summary(queryset)
+            return result, [(None, result)]
+        return catalog_page(queryset, args, brief)
     if name == "compare_summaries":
         if not p["allowCompare"]:
             raise PermissionDenied("跨资源比较已关闭")
@@ -1061,7 +1049,11 @@ def execute(run, name, args):
         for ev in run.evidence
         if ev["tool"] != "search_resources" and ev.get("resourceId") is not None
     }
-    if resource.id not in touched and len(touched) >= p["maxResources"]:
+    if (
+        p["maxResources"] > 0
+        and resource.id not in touched
+        and len(touched) >= p["maxResources"]
+    ):
         raise ValidationError("本次读取资源数已达上限，请缩小问题")
     if not p["allowCompare"] and touched and resource.id not in touched:
         raise PermissionDenied("跨资源读取已关闭")

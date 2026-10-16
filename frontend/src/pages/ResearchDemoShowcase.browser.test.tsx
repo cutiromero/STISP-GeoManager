@@ -53,11 +53,23 @@ function Destination() {
     </div>
   );
 }
+function ProjectSwitch() {
+  const project = useProjectContext();
+  return (
+    <button
+      type="button"
+      onClick={() => project?.choose("3", undefined, { confirm: false })}
+    >
+      切换到逻辑推理
+    </button>
+  );
+}
 function show() {
   return render(
     <AntApp>
       <MemoryRouter initialEntries={["/results"]}>
         <ProjectProvider>
+          <ProjectSwitch />
           <Routes>
             <Route path="/results" element={<ResearchDemoShowcase />} />
             <Route path="/agent/workbench" element={<Destination />} />
@@ -84,16 +96,16 @@ beforeEach(() => {
 });
 
 it.each([0, 1, 2])(
-  "switches only to the authorized project and sends a separate launch intent for case %i",
+  "launches case %i only from its current project without switching projects",
   async (index) => {
-    show();
-    await waitFor(() =>
-      expect(
-        screen.getAllByRole("button", { name: /开始体验/ })[index],
-      ).not.toBeDisabled(),
-    );
-    fireEvent.click(screen.getAllByRole("button", { name: /开始体验/ })[index]);
     const item = items[index];
+    sessionStorage.setItem("project:99", String(item.projectId));
+    show();
+    const launch = await screen.findByRole("button", {
+      name: `开始体验：${item.title}`,
+    });
+    expect(launch).not.toBeDisabled();
+    fireEvent.click(launch);
     await waitFor(() =>
       expect(screen.getByLabelText("入口项目")).toHaveTextContent(
         String(item.projectId),
@@ -111,19 +123,34 @@ it.each([0, 1, 2])(
   },
 );
 
-it("clearly distinguishes the real-map entry from the preserved synthetic cases", async () => {
+it("shows geological demonstrations only in the current logic project", async () => {
+  sessionStorage.setItem("project:99", "3");
   show();
   expect(
     await screen.findByText("真实底图 · 演示录入错误"),
   ).toBeInTheDocument();
-  expect(screen.getAllByText("模拟资料 · 真实计算")).toHaveLength(2);
+  expect(screen.getAllByText("模拟资料 · 真实计算")).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: /开始体验/ })).toHaveLength(2);
+  expect(screen.queryByText(items[0].title)).not.toBeInTheDocument();
   expect(screen.getByText(/按辞书与适用条件修正时代录入/)).toBeInTheDocument();
   await page.screenshot({
     path: "../../test-results/research-demo-showcase-desktop.png",
   });
 });
 
-it("keeps unavailable and inaccessible entries from launching", async () => {
+it("shows ecology only in the current arid-area project and updates on project change", async () => {
+  sessionStorage.setItem("project:99", "8");
+  show();
+  expect(await screen.findByText(items[0].title)).toBeInTheDocument();
+  expect(screen.queryByText(items[1].title)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "切换到逻辑推理" }));
+  expect(await screen.findByText(items[1].title)).toBeInTheDocument();
+  expect(screen.queryByText(items[0].title)).not.toBeInTheDocument();
+  expect(getActiveProject()).toBe("3");
+});
+
+it("keeps unavailable entries disabled and hides entries belonging to inaccessible projects", async () => {
+  sessionStorage.setItem("project:99", "8");
   vi.mocked(agentApi.researchDemos).mockResolvedValue({
     items: [
       { ...items[0], available: false },
@@ -132,11 +159,37 @@ it("keeps unavailable and inaccessible entries from launching", async () => {
   });
   show();
   expect(await screen.findByRole("button", { name: /准备中/ })).toBeDisabled();
-  expect(screen.getByRole("button", { name: /开始体验/ })).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: /开始体验/ }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText(items[1].title)).not.toBeInTheDocument();
+  expect(getActiveProject()).toBe("8");
+});
+
+it("hides all demonstrations in the public project even when other projects are accessible", async () => {
+  show();
+  await waitFor(() => expect(agentApi.researchDemos).toHaveBeenCalled());
+  await waitFor(() => expect(platformApi.projects).toHaveBeenCalled());
+  expect(screen.queryByLabelText("智能科研体验")).not.toBeInTheDocument();
+  expect(screen.queryByText(items[0].projectName)).not.toBeInTheDocument();
+  expect(screen.queryByText(items[1].projectName)).not.toBeInTheDocument();
   expect(getActiveProject()).toBe("1");
 });
 
-it("does not show project names without access and remains readable on a phone", async () => {
+it("hides all demonstrations when the current project is no longer authorized", async () => {
+  sessionStorage.setItem("project:99", "3");
+  vi.mocked(platformApi.projects).mockResolvedValue({
+    items: [{ id: 1, name: "公开", isDefault: true, isActive: true }],
+    canManage: false,
+    canAssign: false,
+  });
+  show();
+  await waitFor(() => expect(getActiveProject()).toBe("1"));
+  expect(screen.queryByLabelText("智能科研体验")).not.toBeInTheDocument();
+});
+
+it("does not show empty entries and remains readable on a phone", async () => {
+  sessionStorage.setItem("project:99", "3");
   vi.mocked(agentApi.researchDemos).mockResolvedValue({ items: [] });
   const mounted = show();
   await waitFor(() => expect(agentApi.researchDemos).toHaveBeenCalled());

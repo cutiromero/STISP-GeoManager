@@ -1156,8 +1156,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                                         "Waiting for the model reasoning stream…",
                                       )
                                     : ui(
-                                        "本次未保存到思考片段，请结合运行状态查看原因。",
-                                        "No reasoning segments were saved. See the run status below.",
+                                        "已开启深度思考，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
+                                        "Deep thinking is enabled, but no displayable reasoning was received. See the answer and tool results below.",
                                       ))
                                 }
                               />

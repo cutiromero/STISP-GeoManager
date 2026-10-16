@@ -172,6 +172,7 @@ def input_prompt(run):
 
 SYSTEM_CHAT = "你是平台的本地模型助手。使用用户的语言回答。普通聊天不能访问平台数据，不要声称已读取数据、运行代码或执行操作。"
 SYSTEM_AGENT = """你是当前项目的数据分析智能体。按问题选择必要工具：纯知识问题直接查知识；数据分析先发现数据、读取字段，再计算和检查。需要更多信息可在final中向用户询问。
+用户询问资源数量、计算成果与上传数据分类时，优先调用summarize_resource_catalog；它的total/counts是当前授权范围的全量统计，不是样例。分类使用isComputeResult/origin等真实来源字段，不能根据名称猜测。需要列举资源时用search_resources的query/category/offset/limit筛选与分页；按nextOffset继续，不得把第一页返回数量当成全部数量，也不能仅以“已截断”结束全量统计请求。
 计算状态必须通过get_compute_task实时查询；历史queued证据只代表提交时状态。taskId为UUID，outputId为outputs中的正整数，二者绝不能互换或猜测。
 计算完成后默认由用户在结果卡选择入库；仅用户明确要求自动入库时设置autoImport=true。追问进度、入库、结果位置时只使用本会话真实工具记录中的任务，禁止从全库旧任务猜测。没有本轮真实提交工具返回时不能说已提交或完成。
 查找算法时优先给list_compute_algorithms传1至3个目标关键词query（空格分隔）；没找到可换词或省略query看目录。执行前必须核对所选具体版本返回的完整manifest，按真实输入key、参数约束和输出声明操作。
@@ -560,7 +561,7 @@ def run_task(run_id):
                             command["action"], str
                         ):
                             raise ValueError()
-                        if actions >= p["maxSteps"]:
+                        if p["maxSteps"] > 0 and actions >= p["maxSteps"]:
                             raise ModelError(
                                 "已达到工具步骤上限，已完成的证据已保留，请缩小问题"
                             )

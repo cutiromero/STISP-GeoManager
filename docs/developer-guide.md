@@ -3,11 +3,25 @@
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 > 版本：v0.1.0
 
+## 智能体额度与思考状态（2026-10-16）
+
+`AgentPolicy.dailyRuns/maxSteps/maxResources` 支持 `0` 表示不限每日次数、工具步骤或详细读取资源数。用户及组额度中的 `dailyRuns=0` 表示该条不限制，所有匹配的正数额度取最小值；均为0时不作每日次数限制。工作流资源校验与工具读取使用同一语义，仍逐次核对当前项目、可见性和功能权限。
+
+对话手选数据数量服从`maxResources`，去除旧版固定3项限制；手选算法允许选择一个或多个已发布版本，每项分别核验权限。前端选择框与服务端校验一致，附件数量使用已保存的`maxAttachments`。
+
+任务预算关闭时，问题长度按`min(maxContextTokens*4, maxContextBytes/4)`估算字符额度，去除固定12000字限制；完整请求仍由实际模型分词校验。
+
+输入字节、输入/生成token、任务时限、工作流判断/算子步骤、协议重试和附件数量可由管理员按研究任务设置，不再受旧版固定档位上限限制。角色预算和任务默认值同样放开固定上界，仍要求角色窗口容纳生成额度和输入余量。模型服务的实际窗口、分词检查、取消与超时、并发保护、附件文件大小及全部读写权限保持生效。配置高于实际模型容量不会扩大模型能力。
+
+深度模式仅展示服务真实返回并持久化的思考内容；没有收到思考内容时准确说明该状态，工具结果与最终答复继续独立展示。
+
+Qwen深度工具调用使用提示约束及后端严格JSON协议验证，不发送会压制思考流的`response_format=json_object`；快速模式仍可使用JSON约束。实际服务A/B验证表明，同一问题在开启该约束时没有返回思考内容，去掉后返回原生思考分隔及正文；启用深度开关本身不能证明已收到思考。
+
 ## 双Demo科研工作流（2026-10-10）
 
 POST /api/agent/workflows/ 支持 ecology_investigation（植被变化与调查排序）和 geology_correction（初图检查、几何候选、受约束编辑与复核）。同样要求本人智能体权限、当前单项目范围和幂等键。创建先生成可确认计划，不直接执行。
 
-inputs 使用明确资源角色。生态为 early_image、late_image、valid_mask、zones、context；地质为 initial_map、surveys、rules。resourceIds覆盖角色资源，后台maxResources默认3、可调上限12。knowledgeSelection支持auto/manual/all/none，manual领域沿用知识分区协议。两期日期、波段、阈值和权重放parameters，按实际算法manifest验证。
+inputs 使用明确资源角色。生态为 early_image、late_image、valid_mask、zones、context；地质为 initial_map、surveys、rules。resourceIds覆盖角色资源，后台maxResources默认3，可配置正数或0（不限）。knowledgeSelection支持auto/manual/all/none，manual领域沿用知识分区协议。两期日期、波段、阈值和权重放parameters，按实际算法manifest验证。
 
 AgentWorkflowStep.decision 为可空公开判断摘要，包含问题、发现、当前判断、待核实项、下一动作、算法理由和实际引用；modelMode区分real/mock。知识引用带整数revision，资源/任务/输出通过实际对象及内部内容校验和核验。摘要用于回查依据，不保存或公开模型内部思维链。
 

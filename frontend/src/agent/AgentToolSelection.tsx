@@ -118,12 +118,11 @@ export default function AgentToolSelection({
               aria-label="选择调用算法"
               mode="multiple"
               value={value.algorithmVersionIds}
-              maxCount={3}
               allowClear
               showSearch
               optionFilterProp="label"
               disabled={disabled}
-              placeholder="选择算法，最多 3 项"
+              placeholder="选择需要调用的算法"
               notFoundContent="当前暂无可用的已发布算法"
               options={algorithms.map((item) => ({
                 value: item.versionId,
@@ -170,13 +169,12 @@ export default function AgentToolSelection({
             <Select
               aria-label="限定数据资源"
               mode="multiple"
-              maxCount={3}
               allowClear
               showSearch
               optionFilterProp="label"
               value={selected}
               disabled={disabled}
-              placeholder="选择数据，最多 3 项"
+              placeholder="选择需要分析的数据"
               notFoundContent="当前项目没有可访问的数据"
               options={resources.map((item) => ({
                 value: item.id,

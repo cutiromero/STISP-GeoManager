@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261016-001 - 智能体研究额度调整
+
+- Status: BackendReady
+- Owner: thinking_limits；root 协调目录统计与部署。
+- Endpoints: GET/PUT /api/agent/admin/；GET /api/agent/bootstrap/；POST /api/agent/conversations/{conversationId}/runs/；POST /api/agent/workflows/。
+- Change type: 放宽既有策略数值范围，保持字段与类型。
+- OpenAPI change: AgentPolicy/AgentQuota 每日次数、工具步骤、详细资源数允许0表示不限；其余研究预算移除固定档位上界，实际模型窗口及安全校验保留；AgentBudgetPreset/Limit/Choice 同步范围。
+- Frontend reason: 管理员可按研究需要调整额度，并取消次数、步骤与资源数量额度；显示模型未返回思考内容的真实状态。
+- Mock examples: 以策略验证、真实HTTP模型替身及浏览器回归验证，响应结构未变。
+- Backend implementation notes: 0直接短路数量限制；正数按原方式生效。保留权限、项目、隐私、批准写入、模型容量、并发和附件大小保护。
+- Verification: 策略保存、0额度与正数收窄、真实窗口校验、深度流解析、类型生成及浏览器显示。
+- Result: 后端策略、预算、协议与HTTP思考回归44项通过；浏览器思考显示2项通过；类型生成与类型检查通过，实际服务A/B验证确认JSON约束压制Qwen思考。发布验证另由回执记录。
+
 ## API-20261014-001 - 数据目录批量永久删除与人工审核反馈
 
 - Status: BackendReady
@@ -98,6 +111,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261016-001 | BackendReady | /api/agent/admin/; bootstrap/; conversations/{id}/runs/; workflows/ | configurable research quotas and manual selection | Updated | HTTP/browser fixtures | Passed | Focused passed | Actual model window and safety guards retained; deployment separate |
 | API-20261014-003 | BackendReady | /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | knowledge query; selected modification approval | Updated | Browser/integration fixtures | Passed | Focused passed | Persistent proposals and exact approved scope; real-model release validation separate |
 | API-20261014-001 | BackendReady | /api/catalog/resources/delete/; /api/agent/workflows/{workflowId}/confirm/ | guarded bulk deletion; approve/reject feedback | Updated | HTTP/browser fixtures | Passed | Focused passed | Isolated real storage tests; no live business deletion |
 | API-20261012-002 | BackendReady | /api/agent/workflows/{workflowId}/pause/; resume/; report/* | persistent MD reports and resumable pause | Updated | HTTP/browser fixtures | Passed | Focused passed | Real files and safe checkpoints; publication pending |
