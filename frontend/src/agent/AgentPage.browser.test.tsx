@@ -1693,7 +1693,7 @@ it("sends a free-text answer to the original run and resumes it without a new tu
   fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
     target: { value: "红光第3波段，近红外第8波段，只预览结果" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  fireEvent.click(screen.getByRole("button", { name: "提交回答" }));
   await waitFor(() =>
     expect(answer).toHaveBeenCalledExactlyOnceWith(
       88,

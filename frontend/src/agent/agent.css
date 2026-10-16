@@ -384,6 +384,31 @@
 .agent-input-row {
   width: 100%;
 }
+.agent-answer-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 8px;
+  color: #426c87;
+  font-size: 12px;
+}
+.agent-answer-target > span:nth-child(2) {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 4px 10px;
+}
+.agent-answer-target > span:nth-child(2) > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-answer-target .ant-btn {
+  height: auto;
+  padding: 0;
+  font-size: inherit;
+}
 .agent-input-row textarea.ant-input {
   width: 100%;
   min-width: 0;

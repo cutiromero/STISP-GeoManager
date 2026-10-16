@@ -244,6 +244,21 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const textAnswerRetry = useRef<{ fingerprint: string; key: string } | null>(
     null,
   );
+  const revealWaitingQuestion = (focus = false) => {
+    if (!waitingRun?.interaction) return;
+    const box = viewport.current;
+    const card = box?.querySelector<HTMLElement>(
+      `[data-question-id="${waitingRun.interaction.questionId}"]`,
+    );
+    if (!box || !card) return;
+    box.scrollTop +=
+      card.getBoundingClientRect().top - box.getBoundingClientRect().top - 24;
+    followLatest.current = true;
+    if (focus)
+      card
+        .querySelector<HTMLElement>("input, textarea, button")
+        ?.focus({ preventScroll: true });
+  };
   const latestResearch = [...runs].reverse().find((run) => run.researchIntent);
   const latestResearchRunId = useRef<number | undefined>(undefined);
   latestResearchRunId.current = latestResearch?.id;
@@ -480,17 +495,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     if (box && followLatest.current) box.scrollTop = box.scrollHeight;
   }, [runs, events]);
   useLayoutEffect(() => {
-    if (!waitingRun?.interaction) return;
-    const box = viewport.current;
-    const card = box?.querySelector<HTMLElement>(
-      `[data-question-id="${waitingRun.interaction.questionId}"]`,
-    );
-    if (box && card) {
-      box.scrollTop +=
-        card.getBoundingClientRect().top - box.getBoundingClientRect().top - 24;
-      followLatest.current = true;
-    }
-  }, [waitingRun?.interaction?.questionId]);
+    revealWaitingQuestion();
+  }, [waitingRun?.interaction?.questionId, waitingRun?.interaction?.revision]);
   useEffect(() => {
     const container = viewport.current;
     if (!container) return;
@@ -1420,6 +1426,31 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 onChange={layout.setInput}
               />
               <div className="agent-composer-content">
+                {waitingRun?.interaction?.status === "pending" && (
+                  <div className="agent-answer-target" id="agent-answer-target">
+                    <MessageOutlined />
+                    <span>
+                      <strong>
+                        {waitingRun.interaction.kind === "review"
+                          ? ui(
+                              "请在问题卡中审核",
+                              "Review in the question card",
+                            )
+                          : ui(
+                              "在下方回答当前问题",
+                              "Answer the current question below",
+                            )}
+                      </strong>
+                      <span>{waitingRun.interaction.title}</span>
+                    </span>
+                    <Button
+                      type="link"
+                      onClick={() => revealWaitingQuestion(true)}
+                    >
+                      {ui("查看问题", "View question")}
+                    </Button>
+                  </div>
+                )}
                 {attachments.length > 0 && (
                   <div className="agent-attachments-row">
                     {attachments.map((item) => (
@@ -1441,6 +1472,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                   <Input.TextArea
                     id="agent-message-input"
                     aria-label={ui("输入消息", "Message")}
+                    aria-describedby={
+                      waitingRun?.interaction?.status === "pending"
+                        ? "agent-answer-target"
+                        : undefined
+                    }
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     style={{ height: layout.input, resize: "none" }}
@@ -1742,8 +1778,16 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     <Button
                       type="primary"
                       className="agent-send-button"
-                      aria-label={ui("发送", "Send")}
-                      title={ui("发送", "Send")}
+                      aria-label={
+                        waitingRun
+                          ? ui("提交回答", "Submit answer")
+                          : ui("发送", "Send")
+                      }
+                      title={
+                        waitingRun
+                          ? ui("提交回答", "Submit answer")
+                          : ui("发送", "Send")
+                      }
                       icon={<SendOutlined />}
                       loading={busy}
                       disabled={
