@@ -566,6 +566,32 @@ def test_only_actual_selected_choice_can_cancel_pending_compute(selected, expect
     assert not user_cancelled_pending_compute(run)
 
 
+@pytest.mark.parametrize("text", ["取消计算", "停止当前计算", "不要再计算了"])
+def test_explicit_cancellation_blocks_ready_plan_and_allows_same_run_to_finish(
+    raster_env, monkeypatch, text
+):
+    from apps.agent.compute_intents import _prepare
+
+    env = raster_env
+    run = make_run(env, "计算NDVI，red=3 nir=8")
+    _prepare(run, env["owner"], env["policy"], env["ndvi"])
+    assert run.compute_intent["status"] == "ready"
+    mock_model(monkeypatch, [band_question()])
+    run_task(run.id)
+    assert submit_answer(env, run, answers={}, text=text).status_code == 202
+    assert claim() == run.id
+    mock_model(
+        monkeypatch,
+        [run_command(env), {"action": "final", "answer": "已取消尚未开始的计算。"}],
+    )
+    run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == "succeeded"
+    assert run.compute_intent["status"] == "cancelled"
+    assert "已取消" in run.answer
+    assert not ComputeTask.objects.exists()
+
+
 def test_stale_parameter_submit_cannot_restart_a_cancelled_plan(raster_env):
     from apps.agent.compute_intents import _prepare, update
     from apps.compute.packages import ComputeError

@@ -821,7 +821,7 @@ def _operator_submit(run, user, p, args):
                 },
             )
         raise ValidationError(
-            "用户已取消计算并改为解释，不能提交新计算；请依据已有资料继续解释。已提交任务保持原状态。"
+            "用户已明确取消计算，不能提交新计算；请说明取消状态，或按其新目标继续。已提交任务保持原状态。"
         )
 
     version_id = args.get("versionId")

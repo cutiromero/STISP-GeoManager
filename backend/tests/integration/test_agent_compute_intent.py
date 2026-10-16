@@ -422,6 +422,8 @@ def test_completion_questions_still_require_real_tasks(env, prompt):
     [
         "解释period assessment与status及跨期状态，不运行算法",
         "解释这份数据的质量状态，定标状态未知，不重新计算",
+        "说明生态状态是什么，不运行算法",
+        "查看植被状态如何影响NDVI，不运行算法",
     ],
 )
 def test_knowledge_and_data_state_explanations_are_not_progress_queries(env, prompt):
