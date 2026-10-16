@@ -24,6 +24,7 @@ from .context import prepare_context
 from .budgets import apply_budget, check_budget_access
 from .tools import TOOLS, execute, evidence_items
 from .compute_intent_text import user_cancelled_pending_compute
+from .citations import historical_answer, historical_text, validate_answer_citations
 
 logger = logging.getLogger(__name__)
 
@@ -120,17 +121,18 @@ def context_messages(run, policy_value, model):
             except (PermissionDenied, ValidationError, ValueError):
                 # Revoked evidence is omitted from subsequent model context.
                 continue
-        content = previous.answer
-        if run.conversation.mode == "agent" and previous.evidence:
-            content += "\n此前证据（数据可能更新，本轮需重新读取）:" + json.dumps(
-                previous.evidence, ensure_ascii=False
-            )
-        size = len(previous.prompt.encode("utf-8")) + len(content.encode("utf-8"))
+        content = (
+            historical_answer(previous)
+            if run.conversation.mode == "agent"
+            else historical_text(previous.answer, previous.id)
+        )
+        previous_prompt = historical_text(input_prompt(previous), previous.id)
+        size = len(previous_prompt.encode("utf-8")) + len(content.encode("utf-8"))
         if size > budget:
             truncated = True
             break
         messages[0:0] = [
-            {"role": "user", "content": input_prompt(previous)},
+            {"role": "user", "content": previous_prompt},
             {"role": "assistant", "content": content},
         ]
         budget -= size
@@ -171,7 +173,7 @@ def input_prompt(run):
     )
 
 
-SYSTEM_CHAT = "你是平台的本地模型助手。使用用户的语言回答。普通聊天不能访问平台数据，不要声称已读取数据、运行代码或执行操作。"
+SYSTEM_CHAT = "你是平台的本地模型助手。使用用户的语言回答。普通聊天不能访问平台数据，不要声称已读取数据、运行代码或执行操作。没有平台证据编号，不能引用[证据 N]或把历史平台依据作为已核实来源。"
 SYSTEM_AGENT = """你是当前项目的数据分析智能体。按问题选择必要工具：纯知识问题直接查知识；数据分析先发现数据、读取字段，再计算和检查。需要更多信息时使用ask_user，在原任务中等待回答并继续。
 用户只询问资源数量或分类数量时，调用summarize_resource_catalog；它的total/counts是当前授权范围的全量统计，不是样例。分类使用isComputeResult/origin等真实来源字段，不能根据名称猜测。分析过程中查找资源时用search_resources的query/category/offset/limit筛选与分页；按nextOffset继续，不得把第一页返回数量当成全部数量，也不能仅以“已截断”结束全量统计请求。
 用户问有哪些资源、哪些计算成果/上传数据、或要求完整名称清单时，优先present_resource_catalog，它由平台直接生成真实的分组清单和总数并结束本轮，避免重复抄写名称。只有需要在清单基础上继续分析时才分页search_resources；只问总数时用summarize_resource_catalog。
@@ -196,7 +198,7 @@ resourceId是单个正整数，例如9；不是字符串或数组。fields是字
 统计必须来自summarize_data或aggregate_data真实输出，不允许用样例行猜测全表统计。scope=prefix_sample仅代表前10000行，必须明确样本限制；保留筛选、有效数、空值和单位未知等限制。不自动宣称因果关系。
 final逐项回答本轮用户明确要求；用户问有哪些字段时列出describe_resource返回的字段名，不能只列参与统计的数值字段。
 面向用户用任务名称、结果名称及现有结果卡说明交付位置；除非用户明确要求内部编号，正文不罗列任务UUID和复杂ID。
-引用工具返回的真实evidenceIds或citation，如[证据 2]。条目的id/documentId/entryId均不是证据编号。final中用Markdown表格呈现关键数值。没有相关资源时明确说明，禁止虚构。
+引用工具返回的真实evidenceIds或citation，如[证据 2]。编号只在当前任务内有效；历史运行的证据仅作背景，不能沿用为本轮编号或引用。需要沿用历史专业结论时重新实际查询或检索来源；未核实则说明证据缺口，不保留无依据的具体断言。条目的id/documentId/entryId均不是证据编号。final中用Markdown表格呈现关键数值。没有相关资源时明确说明，禁止虚构。
 计算查询是带时间的快照，回答中说明已提交及处理口径，最新进度由平台在答复结束时补充。避免把早先排队快照称作答复时的当前状态。
 可用工具（工具名必须完全匹配，arguments 必须是对象；没有参数的工具也要发送空对象）：
 """
@@ -537,6 +539,9 @@ def run_task(run_id):
                             or not command["answer"].strip()
                         ):
                             raise ValueError()
+                        validate_answer_citations(
+                            command["answer"], run.evidence, is_agent=is_agent
+                        )
                         output_ids = set(run.execution_state.get("outputIds", []))
                         read_ids = {
                             item.get("result", {}).get("output", {}).get("id")
