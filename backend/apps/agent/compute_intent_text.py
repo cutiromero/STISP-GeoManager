@@ -51,7 +51,7 @@ def explicit_parameters(prompt, manifest):
         found = []
         if kind == "band":
             patterns = [
-                rf"(?<![A-Za-z0-9近外]){names}\s*(?:波段)?\s*(?:对应|为|是|=|：|:)?\s*(?:第\s*)?({number})\s*(?:个)?\s*(?:波段)?",
+                rf"(?<![A-Za-z0-9近外]){names}\s*(?:波段)?\s*(?:对应|改为|改成|调整为|仍然是|仍为|仍|为|是|=|：|:)?\s*(?:第\s*)?({number})\s*(?:个)?\s*(?:波段)?",
                 rf"第?\s*({number})\s*(?:个)?\s*波段\s*(?:是|为|对应|=|：|:)\s*{names}(?![\w外光])",
             ]
             for pattern in patterns:

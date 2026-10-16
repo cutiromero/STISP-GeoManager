@@ -12,6 +12,7 @@ import { workflowActivity } from "./agentActivity";
 import WorkflowReportFile from "./WorkflowReportFile";
 import WorkflowDeliverables from "./WorkflowDeliverables";
 import GeologyReviewStory from "./GeologyReviewStory";
+import { deletedWorkflowResources } from "./deletedWorkflowResources";
 import {
   workflowNextAction,
   workflowExecutionNote,
@@ -58,11 +59,17 @@ function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
   const previousChange = demo
     ? record(workflow.plan.previousChange).resourceId
     : undefined;
+  const deleted = new Set(
+    deletedWorkflowResources(workflow).map((item) => item.id),
+  );
   return [
     ...new Set(
       [original, previousChange, ...results].filter(
         (value): value is number =>
-          typeof value === "number" && Number.isInteger(value) && value > 0,
+          typeof value === "number" &&
+          Number.isInteger(value) &&
+          value > 0 &&
+          !deleted.has(value),
       ),
     ),
   ];
@@ -98,6 +105,11 @@ export default function WorkflowResults({
   const ui = useComputeText();
   const isActive = active.includes(workflow.status);
   const isGeologyReview = workflow.workflowType === "geology_map_review";
+  const deletedResources = deletedWorkflowResources(workflow);
+  const deletedIds = new Set(deletedResources.map((item) => item.id));
+  const availableResultIds = workflow.resultResourceIds.filter(
+    (id) => !deletedIds.has(id),
+  );
   const needsModificationsReview =
     isGeologyReview &&
     workflow.status === "waiting_approval" &&
@@ -259,6 +271,36 @@ export default function WorkflowResults({
           {ui(workflowStatusLabels[workflow.status])}
         </Tag>
       </Space>
+      {deletedResources.length > 0 && (
+        <Alert
+          type="info"
+          showIcon
+          title="部分历史目录数据已删除"
+          description={
+            <>
+              <p>任务、报告和判断记录已保留；再次处理时请重新选择相应数据。</p>
+              <ul>
+                {deletedResources.map((item) => (
+                  <li key={item.id}>
+                    <strong>{item.name}</strong> · 已删除
+                    {item.deletedAt &&
+                      ` · ${new Date(item.deletedAt).toLocaleString()}`}
+                    {item.source && (
+                      <span>
+                        {" "}
+                        · 原来源：
+                        {item.source.startsWith("compute-output:")
+                          ? "平台算法计算"
+                          : item.source}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          }
+        />
+      )}
       {(stopped ||
         workflow.pauseRequested ||
         workflow.status === "waiting_approval") && (
@@ -476,11 +518,13 @@ export default function WorkflowResults({
             </Button>
           </Popconfirm>
         )}
-        {workflow.status === "paused" && onResume && (
-          <Button type="primary" loading={busy} onClick={onResume}>
-            {ui("继续任务", "Resume task")}
-          </Button>
-        )}
+        {workflow.status === "paused" &&
+          onResume &&
+          !deletedResources.length && (
+            <Button type="primary" loading={busy} onClick={onResume}>
+              {ui("继续任务", "Resume task")}
+            </Button>
+          )}
         {(isActive || workflow.status === "paused") && onCancel && (
           <Popconfirm
             title={ui("停止此工作流？", "Stop this workflow?")}
@@ -498,7 +542,7 @@ export default function WorkflowResults({
           </Popconfirm>
         )}
       </Space>
-      {!!workflow.resultResourceIds.length && (
+      {!!availableResultIds.length && (
         <div className="agent-workflow-saved">
           <span>
             {ui(
@@ -506,7 +550,8 @@ export default function WorkflowResults({
               "Results saved in this project's data resources",
             )}
           </span>
-          {mapResourceIds.length ? (
+          {mapResourceIds.length &&
+          !(isGeologyReview && deletedResources.length) ? (
             <a
               href={
                 isGeologyReview

@@ -104,6 +104,7 @@ def conversation_json(c):
 
 def run_json(r, user):
     from .selections import check_history_evidence, serialize as selection_json
+    from .interactions import public_question
 
     p = require_access(user, r.conversation.mode)
     if r.conversation.mode == "agent":
@@ -123,6 +124,8 @@ def run_json(r, user):
         "evidence": r.evidence,
         "computeIntent": _compute_intent(r, user, p),
         "researchIntent": _research_intent(r, user, p),
+        "interaction": public_question(r.interaction) if r.interaction else None,
+        "interactionHistory": [public_question(item) for item in r.interaction_history],
         "createdAt": r.created_at.isoformat(),
         "updatedAt": r.updated_at.isoformat(),
         "contextTruncated": r.context_truncated,
@@ -271,7 +274,9 @@ def conversation_detail(request, conversation_id):
     if "archived" in value:
         if type(value["archived"]) is not bool:
             raise ApiProblem("归档状态无效")
-        if c.runs.filter(status__in=ACTIVE).exists():
+        from .interactions import BLOCKING
+
+        if c.runs.filter(status__in=BLOCKING).exists():
             raise ApiProblem("请先停止活动运行", 409)
         c.archived = value["archived"]
     c.save(update_fields=["title", "archived", "updated_at"])
@@ -478,6 +483,10 @@ def submit_value(request, c, value, *, available_models=None):
         budget_snapshot = resolve_budget(
             request.user, p, budget_profile, output_tokens, serving_window
         )
+        from .interactions import WAITING
+
+        if c.runs.filter(status__in=WAITING).exists():
+            raise ApiProblem("当前任务正在等待回答或计算，请在原任务中继续或取消", 409)
         if AgentRun._base_manager.filter(
             owner=request.user, status__in=ACTIVE
         ).exists():
@@ -588,9 +597,11 @@ def attachment_detail(request, conversation_id, attachment_id):
     attachment = get_object_or_404(
         AgentAttachment.objects, pk=attachment_id, conversation=c, owner=request.user
     )
+    from .interactions import BLOCKING
+
     if any(
         attachment.id in (run.attachment_ids or [])
-        for run in AgentRun._base_manager.filter(conversation=c, status__in=ACTIVE)
+        for run in AgentRun._base_manager.filter(conversation=c, status__in=BLOCKING)
     ):
         raise ApiProblem("附件正在被活动运行使用，请稍后删除", 409)
     delete_attachment(attachment)
@@ -639,16 +650,65 @@ def cancel(request, run_id):
         AgentRun.objects.select_related("conversation"), pk=run_id, owner=request.user
     )
     # Ownership is enough to stop consumption, even after usage permission revocation.
-    AgentRun.objects.filter(pk=r.id).update(cancel_requested=True)
-    AgentRun.objects.filter(pk=r.id, status="queued").update(
-        status="cancelled", detail="已取消", updated_at=timezone.now()
-    )
+    with transaction.atomic():
+        AgentRun.objects.filter(pk=r.id).update(cancel_requested=True)
+        r.refresh_from_db()
+        if r.interaction.get("status") == "pending":
+            card = {**r.interaction, "status": "cancelled"}
+            AgentRun.objects.filter(pk=r.id).update(
+                interaction=card,
+                interaction_history=[
+                    card if item["questionId"] == card["questionId"] else item
+                    for item in r.interaction_history
+                ],
+            )
+        AgentRun.objects.filter(
+            pk=r.id,
+            status__in=["queued", "waiting_input", "waiting_review", "waiting_compute"],
+        ).update(
+            status="cancelled",
+            detail="已停止后续处理；已提交计算可能继续，可在任务卡单独停止"
+            if r.compute_followups.filter(
+                task__status__in=["queued", "validating", "running", "cancelling"]
+            ).exists()
+            else "已取消，后续操作不会继续启动",
+            updated_at=timezone.now(),
+        )
     if r.research_workflow_id:
         AgentWorkflow.objects.filter(
             pk=r.research_workflow_id, owner=request.user
         ).update(cancel_requested=True)
     r.refresh_from_db()
     return JsonResponse(run_json(r, request.user))
+
+
+@endpoint(["POST"])
+def interaction(request, run_id):
+    from .interactions import answer
+
+    run = get_object_or_404(
+        AgentRun.objects.select_related("conversation"), pk=run_id, owner=request.user
+    )
+    p = require_access(request.user, run.conversation.mode, run.model)
+    if run.conversation.mode == "agent":
+        check_evidence(run, request.user, p)
+    value = body(
+        request,
+        ["action", "questionId", "revision", "submissionKey", "answers", "text"],
+    )
+    answer(run, request.user, value)
+    log_operation(
+        request.user,
+        "agent",
+        "answer_interaction",
+        "success",
+        target_type="agent_run",
+        target_id=run.id,
+        message=value["action"],
+    )
+    return JsonResponse(
+        run_json(run, request.user), status=202 if run.status == "queued" else 200
+    )
 
 
 @endpoint(["GET"])
@@ -1011,6 +1071,10 @@ def workflow_resume(request, workflow_id):
         user, p = _authorize(workflow)
         if workflow.cancel_requested:
             raise ApiProblem("已取消的科研任务不能继续", 409)
+        if workflow.plan.get("deletedResources"):
+            raise ApiProblem(
+                "该科研任务的历史数据已被删除，请重新选择数据后发起任务", 409
+            )
         if workflow.plan.get("scenarioVersion"):
             from .demo_workflow import authorize_demo
 

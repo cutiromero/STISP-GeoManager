@@ -115,6 +115,8 @@ export function computeRun(
     createdAt: "2026-10-09",
     updatedAt: "2026-10-09",
     contextTruncated: false,
+    interaction: null,
+    interactionHistory: [],
     computeIntent: intent,
   };
 }

@@ -210,7 +210,12 @@ def _refresh(run, user, p, *, validate_snapshot=False):
                 or spec["type"] == "field"
                 and (not isinstance(value, str) or value not in source["fields"])
             ):
-                raise ValidationError(spec["label"] + "不属于当前输入数据")
+                detail = (
+                    f"实际影像只有{source['bands']}个波段，{spec['label']}={value}超出1至{source['bands']}范围"
+                    if spec["type"] == "band"
+                    else spec["label"] + "不属于当前输入数据"
+                )
+                raise ValidationError(detail)
     intent.update(
         parameters=params,
         inputSnapshots=snapshots,
@@ -238,6 +243,72 @@ def _refresh(run, user, p, *, validate_snapshot=False):
     )
     _save(run, intent)
     return version
+
+
+def user_import_choice(run, *, default=False):
+    """Latest explicit user choice authorizes import; refusal wins per answer."""
+    messages = [(run.prompt, [])]
+    for question in run.interaction_history:
+        if question.get("status") != "answered":
+            continue
+        answer = question["answer"]
+        decisions = []
+        supplied_text = [answer.get("text", "")]
+        for item in question["questions"]:
+            selected = answer["answers"].get(item["key"])
+            if selected is None:
+                continue
+            values = selected if isinstance(selected, list) else [selected]
+            if item["key"] != "autoImport" and "入库" not in item["label"]:
+                continue
+            if item.get("type") == "text":
+                supplied_text.extend(str(value) for value in values)
+            options = {
+                option["value"]: option["label"] for option in item.get("options", [])
+            }
+            for value in values:
+                text = str(value).strip().lower()
+                label = options.get(value, "").strip()
+                if text in {"false", "no", "reject", "off", "0"} or re.search(
+                    r"^(?:否|不|拒绝|暂不|取消|无需|不要)", label
+                ):
+                    decisions.append(False)
+                elif text in {"true", "yes", "approve", "on", "1"} or re.search(
+                    r"^(?:是|同意|允许|自动入库|计算后入库|结果入库)$", label
+                ):
+                    decisions.append(True)
+        messages.append(("\n".join(supplied_text), decisions))
+    selected = default
+    for message, decisions in messages:
+        values = re.findall(
+            r"(?<!\w)autoImport\s*(?:=|：|:)\s*(true|false)",
+            message,
+            re.IGNORECASE,
+        )
+        refused = re.search(
+            r"(?:不|不要|无需|不用|取消|暂缓|停止)(?:\s|自动|把结果|将结果|结果|进行|申请|执行|再|先)*(?:入库|保存到(?:数据)?库)",
+            message,
+        )
+        if (
+            False in decisions
+            or "false" in [value.lower() for value in values]
+            or refused
+        ):
+            selected = False
+        elif (
+            True in decisions
+            or "true" in [value.lower() for value in values]
+            or any(
+                re.search(
+                    r"(?:自动|结果|请|需要|确认|希望|同意|允许|选择|直接|完成后)\s*(?:自动)?入库|保存到(?:数据)?库|^\s*入库[。！!\s]*$",
+                    clause,
+                )
+                and not re.search(r"是否|要不要|能否|可否|需不需要|能不能", clause)
+                for clause in re.split(r"[，,。；;\n]", message)
+            )
+        ):
+            selected = True
+    return selected
 
 
 def _prepare(run, user, p, version, inherited=None):
@@ -273,7 +344,7 @@ def _prepare(run, user, p, version, inherited=None):
         and inputs == inherited.compute_intent["inputs"]
     ):
         params = dict(inherited.compute_intent["parameters"])
-    explicit, conflicts = explicit_parameters(run.prompt, manifest)
+    explicit, conflicts = explicit_run_parameters(run, manifest)
     params.update(explicit)
     for key in conflicts:
         params.pop(key, None)
@@ -287,10 +358,7 @@ def _prepare(run, user, p, version, inherited=None):
         and inherited.compute_intent["versionId"] == version.id
         and inherited.compute_intent["autoImport"]
     )
-    if re.search(r"自动.{0,4}入库", run.prompt):
-        auto_import = not bool(
-            re.search(r"(?:不|不要|无需).{0,3}自动.{0,4}入库", run.prompt)
-        )
+    auto_import = user_import_choice(run, default=auto_import)
     _save(
         run,
         {
@@ -332,13 +400,35 @@ def _prepare(run, user, p, version, inherited=None):
     return evidence_ids
 
 
+def explicit_run_parameters(run, manifest):
+    from .interactions import user_messages
+
+    values, conflicts = {}, []
+    for message in user_messages(run):
+        supplied, conflicting = explicit_parameters(message, manifest)
+        values.update(supplied)
+        conflicts = [key for key in conflicts if key not in supplied]
+        conflicts.extend(key for key in conflicting if key not in conflicts)
+        for key in conflicting:
+            values.pop(key, None)
+    return values, conflicts
+
+
 def serialize(run, user, p):
+    from .deleted_resources import historical_deletion
+
     intent = run.compute_intent
     if not intent:
         return None
-    version = _version(intent["versionId"], run)
+    deleted = False
     for resource_id in intent["inputs"].values():
-        resolve_resource(user, p, resource_id, run.resource_ids)
+        if historical_deletion(run, user, p, resource_id):
+            deleted = True
+        else:
+            resolve_resource(user, p, resource_id, run.resource_ids)
+    if deleted:
+        return None
+    version = _version(intent["versionId"], run)
     candidates = []
     kinds = {spec["kind"] for spec in version.manifest["inputs"]}
     eligible = resources(user, p, run.resource_ids).filter(data_type__in=kinds)
@@ -429,10 +519,22 @@ def prepare_from_tool(run, user, p, version, inputs):
     if not interactive:
         return None
     intent = run.compute_intent
+    explicit, conflicts = explicit_run_parameters(run, version.manifest)
+    choices_changed = (
+        bool(conflicts)
+        or any(
+            intent.get("parameters", {}).get(key) != value
+            for key, value in explicit.items()
+        )
+        or intent.get("autoImport", False)
+        != user_import_choice(run, default=intent.get("autoImport", False))
+    )
     if (
         intent
         and intent.get("versionId") == version.id
         and intent.get("status") == "ready"
+        and intent.get("inputs") == inputs
+        and not choices_changed
     ):
         return None
     _prepare(run, user, p, version)
@@ -448,9 +550,26 @@ def prepare_from_tool(run, user, p, version, inputs):
     }
 
 
+def archive_submitted_plan(run):
+    """A completed submission is history, rather than a lock on the next tool."""
+    intent = run.compute_intent
+    if not intent.get("taskId"):
+        return
+    state = dict(run.execution_state)
+    history = list(state.get("computePlans", []))
+    if not any(item.get("taskId") == intent["taskId"] for item in history):
+        history.append(dict(intent))
+    state["computePlans"] = history
+    run.execution_state = state
+    AgentRun.objects.filter(pk=run.pk).update(execution_state=state)
+    _save(run, {})
+
+
 def update(run, user, p, value):
     if run.cancel_requested or run.conversation.archived:
         raise ComputeError("本轮已停止或会话已归档", 409)
+    if run.status in {"running", "queued", "waiting_review"}:
+        raise ComputeError("任务正在处理或等待审核，请使用当前问题卡或任务卡", 409)
     intent = run.compute_intent
     if not intent:
         raise ValidationError("本轮没有待处理的计算计划")
@@ -461,28 +580,44 @@ def update(run, user, p, value):
     action = value.get("action")
     if action not in {"update", "submit", "cancel"}:
         raise ValidationError("请选择更新、运行或取消操作")
-    if action == "cancel":
-        if intent.get("taskId"):
-            raise ComputeError("计算已提交，请通过任务卡停止计算", 409)
-        _save(run, {**intent, "status": "cancelled", "message": "计算计划已取消"})
-        return
-    if intent.get("taskId"):
-        if action == "submit" and all(
-            value.get(key, intent[key]) == intent[key]
-            for key in ("inputs", "parameters", "autoImport")
+    if run.status == "waiting_input" and run.interaction.get("status") == "pending":
+        version = _version(intent["versionId"], run)
+        parameter_keys = {item["key"] for item in version.manifest["parameters"]}
+        if any(
+            item["key"] not in parameter_keys for item in run.interaction["questions"]
         ):
-            submit_plan(run, user, p)
-            return
-        raise ComputeError("计算已提交，不能修改本次输入参数", 409)
+            raise ComputeError(
+                "当前还需确认任务目标或其他条件，请先回答最新问题卡", 409
+            )
     with transaction.atomic():
         AgentRun.objects.filter(pk=run.id).update(updated_at=timezone.now())
         run.refresh_from_db()
+        run.conversation.refresh_from_db(fields=["archived"])
+        if run.cancel_requested or run.conversation.archived:
+            raise ComputeError("本轮已停止或会话已归档", 409)
+        if run.status in {"running", "queued", "waiting_review"}:
+            raise ComputeError("任务状态已更新，请使用当前问题卡或任务卡", 409)
+        if run.compute_intent.get("status") in {"superseded", "cancelled"}:
+            raise ComputeError("计算计划已被替代或取消，请使用最新卡片", 409)
         if run.compute_intent["planRevision"] != value["planRevision"]:
             raise ComputeError("参数选择已更新，请刷新卡片", 409)
+        intent = dict(run.compute_intent)
+        if action == "cancel":
+            if intent.get("taskId"):
+                raise ComputeError("计算已提交，请通过任务卡停止计算", 409)
+            _save(run, {**intent, "status": "cancelled", "message": "计算计划已取消"})
+            return
+        if intent.get("taskId"):
+            if action == "submit" and all(
+                value.get(key, intent[key]) == intent[key]
+                for key in ("inputs", "parameters", "autoImport")
+            ):
+                submit_plan(run, user, p)
+                return
+            raise ComputeError("计算已提交，不能修改本次输入参数", 409)
         newer = run.conversation.runs.filter(id__gt=run.id).exclude(compute_intent={})
         if newer.exists():
             raise ComputeError("已有更新的计算计划，请使用最新卡片", 409)
-        intent = dict(run.compute_intent)
         if action == "submit":
             requested_inputs = value.get("inputs", intent["inputs"])
             for key, resource_id in intent["inputs"].items():
@@ -508,6 +643,9 @@ def update(run, user, p, value):
             answer = submit_plan(run, user, p)
             run.answer = answer
             AgentRun.objects.filter(pk=run.id).update(answer=answer)
+            from .interactions import continue_parameter_card
+
+            continue_parameter_card(run)
 
 
 def process(run, user, p):

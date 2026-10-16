@@ -105,6 +105,11 @@ def request_output_import(user, output, name="", *, request_source=""):
                 "request_source": request_source,
             },
         )
+        if not created and record.status == "deleted":
+            raise ComputeError(
+                "该入库结果已由用户删除；如需恢复，可下载尚未过期的计算输出后重新导入。",
+                409,
+            )
         if not created and record.status in {"queued", "failed"}:
             record.status, record.error = "queued", ""
             if not explicit_name and record.name != legacy_default_name:
@@ -339,7 +344,8 @@ def check_live_task(task):
         require_actor(user, task.project_tag_id, "manage_algorithms")
     for record in task.input_records.select_related("resource"):
         if (
-            record.resource.project_tag_id != task.project_tag_id
+            record.resource is None
+            or record.resource.project_tag_id != task.project_tag_id
             or record.resource.status != "active"
         ):
             raise ComputeError("输入数据已停用，计算已停止")
@@ -368,6 +374,8 @@ def task_action(task, user, action):
     elif action == "retry":
         if task.status not in {"failed", "interrupted", "cancelled"}:
             raise ComputeError("仅失败、中断或取消的任务可以重试", 409)
+        if task.input_records.filter(resource__isnull=True).exists():
+            raise ComputeError("历史输入数据已删除，请重新选择数据创建任务。", 409)
         return submit(
             user,
             {

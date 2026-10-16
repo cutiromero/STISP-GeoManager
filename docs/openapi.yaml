@@ -2739,6 +2739,46 @@ paths:
         description: 与 X-Project-Id 等效，用于图片、瓦片和文件链接；同时提供时两者必须相同，否则返回 400。
         schema:
           type: string
+  /api/catalog/resources/delete-preview/:
+    post:
+      tags: [数据目录]
+      operationId: previewResourceDeletion
+      summary: 预览资源删除影响与历史清理确认
+      description: 当前用户、当前项目内核对删除权限和引用。运行中任务、仍有效的成果与地图引用继续保护；已结束科研工作流关联的计算结果返回具名影响说明和10分钟签名确认凭证，预览本身不删除数据。
+      security: [{sessionAuth: []}]
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 当前唯一项目。
+        schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        description: 当前项目内待核对的资源集合。
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ResourceDeletePreviewRequest'}
+      responses:
+        '200':
+          description: 逐项预览与签名确认凭证。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResourceDeletePreviewResponse'}
+        '400':
+          description: 参数无效。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '401':
+          description: 请先登录。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '403':
+          description: 当前项目或删除权限不足。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
   /api/catalog/resources/delete/:
     post:
       tags:
@@ -7087,6 +7127,66 @@ paths:
           type: integer
           description: 上次事件游标
           minimum: 0
+  /api/agent/runs/{runId}/interaction/:
+    post:
+      tags: [智能体]
+      operationId: answerAgentInteraction
+      summary: 回答原任务的问题或取消等待
+      description: 在原AgentRun中保存回答并恢复模型判断，不创建新任务或重新执行已保存步骤。当前用户、项目、模型和数据权限重新核验；问题标识与方案修订匹配，重复提交键幂等，过期问题或不同答案冲突返回409。等待期间释放模型执行槽。
+      security: [{sessionAuth: []}]
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        description: 原任务编号。
+        schema: {type: integer, minimum: 1}
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 当前唯一项目。
+        schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        description: 对当前问题的回答、补充信息或取消动作。
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AgentInteractionUpdate'}
+      responses:
+        '200':
+          description: 已保存的同一任务与问题历史。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentRun'}
+        '400':
+          description: 回答格式或必填审核选项无效。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '401':
+          description: 请先登录。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '403':
+          description: 项目、用户、模型或数据授权变化。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '404':
+          description: 任务不存在或不属于当前用户及项目。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '409':
+          description: 旧问题、方案修订变化、任务状态变化或幂等键对应不同回答。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '503':
+          description: 模型或执行服务暂不可用，原问题保留等待。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
   /api/agent/runs/{runId}/cancel/:
     post:
       tags:
@@ -8773,8 +8873,8 @@ components:
           type: integer
           description: 证据序号
         resourceId:
-          type: integer
-          description: 数据资源 ID
+          type: [integer, 'null']
+          description: 数据资源 ID；知识、计算输出及其他非目录资源证据为空。
         name:
           type: string
           description: 来源名称
@@ -8846,10 +8946,104 @@ components:
     "AgentComputeIntent": {"type": "object", "description": "当前聊天持久计算计划；缺波段语义暂停选择，成功状态绑定真实任务", "properties": {"status": {"type": "string", "description": "计划状态", "enum": ["collecting", "ready", "submitted", "blocked", "superseded", "cancelled"]}, "message": {"type": "string", "description": "当前操作说明"}, "algorithm": {"description": "实际已发布算法版本", "anyOf": [{"$ref": "#/components/schemas/ComputeVersion"}, {"type": "null"}]}, "inputs": {"type": "object", "description": "清单输入键与授权资源", "additionalProperties": {"type": "integer", "description": "资源标识"}}, "inputCandidates": {"type": "array", "description": "授权计算资源候选", "items": {"$ref": "#/components/schemas/ComputeCandidate"}}, "parameters": {"type": "object", "description": "已确认清单参数", "additionalProperties": true}, "missingInputs": {"type": "array", "description": "待选择输入", "items": {"type": "string", "description": "元素"}}, "missingParameters": {"type": "array", "description": "待确认参数", "items": {"type": "string", "description": "元素"}}, "warnings": {"type": "array", "description": "适用条件", "items": {"type": "string", "description": "元素"}}, "knowledgeEvidenceIds": {"type": "array", "description": "知识证据标识", "items": {"type": "integer", "description": "元素"}}, "taskId": {"type": ["string", "null"], "description": "真实任务回执"}, "autoImport": {"type": "boolean", "description": "用户授权自动入库，默认false"}, "planRevision": {"type": "string", "description": "版本与资源参数修订摘要"}}, "required": ["status", "message", "algorithm", "inputs", "inputCandidates", "parameters", "missingInputs", "missingParameters", "warnings", "knowledgeEvidenceIds", "taskId", "autoImport", "planRevision"], "additionalProperties": false}
     "AgentComputeIntentUpdate": {"type": "object", "description": "修改、提交或取消当前持久计划", "properties": {"action": {"type": "string", "description": "操作", "enum": ["update", "submit", "cancel"]}, "planRevision": {"type": "string", "description": "版本与资源参数修订摘要"}, "inputs": {"type": "object", "description": "清单输入键与授权资源", "additionalProperties": {"type": "integer", "description": "资源标识"}}, "parameters": {"type": "object", "description": "已确认清单参数", "additionalProperties": true}, "autoImport": {"type": "boolean", "description": "用户授权自动入库，默认false"}}, "required": ["action", "planRevision"], "additionalProperties": false}
     "ComputeMapPreview": {"type": "object", "description": "后端渲染的临时栅格；不登记资源，不保存工程", "properties": {"name": {"type": "string", "description": "结果名称"}, "kind": {"type": "string", "description": "输出类型", "enum": ["raster"]}, "metadata": {"type": "object", "description": "真实输出元信息", "additionalProperties": true}, "temporary": {"type": "boolean", "description": "临时图层", "const": true}, "imageUrl": {"type": "string", "description": "私有PNG地址，每次重新授权"}, "imageCoordinates": {"type": "array", "description": "WGS84左上右上右下左下", "minItems": 4, "maxItems": 4, "items": {"type": "array", "description": "经纬度", "minItems": 2, "maxItems": 2, "items": {"type": "number", "description": "坐标"}}}}, "required": ["name", "kind", "metadata", "temporary", "imageUrl", "imageCoordinates"], "additionalProperties": false}
+    AgentInteractionOption:
+      type: object
+      description: 模型依据当前任务提供的用户可选答案，不自动提交默认值。
+      additionalProperties: false
+      required: [value, label]
+      properties:
+        value: {type: string, description: 传回原任务的稳定选项值}
+        label: {type: string, description: 用户可读选项}
+        description: {type: string, description: 选项影响或适用条件}
+    AgentInteractionQuestion:
+      type: object
+      description: 一项必要澄清或审核问题，允许用户选择或补充说明。
+      additionalProperties: false
+      required: [key, label, type, required]
+      properties:
+        key: {type: string, description: 本问题卡中的稳定字段键}
+        label: {type: string, description: 需要用户确认的内容}
+        type: {type: string, enum: [single, multiple, text], description: 单选、多选或文字}
+        required: {type: boolean, description: 结构化作答是否必填，信息澄清可由补充文字交给模型解析}
+        options:
+          type: array
+          description: 单选或多选项；文字问题可省略。
+          items: {$ref: '#/components/schemas/AgentInteractionOption'}
+        defaultValue:
+          description: 供用户检查的建议值，需要用户点击确认。
+          oneOf:
+          - {type: string}
+          - type: array
+            items: {type: string}
+          - {type: 'null'}
+    AgentInteractionAnswer:
+      type: object
+      description: 已提交给原任务的用户回答快照。
+      additionalProperties: false
+      required: [submittedAt, submissionKey, answers, text]
+      properties:
+        submittedAt: {type: string, description: 服务端保存时间}
+        submissionKey: {type: string, description: 本次提交的幂等键}
+        answers:
+          type: object
+          description: 与问题字段键对应的单选、多选或文字答案。
+          additionalProperties:
+            oneOf:
+            - {type: string}
+            - type: array
+              items: {type: string}
+        text: {type: string, description: 用户提供的补充条件或自由文字回答}
+    AgentInteraction:
+      type: object
+      description: 同一智能体任务内持久化的问题卡，旧卡不能覆盖新方案。
+      additionalProperties: false
+      required: [questionId, revision, kind, title, reason, questions, status, createdAt]
+      properties:
+        questionId: {type: string, description: 服务端签发的问题标识}
+        revision: {type: integer, minimum: 1, description: 方案修订号}
+        kind: {type: string, enum: [input, review], description: 信息澄清或用户审核；不替代已有地图修改批准机制}
+        title: {type: string, description: 问题卡标题}
+        reason: {type: string, description: 为什么需要用户确认，依据当前输入与工具结果}
+        plan: {type: string, description: 当前简短执行计划}
+        questions:
+          type: array
+          description: 模型提出的本轮必要问题。
+          items: {$ref: '#/components/schemas/AgentInteractionQuestion'}
+        status: {type: string, enum: [pending, answered, cancelled], description: 等待、已回答或已取消}
+        createdAt: {type: string, description: 提问保存时间}
+        answer: {$ref: '#/components/schemas/AgentInteractionAnswer'}
+    AgentInteractionUpdate:
+      type: object
+      description: 将答案送回原任务或取消等待，重试复用同一提交键。
+      additionalProperties: false
+      required: [action, questionId, revision, submissionKey]
+      properties:
+        action: {type: string, enum: [answer, cancel], description: 确认回答并继续，或取消等待}
+        questionId: {type: string, description: 当前问题标识，旧问题返回409}
+        revision: {type: integer, minimum: 1, description: 当前问题的方案修订号}
+        submissionKey: {type: string, minLength: 8, maxLength: 80, description: 唯一用户提交键，重复提交不重复启动}
+        answers:
+          type: object
+          description: 结构化答案；文字澄清可配合text交给模型理解。
+          additionalProperties:
+            oneOf:
+            - {type: string}
+            - type: array
+              items: {type: string}
+        text: {type: string, description: 补充信息，与此前证据一同恢复给模型}
     AgentRun:
       type: object
       description: 持久运行记录；引用失权时返回 403，不返回旧内容
       properties:
+        interaction:
+          description: 当前或最近的问题卡；未提问时为空。
+          anyOf:
+          - {$ref: '#/components/schemas/AgentInteraction'}
+          - {type: 'null'}
+        interactionHistory:
+          type: array
+          description: 同一次任务的完整提问与回答历史，刷新或切换会话后恢复。
+          items: {$ref: '#/components/schemas/AgentInteraction'}
         researchIntent:
           description: 与真实科研任务关联的持久意图；缺省或null为普通对话
           anyOf:
@@ -8930,6 +9124,9 @@ components:
           enum:
           - queued
           - running
+          - waiting_input
+          - waiting_review
+          - waiting_compute
           - succeeded
           - failed
           - cancelled
@@ -8975,6 +9172,8 @@ components:
       - createdAt
       - updatedAt
       - contextTruncated
+      - interaction
+      - interactionHistory
       additionalProperties: false
     AgentEvent:
       type: object
@@ -8995,6 +9194,8 @@ components:
           - context
           - parameters
           - usage
+          - interaction
+          - continuation
         text:
           type: string
           description: 增量文字或简要操作说明
@@ -13770,6 +13971,40 @@ components:
           maxItems: 4
           description: WGS84西、南、东、北界，用于建议预览与定位。
           items: {type: number, description: 经纬度边界值}
+    ResourceDeletePreviewRequest:
+      type: object
+      description: 当前项目内的待删除资源集合，预览不产生删除。
+      additionalProperties: false
+      required: [resourceIds]
+      properties:
+        resourceIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: 待核对资源，重复编号只处理一次。
+          items: {type: integer, minimum: 1, description: 数据资源编号}
+    ResourceDeletePreviewItem:
+      type: object
+      description: 当前授权资源的引用影响，历史清理需要用户明确确认。
+      additionalProperties: false
+      required: [resourceId, name, status, detail, historyReferenceCount]
+      properties:
+        resourceId: {type: integer, description: 请求中的资源编号}
+        name: {type: [string, 'null'], description: 可访问资源名称，不可访问时为空}
+        status: {type: string, enum: [deletable, confirmation_required, blocked, not_found], description: 可删除、需确认历史清理、仍受保护或不存在}
+        detail: {type: string, description: 对用户可读的引用影响或保护原因}
+        historyReferenceCount: {type: integer, minimum: 0, description: 删除将解除的已结束任务或工作流关联数量}
+    ResourceDeletePreviewResponse:
+      type: object
+      description: 删除影响与绑定用户、项目、资源和引用快照的签名确认凭证。
+      additionalProperties: false
+      required: [items, confirmationToken]
+      properties:
+        items:
+          type: array
+          description: 按首次请求顺序返回，受保护项确认后仍不删除。
+          items: {$ref: '#/components/schemas/ResourceDeletePreviewItem'}
+        confirmationToken: {type: string, description: 10分钟内有效，引用变化后重新预览，不授予新权限}
     ResourceBulkDeleteRequest:
       type: object
       description: 当前项目待删除资源，不接受文件路径或其他项目资源。
@@ -13788,6 +14023,9 @@ components:
           type: boolean
           const: true
           description: 用户在界面明确确认永久删除。
+        historyConfirmationToken:
+          type: string
+          description: 用户检查预览并确认清理历史关联后的签名凭证；仅计算结果允许清理已结束计算和科研记录，名称、来源与删除记录保留，运行中依赖继续保护。
     ResourceBulkDeleteItem:
       type: object
       description: 一项资源的真实删除结果。
@@ -18111,8 +18349,8 @@ components:
     "ComputeCategory": {"type": "object", "description": "算法用途分类", "properties": {"id": {"type": "integer", "description": "标识"}, "name": {"type": "string", "description": "文字"}, "sortOrder": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "sortOrder"]}
     "ComputeCandidate": {"type": "object", "description": "当前项目可计算数据；元数据不代表已固定输入", "properties": {"id": {"type": "integer", "description": "标识"}, "name": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "fields": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "bands": {"type": "integer", "description": "标识"}, "crs": {"type": "string", "description": "文字"}, "geometryTypes": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "sizeBytes": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "kind", "projectTagId", "fields", "bands", "crs", "geometryTypes", "sizeBytes"]}
     "ComputeTaskCreate": {"type": "object", "description": "创建任务；相同幂等键只能用于同一请求", "properties": {"name": {"type": "string", "description": "任务名称"}, "versionId": {"type": "integer", "description": "固定算法版本"}, "inputs": {"type": "object", "description": "输入名到资源 ID", "additionalProperties": {"type": "integer", "description": "标识"}}, "parameters": {"type": "object", "description": "按版本声明校验的参数", "additionalProperties": true}, "idempotencyKey": {"type": "string", "description": "客户端生成唯一键，最长80字符"}, "trial": {"type": "boolean", "description": "管理员试运行草稿版本"}}, "required": ["name", "versionId", "inputs", "parameters", "idempotencyKey"]}
-    "ComputeOutput": {"type": "object", "description": "验证后的实际结果及独立入库状态", "properties": {"id": {"type": "integer", "description": "标识"}, "key": {"type": "string", "description": "文字"}, "label": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "fileName": {"type": "string", "description": "文字"}, "sizeBytes": {"type": "integer", "description": "标识"}, "checksum": {"type": "string", "description": "文字"}, "metadata": {"type": "object", "description": "波段/字段/CRS/行数等结果检查信息", "additionalProperties": true}, "expired": {"type": "boolean", "description": "是否"}, "importStatus": {"type": "string", "description": "入库状态", "enum": ["none", "queued", "running", "ready", "failed"]}, "resourceId": {"type": ["integer", "null"], "description": "已入库资源"}, "importError": {"type": "string", "description": "文字"}, "downloadUrl": {"type": "string", "description": "文字"}, "previewUrl": {"type": "string", "description": "文字"}, "resourceName": {"type": "string", "description": "Authorized registered resource name"}, "resourceLocation": {"type": "string", "description": "项目下数据资源 / 计算结果 / 资源名称"}, "mapUrl": {"type": "string", "description": "Direct geographic workspace link when registered"}}, "required": ["id", "key", "label", "kind", "fileName", "sizeBytes", "checksum", "metadata", "expired", "importStatus", "resourceId", "importError", "downloadUrl", "previewUrl"]}
-    "ComputeTask": {"type": "object", "description": "一个项目内的任务记录；日志/未入库成果仅本人和有权管理员可见", "properties": {"id": {"type": "string", "description": "UUID"}, "name": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "ownerName": {"type": "string", "description": "文字"}, "algorithmName": {"type": "string", "description": "文字"}, "version": {"$ref": "#/components/schemas/ComputeVersion"}, "status": {"type": "string", "description": "任务状态", "enum": ["queued", "validating", "running", "cancelling", "succeeded", "failed", "cancelled", "interrupted"]}, "stage": {"type": "string", "description": "平台阶段说明"}, "progress": {"type": "integer", "description": "0至100"}, "error": {"type": "string", "description": "可行动错误信息，不包含主机路径"}, "parameters": {"type": "object", "description": "任务参数快照", "additionalProperties": true}, "inputs": {"type": "array", "description": "列表", "items": {"type": "object", "description": "输入资源ID/名称/固定SHA256/元数据", "additionalProperties": true}}, "outputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeOutput"}}, "createdAt": {"type": "string", "description": "文字"}, "startedAt": {"type": ["string", "null"], "description": "开始时间"}, "finishedAt": {"type": ["string", "null"], "description": "结束时间"}, "trial": {"type": "boolean", "description": "是否"}, "unread": {"type": "boolean", "description": "是否"}, "retryOf": {"type": ["string", "null"], "description": "前序任务"}, "attemptCount": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "projectTagId", "ownerName", "algorithmName", "version", "status", "stage", "progress", "error", "parameters", "inputs", "outputs", "createdAt", "startedAt", "finishedAt", "trial", "unread", "retryOf", "attemptCount"]}
+    "ComputeOutput": {"type": "object", "description": "验证后的实际结果及独立入库状态", "properties": {"id": {"type": "integer", "description": "标识"}, "key": {"type": "string", "description": "文字"}, "label": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "fileName": {"type": "string", "description": "文字"}, "sizeBytes": {"type": "integer", "description": "标识"}, "checksum": {"type": "string", "description": "文字"}, "metadata": {"type": "object", "description": "波段/字段/CRS/行数等结果检查信息", "additionalProperties": true}, "expired": {"type": "boolean", "description": "是否"}, "importStatus": {"type": "string", "description": "入库状态；deleted表示用户确认清理了目录数据，历史来源仍保留", "enum": ["none", "queued", "running", "ready", "failed", "deleted"]}, "resourceId": {"type": ["integer", "null"], "description": "已入库资源"}, "importError": {"type": "string", "description": "文字"}, "downloadUrl": {"type": "string", "description": "文字"}, "previewUrl": {"type": "string", "description": "文字"}, "resourceName": {"type": "string", "description": "Authorized registered resource name"}, "resourceLocation": {"type": "string", "description": "项目下数据资源 / 计算结果 / 资源名称"}, "mapUrl": {"type": "string", "description": "Direct geographic workspace link when registered"}}, "required": ["id", "key", "label", "kind", "fileName", "sizeBytes", "checksum", "metadata", "expired", "importStatus", "resourceId", "importError", "downloadUrl", "previewUrl"]}
+    "ComputeTask": {"type": "object", "description": "一个项目内的任务记录；日志/未入库成果仅本人和有权管理员可见", "properties": {"id": {"type": "string", "description": "UUID"}, "name": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "ownerName": {"type": "string", "description": "文字"}, "algorithmName": {"type": "string", "description": "文字"}, "version": {"$ref": "#/components/schemas/ComputeVersion"}, "status": {"type": "string", "description": "任务状态", "enum": ["queued", "validating", "running", "cancelling", "succeeded", "failed", "cancelled", "interrupted"]}, "stage": {"type": "string", "description": "平台阶段说明"}, "progress": {"type": "integer", "description": "0至100"}, "error": {"type": "string", "description": "可行动错误信息，不包含主机路径"}, "parameters": {"type": "object", "description": "任务参数快照", "additionalProperties": true}, "inputs": {"type": "array", "description": "列表", "items": {"type": "object", "description": "输入资源ID（历史清理后可为空）/名称/固定SHA256/元数据；deletedResource保留原编号、名称、来源、所属项目、删除时间及操作者，不可再作为执行输入", "additionalProperties": true}}, "outputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeOutput"}}, "createdAt": {"type": "string", "description": "文字"}, "startedAt": {"type": ["string", "null"], "description": "开始时间"}, "finishedAt": {"type": ["string", "null"], "description": "结束时间"}, "trial": {"type": "boolean", "description": "是否"}, "unread": {"type": "boolean", "description": "是否"}, "retryOf": {"type": ["string", "null"], "description": "前序任务"}, "attemptCount": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "projectTagId", "ownerName", "algorithmName", "version", "status", "stage", "progress", "error", "parameters", "inputs", "outputs", "createdAt", "startedAt", "finishedAt", "trial", "unread", "retryOf", "attemptCount"]}
     "ComputeRuntimeStatus": {"type": "object", "description": "运行环境和当前用户的能力，不包含主机命令/路径", "properties": {"available": {"type": "boolean", "description": "隔离执行环境和worker均可用"}, "detail": {"type": "string", "description": "状态说明"}, "workerOnline": {"type": "boolean", "description": "是否"}, "runtimes": {"type": "array", "description": "列表", "items": {"type": "object", "description": "ID、名称、imageDigest、ready", "additionalProperties": true}}, "limits": {"type": "object", "description": "配额", "additionalProperties": true}, "permissions": {"type": "object", "description": "计算功能权限", "additionalProperties": {"type": "boolean", "description": "是否"}}}, "required": ["available", "detail", "workerOnline", "runtimes", "limits", "permissions"]}
     "ComputePreview": {"type": "object", "description": "最多100行的表格/矢量属性或栅格元数据预览", "properties": {"kind": {"type": "string", "description": "文字"}, "metadata": {"type": "object", "description": "元数据", "additionalProperties": true}, "columns": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "rows": {"type": "array", "description": "列表", "items": {"type": "array", "description": "列表", "items": {"description": "单元格值"}}}}, "required": ["kind", "metadata", "columns", "rows"]}
     "ComputeAlgorithmList": {"type": "object", "description": "分页结果", "properties": {"items": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeAlgorithm"}}, "total": {"type": "integer", "description": "总数"}}, "required": ["items", "total"]}

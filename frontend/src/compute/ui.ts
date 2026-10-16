@@ -34,6 +34,7 @@ export const importStatusLabels: Record<string, [string, string]> = {
   running: ["入库中", "Importing"],
   ready: ["已入库", "Imported"],
   failed: ["入库失败", "Import failed"],
+  deleted: ["目录数据已删除", "Catalog data deleted"],
 };
 export function statusText(
   ui: (zh: string, en: string) => string,

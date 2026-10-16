@@ -159,7 +159,7 @@ def test_missing_bands_generate_manifest_form_without_default_confirmation(env):
     assert item.compute_intent["status"] == "collecting"
     assert item.compute_intent["parameters"] == {}
     assert item.compute_intent["missingParameters"] == ["green", "nir"]
-    assert item.compute_intent["autoImport"] is False
+    assert item.compute_intent["autoImport"] is True
     assert not ComputeTask.objects.exists()
     dto = serialize(item, env["owner"], env["policy"])
     assert dto["algorithm"]["manifest"] == env["ndwi"].manifest
@@ -388,22 +388,34 @@ def test_model_false_success_is_replaced_by_platform_evidence(env, claim):
     assert "没有实际提交" in answer
 
 
-def test_fast_path_never_contacts_model_provider(env):
+def test_explicit_bands_use_model_and_wait_for_real_compute(env, monkeypatch):
     from apps.agent.worker import run_task
+    from tests.integration.test_agent_interactions import mock_model
 
     item = run(env, "计算NDVI，red=3 nir=8")
     item.status = "running"
     item.save()
-    with (
-        patch("apps.agent.worker.model_window") as window,
-        patch("apps.agent.worker.stream") as stream,
-    ):
-        run_task(item.id)
-    window.assert_not_called()
-    stream.assert_not_called()
+    requests = []
+    mock_model(
+        monkeypatch,
+        [
+            {
+                "action": "execute_operator",
+                "arguments": {
+                    "versionId": env["ndvi"].id,
+                    "inputs": {"image": env["raster"].id},
+                    "parameters": {"red": 3, "nir": 8},
+                },
+            }
+        ],
+        requests,
+    )
+    run_task(item.id)
     item.refresh_from_db()
-    assert item.status == "succeeded"
+    assert requests and item.status == "waiting_compute"
     assert ComputeTask.objects.count() == 1
+    assert ComputeTask.objects.get().parameters == {"red": 3, "nir": 8}
+    assert not item.interaction_history
 
 
 def test_model_cannot_change_already_confirmed_bands(env):

@@ -2615,6 +2615,28 @@ AgentRun.computeIntent 保存算法版本、输入、已确认参数和修订摘
 
 GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84四角，image子路径返回PNG。两者必须带projectTagId，每次检查用户、项目、任务、输入与文件身份，临时过期则404。前端仅放置临时图层，不入库、不保存工程。
 
+## 普通智能体原任务交互与结果续读（2026-10-16）
+
+模型可用 `ask_user` 提出通用问题卡，包含标题、原因、后续安排和单选、多选或文字问题。默认值只预填。普通模型对话同样可澄清，但不获得平台资源、知识或计算权限。数据智能体沿用原工具与选择范围，地图编辑仍须通过既有逐项批准机制。
+
+`AgentRun` 返回 `interaction` 和 `interactionHistory`；`waiting_input`、`waiting_review`、`waiting_compute` 分别表示等待回答、等待审核和等待真实计算。这些状态不会被当作完成，也不占用模型执行槽。服务端保存原消息、实际工具返回、已有方案及回答，刷新和切会话从原运行恢复。
+
+`POST /api/agent/runs/{runId}/interaction/` 使用 Session、CSRF、本人及原单项目授权，请求包含 `action=answer|cancel`、`questionId`、`revision`、`submissionKey`，可附 `answers` 和 `text`。返回200原运行。单选值为字符串，多选为字符串数组；输入问题允许用补充文字回答，由模型理解。审核必须显式选择 `approval=approve|reject`，文字不能代替批准。相同提交键和相同内容幂等返回当前状态；旧问题、变更内容复用提交键或并发状态冲突返回409。模型离线或worker不可用返回503，卡片保留供恢复。未授权读取返回401/403/404，沿用原资源隐私边界。
+
+回答后原运行重新排队，模型结合此前证据和新条件继续；再次缺信息时可再提问。同会话存在等待任务时不能另建一轮绕过。取消或拒绝会明确停止后续操作；已提交算子需从计算任务卡单独停止。通用问题卡待回答时优先展示，旧算法参数卡不能抢先执行非参数审核。
+
+算法成功后 `waiting_compute` 读取真实终态，重新交给原模型解释。内部只读工具 `read_compute_output` 对实际输出重新鉴权并核对SHA256；CSV可分页读取，栅格通过统一GDAL接口返回注明“近似”的统计，其他格式返回元数据及已有预览入口。计算成功与科学解释分别判断，近似统计不能代替生态因果证据。地图、下载、预览及入库继续使用原输出入口。
+
+`AgentEvidence.resourceId` 对知识、计算输出等非目录证据为 null；真实对象编号保存在对应工具结果中，不将 outputId 或知识编号当作数据资源编号。
+
+## 历史计算结果确认清理（2026-10-16）
+
+`POST /api/catalog/resources/delete-preview/` 接收当前项目的 `resourceIds`，返回逐项 `deletable|confirmation_required|blocked|not_found`、影响说明、历史引用数和 `confirmationToken`。沿用目录删除权限，跨项目和不可见资源统一隐藏名称。10分钟令牌绑定用户、项目、资源和当时引用状态；依赖变化或令牌过期需重新预览。
+
+原 `POST /api/catalog/resources/delete/` 额外接收 `historyConfirmationToken`。仅计算结果允许确认后解除已结束计算和科研工作流历史引用；运行、等待回答/审核/计算、入库中，以及成果和已保存工程等有效引用继续保护。预览时被阻止或不可见的项目不因等待期间状态变化而被顺带删除。普通上传原始数据沿用原保护。
+
+确认后保留具名删除凭据、来源、校验和与旧关联记录；历史输入置空，不能据此重试计算。已删除的入库输出使用 `importStatus=deleted`，不再提供失效地图/目录入口或重复入库。工作流移除可执行资源引用，在 `plan.deletedResources` 保留凭据。详见 [计算结果清理说明](computation-result-cleanup-20261016.md)。
+
 ## 知识领域与智能体工具选择（2026-10-10）
 
 独立 `domain` 将结构化条目与文档分为 remote_sensing（遥感基础）、pipelines（油气管道相关）、geology（遥感地质填图逻辑推理）、arid_ecology（干旱区生态安全治理）。原 `category` 细分类保持。历史资料迁移只补领域，不改原文、文件、来源或版本。条目、文档、Wiki列表支持可选 `domain` 查询；文档检索支持 `domains` 数组。上传资料可带 domain；`PATCH /api/knowledge/documents/{documentId}/` 以 `{domain}` 调整资料分区，复核当前项目知识维护权限及本人隐私边界。新领域上传使用独立上游Wiki空间，旧空间中的页面只在全部引用通过当前领域与权限校验时返回。

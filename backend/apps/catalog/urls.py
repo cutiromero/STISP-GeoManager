@@ -7,6 +7,11 @@ urlpatterns = [
     path("catalog/directories/", views.directories, name="catalog-directories"),
     path("catalog/resources/", views.resources, name="catalog-resources"),
     path(
+        "catalog/resources/delete-preview/",
+        resource_management.preview_resource_deletion,
+        name="catalog-resources-delete-preview",
+    ),
+    path(
         "catalog/resources/delete/",
         resource_management.bulk_delete_resources,
         name="catalog-resources-delete",

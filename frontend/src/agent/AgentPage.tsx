@@ -56,6 +56,7 @@ import TaskBudgetControl from "./TaskBudgetControl";
 import RunEvidence from "./RunEvidence";
 import RunComputeTasks from "./RunComputeTasks";
 import ComputeIntentCard from "./ComputeIntentCard";
+import InteractionCard from "./InteractionCard";
 import WorkflowPanel from "./WorkflowPanel";
 import ResearchIntentCard from "./ResearchIntentCard";
 import LiveActivity, { ActivityMark } from "./LiveActivity";
@@ -80,7 +81,10 @@ import ReasoningEffortControl, {
 import "./agent.css";
 import { workflowStatusLabels } from "./workflowFeedback";
 
-const active = (r: AgentRun) => r.status === "queued" || r.status === "running";
+const active = (r: AgentRun) =>
+  ["queued", "running", "waiting_compute"].includes(r.status);
+const waiting = (r: AgentRun) =>
+  ["waiting_input", "waiting_review"].includes(r.status);
 
 function mergeRun(old: AgentRun[], next: AgentRun): AgentRun[] {
   const updated = old.map((run) => {
@@ -235,6 +239,11 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     demoScenario?: AgentResearchScenario;
   } | null>(null);
   const running = runs.find(active);
+  const waitingRun = [...runs].reverse().find(waiting);
+  const taskLocked = Boolean(running || waitingRun);
+  const textAnswerRetry = useRef<{ fingerprint: string; key: string } | null>(
+    null,
+  );
   const latestResearch = [...runs].reverse().find((run) => run.researchIntent);
   const latestResearchRunId = useRef<number | undefined>(undefined);
   latestResearchRunId.current = latestResearch?.id;
@@ -248,6 +257,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const lastRun = runs[runs.length - 1];
   const sidebarRun =
     running ??
+    waitingRun ??
     (latestResearch?.id === lastRun?.id ? latestResearch : pendingResearch) ??
     lastRun;
   const currentResearchWorkflow =
@@ -469,6 +479,18 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     }
     if (box && followLatest.current) box.scrollTop = box.scrollHeight;
   }, [runs, events]);
+  useLayoutEffect(() => {
+    if (!waitingRun?.interaction) return;
+    const box = viewport.current;
+    const card = box?.querySelector<HTMLElement>(
+      `[data-question-id="${waitingRun.interaction.questionId}"]`,
+    );
+    if (box && card) {
+      box.scrollTop +=
+        card.getBoundingClientRect().top - box.getBoundingClientRect().top - 24;
+      followLatest.current = true;
+    }
+  }, [waitingRun?.interaction?.questionId]);
   useEffect(() => {
     const container = viewport.current;
     if (!container) return;
@@ -553,6 +575,55 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       !modelOnline
     )
       return;
+    if (waitingRun?.interaction?.status === "pending" && !demoScenario) {
+      const question = waitingRun.interaction;
+      if (question.kind === "review") {
+        message.info(
+          "请在当前审核卡中明确选择，再确认并继续；补充意见可以填在卡片下方。",
+        );
+        return;
+      }
+      const seq = sequence.current;
+      const fingerprint = JSON.stringify([
+        waitingRun.id,
+        question.questionId,
+        question.revision,
+        text,
+      ]);
+      if (textAnswerRetry.current?.fingerprint !== fingerprint) {
+        textAnswerRetry.current = { fingerprint, key: createUuid() };
+      }
+      setBusy(true);
+      setError("");
+      try {
+        const next = await agentApi.answerInteraction(waitingRun.id, {
+          action: "answer",
+          questionId: question.questionId,
+          revision: question.revision,
+          submissionKey: textAnswerRetry.current.key,
+          answers: {},
+          text,
+        });
+        if (!alive.current || seq !== sequence.current) return;
+        setRuns((old) => mergeRun(old, next));
+        setPrompt("");
+        setEvents([]);
+        followLatest.current = true;
+        void refreshList();
+      } catch (failure) {
+        report(failure);
+        try {
+          const latest = await agentApi.poll(waitingRun.id);
+          if (alive.current && seq === sequence.current)
+            setRuns((old) => mergeRun(old, latest.run));
+        } catch {
+          // The normal history authorization refresh handles revoked access.
+        }
+      } finally {
+        if (alive.current && seq === sequence.current) setBusy(false);
+      }
+      return;
+    }
     const clarification = !demoScenario
       ? [...runs]
           .reverse()
@@ -763,6 +834,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const statusLabel: Record<string, string> = {
     queued: ui("排队中", "Queued"),
     running: ui("生成中", "Generating"),
+    waiting_input: ui("等待您回答", "Waiting for your answer"),
+    waiting_review: ui("等待您审核", "Waiting for your review"),
+    waiting_compute: ui("算法计算中", "Calculating"),
     succeeded: ui("已完成", "Completed"),
     failed: ui("未完成", "Incomplete"),
     cancelled: ui("已停止", "Stopped"),
@@ -1166,22 +1240,27 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         ]}
                       />
                     )}
-                  {!(mode === "agent" && r.computeIntent?.taskId) && (
-                    <SafeMarkdown text={r.answer} />
-                  )}
-                  {mode === "agent" && r.computeIntent && (
-                    <ComputeIntentCard
-                      runId={r.id}
-                      intent={r.computeIntent}
-                      onChanged={(next) =>
-                        setRuns((old) =>
-                          old.map((item) =>
-                            item.id === next.id ? next : item,
-                          ),
-                        )
-                      }
-                    />
-                  )}
+                  {(!(mode === "agent" && r.computeIntent?.taskId) ||
+                    r.evidence.some((item) =>
+                      ["read_compute_output", "get_compute_task"].includes(
+                        item.tool,
+                      ),
+                    )) && <SafeMarkdown text={r.answer} />}
+                  {mode === "agent" &&
+                    r.computeIntent &&
+                    r.interaction?.status !== "pending" && (
+                      <ComputeIntentCard
+                        runId={r.id}
+                        intent={r.computeIntent}
+                        onChanged={(next) =>
+                          setRuns((old) =>
+                            old.map((item) =>
+                              item.id === next.id ? next : item,
+                            ),
+                          )
+                        }
+                      />
+                    )}
                   {mode === "agent" &&
                     r.researchIntent &&
                     !runs.some(
@@ -1227,14 +1306,31 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         }}
                       />
                     )}
-                  {active(r) && !r.computeIntent && !r.researchIntent && (
-                    <LiveActivity
-                      activity={runActivity(
-                        r,
-                        r.id === running?.id ? events : [],
-                      )}
-                    />
-                  )}
+                  <InteractionCard
+                    run={r}
+                    disabled={Boolean(current?.archived) || busy}
+                    onChanged={(next) => {
+                      if (
+                        !alive.current ||
+                        conversationSequence !== sequence.current
+                      )
+                        return;
+                      followLatest.current = true;
+                      setEvents([]);
+                      setRuns((old) => mergeRun(old, next));
+                      void refreshList();
+                    }}
+                  />
+                  {(active(r) || waiting(r)) &&
+                    !r.computeIntent &&
+                    !r.researchIntent && (
+                      <LiveActivity
+                        activity={runActivity(
+                          r,
+                          r.id === running?.id ? events : [],
+                        )}
+                      />
+                    )}
                   {mode === "agent" &&
                     (r.computeIntent?.taskId ||
                       r.evidence.some((item) =>
@@ -1279,27 +1375,30 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       showIcon
                     />
                   )}
-                  {!active(r) && !r.computeIntent && !r.researchIntent && (
-                    <Space className="agent-answer-actions">
-                      <Button
-                        size="small"
-                        icon={<CopyOutlined />}
-                        disabled={!r.answer}
-                        onClick={() => void copy(r.answer)}
-                      >
-                        {ui("复制", "Copy")}
-                      </Button>
-                      <Button
-                        size="small"
-                        disabled={Boolean(running) || busy || !modelOnline}
-                        onClick={() => void send(r.prompt)}
-                      >
-                        {r.status === "succeeded"
-                          ? ui("重新生成", "Regenerate")
-                          : ui("重试", "Retry")}
-                      </Button>
-                    </Space>
-                  )}
+                  {!active(r) &&
+                    !waiting(r) &&
+                    !r.computeIntent &&
+                    !r.researchIntent && (
+                      <Space className="agent-answer-actions">
+                        <Button
+                          size="small"
+                          icon={<CopyOutlined />}
+                          disabled={!r.answer}
+                          onClick={() => void copy(r.answer)}
+                        >
+                          {ui("复制", "Copy")}
+                        </Button>
+                        <Button
+                          size="small"
+                          disabled={taskLocked || busy || !modelOnline}
+                          onClick={() => void send(r.prompt)}
+                        >
+                          {r.status === "succeeded"
+                            ? ui("重新生成", "Regenerate")
+                            : ui("重试", "Retry")}
+                        </Button>
+                      </Space>
+                    )}
                 </div>
               </section>
             ))}
@@ -1326,7 +1425,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     {attachments.map((item) => (
                       <Tag
                         key={item.id}
-                        closable={!running && !busy}
+                        closable={!taskLocked && !busy}
                         onClose={() =>
                           setAttachments((old) =>
                             old.filter((entry) => entry.id !== item.id),
@@ -1347,10 +1446,17 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     style={{ height: layout.input, resize: "none" }}
                     maxLength={bootstrap?.budgets?.maxPromptCharacters ?? 12000}
                     disabled={!canUse || current?.archived}
-                    placeholder={ui(
-                      "输入问题，Enter 发送，Shift+Enter 换行",
-                      "Ask a question. Enter to send, Shift+Enter for a new line",
-                    )}
+                    placeholder={
+                      waitingRun
+                        ? ui(
+                            "可直接补充回答，或在上方问题卡中选择并继续",
+                            "Answer here, or use the question card above",
+                          )
+                        : ui(
+                            "输入问题，Enter 发送，Shift+Enter 换行",
+                            "Ask a question. Enter to send, Shift+Enter for a new line",
+                          )
+                    }
                     onKeyDown={(e) => {
                       if (
                         e.key === "Enter" &&
@@ -1372,7 +1478,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         selected={selected}
                         value={toolPreferences}
                         disabled={
-                          Boolean(running) ||
+                          taskLocked ||
                           busy ||
                           !canUse ||
                           Boolean(current?.archived)
@@ -1405,7 +1511,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                                   return false;
                                 }}
                                 disabled={
-                                  Boolean(running) ||
+                                  taskLocked ||
                                   busy ||
                                   uploadingAttachment ||
                                   current?.archived
@@ -1434,7 +1540,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                                   )}
                                   size="small"
                                   checked={internetEnabled}
-                                  disabled={Boolean(running) || busy}
+                                  disabled={taskLocked || busy}
                                   onChange={setInternetEnabled}
                                 />
                               </label>
@@ -1476,7 +1582,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                             <Select
                               aria-label={ui("选择模型", "Choose model")}
                               value={model || undefined}
-                              disabled={Boolean(running) || busy}
+                              disabled={taskLocked || busy}
                               onChange={(value) => {
                                 setModel(value);
                                 if (
@@ -1503,7 +1609,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                               profile={budgetProfile}
                               output={outputOverride}
                               serviceWindow={selectedModel.contextWindowTokens}
-                              disabled={Boolean(running) || busy}
+                              disabled={taskLocked || busy}
                               onProfile={(value) => {
                                 setBudgetProfile(value);
                                 setOutputOverride(undefined);
@@ -1550,7 +1656,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                             thinkingMode === "deep" ? "agent-tool-active" : ""
                           }
                           aria-pressed={thinkingMode === "deep"}
-                          disabled={Boolean(running) || busy}
+                          disabled={taskLocked || busy}
                           onClick={() => {
                             const next =
                               thinkingMode === "deep" ? "fast" : "deep";
@@ -1567,7 +1673,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                           <ReasoningEffortControl
                             value={effortOverride ?? defaultEffort}
                             overridden={effortOverride !== undefined}
-                            disabled={Boolean(running) || busy}
+                            disabled={taskLocked || busy}
                             onChange={setEffortOverride}
                           />
                         )}
@@ -1604,10 +1710,16 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         const activeSequence = sequence.current;
                         modal.confirm({
                           title: ui("停止这次回答？", "Stop this response?"),
-                          content: ui(
-                            "已生成的内容会保留。停止后可以发送新消息。",
-                            "Generated content will be retained. You can send a new message after stopping.",
-                          ),
+                          content:
+                            running.status === "waiting_compute"
+                              ? ui(
+                                  "停止智能体的后续处理。已提交的计算仍会运行，可在计算任务卡中单独停止。",
+                                  "Stop the agent's next actions. Submitted calculations continue and can be stopped separately in their task cards.",
+                                )
+                              : ui(
+                                  "已生成的内容会保留。停止后可以发送新消息。",
+                                  "Generated content will be retained. You can send a new message after stopping.",
+                                ),
                           okText: ui("停止回答", "Stop response"),
                           cancelText: ui("继续回答", "Keep responding"),
                           onOk: async () => {

@@ -5,6 +5,7 @@ import logging
 import sqlite3
 
 from django.core.exceptions import RequestDataTooBig, ValidationError
+from django.core import signing
 from django.db import DatabaseError, transaction
 from django.db.models import F
 from django.db.models.deletion import ProtectedError
@@ -15,6 +16,12 @@ from apps.audit.service import log_operation
 from apps.catalog.models import DataResource, MapLayer
 from apps.catalog.permissions import user_can_access
 from apps.catalog.resource_references import resource_reference_reasons
+from apps.catalog.resource_history_delete import (
+    detach_history,
+    history_snapshot,
+    issue_confirmation,
+    read_confirmation,
+)
 from apps.catalog.resource_storage_delete import ResourceStorageDeletion
 from apps.core.api import api_login_required
 from apps.core.permissions import feature_denied_response, has_feature_perm
@@ -24,7 +31,7 @@ from apps.projects.context import selected_project_id
 logger = logging.getLogger(__name__)
 
 
-def delete_resource(request, resource_id: int) -> dict:
+def delete_resource(request, resource_id: int, *, confirmed_snapshot=None) -> dict:
     """One guarded deletion shared by the catalog and existing admin controls."""
     result = {
         "resourceId": resource_id,
@@ -48,13 +55,26 @@ def delete_resource(request, resource_id: int) -> dict:
             if resource is None or not user_can_access(resource, request.user):
                 return result
             result["name"] = resource.name
-            reasons = resource_reference_reasons(resource)
+            reasons = resource_reference_reasons(
+                resource, allow_history=confirmed_snapshot is not None
+            )
             if reasons:
                 result.update(
                     status="blocked",
                     detail="暂不能删除：" + "；".join(reasons) + "。请先解除对应引用。",
                 )
                 return result
+            receipt = None
+            if confirmed_snapshot is not None:
+                digest, history = history_snapshot(resource)
+                if digest != confirmed_snapshot:
+                    result.update(
+                        status="blocked",
+                        detail="资源或历史引用已变化，请重新检查删除范围并确认。",
+                    )
+                    return result
+                if resource.is_compute_result:
+                    receipt = detach_history(resource, request.user, history)
             storage = ResourceStorageDeletion(resource)
             with storage:
                 # Remove only resource-owned derived records; saved references
@@ -68,7 +88,13 @@ def delete_resource(request, resource_id: int) -> dict:
                     "数据管理",
                     "删除存量数据",
                     "success",
-                    storage.detail,
+                    storage.detail
+                    + (
+                        "；历史引用已留存删除凭据："
+                        + json.dumps(receipt, ensure_ascii=False)
+                        if receipt
+                        else ""
+                    ),
                     request,
                     target_type="data_resource",
                     target_id=resource_id,
@@ -76,7 +102,11 @@ def delete_resource(request, resource_id: int) -> dict:
                     target_name=result["name"],
                 )
             transaction.on_commit(storage.finalize)
-        result.update(status="deleted", detail=storage.detail)
+        result.update(
+            status="deleted",
+            detail=storage.detail
+            + ("；保留历史任务及名称、来源和删除记录" if receipt else ""),
+        )
     except ProtectedError:
         if storage is not None:
             storage.close()
@@ -108,35 +138,128 @@ def delete_resource(request, resource_id: int) -> dict:
 
 @require_POST
 @api_login_required
-def bulk_delete_resources(request):
+def preview_resource_deletion(request):
+    payload, error = _deletion_payload(request, preview=True)
+    if error is not None:
+        return error
+    ids = list(dict.fromkeys(payload["resourceIds"]))
+    items, snapshots = [], {}
+    for resource_id in ids:
+        item = {
+            "resourceId": resource_id,
+            "name": None,
+            "status": "not_found",
+            "detail": "数据资源不存在或当前项目无权访问",
+            "historyReferenceCount": 0,
+        }
+        resource = DataResource.objects.filter(
+            pk=resource_id, project_tag_id=selected_project_id()
+        ).first()
+        if resource is not None and user_can_access(resource, request.user):
+            item["name"] = resource.name
+            digest, history = history_snapshot(resource)
+            count = sum(len(history[key]) for key in ("inputs", "imports", "workflows"))
+            item["historyReferenceCount"] = count
+            reasons = resource_reference_reasons(resource, allow_history=True)
+            if not reasons:
+                snapshots[str(resource_id)] = digest
+            item.update(
+                status="blocked"
+                if reasons
+                else "confirmation_required"
+                if count
+                else "deletable",
+                detail="暂不能删除：" + "；".join(reasons) + "。"
+                if reasons
+                else "历史任务或科研工作流引用了该计算结果。确认后删除目录数据，保留名称、来源及删除记录；相关历史步骤将无法再次使用此数据。"
+                if count
+                else "将删除资源记录及平台管理的文件。",
+            )
+        items.append(item)
+    return JsonResponse(
+        {
+            "items": items,
+            "confirmationToken": issue_confirmation(request, ids, snapshots),
+        }
+    )
+
+
+def _deletion_payload(request, *, preview=False):
     if not has_feature_perm(request.user, "catalog.delete_dataresource"):
-        return feature_denied_response(request.user)
+        return None, feature_denied_response(request.user)
     if not request.headers.get("X-Project-Id"):
-        return JsonResponse({"detail": "请显式选择要管理的项目"}, status=400)
+        return None, JsonResponse({"detail": "请显式选择要管理的项目"}, status=400)
     try:
         body = request.body
     except RequestDataTooBig:
-        return JsonResponse({"detail": "删除请求过大"}, status=400)
+        return None, JsonResponse({"detail": "删除请求过大"}, status=400)
     if len(body) > 16 * 1024:
-        return JsonResponse({"detail": "删除请求过大"}, status=400)
+        return None, JsonResponse({"detail": "删除请求过大"}, status=400)
     try:
         payload = json.loads(body)
     except (ValueError, UnicodeDecodeError):
-        return JsonResponse({"detail": "请求必须是有效JSON"}, status=400)
-    if not isinstance(payload, dict) or set(payload) != {"resourceIds", "confirmed"}:
-        return JsonResponse(
-            {"detail": "请求仅接受 resourceIds 与 confirmed"}, status=400
-        )
-    if payload["confirmed"] is not True:
-        return JsonResponse({"detail": "请先确认永久删除"}, status=400)
+        return None, JsonResponse({"detail": "请求必须是有效JSON"}, status=400)
+    required = {"resourceIds"} if preview else {"resourceIds", "confirmed"}
+    allowed = required if preview else required | {"historyConfirmationToken"}
+    if not isinstance(payload, dict) or not required <= set(payload) <= allowed:
+        return None, JsonResponse({"detail": "删除请求字段无效"}, status=400)
+    if not preview and payload["confirmed"] is not True:
+        return None, JsonResponse({"detail": "请先确认永久删除"}, status=400)
+    token = payload.get("historyConfirmationToken", "")
+    if not isinstance(token, str) or len(token) > 12000:
+        return None, JsonResponse({"detail": "删除确认凭据无效"}, status=400)
     ids = payload["resourceIds"]
     if (
         not isinstance(ids, list)
         or not 1 <= len(ids) <= 100
         or any(type(value) is not int or value <= 0 for value in ids)
     ):
-        return JsonResponse({"detail": "resourceIds 须为1至100个正整数"}, status=400)
-    items = [delete_resource(request, value) for value in dict.fromkeys(ids)]
+        return None, JsonResponse(
+            {"detail": "resourceIds 须为1至100个正整数"}, status=400
+        )
+    return payload, None
+
+
+@require_POST
+@api_login_required
+def bulk_delete_resources(request):
+    payload, error = _deletion_payload(request)
+    if error is not None:
+        return error
+    ids = list(dict.fromkeys(payload["resourceIds"]))
+    try:
+        snapshots = read_confirmation(
+            request, ids, payload.get("historyConfirmationToken", "")
+        )
+    except signing.BadSignature:
+        return JsonResponse(
+            {"detail": "删除确认已失效或选择已变化，请重新预览并确认。"}, status=409
+        )
+    items = []
+    for value in ids:
+        if payload.get("historyConfirmationToken") and str(value) not in snapshots:
+            resource = DataResource.objects.filter(
+                pk=value, project_tag_id=selected_project_id()
+            ).first()
+            accessible = resource is not None and user_can_access(
+                resource, request.user
+            )
+            items.append(
+                {
+                    "resourceId": value,
+                    "name": resource.name if accessible else None,
+                    "status": "blocked" if accessible else "not_found",
+                    "detail": "预览时未列入可清理范围，请重新检查并确认。"
+                    if accessible
+                    else "数据资源不存在或当前项目无权访问",
+                }
+            )
+        else:
+            items.append(
+                delete_resource(
+                    request, value, confirmed_snapshot=snapshots.get(str(value))
+                )
+            )
     deleted = [item["resourceId"] for item in items if item["status"] == "deleted"]
     return JsonResponse(
         {

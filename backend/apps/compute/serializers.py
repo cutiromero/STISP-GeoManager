@@ -74,7 +74,11 @@ def output_data(output):
         "expired": output.expired,
         "importStatus": record.status if record else "none",
         "resourceId": record.resource_id if record else None,
-        "resourceName": resource.name if resource else "",
+        "resourceName": resource.name
+        if resource
+        else record.name + "（目录数据已删除）"
+        if record and record.status == "deleted"
+        else "",
         "resourceLocation": location,
         "mapUrl": f"/map?resourceId={resource.id}&projectTagId={output.task.project_tag_id}"
         if resource

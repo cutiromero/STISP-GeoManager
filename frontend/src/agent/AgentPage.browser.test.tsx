@@ -1626,6 +1626,128 @@ it("explains a completed deep run without inventing reasoning", async () => {
   expect(screen.queryByText(/未保存到思考片段/)).not.toBeInTheDocument();
 });
 
+function waitingQuestion(): AgentRun {
+  return {
+    ...run(88, "请处理这张影像"),
+    status: "waiting_input",
+    detail: "等待您回答",
+    interaction: {
+      questionId: "band-question",
+      revision: 1,
+      kind: "input",
+      title: "请补充光谱波段",
+      reason: "已读取影像有8个波段，但没有光谱名称。",
+      status: "pending",
+      createdAt: "2026-10-16",
+      questions: [
+        {
+          key: "red",
+          label: "红光波段",
+          type: "text",
+          required: true,
+        },
+      ],
+    },
+    interactionHistory: [],
+  };
+}
+
+it("restores a waiting question and shows matching sidebar and conversation states", async () => {
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [waitingQuestion()],
+  });
+  showAgent();
+  await screen.findByRole("region", { name: "等待您回答的问题" });
+  expect(
+    within(screen.getByLabelText("当前任务")).getByText("等待您回答"),
+  ).toBeVisible();
+  expect(screen.queryByText("已完成")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "重试" }),
+  ).not.toBeInTheDocument();
+  expect(agentApi.submit).not.toHaveBeenCalled();
+});
+
+it("sends a free-text answer to the original run and resumes it without a new turn", async () => {
+  const waiting = waitingQuestion();
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [waiting],
+  });
+  const continued = {
+    ...waiting,
+    status: "queued" as const,
+    interaction: null,
+  };
+  const answer = vi
+    .spyOn(agentApi, "answerInteraction")
+    .mockResolvedValue(continued);
+  vi.spyOn(agentApi, "poll").mockResolvedValue({
+    run: continued,
+    events: [],
+    cursor: 0,
+  });
+  showAgent();
+  await screen.findByRole("region", { name: "等待您回答的问题" });
+  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+    target: { value: "红光第3波段，近红外第8波段，只预览结果" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() =>
+    expect(answer).toHaveBeenCalledExactlyOnceWith(
+      88,
+      expect.objectContaining({
+        action: "answer",
+        questionId: "band-question",
+        revision: 1,
+        answers: {},
+        text: "红光第3波段，近红外第8波段，只预览结果",
+      }),
+    ),
+  );
+  expect(agentApi.submit).not.toHaveBeenCalled();
+  await screen.findByRole("button", { name: "停止回答" });
+  expect(screen.queryByRole("region", { name: "等待您回答的问题" })).toBeNull();
+});
+
+it("gives the current question priority over the legacy parameter form", async () => {
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation: { ...conversation, mode: "agent" },
+    runs: [{ ...waitingQuestion(), computeIntent }],
+  });
+  showAgent("workbench");
+  await screen.findByRole("region", { name: "等待您回答的问题" });
+  expect(screen.queryByText("确认参数并运行")).not.toBeInTheDocument();
+  expect(agentApi.submit).not.toHaveBeenCalled();
+});
+
+it("shows the model interpretation after the same run reads the actual output", async () => {
+  const completed = computeRun({
+    ...computeIntent,
+    status: "submitted",
+    taskId: "verified-task",
+  });
+  completed.answer =
+    "实际输出的平均植被指数为0.42，建议结合同时期降水资料进一步核查。";
+  completed.evidence = [
+    {
+      id: 7,
+      tool: "read_compute_output",
+      resourceId: null,
+      name: "计算结果",
+      recordedAt: "2026-10-16",
+      result: { output: { id: 8 }, bands: [{ mean: 0.42 }] },
+    },
+  ];
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation: { ...conversation, mode: "agent" },
+    runs: [completed],
+  });
+  showAgent("workbench");
+  await screen.findByText(completed.answer);
+});
+
 it("removes recovered workflow activity when agent permission is revoked", async () => {
   vi.mocked(agentApi.workflows).mockResolvedValue({
     items: [{ ...workflow("running"), goal: "撤权后不可保留的研究任务" }],

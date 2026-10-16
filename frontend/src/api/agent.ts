@@ -22,6 +22,7 @@ import type {
   AgentWorkflowReport,
   AgentWorkflowReportPreview,
   AgentWorkflowConfirmation,
+  AgentInteractionUpdate,
 } from "./generated/types.gen";
 
 export const agentApi = {
@@ -70,6 +71,11 @@ export const agentApi = {
     requestJson<AgentRunPoll>(`/api/agent/runs/${id}/?after=${after}`),
   cancel: (id: number) =>
     requestJson<AgentRun>(`/api/agent/runs/${id}/cancel/`, { method: "POST" }),
+  answerInteraction: (id: number, body: AgentInteractionUpdate) =>
+    requestJson<AgentRun>(`/api/agent/runs/${id}/interaction/`, {
+      method: "POST",
+      body,
+    }),
   computeTasks: (id: number) =>
     requestJson<AgentComputeTaskList>(`/api/agent/runs/${id}/compute-tasks/`),
   computeIntent: (id: number) =>

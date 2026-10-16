@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.43] - 2026-10-16
+
+### Added
+- 普通数据智能体和模型对话提供原任务问题卡，支持单选、多选与文字补充，保存等待、回答、取消和继续处理状态。
+- 计算结束后读取真实输出并返回模型继续解释，保留任务、地图、预览、下载与入库入口。
+- 生态资料审核导入工具，在既有干旱区项目补充六条条件明确的知识和三份审核来源摘要，保留版本与争议归档。
+
+### Changed
+- 数据资源删除先展示真实影响，历史计算结果可确认后清理；保留具名删除凭据，活动任务与有效成果引用继续保护。
+- 等待问题时左右状态统一，输入框可直接回答原任务；历史删除结果不再提供失效地图入口。
+
+### Fixed
+- 模型续读计算结果时保持进行状态，停止后准确区分智能体后续操作和已提交算子。
+- 通用算法工具沿用地质修改逐项批准边界，包含时代属性修改。
+
 ## [0.1.42] - 2026-10-16
 
 ### Added

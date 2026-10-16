@@ -138,6 +138,12 @@ TOOLS = {
             ("taskId",),
         ),
         ToolSpec(
+            "read_compute_output",
+            "read_data",
+            "读取真实计算输出并核对校验和，outputId来自get_compute_task的outputs；CSV可offset/limit分页，栅格返回GDAL近似统计（非因果结论），其他类型返回元信息与预览入口。计算完成后解释前必须读取实际输出",
+            ("outputId", "offset", "limit"),
+        ),
+        ToolSpec(
             "list_compute_tasks",
             "read_data",
             "查找本人当前项目最近计算任务，可用query筛选名称",
@@ -206,6 +212,7 @@ def brief(r):
 
 def check_evidence(run, user, p):
     from .selections import knowledge_domains, require_task_selection
+    from .deleted_resources import historical_deletion
 
     domains = knowledge_domains(run) if run.knowledge_selection else None
     # Reauthorize ALL accumulated evidence before revealing history or reusing it.
@@ -214,7 +221,9 @@ def check_evidence(run, user, p):
         # System, algorithm, compute and web evidence intentionally have no
         # DataResource.  Their permissions are rechecked by the capability
         # gate on the next action instead of pretending they are resources.
-        if ev.get("resourceId") is not None:
+        if ev.get("resourceId") is not None and not historical_deletion(
+            run, user, p, ev["resourceId"]
+        ):
             resolve_resource(user, p, ev["resourceId"], run.resource_ids)
         if ev.get("tool") == "search_web" and not _policy_switch(
             p, "internetEnabled", "allowInternet"
@@ -242,6 +251,7 @@ def check_evidence(run, user, p):
             "get_compute_task",
             "import_compute_result",
             "list_compute_tasks",
+            "read_compute_output",
         }:
             from .compute_tools import authorized_task
 
@@ -784,6 +794,7 @@ def _web_search(query, max_results):
 
 
 def _operator_submit(run, user, p, args):
+    from .models import AgentRun
     from apps.compute.services import submit as submit_compute
     from apps.compute.access import project_id
     from apps.compute.services import allowed_algorithms, agent_algorithm_allowed
@@ -805,6 +816,12 @@ def _operator_submit(run, user, p, args):
     ).first()
     if not version or not agent_algorithm_allowed(version):
         raise PermissionDenied("算法未发布或未允许智能体调用")
+    from .demo_decisions import EDIT_CHECKS
+
+    if version.algorithm.identifier in EDIT_CHECKS:
+        raise PermissionDenied(
+            "地质地图修改须经原有逐项方案审批；通用问题卡不能替代修改批准"
+        )
     inputs, parameters = args.get("inputs", {}), args.get("parameters", {})
     if not isinstance(inputs, dict) or not isinstance(parameters, dict):
         raise ValidationError("inputs 与 parameters 必须为对象")
@@ -818,16 +835,40 @@ def _operator_submit(run, user, p, args):
         require_actor(user, project_id(), "catalog.add_dataresource")
     for resource_id in inputs.values():
         resolve_resource(user, p, resource_id, run.resource_ids)
-    from .compute_intents import prepare_from_tool
+    from .compute_intents import (
+        archive_submitted_plan,
+        prepare_from_tool,
+        user_import_choice,
+    )
+
+    if auto_import and not user_import_choice(
+        run,
+        default=bool(
+            run.compute_intent.get("versionId") == version.id
+            and run.compute_intent.get("autoImport")
+        ),
+    ):
+        raise ValidationError("自动入库需要用户明确选择，默认先查看计算结果")
 
     if run.compute_intent.get("status") in {"superseded", "cancelled"}:
         raise ValidationError("本轮计算计划已被替代或取消")
     if run.compute_intent.get("taskId"):
-        if run.compute_intent.get("versionId") != version.id:
-            raise ValidationError("本轮计算已经提交，请从新的请求发起其他算法")
-        pending = None
-    else:
-        pending = prepare_from_tool(run, user, p, version, inputs)
+        if all(
+            run.compute_intent.get(key) == value
+            for key, value in (
+                ("versionId", version.id),
+                ("inputs", inputs),
+                ("parameters", parameters),
+                ("autoImport", auto_import),
+            )
+        ):
+            from .compute_tools import authorized_task
+
+            task = authorized_task(user, run.compute_intent["taskId"], p)
+            result = {**compact_task(task), "autoImport": auto_import}
+            return result, [(None, result)]
+        archive_submitted_plan(run)
+    pending = prepare_from_tool(run, user, p, version, inputs)
     if pending is not None:
         return pending, [(None, pending)]
     if run.compute_intent and run.compute_intent.get("versionId") == version.id:
@@ -837,14 +878,6 @@ def _operator_submit(run, user, p, args):
             or auto_import != run.compute_intent["autoImport"]
         ):
             raise ValidationError("请使用用户在计算卡片或当前消息中明确选择的参数")
-    elif auto_import and not re.search(r"(?<!不)(?<!不要)自动.{0,4}入库", run.prompt):
-        raise ValidationError("自动入库需要用户明确选择，默认先查看计算结果")
-    if run.compute_intent.get("taskId"):
-        from .compute_tools import authorized_task
-
-        task = authorized_task(user, run.compute_intent["taskId"], p)
-        result = {**compact_task(task), "autoImport": auto_import}
-        return result, [(None, result)]
     # Model retries cannot create a second calculation with an invented key.
     digest = hashlib.sha256(
         json.dumps([version_id, inputs, parameters], sort_keys=True).encode()
@@ -862,6 +895,12 @@ def _operator_submit(run, user, p, args):
     if not isinstance(key, str) or not 1 <= len(key) <= 80:
         raise ValidationError("幂等键无效")
     with transaction.atomic():
+        # Serialize with cancellation at the actual side-effect boundary.
+        # Discovery above may have taken time while another tab stopped the run.
+        if not AgentRun.objects.filter(pk=run.pk, cancel_requested=False).update(
+            updated_at=timezone.now()
+        ):
+            raise PermissionDenied("本轮已停止，不能提交计算")
         task = submit_compute(
             user,
             {
@@ -945,6 +984,10 @@ def execute(run, name, args):
         scoped_policy = {**p, "_systemInfoSections": selected}
         result = _system_info(user, scoped_policy)
         return result, [(None, result)]
+    if name == "read_compute_output":
+        from .compute_result_tools import read_output
+
+        return read_output(run, user, p, args)
     if name == "list_compute_algorithms":
         query = args.get("query", "")
         if not isinstance(query, str) or len(query) > 200:

@@ -75,6 +75,12 @@ export default function DataCatalogPage() {
     resources: ResourceListItem[];
   } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deletePreview, setDeletePreview] = useState<Awaited<
+    ReturnType<typeof api.previewResourceDeletion>
+  > | null>(null);
+  const [previewingDeletion, setPreviewingDeletion] = useState(false);
+  const [deletePreviewError, setDeletePreviewError] = useState("");
+  const deletionPreviewSequenceRef = useRef(0);
   const [deleteOutcome, setDeleteOutcome] = useState<{
     deletedCount: number;
     completed: { key: number; name: string; detail: string }[];
@@ -199,8 +205,60 @@ export default function DataCatalogPage() {
     });
   }
 
+  async function previewSelectedDeletion() {
+    const projectId = getActiveProject();
+    const chosen = selectedResources;
+    const sequence = ++deletionPreviewSequenceRef.current;
+    setDeleteSelection({ projectId, resources: chosen });
+    setDeletePreview(null);
+    setDeletePreviewError("");
+    setPreviewingDeletion(true);
+    try {
+      const preview = await api.previewResourceDeletion(
+        { resourceIds: chosen.map((resource) => resource.id) },
+        projectId,
+      );
+      if (
+        mountedRef.current &&
+        sequence === deletionPreviewSequenceRef.current &&
+        getActiveProject() === projectId
+      ) {
+        setDeletePreview(preview);
+      }
+    } catch (error) {
+      if (
+        mountedRef.current &&
+        sequence === deletionPreviewSequenceRef.current
+      ) {
+        setDeletePreviewError(
+          error instanceof Error
+            ? error.message
+            : computeUi(
+                "无法检查删除范围，请重试",
+                "Unable to check deletion scope; try again",
+              ),
+        );
+      }
+    } finally {
+      if (
+        mountedRef.current &&
+        sequence === deletionPreviewSequenceRef.current
+      ) {
+        setPreviewingDeletion(false);
+      }
+    }
+  }
+
+  function closeDeletionPreview() {
+    ++deletionPreviewSequenceRef.current;
+    setDeleteSelection(null);
+    setDeletePreview(null);
+    setPreviewingDeletion(false);
+  }
+
   async function deleteSelectedResources() {
-    if (!deleteSelection || deleting) return;
+    if (!deleteSelection || !deletePreview || deleting || previewingDeletion)
+      return;
     if (getActiveProject() !== deleteSelection.projectId) {
       setDeleteSelection(null);
       message.warning(
@@ -217,6 +275,7 @@ export default function DataCatalogPage() {
         {
           resourceIds: deleteSelection.resources.map((resource) => resource.id),
           confirmed: true,
+          historyConfirmationToken: deletePreview.confirmationToken,
         },
         deleteSelection.projectId,
       );
@@ -250,6 +309,7 @@ export default function DataCatalogPage() {
           })),
       });
       setDeleteSelection(null);
+      setDeletePreview(null);
       setRefreshVersion((version) => version + 1);
     } catch (error) {
       if (mountedRef.current)
@@ -258,6 +318,15 @@ export default function DataCatalogPage() {
             ? error.message
             : computeUi("删除失败，请重试", "Deletion failed; try again"),
         );
+      // Confirmation may have expired or the real dependency graph changed.
+      // Require a fresh preview instead of repeatedly sending stale approval.
+      setDeletePreview(null);
+      setDeletePreviewError(
+        computeUi(
+          "删除未完成，请重新检查范围后确认。",
+          "Deletion did not complete; check the scope again before confirming.",
+        ),
+      );
     } finally {
       if (mountedRef.current) setDeleting(false);
     }
@@ -433,12 +502,7 @@ export default function DataCatalogPage() {
                     danger
                     icon={<DeleteOutlined />}
                     disabled={loading || deleting || !selectedResources.length}
-                    onClick={() =>
-                      setDeleteSelection({
-                        projectId: getActiveProject(),
-                        resources: selectedResources,
-                      })
-                    }
+                    onClick={() => void previewSelectedDeletion()}
                   >
                     {computeUi("删除所选", "Delete selected")}
                   </Button>
@@ -448,8 +512,8 @@ export default function DataCatalogPage() {
             {managingFiles && (
               <Typography.Text type="secondary">
                 {computeUi(
-                  "选择文件后可批量删除；被任务或成果引用的数据将保留并说明原因。",
-                  "Select files to delete in a batch. Data referenced by tasks or results will be retained with an explanation.",
+                  "可批量删除；历史计算结果确认后清理，运行中任务及已保存成果、工程依赖继续保护。",
+                  "Delete in batches. Historical computation results can be removed after confirmation; active tasks and saved results or workspaces remain protected.",
                 )}
               </Typography.Text>
             )}
@@ -599,24 +663,62 @@ export default function DataCatalogPage() {
         open={Boolean(deleteSelection)}
         okText={computeUi("确认删除", "Confirm deletion")}
         cancelText={computeUi("取消", "Cancel")}
-        okButtonProps={{ danger: true }}
+        okButtonProps={{
+          danger: true,
+          disabled:
+            previewingDeletion ||
+            !deletePreview ||
+            !deletePreview.items.some((item) =>
+              ["deletable", "confirmation_required"].includes(item.status),
+            ),
+        }}
         confirmLoading={deleting}
         cancelButtonProps={{ disabled: deleting }}
         closable={!deleting}
         mask={{ closable: !deleting }}
         keyboard={!deleting}
-        onCancel={() => setDeleteSelection(null)}
+        onCancel={closeDeletionPreview}
         onOk={() => void deleteSelectedResources()}
       >
         <Typography.Paragraph>
           {computeUi(
-            "将真实删除以下资源记录及平台管理的文件。被其他任务、图层或成果引用的资源会保留，并显示原因。",
-            "The following resource records and platform-managed files will be deleted. Referenced resources will be retained with an explanation.",
+            "确认后将删除可清理的资源记录及平台管理文件。历史任务和科研工作流保留名称、来源及删除记录；依赖这些数据的历史步骤将无法再次使用它们。仍在运行或被已保存成果、工程引用的资源会保留。",
+            "Confirmation deletes eligible resource records and managed files. Historical tasks and workflows keep names, sources and deletion records; deleted data can no longer be reused. Active tasks and saved results or workspaces remain protected.",
           )}
         </Typography.Paragraph>
+        {previewingDeletion && (
+          <Spin
+            description={computeUi("正在检查引用", "Checking dependencies")}
+          />
+        )}
+        {deletePreviewError && (
+          <Alert
+            type="error"
+            showIcon
+            title={deletePreviewError}
+            action={
+              <Button onClick={() => void previewSelectedDeletion()}>
+                {computeUi("重新检查", "Check again")}
+              </Button>
+            }
+          />
+        )}
         <ul className="catalog-delete-names">
           {deleteSelection?.resources.map((resource) => (
-            <li key={resource.id}>{resource.name}</li>
+            <li key={resource.id}>
+              <strong>{resource.name}</strong>
+              {deletePreview?.items.find(
+                (item) => item.resourceId === resource.id,
+              ) && (
+                <Typography.Paragraph type="secondary">
+                  {
+                    deletePreview.items.find(
+                      (item) => item.resourceId === resource.id,
+                    )?.detail
+                  }
+                </Typography.Paragraph>
+              )}
+            </li>
           ))}
         </ul>
       </Modal>

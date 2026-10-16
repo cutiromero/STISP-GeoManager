@@ -2,6 +2,7 @@ import { Button, Checkbox, Input, Popconfirm, Tag } from "antd";
 import { useState } from "react";
 import type { AgentWorkflow } from "../api/generated/types.gen";
 import WorkflowKnowledgeReferences from "./WorkflowKnowledgeReferences";
+import { deletedWorkflowResources } from "./deletedWorkflowResources";
 import "./geology-review-story.css";
 
 type ReviewAction = (
@@ -165,6 +166,9 @@ export default function GeologyReviewStory({
   const approved = review?.approvedSuggestionIds ?? [];
   const events = storyEvents(workflow);
   const mapId = Number(record(workflow.plan.inputs).initial_map);
+  const deletedIds = new Set(
+    deletedWorkflowResources(workflow).map((item) => item.id),
+  );
   const select = (ids: string[]) =>
     setSelection({ hash: review?.proposalHash ?? "", ids });
   return (
@@ -307,7 +311,7 @@ export default function GeologyReviewStory({
                     <span>暂无范围预览</span>
                   )}
                   <small>修改范围示意</small>
-                  {mapId > 0 && (
+                  {mapId > 0 && !deletedIds.has(mapId) && (
                     <a
                       href={`/map?resourceId=${mapId}&projectTagId=${workflow.projectId}&geologyReview=${encodeURIComponent(workflow.id)}&suggestion=${encodeURIComponent(suggestion.id)}`}
                     >
@@ -367,7 +371,7 @@ export default function GeologyReviewStory({
           )}
         </section>
       )}
-      {workflow.status === "succeeded" && (
+      {workflow.status === "succeeded" && !deletedIds.size && (
         <a
           className="geology-review-map-link"
           href={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`}

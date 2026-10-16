@@ -17,6 +17,7 @@ urlpatterns = [
     path("conversations/<int:conversation_id>/runs/", views.submit),
     path("runs/<int:run_id>/", views.run_detail),
     path("runs/<int:run_id>/cancel/", views.cancel),
+    path("runs/<int:run_id>/interaction/", views.interaction),
     path("runs/<int:run_id>/compute-tasks/", views.compute_tasks),
     path("runs/<int:run_id>/compute-intent/", views.compute_intent),
     path("runs/<int:run_id>/research-intent/", views.research_intent),

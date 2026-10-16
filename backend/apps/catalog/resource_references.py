@@ -18,6 +18,12 @@ def _contains_reference(
         if isinstance(source, dict) and source.get("id") == resource_id:
             return True
         for key, item in value.items():
+            if (
+                key == "inputs"
+                and isinstance(item, dict)
+                and resource_id in item.values()
+            ):
+                return True
             if key in {"resourceId", "dataResourceId"} and item == resource_id:
                 return True
             if key in {"resourceIds", "resultResourceIds"} and isinstance(item, list):
@@ -39,13 +45,101 @@ def _contains_reference(
     return False
 
 
-def resource_reference_reasons(resource) -> list[str]:
+COMPUTE_TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
+WORKFLOW_TERMINAL = {"succeeded", "failed", "cancelled"}
+
+
+def historical_references(resource):
+    """Only completed provenance of a registered computation result is removable."""
+    if not resource.is_compute_result:
+        return [], [], []
+    inputs = list(
+        ComputeInput.objects.filter(
+            resource_id=resource.id, task__status__in=COMPUTE_TERMINAL
+        ).values("id", "task_id", "task__status", "key", "checksum", "snapshot")
+    )
+    imports = list(
+        ComputeImport.objects.filter(
+            resource_id=resource.id,
+            status__in=("ready", "failed"),
+            output__task__status__in=COMPUTE_TERMINAL,
+        ).values("id", "output_id", "status", "output__task__status", "name")
+    )
+    layer_ids = set(resource.map_layers.values_list("id", flat=True))
+    raster_ids = set(resource.raster_datasets.values_list("id", flat=True))
+    workflows = []
+    for workflow in AgentWorkflow.objects.filter(
+        project_tag_id=resource.project_tag_id, status__in=WORKFLOW_TERMINAL
+    ):
+
+        def contains(value):
+            return _contains_reference(value, resource.id, layer_ids, raster_ids)
+
+        step_refs = [
+            row
+            for row in workflow.steps.values(
+                "id", "input_refs", "output_refs", "action"
+            )
+            if any(
+                contains(row[key]) for key in ("input_refs", "output_refs", "action")
+            )
+        ]
+        checkpoint_refs = [
+            row
+            for row in workflow.checkpoints.values("id", "state")
+            if contains(row["state"])
+        ]
+        if (
+            resource.id in workflow.resource_ids
+            or resource.id in workflow.result_resource_ids
+            or contains(workflow.plan)
+            or contains(workflow.evidence)
+            or step_refs
+            or checkpoint_refs
+        ):
+            workflows.append(
+                {
+                    "id": str(workflow.id),
+                    "status": workflow.status,
+                    "planHash": workflow.plan_hash,
+                    "plan": {
+                        key: value
+                        for key, value in workflow.plan.items()
+                        if key != "deletedResources"
+                    },
+                    "evidence": workflow.evidence,
+                    "input": resource.id in workflow.resource_ids,
+                    "output": resource.id in workflow.result_resource_ids,
+                    "steps": step_refs,
+                    "checkpoints": checkpoint_refs,
+                }
+            )
+    return inputs, imports, workflows
+
+
+def resource_reference_reasons(resource, *, allow_history=False) -> list[str]:
     """Return generic categories without revealing another user's object names."""
+    from apps.agent.resource_dependencies import active_run_reasons
+
     reasons = []
-    if ComputeInput.objects.filter(resource_id=resource.id).exists():
-        reasons.append("已有计算任务使用该数据")
-    if ComputeImport.objects.filter(resource_id=resource.id).exists():
-        reasons.append("已有计算任务关联该入库结果")
+    reasons.extend(active_run_reasons(resource.id))
+    removable = bool(allow_history and resource.is_compute_result)
+    inputs = ComputeInput.objects.filter(resource_id=resource.id)
+    imports = ComputeImport.objects.filter(resource_id=resource.id)
+    if removable:
+        inputs = inputs.exclude(task__status__in=COMPUTE_TERMINAL)
+        imports = imports.exclude(
+            status__in=("ready", "failed"),
+            output__task__status__in=COMPUTE_TERMINAL,
+        )
+    if inputs.exists():
+        reasons.append(
+            "计算任务仍在使用该数据" if removable else "已有计算任务使用该数据"
+        )
+    if imports.exists():
+        reasons.append(
+            "计算或入库任务尚未结束" if removable else "已有计算任务关联该入库结果"
+        )
     if resource.result_artifacts.exists():
         reasons.append("成果展示关联了该数据")
     layer_ids = set(resource.map_layers.values_list("id", flat=True))
@@ -85,22 +179,29 @@ def resource_reference_reasons(resource) -> list[str]:
             reasons.append("已保存的工程或专题图引用该数据")
             break
     workflows = AgentWorkflow.objects.filter(project_tag_id=project_id)
+    if removable:
+        workflows = workflows.exclude(status__in=WORKFLOW_TERMINAL)
     if any(
         resource.id in row["resource_ids"]
         or resource.id in row["result_resource_ids"]
         or contains(row["plan"])
-        for row in workflows.values("resource_ids", "result_resource_ids", "plan")
+        or contains(row["evidence"])
+        for row in workflows.values(
+            "resource_ids", "result_resource_ids", "plan", "evidence"
+        )
     ):
         reasons.append("科研工作流引用该数据")
     elif any(
         contains(value)
         for row in AgentWorkflowStep.objects.filter(workflow__project_tag_id=project_id)
-        .values("input_refs", "output_refs")
+        .filter(workflow_id__in=workflows.values("id"))
+        .values("input_refs", "output_refs", "action")
         .iterator()
         for value in row.values()
     ) or any(
         contains(row["state"])
         for row in AgentCheckpoint.objects.filter(workflow__project_tag_id=project_id)
+        .filter(workflow_id__in=workflows.values("id"))
         .values("state")
         .iterator()
     ):

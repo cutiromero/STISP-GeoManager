@@ -106,7 +106,9 @@ class ComputeInput(models.Model):
         ComputeTask, on_delete=models.CASCADE, related_name="input_records"
     )
     key = models.CharField(max_length=80)
-    resource = models.ForeignKey("catalog.DataResource", on_delete=models.PROTECT)
+    resource = models.ForeignKey(
+        "catalog.DataResource", null=True, on_delete=models.PROTECT
+    )
     snapshot = models.JSONField(default=dict)
     checksum = models.CharField(max_length=64, blank=True)
 

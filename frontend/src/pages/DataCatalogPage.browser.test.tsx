@@ -20,6 +20,7 @@ const mockApi = vi.hoisted(() => ({
   resources: vi.fn(),
   dataSchemaSummary: vi.fn(),
   deleteResources: vi.fn(),
+  previewResourceDeletion: vi.fn(),
 }));
 const permissionState = vi.hoisted(() => ({ canDeleteDataResources: true }));
 vi.mock("../api/client", async (importOriginal) => ({
@@ -94,6 +95,20 @@ describe("data catalog computation results", () => {
     resetProjectSession();
     permissionState.canDeleteDataResources = true;
     mockApi.deleteResources.mockReset();
+    mockApi.previewResourceDeletion
+      .mockReset()
+      .mockImplementation(
+        async ({ resourceIds }: { resourceIds: number[] }) => ({
+          items: resourceIds.map((id) => ({
+            resourceId: id,
+            name: id === result.id ? result.name : "原始影像",
+            status: "deletable",
+            detail: "将删除资源记录及平台管理的文件。",
+            historyReferenceCount: 0,
+          })),
+          confirmationToken: "reviewed-resource-snapshot",
+        }),
+      );
     mockApi.resources.mockReset().mockResolvedValue({ items: [result] });
     mockApi.dataSchemaSummary
       .mockReset()
@@ -172,7 +187,11 @@ describe("data catalog computation results", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "确认删除" }));
     await waitFor(() =>
       expect(mockApi.deleteResources).toHaveBeenCalledWith(
-        { resourceIds: [8, 9], confirmed: true },
+        {
+          resourceIds: [8, 9],
+          confirmed: true,
+          historyConfirmationToken: "reviewed-resource-snapshot",
+        },
         "1",
       ),
     );
@@ -266,5 +285,116 @@ describe("data catalog computation results", () => {
     expect(
       screen.queryByRole("button", { name: "文件管理" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("previews historical workflow cleanup and submits only after user confirmation", async () => {
+    mockApi.previewResourceDeletion.mockResolvedValue({
+      items: [
+        {
+          resourceId: result.id,
+          name: result.name,
+          status: "confirmation_required",
+          detail:
+            "历史科研工作流引用该计算结果。删除后保留名称、来源及删除记录。",
+          historyReferenceCount: 2,
+        },
+      ],
+      confirmationToken: "history-snapshot",
+    });
+    mockApi.deleteResources.mockResolvedValue({
+      items: [
+        {
+          resourceId: result.id,
+          name: result.name,
+          status: "deleted",
+          detail: "已删除；保留历史任务及名称、来源和删除记录",
+        },
+      ],
+      deletedIds: [result.id],
+      deletedCount: 1,
+      failedCount: 0,
+    });
+    renderCatalog();
+    await screen.findByText(result.name);
+    fireEvent.click(screen.getByRole("button", { name: "文件管理" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: `选择文件 ${result.name}` }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText(/历史科研工作流引用/),
+    ).toBeInTheDocument();
+    expect(mockApi.deleteResources).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认删除" }));
+    await waitFor(() =>
+      expect(mockApi.deleteResources).toHaveBeenCalledWith(
+        {
+          resourceIds: [result.id],
+          confirmed: true,
+          historyConfirmationToken: "history-snapshot",
+        },
+        "1",
+      ),
+    );
+  });
+
+  it("keeps confirmation disabled for protected active dependencies", async () => {
+    mockApi.previewResourceDeletion.mockResolvedValue({
+      items: [
+        {
+          resourceId: result.id,
+          name: result.name,
+          status: "blocked",
+          detail: "计算任务仍在使用该数据",
+          historyReferenceCount: 0,
+        },
+      ],
+      confirmationToken: "blocked-snapshot",
+    });
+    renderCatalog();
+    await screen.findByText(result.name);
+    fireEvent.click(screen.getByRole("button", { name: "文件管理" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: `选择文件 ${result.name}` }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText("计算任务仍在使用该数据"),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "确认删除" }),
+    ).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: /取\s*消/ }));
+    expect(mockApi.deleteResources).not.toHaveBeenCalled();
+  });
+  it("waits for the real preview and discards its reply after cancellation", async () => {
+    let finishPreview:
+      | ((value: { items: never[]; confirmationToken: string }) => void)
+      | undefined;
+    mockApi.previewResourceDeletion.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishPreview = resolve;
+        }),
+    );
+    renderCatalog();
+    await screen.findByText(result.name);
+    fireEvent.click(screen.getByRole("button", { name: "文件管理" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: `选择文件 ${result.name}` }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "删除所选" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("button", { name: "确认删除" }),
+    ).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: /取\s*消/ }));
+    finishPreview?.({ items: [], confirmationToken: "obsolete" });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(mockApi.deleteResources).not.toHaveBeenCalled();
   });
 });

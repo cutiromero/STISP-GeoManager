@@ -24,6 +24,7 @@ const importNames: Record<string, string> = {
   running: "正在入库",
   ready: "已入库",
   failed: "入库失败",
+  deleted: "目录数据已删除",
 };
 
 function FileIcon({ kind }: { kind: string }) {

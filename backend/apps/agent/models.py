@@ -99,6 +99,9 @@ class AgentRun(ProjectScopedModel):
     evidence = models.JSONField(default=list)
     compute_intent = models.JSONField(default=dict, db_default={})
     research_intent = models.JSONField(default=dict, db_default={})
+    interaction = models.JSONField(default=dict, db_default={})
+    interaction_history = models.JSONField(default=list, db_default=[])
+    execution_state = models.JSONField(default=dict, db_default={})
     research_workflow = models.ForeignKey(
         "AgentWorkflow",
         on_delete=models.SET_NULL,

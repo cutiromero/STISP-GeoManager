@@ -69,7 +69,28 @@ def require_algorithm(run, version_id):
 def require_task_selection(run, task):
     require_algorithm(run, task.version_id)
     if run.resource_ids:
-        inputs = set(task.input_records.values_list("resource_id", flat=True))
+        from .deleted_resources import TERMINAL
+
+        receipts = {
+            item.get("formerResourceId")
+            for item in run.execution_state.get("deletedResources", [])
+            if item.get("platformDeletion") is True
+            and item.get("historyReadableByOwner") is True
+            and item.get("status") == "deleted"
+            and item.get("projectTagId") == run.project_tag_id
+        }
+        inputs = set()
+        for item in task.input_records.all():
+            identity = item.resource_id
+            removed = item.snapshot.get("deletedResource", {})
+            if (
+                identity is None
+                and run.status in TERMINAL
+                and removed.get("platformDeletion") is True
+                and removed.get("formerResourceId") in receipts
+            ):
+                identity = removed["formerResourceId"]
+            inputs.add(identity)
         if not inputs <= set(run.resource_ids):
             raise PermissionDenied("任务输入数据不在本轮手选范围内")
 
@@ -267,6 +288,7 @@ def history_compatible(previous, current):
                 "get_compute_task",
                 "list_compute_tasks",
                 "import_compute_result",
+                "read_compute_output",
             }:
                 result = ev.get("result", {})
                 rows = (

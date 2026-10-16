@@ -157,6 +157,33 @@ it("keeps a research task active after its initial chat run finishes", () => {
   expect(runActivity(run).state).toBe("waiting");
 });
 
+it("keeps the resumed model active while it interprets a finished calculation", () => {
+  const run = computeRun({
+    ...computeIntent,
+    status: "submitted",
+    taskId: "verified-task",
+  });
+  run.status = "running";
+  run.thinkingText = "正在结合实际输出解释";
+  const finished = {
+    state: "complete" as const,
+    label: "计算完成",
+    detail: "",
+  };
+  expect(runActivity(run, [], finished)).toMatchObject({
+    state: "working",
+    label: "正在思考",
+  });
+  run.status = "cancelled";
+  run.detail = "已停止后续处理；已提交计算可能继续";
+  expect(runActivity(run, [], { ...finished, state: "working" })).toMatchObject(
+    {
+      state: "stopped",
+      detail: run.detail,
+    },
+  );
+});
+
 it("follows verified compute progress instead of keeping submitted calculations waiting", () => {
   const run = computeRun({
     ...computeIntent,

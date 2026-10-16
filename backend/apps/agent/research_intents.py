@@ -117,6 +117,8 @@ def _auto_continuation_selection(previous, current):
 
 
 def authorize_run(run, user, policy) -> None:
+    from .deleted_resources import historical_deletion
+
     intent = run.research_intent or {}
     if not intent.get("originRunId"):
         return
@@ -124,6 +126,8 @@ def authorize_run(run, user, policy) -> None:
         raise PermissionDenied("科研对话不属于当前用户")
     require_access(user, "agent", run.model)
     for role, identity in intent.get("inputs", {}).items():
+        if historical_deletion(run, user, policy, identity):
+            continue
         resource = resolve_resource(user, policy, identity)
         revision = intent.get("_inputRevisions", {}).get(role)
         if resource.status != "active" or (

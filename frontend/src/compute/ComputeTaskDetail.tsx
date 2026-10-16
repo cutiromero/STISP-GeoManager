@@ -95,7 +95,7 @@ export function OutputTable({
               <Space orientation="vertical" size={0}>
                 <Tag
                   color={
-                    output.expired
+                    output.expired || output.importStatus === "deleted"
                       ? "default"
                       : output.importStatus === "ready"
                         ? "success"
@@ -161,6 +161,7 @@ export function OutputTable({
                       output.expired ||
                       output.kind === "archive" ||
                       !permissions.import_outputs ||
+                      output.importStatus === "deleted" ||
                       ["queued", "running"].includes(output.importStatus)
                     }
                     loading={busy === output.id}
@@ -375,6 +376,14 @@ export default function ComputeTaskDetail({
               <Typography.Text strong>
                 {String(input.name ?? input.key)}
               </Typography.Text>
+              {input.resourceId === null && (
+                <Tag>
+                  {ui(
+                    "原目录数据已删除，请重新选择输入",
+                    "Catalog data deleted; select a new input",
+                  )}
+                </Tag>
+              )}
               <Typography.Paragraph
                 type="secondary"
                 copyable={!!input.checksum}

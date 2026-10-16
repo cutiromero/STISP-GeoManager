@@ -86,6 +86,18 @@ export function runActivity(
   events: AgentEvent[] = [],
   computeActivity?: LiveActivity,
 ): LiveActivity {
+  if (["waiting_input", "waiting_review"].includes(run.status))
+    return {
+      state: "waiting",
+      label: run.status === "waiting_review" ? "等待您审核" : "等待您回答",
+      detail: run.interaction?.reason ?? run.detail,
+    };
+  if (run.status === "waiting_compute")
+    return {
+      state: "working",
+      label: "算法正在计算",
+      detail: run.detail || "完成后继续读取结果并分析",
+    };
   const intent = run.researchIntent;
   if (intent) {
     if (["clarifying", "waiting_approval"].includes(intent.status))
@@ -108,7 +120,9 @@ export function runActivity(
       detail: intent.message,
     };
   }
-  if (run.computeIntent) {
+  if (["failed", "cancelled", "interrupted"].includes(run.status))
+    return { state: "stopped", label: "本轮已结束", detail: run.detail };
+  if (run.computeIntent && !["queued", "running"].includes(run.status)) {
     const compute = run.computeIntent;
     if (compute.status === "submitted")
       return (

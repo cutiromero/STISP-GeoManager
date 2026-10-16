@@ -424,6 +424,8 @@ def prepare_demo(workflow, user, p) -> None:
 
 
 def authorize_demo(workflow, user, p, *, include_previous=True) -> None:
+    from .deleted_resources import historical_deletion
+
     if not p.get("operatorEnabled", False):
         raise PermissionDenied("智能体算子调用已关闭")
     domains = _domains(workflow)
@@ -435,6 +437,8 @@ def authorize_demo(workflow, user, p, *, include_previous=True) -> None:
         ):
             raise PermissionDenied("知识依据或分区权限已变化，请重新生成计划")
     for role, identity in workflow.plan["inputs"].items():
+        if historical_deletion(workflow, user, p, identity):
+            continue
         resource = resolve_resource(user, p, identity, workflow.resource_ids)
         if (
             resource.status != "active"
@@ -471,6 +475,8 @@ def authorize_demo(workflow, user, p, *, include_previous=True) -> None:
             raise PermissionDenied("已冻结的算法版本已变化或停用")
     for stage in workflow.plan["stages"]:
         for output in stage.get("outputs", []):
+            if historical_deletion(workflow, user, p, output["resourceId"]):
+                continue
             resource = resolve_resource(user, p, output["resourceId"])
             record = ComputeImport.objects.filter(
                 output_id=output["outputId"],

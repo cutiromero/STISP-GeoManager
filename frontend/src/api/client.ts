@@ -112,6 +112,8 @@ import type * as sdkTypes from "./generated/sdk.gen";
 import type {
   ResourceBulkDeleteRequest,
   ResourceBulkDeleteResponse,
+  ResourceDeletePreviewRequest,
+  ResourceDeletePreviewResponse,
 } from "./generated/types.gen";
 import { filenameFromHeaders } from "./downloadFilename";
 import i18n, { currentLocale } from "../i18n";
@@ -714,6 +716,16 @@ export const api = {
   resources: (filters: ResourceFilters = {}) =>
     unwrap<ListResponse<ResourceListItem>>(
       sdk.getResources({ query: filters }),
+    ),
+  previewResourceDeletion: (
+    payload: ResourceDeletePreviewRequest,
+    projectTagId: string = getActiveProject(),
+  ) =>
+    unwrap<ResourceDeletePreviewResponse>(
+      sdk.previewResourceDeletion({
+        body: payload,
+        headers: { "X-Project-Id": Number(projectTagId) },
+      }),
     ),
   deleteResources: (
     payload: ResourceBulkDeleteRequest,

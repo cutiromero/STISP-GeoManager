@@ -18,6 +18,7 @@ from .selections import require_task_selection
 
 def authorized_task(user, task_id, policy_value):
     from .tools import resolve_resource
+    from .deleted_resources import TERMINAL, readable_receipt
 
     try:
         task_id = uuid.UUID(str(task_id))
@@ -32,6 +33,17 @@ def authorized_task(user, task_id, policy_value):
         raise PermissionDenied("任务不存在或无权访问")
     task_access(task, user)
     for item in task.input_records.all():
+        if item.resource_id is None:
+            removed = item.snapshot.get("deletedResource", {})
+            if task.status in TERMINAL and readable_receipt(
+                removed,
+                user,
+                policy_value,
+                task.project_tag_id,
+                removed.get("formerResourceId"),
+            ):
+                continue
+            raise PermissionDenied("计算输入已删除，请重新选择数据后发起计算")
         resolve_resource(user, policy_value, item.resource_id)
     return task
 

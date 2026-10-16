@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261016-002 - 普通智能体原任务交互与历史计算结果清理
+
+- Status: ContractReady
+- Owner: root 契约/智能体前端；generic_interaction_backend 任务恢复；historical_result_cleanup 删除服务/目录；ecology_knowledge_ingestion 审核资料接入。
+- Endpoints: POST /api/agent/runs/{runId}/interaction/；GET /api/agent/runs/{runId}/；POST /api/catalog/resources/delete-preview/；POST /api/catalog/resources/delete/；GET /api/compute/tasks/{taskId}/。
+- Change type: 新增同任务问题卡和删除影响预览，扩展等待状态与历史删除凭证。
+- OpenAPI change: AgentInteraction/Question/Answer/Update；AgentRun.interaction/interactionHistory 与 waiting_input/waiting_review/waiting_compute；事件 interaction/continuation；ResourceDeletePreviewRequest/Item/Response、historyConfirmationToken、ComputeOutput.importStatus=deleted，计算输入可含已删除资源凭据。
+- Frontend reason: 普通对话中回答后续执行，刷新恢复并准确显示等待；清理历史计算结果前说明影响，保留具名历史。
+- Mock examples: 由隔离数据库、浏览器问题卡、真实模型与真实算法链验证，不将固定对白视为模型验收。
+- Backend implementation notes: 问题修订和提交键原子校验，等待释放执行资源；普通模型对话只有澄清权限；历史清理限计算结果，运行中任务、有效成果/地图及隐私保护继续生效，签名凭证绑定用户/项目/引用快照。
+- Verification: 待回答恢复、单次提交与取消、参数影响真实计算、审核拒绝/批准；删除确认、活动保护、跨项目/隐私/快照变化和历史凭据；生态资料幂等入库及真实引用。
+- Result: 本机后端交互、删除和生态导入定向测试通过；问题卡及页面回归进行中，真实模型与候选发布验收另行记录。
+
 ## API-20261016-001 - 智能体研究额度调整
 
 - Status: BackendReady
@@ -111,6 +124,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261016-002 | ContractReady | /api/agent/runs/{runId}/interaction/; /api/catalog/resources/delete-preview/; resources/delete/ | persisted questions; confirmed history cleanup | Updated | HTTP/browser fixtures | Focused passed | In progress | Real model, compute and release acceptance recorded separately |
 | API-20261016-001 | BackendReady | /api/agent/admin/; bootstrap/; conversations/{id}/runs/; workflows/ | configurable research quotas and manual selection | Updated | HTTP/browser fixtures | Passed | Focused passed | Actual model window and safety guards retained; deployment separate |
 | API-20261014-003 | BackendReady | /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | knowledge query; selected modification approval | Updated | Browser/integration fixtures | Passed | Focused passed | Persistent proposals and exact approved scope; real-model release validation separate |
 | API-20261014-001 | BackendReady | /api/catalog/resources/delete/; /api/agent/workflows/{workflowId}/confirm/ | guarded bulk deletion; approve/reject feedback | Updated | HTTP/browser fixtures | Passed | Focused passed | Isolated real storage tests; no live business deletion |

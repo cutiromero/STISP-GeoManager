@@ -527,9 +527,9 @@ export type AgentEvidence = {
      */
     id: number;
     /**
-     * 数据资源 ID
+     * 数据资源 ID；知识、计算输出及其他非目录资源证据为空。
      */
-    resourceId: number;
+    resourceId: number | null;
     /**
      * 来源名称
      */
@@ -750,9 +750,164 @@ export type ComputeMapPreview = {
 };
 
 /**
+ * 模型依据当前任务提供的用户可选答案，不自动提交默认值。
+ */
+export type AgentInteractionOption = {
+    /**
+     * 传回原任务的稳定选项值
+     */
+    value: string;
+    /**
+     * 用户可读选项
+     */
+    label: string;
+    /**
+     * 选项影响或适用条件
+     */
+    description?: string;
+};
+
+/**
+ * 一项必要澄清或审核问题，允许用户选择或补充说明。
+ */
+export type AgentInteractionQuestion = {
+    /**
+     * 本问题卡中的稳定字段键
+     */
+    key: string;
+    /**
+     * 需要用户确认的内容
+     */
+    label: string;
+    /**
+     * 单选、多选或文字
+     */
+    type: 'single' | 'multiple' | 'text';
+    /**
+     * 结构化作答是否必填，信息澄清可由补充文字交给模型解析
+     */
+    required: boolean;
+    /**
+     * 单选或多选项；文字问题可省略。
+     */
+    options?: Array<AgentInteractionOption>;
+    /**
+     * 供用户检查的建议值，需要用户点击确认。
+     */
+    defaultValue?: string | Array<string> | null;
+};
+
+/**
+ * 已提交给原任务的用户回答快照。
+ */
+export type AgentInteractionAnswer = {
+    /**
+     * 服务端保存时间
+     */
+    submittedAt: string;
+    /**
+     * 本次提交的幂等键
+     */
+    submissionKey: string;
+    /**
+     * 与问题字段键对应的单选、多选或文字答案。
+     */
+    answers: {
+        [key: string]: string | Array<string>;
+    };
+    /**
+     * 用户提供的补充条件或自由文字回答
+     */
+    text: string;
+};
+
+/**
+ * 同一智能体任务内持久化的问题卡，旧卡不能覆盖新方案。
+ */
+export type AgentInteraction = {
+    /**
+     * 服务端签发的问题标识
+     */
+    questionId: string;
+    /**
+     * 方案修订号
+     */
+    revision: number;
+    /**
+     * 信息澄清或用户审核；不替代已有地图修改批准机制
+     */
+    kind: 'input' | 'review';
+    /**
+     * 问题卡标题
+     */
+    title: string;
+    /**
+     * 为什么需要用户确认，依据当前输入与工具结果
+     */
+    reason: string;
+    /**
+     * 当前简短执行计划
+     */
+    plan?: string;
+    /**
+     * 模型提出的本轮必要问题。
+     */
+    questions: Array<AgentInteractionQuestion>;
+    /**
+     * 等待、已回答或已取消
+     */
+    status: 'pending' | 'answered' | 'cancelled';
+    /**
+     * 提问保存时间
+     */
+    createdAt: string;
+    answer?: AgentInteractionAnswer;
+};
+
+/**
+ * 将答案送回原任务或取消等待，重试复用同一提交键。
+ */
+export type AgentInteractionUpdate = {
+    /**
+     * 确认回答并继续，或取消等待
+     */
+    action: 'answer' | 'cancel';
+    /**
+     * 当前问题标识，旧问题返回409
+     */
+    questionId: string;
+    /**
+     * 当前问题的方案修订号
+     */
+    revision: number;
+    /**
+     * 唯一用户提交键，重复提交不重复启动
+     */
+    submissionKey: string;
+    /**
+     * 结构化答案；文字澄清可配合text交给模型理解。
+     */
+    answers?: {
+        [key: string]: string | Array<string>;
+    };
+    /**
+     * 补充信息，与此前证据一同恢复给模型
+     */
+    text?: string;
+};
+
+/**
  * 持久运行记录；引用失权时返回 403，不返回旧内容
  */
 export type AgentRun = {
+    /**
+     * 当前或最近的问题卡；未提问时为空。
+     */
+    interaction: AgentInteraction | null;
+    /**
+     * 同一次任务的完整提问与回答历史，刷新或切换会话后恢复。
+     */
+    interactionHistory: Array<AgentInteraction>;
     /**
      * 与真实科研任务关联的持久意图；缺省或null为普通对话
      */
@@ -818,7 +973,7 @@ export type AgentRun = {
     /**
      * 任务状态
      */
-    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
+    status: 'queued' | 'running' | 'waiting_input' | 'waiting_review' | 'waiting_compute' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
     /**
      * 用户问题
      */
@@ -864,7 +1019,7 @@ export type AgentEvent = {
     /**
      * 事件类别
      */
-    kind: 'status' | 'text' | 'thinking' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage';
+    kind: 'status' | 'text' | 'thinking' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage' | 'interaction' | 'continuation';
     /**
      * 增量文字或简要操作说明
      */
@@ -5162,6 +5317,56 @@ export type AgentModificationSuggestion = {
 };
 
 /**
+ * 当前项目内的待删除资源集合，预览不产生删除。
+ */
+export type ResourceDeletePreviewRequest = {
+    /**
+     * 待核对资源，重复编号只处理一次。
+     */
+    resourceIds: Array<number>;
+};
+
+/**
+ * 当前授权资源的引用影响，历史清理需要用户明确确认。
+ */
+export type ResourceDeletePreviewItem = {
+    /**
+     * 请求中的资源编号
+     */
+    resourceId: number;
+    /**
+     * 可访问资源名称，不可访问时为空
+     */
+    name: string | null;
+    /**
+     * 可删除、需确认历史清理、仍受保护或不存在
+     */
+    status: 'deletable' | 'confirmation_required' | 'blocked' | 'not_found';
+    /**
+     * 对用户可读的引用影响或保护原因
+     */
+    detail: string;
+    /**
+     * 删除将解除的已结束任务或工作流关联数量
+     */
+    historyReferenceCount: number;
+};
+
+/**
+ * 删除影响与绑定用户、项目、资源和引用快照的签名确认凭证。
+ */
+export type ResourceDeletePreviewResponse = {
+    /**
+     * 按首次请求顺序返回，受保护项确认后仍不删除。
+     */
+    items: Array<ResourceDeletePreviewItem>;
+    /**
+     * 10分钟内有效，引用变化后重新预览，不授予新权限
+     */
+    confirmationToken: string;
+};
+
+/**
  * 当前项目待删除资源，不接受文件路径或其他项目资源。
  */
 export type ResourceBulkDeleteRequest = {
@@ -5173,6 +5378,10 @@ export type ResourceBulkDeleteRequest = {
      * 用户在界面明确确认永久删除。
      */
     confirmed: true;
+    /**
+     * 用户检查预览并确认清理历史关联后的签名凭证；仅计算结果允许清理已结束计算和科研记录，名称、来源与删除记录保留，运行中依赖继续保护。
+     */
+    historyConfirmationToken?: string;
 };
 
 /**
@@ -8969,9 +9178,9 @@ export type ComputeOutput = {
      */
     expired: boolean;
     /**
-     * 入库状态
+     * 入库状态；deleted表示用户确认清理了目录数据，历史来源仍保留
      */
-    importStatus: 'none' | 'queued' | 'running' | 'ready' | 'failed';
+    importStatus: 'none' | 'queued' | 'running' | 'ready' | 'failed' | 'deleted';
     /**
      * 已入库资源
      */
@@ -11809,6 +12018,48 @@ export type GetDirectoriesResponses = {
 };
 
 export type GetDirectoriesResponse = GetDirectoriesResponses[keyof GetDirectoriesResponses];
+
+export type PreviewResourceDeletionData = {
+    /**
+     * 当前项目内待核对的资源集合。
+     */
+    body: ResourceDeletePreviewRequest;
+    headers: {
+        /**
+         * 当前唯一项目。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/catalog/resources/delete-preview/';
+};
+
+export type PreviewResourceDeletionErrors = {
+    /**
+     * 参数无效。
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录。
+     */
+    401: ErrorResponse;
+    /**
+     * 当前项目或删除权限不足。
+     */
+    403: ErrorResponse;
+};
+
+export type PreviewResourceDeletionError = PreviewResourceDeletionErrors[keyof PreviewResourceDeletionErrors];
+
+export type PreviewResourceDeletionResponses = {
+    /**
+     * 逐项预览与签名确认凭证。
+     */
+    200: ResourceDeletePreviewResponse;
+};
+
+export type PreviewResourceDeletionResponse = PreviewResourceDeletionResponses[keyof PreviewResourceDeletionResponses];
 
 export type BulkDeleteResourcesData = {
     /**
@@ -16777,6 +17028,65 @@ export type GetAgentRunResponses = {
 };
 
 export type GetAgentRunResponse = GetAgentRunResponses[keyof GetAgentRunResponses];
+
+export type AnswerAgentInteractionData = {
+    /**
+     * 对当前问题的回答、补充信息或取消动作。
+     */
+    body: AgentInteractionUpdate;
+    headers: {
+        /**
+         * 当前唯一项目。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 原任务编号。
+         */
+        runId: number;
+    };
+    query?: never;
+    url: '/api/agent/runs/{runId}/interaction/';
+};
+
+export type AnswerAgentInteractionErrors = {
+    /**
+     * 回答格式或必填审核选项无效。
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录。
+     */
+    401: ErrorResponse;
+    /**
+     * 项目、用户、模型或数据授权变化。
+     */
+    403: ErrorResponse;
+    /**
+     * 任务不存在或不属于当前用户及项目。
+     */
+    404: ErrorResponse;
+    /**
+     * 旧问题、方案修订变化、任务状态变化或幂等键对应不同回答。
+     */
+    409: ErrorResponse;
+    /**
+     * 模型或执行服务暂不可用，原问题保留等待。
+     */
+    503: ErrorResponse;
+};
+
+export type AnswerAgentInteractionError = AnswerAgentInteractionErrors[keyof AnswerAgentInteractionErrors];
+
+export type AnswerAgentInteractionResponses = {
+    /**
+     * 已保存的同一任务与问题历史。
+     */
+    200: AgentRun;
+};
+
+export type AnswerAgentInteractionResponse = AnswerAgentInteractionResponses[keyof AnswerAgentInteractionResponses];
 
 export type CancelAgentRunData = {
     body?: never;
