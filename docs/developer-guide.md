@@ -2621,7 +2621,7 @@ GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84
 
 `AgentRun` 返回 `interaction` 和 `interactionHistory`；`waiting_input`、`waiting_review`、`waiting_compute` 分别表示等待回答、等待审核和等待真实计算。这些状态不会被当作完成，也不占用模型执行槽。服务端保存原消息、实际工具返回、已有方案及回答，刷新和切会话从原运行恢复。
 
-`POST /api/agent/runs/{runId}/interaction/` 使用 Session、CSRF、本人及原单项目授权，请求包含 `action=answer|cancel`、`questionId`、`revision`、`submissionKey`，可附 `answers` 和 `text`。返回200原运行。单选值为字符串，多选为字符串数组；输入问题允许用补充文字回答，由模型理解。审核必须显式选择 `approval=approve|reject`，文字不能代替批准。相同提交键和相同内容幂等返回当前状态；旧问题、变更内容复用提交键或并发状态冲突返回409。模型离线或worker不可用返回503，卡片保留供恢复。未授权读取返回401/403/404，沿用原资源隐私边界。
+`POST /api/agent/runs/{runId}/interaction/` 使用 Session、CSRF、本人及原单项目授权，请求包含 `action=answer|cancel`、`questionId`、`revision`、`submissionKey`，可附 `answers` 和 `text`。原任务当前状态为 `queued` 时返回202，其余成功情况返回200；正文均为原任务及问题历史。取消或拒绝返回已停止状态，幂等重试返回请求处理时的真实任务状态。单选值为字符串，多选为字符串数组；输入问题允许用补充文字回答，由模型理解。审核必须显式选择 `approval=approve|reject`，文字不能代替批准。相同提交键和相同内容幂等返回当前状态；旧问题、变更内容复用提交键或并发状态冲突返回409。模型离线或worker不可用返回503，卡片保留供恢复。未授权读取返回401/403/404，沿用原资源隐私边界。
 
 回答后原运行重新排队，模型结合此前证据和新条件继续；再次缺信息时可再提问。同会话存在等待任务时不能另建一轮绕过。取消或拒绝会明确停止后续操作；已提交算子需从计算任务卡单独停止。通用问题卡待回答时优先展示，旧算法参数卡不能抢先执行非参数审核。
 

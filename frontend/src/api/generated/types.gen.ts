@@ -17081,9 +17081,13 @@ export type AnswerAgentInteractionError = AnswerAgentInteractionErrors[keyof Ans
 
 export type AnswerAgentInteractionResponses = {
     /**
-     * 已保存的同一任务与问题历史。
+     * 已保存并返回原任务及问题历史；当前未处于重新排队状态，例如取消、拒绝，或幂等重试时任务已经继续处理。
      */
     200: AgentRun;
+    /**
+     * 已在原任务中保存回答，原任务当前排队等待继续处理；没有新建任务。
+     */
+    202: AgentRun;
 };
 
 export type AnswerAgentInteractionResponse = AnswerAgentInteractionResponses[keyof AnswerAgentInteractionResponses];

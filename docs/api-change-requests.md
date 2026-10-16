@@ -6,7 +6,7 @@
 - Owner: root 契约/智能体前端；generic_interaction_backend 任务恢复；historical_result_cleanup 删除服务/目录；ecology_knowledge_ingestion 审核资料接入。
 - Endpoints: POST /api/agent/runs/{runId}/interaction/；GET /api/agent/runs/{runId}/；POST /api/catalog/resources/delete-preview/；POST /api/catalog/resources/delete/；GET /api/compute/tasks/{taskId}/。
 - Change type: 新增同任务问题卡和删除影响预览，扩展等待状态与历史删除凭证。
-- OpenAPI change: AgentInteraction/Question/Answer/Update；AgentRun.interaction/interactionHistory 与 waiting_input/waiting_review/waiting_compute；事件 interaction/continuation；ResourceDeletePreviewRequest/Item/Response、historyConfirmationToken、ComputeOutput.importStatus=deleted，计算输入可含已删除资源凭据。
+- OpenAPI change: AgentInteraction/Question/Answer/Update；AgentRun.interaction/interactionHistory 与 waiting_input/waiting_review/waiting_compute；事件 interaction/continuation；interaction 成功响应按原任务当前状态区分 queued 返回202、其余返回200，正文均为 AgentRun；ResourceDeletePreviewRequest/Item/Response、historyConfirmationToken、ComputeOutput.importStatus=deleted，计算输入可含已删除资源凭据。
 - Frontend reason: 普通对话中回答后续执行，刷新恢复并准确显示等待；清理历史计算结果前说明影响，保留具名历史。
 - Mock examples: 由隔离数据库、浏览器问题卡、真实模型与真实算法链验证，不将固定对白视为模型验收。
 - Backend implementation notes: 问题修订和提交键原子校验，等待释放执行资源；普通模型对话只有澄清权限；历史清理限计算结果，运行中任务、有效成果/地图及隐私保护继续生效，签名凭证绑定用户/项目/引用快照。
