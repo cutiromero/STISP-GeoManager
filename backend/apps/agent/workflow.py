@@ -92,7 +92,7 @@ def _authorize(workflow):
     user = fresh_user(workflow.owner_id)
     p = require_access(user, "agent", workflow.model)
     if not p.get("workflowEnabled", True):
-        raise PermissionDenied("科研工作流功能已关闭")
+        raise PermissionDenied("MH-workflow功能已关闭")
     for rid in workflow.resource_ids:
         resolve_resource(user, p, rid)
     validate_knowledge(workflow, user)

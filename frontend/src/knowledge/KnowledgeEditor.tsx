@@ -154,7 +154,7 @@ export default function KnowledgeEditor({
     <Modal
       open
       width={820}
-      title={entry ? `维护知识 · v${entry.revision}` : "新建知识条目"}
+      title={entry ? `维护知识 / v${entry.revision}` : "新建知识条目"}
       onCancel={onClose}
       onOk={() => void save()}
       okText="保存知识"

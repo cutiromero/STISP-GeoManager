@@ -153,7 +153,7 @@ export function KnowledgeSection({
                 <div className="about-page-paper-cover-head">
                   <span>{paper.mark}</span>
                   <small>
-                    {paper.volume} · {paper.impact}
+                    {paper.volume} / {paper.impact}
                   </small>
                 </div>
                 <strong>{paper.title}</strong>
@@ -351,14 +351,27 @@ export function KnowledgeSection({
 
 export function DocsSection({ section }: { section: AboutSection }) {
   const { user } = useAppContext();
-  const articles = helpArticles.filter(article => canReadHelp(article.id, user));
-  const faq = helpFaq.filter(item => !!user?.permissions.canAccessAdmin || !/管理员|PDF/.test(item.question));
-  const saveHelp = () => downloadHelp(articles.map(a => `# ${a.title}\n\n${a.summary}\n\n${a.blocks.flatMap(helpBlockText).join("\n\n")}`).join("\n\n"), false);
+  const articles = helpArticles.filter((article) =>
+    canReadHelp(article.id, user),
+  );
+  const faq = helpFaq.filter(
+    (item) =>
+      !!user?.permissions.canAccessAdmin || !/管理员|PDF/.test(item.question),
+  );
+  const saveHelp = () =>
+    downloadHelp(
+      articles
+        .map(
+          (a) =>
+            `# ${a.title}\n\n${a.summary}\n\n${a.blocks.flatMap(helpBlockText).join("\n\n")}`,
+        )
+        .join("\n\n"),
+      false,
+    );
   const [activeArticleId, setActiveArticleId] = useState("platform-guide");
   const [searchKeyword, setSearchKeyword] = useState("");
   const activeArticle =
-    articles.find((article) => article.id === activeArticleId) ??
-    articles[0]!;
+    articles.find((article) => article.id === activeArticleId) ?? articles[0]!;
   const normalizedKeyword = searchKeyword.trim().toLowerCase();
   const filteredCategories = helpCategories
     .map((category) => ({
@@ -386,41 +399,47 @@ export function DocsSection({ section }: { section: AboutSection }) {
         <div className="about-page-help-hero-copy">
           <span className="about-page-kicker">{section.eyebrow}</span>
           <Typography.Title level={2}>{section.title}</Typography.Title>
-          <Typography.Paragraph>帮助文档按当前账号可用功能显示。登录后可在个人设置查看工具操作和智能体权限。</Typography.Paragraph>
+          <Typography.Paragraph>
+            帮助文档按当前账号可用功能显示。登录后可在个人设置查看工具操作和智能体权限。
+          </Typography.Paragraph>
           <div
             className="about-page-help-audience-grid"
             aria-label="帮助文档适用对象"
           >
-            {helpAudienceCards.filter(card => user?.permissions.canAccessAdmin || !card.title.includes("管理员")).map((card) => (
-              <article key={card.title}>
-                <strong>{card.title}</strong>
-                <span>{card.description}</span>
-              </article>
-            ))}
+            {helpAudienceCards
+              .filter(
+                (card) =>
+                  user?.permissions.canAccessAdmin ||
+                  !card.title.includes("管理员"),
+              )
+              .map((card) => (
+                <article key={card.title}>
+                  <strong>{card.title}</strong>
+                  <span>{card.description}</span>
+                </article>
+              ))}
           </div>
           <div className="about-page-help-actions">
-            {helpQuickLinks.filter(link => canReadHelp(link.articleId, user)).map((quickLink) => (
-              <button
-                aria-pressed={activeArticle.id === quickLink.articleId}
-                key={quickLink.articleId}
-                type="button"
-                onClick={() => setActiveArticleId(quickLink.articleId)}
-              >
-                <CheckCircleOutlined />
-                {quickLink.label}
-              </button>
-            ))}
+            {helpQuickLinks
+              .filter((link) => canReadHelp(link.articleId, user))
+              .map((quickLink) => (
+                <button
+                  aria-pressed={activeArticle.id === quickLink.articleId}
+                  key={quickLink.articleId}
+                  type="button"
+                  onClick={() => setActiveArticleId(quickLink.articleId)}
+                >
+                  <CheckCircleOutlined />
+                  {quickLink.label}
+                </button>
+              ))}
           </div>
         </div>
         <div className="about-page-help-download">
           <FilePdfOutlined />
           <strong>离线帮助文档</strong>
           <small>当前账号适用的操作指南</small>
-          <Button
-            onClick={saveHelp}
-            icon={<DownloadOutlined />}
-            type="primary"
-          >
+          <Button onClick={saveHelp} icon={<DownloadOutlined />} type="primary">
             下载当前帮助文档
           </Button>
         </div>

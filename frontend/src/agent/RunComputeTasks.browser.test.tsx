@@ -70,10 +70,10 @@ it("offers map preview without first importing and avoids displaying task or res
   show();
   await screen.findByText("计算完成，结果已保存。");
   expect(
-    screen.getByText("研究区影像 · 红光波段 第 3 波段 · 近红外波段 第 8 波段"),
+    screen.getByText("研究区影像 / 红光波段 第 3 波段 / 近红外波段 第 8 波段"),
   ).toBeInTheDocument();
   expect(
-    screen.getByText("259 × 260 · 1 波段 · EPSG:3857"),
+    screen.getByText("259 × 260 / 1 波段 / EPSG:3857"),
   ).toBeInTheDocument();
   expect(screen.queryByText(task.id)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "在地理工作台查看" }));
@@ -93,8 +93,8 @@ it("imports once then follows the current state to the friendly database locatio
     ...output,
     importStatus: "ready" as const,
     resourceId: 180,
-    resourceName: "研究区影像 · NDVI",
-    resourceLocation: "公开 / 数据资源 / 研究区影像 · NDVI",
+    resourceName: "研究区影像 / NDVI",
+    resourceLocation: "公开 / 数据资源 / 研究区影像 / NDVI",
     mapUrl: "/map?resourceId=180&projectTagId=1",
   };
   poll.mockResolvedValue(result({ ...task, outputs: [imported] }));
@@ -105,7 +105,7 @@ it("imports once then follows the current state to the friendly database locatio
   const button = await screen.findByRole("button", { name: "将结果入库" });
   fireEvent.click(button);
   fireEvent.click(button);
-  await screen.findByText("公开 / 数据资源 / 研究区影像 · NDVI");
+  await screen.findByText("公开 / 数据资源 / 研究区影像 / NDVI");
   expect(importOutput).toHaveBeenCalledOnce();
   expect(importOutput).toHaveBeenCalledWith(30, { name: task.name });
   expect(screen.queryByText("180", { exact: true })).not.toBeInTheDocument();
@@ -169,7 +169,7 @@ it.each([401, 403])(
     );
     await screen.findByText("无权查看此任务");
     expect(
-      screen.queryByRole("region", { name: "研究区影像 · NDVI" }),
+      screen.queryByRole("region", { name: "研究区影像 / NDVI" }),
     ).not.toBeInTheDocument();
     expect(activity).toHaveBeenLastCalledWith(
       expect.objectContaining({ state: "stopped", label: "计算状态不可用" }),
@@ -552,7 +552,7 @@ it("keeps final deliverables first and distinguishes earlier and later index fil
   );
   await screen.findByText("priorities.csv");
   expect(screen.queryByText("ndvi.tif")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByText("中间过程文件 · 2 个"));
+  fireEvent.click(screen.getByText("中间过程文件 / 2 个"));
   expect(
     await screen.findByText("前期植被指数", { selector: ".agent-file-source" }),
   ).toBeInTheDocument();

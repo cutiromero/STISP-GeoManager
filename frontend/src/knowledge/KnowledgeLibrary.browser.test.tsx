@@ -115,7 +115,7 @@ it("shows semantic evidence and its source, with upload gated by capability", as
     ],
   });
   show();
-  await screen.findByText("method.pdf · 公共资料 · 项目成员可见");
+  await screen.findByText("method.pdf / 公共资料 / 项目成员可见");
   expect(screen.queryByRole("button", { name: /添加资料/ })).toBeNull();
   fireEvent.change(screen.getByRole("searchbox", { name: "检索资料原文" }), {
     target: { value: "寻找蚀变区域" },
@@ -143,7 +143,7 @@ it("scopes document, Wiki and original-text retrieval to the selected knowledge 
       </MemoryRouter>
     </AntApp>,
   );
-  await screen.findByText("method.pdf · 公共资料 · 项目成员可见");
+  await screen.findByText("method.pdf / 公共资料 / 项目成员可见");
   expect(api.documents).toHaveBeenCalledWith("arid_ecology");
   expect(api.wiki).toHaveBeenCalledWith("arid_ecology");
   fireEvent.change(screen.getByRole("searchbox", { name: "检索资料原文" }), {

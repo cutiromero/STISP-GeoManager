@@ -36,7 +36,7 @@ const items: AgentResearchDemoList["items"] = [
     scenario: "geology_age_correction",
     projectId: 3,
     projectName: "核地院逻辑推理",
-    title: "真实底图 · 地层时代录入纠偏",
+    title: "真实底图 / 地层时代录入纠偏",
     prompt:
       "使用真实图件副本检查标注的时代录入错误，检索辞书并实际计算、复查和保存地图",
     sampleNature: "real_map_with_demonstration_errors",
@@ -127,9 +127,9 @@ it("shows geological demonstrations only in the current logic project", async ()
   sessionStorage.setItem("project:99", "3");
   show();
   expect(
-    await screen.findByText("真实底图 · 演示录入错误"),
+    await screen.findByText("真实底图 / 演示录入错误"),
   ).toBeInTheDocument();
-  expect(screen.getAllByText("模拟资料 · 真实计算")).toHaveLength(1);
+  expect(screen.getAllByText("模拟资料 / 真实计算")).toHaveLength(1);
   expect(screen.getAllByRole("button", { name: /开始体验/ })).toHaveLength(2);
   expect(screen.queryByText(items[0].title)).not.toBeInTheDocument();
   expect(screen.getByText(/按辞书与适用条件修正时代录入/)).toBeInTheDocument();

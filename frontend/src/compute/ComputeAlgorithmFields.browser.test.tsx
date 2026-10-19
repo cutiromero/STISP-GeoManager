@@ -154,7 +154,7 @@ function showAgent(intent = computeIntent) {
 
 it("uses the same three sections and band names while preserving each entry's default policy", async () => {
   const center = showCenter(computeVersion, 10);
-  await screen.findByText("研究区影像 · 8 波段");
+  await screen.findByText("研究区影像 / 8 波段");
   for (const title of ["输入数据", "算法参数", "结果概览"])
     expect(screen.getByRole("region", { name: title })).toBeInTheDocument();
   expect(
@@ -164,7 +164,7 @@ it("uses the same three sections and band names while preserving each entry's de
   expect(screen.getByText("NDVI指数栅格")).toBeInTheDocument();
   center.unmount();
   showAgent();
-  await screen.findByText("研究区影像 · 8 波段");
+  await screen.findByText("研究区影像 / 8 波段");
   for (const title of ["输入数据", "算法参数", "结果概览"])
     expect(screen.getByRole("region", { name: title })).toBeInTheDocument();
   expect(screen.getByRole("combobox", { name: "红光波段" })).toHaveValue("");
@@ -174,9 +174,9 @@ it("uses the same three sections and band names while preserving each entry's de
 
 it("clears linked bands in the compute center when the image changes", async () => {
   showCenter(computeVersion, 10);
-  await screen.findByText("研究区影像 · 8 波段");
+  await screen.findByText("研究区影像 / 8 波段");
   await choose("近红外波段", "第 8 波段");
-  await choose("输入影像", "另一幅影像 · 4 波段");
+  await choose("输入影像", "另一幅影像 / 4 波段");
   await waitFor(() =>
     expect(screen.getByRole("combobox", { name: "近红外波段" })).toHaveValue(
       "",
@@ -287,7 +287,7 @@ it("disables input-dependent fields until data is selected", async () => {
 it("uses English section and band labels", async () => {
   await setLocale("en");
   showAgent();
-  await screen.findByText("研究区影像 · 8 bands");
+  await screen.findByText("研究区影像 / 8 bands");
   expect(
     screen.getByRole("region", { name: "Input data" }),
   ).toBeInTheDocument();
@@ -303,7 +303,7 @@ it("uses English section and band labels", async () => {
 it("keeps both parameter layouts in a single column on narrow screens", async () => {
   await page.viewport(390, 844);
   const center = showCenter(computeVersion, 10);
-  await screen.findByText("研究区影像 · 8 波段");
+  await screen.findByText("研究区影像 / 8 波段");
   const checkGrid = () => {
     const grid = document.querySelector(".compute-field-grid") as HTMLElement;
     expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(
@@ -321,7 +321,7 @@ it("keeps both parameter layouts in a single column on narrow screens", async ()
   });
   center.unmount();
   const agent = showAgent();
-  await screen.findByText("研究区影像 · 8 波段");
+  await screen.findByText("研究区影像 / 8 波段");
   checkGrid();
   await page.screenshot({
     path: "../../test-results/compute-fields-agent-mobile.png",

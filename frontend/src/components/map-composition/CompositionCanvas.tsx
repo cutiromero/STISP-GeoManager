@@ -389,7 +389,7 @@ export default function CompositionCanvas({
                 {(isSelected || !previewUrl) && (
                   <span className="composition-element-name">
                     {elementNames[id] ?? "文字"}
-                    {current.editor.locked.includes(id) ? " · 已锁定" : ""}
+                    {current.editor.locked.includes(id) ? "，已锁定" : ""}
                   </span>
                 )}
                 {isSelected && selected.length === 1 && !locked && (

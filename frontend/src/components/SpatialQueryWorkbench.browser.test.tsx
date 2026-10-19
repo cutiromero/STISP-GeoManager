@@ -1,10 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { App as AntApp } from "antd";
+import { App as AntApp, ConfigProvider } from "antd";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cloneDefaultVectorSymbolization } from "../symbolization";
+import { workspacePanelTheme } from "../theme";
 import type { DataResource, LoadedVectorLayer } from "../types";
 import SpatialQueryWorkbench from "./SpatialQueryWorkbench";
+import "../styles.css";
 
 const resource: DataResource = {
   id: 10,
@@ -149,4 +152,93 @@ describe("spatial query loaded targets", () => {
     fireEvent.click(screen.getByRole("button", { name: /执行查询/ }));
     expect(input.onRunSpatialQuery).not.toHaveBeenCalled();
   });
+});
+
+describe("spatial query responsive layout", () => {
+  it.each([
+    { viewport: 1920, height: 1080, panelWidth: 1120 },
+    { viewport: 1537, height: 600, panelWidth: 820 },
+    { viewport: 1280, height: 720, panelWidth: 680 },
+    { viewport: 1024, height: 650, panelWidth: 500 },
+    { viewport: 390, height: 844, panelWidth: 358 },
+  ])(
+    "keeps controls separated in a $viewport px window and $panelWidth px panel",
+    async ({ viewport, height, panelWidth }) => {
+      await page.viewport(viewport, height);
+      try {
+        const input = props();
+        const view = render(
+          <ConfigProvider theme={workspacePanelTheme}>
+            <AntApp>
+              <aside
+                className="floating-panel-bottom spatial-workbench-panel-open"
+                style={{
+                  left: 16,
+                  right: "auto",
+                  width: panelWidth,
+                  height: 268,
+                }}
+              >
+                <SpatialQueryWorkbench {...input} />
+              </aside>
+            </AntApp>
+          </ConfigProvider>,
+        );
+        const grid = view.container.querySelector<HTMLElement>(
+          ".spatial-workbench-grid",
+        )!;
+        const tools = view.container.querySelector<HTMLElement>(
+          ".spatial-range-tools",
+        )!;
+        const metrics = view.container.querySelector<HTMLElement>(
+          ".spatial-workbench-meta",
+        )!;
+        await waitFor(() => {
+          expect(grid.clientWidth).toBeGreaterThan(100);
+          expect(metrics.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+            tools.getBoundingClientRect().bottom - 1,
+          );
+        });
+        expect(grid.scrollWidth).toBeLessThanOrEqual(grid.clientWidth + 1);
+        for (const section of grid.querySelectorAll<HTMLElement>(
+          ".spatial-workbench-section",
+        )) {
+          expect(section.scrollWidth).toBeLessThanOrEqual(
+            section.clientWidth + 1,
+          );
+          for (const child of section.children) {
+            expect(child.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+              section.getBoundingClientRect().bottom + 1,
+            );
+          }
+          const heading = section.querySelector<HTMLElement>(
+            ".spatial-section-heading",
+          )!;
+          const title = heading.querySelector<HTMLElement>(".ant-typography")!;
+          expect(title.getBoundingClientRect().height).toBeLessThan(30);
+          expect(title.getBoundingClientRect().right).toBeLessThanOrEqual(
+            section.getBoundingClientRect().right,
+          );
+        }
+        await page.screenshot({
+          path: `../../test-results/spatial-workbench-${viewport}.png`,
+          animations: "disabled",
+          fullPage: true,
+        });
+        if (panelWidth <= 700) {
+          expect(grid.scrollHeight).toBeGreaterThan(grid.clientHeight);
+          grid.scrollTop = grid.scrollHeight;
+          expect(grid.scrollTop).toBeGreaterThan(0);
+          await page.screenshot({
+            path: `../../test-results/spatial-workbench-${viewport}-scrolled.png`,
+            animations: "disabled",
+            fullPage: true,
+          });
+        }
+        view.unmount();
+      } finally {
+        await page.viewport(1600, 900);
+      }
+    },
+  );
 });

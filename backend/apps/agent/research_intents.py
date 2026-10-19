@@ -265,7 +265,7 @@ def process(run, user, policy, guard, event):
     if not policy.get("workflowEnabled", True) or not policy.get(
         "operatorEnabled", False
     ):
-        raise PermissionDenied("科研工作流或智能体算法调用已关闭")
+        raise PermissionDenied("MH-workflow或智能体算法调用已关闭")
     if run.research_intent.get("originRunId") and run.research_workflow_id:
         return serialize(run, user, policy)["message"]
     workflow = None

@@ -51,7 +51,7 @@ function ResultMetadata({ output }: { output: ComputeOutput }) {
   if (typeof data.rows === "number")
     parts.push(ui(`${data.rows} 行`, `${data.rows} rows`));
   return parts.length ? (
-    <span className="agent-compute-muted">{parts.join(" · ")}</span>
+    <span className="agent-compute-muted">{parts.join(" / ")}</span>
   ) : null;
 }
 
@@ -287,8 +287,8 @@ export default function WorkflowDeliverables({
               {
                 key: "files",
                 label: ui(
-                  `中间过程文件 · ${entries.length} 个`,
-                  `Intermediate files · ${entries.length}`,
+                  `中间过程文件 / ${entries.length} 个`,
+                  `Intermediate files / ${entries.length}`,
                 ),
                 children: rows,
               },
@@ -298,7 +298,7 @@ export default function WorkflowDeliverables({
       })}
       <Modal
         open={Boolean(preview)}
-        title={ui(`文件预览 · ${previewName}`, `File preview · ${previewName}`)}
+        title={ui(`文件预览 / ${previewName}`, `File preview / ${previewName}`)}
         width={920}
         footer={null}
         onCancel={() => setPreview(undefined)}

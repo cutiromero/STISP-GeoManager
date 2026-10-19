@@ -82,7 +82,7 @@ export function OutputTable({
               <Space orientation="vertical" size={0}>
                 <Typography.Text strong>{ui(output.label)}</Typography.Text>
                 <Typography.Text type="secondary">
-                  {output.fileName} · {(output.sizeBytes / 1024).toFixed(1)} KiB
+                  {output.fileName} / {(output.sizeBytes / 1024).toFixed(1)} KiB
                 </Typography.Text>
               </Space>
             ),

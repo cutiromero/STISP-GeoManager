@@ -1020,7 +1020,7 @@ export default function WorkspaceHeader({
               <small>
                 {resourceDomainCategoryName(resource, domainTypeLabelByValue) ??
                   t("common.uncategorized")}{" "}
-                · {resourceFormatLabel(resource)}
+                / {resourceFormatLabel(resource)}
               </small>
             </span>
             <Button
@@ -1075,7 +1075,7 @@ export default function WorkspaceHeader({
               <strong>{composition.name}</strong>
               <ProjectLabel id={composition.projectTagId} />
               <small>
-                {composition.projectName} · {formatSceneUpdatedAt(composition)}
+                {composition.projectName} / {formatSceneUpdatedAt(composition)}
               </small>
             </span>
             <Button

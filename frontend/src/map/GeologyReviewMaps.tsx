@@ -12,7 +12,7 @@ export default function GeologyReviewMaps({
   bounds,
   onSelect,
   accessToken,
-  previewLabel = "建议修改范围 · 尚未执行",
+  previewLabel = "建议修改范围，尚未执行",
 }: {
   before: GeoJsonFeatureCollection;
   after: GeoJsonFeatureCollection | null;

@@ -105,8 +105,12 @@ def _english_permission_name(codename: str) -> str:
 
 
 FEATURE_PERMISSIONS: tuple[FeaturePermissionDef, ...] = (
-    FeaturePermissionDef("core", "FeaturePermission", "use_local_model", "本地模型对话", "数据权限"),
-    FeaturePermissionDef("core", "FeaturePermission", "use_data_agent", "数据智能体", "数据权限"),
+    FeaturePermissionDef(
+        "core", "FeaturePermission", "use_local_model", "快速对话", "数据权限"
+    ),
+    FeaturePermissionDef(
+        "core", "FeaturePermission", "use_data_agent", "科研智能体", "数据权限"
+    ),
     FeaturePermissionDef(
         "core",
         "FeaturePermission",

@@ -175,7 +175,7 @@ export function reviewLegend(...data: GeoJsonFeatureCollection[]) {
       const key = String(p.class);
       values.set(key, {
         key,
-        name: `${String(p.name ?? "地质单元")} · ${String(p.code ?? key)}`,
+        name: `${String(p.name ?? "地质单元")} / ${String(p.code ?? key)}`,
         color: geologicalColor(p.class),
       });
     });

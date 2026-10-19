@@ -22,6 +22,7 @@ from apps.catalog.vector_importer import commit_vector_import
 from apps.compute.models import AlgorithmResource
 from apps.compute.views import store_version
 from apps.core.storage import app_path
+from apps.core.display_text import display_text
 from apps.projects.context import ProjectScope, is_superadmin, project_scope
 from apps.projects.models import Project
 from apps.raster.services.importer import import_raster_file
@@ -66,6 +67,12 @@ def checked_file(root: Path, item: dict) -> Path:
 
 
 def import_resource(user, root: Path, item: dict):
+    item = {
+        **item,
+        "name": display_text(item["name"]),
+        "description": display_text(item["description"]),
+        "qualityNote": display_text(item.get("qualityNote", "")),
+    }
     path = checked_file(root, item)
     marker = resource_marker(item)
     existing = DataResource.objects.filter(code=item["code"]).first()
@@ -114,7 +121,7 @@ def import_resource(user, root: Path, item: dict):
     resource.source = marker
     resource.description = item["description"]
     resource.quality_note = item.get("qualityNote", "")
-    resource.provider = "师弟提供的地质案例材料"
+    resource.provider = "地质案例材料"
     resource.save()
     log_operation(
         user,
@@ -138,6 +145,11 @@ def resource_marker(item):
 
 
 def import_artifact(user, project, root, item, resources):
+    item = {
+        **item,
+        "name": display_text(item["name"]),
+        "description": display_text(item["description"]),
+    }
     path = checked_file(root, item)
     associated = [resources[key].id for key in item.get("resources", [])]
     existing = list(ResultArtifact.objects.filter(name=item["name"])[:2])
@@ -161,7 +173,7 @@ def import_artifact(user, project, root, item, resources):
                 {
                     "name": item["name"],
                     "description": item["description"],
-                    "provider": "师弟提供的地质案例材料",
+                    "provider": "地质案例材料",
                     "sourceType": "direct_import",
                     "resultType": item["resultType"],
                     "categoryCode": item.get("categoryCode", "spatial"),
@@ -182,7 +194,7 @@ def import_artifact(user, project, root, item, resources):
 
 
 class Command(BaseCommand):
-    help = "按内容签名幂等导入师弟真实地质材料、成果和草稿算法；不自动发布算法"
+    help = "按内容签名幂等导入地质材料、成果和草稿算法；不自动发布算法"
 
     def add_arguments(self, parser):
         parser.add_argument("--manifest", required=True)

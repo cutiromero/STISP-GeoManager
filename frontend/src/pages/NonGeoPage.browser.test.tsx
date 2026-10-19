@@ -71,7 +71,7 @@ it("shows only the poplar showcase without loading project or algorithm test dat
   });
   const analyze = vi.spyOn(api, "nonGeoAnalysis");
   const { container } = show();
-  expect(await screen.findByText("数值分布 · 株高")).toBeInTheDocument();
+  expect(await screen.findByText("数值分布 / 株高")).toBeInTheDocument();
   expect(container.querySelectorAll(".nongeo-resource-row")).toHaveLength(1);
   expect(screen.queryByText("Algorithm test raster")).not.toBeInTheDocument();
   expect(api.resources).not.toHaveBeenCalled();
@@ -79,20 +79,20 @@ it("shows only the poplar showcase without loading project or algorithm test dat
 });
 it("keeps generic category selection within the showcase", async () => {
   show();
-  expect(await screen.findByText("结构占比 · 地区")).toBeInTheDocument();
+  expect(await screen.findByText("结构占比 / 地区")).toBeInTheDocument();
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "分类维度" }));
   fireEvent.click(
     await screen.findByText("科名", {
       selector: ".ant-select-item-option-content",
     }),
   );
-  expect(await screen.findByText("结构占比 · 科名")).toBeInTheDocument();
+  expect(await screen.findByText("结构占比 / 科名")).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: /指标关系/ })).toBeInTheDocument();
 });
 it("allows the showcase without real-data query permission", async () => {
   permissionState.canQueryData = false;
   show();
-  expect(await screen.findByText("数值分布 · 株高")).toBeInTheDocument();
+  expect(await screen.findByText("数值分布 / 株高")).toBeInTheDocument();
 });
 it("respects the existing browse permission", () => {
   permissionState.canBrowseData = false;
@@ -108,7 +108,7 @@ it.each([
   projectState.current = String(project.id);
   projectState.projects = [{ ...project, isActive: true }];
   show();
-  expect(await screen.findByText("数值分布 · 株高")).toBeInTheDocument();
+  expect(await screen.findByText("数值分布 / 株高")).toBeInTheDocument();
 });
 it("blocks direct showcase URLs in other projects even with a similar name", async () => {
   projectState.current = "3";
@@ -138,7 +138,7 @@ it("does not expose the showcase while project identity is unavailable", () => {
 });
 it("removes ornamental workspace entries and keeps histogram selection in sync", async () => {
   const { container } = show();
-  await screen.findByText("数值分布 · 株高");
+  await screen.findByText("数值分布 / 株高");
   for (const text of ["分析资产", "核心指标", "资源快照", "视图组合"])
     expect(screen.queryByText(text)).not.toBeInTheDocument();
   expect(container.querySelector(".nongeo-insight-panel")).toBeNull();
@@ -153,8 +153,8 @@ it("removes ornamental workspace entries and keeps histogram selection in sync",
       selector: ".ant-select-item-option-content",
     }),
   );
-  expect(await screen.findByText("数值分布 · 胸径")).toBeInTheDocument();
-  const chart = screen.getByText("数值分布 · 胸径").closest("section")!;
+  expect(await screen.findByText("数值分布 / 胸径")).toBeInTheDocument();
+  const chart = screen.getByText("数值分布 / 胸径").closest("section")!;
   expect(chart.querySelector(".nongeo-histogram-axis")).toHaveTextContent(
     "96.4",
   );

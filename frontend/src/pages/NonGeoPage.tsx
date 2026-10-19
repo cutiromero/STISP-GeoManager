@@ -408,7 +408,7 @@ function OverviewContent({
           )}
         </ChartBox>
         <ChartBox
-          title={`${t("nonGeo.structureShare")}${compositionCategory ? ` · ${compositionCategory.label}` : ""}`}
+          title={`${t("nonGeo.structureShare")}${compositionCategory ? ` / ${compositionCategory.label}` : ""}`}
           icon={<DotChartOutlined />}
         >
           {compositionCategory ? (
@@ -418,7 +418,7 @@ function OverviewContent({
           )}
         </ChartBox>
         <ChartBox
-          title={`${t("nonGeo.numericDistribution")}${primaryNumeric ? ` · ${primaryNumeric.label}` : ""}`}
+          title={`${t("nonGeo.numericDistribution")}${primaryNumeric ? ` / ${primaryNumeric.label}` : ""}`}
           extra={
             <Select
               aria-label={t("nonGeo.metricField")}
@@ -596,7 +596,7 @@ function ResourceRow({
         />
       </span>
       <span className="nongeo-resource-row-meta">
-        {resourceCategoryName(resource) ?? t("nonGeo.uncategorized")} ·{" "}
+        {resourceCategoryName(resource) ?? t("nonGeo.uncategorized")} /{" "}
         {resourceFormatLabel(resource)}
       </span>
       <span className="nongeo-resource-row-foot">

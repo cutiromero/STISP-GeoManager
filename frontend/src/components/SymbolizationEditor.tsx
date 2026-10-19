@@ -797,7 +797,7 @@ export function VectorSymbolizationEditor({
     ...fields.filter(isNumericResourceField).map((field) => ({
       value: field.name,
       label: field.description
-        ? `${field.name} · ${field.description}`
+        ? `${field.name} / ${field.description}`
         : field.name,
     })),
   ];
@@ -806,7 +806,7 @@ export function VectorSymbolizationEditor({
     .map((field) => ({
       value: field.name,
       label: field.description
-        ? `${field.name} · ${field.description}`
+        ? `${field.name} / ${field.description}`
         : field.name,
     }));
   const fallbackClassifyField =
@@ -960,7 +960,7 @@ export function VectorSymbolizationEditor({
     .map((field) => ({
       value: field.name,
       label: field.description
-        ? `${field.name} · ${field.description}`
+        ? `${field.name} / ${field.description}`
         : field.name,
     }));
   const graduatedFieldOptions =
@@ -2581,7 +2581,7 @@ export function RasterSymbolizationEditor({
         ]
   ).map((band) => ({
     value: band.band,
-    label: `${band.band} · ${band.description || band.type}`,
+    label: `${band.band} / ${band.description || band.type}`,
   }));
   const alphaBandOptions = [
     { value: "mask", label: i18n.t("symbolization.mask") },

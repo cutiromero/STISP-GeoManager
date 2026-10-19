@@ -15,17 +15,17 @@ describe("formatBasemapServiceDetail", () => {
     expect(
       formatBasemapServiceDetail(
         "Mapbox 卫星实景图",
-        "可访问 · 最近响应 620 ms",
+        "可访问 / 最近响应 620 ms",
       ),
-    ).toBe("Mapbox 卫星实景图 · 可访问 · 最近响应 620 ms");
+    ).toBe("Mapbox 卫星实景图 / 可访问 / 最近响应 620 ms");
   });
 
   it("keeps the existing diagnostic when no display name is provided", () => {
     expect(formatBasemapServiceDetail(undefined, "正在加载当前视野")).toBe(
       "正在加载当前视野",
     );
-    expect(formatBasemapServiceDetail("   ", "加载失败 · 最近 2 次")).toBe(
-      "加载失败 · 最近 2 次",
+    expect(formatBasemapServiceDetail("   ", "加载失败 / 最近 2 次")).toBe(
+      "加载失败 / 最近 2 次",
     );
   });
 
@@ -51,7 +51,7 @@ describe("formatBasemapServiceDetail", () => {
           status: 403,
         },
       }),
-    ).toBe("瞬时错误 · 瓦片失败 1/8（13%） · 业务码 TEMPORARY · 注记层 · t3");
+    ).toBe("瞬时错误 / 瓦片失败 1/8（13%） / 业务码 TEMPORARY / 注记层 / t3");
   });
 });
 
@@ -113,7 +113,7 @@ describe("basemapDetail", () => {
     };
 
     expect(basemapDetail(diagnostics, 2_000, "tianditu")).toBe(
-      "可访问 · 近期瓦片就绪（含客户端排队）183 ms",
+      "可访问 / 近期瓦片就绪（含客户端排队）183 ms",
     );
     expect(
       primaryLatency(

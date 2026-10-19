@@ -90,8 +90,8 @@ export default function KnowledgePage() {
             }}
           >
             <div>
-              <span>POPULUS EUPHRATICA · DESERT SURVIVOR</span>
-              <Typography.Title level={1}>荒漠脊梁 · 生态丰碑</Typography.Title>
+              <span>POPULUS EUPHRATICA / DESERT SURVIVOR</span>
+              <Typography.Title level={1}>荒漠脊梁 / 生态丰碑</Typography.Title>
               <Typography.Paragraph>
                 一棵胡杨连接物种演化、河流廊道、荒漠生态水文、边疆文化与现代保护科技。这里以图文档案、治理案例和科研知识图谱，完整呈现它如何生存，又为何值得守护。
               </Typography.Paragraph>
@@ -111,7 +111,7 @@ export default function KnowledgePage() {
             <aside>
               <small>物种档案编号</small>
               <strong>PE-001</strong>
-              <span>杨柳科 · 杨属</span>
+              <span>杨柳科 / 杨属</span>
               <em>Populus euphratica Oliver</em>
             </aside>
           </section>

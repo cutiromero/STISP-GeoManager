@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { App as AntApp, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,8 @@ import { localeStorageKey, setLocale } from "../i18n";
 import { appTheme } from "../theme";
 import type { Bootstrap } from "../types";
 import LoginPage from "./LoginPage";
+import "../styles.css";
+import { page } from "vitest/browser";
 
 const { mockApi } = vi.hoisted(() => ({
   mockApi: {
@@ -107,29 +109,40 @@ describe("LoginPage", () => {
     expect(screen.getByLabelText("密码")).toHaveValue("");
   });
 
-  it("automatically advances through the login backgrounds", () => {
-    vi.useFakeTimers();
-    const { container, unmount } = renderLoginPage();
-    const slides = container.querySelectorAll(".login-background-slide");
-
-    expect(slides).toHaveLength(3);
-    expect(slides[0]).toHaveAttribute("data-active", "true");
-    expect(slides[0]).toHaveAttribute("data-outgoing", "false");
-
-    act(() => {
-      vi.advanceTimersByTime(9000);
+  it("keeps a static blue cover without metric cards or status polling", async () => {
+    const { container } = renderLoginPage();
+    expect(container.querySelectorAll(".login-background")).toHaveLength(1);
+    expect(container.querySelector(".login-stat-grid")).toBeNull();
+    expect(container.querySelector(".login-ops-panel")).toBeNull();
+    expect(container.querySelector(".login-capability-tags")).toBeNull();
+    expect(mockApi.loginOverview).not.toHaveBeenCalled();
+    expect(screen.getByText("空天观测，时空智能")).toBeVisible();
+    expect(document.querySelector("vite-error-overlay")).toBeNull();
+    await page.screenshot({
+      path: "../../test-results/login-blue-cover-desktop.png",
     });
+  });
 
-    expect(slides[0]).toHaveAttribute("data-active", "false");
-    expect(slides[0]).toHaveAttribute("data-outgoing", "true");
-    expect(slides[1]).toHaveAttribute("data-active", "true");
-
-    act(() => {
-      vi.advanceTimersByTime(1600);
-    });
-
-    expect(slides[0]).toHaveAttribute("data-outgoing", "false");
-    unmount();
-    vi.useRealTimers();
+  it("keeps login controls inside a smaller browser window", async () => {
+    await page.viewport(1000, 650);
+    try {
+      const { container } = renderLoginPage();
+      const card = container.querySelector(".login-card")!;
+      const bounds = card.getBoundingClientRect();
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(
+        screen.getByRole("button", { name: /登录并进入数据平台/ }),
+      ).toBeVisible();
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+        window.innerWidth,
+      );
+      expect(document.querySelector("vite-error-overlay")).toBeNull();
+      await page.screenshot({
+        path: "../../test-results/login-blue-cover-window.png",
+      });
+    } finally {
+      await page.viewport(1600, 900);
+    }
   });
 });

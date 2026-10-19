@@ -125,7 +125,7 @@ export function liveComputeTask(
 ): ComputeTask {
   return {
     id: "6feaa1a7-4b65-4b3e-849a-9d3f8429f8dc",
-    name: "研究区影像 · NDVI",
+    name: "研究区影像 / NDVI",
     projectTagId: 1,
     ownerName: "研究员",
     algorithmName: "NDVI植被指数",

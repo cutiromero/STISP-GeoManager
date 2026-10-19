@@ -234,7 +234,7 @@ export default function ComputeAlgorithmFields({
                     .filter((candidate) => candidate.kind === input.kind)
                     .map((candidate) => ({
                       value: candidate.id,
-                      label: `${candidate.name}${candidate.bands ? ui(` · ${candidate.bands} 波段`, ` · ${candidate.bands} bands`) : ""}`,
+                      label: `${candidate.name}${candidate.bands ? ui(` / ${candidate.bands} 波段`, ` / ${candidate.bands} bands`) : ""}`,
                       disabled:
                         input.minBands !== undefined &&
                         candidate.bands < input.minBands,

@@ -648,6 +648,6 @@ it("keeps the latest chat workflow state when an older failed task arrives later
     within(screen.getByLabelText("当前任务")).getByText("模型正在分析"),
   ).toBeVisible();
   expect(
-    screen.getByRole("button", { name: /科研工作流.*正在分析/ }),
+    screen.getByRole("button", { name: /MH-workflow.*正在分析/ }),
   ).toBeVisible();
 });

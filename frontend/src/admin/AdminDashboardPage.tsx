@@ -549,7 +549,7 @@ export default function AdminDashboardPage({
             </Typography.Title>
             <Typography.Text type="secondary">
               {english ? "Refreshes every 5 seconds" : "每 5 秒自动刷新"}
-              {server ? ` · ${formatDateTime(server.generatedAt)}` : ""}
+              {server ? ` / ${formatDateTime(server.generatedAt)}` : ""}
             </Typography.Text>
           </div>
           {serverLoading || !server ? (
@@ -618,8 +618,8 @@ export default function AdminDashboardPage({
                     `${formatBytes(server.cards.gpu.usedMemoryBytes)} / ${formatBytes(server.cards.gpu.totalMemoryBytes)}`,
                     ...server.cards.gpu.devices.map((device) =>
                       english
-                        ? `GPU ${device.index}: ${device.usagePercent}% · ${formatBytes(device.memoryUsedBytes)} / ${formatBytes(device.memoryTotalBytes)}`
-                        : `GPU ${device.index}：${device.usagePercent}% · ${formatBytes(device.memoryUsedBytes)} / ${formatBytes(device.memoryTotalBytes)}`,
+                        ? `GPU ${device.index}: ${device.usagePercent}% / ${formatBytes(device.memoryUsedBytes)} / ${formatBytes(device.memoryTotalBytes)}`
+                        : `GPU ${device.index}：${device.usagePercent}% / ${formatBytes(device.memoryUsedBytes)} / ${formatBytes(device.memoryTotalBytes)}`,
                     ),
                   ]}
                   icon={<VideoCameraOutlined />}
@@ -2419,7 +2419,7 @@ function formatCompactBounds(bounds: number[]) {
   return `经 ${formatCoordinateLabel(bounds[0], "lng")}-${formatCoordinateLabel(
     bounds[2],
     "lng",
-  )} · 纬 ${formatCoordinateLabel(bounds[1], "lat")}-${formatCoordinateLabel(
+  )} / 纬 ${formatCoordinateLabel(bounds[1], "lat")}-${formatCoordinateLabel(
     bounds[3],
     "lat",
   )}`;

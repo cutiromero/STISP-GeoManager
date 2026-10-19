@@ -190,7 +190,7 @@ def resource_reference_reasons(resource, *, allow_history=False) -> list[str]:
             "resource_ids", "result_resource_ids", "plan", "evidence"
         )
     ):
-        reasons.append("科研工作流引用该数据")
+        reasons.append("MH-workflow引用该数据")
     elif any(
         contains(value)
         for row in AgentWorkflowStep.objects.filter(workflow__project_tag_id=project_id)
@@ -205,7 +205,7 @@ def resource_reference_reasons(resource, *, allow_history=False) -> list[str]:
         .values("state")
         .iterator()
     ):
-        reasons.append("科研工作流引用该数据")
+        reasons.append("MH-workflow引用该数据")
     if any(
         contains(row["result"])
         for row in RasterProcessingJob.objects.filter(

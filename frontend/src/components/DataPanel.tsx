@@ -357,24 +357,26 @@ export default function DataPanel({
                   >
                     {resourcePrimaryCategoryName(resource) ??
                       t("common.uncategorized")}{" "}
-                    · {resourceFormatLabel(resource)}
+                    / {resourceFormatLabel(resource)}
                   </Typography.Text>
                 </div>
                 <Button
                   size="small"
+                  aria-label={t("map.resourceInfo")}
                   type={
                     resource.id === selectedResourceId ? "primary" : "default"
                   }
                   disabled={!resource.isQueryable && !resource.isRenderable}
                   onClick={() => onSelectResource(resource)}
                 >
-                  {t("common.select")}
+                  {t("map.resourceInfo")}
                 </Button>
                 <Button
                   size="small"
                   type="primary"
                   ghost
                   className="resource-quick-load-button"
+                  aria-label={t("map.quickLoad")}
                   disabled={!resource.isQueryable && !resource.isRenderable}
                   loading={Boolean(loadProgress)}
                   onClick={() => void quickLoadResource(resource)}

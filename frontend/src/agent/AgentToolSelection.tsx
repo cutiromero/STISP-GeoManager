@@ -126,13 +126,13 @@ export default function AgentToolSelection({
               notFoundContent="当前暂无可用的已发布算法"
               options={algorithms.map((item) => ({
                 value: item.versionId,
-                label: `${item.name} · ${item.version}`,
+                label: `${item.name} / ${item.version}`,
               }))}
               labelRender={({ value: id }) => {
                 const item = algorithms.find(
                   (option) => option.versionId === id,
                 );
-                return item ? `${item.name} · ${item.version}` : "算法已不可用";
+                return item ? `${item.name} / ${item.version}` : "算法已不可用";
               }}
               onChange={(ids) =>
                 onChange({ ...value, algorithmVersionIds: ids })

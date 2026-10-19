@@ -1400,7 +1400,7 @@ function MapWorkspace() {
       });
       return await loadVectorResource(resource, profile, [], {
         spatialFilter: null,
-        errorMessage: english ? "Quick load failed" : "快速加载失败",
+        errorMessage: english ? "Load failed" : "加载失败",
         trackQuerying: false,
         reportProgress,
       });

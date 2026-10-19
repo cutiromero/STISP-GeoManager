@@ -39,7 +39,7 @@ export function createVectorLayerGroup(
   const now = new Date();
   const groupId = `query-${resource.id}-${now.getTime()}`;
   const displayName = options.name ?? resource.name;
-  const summary = `${queryResult.returnedCount}/${queryResult.totalCount} 条 · ${profile.geometryType || "空间数据"}`;
+  const summary = `${queryResult.returnedCount}/${queryResult.totalCount} 条，${profile.geometryType || "空间数据"}`;
   const metadata = {
     数据名称: resource.name,
     数据类型: resource.dataType,
@@ -109,7 +109,7 @@ export function createRasterLayerGroup(
     // extra boundary colors even when every class pixel is exact.
     symbolization.opacity = 100;
   }
-  const summary = `${raster.bandCount} 波段 · ${raster.metadata.size.join(" x ") || "栅格"}`;
+  const summary = `${raster.bandCount} 波段，${raster.metadata.size.join(" x ") || "栅格"}`;
   const metadata = {
     数据名称: resource.name,
     数据类型: "栅格",

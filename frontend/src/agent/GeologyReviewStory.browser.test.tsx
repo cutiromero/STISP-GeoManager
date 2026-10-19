@@ -244,10 +244,10 @@ it("仅批准明确选中的建议，保存审核意见而不走通用确认", a
 
 it("拒绝需要确认，查看知识来源与地图位置不会执行修改", async () => {
   const { review } = show();
-  const source = screen.getAllByText(/专家知识 · 完整制图范围/)[0]!;
+  const source = screen.getAllByText(/专家知识 \/ 完整制图范围/)[0]!;
   fireEvent.click(source);
   fireEvent.click(
-    screen.getAllByText("完整制图范围的内部漏填检查 · 版本 2")[0]!,
+    screen.getAllByText("完整制图范围的内部漏填检查 / 版本 2")[0]!,
   );
   await waitFor(() =>
     expect(screen.getByText("规则说明第 2 条", { exact: false })).toBeVisible(),
@@ -378,7 +378,7 @@ it.each([1200, 390])("在 %s 像素下保留紧凑审核和真实范围", async 
   }
 });
 
-it("科研工作流表单用角色明确选择新场景，并把选中建议透传API", async () => {
+it("MH-workflow表单用角色明确选择新场景，并把选中建议透传API", async () => {
   const saved = fixture();
   vi.spyOn(agentApi, "bootstrap").mockResolvedValue({
     models: [],

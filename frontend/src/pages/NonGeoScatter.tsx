@@ -146,7 +146,7 @@ export default function NonGeoScatter({
               r={3}
               className="analysis-point"
             >
-              <title>{`${fieldLabel(xField)}: ${point.x}; ${fieldLabel(yField)}: ${point.y}${point.count > 1 ? ` · ${point.count} ${ui("条记录", "records")}` : ""}`}</title>
+              <title>{`${fieldLabel(xField)}: ${point.x}; ${fieldLabel(yField)}: ${point.y}${point.count > 1 ? ` / ${point.count} ${ui("条记录", "records")}` : ""}`}</title>
             </circle>
           ))}
         </svg>

@@ -155,7 +155,7 @@ export default function ComputeTaskForm({
     <Modal
       open
       width={720}
-      title={`${trial ? ui("算法试运行", "Trial run") : ui("新建计算任务", "New compute task")} · ${ui(version.manifest.name)} ${version.version}`}
+      title={`${trial ? ui("算法试运行", "Trial run") : ui("新建计算任务", "New compute task")} / ${ui(version.manifest.name)} ${version.version}`}
       onCancel={onClose}
       onOk={submit}
       confirmLoading={busy}

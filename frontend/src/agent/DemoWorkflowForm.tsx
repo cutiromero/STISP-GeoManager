@@ -1,4 +1,4 @@
-import { Alert, Button, Input, InputNumber, Select } from "antd";
+import { Alert, Button, Input, InputNumber, Select, Tooltip } from "antd";
 import type {
   AgentResource,
   ComputeCandidate,
@@ -156,7 +156,7 @@ export default function DemoWorkflowForm({
       ? [
           {
             role,
-            name: candidate.name,
+            name: resource?.name ?? candidate.name,
             description: resource?.description ?? "",
           },
         ]
@@ -169,7 +169,9 @@ export default function DemoWorkflowForm({
     for (const role of roles) {
       if (next[role.key]) continue;
       const found = matchingCandidates(role, candidates).filter((entry) =>
-        role.match.test(entry.name),
+        role.match.test(
+          resources.find((item) => item.id === entry.id)?.name ?? entry.name,
+        ),
       );
       if (found.length === 1) next[role.key] = found[0]!.id;
     }
@@ -190,25 +192,27 @@ export default function DemoWorkflowForm({
     >
       <div className="agent-demo-form-heading">
         <strong>按角色选择本次资料</strong>
-        <Button
-          size="small"
-          disabled={disabled || evidenceOnly}
-          onClick={autoMatch}
-        >
-          按名称匹配资料
-        </Button>
+        <Tooltip title="根据资料名称填入唯一匹配的建议，不会直接运行。请在运行前核对；也可逐项手动选择。">
+          <Button
+            size="small"
+            disabled={disabled || evidenceOnly}
+            onClick={autoMatch}
+          >
+            按名称匹配资料
+          </Button>
+        </Tooltip>
       </div>
       {type === "geology_age_correction" && (
         <Alert
           type="info"
-          title="真实底图 · 演示录入错误"
+          title="真实底图 / 演示录入错误"
           description="本案例核对地层名称、地区和辞书中的时代定义，修改副本中的少量时代属性。人工精修图用于独立对照，岩性和边界保留。"
         />
       )}
       {type === "geology_map_review" && (
         <Alert
           type="info"
-          title="地质成果智能检查与修正 · 演示案例"
+          title="地质成果智能检查与修正 / 演示案例"
           description="先检查地图并形成有知识依据的建议。您选择并批准建议后，再生成修正后地质图、修改范围和检查报告。"
         />
       )}
@@ -226,7 +230,9 @@ export default function DemoWorkflowForm({
               value={inputs[role.key]}
               options={matchingCandidates(role, candidates).map((entry) => ({
                 value: entry.id,
-                label: entry.name,
+                label:
+                  resources.find((item) => item.id === entry.id)?.name ??
+                  entry.name,
               }))}
               onChange={(id) => {
                 const next = { ...inputs };
@@ -314,7 +320,7 @@ export default function DemoWorkflowForm({
           {selected.map(({ role, name, description }) => (
             <div key={role.key}>
               <strong>
-                {role.label} · {name}
+                {role.label} / {name}
               </strong>
               {description && <p>{description}</p>}
             </div>

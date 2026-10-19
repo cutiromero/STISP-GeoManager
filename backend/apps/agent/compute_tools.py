@@ -205,7 +205,7 @@ def advance(item, user, p, task):
         for output in outputs:
             record = ComputeImport.objects.filter(output=output).first()
             if record is None:
-                suffix = " · " + output.label if len(outputs) > 1 else ""
+                suffix = " " + output.label if len(outputs) > 1 else ""
                 record = request_output_import(
                     user,
                     output,

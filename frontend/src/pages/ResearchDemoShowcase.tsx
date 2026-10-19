@@ -74,7 +74,7 @@ export default function ResearchDemoShowcase() {
           </p>
         </div>
         <Tag color="blue">
-          {ui("实际计算 · 可追溯依据", "Real computation · traceable evidence")}
+          {ui("实际计算 / 可追溯依据", "Real computation / traceable evidence")}
         </Tag>
       </div>
       {error && <Alert type="warning" title={error} />}
@@ -94,12 +94,12 @@ export default function ResearchDemoShowcase() {
                   ? ui("演示案例", "Demonstration case")
                   : item.sampleNature === "real_map_with_demonstration_errors"
                     ? ui(
-                        "真实底图 · 演示录入错误",
-                        "Real map · demonstration entry errors",
+                        "真实底图 / 演示录入错误",
+                        "Real map / demonstration entry errors",
                       )
                     : ui(
-                        "模拟资料 · 真实计算",
-                        "Synthetic inputs · real computation",
+                        "模拟资料 / 真实计算",
+                        "Synthetic inputs / real computation",
                       )}
               </Tag>
               <p>

@@ -682,7 +682,7 @@ export default function DataCatalogPage() {
       >
         <Typography.Paragraph>
           {computeUi(
-            "确认后将删除可清理的资源记录及平台管理文件。历史任务和科研工作流保留名称、来源及删除记录；依赖这些数据的历史步骤将无法再次使用它们。仍在运行或被已保存成果、工程引用的资源会保留。",
+            "确认后将删除可清理的资源记录及平台管理文件。历史任务和MH-workflow保留名称、来源及删除记录；依赖这些数据的历史步骤将无法再次使用它们。仍在运行或被已保存成果、工程引用的资源会保留。",
             "Confirmation deletes eligible resource records and managed files. Historical tasks and workflows keep names, sources and deletion records; deleted data can no longer be reused. Active tasks and saved results or workspaces remain protected.",
           )}
         </Typography.Paragraph>

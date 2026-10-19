@@ -485,7 +485,7 @@ def submit_plan(run, user, p):
         resolve_resource(user, p, resource_id, run.resource_ids).name
         for resource_id in intent["inputs"].values()
     ]
-    name = ("、".join(names) + " · " + version.algorithm.name)[:160]
+    name = ("、".join(names) + " " + version.algorithm.name)[:160]
     result, _ = record_tool(
         run,
         "execute_operator",

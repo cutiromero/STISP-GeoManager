@@ -153,7 +153,7 @@ export function formatBasemapServiceDetail(
   detail: string,
 ) {
   const normalizedName = activeBasemapName?.trim();
-  return normalizedName ? `${normalizedName} · ${detail}` : detail;
+  return normalizedName ? `${normalizedName} / ${detail}` : detail;
 }
 
 function StatusRow({
@@ -205,7 +205,7 @@ function networkDetail(
   ];
   if (network.effectiveType) parts.push(network.effectiveType.toUpperCase());
   if (network.rttMs !== null) parts.push(`RTT ${network.rttMs} ms`);
-  return parts.join(" · ");
+  return parts.join(" / ");
 }
 
 function platformDetail(
@@ -220,7 +220,7 @@ function platformDetail(
     ? english
       ? "Reachable"
       : "可访问"
-    : `${english ? "Reachable" : "可访问"} · ${diagnostics.platformLatencyMs} ms`;
+    : `${english ? "Reachable" : "可访问"} / ${diagnostics.platformLatencyMs} ms`;
 }
 
 export function basemapDetail(
@@ -238,20 +238,20 @@ export function basemapDetail(
     diagnostics.recentBasemapFailures > 0
   ) {
     return failureDetail
-      ? `${english ? "Load failed" : "加载失败"} · ${failureDetail}`
+      ? `${english ? "Load failed" : "加载失败"} / ${failureDetail}`
       : english
-        ? `Load failed · ${diagnostics.recentBasemapFailures} recent failures`
-        : `加载失败 · 最近 ${diagnostics.recentBasemapFailures} 次`;
+        ? `Load failed / ${diagnostics.recentBasemapFailures} recent failures`
+        : `加载失败 / 最近 ${diagnostics.recentBasemapFailures} 次`;
   }
   if (
     failureDetail &&
     failure?.details.failureKind === "transient" &&
     failure.details.failureWindow?.tripped === false
   ) {
-    return `${english ? "Partial instability" : "局部波动"} · ${failureDetail}`;
+    return `${english ? "Partial instability" : "局部波动"} / ${failureDetail}`;
   }
   if (failureDetail)
-    return `${english ? "Service issue" : "服务异常"} · ${failureDetail}`;
+    return `${english ? "Service issue" : "服务异常"} / ${failureDetail}`;
   if (diagnostics.basemap === "loading")
     return english ? "Loading current view" : "正在加载当前视野";
   if (diagnostics.basemap === "unknown")
@@ -262,11 +262,11 @@ export function basemapDetail(
       : "可访问"
     : provider === "tianditu"
       ? english
-        ? `Reachable · recent tile ready time (including client queue) ${diagnostics.basemapLatencyMs} ms`
-        : `可访问 · 近期瓦片就绪（含客户端排队）${diagnostics.basemapLatencyMs} ms`
+        ? `Reachable / recent tile ready time (including client queue) ${diagnostics.basemapLatencyMs} ms`
+        : `可访问 / 近期瓦片就绪（含客户端排队）${diagnostics.basemapLatencyMs} ms`
       : english
-        ? `Reachable · latest response ${diagnostics.basemapLatencyMs} ms`
-        : `可访问 · 最近响应 ${diagnostics.basemapLatencyMs} ms`;
+        ? `Reachable / latest response ${diagnostics.basemapLatencyMs} ms`
+        : `可访问 / 最近响应 ${diagnostics.basemapLatencyMs} ms`;
 }
 
 export function formatTiandituFailureDiagnostic(
@@ -302,7 +302,7 @@ export function formatTiandituFailureDiagnostic(
     );
   }
   if (details.node) parts.push(details.node);
-  return parts.join(" · ");
+  return parts.join(" / ");
 }
 
 function tiandituFailureKindLabel(

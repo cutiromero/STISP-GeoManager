@@ -21,13 +21,13 @@ const genomePapers = [
   {
     title:
       "Chromosome-scale assemblies of the male and female Populus euphratica genomes reveal the molecular basis of sex determination and sexual dimorphism",
-    meta: "Communications Biology · 2022",
+    meta: "Communications Biology / 2022",
     url: "https://doi.org/10.1038/s42003-022-04145-7",
   },
   {
     title:
       "The chromosome-scale genome and population genomics reveal the adaptative evolution of Populus pruinosa to desertification environment",
-    meta: "Horticulture Research · 2024",
+    meta: "Horticulture Research / 2024",
     url: "https://doi.org/10.1093/hr/uhae034",
   },
 ];
@@ -36,26 +36,28 @@ const remoteSensingPapers = [
   {
     title:
       "Individual Populus euphratica tree detection in sparse desert forests based on constrained 2D bin packing",
-    meta: "IEEE TGRS · 2024",
+    meta: "IEEE TGRS / 2024",
     url: "https://doi.org/10.1109/TGRS.2024.3391352",
   },
   {
     title:
       "Ecological restoration trajectory of the Taitema Lake wetland in arid northwest China",
-    meta: "Ecological Indicators · 2024",
+    meta: "Ecological Indicators / 2024",
     url: "https://doi.org/10.1016/j.ecolind.2024.111956",
   },
   {
     title:
       "Vegetation growth improvement inadequately represents the ecological restoration of Populus euphratica forests",
-    meta: "Ecological Indicators · 2025",
+    meta: "Ecological Indicators / 2025",
     url: "https://doi.org/10.1016/j.ecolind.2025.113086",
   },
 ];
 
 export function EnglishHelpCenter() {
   const { user } = useAppContext();
-  const guides = helpContent.english.filter(guide => canReadHelp(guide.id, user));
+  const guides = helpContent.english.filter((guide) =>
+    canReadHelp(guide.id, user),
+  );
   return (
     <section className="about-v2-section">
       <Typography.Title level={2}>Platform help</Typography.Title>
@@ -64,7 +66,14 @@ export function EnglishHelpCenter() {
         cartography.
       </Typography.Paragraph>
       <Button
-        onClick={() => downloadHelp(guides.map(g => `# ${g.title}\n\n${g.items.join("\n\n")}`).join("\n\n"), true)}
+        onClick={() =>
+          downloadHelp(
+            guides
+              .map((g) => `# ${g.title}\n\n${g.items.join("\n\n")}`)
+              .join("\n\n"),
+            true,
+          )
+        }
       >
         Download my help guide
       </Button>
@@ -267,7 +276,7 @@ export function EnglishKnowledgePage() {
             }}
           >
             <div>
-              <span>POPULUS EUPHRATICA · DESERT SURVIVOR</span>
+              <span>POPULUS EUPHRATICA / DESERT SURVIVOR</span>
               <Typography.Title level={1}>
                 A keystone tree of desert river corridors
               </Typography.Title>
@@ -293,7 +302,7 @@ export function EnglishKnowledgePage() {
             <aside>
               <small>Species archive</small>
               <strong>PE-001</strong>
-              <span>Salicaceae · Populus</span>
+              <span>Salicaceae / Populus</span>
               <em>Populus euphratica Oliver</em>
             </aside>
           </section>
@@ -633,7 +642,7 @@ function EnglishKnowledgeTitle({
       <span>{icon}</span>
       <div>
         <small>
-          {index} · {eyebrow}
+          {index} / {eyebrow}
         </small>
         <Typography.Title level={2}>{title}</Typography.Title>
         <Typography.Paragraph>{description}</Typography.Paragraph>

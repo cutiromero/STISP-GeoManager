@@ -449,8 +449,8 @@ export default function VectorImportWorkflow({
                 options={preview.layers.map((layer) => ({
                   value: layer.sourceLayerName,
                   label: l(
-                    `${layer.sourceLayerName} · ${layer.geometryType} · ${layer.featureCount} 要素`,
-                    `${layer.sourceLayerName} · ${layer.geometryType} · ${layer.featureCount} features`,
+                    `${layer.sourceLayerName} / ${layer.geometryType} / ${layer.featureCount} 要素`,
+                    `${layer.sourceLayerName} / ${layer.geometryType} / ${layer.featureCount} features`,
                   ),
                 }))}
                 onChange={handleLayerChange}

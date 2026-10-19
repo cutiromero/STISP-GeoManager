@@ -519,7 +519,7 @@ def output_import(request, output_id):
         raise ComputeError("多文件结果请下载解压后，按数据格式分别导入")
     body = payload(request)
     name = clean_text(
-        body.get("name") or output.task.name + " · " + output.label, 160, "入库名称"
+        body.get("name") or output.task.name + " " + output.label, 160, "入库名称"
     )
     request_output_import(request.user, output, name)
     audit(request, "计算结果申请入库", name)

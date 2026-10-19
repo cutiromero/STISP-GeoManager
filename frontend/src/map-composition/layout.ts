@@ -104,7 +104,7 @@ export function defaultCompositionLayout(
     },
     note: {
       enabled: true,
-      text: `制图说明：WebGIS 平台专题制图 · ${new Date().toLocaleDateString("zh-CN")}`,
+      text: `制图说明：WebGIS 平台专题制图 ${new Date().toLocaleDateString("zh-CN")}`,
       ...boxes.note,
       fontSizePt: 7,
       color: "#475569",

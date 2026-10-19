@@ -161,7 +161,7 @@ export default function WorkflowDecisionTimeline({
                               ? (resultNames[entry.title] ?? entry.title)
                               : entry.title}
                             {entry.revision !== undefined
-                              ? ` · 版本 ${entry.revision}`
+                              ? ` / 版本 ${entry.revision}`
                               : ""}
                           </span>
                         ))}
@@ -267,7 +267,7 @@ export function WorkflowEvidenceUpdate({
       </div>
       {!!addedEvidence.length && (
         <div className="agent-added-evidence">
-          <strong>新增观测证据 · {addedEvidence.length} 条</strong>
+          <strong>新增观测证据 / {addedEvidence.length} 条</strong>
           {addedEvidence.map((row) => (
             <dl key={JSON.stringify(row)}>
               {Object.entries(observationLabels).map(([key, label]) => {

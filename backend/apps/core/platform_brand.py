@@ -3,7 +3,7 @@ from __future__ import annotations
 PLATFORM_CHINESE_NAME = "时空智能服务平台"
 PLATFORM_ENGLISH_NAME = "Spatiotemporal Intelligence Service Platform"
 PLATFORM_ABBREVIATION = "STISP"
-PLATFORM_EDITION = "STISP · Spatiotemporal Services Edition"
+PLATFORM_EDITION = "STISP Spatiotemporal Services Edition"
 
 LEGACY_PLATFORM_NAMES = frozenset(
     {

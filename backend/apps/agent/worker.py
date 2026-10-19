@@ -620,9 +620,7 @@ def run_task(run_id):
                         )
                         break
                     if not is_agent:
-                        raise ValidationError(
-                            "普通模型对话仅支持问题卡，不能调用平台工具"
-                        )
+                        raise ValidationError("快速对话仅支持问题卡，不能调用平台工具")
                     if name not in TOOLS:
                         raise ValidationError("工具未开放")
                     event(run, "tool_started", f"{name}：正在读取或核对数据")

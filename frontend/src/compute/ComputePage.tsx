@@ -575,7 +575,7 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
         <div className="compute-intro">
           <div>
             <Typography.Text className="compute-eyebrow">
-              {ui("时空计算 · 算法与数据", "GEOSPATIAL COMPUTING")}
+              {ui("时空计算 / 算法与数据", "GEOSPATIAL COMPUTING")}
             </Typography.Text>
             <Typography.Title level={2}>
               <CalculatorOutlined /> {ui("计算中心", "Compute center")}

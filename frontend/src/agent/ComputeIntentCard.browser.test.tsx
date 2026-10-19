@@ -34,7 +34,7 @@ it("requires explicit bands rather than silently using manifest defaults", async
     .spyOn(agentApi, "updateComputeIntent")
     .mockResolvedValue(computeRun());
   show();
-  await screen.findByText("研究区影像 · 8 波段");
+  await screen.findByText("研究区影像 / 8 波段");
   fireEvent.click(screen.getByRole("button", { name: "开始计算" }));
   await screen.findAllByText("请补充此参数");
   expect(submit).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ it("clears band selections after switching to another image", async () => {
   show({ ...computeIntent, parameters: { red: 3, nir: 8 } });
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "输入影像" }));
   fireEvent.click(
-    await screen.findByText("另一幅影像 · 4 波段", {
+    await screen.findByText("另一幅影像 / 4 波段", {
       selector: ".ant-select-item-option-content",
     }),
   );
@@ -124,7 +124,7 @@ it("shows server validation failure and never claims a task was submitted", asyn
 it("fits the setup card on a narrow screen", async () => {
   await page.viewport(390, 844);
   const { container } = show();
-  await screen.findByText("研究区影像 · 8 波段");
+  await screen.findByText("研究区影像 / 8 波段");
   expect(container.scrollWidth).toBeLessThanOrEqual(390);
   await page.screenshot({
     path: "../../test-results/compute-intent-mobile.png",

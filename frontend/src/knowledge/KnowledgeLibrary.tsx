@@ -338,7 +338,7 @@ export default function KnowledgeLibrary({
             </section>
           )}
           <div className="knowledge-library-result-heading">
-            <h3>资料架 · {documents?.items.length ?? 0} 份</h3>
+            <h3>资料架 / {documents?.items.length ?? 0} 份</h3>
             <span className="knowledge-muted">
               PDF / Word / Markdown / 文本
             </span>
@@ -351,8 +351,8 @@ export default function KnowledgeLibrary({
                   <div>
                     <h3>{item.title}</h3>
                     <p>
-                      {item.filename} ·{" "}
-                      {item.projectTagId === 1 ? "公共资料" : "当前项目"} ·{" "}
+                      {item.filename} /{" "}
+                      {item.projectTagId === 1 ? "公共资料" : "当前项目"} /{" "}
                       {item.visibility === "owner_only"
                         ? "仅本人"
                         : "项目成员可见"}
@@ -454,7 +454,7 @@ export default function KnowledgeLibrary({
                   <Tag>{domainLabel(item.domain)}</Tag>
                   <Tag>自动整理</Tag>
                   <span>
-                    v{item.version} · {item.sources.length} 项来源
+                    v{item.version} / {item.sources.length} 项来源
                   </span>
                 </div>
                 <h3>
@@ -575,7 +575,7 @@ export default function KnowledgeLibrary({
       >
         {page && (
           <>
-            <Tag>自动整理 · v{page.version}</Tag>
+            <Tag>自动整理 / v{page.version}</Tag>
             <Tag>{domainLabel(page.domain)}</Tag>
             <h2>{page.title}</h2>
             <div className="knowledge-wiki-content">

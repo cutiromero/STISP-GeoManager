@@ -136,7 +136,7 @@ function TaskInputs({ task }: { task: ComputeTask }) {
   });
   return names.length || params.length ? (
     <p className="agent-compute-input-summary">
-      {[...names, ...params].join(" · ")}
+      {[...names, ...params].join(" / ")}
     </p>
   ) : null;
 }
@@ -377,8 +377,8 @@ export default function RunComputeTasks({
               {
                 key: "tasks",
                 label: ui(
-                  `计算任务 · ${items.length} 项${tasksActive ? " · 正在执行" : ""}`,
-                  `Compute tasks · ${items.length}${tasksActive ? " · Running" : ""}`,
+                  `计算任务 / ${items.length} 项${tasksActive ? " / 正在执行" : ""}`,
+                  `Compute tasks / ${items.length}${tasksActive ? " / Running" : ""}`,
                 ),
                 forceRender: true,
                 children: taskCards,

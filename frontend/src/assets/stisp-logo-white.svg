@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
-  <title id="title">A · 轨道地球 · 白色版</title>
+  <title id="title">A 轨道地球 白色版</title>
   <desc id="desc">适合深色导航栏的单色轨道地球标识。</desc>
   <defs>
     <mask id="orbit-gap"><rect width="128" height="128" fill="white"/><path d="M17 76C4 99 36 111 76 85C104 67 121 40 110 28" fill="none" stroke="black" stroke-width="15" stroke-linecap="round"/></mask>

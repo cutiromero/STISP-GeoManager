@@ -96,7 +96,7 @@ export default function AboutV2Page() {
             ))}
           </div>
           <div className="air-about-affiliation">
-            <span>AIR · CAS</span>
+            <span>AIR / CAS</span>
             <strong>
               {en
                 ? "Aerospace Information Research Institute"
@@ -138,7 +138,7 @@ function InstitutionIdentity({ en }: { en: boolean }) {
       />
       <span>
         {en
-          ? "Aerospace Information Research Institute · Chinese Academy of Sciences"
+          ? "Aerospace Information Research Institute / Chinese Academy of Sciences"
           : teamInstitution.name}{" "}
         <LinkOutlined />
       </span>
@@ -200,7 +200,7 @@ function TeamIntroduction({ en }: { en: boolean }) {
           backgroundImage: `linear-gradient(90deg, rgba(9, 30, 53, .96), rgba(9, 30, 53, .72) 55%, rgba(9, 30, 53, .2)), url(${digitalCity})`,
         }}
       >
-        <span className="air-eyebrow">OUR TEAM · AIR CAS</span>
+        <span className="air-eyebrow">OUR TEAM / AIR CAS</span>
         <Typography.Title level={1}>
           {en ? "Spatiotemporal Intelligence Research Team" : "团队介绍"}
         </Typography.Title>
@@ -279,8 +279,8 @@ function TeamIntroduction({ en }: { en: boolean }) {
                   <span className="air-member-role">
                     {member.id === "shen-zhanfeng"
                       ? en
-                        ? "Research Professor · Doctoral Supervisor"
-                        : "研究员 · 博士生导师"
+                        ? "Research Professor / Doctoral Supervisor"
+                        : "研究员 / 博士生导师"
                       : en
                         ? "Team member"
                         : "团队成员"}
@@ -473,7 +473,7 @@ function ContactSection({ en }: { en: boolean }) {
         <div>
           <strong>{en ? "Research correspondence" : "科研通信地址"}</strong>
           <p>
-            {en ? teamInstitution.addressEn : teamInstitution.address} ·{" "}
+            {en ? teamInstitution.addressEn : teamInstitution.address} /{" "}
             {teamInstitution.postalCode}
           </p>
           <a

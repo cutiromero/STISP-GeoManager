@@ -344,7 +344,7 @@ def submit_value(request, c, value, *, available_models=None):
         or reasoning_effort not in {"low", "medium", "xhigh"}
         or thinking_mode != "deep"
     ):
-        raise ApiProblem("思考强度须在深度思考模式下选择低、标准或高")
+        raise ApiProblem("思考强度须在逻辑推理模式下选择低、标准或高")
     budget_profile = value.get("budgetProfile", "")
     output_tokens = value.get("maxOutputTokens")
     if (
@@ -426,9 +426,9 @@ def submit_value(request, c, value, *, available_models=None):
         model_config = registry()[alias]
         if thinking_mode == "deep":
             if not p.get("thinkingEnabled", True):
-                raise ApiProblem("深度思考已由管理员关闭", 403)
+                raise ApiProblem("逻辑推理已由管理员关闭", 403)
             if not model_config.qwen:
-                raise ApiProblem("当前模型不支持深度思考", 400)
+                raise ApiProblem("当前模型不支持逻辑推理", 400)
         if c.mode == "chat" and selected:
             raise ApiProblem("普通聊天不访问平台数据")
         if c.mode == "chat" and (
@@ -911,7 +911,7 @@ def workflow_confirm(request, workflow_id):
         )
         p = require_access(request.user, "agent", workflow.model)
         if not p.get("workflowEnabled", True):
-            raise ApiProblem("科研工作流功能已关闭", 403)
+            raise ApiProblem("MH-workflow功能已关闭", 403)
         if (
             not isinstance(value.get("planHash"), str)
             or value["planHash"] != workflow.plan_hash

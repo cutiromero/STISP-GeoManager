@@ -41,7 +41,7 @@ export default function WorkflowKnowledgeReferences({
           : [];
         return {
           key: String(entry.id ?? title),
-          label: `${title}${entry.revision !== undefined ? ` · 版本 ${String(entry.revision)}` : ""}`,
+          label: `${title}${entry.revision !== undefined ? ` / 版本 ${String(entry.revision)}` : ""}`,
           children: (
             <article aria-label={`${title}原文与出处`}>
               {text(entry.statement) && <p>{text(entry.statement)}</p>}

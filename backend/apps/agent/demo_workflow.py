@@ -610,9 +610,9 @@ def _submit_stage_locked(workflow, user, p, stage) -> None:
         resolve_resource(user, p, identity)
     body = {
         "name": (
-            f"地质成果智能检查与修正 · {stage_title(workflow, stage)}"
+            f"地质成果智能检查与修正 {stage_title(workflow, stage)}"
             if workflow.workflow_type == "geology_map_review"
-            else f"{workflow.goal[:90]} · {stage_title(workflow, stage)}"
+            else f"{workflow.goal[:90]} {stage_title(workflow, stage)}"
         ),
         "versionId": workflow.plan["algorithms"][stage["identifier"]]["versionId"],
         "inputs": inputs,
@@ -719,7 +719,7 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
                 source = (
                     "" if stage.get("manualApproved") else f"workflow:{workflow.id}"
                 )
-                name = f"{stage_title(workflow, stage)} · {output.label} · {workflow.created_at:%m%d-%H%M%S}"
+                name = f"{stage_title(workflow, stage)} {output.label} {workflow.created_at:%m%d-%H%M%S}"
                 record = request_output_import(
                     user, output, name=name, request_source=source
                 )

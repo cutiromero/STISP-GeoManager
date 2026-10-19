@@ -171,7 +171,7 @@ def preview_resource_deletion(request):
                 else "deletable",
                 detail="暂不能删除：" + "；".join(reasons) + "。"
                 if reasons
-                else "历史任务或科研工作流引用了该计算结果。确认后删除目录数据，保留名称、来源及删除记录；相关历史步骤将无法再次使用此数据。"
+                else "历史任务或MH-workflow引用了该计算结果。确认后删除目录数据，保留名称、来源及删除记录；相关历史步骤将无法再次使用此数据。"
                 if count
                 else "将删除资源记录及平台管理的文件。",
             )

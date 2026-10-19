@@ -15,7 +15,7 @@ import { computeApi } from "../api/compute";
 import type {
   AgentWorkflow,
   AgentKnowledgeSelection,
-  AgentModel,
+  AgentResearchDemoList,
   AgentResource,
   ComputeAlgorithm,
   ComputeCandidate,
@@ -25,6 +25,8 @@ import type {
 } from "../api/generated/types.gen";
 import { createUuid } from "../utils/uuid";
 import { useComputeText } from "../compute/ui";
+import { useProjectContext } from "../projects/ProjectContext";
+import { getActiveProject } from "../projects/session";
 import DemoWorkflowForm, {
   demoGoals,
   demoInputsReady,
@@ -33,6 +35,18 @@ import DemoWorkflowForm, {
 import WorkflowResults from "./WorkflowResults";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
+
+export function workflowScenarioOptions(
+  projectId: string,
+  demos: AgentResearchDemoList["items"],
+) {
+  return [
+    { value: "research_processing", label: "通用科研计算" },
+    ...demos
+      .filter((item) => String(item.projectId) === projectId)
+      .map((item) => ({ value: item.scenario, label: item.title })),
+  ];
+}
 
 function ParameterField({
   spec,
@@ -113,10 +127,10 @@ export default function WorkflowPanel({
   onWorkflowChange?: (workflow: AgentWorkflow | undefined) => void;
 }) {
   const ui = useComputeText();
+  const project = useProjectContext();
+  const [demos, setDemos] = useState<AgentResearchDemoList["items"]>([]);
   const [goal, setGoal] = useState("");
   const [workflowType, setWorkflowType] = useState("research_processing");
-  const [selectedModel, setSelectedModel] = useState(model);
-  const [models, setModels] = useState<AgentModel[]>([]);
   const [resources, setResources] = useState<AgentResource[]>([]);
   const [knowledgeDomains, setKnowledgeDomains] = useState<
     KnowledgeDomainOption[]
@@ -187,7 +201,6 @@ export default function WorkflowPanel({
     if (!next) return;
     setWorkflowType(next.workflowType);
     setGoal(next.goal);
-    setSelectedModel(next.model);
     setVersionId(next.algorithmVersionId ?? undefined);
     setParameters(next.parameters);
     const savedInputs = next.plan.inputs;
@@ -222,21 +235,20 @@ export default function WorkflowPanel({
       });
     } else setKnowledgeSelection({ mode: "auto", domains: [] });
   };
-  useEffect(() => setSelectedModel(model), [model]);
   useEffect(() => {
     let disposed = false;
-    void Promise.allSettled([agentApi.bootstrap(), agentApi.resources()]).then(
-      ([bootstrap, data]) => {
-        if (disposed) return;
-        if (bootstrap.status === "fulfilled") {
-          setModels(
-            (bootstrap.value.models ?? []).filter((entry) => entry.allowAgent),
-          );
-          setKnowledgeDomains(bootstrap.value.knowledgeDomains ?? []);
-        }
-        if (data.status === "fulfilled") setResources(data.value.items ?? []);
-      },
-    );
+    void Promise.allSettled([
+      agentApi.bootstrap(),
+      agentApi.resources(),
+      agentApi.researchDemos(),
+    ]).then(([bootstrap, data, scenes]) => {
+      if (disposed) return;
+      if (bootstrap.status === "fulfilled") {
+        setKnowledgeDomains(bootstrap.value.knowledgeDomains ?? []);
+      }
+      if (data.status === "fulfilled") setResources(data.value.items ?? []);
+      if (scenes.status === "fulfilled") setDemos(scenes.value.items ?? []);
+    });
     return () => {
       disposed = true;
     };
@@ -296,7 +308,7 @@ export default function WorkflowPanel({
     try {
       const body = {
         goal,
-        model: selectedModel,
+        model,
         resourceIds: [...new Set([...resourceIds, ...Object.values(inputs)])],
         workflowType,
         algorithmVersionId: isDemo ? undefined : versionId,
@@ -400,6 +412,19 @@ export default function WorkflowPanel({
   useEffect(() => {
     onWorkflowChange?.(workflow);
   }, [workflow, onWorkflowChange]);
+  const scenarioOptions = workflowScenarioOptions(
+    project?.current ?? getActiveProject(),
+    demos,
+  );
+  if (
+    workflow &&
+    !scenarioOptions.some((item) => item.value === workflow.workflowType)
+  ) {
+    scenarioOptions.push({
+      value: workflow.workflowType,
+      label: "已保存的研究场景",
+    });
+  }
   const content = (
     <Space orientation="vertical" style={{ width: "100%" }}>
       <Typography.Text type="secondary">
@@ -415,25 +440,7 @@ export default function WorkflowPanel({
             aria-label="研究场景"
             value={workflowType}
             disabled={locked || busy || Boolean(previousWorkflowId)}
-            options={[
-              { value: "research_processing", label: "通用科研计算" },
-              {
-                value: "ecology_investigation",
-                label: "干旱区生态 · 变化与调查优先区",
-              },
-              {
-                value: "geology_map_review",
-                label: "地质成果智能检查与修正",
-              },
-              {
-                value: "geology_correction",
-                label: "地质填图 · 检查、纠正与复核",
-              },
-              {
-                value: "geology_age_correction",
-                label: "真实底图 · 地层时代录入纠偏",
-              },
-            ]}
+            options={scenarioOptions}
             onChange={(value) => {
               setWorkflowType(value);
               setInputs({});
@@ -442,31 +449,6 @@ export default function WorkflowPanel({
               if (value !== "research_processing")
                 setGoal(demoGoals[value as DemoWorkflowType]);
             }}
-          />
-        </label>
-        <label>
-          <span>分析模型</span>
-          <Select
-            aria-label="工作流分析模型"
-            value={selectedModel}
-            disabled={locked || busy}
-            options={
-              models.length
-                ? models.map((entry) => ({
-                    value: entry.alias,
-                    label: entry.alias === "mock" ? "模拟模型" : entry.name,
-                    disabled: entry.status === "offline",
-                  }))
-                : [
-                    {
-                      value: selectedModel,
-                      label:
-                        selectedModel === "mock" ? "模拟模型" : selectedModel,
-                      disabled: false,
-                    },
-                  ]
-            }
-            onChange={setSelectedModel}
           />
         </label>
       </div>
@@ -511,7 +493,7 @@ export default function WorkflowPanel({
                 .filter((v) => v.status === "published")
                 .map((v) => ({
                   value: v.id,
-                  label: `${a.name} · ${v.version}`,
+                  label: `${a.name} / ${v.version}`,
                 })),
             )}
             onChange={(id) => {
@@ -530,7 +512,12 @@ export default function WorkflowPanel({
                 allowClear
                 options={candidates
                   .filter((c) => c.kind === spec.kind)
-                  .map((c) => ({ value: c.id, label: c.name }))}
+                  .map((c) => ({
+                    value: c.id,
+                    label:
+                      resources.find((item) => item.id === c.id)?.name ??
+                      c.name,
+                  }))}
                 onChange={(id) =>
                   setInputs((old) => {
                     const next = { ...old };
@@ -635,7 +622,7 @@ export default function WorkflowPanel({
         loading={busy}
         disabled={
           !goal.trim() ||
-          !selectedModel ||
+          !model ||
           locked ||
           (knowledgeSelection.mode === "manual" &&
             !knowledgeSelection.domains.length) ||
@@ -728,8 +715,8 @@ export default function WorkflowPanel({
         {
           key: "workflow",
           label: ui(
-            "科研工作流 · 计划、执行与入库",
-            "Research workflow · plan, execute and import",
+            "MH-workflow / 计划、执行与入库",
+            "Research workflow / plan, execute and import",
           ),
           children: content,
         },

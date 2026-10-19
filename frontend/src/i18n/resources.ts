@@ -87,7 +87,7 @@ export const zhCN = {
     brand: {
       chineseName: "时空智能服务平台",
       englishName: "Spatiotemporal Intelligence Service Platform",
-      edition: "STISP · Spatiotemporal Services Edition",
+      edition: "STISP Spatiotemporal Services Edition",
     },
     navigation: {
       dataCatalog: "数据总目录",
@@ -169,7 +169,9 @@ export const zhCN = {
     },
     auth: {
       platformOverview: "平台概览",
-      platformMark: "空天观测 · 时空智能",
+      platformMark: "空天观测，时空智能",
+      platformDescription:
+        "连接数据、知识与算法，让科研分析在同一工作空间中展开。",
       login: "用户登录",
       register: "用户注册",
       loginSubtitle: "登录后进入数据资源总目录，后台功能按权限显示。",
@@ -247,7 +249,8 @@ export const zhCN = {
       legend: "图例",
       properties: "属性",
       load: "加载",
-      quickLoad: "快速加载",
+      resourceInfo: "信息",
+      quickLoad: "加载",
       loadRaster: "加载栅格",
       loadingResourceInfo: "正在读取数据资源信息",
       preparingRasterTiles: "正在准备栅格瓦片服务",
@@ -782,7 +785,7 @@ export const zhCN = {
       readOnlyTitle: "当前账号仅可查看推荐方案",
       readOnlyDescription: "应用或保存符号化模板需要自定义符号化权限。",
       expression: "表达方式",
-      expressionDescription: "{{geometry}} · 先选择图层要如何被看见",
+      expressionDescription: "{{geometry}}，先选择图层要如何被看见",
       fieldExpression: "字段表达",
       single: "单一符号",
       unique: "唯一值分类",
@@ -918,7 +921,7 @@ export const zhCN = {
     catalog: {
       title: "数据资源目录",
       context: "按项目标签共享科研数据",
-      mission: "服务生态保护 · 科学研究 · 数据共享",
+      mission: "服务生态保护、科学研究与数据共享",
       summary:
         "按是否具有地理坐标组织数据资源；当前账号仅能访问公开项目和已获分配项目标签下的内容。",
       overview: "平台数据概览",
@@ -1070,7 +1073,7 @@ export const enUS = {
     brand: {
       chineseName: "时空智能服务平台",
       englishName: "Spatiotemporal Intelligence Service Platform",
-      edition: "STISP · Spatiotemporal Services Edition",
+      edition: "STISP Spatiotemporal Services Edition",
     },
     navigation: {
       dataCatalog: "Data Catalog",
@@ -1158,7 +1161,9 @@ export const enUS = {
     },
     auth: {
       platformOverview: "Platform overview",
-      platformMark: "Earth Observation · Spatiotemporal Intelligence",
+      platformMark: "Earth Observation, Spatiotemporal Intelligence",
+      platformDescription:
+        "Connect data, knowledge and algorithms in one research workspace.",
       login: "Sign in",
       register: "Create account",
       loginSubtitle:
@@ -1241,7 +1246,8 @@ export const enUS = {
       legend: "Legend",
       properties: "Attributes",
       load: "Load",
-      quickLoad: "Quick load",
+      resourceInfo: "Info",
+      quickLoad: "Load",
       loadRaster: "Load raster",
       loadingResourceInfo: "Reading data resource information",
       preparingRasterTiles: "Preparing the raster tile service",
@@ -1815,7 +1821,7 @@ export const enUS = {
         "Applying or saving a symbolization template requires custom-symbolization permission.",
       expression: "Rendering method",
       expressionDescription:
-        "{{geometry}} · Choose how the layer should appear",
+        "{{geometry}} / Choose how the layer should appear",
       fieldExpression: "Field rendering",
       single: "Single symbol",
       unique: "Unique values",
@@ -1957,7 +1963,7 @@ export const enUS = {
     catalog: {
       title: "Poplar Ecological Data Catalog",
       context: "Intelligent Monitoring of Arid-region Poplar Ecosystems",
-      mission: "Ecological conservation · Scientific research · Data sharing",
+      mission: "Ecological conservation, scientific research and data sharing",
       summary:
         "A one-stop catalog connecting remote-sensing imagery, spatial vectors, field surveys, long-term monitoring, and research outputs across the poplar-conservation data chain.",
       overview: "Platform data overview",

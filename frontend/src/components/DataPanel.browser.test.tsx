@@ -355,7 +355,8 @@ describe("DataPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "快速加载" }));
+    expect(screen.getByRole("button", { name: "信息" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "加载" }));
 
     expect(onQuickLoadResource).toHaveBeenCalledWith(
       vectorResource,
@@ -389,7 +390,7 @@ describe("DataPanel", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: "快速加载" });
+    const button = screen.getByRole("button", { name: "加载" });
     fireEvent.click(button);
 
     await waitFor(() => expect(button).toHaveClass("ant-btn-loading"));
@@ -426,7 +427,7 @@ describe("DataPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "快速加载" }));
+    fireEvent.click(screen.getByRole("button", { name: "加载" }));
 
     const progress = await screen.findByRole("status", {
       name: `${rasterResource.name}加载进度`,

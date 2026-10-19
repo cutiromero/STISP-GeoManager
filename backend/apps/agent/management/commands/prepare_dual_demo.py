@@ -183,9 +183,9 @@ def import_table(user, path, code, name):
         category=None,
     )
     resource = DataResource.objects.get(pk=result["resourceId"])
-    resource.code, resource.source = code, "可复现模拟资料 · 双Demo"
+    resource.code, resource.source = code, "可复现模拟资料 双Demo"
     resource.description = (
-        "模拟记录，字段、日期和对象匹配用于验证科研工作流；不作为真实调查结论。"
+        "模拟记录，字段、日期和对象匹配用于验证MH-workflow；不作为真实调查结论。"
     )
     resource.save()
     return resource
@@ -241,7 +241,7 @@ def import_vector(user, path, code, name, *, preserve_invalid=False):
             },
         )
     resource.code, resource.name, resource.maintainer = code, name, user
-    resource.source = "可复现模拟资料 · 双Demo"
+    resource.source = "可复现模拟资料 双Demo"
     resource.description = (
         "模拟地图；研究输入角色已登记，独立参考图和设错清单未登记到平台。"
     )
@@ -364,10 +364,10 @@ class Command(BaseCommand):
                         (
                             "early_image",
                             "early.tif",
-                            "前期影像 · 2025-09-15",
+                            "前期影像 2025-09-15",
                             "imagery",
                         ),
-                        ("late_image", "late.tif", "后期影像 · 2026-09-15", "imagery"),
+                        ("late_image", "late.tif", "后期影像 2026-09-15", "imagery"),
                         ("valid_mask", "mask.tif", "两期共同有效掩膜", "categorical"),
                     ]:
                         marker = "demo-ecology-" + role.replace("_", "-")
@@ -375,7 +375,7 @@ class Command(BaseCommand):
                         if resource is None:
                             dataset = import_raster_file(
                                 folder / file,
-                                name="模拟 · " + label,
+                                name="模拟 " + label,
                                 raster_kind=kind,
                                 uploader_id=user.id,
                             )
@@ -391,19 +391,19 @@ class Command(BaseCommand):
                         user,
                         folder / "zones.gpkg",
                         "demo-ecology-zones",
-                        "模拟 · 四个调查分区",
+                        "模拟 四个调查分区",
                     ).id
                     inputs["context"] = import_table(
                         user,
                         folder / "context-initial.csv",
                         "demo-ecology-context-initial",
-                        "模拟 · 初始生态背景与观测",
+                        "模拟 初始生态背景与观测",
                     ).id
                     inputs["updated_context"] = import_table(
                         user,
                         folder / "context-updated.csv",
                         "demo-ecology-context-updated",
-                        "模拟 · 补充收获记录后的观测",
+                        "模拟 补充收获记录后的观测",
                     ).id
                     official = "https://www.usgs.gov/landsat-missions/landsat-normalized-difference-vegetation-index"
                     knowledge(
@@ -459,20 +459,20 @@ class Command(BaseCommand):
                         user,
                         folder / "initial.gpkg",
                         "demo-geology-initial",
-                        "模拟 · 待检查初始填图",
+                        "模拟 待检查初始填图",
                         preserve_invalid=True,
                     ).id
                     inputs["surveys"] = import_table(
                         user,
                         folder / "surveys.csv",
                         "demo-geology-surveys",
-                        "模拟 · 地质调查记录",
+                        "模拟 地质调查记录",
                     ).id
                     inputs["rules"] = import_table(
                         user,
                         folder / "rules.csv",
                         "demo-geology-rules",
-                        "模拟 · 允许属性修改规则",
+                        "模拟 允许属性修改规则",
                     ).id
                     knowledge(
                         user,

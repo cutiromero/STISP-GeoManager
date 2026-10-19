@@ -55,7 +55,7 @@ export const aboutSections: AboutSection[] = [
     title: "团队介绍",
     badge: "科研团队",
     path: "/about/team",
-    eyebrow: "TEAM · AIR CAS",
+    eyebrow: "TEAM / AIR CAS",
     summary: "中国科学院空天信息创新研究院团队的研究方向、成员介绍与论文成果。",
     navSummary: "研究方向与成员",
     tags: ["遥感解译", "时空计算", "地质资源", "生态环境"],

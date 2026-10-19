@@ -103,7 +103,7 @@ export default function WorkflowReportFile({
           </div>
           {report && (
             <span className="agent-file-name">
-              {report.fileName} · {(report.sizeBytes / 1024).toFixed(1)} KB
+              {report.fileName} / {(report.sizeBytes / 1024).toFixed(1)} KB
             </span>
           )}
           {report?.resourceLocation && (

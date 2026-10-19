@@ -98,7 +98,7 @@ export default function MapCompositionPanel({
         if (current) URL.revokeObjectURL(current);
         return nextUrl;
       });
-      setPreviewTitle(`${composition.name} · V${version.versionNumber}`);
+      setPreviewTitle(`${composition.name} / V${version.versionNumber}`);
     } catch (error) {
       message.error(
         error instanceof Error
@@ -388,7 +388,7 @@ export default function MapCompositionPanel({
               options={(publishingComposition?.versions ?? []).map(
                 (version) => ({
                   value: version.versionNumber,
-                  label: `V${version.versionNumber} · ${version.format.toUpperCase()} · ${new Date(version.createdAt).toLocaleString(english ? "en-US" : "zh-CN")}`,
+                  label: `V${version.versionNumber} / ${version.format.toUpperCase()} / ${new Date(version.createdAt).toLocaleString(english ? "en-US" : "zh-CN")}`,
                 }),
               )}
             />
@@ -425,7 +425,7 @@ export default function MapCompositionPanel({
               options={(restoringComposition?.versions ?? []).map(
                 (version) => ({
                   value: version.versionNumber,
-                  label: `V${version.versionNumber} · ${version.format.toUpperCase()}`,
+                  label: `V${version.versionNumber} / ${version.format.toUpperCase()}`,
                 }),
               )}
             />

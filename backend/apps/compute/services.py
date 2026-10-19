@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from apps.catalog.models import DataResource
 from apps.catalog.permissions import user_can_access
+from apps.core.display_text import display_text
 from .access import permission, project_id, require_actor
 from .config import config
 from .data import candidate
@@ -94,7 +95,9 @@ def request_output_import(user, output, name="", *, request_source=""):
         # An output has a stable, unique ID even when tasks and labels repeat.
         # Keep it outside the clipped human-readable part of a long name.
         suffix = f" [{output.task_id.hex[:8]}/{output.id}]"
-        name = legacy_default_name[: 160 - len(suffix)].rstrip() + suffix
+        name = display_text(legacy_default_name)[: 160 - len(suffix)].rstrip() + suffix
+    else:
+        name = display_text(name)
     name = clean_text(name, 160, "入库名称")
     with transaction.atomic():
         record, created = ComputeImport.objects.get_or_create(
@@ -112,10 +115,13 @@ def request_output_import(user, output, name="", *, request_source=""):
             )
         if not created and record.status in {"queued", "failed"}:
             record.status, record.error = "queued", ""
-            if not explicit_name and record.name != legacy_default_name:
+            if not explicit_name and record.name not in {
+                legacy_default_name,
+                display_text(legacy_default_name),
+            }:
                 # Omitted names preserve an earlier custom name. Legacy automatic
                 # names are upgraded so a duplicate-name failure can be retried.
-                name = record.name
+                name = display_text(record.name)
             record.requested_by, record.name = user, name
             record.request_source = request_source
             record.save(

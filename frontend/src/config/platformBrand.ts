@@ -4,7 +4,7 @@ export const platformBrand = {
   chineseName: "时空智能服务平台",
   englishName: "Spatiotemporal Intelligence Service Platform",
   shortName: "STISP",
-  edition: "STISP · Spatiotemporal Services Edition",
+  edition: "STISP Spatiotemporal Services Edition",
 } as const;
 
 const legacyPlatformNames = new Set([

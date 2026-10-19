@@ -652,6 +652,16 @@
   max-width: 1100px;
   margin: auto;
 }
+.agent-reasoning-settings {
+  width: min(360px, calc(100vw - 64px));
+  padding: 8px 12px;
+}
+.agent-reasoning-settings > .agent-settings-panel {
+  width: 100%;
+}
+.agent-reasoning-settings .agent-tool-switch {
+  margin-top: 12px;
+}
 @media (max-width: 900px) {
   .agent-workspace {
     padding: 10px;

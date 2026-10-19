@@ -52,7 +52,7 @@ it("prepares a durable report once and previews saved Markdown as controlled tex
       truncated: false,
     });
   const mounted = show();
-  await screen.findByText("ecology-analysis-report.md · 2.0 KB");
+  await screen.findByText("ecology-analysis-report.md / 2.0 KB");
   fireEvent.click(screen.getByRole("button", { name: "在线预览" }));
   await screen.findByRole("heading", { name: "生态调查报告" });
   await waitFor(() => expect(screen.getByText("4 个分区")).toBeVisible());

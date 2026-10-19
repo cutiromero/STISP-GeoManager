@@ -97,7 +97,7 @@ export default function ProjectManagementPage() {
                         content: (
                           <Space orientation="vertical">
                             <Typography.Text type="secondary">
-                              {ui("编码")}：{p.code} ·{" "}
+                              {ui("编码")}：{p.code} /{" "}
                               {ui(
                                 "项目编码创建后不可修改；可修改项目名称和说明。",
                               )}

@@ -11,7 +11,7 @@ from .policy import require_access
 def create_workflow(user, project_id, value, *, chat_execution=None):
     p = require_access(user, "agent", value.get("model"))
     if not p.get("workflowEnabled", True):
-        raise ComputeError("科研工作流功能已关闭", 403)
+        raise ComputeError("MH-workflow功能已关闭", 403)
     goal = value.get("goal")
     model = value.get("model")
     workflow_type = value.get("workflowType", "hyperspectral_interpretation")
@@ -58,7 +58,7 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
         )
         or type(import_results) is not bool
     ):
-        raise ComputeError("科研工作流参数无效")
+        raise ComputeError("MH-workflow参数无效")
     if execute_operators and not p.get("operatorEnabled", False):
         raise ComputeError("智能体自动调用算子尚未由超级管理员开启", 403)
     if execute_operators:
@@ -84,12 +84,12 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
                 or existing.model != model
                 or existing.policy_snapshot.get("request") != value
             ):
-                raise ComputeError("幂等键已用于不同科研工作流", 409)
+                raise ComputeError("幂等键已用于不同MH-workflow", 409)
             return existing
         if AgentWorkflow._base_manager.filter(
             owner=user, status__in=WORKFLOW_ACTIVE
         ).exists():
-            raise ComputeError("您已有活动科研工作流，请等待完成", 409)
+            raise ComputeError("您已有活动MH-workflow，请等待完成", 409)
         workflow = AgentWorkflow.objects.create(
             owner=user,
             workflow_type=workflow_type,

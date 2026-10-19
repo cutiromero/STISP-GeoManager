@@ -995,7 +995,7 @@ export default function AdminTopicCompositionManagementPage() {
               <Select
                 options={publishingComposition.versions.map((version) => ({
                   value: version.versionNumber,
-                  label: `V${version.versionNumber} · ${version.format.toUpperCase()}`,
+                  label: `V${version.versionNumber} / ${version.format.toUpperCase()}`,
                 }))}
               />
             </Form.Item>

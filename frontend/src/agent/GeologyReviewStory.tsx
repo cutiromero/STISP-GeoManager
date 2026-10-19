@@ -185,7 +185,7 @@ export default function GeologyReviewStory({
       )}
       {events.length > 1 && (
         <details className="geology-story-history">
-          <summary>查看检查经过 · {events.length - 1} 个阶段</summary>
+          <summary>查看检查经过 / {events.length - 1} 个阶段</summary>
           <ol className="geology-story-events">
             {events.slice(0, -1).map((event) => (
               <li key={event.key}>
@@ -199,7 +199,7 @@ export default function GeologyReviewStory({
       {suggestions.length > 0 && (
         <section className="geology-suggestions" aria-label="建议修改">
           <div className="geology-suggestions-heading">
-            <h3>建议修改 · {suggestions.length} 条</h3>
+            <h3>建议修改 / {suggestions.length} 条</h3>
             {editable && (
               <Checkbox
                 disabled={busy}
@@ -278,7 +278,7 @@ export default function GeologyReviewStory({
                     {suggestion.kind === "fill_gap"
                       ? "内部未分类空白"
                       : "地层时代属性"}{" "}
-                    ·{" "}
+                    /{" "}
                     {suggestion.areaM2.toLocaleString("zh-CN", {
                       maximumFractionDigits: 2,
                     })}{" "}
@@ -286,7 +286,7 @@ export default function GeologyReviewStory({
                   </small>
                   <details className="geology-suggestion-evidence">
                     <summary>
-                      专家知识 ·{" "}
+                      专家知识 /{" "}
                       {suggestion.knowledgeRefs
                         .map((entry) => entry.title)
                         .join("、")}

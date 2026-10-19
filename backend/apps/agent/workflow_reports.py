@@ -77,7 +77,7 @@ def _resource(user, identity: int) -> DataResource:
 def authorize_context(workflow: AgentWorkflow, user, policy: dict) -> list:
     """Recheck real task inputs and all imported outputs before exposing a report."""
     if workflow.status != "succeeded":
-        raise ComputeError("科研工作流完成后才能生成或读取报告", 409)
+        raise ComputeError("MH-workflow完成后才能生成或读取报告", 409)
     ids = list(
         dict.fromkeys(
             workflow.steps.exclude(compute_task_id=None).values_list(
@@ -158,7 +158,7 @@ def render_report(workflow: AgentWorkflow, user, policy: dict, tasks: list) -> b
     from .demo_workflow import stage_title
     from .research_presets import ROLE_LABELS
 
-    title = REPORT_NAMES.get(workflow.workflow_type, "科研工作流报告")
+    title = REPORT_NAMES.get(workflow.workflow_type, "MH-workflow报告")
     lines = [
         f"# {title}",
         "",
@@ -317,7 +317,7 @@ def generate_report(workflow: AgentWorkflow, user, policy: dict, request=None) -
         raw = render_report(workflow, user, policy, tasks)
         if len(raw) > MAX_REPORT_BYTES:
             raise ComputeError("本次报告超过大小上限，请先减少流程输出", 409)
-        label = REPORT_NAMES.get(workflow.workflow_type, "科研工作流报告")
+        label = REPORT_NAMES.get(workflow.workflow_type, "MH-workflow报告")
         data = {
             "schemaVersion": 1,
             "fileName": label + ".md",
@@ -369,7 +369,7 @@ def import_report(workflow: AgentWorkflow, user, policy: dict, request=None) -> 
                 maintainer=user,
                 is_compute_result=True,
                 size_bytes=data["sizeBytes"],
-                description="依据本次已完成科研工作流的公开判断、知识引用与真实计算结果生成。",
+                description="依据本次已完成MH-workflow的公开判断、知识引用与真实计算结果生成。",
                 quality_note=f"SHA256: {data['checksum']}",
             )
             log_operation(

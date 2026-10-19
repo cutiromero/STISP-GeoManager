@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.44] - 2026-10-19
+
+### Changed
+- 地理工作台的数据操作改为“信息”和“加载”，专题操作改为“编辑”。空间查询面板按窗口与面板宽度重排，内容可滚动。
+- 智能体改为“快速对话”和“科研智能体”，推理开关改为“逻辑推理”；模型与分析方案集中在思考强度设置，上传文档独立显示。
+- MH-workflow沿用当前对话模型，新建场景按当前项目筛选，资料选择使用目录真实名称。
+- 登录封面采用简洁蓝色布局，移除概览卡、数据标签、服务状态及持续装饰动画。
+- 统一系统展示分隔文案和地质资料名称，新计算结果与资料导入使用简明名称。
+
+### Fixed
+- 等待用户回答时明确显示当前问题与定位入口，文字答案继续提交到原任务。
+
 ## [0.1.43] - 2026-10-16
 
 ### Added

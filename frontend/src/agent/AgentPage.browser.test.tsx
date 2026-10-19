@@ -378,8 +378,8 @@ beforeEach(() => {
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue({
-    fileName: "科研工作流报告.md",
-    label: "科研工作流报告",
+    fileName: "MH-workflow报告.md",
+    label: "MH-workflow报告",
     contentType: "text/markdown",
     sizeBytes: 300,
     checksum: "verified-report",
@@ -675,9 +675,9 @@ it.each(["chat", "workbench"])(
       screen.queryByText("回答由本地模型生成，请核对重要信息"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "调整思考强度" }),
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText("深度思考", { exact: true }));
+      screen.getByRole("button", { name: "调整思考强度" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByText("逻辑推理", { exact: true }));
     const trigger = await screen.findByRole("button", { name: "调整思考强度" });
     expect(trigger).toHaveTextContent("轻量");
     fireEvent.click(trigger);
@@ -721,7 +721,7 @@ it.each(["chat", "workbench"])(
   },
 );
 
-it("restores administrator default and hides the effort control in fast mode", async () => {
+it("restores administrator default and hides the effort slider in fast mode", async () => {
   render(
     <AntApp>
       <MemoryRouter initialEntries={["/agent/chat"]}>
@@ -730,7 +730,7 @@ it("restores administrator default and hides the effort control in fast mode", a
     </AntApp>,
   );
   await screen.findByText("旧问题");
-  fireEvent.click(screen.getByText("深度思考", { exact: true }));
+  fireEvent.click(screen.getByText("逻辑推理", { exact: true }));
   fireEvent.click(await screen.findByRole("button", { name: "调整思考强度" }));
   fireEvent.keyDown(await screen.findByRole("slider"), {
     key: "End",
@@ -740,9 +740,9 @@ it("restores administrator default and hides the effort control in fast mode", a
   expect(
     screen.getByRole("button", { name: "调整思考强度" }),
   ).toHaveTextContent("轻量");
-  fireEvent.click(screen.getByText("深度思考", { exact: true }));
+  fireEvent.click(screen.getByText("逻辑推理", { exact: true }));
   expect(
-    screen.queryByRole("button", { name: "调整思考强度" }),
+    screen.queryByRole("slider", { name: "思考强度" }),
   ).not.toBeInTheDocument();
   fireEvent.change(
     screen.getByPlaceholderText("输入问题，Enter 发送，Shift+Enter 换行"),
@@ -806,7 +806,7 @@ it.each([false, true])(
     expect(screen.queryByText("describe_resource")).not.toBeInTheDocument();
     expect(screen.queryByText("运行详情")).not.toBeInTheDocument();
     expect(screen.queryByText(/本轮参数/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "模型与回答设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
     if (manager) {
       fireEvent.click(screen.getByText("高级设置"));
       await waitFor(() =>
@@ -832,9 +832,9 @@ it("hides unavailable agent navigation and enables deep thinking for long reason
   );
   await screen.findByText("旧问题");
   expect(
-    screen.queryByRole("button", { name: "数据智能体" }),
+    screen.queryByRole("button", { name: "科研智能体" }),
   ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "模型与回答设置" }));
+  fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "分析方案" }));
   fireEvent.click(
     await screen.findByText("长推理", {
@@ -1035,7 +1035,7 @@ it.each([
         expect(bounds.top).toBeGreaterThanOrEqual(areaBounds.top - 1);
         expect(bounds.bottom).toBeLessThanOrEqual(areaBounds.bottom + 1);
       };
-      fireEvent.click(screen.getByRole("button", { name: /科研工作流/ }));
+      fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
       const goal = await screen.findByRole("textbox", { name: "工作流目标" });
       const drawer = document.querySelector<HTMLElement>(
         ".agent-workflow-drawer .ant-drawer-body",
@@ -1047,14 +1047,14 @@ it.each([
       fireEvent.change(goal, { target: { value: "核查研究区数据" } });
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       await waitFor(() => expect(goal).not.toBeVisible());
-      fireEvent.click(screen.getByRole("button", { name: /科研工作流/ }));
+      fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
       await waitFor(() => expect(goal).toBeVisible());
       expect(screen.getByRole("textbox", { name: "工作流目标" })).toHaveValue(
         "核查研究区数据",
       );
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       await waitFor(() => expect(goal).not.toBeVisible());
-      fireEvent.click(screen.getByRole("button", { name: "模型与回答设置" }));
+      fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
       const profile = screen.getByRole("combobox", { name: "分析方案" });
       expectWithin(
         profile,
@@ -1066,7 +1066,7 @@ it.each([
           selector: ".ant-select-item-option-content",
         }),
       );
-      fireEvent.click(screen.getByRole("button", { name: "模型与回答设置" }));
+      fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
       fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
         target: { value: "低高度窗口问题" },
       });
@@ -1135,7 +1135,7 @@ it("keeps pending approval visible while the drawer is closed and confirms the f
   await screen.findByText("旧问题");
   expect(screen.queryByRole("dialog")).toBeNull();
   const pending = await screen.findByRole("button", {
-    name: /科研工作流.*等待您审核/,
+    name: /MH-workflow.*等待您审核/,
   });
   expect(agentApi.workflow).toHaveBeenCalledWith("workflow-1");
   fireEvent.click(pending);
@@ -1182,7 +1182,7 @@ it("submits resources, internet and an attachment selected from the tools menu",
       selector: ".ant-select-item-option-content",
     }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "工具与数据" }));
+  fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
   fireEvent.click(screen.getByRole("switch", { name: "联网检索" }));
   const file = new File(["测试资料"], "资料.txt", { type: "text/plain" });
   fireEvent.change(
@@ -1262,7 +1262,7 @@ it("submits manual algorithm, data and multiple knowledge zones through explicit
   fireEvent.mouseDown(screen.getByRole("combobox", { name: "选择调用算法" }));
   for (let index = 1; index <= 4; index++) {
     fireEvent.click(
-      await screen.findByText(`分析算法${index} · 1.0.0`, {
+      await screen.findByText(`分析算法${index} / 1.0.0`, {
         selector: ".ant-select-item-option-content",
       }),
     );
@@ -1525,7 +1525,7 @@ it("creates one conversation when the first action uploads multiple documents", 
     }),
   );
   showAgent();
-  fireEvent.click(screen.getByRole("button", { name: "工具与数据" }));
+  fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
   fireEvent.change(
     document.querySelector<HTMLInputElement>('input[type="file"]')!,
     {
@@ -1621,7 +1621,7 @@ it("explains a completed deep run without inventing reasoning", async () => {
   await screen.findByText("已根据当前项目目录完成统计。");
   fireEvent.click(screen.getByText("模型思考过程"));
   await screen.findByText(
-    "已开启深度思考，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
+    "已开启逻辑推理，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
   );
   expect(screen.queryByText(/未保存到思考片段/)).not.toBeInTheDocument();
 });

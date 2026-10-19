@@ -122,7 +122,7 @@ export default function TaskBudgetControl({
                     style={{ margin: "4px 0" }}
                   >
                     {ui("可用上下文", "Available context")}{" "}
-                    {budget.window.toLocaleString()} token ·{" "}
+                    {budget.window.toLocaleString()} token /{" "}
                     {ui("时限", "Timeout")} {budget.seconds / 60}{" "}
                     {ui("分钟", "minutes")}
                   </Typography.Paragraph>

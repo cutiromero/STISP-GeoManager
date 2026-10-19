@@ -406,7 +406,7 @@ export default function KnowledgePage() {
                               {entry.projectTagId === 1
                                 ? "公共基础资料"
                                 : "当前项目"}{" "}
-                              · v{entry.revision}
+                              / v{entry.revision}
                             </span>
                             {entry.status !== "published" && (
                               <Tag>{stateLabels[entry.status]}</Tag>
@@ -438,7 +438,7 @@ export default function KnowledgePage() {
                             <span>
                               {entry.sources.length} 项来源
                               {entry.exceptions.length
-                                ? ` · ${entry.exceptions.length} 项例外 / 核验条件`
+                                ? ` / ${entry.exceptions.length} 项例外 / 核验条件`
                                 : ""}
                             </span>
                             <Button
@@ -496,7 +496,7 @@ export default function KnowledgePage() {
               <Tag>{detail.category}</Tag>
               <Tag>{stateLabels[detail.status]}</Tag>
               <span className="knowledge-muted">
-                v{detail.revision} ·{" "}
+                v{detail.revision} /{" "}
                 {detail.projectTagId === 1 ? "公共基础资料" : "当前项目"}
               </span>
             </Space>
@@ -532,7 +532,7 @@ export default function KnowledgePage() {
               <Sources sources={detail.sources} />
             </section>
             <p className="knowledge-muted">
-              核查方式：{ruleLabels[detail.ruleKind]} · 更新于{" "}
+              核查方式：{ruleLabels[detail.ruleKind]} / 更新于{" "}
               {new Date(detail.updatedAt).toLocaleDateString("zh-CN")}
             </p>
             <Button

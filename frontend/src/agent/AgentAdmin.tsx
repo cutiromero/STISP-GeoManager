@@ -126,7 +126,7 @@ export default function AgentAdmin() {
           "使用范围仍受功能权限和项目成员关系约束；以下设置只会收窄权限。",
           "These policies narrow existing feature and project permissions.",
         )}
-        description={`${ui("工作进程", "Worker")}: ${data.workerOnline ? ui("在线", "Online") : ui("离线", "Offline")} · ${ui("排队", "Queued")}: ${data.queued} · ${ui("运行", "Running")}: ${data.running}`}
+        description={`${ui("工作进程", "Worker")}: ${data.workerOnline ? ui("在线", "Online") : ui("离线", "Offline")} / ${ui("排队", "Queued")}: ${data.queued} / ${ui("运行", "Running")}: ${data.running}`}
       />
       <Form
         form={form}
@@ -142,10 +142,10 @@ export default function AgentAdmin() {
             {(
               [
                 ["enabled", "模块总开关", "Module enabled"],
-                ["chatEnabled", "模型对话", "Model chat"],
-                ["agentEnabled", "数据智能体", "Data agent"],
-                ["thinkingEnabled", "允许深度思考", "Allow deep thinking"],
-                ["workflowEnabled", "科研工作流规划", "Research workflows"],
+                ["chatEnabled", "快速对话", "Quick chat"],
+                ["agentEnabled", "科研智能体", "Research agent"],
+                ["thinkingEnabled", "允许逻辑推理", "Allow deep thinking"],
+                ["workflowEnabled", "MH-workflow规划", "MH-workflow planning"],
                 [
                   "operatorEnabled",
                   "允许智能体提交算子",
@@ -175,11 +175,11 @@ export default function AgentAdmin() {
             ))}
           </Space>
           <Typography.Title level={5}>
-            {ui("模型对话使用范围", "Chat audience")}
+            {ui("快速对话使用范围", "Chat audience")}
           </Typography.Title>
           {audience(["chatAudience"])}
           <Typography.Title level={5}>
-            {ui("数据智能体使用范围", "Data agent audience")}
+            {ui("科研智能体使用范围", "Research agent audience")}
           </Typography.Title>
           {audience(["agentAudience"])}
         </Card>
@@ -215,7 +215,7 @@ export default function AgentAdmin() {
                 <Card
                   key={field.key}
                   size="small"
-                  title={`${data.models.find((m) => m.alias === data.policy.models[field.name]?.alias)?.name ?? data.policy.models[field.name]?.alias} · ${data.models.find((m) => m.alias === data.policy.models[field.name]?.alias)?.status}`}
+                  title={`${data.models.find((m) => m.alias === data.policy.models[field.name]?.alias)?.name ?? data.policy.models[field.name]?.alias} / ${data.models.find((m) => m.alias === data.policy.models[field.name]?.alias)?.status}`}
                   style={{ marginTop: 12 }}
                 >
                   <Form.Item name={[field.name, "alias"]} hidden>
@@ -231,7 +231,7 @@ export default function AgentAdmin() {
                     </Form.Item>
                     <Form.Item
                       name={[field.name, "allowAgent"]}
-                      label={ui("允许数据智能体", "Allow data agent")}
+                      label={ui("允许科研智能体", "Allow data agent")}
                       valuePropName="checked"
                     >
                       <Switch />
@@ -256,8 +256,8 @@ export default function AgentAdmin() {
                           item.alias === data.policy.models[field.name]?.alias,
                       );
                       return ui(
-                        `模型窗口：${model?.contextWindowTokens ?? "未知"} token · ${model?.supportsThinking ? "支持深度思考" : "仅快速回答"}`,
-                        `Context window: ${model?.contextWindowTokens ?? "unknown"} tokens · ${model?.supportsThinking ? "deep thinking supported" : "fast mode only"}`,
+                        `模型窗口：${model?.contextWindowTokens ?? "未知"} token / ${model?.supportsThinking ? "支持逻辑推理" : "仅快速回答"}`,
+                        `Context window: ${model?.contextWindowTokens ?? "unknown"} tokens / ${model?.supportsThinking ? "deep thinking supported" : "fast mode only"}`,
                       );
                     })()}
                   </Typography.Text>
@@ -277,7 +277,7 @@ export default function AgentAdmin() {
         >
           <Typography.Paragraph type="secondary">
             {ui(
-              "开启任务预算后，下方输入、生成、思考强度和时限仅用于科研工作流规划；关闭任务预算时也用于模型对话和数据智能体。温度等其他参数始终生效。",
+              "开启任务预算后，下方输入、生成、思考强度和时限仅用于MH-workflow规划；关闭任务预算时也用于快速对话和科研智能体。温度等其他参数始终生效。",
               "Model cards show the serving window. Input and generation share it; generation includes reasoning and the final answer. Saved settings apply to new runs.",
             )}
           </Typography.Paragraph>
@@ -318,19 +318,19 @@ export default function AgentAdmin() {
             </Form.Item>
             <Form.Item
               name="reasoningEffort"
-              label={ui("深度思考强度", "Reasoning effort")}
+              label={ui("逻辑推理强度", "Reasoning effort")}
             >
               <Select
                 style={{ minWidth: 170 }}
                 options={[
-                  { value: "low", label: ui("低 · 较快", "Low · faster") },
+                  { value: "low", label: ui("低 / 较快", "Low / faster") },
                   {
                     value: "medium",
-                    label: ui("中 · 均衡", "Medium · balanced"),
+                    label: ui("中 / 均衡", "Medium / balanced"),
                   },
                   {
                     value: "xhigh",
-                    label: ui("高 · 更长思考", "High · longer reasoning"),
+                    label: ui("高 / 更长思考", "High / longer reasoning"),
                   },
                 ]}
               />
@@ -446,7 +446,7 @@ export default function AgentAdmin() {
           </Form.Item>
           <Typography.Paragraph>
             {ui(
-              "科研工作流默认只生成计划。开启算子提交前，请先完成算法清单、隔离环境和固定样例验收；代码执行、写入和发布仍保持关闭。",
+              "MH-workflow默认只生成计划。开启算子提交前，请先完成算法清单、隔离环境和固定样例验收；代码执行、写入和发布仍保持关闭。",
               "Research workflows create plans by default. Before enabling operators, validate manifests, isolation and fixed samples; code execution, writes and publishing remain disabled.",
             )}
           </Typography.Paragraph>

@@ -435,8 +435,8 @@ export default function MapCompositionEditor({
       title={
         composition
           ? english
-            ? `Thematic mapping · ${composition.name}`
-            : `专题制图 · ${composition.name}`
+            ? `Thematic mapping: ${composition.name}`
+            : `专题制图：${composition.name}`
           : english
             ? "Thematic mapping"
             : "专题制图"
@@ -459,7 +459,7 @@ export default function MapCompositionEditor({
         <main className="map-composition-preview-pane">
           <div className="composition-preview-toolbar">
             <Typography.Text>
-              {layout.page.preset} ·{" "}
+              {layout.page.preset} /{" "}
               {layout.page.orientation === "landscape"
                 ? english
                   ? "Landscape"
@@ -467,7 +467,7 @@ export default function MapCompositionEditor({
                 : english
                   ? "Portrait"
                   : "纵向"}{" "}
-              · {pixels.width}×{pixels.height}px
+              / {pixels.width}×{pixels.height}px
             </Typography.Text>
             <Space>
               <Typography.Text type="secondary">{saveState}</Typography.Text>

@@ -282,13 +282,13 @@ export default function WorkflowResults({
               <ul>
                 {deletedResources.map((item) => (
                   <li key={item.id}>
-                    <strong>{item.name}</strong> · 已删除
+                    <strong>{item.name}</strong> / 已删除
                     {item.deletedAt &&
-                      ` · ${new Date(item.deletedAt).toLocaleString()}`}
+                      ` / ${new Date(item.deletedAt).toLocaleString()}`}
                     {item.source && (
                       <span>
                         {" "}
-                        · 原来源：
+                        / 原来源：
                         {item.source.startsWith("compute-output:")
                           ? "平台算法计算"
                           : item.source}
@@ -376,8 +376,8 @@ export default function WorkflowResults({
             {
               key: "process",
               label: ui(
-                `查看分析过程 · ${workflow.steps.length} 步`,
-                `Analysis process · ${workflow.steps.length} steps`,
+                `查看分析过程 / ${workflow.steps.length} 步`,
+                `Analysis process / ${workflow.steps.length} steps`,
               ),
               children: (
                 <>

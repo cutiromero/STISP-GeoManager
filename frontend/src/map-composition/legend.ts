@@ -21,7 +21,7 @@ export function compositionLegendItems(
           for (const entry of layer.symbolization.uniqueValues) {
             items.push({
               id: `${layer.id}-raster-${entry.value}`,
-              label: `${layer.name} · ${entry.label || entry.value}`,
+              label: `${layer.name} / ${entry.label || entry.value}`,
               color: entry.color,
               shape: "raster",
             });
@@ -41,7 +41,7 @@ export function compositionLegendItems(
         for (const entry of renderer.classes.filter((item) => item.visible)) {
           items.push({
             id: `${layer.id}-${entry.id}`,
-            label: `${layer.name} · ${entry.label}`,
+            label: `${layer.name} / ${entry.label}`,
             color: entry.color,
             shape: geometryShape(layer.geometryType),
           });
@@ -52,7 +52,7 @@ export function compositionLegendItems(
         for (const entry of renderer.classes.filter((item) => item.visible)) {
           items.push({
             id: `${layer.id}-${entry.id}`,
-            label: `${layer.name} · ${entry.label}`,
+            label: `${layer.name} / ${entry.label}`,
             color: entry.color,
             shape: geometryShape(layer.geometryType),
           });

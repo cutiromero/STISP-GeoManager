@@ -1958,7 +1958,7 @@ function RasterBandPanel({
             className="eco-field-select"
             disabled={!raster.bands.length}
             options={raster.bands.map((band) => ({
-              label: `B${band.band} · ${band.label}`,
+              label: `B${band.band} / ${band.label}`,
               value: band.band,
             }))}
             size="small"
@@ -4058,8 +4058,8 @@ function DataAssetOverview({
         <AssetMiniCard
           caption={
             english
-              ? `Categorical ${insight.categoryStats.length} · Numeric ${insight.numericStats.length}`
-              : `分类 ${insight.categoryStats.length} · 数值 ${insight.numericStats.length}`
+              ? `Categorical ${insight.categoryStats.length} / Numeric ${insight.numericStats.length}`
+              : `分类 ${insight.categoryStats.length} / 数值 ${insight.numericStats.length}`
           }
           tone={chartFieldCount > 0 ? "cyan" : "red"}
           title={insightUiText("字段结构", english)}

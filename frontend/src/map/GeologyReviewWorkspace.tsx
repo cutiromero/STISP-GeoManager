@@ -154,7 +154,7 @@ export default function GeologyReviewWorkspace({
     <main className="geology-review-workspace">
       <header className="geology-review-workspace-header">
         <div>
-          <span className="geology-review-eyebrow">地理工作台 · 演示案例</span>
+          <span className="geology-review-eyebrow">地理工作台演示案例</span>
           <h1>地质成果智能检查与修正</h1>
           <p>
             {actual
@@ -205,8 +205,8 @@ export default function GeologyReviewWorkspace({
                 onSelect={locate}
                 previewLabel={
                   editSubmitted
-                    ? "建议范围 · 修正结果准备中"
-                    : "建议修改范围 · 尚未执行"
+                    ? "建议范围，修正结果准备中"
+                    : "建议修改范围，尚未执行"
                 }
               />
             </section>
@@ -216,7 +216,7 @@ export default function GeologyReviewWorkspace({
                   ? "真实修正结果"
                   : editSubmitted
                     ? "修正结果准备中"
-                    : "建议修改 · 尚未执行"}
+                    : "建议修改，尚未执行"}
               </Tag>
               <h2>{actual ? "实际修改了哪里" : "发现的问题"}</h2>
               <p>

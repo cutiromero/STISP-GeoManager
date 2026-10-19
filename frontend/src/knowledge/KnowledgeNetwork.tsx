@@ -622,7 +622,7 @@ export default function KnowledgeNetwork({
                         : node.id}
                     </text>
                     <title>
-                      {node.id} · {node.category} · {node.degree} 条关系。Enter
+                      {node.id} / {node.category} / {node.degree} 条关系。Enter
                       筛选，方向键移动。
                     </title>
                   </g>
@@ -674,7 +674,7 @@ export default function KnowledgeNetwork({
                     >
                       {anchor.label}
                     </text>
-                    <title>{fullLabel} · 领域导航</title>
+                    <title>{fullLabel} / 领域导航</title>
                   </g>
                 );
               })}
@@ -713,9 +713,9 @@ export default function KnowledgeNetwork({
           </span>
         </div>
         <small>
-          {network.nodes.length} 个节点 · {network.edges.length} /{" "}
+          {network.nodes.length} 个节点 / {network.edges.length} /{" "}
           {entries.length} 条关系
-          {summary.length < entries.length ? " · 点击领域查看更多" : ""}
+          {summary.length < entries.length ? " / 点击领域查看更多" : ""}
         </small>
       </footer>
       {selected && (

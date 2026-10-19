@@ -8,7 +8,6 @@ import {
   Layout,
   Modal,
   Popconfirm,
-  Popover,
   Select,
   Space,
   Switch,
@@ -29,7 +28,6 @@ import {
   MenuOutlined,
   CloseOutlined,
   BulbOutlined,
-  DownOutlined,
   NodeIndexOutlined,
 } from "@ant-design/icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -186,8 +184,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [rename, setRename] = useState<AgentConversation | null>(null);
   const [renameText, setRenameText] = useState("");
   const [showHistory, setShowHistory] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [workflowStatus, setWorkflowStatus] =
     useState<AgentWorkflow["status"]>();
@@ -816,7 +812,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         ...old.filter((entry) => entry.id !== item.id),
         item,
       ]);
-      setToolsOpen(false);
       message.success(ui("附件已上传", "Attachment uploaded"));
     } catch (e) {
       report(e);
@@ -897,7 +892,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 disabled={!bootstrap?.canChat}
                 onClick={() => navigate("/agent/chat")}
               >
-                {ui("模型对话", "Model chat")}
+                {ui("快速对话", "Quick chat")}
               </Button>
             )}
             {bootstrap?.canAgent && (
@@ -908,7 +903,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 disabled={!bootstrap?.canAgent}
                 onClick={() => navigate("/agent/workbench")}
               >
-                {ui("数据智能体", "Data agent")}
+                {ui("科研智能体", "Research agent")}
               </Button>
             )}
           </div>
@@ -1060,14 +1055,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               <div className="agent-conversation-heading">
                 <span>
                   {mode === "chat"
-                    ? ui("模型对话", "Model chat")
-                    : ui("数据智能体", "Data agent")}
+                    ? ui("快速对话", "Quick chat")
+                    : ui("科研智能体", "Research agent")}
                 </span>
                 <strong title={current?.title}>
                   {current?.title ??
                     (mode === "chat"
-                      ? ui("模型对话", "Model chat")
-                      : ui("数据智能体", "Data agent"))}
+                      ? ui("快速对话", "Quick chat")
+                      : ui("科研智能体", "Research agent"))}
                 </strong>
               </div>
             </div>
@@ -1220,7 +1215,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                                   "模型思考过程（生成中）",
                                   "Model reasoning (generating)",
                                 )
-                              : `${ui("模型思考过程", "Model reasoning")}${r.thinkingDurationMs ? ` · ${(r.thinkingDurationMs / 1000).toFixed(1)}s` : ""}`,
+                              : `${ui("模型思考过程", "Model reasoning")}${r.thinkingDurationMs ? ` / ${(r.thinkingDurationMs / 1000).toFixed(1)}s` : ""}`,
                             children: (
                               <ThinkingStream
                                 working={active(r)}
@@ -1236,7 +1231,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                                         "Waiting for the model reasoning stream…",
                                       )
                                     : ui(
-                                        "已开启深度思考，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
+                                        "已开启逻辑推理，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
                                         "Deep thinking is enabled, but no displayable reasoning was received. See the answer and tool results below.",
                                       ))
                                 }
@@ -1523,96 +1518,40 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         onResources={setSelected}
                       />
                     )}
-                    {(attachmentsAvailable || internetAvailable) && (
-                      <Popover
-                        trigger="click"
-                        placement="topLeft"
-                        title={ui("工具与数据", "Tools and data")}
-                        open={toolsOpen}
-                        onOpenChange={setToolsOpen}
-                        content={
-                          <div
-                            className="agent-tools-panel"
-                            onKeyDown={(event) => {
-                              if (event.key === "Escape") setToolsOpen(false);
-                            }}
-                          >
-                            {attachmentsAvailable && (
-                              <Upload
-                                accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
-                                multiple
-                                showUploadList={false}
-                                beforeUpload={(file) => {
-                                  void uploadAttachment(file);
-                                  return false;
-                                }}
-                                disabled={
-                                  taskLocked ||
-                                  busy ||
-                                  uploadingAttachment ||
-                                  current?.archived
-                                }
-                              >
-                                <Button
-                                  icon={<PaperClipOutlined />}
-                                  loading={uploadingAttachment}
-                                >
-                                  {ui(
-                                    "上传文档或图片",
-                                    "Upload document or image",
-                                  )}
-                                </Button>
-                              </Upload>
-                            )}
-                            {internetAvailable && (
-                              <label className="agent-tool-switch">
-                                <span>
-                                  {ui("联网检索", "Internet retrieval")}
-                                </span>
-                                <Switch
-                                  aria-label={ui(
-                                    "联网检索",
-                                    "Internet retrieval",
-                                  )}
-                                  size="small"
-                                  checked={internetEnabled}
-                                  disabled={taskLocked || busy}
-                                  onChange={setInternetEnabled}
-                                />
-                              </label>
-                            )}
-                          </div>
+                    {attachmentsAvailable && (
+                      <Upload
+                        accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
+                        multiple
+                        showUploadList={false}
+                        beforeUpload={(file) => {
+                          void uploadAttachment(file);
+                          return false;
+                        }}
+                        disabled={
+                          taskLocked ||
+                          busy ||
+                          uploadingAttachment ||
+                          current?.archived
                         }
                       >
                         <Button
-                          type="text"
-                          icon={<PlusOutlined />}
-                          aria-label={ui("工具与数据", "Tools and data")}
-                          aria-expanded={toolsOpen}
+                          icon={<PaperClipOutlined />}
+                          loading={uploadingAttachment}
                         >
-                          {ui("工具", "Tools")}
-                          {internetEnabled && (
-                            <span
-                              className="agent-tool-indicator"
-                              aria-label={ui("已联网", "Internet on")}
-                            />
-                          )}
+                          {ui("上传文档", "Upload document")}
                         </Button>
-                      </Popover>
+                      </Upload>
                     )}
-                    <Popover
-                      trigger="click"
-                      placement="topLeft"
-                      title={ui("模型与回答设置", "Model and answer settings")}
-                      open={settingsOpen}
-                      onOpenChange={setSettingsOpen}
-                      content={
-                        <div
-                          className="agent-settings-panel"
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") setSettingsOpen(false);
-                          }}
-                        >
+                    <ReasoningEffortControl
+                      value={effortOverride ?? defaultEffort}
+                      overridden={effortOverride !== undefined}
+                      effortEnabled={
+                        deepThinkingAvailable && thinkingMode === "deep"
+                      }
+                      disabled={taskLocked || busy}
+                      onChange={setEffortOverride}
+                      settings={
+                        <div className="agent-settings-panel">
                           <label className="agent-tool-field">
                             <strong>{ui("使用模型", "Model")}</strong>
                             <Select
@@ -1634,7 +1573,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                               placeholder={ui("选择模型", "Choose model")}
                               options={models.map((item) => ({
                                 value: item.alias,
-                                label: `${item.name} · ${item.status === "online" ? ui("在线", "Online") : item.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${item.supportsVision ? ` · ${ui("支持图片", "Vision")}` : ""}`,
+                                label: `${item.name} / ${item.status === "online" ? ui("在线", "Online") : item.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${item.supportsVision ? ` / ${ui("支持图片", "Vision")}` : ""}`,
                               }))}
                             />
                           </label>
@@ -1664,25 +1603,26 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                               onOutput={setOutputOverride}
                             />
                           )}
+                          {internetAvailable && (
+                            <label className="agent-tool-switch">
+                              <span>
+                                {ui("联网检索", "Internet retrieval")}
+                              </span>
+                              <Switch
+                                aria-label={ui(
+                                  "联网检索",
+                                  "Internet retrieval",
+                                )}
+                                size="small"
+                                checked={internetEnabled}
+                                disabled={taskLocked || busy}
+                                onChange={setInternetEnabled}
+                              />
+                            </label>
+                          )}
                         </div>
                       }
-                    >
-                      <Button
-                        type="text"
-                        className="agent-model-trigger"
-                        aria-label={ui(
-                          "模型与回答设置",
-                          "Model and answer settings",
-                        )}
-                        aria-expanded={settingsOpen}
-                      >
-                        <span>
-                          {selectedModel?.name ??
-                            ui("选择模型", "Choose model")}
-                        </span>
-                        <DownOutlined />
-                      </Button>
-                    </Popover>
+                    />
                     {deepThinkingAvailable && (
                       <>
                         <Button
@@ -1703,16 +1643,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                             );
                           }}
                         >
-                          {ui("深度思考", "Deep thinking")}
+                          {ui("逻辑推理", "Logical reasoning")}
                         </Button>
-                        {thinkingMode === "deep" && (
-                          <ReasoningEffortControl
-                            value={effortOverride ?? defaultEffort}
-                            overridden={effortOverride !== undefined}
-                            disabled={taskLocked || busy}
-                            onChange={setEffortOverride}
-                          />
-                        )}
                       </>
                     )}
                     {mode === "agent" && (
@@ -1726,7 +1658,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         }
                         onClick={() => setWorkflowOpen(true)}
                       >
-                        {ui("科研工作流", "Workflow")}
+                        {ui("MH-workflow", "MH-workflow")}
                         {composerWorkflowStatus && (
                           <span>
                             {workflowStatusLabels[composerWorkflowStatus]}
@@ -1809,7 +1741,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       </div>
       {mode === "agent" && canUse && (
         <Drawer
-          title={ui("科研工作流", "Research workflow")}
+          title={ui("MH-workflow", "MH-workflow")}
           open={workflowOpen}
           onClose={() => setWorkflowOpen(false)}
           forceRender

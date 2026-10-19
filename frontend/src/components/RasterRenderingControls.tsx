@@ -128,7 +128,7 @@ export default function RasterRenderingControls({
             value={draft.bands[index]}
             options={bands.map((band) => ({
               value: band.band,
-              label: `B${band.band} · ${band.label}`,
+              label: `B${band.band} / ${band.label}`,
             }))}
             onChange={(band: number) => {
               const next = [...draft.bands];

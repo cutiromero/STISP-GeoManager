@@ -115,7 +115,7 @@ export default function BudgetSettings() {
       ))}
       <Typography.Paragraph type="secondary" style={{ marginTop: 12 }}>
         {ui(
-          "方案默认值会按用户上限和所选模型窗口收窄。这里适用于模型对话和数据智能体；科研工作流规划仍使用下方全局参数。",
+          "方案默认值会按用户上限和所选模型窗口收窄。这里适用于快速对话和科研智能体；MH-workflow规划仍使用下方全局参数。",
           "Profile defaults are capped by the user allowance and selected model. These budgets apply to chat and data agents; research workflow planning uses the global settings below.",
         )}
       </Typography.Paragraph>

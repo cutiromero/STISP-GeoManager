@@ -79,7 +79,7 @@ export default function MapCompositionCard({
         {composition.publishedVersion ? (
           <small>
             {english ? "Published" : "已发布"} V
-            {composition.publishedVersion.versionNumber} ·{" "}
+            {composition.publishedVersion.versionNumber} /{" "}
             {composition.audienceGroups
               .map((group) => group.name)
               .join(english ? ", " : "、") ||
@@ -100,7 +100,7 @@ export default function MapCompositionCard({
       <Space size={4} wrap>
         {composition.canEditLayout ? (
           <Button size="small" icon={<EditOutlined />} onClick={onOpen}>
-            {english ? "Edit layout" : "编辑版式"}
+            {english ? "Edit" : "编辑"}
           </Button>
         ) : null}
         <Button

@@ -128,7 +128,7 @@ def validate_answer_citations(answer: str, evidence: list, *, is_agent: bool) ->
         action = (
             "请重新实际查询或检索有关来源后，使用本轮工具返回的evidenceIds或citation；"
             if is_agent
-            else "普通模型对话没有平台证据权限；请依据用户提供的内容说明，不能声称核实平台资料；"
+            else "快速对话没有平台证据权限；请依据用户提供的内容说明，不能声称核实平台资料；"
         )
         raise ValidationError(
             f"回答引用不属于本轮真实证据：{detail}。历史编号不能映射为本轮编号。"

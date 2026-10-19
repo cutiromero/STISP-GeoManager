@@ -168,6 +168,28 @@ async function select(label: string, option: string) {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(agentApi, "researchDemos").mockResolvedValue({
+    items: [
+      {
+        scenario: "ecology_investigation",
+        title: "干旱区生态 / 变化与调查优先区",
+      },
+      {
+        scenario: "geology_age_correction",
+        title: "真实底图 / 地层时代录入纠偏",
+      },
+    ].map((item) => ({
+      ...item,
+      scenario: item.scenario as
+        | "ecology_investigation"
+        | "geology_age_correction",
+      projectId: 1,
+      projectName: "测试项目",
+      prompt: "分析",
+      available: true,
+      sampleNature: "synthetic" as const,
+    })),
+  });
   vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue(
     workflowReport(),
   );
@@ -365,7 +387,7 @@ it("presents the completed ecological workflow as a conclusion and a compact rea
       </MemoryRouter>
     </AntApp>,
   );
-  await screen.findByText("ecology-analysis-report.md · 2.0 KB");
+  await screen.findByText("ecology-analysis-report.md / 2.0 KB");
   await screen.findByText("investigation_advice.csv");
   expect(screen.queryByLabelText("分析说明与决策依据")).not.toBeInTheDocument();
   expect(screen.getByText("分区统计表")).toBeVisible();
@@ -384,7 +406,7 @@ it("binds ecological input roles, lets the user choose the evidence version, and
     .spyOn(agentApi, "createWorkflow")
     .mockResolvedValue(savedWorkflow({ status: "queued" }));
   showWorkflow();
-  await select("研究场景", "干旱区生态 · 变化与调查优先区");
+  await select("研究场景", "干旱区生态 / 变化与调查优先区");
   fireEvent.click(screen.getByRole("button", { name: "按名称匹配资料" }));
   expect(screen.getByRole("button", { name: "生成执行计划" })).toBeDisabled();
   await select("生态背景与观测记录", "模拟生态背景补充证据版");
@@ -438,11 +460,11 @@ it("restores a saved multi-stage judgement and scoped knowledge without creating
   expect(
     screen.queryByText("西区平均变化为 -0.21，覆盖率 0.93"),
   ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByText("查看分析过程 · 1 步"));
+  fireEvent.click(screen.getByText("查看分析过程 / 1 步"));
   expect(
     screen.getByText("西区平均变化为 -0.21，覆盖率 0.93"),
   ).toBeInTheDocument();
-  expect(screen.getByText("同季节植被比较 · 版本 3")).toBeInTheDocument();
+  expect(screen.getByText("同季节植被比较 / 版本 3")).toBeInTheDocument();
   expect(screen.getByText("查看分析结果与后续建议")).toBeInTheDocument();
   expect(screen.getByText("统计表")).toBeInTheDocument();
   expect(screen.queryByText("finish")).not.toBeInTheDocument();
@@ -507,12 +529,12 @@ it("uses a real model label for real decisions and clears previous evidence when
     Object.assign(new Error("项目权限已撤销"), { status: 403 }),
   );
   showWorkflow();
-  fireEvent.click(await screen.findByText("查看分析过程 · 1 步"));
+  fireEvent.click(await screen.findByText("查看分析过程 / 1 步"));
   await screen.findByText("Qwen 分析模型");
   await select("历史工作流", "另一次调查");
   await screen.findByText("项目权限已撤销");
   expect(screen.queryByText("初步优先调查西区")).not.toBeInTheDocument();
-  expect(screen.queryByText("同季节植被比较 · 版本 3")).not.toBeInTheDocument();
+  expect(screen.queryByText("同季节植被比较 / 版本 3")).not.toBeInTheDocument();
 });
 
 it("deduplicates workflow task IDs and opens an imported vector through the actual map URL", async () => {
@@ -693,8 +715,8 @@ it("binds real-map age roles and uses published manifest parameters in the manua
     }),
   );
   showWorkflow();
-  await select("研究场景", "真实底图 · 地层时代录入纠偏");
-  expect(screen.getByText("真实底图 · 演示录入错误")).toBeInTheDocument();
+  await select("研究场景", "真实底图 / 地层时代录入纠偏");
+  expect(screen.getByText("真实底图 / 演示录入错误")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "按名称匹配资料" }));
   expect(
     screen.getByRole("combobox", { name: "空间背景与资料说明" }),
@@ -767,7 +789,7 @@ it.each([
       : workflowType === "geology_correction"
         ? ["修复后检查", "调查证据属性编辑", "最终填图复查"]
         : taskNames;
-  fireEvent.click(await screen.findByText("计算任务 · 3 项"));
+  fireEvent.click(await screen.findByText("计算任务 / 3 项"));
   for (const title of expected)
     expect(
       await screen.findByRole("region", { name: title }),
@@ -885,7 +907,7 @@ it("restores the earlier judgement, new observation evidence and updated conclus
   });
   const create = vi.spyOn(agentApi, "createWorkflow");
   showWorkflow();
-  fireEvent.click(await screen.findByText("查看分析过程 · 1 步"));
+  fireEvent.click(await screen.findByText("查看分析过程 / 1 步"));
   const comparison = await screen.findByLabelText("补充观测后的判断更新");
   expect(within(comparison).getByText("初步优先调查西区")).toBeInTheDocument();
   expect(
@@ -935,7 +957,7 @@ it("expands saved knowledge statements, conditions and original citations using 
     ],
   });
   showWorkflow();
-  fireEvent.click(await screen.findByText("有效像元比较依据 · 版本 2"));
+  fireEvent.click(await screen.findByText("有效像元比较依据 / 版本 2"));
   const reference = await screen.findByLabelText("有效像元比较依据原文与出处");
   expect(
     within(reference).getByText("仅比较两期共同有效的像元。"),

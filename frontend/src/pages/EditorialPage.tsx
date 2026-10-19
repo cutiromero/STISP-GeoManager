@@ -323,8 +323,8 @@ export default function EditorialPage({
               />
               <Button onClick={() => edit("new")}>
                 {kind === "knowledge"
-                  ? ui("新建内容") + " · " + ui("知识")
-                  : ui("新建内容") + " · " + ui("新闻")}
+                  ? ui("新建内容") + " / " + ui("知识")
+                  : ui("新建内容") + " / " + ui("新闻")}
               </Button>
             </Space>
           </div>
@@ -350,7 +350,7 @@ export default function EditorialPage({
             <h1>{article.title}</h1>
             <p className="editorial-meta">
               {kind === "news" && article.eventDate
-                ? `${ui("活动日期")} ${article.eventDate} · `
+                ? `${ui("活动日期")} ${article.eventDate} / `
                 : ""}
               {article.publishedAt
                 ? `${ui("已发布")} ${article.publishedAt.slice(0, 10)}`

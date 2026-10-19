@@ -339,7 +339,7 @@ def _service_status_headline(services: list[dict]) -> str:
         "warning": localized("待同步", " pending"),
         "risk": localized("异常", " issue"),
     }
-    return " · ".join(
+    return "；".join(
         f"{service['label']}{status_text.get(service['status'], localized('未知', ' unknown'))}"
         for service in services
     )

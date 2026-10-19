@@ -191,7 +191,7 @@ it("restores a saved plan and only executes after confirmation", async () => {
       </MemoryRouter>
     </AntApp>,
   );
-  fireEvent.click(screen.getByText("科研工作流 · 计划、执行与入库"));
+  fireEvent.click(screen.getByText("MH-workflow / 计划、执行与入库"));
   await screen.findByText("研究区影像");
   expect(confirm).not.toHaveBeenCalled();
   expect(create).not.toHaveBeenCalled();
@@ -217,7 +217,7 @@ it("shows confirmation failure without claiming successful execution", async () 
       </MemoryRouter>
     </AntApp>,
   );
-  fireEvent.click(screen.getByText("科研工作流 · 计划、执行与入库"));
+  fireEvent.click(screen.getByText("MH-workflow / 计划、执行与入库"));
   fireEvent.click(await screen.findByRole("button", { name: "确认执行" }));
   await screen.findByText("输入数据已变化，请重新预览");
   expect(screen.queryByText("已完成", { exact: true })).not.toBeInTheDocument();

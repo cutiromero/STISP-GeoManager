@@ -191,8 +191,8 @@ export default function ComputeOutputMapPreview({
           </strong>
           <span>
             {ui(
-              "临时预览 · 原数据保持不变",
-              "Temporary preview · Original data preserved",
+              "临时预览，原数据保持不变",
+              "Temporary preview, original data preserved",
             )}
           </span>
         </div>
