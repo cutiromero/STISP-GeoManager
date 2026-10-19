@@ -375,7 +375,7 @@ class ResourceDeleteTests(ResourceDeleteFixture):
             resource_ids=[item.id],
             status="succeeded",
         )
-        self.assertIn("科研工作流", self.delete([item.id]).json()["items"][0]["detail"])
+        self.assertIn("MH-workflow", self.delete([item.id]).json()["items"][0]["detail"])
         workflow.resource_ids = []
         workflow.save()
         AgentCheckpoint.objects.create(
