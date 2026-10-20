@@ -423,26 +423,25 @@ def prepare_demo(workflow, user, p) -> None:
             workflow.refresh_from_db()
 
 
-def authorize_demo(workflow, user, p, *, include_previous=True) -> None:
+def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -> None:
     from .deleted_resources import historical_deletion
 
     if not p.get("operatorEnabled", False):
         raise PermissionDenied("智能体算子调用已关闭")
     domains = _domains(workflow)
     for item in workflow.evidence:
-        if (
-            not visible_entries(user, domains=domains)
-            .filter(pk=item["id"], revision=item["revision"])
-            .exists()
-        ):
+        visible = visible_entries(user, domains=domains).filter(pk=item["id"])
+        if not history:
+            visible = visible.filter(revision=item["revision"])
+        if not visible.exists():
             raise PermissionDenied("知识依据或分区权限已变化，请重新生成计划")
     for role, identity in workflow.plan["inputs"].items():
-        if historical_deletion(workflow, user, p, identity):
+        if history and historical_deletion(workflow, user, p, identity):
             continue
         resource = resolve_resource(user, p, identity, workflow.resource_ids)
-        if (
-            resource.status != "active"
-            or resource.updated_at.isoformat() != workflow.plan["inputSnapshots"][role]
+        if resource.status != "active" or (
+            not history
+            and resource.updated_at.isoformat() != workflow.plan["inputSnapshots"][role]
         ):
             raise PermissionDenied("原始输入已变化或停用，请重新核对")
     for identifier, fixed in workflow.plan["algorithms"].items():
@@ -475,7 +474,7 @@ def authorize_demo(workflow, user, p, *, include_previous=True) -> None:
             raise PermissionDenied("已冻结的算法版本已变化或停用")
     for stage in workflow.plan["stages"]:
         for output in stage.get("outputs", []):
-            if historical_deletion(workflow, user, p, output["resourceId"]):
+            if history and historical_deletion(workflow, user, p, output["resourceId"]):
                 continue
             resource = resolve_resource(user, p, output["resourceId"])
             record = ComputeImport.objects.filter(
@@ -488,15 +487,21 @@ def authorize_demo(workflow, user, p, *, include_previous=True) -> None:
             if (
                 record is None
                 or resource.status != "active"
-                or resource.updated_at.isoformat() != output["resourceRevision"]
+                or (
+                    not history
+                    and resource.updated_at.isoformat() != output["resourceRevision"]
+                )
             ):
                 raise PermissionDenied("下游输入不再对应已核验的实际输出")
-    if workflow.import_results:
+    if workflow.import_results and not history:
         require_actor(user, workflow.project_tag_id, "catalog.add_dataresource")
     if include_previous and workflow.plan.get("previousWorkflowId"):
-        from .demo_updates import authorize_update
+        from .demo_updates import _chain, authorize_update
 
-        authorize_update(workflow, user, p)
+        if history:
+            _chain(workflow, user, p, history=True)
+        else:
+            authorize_update(workflow, user, p)
 
 
 def confirm_demo(workflow, user, p, plan_hash, selected_suggestion_ids=None) -> None:

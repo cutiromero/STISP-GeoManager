@@ -147,13 +147,21 @@ def run_json(r, user):
 def _compute_intent(run, user, p):
     from .compute_intents import serialize
 
-    return serialize(run, user, p) if run.conversation.mode == "agent" else None
+    return (
+        serialize(run, user, p, history=True)
+        if run.conversation.mode == "agent"
+        else None
+    )
 
 
 def _research_intent(run, user, p):
     from .research_intents import serialize
 
-    return serialize(run, user, p) if run.conversation.mode == "agent" else None
+    return (
+        serialize(run, user, p, history=True)
+        if run.conversation.mode == "agent"
+        else None
+    )
 
 
 def _run_parameters(run):
@@ -837,7 +845,7 @@ def workflow_json(workflow, include_steps=True):
 @endpoint(["GET", "POST"])
 def workflow_submit(request):
     if request.method == "GET":
-        from .workflow import _authorize
+        from .workflow import authorize_workflow_history
 
         require_access(request.user, "agent")
         visible = []
@@ -845,7 +853,7 @@ def workflow_submit(request):
             "-created_at"
         )[:30]:
             try:
-                _authorize(workflow)
+                authorize_workflow_history(workflow)
                 visible.append(workflow_json(workflow))
             except PermissionDenied:
                 continue
@@ -1016,12 +1024,12 @@ def record_workflow_review(workflow, decision, feedback, plan_hash, review_outpu
 
 @endpoint(["GET"])
 def workflow_detail(request, workflow_id):
-    from .workflow import _authorize
+    from .workflow import authorize_workflow_history
 
     workflow = get_object_or_404(
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
     )
-    _authorize(workflow)
+    authorize_workflow_history(workflow)
     return JsonResponse(workflow_json(workflow))
 
 

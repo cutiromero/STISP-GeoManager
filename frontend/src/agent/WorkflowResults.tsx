@@ -1,5 +1,6 @@
 import { Alert, Button, Collapse, Input, Popconfirm, Space, Tag } from "antd";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import type { AgentWorkflow } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
 import WorkflowDecisionTimeline, {
@@ -552,8 +553,8 @@ export default function WorkflowResults({
           </span>
           {mapResourceIds.length &&
           !(isGeologyReview && deletedResources.length) ? (
-            <a
-              href={
+            <Link
+              to={
                 isGeologyReview
                   ? `/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
                   : `/map?resources=${mapResourceIds.join(",")}&projectTagId=${workflow.projectId}`
@@ -563,7 +564,7 @@ export default function WorkflowResults({
                 "在地理工作台对比成果图层",
                 "Compare result layers in the map workspace",
               )}
-            </a>
+            </Link>
           ) : (
             ui(
               "可在本项目的数据资源中查看成果",

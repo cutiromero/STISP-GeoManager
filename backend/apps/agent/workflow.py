@@ -88,26 +88,41 @@ def step(
     )
 
 
-def _authorize(workflow):
+def _authorize(workflow, *, history=False):
+    from .deleted_resources import historical_deletion
+
     user = fresh_user(workflow.owner_id)
     p = require_access(user, "agent", workflow.model)
     if not p.get("workflowEnabled", True):
         raise PermissionDenied("MH-workflow功能已关闭")
+    if not history and workflow.plan.get("deletedResources"):
+        raise PermissionDenied("该科研任务引用的数据已删除，请重新选择数据后发起任务")
     for rid in workflow.resource_ids:
+        if history and historical_deletion(workflow, user, p, rid):
+            continue
         resolve_resource(user, p, rid)
-    validate_knowledge(workflow, user)
+    validate_knowledge(workflow, user, history=history)
     return user, p
 
 
-def validate_knowledge(workflow, user):
+def authorize_workflow_history(workflow):
+    """Read saved work under current access, without revalidating an execution plan."""
+    user, p = _authorize(workflow, history=True)
+    if workflow.plan.get("scenarioVersion"):
+        from .demo_workflow import authorize_demo
+
+        authorize_demo(workflow, user, p, history=True)
+    return user, p
+
+
+def validate_knowledge(workflow, user, *, history=False):
     from apps.knowledge.services import visible_entries
 
     for entry in workflow.evidence:
-        if (
-            not visible_entries(user)
-            .filter(pk=entry.get("id"), revision=entry.get("revision"))
-            .exists()
-        ):
+        visible = visible_entries(user).filter(pk=entry.get("id"))
+        if not history:
+            visible = visible.filter(revision=entry.get("revision"))
+        if not visible.exists():
             raise PermissionDenied("知识依据已变化或无权访问，请重新生成计划")
 
 

@@ -280,10 +280,12 @@ it("confirms a workflow stop before invoking the mutation", async () => {
   const stop = vi.fn();
   render(
     <AntApp>
-      <WorkflowResults
-        workflow={savedWorkflow({ status: "running" })}
-        onCancel={stop}
-      />
+      <MemoryRouter>
+        <WorkflowResults
+          workflow={savedWorkflow({ status: "running" })}
+          onCancel={stop}
+        />
+      </MemoryRouter>
     </AntApp>,
   );
   fireEvent.click(screen.getByRole("button", { name: "停止此工作流" }));

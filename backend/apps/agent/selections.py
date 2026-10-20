@@ -230,10 +230,10 @@ def check_history_evidence(run, user, policy):
     from .tools import check_evidence
 
     for source in history_sources(run):
-        check_evidence(source, user, policy)
+        check_evidence(source, user, policy, history=True)
         from .research_intents import authorize_run
 
-        authorize_run(source, user, policy)
+        authorize_run(source, user, policy, history=True)
 
 
 def source_knowledge_domains(run):

@@ -116,7 +116,7 @@ def _auto_continuation_selection(previous, current):
     }
 
 
-def authorize_run(run, user, policy) -> None:
+def authorize_run(run, user, policy, *, history=False) -> None:
     from .deleted_resources import historical_deletion
 
     intent = run.research_intent or {}
@@ -126,12 +126,12 @@ def authorize_run(run, user, policy) -> None:
         raise PermissionDenied("科研对话不属于当前用户")
     require_access(user, "agent", run.model)
     for role, identity in intent.get("inputs", {}).items():
-        if historical_deletion(run, user, policy, identity):
+        if history and historical_deletion(run, user, policy, identity):
             continue
         resource = resolve_resource(user, policy, identity)
         revision = intent.get("_inputRevisions", {}).get(role)
         if resource.status != "active" or (
-            revision and resource.updated_at.isoformat() != revision
+            not history and revision and resource.updated_at.isoformat() != revision
         ):
             raise PermissionDenied("科研资料已变化或不可用，请重新解析任务")
     if run.research_workflow_id:
@@ -142,17 +142,17 @@ def authorize_run(run, user, policy) -> None:
         ).first()
         if workflow is None:
             raise PermissionDenied("科研流程不属于当前会话项目")
-        _authorize(workflow)
+        _authorize(workflow, history=history)
         if workflow.plan.get("scenarioVersion"):
             from .demo_workflow import authorize_demo
 
-            authorize_demo(workflow, user, policy)
+            authorize_demo(workflow, user, policy, history=history)
 
 
-def serialize(run, user, policy):
+def serialize(run, user, policy, *, history=False):
     if not run.research_intent.get("originRunId"):
         return None
-    authorize_run(run, user, policy)
+    authorize_run(run, user, policy, history=history)
     data = {key: run.research_intent[key] for key in PUBLIC_KEYS}
     if run.research_workflow_id:
         workflow = AgentWorkflow.objects.get(pk=run.research_workflow_id)

@@ -164,6 +164,106 @@ def test_report_download_real_utf8_file_and_export_permission(completed):
     assert request(env).json()["canDownload"] is False
 
 
+def test_saved_report_remains_readable_after_metadata_and_knowledge_updates(completed):
+    env = completed
+    first = request(env)
+    assert first.status_code == 200, first.content
+    content = request(env, "preview/", "get").json()["content"]
+    resource = env["resource"]
+    resource.name = "修改后的数据名称"
+    resource.save()
+    knowledge = env["knowledge"]
+    knowledge.revision += 1
+    knowledge.save(update_fields=["revision"])
+    assert request(env).json() == first.json()
+    preview = request(env, "preview/", "get")
+    assert preview.status_code == 200 and preview.json()["content"] == content
+    assert request(env, "download/", "get").status_code == 200
+    assert request(env, "import/").status_code == 403
+    knowledge.status = "draft"
+    knowledge.save(update_fields=["status"])
+    assert request(env, "preview/", "get").status_code == 403
+
+
+def test_generating_a_new_report_still_requires_current_frozen_knowledge(completed):
+    env = completed
+    knowledge = env["knowledge"]
+    knowledge.revision += 1
+    knowledge.save(update_fields=["revision"])
+    assert request(env).status_code == 403
+    path, metadata_path, _ = _paths(env["workflow"])
+    assert not path.exists() and not metadata_path.exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_saved_report_reads_confirmed_deleted_stage_result(completed):
+    from apps.agent.workflow_reports import authorize_context
+    from apps.compute.models import ComputeImport
+    from apps.core.storage import table_data_path
+
+    env = completed
+    env["owner"].user_permissions.add(
+        Permission.objects.get(codename="delete_dataresource")
+    )
+    result_file = table_data_path("history-stage/statistics.csv")
+    result_file.parent.mkdir(parents=True)
+    result_file.write_bytes(app_path(env["output"].path).read_bytes())
+    resource = DataResource.objects.create(
+        name="调查统计",
+        code="history-report-stage",
+        data_type="table",
+        file_format="CSV",
+        storage_path="table/history-stage/statistics.csv",
+        is_compute_result=True,
+    )
+    ComputeImport.objects.create(
+        output=env["output"],
+        requested_by=env["owner"],
+        name=resource.name,
+        status="ready",
+        resource=resource,
+    )
+    workflow = env["workflow"]
+    workflow.result_resource_ids = [resource.id]
+    workflow.plan["stages"][0]["outputs"] = [{"resourceId": resource.id}]
+    workflow.save(update_fields=["result_resource_ids", "plan"])
+    assert request(env).status_code == 200
+    original = request(env, "preview/", "get").json()["content"]
+    header = {"HTTP_X_PROJECT_ID": str(env["project"].id)}
+    selection = {"resourceIds": [resource.id]}
+    preview = env["client"].post(
+        "/api/catalog/resources/delete-preview/",
+        json.dumps(selection),
+        content_type="application/json",
+        **header,
+    )
+    assert preview.status_code == 200, preview.content
+    deleted = env["client"].post(
+        "/api/catalog/resources/delete/",
+        json.dumps(
+            {
+                **selection,
+                "confirmed": True,
+                "historyConfirmationToken": preview.json()["confirmationToken"],
+            }
+        ),
+        content_type="application/json",
+        **header,
+    )
+    assert deleted.json()["deletedCount"] == 1, deleted.content
+    workflow.refresh_from_db()
+    # Frozen legacy result lists may retain an ID even after the deletion receipt.
+    workflow.result_resource_ids = [resource.id]
+    workflow.save(update_fields=["result_resource_ids"])
+    authorize_context(workflow, env["owner"], env["policy"], history=True)
+    assert request(env).status_code == 200
+    assert request(env, "preview/", "get").json()["content"] == original
+    download = request(env, "download/", "get")
+    assert download.status_code == 200
+    assert b"".join(download.streaming_content).decode("utf-8") == original
+    assert request(env, "import/").status_code == 403
+
+
 def test_report_import_document_compute_result_private_and_idempotent(completed):
     env = completed
     assert request(env).status_code == 200
@@ -238,7 +338,7 @@ def test_report_rechecks_revoked_sources_after_generation(completed, source):
             owner_only=True, maintainer=env["outsider"]
         )
     elif source == "knowledge":
-        KnowledgeEntry.objects.filter(pk=env["knowledge"].id).update(revision=2)
+        KnowledgeEntry.objects.filter(pk=env["knowledge"].id).update(status="draft")
     elif source == "report":
         imported = request(env, "import/").json()["resourceId"]
         DataResource.objects.filter(pk=imported).update(

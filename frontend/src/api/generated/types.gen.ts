@@ -2960,9 +2960,47 @@ export type LoginRequest = {
      */
     password: string;
     /**
-     * 是否使用持久会话
+     * 兼容旧客户端的输入；当前所有角色均使用页面会话，此值不再启用持久登录。
+     *
+     * @deprecated
      */
     remember?: boolean;
+};
+
+/**
+ * 平台页面会话维护请求；正常刷新续接与新标签加入均须持有服务端验证的令牌。
+ */
+export type BrowserSessionRequest = {
+    /**
+     * start用于刚登录的页面，resume用于刷新或在线标签交接，heartbeat续期，suspend挂起，abandon注销无法续接的会话。
+     */
+    action: 'start' | 'resume' | 'heartbeat' | 'suspend' | 'abandon';
+    /**
+     * 页面随机标识；除abandon外必填，各标签独立。
+     */
+    pageId?: string;
+    /**
+     * 32字节随机令牌的十六进制文本；除abandon外必填，服务端只保存摘要。
+     */
+    token?: string;
+    /**
+     * 同一页面单调递增的请求序号；除abandon外必填，旧心跳不得覆盖退出或刷新后的较新状态。
+     */
+    sequence?: number;
+};
+
+/**
+ * 当前页面会话维护结果。
+ */
+export type BrowserSessionResponse = {
+    /**
+     * 生命周期处理结果说明。
+     */
+    detail: string;
+    /**
+     * 是否仍有可用于后端鉴权的有效页面租约。
+     */
+    active: boolean;
 };
 
 export type LoginResponse = {
@@ -9735,6 +9773,42 @@ export type RegisterResponses = {
 };
 
 export type RegisterResponse2 = RegisterResponses[keyof RegisterResponses];
+
+export type UpdateBrowserSessionData = {
+    /**
+     * 当前页面及动作；除abandon外必须提供该会话的随机令牌。
+     */
+    body: BrowserSessionRequest;
+    path?: never;
+    query?: never;
+    url: '/api/auth/browser-session/';
+};
+
+export type UpdateBrowserSessionErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type UpdateBrowserSessionError = UpdateBrowserSessionErrors[keyof UpdateBrowserSessionErrors];
+
+export type UpdateBrowserSessionResponses = {
+    /**
+     * 页面生命周期已更新；active表示仍存在有效页面租约。
+     */
+    200: BrowserSessionResponse;
+};
+
+export type UpdateBrowserSessionResponse = UpdateBrowserSessionResponses[keyof UpdateBrowserSessionResponses];
 
 export type LogoutData = {
     body?: never;

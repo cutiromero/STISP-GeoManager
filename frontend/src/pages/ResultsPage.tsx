@@ -42,6 +42,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import resultsShowcaseImage from "../assets/portal/results-showcase-20260924.png";
 import WorkspaceHeader from "../components/WorkspaceHeader";
@@ -790,6 +791,7 @@ function ResultCover({ item }: { item: PublishedResult }) {
 
 function ResultDetail({ item }: { item: PublishedResult }) {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const ui = useComputeText();
   const locale = i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN";
   const format = resultFormat(item);
@@ -840,6 +842,19 @@ function ResultDetail({ item }: { item: PublishedResult }) {
                   key={resource.id}
                   aria-label={resource.name}
                   href={destination}
+                  onClick={(event) => {
+                    if (
+                      event.button !== 0 ||
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey
+                    ) {
+                      return;
+                    }
+                    event.preventDefault();
+                    navigate(destination);
+                  }}
                   icon={spatial ? <GlobalOutlined /> : <DatabaseOutlined />}
                 >
                   {resource.name}

@@ -65,6 +65,10 @@ def _paths(workflow: AgentWorkflow) -> tuple[Path, Path, str]:
     )
 
 
+def has_saved_report(workflow: AgentWorkflow) -> bool:
+    return _paths(workflow)[1].is_file()
+
+
 def _resource(user, identity: int) -> DataResource:
     value = filter_accessible(
         DataResource.objects.filter(pk=identity, status="active"), user
@@ -74,8 +78,12 @@ def _resource(user, identity: int) -> DataResource:
     return value
 
 
-def authorize_context(workflow: AgentWorkflow, user, policy: dict) -> list:
+def authorize_context(
+    workflow: AgentWorkflow, user, policy: dict, *, history=False
+) -> list:
     """Recheck real task inputs and all imported outputs before exposing a report."""
+    from .deleted_resources import historical_deletion
+
     if workflow.status != "succeeded":
         raise ComputeError("MH-workflow完成后才能生成或读取报告", 409)
     ids = list(
@@ -99,6 +107,8 @@ def authorize_context(workflow: AgentWorkflow, user, policy: dict) -> list:
         if record.resource_id:
             _resource(user, record.resource_id)
     for identity in workflow.result_resource_ids:
+        if history and historical_deletion(workflow, user, policy, identity):
+            continue
         _resource(user, identity)
     return tasks
 
@@ -310,10 +320,11 @@ def generate_report(workflow: AgentWorkflow, user, policy: dict, request=None) -
         # SQLite ignores select_for_update: obtain its writer lock without changing state.
         AgentWorkflow.objects.filter(pk=workflow.id).update(detail=F("detail"))
         workflow = AgentWorkflow.objects.select_for_update().get(pk=workflow.id)
-        tasks = authorize_context(workflow, user, policy)
         path, metadata_path, _ = _paths(workflow)
         if metadata_path.is_file():
+            authorize_context(workflow, user, policy, history=True)
             return load_report(workflow, user)[0]
+        tasks = authorize_context(workflow, user, policy)
         raw = render_report(workflow, user, policy, tasks)
         if len(raw) > MAX_REPORT_BYTES:
             raise ComputeError("本次报告超过大小上限，请先减少流程输出", 409)

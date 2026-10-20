@@ -15,6 +15,7 @@ from apps.audit.events import (
 )
 from apps.audit.service import log_operation
 from apps.core.api import api_login_required
+from apps.core.browser_sessions import prepare_browser_session
 from apps.core.emails import AccountEmailError, validate_account_email
 from apps.core.initialization import (
     ensure_default_user_group,
@@ -93,7 +94,6 @@ def login_view(request):
 
     username = str(payload.get("username", "")).strip()
     password = str(payload.get("password", ""))
-    remember = bool(payload.get("remember", False))
     user = authenticate(request, username=username, password=password)
     if user is None or not user.is_active:
         log_operation(
@@ -111,8 +111,7 @@ def login_view(request):
         )
 
     login(request, user)
-    if not remember:
-        request.session.set_expiry(0)
+    prepare_browser_session(request)
     log_operation(
         user,
         "认证授权",
@@ -130,7 +129,7 @@ def guest_login_view(request):
     ensure_superadmin_defaults(create_account=False, attach_existing_superusers=False)
     user = ensure_guest_user()
     login(request, user)
-    request.session.set_expiry(0)
+    prepare_browser_session(request)
     log_operation(
         user,
         "认证授权",
@@ -338,6 +337,7 @@ def register_view(request):
         )
 
     login(request, user)
+    prepare_browser_session(request)
     message = (
         localized(
             "用户注册成功，科研用户权限申请已提交",

@@ -34,6 +34,7 @@ import {
 } from "./router";
 import type { Bootstrap, User } from "./types";
 import i18n, { type AppLocale } from "./i18n";
+import { browserSessionEndedEvent } from "./auth/browserSession";
 
 const AdminAuthPage = lazy(() => import("./admin/AdminAuthPage"));
 const AdminDataBackupPage = lazy(() => import("./admin/AdminDataBackupPage"));
@@ -108,6 +109,13 @@ export default function App({
     updateUser(value);
   }, []);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const signedOut = () => setUser(null);
+    window.addEventListener(browserSessionEndedEvent, signedOut);
+    return () =>
+      window.removeEventListener(browserSessionEndedEvent, signedOut);
+  }, [setUser]);
 
   const handleForbidden = useCallback(async () => {
     const generation = authGeneration.current;

@@ -368,7 +368,7 @@ class LoginOverviewApiTests(TestCase):
         self.assertEqual(payload["platform"]["abbreviation"], "STISP")
         self.assertEqual(
             payload["platform"]["edition"],
-            "STISP · Spatiotemporal Services Edition",
+            "STISP Spatiotemporal Services Edition",
         )
         from django.conf import settings
         import tomllib
@@ -916,6 +916,21 @@ class ApiJsonErrorTests(TestCase):
 
 
 class RegistrationApiTests(TestCase):
+    def start_browser_page(self, client):
+        response = client.post(
+            "/api/auth/browser-session/",
+            data=json.dumps(
+                {
+                    "action": "start",
+                    "pageId": "auth_test_page_12345678",
+                    "token": "a" * 64,
+                    "sequence": 1,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
     def test_login_writes_dashboard_compatible_audit_log(self):
         user = get_user_model().objects.create_user(
             username="login-user", password="pass12345"
@@ -1200,6 +1215,7 @@ class RegistrationApiTests(TestCase):
             ),
             content_type="application/json",
         )
+        self.start_browser_page(login_client)
         me_response = login_client.get("/api/auth/me/")
 
         guest_client = self.client_class()
@@ -1251,6 +1267,8 @@ class RegistrationApiTests(TestCase):
             200,
         )
 
+        self.start_browser_page(first_visitor)
+        self.start_browser_page(second_visitor)
         first_me = first_visitor.get("/api/auth/me/")
         first_resources = first_visitor.get("/api/catalog/resources/")
 
@@ -1263,6 +1281,8 @@ class RegistrationApiTests(TestCase):
         second_visitor = self.client_class()
         self.assertEqual(first_visitor.post("/api/auth/guest-login/").status_code, 200)
         self.assertEqual(second_visitor.post("/api/auth/guest-login/").status_code, 200)
+        self.start_browser_page(first_visitor)
+        self.start_browser_page(second_visitor)
         guest = get_user_model().objects.get(username="guest")
         guest.refresh_from_db()
         guest.profile.refresh_from_db()
@@ -3274,8 +3294,11 @@ class FeaturePermissionTests(TestCase):
             item["categoryCode"]: item
             for item in overview["ownUploads"]["categoryBreakdown"]
         }
-        self.assertEqual(len(own_categories), 2)
+        self.assertEqual(
+            set(own_categories), {"spatial", "non_spatial", "compute_results"}
+        )
         self.assertEqual(own_categories["spatial"]["count"], 1)
+        self.assertEqual(own_categories["compute_results"]["count"], 0)
         self.assertEqual(own_categories["spatial"]["children"], [])
         self.assertEqual(overview["ownUploads"]["unclassifiedCount"], 0)
         self.assertEqual(overview["visibleResources"]["totalResources"], 2)

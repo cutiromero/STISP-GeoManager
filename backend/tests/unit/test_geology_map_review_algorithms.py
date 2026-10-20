@@ -413,6 +413,58 @@ def test_moved_gap_is_discovered_from_actual_geometry(tmp_path):
     )
 
 
+@pytest.mark.parametrize("offset", [(0, 0), (20, -10)])
+def test_native_grid_island_is_found_corrected_and_rechecked(tmp_path, offset):
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    initial, original, _ = fixture(tmp_path)
+    reference = tmp_path / "native-grid.tif"
+    with rasterio.open(
+        reference,
+        "w",
+        driver="GTiff",
+        width=150,
+        height=150,
+        count=1,
+        dtype="uint8",
+        crs=32646,
+        transform=from_origin(BASE_X - 100, BASE_Y + 200, 2, 2),
+    ) as dst:
+        dst.write(np.zeros((150, 150), dtype="uint8"), 1)
+    module = runpy.run_path(str(ROOT.parents[1] / "scripts/geology_review_data.py"))
+    gap, _ = module["natural_gap"](
+        (BASE_X + 50 + offset[0], BASE_Y + 50 + offset[1]), reference
+    )
+    frame = original.copy()
+    frame.at[0, "geometry"] = geom(0, 0, 100, 100).difference(gap)
+    store(frame, initial.inputs["features"])
+    issues, report = check(initial)
+    assert report["metrics"]["issue_count"] == 2
+    hole = next(row for row in issues if row["kind"] == "fill_gap")
+    assert hole["status"] == "repairable"
+    assert float(hole["area_m2"]) == pytest.approx(gap.area, abs=1e-5)
+    edit = edit_context(tmp_path, initial, issues)
+    load("geology-map-correct")["run"](edit)
+    corrected = gpd.read_file(edit.output_path("corrected.gpkg")).to_crs(32646)
+    assert (
+        corrected.geometry.iloc[0].symmetric_difference(geom(0, 0, 100, 100)).area
+        < 1e-5
+    )
+    assert all(
+        corrected.geometry.iloc[i].symmetric_difference(original.geometry.iloc[i]).area
+        < 1e-5
+        for i in [1, 2]
+    )
+    recheck = Context(
+        tmp_path / "recheck",
+        {**initial.inputs, "features": edit.output_path("corrected.gpkg")},
+    )
+    remaining, final = check(recheck)
+    assert remaining == [] and final["metrics"]["issue_count"] == 0
+
+
 def test_empty_approval_and_contradictory_knowledge_stop_edits(tmp_path):
     initial, _, _ = fixture(tmp_path)
     edit = edit_context(tmp_path, initial, [])

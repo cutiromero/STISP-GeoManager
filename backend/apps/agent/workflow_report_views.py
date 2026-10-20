@@ -8,26 +8,30 @@ from apps.compute.access import require_actor
 from apps.compute.packages import ComputeError
 from .models import AgentWorkflow
 from .views import body, endpoint
-from .workflow import _authorize
+from .workflow import _authorize, authorize_workflow_history
 from .workflow_reports import (
     CONTENT_TYPE,
     PREVIEW_LIMIT,
     authorize_context,
     generate_report,
+    has_saved_report,
     import_report,
     load_report,
     report_json,
 )
 
 
-def _authorized(request, workflow_id):
+def _authorized(request, workflow_id, *, history=False, read_saved=False):
     workflow = get_object_or_404(
         AgentWorkflow.objects.select_related("project_tag"),
         pk=workflow_id,
         owner=request.user,
     )
-    user, policy = _authorize(workflow)
-    authorize_context(workflow, user, policy)
+    reading = history or (read_saved and has_saved_report(workflow))
+    user, policy = (
+        authorize_workflow_history(workflow) if reading else _authorize(workflow)
+    )
+    authorize_context(workflow, user, policy, history=reading)
     return workflow, user, policy
 
 
@@ -39,14 +43,14 @@ def _empty_body(request):
 @endpoint(["POST"])
 def workflow_report(request, workflow_id):
     _empty_body(request)
-    workflow, user, policy = _authorized(request, workflow_id)
+    workflow, user, policy = _authorized(request, workflow_id, read_saved=True)
     data = generate_report(workflow, user, policy, request)
     return JsonResponse(report_json(workflow, user, data))
 
 
 @endpoint(["GET"])
 def workflow_report_preview(request, workflow_id):
-    workflow, user, _ = _authorized(request, workflow_id)
+    workflow, user, _ = _authorized(request, workflow_id, history=True)
     data, path = load_report(workflow, user)
     try:
         content = path.read_text(encoding="utf-8")
@@ -64,7 +68,7 @@ def workflow_report_preview(request, workflow_id):
 
 @endpoint(["GET"])
 def workflow_report_download(request, workflow_id):
-    workflow, user, _ = _authorized(request, workflow_id)
+    workflow, user, _ = _authorized(request, workflow_id, history=True)
     require_actor(user, workflow.project_tag_id, "catalog.export_dataresource")
     data, path = load_report(workflow, user)
     log_operation(

@@ -414,15 +414,15 @@ def explicit_run_parameters(run, manifest):
     return values, conflicts
 
 
-def serialize(run, user, p):
-    from .deleted_resources import historical_deletion
+def serialize(run, user, p, *, history=False):
+    from .deleted_resources import TERMINAL, historical_deletion
 
     intent = run.compute_intent
     if not intent:
         return None
     deleted = False
     for resource_id in intent["inputs"].values():
-        if historical_deletion(run, user, p, resource_id):
+        if history and historical_deletion(run, user, p, resource_id):
             deleted = True
         else:
             resolve_resource(user, p, resource_id, run.resource_ids)
@@ -433,10 +433,14 @@ def serialize(run, user, p):
     kinds = {spec["kind"] for spec in version.manifest["inputs"]}
     eligible = resources(user, p, run.resource_ids).filter(data_type__in=kinds)
     chosen = set(intent["inputs"].values())
-    visible_candidates = [
-        *eligible.filter(pk__in=chosen).order_by("id"),
-        *eligible.exclude(pk__in=chosen).order_by("name", "id")[:10],
-    ]
+    visible_candidates = (
+        []
+        if history and run.status in TERMINAL and intent.get("status") not in OPEN
+        else [
+            *eligible.filter(pk__in=chosen).order_by("id"),
+            *eligible.exclude(pk__in=chosen).order_by("name", "id")[:10],
+        ]
+    )
     for resource in visible_candidates:
         try:
             candidates.append(

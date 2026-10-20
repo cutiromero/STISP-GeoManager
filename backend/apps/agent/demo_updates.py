@@ -19,7 +19,7 @@ from .workflow import _state_hash
 FIXED_ROLES = ("early_image", "late_image", "valid_mask", "zones")
 
 
-def _chain(workflow, user, policy) -> list:
+def _chain(workflow, user, policy, *, history=False) -> list:
     from .demo_workflow import authorize_demo
 
     identity = workflow.plan.get("previousWorkflowId")
@@ -41,7 +41,7 @@ def _chain(workflow, user, policy) -> list:
         ).first()
         if previous is None:
             raise PermissionDenied("前次分析尚未完成或不属于当前用户与项目")
-        authorize_demo(previous, user, policy, include_previous=False)
+        authorize_demo(previous, user, policy, include_previous=False, history=history)
         chain.append(previous)
         identity = previous.plan.get("previousWorkflowId")
     return chain

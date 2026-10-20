@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type {
@@ -189,11 +189,21 @@ function fixture(): AgentWorkflow {
     },
   };
 }
+function RoutePosition() {
+  const location = useLocation();
+  return (
+    <output aria-label="当前页面路径">
+      {location.pathname + location.search}
+    </output>
+  );
+}
+
 function show(workflow = fixture(), review = vi.fn()) {
   const view = render(
     <App>
       <style>{platformStyles + agentStyles + storyStyles}</style>
       <MemoryRouter>
+        <RoutePosition />
         <WorkflowResults
           compact
           workflow={workflow}
@@ -257,6 +267,15 @@ it("拒绝需要确认，查看知识来源与地图位置不会执行修改", a
       .getAllByRole("link", { name: "在地图上查看位置" })[0]
       ?.getAttribute("href"),
   ).toContain("geologyReview=map-review-actual&suggestion=suggestion-gap");
+  expect(
+    fireEvent.click(
+      screen.getAllByRole("link", { name: "在地图上查看位置" })[0]!,
+    ),
+  ).toBe(false);
+  expect(screen.getByLabelText("当前页面路径")).toHaveTextContent(
+    "/map?resourceId=101&projectTagId=3&geologyReview=map-review-actual&suggestion=suggestion-gap",
+  );
+  expect(review).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "拒绝建议" }));
   expect(review).not.toHaveBeenCalled();
   fireEvent.click(await screen.findByRole("button", { name: "确认拒绝" }));
@@ -310,7 +329,10 @@ it("复核解释来自实际模型结果，更换问题位置会更新范围预�
   );
   const view = render(
     <App>
-      <GeologyReviewStory workflow={next} />
+      <MemoryRouter>
+        <RoutePosition />
+        <GeologyReviewStory workflow={next} />
+      </MemoryRouter>
     </App>,
   );
   expect(
@@ -336,7 +358,10 @@ it("复核解释来自实际模型结果，更换问题位置会更新范围预�
   };
   view.rerender(
     <App>
-      <GeologyReviewStory workflow={next} />
+      <MemoryRouter>
+        <RoutePosition />
+        <GeologyReviewStory workflow={next} />
+      </MemoryRouter>
     </App>,
   );
   expect(
@@ -350,6 +375,16 @@ it("复核解释来自实际模型结果，更换问题位置会更新范围预�
       .getByRole("link", { name: "查看待检查地质图与修正后地质图" })
       .getAttribute("href"),
   ).toBe("/map?geologyReview=map-review-actual&projectTagId=3");
+  expect(
+    fireEvent.click(
+      screen.getByRole("link", {
+        name: "查看待检查地质图与修正后地质图",
+      }),
+    ),
+  ).toBe(false);
+  expect(screen.getByLabelText("当前页面路径")).toHaveTextContent(
+    "/map?geologyReview=map-review-actual&projectTagId=3",
+  );
 });
 
 it.each([1200, 390])("在 %s 像素下保留紧凑审核和真实范围", async (width) => {

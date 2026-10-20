@@ -128,6 +128,28 @@ def test_changed_document_or_rule_invalidates_history(knowledge_agent):
             check_evidence(run, s["user"], {})
 
 
+def test_saved_knowledge_snapshots_survive_revision_but_not_access_changes(
+    knowledge_agent,
+):
+    s, entry, doc, run = knowledge_agent
+    with project_scope(s["scope"]):
+        _, pairs = execute(run, "search_knowledge", {"query": "矿物"})
+        run.evidence += evidence_items(run, "search_knowledge", pairs)
+        snapshot = list(run.evidence)
+        doc.sha256 = "b" * 64
+        doc.save(update_fields=["sha256"])
+        entry.revision += 1
+        entry.save(update_fields=["revision"])
+        check_evidence(run, s["user"], {}, history=True)
+        assert run.evidence == snapshot
+        with pytest.raises(PermissionDenied):
+            check_evidence(run, s["user"], {})
+        doc.visibility = "owner_only"
+        doc.save(update_fields=["visibility"])
+        with pytest.raises(PermissionDenied, match="知识资料"):
+            check_evidence(run, s["user"], {}, history=True)
+
+
 def test_document_passages_are_bounded_and_outage_is_explicit(
     knowledge_agent, monkeypatch
 ):

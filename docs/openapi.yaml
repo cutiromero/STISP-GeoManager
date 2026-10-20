@@ -364,6 +364,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/auth/browser-session/:
+    post:
+      tags:
+      - 认证接口
+      summary: 维护当前平台页面的登录生命周期
+      description: 登录、注册或游客登录后先使用start登记页面；resume恢复刷新页面或加入仍在线的同源标签。heartbeat每30秒续期120秒；suspend在页面离开时立即挂起当前页，20秒内可凭原令牌恢复正常刷新。没有可续接页面时abandon在后端注销旧会话。最后页面挂起或租约过期后，受保护接口返回401。令牌只保存在页面会话内，不用于URL、持久Cookie或本地持久存储。
+      operationId: updateBrowserSession
+      security:
+      - sessionAuth: []
+      requestBody:
+        required: true
+        description: 当前页面及动作；除abandon外必须提供该会话的随机令牌。
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrowserSessionRequest'
+      responses:
+        '200':
+          description: 页面生命周期已更新；active表示仍存在有效页面租约。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrowserSessionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /api/auth/logout/:
     post:
       tags:
@@ -11157,7 +11186,47 @@ components:
         remember:
           type: boolean
           default: false
-          description: 是否使用持久会话
+          deprecated: true
+          description: 兼容旧客户端的输入；当前所有角色均使用页面会话，此值不再启用持久登录。
+    BrowserSessionRequest:
+      type: object
+      description: 平台页面会话维护请求；正常刷新续接与新标签加入均须持有服务端验证的令牌。
+      required:
+      - action
+      properties:
+        action:
+          type: string
+          enum: [start, resume, heartbeat, suspend, abandon]
+          description: start用于刚登录的页面，resume用于刷新或在线标签交接，heartbeat续期，suspend挂起，abandon注销无法续接的会话。
+        pageId:
+          type: string
+          minLength: 16
+          maxLength: 80
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: 页面随机标识；除abandon外必填，各标签独立。
+        token:
+          type: string
+          minLength: 64
+          maxLength: 64
+          pattern: '^[a-f0-9]+$'
+          description: 32字节随机令牌的十六进制文本；除abandon外必填，服务端只保存摘要。
+        sequence:
+          type: integer
+          minimum: 1
+          description: 同一页面单调递增的请求序号；除abandon外必填，旧心跳不得覆盖退出或刷新后的较新状态。
+    BrowserSessionResponse:
+      type: object
+      description: 当前页面会话维护结果。
+      required:
+      - detail
+      - active
+      properties:
+        detail:
+          type: string
+          description: 生命周期处理结果说明。
+        active:
+          type: boolean
+          description: 是否仍有可用于后端鉴权的有效页面租约。
     LoginResponse:
       type: object
       required:

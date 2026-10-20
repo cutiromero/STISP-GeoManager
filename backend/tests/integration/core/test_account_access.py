@@ -37,7 +37,14 @@ def test_own_permissions_and_research_application_lifecycle(client):
         for p in profile["availablePermissions"]
     )
     body = dict(displayName="申请人", department="研究组", reason="需要上传数据并分析")
-    assert client.post('/api/auth/research-application/', {**body, 'department': 'x' * 121}, content_type='application/json').status_code == 400
+    assert (
+        client.post(
+            "/api/auth/research-application/",
+            {**body, "department": "x" * 121},
+            content_type="application/json",
+        ).status_code
+        == 400
+    )
     response = client.post(
         "/api/auth/research-application/", body, content_type="application/json"
     )
@@ -109,6 +116,19 @@ def test_applications_are_private_and_superadmin_review_only(client):
     )
     client.logout()
     client.post("/api/auth/guest-login/")
+    assert (
+        client.post(
+            "/api/auth/browser-session/",
+            {
+                "action": "start",
+                "pageId": "account_access_test_page",
+                "token": "a" * 64,
+                "sequence": 1,
+            },
+            content_type="application/json",
+        ).status_code
+        == 200
+    )
     assert not client.get("/api/auth/access/").json()["researchEligible"]
     assert (
         client.post(

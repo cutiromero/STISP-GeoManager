@@ -8,6 +8,7 @@ import {
 } from "./client";
 import { setLocale } from "../i18n";
 import { setActiveProject, resetProjectSession } from "../projects/session";
+import { endBrowserSession } from "../auth/browserSession";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
@@ -40,6 +41,7 @@ describe("api client", () => {
   });
 
   afterEach(() => {
+    endBrowserSession(false);
     resetProjectSession();
     unregisterForbiddenHandler();
     vi.unstubAllGlobals();
@@ -97,7 +99,9 @@ describe("api client", () => {
 
   it("sends JSON POST requests with CSRF token and included credentials", async () => {
     setTestCookie("csrftoken=secure%20token");
-    fetchMock.mockResolvedValue(jsonResponse({ user: { id: 1 } }));
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ user: { id: 1 }, active: true })),
+    );
 
     await api.login("tester", "pass12345", true);
 
@@ -113,6 +117,14 @@ describe("api client", () => {
       username: "tester",
       password: "pass12345",
       remember: true,
+    });
+    const pageRequest = capturedRequest(fetchMock, 1);
+    expect(requestPath(pageRequest)).toBe("/api/auth/browser-session/");
+    expect(pageRequest.credentials).toBe("include");
+    expect(pageRequest.headers.get("X-CSRFToken")).toBe("secure token");
+    expect(JSON.parse(await pageRequest.clone().text())).toMatchObject({
+      action: "start",
+      sequence: 1,
     });
   });
 

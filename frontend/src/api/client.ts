@@ -117,6 +117,11 @@ import type {
 } from "./generated/types.gen";
 import { filenameFromHeaders } from "./downloadFilename";
 import i18n, { currentLocale } from "../i18n";
+import {
+  endBrowserSession,
+  resumeBrowserSession,
+  startBrowserSession,
+} from "../auth/browserSession";
 
 interface ListResponse<T> {
   items: T[];
@@ -532,18 +537,42 @@ export const api = {
   bootstrap: () => requestJson<Bootstrap>("/api/bootstrap/"),
   loginOverview: () => unwrap<LoginOverviewResponse>(sdk.getLoginOverview()),
   csrf: () => requestJson<{ detail: string }>("/api/auth/csrf/"),
-  me: () => requestJson<MeResponse>("/api/auth/me/"),
-  login: (username: string, password: string, remember: boolean) =>
-    requestJson<{ user: User }>("/api/auth/login/", {
+  me: async () => {
+    if (!(await resumeBrowserSession()))
+      throw new ApiError(i18n.t("errors.unauthorized"), 401);
+    return requestJson<MeResponse>("/api/auth/me/");
+  },
+  login: async (username: string, password: string, remember = false) => {
+    const response = await requestJson<{ user: User }>("/api/auth/login/", {
       method: "POST",
       body: { username, password, remember },
-    }),
-  guestLogin: () =>
-    requestJson<{ user: User }>("/api/auth/guest-login/", { method: "POST" }),
-  register: (payload: RegisterRequest) =>
-    unwrap<RegisterResponse>(sdk.register({ body: payload })),
-  logout: () =>
-    requestJson<{ detail: string }>("/api/auth/logout/", { method: "POST" }),
+    });
+    await startBrowserSession();
+    return response;
+  },
+  guestLogin: async () => {
+    const response = await requestJson<{ user: User }>(
+      "/api/auth/guest-login/",
+      { method: "POST" },
+    );
+    await startBrowserSession();
+    return response;
+  },
+  register: async (payload: RegisterRequest) => {
+    const response = await unwrap<RegisterResponse>(
+      sdk.register({ body: payload }),
+    );
+    await startBrowserSession();
+    return response;
+  },
+  logout: async () => {
+    const response = await requestJson<{ detail: string }>(
+      "/api/auth/logout/",
+      { method: "POST" },
+    );
+    endBrowserSession();
+    return response;
+  },
   adminProfile: () => unwrap<AdminProfile>(sdk.getAdminProfile()),
   updateAdminProfile: (payload: AdminProfileUpdate) =>
     unwrap<AdminProfile>(sdk.updateAdminProfile({ body: payload })),

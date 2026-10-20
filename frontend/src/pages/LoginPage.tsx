@@ -6,17 +6,7 @@ import {
   UserOutlined,
   UserSwitchOutlined,
 } from "@ant-design/icons";
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Checkbox,
-  Form,
-  Input,
-  Radio,
-  Typography,
-} from "antd";
+import { Alert, App, Button, Card, Form, Input, Radio, Typography } from "antd";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -53,11 +43,7 @@ export default function LoginPage() {
     setSubmittingAction("login");
     try {
       await api.csrf();
-      const response = await api.login(
-        values.username,
-        values.password,
-        Boolean(values.remember),
-      );
+      const response = await api.login(values.username, values.password, false);
       setUser(response.user);
     } catch (error) {
       message.error(
@@ -176,7 +162,6 @@ export default function LoginPage() {
             key="login"
             className="login-form"
             layout="vertical"
-            initialValues={{ remember: true }}
             onFinish={handleFinish}
             requiredMark={false}
           >
@@ -205,9 +190,6 @@ export default function LoginPage() {
               />
             </Form.Item>
             <div className="login-options">
-              <Form.Item name="remember" valuePropName="checked" noStyle>
-                <Checkbox>{t("auth.remember")}</Checkbox>
-              </Form.Item>
               <Button
                 type="link"
                 size="small"

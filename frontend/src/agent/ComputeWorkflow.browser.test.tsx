@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp } from "antd";
 import { beforeEach, expect, it, vi } from "vitest";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import type {
@@ -176,6 +176,14 @@ it("replaces queued evidence with live finished and imported task status", async
 });
 
 it("restores a saved plan and only executes after confirmation", async () => {
+  function RoutePosition() {
+    const location = useLocation();
+    return (
+      <output aria-label="当前页面路径">
+        {location.pathname + location.search}
+      </output>
+    );
+  }
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [workflow] });
   const confirm = vi.spyOn(agentApi, "confirmWorkflow").mockResolvedValue({
     ...workflow,
@@ -187,6 +195,7 @@ it("restores a saved plan and only executes after confirmation", async () => {
   render(
     <AntApp>
       <MemoryRouter>
+        <RoutePosition />
         <WorkflowPanel model="mock" resourceIds={[12]} />
       </MemoryRouter>
     </AntApp>,
@@ -203,6 +212,14 @@ it("restores a saved plan and only executes after confirmation", async () => {
   expect(
     screen.getByRole("link", { name: "在地理工作台对比成果图层" }),
   ).toHaveAttribute("href", "/map?resources=42&projectTagId=1");
+  expect(
+    fireEvent.click(
+      screen.getByRole("link", { name: "在地理工作台对比成果图层" }),
+    ),
+  ).toBe(false);
+  expect(screen.getByLabelText("当前页面路径")).toHaveTextContent(
+    "/map?resources=42&projectTagId=1",
+  );
 });
 
 it("shows confirmation failure without claiming successful execution", async () => {

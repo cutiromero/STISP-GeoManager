@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.45] - 2026-10-20
+
+### Changed
+- 关闭平台的全部页面后重新打开需要登录，正常刷新和仍有页面在线的多标签使用保留会话。
+- 快速对话与科研智能体共用轻量、标准、深入三档思考强度；模型和分析方案由后台默认设置决定。
+- 上传文档按钮采用与输入栏其他操作一致的样式。
+- 地质检查演示局部改为沿原生29米格网生成的自然阶梯岛，保留原图及历史版本。
+
+### Fixed
+- 已完成聊天的查看与任务重新执行分别校验；资料名称及元信息更新不再阻断历史聊天，已删除结果保留有据可查的历史内容。
+- 成果及地质检查中的地图入口使用站内导航，查看结果时保持当前登录会话。
+
 ## [0.1.44] - 2026-10-19
 
 ### Changed

@@ -1,10 +1,15 @@
 from django.urls import path
 
 from apps.core import admin_api, auth_views, views, account_access
+from apps.core.browser_sessions import browser_session_view
 
 urlpatterns = [
     path("auth/access/", account_access.access_view, name="account-access"),
-    path("auth/research-application/", account_access.apply_research, name="apply-research"),
+    path(
+        "auth/research-application/",
+        account_access.apply_research,
+        name="apply-research",
+    ),
     path("bootstrap/", views.bootstrap, name="bootstrap"),
     path("login/overview/", views.login_overview, name="login-overview"),
     path("health/", views.health, name="health"),
@@ -18,6 +23,7 @@ urlpatterns = [
     path("auth/guest-login/", auth_views.guest_login_view, name="guest-login"),
     path("auth/register/", auth_views.register_view, name="register"),
     path("auth/logout/", auth_views.logout_view, name="logout"),
+    path("auth/browser-session/", browser_session_view, name="browser-session"),
     path("auth/me/", auth_views.me_view, name="me"),
     path(
         "admin/operation-logs/",

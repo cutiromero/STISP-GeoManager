@@ -64,6 +64,27 @@ describe("LoginPage", () => {
     mockApi.loginOverview.mockRejectedValue(new Error("offline"));
   });
 
+  it("does not offer remembered login and registers the current page after sign in", async () => {
+    mockApi.csrf.mockResolvedValue({});
+    mockApi.login.mockResolvedValue({ user: { id: 1 } });
+    renderLoginPage();
+    expect(screen.queryByText("记住登录状态")).toBeNull();
+    fireEvent.change(screen.getByLabelText("账号"), {
+      target: { value: "page-user" },
+    });
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "test-page-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /登录并进入数据平台/ }));
+    await vi.waitFor(() =>
+      expect(mockApi.login).toHaveBeenCalledWith(
+        "page-user",
+        "test-page-password",
+        false,
+      ),
+    );
+  });
+
   it("switches to English immediately and persists the selected locale", async () => {
     renderLoginPage();
 

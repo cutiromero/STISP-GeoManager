@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App as AntApp, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppContext } from "../contexts/AppContext";
 import { appTheme } from "../theme";
@@ -173,6 +173,15 @@ const publishedComposition: MapComposition = {
   updatedAt: "2026-07-23T09:00:00+08:00",
 };
 
+function RoutePosition() {
+  const location = useLocation();
+  return (
+    <output aria-label="当前页面路径">
+      {location.pathname + location.search}
+    </output>
+  );
+}
+
 function renderResultsPage() {
   const setBootstrap = vi.fn();
   const setUser = vi.fn();
@@ -183,6 +192,7 @@ function renderResultsPage() {
           value={{ bootstrap, user: viewer, setBootstrap, setUser }}
         >
           <MemoryRouter initialEntries={["/results"]}>
+            <RoutePosition />
             <ResultsPage />
           </MemoryRouter>
         </AppContext.Provider>
@@ -309,6 +319,18 @@ describe("ResultsPage published map compositions", () => {
           screen.getByRole("link", { name: "当前面积统计" }),
         ).toHaveAttribute(
           "href",
+          `/resources/catalog?resourceId=302&q=${encodeURIComponent("当前面积统计")}`,
+        );
+        expect(
+          fireEvent.click(screen.getByRole("link", { name: "人工精修对照图" })),
+        ).toBe(false);
+        expect(screen.getByLabelText("当前页面路径")).toHaveTextContent(
+          "/map?resources=301&projectTagId=3",
+        );
+        expect(
+          fireEvent.click(screen.getByRole("link", { name: "当前面积统计" })),
+        ).toBe(false);
+        expect(screen.getByLabelText("当前页面路径")).toHaveTextContent(
           `/resources/catalog?resourceId=302&q=${encodeURIComponent("当前面积统计")}`,
         );
       } else {

@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261020-001 - 页面关闭后的登录生命周期
+
+- Status: BackendReady
+- Owner: portal_ui_cleanup，登录与认证前后端统一实现。
+- Endpoints: POST /api/auth/browser-session/；POST /api/auth/login/、guest-login/、register/ 与 GET /api/auth/me/ 的页面登录生命周期。
+- Change type: 增加页面租约；remember 保留为废弃输入且不再启用持久登录。
+- OpenAPI change: BrowserSessionRequest/Response，start/resume/heartbeat/suspend/abandon动作。
+- Frontend reason: 所有角色关闭最后平台页面后重开需登录，正常刷新及仍在线的多标签可续接。
+- Mock examples: 使用真实Django Session、受控时钟与隔离浏览器验证，不写入业务数据。
+- Backend implementation notes: 复用Django Session存储随机令牌摘要及各页面租约；页面退出挂起，20秒刷新续接，30秒心跳/120秒失联边界；下载和瓦片沿用Cookie并校验租约。
+- Verification: 普通/超级用户、游客、刷新、多标签、浏览器会话恢复、Cookie重放、失联过期和匿名公开读取。
+- Result: 本机真实login/start/suspend/resume、原始超级用户、游客、Cookie重放、失联、CSRF及既有认证权限回归54项通过；浏览器生命周期、API客户端及登录页33项通过，包含HTTP兼容随机数、刷新、多标签交接和浏览器恢复拒绝旧存储。契约已生成，统一API/类型/构建与候选发布由本轮总验收记录。
+
 ## API-20261016-002 - 普通智能体原任务交互与历史计算结果清理
 
 - Status: ContractReady
@@ -124,6 +137,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261020-001 | BackendReady | /api/auth/browser-session/; login/; guest-login/; register/; me/ | browser page leases and session lifecycle | Updated | HTTP/browser fixtures | Passed | 54 backend; 33 browser passed | 20-second refresh; 120-second lost-contact expiry; release acceptance separate |
 | API-20261016-002 | ContractReady | /api/agent/runs/{runId}/interaction/; /api/catalog/resources/delete-preview/; resources/delete/ | persisted questions; confirmed history cleanup | Updated | HTTP/browser fixtures | Focused passed | In progress | Real model, compute and release acceptance recorded separately |
 | API-20261016-001 | BackendReady | /api/agent/admin/; bootstrap/; conversations/{id}/runs/; workflows/ | configurable research quotas and manual selection | Updated | HTTP/browser fixtures | Passed | Focused passed | Actual model window and safety guards retained; deployment separate |
 | API-20261014-003 | BackendReady | /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | knowledge query; selected modification approval | Updated | Browser/integration fixtures | Passed | Focused passed | Persistent proposals and exact approved scope; real-model release validation separate |

@@ -113,7 +113,7 @@ def read_knowledge_document(run, user, args):
     return response, [(None, response)]
 
 
-def check_document_evidence(user, document_refs, domains=None):
+def check_document_evidence(user, document_refs, domains=None, *, history=False):
     from apps.knowledge.library import visible_documents
 
     expected = set(document_refs)
@@ -125,5 +125,9 @@ def check_document_evidence(user, document_refs, domains=None):
         .exclude(status__in=["failed", "cancelled"])
         .values_list("id", "sha256")
     )
-    if not expected <= actual:
+    if not (
+        {identity for identity, _ in expected} <= {identity for identity, _ in actual}
+        if history
+        else expected <= actual
+    ):
         raise PermissionDenied("知识资料已更新或访问权限已变化，请重新检索")

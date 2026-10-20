@@ -721,7 +721,72 @@ it.each(["chat", "workbench"])(
   },
 );
 
-it("restores administrator default and hides the effort slider in fast mode", async () => {
+it.each([
+  ["chat", "low"],
+  ["chat", "medium"],
+  ["chat", "xhigh"],
+  ["workbench", "low"],
+  ["workbench", "medium"],
+  ["workbench", "xhigh"],
+] as const)(
+  "%s enables reasoning with the selected %s effort",
+  async (mode, effort) => {
+    bootstrap.allowAttachments = true;
+    vi.mocked(agentApi.detail).mockResolvedValue({
+      conversation,
+      runs: [
+        run(1, "旧问题", "可以结合项目中的数据、算法和专家知识继续分析。"),
+      ],
+    });
+    showAgent(mode);
+    await screen.findByText("旧问题");
+    const reasoning = screen.getByRole("button", { name: /逻辑推理/ });
+    expect(reasoning).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
+    const slider = await screen.findByRole("slider", { name: "思考强度" });
+    await waitFor(() => expect(slider).toBeVisible());
+    for (const label of ["轻量", "标准", "深入"])
+      expect(screen.getByText(label, { exact: true })).toBeVisible();
+    expect(reasoning).toHaveAttribute("aria-pressed", "false");
+    if (effort === "low") {
+      fireEvent.keyDown(slider, { key: "Home", keyCode: 36 });
+      fireEvent.keyUp(slider, { key: "Home", keyCode: 36 });
+    } else fireEvent.keyDown(slider, { key: "End", keyCode: 35 });
+    if (effort === "medium")
+      fireEvent.keyDown(slider, { key: "ArrowLeft", keyCode: 37 });
+    await waitFor(() =>
+      expect(reasoning).toHaveAttribute("aria-pressed", "true"),
+    );
+    if (effort === "medium") {
+      await waitFor(() =>
+        expect(slider.closest(".ant-popover")!.className).not.toMatch(
+          /(?:-enter|-appear|-leave)/,
+        ),
+      );
+      await page.screenshot({
+        path: `../../test-results/agent-${mode}-effort-levels.png`,
+      });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+      target: { value: "分析研究资料" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() =>
+      expect(agentApi.submit).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          thinkingMode: "deep",
+          reasoningEffort: effort,
+          budgetProfile: "normal",
+          maxOutputTokens: undefined,
+        }),
+      ),
+    );
+  },
+);
+
+it("restores administrator default and keeps the effort choices visible without enabling reasoning on open", async () => {
   render(
     <AntApp>
       <MemoryRouter initialEntries={["/agent/chat"]}>
@@ -741,9 +806,11 @@ it("restores administrator default and hides the effort slider in fast mode", as
     screen.getByRole("button", { name: "调整思考强度" }),
   ).toHaveTextContent("轻量");
   fireEvent.click(screen.getByText("逻辑推理", { exact: true }));
-  expect(
-    screen.queryByRole("slider", { name: "思考强度" }),
-  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
+  await waitFor(() =>
+    expect(screen.getByRole("slider", { name: "思考强度" })).toBeVisible(),
+  );
+  expect(screen.getByText("选择强度将开启逻辑推理。")).toBeVisible();
   fireEvent.change(
     screen.getByPlaceholderText("输入问题，Enter 发送，Shift+Enter 换行"),
     { target: { value: "快速问题" } },
@@ -759,6 +826,42 @@ it("restores administrator default and hides the effort slider in fast mode", as
     ),
   );
 });
+
+it.each(["chat", "workbench"] as const)(
+  "%s uses the backend model and profile instead of a saved local model choice",
+  async (mode) => {
+    const previousModels = bootstrap.models;
+    bootstrap.models = [
+      ...previousModels,
+      { ...previousModels[0], alias: "old-choice", name: "旧本机选择" },
+    ];
+    bootstrap.budgets!.defaultProfile = "materials";
+    localStorage.setItem(
+      `agent-model:99:${mode === "workbench" ? "agent" : "chat"}`,
+      "old-choice",
+    );
+    try {
+      showAgent(mode);
+      await screen.findByText("旧问题");
+      fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+        target: { value: "按项目默认配置分析" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "发送" }));
+      await waitFor(() =>
+        expect(agentApi.submit).toHaveBeenCalledWith(
+          1,
+          expect.objectContaining({
+            model: "mock",
+            budgetProfile: "materials",
+            maxOutputTokens: undefined,
+          }),
+        ),
+      );
+    } finally {
+      bootstrap.models = previousModels;
+    }
+  },
+);
 
 it.each([false, true])(
   "keeps per-answer sources readable without run details for any role (%s)",
@@ -807,21 +910,18 @@ it.each([false, true])(
     expect(screen.queryByText("运行详情")).not.toBeInTheDocument();
     expect(screen.queryByText(/本轮参数/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
-    if (manager) {
-      fireEvent.click(screen.getByText("高级设置"));
-      await waitFor(() =>
-        expect(
-          screen.getByRole("spinbutton", { name: "本次生成上限" }),
-        ).toBeVisible(),
-      );
-    } else {
-      expect(screen.queryByText("高级设置")).not.toBeInTheDocument();
+    expect(screen.queryByText("高级设置")).not.toBeInTheDocument();
+    if (!manager)
       expect(screen.queryByText("工具调用详情")).not.toBeInTheDocument();
-    }
+    expect(screen.queryByRole("combobox", { name: "选择模型" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "分析方案" })).toBeNull();
+    expect(
+      screen.queryByRole("spinbutton", { name: "本次生成上限" }),
+    ).toBeNull();
   },
 );
 
-it("hides unavailable agent navigation and enables deep thinking for long reasoning", async () => {
+it("hides unavailable agent navigation and starts reasoning from the effort choice using the backend profile", async () => {
   bootstrap.canAgent = false;
   render(
     <AntApp>
@@ -835,12 +935,10 @@ it("hides unavailable agent navigation and enables deep thinking for long reason
     screen.queryByRole("button", { name: "科研智能体" }),
   ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "分析方案" }));
-  fireEvent.click(
-    await screen.findByText("长推理", {
-      selector: ".ant-select-item-option-content",
-    }),
-  );
+  fireEvent.keyDown(await screen.findByRole("slider", { name: "思考强度" }), {
+    key: "End",
+    keyCode: 35,
+  });
   expect(
     await screen.findByRole("button", { name: "调整思考强度" }),
   ).toBeVisible();
@@ -854,7 +952,8 @@ it("hides unavailable agent navigation and enables deep thinking for long reason
       1,
       expect.objectContaining({
         thinkingMode: "deep",
-        budgetProfile: "reasoning",
+        reasoningEffort: "xhigh",
+        budgetProfile: "normal",
         maxOutputTokens: undefined,
       }),
     ),
@@ -1055,17 +1154,12 @@ it.each([
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       await waitFor(() => expect(goal).not.toBeVisible());
       fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
-      const profile = screen.getByRole("combobox", { name: "分析方案" });
+      const effort = await screen.findByRole("slider", { name: "思考强度" });
       expectWithin(
-        profile,
-        document.querySelector<HTMLElement>(".agent-settings-panel")!,
+        effort,
+        document.querySelector<HTMLElement>(".agent-reasoning-settings")!,
       );
-      fireEvent.mouseDown(profile);
-      fireEvent.click(
-        await screen.findByText("长材料", {
-          selector: ".ant-select-item-option-content",
-        }),
-      );
+      fireEvent.keyDown(effort, { key: "End", keyCode: 35 });
       fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
       fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
         target: { value: "低高度窗口问题" },
@@ -1080,7 +1174,9 @@ it.each([
           1,
           expect.objectContaining({
             prompt: "低高度窗口问题",
-            budgetProfile: "materials",
+            thinkingMode: "deep",
+            reasoningEffort: "xhigh",
+            budgetProfile: "normal",
           }),
         ),
       );
@@ -1149,7 +1245,7 @@ it("keeps pending approval visible while the drawer is closed and confirms the f
   await waitFor(() => expect(screen.queryByText("待确认")).toBeNull());
 });
 
-it("submits resources, internet and an attachment selected from the tools menu", async () => {
+it("submits selected resources and a document while keeping system settings out of the composer", async () => {
   bootstrap.allowAttachments = true;
   bootstrap.internetEnabled = true;
   vi.mocked(agentApi.resources).mockResolvedValue({
@@ -1182,8 +1278,41 @@ it("submits resources, internet and an attachment selected from the tools menu",
       selector: ".ant-select-item-option-content",
     }),
   );
+  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("radiogroup", { name: "数据选择方式" }),
+    ).not.toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
-  fireEvent.click(screen.getByRole("switch", { name: "联网检索" }));
+  await waitFor(() =>
+    expect(screen.getByRole("slider", { name: "思考强度" })).toBeVisible(),
+  );
+  await waitFor(() =>
+    expect(
+      screen.getByRole("slider").closest(".ant-popover")!.className,
+    ).not.toMatch(/(?:-enter|-appear|-leave)/),
+  );
+  expect(screen.queryByRole("switch", { name: "联网检索" })).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "选择模型" })).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "分析方案" })).toBeNull();
+  expect(screen.queryByText("高级设置")).not.toBeInTheDocument();
+  const upload = screen.getByRole("button", { name: /上传文档/ });
+  const algorithm = screen.getByRole("button", { name: "调用算法" });
+  for (const property of [
+    "height",
+    "borderRadius",
+    "fontSize",
+    "backgroundColor",
+    "color",
+  ] as const) {
+    expect(getComputedStyle(upload)[property]).toBe(
+      getComputedStyle(algorithm)[property],
+    );
+  }
+  await page.screenshot({
+    path: "../../test-results/agent-composer-effort-desktop.png",
+  });
   const file = new File(["测试资料"], "资料.txt", { type: "text/plain" });
   fireEvent.change(
     document.querySelector<HTMLInputElement>('input[type="file"]')!,
@@ -1206,7 +1335,7 @@ it("submits resources, internet and an attachment selected from the tools menu",
       expect.objectContaining({
         resourceIds: [10],
         attachmentIds: [5],
-        internetEnabled: true,
+        internetEnabled: false,
       }),
     ),
   );
@@ -1525,7 +1654,6 @@ it("creates one conversation when the first action uploads multiple documents", 
     }),
   );
   showAgent();
-  fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
   fireEvent.change(
     document.querySelector<HTMLInputElement>('input[type="file"]')!,
     {

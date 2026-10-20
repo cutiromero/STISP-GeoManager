@@ -210,7 +210,7 @@ def brief(r):
     }
 
 
-def check_evidence(run, user, p):
+def check_evidence(run, user, p, *, history=False):
     from .selections import knowledge_domains, require_task_selection
     from .deleted_resources import historical_deletion
 
@@ -221,8 +221,8 @@ def check_evidence(run, user, p):
         # System, algorithm, compute and web evidence intentionally have no
         # DataResource.  Their permissions are rechecked by the capability
         # gate on the next action instead of pretending they are resources.
-        if ev.get("resourceId") is not None and not historical_deletion(
-            run, user, p, ev["resourceId"]
+        if ev.get("resourceId") is not None and not (
+            history and historical_deletion(run, user, p, ev["resourceId"])
         ):
             resolve_resource(user, p, ev["resourceId"], run.resource_ids)
         if ev.get("tool") == "search_web" and not _policy_switch(
@@ -288,12 +288,17 @@ def check_evidence(run, user, p):
             .filter(pk__in=[identity for identity, _ in knowledge_refs])
             .values_list("id", "revision")
         )
-        if not knowledge_refs <= visible:
+        if not (
+            {identity for identity, _ in knowledge_refs}
+            <= {identity for identity, _ in visible}
+            if history
+            else knowledge_refs <= visible
+        ):
             raise PermissionDenied("知识依据已更新或访问权限已变化，请重新检索")
     if document_refs:
         from .knowledge_tools import check_document_evidence
 
-        check_document_evidence(user, document_refs, domains=domains)
+        check_document_evidence(user, document_refs, domains=domains, history=history)
 
 
 def _q(name):

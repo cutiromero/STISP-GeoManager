@@ -436,7 +436,8 @@
   align-items: center;
   gap: 3px;
 }
-.agent-composer-tools > .ant-btn {
+.agent-composer-tools > .ant-btn,
+.agent-composer-tools > .agent-upload-tool .ant-btn {
   height: 30px;
   max-width: 100%;
   padding: 0 8px;
@@ -444,10 +445,11 @@
   border-radius: 16px;
   box-shadow: none;
   background: transparent;
-  color: #667f91;
+  color: #45677e;
   font-size: 12px;
 }
 .agent-composer-tools > .ant-btn:hover,
+.agent-composer-tools > .agent-upload-tool .ant-btn:hover,
 .agent-composer-tools > .agent-tool-active {
   color: #315f7d;
   background: #eaf2f8;
@@ -475,8 +477,7 @@
 .agent-send-button.ant-btn-primary:disabled {
   background: #e9eef1;
 }
-.agent-tools-panel,
-.agent-settings-panel {
+.agent-tools-panel {
   display: grid;
   gap: 16px;
   width: min(340px, calc(100vw - 48px));
@@ -653,14 +654,17 @@
   margin: auto;
 }
 .agent-reasoning-settings {
-  width: min(360px, calc(100vw - 64px));
-  padding: 8px 12px;
+  width: min(280px, calc(100vw - 64px));
+  padding: 8px 10px 2px;
 }
-.agent-reasoning-settings > .agent-settings-panel {
-  width: 100%;
+.agent-reasoning-settings .ant-slider {
+  margin-inline: 14px;
 }
-.agent-reasoning-settings .agent-tool-switch {
-  margin-top: 12px;
+.agent-effort-hint.ant-typography {
+  margin: 26px 0 4px;
+  color: #7b8e9d;
+  font-size: 12px;
+  line-height: 1.6;
 }
 @media (max-width: 900px) {
   .agent-workspace {
@@ -731,7 +735,8 @@
   .agent-composer-footer {
     gap: 4px;
   }
-  .agent-composer-tools > .ant-btn {
+  .agent-composer-tools > .ant-btn,
+  .agent-composer-tools > .agent-upload-tool .ant-btn {
     padding-inline: 6px;
     font-size: 11px;
   }

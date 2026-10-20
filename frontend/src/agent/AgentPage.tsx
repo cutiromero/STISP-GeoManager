@@ -8,7 +8,6 @@ import {
   Layout,
   Modal,
   Popconfirm,
-  Select,
   Space,
   Switch,
   Tag,
@@ -50,7 +49,6 @@ import type {
 import { createUuid } from "../utils/uuid";
 import { useAgentBootstrap } from "./useAgentBootstrap";
 import SafeMarkdown from "./SafeMarkdown";
-import TaskBudgetControl from "./TaskBudgetControl";
 import RunEvidence from "./RunEvidence";
 import RunComputeTasks from "./RunComputeTasks";
 import ComputeIntentCard from "./ComputeIntentCard";
@@ -149,9 +147,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   }, [mode, location.state, location.pathname, navigate]);
   const [model, setModel] = useState("");
   const [thinkingMode, setThinkingMode] = useState<"fast" | "deep">("fast");
-  const [budgetProfile, setBudgetProfile] =
-    useState<AgentBudgetProfileId>("normal");
-  const [outputOverride, setOutputOverride] = useState<number>();
+  const budgetProfile = bootstrap?.budgets?.defaultProfile ?? "normal";
   const [effortOverride, setEffortOverride] = useState<ReasoningEffort>();
   const defaultEffort =
     (bootstrap?.budgets?.enabled
@@ -160,9 +156,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         )?.reasoningEffort
       : bootstrap?.defaultReasoningEffort) ?? "medium";
   const requestedEffort = thinkingMode === "deep" ? effortOverride : undefined;
-  useEffect(() => {
-    if (bootstrap?.budgets) setBudgetProfile(bootstrap.budgets.defaultProfile);
-  }, [bootstrap?.budgets?.defaultProfile]);
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
   const [error, setError] = useState("");
@@ -364,7 +357,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   }, [mode, canUse, query, archived]);
   useEffect(() => {
     if (!bootstrap || model) return;
-    const preferred = localStorage.getItem(`agent-model:${user?.id}:${mode}`);
     const candidates = bootstrap.models.filter(
       (m) => mode === "chat" || m.allowAgent,
     );
@@ -374,18 +366,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         : bootstrap.defaultChatModel;
     const demoModel = demoLaunch.current
       ? (candidates.find(
-          (entry) => entry.alias === preferred && entry.status === "online",
-        ) ??
-        candidates.find(
           (entry) => entry.alias === defaultModel && entry.status === "online",
-        ) ??
-        candidates.find((entry) => entry.status === "online"))
+        ) ?? candidates.find((entry) => entry.status === "online"))
       : undefined;
     setModel(
       demoModel?.alias ??
-        (candidates.some((m) => m.alias === preferred)
-          ? preferred!
-          : defaultModel || candidates[0]?.alias || ""),
+        (candidates.some((m) => m.alias === defaultModel)
+          ? defaultModel
+          : candidates[0]?.alias || ""),
     );
   }, [bootstrap, mode, model, user?.id]);
   useEffect(() => {
@@ -685,8 +673,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         previous.internetEnabled === (internetEnabled && internetAvailable) &&
         previous.budgetProfile ===
           (bootstrap?.budgets?.enabled ? budgetProfile : undefined) &&
-        previous.maxOutputTokens ===
-          (bootstrap?.budgets?.enabled ? outputOverride : undefined) &&
+        previous.maxOutputTokens === undefined &&
         JSON.stringify(previous.toolPreferences) ===
           JSON.stringify(toolPreferences);
       const submission = same
@@ -706,9 +693,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
             budgetProfile: bootstrap?.budgets?.enabled
               ? budgetProfile
               : undefined,
-            maxOutputTokens: bootstrap?.budgets?.enabled
-              ? outputOverride
-              : undefined,
+            maxOutputTokens: undefined,
             toolPreferences,
             demoScenario,
           };
@@ -719,7 +704,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         idempotencyKey: submission.key,
         ...(demoScenario ? { demoScenario } : {}),
         ...(bootstrap?.budgets?.enabled
-          ? { budgetProfile, maxOutputTokens: outputOverride }
+          ? { budgetProfile, maxOutputTokens: undefined }
           : {}),
         thinkingMode,
         reasoningEffort: requestedEffort,
@@ -1520,6 +1505,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     )}
                     {attachmentsAvailable && (
                       <Upload
+                        className="agent-upload-tool"
                         accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
                         multiple
                         showUploadList={false}
@@ -1535,6 +1521,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         }
                       >
                         <Button
+                          type="text"
                           icon={<PaperClipOutlined />}
                           loading={uploadingAttachment}
                         >
@@ -1542,87 +1529,24 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         </Button>
                       </Upload>
                     )}
-                    <ReasoningEffortControl
-                      value={effortOverride ?? defaultEffort}
-                      overridden={effortOverride !== undefined}
-                      effortEnabled={
-                        deepThinkingAvailable && thinkingMode === "deep"
-                      }
-                      disabled={taskLocked || busy}
-                      onChange={setEffortOverride}
-                      settings={
-                        <div className="agent-settings-panel">
-                          <label className="agent-tool-field">
-                            <strong>{ui("使用模型", "Model")}</strong>
-                            <Select
-                              aria-label={ui("选择模型", "Choose model")}
-                              value={model || undefined}
-                              disabled={taskLocked || busy}
-                              onChange={(value) => {
-                                setModel(value);
-                                if (
-                                  !models.find((item) => item.alias === value)
-                                    ?.supportsThinking
-                                )
-                                  setThinkingMode("fast");
-                                localStorage.setItem(
-                                  `agent-model:${user?.id}:${mode}`,
-                                  value,
-                                );
-                              }}
-                              placeholder={ui("选择模型", "Choose model")}
-                              options={models.map((item) => ({
-                                value: item.alias,
-                                label: `${item.name} / ${item.status === "online" ? ui("在线", "Online") : item.status === "offline" ? ui("离线", "Offline") : ui("待检测", "Unchecked")}${item.supportsVision ? ` / ${ui("支持图片", "Vision")}` : ""}`,
-                              }))}
-                            />
-                          </label>
-                          {bootstrap?.budgets?.enabled && selectedModel && (
-                            <TaskBudgetControl
-                              canManage={Boolean(bootstrap.canManage)}
-                              options={bootstrap.budgets}
-                              profile={budgetProfile}
-                              output={outputOverride}
-                              serviceWindow={selectedModel.contextWindowTokens}
-                              disabled={taskLocked || busy}
-                              onProfile={(value) => {
-                                setBudgetProfile(value);
-                                setOutputOverride(undefined);
-                                setEffortOverride(undefined);
-                                if (
-                                  value === "reasoning" &&
-                                  deepThinkingAvailable
-                                ) {
-                                  setThinkingMode("deep");
-                                  localStorage.setItem(
-                                    `agent-thinking:${user?.id}:${mode}`,
-                                    "deep",
-                                  );
-                                }
-                              }}
-                              onOutput={setOutputOverride}
-                            />
-                          )}
-                          {internetAvailable && (
-                            <label className="agent-tool-switch">
-                              <span>
-                                {ui("联网检索", "Internet retrieval")}
-                              </span>
-                              <Switch
-                                aria-label={ui(
-                                  "联网检索",
-                                  "Internet retrieval",
-                                )}
-                                size="small"
-                                checked={internetEnabled}
-                                disabled={taskLocked || busy}
-                                onChange={setInternetEnabled}
-                              />
-                            </label>
-                          )}
-                        </div>
-                      }
-                    />
+                    {deepThinkingAvailable && (
+                      <ReasoningEffortControl
+                        value={effortOverride ?? defaultEffort}
+                        overridden={effortOverride !== undefined}
+                        effortEnabled={thinkingMode === "deep"}
+                        disabled={taskLocked || busy}
+                        onChange={(value) => {
+                          setEffortOverride(value);
+                          if (value !== undefined) {
+                            setThinkingMode("deep");
+                            localStorage.setItem(
+                              `agent-thinking:${user?.id}:${mode}`,
+                              "deep",
+                            );
+                          }
+                        }}
+                      />
+                    )}
                     {deepThinkingAvailable && (
                       <>
                         <Button

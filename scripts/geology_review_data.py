@@ -4,11 +4,15 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
-from shapely.geometry import Point, box
+import rasterio
+from rasterio.features import rasterize, shapes
+from rasterio.windows import Window, from_bounds, transform as window_transform
+from shapely.geometry import Polygon, box, shape
 from shapely.ops import unary_union
 
 ROI = (766465.899734376, 3973540.0897343755, 769265.899734376, 3976340.0897343755)
@@ -158,11 +162,104 @@ def rules():
     ]
 
 
-def prepare(source, mapping_path, output, offset=(0, 0), structures=None):
-    output.mkdir(parents=True, exist_ok=True)
+def natural_gap(
+    center: tuple[float, float], grid_reference: Path
+) -> tuple[Polygon, dict]:
+    """Build one irregular island on the original classification's pixel grid."""
+    with rasterio.open(grid_reference) as reference:
+        grid = reference.transform
+        if reference.crs is None or reference.crs.to_epsg() != 32646:
+            raise ValueError("格网参照必须采用本案例的米制投影EPSG:32646")
+        if grid.a <= 0 or grid.e >= 0 or grid.b != 0 or grid.d != 0:
+            raise ValueError("格网参照需要无旋转的北向上分类栅格")
+        # Asymmetric lobes form a natural outline; pixelization supplies the
+        # same stair-step boundary as the surrounding classified map.
+        profile = [
+            (-8, -1),
+            (-7, -4),
+            (-5, -5),
+            (-3, -7),
+            (0, -6),
+            (2, -8),
+            (4, -6),
+            (5, -3),
+            (8, -2),
+            (7, 1),
+            (8, 3),
+            (5, 4),
+            (4, 6),
+            (1, 7),
+            (-1, 5),
+            (-3, 6),
+            (-4, 3),
+            (-7, 3),
+            (-6, 1),
+        ]
+        outline = Polygon(
+            [(center[0] + x * grid.a, center[1] + y * -grid.e) for x, y in profile]
+        )
+        extent = from_bounds(*outline.bounds, transform=grid)
+        left, top = math.floor(extent.col_off) - 1, math.floor(extent.row_off) - 1
+        width = math.ceil(extent.col_off + extent.width) - left + 1
+        height = math.ceil(extent.row_off + extent.height) - top + 1
+        if (
+            left < 0
+            or top < 0
+            or left + width > reference.width
+            or top + height > reference.height
+        ):
+            raise ValueError("演示位置超出格网参照的实际覆盖范围")
+        local_grid = window_transform(Window(left, top, width, height), grid)
+        mask = rasterize(
+            [(outline, 1)],
+            out_shape=(height, width),
+            transform=local_grid,
+            fill=0,
+            dtype="uint8",
+        )
+        islands = [
+            shape(geometry)
+            for geometry, value in shapes(
+                mask, mask=mask.astype(bool), transform=local_grid
+            )
+            if value == 1
+        ]
+        if len(islands) != 1 or islands[0].geom_type != "Polygon":
+            raise ValueError("演示范围必须为一个边连通的有效岛状面")
+        gap = islands[0]
+        if not gap.is_valid or gap.interiors or gap.is_empty:
+            raise ValueError("岛状范围不得包含无效几何或内部空洞")
+        cells = int(mask.sum())
+        if not 0 < gap.area < 300000 or not math.isclose(
+            gap.area, cells * abs(grid.a * grid.e), abs_tol=0.001
+        ):
+            raise ValueError("岛状范围面积须与原生像元一致并满足现有筛查范围")
+        return gap, {
+            "shape": "irregular-native-grid-island-v1",
+            "gridReference": str(grid_reference),
+            "gridReferenceSha256": hashlib.sha256(
+                grid_reference.read_bytes()
+            ).hexdigest(),
+            "gridTransform": list(grid)[:6],
+            "gridCrs": reference.crs.to_string(),
+            "gridCellSizeM": [grid.a, -grid.e],
+            "gridCellCount": cells,
+        }
+
+
+def prepare(
+    source, mapping_path, output, offset=(0, 0), structures=None, grid_reference=None
+):
+    if grid_reference is None:
+        raise ValueError("请提供原分类栅格作为格网参照，保留实际像元尺寸和对齐方式")
+    if output.exists() and any(output.iterdir()):
+        raise FileExistsError("运行资料目录已有内容，请选择新的版本目录")
     private = output.parent / (
         "acceptance-only" if offset == (0, 0) else "acceptance-variant"
     )
+    if private.exists() and any(private.iterdir()):
+        raise FileExistsError("独立验收目录已有内容，请选择新的版本目录")
+    output.mkdir(parents=True, exist_ok=True)
     private.mkdir(parents=True, exist_ok=True)
     # Establish reviewed rules before constructing the matching input conditions.
     save_json(output / "expert_knowledge.json", knowledge())
@@ -203,7 +300,9 @@ def prepare(source, mapping_path, output, offset=(0, 0), structures=None):
     assert area.difference(unary_union(frame.geometry)).area < 0.001
     frame.to_file(private / "reference.gpkg", layer="data", driver="GPKG", index=False)
     before = frame.copy(deep=True)
-    gap = Point(CENTER[0] + offset[0], CENTER[1] + offset[1]).buffer(230)
+    gap, gap_preparation = natural_gap(
+        (CENTER[0] + offset[0], CENTER[1] + offset[1]), grid_reference
+    )
     host = frame.index[frame.feature_id == "geo-unit-00001"][0]
     assert frame.loc[host].geometry.contains(gap)
     frame.at[host, "geometry"] = frame.loc[host].geometry.difference(gap)
@@ -265,6 +364,7 @@ def prepare(source, mapping_path, output, offset=(0, 0), structures=None):
             "roi": ROI,
             "gapHost": "geo-unit-00001",
             "gapAreaM2": gap.area,
+            "gapPreparation": gap_preparation,
             "ageObject": age_id,
             "gapCenter": [CENTER[0] + offset[0], CENTER[1] + offset[1]],
             "correctAge": "T3",
@@ -328,5 +428,13 @@ if __name__ == "__main__":
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--offset", type=float, nargs=2, default=(0, 0))
     parser.add_argument("--structures", type=Path)
+    parser.add_argument("--grid-reference", type=Path, required=True)
     args = parser.parse_args()
-    prepare(args.source, args.mapping, args.output, tuple(args.offset), args.structures)
+    prepare(
+        args.source,
+        args.mapping,
+        args.output,
+        tuple(args.offset),
+        args.structures,
+        args.grid_reference,
+    )

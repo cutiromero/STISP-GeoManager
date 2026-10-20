@@ -1,5 +1,6 @@
 import { Button, Checkbox, Input, Popconfirm, Tag } from "antd";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import type { AgentWorkflow } from "../api/generated/types.gen";
 import WorkflowKnowledgeReferences from "./WorkflowKnowledgeReferences";
 import { deletedWorkflowResources } from "./deletedWorkflowResources";
@@ -312,11 +313,11 @@ export default function GeologyReviewStory({
                   )}
                   <small>修改范围示意</small>
                   {mapId > 0 && !deletedIds.has(mapId) && (
-                    <a
-                      href={`/map?resourceId=${mapId}&projectTagId=${workflow.projectId}&geologyReview=${encodeURIComponent(workflow.id)}&suggestion=${encodeURIComponent(suggestion.id)}`}
+                    <Link
+                      to={`/map?resourceId=${mapId}&projectTagId=${workflow.projectId}&geologyReview=${encodeURIComponent(workflow.id)}&suggestion=${encodeURIComponent(suggestion.id)}`}
                     >
                       在地图上查看位置
-                    </a>
+                    </Link>
                   )}
                 </div>
               </article>
@@ -372,12 +373,12 @@ export default function GeologyReviewStory({
         </section>
       )}
       {workflow.status === "succeeded" && !deletedIds.size && (
-        <a
+        <Link
           className="geology-review-map-link"
-          href={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`}
+          to={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`}
         >
           查看待检查地质图与修正后地质图
-        </a>
+        </Link>
       )}
     </section>
   );
