@@ -2559,7 +2559,7 @@ export const getAgentWorkflow = <ThrowOnError extends boolean = false>(options: 
 /**
  * 取消科研工作流
  *
- * 请求在安全边界停止当前用户的科研工作流。
+ * 请求在安全边界停止当前用户的科研工作流。可选replacePlanHash仅用于重新生成初始计划，后端原子核对相同计划摘要、等待初始批准、尚未授权执行且没有计算任务；过期或已开始时409且不取消任务。
  */
 export const cancelAgentWorkflow = <ThrowOnError extends boolean = false>(options: Options<CancelAgentWorkflowData, ThrowOnError>): RequestResult<CancelAgentWorkflowResponses, CancelAgentWorkflowErrors, ThrowOnError> => (options.client ?? client).post<CancelAgentWorkflowResponses, CancelAgentWorkflowErrors, ThrowOnError>({
     security: [{
@@ -2568,7 +2568,11 @@ export const cancelAgentWorkflow = <ThrowOnError extends boolean = false>(option
             type: 'apiKey'
         }],
     url: '/api/agent/workflows/{workflowId}/cancel/',
-    ...options
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**

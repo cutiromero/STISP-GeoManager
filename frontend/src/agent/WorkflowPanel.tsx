@@ -26,15 +26,26 @@ import type {
 import { createUuid } from "../utils/uuid";
 import { useComputeText } from "../compute/ui";
 import { useProjectContext } from "../projects/ProjectContext";
-import { getActiveProject } from "../projects/session";
+import { getActiveProject, projectSignal } from "../projects/session";
 import DemoWorkflowForm, {
   demoGoals,
   demoInputsReady,
   type DemoWorkflowType,
 } from "./DemoWorkflowForm";
 import WorkflowResults from "./WorkflowResults";
+import { allWorkflowPages, workflowGeologyVersions } from "./workflowCatalog";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
+
+function planDraftSignature(value: Record<string, unknown>) {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(item).sort(([a], [b]) => a.localeCompare(b)),
+        )
+      : item,
+  );
+}
 
 export function workflowScenarioOptions(
   projectId: string,
@@ -147,6 +158,7 @@ export default function WorkflowPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [previousWorkflowId, setPreviousWorkflowId] = useState<string>();
+  const [previewDraft, setPreviewDraft] = useState("");
   const mutationInFlight = useRef(false);
   const lastPreviewRequest = useRef<
     { signature: string; key: string } | undefined
@@ -156,27 +168,38 @@ export default function WorkflowPanel({
     workflowType === "geology_correction" ||
     workflowType === "geology_age_correction" ||
     workflowType === "geology_map_review";
+  const reviewingPlan =
+    workflow?.status === "waiting_approval" &&
+    workflow.plan.phase === "review_plan";
   const locked = Boolean(
-    workflow && [...active, "paused"].includes(workflow.status),
+    workflow &&
+    [...active, "paused"].includes(workflow.status) &&
+    !reviewingPlan,
+  );
+  const draft = {
+    goal,
+    model,
+    workflowType,
+    algorithmVersionId: isDemo ? null : (versionId ?? null),
+    inputs,
+    parameters,
+    knowledgeSelection,
+  };
+  const planOutdated = Boolean(
+    reviewingPlan && previewDraft && previewDraft !== planDraftSignature(draft),
   );
   const version = algorithms
     .flatMap((algorithm) => algorithm.versions)
     .find((v) => v.id === versionId);
-  const ageParameterSpecs = Array.from(
+  const geologyParameterSpecs = Array.from(
     new Map(
-      algorithms
-        .filter((algorithm) =>
-          ["geology-age-check", "geology-age-edit"].includes(
-            algorithm.identifier,
-          ),
-        )
-        .flatMap((algorithm) =>
-          algorithm.versions
-            .filter((item) => item.status === "published")
-            .sort((left, right) => right.id - left.id)
-            .slice(0, 1)
-            .flatMap((item) => item.manifest.parameters),
-        )
+      workflowGeologyVersions(
+        algorithms,
+        workflowType === "geology_map_review"
+          ? ["geology-map-check", "geology-map-correct"]
+          : ["geology-age-check", "geology-age-edit"],
+      )
+        .flatMap((item) => item.manifest.parameters)
         .map((spec) => [spec.key, spec] as const),
     ).values(),
   );
@@ -198,24 +221,25 @@ export default function WorkflowPanel({
   const restore = (next: AgentWorkflow | undefined) => {
     setPreviousWorkflowId(undefined);
     setWorkflow(next);
+    setPreviewDraft("");
     if (!next) return;
     setWorkflowType(next.workflowType);
     setGoal(next.goal);
     setVersionId(next.algorithmVersionId ?? undefined);
     setParameters(next.parameters);
     const savedInputs = next.plan.inputs;
-    setInputs(
+    const restoredInputs =
       savedInputs &&
-        typeof savedInputs === "object" &&
-        !Array.isArray(savedInputs)
+      typeof savedInputs === "object" &&
+      !Array.isArray(savedInputs)
         ? Object.fromEntries(
             Object.entries(savedInputs).filter(
               (entry): entry is [string, number] =>
                 typeof entry[1] === "number",
             ),
           )
-        : {},
-    );
+        : {};
+    setInputs(restoredInputs);
     const selection = next.plan.knowledgeSelection;
     if (
       selection &&
@@ -225,15 +249,41 @@ export default function WorkflowPanel({
       ["auto", "manual", "all", "none"].includes(String(selection.mode)) &&
       Array.isArray(selection.domains)
     ) {
-      setKnowledgeSelection({
+      const restoredKnowledge = {
         mode: selection.mode as AgentKnowledgeSelection["mode"],
         domains: selection.domains.filter((value): value is KnowledgeDomain =>
           ["remote_sensing", "pipelines", "geology", "arid_ecology"].includes(
             String(value),
           ),
         ),
-      });
-    } else setKnowledgeSelection({ mode: "auto", domains: [] });
+      };
+      setKnowledgeSelection(restoredKnowledge);
+      setPreviewDraft(
+        planDraftSignature({
+          goal: next.goal,
+          model,
+          workflowType: next.workflowType,
+          algorithmVersionId: next.algorithmVersionId ?? null,
+          inputs: restoredInputs,
+          parameters: next.parameters,
+          knowledgeSelection: restoredKnowledge,
+        }),
+      );
+    } else {
+      const restoredKnowledge = { mode: "auto" as const, domains: [] };
+      setKnowledgeSelection(restoredKnowledge);
+      setPreviewDraft(
+        planDraftSignature({
+          goal: next.goal,
+          model,
+          workflowType: next.workflowType,
+          algorithmVersionId: next.algorithmVersionId ?? null,
+          inputs: restoredInputs,
+          parameters: next.parameters,
+          knowledgeSelection: restoredKnowledge,
+        }),
+      );
+    }
   };
   useEffect(() => {
     let disposed = false;
@@ -255,15 +305,17 @@ export default function WorkflowPanel({
   }, []);
   useEffect(() => {
     let disposed = false;
+    const projectId = getActiveProject();
+    const signal = projectSignal();
     void Promise.all([
-      computeApi.algorithms({ pageSize: 100 }),
-      computeApi.inputs({ pageSize: 100 }),
+      allWorkflowPages(computeApi.algorithms, projectId, signal),
+      allWorkflowPages(computeApi.inputs, projectId, signal),
       agentApi.workflows(),
     ])
       .then(([a, c, w]) => {
         if (disposed) return;
-        setAlgorithms(a.items);
-        setCandidates(c.items);
+        setAlgorithms(a);
+        setCandidates(c);
         setHistory(w.items);
         restore(w.items[0]);
       })
@@ -306,6 +358,19 @@ export default function WorkflowPanel({
     setBusy(true);
     setError("");
     try {
+      if (reviewingPlan && workflow) {
+        const cancelled = await agentApi.cancelWorkflow(workflow.id, {
+          replacePlanHash: workflow.planHash,
+        });
+        if (cancelled.status !== "cancelled")
+          throw new Error(
+            "旧计划尚未停止，已保留当前任务。请刷新状态后再生成计划。",
+          );
+        setWorkflow(cancelled);
+        setHistory((old) =>
+          old.map((item) => (item.id === cancelled.id ? cancelled : item)),
+        );
+      }
       const body = {
         goal,
         model,
@@ -337,6 +402,7 @@ export default function WorkflowPanel({
       });
       lastPreviewRequest.current = undefined;
       setWorkflow(result);
+      setPreviewDraft(planDraftSignature(draft));
       setPreviousWorkflowId(undefined);
       setHistory((old) => [result, ...old]);
     } catch (e) {
@@ -348,6 +414,10 @@ export default function WorkflowPanel({
   };
   const action = async (confirm: boolean) => {
     if (!workflow || mutationInFlight.current) return;
+    if (confirm && planOutdated) {
+      setError("资料或参数已改变，请重新生成执行计划后确认。");
+      return;
+    }
     mutationInFlight.current = true;
     setBusy(true);
     setError("");
@@ -416,6 +486,11 @@ export default function WorkflowPanel({
     project?.current ?? getActiveProject(),
     demos,
   );
+  const currentPreset = demos.find(
+    (item) =>
+      item.scenario === workflowType &&
+      String(item.projectId) === (project?.current ?? getActiveProject()),
+  )?.preset;
   if (
     workflow &&
     !scenarioOptions.some((item) => item.value === workflow.workflowType)
@@ -442,9 +517,15 @@ export default function WorkflowPanel({
             disabled={locked || busy || Boolean(previousWorkflowId)}
             options={scenarioOptions}
             onChange={(value) => {
+              const preset = demos.find(
+                (item) =>
+                  item.scenario === value &&
+                  String(item.projectId) ===
+                    (project?.current ?? getActiveProject()),
+              )?.preset;
               setWorkflowType(value);
-              setInputs({});
-              setParameters({});
+              setInputs(preset?.inputs ?? {});
+              setParameters(preset?.parameters ?? {});
               setVersionId(undefined);
               if (value !== "research_processing")
                 setGoal(demoGoals[value as DemoWorkflowType]);
@@ -455,6 +536,7 @@ export default function WorkflowPanel({
       <Input.TextArea
         aria-label={ui("工作流目标", "Workflow goal")}
         value={goal}
+        disabled={locked || busy}
         onChange={(e) => setGoal(e.target.value)}
         maxLength={12000}
         autoSize={{ minRows: 2, maxRows: 4 }}
@@ -474,6 +556,15 @@ export default function WorkflowPanel({
           onInputsChange={setInputs}
           onParametersChange={setParameters}
           evidenceOnly={Boolean(previousWorkflowId)}
+          preset={currentPreset}
+          onPresetRestore={() => {
+            if (!currentPreset) return;
+            setInputs(currentPreset.inputs);
+            setParameters(currentPreset.parameters);
+            setGoal(demoGoals[workflowType as DemoWorkflowType]);
+            setKnowledgeSelection({ mode: "auto", domains: [] });
+            setVersionId(undefined);
+          }}
         />
       ) : (
         <>
@@ -559,10 +650,12 @@ export default function WorkflowPanel({
             ))}
         </>
       )}
-      {workflowType === "geology_age_correction" &&
-        ageParameterSpecs.length > 0 && (
+      {["geology_age_correction", "geology_map_review"].includes(
+        workflowType,
+      ) &&
+        geologyParameterSpecs.length > 0 && (
           <div className="agent-demo-fields agent-demo-parameters">
-            {ageParameterSpecs.map((spec) => (
+            {geologyParameterSpecs.map((spec) => (
               <label key={spec.key}>
                 <span>{spec.label}</span>
                 <ParameterField
@@ -627,7 +720,11 @@ export default function WorkflowPanel({
           (knowledgeSelection.mode === "manual" &&
             !knowledgeSelection.domains.length) ||
           (isDemo &&
-            !demoInputsReady(workflowType as DemoWorkflowType, inputs)) ||
+            !demoInputsReady(
+              workflowType as DemoWorkflowType,
+              inputs,
+              candidates,
+            )) ||
           Boolean(
             previousWorkflowId &&
             inputs.context ===
@@ -646,6 +743,11 @@ export default function WorkflowPanel({
           ? ui("生成更新计划", "Preview evidence update")
           : ui("生成执行计划", "Preview plan")}
       </Button>
+      {reviewingPlan && (
+        <Typography.Text type="secondary">
+          重新生成会撤销当前尚未执行的旧计划，并按上方资料、参数与知识范围生成新计划。
+        </Typography.Text>
+      )}
       {previousWorkflowId && (
         <Alert
           type="info"
@@ -662,6 +764,13 @@ export default function WorkflowPanel({
         />
       )}
       {error && <Alert type="error" title={error} />}
+      {planOutdated && (
+        <Alert
+          type="warning"
+          title="资料或参数已改变"
+          description="当前显示的是旧计划。请重新生成执行计划，核对后再确认执行。"
+        />
+      )}
       {history.length > 1 && (
         <Select
           aria-label={ui("历史工作流", "Workflow history")}
@@ -681,7 +790,7 @@ export default function WorkflowPanel({
         <WorkflowResults
           workflow={workflow}
           busy={busy}
-          onConfirm={() => void action(true)}
+          onConfirm={planOutdated ? undefined : () => void action(true)}
           onCancel={() => void action(false)}
           onPause={() => void controlWorkflow("pause")}
           onResume={() => void controlWorkflow("resume")}

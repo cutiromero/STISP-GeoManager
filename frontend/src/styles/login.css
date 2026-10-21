@@ -19,12 +19,137 @@ body:has(.login-shell),
   background: #102c46;
 }
 
-.login-background {
+.login-background-carousel {
   position: absolute;
   inset: 0;
   z-index: -2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-background-slide {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
   background-size: cover;
   background-position: center;
+  transition: opacity 1.6s ease-in-out;
+}
+
+.login-background-slide.is-outgoing {
+  z-index: 1;
+  opacity: 1;
+}
+
+.login-background-slide.is-active {
+  z-index: 2;
+  opacity: 1;
+}
+
+.login-background-carousel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background:
+    radial-gradient(ellipse at 26% 48%, #ffffff38, transparent 34%),
+    radial-gradient(ellipse at 78% 28%, #ffffff2e, transparent 26%),
+    linear-gradient(118deg, transparent 0 35%, #ffffff3d 45%, transparent 56%),
+    repeating-linear-gradient(
+      118deg,
+      transparent 0 54px,
+      #ffffff1f 55px,
+      transparent 57px 118px
+    ),
+    repeating-linear-gradient(
+      28deg,
+      transparent 0 76px,
+      #c4e0f317 77px,
+      transparent 79px 164px
+    );
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    620px 620px,
+    760px 760px;
+  opacity: 0.78;
+  animation:
+    loginGridDrift 12s linear infinite,
+    loginOverlayPulse 4.8s ease-in-out infinite alternate;
+  mask-image: linear-gradient(90deg, #000000a8, #0000007a 62%, #00000038);
+  mix-blend-mode: screen;
+}
+
+.login-background-carousel::after {
+  content: "";
+  position: absolute;
+  inset: auto -18% -34% 22%;
+  z-index: 3;
+  height: 58%;
+  background:
+    linear-gradient(92deg, transparent, #ffffff47, transparent),
+    linear-gradient(180deg, transparent, #192d3b1f);
+  opacity: 0.86;
+  transform: rotate(-8deg);
+  animation: loginGlowFloat 7.5s ease-in-out infinite alternate;
+}
+
+.login-background-carousel[data-animated="false"]::before,
+.login-background-carousel[data-animated="false"]::after {
+  animation-play-state: paused;
+}
+
+@keyframes loginGridDrift {
+  from {
+    background-position:
+      0 0,
+      0 0,
+      0 0,
+      0 0,
+      0 0;
+  }
+  to {
+    background-position:
+      0 0,
+      0 0,
+      0 0,
+      120px 80px,
+      -140px 90px;
+  }
+}
+
+@keyframes loginOverlayPulse {
+  from {
+    opacity: 0.62;
+    filter: brightness(1);
+  }
+  to {
+    opacity: 0.9;
+    filter: brightness(1.18);
+  }
+}
+
+@keyframes loginGlowFloat {
+  from {
+    opacity: 0.56;
+    transform: rotate(-8deg) translate3d(-4%, 2%, 0);
+  }
+  to {
+    opacity: 0.94;
+    transform: rotate(-8deg) translate3d(4%, -2%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-background-slide {
+    transition: none;
+  }
+  .login-background-carousel::before,
+  .login-background-carousel::after {
+    animation: none;
+  }
 }
 
 .login-shell::before {

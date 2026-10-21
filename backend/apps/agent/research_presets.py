@@ -12,7 +12,12 @@ from apps.compute.services import (
     allowed_algorithms,
     runtime_state,
 )
-from apps.projects.context import ProjectScope, is_superadmin, project_scope
+from apps.projects.context import (
+    ProjectScope,
+    is_superadmin,
+    project_scope,
+    selected_project_id,
+)
 from apps.projects.middleware import models_q
 from apps.projects.models import Project
 
@@ -252,6 +257,7 @@ def list_demos(user, p: dict) -> dict:
     """Navigation across authorized projects, without exposing private input names."""
     if not allowed(user, "agent", p):
         return {"items": []}
+    current_project = selected_project_id()
     projects = Project.objects.filter(is_active=True)
     superadmin = is_superadmin(user)
     if not superadmin:
@@ -313,6 +319,16 @@ def list_demos(user, p: dict) -> dict:
                             and len(GRAPHS[scene["scenario"]])
                             + (2 if scene["scenario"] == "geology_map_review" else 1)
                             <= p["maxIterations"]
+                        ),
+                        **(
+                            {
+                                "preset": {
+                                    "inputs": scene["preferredInputs"],
+                                    "parameters": scene["defaults"],
+                                }
+                            }
+                            if project.id == current_project
+                            else {}
                         ),
                     }
                 )

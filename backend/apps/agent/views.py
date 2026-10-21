@@ -1120,6 +1120,44 @@ def workflow_resume(request, workflow_id):
 
 @endpoint(["POST"])
 def workflow_cancel(request, workflow_id):
+    value = body(request, ["replacePlanHash"]) if request.body else {}
+    if "replacePlanHash" in value:
+        expected = value["replacePlanHash"]
+        if not isinstance(expected, str) or len(expected) != 64:
+            raise ApiProblem("请提供最后读取的初始执行计划摘要")
+        with transaction.atomic():
+            AgentWorkflow.objects.filter(pk=workflow_id, owner=request.user).update(
+                idempotency_key=F("idempotency_key")
+            )
+            workflow = get_object_or_404(
+                AgentWorkflow.objects.select_for_update(),
+                pk=workflow_id,
+                owner=request.user,
+            )
+            require_access(request.user, "agent", workflow.model)
+            if (
+                workflow.status != "waiting_approval"
+                or workflow.plan.get("phase") != "review_plan"
+                or workflow.plan_hash != expected
+                or workflow.execute_operators
+                or workflow.operator_steps != 0
+                or workflow.steps.filter(compute_task_id__isnull=False).exists()
+            ):
+                raise ApiProblem("原计划已变化或开始执行，未撤销，请刷新后核对", 409)
+            workflow.status = "cancelled"
+            workflow.cancel_requested = True
+            workflow.pause_requested = False
+            workflow.detail = "初始执行计划已作废，可按新的资料和参数重新生成"
+            workflow.save(
+                update_fields=[
+                    "status",
+                    "cancel_requested",
+                    "pause_requested",
+                    "detail",
+                    "updated_at",
+                ]
+            )
+        return JsonResponse(workflow_json(workflow))
     workflow = get_object_or_404(
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
     )

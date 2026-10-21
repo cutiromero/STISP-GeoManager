@@ -185,6 +185,26 @@
   display: inline-block;
   margin-top: 16px;
 }
+.geology-review-basis {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid #dae6ef;
+  border-radius: 8px;
+  background: #f6f9fc;
+  color: #47657f;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.geology-review-basis ul {
+  margin: 5px 0 0;
+  padding-left: 18px;
+}
+.geology-review-basis small {
+  color: #71869a;
+}
 @media (max-width: 600px) {
   .geology-review-story {
     padding: 14px;

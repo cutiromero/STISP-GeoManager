@@ -13,6 +13,7 @@ export default function GeologyReviewMaps({
   onSelect,
   accessToken,
   previewLabel = "建议修改范围，尚未执行",
+  inspectionOnly = false,
 }: {
   before: GeoJsonFeatureCollection;
   after: GeoJsonFeatureCollection | null;
@@ -21,6 +22,7 @@ export default function GeologyReviewMaps({
   onSelect: (index: number) => void;
   accessToken: string;
   previewLabel?: string;
+  inspectionOnly?: boolean;
 }) {
   const left = useRef<HTMLDivElement>(null),
     right = useRef<HTMLDivElement>(null);
@@ -216,7 +218,13 @@ export default function GeologyReviewMaps({
           <div
             ref={right}
             className="geology-review-map-canvas"
-            aria-label={after ? "修正后地质图地图" : "建议修改范围地图"}
+            aria-label={
+              after
+                ? "修正后地质图地图"
+                : inspectionOnly
+                  ? "检查后原图地图"
+                  : "建议修改范围地图"
+            }
             aria-busy={!ready[1]}
           />
         </section>
@@ -228,10 +236,12 @@ export default function GeologyReviewMaps({
             {item.name}
           </span>
         ))}
-        <span>
-          <i className="geology-review-change-swatch" />
-          {after ? "实际修改范围" : "建议修改范围"}
-        </span>
+        {!inspectionOnly && (
+          <span>
+            <i className="geology-review-change-swatch" />
+            {after ? "实际修改范围" : "建议修改范围"}
+          </span>
+        )}
       </div>
     </>
   );

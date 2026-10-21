@@ -7804,7 +7804,7 @@ paths:
       - 智能体
       operationId: cancelAgentWorkflow
       summary: 取消科研工作流
-      description: 请求在安全边界停止当前用户的科研工作流。
+      description: 请求在安全边界停止当前用户的科研工作流。可选replacePlanHash仅用于重新生成初始计划，后端原子核对相同计划摘要、等待初始批准、尚未授权执行且没有计算任务；过期或已开始时409且不取消任务。
       security:
       - sessionAuth: []
       parameters:
@@ -7822,6 +7822,17 @@ paths:
         schema:
           type: string
           format: uuid
+      requestBody:
+        required: false
+        description: 普通取消可为空；重新生成计划时带最后读取的摘要。
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 有条件作废尚未执行的初始计划。
+              properties:
+                replacePlanHash: {type: string, minLength: 64, maxLength: 64, description: 待作废的初始计划摘要；阶段或摘要变化时拒绝}
+              additionalProperties: false
       responses:
         '200':
           description: 操作成功
@@ -7835,6 +7846,10 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /api/agent/workflows/{workflowId}/pause/:
     post:
       tags: [智能体]
@@ -9473,6 +9488,17 @@ components:
               prompt: {type: string, description: 启动用自然语言，明确资料性质、预设与成果保存目标}
               sampleNature: {type: string, enum: [synthetic, real_map_with_demonstration_errors, demonstration_case], description: synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例}
               available: {type: boolean, description: 资料、已发布算法与模型等必要服务是否就绪}
+              preset:
+                type: object
+                description: 仅当前请求项目返回的活动预设；按稳定资源编码定位，不包含其他项目的输入标识。缺项表示该角色预设不可用。
+                properties:
+                  inputs:
+                    type: object
+                    description: 角色键到当前可访问的唯一活动预设资源
+                    additionalProperties: {type: integer, minimum: 1, description: 当前项目的资源标识}
+                  parameters: {type: object, description: 已发布场景算法的预设参数, additionalProperties: true}
+                required: [inputs, parameters]
+                additionalProperties: false
             required: [scenario, projectId, projectName, title, prompt, sampleNature, available]
             additionalProperties: false
       required: [items]
@@ -18421,7 +18447,7 @@ components:
     "ComputeAlgorithm": {"type": "object", "description": "项目算法资源；公共算法可供私有项目调用", "properties": {"id": {"type": "integer", "description": "标识"}, "projectTagId": {"type": "integer", "description": "所属项目"}, "identifier": {"type": "string", "description": "文字"}, "name": {"type": "string", "description": "文字"}, "description": {"type": "string", "description": "文字"}, "category": {"type": "string", "description": "文字"}, "author": {"type": "string", "description": "文字"}, "enabled": {"type": "boolean", "description": "是否"}, "versions": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeVersion"}}, "canManage": {"type": "boolean", "description": "当前用户在当前项目可维护"}}, "required": ["id", "projectTagId", "identifier", "name", "description", "category", "author", "enabled", "versions", "canManage"]}
     "ComputeAlgorithmWrite": {"type": "object", "description": "登记/更新算法；项目取显式 X-Project-Id，不接受跨项目更新", "properties": {"identifier": {"type": "string", "description": "文字"}, "name": {"type": "string", "description": "文字"}, "description": {"type": "string", "description": "文字"}, "category": {"type": "string", "description": "文字"}, "author": {"type": "string", "description": "文字"}, "enabled": {"type": "boolean", "description": "是否"}}, "required": ["name", "identifier"]}
     "ComputeCategory": {"type": "object", "description": "算法用途分类", "properties": {"id": {"type": "integer", "description": "标识"}, "name": {"type": "string", "description": "文字"}, "sortOrder": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "sortOrder"]}
-    "ComputeCandidate": {"type": "object", "description": "当前项目可计算数据；元数据不代表已固定输入", "properties": {"id": {"type": "integer", "description": "标识"}, "name": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "fields": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "bands": {"type": "integer", "description": "标识"}, "crs": {"type": "string", "description": "文字"}, "geometryTypes": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "sizeBytes": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "kind", "projectTagId", "fields", "bands", "crs", "geometryTypes", "sizeBytes"]}
+    "ComputeCandidate": {"type": "object", "description": "当前项目可计算数据；元数据不代表已固定输入", "properties": {"id": {"type": "integer", "description": "标识"}, "name": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "fields": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "bands": {"type": "integer", "description": "标识"}, "crs": {"type": "string", "description": "文字"}, "geometryTypes": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "sizeBytes": {"type": "integer", "description": "标识"}, "fileFormat": {"type": "string", "description": "资源登记格式；候选字段和几何类型从实际入库文件读取，后缀不能替代角色校验"}}, "required": ["id", "name", "kind", "projectTagId", "fields", "bands", "crs", "geometryTypes", "sizeBytes"]}
     "ComputeTaskCreate": {"type": "object", "description": "创建任务；相同幂等键只能用于同一请求", "properties": {"name": {"type": "string", "description": "任务名称"}, "versionId": {"type": "integer", "description": "固定算法版本"}, "inputs": {"type": "object", "description": "输入名到资源 ID", "additionalProperties": {"type": "integer", "description": "标识"}}, "parameters": {"type": "object", "description": "按版本声明校验的参数", "additionalProperties": true}, "idempotencyKey": {"type": "string", "description": "客户端生成唯一键，最长80字符"}, "trial": {"type": "boolean", "description": "管理员试运行草稿版本"}}, "required": ["name", "versionId", "inputs", "parameters", "idempotencyKey"]}
     "ComputeOutput": {"type": "object", "description": "验证后的实际结果及独立入库状态", "properties": {"id": {"type": "integer", "description": "标识"}, "key": {"type": "string", "description": "文字"}, "label": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "fileName": {"type": "string", "description": "文字"}, "sizeBytes": {"type": "integer", "description": "标识"}, "checksum": {"type": "string", "description": "文字"}, "metadata": {"type": "object", "description": "波段/字段/CRS/行数等结果检查信息", "additionalProperties": true}, "expired": {"type": "boolean", "description": "是否"}, "importStatus": {"type": "string", "description": "入库状态；deleted表示用户确认清理了目录数据，历史来源仍保留", "enum": ["none", "queued", "running", "ready", "failed", "deleted"]}, "resourceId": {"type": ["integer", "null"], "description": "已入库资源"}, "importError": {"type": "string", "description": "文字"}, "downloadUrl": {"type": "string", "description": "文字"}, "previewUrl": {"type": "string", "description": "文字"}, "resourceName": {"type": "string", "description": "Authorized registered resource name"}, "resourceLocation": {"type": "string", "description": "项目下数据资源 / 计算结果 / 资源名称"}, "mapUrl": {"type": "string", "description": "Direct geographic workspace link when registered"}}, "required": ["id", "key", "label", "kind", "fileName", "sizeBytes", "checksum", "metadata", "expired", "importStatus", "resourceId", "importError", "downloadUrl", "previewUrl"]}
     "ComputeTask": {"type": "object", "description": "一个项目内的任务记录；日志/未入库成果仅本人和有权管理员可见", "properties": {"id": {"type": "string", "description": "UUID"}, "name": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "ownerName": {"type": "string", "description": "文字"}, "algorithmName": {"type": "string", "description": "文字"}, "version": {"$ref": "#/components/schemas/ComputeVersion"}, "status": {"type": "string", "description": "任务状态", "enum": ["queued", "validating", "running", "cancelling", "succeeded", "failed", "cancelled", "interrupted"]}, "stage": {"type": "string", "description": "平台阶段说明"}, "progress": {"type": "integer", "description": "0至100"}, "error": {"type": "string", "description": "可行动错误信息，不包含主机路径"}, "parameters": {"type": "object", "description": "任务参数快照", "additionalProperties": true}, "inputs": {"type": "array", "description": "列表", "items": {"type": "object", "description": "输入资源ID（历史清理后可为空）/名称/固定SHA256/元数据；deletedResource保留原编号、名称、来源、所属项目、删除时间及操作者，不可再作为执行输入", "additionalProperties": true}}, "outputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeOutput"}}, "createdAt": {"type": "string", "description": "文字"}, "startedAt": {"type": ["string", "null"], "description": "开始时间"}, "finishedAt": {"type": ["string", "null"], "description": "结束时间"}, "trial": {"type": "boolean", "description": "是否"}, "unread": {"type": "boolean", "description": "是否"}, "retryOf": {"type": ["string", "null"], "description": "前序任务"}, "attemptCount": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "projectTagId", "ownerName", "algorithmName", "version", "status", "stage", "progress", "error", "parameters", "inputs", "outputs", "createdAt", "startedAt", "finishedAt", "trial", "unread", "retryOf", "attemptCount"]}

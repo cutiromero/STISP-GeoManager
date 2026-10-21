@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261021-001 - 地质工作流预设与输入角色校验
+
+- Status: BackendReady
+- Owner: root 契约/预设；workflow_form 表单；cover_animation 后端角色校验。
+- Endpoints: GET /api/compute/inputs/；GET /api/agent/research-demos/；POST /api/agent/workflows/；POST /api/agent/workflows/{workflowId}/cancel/。
+- Change type: 扩展候选格式及当前项目活动预设；计划创建前验证地质输入。
+- OpenAPI change: ComputeCandidate.fileFormat；AgentResearchDemoList.items[].preset（仅当前项目返回），含inputs和parameters；cancel可选replacePlanHash和400/409错误。
+- Frontend reason: 预设按钮恢复实际活动资源，名称匹配可以重新选择，三个输入角色按真实字段和几何过滤；编辑输入后不能执行旧计划。
+- Mock examples: 复用101-agent-research-demo与隔离数据库/浏览器样例，实际角色读取测试不以固定名称替代格式校验。
+- Backend implementation notes: 当前项目预设依稳定code解析且继续校验可见性；其他项目不返回输入标识；地质图/范围需实际面几何、坐标系及各自必要字段，规则需结构化表字段，开始前报出具体角色错误；执行阶段保留完整文件与空间检查。
+- Verification: 修改后预设恢复、名称匹配覆盖、歧义与缺资料反馈、候选分页、角色不互串、错误输入无任务副作用、计划变化重新生成、真实知识/算法依据。
+- Result: 已实现；输入校验、知识引用及报告、预设发现测试通过，前端和真实模型/服务器验收分别记录。
+
 ## API-20261020-001 - 页面关闭后的登录生命周期
 
 - Status: BackendReady
@@ -137,6 +150,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261021-001 | BackendReady | /api/compute/inputs/; /api/agent/research-demos/; /api/agent/workflows/; /cancel/ | current-project preset, actual input-role checks and conditional replacement | Updated | Integration/browser fixtures | Implemented | Focused verification | Preserve permissions; metadata before plan and complete runtime validation |
 | API-20261020-001 | BackendReady | /api/auth/browser-session/; login/; guest-login/; register/; me/ | browser page leases and session lifecycle | Updated | HTTP/browser fixtures | Passed | 54 backend; 33 browser passed | 20-second refresh; 120-second lost-contact expiry; release acceptance separate |
 | API-20261016-002 | ContractReady | /api/agent/runs/{runId}/interaction/; /api/catalog/resources/delete-preview/; resources/delete/ | persisted questions; confirmed history cleanup | Updated | HTTP/browser fixtures | Focused passed | In progress | Real model, compute and release acceptance recorded separately |
 | API-20261016-001 | BackendReady | /api/agent/admin/; bootstrap/; conversations/{id}/runs/; workflows/ | configurable research quotas and manual selection | Updated | HTTP/browser fixtures | Passed | Focused passed | Actual model window and safety guards retained; deployment separate |

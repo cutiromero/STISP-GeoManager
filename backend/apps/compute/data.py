@@ -30,6 +30,7 @@ def candidate(resource, *, raster_metadata=False):
         "id": resource.id,
         "name": resource.name,
         "kind": resource.data_type,
+        "fileFormat": resource.file_format,
         "projectTagId": resource.project_tag_id,
         "fields": [],
         "bands": 0,

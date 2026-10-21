@@ -1,8 +1,22 @@
-import { Alert, Button, Input, InputNumber, Select, Tooltip } from "antd";
+import {
+  Alert,
+  Button,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+  Tooltip,
+} from "antd";
+import { useEffect, useState } from "react";
 import type {
   AgentResource,
   ComputeCandidate,
 } from "../api/generated/types.gen";
+import {
+  geologyInputIssues,
+  geologyRoleHelp,
+  geologyWorkflowIssues,
+} from "./geologyWorkflowInputs";
 
 export type DemoWorkflowType =
   | "ecology_investigation"
@@ -94,13 +108,13 @@ export const demoRoles: Record<DemoWorkflowType, Role[]> = {
       key: "coverage",
       label: "制图范围",
       kind: "vector",
-      match: /制图范围|coverage/i,
+      match: /制图.*(?:范围|覆盖)|coverage/i,
     },
     {
       key: "rules",
       label: "专家规则",
       kind: "table",
-      match: /专家规则|review.*rules/i,
+      match: /专家.*规则|review.*rules/i,
     },
   ],
 };
@@ -116,15 +130,30 @@ export const demoGoals: Record<DemoWorkflowType, string> = {
     "请检查这张待提交的地质图，查阅专家知识，说明发现的问题和建议修改；经我批准后修正地图，复核结果并生成检查报告和统计表。",
 };
 
-function matchingCandidates(role: Role, candidates: ComputeCandidate[]) {
-  return candidates.filter((candidate) => candidate.kind === role.kind);
+function matchingCandidates(
+  type: DemoWorkflowType,
+  role: Role,
+  candidates: ComputeCandidate[],
+) {
+  return candidates.filter(
+    (candidate) =>
+      candidate.kind === role.kind &&
+      (type !== "geology_map_review" ||
+        !geologyInputIssues(role.key, candidate).length),
+  );
 }
 
 export function demoInputsReady(
   type: DemoWorkflowType,
   inputs: Record<string, number>,
+  candidates?: ComputeCandidate[],
 ) {
-  return demoRoles[type].every((role) => (inputs[role.key] ?? 0) > 0);
+  return (
+    demoRoles[type].every((role) => (inputs[role.key] ?? 0) > 0) &&
+    (type !== "geology_map_review" ||
+      !candidates ||
+      !geologyWorkflowIssues(inputs, candidates).length)
+  );
 }
 
 export default function DemoWorkflowForm({
@@ -135,6 +164,8 @@ export default function DemoWorkflowForm({
   parameters,
   disabled,
   evidenceOnly = false,
+  preset,
+  onPresetRestore,
   onInputsChange,
   onParametersChange,
 }: {
@@ -145,10 +176,24 @@ export default function DemoWorkflowForm({
   parameters: Record<string, unknown>;
   disabled: boolean;
   evidenceOnly?: boolean;
+  preset?: {
+    inputs: Record<string, number>;
+    parameters: Record<string, unknown>;
+  };
+  onPresetRestore?: () => void;
   onInputsChange: (value: Record<string, number>) => void;
   onParametersChange: (value: Record<string, unknown>) => void;
 }) {
   const roles = demoRoles[type];
+  const [matchFeedback, setMatchFeedback] = useState("");
+  useEffect(() => setMatchFeedback(""), [type]);
+  const inputIssues =
+    type === "geology_map_review"
+      ? geologyWorkflowIssues(inputs, candidates)
+      : [];
+  const presetReady = Boolean(
+    preset && demoInputsReady(type, preset.inputs, candidates),
+  );
   const selected = roles.flatMap((role) => {
     const resource = resources.find((entry) => entry.id === inputs[role.key]);
     const candidate = candidates.find((entry) => entry.id === inputs[role.key]);
@@ -158,6 +203,7 @@ export default function DemoWorkflowForm({
             role,
             name: resource?.name ?? candidate.name,
             description: resource?.description ?? "",
+            fileFormat: candidate.fileFormat ?? "",
           },
         ]
       : [];
@@ -166,16 +212,46 @@ export default function DemoWorkflowForm({
     onParametersChange({ ...parameters, [key]: value });
   const autoMatch = () => {
     const next = { ...inputs };
+    const matched: string[] = [];
+    const unresolved: string[] = [];
     for (const role of roles) {
-      if (next[role.key]) continue;
-      const found = matchingCandidates(role, candidates).filter((entry) =>
+      const found = matchingCandidates(type, role, candidates).filter((entry) =>
         role.match.test(
           resources.find((item) => item.id === entry.id)?.name ?? entry.name,
         ),
       );
-      if (found.length === 1) next[role.key] = found[0]!.id;
+      const exact = found.filter(
+        (entry) =>
+          (
+            resources.find((item) => item.id === entry.id)?.name ?? entry.name
+          ).trim() === role.label,
+      );
+      const unique = exact.length === 1 ? exact : found;
+      if (unique.length === 1) {
+        next[role.key] = unique[0]!.id;
+        matched.push(role.label);
+      } else {
+        const selectedCompatible = matchingCandidates(
+          type,
+          role,
+          candidates,
+        ).some((item) => item.id === next[role.key]);
+        const previousSelection = next[role.key];
+        if (previousSelection && !selectedCompatible) delete next[role.key];
+        unresolved.push(
+          `${role.label}${found.length ? "有多个匹配" : "没有兼容的名称匹配"}${previousSelection ? (selectedCompatible ? "，已保留兼容的手动选择，请核对" : "，原选择不兼容，已清空") : "，请手动选择"}`,
+        );
+      }
     }
     onInputsChange(next);
+    setMatchFeedback(
+      [
+        matched.length
+          ? `已重新匹配：${matched.join("、")}。`
+          : "未找到唯一匹配的资料。",
+        ...unresolved,
+      ].join(" "),
+    );
   };
   const bandLimit = Math.min(
     ...["early_image", "late_image"].map(
@@ -192,16 +268,47 @@ export default function DemoWorkflowForm({
     >
       <div className="agent-demo-form-heading">
         <strong>按角色选择本次资料</strong>
-        <Tooltip title="根据资料名称填入唯一匹配的建议，不会直接运行。请在运行前核对；也可逐项手动选择。">
-          <Button
-            size="small"
-            disabled={disabled || evidenceOnly}
-            onClick={autoMatch}
-          >
-            按名称匹配资料
-          </Button>
-        </Tooltip>
+        <Space size={6} wrap>
+          {type === "geology_map_review" && (
+            <Tooltip
+              title={
+                presetReady
+                  ? "恢复当前项目活动演示资料及默认参数，不启动计算。"
+                  : "当前项目预设不完整或不兼容，请先补齐资料。"
+              }
+            >
+              <Button
+                aria-label="预设"
+                size="small"
+                disabled={disabled || evidenceOnly || !presetReady}
+                onClick={() => {
+                  onPresetRestore?.();
+                  setMatchFeedback(
+                    "已恢复当前项目预设资料及参数，请核对后生成执行计划。",
+                  );
+                }}
+              >
+                预设
+              </Button>
+            </Tooltip>
+          )}
+          <Tooltip title="重新按资料名称匹配并更新已有选项。多个匹配时保留当前选择并提示手动核对，不会直接运行。">
+            <Button
+              size="small"
+              disabled={disabled || evidenceOnly}
+              onClick={autoMatch}
+            >
+              按名称匹配资料
+            </Button>
+          </Tooltip>
+        </Space>
       </div>
+      {matchFeedback && <Alert type="info" showIcon title={matchFeedback} />}
+      {type === "geology_map_review" && !presetReady && (
+        <p className="agent-demo-hint">
+          当前项目尚无完整可用的预设资料，可按格式要求选择自己的资料。
+        </p>
+      )}
       {type === "geology_age_correction" && (
         <Alert
           type="info"
@@ -213,7 +320,7 @@ export default function DemoWorkflowForm({
         <Alert
           type="info"
           title="地质成果智能检查与修正 / 演示案例"
-          description="先检查地图并形成有知识依据的建议。您选择并批准建议后，再生成修正后地质图、修改范围和检查报告。"
+          description="先依据当前资料生成执行计划，再检索专家知识并检查地图。专家规则是算法可执行的条件；下方“知识依据”决定检索哪个知识分区，两者需相互对应。您批准具体建议后才修改地图。"
         />
       )}
       <div className="agent-demo-fields">
@@ -228,12 +335,21 @@ export default function DemoWorkflowForm({
               disabled={disabled || (evidenceOnly && role.key !== "context")}
               placeholder={`选择${role.label}`}
               value={inputs[role.key]}
-              options={matchingCandidates(role, candidates).map((entry) => ({
-                value: entry.id,
-                label:
-                  resources.find((item) => item.id === entry.id)?.name ??
-                  entry.name,
-              }))}
+              status={
+                inputIssues.some((message) =>
+                  message.startsWith(role.label + "："),
+                )
+                  ? "error"
+                  : undefined
+              }
+              options={matchingCandidates(type, role, candidates).map(
+                (entry) => ({
+                  value: entry.id,
+                  label:
+                    resources.find((item) => item.id === entry.id)?.name ??
+                    entry.name,
+                }),
+              )}
               onChange={(id) => {
                 const next = { ...inputs };
                 if (id === undefined) delete next[role.key];
@@ -241,9 +357,28 @@ export default function DemoWorkflowForm({
                 onInputsChange(next);
               }}
             />
+            {type === "geology_map_review" && (
+              <small className="agent-demo-hint">
+                {geologyRoleHelp[role.key]}
+              </small>
+            )}
           </label>
         ))}
       </div>
+      {!!inputIssues.length && (
+        <Alert
+          type="error"
+          showIcon
+          title="当前资料不满足本场景要求"
+          description={
+            <ul>
+              {inputIssues.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          }
+        />
+      )}
       {type === "ecology_investigation" && (
         <>
           <div className="agent-demo-fields agent-demo-parameters">
@@ -317,17 +452,18 @@ export default function DemoWorkflowForm({
       )}
       {!!selected.length && (
         <div className="agent-demo-source-notes" aria-label="已选资料说明">
-          {selected.map(({ role, name, description }) => (
+          {selected.map(({ role, name, description, fileFormat }) => (
             <div key={role.key}>
               <strong>
                 {role.label} / {name}
               </strong>
+              {fileFormat && <small>资料格式：{fileFormat}</small>}
               {description && <p>{description}</p>}
             </div>
           ))}
         </div>
       )}
-      {!demoInputsReady(type, inputs) && (
+      {!demoInputsReady(type, inputs, candidates) && (
         <Alert
           type="info"
           title="为每个角色选择资料后，生成可核对的执行计划。"

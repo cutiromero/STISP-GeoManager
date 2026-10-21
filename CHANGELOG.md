@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.46] - 2026-10-21
+
+### Changed
+- 登录封面恢复三张背景轮换、网格及光带持续动画，保留当前布局。
+- 地质检查提供“预设”恢复和有反馈的名称匹配，分别筛选地质图、覆盖范围与结构化规则，展示已发布算法参数。
+- 地质修改建议及新报告逐项展示具体知识修订、出处和实际修正工具；无可修正项时给出检查或补证据结论。
+
+### Fixed
+- 地理工作台阻止同一原始数据重复加载，并清理缓存及工程恢复中的重复显示。
+- 地质工作流创建及执行前验证实际输入文件结构、面几何、坐标系和参数，错误输入显示对应角色原因。
+- 修改资料、目标、知识或参数后需重新生成计划；替换初始计划时原子核对摘要和执行状态，保护已开始的任务。
+
 ## [0.1.45] - 2026-10-20
 
 ### Changed

@@ -64,6 +64,10 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
     if execute_operators:
         raise ComputeError("请先生成计划，再使用确认执行入口")
     resources_selected = sorted(set(resources_selected))
+    if workflow_type == "geology_map_review":
+        from .geology_input_validation import validate_geology_inputs
+
+        validate_geology_inputs(user, p, inputs, parameters, resources_selected)
     with transaction.atomic():
         if connection.vendor == "sqlite":
             # Reserve the writer before any reads establish a WAL snapshot.

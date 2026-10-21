@@ -5,6 +5,8 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { resetProjectSession, setActiveProject } from "../projects/session";
+import { agentApi } from "../api/agent";
+import { workflowReport } from "../agent/workflowReport.testFixtures";
 import GeologyReviewWorkspace from "./GeologyReviewWorkspace";
 import {
   afterReviewMap,
@@ -90,7 +92,7 @@ it("批准前只查询待检查图，右图显示相同底图和真实建议范�
   const sources = vi.spyOn(mapboxgl.Map.prototype, "addSource");
   show();
   await mapsReady();
-  expect(screen.getByText("建议修改 · 尚未执行")).toBeVisible();
+  expect(screen.getByText("建议修改，尚未执行")).toBeVisible();
   expect(screen.queryByText("修正后地质图")).not.toBeInTheDocument();
   const units = sources.mock.calls.filter(([id]) => id === "geological-units");
   expect(units).toHaveLength(2);
@@ -116,6 +118,57 @@ it("批准前只查询待检查图，右图显示相同底图和真实建议范�
     animations: "disabled",
   });
 });
+
+it.each(["no_changes", "requires_evidence"])(
+  "检查完成%s只读取并展示未修改原图，不伪造修正成果",
+  async (kind) => {
+    const sources = vi.spyOn(mapboxgl.Map.prototype, "addSource");
+    vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue(
+      workflowReport({ label: "检查报告" }),
+    );
+    const workflow = reviewWorkflow();
+    workflow.status = "succeeded";
+    workflow.modificationReview = undefined;
+    workflow.plan.reviewOutcome = { kind, checkTaskId: "actual-check" };
+    request.mockImplementation(async (url: string) => {
+      if (url === "/api/agent/workflows/review-workflow/") return workflow;
+      if (url === "/api/catalog/resources/101/query/")
+        return reviewQuery(101, beforeReviewMap);
+      throw new Error(`未预期的接口：${url}`);
+    });
+    show();
+    const before = await screen.findByLabelText("待检查地质图地图");
+    const unchanged = screen.getByLabelText("检查后原图地图");
+    await waitFor(
+      () => {
+        expect(before).toHaveAttribute("aria-busy", "false");
+        expect(unchanged).toHaveAttribute("aria-busy", "false");
+      },
+      { timeout: 20000 },
+    );
+    expect(
+      screen.getByText(
+        kind === "no_changes"
+          ? "检查已完成，未修改地图"
+          : "检查已完成，待补充证据",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByLabelText("修正后地质图地图")).not.toBeInTheDocument();
+    expect(screen.queryByText("建议修改，尚未执行")).not.toBeInTheDocument();
+    expect(screen.queryByText("实际修改范围")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /定位修改处/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      request.mock.calls.filter(([url]) => String(url).endsWith("/query/")),
+    ).toHaveLength(1);
+    const units = sources.mock.calls.filter(
+      ([id]) => id === "geological-units",
+    );
+    expect(units).toHaveLength(2);
+    expect(units[0]![1]).toEqual(units[1]![1]);
+  },
+);
 
 it("真实三份图件使用统一配色，点击同一对象的不同修改可区分并同步定位缩放", async () => {
   respond(true);

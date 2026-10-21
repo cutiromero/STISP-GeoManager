@@ -271,6 +271,64 @@ describe("useLayerGroups", () => {
       "moving",
     ]);
   });
+
+  it("keeps the first loaded layer and its style during concurrent additions", () => {
+    const { result } = renderHook(() => useLayerGroups());
+    const original = makeGroup("original", [makeVectorLayer("source")]);
+    const duplicate = {
+      ...original,
+      id: "duplicate",
+      children: original.children.map((layer) => ({ ...layer, id: "copy" })),
+    };
+    act(() => {
+      result.current.addGroup(original);
+      result.current.addGroup(duplicate);
+    });
+    expect(result.current.groups).toEqual([original]);
+  });
+
+  it("deduplicates cache restoration and allows loading again after removal", async () => {
+    const original = makeGroup("original", [makeVectorLayer("source")]);
+    readCachedLayerGroupsMock.mockResolvedValueOnce([
+      original,
+      { ...original, id: "old-copy" },
+    ]);
+    const { result } = renderHook(() => useLayerGroups());
+    await waitFor(() => expect(result.current.groups).toEqual([original]));
+    act(() => result.current.removeGroup(original.id));
+    act(() => result.current.addGroup(original));
+    expect(result.current.groups).toEqual([original]);
+  });
+
+  it("deduplicates replaced groups while keeping different query results", () => {
+    const { result } = renderHook(() => useLayerGroups());
+    const original = makeGroup("original", [makeVectorLayer("source")]);
+    const filtered = {
+      ...original,
+      id: "query",
+      children: original.children.map((layer) => ({
+        ...layer,
+        id: "query-layer",
+        query: {
+          attributeFilters: [
+            { field: "class", operator: "eq" as const, value: "5" },
+          ],
+          spatialFilter: null,
+        },
+      })),
+    };
+    act(() =>
+      result.current.replaceGroups([
+        original,
+        { ...original, id: "copy" },
+        filtered,
+      ]),
+    );
+    expect(result.current.groups.map((group) => group.id)).toEqual([
+      "original",
+      "query",
+    ]);
+  });
 });
 
 function makeGroup(
@@ -280,7 +338,7 @@ function makeGroup(
   return {
     id,
     name: `${id} 组`,
-    sourceResource: sourceResource(),
+    sourceResource: sourceResource(id),
     visible: true,
     summary: `${id} 摘要`,
     createdAt: "2026-06-06T00:00:00.000Z",
@@ -295,7 +353,7 @@ function makeVectorLayer(id: string): LoadedVectorLayer {
     id,
     name: id,
     layerType: "vector",
-    sourceResource: sourceResource(),
+    sourceResource: sourceResource(id),
     geojson: { type: "FeatureCollection", features: [] },
     geometryType: "Point",
     visible: true,
@@ -311,7 +369,7 @@ function makeRasterLayer(id: string): LoadedRasterLayer {
     id,
     name: id,
     layerType: "raster",
-    sourceResource: sourceResource() as LoadedRasterLayer["sourceResource"],
+    sourceResource: sourceResource(id) as LoadedRasterLayer["sourceResource"],
     geometryType: "Raster",
     visible: true,
     summary: `${id} 摘要`,
@@ -321,9 +379,13 @@ function makeRasterLayer(id: string): LoadedRasterLayer {
   };
 }
 
-function sourceResource(): ResourceListItem {
+function sourceResource(key: string): ResourceListItem {
   return {
-    id: 1,
+    id: [...key].reduce(
+      (value, character) =>
+        (value * 31 + character.charCodeAt(0)) % 1_000_000_007,
+      0,
+    ),
     name: "测试资源",
     dataType: "vector",
   } as ResourceListItem;

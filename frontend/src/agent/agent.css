@@ -1168,6 +1168,9 @@
   font-size: 12px;
   line-height: 1.65;
 }
+.agent-demo-fields .agent-demo-hint {
+  margin: 0;
+}
 .agent-demo-source-notes {
   display: grid;
   gap: 9px;

@@ -130,9 +130,14 @@ describe("LoginPage", () => {
     expect(screen.getByLabelText("密码")).toHaveValue("");
   });
 
-  it("keeps a static blue cover without metric cards or status polling", async () => {
+  it("keeps the blue cover layout with animated backgrounds and no status polling", async () => {
     const { container } = renderLoginPage();
-    expect(container.querySelectorAll(".login-background")).toHaveLength(1);
+    expect(container.querySelectorAll(".login-background-slide")).toHaveLength(
+      3,
+    );
+    expect(
+      container.querySelectorAll(".login-background-slide.is-active"),
+    ).toHaveLength(1);
     expect(container.querySelector(".login-stat-grid")).toBeNull();
     expect(container.querySelector(".login-ops-panel")).toBeNull();
     expect(container.querySelector(".login-capability-tags")).toBeNull();

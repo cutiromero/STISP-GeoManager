@@ -183,7 +183,8 @@ def test_directory_shows_unready_entry_without_input_names(demo):  # noqa: F811
         ProjectScope((env["project"].id,), env["project"].id, env["owner"].id)
     ):
         mark(env)
-    result = list_demos(env["owner"], env["policy"])
+    with project_scope(ProjectScope((1,), 1, env["owner"].id)):
+        result = list_demos(env["owner"], env["policy"])
     assert result["items"] and not any(i["available"] for i in result["items"])
     assert all(
         set(i)
@@ -198,3 +199,56 @@ def test_directory_shows_unready_entry_without_input_names(demo):  # noqa: F811
         }
         for i in result["items"]
     )
+
+
+def test_current_project_returns_live_preset_without_cross_project_inputs(demo):  # noqa: F811
+    env = demo
+    scope = ProjectScope((env["project"].id,), env["project"].id, env["owner"].id)
+    with project_scope(scope):
+        mark(env)
+        item = next(
+            value
+            for value in list_demos(env["owner"], env["policy"])["items"]
+            if value["scenario"] == "ecology_investigation"
+        )
+        assert item["preset"]["inputs"] == {
+            role: env["inputs"][role]
+            for role in ("early_image", "late_image", "valid_mask", "zones", "context")
+        }
+        assert item["preset"]["parameters"]["red"] == 1
+        assert item["preset"]["parameters"]["early_date"] == "2025-09-15"
+    # The same authorized project can be advertised elsewhere, without inputs.
+    with project_scope(ProjectScope((1,), 1, env["owner"].id)):
+        other = list_demos(env["owner"], env["policy"])["items"]
+        assert other and all("preset" not in value for value in other)
+
+
+def test_preset_tracks_activity_and_visibility_instead_of_old_names(demo):  # noqa: F811
+    env = demo
+    with project_scope(
+        ProjectScope((env["project"].id,), env["project"].id, env["owner"].id)
+    ):
+        mark(env)
+        previous = DataResource.objects.get(pk=env["inputs"]["early_image"])
+        previous.source = "retired-original-version"
+        previous.save()
+        current = DataResource.objects.create(
+            code="new-image",
+            name="重新命名的前期影像",
+            source=MARKERS["early_image"][1],
+            data_type="raster",
+            maintainer=env["owner"],
+        )
+
+        def preset():
+            return next(
+                value["preset"]
+                for value in list_demos(env["owner"], env["policy"])["items"]
+                if value["scenario"] == "ecology_investigation"
+            )
+
+        assert preset()["inputs"]["early_image"] == current.id
+        current.owner_only, current.maintainer = True, env["outsider"]
+        current.save()
+        assert "early_image" not in preset()["inputs"]
+        assert previous.id not in preset()["inputs"].values()

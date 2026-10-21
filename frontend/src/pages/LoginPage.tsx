@@ -11,13 +11,13 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import stispLogoWhite from "../assets/stisp-logo-white.svg";
-import loginBackground from "../assets/spatiotemporal/digital-earth.png";
 import { teamInstitution } from "../about/institution";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { platformBrand } from "../config/platformBrand";
 import { useAppContext } from "../contexts/AppContext";
 import { currentLocale } from "../i18n";
 import type { LoginFormValues, RegisterFormValues } from "../types";
+import LoginBackground from "./LoginBackground";
 
 const platformChineseName = platformBrand.chineseName;
 const platformEnglishName = platformBrand.englishName;
@@ -93,11 +93,7 @@ export default function LoginPage() {
   return (
     <main className="login-shell">
       <LanguageSwitcher className="login-language-switcher" />
-      <div
-        className="login-background"
-        aria-hidden="true"
-        style={{ backgroundImage: `url("${loginBackground}")` }}
-      />
+      <LoginBackground />
       <section
         className="login-hero-panel"
         aria-label={t("auth.platformOverview")}

@@ -13,6 +13,11 @@ import type {
   GeoJsonFeatureCollection,
 } from "../api/generated/types.gen";
 import WorkflowReportFile from "../agent/WorkflowReportFile";
+import {
+  geologyReviewOutcome,
+  geologyReviewOutcomeDescription,
+  geologyReviewOutcomeLabel,
+} from "../agent/geologyReviewOutcome";
 import { useAppContext } from "../contexts/AppContext";
 import { getActiveProject } from "../projects/session";
 import { useProjectContext } from "../projects/ProjectContext";
@@ -73,7 +78,10 @@ export default function GeologyReviewWorkspace({
         )
           throw new Error("检查任务不属于当前项目，请切换项目后查看");
         const ids = reviewResourceIds(value);
+        const outcome = geologyReviewOutcome(value);
         if (!ids.before) throw new Error("检查记录尚无可用的待检查地质图");
+        if (outcome && (ids.after || ids.differences))
+          throw new Error("检查记录与修正成果不一致，请核对任务状态");
         if (
           (ids.after || ids.differences) &&
           !value.modificationReview?.approvedSuggestionIds.length
@@ -89,7 +97,9 @@ export default function GeologyReviewWorkspace({
             : Promise.resolve(null),
         ]);
         if (disposed) return;
-        const differences = actual ?? previewSuggestions(value);
+        const differences: GeoJsonFeatureCollection = outcome
+          ? { type: "FeatureCollection", features: [] }
+          : (actual ?? previewSuggestions(value));
         setWorkflow(value);
         setData({ before, after, differences });
         const target = reviewSuggestionIndex(value, differences, suggestionId);
@@ -119,6 +129,7 @@ export default function GeologyReviewWorkspace({
   const current = data?.differences.features[selected];
   const properties = current?.properties ?? {};
   const actual = Boolean(data?.after);
+  const outcome = geologyReviewOutcome(workflow);
   const editSubmitted =
     workflow &&
     Array.isArray(workflow.plan.stages) &&
@@ -157,11 +168,13 @@ export default function GeologyReviewWorkspace({
           <span className="geology-review-eyebrow">地理工作台演示案例</span>
           <h1>地质成果智能检查与修正</h1>
           <p>
-            {actual
-              ? "两张地图共享视角与类别配色，橙色边界标出算法实际修改的位置。"
-              : editSubmitted
-                ? "修正任务已提交，当前显示获批建议；结果就绪后可刷新对照。"
-                : "核对建议的位置、依据和范围，返回对话选择批准后执行。"}
+            {outcome
+              ? geologyReviewOutcomeDescription(outcome)
+              : actual
+                ? "两张地图共享视角与类别配色，橙色边界标出算法实际修改的位置。"
+                : editSubmitted
+                  ? "修正任务已提交，当前显示获批建议；结果就绪后可刷新对照。"
+                  : "核对建议的位置、依据和范围，返回对话选择批准后执行。"}
           </p>
         </div>
         <div className="geology-review-workspace-actions">
@@ -177,14 +190,16 @@ export default function GeologyReviewWorkspace({
           >
             刷新结果
           </Button>
-          <Button
-            type="primary"
-            icon={<AimOutlined />}
-            disabled={!data?.differences.features.length}
-            onClick={() => locate(selected)}
-          >
-            定位修改处
-          </Button>
+          {!outcome && (
+            <Button
+              type="primary"
+              icon={<AimOutlined />}
+              disabled={!data?.differences.features.length}
+              onClick={() => locate(selected)}
+            >
+              定位修改处
+            </Button>
+          )}
         </div>
       </header>
       {error && <Alert type="error" showIcon title={error} />}
@@ -203,28 +218,41 @@ export default function GeologyReviewWorkspace({
                 accessToken={bootstrap.map.mapboxAccessToken}
                 bounds={focus}
                 onSelect={locate}
+                inspectionOnly={Boolean(outcome)}
                 previewLabel={
-                  editSubmitted
-                    ? "建议范围，修正结果准备中"
-                    : "建议修改范围，尚未执行"
+                  outcome
+                    ? "检查后原图，保持不变"
+                    : editSubmitted
+                      ? "建议范围，修正结果准备中"
+                      : "建议修改范围，尚未执行"
                 }
               />
             </section>
             <aside className="geology-review-map-inspector">
-              <Tag color={actual ? "blue" : "gold"}>
-                {actual
-                  ? "真实修正结果"
-                  : editSubmitted
-                    ? "修正结果准备中"
-                    : "建议修改，尚未执行"}
+              <Tag color={actual || outcome === "no_changes" ? "blue" : "gold"}>
+                {outcome
+                  ? geologyReviewOutcomeLabel(outcome)
+                  : actual
+                    ? "真实修正结果"
+                    : editSubmitted
+                      ? "修正结果准备中"
+                      : "建议修改，尚未执行"}
               </Tag>
-              <h2>{actual ? "实际修改了哪里" : "发现的问题"}</h2>
+              <h2>
+                {outcome
+                  ? "本轮检查结果"
+                  : actual
+                    ? "实际修改了哪里"
+                    : "发现的问题"}
+              </h2>
               <p>
-                {actual
-                  ? `本次修改涉及${summary.count}个图斑，范围合计${(summary.area / 10000).toFixed(2)}公顷。`
-                  : editSubmitted
-                    ? "已提交修正任务，当前显示获批建议范围；实际修改结果就绪后请刷新查看。"
-                    : "批准前展示的是建议范围，地图内容保持当前状态。"}
+                {outcome
+                  ? geologyReviewOutcomeDescription(outcome)
+                  : actual
+                    ? `本次修改涉及${summary.count}个图斑，范围合计${(summary.area / 10000).toFixed(2)}公顷。`
+                    : editSubmitted
+                      ? "已提交修正任务，当前显示获批建议范围；实际修改结果就绪后请刷新查看。"
+                      : "批准前展示的是建议范围，地图内容保持当前状态。"}
               </p>
               <div className="geology-review-change-list">
                 {data.differences.features.map((feature, index) => (
@@ -292,11 +320,19 @@ export default function GeologyReviewWorkspace({
               ) : (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="尚未形成修改建议"
+                  description={
+                    outcome === "no_changes"
+                      ? "本轮没有需要修改的对象"
+                      : outcome === "requires_evidence"
+                        ? "请查看报告中的疑点和补充资料建议"
+                        : "尚未形成修改建议"
+                  }
                 />
               )}
               <p className="geology-review-workspace-note">
-                点击橙色区域或上方条目查看变化；拖动、缩放任一地图，两边同步。
+                {outcome
+                  ? "两侧显示同一份待检查地质图，本轮没有生成修正图。拖动、缩放任一地图，两边同步。"
+                  : "点击橙色区域或上方条目查看变化；拖动、缩放任一地图，两边同步。"}
               </p>
             </aside>
           </div>

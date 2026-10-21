@@ -1314,6 +1314,23 @@ export type AgentResearchDemoList = {
          * 资料、已发布算法与模型等必要服务是否就绪
          */
         available: boolean;
+        /**
+         * 仅当前请求项目返回的活动预设；按稳定资源编码定位，不包含其他项目的输入标识。缺项表示该角色预设不可用。
+         */
+        preset?: {
+            /**
+             * 角色键到当前可访问的唯一活动预设资源
+             */
+            inputs: {
+                [key: string]: number;
+            };
+            /**
+             * 已发布场景算法的预设参数
+             */
+            parameters: {
+                [key: string]: unknown;
+            };
+        };
     }>;
 };
 
@@ -9137,6 +9154,10 @@ export type ComputeCandidate = {
      * 标识
      */
     sizeBytes: number;
+    /**
+     * 资源登记格式；候选字段和几何类型从实际入库文件读取，后缀不能替代角色校验
+     */
+    fileFormat?: string;
 };
 
 /**
@@ -18162,7 +18183,15 @@ export type GetAgentWorkflowResponses = {
 export type GetAgentWorkflowResponse = GetAgentWorkflowResponses[keyof GetAgentWorkflowResponses];
 
 export type CancelAgentWorkflowData = {
-    body?: never;
+    /**
+     * 有条件作废尚未执行的初始计划。
+     */
+    body?: {
+        /**
+         * 待作废的初始计划摘要；阶段或摘要变化时拒绝
+         */
+        replacePlanHash?: string;
+    };
     headers: {
         /**
          * 唯一当前项目 ID，禁止 all
@@ -18181,6 +18210,10 @@ export type CancelAgentWorkflowData = {
 
 export type CancelAgentWorkflowErrors = {
     /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
      * 未认证
      */
     401: ErrorResponse;
@@ -18192,6 +18225,10 @@ export type CancelAgentWorkflowErrors = {
      * 资源不存在
      */
     404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
 };
 
 export type CancelAgentWorkflowError = CancelAgentWorkflowErrors[keyof CancelAgentWorkflowErrors];

@@ -23,6 +23,7 @@ import type {
   AgentWorkflowReportPreview,
   AgentWorkflowConfirmation,
   AgentInteractionUpdate,
+  CancelAgentWorkflowData,
 } from "./generated/types.gen";
 
 export const agentApi = {
@@ -112,9 +113,10 @@ export const agentApi = {
       method: "POST",
       body: { planHash, ...review },
     }),
-  cancelWorkflow: (id: string) =>
+  cancelWorkflow: (id: string, body?: CancelAgentWorkflowData["body"]) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/cancel/`, {
       method: "POST",
+      ...(body ? { body } : {}),
     }),
   pauseWorkflow: (id: string) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/pause/`, {

@@ -24,6 +24,7 @@ import { researchDemoLaunch } from "./researchDemoLaunch";
 import platformStyles from "../styles.css?inline";
 import agentStyles from "./agent.css?inline";
 import storyStyles from "./geology-review-story.css?inline";
+import { workflowReport } from "./workflowReport.testFixtures";
 
 const decision = {
   problem: "地图内部空白是否漏填？",
@@ -216,6 +217,89 @@ function show(workflow = fixture(), review = vi.fn()) {
   return { ...view, review };
 }
 beforeEach(() => vi.restoreAllMocks());
+
+it("直接展示本次具体知识修订和实际算法版本，不把待执行工具写成完成", () => {
+  const workflow = fixture();
+  workflow.plan.algorithms = {
+    "geology-map-check": {
+      name: "地质成果智能检查",
+      manifest: { version: "1.0.1" },
+    },
+    "geology-map-correct": {
+      name: "地质成果受约束修正",
+      manifest: { version: "1.0.2" },
+    },
+  };
+  workflow.plan.stages = [
+    {
+      name: "check",
+      identifier: "geology-map-check",
+      taskId: "actual-check",
+      status: "succeeded",
+    },
+    { name: "edit", identifier: "geology-map-correct", status: "pending" },
+  ];
+  show(workflow);
+  const basis = within(screen.getByLabelText("本次知识与算法"));
+  expect(basis.getByText("完整制图范围的内部漏填检查（修订 2）")).toBeVisible();
+  expect(
+    basis.getByText("检查：地质成果智能检查 1.0.1 / 已实际执行"),
+  ).toBeVisible();
+  expect(
+    basis.getByText("修正：地质成果受约束修正 1.0.2 / 尚未执行"),
+  ).toBeVisible();
+});
+
+it.each(["no_changes", "requires_evidence"])(
+  "仅检查结论%s保留原图入口，不显示不存在的修正图或复核完成",
+  (kind) => {
+    const workflow = fixture();
+    workflow.status = "succeeded";
+    workflow.modificationReview = undefined;
+    workflow.resultResourceIds = [900];
+    workflow.plan.stages = [
+      {
+        name: "check",
+        outputs: [{ key: "issues", kind: "table", resourceId: 900 }],
+      },
+    ];
+    workflow.plan.reviewOutcome = { kind, checkTaskId: "actual-check" };
+    workflow.steps.push(
+      step(4, "analysis_decision", "检查完成", {
+        decision: {
+          ...decision,
+          nextAction: "finish",
+          judgement: "原图保持不变",
+          resultSummary: "检查结果已读取",
+        },
+      }),
+    );
+    vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue(
+      workflowReport({ label: "检查报告" }),
+    );
+    show(workflow);
+    expect(
+      screen.getByText(
+        kind === "no_changes"
+          ? "检查已完成，未修改地图"
+          : "检查已完成，待补充证据",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText("复核完成")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "查看待检查地质图与修正后地质图" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "查看待检查地质图" }),
+    ).toHaveAttribute("href", "/map?resourceId=101&projectTagId=3");
+    expect(
+      screen.getByRole("link", { name: "在地理工作台查看待检查图" }),
+    ).toHaveAttribute("href", "/map?resourceId=101&projectTagId=3");
+    expect(
+      screen.queryByRole("link", { name: "在地理工作台对比成果图层" }),
+    ).not.toBeInTheDocument();
+  },
+);
 
 it("仅批准明确选中的建议，保存审核意见而不走通用确认", async () => {
   const { review } = show();

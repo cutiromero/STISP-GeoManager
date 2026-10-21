@@ -13,6 +13,10 @@ import { workflowActivity } from "./agentActivity";
 import WorkflowReportFile from "./WorkflowReportFile";
 import WorkflowDeliverables from "./WorkflowDeliverables";
 import GeologyReviewStory from "./GeologyReviewStory";
+import {
+  geologyReviewOutcome,
+  geologyReviewOriginalMapId,
+} from "./geologyReviewOutcome";
 import { deletedWorkflowResources } from "./deletedWorkflowResources";
 import {
   workflowNextAction,
@@ -106,6 +110,8 @@ export default function WorkflowResults({
   const ui = useComputeText();
   const isActive = active.includes(workflow.status);
   const isGeologyReview = workflow.workflowType === "geology_map_review";
+  const inspectionOnly = Boolean(geologyReviewOutcome(workflow));
+  const originalMapId = geologyReviewOriginalMapId(workflow);
   const deletedResources = deletedWorkflowResources(workflow);
   const deletedIds = new Set(deletedResources.map((item) => item.id));
   const availableResultIds = workflow.resultResourceIds.filter(
@@ -201,7 +207,9 @@ export default function WorkflowResults({
   const primaryStageNames =
     workflow.workflowType === "ecology_investigation"
       ? ["change", "priority"]
-      : ["edit", "recheck"];
+      : inspectionOnly
+        ? ["check"]
+        : ["edit", "recheck"];
   const primaryTaskIds =
     workflow.status === "succeeded" && Array.isArray(workflow.plan.stages)
       ? workflow.plan.stages.flatMap((stage) => {
@@ -552,18 +560,23 @@ export default function WorkflowResults({
             )}
           </span>
           {mapResourceIds.length &&
+          (!inspectionOnly || originalMapId) &&
           !(isGeologyReview && deletedResources.length) ? (
             <Link
               to={
-                isGeologyReview
+                isGeologyReview && !inspectionOnly
                   ? `/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
-                  : `/map?resources=${mapResourceIds.join(",")}&projectTagId=${workflow.projectId}`
+                  : isGeologyReview
+                    ? `/map?resourceId=${originalMapId}&projectTagId=${workflow.projectId}`
+                    : `/map?resources=${mapResourceIds.join(",")}&projectTagId=${workflow.projectId}`
               }
             >
-              {ui(
-                "在地理工作台对比成果图层",
-                "Compare result layers in the map workspace",
-              )}
+              {inspectionOnly
+                ? "在地理工作台查看待检查图"
+                : ui(
+                    "在地理工作台对比成果图层",
+                    "Compare result layers in the map workspace",
+                  )}
             </Link>
           ) : (
             ui(

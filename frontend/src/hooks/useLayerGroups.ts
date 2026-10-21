@@ -10,6 +10,10 @@ import {
   reorderLayerGroups,
 } from "../utils/geometry";
 import { useCachedLayerGroups } from "./useCachedLayerGroups";
+import {
+  resourceLayerKey,
+  uniqueLoadedLayerGroups,
+} from "../utils/uniqueLoadedLayers";
 
 export function useLayerGroups(cacheKey = "default") {
   const [groups, setGroups] = useCachedLayerGroups(cacheKey);
@@ -237,7 +241,13 @@ export function useLayerGroups(cacheKey = "default") {
 
   const addGroup = useCallback(
     (group: LoadedLayerGroup) => {
-      setGroups((current) => [group, ...current]);
+      setGroups((current) => {
+        const seen = new Set(
+          current.flatMap((entry) => entry.children.map(resourceLayerKey)),
+        );
+        const additions = uniqueLoadedLayerGroups([group], seen);
+        return additions.length ? [...additions, ...current] : current;
+      });
     },
     [setGroups],
   );

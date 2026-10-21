@@ -25,6 +25,7 @@ from apps.agent.geology_review import (
     validate_modifications,
 )
 from apps.agent.models import AgentWorkflow
+from apps.agent.geology_input_validation import ROLES
 from apps.agent.views import workflow_json
 from apps.agent.workflow import step
 from apps.catalog.models import DataResource
@@ -82,8 +83,13 @@ def review_case(demo, monkeypatch):
         "apps.compute.data.candidate",
         lambda resource: {
             "id": resource.id,
-            "fields": ["class", "formation", "geologic_age"],
+            "fields": sorted(
+                ROLES[
+                    next(role for role in ROLES if demo["inputs"][role] == resource.id)
+                ][2]
+            ),
             "crs": "EPSG:4326",
+            "geometryTypes": ["Polygon"] if resource.data_type == "vector" else [],
         },
     )
     inputs = {
@@ -271,11 +277,9 @@ def test_real_model_query_executes_actual_search_with_saved_revisions(
     assert wf.plan["actualModelCallCount"] == 1
     assert stream.call_count == 1 and not ComputeTask.objects.exists()
     payload = json.loads(stream.call_args.args[1][1]["content"])
-    assert payload["inputRoles"][0]["metadata"]["fields"] == [
-        "class",
-        "formation",
-        "geologic_age",
-    ]
+    assert payload["inputRoles"][0]["metadata"]["fields"] == sorted(
+        ROLES["initial_map"][2]
+    )
     record = wf.steps.get(kind="search_expert_knowledge")
     assert record.action["query"] == value["decision"]["knowledgeQuery"]
     assert {(v["id"], v["revision"]) for v in record.output_refs["knowledge"]} == {
@@ -488,6 +492,62 @@ def test_each_issue_exposes_only_retrieved_current_matching_knowledge(review_cas
     env["entries"][0].revision += 1
     env["entries"][0].save()
     assert required_knowledge(wf, results)[0]["requiredKnowledgeRefs"] == []
+
+
+@pytest.mark.parametrize(
+    "binding,accepted",
+    [
+        ("explicit", True),
+        ("id_only", True),
+        ("revision_only", True),
+        ("empty", True),
+        ("wrong_id", False),
+        ("missing_id", False),
+        ("stale_revision", False),
+    ],
+)
+def test_explicit_issue_knowledge_binding_cannot_fall_back_to_seed(
+    review_case, binding, accepted
+):
+    env = review_case
+    wf, stage, _ = waiting_suggestions(env)
+    results = wf.plan["stages"][1]["results"]
+    row, entry = results[0]["rows"][0], env["entries"][0]
+    row.update(knowledge_id=str(entry.id), knowledge_revision=str(entry.revision))
+    if binding == "id_only":
+        row["knowledge_revision"] = ""
+    elif binding == "revision_only":
+        row["knowledge_id"] = ""
+    elif binding == "empty":
+        row.update(knowledge_id="", knowledge_revision="")
+    elif binding == "wrong_id":
+        row["knowledge_id"] = str(env["entries"][1].id)
+    elif binding == "missing_id":
+        row["knowledge_id"] = "99999999"
+    elif binding == "stale_revision":
+        entry.revision += 1
+        entry.save()
+        wf.evidence[0] = serialize(entry)
+    requirement = required_knowledge(wf, results)[0]
+    if accepted:
+        assert requirement["requiredKnowledgeRefs"] == [
+            {
+                "id": entry.id,
+                "revision": entry.revision,
+                "title": entry.title,
+            }
+        ]
+        freeze_proposal(wf, stage)
+        assert (
+            wf.plan["modificationReview"]["suggestions"][0]["knowledgeRefs"]
+            == requirement["requiredKnowledgeRefs"]
+        )
+    else:
+        assert requirement["requiredKnowledgeRefs"] == []
+        assert requirement["knowledgeState"] == "not_retrieved"
+        with pytest.raises(ComputeError, match="对应规则"):
+            freeze_proposal(wf, stage)
+    assert ComputeTask.objects.count() == 1
 
 
 @pytest.mark.parametrize("change", [{"status": "draft"}, {"domain": "pipelines"}])

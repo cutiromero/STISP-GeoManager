@@ -4,6 +4,11 @@ import { Link } from "react-router-dom";
 import type { AgentWorkflow } from "../api/generated/types.gen";
 import WorkflowKnowledgeReferences from "./WorkflowKnowledgeReferences";
 import { deletedWorkflowResources } from "./deletedWorkflowResources";
+import {
+  geologyReviewOutcome,
+  geologyReviewOutcomeDescription,
+  geologyReviewOutcomeLabel,
+} from "./geologyReviewOutcome";
 import "./geology-review-story.css";
 
 type ReviewAction = (
@@ -87,6 +92,7 @@ function storyEvents(workflow: AgentWorkflow) {
   const final = [...decisions]
     .reverse()
     .find((decision) => decision.nextAction === "finish");
+  const outcome = geologyReviewOutcome(workflow);
   const events: { key: string; title: string; description: string }[] = [];
   if (check)
     events.push({
@@ -132,7 +138,7 @@ function storyEvents(workflow: AgentWorkflow) {
   if (workflow.status === "succeeded" && final)
     events.push({
       key: "done",
-      title: "复核完成",
+      title: outcome ? geologyReviewOutcomeLabel(outcome) : "复核完成",
       description: final.resultSummary || final.judgement,
     });
   return events;
@@ -166,6 +172,55 @@ export default function GeologyReviewStory({
       : [];
   const approved = review?.approvedSuggestionIds ?? [];
   const events = storyEvents(workflow);
+  const outcome = geologyReviewOutcome(workflow);
+  const algorithms = record(workflow.plan.algorithms);
+  const tools = (
+    Array.isArray(workflow.plan.stages) ? workflow.plan.stages : []
+  )
+    .map(record)
+    .filter((stage) =>
+      ["check", "edit", "recheck"].includes(String(stage.name)),
+    )
+    .flatMap((stage) => {
+      const algorithm = record(algorithms[String(stage.identifier)]);
+      const manifest = record(algorithm.manifest);
+      if (!algorithm.name) return [];
+      const labels: Record<string, string> = {
+        check: "检查",
+        edit: "修正",
+        recheck: "复核",
+      };
+      const task = workflow.steps.find(
+        (step) => stage.taskId && step.computeTaskId === stage.taskId,
+      );
+      return [
+        {
+          stage: String(stage.name),
+          label: labels[String(stage.name)],
+          name: String(algorithm.name),
+          version: typeof manifest.version === "string" ? manifest.version : "",
+          status:
+            stage.status === "skipped"
+              ? "本轮无需执行"
+              : !stage.taskId
+                ? "尚未执行"
+                : task?.status === "succeeded" || stage.status === "succeeded"
+                  ? "已实际执行"
+                  : task?.status === "failed" || stage.status === "failed"
+                    ? "执行失败"
+                    : "已提交计算",
+        },
+      ];
+    });
+  const citedKnowledge = workflow.evidence.filter((entry) =>
+    suggestions.some((suggestion) =>
+      suggestion.knowledgeRefs.some(
+        (ref) =>
+          String(ref.id) === String(entry.id) &&
+          ref.revision === Number(entry.revision),
+      ),
+    ),
+  );
   const mapId = Number(record(workflow.plan.inputs).initial_map);
   const deletedIds = new Set(
     deletedWorkflowResources(workflow).map((item) => item.id),
@@ -178,6 +233,11 @@ export default function GeologyReviewStory({
         <strong>地质成果智能检查与修正</strong>
         <Tag color="blue">演示案例</Tag>
       </div>
+      {outcome && (
+        <p className="geology-story-current">
+          {geologyReviewOutcomeDescription(outcome)}
+        </p>
+      )}
       {events.length > 0 && (
         <div className="geology-story-current">
           <strong>{events[events.length - 1]!.title}</strong>
@@ -196,6 +256,38 @@ export default function GeologyReviewStory({
             ))}
           </ol>
         </details>
+      )}
+      {(tools.length > 0 || citedKnowledge.length > 0) && (
+        <section className="geology-review-basis" aria-label="本次知识与算法">
+          {citedKnowledge.length > 0 && (
+            <div>
+              <strong>修改依据来自这些知识</strong>
+              <ul>
+                {citedKnowledge.map((entry) => (
+                  <li key={`${entry.id}:${entry.revision}`}>
+                    {String(entry.title)}（修订 {String(entry.revision)}）
+                  </li>
+                ))}
+              </ul>
+              <small>
+                每处修改与具体条目的对应关系、适用条件和来源可在下方建议中展开查看。
+              </small>
+            </div>
+          )}
+          {tools.length > 0 && (
+            <div>
+              <strong>本次调用的算法工具</strong>
+              <ul>
+                {tools.map((tool) => (
+                  <li key={tool.stage}>
+                    {tool.label}：{tool.name}
+                    {tool.version ? ` ${tool.version}` : ""} / {tool.status}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       )}
       {suggestions.length > 0 && (
         <section className="geology-suggestions" aria-label="建议修改">
@@ -372,14 +464,20 @@ export default function GeologyReviewStory({
           )}
         </section>
       )}
-      {workflow.status === "succeeded" && !deletedIds.size && (
-        <Link
-          className="geology-review-map-link"
-          to={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`}
-        >
-          查看待检查地质图与修正后地质图
-        </Link>
-      )}
+      {workflow.status === "succeeded" &&
+        !deletedIds.size &&
+        (!outcome || mapId > 0) && (
+          <Link
+            className="geology-review-map-link"
+            to={
+              outcome
+                ? `/map?resourceId=${mapId}&projectTagId=${workflow.projectId}`
+                : `/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
+            }
+          >
+            {outcome ? "查看待检查地质图" : "查看待检查地质图与修正后地质图"}
+          </Link>
+        )}
     </section>
   );
 }

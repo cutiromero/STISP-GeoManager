@@ -121,6 +121,18 @@ def _matching_knowledge(workflow, seeds):
     }
 
 
+def _bound_knowledge(row, matches):
+    """Respect explicit rule bindings in addition to the retrieved seed/version."""
+    identity = str(row.get("knowledge_id") or "").strip()
+    revision = str(row.get("knowledge_revision") or "").strip()
+    return [
+        entry
+        for entry in matches
+        if (not identity or str(entry["id"]) == identity)
+        and (not revision or str(entry["revision"]) == revision)
+    ]
+
+
 def required_knowledge(workflow, results):
     """Describe actual retrieved citations per issue; never select an edit."""
     rows = [
@@ -133,21 +145,22 @@ def required_knowledge(workflow, results):
     matches = _matching_knowledge(
         workflow, {row.get("knowledge_seed", "") for _, _, row in rows}
     )
-    return [
-        {
-            "outputId": output_id,
-            "rowIndex": index,
-            "featureId": row.get("feature_id"),
-            "kind": row["kind"],
-            "ruleId": row.get("rule_id"),
-            "requiredKnowledgeRefs": matches.get(row.get("knowledge_seed"), []),
-            "knowledgeState": "available"
-            if matches.get(row.get("knowledge_seed"))
-            else "not_retrieved",
-            "citationRequirement": "at_least_one_matching_reference_per_adopted_issue",
-        }
-        for output_id, index, row in rows
-    ]
+    requirements = []
+    for output_id, index, row in rows:
+        refs = _bound_knowledge(row, matches.get(row.get("knowledge_seed"), []))
+        requirements.append(
+            {
+                "outputId": output_id,
+                "rowIndex": index,
+                "featureId": row.get("feature_id"),
+                "kind": row["kind"],
+                "ruleId": row.get("rule_id"),
+                "requiredKnowledgeRefs": refs,
+                "knowledgeState": "available" if refs else "not_retrieved",
+                "citationRequirement": "at_least_one_matching_reference_per_adopted_issue",
+            }
+        )
+    return requirements
 
 
 def _knowledge(workflow, row, decision):
@@ -160,13 +173,18 @@ def _knowledge(workflow, row, decision):
         raise ComputeError("当前检查规则缺少可核对的专家知识定位")
     matches = [
         entry
-        for entry in _matching_knowledge(workflow, [row["knowledge_seed"]])[
-            row["knowledge_seed"]
-        ]
+        for entry in _bound_knowledge(
+            row,
+            _matching_knowledge(workflow, [row["knowledge_seed"]])[
+                row["knowledge_seed"]
+            ],
+        )
         if str(entry["id"]) in cited
     ]
     if not matches:
-        raise ComputeError("当前建议尚未引用对应规则的实际专家知识，请重新核对知识依据")
+        raise ComputeError(
+            "当前建议尚未引用对应规则的实际专家知识，或显式知识编号、修订不一致，请重新核对知识依据"
+        )
     return [
         {"id": entry["id"], "revision": entry["revision"], "title": entry["title"]}
         for entry in matches

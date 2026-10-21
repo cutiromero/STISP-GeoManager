@@ -49,6 +49,7 @@ import MapCompositionPanel from "../components/map-composition/MapCompositionPan
 import { useAppContext } from "../contexts/AppContext";
 import { LayerContext, type LayerContextValue } from "../hooks/LayerContext";
 import { useLayerGroups } from "../hooks/useLayerGroups";
+import { useUniqueLayerLoad } from "../hooks/useUniqueLayerLoad";
 import { useMapCompositions } from "../hooks/useMapCompositions";
 import { useRasterRender } from "../hooks/useRasterRender";
 import { useWorkspaceScenes } from "../hooks/useWorkspaceScenes";
@@ -124,6 +125,7 @@ import {
   resourceSpatialExtent,
 } from "../utils/resources";
 import { isAbortError } from "../utils/rasterRenderTasks";
+import { resourceLayerKey } from "../utils/uniqueLoadedLayers";
 import { showGeojsonWarnings } from "../workspace/workspaceNotifications";
 
 type DrawPurpose = "query";
@@ -765,6 +767,27 @@ function MapWorkspace() {
   const layerGroups = useLayerGroups(
     `${user ? `user-${user.id}` : "anonymous"}:project-${getActiveProject()}`,
   );
+  const uniqueLayerLoad = useUniqueLayerLoad({
+    scope: `${user?.id ?? "anonymous"}:${getActiveProject()}`,
+    groups: layerGroups.groups,
+    onExisting: async (group, layer) => {
+      layerGroups.setGroupVisibility(group.id, true);
+      layerGroups.setLayerVisibility(group.id, layer.id, true);
+      setSelectedLayerId(layer.id);
+      setActiveLeftPanel("layers");
+      await locateLayer(group.id, layer.id);
+      message.info(
+        english
+          ? "This data is already loaded; showing the existing layer"
+          : "该数据已加载，已定位现有图层",
+      );
+    },
+    onLoading: () => {
+      message.info(
+        english ? "This data is already loading" : "该数据正在加载，请稍候",
+      );
+    },
+  });
   const { prepareRasterLayer, startRasterRender, setMapInstance } =
     useRasterRender(layerGroups.updateRasterLayer);
   const permissionDeniedMessage = english
@@ -1378,6 +1401,20 @@ function MapWorkspace() {
     resource: ResourceListItem,
     reportProgress: DataResourceLoadReporter = () => undefined,
   ) {
+    if (
+      await uniqueLayerLoad.showExisting(
+        resourceLayerKey({
+          sourceResource: resource,
+          layerType: resource.dataType === "raster" ? "raster" : "vector",
+        }),
+      )
+    ) {
+      reportProgress({
+        percent: 100,
+        message: english ? "Showing existing layer" : "已定位现有图层",
+      });
+      return true;
+    }
     reportProgress({
       percent: 8,
       message: english
@@ -1486,6 +1523,17 @@ function MapWorkspace() {
       message.warning(permissionDeniedMessage);
       return false;
     }
+    return uniqueLayerLoad.load(
+      resourceLayerKey({ sourceResource: resource, layerType: "raster" }),
+      async () => loadNewRasterResource(resource, profile, reportProgress),
+    );
+  }
+
+  async function loadNewRasterResource(
+    resource: DataResource,
+    profile: DataResourceProfile,
+    reportProgress: DataResourceLoadReporter,
+  ) {
     const group = createRasterLayerGroup(resource, profile);
     if (!group) {
       message.error(
@@ -1559,6 +1607,28 @@ function MapWorkspace() {
       message.warning(permissionDeniedMessage);
       return false;
     }
+    return uniqueLayerLoad.load(
+      resourceLayerKey({
+        sourceResource: resource,
+        layerType: "vector",
+        query: { attributeFilters, spatialFilter: options.spatialFilter },
+      }),
+      async () =>
+        loadNewVectorResource(resource, profile, attributeFilters, options),
+    );
+  }
+
+  async function loadNewVectorResource(
+    resource: ResourceListItem,
+    profile: DataResourceProfile,
+    attributeFilters: AttributeFilter[],
+    options: {
+      spatialFilter: SpatialFilter | null;
+      errorMessage: string;
+      trackQuerying?: boolean;
+      reportProgress?: DataResourceLoadReporter;
+    },
+  ) {
     const trackQuerying = options.trackQuerying !== false;
     if (trackQuerying) setQuerying(true);
     try {
@@ -2246,16 +2316,9 @@ function MapWorkspace() {
   }
 
   function handleLoadSpatialResult() {
-    if (spatialQueryResult?.loadedLayerName) {
-      message.info(
-        english
-          ? "Spatial query results are already loaded as a layer"
-          : "空间查询结果已加载为图层",
-      );
-      return;
-    }
     const group = createSpatialResultGroup();
-    if (!group) {
+    const layer = group?.children[0];
+    if (!group || !layer) {
       message.warning(
         english
           ? "No spatial query results are available to load"
@@ -2263,16 +2326,19 @@ function MapWorkspace() {
       );
       return;
     }
-    layerGroups.addGroup(group);
-    setSelectedLayerId(group.children[0]?.id ?? null);
-    setSpatialQueryResult((current) =>
-      current ? { ...current, loadedLayerName: group.name } : current,
-    );
-    message.success(
-      english
-        ? "Spatial query results loaded as a layer"
-        : "空间查询结果已加载为图层",
-    );
+    void uniqueLayerLoad.load(resourceLayerKey(layer), async () => {
+      layerGroups.addGroup(group);
+      setSelectedLayerId(group.children[0]?.id ?? null);
+      setSpatialQueryResult((current) =>
+        current ? { ...current, loadedLayerName: group.name } : current,
+      );
+      message.success(
+        english
+          ? "Spatial query results loaded as a layer"
+          : "空间查询结果已加载为图层",
+      );
+      return true;
+    });
   }
 
   async function handleLocateSpatialResult() {

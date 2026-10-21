@@ -274,6 +274,19 @@ def prepare_demo(workflow, user, p) -> None:
         raise ComputeError("请按场景明确选择全部输入角色")
     if p["maxResources"] > 0 and len(set(inputs.values())) > p["maxResources"]:
         raise ComputeError("场景输入超过当前资源上限")
+    validated_versions = None
+    if workflow.workflow_type == "geology_map_review":
+        from .geology_input_validation import validate_geology_inputs
+
+        validated_versions = _versions(workflow, GRAPHS[workflow.workflow_type])
+        validate_geology_inputs(
+            user,
+            p,
+            inputs,
+            workflow.parameters,
+            workflow.resource_ids,
+            versions=validated_versions,
+        )
     snapshots, names = {}, {}
     for role, kind in roles.items():
         resource = resolve_resource(user, p, inputs[role], workflow.resource_ids)
@@ -307,7 +320,7 @@ def prepare_demo(workflow, user, p) -> None:
         from .demo_updates import prepare_update
 
         graph = prepare_update(workflow, user, p)
-    versions = _versions(workflow, graph)
+    versions = validated_versions or _versions(workflow, graph)
     required_steps = len(graph)
     decisions_required = required_steps + (
         2 if workflow.workflow_type == "geology_map_review" else 1
@@ -802,6 +815,10 @@ def advance_demo(workflow_id) -> None:
                 prepare_demo(workflow, user, p)
                 return
             authorize_demo(workflow, user, p)
+            if workflow.workflow_type == "geology_map_review":
+                from .geology_review_outcome import finish_without_edits
+
+                finish_without_edits(workflow, user, p)
             index = workflow.plan["stageIndex"]
             stages = workflow.plan["stages"]
             stage = (

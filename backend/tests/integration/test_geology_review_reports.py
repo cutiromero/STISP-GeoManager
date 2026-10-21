@@ -1,6 +1,7 @@
 """Short public reports bind actual CSV files, saved approval and expert sources."""
 
 import csv
+import copy
 
 import pytest
 
@@ -16,6 +17,8 @@ from apps.compute.models import (
 )
 from apps.compute.packages import checksum
 from apps.core.storage import app_path
+from apps.knowledge.models import KnowledgeEntry
+from apps.knowledge.services import serialize
 from tests.integration.test_compute import setup_compute  # noqa: F401
 from tests.integration.test_demo_workflow import demo  # noqa: F401
 from tests.integration.test_workflow_reports import completed, request  # noqa: F401
@@ -290,3 +293,170 @@ def test_rejected_or_unfinished_case_has_no_success_report(geological, status):
     AgentWorkflow.objects.filter(pk=env["workflow"].id).update(status=status)
     assert request(env).status_code == 409
     assert not _paths(env["workflow"])[0].exists()
+
+
+def replace_rows(result, rows):
+    path = app_path(result.path)
+    with path.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    result.checksum, result.size_bytes = checksum(path), path.stat().st_size
+    result.save(update_fields=["checksum", "size_bytes"])
+
+
+def read_rows(result):
+    with app_path(result.path).open(encoding="utf-8-sig", newline="") as stream:
+        return list(csv.DictReader(stream))
+
+
+def test_report_each_change_names_its_own_knowledge_rule_and_actual_algorithm(
+    geological,
+):
+    env, workflow = geological, geological["workflow"]
+    entry = KnowledgeEntry.objects.create(
+        project_tag=env["project"],
+        seed_key="report-age",
+        title="八宝山组时代定义",
+        statement="采用该条目定义的地层属于晚三叠世。",
+        status="published",
+        revision=3,
+        sources=[{"title": "中国岩石地层名称辞典", "locator": "06-63-0717"}],
+    )
+    evidence = serialize(entry)
+    workflow.evidence.append(evidence)
+    review = workflow.plan["modificationReview"]
+    suggestion = copy.deepcopy(review["suggestions"][0])
+    suggestion.update(
+        id="suggestion-b",
+        kind="set_age",
+        featureId="区域B",
+        title="更新地层时代",
+        currentState="晚侏罗世",
+        suggestedState="晚三叠世",
+        ruleId="age-rule",
+        areaM2=100,
+        reason="地层时代与适用辞书定义矛盾。",
+        knowledgeRefs=[
+            {"id": entry.id, "revision": entry.revision, "title": entry.title}
+        ],
+    )
+    review["suggestions"].append(suggestion)
+    review["approvedSuggestionIds"].append(suggestion["id"])
+    approval = workflow.steps.get(kind="modifications_approved")
+    approval.action["selectedSuggestionIds"] = review["approvedSuggestionIds"]
+    approval.save(update_fields=["action"])
+    workflow.plan["algorithms"] = {
+        "geology-map-correct": {
+            "name": "未执行的伪造工具",
+            "manifest": {"version": "99.0"},
+        }
+    }
+    workflow.save()
+    issues = read_rows(env["issues"])
+    issues.append(
+        {
+            **issues[0],
+            "feature_id": "区域B",
+            "kind": "set_age",
+            "rule_id": "age-rule",
+            "area_m2": "100",
+        }
+    )
+    replace_rows(env["issues"], issues)
+    edit = ComputeTask.objects.get(pk=workflow.plan["stages"][1]["taskId"])
+    changes = edit.outputs.get(key="changes")
+    rows = read_rows(changes)
+    rows.append(
+        {
+            **rows[0],
+            "feature_id": "区域B",
+            "kind": "set_age",
+            "rule_id": "age-rule",
+            "area_m2": "100",
+            "old_value": "J3",
+            "new_value": "T3",
+            "current_label": "晚侏罗世",
+            "suggested_label": "晚三叠世",
+        }
+    )
+    replace_rows(changes, rows)
+    assert request(env).status_code == 200
+    content = request(env, "preview/", "get").json()["content"]
+    assert "未执行的伪造工具" not in content and "99.0" not in content
+    for heading, end in (
+        ("## 用户批准的建议修改", "## 算法实际修改了什么"),
+        ("## 算法实际修改了什么", "### 修改前后面积"),
+    ):
+        section = content.split(heading)[1].split(end)[0]
+        first, second = section.split("- 图斑 区域A：")[1].split("- 图斑 区域B：")
+        assert "完整范围内部漏填规则" in first and "第 1 条" in first
+        assert "coverage-rule" in first and "八宝山组时代定义" not in first
+        assert "八宝山组时代定义" in second and "修订 3" in second
+        assert "06-63-0717" in second and "age-rule" in second
+        assert "完整范围内部漏填规则" not in second
+        assert all("地质成果受约束修正 1.0.0" in item for item in (first, second))
+
+
+def inspection_case(env, kind, *, repairable=False):
+    workflow = env["workflow"]
+    stages = workflow.plan["stages"]
+    check_id = stages[0]["taskId"]
+    for stage in stages[1:]:
+        workflow.steps.filter(compute_task_id=stage["taskId"]).delete()
+        task = ComputeTask.objects.get(pk=stage["taskId"])
+        task.outputs.all().delete()
+        task.delete()
+        stage.pop("taskId")
+        stage["status"] = "skipped"
+    workflow.plan.pop("modificationReview")
+    workflow.steps.filter(kind="modifications_approved").delete()
+    workflow.plan["reviewOutcome"] = {"kind": kind, "checkTaskId": check_id}
+    workflow.plan["finalDecision"].update(
+        judgement="现有证据支持检查结论，未执行地图修改。",
+        resultSummary="请根据检查结果决定是否补充资料。",
+    )
+    check = ComputeTask.objects.get(pk=check_id)
+    stats = read_rows(env["stats"])
+    for row in stats:
+        row.update(after_area_m2=row["before_area_m2"], delta_area_m2=0)
+    env["stats"] = output(env, check, "statistics", stats)
+    if kind == "requires_evidence" or repairable:
+        rows = read_rows(env["issues"])
+        rows[0].update(
+            status="repairable" if repairable else "needs_review",
+            reason="尚未确认空白是否属于未调查区，需要补充覆盖资料。",
+        )
+        replace_rows(env["issues"], rows)
+    else:
+        path = app_path(env["issues"].path)
+        path.write_text("feature_id,kind,status,reason\n", encoding="utf-8")
+        env["issues"].checksum = checksum(path)
+        env["issues"].save(update_fields=["checksum"])
+    workflow.result_ids = list(check.outputs.values_list("id", flat=True))
+    workflow.save()
+    return workflow
+
+
+@pytest.mark.parametrize(
+    "kind,label", [("no_changes", "无需修改"), ("requires_evidence", "需要补充证据")]
+)
+def test_inspection_only_report_uses_real_check_and_never_claims_edit_or_recheck(
+    geological, kind, label
+):
+    env = geological
+    inspection_case(env, kind)
+    response = request(env)
+    assert response.status_code == 200, response.content
+    content = request(env, "preview/", "get").json()["content"]
+    assert label in content and "未执行修正及修正后复核" in content
+    assert "完整范围内部漏填规则" in content and "第 1 条" in content
+    assert "检查算法：地质成果检查 1.0.0" in content
+    assert "地质成果受约束修正" not in content and "修正算法：" not in content
+    assert "算法实际修改了什么" not in content
+
+
+def test_inspection_only_report_cannot_hide_repairable_issue(geological):
+    inspection_case(geological, "no_changes", repairable=True)
+    assert request(geological).status_code == 409
+    assert not _paths(geological["workflow"])[0].exists()

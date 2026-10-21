@@ -6,6 +6,7 @@ import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import DemoWorkflowForm from "./DemoWorkflowForm";
 import WorkflowPanel from "./WorkflowPanel";
+import { geologyRequiredFields } from "./geologyWorkflowInputs";
 
 beforeEach(() => vi.restoreAllMocks());
 
@@ -21,7 +22,7 @@ it("shows the database resource name in the selector and the selected source exp
             kind: "vector",
             name: "旧候选别名",
             projectTagId: 3,
-            fields: [],
+            fields: geologyRequiredFields.initial_map!,
             bands: 0,
             crs: "EPSG:32645",
             geometryTypes: ["Polygon"],

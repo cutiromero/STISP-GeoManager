@@ -23,6 +23,7 @@ import {
   workspaceInventoryChangedEvent,
 } from "../workspace/workspaceSync";
 import { workspaceSnapshot } from "../workspace/workspaceSnapshot";
+import { uniqueLoadedLayerGroups } from "../utils/uniqueLoadedLayers";
 
 interface UseWorkspaceScenesOptions {
   canViewWorkspaces: boolean;
@@ -271,7 +272,7 @@ export function useWorkspaceScenes({
           });
         },
       });
-      const restoredGroups = restoreResult.groups;
+      const restoredGroups = uniqueLoadedLayerGroups(restoreResult.groups);
       if (restoredGroups.length === 0) {
         showWorkspaceRestoreEmptyResult(notification, {
           key: notificationKey,
@@ -291,7 +292,12 @@ export function useWorkspaceScenes({
         detail: "正在应用图层和地图视图",
       });
       replaceGroups(restoredGroups);
-      setSelectedLayerId(snapshot.selectedLayerId ?? null);
+      const restoredLayers = restoredGroups.flatMap((group) => group.children);
+      setSelectedLayerId(
+        restoredLayers.some((layer) => layer.id === snapshot.selectedLayerId)
+          ? (snapshot.selectedLayerId ?? null)
+          : (restoredLayers[0]?.id ?? null),
+      );
       onWorkspaceLoaded();
       if (snapshot.mapView && mapRef.current) {
         mapRef.current.flyTo({
