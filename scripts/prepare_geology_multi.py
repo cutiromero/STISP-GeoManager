@@ -165,7 +165,7 @@ def main():
         resources.append(
             {
                 "role": role,
-                "file": str(path.relative_to(output)),
+                "file": path.relative_to(output).as_posix(),
                 "sha256": sha(path),
                 "kind": kind,
                 "code": "geology-multi-" + role.replace("_", "-"),
@@ -213,7 +213,7 @@ def main():
         shutil.copyfile(source / "figures" / filename, path)
         artifacts.append(
             {
-                "file": str(path.relative_to(output)),
+                "file": path.relative_to(output).as_posix(),
                 "sha256": sha(path),
                 "name": name,
                 "description": "交付参考结果，仅用于说明案例设计；当前运行地图、统计及报告以当次任务输出为准。",

@@ -4,6 +4,8 @@ from django.db.models import Q
 
 from apps.projects.models import Project
 
+GEOLOGY_PROJECT_CODES = ("02", "demo-geology-reasoning")
+
 
 def topic_algorithms(query, selected_id):
     project = Project.objects.filter(pk=selected_id, is_active=True).first()
@@ -12,7 +14,7 @@ def topic_algorithms(query, selected_id):
     # An algorithm registered within this project is an explicit local choice.
     own = Q(project_tag_id=selected_id)
     common = Q(identifier__in=("vector-metrics", "vector-geometry-repair"))
-    if project.code == "demo-geology-reasoning":
+    if project.code in GEOLOGY_PROJECT_CODES:
         shared = (
             Q(identifier__startswith="geology-")
             | Q(category__icontains="地质")

@@ -17,6 +17,7 @@ from apps.catalog.importer import import_plain_table
 from apps.catalog.models import DataResource
 from apps.catalog.vector_importer import commit_vector_import
 from apps.compute.models import AlgorithmCategory, AlgorithmResource
+from apps.compute.project_tools import GEOLOGY_PROJECT_CODES
 from apps.compute.views import store_version
 from apps.core.storage import app_path
 from apps.knowledge.models import KnowledgeEntry, KnowledgeRevision
@@ -260,7 +261,7 @@ class Command(BaseCommand):
             .first()
         )
         project = Project.objects.filter(
-            pk=options["project_id"], is_active=True, code="demo-geology-reasoning"
+            pk=options["project_id"], is_active=True, code__in=GEOLOGY_PROJECT_CODES
         ).first()
         if user is None or not is_superadmin(user) or project is None:
             raise CommandError("请选择现有逻辑推理项目与有效超级管理员")

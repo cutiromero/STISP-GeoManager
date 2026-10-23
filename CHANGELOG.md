@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.47] - 2026-10-23
+
+### Added
+- 逻辑推理项目增加海德乌拉地质综合推理及岩性、构造、蚀变分段入口，复用原任务、逐项批准、恢复和真实算法结果。
+- 新场景按九种输入角色读取资料与17条本案例试用知识，串联检查、获批修正、复核、交汇重建及远景区比较。
+- 结果提供点线面前后地图、可定位的问题与知识依据，以及可预览、下载和入库的简短检查报告。
+
+### Changed
+- 逻辑推理和生态风险项目按专题筛选相关算法，保留历史任务及原有演示。
+- 导入工具兼容现网逻辑推理项目编码，使用跨平台资料路径，复用已有项目。
+
+### Fixed
+- 地图初始化和刷新不再用未初始化的默认视角覆盖已保存视角，前后矿物图层读取各自实际结果。
+- 智能体worker只对SQLite忙锁重试，数据库结构错误及时反馈。
+
 ## [0.1.46] - 2026-10-21
 
 ### Changed

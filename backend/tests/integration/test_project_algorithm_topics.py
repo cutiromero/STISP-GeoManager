@@ -9,9 +9,10 @@ from apps.projects.models import Project
 
 
 @pytest.mark.django_db
-def test_project_topics_filter_shared_tools_but_keep_local_and_history():
+@pytest.mark.parametrize("geology_code", ["02", "demo-geology-reasoning"])
+def test_project_topics_filter_shared_tools_but_keep_local_and_history(geology_code):
     user = get_user_model().objects.create_superuser("topic-admin", password="test")
-    geology = Project.objects.create(name="地质", code="demo-geology-reasoning")
+    geology = Project.objects.create(name="地质", code=geology_code)
     ecology = Project.objects.create(name="生态", code="demo-arid-ecology")
     with project_scope(ProjectScope((1,), 1, user.id, True)):
         for identifier, category in [
