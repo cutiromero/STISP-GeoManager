@@ -17,14 +17,21 @@ import {
   geologyRoleHelp,
   geologyWorkflowIssues,
 } from "./geologyWorkflowInputs";
+import {
+  multiElementInputIssues,
+  multiElementRoles,
+  multiElementSegments,
+} from "./multiElementScenario";
 
 export type DemoWorkflowType =
   | "ecology_investigation"
   | "geology_correction"
   | "geology_age_correction"
-  | "geology_map_review";
+  | "geology_map_review"
+  | "geology_multi_element_reasoning";
 type Role = { key: string; label: string; kind: string; match: RegExp };
 export const demoRoles: Record<DemoWorkflowType, Role[]> = {
+  geology_multi_element_reasoning: multiElementRoles,
   ecology_investigation: [
     {
       key: "early_image",
@@ -120,6 +127,8 @@ export const demoRoles: Record<DemoWorkflowType, Role[]> = {
 };
 
 export const demoGoals: Record<DemoWorkflowType, string> = {
+  geology_multi_element_reasoning:
+    "检查海德乌拉岩性、构造及遥感矿物识别成果，检索本案例试用专家规则，解释实测疑点并形成建议；经我逐项批准后执行修正和复核，重建交汇关系，比较前后优先核查远景区并生成报告。",
   ecology_investigation:
     "分析两期植被变化，结合生态背景和观测证据确定调查优先区，说明依据与待补资料。",
   geology_correction:
@@ -138,6 +147,8 @@ function matchingCandidates(
   return candidates.filter(
     (candidate) =>
       candidate.kind === role.kind &&
+      (type !== "geology_multi_element_reasoning" ||
+        !multiElementInputIssues(role.key, candidate).length) &&
       (type !== "geology_map_review" ||
         !geologyInputIssues(role.key, candidate).length),
   );
@@ -150,6 +161,16 @@ export function demoInputsReady(
 ) {
   return (
     demoRoles[type].every((role) => (inputs[role.key] ?? 0) > 0) &&
+    (type !== "geology_multi_element_reasoning" ||
+      !candidates ||
+      demoRoles[type].every((role) => {
+        const candidate = candidates.find(
+          (item) => item.id === inputs[role.key],
+        );
+        return (
+          candidate && !multiElementInputIssues(role.key, candidate).length
+        );
+      })) &&
     (type !== "geology_map_review" ||
       !candidates ||
       !geologyWorkflowIssues(inputs, candidates).length)
@@ -269,7 +290,9 @@ export default function DemoWorkflowForm({
       <div className="agent-demo-form-heading">
         <strong>按角色选择本次资料</strong>
         <Space size={6} wrap>
-          {type === "geology_map_review" && (
+          {["geology_map_review", "geology_multi_element_reasoning"].includes(
+            type,
+          ) && (
             <Tooltip
               title={
                 presetReady
@@ -322,6 +345,29 @@ export default function DemoWorkflowForm({
           title="地质成果智能检查与修正 / 演示案例"
           description="先依据当前资料生成执行计划，再检索专家知识并检查地图。专家规则是算法可执行的条件；下方“知识依据”决定检索哪个知识分区，两者需相互对应。您批准具体建议后才修改地图。"
         />
+      )}
+      {type === "geology_multi_element_reasoning" && (
+        <>
+          <Alert
+            type="info"
+            showIcon
+            title="海德乌拉地质综合推理 / 演示案例"
+            description="岩性和构造为模拟识别输入（演示）；五类矿物为遥感矿物识别结果（演示案例）。规则仅在本案例试用。每次按当前输入检查，批准后才修改；未批准及待裁定对象保留。"
+          />
+          <label className="agent-multi-segment">
+            <span>本次演示环节</span>
+            <Select
+              aria-label="本次演示环节"
+              options={[...multiElementSegments]}
+              value={String(parameters.segment ?? "all")}
+              disabled={disabled}
+              onChange={(value) => setParameter("segment", value)}
+            />
+          </label>
+          <p className="agent-demo-hint">
+            分段采用下方明确选择的上游数据版本。岩性图和研究区需面矢量，构造需线矢量，规则需结构化表，矿物需栅格；资料或参数改变后重新生成计划。
+          </p>
+        </>
       )}
       <div className="agent-demo-fields">
         {roles.map((role) => (

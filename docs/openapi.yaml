@@ -6363,7 +6363,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
   "/api/compute/runtime/": {"get": {"operationId": "getComputeRuntime", "tags": ["Compute"], "summary": "getComputeRuntime", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeRuntimeStatus"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
   "/api/compute/categories/": {"get": {"operationId": "listComputeCategories", "tags": ["Compute"], "summary": "listComputeCategories", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [], "parameters": [{"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeCategoryList"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}, "post": {"operationId": "createComputeCategory", "tags": ["Compute"], "summary": "createComputeCategory", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeCategory"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeCategory"}}}}}}
-  "/api/compute/algorithms/": {"get": {"operationId": "listComputeAlgorithms", "tags": ["Compute"], "summary": "listComputeAlgorithms", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [], "parameters": [{"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}, {"name": "q", "in": "query", "required": false, "description": "q 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "page", "in": "query", "required": false, "description": "page 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "pageSize", "in": "query", "required": false, "description": "pageSize 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "manage", "in": "query", "required": false, "description": "manage 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "category", "in": "query", "required": false, "description": "category 筛选/分页", "schema": {"type": "string", "description": "文字"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAlgorithmList"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}, "post": {"operationId": "createComputeAlgorithm", "tags": ["Compute"], "summary": "createComputeAlgorithm", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAlgorithm"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAlgorithmWrite"}}}}}}
+  "/api/compute/algorithms/": {"get": {"operationId": "listComputeAlgorithms", "tags": ["Compute"], "summary": "listComputeAlgorithms", "description": "按当前单项目返回相关共享算法及本项目登记算法。逻辑推理项目保留地质类，干旱生态项目保留生态、植被、水体指数及通用矢量工具；公开项目目录不变。发现与执行共用后端筛选，历史任务继续可读。", "security": [], "parameters": [{"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}, {"name": "q", "in": "query", "required": false, "description": "q 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "page", "in": "query", "required": false, "description": "page 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "pageSize", "in": "query", "required": false, "description": "pageSize 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "manage", "in": "query", "required": false, "description": "manage 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "category", "in": "query", "required": false, "description": "category 筛选/分页", "schema": {"type": "string", "description": "文字"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAlgorithmList"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}, "post": {"operationId": "createComputeAlgorithm", "tags": ["Compute"], "summary": "createComputeAlgorithm", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAlgorithm"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAlgorithmWrite"}}}}}}
   "/api/compute/algorithms/{algorithmId}/": {"post":{"operationId":"updateComputeAlgorithm","tags":["Compute"],"summary":"updateComputeAlgorithm","description":"计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。","security":[{"sessionAuth":[]}],"parameters":[{"name":"algorithmId","in":"path","required":true,"description":"对象标识","schema":{"type":"integer","description":"标识"}},{"name":"X-Project-Id","in":"header","required":true,"description":"当前单个业务项目；私有项目必须授权","schema":{"type":"integer","description":"标识"}}],"responses":{"200":{"description":"成功","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ComputeAlgorithm"}}}},"400":{"description":"参数/包/输出校验失败","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"401":{"description":"请先登录","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"403":{"description":"功能权限不足","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"404":{"description":"对象不存在或无权访问","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"409":{"description":"版本/配额/幂等键冲突","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"503":{"description":"隔离环境不可用","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}}},"requestBody":{"required":true,"description":"请求内容","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ComputeAlgorithmWrite"}}}}},"delete":{"operationId":"deleteComputeAlgorithm","tags":["Compute"],"summary":"deleteComputeAlgorithm","description":"删除当前项目内没有任务历史的算法登记及其版本包；已有任务记录的算法必须归档停用。","security":[{"sessionAuth":[]}],"parameters":[{"name":"algorithmId","in":"path","required":true,"description":"对象标识","schema":{"type":"integer","description":"标识"}},{"name":"X-Project-Id","in":"header","required":true,"description":"当前单个业务项目；私有项目必须授权","schema":{"type":"integer","description":"标识"}}],"responses":{"200":{"description":"算法已删除","content":{"application/json":{"schema":{"$ref":"#/components/schemas/DetailResponse"}}}},"400":{"description":"参数/包/输出校验失败","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"401":{"description":"请先登录","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"403":{"description":"功能权限不足","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"404":{"description":"对象不存在或无权访问","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"409":{"description":"算法已有任务历史，不能删除","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}}}}}
   "/api/compute/algorithms/{algorithmId}/versions/": {"post": {"operationId": "uploadComputeVersion", "tags": ["Compute"], "summary": "uploadComputeVersion", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "algorithmId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "integer", "description": "标识"}}, {"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeVersion"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"multipart/form-data": {"schema": {"type": "object", "description": "算法ZIP包", "properties": {"file": {"type": "string", "description": "ZIP文件", "format": "binary"}}, "required": ["file"]}}}}}}
   "/api/compute/versions/{versionId}/": {"post": {"operationId": "changeComputeVersion", "tags": ["Compute"], "summary": "changeComputeVersion", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "versionId", "in": "path", "required": true, "description": "对象标识", "schema": {"type": "integer", "description": "标识"}}, {"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeVersion"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeVersionAction"}}}}}}
@@ -9394,8 +9394,8 @@ components:
       additionalProperties: false
     AgentResearchScenario:
       type: string
-      description: 当前授权项目内已登记科研场景；geology_map_review 为专家知识驱动的地质成果检查、选中建议批准、受约束修正与复核演示
-      enum: [ecology_investigation, geology_correction, geology_age_correction, geology_map_review]
+      description: 当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确
+      enum: [ecology_investigation, geology_correction, geology_age_correction, geology_map_review, geology_multi_element_reasoning]
     AgentResearchQuestion:
       type: object
       description: 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
@@ -10257,6 +10257,13 @@ components:
         plan:
           type: object
           description: 经预检的输入、算法、参数与知识依据
+          properties:
+            multiElementMap:
+              $ref: '#/components/schemas/AgentMultiElementMap'
+            trialRuleBindings:
+              type: array
+              description: 仅当前项目与综合地质场景可读取的显式试用规则及冻结版本；不改变普通知识检索对草稿的可见性
+              items: {$ref: '#/components/schemas/AgentTrialRuleBinding'}
           additionalProperties: true
         planHash:
           type: string
@@ -10305,7 +10312,7 @@ components:
       properties:
         workflowType:
           type: string
-          description: 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 和 geology_age_correction 保留历史地质流程，geology_map_review 为专家知识驱动的检查、批准后修正和复核；默认 hyperspectral_interpretation
+          description: 工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，保留生态与既有地质场景；默认 hyperspectral_interpretation
           default: hyperspectral_interpretation
           maxLength: 40
         goal:
@@ -10328,7 +10335,7 @@ components:
           description: 可选的已发布智能体算法版本
         parameters:
           type: object
-          description: 算子参数候选；服务端按 manifest 校验
+          description: 算子参数候选；服务端按manifest校验。综合地质场景segment为all、lithology、structure或alteration，分段所用上游资源与版本必须保存在计划中。
           additionalProperties: true
         executeOperators:
           type: boolean
@@ -10341,7 +10348,7 @@ components:
           maxLength: 80
         inputs:
           type: object
-          description: 输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质逻辑推理使用 initial_map、surveys、rules；地质成果检查使用 initial_map、coverage、rules。真实计算输出入库后按持久来源接入后续步骤。
+          description: 输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。
           additionalProperties:
             type: integer
             minimum: 1
@@ -14011,8 +14018,8 @@ components:
           default: ''
         selectedSuggestionIds:
           type: array
-          description: 地质成果review_modifications阶段approve必填，至少一个当前planHash下的建议标识；只执行所选范围，reject省略，其他阶段不得扩大操作范围。
-          minItems: 1
+          description: 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项；综合推理场景允许空数组，明确选择不修改并继续复核。reject省略，其他阶段不得扩大操作范围。
+          minItems: 0
           maxItems: 30
           uniqueItems: true
           items: {type: string, minLength: 1, maxLength: 64, description: 当前实际问题和模型建议绑定的稳定标识}
@@ -14027,13 +14034,55 @@ components:
           description: 实际问题清单与规范化模型建议的内容哈希；方案改变必须重新批准。
         suggestions:
           type: array
-          maxItems: 30
-          description: 由模型选择、由实际检查清单固定对象与空间范围的建议。
+          description: 由模型选择、由实际检查清单固定对象与空间范围的建议；综合场景支持按对象和动作集中批准。
           items: {$ref: '#/components/schemas/AgentModificationSuggestion'}
         approvedSuggestionIds:
           type: array
           description: 后端已保存的获批建议标识；尚未批准时为空。
           items: {type: string, description: 当前建议标识}
+    AgentTrialRuleBinding:
+      type: object
+      description: 服务端核验项目、场景和修订后的试用知识；状态保持草稿，仅本案例可用
+      additionalProperties: false
+      required: [id, revision, ruleId, ruleVersion, title, parameters]
+      properties:
+        id: {type: integer, minimum: 1, description: 知识条目编号}
+        revision: {type: integer, minimum: 1, description: 冻结知识修订}
+        ruleId: {type: string, description: 本案例规则编号}
+        ruleVersion: {type: string, description: 冻结规则版本}
+        title: {type: string, description: 试用规则标题}
+        parameters: {type: object, description: 实际传给算子的规则参数, additionalProperties: true}
+    AgentMultiElementMap:
+      type: object
+      description: 当前真实任务的地图资源；输入为模拟识别演示，输出只引用本轮实际计算，不引用交付包PNG
+      additionalProperties: false
+      properties:
+        before:
+          type: object
+          description: 当前检查采用的明确上游版本
+          additionalProperties: false
+          properties:
+            lithology: {type: integer, minimum: 1, description: 岩性输入资源}
+            faults: {type: integer, minimum: 1, description: 构造输入资源}
+        after:
+          type: object
+          description: 获批计算形成的新版本，未形成时缺省
+          additionalProperties: false
+          properties:
+            lithology: {type: integer, minimum: 1, description: 本轮修正岩性资源}
+            faults: {type: integer, minimum: 1, description: 本轮修正构造资源}
+        changes:
+          type: array
+          description: 真实变化线点面图层，不含未批准建议
+          items: {type: integer, minimum: 1, description: 变化图层资源}
+        checks:
+          type: array
+          description: 当前实际检查的疑点及待核查图层
+          items: {type: integer, minimum: 1, description: 问题图层资源}
+        alterations: {type: integer, minimum: 1, description: 保留原识别信息并标识处理状态的蚀变面图层}
+        intersections: {type: integer, minimum: 1, description: 几何与推测交汇点，inferred字段决定实心或空心}
+        beforeProspects: {type: integer, minimum: 1, description: 同参数下修正前优先核查远景区}
+        afterProspects: {type: integer, minimum: 1, description: 同参数下修正后优先核查远景区；A/B为证据组合等级}
     AgentModificationSuggestion:
       type: object
       description: 一项有实际图斑、规则、知识与空间预览支持的修改建议。
@@ -14041,7 +14090,7 @@ components:
       required: [id, kind, featureId, title, currentState, suggestedState, reason, areaM2, ruleId, knowledgeRefs, preview, bounds]
       properties:
         id: {type: string, description: 当前问题与建议内容绑定的标识，不由客户端编造}
-        kind: {type: string, enum: [fill_gap, set_age], description: 填补有据内部漏填或更新地层时代属性}
+        kind: {type: string, enum: [fill_gap, set_age, multi_element], description: 内部漏填、时代属性或多要素建议；综合场景具体操作由action标识}
         featureId: {type: string, description: 当前数据中的稳定图斑标识}
         title: {type: string, description: 简短问题标题}
         currentState: {type: string, description: 当前地图或属性的可读状态}
@@ -14049,6 +14098,34 @@ components:
         reason: {type: string, description: 模型根据当次实际知识和结果给出的简短理由}
         areaM2: {type: number, minimum: 0, description: 实际修改范围平方米面积；属性修改展示对应对象范围}
         ruleId: {type: string, description: 本次结构化专家规则标识}
+        element: {type: string, enum: [lithology, structure, alteration], description: 综合场景建议作用于岩性、构造或蚀变}
+        action: {type: string, description: 服务端冻结的建议动作；降权、保留、待裁定与剔除分别记录，客户端不提交新动作}
+        observations: {type: object, description: 当次算法实测值与量纲，用于核对规则条件, additionalProperties: true}
+        ruleConditions:
+          type: array
+          description: 当次规则成立所需条件
+          items: {type: string, description: 可核对条件}
+        exceptions:
+          type: array
+          description: 必须保留的地质例外与证据缺口
+          items: {type: string, description: 例外或证据缺口}
+        ruleRefs:
+          type: array
+          description: 本案例试用规则及具体知识版本来源
+          items:
+            type: object
+            description: 一条显式绑定的试用规则引用
+            additionalProperties: false
+            required: [id, version, title, knowledgeId, revision, source]
+            properties:
+              id: {type: string, description: 规则编号}
+              version: {type: string, description: 冻结规则版本}
+              title: {type: string, description: 规则标题}
+              knowledgeId: {type: integer, minimum: 1, description: 已授权试用知识条目编号}
+              revision: {type: integer, minimum: 1, description: 知识修订}
+              source: {type: string, description: 原来源及核实程度}
+        lengthM: {type: number, minimum: 0, description: 构造对象实测米制长度；不以面积代替线长度}
+        status: {type: string, description: 建议、待裁定、例外、保留、降权或剔除的实际处置状态}
         knowledgeRefs:
           type: array
           minItems: 1

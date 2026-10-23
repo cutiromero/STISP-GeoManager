@@ -1,5 +1,19 @@
 # API Change Requests
 
+## API-20261023-001 - 海德乌拉多要素推理和试用规则
+
+- Status: BackendReady
+- Owner: multi_frontend 契约与地图；multi_workflow 持久流程与批准；multi_algorithms 隔离算子。
+- Endpoints: GET /api/agent/research-demos/；POST /api/agent/workflows/；GET /api/agent/workflows/{workflowId}/；POST /api/agent/workflows/{workflowId}/confirm/；GET /api/compute/algorithms/。
+- Change type: 扩展场景及建议字段，沿用统一端点、会话鉴权、原单项目和本人授权。
+- OpenAPI change: geology_multi_element_reasoning；parameters.segment=all/lithology/structure/alteration；九类明确输入；plan.multiElementMap和trialRuleBindings；multi_element建议、实测值、条件、例外及具体规则版本引用。
+- Frontend reason: 综合入口和三个分段共用持久任务，线点面双图与证据链可核对；明确上游版本和本案例试用性质。
+- Mock examples: 新组件浏览器场景及隔离本机实际数据验证，不用交付包PNG代替运行结果。
+- Backend implementation notes: 仅当前项目、当前场景、显式绑定条目及修订读取draft试用知识；普通知识检索权限不变。批准只传selectedSuggestionIds，后端重验快照和动作。未批准、待裁定、降权和剔除分开存储。算法发现与执行按稳定项目编码统一筛选相关共享工具及本项目登记工具；公开目录和历史任务读取不变。
+- Verification: 旧案例不变；不同segment和输入影响计划；批准范围绑定；真实新图层和地图证据吻合；空输出正常显示。
+- Result: 契约与生成类型已同步；前端角色、批准及线点面浏览器验证通过。本机四项1.0.1算法经真实试运行发布，完整工作流的五个真实计算任务及批准、报告预览下载通过；模型连接未恢复，模型判断仍单列为模拟验证。真实地图读取完整矢量，按需加载密集检查与矿物图层，改前矿物取检查输出、改后取获批处理输出。
+
+
 ## API-20261021-001 - 地质工作流预设与输入角色校验
 
 - Status: BackendReady
@@ -150,6 +164,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261023-001 | BackendReady | /api/agent/research-demos/; /api/agent/workflows/; /confirm/; /api/compute/algorithms/ | multi-element scenario, trial rule bindings, measured suggestions, real map outputs and project tools | Updated | Integration/browser fixtures | Passed | Focused browser, unit and real local workflow passed | Real algorithms and maps verified; model decisions use mock, recorded separately |
 | API-20261021-001 | BackendReady | /api/compute/inputs/; /api/agent/research-demos/; /api/agent/workflows/; /cancel/ | current-project preset, actual input-role checks and conditional replacement | Updated | Integration/browser fixtures | Implemented | Focused verification | Preserve permissions; metadata before plan and complete runtime validation |
 | API-20261020-001 | BackendReady | /api/auth/browser-session/; login/; guest-login/; register/; me/ | browser page leases and session lifecycle | Updated | HTTP/browser fixtures | Passed | 54 backend; 33 browser passed | 20-second refresh; 120-second lost-contact expiry; release acceptance separate |
 | API-20261016-002 | ContractReady | /api/agent/runs/{runId}/interaction/; /api/catalog/resources/delete-preview/; resources/delete/ | persisted questions; confirmed history cleanup | Updated | HTTP/browser fixtures | Focused passed | In progress | Real model, compute and release acceptance recorded separately |

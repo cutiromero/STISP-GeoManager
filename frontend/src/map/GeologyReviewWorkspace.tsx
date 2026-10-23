@@ -22,6 +22,7 @@ import { useAppContext } from "../contexts/AppContext";
 import { getActiveProject } from "../projects/session";
 import { useProjectContext } from "../projects/ProjectContext";
 import GeologyReviewMaps from "./GeologyReviewMaps";
+import MultiElementWorkspace from "./MultiElementWorkspace";
 import {
   previewSuggestions,
   queryReviewMap,
@@ -65,18 +66,27 @@ export default function GeologyReviewWorkspace({
       setError("");
       setLoading(true);
       setData(null);
+      setWorkflow(null);
       try {
         if (projectTagId && projectTagId !== currentProject)
           throw new Error("请切换到检查任务所属项目后查看");
         const value = await agentApi.workflow(workflowId);
         if (disposed) return;
-        if (value.workflowType !== "geology_map_review")
+        if (
+          !["geology_map_review", "geology_multi_element_reasoning"].includes(
+            value.workflowType,
+          )
+        )
           throw new Error("此任务不属于地质成果检查案例");
         if (
           String(value.projectId) !== currentProject ||
           getActiveProject() !== currentProject
         )
           throw new Error("检查任务不属于当前项目，请切换项目后查看");
+        if (value.workflowType === "geology_multi_element_reasoning") {
+          setWorkflow(value);
+          return;
+        }
         const ids = reviewResourceIds(value);
         const outcome = geologyReviewOutcome(value);
         if (!ids.before) throw new Error("检查记录尚无可用的待检查地质图");
@@ -161,6 +171,17 @@ export default function GeologyReviewWorkspace({
         reviewBounds({ type: "FeatureCollection", features: [feature] }),
       );
   };
+  if (
+    workflow?.workflowType === "geology_multi_element_reasoning" &&
+    String(workflow.projectId) === currentProject
+  )
+    return (
+      <MultiElementWorkspace
+        workflow={workflow}
+        suggestionId={suggestionId}
+        onReload={() => setReload((value) => value + 1)}
+      />
+    );
   return (
     <main className="geology-review-workspace">
       <header className="geology-review-workspace-header">

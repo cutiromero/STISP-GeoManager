@@ -33,6 +33,11 @@ from .tools import resolve_resource
 from .compute_tools import authorized_task
 from .demo_decisions import decide
 from .demo_results import create_changes, read_results
+from .geology_multi import (
+    ROLES as MULTI_ROLES,
+    SCENARIO as MULTI_TYPE,
+    graph as multi_graph,
+)
 from .workflow import _authorize, _scope, _state_hash, checkpoint, step
 from .workflow_controls import (
     WorkflowPaused,
@@ -46,6 +51,7 @@ DEMO_TYPES = {
     "geology_correction",
     "geology_age_correction",
     "geology_map_review",
+    "geology_multi_element_reasoning",
 }
 STAGE_TITLES = {
     "early_ndvi": "前期植被指数",
@@ -187,8 +193,15 @@ GRAPHS = {
     ],
 }
 
+ROLES[MULTI_TYPE] = MULTI_ROLES
+GRAPHS[MULTI_TYPE] = multi_graph()
+
 
 def stage_title(workflow, stage: dict) -> str:
+    if workflow.workflow_type == MULTI_TYPE:
+        from .geology_multi import TITLES
+
+        return TITLES.get(stage["name"], stage["name"])
     if workflow.workflow_type == "geology_map_review":
         return {
             "expert_knowledge": "查阅专家知识",
@@ -275,6 +288,11 @@ def prepare_demo(workflow, user, p) -> None:
     if p["maxResources"] > 0 and len(set(inputs.values())) > p["maxResources"]:
         raise ComputeError("场景输入超过当前资源上限")
     validated_versions = None
+    multi_knowledge = None
+    if workflow.workflow_type == MULTI_TYPE:
+        from .geology_multi import prepare
+
+        multi_knowledge = prepare(workflow, user, p)
     if workflow.workflow_type == "geology_map_review":
         from .geology_input_validation import validate_geology_inputs
 
@@ -315,7 +333,7 @@ def prepare_demo(workflow, user, p) -> None:
             raise ComputeError("请提供前后两期的实际日期") from exc
         if early >= late:
             raise ComputeError("后期日期必须晚于前期日期")
-    graph = GRAPHS[workflow.workflow_type]
+    graph = workflow.plan.get("multiGraph") or GRAPHS[workflow.workflow_type]
     if workflow.plan.get("previousWorkflowId"):
         from .demo_updates import prepare_update
 
@@ -332,7 +350,9 @@ def prepare_demo(workflow, user, p) -> None:
     stages = []
     for name, identifier, bindings in graph:
         manifest = versions[identifier]["manifest"]
-        if set(bindings) != {i["key"] for i in manifest["inputs"] if i["required"]}:
+        required = {i["key"] for i in manifest["inputs"] if i["required"]}
+        declared = {i["key"] for i in manifest["inputs"]}
+        if not required <= set(bindings) <= declared:
             raise ComputeError("场景算法输入清单与角色协议不一致：" + identifier)
         parameters = {
             spec["key"]: workflow.parameters.get(spec["key"], spec.get("default"))
@@ -372,9 +392,13 @@ def prepare_demo(workflow, user, p) -> None:
         else "地质 接触 几何 观测"
     )
     knowledge = (
-        search_entries(user, query, limit=8, domains=domains)["items"]
-        if domains and workflow.workflow_type != "geology_map_review"
-        else []
+        multi_knowledge
+        if multi_knowledge is not None
+        else (
+            search_entries(user, query, limit=8, domains=domains)["items"]
+            if domains and workflow.workflow_type != "geology_map_review"
+            else []
+        )
     )
     workflow.plan = {
         **workflow.plan,
@@ -442,7 +466,16 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
     if not p.get("operatorEnabled", False):
         raise PermissionDenied("智能体算子调用已关闭")
     domains = _domains(workflow)
+    from apps.knowledge.trial_rules import authorize_trial_evidence
+
+    trial_ids = authorize_trial_evidence(workflow, user, history=history)
+    if workflow.workflow_type == MULTI_TYPE and not history:
+        from .geology_multi import authorize_frozen
+
+        authorize_frozen(workflow, user, p)
     for item in workflow.evidence:
+        if item["id"] in trial_ids:
+            continue
         visible = visible_entries(user, domains=domains).filter(pk=item["id"])
         if not history:
             visible = visible.filter(revision=item["revision"])
@@ -524,9 +557,12 @@ def confirm_demo(workflow, user, p, plan_hash, selected_suggestion_ids=None) -> 
         raise ComputeError("场景计划已变化，请刷新后确认", 409)
     authorize_demo(workflow, user, p)
     if workflow.plan["phase"] == "review_modifications":
-        from .geology_review import approve_modifications
+        if workflow.workflow_type == MULTI_TYPE:
+            from .geology_multi_review import approve_modifications
+        else:
+            from .geology_review import approve_modifications
 
-        if workflow.workflow_type != "geology_map_review":
+        if workflow.workflow_type not in {"geology_map_review", MULTI_TYPE}:
             raise ComputeError("当前场景不支持此修改审核", 409)
         approve_modifications(workflow, user, p, selected_suggestion_ids, plan_hash)
         workflow.plan["phase"] = "decide"
@@ -565,6 +601,12 @@ def confirm_demo(workflow, user, p, plan_hash, selected_suggestion_ids=None) -> 
 
 def _inputs(workflow, stage) -> dict:
     values = {}
+    specs = {
+        item["key"]: item
+        for item in workflow.plan["algorithms"][stage["identifier"]]["manifest"][
+            "inputs"
+        ]
+    }
     for key, binding in stage["bindings"].items():
         if "/" not in binding:
             values[key] = workflow.plan["inputs"].get(binding) or workflow.plan.get(
@@ -581,6 +623,9 @@ def _inputs(workflow, stage) -> dict:
             )
             values[key] = output.get("resourceId") if output else None
         if type(values[key]) is not int or values[key] < 1:
+            if specs.get(key, {}).get("required") is False:
+                del values[key]
+                continue
             raise ComputeError("上一步结果尚未成为可用输入：" + binding)
     return values
 
@@ -605,6 +650,12 @@ def _submit_stage(workflow, user, p, stage) -> None:
 
 
 def _submit_stage_locked(workflow, user, p, stage) -> None:
+    if workflow.workflow_type == MULTI_TYPE and stage["name"] == "apply":
+        from .geology_multi_review import create_approved_changes
+
+        workflow.plan["approved_changes"] = create_approved_changes(
+            workflow, user, p, stage
+        ).id
     edits = stage.get("edits")
     if workflow.workflow_type == "geology_map_review" and stage["name"] == "edit":
         from .geology_review import approved_edits
@@ -769,6 +820,10 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
         set(workflow.result_resource_ids + [r.resource_id for _, r in records])
     )
     stage["status"] = "completed"
+    if workflow.workflow_type == MULTI_TYPE:
+        from .geology_multi_review import update_map
+
+        update_map(workflow)
     workflow.plan["stageIndex"] += 1
     workflow.plan["phase"] = "decide"
     workflow.status, workflow.detail = "queued", "已读取本步结果，下一步将据此更新判断"
@@ -1043,6 +1098,32 @@ def advance_demo(workflow_id) -> None:
                                 "proposalHash"
                             ],
                         },
+                    )
+                return
+            if (
+                workflow.workflow_type == MULTI_TYPE
+                and stage["name"] == "apply"
+                and not stage.get("modificationsApproval")
+            ):
+                from .geology_multi_review import freeze_proposal
+
+                with transaction.atomic():
+                    locked_workflow(workflow.id)
+                    check_pause(workflow)
+                    freeze_proposal(workflow, stage)
+                    step(
+                        workflow,
+                        "modification_suggestions",
+                        message=workflow.detail,
+                        output_refs={
+                            "modificationReview": workflow.plan["modificationReview"]
+                        },
+                    )
+                    _save(workflow)
+                    checkpoint(
+                        workflow,
+                        "review_modifications",
+                        {"planHash": workflow.plan_hash},
                     )
                 return
             if stage["identifier"] == "finish":

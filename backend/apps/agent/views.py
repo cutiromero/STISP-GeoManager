@@ -333,6 +333,7 @@ def submit_value(request, c, value, *, available_models=None):
             "geology_correction",
             "geology_age_correction",
             "geology_map_review",
+            "geology_multi_element_reasoning",
         }
         or c.mode != "agent"
     ):
@@ -965,6 +966,7 @@ def workflow_confirm(request, workflow_id):
             "geology_correction",
             "geology_age_correction",
             "geology_map_review",
+            "geology_multi_element_reasoning",
         }:
             from .demo_workflow import confirm_demo
 

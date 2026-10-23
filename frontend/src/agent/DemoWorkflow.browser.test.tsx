@@ -158,6 +158,9 @@ function Location() {
   );
 }
 async function select(label: string, option: string) {
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: label })).toBeEnabled(),
+  );
   fireEvent.mouseDown(screen.getByRole("combobox", { name: label }));
   fireEvent.click(
     await screen.findByText(option, {

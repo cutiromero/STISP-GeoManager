@@ -2722,3 +2722,17 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 编辑前必须进入`review_modifications`，返回可选`AgentWorkflow.modificationReview`。建议包含实际图斑、当前与建议状态、理由、知识、规则、平方米面积和WGS84范围预览。批准请求在原`planHash`、`decision`、`feedback`之外提供`selectedSuggestionIds`，只允许当前方案中至少一项；后端保存确切批准范围，生成该子集的修改表。拒绝时停止后续编辑。修改建议、原输入、知识或算法版本变化需重新确认；客户端不能传入修改坐标或目标属性替换批准记录。
 
 计算在既有隔离运行器执行，真实输出和新输入继续绑定任务、校验和与资源修订；模型读取修正和复核统计形成最终说明。报告和地图沿用本人、单项目、资源与输出访问授权。建议JSON只支持预览，不替代真实差异图层。
+
+## 海德乌拉多要素推理演示（2026-10-23）
+
+新增 `geology_multi_element_reasoning`，统一使用原工作流创建、读取、确认及报告端点。`parameters.segment` 为 `all`、`lithology`、`structure`、`alteration`，分别对应综合及三个简短入口。资料绑定使用 `lithology`、`faults`、`coverage`、`rules` 和五类矿物栅格 `hematite`、`chlorite`、`hydromica`、`calcite`、`dolomite`。分段须保存实际使用的上游资源版本。
+
+`plan.trialRuleBindings`保存服务端核验的知识ID、修订、规则编号、版本及实际参数。条目仍为草稿，仅显式绑定的当前项目/场景可读取，普通知识检索继续按原发布权限过滤。建议以 `kind=multi_element` 扩展原批准协议，附 `element/action/observations/ruleConditions/exceptions/ruleRefs/lengthM/status`。确认仍只传当前 `planHash` 与 `selectedSuggestionIds`，不接受客户端新坐标、目标类别或动作；方案改变须重新批准。综合场景允许 `selectedSuggestionIds: []`，表示不修改并继续真实复核；传统地质修正场景继续要求至少一项。
+
+`plan.multiElementMap`仅引用本轮真实任务的输入和输出：before/after岩性与构造，changes、checks、蚀变状态、交汇点及前后远景区。WGS84用于显示，EPSG:32646用于米制计算。交汇点由inferred区分几何相交与推测交汇；A/B为本场景的证据组合等级，显示为优先核查远景区。交付包参考图片和独立评价材料不进入运行成果。
+
+地图默认读取基础双图、构造、交汇与远景区；密集检查记录和矿物状态按勾选读取，继续验证返回完整性。改前矿物读取检查阶段真实输出，改后矿物读取获批处理输出。可选图层读取失败单独提示并允许重试，基础双图保留；切换图层保持当前视角。双图首次按真实研究区边界留白缩放，仅在主地图完成初始化后保存视角，避免React StrictMode首次清理将默认视角误作已恢复视角；综合场景详细岩性图例默认折叠。
+
+### 按项目组织可用算法（2026-10-23）
+
+计算目录与普通科研智能体共用服务端项目筛选。逻辑推理项目保留地质及逻辑推理相关共享工具；干旱区生态项目保留植被、水体指数、生态风险及通用矢量统计修复工具。各项目自行登记的工具保留，公开项目目录不变。执行时使用同一筛选，已存在的历史任务继续可读，不因目录归类改变丢失记录。

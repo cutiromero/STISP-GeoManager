@@ -26,6 +26,7 @@ from .geology_reference import REFERENCE_SOURCE_PREFIX
 from .models import AgentRuntime
 from .policy import allowed, visible_models, worker_online
 from .tools import resources
+from .geology_multi import SCENARIO as MULTI_TYPE, LABELS as MULTI_LABELS
 
 SOURCE_NOTE = (
     "明确标注的模拟资料；参数来自样例说明及已发布算法，结论由实际计算和模型判断产生。"
@@ -72,12 +73,19 @@ REVIEW_MARKERS = {
     "rules": ("code", "geology-review-rules"),
 }
 TITLES = {
+    MULTI_TYPE: "海德乌拉地质综合推理",
     "geology_map_review": "地质成果智能检查与修正",
     "geology_age_correction": "地质图件地层时代一致性纠偏",
     "ecology_investigation": "干旱区生态风险评估分析决策",
     "geology_correction": "地质逻辑推理与填图纠偏",
 }
 PROMPTS = {
+    MULTI_TYPE: (
+        "请使用当前项目的海德乌拉演示案例，按综合入口检查岩性、构造和五类遥感矿物识别结果。"
+        "读取本案例试用知识及实际测量，说明适用条件和例外，给出少量可核查的处置建议。"
+        "等我选中批准后再修正，未批准和待裁定项保留；降权保留原对象。"
+        "重新检查，重建几何交汇及推测交汇，对比优先核查远景区，保存报告并展示地图。"
+    ),
     "geology_map_review": (
         "请检查这个项目的待检查地质图，使用演示案例的制图覆盖资料和样例参数。"
         "先检索专家知识，再核对地图的完整覆盖和地层时代属性，说明发现的问题、依据及建议修改。"
@@ -137,8 +145,10 @@ def _candidate(resource, role: str, scenario: str) -> dict:
     age = scenario == "geology_age_correction"
     review = scenario == "geology_map_review"
     marker_field, marker = (
-        REVIEW_MARKERS if review else AGE_MARKERS if age else MARKERS
-    )[role]
+        ("code", "geology-multi-" + role.replace("_", "-"))
+        if scenario == MULTI_TYPE
+        else (REVIEW_MARKERS if review else AGE_MARKERS if age else MARKERS)[role]
+    )
     simulated = getattr(resource, marker_field) == marker or (
         role == "context" and resource.code == "demo-ecology-context-updated"
     )
@@ -194,11 +204,27 @@ def discover(user, p: dict, run=None) -> dict:
     for scenario, roles in ROLES.items():
         age = scenario == "geology_age_correction"
         review = scenario == "geology_map_review"
-        markers = REVIEW_MARKERS if review else AGE_MARKERS if age else MARKERS
+        multi = scenario == MULTI_TYPE
+        markers = (
+            {
+                role: ("code", "geology-multi-" + role.replace("_", "-"))
+                for role in roles
+            }
+            if multi
+            else REVIEW_MARKERS
+            if review
+            else AGE_MARKERS
+            if age
+            else MARKERS
+        )
         inputs, preferred = {}, {}
         for role, kind in roles.items():
             field, marker = markers[role]
             candidates = query.filter(data_type=kind)
+            if multi:
+                candidates = candidates.exclude(
+                    source__startswith="geology-multi-reference:"
+                ).exclude(source__startswith="geology-multi-evaluation:")
             if age or review:
                 candidates = candidates.exclude(
                     source__startswith=REFERENCE_SOURCE_PREFIX
@@ -225,13 +251,29 @@ def discover(user, p: dict, run=None) -> dict:
         algorithms = [a for a in available_algorithms if a["identifier"] in identifiers]
         sample_images = all(role in preferred for role in ("early_image", "late_image"))
         specs, defaults = _parameters(algorithms, sample_images)
+        if multi:
+            # Stage selectors are scenario inputs, not a draft publication switch.
+            specs = [spec for spec in specs if spec["key"] != "segment"]
+            specs.insert(
+                0,
+                {
+                    "key": "segment",
+                    "label": "演示入口",
+                    "type": "enum",
+                    "choices": ["all", "lithology", "structure", "alteration"],
+                    "default": "all",
+                },
+            )
+            defaults["segment"] = "all"
         scenarios.append(
             {
                 "scenario": scenario,
                 "workflowType": scenario,
                 "title": TITLES[scenario],
                 "roleLabels": {
-                    role: "空间背景与资料说明"
+                    role: MULTI_LABELS[role]
+                    if multi
+                    else "空间背景与资料说明"
                     if age and role == "surveys"
                     else ROLE_LABELS[role]
                     for role in roles
@@ -243,7 +285,9 @@ def discover(user, p: dict, run=None) -> dict:
                 "algorithms": algorithms,
                 "available": all(inputs.values())
                 and len(algorithms) == len(identifiers),
-                "sourceNote": REVIEW_SOURCE_NOTE
+                "sourceNote": "演示案例：岩性与构造为模拟识别输入，五类矿物为遥感识别结果；17条规则仅本案例试用，获批后执行。"
+                if multi
+                else REVIEW_SOURCE_NOTE
                 if review
                 else REAL_SOURCE_NOTE
                 if age
@@ -305,7 +349,7 @@ def list_demos(user, p: dict) -> dict:
                         "prompt": PROMPTS[scene["scenario"]],
                         "sampleNature": (
                             "demonstration_case"
-                            if scene["scenario"] == "geology_map_review"
+                            if scene["scenario"] in {"geology_map_review", MULTI_TYPE}
                             else "synthetic"
                         ),
                         "available": bool(

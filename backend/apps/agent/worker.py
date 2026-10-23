@@ -844,7 +844,15 @@ def serve(stop=None, once=False):
                     for f in futures.values():
                         f.result()
                     break
-            except OperationalError:
+            except OperationalError as exc:
+                if (
+                    "locked" not in str(exc).casefold()
+                    and "busy" not in str(exc).casefold()
+                ):
+                    logger.exception(
+                        "agent database failure; verify migrations before restart"
+                    )
+                    raise
                 logger.warning("agent queue busy; retrying next heartbeat")
             stop.wait(1)
         # Cancellation will close provider sockets on the next monitor check.

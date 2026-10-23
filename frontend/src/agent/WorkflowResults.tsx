@@ -13,6 +13,8 @@ import { workflowActivity } from "./agentActivity";
 import WorkflowReportFile from "./WorkflowReportFile";
 import WorkflowDeliverables from "./WorkflowDeliverables";
 import GeologyReviewStory from "./GeologyReviewStory";
+import MultiElementStory from "./MultiElementStory";
+import { multiElementType } from "./multiElementScenario";
 import {
   geologyReviewOutcome,
   geologyReviewOriginalMapId,
@@ -37,6 +39,7 @@ function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
     "geology_correction",
     "geology_age_correction",
     "geology_map_review",
+    multiElementType,
   ].includes(workflow.workflowType);
   const stages = Array.isArray(workflow.plan.stages)
     ? workflow.plan.stages
@@ -109,7 +112,9 @@ export default function WorkflowResults({
 }) {
   const ui = useComputeText();
   const isActive = active.includes(workflow.status);
-  const isGeologyReview = workflow.workflowType === "geology_map_review";
+  const isMultiElement = workflow.workflowType === multiElementType;
+  const isGeologyReview =
+    workflow.workflowType === "geology_map_review" || isMultiElement;
   const inspectionOnly = Boolean(geologyReviewOutcome(workflow));
   const originalMapId = geologyReviewOriginalMapId(workflow);
   const deletedResources = deletedWorkflowResources(workflow);
@@ -172,31 +177,42 @@ export default function WorkflowResults({
             priority: ui("调查顺序分析", "Investigation priorities"),
             initial_check: ui("初始填图检查", "Initial map check"),
             geometry: ui("几何修复", "Geometry repair"),
-            ...(isGeologyReview
+            ...(isMultiElement
               ? {
-                  check: "检查地质图",
-                  edit: "生成修正后地质图",
-                  recheck: "复核修正后地质图",
+                  check: "三要素检查与建议",
+                  apply: "执行获批操作",
+                  recheck: "修正后复核",
+                  relations: "重建构造交汇",
+                  prospect: "前后远景区比较",
                 }
-              : workflow.workflowType === "geology_age_correction"
+              : isGeologyReview
                 ? {
-                    check: ui("初始时代属性检查", "Initial geologic age check"),
-                    edit: ui("地层时代属性纠偏", "Geologic age correction"),
-                    recheck: ui(
-                      "最终时代属性复查",
-                      "Final geologic age recheck",
-                    ),
+                    check: "检查地质图",
+                    edit: "生成修正后地质图",
+                    recheck: "复核修正后地质图",
                   }
-                : workflow.workflowType === "geology_correction"
+                : workflow.workflowType === "geology_age_correction"
                   ? {
-                      check: ui("修复后检查", "Check after repair"),
-                      edit: ui(
-                        "调查证据属性编辑",
-                        "Evidence-based attribute editing",
+                      check: ui(
+                        "初始时代属性检查",
+                        "Initial geologic age check",
                       ),
-                      recheck: ui("最终填图复查", "Final map recheck"),
+                      edit: ui("地层时代属性纠偏", "Geologic age correction"),
+                      recheck: ui(
+                        "最终时代属性复查",
+                        "Final geologic age recheck",
+                      ),
                     }
-                  : {}),
+                  : workflow.workflowType === "geology_correction"
+                    ? {
+                        check: ui("修复后检查", "Check after repair"),
+                        edit: ui(
+                          "调查证据属性编辑",
+                          "Evidence-based attribute editing",
+                        ),
+                        recheck: ui("最终填图复查", "Final map recheck"),
+                      }
+                    : {}),
           };
           return typeof data.taskId === "string" && stageLabels[stageName]
             ? [[data.taskId, stageLabels[stageName]]]
@@ -204,8 +220,9 @@ export default function WorkflowResults({
         }),
       )
     : undefined;
-  const primaryStageNames =
-    workflow.workflowType === "ecology_investigation"
+  const primaryStageNames = isMultiElement
+    ? ["apply", "relations", "prospect"]
+    : workflow.workflowType === "ecology_investigation"
       ? ["change", "priority"]
       : inspectionOnly
         ? ["check"]
@@ -351,7 +368,15 @@ export default function WorkflowResults({
             {lastReview.action.feedback}
           </p>
         )}
-      {isGeologyReview && (
+      {isMultiElement && (
+        <MultiElementStory
+          key={`${workflow.id}:${workflow.modificationReview?.proposalHash ?? "pending"}`}
+          workflow={workflow}
+          busy={busy}
+          onReview={onReview}
+        />
+      )}
+      {isGeologyReview && !isMultiElement && (
         <GeologyReviewStory
           key={`${workflow.id}:${workflow.modificationReview?.proposalHash ?? "pending"}`}
           workflow={workflow}

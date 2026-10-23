@@ -27,6 +27,7 @@ CONTENT_TYPE = "text/markdown"
 PREVIEW_LIMIT = 200_000
 MAX_REPORT_BYTES = 2 * 1024 * 1024
 REPORT_NAMES = {
+    "geology_multi_element_reasoning": "海德乌拉综合检查报告",
     "geology_map_review": "检查报告",
     "ecology_investigation": "生态风险分析报告",
     "geology_correction": "地质纠偏分析报告",
@@ -57,12 +58,22 @@ def _cell(value: object) -> str:
 
 
 def _paths(workflow: AgentWorkflow) -> tuple[Path, Path, str]:
-    relative = f"workflow-reports/{workflow.id}/report.md"
+    directory = f"workflow-reports/{workflow.id}"
+    if workflow.workflow_type == "geology_multi_element_reasoning":
+        directory += "/compact-v2"
+    relative = f"{directory}/report.md"
     return (
         table_data_path(relative),
-        table_data_path(f"workflow-reports/{workflow.id}/metadata.json"),
+        table_data_path(f"{directory}/metadata.json"),
         relative,
     )
+
+
+def _source(workflow: AgentWorkflow) -> str:
+    value = f"workflow-report:{workflow.id}"
+    if workflow.workflow_type == "geology_multi_element_reasoning":
+        value += ":compact-v2"
+    return value
 
 
 def has_saved_report(workflow: AgentWorkflow) -> bool:
@@ -160,6 +171,10 @@ def _table_rows(output: ComputeOutput) -> list[str]:
 
 
 def render_report(workflow: AgentWorkflow, user, policy: dict, tasks: list) -> bytes:
+    if workflow.workflow_type == "geology_multi_element_reasoning":
+        from .geology_multi_report import render_report as render_multi_report
+
+        return render_multi_report(workflow, tasks)
     if workflow.workflow_type == "geology_map_review":
         from .geology_review_report import render_geology_report
 
@@ -304,7 +319,7 @@ def load_report(workflow: AgentWorkflow, user) -> tuple[dict, Path]:
         raise ComputeError("报告内容与登记校验不一致", 409)
     if data["resourceId"] is not None:
         resource = _resource(user, data["resourceId"])
-        if resource.source != f"workflow-report:{workflow.id}":
+        if resource.source != _source(workflow):
             raise PermissionDenied("报告入库关联无效")
     return data, path
 
@@ -363,7 +378,7 @@ def import_report(workflow: AgentWorkflow, user, policy: dict, request=None) -> 
         if data["resourceId"] is not None:
             return data
         _, metadata_path, relative = _paths(workflow)
-        source = f"workflow-report:{workflow.id}"
+        source = _source(workflow)
         resource = DataResource.objects.filter(source=source).first()
         if resource:
             _resource(user, resource.id)
@@ -371,7 +386,8 @@ def import_report(workflow: AgentWorkflow, user, policy: dict, request=None) -> 
             resource = DataResource.objects.create(
                 project_tag_id=workflow.project_tag_id,
                 name=data["label"],
-                code=f"wf-report-{workflow.id.hex}",
+                code=f"wf-report-{workflow.id.hex}"
+                + ("-c2" if source.endswith(":compact-v2") else ""),
                 data_type="document",
                 file_format="MD",
                 storage_path="table/" + relative,

@@ -1142,9 +1142,9 @@ export type AgentRunInput = {
 };
 
 /**
- * 当前授权项目内已登记科研场景；geology_map_review 为专家知识驱动的地质成果检查、选中建议批准、受约束修正与复核演示
+ * 当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确
  */
-export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction' | 'geology_age_correction' | 'geology_map_review';
+export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction' | 'geology_age_correction' | 'geology_map_review' | 'geology_multi_element_reasoning';
 
 /**
  * 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
@@ -2227,6 +2227,11 @@ export type AgentWorkflow = {
      * 经预检的输入、算法、参数与知识依据
      */
     plan: {
+        multiElementMap?: AgentMultiElementMap;
+        /**
+         * 仅当前项目与综合地质场景可读取的显式试用规则及冻结版本；不改变普通知识检索对草稿的可见性
+         */
+        trialRuleBindings?: Array<AgentTrialRuleBinding>;
         [key: string]: unknown;
     };
     /**
@@ -2249,7 +2254,7 @@ export type AgentWorkflow = {
  */
 export type AgentWorkflowInput = {
     /**
-     * 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 和 geology_age_correction 保留历史地质流程，geology_map_review 为专家知识驱动的检查、批准后修正和复核；默认 hyperspectral_interpretation
+     * 工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，保留生态与既有地质场景；默认 hyperspectral_interpretation
      */
     workflowType?: string;
     /**
@@ -2269,7 +2274,7 @@ export type AgentWorkflowInput = {
      */
     algorithmVersionId?: number | null;
     /**
-     * 算子参数候选；服务端按 manifest 校验
+     * 算子参数候选；服务端按manifest校验。综合地质场景segment为all、lithology、structure或alteration，分段所用上游资源与版本必须保存在计划中。
      */
     parameters?: {
         [key: string]: unknown;
@@ -2283,7 +2288,7 @@ export type AgentWorkflowInput = {
      */
     idempotencyKey: string;
     /**
-     * 输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质逻辑推理使用 initial_map、surveys、rules；地质成果检查使用 initial_map、coverage、rules。真实计算输出入库后按持久来源接入后续步骤。
+     * 输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。
      */
     inputs?: {
         [key: string]: number;
@@ -5276,7 +5281,7 @@ export type AgentWorkflowConfirmation = {
      */
     feedback?: string;
     /**
-     * 地质成果review_modifications阶段approve必填，至少一个当前planHash下的建议标识；只执行所选范围，reject省略，其他阶段不得扩大操作范围。
+     * 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项；综合推理场景允许空数组，明确选择不修改并继续复核。reject省略，其他阶段不得扩大操作范围。
      */
     selectedSuggestionIds?: Array<string>;
 };
@@ -5290,13 +5295,101 @@ export type AgentModificationReview = {
      */
     proposalHash: string;
     /**
-     * 由模型选择、由实际检查清单固定对象与空间范围的建议。
+     * 由模型选择、由实际检查清单固定对象与空间范围的建议；综合场景支持按对象和动作集中批准。
      */
     suggestions: Array<AgentModificationSuggestion>;
     /**
      * 后端已保存的获批建议标识；尚未批准时为空。
      */
     approvedSuggestionIds: Array<string>;
+};
+
+/**
+ * 服务端核验项目、场景和修订后的试用知识；状态保持草稿，仅本案例可用
+ */
+export type AgentTrialRuleBinding = {
+    /**
+     * 知识条目编号
+     */
+    id: number;
+    /**
+     * 冻结知识修订
+     */
+    revision: number;
+    /**
+     * 本案例规则编号
+     */
+    ruleId: string;
+    /**
+     * 冻结规则版本
+     */
+    ruleVersion: string;
+    /**
+     * 试用规则标题
+     */
+    title: string;
+    /**
+     * 实际传给算子的规则参数
+     */
+    parameters: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * 当前真实任务的地图资源；输入为模拟识别演示，输出只引用本轮实际计算，不引用交付包PNG
+ */
+export type AgentMultiElementMap = {
+    /**
+     * 当前检查采用的明确上游版本
+     */
+    before?: {
+        /**
+         * 岩性输入资源
+         */
+        lithology?: number;
+        /**
+         * 构造输入资源
+         */
+        faults?: number;
+    };
+    /**
+     * 获批计算形成的新版本，未形成时缺省
+     */
+    after?: {
+        /**
+         * 本轮修正岩性资源
+         */
+        lithology?: number;
+        /**
+         * 本轮修正构造资源
+         */
+        faults?: number;
+    };
+    /**
+     * 真实变化线点面图层，不含未批准建议
+     */
+    changes?: Array<number>;
+    /**
+     * 当前实际检查的疑点及待核查图层
+     */
+    checks?: Array<number>;
+    /**
+     * 保留原识别信息并标识处理状态的蚀变面图层
+     */
+    alterations?: number;
+    /**
+     * 几何与推测交汇点，inferred字段决定实心或空心
+     */
+    intersections?: number;
+    /**
+     * 同参数下修正前优先核查远景区
+     */
+    beforeProspects?: number;
+    /**
+     * 同参数下修正后优先核查远景区；A/B为证据组合等级
+     */
+    afterProspects?: number;
 };
 
 /**
@@ -5308,9 +5401,9 @@ export type AgentModificationSuggestion = {
      */
     id: string;
     /**
-     * 填补有据内部漏填或更新地层时代属性
+     * 内部漏填、时代属性或多要素建议；综合场景具体操作由action标识
      */
-    kind: 'fill_gap' | 'set_age';
+    kind: 'fill_gap' | 'set_age' | 'multi_element';
     /**
      * 当前数据中的稳定图斑标识
      */
@@ -5339,6 +5432,65 @@ export type AgentModificationSuggestion = {
      * 本次结构化专家规则标识
      */
     ruleId: string;
+    /**
+     * 综合场景建议作用于岩性、构造或蚀变
+     */
+    element?: 'lithology' | 'structure' | 'alteration';
+    /**
+     * 服务端冻结的建议动作；降权、保留、待裁定与剔除分别记录，客户端不提交新动作
+     */
+    action?: string;
+    /**
+     * 当次算法实测值与量纲，用于核对规则条件
+     */
+    observations?: {
+        [key: string]: unknown;
+    };
+    /**
+     * 当次规则成立所需条件
+     */
+    ruleConditions?: Array<string>;
+    /**
+     * 必须保留的地质例外与证据缺口
+     */
+    exceptions?: Array<string>;
+    /**
+     * 本案例试用规则及具体知识版本来源
+     */
+    ruleRefs?: Array<{
+        /**
+         * 规则编号
+         */
+        id: string;
+        /**
+         * 冻结规则版本
+         */
+        version: string;
+        /**
+         * 规则标题
+         */
+        title: string;
+        /**
+         * 已授权试用知识条目编号
+         */
+        knowledgeId: number;
+        /**
+         * 知识修订
+         */
+        revision: number;
+        /**
+         * 原来源及核实程度
+         */
+        source: string;
+    }>;
+    /**
+     * 构造对象实测米制长度；不以面积代替线长度
+     */
+    lengthM?: number;
+    /**
+     * 建议、待裁定、例外、保留、降权或剔除的实际处置状态
+     */
+    status?: string;
     /**
      * 当前检索实际返回的知识与修订，权限继续按原项目检查。
      */

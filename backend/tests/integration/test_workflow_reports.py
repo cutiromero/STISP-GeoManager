@@ -8,6 +8,7 @@ from django.contrib.auth.models import Permission
 from apps.agent.models import AgentWorkflow
 from apps.agent.workflow import step
 from apps.agent.workflow_reports import _paths
+from apps.agent.workflow_reports import generate_report, import_report, load_report
 from apps.catalog.models import DataResource
 from apps.compute.models import ComputeInput, ComputeOutput, ComputeTask
 from apps.compute.packages import checksum
@@ -108,6 +109,33 @@ def request(env, suffix="", method="post", body=None):
         content_type="application/json",
         HTTP_X_PROJECT_ID=str(env["project"].id),
     )
+
+
+def test_multi_compact_report_preserves_previous_immutable_report(
+    completed, monkeypatch
+):
+    env = completed
+    workflow = env["workflow"]
+    original = generate_report(workflow, env["owner"], env["policy"])
+    old_path, old_metadata, _ = _paths(workflow)
+    original_bytes, original_meta = old_path.read_bytes(), old_metadata.read_bytes()
+    workflow.workflow_type = "geology_multi_element_reasoning"
+    workflow.save(update_fields=["workflow_type"])
+    monkeypatch.setattr(
+        "apps.agent.workflow_reports.render_report",
+        lambda *args: b"# Compact actual report\n",
+    )
+    compact = generate_report(workflow, env["owner"], env["policy"])
+    new_path, _, _ = _paths(workflow)
+    assert new_path != old_path and "compact-v2" in str(new_path)
+    assert compact["checksum"] != original["checksum"]
+    assert old_path.read_bytes() == original_bytes
+    assert old_metadata.read_bytes() == original_meta
+    imported = import_report(workflow, env["owner"], env["policy"])
+    resource = DataResource.objects.get(pk=imported["resourceId"])
+    assert resource.source.endswith(":compact-v2")
+    assert "compact-v2" in resource.storage_path
+    assert load_report(workflow, env["owner"])[0] == imported
 
 
 def test_report_real_content_persistent_idempotent_and_no_private_model_payload(

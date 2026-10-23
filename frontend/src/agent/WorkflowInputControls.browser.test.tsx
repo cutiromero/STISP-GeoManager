@@ -121,6 +121,9 @@ function show() {
 }
 
 async function select(label: string, option: string) {
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: label })).toBeEnabled(),
+  );
   fireEvent.mouseDown(screen.getByRole("combobox", { name: label }));
   fireEvent.click(
     await screen.findByText(option, {
@@ -128,6 +131,22 @@ async function select(label: string, option: string) {
     }),
   );
 }
+
+it("waits for saved tasks before accepting a new scene so restoration cannot overwrite it", async () => {
+  let restoreTasks: (value: { items: AgentWorkflow[] }) => void = () => {};
+  vi.mocked(agentApi.workflows).mockReturnValue(
+    new Promise((resolve) => {
+      restoreTasks = resolve;
+    }),
+  );
+  show();
+  expect(screen.getByRole("combobox", { name: "研究场景" })).toBeDisabled();
+  restoreTasks({ items: [saved()] });
+  await screen.findByText("待检查地质图 / 待检查地质图");
+  await select("研究场景", "通用科研计算");
+  expect(screen.queryByRole("combobox", { name: "待检查地质图" })).toBeNull();
+  expect(screen.getByRole("combobox", { name: "指定算法" })).toBeEnabled();
+});
 
 it("restores the current active preset and really rematches an already selected custom map", async () => {
   const create = vi

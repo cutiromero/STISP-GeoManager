@@ -34,6 +34,7 @@ import DemoWorkflowForm, {
 } from "./DemoWorkflowForm";
 import WorkflowResults from "./WorkflowResults";
 import { allWorkflowPages, workflowGeologyVersions } from "./workflowCatalog";
+import { multiElementType } from "./multiElementScenario";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 
@@ -155,6 +156,8 @@ export default function WorkflowPanel({
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [workflow, setWorkflow] = useState<AgentWorkflow>();
   const [history, setHistory] = useState<AgentWorkflow[]>([]);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [contextReady, setContextReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [previousWorkflowId, setPreviousWorkflowId] = useState<string>();
@@ -167,15 +170,19 @@ export default function WorkflowPanel({
     workflowType === "ecology_investigation" ||
     workflowType === "geology_correction" ||
     workflowType === "geology_age_correction" ||
-    workflowType === "geology_map_review";
+    workflowType === "geology_map_review" ||
+    workflowType === multiElementType;
   const reviewingPlan =
     workflow?.status === "waiting_approval" &&
     workflow.plan.phase === "review_plan";
-  const locked = Boolean(
-    workflow &&
-    [...active, "paused"].includes(workflow.status) &&
-    !reviewingPlan,
-  );
+  const initializing = !catalogReady || !contextReady;
+  const locked =
+    initializing ||
+    Boolean(
+      workflow &&
+      [...active, "paused"].includes(workflow.status) &&
+      !reviewingPlan,
+    );
   const draft = {
     goal,
     model,
@@ -195,9 +202,16 @@ export default function WorkflowPanel({
     new Map(
       workflowGeologyVersions(
         algorithms,
-        workflowType === "geology_map_review"
-          ? ["geology-map-check", "geology-map-correct"]
-          : ["geology-age-check", "geology-age-edit"],
+        workflowType === multiElementType
+          ? [
+              "geology-multi-check",
+              "geology-multi-apply",
+              "geology-multi-relations",
+              "geology-multi-prospect",
+            ]
+          : workflowType === "geology_map_review"
+            ? ["geology-map-check", "geology-map-correct"]
+            : ["geology-age-check", "geology-age-edit"],
       )
         .flatMap((item) => item.manifest.parameters)
         .map((spec) => [spec.key, spec] as const),
@@ -298,6 +312,7 @@ export default function WorkflowPanel({
       }
       if (data.status === "fulfilled") setResources(data.value.items ?? []);
       if (scenes.status === "fulfilled") setDemos(scenes.value.items ?? []);
+      setContextReady(true);
     });
     return () => {
       disposed = true;
@@ -321,6 +336,9 @@ export default function WorkflowPanel({
       })
       .catch((e) => {
         if (!disposed) report(e);
+      })
+      .finally(() => {
+        if (!disposed) setCatalogReady(true);
       });
     return () => {
       disposed = true;
@@ -514,6 +532,7 @@ export default function WorkflowPanel({
           <Select
             aria-label="研究场景"
             value={workflowType}
+            loading={initializing}
             disabled={locked || busy || Boolean(previousWorkflowId)}
             options={scenarioOptions}
             onChange={(value) => {
@@ -650,24 +669,28 @@ export default function WorkflowPanel({
             ))}
         </>
       )}
-      {["geology_age_correction", "geology_map_review"].includes(
-        workflowType,
-      ) &&
+      {[
+        "geology_age_correction",
+        "geology_map_review",
+        multiElementType,
+      ].includes(workflowType) &&
         geologyParameterSpecs.length > 0 && (
           <div className="agent-demo-fields agent-demo-parameters">
-            {geologyParameterSpecs.map((spec) => (
-              <label key={spec.key}>
-                <span>{spec.label}</span>
-                <ParameterField
-                  spec={spec}
-                  value={parameters[spec.key] ?? spec.default}
-                  disabled={locked || busy}
-                  onChange={(value) =>
-                    setParameters((old) => ({ ...old, [spec.key]: value }))
-                  }
-                />
-              </label>
-            ))}
+            {geologyParameterSpecs
+              .filter((spec) => spec.key !== "segment")
+              .map((spec) => (
+                <label key={spec.key}>
+                  <span>{spec.label}</span>
+                  <ParameterField
+                    spec={spec}
+                    value={parameters[spec.key] ?? spec.default}
+                    disabled={locked || busy}
+                    onChange={(value) =>
+                      setParameters((old) => ({ ...old, [spec.key]: value }))
+                    }
+                  />
+                </label>
+              ))}
           </div>
         )}
       <div className="agent-workflow-selectors">

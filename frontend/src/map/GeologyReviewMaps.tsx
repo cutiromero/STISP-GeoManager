@@ -4,6 +4,8 @@ import { Alert } from "antd";
 import { useEffect, useRef, useState } from "react";
 import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
 import { geologicalColor, record, reviewLegend } from "./geologyReviewData";
+import { addReviewOverlay, type ReviewOverlay } from "./reviewVectorLayers";
+const emptyOverlays: ReviewOverlay[] = [];
 
 export default function GeologyReviewMaps({
   before,
@@ -14,6 +16,11 @@ export default function GeologyReviewMaps({
   accessToken,
   previewLabel = "建议修改范围，尚未执行",
   inspectionOnly = false,
+  overlays = emptyOverlays,
+  onInspect,
+  beforeLabel = "待检查地质图",
+  afterLabel = "修正后地质图",
+  compactLegend = false,
 }: {
   before: GeoJsonFeatureCollection;
   after: GeoJsonFeatureCollection | null;
@@ -23,19 +30,49 @@ export default function GeologyReviewMaps({
   accessToken: string;
   previewLabel?: string;
   inspectionOnly?: boolean;
+  overlays?: ReviewOverlay[];
+  onInspect?: (feature: GeoJsonFeatureCollection["features"][number]) => void;
+  beforeLabel?: string;
+  afterLabel?: string;
+  compactLegend?: boolean;
 }) {
   const left = useRef<HTMLDivElement>(null),
     right = useRef<HTMLDivElement>(null);
   const maps = useRef<MapboxMap[]>([]);
-  const latest = useRef({ before, after, differences, bounds, onSelect });
+  const view = useRef<{
+    center: [number, number];
+    zoom: number;
+    bearing: number;
+    pitch: number;
+  } | null>(null);
+  const latest = useRef({
+    before,
+    after,
+    differences,
+    bounds,
+    onSelect,
+    overlays,
+    onInspect,
+  });
   const [error, setError] = useState("");
+  const [errorDetail, setErrorDetail] = useState("");
   const [ready, setReady] = useState([false, false]);
-  latest.current = { before, after, differences, bounds, onSelect };
+  latest.current = {
+    before,
+    after,
+    differences,
+    bounds,
+    onSelect,
+    overlays,
+    onInspect,
+  };
   useEffect(() => {
     if (!left.current || !right.current) return;
     let syncing = false,
-      disposed = false;
+      disposed = false,
+      primaryInitialized = false;
     setError("");
+    setErrorDetail("");
     setReady([false, false]);
     const observer = new ResizeObserver(() =>
       maps.current.forEach((map) => map.resize()),
@@ -56,8 +93,7 @@ export default function GeologyReviewMaps({
                 },
               ],
             },
-            center: [96, 36],
-            zoom: 8,
+            ...(view.current ?? { center: [96, 36], zoom: 8 }),
             attributionControl: false,
             collectResourceTiming: false,
             performanceMetricsCollection: false,
@@ -70,8 +106,15 @@ export default function GeologyReviewMaps({
           new mapboxgl.NavigationControl({ showCompass: false }),
           "top-right",
         );
-        map.on("error", () => {
-          if (!disposed) setError("地图渲染失败，请刷新或核对图件后重试。");
+        map.on("error", (event) => {
+          if (!disposed) {
+            setError("地图渲染失败，请刷新或核对图件后重试。");
+            setErrorDetail(
+              String(event.error?.message ?? "")
+                .replace(/([?&]access_token=)[^&\s]+/gi, "$1***")
+                .slice(0, 600),
+            );
+          }
         });
         map.on("idle", () => {
           if (!disposed)
@@ -123,7 +166,11 @@ export default function GeologyReviewMaps({
             id: "units",
             type: "fill",
             source: "geological-units",
-            paint: { "fill-color": color, "fill-opacity": 0.95 },
+            filter: ["==", ["geometry-type"], "Polygon"],
+            paint: {
+              "fill-color": ["coalesce", ["get", "fill_color"], color],
+              "fill-opacity": 0.95,
+            },
           });
           map.addLayer({
             id: "unit-boundaries",
@@ -131,6 +178,19 @@ export default function GeologyReviewMaps({
             source: "geological-units",
             paint: { "line-color": "#66768c", "line-width": 0.8 },
           });
+          for (const overlay of state.overlays) {
+            const overlayData = index
+              ? (overlay.after ?? overlay.before)
+              : overlay.before;
+            if (overlayData)
+              addReviewOverlay(
+                map,
+                `review-${overlay.key}`,
+                overlayData,
+                overlay.color,
+                (feature) => latest.current.onInspect?.(feature),
+              );
+          }
           const highlighted = {
             ...state.differences,
             features: state.differences.features.map((feature, position) => ({
@@ -146,6 +206,7 @@ export default function GeologyReviewMaps({
             id: "change-fill",
             type: "fill",
             source: "actual-differences",
+            filter: ["==", ["geometry-type"], "Polygon"],
             paint: { "fill-color": "#e99032", "fill-opacity": 0.22 },
           });
           map.addLayer({
@@ -156,6 +217,18 @@ export default function GeologyReviewMaps({
               "line-color": "#c86612",
               "line-width": 3,
               "line-dasharray": [3, 2],
+            },
+          });
+          map.addLayer({
+            id: "change-point",
+            type: "circle",
+            source: "actual-differences",
+            filter: ["==", ["geometry-type"], "Point"],
+            paint: {
+              "circle-color": "#e99032",
+              "circle-radius": 6,
+              "circle-stroke-color": "#c86612",
+              "circle-stroke-width": 2,
             },
           });
           map.on("click", "change-fill", (event) => {
@@ -169,18 +242,30 @@ export default function GeologyReviewMaps({
             )
               latest.current.onSelect(row);
           });
+          for (const layer of ["change-outline", "change-point"])
+            map.on("click", layer, (event) => {
+              const row = Number(
+                record(record(event.features?.[0]).properties).review_index,
+              );
+              if (
+                Number.isInteger(row) &&
+                row >= 0 &&
+                row < latest.current.differences.features.length
+              )
+                latest.current.onSelect(row);
+            });
           map.on("mouseenter", "change-fill", () => {
             map.getCanvas().style.cursor = "pointer";
           });
           map.on("mouseleave", "change-fill", () => {
             map.getCanvas().style.cursor = "";
           });
-          if (state.bounds)
+          if (state.bounds && !view.current)
             map.fitBounds(state.bounds, {
-              padding: 35,
-              maxZoom: 16,
+              padding: 50,
               duration: 0,
             });
+          if (index === 0) primaryInitialized = true;
         });
       });
       observer.observe(left.current);
@@ -191,21 +276,44 @@ export default function GeologyReviewMaps({
     return () => {
       disposed = true;
       observer.disconnect();
+      const primary = maps.current[0];
+      if (primary && primaryInitialized) {
+        view.current = {
+          center: primary.getCenter().toArray(),
+          zoom: primary.getZoom(),
+          bearing: primary.getBearing(),
+          pitch: primary.getPitch(),
+        };
+      }
       maps.current.forEach((map) => map.remove());
       maps.current = [];
     };
-  }, [before, after, differences, accessToken]);
+  }, [before, after, differences, accessToken, overlays]);
   useEffect(() => {
     const primary = maps.current[0];
     if (bounds && primary?.isStyleLoaded())
-      primary.fitBounds(bounds, { padding: 60, maxZoom: 16, duration: 350 });
+      primary.fitBounds(bounds, { padding: 50, maxZoom: 18, duration: 350 });
   }, [bounds]);
   return (
     <>
-      {error && <Alert type="error" showIcon title={error} />}
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          title={error}
+          description={
+            errorDetail ? (
+              <details>
+                <summary>查看渲染原因</summary>
+                {errorDetail}
+              </details>
+            ) : undefined
+          }
+        />
+      )}
       <div className="geology-review-map-pair">
         <section>
-          <header>待检查地质图</header>
+          <header>{beforeLabel}</header>
           <div
             ref={left}
             className="geology-review-map-canvas"
@@ -214,7 +322,7 @@ export default function GeologyReviewMaps({
           />
         </section>
         <section>
-          <header>{after ? "修正后地质图" : previewLabel}</header>
+          <header>{after ? afterLabel : previewLabel}</header>
           <div
             ref={right}
             className="geology-review-map-canvas"
@@ -230,12 +338,35 @@ export default function GeologyReviewMaps({
         </section>
       </div>
       <div className="geology-review-map-legend" aria-label="统一地质类别配色">
-        {reviewLegend(before, ...(after ? [after] : [])).map((item) => (
-          <span key={item.key}>
-            <i style={{ background: item.color }} />
-            {item.name}
+        {overlays.map((overlay) => (
+          <span key={overlay.key}>
+            <i style={{ background: overlay.color }} />
+            {overlay.label}
           </span>
         ))}
+        {overlays.some((overlay) => overlay.key === "intersections") && (
+          <span>● 几何交汇 / ○ 推测交汇</span>
+        )}
+        {compactLegend ? (
+          <details className="geology-review-lithology-legend">
+            <summary>查看岩性配色</summary>
+            <div>
+              {reviewLegend(before, ...(after ? [after] : [])).map((item) => (
+                <span key={item.key}>
+                  <i style={{ background: item.color }} />
+                  {item.name}
+                </span>
+              ))}
+            </div>
+          </details>
+        ) : (
+          reviewLegend(before, ...(after ? [after] : [])).map((item) => (
+            <span key={item.key}>
+              <i style={{ background: item.color }} />
+              {item.name}
+            </span>
+          ))
+        )}
         {!inspectionOnly && (
           <span>
             <i className="geology-review-change-swatch" />

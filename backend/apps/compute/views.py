@@ -127,6 +127,11 @@ def categories(request):
     query = AlgorithmCategory._base_manager.filter(
         project_tag_id__in={1, project_id()}
     ).order_by("sort_order", "id")
+    if project_id() != 1:
+        query = query.filter(
+            Q(project_tag_id=project_id())
+            | Q(name__in=allowed_algorithms().values_list("category", flat=True))
+        )
     return JsonResponse(
         {
             "items": [

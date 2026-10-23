@@ -19,6 +19,7 @@ export function researchDemoLaunch(
       "geology_correction",
       "geology_age_correction",
       "geology_map_review",
+      "geology_multi_element_reasoning",
     ].includes(String(data.scenario)) ||
     !Number.isInteger(data.projectId) ||
     String(data.projectId) !== projectId ||

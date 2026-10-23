@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "identifier": "geology-multi-prospect",
+  "name": "海德乌拉优先核查远景区分析",
+  "version": "1.0.1",
+  "description": "海德乌拉优先核查远景区分析。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
+  "author": "STISP",
+  "runtime": "python-geospatial-v1",
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
+  "inputs": [
+    {
+      "key": "lithology",
+      "label": "模拟识别岩性图（演示）",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "faults",
+      "label": "模拟识别构造图（演示）",
+      "kind": "vector",
+      "geometryTypes": [
+        "LineString",
+        "MultiLineString"
+      ]
+    },
+    {
+      "key": "coverage",
+      "label": "研究区制图范围",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "rules",
+      "label": "本案例显式启用的专家规则及版本",
+      "kind": "table"
+    },
+    {
+      "key": "hematite",
+      "label": "赤铁矿遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "chlorite",
+      "label": "绿泥石遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "hydromica",
+      "label": "水云母遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "calcite",
+      "label": "方解石遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "dolomite",
+      "label": "白云石遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "before_lithology",
+      "label": "修改前岩性图",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "before_faults",
+      "label": "修改前构造图",
+      "kind": "vector",
+      "geometryTypes": [
+        "LineString",
+        "MultiLineString"
+      ]
+    },
+    {
+      "key": "alterations",
+      "label": "获批矿物处理状态",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ],
+      "required": false
+    },
+    {
+      "key": "intersections",
+      "label": "当前构造交汇点",
+      "kind": "vector",
+      "geometryTypes": [
+        "Point",
+        "MultiPoint"
+      ],
+      "required": false
+    }
+  ],
+  "parameters": [
+    {
+      "key": "working_epsg",
+      "label": "米制工作投影EPSG",
+      "type": "integer",
+      "default": 32646,
+      "min": 1,
+      "max": 999999
+    },
+    {
+      "key": "segment",
+      "label": "本次检查范围",
+      "type": "enum",
+      "default": "all",
+      "choices": [
+        "all",
+        "lithology",
+        "structure",
+        "alteration"
+      ]
+    },
+    {
+      "key": "grid_resolution_m",
+      "label": "综合分析网格（米）",
+      "type": "number",
+      "default": 100,
+      "min": 10,
+      "max": 1000
+    },
+    {
+      "key": "min_zone_area_m2",
+      "label": "远景区最小面积（平方米）",
+      "type": "number",
+      "default": 200000,
+      "min": 0,
+      "max": 100000000
+    }
+  ],
+  "outputs": [
+    {
+      "key": "before_zones",
+      "label": "修改前优先核查远景区",
+      "kind": "vector",
+      "file": "before_zones.gpkg",
+      "required": false
+    },
+    {
+      "key": "after_zones",
+      "label": "修改后优先核查远景区",
+      "kind": "vector",
+      "file": "after_zones.gpkg",
+      "required": false
+    },
+    {
+      "key": "evidence",
+      "label": "每区实测依据链",
+      "kind": "table",
+      "file": "evidence.csv"
+    },
+    {
+      "key": "statistics",
+      "label": "前后远景区统计",
+      "kind": "table",
+      "file": "statistics.csv"
+    }
+  ],
+  "timeoutSeconds": 900,
+  "deterministic": true
+}

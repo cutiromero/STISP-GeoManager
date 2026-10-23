@@ -19,6 +19,25 @@ const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("../api/client", () => ({ requestJson: request }));
 beforeEach(() => request.mockReset());
 
+it("queues preview reads so the server's single-query gate does not reject the second map", async () => {
+  let finishFirst = (_value: ReturnType<typeof reviewQuery>) => {};
+  request
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishFirst = resolve;
+        }),
+    )
+    .mockResolvedValueOnce(reviewQuery(201, afterReviewMap));
+  const first = queryReviewMap(101);
+  const second = queryReviewMap(201);
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  finishFirst(reviewQuery(101, beforeReviewMap));
+  expect(await first).toEqual(beforeReviewMap);
+  expect(await second).toEqual(afterReviewMap);
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
 it("完成后的建议入口按对象及修改类型定位，区分同一图斑的两项修改", () => {
   const workflow = reviewWorkflow(true);
   expect(

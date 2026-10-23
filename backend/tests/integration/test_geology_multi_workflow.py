@@ -1,0 +1,488 @@
+"""Project-bound trial knowledge, approval scope and repeatable multi-element plans."""
+
+# ruff: noqa: F811
+import copy
+import csv
+import io
+import json
+import uuid
+from types import SimpleNamespace
+from pathlib import Path
+
+import pytest
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
+from django.core.exceptions import PermissionDenied
+
+from apps.agent.geology_multi import SCENARIO, ROLES, FIELDS, graph, prepare
+from apps.agent.geology_multi_review import (
+    approve_modifications,
+    create_approved_changes,
+    freeze_proposal,
+    validate_edits,
+)
+from apps.agent.geology_multi_results import table_rows
+from apps.agent.models import AgentWorkflow
+from apps.catalog.models import DataResource
+from apps.compute.packages import ComputeError
+from apps.compute.models import AlgorithmResource, AlgorithmVersion
+from apps.compute.packages import validate_manifest
+from apps.core.storage import table_data_path
+from apps.knowledge.models import KnowledgeEntry, KnowledgeRevision
+from apps.knowledge.services import visible_entries, serialize
+from apps.knowledge.trial_rules import read_bound_rules, authorize_trial_evidence
+from tests.integration.test_compute import setup_compute  # noqa: F401
+from tests.integration.test_demo_workflow import demo  # noqa: F401
+
+pytestmark = pytest.mark.django_db
+
+
+def test_freezing_rules_requires_project_write_permission_before_any_write(multi):
+    env = multi
+    owner = env["owner"]
+    owner.user_permissions.remove(
+        Permission.objects.get(
+            codename="add_dataresource", content_type__app_label="catalog"
+        )
+    )
+    owner = get_user_model().objects.get(pk=owner.pk)
+    workflow = env["workflow"]
+    workflow.pk = uuid.uuid4()
+    path = table_data_path(f"demo/workflows/{workflow.id}/trial-rules.csv")
+    before = DataResource.objects.count()
+    with pytest.raises(ComputeError, match="catalog.add_dataresource"):
+        prepare(workflow, owner, env["policy"])
+    assert DataResource.objects.count() == before
+    assert not path.exists()
+
+
+def csv_bytes(columns, rows):
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=columns)
+    writer.writeheader()
+    writer.writerows(rows)
+    return stream.getvalue().encode("utf-8")
+
+
+@pytest.fixture
+def multi(demo, monkeypatch):
+    user, project = demo["owner"], demo["project"]
+    entries = []
+    for rule_id in ("L-03", "A-01"):
+        entry = KnowledgeEntry.objects.create(
+            title=rule_id + " 本案例试用",
+            domain="geology",
+            status="draft",
+            statement="先核对观测与条件，例外保留。",
+            conditions=["本示范区"],
+            exceptions=["依据不足时保留"],
+            sources=[{"title": "项目整理规则", "locator": rule_id}],
+            rule_config={
+                "trialScope": {
+                    "scenario": SCENARIO,
+                    "projectId": project.id,
+                    "ruleId": rule_id,
+                    "ruleVersion": "0.1-draft",
+                },
+                "parameters": {"threshold": 0.5},
+                "rule": {"id": rule_id},
+            },
+        )
+        entries.append(entry)
+    rows = [
+        {
+            "rule_id": entry.rule_config["trialScope"]["ruleId"],
+            "rule_version": "0.1-draft",
+            "knowledge_id": entry.id,
+            "knowledge_revision": entry.revision,
+            "params_json": '{"threshold":999}',
+            "rule_json": '{"id":"client-forgery"}',
+            "units_json": '{"T3":{"name":"地层"}}' if i == 0 else "",
+            "aliases_json": '{"地层":"T3"}' if i == 0 else "",
+        }
+        for i, entry in enumerate(entries)
+    ]
+    path = table_data_path("multi/input-rules.csv")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(csv_bytes(FIELDS, rows))
+    inputs = {}
+    for role, kind in ROLES.items():
+        resource = DataResource.objects.create(
+            name=role,
+            code="geology-multi-" + role,
+            data_type=kind,
+            storage_path="table/multi/input-rules.csv" if role == "rules" else "",
+            file_format="CSV" if role == "rules" else "GPKG",
+            maintainer=user,
+        )
+        inputs[role] = resource.id
+    monkeypatch.setattr(
+        "apps.agent.geology_multi.candidate",
+        lambda resource: {
+            "fields": ["feature_id", "name", "geo_sym", "line_id"],
+            "crs": "EPSG:32646",
+            "geometryTypes": ["LineString"]
+            if resource.id == inputs["faults"]
+            else ["Polygon"],
+        },
+    )
+    workflow = AgentWorkflow.objects.create(
+        owner=user,
+        model="mock",
+        workflow_type=SCENARIO,
+        goal="检查海德乌拉案例",
+        max_iterations=12,
+        max_operator_steps=12,
+        resource_ids=list(inputs.values()),
+        parameters={"segment": "all"},
+        plan={"inputs": inputs},
+        idempotency_key="multi-review-test",
+    )
+    workflow.evidence = prepare(workflow, user, demo["policy"])
+    workflow.plan.update(
+        inputSnapshots={
+            role: DataResource.objects.get(pk=identity).updated_at.isoformat()
+            for role, identity in inputs.items()
+        },
+        algorithms={"geology-multi-apply": {"versionId": 1, "checksum": "a" * 64}},
+    )
+    yield {
+        **demo,
+        "workflow": workflow,
+        "entries": entries,
+        "inputs": inputs,
+        "rows": rows,
+    }
+
+
+def test_trial_drafts_are_explicit_and_do_not_enter_ordinary_retrieval(multi):
+    wf, user = multi["workflow"], multi["owner"]
+    assert (
+        not visible_entries(user)
+        .filter(pk__in=[e.id for e in multi["entries"]])
+        .exists()
+    )
+    assert authorize_trial_evidence(wf, user) == {e.id for e in multi["entries"]}
+    bound = [
+        {key: row[key] for key in ("id", "revision", "ruleId", "ruleVersion")}
+        for row in wf.plan["trialRuleBindings"]
+    ]
+    with pytest.raises(PermissionDenied):
+        read_bound_rules(user, wf.project_tag_id, "geology_map_review", bound)
+    bound[0]["revision"] += 1
+    with pytest.raises(PermissionDenied):
+        read_bound_rules(user, wf.project_tag_id, SCENARIO, bound)
+
+
+def test_server_freezes_knowledge_parameters_not_client_csv(multi):
+    wf = multi["workflow"]
+    path = table_data_path(f"demo/workflows/{wf.id}/trial-rules.csv")
+    rows = list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8"))))
+    assert all(json.loads(row["params_json"])["threshold"] == 0.5 for row in rows)
+    assert json.loads(rows[0]["rule_json"])["id"] == "L-03"
+    multi["entries"][0].statement = "同修订擅改正文"
+    multi["entries"][0].save()
+    with pytest.raises(PermissionDenied, match="已变化"):
+        authorize_trial_evidence(wf, multi["owner"])
+
+
+def test_history_reads_archived_trial_revision_while_execution_rejects_changes(multi):
+    wf, user = multi["workflow"], multi["owner"]
+    entry = multi["entries"][0]
+    KnowledgeRevision.objects.create(
+        entry=entry,
+        revision=entry.revision,
+        snapshot=serialize(entry),
+    )
+    entry.revision += 1
+    entry.statement = "经审查更新后的说明"
+    entry.status = "published"
+    entry.save()
+    with pytest.raises(PermissionDenied):
+        authorize_trial_evidence(wf, user)
+    assert authorize_trial_evidence(wf, user, history=True) == {
+        item.id for item in multi["entries"]
+    }
+    wf.evidence[0]["statement"] = "被篡改的历史引用"
+    with pytest.raises(PermissionDenied):
+        authorize_trial_evidence(wf, user, history=True)
+
+
+def fixture_review(multi):
+    wf = multi["workflow"]
+    rows = []
+    edits = []
+    for index, (rule_id, action) in enumerate(
+        (("L-03", "set_code"), ("A-01", "downweight"))
+    ):
+        rows.append(
+            {
+                "issue_id": f"I{index}",
+                "element": "lithology" if index == 0 else "alteration",
+                "feature_id": f"N{index}",
+                "rule_id": rule_id,
+                "rule_version": "0.1-draft",
+                "snapshot_hash": "b" * 64,
+                "allowed_actions_json": json.dumps([action, "review", "keep"]),
+                "suggested_action": action,
+                "target_code": "T3" if index == 0 else "",
+                "measurements_json": '{"area_m2":100}',
+                "reason": "实际属性与试用规则存在差异",
+                "geometry_json": '{"type":"Polygon","coordinates":[[[90,30],[91,30],[91,31],[90,31],[90,30]]]}',
+            }
+        )
+        edits.append(
+            {
+                "issue_id": f"I{index}",
+                "action": action,
+                "target_code": "T3" if index == 0 else "",
+                "weight": 1 if index == 0 else 0.5,
+                "reason": "依据当前测量、试用规则及必要例外提出建议",
+            }
+        )
+    results = [
+        {
+            "key": "issues",
+            "outputId": 2,
+            "taskId": "task",
+            "checksum": "c" * 64,
+            "rows": rows,
+        }
+    ]
+    check = {
+        "name": "check",
+        "identifier": "geology-multi-check",
+        "taskId": "task",
+        "results": results,
+    }
+    apply = {
+        "name": "apply",
+        "identifier": "geology-multi-apply",
+        "parameters": {"segment": "all"},
+        "edits": edits,
+        "decision": {
+            "evidenceRefs": [
+                {"kind": "knowledge", "id": str(e.id)} for e in multi["entries"]
+            ]
+        },
+    }
+    wf.plan.update(stages=[check, apply], stageIndex=1)
+    freeze_proposal(wf, apply)
+    return wf, apply, results
+
+
+def test_approval_only_writes_selected_object_action(multi, monkeypatch):
+    wf, stage, results = fixture_review(multi)
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.read_results", lambda *args: results
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.authorized_task",
+        lambda *args: SimpleNamespace(),
+    )
+    selected = [wf.plan["modificationReview"]["suggestions"][1]["id"]]
+    approve_modifications(wf, multi["owner"], multi["policy"], selected, "hash")
+    resource = create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+    path = table_data_path(resource.storage_path.removeprefix("table/"))
+    records = list(csv.DictReader(io.StringIO(path.read_text(encoding="utf-8"))))
+    assert len(records) == 1
+    assert records[0]["feature_id"] == "N1"
+    assert records[0]["action"] == "downweight"
+    assert float(records[0]["weight"]) == 0.5
+    stage["parameters"]["segment"] = "lithology"
+    with pytest.raises(ComputeError, match="有效批准"):
+        create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+
+
+def test_no_approval_cannot_execute_and_empty_selection_retains_all(multi, monkeypatch):
+    wf, stage, results = fixture_review(multi)
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.read_results", lambda *args: results
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.authorized_task",
+        lambda *args: SimpleNamespace(),
+    )
+    with pytest.raises(ComputeError, match="有效批准"):
+        create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+    approve_modifications(wf, multi["owner"], multi["policy"], [], "hash")
+    resource = create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+    assert resource.item_count == 0
+    assert wf.plan["modificationReview"]["unapprovedSuggestionIds"]
+
+
+def test_model_cannot_change_target_or_turn_downweight_into_delete(multi):
+    _, stage, results = fixture_review(multi)
+    changed = copy.deepcopy(stage["edits"])
+    changed[0]["target_code"] = "arbitrary"
+    with pytest.raises(ComputeError, match="目标代号"):
+        validate_edits(changed, results)
+    changed = copy.deepcopy(stage["edits"])
+    changed[1]["weight"] = 0
+    with pytest.raises(ComputeError, match="降权"):
+        validate_edits(changed, results)
+
+
+def test_each_segment_shares_inputs_and_explicit_upstream_bindings():
+    assert len(graph("lithology")) == 3
+    assert len(graph("structure")) == 4
+    assert len(graph("alteration")) == len(graph("all")) == 5
+    assert graph("all")[-1][2]["lithology"] == "apply/lithology"
+    assert graph("structure")[-1][2]["faults"] == "apply/faults"
+
+
+def test_large_actual_issue_table_keeps_rule_counts_and_labels_sample(tmp_path):
+    path = tmp_path / "issues.csv"
+    rows = [
+        {"issue_id": str(i), "rule_id": "L-03" if i < 100 else "A-01"}
+        for i in range(300)
+    ]
+    path.write_bytes(csv_bytes(("issue_id", "rule_id"), rows))
+    value = table_rows(path, "issues")
+    assert value["rowCount"] == 300
+    assert value["countsByRule"] == {"L-03": 100, "A-01": 200}
+    assert value["scope"] == "representative_sample"
+    assert len(value["rows"]) == 4
+
+
+def test_representative_issues_use_actual_size_without_hiding_total(tmp_path):
+    path = tmp_path / "issues.csv"
+    columns = ("issue_id", "rule_id", "measurements_json")
+    rows = [
+        {
+            "issue_id": f"l-{size}",
+            "rule_id": "L-03",
+            "measurements_json": json.dumps({"area_m2": size}),
+        }
+        for size in (1, 80, 2, 100)
+    ] + [
+        {
+            "issue_id": f"s-{size}",
+            "rule_id": "S-02",
+            "measurements_json": json.dumps({"length_m": size}),
+        }
+        for size in (3, 200, 20)
+    ]
+    path.write_bytes(csv_bytes(columns, rows))
+    result = table_rows(path, "issues")
+    assert result["rowCount"] == 7
+    assert result["countsByRule"] == {"L-03": 4, "S-02": 3}
+    assert [row["issue_id"] for row in result["rows"]] == [
+        "l-100",
+        "l-80",
+        "s-200",
+        "s-20",
+    ]
+    assert result["scope"] == "representative_sample"
+
+
+def test_native_published_manifests_prepare_the_actual_stage_protocol(multi):
+    from apps.agent.demo_workflow import prepare_demo, confirm_demo
+
+    root = Path(__file__).resolve().parents[3]
+    for suffix in ("check", "apply", "relations", "prospect"):
+        manifest = validate_manifest(
+            json.loads(
+                (
+                    root / f"examples/compute/geology-multi-{suffix}/operator.yaml"
+                ).read_text(encoding="utf-8")
+            )
+        )
+        algorithm = AlgorithmResource.objects.create(
+            identifier=manifest["identifier"],
+            name=manifest["name"],
+            created_by=multi["owner"],
+        )
+        AlgorithmVersion.objects.create(
+            algorithm=algorithm,
+            version="1.0.0",
+            status="published",
+            manifest=manifest,
+            checksum="d" * 64,
+            runtime_digest="sha256:" + "a" * 64,
+        )
+    wf = multi["workflow"]
+    prepare_demo(wf, multi["owner"], multi["policy"])
+    assert wf.status == "waiting_approval"
+    assert [stage["name"] for stage in wf.plan["stages"]] == [
+        "check",
+        "apply",
+        "recheck",
+        "relations",
+        "prospect",
+    ]
+    assert wf.plan["stages"][0]["bindings"]["rules"] == "frozen_rules"
+    assert wf.plan["stages"][2]["bindings"]["alterations"] == "apply/alterations"
+    assert wf.plan["stages"][4]["bindings"]["before_lithology"] == "lithology"
+    assert wf.plan["stages"][4]["parameters"]["segment"] == "all"
+    assert len(wf.plan["upstreamVersions"]) == 9
+    confirm_demo(wf, multi["owner"], multi["policy"], wf.plan_hash)
+    assert wf.status == "queued"
+    assert wf.execute_operators is True
+
+
+def test_missing_optional_upstream_is_omitted_without_reusing_original():
+    from apps.agent.demo_workflow import _inputs
+
+    workflow = SimpleNamespace(
+        plan={
+            "inputs": {"faults": 10},
+            "algorithms": {
+                "next": {
+                    "manifest": {
+                        "inputs": [
+                            {"key": "faults", "required": True},
+                            {"key": "intersections", "required": False},
+                        ]
+                    }
+                }
+            },
+            "stages": [
+                {"name": "apply", "outputs": []},
+                {"name": "relations", "outputs": []},
+            ],
+        }
+    )
+    stage = {
+        "identifier": "next",
+        "bindings": {"faults": "faults", "intersections": "relations/intersections"},
+    }
+    assert _inputs(workflow, stage) == {"faults": 10}
+    stage["bindings"]["faults"] = "apply/faults"
+    with pytest.raises(ComputeError, match="apply/faults"):
+        _inputs(workflow, stage)
+
+
+def test_before_approval_map_does_not_claim_a_corrected_result(multi):
+    from apps.agent.geology_multi_review import update_map
+
+    wf, _, _ = fixture_review(multi)
+    wf.plan["stages"][0]["outputs"] = [
+        {"key": "issue_lithology", "kind": "vector", "resourceId": 100}
+    ]
+    update_map(wf)
+    assert "after" not in wf.plan["multiElementMap"]
+    assert "changes" not in wf.plan["multiElementMap"]
+    assert wf.plan["multiElementMap"]["checks"] == [100]
+
+
+def test_mock_analysis_uses_current_issues_and_keeps_simulation_label(multi):
+    from apps.agent.demo_decisions import _mock_decision
+
+    wf, stage, results = fixture_review(multi)
+    refs = [
+        {"kind": "knowledge", "id": str(entry.id), "revision": entry.revision}
+        for entry in multi["entries"]
+    ]
+    decision, edits = _mock_decision(
+        SimpleNamespace(name="模拟测试"), stage, refs, results, wf
+    )
+    assert decision["modelMode"] == "mock"
+    assert {edit["issue_id"] for edit in edits} == {"I0", "I1"}
+    assert edits[1]["action"] == "downweight"
+    assert edits[1]["weight"] > 0
+    results[0]["rows"][0]["target_code"] = "T4"
+    _, fresh = _mock_decision(
+        SimpleNamespace(name="模拟测试"), stage, refs, results, wf
+    )
+    assert fresh[0]["target_code"] == "T4"

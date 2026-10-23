@@ -1771,7 +1771,7 @@ export const createComputeCategory = <ThrowOnError extends boolean = false>(opti
 /**
  * listComputeAlgorithms
  *
- * 计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。
+ * 按当前单项目返回相关共享算法及本项目登记算法。逻辑推理项目保留地质类，干旱生态项目保留生态、植被、水体指数及通用矢量工具；公开项目目录不变。发现与执行共用后端筛选，历史任务继续可读。
  */
 export const listComputeAlgorithms = <ThrowOnError extends boolean = false>(options?: Options<ListComputeAlgorithmsData, ThrowOnError>): RequestResult<ListComputeAlgorithmsResponses, ListComputeAlgorithmsErrors, ThrowOnError> => (options?.client ?? client).get<ListComputeAlgorithmsResponses, ListComputeAlgorithmsErrors, ThrowOnError>({ url: '/api/compute/algorithms/', ...options });
 

@@ -8,6 +8,11 @@ import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
 import { useComputeText } from "../compute/ui";
 import { createUuid } from "../utils/uuid";
+import {
+  multiElementPrompt,
+  multiElementSegments,
+  multiElementType,
+} from "../agent/multiElementScenario";
 import "./research-demo-showcase.css";
 
 export default function ResearchDemoShowcase() {
@@ -103,27 +108,56 @@ export default function ResearchDemoShowcase() {
                       )}
               </Tag>
               <p>
-                {item.scenario === "geology_map_review"
-                  ? ui(
-                      "查阅专家知识，检查地图并提出建议；由您批准修正，再看前后变化与检查报告。",
-                      "Check the map against expert knowledge, approve selected suggestions and review the maps and report.",
-                    )
-                  : item.scenario === "geology_age_correction"
+                {item.scenario === multiElementType
+                  ? "检查岩性、构造与矿物识别成果，逐项核对知识和实测依据；批准后生成修正版本及优先核查远景区。"
+                  : item.scenario === "geology_map_review"
                     ? ui(
-                        "读取真实地质图副本，按辞书与适用条件修正时代录入，复核并查看前后地图。",
-                        "Check age entries in a real-map copy using dictionary conditions, then review the before and after maps.",
+                        "查阅专家知识，检查地图并提出建议；由您批准修正，再看前后变化与检查报告。",
+                        "Check the map against expert knowledge, approve selected suggestions and review the maps and report.",
                       )
-                    : item.scenario === "ecology_investigation"
+                    : item.scenario === "geology_age_correction"
                       ? ui(
-                          "发现植被变化，解释线索，安排调查；补充观测后更新建议。",
-                          "Discover vegetation changes, explain evidence and update investigation priorities.",
+                          "读取真实地质图副本，按辞书与适用条件修正时代录入，复核并查看前后地图。",
+                          "Check age entries in a real-map copy using dictionary conditions, then review the before and after maps.",
                         )
-                      : ui(
-                          "检查填图问题，依据调查与规则纠偏，复核并对照地图。",
-                          "Check mapping issues, correct them using evidence and compare the maps.",
-                        )}
+                      : item.scenario === "ecology_investigation"
+                        ? ui(
+                            "发现植被变化，解释线索，安排调查；补充观测后更新建议。",
+                            "Discover vegetation changes, explain evidence and update investigation priorities.",
+                          )
+                        : ui(
+                            "检查填图问题，依据调查与规则纠偏，复核并对照地图。",
+                            "Check mapping issues, correct them using evidence and compare the maps.",
+                          )}
               </p>
               <span className="research-demo-project">{item.projectName}</span>
+              {item.scenario === multiElementType && (
+                <div
+                  className="research-demo-segments"
+                  aria-label="分段体验入口"
+                >
+                  {multiElementSegments.slice(1).map((segment) => (
+                    <Button
+                      key={segment.value}
+                      size="small"
+                      disabled={!item.available}
+                      onClick={() =>
+                        navigate("/agent/workbench", {
+                          state: {
+                            researchDemo: {
+                              ...item,
+                              prompt: multiElementPrompt(segment.value),
+                              token: createUuid(),
+                            },
+                          },
+                        })
+                      }
+                    >
+                      {segment.label}
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
             <Button
               type="primary"
