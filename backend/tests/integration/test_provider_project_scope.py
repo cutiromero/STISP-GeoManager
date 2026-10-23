@@ -2,6 +2,7 @@
 
 import json
 import threading
+import time
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -11,6 +12,7 @@ from django.core.exceptions import PermissionDenied
 from apps.agent.config import ModelConfig
 from apps.agent.demo_workflow import authorize_demo
 from apps.agent.models import AgentWorkflow
+from apps.agent.model_guard import ModelStreamGuard
 from apps.agent.provider import stream
 from apps.agent.workflow import _authorize
 from apps.knowledge.models import KnowledgeEntry
@@ -122,7 +124,7 @@ def scoped_workflow(transactional_db, setup_agent):  # noqa: F811
     return env, workflow, public[0], own, private
 
 
-def consume(env, workflow, private, on_monitor=None):
+def consume(env, workflow, private, on_monitor=None, *, cached=False):
     calling_thread = threading.get_ident()
     monitored = threading.Event()
     scopes = []
@@ -142,22 +144,37 @@ def consume(env, workflow, private, on_monitor=None):
                 monitored.set()
 
     with waiting_http_model(monitored) as model, project_scope(env["scope"]):
+        stream_guard = (
+            ModelStreamGuard(guard, time.monotonic() + 10) if cached else guard
+        )
         result = "".join(
-            stream(model, [{"role": "user", "content": "分析"}], 200, guard)
+            stream(
+                model,
+                [{"role": "user", "content": "分析"}],
+                200,
+                stream_guard,
+                monitor_guard=stream_guard.poll if cached else None,
+            )
         )
     return result, scopes
 
 
-def test_real_monitor_keeps_public_and_selected_project_knowledge(scoped_workflow):
+@pytest.mark.parametrize("cached", [False, True])
+def test_real_monitor_keeps_public_and_selected_project_knowledge(
+    scoped_workflow, cached
+):
     env, workflow, _, _, private = scoped_workflow
-    result, scopes = consume(env, workflow, private)
+    result, scopes = consume(env, workflow, private, cached=cached)
     assert result == "完成"
     assert any(in_monitor for in_monitor, _ in scopes)
     assert all(scope == env["scope"] for _, scope in scopes)
 
 
 @pytest.mark.parametrize("source", ["public", "own"])
-def test_real_monitor_rejects_changed_knowledge_revision(scoped_workflow, source):
+@pytest.mark.parametrize("cached", [False, True])
+def test_real_monitor_rejects_changed_knowledge_revision(
+    scoped_workflow, source, cached
+):
     env, workflow, public, own, private = scoped_workflow
     entry = public if source == "public" else own
 
@@ -165,10 +182,13 @@ def test_real_monitor_rejects_changed_knowledge_revision(scoped_workflow, source
         KnowledgeEntry._base_manager.filter(pk=entry.id).update(revision=2)
 
     with pytest.raises(PermissionDenied, match="知识依据已变化"):
-        consume(env, workflow, private, revise)
+        consume(env, workflow, private, revise, cached=cached)
 
 
-def test_real_monitor_rejects_live_project_membership_revocation(scoped_workflow):
+@pytest.mark.parametrize("cached", [False, True])
+def test_real_monitor_rejects_live_project_membership_revocation(
+    scoped_workflow, cached
+):
     env, workflow, _, _, private = scoped_workflow
 
     def revoke():
@@ -177,14 +197,15 @@ def test_real_monitor_rejects_live_project_membership_revocation(scoped_workflow
         ).delete()
 
     with pytest.raises(PermissionDenied, match="项目访问权限已撤回"):
-        consume(env, workflow, private, revoke)
+        consume(env, workflow, private, revoke, cached=cached)
 
 
-def test_real_monitor_rejects_other_private_project_evidence(scoped_workflow):
+@pytest.mark.parametrize("cached", [False, True])
+def test_real_monitor_rejects_other_private_project_evidence(scoped_workflow, cached):
     env, workflow, _, _, private = scoped_workflow
 
     def inject():
         workflow.evidence.append(serialize(private))
 
     with pytest.raises(PermissionDenied, match="知识依据已变化"):
-        consume(env, workflow, private, inject)
+        consume(env, workflow, private, inject, cached=cached)

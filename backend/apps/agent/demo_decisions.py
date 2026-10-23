@@ -11,6 +11,7 @@ from . import provider
 from .config import registry
 from .context import prepare_context
 from .demo_results import EDIT_FIELDS, resource_context, validate_edits
+from .model_guard import ModelStreamGuard
 
 FIELDS = {
     "problem",
@@ -788,7 +789,12 @@ def decide(
             "引用只从availableEvidence选。每步至少引用一条实际适用知识；actualResults非空须引用本轮最新statistics输出。"
             "check尚未提交时不能声称发现了具体问题；算法返回后按实测值、规则条件、例外形成解释。"
             "scope=representative_sample仅为规则分组的代表样本，rowCount与countsByRule才是完整统计；不能把展示行数说成全部问题数量。"
-            "仅allowedAction=geology-multi-apply时提出edits，每项包含issue_id,action,target_code,weight,reason。"
+            "只有allowedAction和decision.nextAction均为geology-multi-apply时才提出edits，"
+            "每项包含issue_id,action,target_code,weight,reason。"
+            "此时edits仍只是建议，后端须等待用户逐项批准后才执行实际修改；"
+            "不能因建议尚待批准就把nextAction写成request_review。"
+            "request_review用于证据不足、冲突等无法形成有据建议的情况，此时edits必须为[]；"
+            "其他算法步骤也必须edits=[]。"
             "问题来自editTask.issuesOutputIds对应actualResults；issue_id及target_code须与该真实行一致。"
             "action只从allowed_actions_json选，set_code/reclassify/merge目标必须是实测支持的target_code；其他动作target_code为空。"
             "降权downweight保留原对象且0<weight<1，exclude权重为0，其他动作weight=1。"
@@ -877,6 +883,11 @@ def decide(
                     top_p=policy["topP"],
                     reasoning_effort=policy["reasoningEffort"],
                     on_usage=record["usage"].update,
+                    **(
+                        {"monitor_guard": guard.poll}
+                        if isinstance(guard, ModelStreamGuard)
+                        else {}
+                    ),
                 )
             )
         )

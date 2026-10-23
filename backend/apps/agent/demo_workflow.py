@@ -27,6 +27,7 @@ from apps.knowledge.domains import DOMAINS, validate_domains
 from apps.knowledge.services import search_entries, visible_entries
 from apps.projects.context import project_scope
 from .models import AgentWorkflow
+from .model_guard import ModelStreamGuard
 from .geology_reference import is_reference_resource
 from .provider import ModelError
 from .tools import resolve_resource
@@ -646,7 +647,9 @@ def _submit_stage(workflow, user, p, stage) -> None:
         check_pause(workflow)
         if current.cancel_requested or current.status not in {"queued", "running"}:
             raise ModelError("场景已停止，未提交下一步计算")
-        _submit_stage_locked(workflow, user, p, stage)
+        fresh, policy = _authorize(current)
+        authorize_demo(current, fresh, policy)
+        _submit_stage_locked(workflow, fresh, policy, stage)
 
 
 def _submit_stage_locked(workflow, user, p, stage) -> None:
@@ -689,12 +692,14 @@ def _submit_stage_locked(workflow, user, p, stage) -> None:
         "idempotencyKey": f"demo-{workflow.id}-{stage['name']}",
         "trial": False,
     }
-    validate_submission(user, body)
     with transaction.atomic():
         current = locked_workflow(workflow.id)
         check_pause(workflow)
         if current.cancel_requested or current.status not in {"queued", "running"}:
             raise ModelError("场景已停止，未提交下一步计算")
+        user, p = _authorize(current)
+        authorize_demo(current, user, p)
+        validate_submission(user, body)
         AgentWorkflow.objects.filter(pk=workflow.id).update(heartbeat=timezone.now())
         task = submit(user, body)
         stage.update(taskId=str(task.id), inputs=inputs, status="waiting_compute")
@@ -735,6 +740,8 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
     with transaction.atomic():
         if _collection_cancelled(workflow):
             return False
+        user, p = _authorize(workflow)
+        authorize_demo(workflow, user, p)
         workflow.steps.filter(kind="submit_operator", compute_task_id=task.id).update(
             status="succeeded",
             message="计算已完成",
@@ -783,6 +790,8 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
         with transaction.atomic():
             if _collection_cancelled(workflow):
                 return False
+            user, p = _authorize(workflow)
+            authorize_demo(workflow, user, p)
             record = ComputeImport.objects.filter(output=output).first()
             if record is None:
                 source = (
@@ -830,6 +839,8 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
     with transaction.atomic():
         if _collection_cancelled(workflow):
             return False
+        user, p = _authorize(workflow)
+        authorize_demo(workflow, user, p)
         step(
             workflow,
             "collect_results",
@@ -909,14 +920,13 @@ def advance_demo(workflow_id) -> None:
                     raise ComputeError("已达到场景模型决策次数上限")
                 deadline, heartbeat_at = time.monotonic() + p["maxRunSeconds"], [0.0]
 
-                def guard():
+                def check_stream_authorization():
                     check_pause(workflow)
                     current = AgentWorkflow.objects.get(pk=workflow.id)
-                    if (
-                        current.cancel_requested
-                        or current.status not in {"queued", "running"}
-                        or time.monotonic() > deadline
-                    ):
+                    if current.cancel_requested or current.status not in {
+                        "queued",
+                        "running",
+                    }:
                         raise ModelError("场景分析已停止或达到本步时限")
                     fresh, policy = _authorize(current)
                     authorize_demo(current, fresh, policy)
@@ -925,6 +935,8 @@ def advance_demo(workflow_id) -> None:
                             heartbeat=timezone.now()
                         )
                         heartbeat_at[0] = time.monotonic()
+
+                guard = ModelStreamGuard(check_stream_authorization, deadline)
 
                 # Reserve the decision count before contacting the configured model.
                 if not recovering_response:
@@ -993,7 +1005,7 @@ def advance_demo(workflow_id) -> None:
                     record_attempt,
                     on_response=lambda: _save(workflow),
                 )
-                guard()
+                guard.poll()
                 stage.update(decision=decision, edits=edits)
                 with transaction.atomic():
                     step(
@@ -1108,8 +1120,15 @@ def advance_demo(workflow_id) -> None:
                 from .geology_multi_review import freeze_proposal
 
                 with transaction.atomic():
-                    locked_workflow(workflow.id)
+                    current = locked_workflow(workflow.id)
                     check_pause(workflow)
+                    if current.cancel_requested or current.status not in {
+                        "queued",
+                        "running",
+                    }:
+                        raise ModelError("检查已停止，未生成新的修改建议")
+                    fresh, policy = _authorize(current)
+                    authorize_demo(current, fresh, policy)
                     freeze_proposal(workflow, stage)
                     step(
                         workflow,
@@ -1127,18 +1146,31 @@ def advance_demo(workflow_id) -> None:
                     )
                 return
             if stage["identifier"] == "finish":
-                stage["status"] = "completed"
-                workflow.plan["phase"] = "completed"
-                workflow.plan["finalDecision"] = stage["decision"]
-                workflow.status, workflow.current_step = "succeeded", "finalize"
-                workflow.detail = (
-                    stage["decision"]["resultSummary"] or stage["decision"]["judgement"]
-                )
-                workflow.detail = workflow.detail[:300]
-                _save(workflow)
-                checkpoint(
-                    workflow, "finalize", {"resourceIds": workflow.result_resource_ids}
-                )
+                with transaction.atomic():
+                    current = locked_workflow(workflow.id)
+                    check_pause(workflow)
+                    if current.cancel_requested or current.status not in {
+                        "queued",
+                        "running",
+                    }:
+                        raise ModelError("检查已停止，未结束场景分析")
+                    fresh, policy = _authorize(current)
+                    authorize_demo(current, fresh, policy)
+                    stage["status"] = "completed"
+                    workflow.plan["phase"] = "completed"
+                    workflow.plan["finalDecision"] = stage["decision"]
+                    workflow.status, workflow.current_step = "succeeded", "finalize"
+                    workflow.detail = (
+                        stage["decision"]["resultSummary"]
+                        or stage["decision"]["judgement"]
+                    )
+                    workflow.detail = workflow.detail[:300]
+                    _save(workflow)
+                    checkpoint(
+                        workflow,
+                        "finalize",
+                        {"resourceIds": workflow.result_resource_ids},
+                    )
                 return
             _submit_stage(workflow, user, p, stage)
         except WorkflowPaused:

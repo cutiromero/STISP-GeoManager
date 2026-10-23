@@ -8,6 +8,7 @@ import json
 import uuid
 from types import SimpleNamespace
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -486,3 +487,72 @@ def test_mock_analysis_uses_current_issues_and_keeps_simulation_label(multi):
         SimpleNamespace(name="模拟测试"), stage, refs, results, wf
     )
     assert fresh[0]["target_code"] == "T4"
+
+
+@pytest.mark.parametrize("action", ["geology-multi-apply", "request_review"])
+def test_multi_model_protocol_distinguishes_proposal_from_insufficient_evidence(
+    multi, settings, action
+):
+    from apps.agent.demo_decisions import decide
+
+    settings.AGENT_MODELS = [
+        {
+            "alias": "mock",
+            "name": "模型协议测试",
+            "model_id": "qwen-fixture",
+            "base_url": "http://127.0.0.1:19100/v1",
+            "agent": True,
+        }
+    ]
+    wf, stage, results = fixture_review(multi)
+    proposal_edits = copy.deepcopy(stage.pop("edits"))
+    stage.pop("decision")
+    review_before = copy.deepcopy(wf.plan["modificationReview"])
+    response = {
+        "decision": {
+            "problem": "核对当前检查结果与试用规则",
+            "findings": ["实测对象已对应到本案例知识"],
+            "judgement": "形成修改建议" if action.endswith("apply") else "需补充资料",
+            "uncertainties": ["未批准前保持原对象"],
+            "nextAction": action,
+            "algorithmReason": "按当前测量与适用知识判断",
+            "evidenceRefs": [
+                {"kind": "output", "id": "2"},
+                *[
+                    {"kind": "knowledge", "id": str(entry.id)}
+                    for entry in multi["entries"]
+                ],
+            ],
+            "resultSummary": "建议需逐项批准" if action.endswith("apply") else "等待补证",
+        },
+        "edits": proposal_edits if action.endswith("apply") else [],
+    }
+    # A review may not carry executable proposals, even when its rows are valid.
+    invalid = {**response, "edits": proposal_edits}
+    raws = [invalid, response] if action == "request_review" else [response]
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
+        patch("apps.agent.context.count_tokens", return_value=800),
+        patch(
+            "apps.agent.demo_decisions.provider.stream",
+            side_effect=[iter([json.dumps(raw, ensure_ascii=False)]) for raw in raws],
+        ) as stream,
+    ):
+        decision, edits = decide(
+            wf, multi["owner"], multi["policy"], stage, results, lambda: None
+        )
+    assert decision["nextAction"] == action and decision["modelMode"] == "real"
+    assert edits == response["edits"]
+    instruction = stream.call_args_list[0].args[1][0]["content"]
+    assert "只有allowedAction和decision.nextAction均为geology-multi-apply" in instruction
+    assert "后端须等待用户逐项批准后才执行实际修改" in instruction
+    assert "不能因建议尚待批准就把nextAction写成request_review" in instruction
+    assert "request_review用于证据不足、冲突" in instruction
+    assert "此时edits必须为[]" in instruction
+    assert wf.plan["modificationReview"] == review_before
+    assert not wf.plan["modificationReview"]["approvedSuggestionIds"]
+    if action == "request_review":
+        assert stream.call_count == 2
+        assert "不得提前提交" in stage["modelAttempts"][0]["validationError"]
+        assert not stage["modelAttempts"][0]["accepted"]

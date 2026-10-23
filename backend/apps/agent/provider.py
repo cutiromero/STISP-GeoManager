@@ -89,6 +89,7 @@ def stream(
     on_thinking=None,
     reasoning_effort="medium",
     on_usage=None,
+    monitor_guard=None,
 ):
     """No proxies/redirects; cancellation shuts down the upstream socket."""
     url = urlsplit(model.base_url)
@@ -122,7 +123,7 @@ def stream(
         try:
             while not done.wait(0.5):
                 try:
-                    guard()
+                    (monitor_guard or guard)()
                 except Exception as exc:
                     failures.append(exc)
                     if sock:
