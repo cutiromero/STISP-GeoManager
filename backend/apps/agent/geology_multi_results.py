@@ -12,6 +12,8 @@ def table_rows(path, key):
     if path.stat().st_size > 64 * 1024 * 1024:
         raise ComputeError("综合检查结果表超过64 MiB，请缩小本次检查范围")
     groups, rows, count, counts = {}, [], 0, Counter()
+    evidence_groups, combinations = {}, {}
+    seen_zones = set()
     with path.open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
         if not reader.fieldnames or len(reader.fieldnames) > 80:
@@ -29,18 +31,148 @@ def table_rows(path, key):
                 representatives.append(row)
                 representatives.sort(key=_measured_size, reverse=True)
                 del representatives[2:]
-            elif len(rows) < 40:
+            elif key == "evidence":
+                zone = (row.get("phase"), row.get("zone_id"))
+                if zone in seen_zones:
+                    raise ComputeError("远景区证据包含重复的同分期对象，已停止面积汇总")
+                _aggregate_evidence(row, evidence_groups, combinations)
+                seen_zones.add(zone)
+                representatives = groups.setdefault((row["phase"], row["grade"]), [])
+                representatives.append(row)
+                representatives.sort(
+                    key=lambda item: float(item["area_km2"]), reverse=True
+                )
+                del representatives[2:]
+            elif key in {"statistics", "changes"} or len(rows) < 40:
                 rows.append(row)
-    if key == "issues":
+    if key in {"issues", "evidence"}:
         rows = [row for representatives in groups.values() for row in representatives]
-    return {
+    result = {
         "columns": reader.fieldnames,
         "rows": rows,
         "rowCount": count,
         "scope": "all" if count == len(rows) else "representative_sample",
-        "samplingNote": "每条规则选取实际面积或长度较大的两个代表对象，未进入建议的对象保持原样；完整结果可下载",
+        "samplingNote": (
+            "全部远景区均参与分期、等级及证据组合汇总；每个分期和等级展示面积最大的两个代表，完整对象证据可下载"
+            if key == "evidence"
+            else "每条规则选取实际面积或长度较大的两个代表对象，未进入建议的对象保持原样；完整结果可下载"
+        ),
         "countsByRule": dict(counts),
     }
+    if key == "evidence":
+        result["aggregate"] = {
+            "scope": "all_rows",
+            "rowCount": count,
+            "byPhaseAndGrade": _finish_groups(evidence_groups),
+            "evidenceCombinations": _finish_groups(combinations),
+            "countUnit": "zone",
+            "aggregationNote": "以(phase,zone_id)唯一对象计数；两张汇总表是同一完整证据表的不同分组，面积不相加，前后期分别比较",
+            "interpretation": "分期、等级分别汇总；实测比例仅给出各区取值范围。邻近矿物、断裂与交汇作为背景，分级依据实际规则表达式和实测条件",
+        }
+    return result
+
+
+def _evidence_basis(row):
+    try:
+        basis = json.loads(row["evidence_json"])
+        measured, context = basis["grade_conditions"], basis["context"]
+        area = float(row["area_km2"])
+        if (
+            not isinstance(measured, dict)
+            or not isinstance(context, dict)
+            or not math.isfinite(area)
+            or area < 0
+            or not row["phase"]
+            or not row["grade"]
+            or not row["zone_id"]
+            or basis["phase"] != row["phase"]
+            or not isinstance(context["minerals"], list)
+            or not all(isinstance(value, str) for value in context["minerals"])
+            or not isinstance(measured["rule_expression"], str)
+            or not isinstance(basis["knowledge"], list)
+        ):
+            raise ValueError("invalid evidence")
+        for key in ("faults", "intersections"):
+            if not isinstance(context[key], list) or not all(
+                isinstance(item, dict) for item in context[key]
+            ):
+                raise ValueError("invalid associations")
+        for key in (
+            "structure_supported_fraction",
+            "alteration_supported_fraction",
+            "favourable_fraction",
+            "min_weighted_type_count",
+        ):
+            if not math.isfinite(float(measured[key])):
+                raise ValueError("invalid measurement")
+    except (ValueError, TypeError, KeyError) as exc:
+        raise ComputeError("远景区证据缺少有效分期、面积、实测条件或知识引用") from exc
+    return basis, measured, context, area
+
+
+def _aggregate_evidence(row, groups, combinations):
+    basis, measured, context, area = _evidence_basis(row)
+    phase, grade = row["phase"], row["grade"]
+    minerals = tuple(sorted(set(context["minerals"])))
+    expression = measured["rule_expression"]
+    for table, key, dimensions in (
+        (groups, (phase, grade), {"phase": phase, "grade": grade}),
+        (
+            combinations,
+            (phase, grade, expression, minerals),
+            {
+                "phase": phase,
+                "grade": grade,
+                "ruleExpression": expression,
+                "minerals": list(minerals),
+            },
+        ),
+    ):
+        group = table.setdefault(
+            key,
+            {
+                **dimensions,
+                "zoneCount": 0,
+                "areas": [],
+                "knowledge": {},
+                "measurementRanges": {},
+            },
+        )
+        group["zoneCount"] += 1
+        group["areas"].append(area)
+        for name in (
+            "structure_supported_fraction",
+            "alteration_supported_fraction",
+            "favourable_fraction",
+            "min_weighted_type_count",
+        ):
+            value = float(measured[name])
+            values = group["measurementRanges"].setdefault(
+                name, {"min": value, "max": value}
+            )
+            values["min"], values["max"] = (
+                min(values["min"], value),
+                max(values["max"], value),
+            )
+        for citation in basis["knowledge"]:
+            if not isinstance(citation, dict):
+                raise ComputeError("远景区知识引用格式无效")
+            group["knowledge"][json.dumps(citation, sort_keys=True)] = citation
+
+
+def _finish_groups(groups):
+    return [
+        {
+            **{
+                key: value
+                for key, value in group.items()
+                if key not in {"areas", "knowledge"}
+            },
+            "areaKm2": math.fsum(group["areas"]),
+            "knowledge": list(group["knowledge"].values()),
+        }
+        for _, group in sorted(groups.items())
+    ]
 
 
 def _measured_size(row):
@@ -55,18 +187,230 @@ def _measured_size(row):
     return area or length, row.get("issue_id", "")
 
 
-def model_results(results):
+def model_results(results, *, stage_name):
     """Geometry is available to the map; narrative decisions use actual measurements."""
-    return [
-        {
+    values, shared_metadata = [], {}
+    for item in results:
+        value = {
             **item,
             "rows": [
-                {key: value for key, value in row.items() if key != "geometry_json"}
+                {key: cell for key, cell in row.items() if key != "geometry_json"}
                 for row in item.get("rows", [])
             ],
         }
-        for item in results
+        if item["key"] == "issues" and stage_name != "apply":
+            value.update(
+                rows=[],
+                scope="reference_only",
+                samplingNote="历史问题明细保存在完整输出；本阶段依据完整规则统计及实际获批修改继续复核，不重复发送历史候选对象",
+            )
+            value.pop("columns", None)
+        elif item["key"] == "evidence":
+            value["rows"] = [_model_evidence_row(row) for row in item.get("rows", [])]
+            if "aggregate" in item:
+                value["aggregate"], value["rows"] = _model_evidence(
+                    item["aggregate"], value["rows"]
+                )
+        if "metadata" in item:
+            value["metadata"] = _model_metadata(
+                item, shared_metadata, columns=value.get("columns")
+            )
+        if item["key"] in {"statistics", "changes"}:
+            value.update(_column_rows(value["rows"], value.get("columns")))
+        values.append(value)
+    return values
+
+
+def _column_rows(rows, columns=None):
+    columns = list(columns or (rows[0] if rows else []))
+    if any(set(row) != set(columns) for row in rows):
+        raise ComputeError("综合检查表格列与明细不一致，已停止模型投影")
+    return {
+        "columns": columns,
+        "rows": [[row[name] for name in columns] for row in rows],
+        "rowFormat": "columns",
+    }
+
+
+def _model_metadata(item, shared, *, columns=None):
+    """Send identical task facts once, retaining an exact source reference elsewhere."""
+    metadata = {**item["metadata"]}
+    if "fields" in metadata:
+        fields = metadata["fields"]
+        identity = ("fields", json.dumps(fields, ensure_ascii=False))
+        if columns is not None and columns == fields:
+            del metadata["fields"]
+            metadata["fieldsRef"] = {
+                "outputId": item.get("outputId"),
+                "path": "columns",
+            }
+            shared.setdefault(identity, metadata["fieldsRef"])
+        elif identity in shared:
+            del metadata["fields"]
+            metadata["fieldsRef"] = shared[identity]
+        else:
+            shared[identity] = {
+                "outputId": item.get("outputId"),
+                "path": "metadata.fields",
+            }
+    quality = metadata.get("qualityCheck", {})
+    facts = metadata.get("knowledgeFacts", {})
+    duplicate_facts = facts and facts == {"geologyMulti": quality.get("metrics")}
+    if duplicate_facts:
+        del metadata["knowledgeFacts"]
+    quality_source = None
+    for key in ("qualityCheck", "knowledgeFacts"):
+        if key not in metadata:
+            continue
+        signature = json.dumps(metadata[key], sort_keys=True, ensure_ascii=False)
+        identity = (item.get("taskId"), key, signature)
+        if identity in shared:
+            del metadata[key]
+            metadata[f"{key}Ref"] = shared[identity]
+        else:
+            shared[identity] = {
+                "outputId": item.get("outputId"),
+                "path": f"metadata.{key}",
+            }
+        if key == "qualityCheck":
+            quality_source = shared[identity]
+    if duplicate_facts:
+        metadata["knowledgeFactsRef"] = {
+            "outputId": quality_source.get("outputId"),
+            "path": "metadata.qualityCheck.metrics",
+            "scope": "geologyMulti",
+        }
+    return metadata
+
+
+def _model_evidence_row(row):
+    basis, measured, context, area = _evidence_basis(row)
+    return {
+        "phase": row["phase"],
+        "zoneId": row["zone_id"],
+        "grade": row["grade"],
+        "areaKm2": area,
+        "explanation": row.get("explanation", ""),
+        "gradeConditions": measured,
+        "knowledge": basis["knowledge"],
+        "minerals": context["minerals"],
+        "faultAssociations": len(context["faults"]),
+        "intersectionAssociations": len(context["intersections"]),
+        "inferredIntersectionAssociations": sum(
+            bool(item.get("inferred")) for item in context["intersections"]
+        ),
+        "lithologyAreasM2": context.get("lithology_areas_m2", {}),
+        "contextScope": "实测条件、关联数量及岩性面积；完整关联对象和条件保存在原输出",
+    }
+
+
+def _model_evidence(aggregate, rows):
+    """Factor repeated evidence values; every group, range and citation is retained."""
+    definitions, identities = {}, {}
+
+    def project(item):
+        projected = {}
+        for key, value in item.items():
+            if key not in {
+                "knowledge",
+                "measurementRanges",
+                "ruleExpression",
+                "gradeConditions",
+                "minerals",
+            }:
+                projected[key] = value
+                continue
+            signature = (key, json.dumps(value, sort_keys=True, ensure_ascii=False))
+            if signature not in identities:
+                reference = f"{key}{len(identities) + 1}"
+                definitions[reference] = value
+                identities[signature] = reference
+            projected[f"{key}Ref"] = identities[signature]
+        return projected
+
+    result = {**aggregate}
+    for key in ("byPhaseAndGrade", "evidenceCombinations"):
+        result[key] = [project(item) for item in aggregate[key]]
+    result["evidenceCombinations"] = _column_rows(result["evidenceCombinations"])
+    projected_rows = [project(row) for row in rows]
+    result["definitions"] = definitions
+    result["referenceNote"] = (
+        "以Ref结尾的字段引用本aggregate.definitions中的完整原值；所有分组、数量、面积、实测范围及知识引用均保留"
+    )
+    return result, projected_rows
+
+
+def model_knowledge(knowledge):
+    """Use exact field references for repeated passages, preserving the full evidence."""
+    seen = {}
+
+    def project(value, path):
+        if isinstance(value, (dict, list, str)):
+            signature = json.dumps(value, sort_keys=True, ensure_ascii=False)
+            if len(signature.encode()) >= 80:
+                if signature in seen:
+                    return {"sameAs": seen[signature]}
+                seen[signature] = path
+        if isinstance(value, dict):
+            return {key: project(item, f"{path}.{key}") for key, item in value.items()}
+        if isinstance(value, list):
+            return [
+                project(item, f"{path}[{index}]") for index, item in enumerate(value)
+            ]
+        return value
+
+    return [
+        project(item, f"knowledge[{index}]") for index, item in enumerate(knowledge)
     ]
+
+
+def model_review(workflow):
+    """Keep approval semantics and original-output bindings; map keeps full geometry."""
+    review = workflow.plan.get("modificationReview")
+    if review is None:
+        return None
+    suggestions = []
+    for item in review["suggestions"]:
+        suggestions.append(
+            {
+                **{
+                    key: item.get(key)
+                    for key in (
+                        "id",
+                        "element",
+                        "featureId",
+                        "currentState",
+                        "suggestedState",
+                        "reason",
+                        "action",
+                        "status",
+                        "areaM2",
+                        "lengthM",
+                        "observations",
+                    )
+                },
+                "ruleRefs": [
+                    {
+                        key: ref[key]
+                        for key in ("id", "version", "knowledgeId", "revision")
+                    }
+                    for ref in item["ruleRefs"]
+                ],
+            }
+        )
+    check = next(stage for stage in workflow.plan["stages"] if stage["name"] == "check")
+    return {
+        "proposalHash": review["proposalHash"],
+        "approvedSuggestionIds": review.get("approvedSuggestionIds", []),
+        "unapprovedSuggestionIds": review.get("unapprovedSuggestionIds", []),
+        "suggestions": _column_rows(suggestions),
+        "sourceOutputs": [
+            {key: item[key] for key in ("outputId", "taskId", "key", "checksum")}
+            for item in check.get("results", [])
+            if item["key"] == "issues"
+        ],
+        "geometryScope": "完整预览几何保存在原批准方案和地图，模型仅接收处置语义、规则绑定和实际输出引用",
+    }
 
 
 def edit_task(workflow, results):

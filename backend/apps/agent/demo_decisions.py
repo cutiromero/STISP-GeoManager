@@ -374,13 +374,19 @@ def decision_payload(workflow, stage, context, results) -> dict:
     if getattr(workflow, "workflow_type", None) == "geology_map_review":
         payload["modificationReview"] = workflow.plan.get("modificationReview")
     if getattr(workflow, "workflow_type", None) == "geology_multi_element_reasoning":
-        from .geology_multi_results import edit_task, model_results
+        from .geology_multi_results import (
+            edit_task,
+            model_knowledge,
+            model_results,
+            model_review,
+        )
 
-        payload["actualResults"] = model_results(results)
+        payload["knowledge"] = model_knowledge(workflow.evidence)
+        payload["actualResults"] = model_results(results, stage_name=stage["name"])
         payload["editTask"] = (
             edit_task(workflow, results) if stage["name"] == "apply" else None
         )
-        payload["modificationReview"] = workflow.plan.get("modificationReview")
+        payload["modificationReview"] = model_review(workflow)
         payload["upstreamVersions"] = workflow.plan.get("upstreamVersions")
     feedback = _human_feedback(workflow)
     if feedback:
@@ -789,6 +795,10 @@ def decide(
             "引用只从availableEvidence选。每步至少引用一条实际适用知识；actualResults非空须引用本轮最新statistics输出。"
             "check尚未提交时不能声称发现了具体问题；算法返回后按实测值、规则条件、例外形成解释。"
             "scope=representative_sample仅为规则分组的代表样本，rowCount与countsByRule才是完整统计；不能把展示行数说成全部问题数量。"
+            "scope=reference_only且rows=[]仅表示不重复发送历史明细，不代表没有问题；"
+            "判断仍有多少问题须读取rowCount、countsByRule及本轮最新完整statistics，代表样本不能代替全量统计。"
+            "Ref与definitions表示同一次payload内已给出内容的复用，按对应引用读取，不表示缺少证据。"
+            "sameAs按knowledge中的字段路径读取原值；rowFormat=columns的rows按columns列顺序逐项对应，保留全部记录。"
             "只有allowedAction和decision.nextAction均为geology-multi-apply时才提出edits，"
             "每项包含issue_id,action,target_code,weight,reason。"
             "此时edits仍只是建议，后端须等待用户逐项批准后才执行实际修改；"
@@ -801,7 +811,7 @@ def decide(
             "对每个建议在decision.evidenceRefs引用该问题rule_id/rule_version对应的具体knowledge编号。"
             "优先解释少量清楚对象，最多30项，不要求把所有疑点都修改；保留/待裁定可用keep/review。"
             "岩石孤岛不能单凭老新关系认定错误，构造短线不能单凭短就认定假线，碳酸盐背景不能排除热液叠加。"
-            "未获批准不可声称已修正；modificationReview的selected范围才是用户批准。其余项保留。"
+            "未获批准不可声称已修正；modificationReview.approvedSuggestionIds才是用户批准的建议范围。其余项保留。"
             "其他阶段edits=[]；执行后读取当次结果及复核统计，说明实际改变、未修改与下一步。"
             "分段入口使用upstreamVersions，不把旧图当新成果。A/B仅表示本案例证据组合下的优先核查等级，不是矿化概率。"
         )
@@ -814,7 +824,19 @@ def decide(
         )
     messages = [
         {"role": "system", "content": instruction},
-        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        {
+            "role": "user",
+            "content": json.dumps(
+                payload,
+                ensure_ascii=False,
+                **(
+                    {"separators": (",", ":")}
+                    if getattr(workflow, "workflow_type", None)
+                    == "geology_multi_element_reasoning"
+                    else {}
+                ),
+            ),
+        },
     ]
     current = messages[-1]
     guard()
