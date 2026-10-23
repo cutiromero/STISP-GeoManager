@@ -853,7 +853,7 @@ def decide(
             instruction,
         )
     window = provider.model_window(model)
-    output_limit = min(policy["maxOutputTokens"], 4096)
+    output_limit = policy["maxOutputTokens"]
     parameters = {**policy, "maxOutputTokens": output_limit}
     feedback_text = ""
     for attempt in range(2):
@@ -995,7 +995,7 @@ def _recover_decision(
                 "本步已有模型请求记录，但完整分析响应未保存；本步尚未提交计算。"
                 "请重新发起分析，已完成的前序计算与审计记录保留。"
             )
-    limit = min(policy["maxOutputTokens"], 4096)
+    limit = policy["maxOutputTokens"]
     calls = workflow.plan.get("actualModelCallCount", 0)
     ceiling = getattr(workflow, "max_iterations", 0)
     iteration = getattr(workflow, "iteration", 0)

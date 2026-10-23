@@ -74,6 +74,49 @@ def ordinary_stage():
     return workflow, stage, results
 
 
+@pytest.mark.parametrize("output_limit", [2048, 8192, 16384])
+def test_configured_output_limit_reaches_model_and_reserves_context(
+    output_limit, retry_model
+):
+    workflow, stage, results = ordinary_stage()
+    policy = {**default_policy(), "maxOutputTokens": output_limit}
+    answer = model_response("ecology-priority", [])
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
+        patch("apps.agent.context.count_tokens", return_value=800),
+        patch(
+            "apps.agent.demo_decisions.provider.stream",
+            return_value=iter([json.dumps(answer)]),
+        ) as stream,
+    ):
+        decision, edits = decide(
+            workflow, None, policy, stage, results, lambda: None
+        )
+    assert decision["nextAction"] == "ecology-priority" and edits == []
+    assert stream.call_args.args[2] == output_limit
+    attempt = stage["modelAttempts"][0]
+    assert attempt["outputLimit"] == output_limit
+    assert attempt["inputLimit"] == min(
+        policy["maxContextTokens"], 32768 - output_limit - 256
+    )
+
+
+def test_larger_output_reservation_still_rejects_oversized_input(retry_model):
+    workflow, stage, results = ordinary_stage()
+    policy = {**default_policy(), "maxOutputTokens": 8192}
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
+        patch("apps.agent.context.count_tokens", return_value=25000),
+        patch("apps.agent.demo_decisions.provider.stream") as stream,
+        pytest.raises(ModelError, match="25000 token，可用 24320"),
+    ):
+        decide(workflow, None, policy, stage, results, lambda: None)
+    stream.assert_not_called()
+    assert not stage.get("modelAttempts")
+
+
 def test_wrong_statistics_retries_real_model_without_adding_refs(retry_model):
     workflow, stage, results = ordinary_stage()
     initial_results = copy.deepcopy(results)
