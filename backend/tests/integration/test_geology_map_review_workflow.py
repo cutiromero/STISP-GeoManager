@@ -329,6 +329,32 @@ def test_approve_subset_is_frozen_and_only_selected_rows_reach_changes_file(
     ).exists()
 
 
+def test_model_geometry_projection_does_not_change_approval_or_execution(review_case):
+    from apps.agent.demo_decisions import decision_payload
+    from apps.agent.geology_review import proposal
+
+    wf, stage, _ = waiting_suggestions(review_case)
+    results = wf.plan["stages"][1]["results"]
+    saved_plan, saved_results = copy.deepcopy(wf.plan), copy.deepcopy(results)
+    expected_review, expected_rows = proposal(wf, stage, results)
+    payload = decision_payload(wf, stage, [], results)
+    assert "geometry_json" not in payload["actualResults"][0]["rows"][0]
+    assert "preview" not in payload["modificationReview"]["suggestions"][0]
+    assert (wf.plan, results) == (saved_plan, saved_results)
+    assert proposal(wf, stage, results) == (expected_review, expected_rows)
+    selected = [expected_review["suggestions"][0]["id"]]
+    response = confirm(review_case, wf, selectedSuggestionIds=selected)
+    assert response.status_code == 200, response.content
+    wf.refresh_from_db()
+    restored = wf.plan["stages"][2]
+    actual = approved_edits(wf, review_case["owner"], review_case["policy"], restored)
+    assert actual == [{key: expected_rows[0][key] for key in (*EDIT_FIELDS, "reason")}]
+    assert (
+        wf.plan["modificationReview"]["suggestions"] == expected_review["suggestions"]
+    )
+    assert "preview" in wf.plan["modificationReview"]["suggestions"][0]
+
+
 @pytest.mark.parametrize("ids", [None, [], ["stale"], ["duplicate", "duplicate"]])
 def test_empty_unknown_and_duplicate_approval_do_not_edit(review_case, ids):
     wf, _, _ = waiting_suggestions(review_case)

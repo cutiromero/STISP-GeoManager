@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - 逐处讲解仅更新当前对象，切换时保留双图实例及全域数据；构造处置兼容实际state/status字段，灰色虚线表达本轮不参与。
+- 地质检查模型读取完整问题与统计摘要，地图坐标保留在结果和审核记录中，避免扩区后重复几何占满模型输入。
 
 ## [0.1.47] - 2026-10-23
 

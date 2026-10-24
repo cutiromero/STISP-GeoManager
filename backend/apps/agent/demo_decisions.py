@@ -372,7 +372,12 @@ def decision_payload(workflow, stage, context, results) -> dict:
         "availableEvidence": evidence_refs(workflow, context, results),
     }
     if getattr(workflow, "workflow_type", None) == "geology_map_review":
-        payload["modificationReview"] = workflow.plan.get("modificationReview")
+        from .geology_review_context import model_results, model_review
+
+        payload["actualResults"] = model_results(results)
+        payload["modificationReview"] = model_review(
+            workflow.plan.get("modificationReview")
+        )
     if getattr(workflow, "workflow_type", None) == "geology_multi_element_reasoning":
         from .geology_multi_results import (
             edit_task,
@@ -780,6 +785,8 @@ def decide(
             "若无法形成任何有据建议则request_review，不能猜造引用，也不能据规则表冒充知识检索。"
             "fill_gap填补唯一地质单元内部遗漏，不更改宿主类别；set_age更新明确知识支持的时代字段。"
             "几何范围、issue_id与签名由平台绑定，不由模型生成。提出建议后必须等用户批准选中项再编辑。"
+            "geometrySummary和previewSummary保留真实范围、原始内容签名与行定位，"
+            "只省略坐标序列；所有问题行及统计均完整保留，完整几何仍用于地图、审批和实际修正。"
             "其他阶段edits=[]。资料不足可request_review，说明还需要什么；不猜目标类别或范围。"
             "用户批准可能只是部分建议；modificationReview和executionState明确批准范围，"
             "修正后读取实际结果，调用复核，最终说明实际修改范围、面积、仍需处理的问题。"
@@ -832,7 +839,7 @@ def decide(
                 **(
                     {"separators": (",", ":")}
                     if getattr(workflow, "workflow_type", None)
-                    == "geology_multi_element_reasoning"
+                    in {"geology_map_review", "geology_multi_element_reasoning"}
                     else {}
                 ),
             ),
