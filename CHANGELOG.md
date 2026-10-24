@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.48] - 2026-10-25
+
+### Changed
+- 地质成果检查预设扩展至70.56平方公里，包含3处内部漏填和2处地层时代问题，原资料及历史任务保留。
+- 海德乌拉结果默认从第一处实际修改开始，提供上一处、下一处、对象内前后标签和三句依据说明；全区查看继续保留。
+- 调查建议单独比较真实变化的核查区，按当次结果统计数量与面积，点击定位变化范围。
+- 地质修正结果增加常规地理工作台对比入口，保持数据、图层及单图操作入口。
+
+### Fixed
+- 逐处讲解仅更新当前对象，切换时保留双图实例及全域数据；构造处置兼容实际state/status字段，灰色虚线表达本轮不参与。
+
 ## [0.1.47] - 2026-10-23
 
 ### Added

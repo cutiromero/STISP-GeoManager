@@ -590,7 +590,7 @@ export default function WorkflowResults({
             <Link
               to={
                 isGeologyReview && !inspectionOnly
-                  ? `/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
+                  ? `/map?${isMultiElement ? "geologyReview" : "geologyCompare"}=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
                   : isGeologyReview
                     ? `/map?resourceId=${originalMapId}&projectTagId=${workflow.projectId}`
                     : `/map?resources=${mapResourceIds.join(",")}&projectTagId=${workflow.projectId}`

@@ -146,3 +146,43 @@ def test_package_has_only_reviewed_operator_files(settings):
     uploaded = command.package(directory)
     with zipfile.ZipFile(uploaded) as archive:
         assert set(archive.namelist()) == set(command.PACKAGE_FILES)
+
+
+def test_expanded_version_import_preserves_previous_resources_and_is_repeatable(inputs):
+    kwargs, path, value, user, project = inputs
+    call_command("prepare_geology_review_case", **kwargs)
+    with project_scope(ProjectScope((project.id,), project.id, user.id, True)):
+        previous = {
+            item.id: (item.code, item.name, item.source, item.storage_path)
+            for item in DataResource.objects.all()
+        }
+    value["caseVersion"] = command.EXPANDED_VERSION
+    for item in value["resources"]:
+        item["code"] = item["code"].replace(
+            "geology-review", "geology-review-expanded-20261025", 1
+        )
+        item["name"] += " 扩展区"
+    path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+    call_command("prepare_geology_review_case", **kwargs)
+    first = json.loads(kwargs["record"].read_text(encoding="utf-8"))
+    call_command("prepare_geology_review_case", **kwargs)
+    assert json.loads(kwargs["record"].read_text(encoding="utf-8")) == first
+    assert first["caseVersion"] == command.EXPANDED_VERSION
+    assert set(first["resources"]) == command.VERSION_CODES[command.EXPANDED_VERSION]
+    with project_scope(ProjectScope((project.id,), project.id, user.id, True)):
+        assert DataResource.objects.count() == 6
+        for item in DataResource.objects.filter(id__in=previous):
+            assert (item.code, item.name, item.source, item.storage_path) == previous[
+                item.id
+            ]
+    assert AlgorithmVersion.objects.count() == 2
+
+
+def test_mixing_input_versions_is_rejected_before_import(inputs):
+    kwargs, path, value, _, _ = inputs
+    value["caseVersion"] = command.EXPANDED_VERSION
+    value["resources"][0]["code"] = "geology-review-expanded-20261025-initial"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(CommandError, match="三项运行资料"):
+        call_command("prepare_geology_review_case", **kwargs)
+    assert not DataResource._base_manager.exists()

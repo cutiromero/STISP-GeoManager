@@ -40,6 +40,13 @@ export async function queryReviewMap(
   id: number,
   options: { mixed?: boolean; allowEmpty?: boolean } = {},
 ) {
+  return (await queryReviewMapResult(id, options)).geojson;
+}
+
+export async function queryReviewMapResult(
+  id: number,
+  options: { mixed?: boolean; allowEmpty?: boolean } = {},
+) {
   const projectId = getActiveProject();
   const signal = projectSignal();
   const response = reviewQueryQueue.then(() => {
@@ -72,7 +79,7 @@ export async function queryReviewMap(
     )
   )
     throw new Error("双图预览需要完整的面图件");
-  return result.geojson;
+  return result;
 }
 
 export function previewSuggestions(

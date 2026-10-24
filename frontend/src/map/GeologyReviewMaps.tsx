@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
 import { geologicalColor, record, reviewLegend } from "./geologyReviewData";
 import { addReviewOverlay, type ReviewOverlay } from "./reviewVectorLayers";
+import {
+  applyReviewSpotlight,
+  type ReviewMapSpotlight,
+} from "./reviewMapSpotlight";
 const emptyOverlays: ReviewOverlay[] = [];
 
 export default function GeologyReviewMaps({
@@ -21,6 +25,7 @@ export default function GeologyReviewMaps({
   beforeLabel = "待检查地质图",
   afterLabel = "修正后地质图",
   compactLegend = false,
+  spotlight,
 }: {
   before: GeoJsonFeatureCollection;
   after: GeoJsonFeatureCollection | null;
@@ -35,10 +40,12 @@ export default function GeologyReviewMaps({
   beforeLabel?: string;
   afterLabel?: string;
   compactLegend?: boolean;
+  spotlight?: ReviewMapSpotlight | null;
 }) {
   const left = useRef<HTMLDivElement>(null),
     right = useRef<HTMLDivElement>(null);
   const maps = useRef<MapboxMap[]>([]);
+  const removeLabels = useRef<Array<() => void>>([]);
   const view = useRef<{
     center: [number, number];
     zoom: number;
@@ -53,6 +60,7 @@ export default function GeologyReviewMaps({
     onSelect,
     overlays,
     onInspect,
+    spotlight,
   });
   const [error, setError] = useState("");
   const [errorDetail, setErrorDetail] = useState("");
@@ -65,6 +73,7 @@ export default function GeologyReviewMaps({
     onSelect,
     overlays,
     onInspect,
+    spotlight,
   };
   useEffect(() => {
     if (!left.current || !right.current) return;
@@ -260,6 +269,14 @@ export default function GeologyReviewMaps({
           map.on("mouseleave", "change-fill", () => {
             map.getCanvas().style.cursor = "";
           });
+          const removeLabel = applyReviewSpotlight(
+            map,
+            index,
+            state.spotlight,
+            state.overlays.map((overlay) => overlay.key),
+            (feature) => latest.current.onInspect?.(feature),
+          );
+          if (removeLabel) removeLabels.current.push(removeLabel);
           if (state.bounds && !view.current)
             map.fitBounds(state.bounds, {
               padding: 50,
@@ -276,6 +293,8 @@ export default function GeologyReviewMaps({
     return () => {
       disposed = true;
       observer.disconnect();
+      removeLabels.current.forEach((remove) => remove());
+      removeLabels.current = [];
       const primary = maps.current[0];
       if (primary && primaryInitialized) {
         view.current = {
@@ -289,6 +308,20 @@ export default function GeologyReviewMaps({
       maps.current = [];
     };
   }, [before, after, differences, accessToken, overlays]);
+  useEffect(() => {
+    removeLabels.current.forEach((remove) => remove());
+    removeLabels.current = [];
+    maps.current.forEach((map, index) => {
+      const removeLabel = applyReviewSpotlight(
+        map,
+        index,
+        spotlight,
+        latest.current.overlays.map((overlay) => overlay.key),
+        (feature) => latest.current.onInspect?.(feature),
+      );
+      if (removeLabel) removeLabels.current.push(removeLabel);
+    });
+  }, [spotlight]);
   useEffect(() => {
     const primary = maps.current[0];
     if (bounds && primary?.isStyleLoaded())

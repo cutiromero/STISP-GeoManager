@@ -38,9 +38,7 @@ REAL_SOURCE_NOTE = (
     "地区细分未经野外核实，本轮恢复演示字段一致性。"
     "本轮独立验证八宝山组3项；闹仓坚沟组辞书地区为青海玛多县一带，当前当地适用尚未核实。"
 )
-REVIEW_SOURCE_NOTE = (
-    "演示案例：小范围地质图，结合专家知识检查完整覆盖与地层属性，修改前由用户批准。"
-)
+REVIEW_SOURCE_NOTE = "演示案例：地质图结合专家知识检查完整覆盖与地层属性，修改前由用户批准。"
 ROLE_LABELS = {
     "early_image": "前期影像",
     "late_image": "后期影像",
@@ -68,9 +66,9 @@ AGE_MARKERS = {
     "rules": ("code", "real-geology-age-rules"),
 }
 REVIEW_MARKERS = {
-    "initial_map": ("code", "geology-review-initial"),
-    "coverage": ("code", "geology-review-coverage"),
-    "rules": ("code", "geology-review-rules"),
+    "initial_map": ("code", "geology-review-expanded-20261025-initial"),
+    "coverage": ("code", "geology-review-expanded-20261025-coverage"),
+    "rules": ("code", "geology-review-expanded-20261025-rules"),
 }
 TITLES = {
     MULTI_TYPE: "海德乌拉地质综合推理",
@@ -251,6 +249,14 @@ def discover(user, p: dict, run=None) -> dict:
         algorithms = [a for a in available_algorithms if a["identifier"] in identifiers]
         sample_images = all(role in preferred for role in ("early_image", "late_image"))
         specs, defaults = _parameters(algorithms, sample_images)
+        if review and set(preferred) == set(roles):
+            # These three exact markers identify one prepared input version.
+            # The immutable operator's native default remains for custom inputs.
+            defaults["max_changes"] = 5
+            specs = [
+                {**spec, "default": 5} if spec["key"] == "max_changes" else spec
+                for spec in specs
+            ]
         if multi:
             # Stage selectors are scenario inputs, not a draft publication switch.
             specs = [spec for spec in specs if spec["key"] != "segment"]

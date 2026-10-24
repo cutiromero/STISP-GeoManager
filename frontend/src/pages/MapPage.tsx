@@ -1,5 +1,5 @@
 import { selectedMapBasemap, restoreMapBasemap } from "../map/basemapSnapshot";
-import { getActiveProject } from "../projects/session";
+import { getActiveProject, projectSignal } from "../projects/session";
 import { useProjectContext } from "../projects/ProjectContext";
 import {
   AimOutlined,
@@ -56,7 +56,6 @@ import { useWorkspaceScenes } from "../hooks/useWorkspaceScenes";
 import { workspaceSnapshot } from "../workspace/workspaceSnapshot";
 import { effectiveMapLayers } from "../map/effectiveMapLayers";
 import ComputeOutputMapPreview from "../map/ComputeOutputMapPreview";
-import GeologyReviewWorkspace from "../map/GeologyReviewWorkspace";
 import { clearFeatureState, getMapState } from "../map/mapState";
 import {
   claimMapErrorNotification,
@@ -223,6 +222,12 @@ const emptyPermissions = {
 };
 
 const MapCanvas = lazy(() => import("../components/MapCanvas"));
+const GeologyReviewWorkspace = lazy(
+  () => import("../map/GeologyReviewWorkspace"),
+);
+const GeologyWorkbenchCompare = lazy(
+  () => import("../map/GeologyWorkbenchCompare"),
+);
 const MapCompositionEditor = lazy(
   () => import("../components/map-composition/MapCompositionEditor"),
 );
@@ -625,11 +630,19 @@ export default function MapPage() {
   const workflowId = params.get("geologyReview");
   if (workflowId)
     return (
-      <GeologyReviewWorkspace
-        workflowId={workflowId}
-        projectTagId={params.get("projectTagId")}
-        suggestionId={params.get("suggestion")}
-      />
+      <Suspense
+        fallback={
+          <div className="map-canvas-loading">
+            <Spin />
+          </div>
+        }
+      >
+        <GeologyReviewWorkspace
+          workflowId={workflowId}
+          projectTagId={params.get("projectTagId")}
+          suggestionId={params.get("suggestion")}
+        />
+      </Suspense>
     );
   return <MapWorkspace />;
 }
@@ -642,6 +655,9 @@ function MapWorkspace() {
   const english =
     i18n.resolvedLanguage?.toLowerCase().startsWith("en") ?? false;
   const [searchParams, setSearchParams] = useSearchParams();
+  const comparisonWorkflowId = searchParams.get("geologyCompare")?.trim() ?? "";
+  const comparisonVisible =
+    Boolean(comparisonWorkflowId) && searchParams.get("mapMode") !== "single";
   const initialGeoInsightCache = lastGeoInsightCache;
 
   const [resources, setResources] = useState<ResourceListItem[]>([]);
@@ -840,6 +856,65 @@ function MapWorkspace() {
     () => layerGroups.groups.flatMap((group) => group.children),
     [layerGroups.groups],
   );
+  const registerComparisonLayer = async (
+    profile: DataResourceProfile,
+    result: ResourceQueryResult,
+  ) => {
+    if (!permissions.canQueryData || !permissions.canLoadVectorLayer)
+      throw new Error(permissionDeniedMessage);
+    const signal = projectSignal();
+    const projectId = getActiveProject();
+    const resource = profile.resource;
+    await uniqueLayerLoad.load(
+      resourceLayerKey({ sourceResource: resource, layerType: "vector" }),
+      async () => {
+        if (signal.aborted || getActiveProject() !== projectId)
+          throw new DOMException("项目已切换", "AbortError");
+        const group = createVectorLayerGroup(resource, profile, result, {
+          attributeFilters: [],
+          spatialFilter: null,
+        });
+        layerGroups.addGroup(group);
+        setSelectedLayerId(group.children[0]?.id ?? null);
+        setActiveLeftPanel("layers");
+        return true;
+      },
+    );
+    if (signal.aborted || getActiveProject() !== projectId)
+      throw new DOMException("项目已切换", "AbortError");
+    // Reuse the registered layer while replacing any earlier partial query
+    // with this complete, validated comparison response.
+    const existing = layerGroups.groups.find((group) =>
+      group.children.some(
+        (layer) =>
+          layer.layerType === "vector" &&
+          resourceLayerKey(layer) === `resource:${resource.id}`,
+      ),
+    );
+    const layer = existing?.children.find(
+      (item) => resourceLayerKey(item) === `resource:${resource.id}`,
+    );
+    if (existing && layer?.layerType === "vector")
+      layerGroups.updateLayer(existing.id, layer.id, (current) =>
+        current.layerType === "vector"
+          ? {
+              ...current,
+              geojson: result.geojson,
+              fields: result.fields,
+              summary: `${result.returnedCount}/${result.totalCount} 条，${profile.geometryType || "空间数据"}`,
+              metadata: {
+                ...current.metadata,
+                返回条数: result.returnedCount,
+                命中条数: result.totalCount,
+              },
+            }
+          : current,
+      );
+  };
+  useEffect(() => {
+    if (!comparisonVisible && mapObject)
+      requestAnimationFrame(() => mapObject.resize());
+  }, [comparisonVisible, mapObject]);
   const spatialQueryResources = useMemo(
     () => loadedQueryResources(allLayers),
     [allLayers],
@@ -2773,30 +2848,83 @@ function MapWorkspace() {
               />
             </div>
           )}
-          <Suspense
-            fallback={
-              <div className="map-canvas-loading">
-                <Spin size="large" />
-              </div>
-            }
+          <div
+            className={`geology-workbench-single-map ${comparisonVisible ? "is-covered" : ""}`}
+            style={{ width: "100%", height: "100%" }}
+            aria-hidden={comparisonVisible}
           >
-            <MapCanvas
-              bootstrap={bootstrap}
-              basemapPreferenceScope={`user:${user?.id ?? "anonymous"}`}
-              basemapSwitchDisabled={mapExporting}
-              loadedLayers={mapLayers}
-              drawMode={activeDraw?.mode ?? null}
-              spatialFilter={spatialFilter}
-              layerExtentOverlays={layerExtentOverlays}
-              onDrawComplete={handleDrawComplete}
-              onFeatureSelect={setSelectedFeature}
-              onMapReady={handleMapReady}
-              onMapDestroy={handleMapDestroy}
-              onMapError={handleMapError}
-              onViewStateChange={setCurrentMapView}
-              onBasemapSwitchingChange={setBasemapSwitching}
-            />
-          </Suspense>
+            <Suspense
+              fallback={
+                <div className="map-canvas-loading">
+                  <Spin size="large" />
+                </div>
+              }
+            >
+              <MapCanvas
+                bootstrap={bootstrap}
+                basemapPreferenceScope={`user:${user?.id ?? "anonymous"}`}
+                basemapSwitchDisabled={mapExporting}
+                loadedLayers={mapLayers}
+                drawMode={activeDraw?.mode ?? null}
+                spatialFilter={spatialFilter}
+                layerExtentOverlays={layerExtentOverlays}
+                onDrawComplete={handleDrawComplete}
+                onFeatureSelect={setSelectedFeature}
+                onMapReady={handleMapReady}
+                onMapDestroy={handleMapDestroy}
+                onMapError={handleMapError}
+                onViewStateChange={setCurrentMapView}
+                onBasemapSwitchingChange={setBasemapSwitching}
+              />
+            </Suspense>
+          </div>
+          {comparisonWorkflowId && (
+            <Suspense
+              fallback={
+                <div className="map-canvas-loading">
+                  <Spin />
+                </div>
+              }
+            >
+              <GeologyWorkbenchCompare
+                key={`${getActiveProject()}:${comparisonWorkflowId}`}
+                workflowId={comparisonWorkflowId}
+                projectId={getActiveProject()}
+                projectTagId={searchParams.get("projectTagId")}
+                suggestionId={searchParams.get("suggestion")}
+                accessToken={bootstrap.map.mapboxAccessToken}
+                canLoad={
+                  permissions.canQueryData && permissions.canLoadVectorLayer
+                }
+                comparisonVisible={comparisonVisible}
+                registerLayer={registerComparisonLayer}
+                onVisibilityChange={(visible) => {
+                  const next = new URLSearchParams(searchParams);
+                  if (visible) next.delete("mapMode");
+                  else next.set("mapMode", "single");
+                  setSearchParams(next, { replace: true });
+                }}
+                onSuggestionChange={(id) => {
+                  const next = new URLSearchParams(searchParams);
+                  if (id) next.set("suggestion", id);
+                  else next.delete("suggestion");
+                  setSearchParams(next, { replace: true });
+                }}
+                onSwitchProject={
+                  searchParams.get("projectTagId") !== getActiveProject() &&
+                  projectContext?.projects.some(
+                    (item) =>
+                      String(item.id) === searchParams.get("projectTagId"),
+                  )
+                    ? () =>
+                        projectContext?.choose(
+                          searchParams.get("projectTagId")!,
+                        )
+                    : undefined
+                }
+              />
+            </Suspense>
+          )}
           {/^[1-9]\d*$/.test(searchParams.get("computeOutputId") ?? "") && (
             <ComputeOutputMapPreview
               key={searchParams.get("computeOutputId")}

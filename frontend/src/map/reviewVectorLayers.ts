@@ -39,6 +39,22 @@ export function reviewOverlayColor(fallback: string): ExpressionSpecification {
   ];
 }
 
+export function reviewOverlayOpacity(): ExpressionSpecification {
+  const state: ExpressionSpecification = [
+    "coalesce",
+    ["get", "state"],
+    ["get", "status"],
+  ];
+  return [
+    "case",
+    ["==", state, "exclude"],
+    0.25,
+    ["==", state, "downweight"],
+    0.5,
+    1,
+  ];
+}
+
 export function addReviewOverlay(
   map: MapboxMap,
   id: string,
@@ -65,19 +81,12 @@ export function addReviewOverlay(
     filter: [
       "all",
       ["!=", ["geometry-type"], "Point"],
-      ["!=", ["get", "state"], "exclude"],
+      ["!=", ["coalesce", ["get", "state"], ["get", "status"]], "exclude"],
     ],
     paint: {
       "line-color": paint,
       "line-width": 2.1,
-      "line-opacity": [
-        "case",
-        ["==", ["get", "state"], "exclude"],
-        0.25,
-        ["==", ["get", "state"], "downweight"],
-        0.5,
-        1,
-      ],
+      "line-opacity": reviewOverlayOpacity(),
     },
   });
   map.addLayer({
@@ -87,7 +96,7 @@ export function addReviewOverlay(
     filter: [
       "all",
       ["==", ["geometry-type"], "LineString"],
-      ["==", ["get", "state"], "exclude"],
+      ["==", ["coalesce", ["get", "state"], ["get", "status"]], "exclude"],
     ],
     paint: {
       "line-color": "#8d9baa",

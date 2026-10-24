@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { appTheme } from "./theme";
+import platformStyles from "./styles.css?inline";
 import type {
   Bootstrap,
   DataResourceProfile,
@@ -82,7 +83,8 @@ vi.mock("./api/platform", () => ({
   },
 }));
 
-vi.mock("./api/client", () => ({
+vi.mock("./api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./api/client")>()),
   ApiError: MockApiError,
   api: mockApi,
   registerForbiddenHandler: vi.fn(),
@@ -97,6 +99,7 @@ vi.mock("./components/MapCanvas", () => ({
   }) => (
     <div
       data-testid="map-canvas"
+      style={{ width: "100%", height: "100%" }}
       data-raster-tile-url={
         loadedLayers.find((layer) => layer.layerType === "raster")?.tileUrl ??
         ""
@@ -659,16 +662,37 @@ describe("application critical flows", () => {
   });
 
   it("opens the public map directly at the root without a homepage", async () => {
-    renderApp("/");
-    expect(
-      await screen.findByTestId("map-canvas", {}, { timeout: 5000 }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^首页$/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^数据资源$/ }),
-    ).toBeInTheDocument();
+    const stylesheet = document.createElement("style");
+    stylesheet.textContent = platformStyles;
+    document.head.append(stylesheet);
+    try {
+      renderApp("/");
+      const canvas = await screen.findByTestId(
+        "map-canvas",
+        {},
+        { timeout: 5000 },
+      );
+      expect(canvas).toBeInTheDocument();
+      const wrapper = canvas.closest<HTMLElement>(
+        ".geology-workbench-single-map",
+      );
+      expect(wrapper).not.toBeNull();
+      expect(wrapper!.getBoundingClientRect().height).toBeGreaterThan(300);
+      expect(canvas.getBoundingClientRect().height).toBeGreaterThan(300);
+      expect(canvas.getBoundingClientRect().width).toBeGreaterThan(300);
+      expect(canvas).toBeVisible();
+      expect(
+        screen.queryByLabelText("地理工作台地质成果对比"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /^首页$/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /^数据资源$/ }),
+      ).toBeInTheDocument();
+    } finally {
+      stylesheet.remove();
+    }
   });
 
   it("upgrades a legacy bootstrap name in the browser tab", async () => {

@@ -1,6 +1,8 @@
 import {
   AimOutlined,
   ArrowLeftOutlined,
+  LeftOutlined,
+  RightOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Checkbox, Empty, Spin, Tag } from "antd";
@@ -24,6 +26,17 @@ import {
   reviewBounds,
 } from "./geologyReviewData";
 import type { ReviewOverlay } from "./reviewVectorLayers";
+import MultiElementTourCard from "./MultiElementTourCard";
+import MultiElementOutcome from "./MultiElementOutcome";
+import {
+  actualTourChanges,
+  featureCollection,
+  prospectChanges,
+  tourAlgorithm,
+  tourFeature,
+  tourLabels,
+} from "./multiElementTour";
+import "./multi-element-tour.css";
 
 const empty: GeoJsonFeatureCollection = {
   type: "FeatureCollection",
@@ -36,6 +49,8 @@ type MultiMaps = {
   differences: GeoJsonFeatureCollection;
   overlays: ReviewOverlay[];
   issues: GeoJsonFeatureCollection;
+  beforeProspects: GeoJsonFeatureCollection;
+  afterProspects: GeoJsonFeatureCollection;
 };
 const displayFields: Record<string, string> = {
   name: "岩性名称",
@@ -122,6 +137,11 @@ export default function MultiElementWorkspace({
     null,
   );
   const [selected, setSelected] = useState<Feature>();
+  const [tourKey, setTourKey] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"tour" | "overview" | "outcome">(
+    "tour",
+  );
+  const [outcomeGrade, setOutcomeGrade] = useState<string | null>(null);
   const [optionalData, setOptionalData] = useState<
     Record<string, GeoJsonFeatureCollection>
   >({});
@@ -237,17 +257,38 @@ export default function MultiElementWorkspace({
           color: "#537fc0",
         },
       ];
-      setData({ before, after, differences, overlays, issues });
+      setData({
+        before,
+        after,
+        differences,
+        overlays,
+        issues,
+        beforeProspects,
+        afterProspects,
+      });
       const suggestion = workflow.modificationReview?.suggestions.find(
         (item) => item.id === suggestionId,
       );
-      const feature = [...differences.features, ...issues.features].find(
+      const requestedFeature = [
+        ...differences.features,
+        ...issues.features,
+      ].find(
         (item) =>
           item.properties.suggestion_id === suggestionId ||
           item.properties.issue_id === suggestionId ||
           (suggestion &&
             String(item.properties.feature_id) === suggestion.featureId &&
             item.properties.rule_id === suggestion.ruleId),
+      );
+      const tourChanges = actualTourChanges(workflow, differences);
+      const current =
+        tourChanges.find((item) => item.key === suggestionId) ?? tourChanges[0];
+      const feature = requestedFeature ?? current?.feature;
+      setTourKey(current?.key ?? null);
+      setViewMode(
+        current && (!suggestionId || current.key === suggestionId)
+          ? "tour"
+          : "overview",
       );
       setSelected(feature);
       setFocus(
@@ -268,6 +309,17 @@ export default function MultiElementWorkspace({
       disposed = true;
     };
   }, [workflow, suggestionId]);
+  const tour = useMemo(
+    () => (data ? actualTourChanges(workflow, data.differences) : []),
+    [data, workflow],
+  );
+  const tourIndex = Math.max(
+    0,
+    tour.findIndex((item) => item.key === tourKey),
+  );
+  const currentTour = tour[tourIndex];
+  const storyNeedsAlterations =
+    viewMode === "tour" && currentTour?.suggestion.element === "alteration";
   useEffect(() => {
     if (!data) return;
     let disposed = false;
@@ -296,7 +348,10 @@ export default function MultiElementWorkspace({
         ids: map.alterations ? [map.alterations] : [],
       },
     ].filter(
-      (group) => visible.includes(group.visibleKey) && group.ids.length > 0,
+      (group) =>
+        (visible.includes(group.visibleKey) ||
+          (group.visibleKey === "alterations" && storyNeedsAlterations)) &&
+        group.ids.length > 0,
     );
     setOptionalLoading(groups.map((group) => group.key));
     void Promise.allSettled(
@@ -356,7 +411,7 @@ export default function MultiElementWorkspace({
     return () => {
       disposed = true;
     };
-  }, [data, visible, workflow.id, workflow.plan]);
+  }, [data, visible, workflow.id, workflow.plan, storyNeedsAlterations]);
   const issues = optionalData.checks ?? data?.issues ?? empty;
   const overlayKey = visible
     .filter(
@@ -370,6 +425,15 @@ export default function MultiElementWorkspace({
         ),
     )
     .join("|");
+  const shownChecks = visible.includes("checks")
+    ? optionalData.checks
+    : undefined;
+  const shownAlterationsBefore = visible.includes("alterations")
+    ? optionalData["alterations-before"]
+    : undefined;
+  const shownAlterationsAfter = visible.includes("alterations")
+    ? optionalData["alterations-after"]
+    : undefined;
   const overlays = useMemo(
     () =>
       data?.overlays
@@ -378,23 +442,128 @@ export default function MultiElementWorkspace({
           item.key === "alterations"
             ? {
                 ...item,
-                before: optionalData["alterations-before"],
-                after: optionalData["alterations-after"],
+                before: shownAlterationsBefore,
+                after: shownAlterationsAfter,
               }
-            : optionalData[item.key]
+            : item.key === "checks" && shownChecks
               ? {
                   ...item,
-                  before: optionalData[item.key],
-                  after: optionalData[item.key],
+                  before: shownChecks,
+                  after: shownChecks,
                 }
               : item,
         ) ?? [],
-    [data, overlayKey, optionalData],
+    [
+      data,
+      overlayKey,
+      shownChecks,
+      shownAlterationsBefore,
+      shownAlterationsAfter,
+    ],
   );
   const inspect = (feature: Feature) => {
     setSelected(feature);
     setFocus(reviewBounds({ type: "FeatureCollection", features: [feature] }));
+    const item = tour.find(
+      (item) =>
+        item.feature === feature ||
+        (String(feature.properties.feature_id ?? feature.properties.line_id) ===
+          item.suggestion.featureId &&
+          (!feature.properties.rule_id ||
+            feature.properties.rule_id === item.suggestion.ruleId)),
+    );
+    if (item) {
+      setTourKey(item.key);
+      setViewMode("tour");
+    } else if (viewMode !== "outcome" || !feature.properties.grade)
+      setViewMode("overview");
   };
+  const showTour = (index: number) => {
+    const item = tour[index];
+    if (item) inspect(item.feature);
+  };
+  const outcome = useMemo(
+    () =>
+      data &&
+      workflow.plan.multiElementMap?.beforeProspects &&
+      workflow.plan.multiElementMap.afterProspects
+        ? prospectChanges(data.beforeProspects, data.afterProspects)
+        : null,
+    [data, workflow.plan],
+  );
+  const focusedOutcome = useMemo(
+    () =>
+      outcome
+        ? {
+            before: featureCollection(
+              outcome.before.features.filter(
+                (feature) =>
+                  !outcomeGrade || feature.properties.grade === outcomeGrade,
+              ),
+            ),
+            after: featureCollection(
+              outcome.after.features.filter(
+                (feature) =>
+                  !outcomeGrade || feature.properties.grade === outcomeGrade,
+              ),
+            ),
+          }
+        : null,
+    [outcome, outcomeGrade],
+  );
+  const showOutcome = (grade?: string) => {
+    if (!outcome) return;
+    setOutcomeGrade(grade ?? null);
+    setViewMode("outcome");
+    setFocus(
+      reviewBounds(
+        featureCollection(
+          [...outcome.before.features, ...outcome.after.features].filter(
+            (feature) => !grade || feature.properties.grade === grade,
+          ),
+        ),
+      ),
+    );
+  };
+  const tourBefore = currentTour
+    ? tourFeature(
+        currentTour.suggestion.element === "structure"
+          ? data?.overlays.find((overlay) => overlay.key === "faults")?.before
+          : currentTour.suggestion.element === "alteration"
+            ? optionalData["alterations-before"]
+            : data?.before,
+        currentTour,
+      )
+    : undefined;
+  const tourAfter = currentTour
+    ? tourFeature(
+        currentTour.suggestion.element === "structure"
+          ? data?.overlays.find((overlay) => overlay.key === "faults")?.after
+          : currentTour.suggestion.element === "alteration"
+            ? optionalData["alterations-after"]
+            : data?.after,
+        currentTour,
+      )
+    : undefined;
+  const spotlight = useMemo(() => {
+    if (viewMode === "outcome" && focusedOutcome) return focusedOutcome;
+    if (viewMode !== "tour" || !currentTour) return null;
+    const currentLabels = tourLabels(currentTour, tourBefore, tourAfter);
+    return {
+      before: featureCollection([tourBefore ?? currentTour.feature]),
+      after: featureCollection([
+        tourAfter ?? {
+          ...currentTour.feature,
+          properties: {
+            ...currentTour.feature.properties,
+            state: currentTour.action,
+          },
+        },
+      ]),
+      beforeLabel: currentLabels.before,
+      afterLabel: currentLabels.after,
+    };
+  }, [viewMode, focusedOutcome, currentTour, tourBefore, tourAfter]);
   const suggestion = workflow.modificationReview?.suggestions.find(
     (item) =>
       selected &&
@@ -409,9 +578,7 @@ export default function MultiElementWorkspace({
         <div>
           <span className="geology-review-eyebrow">地理工作台演示案例</span>
           <h1>海德乌拉地质综合推理</h1>
-          <p>
-            同一视角对照当次真实图层，点击对象查看测量、规则与实际处理；A/B表示优先核查证据组合等级。
-          </p>
+          <p>从一处修改看懂检查依据、实际处置与调查建议的变化。</p>
         </div>
         <div className="geology-review-workspace-actions">
           <Button
@@ -426,9 +593,13 @@ export default function MultiElementWorkspace({
           <Button
             icon={<AimOutlined />}
             disabled={!selected}
-            onClick={() => selected && inspect(selected)}
+            onClick={() =>
+              viewMode === "outcome"
+                ? showOutcome(outcomeGrade ?? undefined)
+                : selected && inspect(selected)
+            }
           >
-            定位当前对象
+            {viewMode === "outcome" ? "定位变化区" : "定位当前对象"}
           </Button>
         </div>
       </header>
@@ -447,25 +618,77 @@ export default function MultiElementWorkspace({
       )}
       {data && (
         <>
-          <div className="multi-element-map-controls">
-            <strong>联动图层</strong>
-            <Checkbox.Group
-              options={data.overlays.map((item) => ({
-                value: item.key,
-                label: item.label,
-              }))}
-              value={visible}
-              onChange={(items) => setVisible(items.map(String))}
-            />
-            {optionalLoading.length > 0 && (
-              <span role="status">正在读取所选图层…</span>
-            )}
-          </div>
+          {tour.length > 0 && (
+            <nav className="multi-tour-toolbar" aria-label="修改导览">
+              <div className="multi-tour-pager">
+                <Button
+                  icon={<LeftOutlined />}
+                  aria-label="上一处修改"
+                  disabled={tourIndex <= 0}
+                  onClick={() => showTour(tourIndex - 1)}
+                >
+                  上一处
+                </Button>
+                <strong aria-live="polite">
+                  第{tourIndex + 1}处，共{tour.length}处
+                </strong>
+                <Button
+                  icon={<RightOutlined />}
+                  aria-label="下一处修改"
+                  disabled={tourIndex >= tour.length - 1}
+                  onClick={() => showTour(tourIndex + 1)}
+                >
+                  下一处
+                </Button>
+              </div>
+              <div className="multi-tour-view-switch">
+                <Button
+                  type={viewMode === "tour" ? "primary" : "default"}
+                  onClick={() => showTour(tourIndex)}
+                >
+                  逐处看修改
+                </Button>
+                <Button
+                  type={viewMode === "overview" ? "primary" : "default"}
+                  onClick={() => {
+                    setViewMode("overview");
+                    setFocus(reviewBounds(data.before));
+                  }}
+                >
+                  查看全区
+                </Button>
+              </div>
+            </nav>
+          )}
+          {viewMode === "overview" && (
+            <div className="multi-element-map-controls">
+              <strong>联动图层</strong>
+              <Checkbox.Group
+                options={data.overlays.map((item) => ({
+                  value: item.key,
+                  label: item.label,
+                }))}
+                value={visible}
+                onChange={(items) => setVisible(items.map(String))}
+              />
+              {optionalLoading.length > 0 && (
+                <span role="status">正在读取所选图层…</span>
+              )}
+            </div>
+          )}
+          {storyNeedsAlterations && optionalLoading.length > 0 && (
+            <div className="multi-tour-loading" role="status">
+              <Spin size="small" />
+              正在读取当前矿物的实际前后权重…
+            </div>
+          )}
           {Object.entries(optionalErrors)
-            .filter(([key]) =>
-              visible.includes(
-                key.startsWith("alterations-") ? "alterations" : key,
-              ),
+            .filter(
+              ([key]) =>
+                visible.includes(
+                  key.startsWith("alterations-") ? "alterations" : key,
+                ) ||
+                (storyNeedsAlterations && key.startsWith("alterations-")),
             )
             .map(([key, reason]) => (
               <Alert
@@ -476,105 +699,155 @@ export default function MultiElementWorkspace({
                 description={`${reason}。基础双图仍可查看；取消勾选后重新勾选可重试。`}
               />
             ))}
-          <div className="geology-review-workspace-body">
+          <div
+            className={`geology-review-workspace-body${viewMode !== "overview" ? " multi-tour-layout" : ""}`}
+          >
             <section className="geology-review-map-area">
-              <GeologyReviewMaps
-                before={data.before}
-                after={data.after}
-                differences={data.differences}
-                overlays={overlays}
-                bounds={focus}
-                onSelect={(index) => {
-                  const feature = data.differences.features[index];
-                  if (feature) inspect(feature);
-                }}
-                onInspect={inspect}
-                accessToken={bootstrap.map.mapboxAccessToken}
-                beforeLabel="本次检查采用的岩性与构造"
-                afterLabel="获批修正版本及综合分析"
-                previewLabel="当前输入与检查范围，尚无修正版本"
-                compactLegend
-              />
-            </section>
-            <aside className="geology-review-map-inspector">
-              <Tag color="blue">真实任务图层</Tag>
-              <h2>对象与依据</h2>
-              <p>
-                变化高亮来自实际差异；批准前显示建议范围。实心点为几何交汇，空心点为推测交汇；灰色虚线为本轮不参与的构造，原线仍保留。
-              </p>
-              <details className="multi-element-map-objects">
-                <summary>
-                  定位检查记录 / {issues.features.length} 条规则命中
-                </summary>
-                {!optionalData.checks && (
-                  <p>
-                    当前列出模型已引用的建议，勾选“待核查项”读取完整检查图层。
-                  </p>
-                )}
-                <div className="geology-review-change-list">
-                  {issues.features.slice(0, 100).map((feature) => (
-                    <button
-                      key={String(
-                        feature.properties.issue_id ??
-                          feature.id ??
-                          `${feature.properties.feature_id}:${feature.properties.rule_id}`,
-                      )}
-                      onClick={() => inspect(feature)}
-                    >
-                      <span>
-                        {String(feature.properties.rule_id ?? "检查对象")} /{" "}
-                        {String(
-                          feature.properties.name ??
-                            feature.properties.element ??
-                            "实际疑点",
-                        )}
-                      </span>
-                      <small>{readable(feature.properties.status ?? "")}</small>
-                    </button>
-                  ))}
-                </div>
-                {issues.features.length > 100 && (
-                  <p>此处列出前100个对象，其他对象可直接点击地图查看。</p>
-                )}
-              </details>
-              {selected ? (
-                <section className="geology-review-selected-change">
-                  <dl>
-                    {Object.entries(selected.properties)
-                      .filter(([key]) => key in displayFields)
-                      .map(([key, value]) => (
-                        <div key={key}>
-                          <dt>{displayFields[key]}</dt>
-                          <dd>
-                            {key === "measurements_json"
-                              ? formatMultiElementObservation(value)
-                              : readable(value)}
-                          </dd>
-                        </div>
-                      ))}
-                  </dl>
-                  {suggestion && (
-                    <>
-                      {workflow.modificationReview?.approvedSuggestionIds.includes(
-                        suggestion.id,
-                      ) && (
-                        <p>
-                          <strong>用户获批操作：</strong>
-                          {readable(suggestion.action)}
-                        </p>
-                      )}
-                      <MultiElementEvidence suggestion={suggestion} />
-                    </>
-                  )}
-                </section>
-              ) : (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="点击疑点、交汇点或远景区查看依据"
+              <div
+                className="multi-tour-map-stage"
+                aria-label={
+                  viewMode === "tour"
+                    ? "当前对象前后状态"
+                    : viewMode === "outcome"
+                      ? "调查建议前后对比"
+                      : "全区前后对比"
+                }
+              >
+                <GeologyReviewMaps
+                  before={data.before}
+                  after={data.after}
+                  differences={data.differences}
+                  overlays={overlays}
+                  bounds={focus}
+                  onSelect={(index) => {
+                    const feature = data.differences.features[index];
+                    if (feature) inspect(feature);
+                  }}
+                  onInspect={inspect}
+                  accessToken={bootstrap.map.mapboxAccessToken}
+                  beforeLabel={
+                    viewMode === "tour"
+                      ? "改前"
+                      : viewMode === "outcome"
+                        ? "处理前的核查区"
+                        : "本次检查采用的岩性与构造"
+                  }
+                  afterLabel={
+                    viewMode === "tour"
+                      ? "改后"
+                      : viewMode === "outcome"
+                        ? "更新后的核查区"
+                        : "获批修正版本及综合分析"
+                  }
+                  previewLabel="当前输入与检查范围，尚无修正版本"
+                  compactLegend
+                  spotlight={spotlight}
+                />
+              </div>
+              {viewMode === "tour" && currentTour && (
+                <MultiElementTourCard
+                  change={currentTour}
+                  before={tourBefore}
+                  after={tourAfter}
+                  algorithm={tourAlgorithm(workflow)}
                 />
               )}
-            </aside>
+              {viewMode === "outcome" && (
+                <p className="multi-tour-map-note">
+                  只突出实际改变的核查区；相同的核查区保持淡化。左右拖动、缩放保持同一视角。
+                </p>
+              )}
+            </section>
+            {viewMode === "overview" && (
+              <aside className="geology-review-map-inspector">
+                <Tag color="blue">真实任务图层</Tag>
+                <h2>对象与依据</h2>
+                <p>
+                  变化高亮来自实际差异；批准前显示建议范围。实心点为几何交汇，空心点为推测交汇；灰色虚线为本轮不参与的构造，原线仍保留。
+                </p>
+                <details className="multi-element-map-objects">
+                  <summary>
+                    定位检查记录 / {issues.features.length} 条规则命中
+                  </summary>
+                  {!optionalData.checks && (
+                    <p>
+                      当前列出模型已引用的建议，勾选“待核查项”读取完整检查图层。
+                    </p>
+                  )}
+                  <div className="geology-review-change-list">
+                    {issues.features.slice(0, 100).map((feature) => (
+                      <button
+                        key={String(
+                          feature.properties.issue_id ??
+                            feature.id ??
+                            `${feature.properties.feature_id}:${feature.properties.rule_id}`,
+                        )}
+                        onClick={() => inspect(feature)}
+                      >
+                        <span>
+                          {String(feature.properties.rule_id ?? "检查对象")} /{" "}
+                          {String(
+                            feature.properties.name ??
+                              feature.properties.element ??
+                              "实际疑点",
+                          )}
+                        </span>
+                        <small>
+                          {readable(feature.properties.status ?? "")}
+                        </small>
+                      </button>
+                    ))}
+                  </div>
+                  {issues.features.length > 100 && (
+                    <p>此处列出前100个对象，其他对象可直接点击地图查看。</p>
+                  )}
+                </details>
+                {selected ? (
+                  <section className="geology-review-selected-change">
+                    <dl>
+                      {Object.entries(selected.properties)
+                        .filter(([key]) => key in displayFields)
+                        .map(([key, value]) => (
+                          <div key={key}>
+                            <dt>{displayFields[key]}</dt>
+                            <dd>
+                              {key === "measurements_json"
+                                ? formatMultiElementObservation(value)
+                                : readable(value)}
+                            </dd>
+                          </div>
+                        ))}
+                    </dl>
+                    {suggestion && (
+                      <>
+                        {workflow.modificationReview?.approvedSuggestionIds.includes(
+                          suggestion.id,
+                        ) && (
+                          <p>
+                            <strong>用户获批操作：</strong>
+                            {readable(suggestion.action)}
+                          </p>
+                        )}
+                        <MultiElementEvidence suggestion={suggestion} />
+                      </>
+                    )}
+                  </section>
+                ) : (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description="点击疑点、交汇点或远景区查看依据"
+                  />
+                )}
+              </aside>
+            )}
           </div>
+          {outcome && (
+            <MultiElementOutcome
+              result={outcome}
+              active={viewMode === "outcome"}
+              onFocus={showOutcome}
+            />
+          )}
           {workflow.status === "succeeded" && (
             <div className="geology-review-workspace-report">
               <WorkflowReportFile

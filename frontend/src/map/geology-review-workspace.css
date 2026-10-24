@@ -260,3 +260,17 @@
   max-height: 260px;
   overflow: auto;
 }
+.geology-review-focus-label {
+  max-width: 240px;
+  padding: 6px 12px;
+  color: #193c5b;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #b6cfe1;
+  border-radius: 5px;
+  box-shadow: 0 3px 12px #17344b20;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+}
