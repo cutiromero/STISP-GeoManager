@@ -12,6 +12,7 @@ import {
 } from "./geologyReview.testFixtures";
 import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
 import MultiElementWorkspace from "./MultiElementWorkspace";
+import { reviewBounds } from "./geologyReviewData";
 import workspaceStyles from "./geology-review-workspace.css?inline";
 import tourStyles from "./multi-element-tour.css?inline";
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
@@ -245,6 +246,15 @@ it("keeps the base maps usable when an optional dense layer fails and retries on
 
 it("用真实获批变化逐处讲解，并以实际几何和面积展示调查建议变化", async () => {
   await page.viewport(1280, 800);
+  const liveMaps = new Set<mapboxgl.Map>();
+  const fitBounds = mapboxgl.Map.prototype.fitBounds;
+  vi.spyOn(mapboxgl.Map.prototype, "fitBounds").mockImplementation(function (
+    this: mapboxgl.Map,
+    ...args: Parameters<mapboxgl.Map["fitBounds"]>
+  ) {
+    liveMaps.add(this);
+    return fitBounds.apply(this, args);
+  });
   const workflow = reviewWorkflow(true);
   workflow.workflowType = "geology_multi_element_reasoning";
   workflow.plan.inputs = { lithology: 101, faults: 102 };
@@ -469,30 +479,57 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   expect(beforeCanvas).not.toBeNull();
   expect(afterCanvas).not.toBeNull();
   const expectFocusInBothMaps = async () => {
-    await waitFor(() => {
-      const maps = document.querySelectorAll(".geology-review-map-canvas");
-      expect(maps).toHaveLength(2);
-      for (const map of maps) {
-        const canvas = map.querySelector("canvas")!.getBoundingClientRect();
-        const marker = map
-          .querySelector(".geology-review-focus-label")!
-          .getBoundingClientRect();
-        expect(marker.left).toBeGreaterThanOrEqual(canvas.left);
-        expect(marker.right).toBeLessThanOrEqual(canvas.right);
-        expect(marker.top).toBeGreaterThanOrEqual(canvas.top);
-        expect(marker.bottom).toBeLessThanOrEqual(canvas.bottom);
-        expect(
-          Math.abs(
-            (marker.left + marker.right - canvas.left - canvas.right) / 2,
-          ),
-        ).toBeLessThan(canvas.width * 0.15);
-        expect(
-          Math.abs(
-            (marker.top + marker.bottom - canvas.top - canvas.bottom) / 2,
-          ),
-        ).toBeLessThan(canvas.height * 0.25);
-      }
-    });
+    await waitFor(
+      () => {
+        const selected =
+          Number(
+            document
+              .querySelector(".multi-tour-pager strong")
+              ?.textContent?.match(/第(\d+)处/)?.[1],
+          ) - 1;
+        const target = reviewBounds({
+          type: "FeatureCollection",
+          features: [changes.features[selected]!],
+        })!;
+        expect(liveMaps.size).toBe(2);
+        for (const map of liveMaps) {
+          expect(map.isMoving()).toBe(false);
+          expect(map.isSourceLoaded("story-focus")).toBe(true);
+          const canvas = map.getCanvas().getBoundingClientRect();
+          for (const x of [target[0], target[2]])
+            for (const y of [target[1], target[3]]) {
+              const point = map.project([x, y]);
+              expect(point.x).toBeGreaterThanOrEqual(0);
+              expect(point.x).toBeLessThanOrEqual(canvas.width);
+              expect(point.y).toBeGreaterThanOrEqual(0);
+              expect(point.y).toBeLessThanOrEqual(canvas.height);
+            }
+        }
+        const maps = document.querySelectorAll(".geology-review-map-canvas");
+        expect(maps).toHaveLength(2);
+        for (const map of maps) {
+          const canvas = map.querySelector("canvas")!.getBoundingClientRect();
+          const marker = map
+            .querySelector(".geology-review-focus-label")!
+            .getBoundingClientRect();
+          expect(marker.left).toBeGreaterThanOrEqual(canvas.left);
+          expect(marker.right).toBeLessThanOrEqual(canvas.right);
+          expect(marker.top).toBeGreaterThanOrEqual(canvas.top);
+          expect(marker.bottom).toBeLessThanOrEqual(canvas.bottom);
+          expect(
+            Math.abs(
+              (marker.left + marker.right - canvas.left - canvas.right) / 2,
+            ),
+          ).toBeLessThan(canvas.width * 0.15);
+          expect(
+            Math.abs(
+              (marker.top + marker.bottom - canvas.top - canvas.bottom) / 2,
+            ),
+          ).toBeLessThan(canvas.height * 0.25);
+        }
+      },
+      { timeout: 5000 },
+    );
   };
   await expectFocusInBothMaps();
   expect(labels).toHaveTextContent("Q");
@@ -560,10 +597,55 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   expect(screen.getByText("面积减少0.65平方公里")).toBeVisible();
   fireEvent.click(screen.getByText("定位变化的核查区"));
   expect(screen.getByLabelText("调查建议前后对比")).toBeVisible();
-  fireEvent.click(screen.getByText("查看全区"));
-  expect(screen.getByText("对象与依据")).toBeVisible();
   fireEvent.click(screen.getByText("逐处看修改"));
+  await expectFocusInBothMaps();
+  await page.getByRole("button", { name: "查看全区", exact: true }).click();
+  expect(screen.getByText("对象与依据")).toBeVisible();
+  await waitFor(() => expect(beforeCanvas!.clientHeight).toBeGreaterThan(400));
+  await page.getByRole("button", { name: "逐处看修改", exact: true }).click();
   expect(screen.getByText("第3处，共3处")).toBeVisible();
+  await expectFocusInBothMaps();
+  for (const [width, height] of [
+    [820, 620],
+    [1600, 1000],
+  ]) {
+    await page.viewport(width!, height!);
+    await page.getByRole("button", { name: "查看全区", exact: true }).click();
+    await waitFor(() =>
+      expect(beforeCanvas!.clientHeight).toBeGreaterThanOrEqual(400),
+    );
+    await page.getByRole("button", { name: "逐处看修改", exact: true }).click();
+    await expectFocusInBothMaps();
+  }
+  const primary = [...liveMaps][0]!;
+  primary.panBy([30, 20], { duration: 0 });
+  const pannedCenter = primary.getCenter().toArray();
+  const pannedZoom = primary.getZoom();
+  await page.viewport(1600, 900);
+  await waitFor(() => expect(beforeCanvas!.clientHeight).toBe(333));
+  primary
+    .getCenter()
+    .toArray()
+    .forEach((value, index) =>
+      expect(value).toBeCloseTo(pannedCenter[index]!, 7),
+    );
+  expect(primary.getZoom()).toBeCloseTo(pannedZoom, 7);
+  fireEvent.click(screen.getByLabelText("上一处修改"));
+  fireEvent.click(screen.getByLabelText("下一处修改"));
+  await expectFocusInBothMaps();
+  expect(liveMaps.size).toBe(2);
+  expect(
+    screen.getByLabelText("待检查地质图地图").querySelector("canvas"),
+  ).toBe(beforeCanvas);
+  expect(
+    screen.getByLabelText("修正后地质图地图").querySelector("canvas"),
+  ).toBe(afterCanvas);
+  for (const id of [101, 201, 301])
+    expect(
+      request.mock.calls.filter(([url]) =>
+        String(url).includes(`/${id}/query/`),
+      ),
+    ).toHaveLength(1);
   await page.screenshot({
     path: "../../test-results/multi-element-change-tour.png",
     animations: "disabled",
