@@ -256,6 +256,18 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   const after = structuredClone(before);
   after.features[0]!.properties.geo_sym = "T₃b";
   const minerals = structuredClone(before);
+  minerals.features[0]!.geometry = {
+    type: "Polygon",
+    coordinates: [
+      [
+        [98.6, 35.7],
+        [98.63, 35.7],
+        [98.63, 35.72],
+        [98.6, 35.72],
+        [98.6, 35.7],
+      ],
+    ],
+  };
   minerals.features[0]!.properties = {
     feature_id: "mineral-1",
     weight: 0.8,
@@ -411,8 +423,13 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     600: minerals,
     601: afterMinerals,
   };
+  let completeMineralRead = () => {};
+  const mineralRead = new Promise<void>((resolve) => {
+    completeMineralRead = resolve;
+  });
   request.mockImplementation(async (url: string) => {
     const id = Number(url.match(/resources\/(\d+)\/query/)?.[1]);
+    if ([600, 601].includes(id)) await mineralRead;
     return reviewQuery(
       id,
       collections[id] ?? { type: "FeatureCollection", features: [] },
@@ -451,6 +468,33 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     .querySelector("canvas");
   expect(beforeCanvas).not.toBeNull();
   expect(afterCanvas).not.toBeNull();
+  const expectFocusInBothMaps = async () => {
+    await waitFor(() => {
+      const maps = document.querySelectorAll(".geology-review-map-canvas");
+      expect(maps).toHaveLength(2);
+      for (const map of maps) {
+        const canvas = map.querySelector("canvas")!.getBoundingClientRect();
+        const marker = map
+          .querySelector(".geology-review-focus-label")!
+          .getBoundingClientRect();
+        expect(marker.left).toBeGreaterThanOrEqual(canvas.left);
+        expect(marker.right).toBeLessThanOrEqual(canvas.right);
+        expect(marker.top).toBeGreaterThanOrEqual(canvas.top);
+        expect(marker.bottom).toBeLessThanOrEqual(canvas.bottom);
+        expect(
+          Math.abs(
+            (marker.left + marker.right - canvas.left - canvas.right) / 2,
+          ),
+        ).toBeLessThan(canvas.width * 0.15);
+        expect(
+          Math.abs(
+            (marker.top + marker.bottom - canvas.top - canvas.bottom) / 2,
+          ),
+        ).toBeLessThan(canvas.height * 0.25);
+      }
+    });
+  };
+  await expectFocusInBothMaps();
   expect(labels).toHaveTextContent("Q");
   expect(labels).toHaveTextContent("T₃b");
   expect(screen.getByText("发现了什么")).toBeVisible();
@@ -465,6 +509,22 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
     "本轮不参与分析",
   );
+  await expectFocusInBothMaps();
+  fireEvent.click(screen.getByLabelText("下一处修改"));
+  await waitFor(() =>
+    expect(
+      request.mock.calls.filter(([url]) =>
+        /\/(600|601)\/query\//.test(String(url)),
+      ),
+    ).not.toHaveLength(0),
+  );
+  fireEvent.click(screen.getByLabelText("上一处修改"));
+  expect(screen.getByText("第2处，共3处")).toBeVisible();
+  completeMineralRead();
+  await expectFocusInBothMaps();
+  expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
+    "本轮不参与分析",
+  );
   fireEvent.click(screen.getByLabelText("下一处修改"));
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
@@ -474,6 +534,13 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
     "证据权重 0.4",
   );
+  await expectFocusInBothMaps();
+  fireEvent.click(screen.getByLabelText("上一处修改"));
+  fireEvent.click(screen.getByLabelText("上一处修改"));
+  fireEvent.click(screen.getByLabelText("下一处修改"));
+  fireEvent.click(screen.getByLabelText("下一处修改"));
+  expect(screen.getByText("第3处，共3处")).toBeVisible();
+  await expectFocusInBothMaps();
   expect(
     request.mock.calls.filter(([url]) => String(url).includes("/301/query/")),
   ).toHaveLength(1);

@@ -324,7 +324,7 @@ export default function GeologyReviewMaps({
   }, [spotlight]);
   useEffect(() => {
     const primary = maps.current[0];
-    if (bounds && primary?.isStyleLoaded())
+    if (bounds && primary)
       primary.fitBounds(bounds, { padding: 50, maxZoom: 18, duration: 350 });
   }, [bounds]);
   return (
