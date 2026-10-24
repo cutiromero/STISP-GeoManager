@@ -330,14 +330,36 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     { name: "check", outputs: [{ key: "alterations", resourceId: 600 }] },
     {
       name: "apply",
+      status: "completed",
       identifier: "actual-edit",
       taskId: "actual-task",
       approvedEdits: suggestions.map((item) => ({
         feature_id: item.featureId,
         rule_id: item.ruleId,
         action: item.action,
+        target_code: item.action === "set_code" ? "T₃b" : "",
         weight: item.action === "downweight" ? 0.4 : 1,
       })),
+      results: [
+        {
+          key: "changes",
+          taskId: "actual-task",
+          outputId: 286,
+          checksum: "a".repeat(64),
+          scope: "all",
+          rowCount: suggestions.length,
+          rows: suggestions.map((item) => ({
+            feature_id: item.featureId,
+            rule_id: item.ruleId,
+            action: item.action,
+            target_code: item.action === "set_code" ? "T₃b" : "",
+            weight: item.action === "downweight" ? "0.4" : "1.0",
+            actual_changed: "True",
+            old_code: "Q",
+            new_code: "T₃b",
+          })),
+        },
+      ],
     },
   ];
   workflow.plan.multiElementMap = {
@@ -357,11 +379,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
         feature_id: item.featureId,
         element: item.element,
         rule_id: item.ruleId,
-        action: item.action,
-        actual_changed: true,
-        old_code: "Q",
-        new_code: "T₃b",
-        weight: item.action === "downweight" ? 0.4 : 0,
+        suggested_action: item.action,
       },
     })),
   };

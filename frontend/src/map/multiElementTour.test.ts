@@ -37,13 +37,36 @@ function fixture() {
   workflow.plan.stages = [
     {
       name: "apply",
+      status: "completed",
       identifier: "real-algorithm",
       taskId: "actual-task",
       approvedEdits: suggestions.map((item) => ({
         feature_id: item.featureId,
         rule_id: item.ruleId,
         action: item.action,
+        target_code: item.action === "set_code" ? "T₃b" : "",
+        weight: item.action === "downweight" ? 0.5 : 1,
       })),
+      results: [
+        {
+          key: "changes",
+          taskId: "actual-task",
+          outputId: 286,
+          checksum: "a".repeat(64),
+          scope: "all",
+          rowCount: suggestions.length,
+          rows: suggestions.map((item) => ({
+            feature_id: item.featureId,
+            rule_id: item.ruleId,
+            action: item.action,
+            target_code: item.action === "set_code" ? "T₃b" : "",
+            weight: item.action === "downweight" ? "0.5" : "1.0",
+            actual_changed: item.action !== "keep" ? "True" : "False",
+            old_code: "Q",
+            new_code: "T₃b",
+          })),
+        },
+      ],
     },
   ];
   workflow.plan.algorithms = {
@@ -55,11 +78,8 @@ function fixture() {
       properties: {
         feature_id: item.featureId,
         rule_id: item.ruleId,
-        action: item.action,
-        actual_changed: item.action !== "keep",
-        old_code: "Q",
-        new_code: "T₃b",
-        weight: 0.5,
+        suggested_action: item.action,
+        target_code: item.action === "set_code" ? "T₃b" : "",
       },
     })),
   );
@@ -75,6 +95,61 @@ it("导览仅显示实际执行、已批准并与冻结操作一致的变化，�
   workflow.modificationReview!.approvedSuggestionIds = ["suggestion-0"];
   expect(actualTourChanges(workflow, differences)).toHaveLength(1);
   workflow.plan.stages = [];
+  expect(actualTourChanges(workflow, differences)).toHaveLength(0);
+});
+
+it("从完整实际变更表匹配几何，保留任务、文件和行定位，不把空间疑点当成已执行结果", () => {
+  const { workflow, differences } = fixture();
+  expect(differences.features[0]!.properties.actual_changed).toBeUndefined();
+  const changes = actualTourChanges(workflow, differences);
+  expect(changes).toHaveLength(3);
+  expect(changes[0]!.feature.geometry).toBe(differences.features[0]!.geometry);
+  expect(changes[0]!.feature.properties).toMatchObject({
+    action: "set_code",
+    old_code: "Q",
+    new_code: "T₃b",
+    actual_changed: "True",
+  });
+  expect(changes[0]!.resultRef).toEqual({
+    taskId: "actual-task",
+    outputId: 286,
+    checksum: "a".repeat(64),
+    rowIndex: 1,
+  });
+  const stages = workflow.plan.stages as Array<Record<string, unknown>>;
+  stages[0]!.results = [];
+  differences.features[0]!.properties.actual_changed = true;
+  expect(actualTourChanges(workflow, differences)).toHaveLength(0);
+});
+
+it("拒绝未完成、抽样、截断、异任务、重复结果和与获批参数不同的处置", () => {
+  for (const patch of [
+    { scope: "representative_sample" },
+    { rowCount: 99 },
+    { taskId: "unrelated-task" },
+    { checksum: "missing" },
+  ]) {
+    const { workflow, differences } = fixture();
+    const stage = (workflow.plan.stages as Array<Record<string, unknown>>)[0]!;
+    const results = stage.results as Array<Record<string, unknown>>;
+    Object.assign(results[0]!, patch);
+    expect(actualTourChanges(workflow, differences)).toHaveLength(0);
+  }
+  const { workflow, differences } = fixture();
+  const stage = (workflow.plan.stages as Array<Record<string, unknown>>)[0]!;
+  const result = (stage.results as Array<Record<string, unknown>>)[0]!;
+  const rows = result.rows as Array<Record<string, unknown>>;
+  rows.push({ ...rows[0] });
+  result.rowCount = rows.length;
+  expect(actualTourChanges(workflow, differences)).toHaveLength(2);
+  rows.pop();
+  result.rowCount = rows.length;
+  rows[2]!.weight = "0.25";
+  rows[0]!.new_code = "different";
+  expect(
+    actualTourChanges(workflow, differences).map((item) => item.action),
+  ).toEqual(["exclude"]);
+  stage.status = "running";
   expect(actualTourChanges(workflow, differences)).toHaveLength(0);
 });
 

@@ -66,6 +66,11 @@ export default function MultiElementTourCard({
           对象 {change.suggestion.featureId}；实际算法 {algorithm.name}{" "}
           {algorithm.version}；任务 {algorithm.taskId || "尚无任务编号"}。
         </p>
+        <p title={change.resultRef.checksum}>
+          实际变更表第 {change.resultRef.rowIndex} 行；输出{" "}
+          {change.resultRef.outputId}
+          ；文件校验 {change.resultRef.checksum.slice(0, 12)}。
+        </p>
         <MultiElementEvidence suggestion={change.suggestion} />
       </details>
     </section>

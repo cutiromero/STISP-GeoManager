@@ -11,6 +11,12 @@ export type TourChange = {
   feature: Feature;
   suggestion: AgentModificationSuggestion;
   action: string;
+  resultRef: {
+    taskId: string;
+    outputId: number;
+    checksum: string;
+    rowIndex: number;
+  };
 };
 export const featureCollection = (
   features: Feature[],
@@ -33,36 +39,80 @@ export function actualTourChanges(
   const edits = Array.isArray(apply?.approvedEdits)
     ? apply.approvedEdits.map(record)
     : [];
+  // The three spatial change outputs preserve issue geometry. Execution facts
+  // come from the complete persisted CSV result, not those suggested actions.
+  const result = (Array.isArray(apply?.results) ? apply.results : [])
+    .map(record)
+    .find((item) => item.key === "changes" && item.taskId === apply?.taskId);
+  const rows = Array.isArray(result?.rows) ? result.rows.map(record) : [];
+  if (
+    apply?.status !== "completed" ||
+    !apply.taskId ||
+    result?.scope !== "all" ||
+    result.rowCount !== rows.length ||
+    !Number.isSafeInteger(result.outputId) ||
+    Number(result.outputId) <= 0 ||
+    !/^[a-f0-9]{64}$/.test(String(result.checksum))
+  )
+    return [];
+  const sameId = (a: unknown, b: unknown) =>
+    a !== undefined && a !== null && String(a) === String(b);
+  const changed = (value: unknown) =>
+    value === true ||
+    value === 1 ||
+    (typeof value === "string" && /^(?:true|1(?:\.0+)?)$/i.test(value.trim()));
   const seen = new Set<string>();
   return differences.features.flatMap((feature) => {
     const p = feature.properties;
-    if (
-      ![true, "true", "True", 1].includes(
-        p.actual_changed as boolean | string | number,
-      )
-    )
-      return [];
+    const matches = rows.flatMap((row, index) =>
+      sameId(row.feature_id, p.feature_id) &&
+      sameId(row.rule_id, p.rule_id) &&
+      row.action === (p.suggested_action ?? p.action) &&
+      changed(row.actual_changed) &&
+      (!p.issue_id || sameId(row.issue_id, p.issue_id))
+        ? [{ row, index }]
+        : [],
+    );
+    if (matches.length !== 1) return [];
+    const { row, index } = matches[0]!;
     const suggestion = review?.suggestions.find(
       (item) =>
         approved.has(item.id) &&
-        item.featureId === String(p.feature_id) &&
-        item.ruleId === p.rule_id &&
-        item.action === p.action,
+        sameId(item.featureId, row.feature_id) &&
+        sameId(item.ruleId, row.rule_id) &&
+        item.action === row.action,
     );
     if (
       !suggestion ||
       !edits.some(
         (edit) =>
-          edit.feature_id === p.feature_id &&
-          edit.rule_id === p.rule_id &&
-          edit.action === p.action,
+          sameId(edit.feature_id, row.feature_id) &&
+          sameId(edit.rule_id, row.rule_id) &&
+          edit.action === row.action &&
+          String(edit.target_code ?? "") === String(row.target_code ?? "") &&
+          Number.isFinite(Number(edit.weight)) &&
+          Number(edit.weight) === Number(row.weight) &&
+          (!edit.snapshot_hash || edit.snapshot_hash === row.snapshot_hash) &&
+          (row.action !== "set_code" ||
+            (Boolean(edit.target_code) && row.new_code === edit.target_code)),
       ) ||
       seen.has(suggestion.id)
     )
       return [];
     seen.add(suggestion.id);
     return [
-      { key: suggestion.id, feature, suggestion, action: String(p.action) },
+      {
+        key: suggestion.id,
+        feature: { ...feature, properties: { ...p, ...row } },
+        suggestion,
+        action: String(row.action),
+        resultRef: {
+          taskId: String(result.taskId),
+          outputId: Number(result.outputId),
+          checksum: String(result.checksum),
+          rowIndex: index + 1,
+        },
+      },
     ];
   });
 }
