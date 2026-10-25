@@ -84,6 +84,7 @@ def graph(segment="all"):
                 "geology-multi-relations",
                 {
                     "faults": "apply/faults",
+                    "before_faults": "faults",
                     "coverage": "coverage",
                     "rules": "frozen_rules",
                 },

@@ -174,6 +174,31 @@ def render_report(workflow, tasks):
                 "",
             ]
         )
+        for row in actual_table(stages["relations"], "statistics"):
+            if row.get("before_count") not in {None, ""}:
+                kind = "几何相交" if row["kind"] == "geometric" else "推测交汇"
+                lines.extend(
+                    [
+                        f"{kind}：处理前{row['before_count']}处 → 处理后{row['after_count']}处。",
+                        "",
+                    ]
+                )
+    merges = [row for row in changes if row["action"] == "merge"]
+    if merges:
+        involved = sum(
+            float(row.get("involved_area_m2") or row["area_m2"]) for row in merges
+        )
+        removed = sum(
+            float(row.get("removed_internal_boundary_m") or 0) for row in merges
+        )
+        lines.extend(
+            [
+                f"岩性整理：融合{len(merges)}组，涉及对象面积{involved / 1e6:.4f}km²，移除内部边界{removed:.2f}米。",
+                "",
+                "涉及对象面积表示被整理图斑的完整范围。实际覆盖几何变化面积为0，外部范围保持；同类别融合的类别面积也保持。",
+                "",
+            ]
+        )
     if "prospect" in stages:
         rows = actual_table(stages["prospect"], "statistics")
         lines.extend(
@@ -263,6 +288,9 @@ def _observations(values, text):
         "observed_code": "原代号",
         "expected_code": "对应代号",
         "area_m2": "面积（m²）",
+        "involved_area_m2": "涉及对象面积（m²）",
+        "shared_boundary_m": "共享边界（m）",
+        "fault_distance_m": "距构造（m）",
         "length_m": "长度（m）",
         "cover_ratio": "覆盖层内比例",
         "boundary_ratio": "沿界比例",

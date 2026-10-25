@@ -57,10 +57,22 @@ def _cell(value: object) -> str:
     return _text(value, 1000).replace("|", "\\|").replace("\n", " ")
 
 
+def _multi_report_version(workflow: AgentWorkflow) -> str:
+    versions = workflow.plan.get("algorithms", {}).values()
+    return (
+        "complete-v3"
+        if any(
+            item.get("manifest", {}).get("version") in {"1.0.2", "1.0.3"}
+            for item in versions
+        )
+        else "compact-v2"
+    )
+
+
 def _paths(workflow: AgentWorkflow) -> tuple[Path, Path, str]:
     directory = f"workflow-reports/{workflow.id}"
     if workflow.workflow_type == "geology_multi_element_reasoning":
-        directory += "/compact-v2"
+        directory += "/" + _multi_report_version(workflow)
     relative = f"{directory}/report.md"
     return (
         table_data_path(relative),
@@ -72,7 +84,7 @@ def _paths(workflow: AgentWorkflow) -> tuple[Path, Path, str]:
 def _source(workflow: AgentWorkflow) -> str:
     value = f"workflow-report:{workflow.id}"
     if workflow.workflow_type == "geology_multi_element_reasoning":
-        value += ":compact-v2"
+        value += ":" + _multi_report_version(workflow)
     return value
 
 
@@ -387,7 +399,13 @@ def import_report(workflow: AgentWorkflow, user, policy: dict, request=None) -> 
                 project_tag_id=workflow.project_tag_id,
                 name=data["label"],
                 code=f"wf-report-{workflow.id.hex}"
-                + ("-c2" if source.endswith(":compact-v2") else ""),
+                + (
+                    "-c2"
+                    if source.endswith(":compact-v2")
+                    else "-c3"
+                    if source.endswith(":complete-v3")
+                    else ""
+                ),
                 data_type="document",
                 file_format="MD",
                 storage_path="table/" + relative,

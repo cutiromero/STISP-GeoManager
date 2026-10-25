@@ -2736,3 +2736,13 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 ### 按项目组织可用算法（2026-10-23）
 
 计算目录与普通科研智能体共用服务端项目筛选。逻辑推理项目保留地质及逻辑推理相关共享工具；干旱区生态项目保留植被、水体指数、生态风险及通用矢量统计修复工具。各项目自行登记的工具保留，公开项目目录不变。执行时使用同一筛选，已存在的历史任务继续可读，不因目录归类改变丢失记录。
+
+### 完整地质对比与独立评价（2026-10-25）
+
+`AgentMultiElementMap.beforeAlterations`可选引用本次检查采用的矿物面，`beforeIntersections`可选引用与修改后相同参数重建的修改前交汇点；历史任务未保存时省略。已有`alterations`和`intersections`继续表示修改后的真实成果。普通工作台按任务组织改前、改后和修改范围，图层名称保持数据目录原名，界面角色单独标识。代号、类别、构造参与状态或矿物权重变化也使用真实变化表定位。
+
+`GET /api/agent/workflows/{workflowId}/validation/`返回`AgentWorkflowValidation`：`available/scope/summary`说明评价是否存在及模拟范围；`sections`按稳定`key`、中文`title`、统计口径`summary`、`columns[{key,label}]`及标量`rows`展示真实分规则、分关系、岩性对照和置信度标定。尚无评价返回200、`available=false`和空分项/文件，不运行评价算法或创建文件。
+
+该接口沿用工作流的当前单项目、本人或管理查看授权。独立参考、准备记录和评价结果由专门只读接口提供，保持在`plan`、模型上下文、知识检索与正常算法输入之外；页面默认折叠，仅在展开时请求。
+
+`files`包含受控`key`、真实文件名、媒体类型、字节数、SHA256、预览和下载地址及`canDownload`。`GET validation/files/{fileKey}/preview/`只预览Markdown并复用`AgentWorkflowReportPreview`，最多200000字符；其余文件`previewUrl=null`。`GET validation/files/{fileKey}/download/`下载完整原始字节，额外要求数据导出权限，返回attachment、nosniff和no-store。每次读取重验清单来源、大小和SHA256；文件键仅接受`[a-z0-9][a-z0-9_-]{0,63}`，不接受路径。未知文件404，内容变化409，其他错误使用统一`ErrorResponse`。

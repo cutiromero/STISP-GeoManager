@@ -8,6 +8,7 @@ from shapely.geometry import LineString, Point
 from shapely.ops import unary_union
 
 from multi_io import ISSUE_FIELDS, digest, dump, geojson_geometry, scalar
+from multi_lithology_merge import candidates as merge_candidates
 
 
 def issue(
@@ -53,6 +54,27 @@ def lithology_findings(
 ):
     result = []
     fault_union = unary_union(faults.geometry)
+    if "L-05" in rules:
+        for index, host_index, measured in merge_candidates(
+            lithology, faults, aliases, rules["L-05"]
+        ):
+            row = lithology.loc[index]
+            result.append(
+                issue(
+                    "lithology",
+                    row.feature_id,
+                    row.geometry.union(lithology.at[host_index, "geometry"]),
+                    rules["L-05"],
+                    snapshot,
+                    config,
+                    measured,
+                    f"两块图斑名称和代号一致，共享{measured['shared_boundary_m']:.1f}米边界，边界附近未发现构造线。本轮按同一单元整理，可批准去掉内部划分，外部范围和类别面积保持。",
+                    "merge",
+                    row.geo_sym,
+                    "suggested",
+                    ["merge", "keep", "review"],
+                )
+            )
     for _, row in lithology.iterrows():
         expected = aliases.get(row["name"])
         if "L-03" in rules and expected and expected != row.geo_sym:

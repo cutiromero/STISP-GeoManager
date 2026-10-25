@@ -60,6 +60,7 @@ const points: GeoJsonFeatureCollection = {
   })),
 };
 beforeEach(() => {
+  sessionStorage.removeItem("geology-story:review-workflow");
   vi.restoreAllMocks();
   vi.spyOn(mapboxgl.Map.prototype, "_authenticate").mockImplementation(
     () => {},
@@ -445,7 +446,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
       collections[id] ?? { type: "FeatureCollection", features: [] },
     );
   });
-  render(
+  const view = render(
     <App>
       <MemoryRouter>
         <style>
@@ -481,12 +482,13 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   const expectFocusInBothMaps = async () => {
     await waitFor(
       () => {
-        const selected =
-          Number(
-            document
-              .querySelector(".multi-tour-pager strong")
-              ?.textContent?.match(/第(\d+)处/)?.[1],
-          ) - 1;
+        const currentKey = document
+          .querySelector(".multi-tour-map-stage")
+          ?.getAttribute("data-current-change");
+        const selected = suggestions.findIndex(
+          (item) => item.id === currentKey,
+        );
+        expect(selected).toBeGreaterThanOrEqual(0);
         const target = reviewBounds({
           type: "FeatureCollection",
           features: [changes.features[selected]!],
@@ -543,8 +545,10 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   expect(narrative.getBoundingClientRect().bottom).toBeLessThanOrEqual(800);
   fireEvent.click(screen.getByLabelText("下一处修改"));
   expect(screen.getByText("第2处，共3处")).toBeVisible();
-  expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
-    "本轮不参与分析",
+  await waitFor(() =>
+    expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
+      "本轮不参与分析",
+    ),
   );
   await expectFocusInBothMaps();
   fireEvent.click(screen.getByLabelText("下一处修改"));
@@ -568,8 +572,10 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
       "证据权重 0.8",
     ),
   );
-  expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
-    "证据权重 0.4",
+  await waitFor(() =>
+    expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
+      "证据权重 0.4",
+    ),
   );
   await expectFocusInBothMaps();
   fireEvent.click(screen.getByLabelText("上一处修改"));
@@ -622,7 +628,10 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   const pannedCenter = primary.getCenter().toArray();
   const pannedZoom = primary.getZoom();
   await page.viewport(1600, 900);
-  await waitFor(() => expect(beforeCanvas!.clientHeight).toBe(333));
+  await waitFor(() => {
+    expect(beforeCanvas!.clientHeight).toBeGreaterThanOrEqual(220);
+    expect(beforeCanvas!.clientHeight).toBeLessThanOrEqual(300);
+  });
   primary
     .getCenter()
     .toArray()
@@ -651,5 +660,48 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     animations: "disabled",
     fullPage: true,
   });
+  const reads = request.mock.calls.length;
+  fireEvent.click(screen.getByRole("button", { name: "查看构造章节" }));
+  expect(screen.getByText("第1处，共1处")).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
+      "本轮不参与分析",
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "查看矿物章节" }));
+  expect(screen.getByText("第1处，共1处")).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
+      "证据权重 0.4",
+    ),
+  );
+  expect(request).toHaveBeenCalledTimes(reads);
+  await waitFor(() =>
+    expect(sessionStorage.getItem("geology-story:review-workflow")).toContain(
+      '"chapter":"alteration"',
+    ),
+  );
+  view.unmount();
+  render(
+    <App>
+      <MemoryRouter>
+        <style>
+          {workspaceStyles}
+          {tourStyles}
+        </style>
+        <MultiElementWorkspace
+          workflow={workflow}
+          suggestionId={null}
+          onReload={() => {}}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(await screen.findByText("第1处，共1处")).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
+      "证据权重 0.4",
+    ),
+  );
   await page.viewport(1600, 900);
 });

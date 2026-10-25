@@ -2044,6 +2044,111 @@ export type AgentWorkflowStep = {
 };
 
 /**
+ * 与运行输入隔离的工作流独立评价，仅用于授权页面与文件验收
+ */
+export type AgentWorkflowValidation = {
+    /**
+     * 绑定的实际工作流
+     */
+    workflowId: string;
+    /**
+     * 是否已存在可读取的独立评价；false时sections及files为空
+     */
+    available: boolean;
+    /**
+     * 数据性质与评价范围，明确模拟输入及未覆盖项目
+     */
+    scope: string;
+    /**
+     * 通俗评价结论或尚无评价的原因
+     */
+    summary: string;
+    /**
+     * 按规则、关系、岩性对照或置信度标定组织的实际评价统计
+     */
+    sections: Array<AgentWorkflowValidationSection>;
+    /**
+     * 受控独立评价清单中的真实文件
+     */
+    files: Array<AgentWorkflowValidationFile>;
+};
+
+/**
+ * 一项独立评价表格，列定义与每行实际统计对应
+ */
+export type AgentWorkflowValidationSection = {
+    /**
+     * 分项稳定键
+     */
+    key: string;
+    /**
+     * 用户可读的分项名称
+     */
+    title: string;
+    /**
+     * 本项统计口径、结论及证据范围
+     */
+    summary: string;
+    /**
+     * 显示列及其稳定字段键
+     */
+    columns: Array<{
+        /**
+         * 对应rows中的字段键
+         */
+        key: string;
+        /**
+         * 中文列标题
+         */
+        label: string;
+    }>;
+    /**
+     * 独立计算得到的统计行，保持零值、未定义值和未验证结果的区别
+     */
+    rows: Array<{
+        [key: string]: string | number | boolean | null;
+    }>;
+};
+
+/**
+ * 只读独立评价文件，文件访问时再次核验来源、大小和SHA256
+ */
+export type AgentWorkflowValidationFile = {
+    /**
+     * 受控文件键，不是路径
+     */
+    key: string;
+    /**
+     * 用户可读的真实下载文件名
+     */
+    fileName: string;
+    /**
+     * 清单登记的真实文件媒体类型
+     */
+    contentType: string;
+    /**
+     * 已保存文件字节数
+     */
+    sizeBytes: number;
+    /**
+     * 已保存文件SHA256
+     */
+    checksum: string;
+    /**
+     * Markdown预览端点，其余类型为null
+     */
+    previewUrl: string | null;
+    /**
+     * 受工作流授权及数据导出权限保护的下载地址
+     */
+    downloadUrl: string;
+    /**
+     * 当前用户是否具备下载所需权限
+     */
+    canDownload: boolean;
+};
+
+/**
  * 已生成并持久保存的科研Markdown报告，操作能力根据当前权限返回
  */
 export type AgentWorkflowReport = {
@@ -5375,9 +5480,17 @@ export type AgentMultiElementMap = {
      */
     checks?: Array<number>;
     /**
+     * 本次检查实际读取的修改前矿物面图层，历史任务可缺省
+     */
+    beforeAlterations?: number;
+    /**
      * 保留原识别信息并标识处理状态的蚀变面图层
      */
     alterations?: number;
+    /**
+     * 同参数下修改前实际重建的交汇点，历史任务未保存时可缺省
+     */
+    beforeIntersections?: number;
     /**
      * 几何与推测交汇点，inferred字段决定实心或空心
      */
@@ -18681,6 +18794,158 @@ export type ImportAgentWorkflowReportResponses = {
 };
 
 export type ImportAgentWorkflowReportResponse = ImportAgentWorkflowReportResponses[keyof ImportAgentWorkflowReportResponses];
+
+export type GetAgentWorkflowValidationData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目ID，禁止all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户可查看的工作流UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/validation/';
+};
+
+export type GetAgentWorkflowValidationErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type GetAgentWorkflowValidationError = GetAgentWorkflowValidationErrors[keyof GetAgentWorkflowValidationErrors];
+
+export type GetAgentWorkflowValidationResponses = {
+    /**
+     * 独立评价或尚无评价的明确状态
+     */
+    200: AgentWorkflowValidation;
+};
+
+export type GetAgentWorkflowValidationResponse = GetAgentWorkflowValidationResponses[keyof GetAgentWorkflowValidationResponses];
+
+export type PreviewAgentWorkflowValidationFileData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目ID，禁止all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户可查看的工作流UUID
+         */
+        workflowId: string;
+        /**
+         * 评价清单中的受控文件键，不能传入文件路径
+         */
+        fileKey: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/validation/files/{fileKey}/preview/';
+};
+
+export type PreviewAgentWorkflowValidationFileErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type PreviewAgentWorkflowValidationFileError = PreviewAgentWorkflowValidationFileErrors[keyof PreviewAgentWorkflowValidationFileErrors];
+
+export type PreviewAgentWorkflowValidationFileResponses = {
+    /**
+     * 已保存Markdown评价说明
+     */
+    200: AgentWorkflowReportPreview;
+};
+
+export type PreviewAgentWorkflowValidationFileResponse = PreviewAgentWorkflowValidationFileResponses[keyof PreviewAgentWorkflowValidationFileResponses];
+
+export type DownloadAgentWorkflowValidationFileData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目ID，禁止all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户可查看的工作流UUID
+         */
+        workflowId: string;
+        /**
+         * 评价清单中的受控文件键，不能传入文件路径
+         */
+        fileKey: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/validation/files/{fileKey}/download/';
+};
+
+export type DownloadAgentWorkflowValidationFileErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type DownloadAgentWorkflowValidationFileError = DownloadAgentWorkflowValidationFileErrors[keyof DownloadAgentWorkflowValidationFileErrors];
+
+export type DownloadAgentWorkflowValidationFileResponses = {
+    /**
+     * 独立评价文件原始字节
+     */
+    200: Blob | File;
+};
+
+export type DownloadAgentWorkflowValidationFileResponse = DownloadAgentWorkflowValidationFileResponses[keyof DownloadAgentWorkflowValidationFileResponses];
 
 export type GetAgentAdminData = {
     body?: never;

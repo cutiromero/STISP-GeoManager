@@ -101,6 +101,41 @@
   line-height: 1.65;
   background: #fff;
 }
+.geology-workbench-compare-options {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 7px 14px;
+  border-bottom: 1px solid #d3e1ee;
+}
+.geology-workbench-compare-options small {
+  color: #64788c;
+  font-size: 11px;
+}
+.geology-workbench-compare .multi-tour-card {
+  padding: 10px 0;
+  border: 0;
+}
+.geology-workbench-compare .multi-tour-card h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.geology-workbench-compare .multi-tour-interpretation {
+  display: none;
+}
+.geology-workbench-compare .multi-tour-explanation {
+  gap: 12px;
+}
+.geology-workbench-compare.is-single .geology-workbench-compare-detail {
+  max-height: 120px;
+}
+.layer-comparison-role {
+  display: block;
+  margin: 0 8px 6px;
+  color: #4b7198;
+  font-size: 11px;
+}
 .geology-workbench-compare-detail nav {
   display: flex;
   align-items: center;

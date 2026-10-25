@@ -93,7 +93,7 @@ export function actualTourChanges(
           Number.isFinite(Number(edit.weight)) &&
           Number(edit.weight) === Number(row.weight) &&
           (!edit.snapshot_hash || edit.snapshot_hash === row.snapshot_hash) &&
-          (row.action !== "set_code" ||
+          (!["set_code", "reclassify", "merge"].includes(String(row.action)) ||
             (Boolean(edit.target_code) && row.new_code === edit.target_code)),
       ) ||
       seen.has(suggestion.id)
@@ -137,13 +137,23 @@ export function tourFeature(
   data: GeoJsonFeatureCollection | null | undefined,
   change: TourChange,
 ) {
-  return data?.features.find(
-    (feature) =>
-      String(
-        feature.properties.feature_id ??
-          feature.properties.line_id ??
-          feature.id,
-      ) === change.suggestion.featureId,
+  return (
+    data?.features.find(
+      (feature) =>
+        String(
+          feature.properties.feature_id ??
+            feature.properties.line_id ??
+            feature.id,
+        ) === change.suggestion.featureId,
+    ) ??
+    (change.action === "merge" &&
+    String(change.feature.properties.host_feature_id ?? "").trim()
+      ? data?.features.find(
+          (feature) =>
+            String(feature.properties.feature_id ?? feature.id) ===
+            String(change.feature.properties.host_feature_id),
+        )
+      : undefined)
   );
 }
 
@@ -160,6 +170,22 @@ export function tourLabels(
       : String(value);
   };
   switch (change.action) {
+    case "reclassify":
+    case "merge":
+      return {
+        title: change.action === "merge" ? "同单元图斑整理" : "岩性类别修正",
+        before: String(
+          before?.properties.geo_sym ??
+            p.old_code ??
+            change.suggestion.currentState,
+        ),
+        after: String(
+          after?.properties.geo_sym ??
+            p.new_code ??
+            change.suggestion.suggestedState,
+        ),
+        note: change.suggestion.reason,
+      };
     case "set_code":
       return {
         title: "地质代号修正",

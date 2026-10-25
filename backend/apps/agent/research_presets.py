@@ -38,7 +38,9 @@ REAL_SOURCE_NOTE = (
     "地区细分未经野外核实，本轮恢复演示字段一致性。"
     "本轮独立验证八宝山组3项；闹仓坚沟组辞书地区为青海玛多县一带，当前当地适用尚未核实。"
 )
-REVIEW_SOURCE_NOTE = "演示案例：地质图结合专家知识检查完整覆盖与地层属性，修改前由用户批准。"
+REVIEW_SOURCE_NOTE = (
+    "演示案例：地质图结合专家知识检查完整覆盖与地层属性，修改前由用户批准。"
+)
 ROLE_LABELS = {
     "early_image": "前期影像",
     "late_image": "后期影像",
@@ -81,6 +83,7 @@ PROMPTS = {
     MULTI_TYPE: (
         "请使用当前项目的海德乌拉演示案例，按综合入口检查岩性、构造和五类遥感矿物识别结果。"
         "读取本案例试用知识及实际测量，说明适用条件和例外，给出少量可核查的处置建议。"
+        "若使用演示整理副本，按同一单元粒度检查冗余内部边界，有充分测量和对应知识支持时提出融合；类别保持。"
         "等我选中批准后再修正，未批准和待裁定项保留；降权保留原对象。"
         "重新检查，重建几何交汇及推测交汇，对比优先核查远景区，保存报告并展示地图。"
     ),
@@ -147,8 +150,17 @@ def _candidate(resource, role: str, scenario: str) -> dict:
         if scenario == MULTI_TYPE
         else (REVIEW_MARKERS if review else AGE_MARKERS if age else MARKERS)[role]
     )
-    simulated = getattr(resource, marker_field) == marker or (
-        role == "context" and resource.code == "demo-ecology-context-updated"
+    simulated = (
+        getattr(resource, marker_field) == marker
+        or (role == "context" and resource.code == "demo-ecology-context-updated")
+        or (
+            scenario == MULTI_TYPE
+            and resource.code
+            in {
+                "geology-multi-lithology-complete-20261025",
+                "geology-multi-rules-complete-20261025",
+            }
+        )
     )
     return {
         "id": resource.id,
@@ -215,6 +227,13 @@ def discover(user, p: dict, run=None) -> dict:
             if age
             else MARKERS
         )
+        if multi:
+            # Prefer the explicitly registered case version; historical resources
+            # remain available through manual selection and saved workflows.
+            for role in ("lithology", "rules"):
+                versioned = f"geology-multi-{role}-complete-20261025"
+                if query.filter(code=versioned).exists():
+                    markers[role] = ("code", versioned)
         inputs, preferred = {}, {}
         for role, kind in roles.items():
             field, marker = markers[role]
@@ -291,7 +310,7 @@ def discover(user, p: dict, run=None) -> dict:
                 "algorithms": algorithms,
                 "available": all(inputs.values())
                 and len(algorithms) == len(identifiers),
-                "sourceNote": "演示案例：岩性与构造为模拟识别输入，五类矿物为遥感识别结果；17条规则仅本案例试用，获批后执行。"
+                "sourceNote": "演示案例：岩性与构造为模拟识别输入，五类矿物为遥感识别结果；本轮显式绑定试用知识，获批后执行。整理副本用于展示同单元融合。"
                 if multi
                 else REVIEW_SOURCE_NOTE
                 if review

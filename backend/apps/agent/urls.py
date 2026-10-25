@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, workflow_report_views
+from . import views, workflow_report_views, workflow_validation_views
 
 urlpatterns = [
     path("bootstrap/", views.bootstrap),
@@ -41,6 +41,18 @@ urlpatterns = [
     path(
         "workflows/<uuid:workflow_id>/report/import/",
         workflow_report_views.workflow_report_import,
+    ),
+    path(
+        "workflows/<uuid:workflow_id>/validation/",
+        workflow_validation_views.workflow_validation,
+    ),
+    path(
+        "workflows/<uuid:workflow_id>/validation/files/<str:file_key>/preview/",
+        workflow_validation_views.workflow_validation_preview,
+    ),
+    path(
+        "workflows/<uuid:workflow_id>/validation/files/<str:file_key>/download/",
+        workflow_validation_views.workflow_validation_download,
     ),
     path("admin/", views.admin),
 ]

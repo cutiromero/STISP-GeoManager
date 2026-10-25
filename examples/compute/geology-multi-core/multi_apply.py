@@ -6,6 +6,7 @@ import math
 from shapely.ops import unary_union
 
 from multi_io import CHANGE_FIELDS, ISSUE_FIELDS, scalar, table
+from multi_lithology_merge import approved_host
 
 
 def approved(context, findings, snapshot):
@@ -100,6 +101,8 @@ def apply(lithology, faults, alterations, operations):
         old_code = scalar(frame.at[index, "geo_sym"]) if "geo_sym" in frame else ""
         actual_changed = action not in {"keep", "review"}
         host_id = ""
+        involved_geometry = geometry
+        removed_boundary = 0.0
         if action == "set_code":
             if operation["element"] != "lithology":
                 raise ValueError("代号更新只用于岩性资料")
@@ -114,16 +117,25 @@ def apply(lithology, faults, alterations, operations):
             ]
             if hosts.empty:
                 raise ValueError("当前地图中没有获批的相邻目标单元")
-            host_index = max(
-                hosts.index,
-                key=lambda key: (
-                    frame.at[key, "geometry"]
-                    .boundary.intersection(geometry.buffer(0.5))
-                    .length
-                ),
-            )
+            if operation["rule_id"] == "L-05":
+                if action != "merge":
+                    raise ValueError("同单元整理规则只支持获批融合")
+                host_index = approved_host(frame, operation, geometry)
+            else:
+                host_index = max(
+                    hosts.index,
+                    key=lambda key: (
+                        frame.at[key, "geometry"]
+                        .boundary.intersection(geometry.buffer(0.5))
+                        .length
+                    ),
+                )
             host_id = str(frame.at[host_index, "feature_id"])
             if action == "merge":
+                removed_boundary = geometry.boundary.intersection(
+                    frame.at[host_index, "geometry"].boundary
+                ).length
+                involved_geometry = geometry.union(frame.at[host_index, "geometry"])
                 frame.at[host_index, "geometry"] = frame.at[
                     host_index, "geometry"
                 ].union(geometry)
@@ -154,8 +166,19 @@ def apply(lithology, faults, alterations, operations):
                 if action in {"set_code", "reclassify", "merge"}
                 else old_code,
                 "host_feature_id": host_id,
+                "_geometry": involved_geometry,
                 "actual_changed": actual_changed,
                 "area_m2": float(geometry.area),
+                "involved_area_m2": float(involved_geometry.area),
+                "geometry_change_area_m2": 0.0,
+                "class_change_area_m2": float(geometry.area)
+                if action in {"reclassify", "merge"}
+                and old_code != operation["target_code"]
+                else 0.0,
+                "attribute_change_area_m2": float(geometry.area)
+                if action == "set_code"
+                else 0.0,
+                "removed_internal_boundary_m": float(removed_boundary),
                 "length_m": float(geometry.length)
                 if operation["element"] == "structure"
                 else 0.0,

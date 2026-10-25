@@ -158,7 +158,11 @@ export default function GeologyReviewWorkspace({
       features.map((feature) => feature.properties.feature_id),
     );
     const area = features.reduce(
-      (sum, feature) => sum + Number(feature.properties.area_m2 ?? 0),
+      (sum, feature) =>
+        sum +
+        (feature.properties.kind === "fill_gap"
+          ? Number(feature.properties.area_m2 ?? 0)
+          : 0),
       0,
     );
     return { count: ids.size, area: Number.isFinite(area) ? area : 0 };
@@ -199,6 +203,17 @@ export default function GeologyReviewWorkspace({
           </p>
         </div>
         <div className="geology-review-workspace-actions">
+          {workflow && (
+            <Button
+              onClick={() =>
+                navigate(
+                  `/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}${suggestionId ? `&suggestion=${encodeURIComponent(suggestionId)}` : ""}`,
+                )
+              }
+            >
+              在地理工作台对比
+            </Button>
+          )}
           <Button
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate("/agent/workbench")}
@@ -270,7 +285,7 @@ export default function GeologyReviewWorkspace({
                 {outcome
                   ? geologyReviewOutcomeDescription(outcome)
                   : actual
-                    ? `本次修改涉及${summary.count}个图斑，范围合计${(summary.area / 10000).toFixed(2)}公顷。`
+                    ? `本次修改涉及${summary.count}个图斑、${data.differences.features.length}条操作记录；补齐覆盖${(summary.area / 10000).toFixed(2)}公顷，其余为属性更新。`
                     : editSubmitted
                       ? "已提交修正任务，当前显示获批建议范围；实际修改结果就绪后请刷新查看。"
                       : "批准前展示的是建议范围，地图内容保持当前状态。"}

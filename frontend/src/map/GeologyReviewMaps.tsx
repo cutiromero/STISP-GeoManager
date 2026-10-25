@@ -10,6 +10,13 @@ import {
   type ReviewMapSpotlight,
 } from "./reviewMapSpotlight";
 const emptyOverlays: ReviewOverlay[] = [];
+function focusPadding(map: MapboxMap) {
+  const canvas = map.getCanvas();
+  return Math.max(
+    12,
+    Math.min(50, Math.min(canvas.clientWidth, canvas.clientHeight) * 0.15),
+  );
+}
 
 export default function GeologyReviewMaps({
   before,
@@ -279,7 +286,7 @@ export default function GeologyReviewMaps({
           if (removeLabel) removeLabels.current.push(removeLabel);
           if (state.bounds && !view.current)
             map.fitBounds(state.bounds, {
-              padding: 50,
+              padding: focusPadding(map),
               duration: 0,
             });
           if (index === 0) primaryInitialized = true;
@@ -326,7 +333,11 @@ export default function GeologyReviewMaps({
     const primary = maps.current[0];
     if (bounds && primary) {
       maps.current.forEach((map) => map.resize());
-      primary.fitBounds(bounds, { padding: 50, maxZoom: 18, duration: 350 });
+      primary.fitBounds(bounds, {
+        padding: focusPadding(primary),
+        maxZoom: 18,
+        duration: 350,
+      });
     }
   }, [bounds]);
   return (

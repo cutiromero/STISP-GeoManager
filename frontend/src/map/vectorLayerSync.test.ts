@@ -106,6 +106,53 @@ describe("reorderLoadedStyleLayers", () => {
 });
 
 describe("addLoadedStyleLayers", () => {
+  it("keeps excluded comparison structures as a separate grey dashed interactive layer", () => {
+    const addLayer = vi.fn();
+    const map = {
+      style: {},
+      getStyle: vi.fn(() => ({})),
+      getLayer: vi.fn(() => undefined),
+      addLayer,
+      hasImage: vi.fn(() => false),
+      addImage: vi.fn(),
+      setFilter: vi.fn(),
+      setLayoutProperty: vi.fn(),
+      setPaintProperty: vi.fn(),
+    } as unknown as MapboxMap;
+    const layer = createVectorLayer();
+    layer.metadata = { 对比任务: "actual-workflow", comparisonElement: "构造" };
+    layer.geojson.features[0]!.geometry = {
+      type: "LineString",
+      coordinates: [
+        [98, 35],
+        [98.1, 35.1],
+      ],
+    };
+    layer.geojson.features[0]!.properties = {
+      line_id: "line-1",
+      state: "exclude",
+      weight: 0,
+    };
+    addLoadedStyleLayers(map, "loaded-test", layer);
+    const dashed = addLayer.mock.calls.find(
+      ([item]) => item.id === "loaded-test-excluded-line",
+    )?.[0];
+    expect(dashed).toMatchObject({
+      type: "line",
+      source: "loaded-test",
+      paint: { "line-color": "#8d9baa", "line-dasharray": [3, 2] },
+    });
+    expect(dashed.filter).toContainEqual(["==", ["get", "state"], "exclude"]);
+    expect(
+      addLayer.mock.calls.find(([item]) => item.id === "loaded-test-line")?.[0]
+        .filter,
+    ).toContainEqual(["!=", ["get", "state"], "exclude"]);
+    expect(loadedStyleLayerIds("loaded-test")).toContain(
+      "loaded-test-excluded-line",
+    );
+    expect(layer.geojson.features).toHaveLength(1);
+    expect(layer.geojson.features[0]!.properties.weight).toBe(0);
+  });
   it("uses unique-value class size as the symbol icon-size multiplier", () => {
     const addLayer = vi.fn();
     const style = cloneDefaultVectorSymbolization();

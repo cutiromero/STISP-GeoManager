@@ -170,7 +170,12 @@ def proposal(workflow, stage, results):
                 "status": "review"
                 if edit["action"] in {"keep", "review"}
                 else "suggested",
-                "areaM2": float(row.get("area_m2") or measurements.get("area_m2") or 0),
+                "areaM2": float(
+                    measurements.get("involved_area_m2")
+                    or row.get("area_m2")
+                    or measurements.get("area_m2")
+                    or 0
+                ),
                 "lengthM": float(
                     row.get("length_m") or measurements.get("length_m") or 0
                 ),
@@ -376,7 +381,9 @@ def update_map(workflow):
         }
         values["changes"] = [value for key, value in apply.items() if "change" in key]
     for key, value in (
+        ("beforeAlterations", check.get("alterations")),
         ("alterations", apply.get("alterations") or check.get("alterations")),
+        ("beforeIntersections", relations.get("before_intersections")),
         ("intersections", relations.get("intersections")),
         ("beforeProspects", prospect.get("before_zones")),
         ("afterProspects", prospect.get("after_zones")),

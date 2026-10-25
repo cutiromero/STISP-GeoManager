@@ -123,8 +123,22 @@ def create():
         ),
         "relations": (
             "海德乌拉构造关系重建",
-            [base[1], base[2], base[3]],
             [
+                base[1],
+                base[2],
+                base[3],
+                {
+                    **vector("before_faults", "处理前构造图（比较用）", lines),
+                    "required": False,
+                },
+            ],
+            [
+                output(
+                    "before_intersections",
+                    "处理前几何与推测交汇点",
+                    "vector",
+                    "before_intersections.gpkg",
+                ),
                 output(
                     "intersections", "几何与推测交汇点", "vector", "intersections.gpkg"
                 ),
@@ -162,7 +176,7 @@ def create():
             "schemaVersion": 1,
             "identifier": directory.name,
             "name": name,
-            "version": "1.0.1",
+            "version": "1.0.3",
             "description": name
             + "。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
             "author": "STISP",
@@ -182,6 +196,7 @@ def create():
                     not in {
                         "alterations",
                         "intersections",
+                        "before_intersections",
                         "before_zones",
                         "after_zones",
                     }

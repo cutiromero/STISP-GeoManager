@@ -40,6 +40,26 @@ def run(context):
             unary_union(coverage.loc[coverage.role == "exclusion", "geometry"])
         )
     points = reconstruct(faults, area, knowledge)
+    try:
+        before_path = context.input_path("before_faults")
+    except KeyError:
+        before_path = None
+    before = None
+    if before_path:
+        before_faults = vector(
+            before_path,
+            config["working_epsg"],
+            {"LineString", "MultiLineString"},
+            "line_id",
+            allow_empty=True,
+        )
+        before = reconstruct(before_faults, area, knowledge)
+        write_vector(
+            context.output_path("before_intersections.gpkg"),
+            before,
+            config["working_epsg"],
+            "Point",
+        )
     write_vector(
         context.output_path("intersections.gpkg"),
         points,
@@ -50,7 +70,21 @@ def run(context):
         {"kind": "geometric", "count": int((~points.inferred.astype(bool)).sum())},
         {"kind": "inferred", "count": int(points.inferred.astype(bool).sum())},
     ]
-    write_table(context.output_path("statistics.csv"), rows, ["kind", "count"])
+    for row in rows:
+        row["after_count"] = row["count"]
+        row["before_count"] = (
+            int((before.inferred.astype(bool) == (row["kind"] == "inferred")).sum())
+            if before is not None
+            else ""
+        )
+        row["delta_count"] = (
+            row["count"] - row["before_count"] if before is not None else ""
+        )
+    write_table(
+        context.output_path("statistics.csv"),
+        rows,
+        ["kind", "count", "before_count", "after_count", "delta_count"],
+    )
     report(
         context,
         {

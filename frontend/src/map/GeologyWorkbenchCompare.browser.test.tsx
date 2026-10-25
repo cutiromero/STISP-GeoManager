@@ -177,7 +177,7 @@ it("embeds synchronized real maps while registering the same catalog layers, and
   expect(request).toHaveBeenCalledTimes(calls);
   expect(screen.getByRole("link", { name: "独立对比页" })).toHaveAttribute(
     "href",
-    "/map?geologyReview=review-workflow&projectTagId=3",
+    "/map?geologyReview=review-workflow&projectTagId=3&suggestion=suggest-age",
   );
   await page.screenshot({
     path: "../../test-results/geology-workbench-compare-desktop.png",

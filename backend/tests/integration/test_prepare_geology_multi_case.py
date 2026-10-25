@@ -33,7 +33,16 @@ def material_manifest(tmp_path):
         encoding="utf-8",
     )
     (tmp_path / "trial_knowledge.json").write_text(
-        json.dumps({"scenario": SCENARIO, "rules": [{} for _ in range(17)]}),
+        json.dumps(
+            {
+                "scenario": SCENARIO,
+                "rules": [
+                    {"id": f"{prefix}-{index:02}"}
+                    for prefix, count in [("L", 4), ("S", 5), ("A", 5), ("P", 3)]
+                    for index in range(1, count + 1)
+                ],
+            }
+        ),
         encoding="utf-8",
     )
     return path

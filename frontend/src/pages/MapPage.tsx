@@ -55,6 +55,12 @@ import { useRasterRender } from "../hooks/useRasterRender";
 import { useWorkspaceScenes } from "../hooks/useWorkspaceScenes";
 import { workspaceSnapshot } from "../workspace/workspaceSnapshot";
 import { effectiveMapLayers } from "../map/effectiveMapLayers";
+import {
+  displayComparisonLayers,
+  upsertComparisonLayer,
+} from "../map/comparisonLayerGroups";
+import type { ComparisonLayerPlacement } from "../map/geologyWorkbenchCompareData";
+import { reviewBounds } from "../map/geologyReviewData";
 import ComputeOutputMapPreview from "../map/ComputeOutputMapPreview";
 import { clearFeatureState, getMapState } from "../map/mapState";
 import {
@@ -856,15 +862,30 @@ function MapWorkspace() {
     () => layerGroups.groups.flatMap((group) => group.children),
     [layerGroups.groups],
   );
+  const comparisonSources = useRef(new Map<number, GeoJsonFeatureCollection>());
   const registerComparisonLayer = async (
     profile: DataResourceProfile,
     result: ResourceQueryResult,
+    placement?: ComparisonLayerPlacement,
   ) => {
     if (!permissions.canQueryData || !permissions.canLoadVectorLayer)
       throw new Error(permissionDeniedMessage);
     const signal = projectSignal();
     const projectId = getActiveProject();
     const resource = profile.resource;
+    if (placement) {
+      if (signal.aborted || getActiveProject() !== projectId)
+        throw new DOMException("项目已切换", "AbortError");
+      comparisonSources.current.set(
+        resource.id,
+        placement.displayData ?? result.geojson,
+      );
+      layerGroups.setGroups((current) =>
+        upsertComparisonLayer(current, profile, result, placement),
+      );
+      setActiveLeftPanel("layers");
+      return;
+    }
     await uniqueLayerLoad.load(
       resourceLayerKey({ sourceResource: resource, layerType: "vector" }),
       async () => {
@@ -2898,6 +2919,27 @@ function MapWorkspace() {
                 }
                 comparisonVisible={comparisonVisible}
                 registerLayer={registerComparisonLayer}
+                selectedObject={selectedFeature?.properties ?? null}
+                onLayerDisplay={(side, changes, current) => {
+                  layerGroups.setGroups((groups) =>
+                    displayComparisonLayers(
+                      groups,
+                      comparisonWorkflowId,
+                      side,
+                      changes,
+                      comparisonSources.current,
+                    ),
+                  );
+                  const bounds = reviewBounds(current ?? changes);
+                  if (bounds && mapInstanceRef.current && !comparisonVisible)
+                    mapInstanceRef.current.fitBounds(
+                      [
+                        [bounds[0], bounds[1]],
+                        [bounds[2], bounds[3]],
+                      ],
+                      { padding: 75, maxZoom: 16, duration: 350 },
+                    );
+                }}
                 onVisibilityChange={(visible) => {
                   const next = new URLSearchParams(searchParams);
                   if (visible) next.delete("mapMode");

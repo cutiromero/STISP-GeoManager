@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-multi-relations",
   "name": "海德乌拉构造关系重建",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "海德乌拉构造关系重建。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -35,6 +35,16 @@
       "key": "rules",
       "label": "本案例显式启用的专家规则及版本",
       "kind": "table"
+    },
+    {
+      "key": "before_faults",
+      "label": "处理前构造图（比较用）",
+      "kind": "vector",
+      "geometryTypes": [
+        "LineString",
+        "MultiLineString"
+      ],
+      "required": false
     }
   ],
   "parameters": [
@@ -76,6 +86,13 @@
     }
   ],
   "outputs": [
+    {
+      "key": "before_intersections",
+      "label": "处理前几何与推测交汇点",
+      "kind": "vector",
+      "file": "before_intersections.gpkg",
+      "required": false
+    },
     {
       "key": "intersections",
       "label": "几何与推测交汇点",

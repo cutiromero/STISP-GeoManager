@@ -388,7 +388,9 @@ def test_approval_accepts_catalog_normalized_display_text_only(tmp_path):
             writer.writerow([column[0] for column in cursor.description])
             writer.writerows(cursor)
     assert any(row["conditions"].endswith("\n") for row in findings)
-    assert all(not row["conditions"].endswith("\n") for row in read(edited.inputs["issues"]))
+    assert all(
+        not row["conditions"].endswith("\n") for row in read(edited.inputs["issues"])
+    )
     load("apply")(edited)
     result = gpd.read_file(edited.output_path("lithology.gpkg")).set_index("feature_id")
     assert result.at["G4", "geo_sym"] == "C"
@@ -641,3 +643,121 @@ def test_explicit_approved_merge_changes_only_source_and_measured_host(tmp_path)
     assert float(
         next(row for row in rows if row["geo_sym"] == "C")["delta_area_m2"]
     ) == pytest.approx(10000)
+
+
+def enable_consolidation(initial):
+    rows = read(initial.inputs["rules"])
+    rows.append(
+        {
+            **rows[0],
+            "rule_id": "L-05",
+            "knowledge_id": "99",
+            "rule_json": json.dumps(
+                {
+                    "id": "L-05",
+                    "condition": "同单元粒度整理",
+                    "basis": {"gap": "保留有意义内部边界"},
+                }
+            ),
+            "params_json": json.dumps(
+                {
+                    "unit_level_consolidation": True,
+                    "min_shared_boundary_m": 1,
+                    "fault_buffer_m": 100,
+                }
+            ),
+            "units_json": "",
+            "aliases_json": "",
+        }
+    )
+    write(initial.inputs["rules"], rows)
+
+
+def test_same_unit_merge_requires_measurement_approval_and_preserves_class_area(
+    tmp_path,
+):
+    initial, original = fixture(tmp_path)
+    faults = gpd.read_file(initial.inputs["faults"])
+    store(faults.iloc[:0], initial.inputs["faults"])
+    enable_consolidation(initial)
+    findings, _ = check(initial)
+    candidate = next(row for row in findings if row["rule_id"] == "L-05")
+    measurement = json.loads(candidate["measurements_json"])
+    assert measurement["shared_boundary_m"] == pytest.approx(1000)
+    assert measurement["host_feature_id"] == "G2"
+    rejected = approval_context(tmp_path, initial, [])
+    load("apply")(rejected)
+    assert len(gpd.read_file(rejected.output_path("lithology.gpkg"))) == len(original)
+    # A new execution directory prevents output from the rejection becoming evidence.
+    edited = approval_context(tmp_path, initial, [candidate])
+    edited.directory = tmp_path / "accepted"
+    edited.directory.mkdir()
+    load("apply")(edited)
+    result = gpd.read_file(edited.output_path("lithology.gpkg"))
+    assert len(result) == len(original) - 1 and "G1" not in set(result.feature_id)
+    assert (
+        result.geometry.union_all()
+        .symmetric_difference(original.geometry.union_all())
+        .area
+        < 0.01
+    )
+    for code in set(original.geo_sym):
+        assert result.loc[result.geo_sym == code].geometry.area.sum() == pytest.approx(
+            original.loc[original.geo_sym == code].geometry.area.sum()
+        )
+    actual = read(edited.output_path("changes.csv"))[0]
+    assert float(actual["involved_area_m2"]) == pytest.approx(980000)
+    assert float(actual["geometry_change_area_m2"]) == 0
+    assert float(actual["class_change_area_m2"]) == 0
+    assert float(actual["removed_internal_boundary_m"]) == pytest.approx(1000)
+    highlight = gpd.read_file(edited.output_path("changes_lithology_issues.gpkg"))
+    assert highlight.geometry.area.sum() == pytest.approx(980000)
+    for identity in ("G3", "G4"):
+        assert (
+            result.set_index("feature_id")
+            .at[identity, "geometry"]
+            .equals_exact(original.set_index("feature_id").at[identity, "geometry"], 0)
+        )
+
+
+def test_same_unit_rule_preserves_fault_boundary_and_requires_explicit_scope(tmp_path):
+    initial, _ = fixture(tmp_path)
+    enable_consolidation(initial)
+    findings, _ = check(initial)
+    assert not any(row["rule_id"] == "L-05" for row in findings)
+    rows = read(initial.inputs["rules"])
+    rows[-1]["params_json"] = json.dumps({"unit_level_consolidation": False})
+    write(initial.inputs["rules"], rows)
+    second = Context(tmp_path / "second", initial.inputs, initial.parameters)
+    findings, _ = check(second)
+    assert not any(row["rule_id"] == "L-05" for row in findings)
+
+
+def test_relation_before_after_is_reconstructed_from_actual_active_lines(tmp_path):
+    initial, _ = fixture(tmp_path)
+    faults = gpd.read_file(initial.inputs["faults"])
+    faults["state"], faults["weight"] = ["exclude", "keep"], [0.0, 1.0]
+    after = tmp_path / "after_faults.gpkg"
+    store(faults, after)
+    relations = Context(
+        tmp_path / "relations",
+        {
+            **initial.inputs,
+            "before_faults": initial.inputs["faults"],
+            "faults": after,
+        },
+        initial.parameters,
+    )
+    load("relations")(relations)
+    before = gpd.read_file(relations.output_path("before_intersections.gpkg"))
+    assert len(before.loc[~before.inferred.astype(bool)]) == 1
+    row = next(
+        row
+        for row in read(relations.output_path("statistics.csv"))
+        if row["kind"] == "geometric"
+    )
+    assert (
+        row["before_count"] == "1"
+        and row["after_count"] == "0"
+        and row["delta_count"] == "-1"
+    )

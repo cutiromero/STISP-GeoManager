@@ -856,6 +856,53 @@
         }
       }
     },
+    "/api/auth/browser-session/": {
+      "post": {
+        "tags": [
+          "认证接口"
+        ],
+        "summary": "维护当前平台页面的登录生命周期",
+        "description": "登录、注册或游客登录后先使用start登记页面；resume恢复刷新页面或加入仍在线的同源标签。heartbeat每30秒续期120秒；suspend在页面离开时立即挂起当前页，20秒内可凭原令牌恢复正常刷新。没有可续接页面时abandon在后端注销旧会话。最后页面挂起或租约过期后，受保护接口返回401。令牌只保存在页面会话内，不用于URL、持久Cookie或本地持久存储。",
+        "operationId": "updateBrowserSession",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "当前页面及动作；除abandon外必须提供该会话的随机令牌。",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "页面生命周期已更新；active表示仍存在有效页面租约。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/api/auth/logout/": {
       "post": {
         "tags": [
@@ -7879,7 +7926,7 @@
           "管理后台"
         ],
         "summary": "操作单个存量数据",
-        "description": "支持重命名数据资源、更新启停状态、保存默认可视化方案、配置访问用户组和删除确认。重命名只修改数据资源显示名称，不修改数据编号、物理存储标识或默认图层名称。目标数据必须对当前用户可见或由当前用户上传；不可见数据按不存在处理；超级管理员不受对象可见范围限制。重命名、启停、默认可视化和普通编辑需要 `catalog.change_dataresource`；删除需要 `catalog.delete_dataresource`；数据上传者本人或具备 `catalog.change_dataresource` 的用户可以通过 `updateAccess` 修改可见范围。可手动配置的数据访问角色列表不会返回超级管理员角色，后端仍会强制保留超级管理员访问范围。成功操作会写入审计日志。",
+        "description": "支持重命名数据资源、更新启停状态、保存默认可视化方案、配置访问用户组和删除确认。重命名只修改数据资源显示名称，不修改数据编号、物理存储标识或默认图层名称。目标数据必须对当前用户可见或由当前用户上传；不可见数据按不存在处理；超级管理员不受对象可见范围限制。重命名、启停、默认可视化和普通编辑需要 `catalog.change_dataresource`；删除需要 `catalog.delete_dataresource`；数据上传者本人或具备 `catalog.change_dataresource` 的用户可以通过 `updateAccess` 修改可见范围。可手动配置的数据访问角色列表不会返回超级管理员角色，后端仍会强制保留超级管理员访问范围。成功操作会写入审计日志。删除委托目录共享的受保护永久删除服务，任务/成果/工程/科研引用、非法存储路径或存储清理失败返回409及可读原因；独占受控文件和存储层随登记删除，共享和外部原材料保留。",
         "operationId": "updateAdminDataResource",
         "security": [
           {
@@ -7951,6 +7998,16 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "数据仍被引用、存储路径不能安全删除或存储操作失败，资源保留并返回具体原因。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -8474,6 +8531,148 @@
             }
           }
         ]
+      }
+    },
+    "/api/catalog/resources/delete-preview/": {
+      "post": {
+        "tags": [
+          "数据目录"
+        ],
+        "operationId": "previewResourceDeletion",
+        "summary": "预览资源删除影响与历史清理确认",
+        "description": "当前用户、当前项目内核对删除权限和引用。运行中任务、仍有效的成果与地图引用继续保护；已结束科研工作流关联的计算结果返回具名影响说明和10分钟签名确认凭证，预览本身不删除数据。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前唯一项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "当前项目内待核对的资源集合。",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceDeletePreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "逐项预览与签名确认凭证。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceDeletePreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数无效。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "当前项目或删除权限不足。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalog/resources/delete/": {
+      "post": {
+        "tags": [
+          "数据目录"
+        ],
+        "operationId": "bulkDeleteResources",
+        "summary": "批量永久删除当前项目数据资源",
+        "description": "需要 catalog.delete_dataresource 权限及当前项目访问权。逐项删除资源登记、派生图层/数据集及独占的受控存储；任务、成果、工程、科研工作流引用中的资源拒绝删除。共享存储保留，外部原始文件保留。跨项目、不存在或 owner_only 不可见资源统一返回 not_found，不泄露名称；每项独立处理，部分成功返回 200。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "发起删除时选中的唯一项目 ID，切换项目后不得复用该请求。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "用户已确认永久删除的资源清单。",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceBulkDeleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "每项实际删除或拒绝原因；重复请求的已删除项返回 not_found。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceBulkDeleteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
       }
     },
     "/api/catalog/resources/": {
@@ -16849,7 +17048,7 @@
           "Compute"
         ],
         "summary": "listComputeAlgorithms",
-        "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。",
+        "description": "按当前单项目返回相关共享算法及本项目登记算法。逻辑推理项目保留地质类，干旱生态项目保留生态、植被、水体指数及通用矢量工具；公开项目目录不变。发现与执行共用后端筛选，历史任务继续可读。",
         "security": [],
         "parameters": [
           {
@@ -20314,6 +20513,136 @@
         ]
       }
     },
+    "/api/agent/runs/{runId}/interaction/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "answerAgentInteraction",
+        "summary": "回答原任务的问题或取消等待",
+        "description": "在原AgentRun中保存回答并恢复模型判断，不创建新任务或重新执行已保存步骤。当前用户、项目、模型和数据权限重新核验；问题标识与方案修订匹配，重复提交键幂等，过期问题或不同答案冲突返回409。等待期间释放模型执行槽。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "原任务编号。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前唯一项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "对当前问题的回答、补充信息或取消动作。",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentInteractionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已保存并返回原任务及问题历史；当前未处于重新排队状态，例如取消、拒绝，或幂等重试时任务已经继续处理。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRun"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "已在原任务中保存回答，原任务当前排队等待继续处理；没有新建任务。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "回答格式或必填审核选项无效。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "项目、用户、模型或数据授权变化。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "任务不存在或不属于当前用户及项目。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "旧问题、方案修订变化、任务状态变化或幂等键对应不同回答。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "模型或执行服务暂不可用，原问题保留等待。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agent/runs/{runId}/cancel/": {
       "post": {
         "tags": [
@@ -20630,8 +20959,8 @@
           "智能体"
         ],
         "operationId": "confirmAgentWorkflow",
-        "summary": "确认当前预览计划并执行",
-        "description": "确认当前预览计划并执行；重新核对当前项目、本人记录及实际计算权限。",
+        "summary": "提交计划或结果人工审核意见",
+        "description": "确认计划并执行，或在 waiting_approval 时拒绝并停止后续操作。重新核对当前项目、本人记录、实际计算权限及计划哈希。审核意见持久保存，仅作为审核依据；不是算法编辑指令。拒绝保留已有计算和候选输出。暂停、状态冲突或过期计划返回 409。",
         "security": [
           {
             "sessionAuth": []
@@ -20688,24 +21017,11 @@
         },
         "requestBody": {
           "required": true,
-          "description": "已审核计划的内容哈希",
+          "description": "已审核计划的哈希、审核选择和可选意见。",
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "description": "确认执行的计划",
-                "properties": {
-                  "planHash": {
-                    "type": "string",
-                    "description": "预览返回的计划哈希",
-                    "minLength": 1,
-                    "maxLength": 64
-                  }
-                },
-                "required": [
-                  "planHash"
-                ],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/AgentWorkflowConfirmation"
               }
             }
           }
@@ -21924,7 +22240,7 @@
         ],
         "operationId": "cancelAgentWorkflow",
         "summary": "取消科研工作流",
-        "description": "请求在安全边界停止当前用户的科研工作流。",
+        "description": "请求在安全边界停止当前用户的科研工作流。可选replacePlanHash仅用于重新生成初始计划，后端原子核对相同计划摘要、等待初始批准、尚未授权执行且没有计算任务；过期或已开始时409且不取消任务。",
         "security": [
           {
             "sessionAuth": []
@@ -21952,9 +22268,94 @@
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "description": "普通取消可为空；重新生成计划时带最后读取的摘要。",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "有条件作废尚未执行的初始计划。",
+                "properties": {
+                  "replacePlanHash": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64,
+                    "description": "待作废的初始计划摘要；阶段或摘要变化时拒绝"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "操作成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflow"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/pause/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "pauseAgentWorkflow",
+        "summary": "暂停科研工作流",
+        "description": "空请求体。本人当前项目工作流在安全边界暂停；已提交计算可完成并保留任务引用。重复请求幂等，结束的工作流返回409。要求智能体、计算及输入访问权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "本人工作流 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "最新持久工作流状态，running阶段可先返回pauseRequested=true",
             "content": {
               "application/json": {
                 "schema": {
@@ -21971,6 +22372,534 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/resume/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "resumeAgentWorkflow",
+        "summary": "继续科研工作流",
+        "description": "空请求体。重新核验本人、项目、输入和固定算法版本后恢复暂停位置；复用已提交计算任务，等待审核的阶段仍需原确认。重复请求幂等，结束的工作流返回409。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "本人工作流 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "恢复后的持久工作流状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflow"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/report/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "prepareAgentWorkflowReport",
+        "summary": "生成科研报告文件",
+        "description": "空请求体或空对象。将成功工作流的公开判断、真实输入、知识引用、计算参数与结果整理成持久Markdown报告，重复请求返回同一文件；不重跑模型或计算。要求本人、当前项目、智能体和所有关联数据访问权限，未成功工作流或文件校验异常返回409。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "本人工作流 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "真实报告文件及当前权限下的操作能力",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/report/preview/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "previewAgentWorkflowReport",
+        "summary": "在线预览科研报告",
+        "description": "读取已生成文件的UTF8文本，最多200000字符；前端以受控Markdown渲染。每次核对本人、项目、输入及关联任务与结果访问权限。缺报告返回404，身份或文件内容变化返回409。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "本人工作流 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "保存文件的Markdown正文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowReportPreview"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/report/download/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "downloadAgentWorkflowReport",
+        "summary": "下载科研报告",
+        "description": "下载已保存真实Markdown文件；重新核验本人、项目、输入与关联结果权限，并要求数据导出权限。返回attachment、nosniff和no-store头。缺文件404，校验失败409。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "本人工作流 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "UTF8 Markdown文件内容",
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string",
+                  "description": "持久报告文件内容"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/report/import/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "importAgentWorkflowReport",
+        "summary": "将科研报告入库",
+        "description": "空请求体或空对象。将已生成报告登记为当前项目的MD文档资源并归入计算结果，重复请求复用同一资源。要求本人、智能体、关联数据访问及数据新增权限；文件须通过保存校验。缺报告404，文件或身份变化409。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID，禁止 all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "本人工作流 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已入库报告的文件与目录位置",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/validation/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "getAgentWorkflowValidation",
+        "summary": "查看工作流独立评价",
+        "description": "只读展示绑定本次工作流的独立评价摘要、分项统计及文件。沿用工作流的当前项目、本人或管理权限授权；独立参考与评价只供展示验收，绝不进入plan、模型上下文、知识检索或正常计算输入。尚无评价时返回available=false及说明，不重新计算或创建文件。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目ID，禁止all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "当前用户可查看的工作流UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "独立评价或尚无评价的明确状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowValidation"
+                },
+                "example": {
+                  "workflowId": "00000000-0000-4000-8000-000000000025",
+                  "available": false,
+                  "scope": "本案例采用模拟识别输入；独立评价仅在存在当次验收材料时展示。",
+                  "summary": "当前任务尚未登记独立评价。",
+                  "sections": [],
+                  "files": []
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/validation/files/{fileKey}/preview/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "previewAgentWorkflowValidationFile",
+        "summary": "预览独立评价说明",
+        "description": "读取已绑定评价清单中的Markdown文件，最多200000字符并明确truncated。每次重查工作流授权、受控文件key、清单来源、字节数和SHA256；只读且不生成新报告。非Markdown文件不提供previewUrl，直接请求返回404。文件变化返回409。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目ID，禁止all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "当前用户可查看的工作流UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "fileKey",
+            "in": "path",
+            "required": true,
+            "description": "评价清单中的受控文件键，不能传入文件路径",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已保存Markdown评价说明",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowReportPreview"
+                },
+                "example": {
+                  "content": "# 独立评价\n\n接口预览样例，实际评价由任务绑定文件提供。",
+                  "fileName": "独立评价.md",
+                  "contentType": "text/markdown",
+                  "truncated": false
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/{workflowId}/validation/files/{fileKey}/download/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "downloadAgentWorkflowValidationFile",
+        "summary": "下载独立评价文件",
+        "description": "读取受控评价清单的原始文件字节，沿用工作流授权并额外要求数据导出权限。每次核对文件来源、字节数和SHA256；返回attachment、nosniff和no-store头，不接受任意路径，不重新评价或改变业务数据。文件变化返回409。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目ID，禁止all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "当前用户可查看的工作流UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "fileKey",
+            "in": "path",
+            "required": true,
+            "description": "评价清单中的受控文件键，不能传入文件路径",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "与清单SHA256一致的原始文件，Content-Type取清单中的实际类型",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "独立评价文件原始字节"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           }
         }
       }
@@ -22972,9 +23901,8 @@
           },
           "dailyRuns": {
             "type": "integer",
-            "description": "当日运行上限；多个匹配策略取最小值",
-            "minimum": 1,
-            "maximum": 1000
+            "description": "当日运行上限；0表示本规则不限制，多个正数策略取最小值",
+            "minimum": 0
           }
         },
         "required": [
@@ -23001,14 +23929,12 @@
           "maxOutputTokens": {
             "type": "integer",
             "description": "思考与正文生成额度",
-            "minimum": 128,
-            "maximum": 261632
+            "minimum": 128
           },
           "maxRunSeconds": {
             "type": "integer",
             "description": "任务时限，秒",
-            "minimum": 60,
-            "maximum": 7200
+            "minimum": 60
           },
           "reasoningEffort": {
             "type": "string",
@@ -23034,20 +23960,17 @@
           "contextWindowTokens": {
             "type": "integer",
             "description": "角色允许的总窗口，实际仍受模型服务约束",
-            "minimum": 1024,
-            "maximum": 262144
+            "minimum": 1024
           },
           "maxOutputTokens": {
             "type": "integer",
             "description": "思考与正文生成额度",
-            "minimum": 128,
-            "maximum": 261632
+            "minimum": 128
           },
           "maxRunSeconds": {
             "type": "integer",
             "description": "任务时限，秒",
-            "minimum": 60,
-            "maximum": 7200
+            "minimum": 60
           }
         },
         "required": [
@@ -23075,20 +23998,17 @@
           "contextWindowTokens": {
             "type": "integer",
             "description": "角色允许的总窗口，实际仍受模型服务约束",
-            "minimum": 1024,
-            "maximum": 262144
+            "minimum": 1024
           },
           "maxOutputTokens": {
             "type": "integer",
             "description": "思考与正文生成额度",
-            "minimum": 128,
-            "maximum": 261632
+            "minimum": 128
           },
           "maxRunSeconds": {
             "type": "integer",
             "description": "任务时限，秒",
-            "minimum": 60,
-            "maximum": 7200
+            "minimum": 60
           },
           "reasoningEffort": {
             "type": "string",
@@ -23255,8 +24175,7 @@
           "maxAttachments": {
             "type": "integer",
             "description": "单次任务最多引用附件数",
-            "minimum": 1,
-            "maximum": 20
+            "minimum": 1
           },
           "chatAudience": {
             "$ref": "#/components/schemas/AgentAudience"
@@ -23274,27 +24193,23 @@
           },
           "dailyRuns": {
             "type": "integer",
-            "description": "单用户每日运行上限",
-            "minimum": 1,
-            "maximum": 1000
+            "description": "单用户每日运行上限；0表示不限，用户或组的正数额度仍生效",
+            "minimum": 0
           },
           "maxContextBytes": {
             "type": "integer",
             "description": "输入文本大小保护上限（UTF-8字节）；实际窗口另外通过模型分词器核验",
-            "minimum": 8000,
-            "maximum": 500000
+            "minimum": 8000
           },
           "maxOutputTokens": {
             "type": "integer",
             "description": "单次模型调用的思考与正文合计生成 token 上限",
-            "minimum": 128,
-            "maximum": 32768
+            "minimum": 128
           },
           "maxContextTokens": {
             "type": "integer",
             "description": "输入 token 预算；同时受实际模型窗口减去生成预留和256 token安全余量限制",
-            "minimum": 1024,
-            "maximum": 262144
+            "minimum": 1024
           },
           "reasoningEffort": {
             "type": "string",
@@ -23319,39 +24234,33 @@
           },
           "maxSteps": {
             "type": "integer",
-            "description": "最多工具动作",
-            "minimum": 1,
-            "maximum": 64
+            "description": "最多工具动作；0表示不限，仍受运行时限与权限约束",
+            "minimum": 0
           },
           "maxResources": {
             "type": "integer",
-            "description": "最多详细读取资源数",
-            "minimum": 1,
-            "maximum": 12
+            "description": "最多详细读取资源数；0表示不限，仍限当前项目可见资源",
+            "minimum": 0
           },
           "maxIterations": {
             "type": "integer",
             "description": "科研工作流最大迭代轮次",
-            "minimum": 1,
-            "maximum": 20
+            "minimum": 1
           },
           "maxOperatorSteps": {
             "type": "integer",
             "description": "科研工作流最大算子步骤数",
-            "minimum": 1,
-            "maximum": 64
+            "minimum": 1
           },
           "maxProtocolRetries": {
             "type": "integer",
             "description": "协议纠错次数",
-            "minimum": 0,
-            "maximum": 3
+            "minimum": 0
           },
           "maxRunSeconds": {
             "type": "integer",
             "description": "单次运行最长秒数",
-            "minimum": 60,
-            "maximum": 1800
+            "minimum": 60
           },
           "allowDocuments": {
             "type": "boolean",
@@ -23744,8 +24653,11 @@
             "description": "证据序号"
           },
           "resourceId": {
-            "type": "integer",
-            "description": "数据资源 ID"
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "数据资源 ID；知识、计算输出及其他非目录资源证据为空。"
           },
           "name": {
             "type": "string",
@@ -24054,10 +24966,277 @@
         ],
         "additionalProperties": false
       },
+      "AgentInteractionOption": {
+        "type": "object",
+        "description": "模型依据当前任务提供的用户可选答案，不自动提交默认值。",
+        "additionalProperties": false,
+        "required": [
+          "value",
+          "label"
+        ],
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "传回原任务的稳定选项值"
+          },
+          "label": {
+            "type": "string",
+            "description": "用户可读选项"
+          },
+          "description": {
+            "type": "string",
+            "description": "选项影响或适用条件"
+          }
+        }
+      },
+      "AgentInteractionQuestion": {
+        "type": "object",
+        "description": "一项必要澄清或审核问题，允许用户选择或补充说明。",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "type",
+          "required"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "本问题卡中的稳定字段键"
+          },
+          "label": {
+            "type": "string",
+            "description": "需要用户确认的内容"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "single",
+              "multiple",
+              "text"
+            ],
+            "description": "单选、多选或文字"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "结构化作答是否必填，信息澄清可由补充文字交给模型解析"
+          },
+          "options": {
+            "type": "array",
+            "description": "单选或多选项；文字问题可省略。",
+            "items": {
+              "$ref": "#/components/schemas/AgentInteractionOption"
+            }
+          },
+          "defaultValue": {
+            "description": "供用户检查的建议值，需要用户点击确认。",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AgentInteractionAnswer": {
+        "type": "object",
+        "description": "已提交给原任务的用户回答快照。",
+        "additionalProperties": false,
+        "required": [
+          "submittedAt",
+          "submissionKey",
+          "answers",
+          "text"
+        ],
+        "properties": {
+          "submittedAt": {
+            "type": "string",
+            "description": "服务端保存时间"
+          },
+          "submissionKey": {
+            "type": "string",
+            "description": "本次提交的幂等键"
+          },
+          "answers": {
+            "type": "object",
+            "description": "与问题字段键对应的单选、多选或文字答案。",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "text": {
+            "type": "string",
+            "description": "用户提供的补充条件或自由文字回答"
+          }
+        }
+      },
+      "AgentInteraction": {
+        "type": "object",
+        "description": "同一智能体任务内持久化的问题卡，旧卡不能覆盖新方案。",
+        "additionalProperties": false,
+        "required": [
+          "questionId",
+          "revision",
+          "kind",
+          "title",
+          "reason",
+          "questions",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "questionId": {
+            "type": "string",
+            "description": "服务端签发的问题标识"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "方案修订号"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "input",
+              "review"
+            ],
+            "description": "信息澄清或用户审核；不替代已有地图修改批准机制"
+          },
+          "title": {
+            "type": "string",
+            "description": "问题卡标题"
+          },
+          "reason": {
+            "type": "string",
+            "description": "为什么需要用户确认，依据当前输入与工具结果"
+          },
+          "plan": {
+            "type": "string",
+            "description": "当前简短执行计划"
+          },
+          "questions": {
+            "type": "array",
+            "description": "模型提出的本轮必要问题。",
+            "items": {
+              "$ref": "#/components/schemas/AgentInteractionQuestion"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "answered",
+              "cancelled"
+            ],
+            "description": "等待、已回答或已取消"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "提问保存时间"
+          },
+          "answer": {
+            "$ref": "#/components/schemas/AgentInteractionAnswer"
+          }
+        }
+      },
+      "AgentInteractionUpdate": {
+        "type": "object",
+        "description": "将答案送回原任务或取消等待，重试复用同一提交键。",
+        "additionalProperties": false,
+        "required": [
+          "action",
+          "questionId",
+          "revision",
+          "submissionKey"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "answer",
+              "cancel"
+            ],
+            "description": "确认回答并继续，或取消等待"
+          },
+          "questionId": {
+            "type": "string",
+            "description": "当前问题标识，旧问题返回409"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "当前问题的方案修订号"
+          },
+          "submissionKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 80,
+            "description": "唯一用户提交键，重复提交不重复启动"
+          },
+          "answers": {
+            "type": "object",
+            "description": "结构化答案；文字澄清可配合text交给模型理解。",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          },
+          "text": {
+            "type": "string",
+            "description": "补充信息，与此前证据一同恢复给模型"
+          }
+        }
+      },
       "AgentRun": {
         "type": "object",
         "description": "持久运行记录；引用失权时返回 403，不返回旧内容",
         "properties": {
+          "interaction": {
+            "description": "当前或最近的问题卡；未提问时为空。",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentInteraction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interactionHistory": {
+            "type": "array",
+            "description": "同一次任务的完整提问与回答历史，刷新或切换会话后恢复。",
+            "items": {
+              "$ref": "#/components/schemas/AgentInteraction"
+            }
+          },
           "researchIntent": {
             "description": "与真实科研任务关联的持久意图；缺省或null为普通对话",
             "anyOf": [
@@ -24082,8 +25261,7 @@
           },
           "algorithmVersionIds": {
             "type": "array",
-            "description": "manual必须选择1至3个实际已发布版本，auto为空",
-            "maxItems": 3,
+            "description": "manual必须选择至少一个实际已发布版本，auto为空；逐个核验算法权限",
             "uniqueItems": true,
             "items": {
               "type": "integer",
@@ -24177,6 +25355,9 @@
             "enum": [
               "queued",
               "running",
+              "waiting_input",
+              "waiting_review",
+              "waiting_compute",
               "succeeded",
               "failed",
               "cancelled",
@@ -24234,7 +25415,9 @@
           "attachments",
           "createdAt",
           "updatedAt",
-          "contextTruncated"
+          "contextTruncated",
+          "interaction",
+          "interactionHistory"
         ],
         "additionalProperties": false
       },
@@ -24257,7 +25440,9 @@
               "tool_completed",
               "context",
               "parameters",
-              "usage"
+              "usage",
+              "interaction",
+              "continuation"
             ]
           },
           "text": {
@@ -24385,8 +25570,7 @@
           },
           "algorithmVersionIds": {
             "type": "array",
-            "description": "manual必须选择1至3个实际已发布版本，auto为空",
-            "maxItems": 3,
+            "description": "manual必须选择至少一个实际已发布版本，auto为空；逐个核验算法权限",
             "uniqueItems": true,
             "items": {
               "type": "integer",
@@ -24417,8 +25601,7 @@
           "maxOutputTokens": {
             "type": "integer",
             "description": "思考与正文生成额度",
-            "minimum": 128,
-            "maximum": 261632
+            "minimum": 128
           },
           "model": {
             "type": "string",
@@ -24446,7 +25629,7 @@
           },
           "resourceIds": {
             "type": "array",
-            "description": "空数组表示自主发现；非空进一步缩小数据范围",
+            "description": "空数组表示自主发现；非空进一步缩小数据范围，数量服从管理员maxResources策略（0不限）",
             "items": {
               "type": "integer",
               "description": "对象 ID",
@@ -24460,8 +25643,7 @@
               "type": "integer",
               "description": "附件 ID",
               "minimum": 1
-            },
-            "maxItems": 10
+            }
           },
           "internetEnabled": {
             "type": "boolean",
@@ -24477,11 +25659,13 @@
       },
       "AgentResearchScenario": {
         "type": "string",
-        "description": "当前授权项目内已登记科研场景；地质时代纠偏使用真实图件副本和明确标注的演示录入错误，由模型解析目标与参数",
+        "description": "当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确",
         "enum": [
           "ecology_investigation",
           "geology_correction",
-          "geology_age_correction"
+          "geology_age_correction",
+          "geology_map_review",
+          "geology_multi_element_reasoning"
         ]
       },
       "AgentResearchQuestion": {
@@ -24741,13 +25925,39 @@
                   "type": "string",
                   "enum": [
                     "synthetic",
-                    "real_map_with_demonstration_errors"
+                    "real_map_with_demonstration_errors",
+                    "demonstration_case"
                   ],
-                  "description": "synthetic为模拟样例；real_map_with_demonstration_errors为真实图件副本上设置明确标注的少量时代录入错误，用于验证辞书一致性纠偏"
+                  "description": "synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例"
                 },
                 "available": {
                   "type": "boolean",
                   "description": "资料、已发布算法与模型等必要服务是否就绪"
+                },
+                "preset": {
+                  "type": "object",
+                  "description": "仅当前请求项目返回的活动预设；按稳定资源编码定位，不包含其他项目的输入标识。缺项表示该角色预设不可用。",
+                  "properties": {
+                    "inputs": {
+                      "type": "object",
+                      "description": "角色键到当前可访问的唯一活动预设资源",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "当前项目的资源标识"
+                      }
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "description": "已发布场景算法的预设参数",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "inputs",
+                    "parameters"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [
@@ -25699,6 +26909,12 @@
             "type": "string",
             "description": "模型选择的下一步受限动作"
           },
+          "knowledgeQuery": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "description": "仅地质成果检查的search_expert_knowledge阶段提供，由模型根据实际资料形成的专家知识检索词；其他阶段省略"
+          },
           "algorithmReason": {
             "type": "string",
             "description": "为什么选择该算法、输入角色及参数"
@@ -25857,6 +27073,281 @@
         ],
         "additionalProperties": false
       },
+      "AgentWorkflowValidation": {
+        "type": "object",
+        "description": "与运行输入隔离的工作流独立评价，仅用于授权页面与文件验收",
+        "additionalProperties": false,
+        "required": [
+          "workflowId",
+          "available",
+          "scope",
+          "summary",
+          "sections",
+          "files"
+        ],
+        "properties": {
+          "workflowId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "绑定的实际工作流"
+          },
+          "available": {
+            "type": "boolean",
+            "description": "是否已存在可读取的独立评价；false时sections及files为空"
+          },
+          "scope": {
+            "type": "string",
+            "description": "数据性质与评价范围，明确模拟输入及未覆盖项目"
+          },
+          "summary": {
+            "type": "string",
+            "description": "通俗评价结论或尚无评价的原因"
+          },
+          "sections": {
+            "type": "array",
+            "description": "按规则、关系、岩性对照或置信度标定组织的实际评价统计",
+            "items": {
+              "$ref": "#/components/schemas/AgentWorkflowValidationSection"
+            }
+          },
+          "files": {
+            "type": "array",
+            "description": "受控独立评价清单中的真实文件",
+            "items": {
+              "$ref": "#/components/schemas/AgentWorkflowValidationFile"
+            }
+          }
+        }
+      },
+      "AgentWorkflowValidationSection": {
+        "type": "object",
+        "description": "一项独立评价表格，列定义与每行实际统计对应",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "title",
+          "summary",
+          "columns",
+          "rows"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "分项稳定键"
+          },
+          "title": {
+            "type": "string",
+            "description": "用户可读的分项名称"
+          },
+          "summary": {
+            "type": "string",
+            "description": "本项统计口径、结论及证据范围"
+          },
+          "columns": {
+            "type": "array",
+            "description": "显示列及其稳定字段键",
+            "items": {
+              "type": "object",
+              "description": "单个统计列",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "label"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "对应rows中的字段键"
+                },
+                "label": {
+                  "type": "string",
+                  "description": "中文列标题"
+                }
+              }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "description": "独立计算得到的统计行，保持零值、未定义值和未验证结果的区别",
+            "items": {
+              "type": "object",
+              "description": "一行统计，键对应columns，值仅为可显示标量",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ],
+                "description": "实际统计值或明确文字说明，未计算为null"
+              }
+            }
+          }
+        }
+      },
+      "AgentWorkflowValidationFile": {
+        "type": "object",
+        "description": "只读独立评价文件，文件访问时再次核验来源、大小和SHA256",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "fileName",
+          "contentType",
+          "sizeBytes",
+          "checksum",
+          "previewUrl",
+          "downloadUrl",
+          "canDownload"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "description": "受控文件键，不是路径"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "用户可读的真实下载文件名"
+          },
+          "contentType": {
+            "type": "string",
+            "description": "清单登记的真实文件媒体类型"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "已保存文件字节数"
+          },
+          "checksum": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "已保存文件SHA256"
+          },
+          "previewUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Markdown预览端点，其余类型为null"
+          },
+          "downloadUrl": {
+            "type": "string",
+            "description": "受工作流授权及数据导出权限保护的下载地址"
+          },
+          "canDownload": {
+            "type": "boolean",
+            "description": "当前用户是否具备下载所需权限"
+          }
+        }
+      },
+      "AgentWorkflowReport": {
+        "type": "object",
+        "description": "已生成并持久保存的科研Markdown报告，操作能力根据当前权限返回",
+        "additionalProperties": false,
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "description": "可下载的真实文件名"
+          },
+          "label": {
+            "type": "string",
+            "description": "用户可读的报告标题"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "text/markdown"
+            ],
+            "description": "报告文件类型"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "实际文件字节数"
+          },
+          "checksum": {
+            "type": "string",
+            "description": "已保存文件的SHA256"
+          },
+          "previewUrl": {
+            "type": "string",
+            "description": "受授权保护的报告预览接口"
+          },
+          "downloadUrl": {
+            "type": "string",
+            "description": "受授权及数据导出权限保护的下载地址"
+          },
+          "resourceId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "已登记文档资源ID，未入库为null"
+          },
+          "resourceName": {
+            "type": "string",
+            "description": "入库资源名称，未入库为空字符串"
+          },
+          "resourceLocation": {
+            "type": "string",
+            "description": "用户可读的项目与计算结果目录位置，未入库为空字符串"
+          },
+          "canDownload": {
+            "type": "boolean",
+            "description": "当前用户具有下载所需权限"
+          },
+          "canImport": {
+            "type": "boolean",
+            "description": "当前用户具有入库所需权限"
+          }
+        },
+        "required": [
+          "fileName",
+          "label",
+          "contentType",
+          "sizeBytes",
+          "checksum",
+          "previewUrl",
+          "downloadUrl",
+          "resourceId",
+          "resourceName",
+          "resourceLocation",
+          "canDownload",
+          "canImport"
+        ]
+      },
+      "AgentWorkflowReportPreview": {
+        "type": "object",
+        "description": "持久报告的受控在线预览正文",
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "已保存Markdown文本，前端受控渲染"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "已保存报告文件名"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "text/markdown"
+            ],
+            "description": "文件类型"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "正文超过预览字符上限时为true，下载仍为完整文件"
+          }
+        },
+        "required": [
+          "content",
+          "fileName",
+          "contentType",
+          "truncated"
+        ]
+      },
       "AgentWorkflow": {
         "type": "object",
         "description": "可恢复的项目科研工作流",
@@ -25890,6 +27381,7 @@
               "running",
               "waiting_compute",
               "waiting_approval",
+              "paused",
               "succeeded",
               "failed",
               "cancelled",
@@ -25899,6 +27391,17 @@
           "detail": {
             "type": "string",
             "description": "可读状态"
+          },
+          "pauseRequested": {
+            "type": "boolean",
+            "description": "已请求暂停，运行中的判断在保存进度后进入paused"
+          },
+          "pausedFrom": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "暂停前阶段，恢复保留原计算或审核位置"
           },
           "currentStep": {
             "type": "string",
@@ -25980,11 +27483,26 @@
           "plan": {
             "type": "object",
             "description": "经预检的输入、算法、参数与知识依据",
+            "properties": {
+              "multiElementMap": {
+                "$ref": "#/components/schemas/AgentMultiElementMap"
+              },
+              "trialRuleBindings": {
+                "type": "array",
+                "description": "仅当前项目与综合地质场景可读取的显式试用规则及冻结版本；不改变普通知识检索对草稿的可见性",
+                "items": {
+                  "$ref": "#/components/schemas/AgentTrialRuleBinding"
+                }
+              }
+            },
             "additionalProperties": true
           },
           "planHash": {
             "type": "string",
             "description": "确认计划时校验的内容哈希"
+          },
+          "modificationReview": {
+            "$ref": "#/components/schemas/AgentModificationReview"
           },
           "importResults": {
             "type": "boolean",
@@ -26034,7 +27552,7 @@
         "properties": {
           "workflowType": {
             "type": "string",
-            "description": "工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 为模拟填图检查纠偏，geology_age_correction 为真实底图副本的地层时代录入纠偏；默认 hyperspectral_interpretation",
+            "description": "工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，保留生态与既有地质场景；默认 hyperspectral_interpretation",
             "default": "hyperspectral_interpretation",
             "maxLength": 40
           },
@@ -26066,7 +27584,7 @@
           },
           "parameters": {
             "type": "object",
-            "description": "算子参数候选；服务端按 manifest 校验",
+            "description": "算子参数候选；服务端按manifest校验。综合地质场景segment为all、lithology、structure或alteration，分段所用上游资源与版本必须保存在计划中。",
             "additionalProperties": true
           },
           "executeOperators": {
@@ -26082,7 +27600,7 @@
           },
           "inputs": {
             "type": "object",
-            "description": "输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质使用 initial_map、surveys、rules。真实计算输出入库后按持久来源接入后续步骤。",
+            "description": "输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。",
             "additionalProperties": {
               "type": "integer",
               "minimum": 1
@@ -27230,7 +28748,65 @@
           "remember": {
             "type": "boolean",
             "default": false,
-            "description": "是否使用持久会话"
+            "deprecated": true,
+            "description": "兼容旧客户端的输入；当前所有角色均使用页面会话，此值不再启用持久登录。"
+          }
+        }
+      },
+      "BrowserSessionRequest": {
+        "type": "object",
+        "description": "平台页面会话维护请求；正常刷新续接与新标签加入均须持有服务端验证的令牌。",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "resume",
+              "heartbeat",
+              "suspend",
+              "abandon"
+            ],
+            "description": "start用于刚登录的页面，resume用于刷新或在线标签交接，heartbeat续期，suspend挂起，abandon注销无法续接的会话。"
+          },
+          "pageId": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "页面随机标识；除abandon外必填，各标签独立。"
+          },
+          "token": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "pattern": "^[a-f0-9]+$",
+            "description": "32字节随机令牌的十六进制文本；除abandon外必填，服务端只保存摘要。"
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "同一页面单调递增的请求序号；除abandon外必填，旧心跳不得覆盖退出或刷新后的较新状态。"
+          }
+        }
+      },
+      "BrowserSessionResponse": {
+        "type": "object",
+        "description": "当前页面会话维护结果。",
+        "required": [
+          "detail",
+          "active"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "生命周期处理结果说明。"
+          },
+          "active": {
+            "type": "boolean",
+            "description": "是否仍有可用于后端鉴权的有效页面租约。"
           }
         }
       },
@@ -30962,6 +32538,600 @@
           }
         }
       },
+      "AgentWorkflowConfirmation": {
+        "type": "object",
+        "description": "用户对当前预览计划或候选结果的审核选择。",
+        "additionalProperties": false,
+        "required": [
+          "planHash"
+        ],
+        "properties": {
+          "planHash": {
+            "type": "string",
+            "description": "当前预览返回的计划哈希。",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "decision": {
+            "type": "string",
+            "description": "approve 继续现有确认流程；reject 仅在等待审核时停止后续流程。",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "default": "approve"
+          },
+          "feedback": {
+            "type": "string",
+            "description": "人工审核意见，作为判断依据保存。",
+            "maxLength": 4000,
+            "default": ""
+          },
+          "selectedSuggestionIds": {
+            "type": "array",
+            "description": "地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项；综合推理场景允许空数组，明确选择不修改并继续复核。reject省略，其他阶段不得扩大操作范围。",
+            "minItems": 0,
+            "maxItems": 30,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "当前实际问题和模型建议绑定的稳定标识"
+            }
+          }
+        }
+      },
+      "AgentModificationReview": {
+        "type": "object",
+        "description": "地质成果修改建议及持久批准范围；仅相应工作流提供，客户端不提交修改坐标或目标值。",
+        "additionalProperties": false,
+        "required": [
+          "proposalHash",
+          "suggestions",
+          "approvedSuggestionIds"
+        ],
+        "properties": {
+          "proposalHash": {
+            "type": "string",
+            "description": "实际问题清单与规范化模型建议的内容哈希；方案改变必须重新批准。"
+          },
+          "suggestions": {
+            "type": "array",
+            "description": "由模型选择、由实际检查清单固定对象与空间范围的建议；综合场景支持按对象和动作集中批准。",
+            "items": {
+              "$ref": "#/components/schemas/AgentModificationSuggestion"
+            }
+          },
+          "approvedSuggestionIds": {
+            "type": "array",
+            "description": "后端已保存的获批建议标识；尚未批准时为空。",
+            "items": {
+              "type": "string",
+              "description": "当前建议标识"
+            }
+          }
+        }
+      },
+      "AgentTrialRuleBinding": {
+        "type": "object",
+        "description": "服务端核验项目、场景和修订后的试用知识；状态保持草稿，仅本案例可用",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "revision",
+          "ruleId",
+          "ruleVersion",
+          "title",
+          "parameters"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "知识条目编号"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "冻结知识修订"
+          },
+          "ruleId": {
+            "type": "string",
+            "description": "本案例规则编号"
+          },
+          "ruleVersion": {
+            "type": "string",
+            "description": "冻结规则版本"
+          },
+          "title": {
+            "type": "string",
+            "description": "试用规则标题"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "实际传给算子的规则参数",
+            "additionalProperties": true
+          }
+        }
+      },
+      "AgentMultiElementMap": {
+        "type": "object",
+        "description": "当前真实任务的地图资源；输入为模拟识别演示，输出只引用本轮实际计算，不引用交付包PNG",
+        "additionalProperties": false,
+        "properties": {
+          "before": {
+            "type": "object",
+            "description": "当前检查采用的明确上游版本",
+            "additionalProperties": false,
+            "properties": {
+              "lithology": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "岩性输入资源"
+              },
+              "faults": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "构造输入资源"
+              }
+            }
+          },
+          "after": {
+            "type": "object",
+            "description": "获批计算形成的新版本，未形成时缺省",
+            "additionalProperties": false,
+            "properties": {
+              "lithology": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "本轮修正岩性资源"
+              },
+              "faults": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "本轮修正构造资源"
+              }
+            }
+          },
+          "changes": {
+            "type": "array",
+            "description": "真实变化线点面图层，不含未批准建议",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "变化图层资源"
+            }
+          },
+          "checks": {
+            "type": "array",
+            "description": "当前实际检查的疑点及待核查图层",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "问题图层资源"
+            }
+          },
+          "beforeAlterations": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "本次检查实际读取的修改前矿物面图层，历史任务可缺省"
+          },
+          "alterations": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "保留原识别信息并标识处理状态的蚀变面图层"
+          },
+          "beforeIntersections": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "同参数下修改前实际重建的交汇点，历史任务未保存时可缺省"
+          },
+          "intersections": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "几何与推测交汇点，inferred字段决定实心或空心"
+          },
+          "beforeProspects": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "同参数下修正前优先核查远景区"
+          },
+          "afterProspects": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "同参数下修正后优先核查远景区；A/B为证据组合等级"
+          }
+        }
+      },
+      "AgentModificationSuggestion": {
+        "type": "object",
+        "description": "一项有实际图斑、规则、知识与空间预览支持的修改建议。",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "featureId",
+          "title",
+          "currentState",
+          "suggestedState",
+          "reason",
+          "areaM2",
+          "ruleId",
+          "knowledgeRefs",
+          "preview",
+          "bounds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "当前问题与建议内容绑定的标识，不由客户端编造"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fill_gap",
+              "set_age",
+              "multi_element"
+            ],
+            "description": "内部漏填、时代属性或多要素建议；综合场景具体操作由action标识"
+          },
+          "featureId": {
+            "type": "string",
+            "description": "当前数据中的稳定图斑标识"
+          },
+          "title": {
+            "type": "string",
+            "description": "简短问题标题"
+          },
+          "currentState": {
+            "type": "string",
+            "description": "当前地图或属性的可读状态"
+          },
+          "suggestedState": {
+            "type": "string",
+            "description": "建议修正后的可读状态"
+          },
+          "reason": {
+            "type": "string",
+            "description": "模型根据当次实际知识和结果给出的简短理由"
+          },
+          "areaM2": {
+            "type": "number",
+            "minimum": 0,
+            "description": "实际修改范围平方米面积；属性修改展示对应对象范围"
+          },
+          "ruleId": {
+            "type": "string",
+            "description": "本次结构化专家规则标识"
+          },
+          "element": {
+            "type": "string",
+            "enum": [
+              "lithology",
+              "structure",
+              "alteration"
+            ],
+            "description": "综合场景建议作用于岩性、构造或蚀变"
+          },
+          "action": {
+            "type": "string",
+            "description": "服务端冻结的建议动作；降权、保留、待裁定与剔除分别记录，客户端不提交新动作"
+          },
+          "observations": {
+            "type": "object",
+            "description": "当次算法实测值与量纲，用于核对规则条件",
+            "additionalProperties": true
+          },
+          "ruleConditions": {
+            "type": "array",
+            "description": "当次规则成立所需条件",
+            "items": {
+              "type": "string",
+              "description": "可核对条件"
+            }
+          },
+          "exceptions": {
+            "type": "array",
+            "description": "必须保留的地质例外与证据缺口",
+            "items": {
+              "type": "string",
+              "description": "例外或证据缺口"
+            }
+          },
+          "ruleRefs": {
+            "type": "array",
+            "description": "本案例试用规则及具体知识版本来源",
+            "items": {
+              "type": "object",
+              "description": "一条显式绑定的试用规则引用",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "version",
+                "title",
+                "knowledgeId",
+                "revision",
+                "source"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "规则编号"
+                },
+                "version": {
+                  "type": "string",
+                  "description": "冻结规则版本"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "规则标题"
+                },
+                "knowledgeId": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "已授权试用知识条目编号"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "知识修订"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "原来源及核实程度"
+                }
+              }
+            }
+          },
+          "lengthM": {
+            "type": "number",
+            "minimum": 0,
+            "description": "构造对象实测米制长度；不以面积代替线长度"
+          },
+          "status": {
+            "type": "string",
+            "description": "建议、待裁定、例外、保留、降权或剔除的实际处置状态"
+          },
+          "knowledgeRefs": {
+            "type": "array",
+            "minItems": 1,
+            "description": "当前检索实际返回的知识与修订，权限继续按原项目检查。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "revision",
+                "title"
+              ],
+              "description": "一条实际知识依据。",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "实际知识编号"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "实际知识修订"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "用户可读知识标题"
+                }
+              }
+            }
+          },
+          "preview": {
+            "$ref": "#/components/schemas/GeoJSONGeometry",
+            "description": "从实际问题计算得到的WGS84修改范围，不是客户端编辑参数。"
+          },
+          "bounds": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "WGS84西、南、东、北界，用于建议预览与定位。",
+            "items": {
+              "type": "number",
+              "description": "经纬度边界值"
+            }
+          }
+        }
+      },
+      "ResourceDeletePreviewRequest": {
+        "type": "object",
+        "description": "当前项目内的待删除资源集合，预览不产生删除。",
+        "additionalProperties": false,
+        "required": [
+          "resourceIds"
+        ],
+        "properties": {
+          "resourceIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "待核对资源，重复编号只处理一次。",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "数据资源编号"
+            }
+          }
+        }
+      },
+      "ResourceDeletePreviewItem": {
+        "type": "object",
+        "description": "当前授权资源的引用影响，历史清理需要用户明确确认。",
+        "additionalProperties": false,
+        "required": [
+          "resourceId",
+          "name",
+          "status",
+          "detail",
+          "historyReferenceCount"
+        ],
+        "properties": {
+          "resourceId": {
+            "type": "integer",
+            "description": "请求中的资源编号"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "可访问资源名称，不可访问时为空"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "deletable",
+              "confirmation_required",
+              "blocked",
+              "not_found"
+            ],
+            "description": "可删除、需确认历史清理、仍受保护或不存在"
+          },
+          "detail": {
+            "type": "string",
+            "description": "对用户可读的引用影响或保护原因"
+          },
+          "historyReferenceCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "删除将解除的已结束任务或工作流关联数量"
+          }
+        }
+      },
+      "ResourceDeletePreviewResponse": {
+        "type": "object",
+        "description": "删除影响与绑定用户、项目、资源和引用快照的签名确认凭证。",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "confirmationToken"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "按首次请求顺序返回，受保护项确认后仍不删除。",
+            "items": {
+              "$ref": "#/components/schemas/ResourceDeletePreviewItem"
+            }
+          },
+          "confirmationToken": {
+            "type": "string",
+            "description": "10分钟内有效，引用变化后重新预览，不授予新权限"
+          }
+        }
+      },
+      "ResourceBulkDeleteRequest": {
+        "type": "object",
+        "description": "当前项目待删除资源，不接受文件路径或其他项目资源。",
+        "additionalProperties": false,
+        "required": [
+          "resourceIds",
+          "confirmed"
+        ],
+        "properties": {
+          "resourceIds": {
+            "type": "array",
+            "description": "1 至 100 个正整数资源编号，重复编号只处理一次。",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true,
+            "description": "用户在界面明确确认永久删除。"
+          },
+          "historyConfirmationToken": {
+            "type": "string",
+            "description": "用户检查预览并确认清理历史关联后的签名凭证；仅计算结果允许清理已结束计算和科研记录，名称、来源与删除记录保留，运行中依赖继续保护。"
+          }
+        }
+      },
+      "ResourceBulkDeleteItem": {
+        "type": "object",
+        "description": "一项资源的真实删除结果。",
+        "additionalProperties": false,
+        "required": [
+          "resourceId",
+          "name",
+          "status",
+          "detail"
+        ],
+        "properties": {
+          "resourceId": {
+            "type": "integer",
+            "description": "请求中的资源编号。"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "可访问资源名称；not_found 时为空。"
+          },
+          "status": {
+            "type": "string",
+            "description": "deleted 已删除；blocked 存在引用等保护；not_found 不存在或不可访问；failed 存储或数据库操作失败。",
+            "enum": [
+              "deleted",
+              "blocked",
+              "not_found",
+              "failed"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "用户可读的删除范围或拒绝原因，不返回服务器路径。"
+          }
+        }
+      },
+      "ResourceBulkDeleteResponse": {
+        "type": "object",
+        "description": "部分成功的逐项结果及汇总。",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "deletedIds",
+          "deletedCount",
+          "failedCount"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "按请求首次出现顺序返回每项结果。",
+            "items": {
+              "$ref": "#/components/schemas/ResourceBulkDeleteItem"
+            }
+          },
+          "deletedIds": {
+            "type": "array",
+            "description": "确实已删除的资源编号，供刷新目录和清理选中项。",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "deletedCount": {
+            "type": "integer",
+            "description": "成功删除项数。",
+            "minimum": 0
+          },
+          "failedCount": {
+            "type": "integer",
+            "description": "未删除项数，包含 blocked、not_found 和 failed。",
+            "minimum": 0
+          }
+        }
+      },
       "DataResource": {
         "type": "object",
         "required": [
@@ -33432,10 +35602,13 @@
                 "$ref": "#/components/schemas/ExportJobResult"
               },
               {
+                "$ref": "#/components/schemas/RasterJobInputReferences"
+              },
+              {
                 "type": "null"
               }
             ],
-            "description": "任务完成后的结果；未完成或失败时为 null"
+            "description": "完成任务的结果；渲染和导出任务在排队或处理中保存精简输入引用，失败时可以保留引用，其他任务未完成时可为 null"
           },
           "error": {
             "type": "string",
@@ -33453,6 +35626,35 @@
             ],
             "format": "double",
             "description": "任务结束时间戳"
+          }
+        }
+      },
+      "RasterJobInputReferences": {
+        "type": "object",
+        "required": [
+          "inputRefs"
+        ],
+        "properties": {
+          "inputRefs": {
+            "type": "array",
+            "description": "用于保护正在使用的数据；只保存标识，不保存几何或栅格内容",
+            "items": {
+              "type": "object",
+              "properties": {
+                "resourceId": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "layerId": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "datasetId": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
           }
         }
       },
@@ -37241,6 +39443,10 @@
           "sizeBytes": {
             "type": "integer",
             "description": "标识"
+          },
+          "fileFormat": {
+            "type": "string",
+            "description": "资源登记格式；候选字段和几何类型从实际入库文件读取，后缀不能替代角色校验"
           }
         },
         "required": [
@@ -37340,13 +39546,14 @@
           },
           "importStatus": {
             "type": "string",
-            "description": "入库状态",
+            "description": "入库状态；deleted表示用户确认清理了目录数据，历史来源仍保留",
             "enum": [
               "none",
               "queued",
               "running",
               "ready",
-              "failed"
+              "failed",
+              "deleted"
             ]
           },
           "resourceId": {
@@ -37461,7 +39668,7 @@
             "description": "列表",
             "items": {
               "type": "object",
-              "description": "输入资源ID/名称/固定SHA256/元数据",
+              "description": "输入资源ID（历史清理后可为空）/名称/固定SHA256/元数据；deletedResource保留原编号、名称、来源、所属项目、删除时间及操作者，不可再作为执行输入",
               "additionalProperties": true
             }
           },

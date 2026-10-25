@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261025-001 - 地质完整对比与隔离独立评价
+
+- Status: ContractReady
+- Owner: haide_story前端与契约；root后端及数据；evaluation独立评价。
+- Endpoints: GET /api/agent/workflows/{workflowId}/；GET /api/agent/workflows/{workflowId}/validation/；GET /api/agent/workflows/{workflowId}/validation/files/{fileKey}/preview/、download/。
+- Change type: 现有地图资源增加可选改前交汇和矿物引用；新增隔离只读独立评价及文件访问。
+- OpenAPI change: AgentMultiElementMap.beforeIntersections/beforeAlterations；AgentWorkflowValidation/Section/File；预览复用AgentWorkflowReportPreview。
+- Mock examples: mock/prism/examples/102-agent-validation.json，仅为空评价可用性样例，不充当实测结论。
+- Frontend reason: 两案例任务对比组完整保留改前、改后与修改范围；海德章节可核对交汇前后及展开独立评价。
+- Backend implementation notes: 沿用当前项目、本人或管理工作流授权；独立评价不进入plan、模型、知识检索或正常算法输入。文件键来自受控清单，每次核验SHA256/大小/来源，下载额外验证数据导出权限；读取不创建新成果。
+- Verification: 无评价200明确状态；跨项目/越权/路径/校验漂移拒绝；独立参考隔离；真实表格、文件预览下载及两案例工作台去重恢复。
+- Result: 契约完成，后端与前端实现及必要检查进行中。
+
 ## API-20261023-001 - 海德乌拉多要素推理和试用规则
 
 - Status: BackendReady
@@ -164,6 +177,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261025-001 | ContractReady | /api/agent/workflows/{workflowId}/validation/; validation/files/*; workflow map fields | isolated read-only evaluation and before-layer references | Updated | 102-agent-validation | Pending | Pending | Implementation in progress |
 | API-20261023-001 | BackendReady | /api/agent/research-demos/; /api/agent/workflows/; /confirm/; /api/compute/algorithms/ | multi-element scenario, trial rule bindings, measured suggestions, real map outputs and project tools | Updated | Integration/browser fixtures | Passed | Focused browser, unit and real local workflow passed | Real algorithms and maps verified; model decisions use mock, recorded separately |
 | API-20261021-001 | BackendReady | /api/compute/inputs/; /api/agent/research-demos/; /api/agent/workflows/; /cancel/ | current-project preset, actual input-role checks and conditional replacement | Updated | Integration/browser fixtures | Implemented | Focused verification | Preserve permissions; metadata before plan and complete runtime validation |
 | API-20261020-001 | BackendReady | /api/auth/browser-session/; login/; guest-login/; register/; me/ | browser page leases and session lifecycle | Updated | HTTP/browser fixtures | Passed | 54 backend; 33 browser passed | 20-second refresh; 120-second lost-contact expiry; release acceptance separate |

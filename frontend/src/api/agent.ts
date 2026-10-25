@@ -21,6 +21,7 @@ import type {
   AgentResearchIntentUpdate,
   AgentWorkflowReport,
   AgentWorkflowReportPreview,
+  AgentWorkflowValidation,
   AgentWorkflowConfirmation,
   AgentInteractionUpdate,
   CancelAgentWorkflowData,
@@ -100,6 +101,14 @@ export const agentApi = {
     }),
   workflow: (id: string) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/`),
+  workflowValidation: (id: string) =>
+    requestJson<AgentWorkflowValidation>(
+      `/api/agent/workflows/${encodeURIComponent(id)}/validation/`,
+    ),
+  workflowValidationPreview: (id: string, fileKey: string) =>
+    requestJson<AgentWorkflowReportPreview>(
+      `/api/agent/workflows/${encodeURIComponent(id)}/validation/files/${encodeURIComponent(fileKey)}/preview/`,
+    ),
   workflows: () => requestJson<AgentWorkflowList>("/api/agent/workflows/"),
   confirmWorkflow: (
     id: string,

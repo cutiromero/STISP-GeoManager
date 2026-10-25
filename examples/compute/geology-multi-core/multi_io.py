@@ -186,7 +186,7 @@ def rules(path):
         identifier = row["rule_id"]
         if identifier in result or identifier not in {
             f"{p}-{i:02}"
-            for p, count in [("L", 4), ("S", 5), ("A", 5), ("P", 3)]
+            for p, count in [("L", 5), ("S", 5), ("A", 5), ("P", 3)]
             for i in range(1, count + 1)
         }:
             raise ValueError("规则编号未知或重复")

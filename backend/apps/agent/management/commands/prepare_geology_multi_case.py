@@ -125,11 +125,12 @@ def register_knowledge(user, project, bundle):
     entries = []
     for rule in bundle["rules"]:
         basis = rule.get("basis", {})
+        version = rule.get("version", bundle["version"])
         sources = [
             {
                 "title": "海德乌拉演示规则集",
                 "url": "",
-                "locator": f"knowledge/rules.yaml {rule['id']} {bundle['version']}",
+                "locator": f"knowledge/rules.yaml {rule['id']} {version}",
                 "excerpt": basis.get("statement", "")[:1200],
             }
         ]
@@ -143,7 +144,7 @@ def register_knowledge(user, project, bundle):
             for item in basis.get("refs", [])
         )
         exceptions = [basis["gap"]] if basis.get("gap") else []
-        if rule["id"].startswith("L-") and rule["id"] != "L-03":
+        if rule["id"] in {"L-01", "L-02", "L-04"}:
             exceptions.append(
                 "残留体、构造窗、捕虏体等地质例外需进一步证据；面积和时代排序只构成疑点。"
             )
@@ -171,7 +172,7 @@ def register_knowledge(user, project, bundle):
                     "scenario": SCENARIO,
                     "projectId": project.id,
                     "ruleId": rule["id"],
-                    "ruleVersion": bundle["version"],
+                    "ruleVersion": version,
                 },
                 "parameters": {
                     **rule.get("params", {}),
@@ -272,14 +273,29 @@ class Command(BaseCommand):
             manifest.get("scenario") != SCENARIO
             or {item["role"] for item in manifest["resources"]} != ROLES
             or len(manifest["resources"]) != 8
-            or len(bundle["rules"]) != 17
+            or {rule["id"] for rule in bundle["rules"]}
+            not in (
+                {
+                    f"{prefix}-{index:02}"
+                    for prefix, count in [("L", 4), ("S", 5), ("A", 5), ("P", 3)]
+                    for index in range(1, count + 1)
+                },
+                {
+                    f"{prefix}-{index:02}"
+                    for prefix, count in [("L", 5), ("S", 5), ("A", 5), ("P", 3)]
+                    for index in range(1, count + 1)
+                },
+            )
+            or len(bundle["rules"]) != len({rule["id"] for rule in bundle["rules"]})
             or bundle.get("scenario") != SCENARIO
         ):
             raise CommandError("运行资料或试用知识清单不完整")
         for item in [*manifest["resources"], *manifest["artifacts"]]:
             checked_file(root, item)
         if options["dry_run"]:
-            self.stdout.write("8项输入、17条试用规则与2项参考成果预检通过；无业务写入")
+            self.stdout.write(
+                f"8项输入、{len(bundle['rules'])}条试用规则与{len(manifest['artifacts'])}项参考成果预检通过；无业务写入"
+            )
             return
         record = {
             "projectId": project.id,
@@ -309,7 +325,7 @@ class Command(BaseCommand):
                     writer.writerow(
                         {
                             "rule_id": config["trialScope"]["ruleId"],
-                            "rule_version": bundle["version"],
+                            "rule_version": config["trialScope"]["ruleVersion"],
                             "knowledge_id": entry.id,
                             "knowledge_revision": entry.revision,
                             "params_json": json.dumps(
@@ -335,10 +351,10 @@ class Command(BaseCommand):
             rule_item = {
                 "file": "inputs/rules.csv",
                 "sha256": digest(rule_path),
-                "code": "geology-multi-rules",
+                "code": manifest.get("rulesCode", "geology-multi-rules"),
                 "kind": "table",
                 "name": "海德乌拉本案例试用规则",
-                "description": "17条草拟规则及34个归一化代号、38种名称映射；仅本项目本场景显式绑定后读取。",
+                "description": f"{len(bundle['rules'])}条试用规则及34个归一化代号、38种名称映射；仅本项目本场景显式绑定后读取。",
             }
             resources = {}
             colors = json.loads(
@@ -359,5 +375,5 @@ class Command(BaseCommand):
             json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         self.stdout.write(
-            f"已登记{len(record['resources'])}项输入、17条试用知识及2项参考成果；原包与独立评价资料未登记为运行输入"
+            f"已登记{len(record['resources'])}项输入、{len(bundle['rules'])}条试用知识及{len(manifest['artifacts'])}项参考成果；原包与独立评价资料未登记为运行输入"
         )

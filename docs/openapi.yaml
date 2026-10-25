@@ -8053,6 +8053,103 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /api/agent/workflows/{workflowId}/validation/:
+    get:
+      tags: [智能体]
+      operationId: getAgentWorkflowValidation
+      summary: 查看工作流独立评价
+      description: 只读展示绑定本次工作流的独立评价摘要、分项统计及文件。沿用工作流的当前项目、本人或管理权限授权；独立参考与评价只供展示验收，绝不进入plan、模型上下文、知识检索或正常计算输入。尚无评价时返回available=false及说明，不重新计算或创建文件。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目ID，禁止all
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 当前用户可查看的工作流UUID
+        schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: 独立评价或尚无评价的明确状态
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentWorkflowValidation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/agent/workflows/{workflowId}/validation/files/{fileKey}/preview/:
+    get:
+      tags: [智能体]
+      operationId: previewAgentWorkflowValidationFile
+      summary: 预览独立评价说明
+      description: 读取已绑定评价清单中的Markdown文件，最多200000字符并明确truncated。每次重查工作流授权、受控文件key、清单来源、字节数和SHA256；只读且不生成新报告。非Markdown文件不提供previewUrl，直接请求返回404。文件变化返回409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目ID，禁止all
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 当前用户可查看的工作流UUID
+        schema: {type: string, format: uuid}
+      - name: fileKey
+        in: path
+        required: true
+        description: 评价清单中的受控文件键，不能传入文件路径
+        schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
+      responses:
+        '200':
+          description: 已保存Markdown评价说明
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentWorkflowReportPreview'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/agent/workflows/{workflowId}/validation/files/{fileKey}/download/:
+    get:
+      tags: [智能体]
+      operationId: downloadAgentWorkflowValidationFile
+      summary: 下载独立评价文件
+      description: 读取受控评价清单的原始文件字节，沿用工作流授权并额外要求数据导出权限。每次核对文件来源、字节数和SHA256；返回attachment、nosniff和no-store头，不接受任意路径，不重新评价或改变业务数据。文件变化返回409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目ID，禁止all
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 当前用户可查看的工作流UUID
+        schema: {type: string, format: uuid}
+      - name: fileKey
+        in: path
+        required: true
+        description: 评价清单中的受控文件键，不能传入文件路径
+        schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
+      responses:
+        '200':
+          description: 与清单SHA256一致的原始文件，Content-Type取清单中的实际类型
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary, description: 独立评价文件原始字节}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/agent/admin/:
     get:
       tags:
@@ -10094,6 +10191,67 @@ components:
       - startedAt
       - finishedAt
       additionalProperties: false
+    AgentWorkflowValidation:
+      type: object
+      description: 与运行输入隔离的工作流独立评价，仅用于授权页面与文件验收
+      additionalProperties: false
+      required: [workflowId, available, scope, summary, sections, files]
+      properties:
+        workflowId: {type: string, format: uuid, description: 绑定的实际工作流}
+        available: {type: boolean, description: 是否已存在可读取的独立评价；false时sections及files为空}
+        scope: {type: string, description: 数据性质与评价范围，明确模拟输入及未覆盖项目}
+        summary: {type: string, description: 通俗评价结论或尚无评价的原因}
+        sections:
+          type: array
+          description: 按规则、关系、岩性对照或置信度标定组织的实际评价统计
+          items: {$ref: '#/components/schemas/AgentWorkflowValidationSection'}
+        files:
+          type: array
+          description: 受控独立评价清单中的真实文件
+          items: {$ref: '#/components/schemas/AgentWorkflowValidationFile'}
+    AgentWorkflowValidationSection:
+      type: object
+      description: 一项独立评价表格，列定义与每行实际统计对应
+      additionalProperties: false
+      required: [key, title, summary, columns, rows]
+      properties:
+        key: {type: string, description: 分项稳定键}
+        title: {type: string, description: 用户可读的分项名称}
+        summary: {type: string, description: 本项统计口径、结论及证据范围}
+        columns:
+          type: array
+          description: 显示列及其稳定字段键
+          items:
+            type: object
+            description: 单个统计列
+            additionalProperties: false
+            required: [key, label]
+            properties:
+              key: {type: string, description: 对应rows中的字段键}
+              label: {type: string, description: 中文列标题}
+        rows:
+          type: array
+          description: 独立计算得到的统计行，保持零值、未定义值和未验证结果的区别
+          items:
+            type: object
+            description: 一行统计，键对应columns，值仅为可显示标量
+            additionalProperties:
+              type: [string, number, boolean, 'null']
+              description: 实际统计值或明确文字说明，未计算为null
+    AgentWorkflowValidationFile:
+      type: object
+      description: 只读独立评价文件，文件访问时再次核验来源、大小和SHA256
+      additionalProperties: false
+      required: [key, fileName, contentType, sizeBytes, checksum, previewUrl, downloadUrl, canDownload]
+      properties:
+        key: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 受控文件键，不是路径}
+        fileName: {type: string, description: 用户可读的真实下载文件名}
+        contentType: {type: string, description: 清单登记的真实文件媒体类型}
+        sizeBytes: {type: integer, minimum: 0, description: 已保存文件字节数}
+        checksum: {type: string, pattern: '^[a-f0-9]{64}$', description: 已保存文件SHA256}
+        previewUrl: {type: [string, 'null'], description: Markdown预览端点，其余类型为null}
+        downloadUrl: {type: string, description: 受工作流授权及数据导出权限保护的下载地址}
+        canDownload: {type: boolean, description: 当前用户是否具备下载所需权限}
     AgentWorkflowReport:
       type: object
       description: 已生成并持久保存的科研Markdown报告，操作能力根据当前权限返回
@@ -14079,7 +14237,9 @@ components:
           type: array
           description: 当前实际检查的疑点及待核查图层
           items: {type: integer, minimum: 1, description: 问题图层资源}
+        beforeAlterations: {type: integer, minimum: 1, description: 本次检查实际读取的修改前矿物面图层，历史任务可缺省}
         alterations: {type: integer, minimum: 1, description: 保留原识别信息并标识处理状态的蚀变面图层}
+        beforeIntersections: {type: integer, minimum: 1, description: 同参数下修改前实际重建的交汇点，历史任务未保存时可缺省}
         intersections: {type: integer, minimum: 1, description: 几何与推测交汇点，inferred字段决定实心或空心}
         beforeProspects: {type: integer, minimum: 1, description: 同参数下修正前优先核查远景区}
         afterProspects: {type: integer, minimum: 1, description: 同参数下修正后优先核查远景区；A/B为证据组合等级}

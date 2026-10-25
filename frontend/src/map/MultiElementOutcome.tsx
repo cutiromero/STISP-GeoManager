@@ -1,15 +1,20 @@
 import { AimOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import type { prospectChanges } from "./multiElementTour";
+import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
 
 export default function MultiElementOutcome({
   result,
   active,
   onFocus,
+  onObjectFocus,
 }: {
   result: ReturnType<typeof prospectChanges>;
   active: boolean;
   onFocus: (grade?: string) => void;
+  onObjectFocus?: (
+    feature: GeoJsonFeatureCollection["features"][number],
+  ) => void;
 }) {
   const changed = result.before.features.length + result.after.features.length;
   return (
@@ -72,6 +77,61 @@ export default function MultiElementOutcome({
           : "本次前后核查区保持一致。"}
         这里反映核查排序与范围的变化，找矿效果仍需后续调查验证。
       </p>
+      {changed > 0 && (
+        <details className="multi-tour-evidence multi-outcome-evidence">
+          <summary>逐区查看实际调查依据与变化位置</summary>
+          <p>
+            岩性背景、参与分析的构造交汇和矿物权重按当次算法输出记录。点击定位，展开具体证据核对各要素如何影响核查区。
+          </p>
+          {[
+            { label: "处理前", data: result.before },
+            { label: "处理后", data: result.after },
+          ].map((side) => (
+            <section key={side.label}>
+              <h3>{side.label}发生变化的核查区</h3>
+              {side.data.features.map((feature, index) => (
+                <details key={`${side.label}:${String(feature.id ?? index)}`}>
+                  <summary>
+                    {String(feature.properties.grade)}类核查区 {index + 1}
+                    <Button
+                      type="link"
+                      size="small"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        onObjectFocus?.(feature);
+                      }}
+                    >
+                      定位
+                    </Button>
+                  </summary>
+                  <p>
+                    {String(
+                      feature.properties.explanation ?? "详见该区具体证据记录",
+                    )}
+                  </p>
+                  <p>
+                    面积：
+                    {Number(feature.properties.area_km2).toLocaleString(
+                      "zh-CN",
+                      { maximumFractionDigits: 4 },
+                    )}
+                    平方公里
+                  </p>
+                  <pre>
+                    {typeof feature.properties.evidence_json === "string"
+                      ? feature.properties.evidence_json
+                      : JSON.stringify(
+                          feature.properties.evidence_json ?? {},
+                          null,
+                          2,
+                        )}
+                  </pre>
+                </details>
+              ))}
+            </section>
+          ))}
+        </details>
+      )}
     </section>
   );
 }

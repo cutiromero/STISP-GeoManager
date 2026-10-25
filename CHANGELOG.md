@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.49] - 2026-10-25
+
+### Added
+- 海德乌拉增加有条件的同单元图斑融合，实际测量共享边界和构造距离，批准后只整理获批对象，保留外部范围及类别面积。
+- 海德乌拉结果按总览、岩性、构造、矿物和调查建议分章，展示真实修改、知识来源、交汇重建及相同参数的远景区比较。
+- 两个地质案例可一键进入地理工作台前后对比组，包含原图、结果及属性、状态、权重和几何修改范围，支持逐处定位、同步双图和刷新恢复。
+- 独立评价提供分规则、实测接触关系、构造对照及置信度标定，隔离保存并按权限预览下载，绑定实际任务及输入版本。
+
+### Changed
+- 综合地质四类算法升级至1.0.3，关系重建输出真实处理前后交汇统计；报告区分涉及对象面积、覆盖变化面积和移除的内部边界。
+- 保留原始资料、原海德乌拉六处修改任务及扩区五问题案例，新整理副本采用独立资源版本。
+
 ## [0.1.48] - 2026-10-25
 
 ### Changed

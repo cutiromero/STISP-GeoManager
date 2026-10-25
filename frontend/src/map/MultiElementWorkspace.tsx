@@ -28,6 +28,10 @@ import {
 import type { ReviewOverlay } from "./reviewVectorLayers";
 import MultiElementTourCard from "./MultiElementTourCard";
 import MultiElementOutcome from "./MultiElementOutcome";
+import MultiElementChapters, {
+  type StoryChapter,
+} from "./MultiElementChapters";
+import WorkflowValidationPanel from "./WorkflowValidationPanel";
 import {
   actualTourChanges,
   featureCollection,
@@ -42,6 +46,15 @@ const empty: GeoJsonFeatureCollection = {
   type: "FeatureCollection",
   features: [],
 };
+function savedStory(id: string) {
+  try {
+    return record(
+      JSON.parse(sessionStorage.getItem(`geology-story:${id}`) ?? "{}"),
+    );
+  } catch {
+    return {};
+  }
+}
 type Feature = GeoJsonFeatureCollection["features"][number];
 type MultiMaps = {
   before: GeoJsonFeatureCollection;
@@ -130,6 +143,18 @@ export default function MultiElementWorkspace({
 }) {
   const navigate = useNavigate();
   const { bootstrap } = useAppContext();
+  const [chapter, setChapter] = useState<StoryChapter>(() => {
+    const value = savedStory(workflow.id).chapter;
+    return [
+      "all",
+      "lithology",
+      "structure",
+      "alteration",
+      "investigation",
+    ].includes(String(value))
+      ? (value as StoryChapter)
+      : "all";
+  });
   const [data, setData] = useState<MultiMaps>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -155,11 +180,22 @@ export default function MultiElementWorkspace({
   const resourceRequests = useRef(
     new Map<number, Promise<GeoJsonFeatureCollection>>(),
   );
-  const [visible, setVisible] = useState([
-    "faults",
-    "intersections",
-    "prospects",
-  ]);
+  const [visible, setVisible] = useState<string[]>(() => {
+    const value = savedStory(workflow.id).visible;
+    return Array.isArray(value)
+      ? value.filter(
+          (key): key is string =>
+            typeof key === "string" &&
+            [
+              "checks",
+              "faults",
+              "intersections",
+              "prospects",
+              "alterations",
+            ].includes(key),
+        )
+      : ["faults", "intersections", "prospects"];
+  });
   useEffect(() => {
     let disposed = false;
     setLoading(true);
@@ -202,6 +238,7 @@ export default function MultiElementWorkspace({
         faults,
         afterFaults,
         changes,
+        beforeIntersections,
         intersections,
         beforeProspects,
         afterProspects,
@@ -213,6 +250,7 @@ export default function MultiElementWorkspace({
         query(faultsId),
         query(map.after?.faults ?? faultsId),
         merge(map.changes ?? []),
+        query(map.beforeIntersections),
         query(map.intersections),
         query(map.beforeProspects),
         query(map.afterProspects),
@@ -246,6 +284,7 @@ export default function MultiElementWorkspace({
         {
           key: "intersections",
           label: "构造交汇",
+          before: beforeIntersections,
           after: intersections,
           color: "#b4526e",
         },
@@ -266,34 +305,65 @@ export default function MultiElementWorkspace({
         beforeProspects,
         afterProspects,
       });
+      const saved = savedStory(workflow.id);
+      const requestedId =
+        suggestionId ??
+        (typeof saved.tourKey === "string" ? saved.tourKey : null);
       const suggestion = workflow.modificationReview?.suggestions.find(
-        (item) => item.id === suggestionId,
+        (item) => item.id === requestedId,
       );
       const requestedFeature = [
         ...differences.features,
         ...issues.features,
       ].find(
         (item) =>
-          item.properties.suggestion_id === suggestionId ||
-          item.properties.issue_id === suggestionId ||
+          item.properties.suggestion_id === requestedId ||
+          item.properties.issue_id === requestedId ||
           (suggestion &&
             String(item.properties.feature_id) === suggestion.featureId &&
             item.properties.rule_id === suggestion.ruleId),
       );
       const tourChanges = actualTourChanges(workflow, differences);
       const current =
-        tourChanges.find((item) => item.key === suggestionId) ?? tourChanges[0];
+        tourChanges.find((item) => item.key === requestedId) ??
+        tourChanges.find(
+          (item) =>
+            saved.chapter === "all" ||
+            item.suggestion.element === saved.chapter,
+        ) ??
+        tourChanges[0];
       const feature = requestedFeature ?? current?.feature;
       setTourKey(current?.key ?? null);
+      const restoredOutcome =
+        saved.viewMode === "outcome" &&
+        !suggestionId &&
+        map.beforeProspects &&
+        map.afterProspects;
       setViewMode(
-        current && (!suggestionId || current.key === suggestionId)
-          ? "tour"
-          : "overview",
+        restoredOutcome
+          ? "outcome"
+          : saved.viewMode === "overview" && !suggestionId
+            ? "overview"
+            : current && (!suggestionId || current.key === suggestionId)
+              ? "tour"
+              : "overview",
       );
       setSelected(feature);
+      const restoredZones = restoredOutcome
+        ? prospectChanges(beforeProspects, afterProspects)
+        : null;
       setFocus(
         reviewBounds(
-          feature ? { type: "FeatureCollection", features: [feature] } : before,
+          restoredZones
+            ? featureCollection([
+                ...restoredZones.before.features,
+                ...restoredZones.after.features,
+              ])
+            : saved.viewMode === "overview" && !suggestionId
+              ? before
+              : feature
+                ? featureCollection([feature])
+                : before,
         ),
       );
     };
@@ -309,10 +379,31 @@ export default function MultiElementWorkspace({
       disposed = true;
     };
   }, [workflow, suggestionId]);
-  const tour = useMemo(
+  const allTour = useMemo(
     () => (data ? actualTourChanges(workflow, data.differences) : []),
     [data, workflow],
   );
+  const tour = useMemo(
+    () =>
+      allTour.filter(
+        (item) =>
+          chapter === "all" ||
+          chapter === "investigation" ||
+          item.suggestion.element === chapter,
+      ),
+    [allTour, chapter],
+  );
+  useEffect(() => {
+    if (!data) return;
+    try {
+      sessionStorage.setItem(
+        `geology-story:${workflow.id}`,
+        JSON.stringify({ chapter, tourKey, viewMode, visible }),
+      );
+    } catch {
+      /* storage availability does not prevent map use */
+    }
+  }, [data, workflow.id, chapter, tourKey, viewMode, visible]);
   const tourIndex = Math.max(
     0,
     tour.findIndex((item) => item.key === tourKey),
@@ -332,9 +423,11 @@ export default function MultiElementWorkspace({
     const checkOutputs = Array.isArray(initialCheck?.outputs)
       ? initialCheck.outputs.map(record)
       : [];
-    const beforeAlterations = Number(
-      checkOutputs.find((output) => output.key === "alterations")?.resourceId,
-    );
+    const beforeAlterations =
+      map.beforeAlterations ??
+      Number(
+        checkOutputs.find((output) => output.key === "alterations")?.resourceId,
+      );
     const groups = [
       { key: "checks", visibleKey: "checks", ids: map.checks ?? [] },
       {
@@ -464,7 +557,7 @@ export default function MultiElementWorkspace({
   const inspect = (feature: Feature) => {
     setSelected(feature);
     setFocus(reviewBounds({ type: "FeatureCollection", features: [feature] }));
-    const item = tour.find(
+    const item = allTour.find(
       (item) =>
         item.feature === feature ||
         (String(feature.properties.feature_id ?? feature.properties.line_id) ===
@@ -473,6 +566,8 @@ export default function MultiElementWorkspace({
             feature.properties.rule_id === item.suggestion.ruleId)),
     );
     if (item) {
+      if (chapter !== "all" && chapter !== item.suggestion.element)
+        setChapter(item.suggestion.element as StoryChapter);
       setTourKey(item.key);
       setViewMode("tour");
     } else if (viewMode !== "outcome" || !feature.properties.grade)
@@ -480,7 +575,10 @@ export default function MultiElementWorkspace({
   };
   const showTour = (index: number) => {
     const item = tour[index];
-    if (item) inspect(item.feature);
+    if (item) {
+      inspect(item.feature);
+      if (chapter === "investigation") setChapter("all");
+    }
   };
   const outcome = useMemo(
     () =>
@@ -515,6 +613,7 @@ export default function MultiElementWorkspace({
     if (!outcome) return;
     setOutcomeGrade(grade ?? null);
     setViewMode("outcome");
+    setChapter("investigation");
     setFocus(
       reviewBounds(
         featureCollection(
@@ -523,6 +622,34 @@ export default function MultiElementWorkspace({
           ),
         ),
       ),
+    );
+  };
+  const showChapter = (next: StoryChapter) => {
+    setChapter(next);
+    if (next === "investigation") {
+      showOutcome();
+      return;
+    }
+    const item = allTour.find(
+      (change) => next === "all" || change.suggestion.element === next,
+    );
+    if (item) {
+      setTourKey(item.key);
+      setSelected(item.feature);
+      setViewMode("tour");
+      setFocus(reviewBounds(featureCollection([item.feature])));
+    } else {
+      setViewMode("overview");
+      setFocus(data ? reviewBounds(data.before) : null);
+    }
+    setVisible(
+      next === "structure"
+        ? ["faults", "intersections"]
+        : next === "alteration"
+          ? ["alterations"]
+          : next === "lithology"
+            ? []
+            : ["faults", "intersections", "prospects"],
     );
   };
   const tourBefore = currentTour
@@ -582,6 +709,15 @@ export default function MultiElementWorkspace({
         </div>
         <div className="geology-review-workspace-actions">
           <Button
+            onClick={() =>
+              navigate(
+                `/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}${currentTour ? `&suggestion=${encodeURIComponent(currentTour.key)}` : ""}`,
+              )
+            }
+          >
+            在地理工作台对比
+          </Button>
+          <Button
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate("/agent/workbench")}
           >
@@ -606,8 +742,7 @@ export default function MultiElementWorkspace({
       <Alert
         showIcon
         type="info"
-        title="演示案例"
-        description="岩性与构造为模拟识别输入（演示）；矿物为遥感矿物识别结果（演示案例）。草拟规则仅在本案例试用，待裁定与未批准对象保留。"
+        title="演示案例：岩性与构造为模拟识别；矿物为遥感矿物识别结果。规则在本案例试用，待裁定与未批准对象保留。"
       />
       {error && <Alert type="error" showIcon title={error} />}
       {loading && (
@@ -618,6 +753,15 @@ export default function MultiElementWorkspace({
       )}
       {data && (
         <>
+          <MultiElementChapters
+            workflow={workflow}
+            active={chapter}
+            tour={allTour}
+            onChange={showChapter}
+            intersections={data.overlays.find(
+              (item) => item.key === "intersections",
+            )}
+          />
           {tour.length > 0 && (
             <nav className="multi-tour-toolbar" aria-label="修改导览">
               <div className="multi-tour-pager">
@@ -705,6 +849,9 @@ export default function MultiElementWorkspace({
             <section className="geology-review-map-area">
               <div
                 className="multi-tour-map-stage"
+                data-current-change={
+                  viewMode === "tour" ? currentTour?.key : undefined
+                }
                 aria-label={
                   viewMode === "tour"
                     ? "当前对象前后状态"
@@ -846,8 +993,10 @@ export default function MultiElementWorkspace({
               result={outcome}
               active={viewMode === "outcome"}
               onFocus={showOutcome}
+              onObjectFocus={inspect}
             />
           )}
+          <WorkflowValidationPanel workflowId={workflow.id} />
           {workflow.status === "succeeded" && (
             <div className="geology-review-workspace-report">
               <WorkflowReportFile
