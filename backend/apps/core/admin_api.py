@@ -67,7 +67,6 @@ from apps.core.initialization import (
     GUEST_GROUP_NAME,
     SUPERADMIN_GROUP_NAME,
     DEFAULT_USER_GROUP_NAME,
-    ensure_guest_user,
     ensure_superadmin_defaults,
     is_builtin_group,
     is_guest_group,
@@ -437,10 +436,6 @@ def update_admin_profile_password(request):
 @api_permission_required("core.manage_auth")
 def group_list(request):
     if request.method == "GET":
-        ensure_superadmin_defaults(
-            create_account=False, attach_existing_superusers=False
-        )
-        ensure_guest_user()
         return JsonResponse(
             {
                 "items": [
