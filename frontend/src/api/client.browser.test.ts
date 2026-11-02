@@ -3,6 +3,7 @@ import type { ExportLayersPayload, ResourceListItem } from "../types";
 import {
   ApiError,
   api,
+  requestJson,
   registerForbiddenHandler,
   unregisterForbiddenHandler,
 } from "./client";
@@ -45,6 +46,24 @@ describe("api client", () => {
     resetProjectSession();
     unregisterForbiddenHandler();
     vi.unstubAllGlobals();
+  });
+
+  it("forwards caller cancellation to the real Request without aborting other project reads", async () => {
+    setActiveProject("3");
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ items: [] })),
+    );
+    const caller = new AbortController();
+    await requestJson("/api/compute/inputs/", { signal: caller.signal });
+    await requestJson("/api/agent/workflows/");
+    const catalog = capturedRequest(fetchMock, 0);
+    const history = capturedRequest(fetchMock, 1);
+    expect(catalog.signal.aborted).toBe(false);
+    caller.abort();
+    expect(catalog.signal.aborted).toBe(true);
+    expect(history.signal.aborted).toBe(false);
+    setActiveProject("4");
+    expect(history.signal.aborted).toBe(true);
   });
 
   it.each(["1", "9", "all"])(

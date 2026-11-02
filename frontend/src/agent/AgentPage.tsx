@@ -1690,6 +1690,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               model={model}
               resourceIds={selected}
               embedded
+              open={workflowOpen}
+              bootstrap={bootstrap}
               onStatusChange={setWorkflowStatus}
               onWorkflowChange={setManualWorkflow}
             />

@@ -1168,6 +1168,40 @@ it("resizes the workflow from its left edge and restores its saved width", async
   expect(restored).toHaveAttribute("aria-valuenow", "720");
 });
 
+it("does not preload workflow catalogs while switching chat modes and reuses the opened draft", async () => {
+  showAgent("workbench");
+  await screen.findByText("旧问题");
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+  expect(computeApi.algorithms).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "快速对话" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "快速对话" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "科研智能体" }));
+  await screen.findByRole("button", { name: /MH-workflow/ });
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+  expect(computeApi.algorithms).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+  await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "研究场景" })).toBeEnabled(),
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "工作流目标" }), {
+    target: { value: "保持这份草稿" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+  await screen.findByRole("textbox", { name: "工作流目标" });
+  expect(screen.getByRole("textbox", { name: "工作流目标" })).toHaveValue(
+    "保持这份草稿",
+  );
+  expect(computeApi.inputs).toHaveBeenCalledOnce();
+  expect(computeApi.algorithms).toHaveBeenCalledOnce();
+});
+
 it.each([
   [1366, 768],
   [1024, 600],

@@ -324,6 +324,7 @@ export async function requestJson<T>(
     method?: string;
     body?: unknown;
     projectTagId?: string;
+    signal?: AbortSignal;
   } = {},
 ): Promise<T> {
   const method = options.method ?? "GET";
@@ -334,7 +335,9 @@ export async function requestJson<T>(
     method,
     credentials: "include",
     headers,
-    signal: projectSignal(),
+    signal: options.signal
+      ? AbortSignal.any([projectSignal(), options.signal])
+      : projectSignal(),
   };
   if (method !== "GET") {
     headers.set("X-CSRFToken", getCookie("csrftoken") ?? "");

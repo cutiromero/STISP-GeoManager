@@ -14,6 +14,7 @@ import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import type {
   AgentWorkflow,
+  AgentBootstrap,
   AgentKnowledgeSelection,
   AgentResearchDemoList,
   AgentResource,
@@ -129,17 +130,22 @@ export default function WorkflowPanel({
   model,
   resourceIds,
   embedded = false,
+  open = true,
+  bootstrap,
   onStatusChange,
   onWorkflowChange,
 }: {
   model: string;
   resourceIds: number[];
   embedded?: boolean;
+  open?: boolean;
+  bootstrap?: AgentBootstrap | null;
   onStatusChange?: (status: AgentWorkflow["status"] | undefined) => void;
   onWorkflowChange?: (workflow: AgentWorkflow | undefined) => void;
 }) {
   const ui = useComputeText();
   const project = useProjectContext();
+  const projectId = project?.current ?? getActiveProject();
   const [demos, setDemos] = useState<AgentResearchDemoList["items"]>([]);
   const [goal, setGoal] = useState("");
   const [workflowType, setWorkflowType] = useState("research_processing");
@@ -156,8 +162,11 @@ export default function WorkflowPanel({
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [workflow, setWorkflow] = useState<AgentWorkflow>();
   const [history, setHistory] = useState<AgentWorkflow[]>([]);
-  const [catalogReady, setCatalogReady] = useState(false);
-  const [contextReady, setContextReady] = useState(false);
+  const [catalogScope, setCatalogScope] = useState<string>();
+  const [contextScope, setContextScope] = useState<string>();
+  const [historyScope, setHistoryScope] = useState<string>();
+  const catalogReady = catalogScope === projectId;
+  const contextReady = contextScope === projectId;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [previousWorkflowId, setPreviousWorkflowId] = useState<string>();
@@ -175,7 +184,8 @@ export default function WorkflowPanel({
   const reviewingPlan =
     workflow?.status === "waiting_approval" &&
     workflow.plan.phase === "review_plan";
-  const initializing = !catalogReady || !contextReady;
+  const initializing =
+    !catalogReady || !contextReady || historyScope !== projectId;
   const locked =
     initializing ||
     Boolean(
@@ -300,11 +310,15 @@ export default function WorkflowPanel({
     }
   };
   useEffect(() => {
+    if (!open || contextReady) return;
     let disposed = false;
+    const controller = new AbortController();
     void Promise.allSettled([
-      agentApi.bootstrap(),
-      agentApi.resources(),
-      agentApi.researchDemos(),
+      bootstrap
+        ? Promise.resolve(bootstrap)
+        : agentApi.bootstrap({ signal: controller.signal }),
+      agentApi.resources("", { signal: controller.signal }),
+      agentApi.researchDemos({ signal: controller.signal }),
     ]).then(([bootstrap, data, scenes]) => {
       if (disposed) return;
       if (bootstrap.status === "fulfilled") {
@@ -312,38 +326,73 @@ export default function WorkflowPanel({
       }
       if (data.status === "fulfilled") setResources(data.value.items ?? []);
       if (scenes.status === "fulfilled") setDemos(scenes.value.items ?? []);
-      setContextReady(true);
+      setContextScope(projectId);
     });
     return () => {
       disposed = true;
+      controller.abort();
     };
-  }, []);
+  }, [open, projectId, contextReady, bootstrap]);
   useEffect(() => {
+    if (!open || catalogReady) return;
     let disposed = false;
-    const projectId = getActiveProject();
-    const signal = projectSignal();
+    const controller = new AbortController();
+    const signal = AbortSignal.any([projectSignal(), controller.signal]);
     void Promise.all([
-      allWorkflowPages(computeApi.algorithms, projectId, signal),
-      allWorkflowPages(computeApi.inputs, projectId, signal),
-      agentApi.workflows(),
+      allWorkflowPages(
+        (params) => computeApi.algorithms(params, { signal }),
+        projectId,
+        signal,
+      ),
+      allWorkflowPages(
+        (params) => computeApi.inputs(params, { signal }),
+        projectId,
+        signal,
+      ),
     ])
-      .then(([a, c, w]) => {
+      .then(([a, c]) => {
         if (disposed) return;
         setAlgorithms(a);
         setCandidates(c);
-        setHistory(w.items);
-        restore(w.items[0]);
       })
       .catch((e) => {
         if (!disposed) report(e);
       })
       .finally(() => {
-        if (!disposed) setCatalogReady(true);
+        if (!disposed) setCatalogScope(projectId);
       });
     return () => {
       disposed = true;
+      controller.abort();
     };
-  }, []);
+  }, [open, projectId, catalogReady]);
+  useEffect(() => {
+    let disposed = false;
+    const controller = new AbortController();
+    setWorkflow(undefined);
+    setHistory([]);
+    setCandidates([]);
+    setResources([]);
+    setDemos([]);
+    setAlgorithms([]);
+    void agentApi
+      .workflows({ signal: controller.signal })
+      .then((result) => {
+        if (disposed) return;
+        setHistory(result.items);
+        restore(result.items[0]);
+      })
+      .catch((error) => {
+        if (!disposed) report(error);
+      })
+      .finally(() => {
+        if (!disposed) setHistoryScope(projectId);
+      });
+    return () => {
+      disposed = true;
+      controller.abort();
+    };
+  }, [projectId]);
   useEffect(() => {
     if (
       !workflow ||

@@ -28,14 +28,15 @@ import type {
 } from "./generated/types.gen";
 
 export const agentApi = {
-  researchDemos: () =>
-    requestJson<AgentResearchDemoList>("/api/agent/research-demos/"),
+  researchDemos: (options: { signal?: AbortSignal } = {}) =>
+    requestJson<AgentResearchDemoList>("/api/agent/research-demos/", options),
   updateResearchIntent: (id: number, body: AgentResearchIntentUpdate) =>
     requestJson<AgentRun>(`/api/agent/runs/${id}/research-intent/`, {
       method: "POST",
       body,
     }),
-  bootstrap: () => requestJson<AgentBootstrap>("/api/agent/bootstrap/"),
+  bootstrap: (options: { signal?: AbortSignal } = {}) =>
+    requestJson<AgentBootstrap>("/api/agent/bootstrap/", options),
   conversations: (mode: "chat" | "agent", q = "", archived = false) =>
     requestJson<AgentConversationList>(
       `/api/agent/conversations/?${new URLSearchParams({ mode, q, archived: String(archived) })}`,
@@ -87,9 +88,10 @@ export const agentApi = {
       method: "POST",
       body,
     }),
-  resources: (q = "") =>
+  resources: (q = "", options: { signal?: AbortSignal } = {}) =>
     requestJson<AgentResourceList>(
       `/api/agent/resources/?q=${encodeURIComponent(q)}`,
+      options,
     ),
   admin: () => requestJson<AgentAdmin>("/api/agent/admin/"),
   savePolicy: (body: AgentAdminUpdate) =>
@@ -109,7 +111,8 @@ export const agentApi = {
     requestJson<AgentWorkflowReportPreview>(
       `/api/agent/workflows/${encodeURIComponent(id)}/validation/files/${encodeURIComponent(fileKey)}/preview/`,
     ),
-  workflows: () => requestJson<AgentWorkflowList>("/api/agent/workflows/"),
+  workflows: (options: { signal?: AbortSignal } = {}) =>
+    requestJson<AgentWorkflowList>("/api/agent/workflows/", options),
   confirmWorkflow: (
     id: string,
     planHash: string,

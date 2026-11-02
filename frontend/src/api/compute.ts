@@ -40,9 +40,13 @@ const query = (params: Record<string, string | number | undefined>) =>
   ).toString();
 export const computeApi = {
   runtime: () => requestJson<ComputeRuntimeStatus>("/api/compute/runtime/"),
-  algorithms: (params: Record<string, string | number | undefined> = {}) =>
+  algorithms: (
+    params: Record<string, string | number | undefined> = {},
+    options: { signal?: AbortSignal } = {},
+  ) =>
     requestJson<ComputeAlgorithmList>(
       `/api/compute/algorithms/?${query(params)}`,
+      options,
     ),
   saveAlgorithm: (id: number | null, body: ComputeAlgorithmWrite) =>
     requestJson<ComputeAlgorithm>(
@@ -65,8 +69,14 @@ export const computeApi = {
       method: "POST",
       body: { action },
     }),
-  inputs: (params: Record<string, string | number | undefined> = {}) =>
-    requestJson<ComputeCandidateList>(`/api/compute/inputs/?${query(params)}`),
+  inputs: (
+    params: Record<string, string | number | undefined> = {},
+    options: { signal?: AbortSignal } = {},
+  ) =>
+    requestJson<ComputeCandidateList>(
+      `/api/compute/inputs/?${query(params)}`,
+      options,
+    ),
   preflight: (body: ComputeTaskCreate) =>
     requestJson<ComputePreflight>("/api/compute/preflight/", {
       method: "POST",

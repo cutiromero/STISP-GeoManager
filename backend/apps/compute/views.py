@@ -7,7 +7,7 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Case, When, Value, IntegerField, Q
+from django.db.models import Case, When, Value, IntegerField, Q, Prefetch
 from django.conf import settings
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -19,7 +19,8 @@ from apps.catalog.models import DataResource
 from apps.catalog.permissions import filter_accessible
 from apps.core.storage import app_path
 from .access import permission, project_id, require_actor, task_access
-from .data import candidate, preview
+from apps.raster.models import RasterDataset
+from .data import list_candidate, preview
 from .models import (
     AlgorithmCategory,
     AlgorithmResource,
@@ -392,7 +393,16 @@ def inputs(request):
         query = query.filter(data_type=request.GET["kind"])
     if request.GET.get("q"):
         query = query.filter(name__icontains=request.GET["q"][:160])
-    return page(request, query, candidate)
+    query = query.prefetch_related(
+        Prefetch(
+            "raster_datasets",
+            queryset=RasterDataset.objects.filter(status="ready").only(
+                "data_resource_id", "source_relative_path", "source_gdalinfo"
+            ),
+            to_attr="_compute_ready_rasters",
+        )
+    )
+    return page(request, query, list_candidate)
 
 
 @endpoint(["POST"])

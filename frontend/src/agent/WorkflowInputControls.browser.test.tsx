@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import type {
@@ -17,6 +17,9 @@ import type {
 import WorkflowPanel from "./WorkflowPanel";
 import DemoWorkflowForm, { demoGoals } from "./DemoWorkflowForm";
 import { geologyRequiredFields } from "./geologyWorkflowInputs";
+import { resetProjectSession, setActiveProject } from "../projects/session";
+
+afterEach(() => resetProjectSession());
 
 const names = {
   initial_map: "待检查地质图",
@@ -119,6 +122,120 @@ function show() {
     </App>,
   );
 }
+
+function openedPanel(open: boolean) {
+  return (
+    <App>
+      <MemoryRouter>
+        <WorkflowPanel
+          model="configured-model"
+          resourceIds={[]}
+          embedded
+          open={open}
+        />
+      </MemoryRouter>
+    </App>
+  );
+}
+
+it("loads the catalog only on open, aborts a closed request and ignores its late page", async () => {
+  let finishOldPage: (value: {
+    items: ComputeCandidate[];
+    total: number;
+  }) => void = () => {};
+  vi.mocked(computeApi.inputs)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOldPage = resolve;
+        }),
+    )
+    .mockResolvedValue({ items: candidates, total: candidates.length });
+  const view = render(openedPanel(false));
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+  expect(computeApi.algorithms).not.toHaveBeenCalled();
+  await waitFor(() => expect(agentApi.workflows).toHaveBeenCalledOnce());
+  view.rerender(openedPanel(true));
+  await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledOnce());
+  const originalSignal = vi.mocked(computeApi.inputs).mock.calls[0]![1]!
+    .signal!;
+  expect(originalSignal.aborted).toBe(false);
+  view.rerender(openedPanel(false));
+  await waitFor(() => expect(originalSignal.aborted).toBe(true));
+  finishOldPage({ items: [candidates[0]!], total: 200 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(computeApi.inputs).toHaveBeenCalledOnce();
+  view.rerender(openedPanel(true));
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "研究场景" })).toBeEnabled(),
+  );
+  expect(computeApi.inputs).toHaveBeenCalledTimes(2);
+  await select("研究场景", "地质成果智能检查与修正");
+  expect(screen.getByRole("button", { name: "预设" })).toBeEnabled();
+  view.rerender(openedPanel(false));
+  view.rerender(openedPanel(true));
+  expect(computeApi.inputs).toHaveBeenCalledTimes(2);
+});
+
+it("restores and polls an existing task while the catalog drawer remains closed", async () => {
+  const onStatusChange = vi.fn();
+  vi.mocked(agentApi.workflows).mockResolvedValue({
+    items: [{ ...saved(), status: "running" }],
+  });
+  vi.spyOn(agentApi, "workflow").mockResolvedValue({
+    ...saved(),
+    status: "succeeded",
+  });
+  render(
+    <App>
+      <MemoryRouter>
+        <WorkflowPanel
+          model="configured-model"
+          resourceIds={[]}
+          embedded
+          open={false}
+          onStatusChange={onStatusChange}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  await waitFor(() => expect(onStatusChange).toHaveBeenCalledWith("running"));
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+  await waitFor(
+    () => expect(onStatusChange).toHaveBeenCalledWith("succeeded"),
+    { timeout: 3000 },
+  );
+  expect(agentApi.workflow).toHaveBeenCalledWith("current-plan");
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+});
+
+it("aborts the old project catalog and reloads for the newly selected project", async () => {
+  setActiveProject("1");
+  let finishOldPage: (value: {
+    items: ComputeCandidate[];
+    total: number;
+  }) => void = () => {};
+  vi.mocked(computeApi.inputs)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOldPage = resolve;
+        }),
+    )
+    .mockResolvedValue({ items: [], total: 0 });
+  const view = render(openedPanel(true));
+  await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledOnce());
+  const originalSignal = vi.mocked(computeApi.inputs).mock.calls[0]![1]!
+    .signal!;
+  setActiveProject("2");
+  view.rerender(openedPanel(true));
+  await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledTimes(2));
+  expect(originalSignal.aborted).toBe(true);
+  finishOldPage({ items: candidates, total: 500 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(computeApi.inputs).toHaveBeenCalledTimes(2);
+  expect(agentApi.workflows).toHaveBeenCalledTimes(2);
+});
 
 async function select(label: string, option: string) {
   await waitFor(() =>
@@ -377,7 +494,10 @@ it("loads later catalog pages so a preset beyond the first hundred remains selec
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "预设" })).not.toBeDisabled(),
   );
-  expect(computeApi.inputs).toHaveBeenCalledWith({ page: 2, pageSize: 100 });
+  expect(computeApi.inputs).toHaveBeenCalledWith(
+    { page: 2, pageSize: 100 },
+    { signal: expect.any(AbortSignal) },
+  );
 });
 
 it("uses the published geology parameter form and sends the user's revised threshold", async () => {
