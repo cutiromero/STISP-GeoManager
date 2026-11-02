@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-const defaults = { sidebar: 260, input: 64 };
+const defaults = { sidebar: 260, input: 64, workflow: 720 };
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
@@ -15,6 +15,9 @@ export default function useAgentLayout(storageKey: string) {
         input: Number.isFinite(saved?.input)
           ? clamp(saved.input, 64, 320)
           : defaults.input,
+        workflow: Number.isFinite(saved?.workflow)
+          ? clamp(saved.workflow, 360, 1120)
+          : defaults.workflow,
       };
     } catch {
       return defaults;
@@ -52,6 +55,8 @@ export default function useAgentLayout(storageKey: string) {
     64,
     Math.min(320, Math.floor(viewport.height * 0.32)),
   );
+  const workflowMax = Math.min(1120, viewport.width);
+  const workflowMin = Math.min(360, workflowMax);
   return {
     defaults,
     narrow: viewport.width <= 900,
@@ -61,9 +66,14 @@ export default function useAgentLayout(storageKey: string) {
     input: clamp(preferred.input, 64, inputMax),
     inputMin: 64,
     inputMax,
+    workflow: clamp(preferred.workflow, workflowMin, workflowMax),
+    workflowMin,
+    workflowMax,
     setSidebar: (value: number) =>
       setPreferred((previous) => ({ ...previous, sidebar: value })),
     setInput: (value: number) =>
       setPreferred((previous) => ({ ...previous, input: value })),
+    setWorkflow: (value: number) =>
+      setPreferred((previous) => ({ ...previous, workflow: value })),
   };
 }

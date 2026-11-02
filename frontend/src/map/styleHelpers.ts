@@ -48,10 +48,18 @@ export function upsertLayer(map: MapboxMap, layer: AnyLayer) {
     map.addLayer(normalizedLayer);
     return;
   }
-  if ("filter" in normalizedLayer) {
+  if (
+    "filter" in normalizedLayer &&
+    !styleValuesEqual(
+      map.getFilter?.(normalizedLayer.id),
+      normalizedLayer.filter,
+    )
+  ) {
     map.setFilter(normalizedLayer.id, normalizedLayer.filter);
   }
   const writableMap = map as unknown as {
+    getLayoutProperty?: (layerId: string, property: string) => unknown;
+    getPaintProperty?: (layerId: string, property: string) => unknown;
     setLayoutProperty: (
       layerId: string,
       property: string,
@@ -66,11 +74,34 @@ export function upsertLayer(map: MapboxMap, layer: AnyLayer) {
   for (const [property, value] of Object.entries(
     normalizedLayer.layout ?? {},
   )) {
-    writableMap.setLayoutProperty(normalizedLayer.id, property, value);
+    if (
+      !styleValuesEqual(
+        writableMap.getLayoutProperty?.(normalizedLayer.id, property),
+        value,
+      )
+    ) {
+      writableMap.setLayoutProperty(normalizedLayer.id, property, value);
+    }
   }
   for (const [property, value] of Object.entries(normalizedLayer.paint ?? {})) {
-    writableMap.setPaintProperty(normalizedLayer.id, property, value);
+    if (
+      !styleValuesEqual(
+        writableMap.getPaintProperty?.(normalizedLayer.id, property),
+        value,
+      )
+    ) {
+      writableMap.setPaintProperty(normalizedLayer.id, property, value);
+    }
   }
+}
+
+function styleValuesEqual(current: unknown, next: unknown): boolean {
+  if (current === next) return true;
+  return (
+    typeof current === "object" &&
+    typeof next === "object" &&
+    JSON.stringify(current) === JSON.stringify(next)
+  );
 }
 
 export function normalizeMapboxColorValue<T>(value: T): T {

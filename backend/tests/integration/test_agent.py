@@ -131,6 +131,38 @@ def new_run(s, **overrides):
     )
 
 
+@pytest.mark.parametrize("mode", ["chat", "agent"])
+def test_assistant_brand_preserves_model_identity_and_mode(
+    setup_agent, monkeypatch, mode
+):
+    from apps.agent import worker
+
+    s = setup_agent
+    s["conversation"].mode = mode
+    s["conversation"].save(update_fields=["mode"])
+    sent = []
+
+    def respond(model, messages, *args, **kwargs):
+        sent.extend(messages)
+        yield json.dumps({"action": "final", "answer": "我是MH-Agent。"})
+
+    monkeypatch.setattr(worker, "stream", respond)
+    monkeypatch.setattr(worker, "model_window", lambda model: 32768)
+    monkeypatch.setattr(worker, "prepare_context", lambda *args: (1, False))
+    with project_scope(s["scope"]):
+        run = new_run(s)
+    run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == "succeeded", run.detail
+    system = "\n".join(m["content"] for m in sent if m["role"] == "system")
+    assert "MH-Agent" in system
+    assert "mock-local" in system and "Mock" in system
+    assert "不能隐瞒、否认或伪造底层来源" in system
+    if mode == "chat":
+        assert "普通聊天不能访问平台数据" in system
+    assert run.model == "mock"
+
+
 def test_permissions_and_project_isolation(setup_agent):
     s = setup_agent
     c = s["client"]
@@ -734,7 +766,10 @@ def test_workflow_cancel_closes_queued_item(setup_agent):
     assert response.status_code == 202, response.content
     workflow_id = response.json()["id"]
     cancelled = s["client"].post(
-        f"/api/agent/workflows/{workflow_id}/cancel/", **s["header"]
+        f"/api/agent/workflows/{workflow_id}/cancel/",
+        "{}",
+        content_type="application/json",
+        **s["header"],
     )
     assert cancelled.status_code == 200, cancelled.content
     workflow = AgentWorkflow.objects.get(pk=workflow_id)

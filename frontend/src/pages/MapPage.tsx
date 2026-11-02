@@ -55,6 +55,10 @@ import { useRasterRender } from "../hooks/useRasterRender";
 import { useWorkspaceScenes } from "../hooks/useWorkspaceScenes";
 import { workspaceSnapshot } from "../workspace/workspaceSnapshot";
 import { effectiveMapLayers } from "../map/effectiveMapLayers";
+import MapPanelChrome from "../map/MapPanelChrome";
+import WorkbenchLegend from "../map/WorkbenchLegend";
+import { useMapPanelLayout } from "../map/useMapPanelLayout";
+import "../map/map-workbench-panels.css";
 import {
   displayComparisonLayers,
   upsertComparisonLayer,
@@ -742,6 +746,12 @@ function MapWorkspace() {
     { min: 0, max: 22 },
   );
   const mapInstanceRef = useRef<MapboxMap | null>(null);
+  const panelLayout = useMapPanelLayout(
+    `user:${user?.id ?? "anonymous"}`,
+    () => {
+      mapInstanceRef.current?.resize();
+    },
+  );
   const resourceRequestSequenceRef = useRef(0);
   const resourceProfileRequestSequenceRef = useRef(0);
   const spatialProfileRequestSequenceRef = useRef(0);
@@ -2808,7 +2818,9 @@ function MapWorkspace() {
         }}
       />
       <div
-        className={`workspace-body ${
+        ref={panelLayout.containerRef}
+        style={panelLayout.style}
+        className={`workspace-body workspace-map-resizable ${
           spatialWorkbenchOpen
             ? "workspace-body-spatial-open"
             : "workspace-body-spatial-collapsed"
@@ -2980,129 +2992,160 @@ function MapWorkspace() {
               }}
             />
           )}
+          {!comparisonVisible && (
+            <WorkbenchLegend
+              layers={mapLayers}
+              english={english}
+              mobileHidden={mobileMapPanel !== "map"}
+            />
+          )}
         </main>
         <aside
-          className={`floating-panel floating-panel-left ${
+          className={`floating-panel floating-panel-left ${panelLayout.layout.leftCollapsed ? "map-panel-is-collapsed" : ""} ${
             mobileMapPanel === "left"
               ? "mobile-map-panel-visible"
               : "mobile-map-panel-hidden"
           }`}
         >
-          <ConfigProvider theme={workspacePanelTheme}>
-            <LayerContext.Provider value={layerContextValue}>
-              <Tabs
-                className="workspace-side-tabs workspace-left-tabs"
-                activeKey={activeLeftPanel}
-                onChange={handleLeftPanelChange}
-                size="small"
-                items={[
-                  {
-                    key: "data",
-                    label: (
-                      <span className="tab-label">
-                        <DatabaseOutlined style={{ fontSize: 14 }} />
-                        {english ? "Data" : "数据"}
-                      </span>
-                    ),
-                    children: renderDataPanel(),
-                  },
-                  {
-                    key: "layers",
-                    label: (
-                      <span className="tab-label">
-                        <ApartmentOutlined style={{ fontSize: 14 }} />
-                        {english ? "Layers" : "图层"}
-                      </span>
-                    ),
-                    children: <LayerPanel />,
-                  },
-                  {
-                    key: "projects",
-                    label: (
-                      <span className="tab-label">
-                        <FolderOpenOutlined style={{ fontSize: 14 }} />
-                        {english ? "Projects" : "工程"}
-                      </span>
-                    ),
-                    children: (
-                      <WorkspaceScenePanel
-                        kind="project"
-                        total={workspaceTotal}
-                        query={workspaceQuery}
-                        onQuery={loadWorkspaceScenes}
-                        items={workspaceScenes.filter(
-                          (scene) => scene.kind === "project",
-                        )}
-                        accessGroups={workspaceAccessGroups}
-                        onLoad={loadWorkspaceScene}
-                        onRefresh={loadWorkspaceScenes}
-                        onUpdate={updateWorkspaceScene}
-                        onDelete={deleteWorkspaceScene}
-                        onCreateComposition={handleCreateMapComposition}
-                      />
-                    ),
-                  },
-                  {
-                    key: "topics",
-                    label: (
-                      <span className="tab-label">
-                        <AppstoreOutlined style={{ fontSize: 14 }} />
-                        {english ? "Thematic maps" : "专题"}
-                      </span>
-                    ),
-                    children: (
-                      <MapCompositionPanel
-                        items={mapCompositions.items}
-                        availableAudienceGroups={
-                          mapCompositions.availableAudienceGroups
-                        }
-                        availableProjectAccessGroups={workspaceAccessGroups}
-                        loading={mapCompositions.loading}
-                        onRefresh={mapCompositions.load}
-                        onOpen={handleOpenMapComposition}
-                        onLoadSource={handleLoadMapCompositionSource}
-                        onRestored={handleRestoredMapCompositionProject}
-                        onChanged={mapCompositions.update}
-                        onDeleted={mapCompositions.remove}
-                      />
-                    ),
-                  },
-                ]}
-              />
-              <LayerDataTableModal
-                layer={tableLayer}
-                open={Boolean(tableLayer)}
-                onClose={() => setTableLayer(null)}
-                onSelectionChange={handleSelectionChange}
-              />
-            </LayerContext.Provider>
-          </ConfigProvider>
+          <MapPanelChrome
+            side="left"
+            title={english ? "Data and layers" : "数据与图层"}
+            collapsed={panelLayout.layout.leftCollapsed}
+            width={panelLayout.layout.left}
+            english={english}
+            onToggle={() => panelLayout.toggle("left")}
+            onResizeStart={(event) => panelLayout.beginResize("left", event)}
+            onResize={(amount) => panelLayout.resize("left", amount)}
+          />
+          <div className="map-panel-content">
+            <ConfigProvider theme={workspacePanelTheme}>
+              <LayerContext.Provider value={layerContextValue}>
+                <Tabs
+                  className="workspace-side-tabs workspace-left-tabs"
+                  activeKey={activeLeftPanel}
+                  onChange={handleLeftPanelChange}
+                  size="small"
+                  items={[
+                    {
+                      key: "data",
+                      label: (
+                        <span className="tab-label">
+                          <DatabaseOutlined style={{ fontSize: 14 }} />
+                          {english ? "Data" : "数据"}
+                        </span>
+                      ),
+                      children: renderDataPanel(),
+                    },
+                    {
+                      key: "layers",
+                      label: (
+                        <span className="tab-label">
+                          <ApartmentOutlined style={{ fontSize: 14 }} />
+                          {english ? "Layers" : "图层"}
+                        </span>
+                      ),
+                      children: <LayerPanel />,
+                    },
+                    {
+                      key: "projects",
+                      label: (
+                        <span className="tab-label">
+                          <FolderOpenOutlined style={{ fontSize: 14 }} />
+                          {english ? "Projects" : "工程"}
+                        </span>
+                      ),
+                      children: (
+                        <WorkspaceScenePanel
+                          kind="project"
+                          total={workspaceTotal}
+                          query={workspaceQuery}
+                          onQuery={loadWorkspaceScenes}
+                          items={workspaceScenes.filter(
+                            (scene) => scene.kind === "project",
+                          )}
+                          accessGroups={workspaceAccessGroups}
+                          onLoad={loadWorkspaceScene}
+                          onRefresh={loadWorkspaceScenes}
+                          onUpdate={updateWorkspaceScene}
+                          onDelete={deleteWorkspaceScene}
+                          onCreateComposition={handleCreateMapComposition}
+                        />
+                      ),
+                    },
+                    {
+                      key: "topics",
+                      label: (
+                        <span className="tab-label">
+                          <AppstoreOutlined style={{ fontSize: 14 }} />
+                          {english ? "Thematic maps" : "专题"}
+                        </span>
+                      ),
+                      children: (
+                        <MapCompositionPanel
+                          items={mapCompositions.items}
+                          availableAudienceGroups={
+                            mapCompositions.availableAudienceGroups
+                          }
+                          availableProjectAccessGroups={workspaceAccessGroups}
+                          loading={mapCompositions.loading}
+                          onRefresh={mapCompositions.load}
+                          onOpen={handleOpenMapComposition}
+                          onLoadSource={handleLoadMapCompositionSource}
+                          onRestored={handleRestoredMapCompositionProject}
+                          onChanged={mapCompositions.update}
+                          onDeleted={mapCompositions.remove}
+                        />
+                      ),
+                    },
+                  ]}
+                />
+                <LayerDataTableModal
+                  layer={tableLayer}
+                  open={Boolean(tableLayer)}
+                  onClose={() => setTableLayer(null)}
+                  onSelectionChange={handleSelectionChange}
+                />
+              </LayerContext.Provider>
+            </ConfigProvider>
+          </div>
         </aside>
         <aside
-          className={`floating-panel floating-panel-right ${
+          className={`floating-panel floating-panel-right ${panelLayout.layout.rightCollapsed ? "map-panel-is-collapsed" : ""} ${
             mobileMapPanel === "right"
               ? "mobile-map-panel-visible"
               : "mobile-map-panel-hidden"
           }`}
           aria-label={english ? "Feature information panel" : "要素信息面板"}
         >
-          <ConfigProvider theme={workspacePanelTheme}>
-            <LayerContext.Provider value={layerContextValue}>
-              <RightSidePanel
-                selectedFeature={rightPanelSelectedFeature}
-                selectedResource={rightPanelSelectedResource}
-                selectedResourceProfile={rightPanelSelectedResourceProfile}
-                selectedLayer={rightPanelSelectedLayer}
-                visualizationSummary={rightPanelVisualizationSummary}
-                visualizationSummaryLoading={
-                  rightPanelVisualizationSummaryLoading
-                }
-                visualizationSummaryError={visualizationSummaryError}
-                currentView={currentMapView}
-                mapConfig={bootstrap.map}
-              />
-            </LayerContext.Provider>
-          </ConfigProvider>
+          <MapPanelChrome
+            side="right"
+            title={english ? "Data insights" : "数据洞察"}
+            collapsed={panelLayout.layout.rightCollapsed}
+            width={panelLayout.layout.right}
+            english={english}
+            onToggle={() => panelLayout.toggle("right")}
+            onResizeStart={(event) => panelLayout.beginResize("right", event)}
+            onResize={(amount) => panelLayout.resize("right", amount)}
+          />
+          <div className="map-panel-content">
+            <ConfigProvider theme={workspacePanelTheme}>
+              <LayerContext.Provider value={layerContextValue}>
+                <RightSidePanel
+                  selectedFeature={rightPanelSelectedFeature}
+                  selectedResource={rightPanelSelectedResource}
+                  selectedResourceProfile={rightPanelSelectedResourceProfile}
+                  selectedLayer={rightPanelSelectedLayer}
+                  visualizationSummary={rightPanelVisualizationSummary}
+                  visualizationSummaryLoading={
+                    rightPanelVisualizationSummaryLoading
+                  }
+                  visualizationSummaryError={visualizationSummaryError}
+                  currentView={currentMapView}
+                  mapConfig={bootstrap.map}
+                />
+              </LayerContext.Provider>
+            </ConfigProvider>
+          </div>
         </aside>
         <aside
           id="spatial-query-workbench-panel"

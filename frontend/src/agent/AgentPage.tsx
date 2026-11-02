@@ -868,30 +868,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               onClick={() => setShowHistory(false)}
             />
           </div>
-          <div className="agent-mode-nav">
-            {bootstrap?.canChat && (
-              <Button
-                block
-                icon={<MessageOutlined />}
-                type={mode === "chat" ? "primary" : "text"}
-                disabled={!bootstrap?.canChat}
-                onClick={() => navigate("/agent/chat")}
-              >
-                {ui("快速对话", "Quick chat")}
-              </Button>
-            )}
-            {bootstrap?.canAgent && (
-              <Button
-                block
-                icon={<RobotOutlined />}
-                type={mode === "agent" ? "primary" : "text"}
-                disabled={!bootstrap?.canAgent}
-                onClick={() => navigate("/agent/workbench")}
-              >
-                {ui("科研智能体", "Research agent")}
-              </Button>
-            )}
-          </div>
           <Button
             className="agent-new-conversation"
             block
@@ -1037,6 +1013,33 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               >
                 {ui("会话", "History")}
               </Button>
+              <nav
+                className="agent-mode-nav"
+                aria-label={ui("对话模式", "Conversation mode")}
+              >
+                {bootstrap?.canChat && (
+                  <Button
+                    aria-label={ui("快速对话", "Quick chat")}
+                    icon={<MessageOutlined />}
+                    type={mode === "chat" ? "primary" : "text"}
+                    aria-current={mode === "chat" ? "page" : undefined}
+                    onClick={() => navigate("/agent/chat")}
+                  >
+                    {ui("快速对话", "Quick chat")}
+                  </Button>
+                )}
+                {bootstrap?.canAgent && (
+                  <Button
+                    aria-label={ui("科研智能体", "Research agent")}
+                    icon={<RobotOutlined />}
+                    type={mode === "agent" ? "primary" : "text"}
+                    aria-current={mode === "agent" ? "page" : undefined}
+                    onClick={() => navigate("/agent/workbench")}
+                  >
+                    {ui("科研智能体", "Research agent")}
+                  </Button>
+                )}
+              </nav>
               <div className="agent-conversation-heading">
                 <span>
                   {mode === "chat"
@@ -1139,12 +1142,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 <div className="agent-assistant-message">
                   <Space className="agent-answer-heading">
                     <RobotOutlined />
-                    <strong>
-                      {r.computeIntent
-                        ? ui("平台计算助手", "Platform compute assistant")
-                        : (bootstrap?.models.find((m) => m.alias === r.model)
-                            ?.name ?? r.model)}
-                    </strong>
+                    <strong>MH-Agent</strong>
                     {r.status !== "succeeded" && (
                       <span
                         className={`agent-answer-status${active(r) ? " is-active" : ""}`}
@@ -1669,16 +1667,33 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
           open={workflowOpen}
           onClose={() => setWorkflowOpen(false)}
           forceRender
-          size={640}
+          size={layout.workflow}
           classNames={{ root: "agent-workflow-drawer" }}
         >
-          <WorkflowPanel
-            model={model}
-            resourceIds={selected}
-            embedded
-            onStatusChange={setWorkflowStatus}
-            onWorkflowChange={setManualWorkflow}
+          <AgentResizeHandle
+            orientation="vertical"
+            label={ui("调整工作流宽度", "Resize workflow panel")}
+            hint={ui(
+              "左右拖动调整宽度，双击恢复",
+              "Drag to resize; double-click to reset",
+            )}
+            controls="agent-workflow-content"
+            value={layout.workflow}
+            min={layout.workflowMin}
+            max={layout.workflowMax}
+            defaultValue={layout.defaults.workflow}
+            reverse
+            onChange={layout.setWorkflow}
           />
+          <div id="agent-workflow-content">
+            <WorkflowPanel
+              model={model}
+              resourceIds={selected}
+              embedded
+              onStatusChange={setWorkflowStatus}
+              onWorkflowChange={setManualWorkflow}
+            />
+          </div>
         </Drawer>
       )}
       <Modal

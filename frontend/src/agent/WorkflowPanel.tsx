@@ -95,7 +95,7 @@ function ParameterField({
       <Select
         aria-label={spec.label}
         disabled={disabled}
-        style={{ minWidth: 180 }}
+        style={{ width: "100%", minWidth: 0 }}
         value={value as string | number | undefined}
         onChange={onChange}
         options={values.map((v) => ({ value: v, label: String(v) }))}
@@ -613,11 +613,11 @@ export default function WorkflowPanel({
             }}
           />
           {version?.manifest.inputs.map((spec) => (
-            <Space key={spec.key} wrap>
+            <label key={spec.key} className="agent-workflow-parameter">
               <Typography.Text>{spec.label}</Typography.Text>
               <Select
                 aria-label={spec.label}
-                style={{ minWidth: 220 }}
+                style={{ width: "100%", minWidth: 0 }}
                 value={inputs[spec.key]}
                 allowClear
                 options={candidates
@@ -637,7 +637,7 @@ export default function WorkflowPanel({
                   })
                 }
               />
-            </Space>
+            </label>
           ))}
           {version?.manifest.parameters
             .filter(
@@ -649,7 +649,7 @@ export default function WorkflowPanel({
                   )?.default) === spec.when.equals,
             )
             .map((spec) => (
-              <Space key={spec.key} wrap>
+              <label key={spec.key} className="agent-workflow-parameter">
                 <Typography.Text>{spec.label}</Typography.Text>
                 <ParameterField
                   spec={spec}
@@ -665,7 +665,7 @@ export default function WorkflowPanel({
                     setParameters((old) => ({ ...old, [spec.key]: value }))
                   }
                 />
-              </Space>
+              </label>
             ))}
         </>
       )}

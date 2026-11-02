@@ -24,6 +24,7 @@ from apps.raster.services.geo_utils import (
     tile_bounds_3857,
 )
 from apps.raster.services.rules_engine import normalize_rules, read_source_bands
+from apps.raster.services.tile_singleflight import tile_render_slot
 from apps.raster.services.tile_pyramid import (
     TilePyramidBuildResult,
     build_atomic_mbtiles_pyramid,
@@ -152,7 +153,7 @@ def render_xyz_tile(dataset_id: int, style_hash: str, z: int, x: int, y: int) ->
         raise RasterRenderError("分类栅格静态瓦片尚未完整发布，请重新渲染图层")
 
     fingerprint = raster_path.stat()
-    return _render_xyz_tile_cached(
+    key = (
         dataset_id,
         style_hash,
         z,
@@ -161,6 +162,10 @@ def render_xyz_tile(dataset_id: int, style_hash: str, z: int, x: int, y: int) ->
         fingerprint.st_mtime_ns,
         fingerprint.st_size,
     )
+    # lru_cache may run the same cold key concurrently. Recheck its cache only
+    # after the previous render finishes; different tiles remain independent.
+    with tile_render_slot(key):
+        return _render_xyz_tile_cached(*key)
 
 
 @lru_cache(maxsize=128)

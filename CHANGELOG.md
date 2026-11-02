@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.50] - 2026-11-02
+
+### Added
+- 地理工作台左右栏支持拖动调宽、收起及恢复，实时图例随当前可见图层的实际渲染更新。
+- 提供独立的公网可用性监测工具，支持企业微信群停服与恢复通知、本机隐藏运行和重复告警抑制；Webhook采用私有配置。
+
+### Fixed
+- 快速对话与科研智能体入口固定于对话顶部，窄屏下也可切换；MH-workflow支持调宽并修复长资料名称导致的表单重叠。
+- 助手统一以MH-Agent介绍平台身份，保留底层模型的真实配置及权限边界。
+- 角色列表按实际权限数量降序排列，超级管理员置顶。
+- 同一动态栅格瓦片的并发请求合并渲染，地图样式未变化时跳过重复设置。
+
 ## [0.1.49] - 2026-10-25
 
 ### Added

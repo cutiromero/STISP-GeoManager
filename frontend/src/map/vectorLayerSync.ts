@@ -905,7 +905,10 @@ export function setLoadedLayerGroupVisibility(
   if (!hasMapStyle(map)) return;
   const visibility = visible ? "visible" : "none";
   for (const layerId of loadedStyleLayerIds(sourceId)) {
-    if (map.getLayer(layerId)) {
+    if (
+      map.getLayer(layerId) &&
+      map.getLayoutProperty?.(layerId, "visibility") !== visibility
+    ) {
       map.setLayoutProperty(layerId, "visibility", visibility);
     }
   }

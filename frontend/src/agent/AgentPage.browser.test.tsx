@@ -997,7 +997,7 @@ it("drags the sidebar and input, stops on cancel, and remembers their sizes", as
   await waitFor(() =>
     expect(
       JSON.parse(localStorage.getItem("agent-layout:99:chat") ?? "null"),
-    ).toEqual({ sidebar: 340, input: 144 }),
+    ).toEqual({ sidebar: 340, input: 144, workflow: 720 }),
   );
   first.unmount();
   showAgent();
@@ -1099,6 +1099,73 @@ it("keeps narrow screens usable with a dismissible sidebar and bounded input", a
   } finally {
     await page.viewport(1600, 900);
   }
+});
+
+it("keeps both allowed conversation modes visible when the history sidebar is hidden", async () => {
+  await page.viewport(390, 844);
+  try {
+    showAgent("workbench");
+    await screen.findByText("旧问题");
+    const sidebar = screen.getByRole("complementary", {
+      hidden: true,
+    });
+    expect(sidebar).not.toBeVisible();
+    const quick = screen.getByRole("button", { name: "快速对话" });
+    expect(quick).toBeVisible();
+    fireEvent.click(quick);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "快速对话" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "科研智能体" }));
+    await screen.findByRole("button", { name: /MH-workflow/ });
+    expect(screen.getByRole("button", { name: "科研智能体" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("button", { name: "快速对话" })).toBeVisible();
+  } finally {
+    await page.viewport(1600, 900);
+  }
+});
+
+it("resizes the workflow from its left edge and restores its saved width", async () => {
+  vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(
+    () => {},
+  );
+  const first = showAgent("workbench");
+  await screen.findByText("旧问题");
+  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+  const handle = await screen.findByRole("separator", {
+    name: "调整工作流宽度",
+  });
+  fireEvent.pointerDown(handle, { button: 0, pointerId: 9, clientX: 880 });
+  fireEvent.pointerMove(handle, { pointerId: 9, clientX: 720 });
+  fireEvent.pointerUp(handle, { pointerId: 9 });
+  await waitFor(() => expect(handle).toHaveAttribute("aria-valuenow", "880"));
+  const drawer = document.querySelector<HTMLElement>(
+    ".agent-workflow-drawer .ant-drawer-content-wrapper",
+  )!;
+  expect(drawer.getBoundingClientRect().width).toBe(880);
+  await waitFor(() =>
+    expect(
+      JSON.parse(localStorage.getItem("agent-layout:99:agent") ?? "null")
+        .workflow,
+    ).toBe(880),
+  );
+  first.unmount();
+  showAgent("workbench");
+  fireEvent.click(await screen.findByRole("button", { name: /MH-workflow/ }));
+  const restored = await screen.findByRole("separator", {
+    name: "调整工作流宽度",
+  });
+  expect(restored).toHaveAttribute("aria-valuenow", "880");
+  fireEvent.keyDown(restored, { key: "ArrowLeft" });
+  expect(restored).toHaveAttribute("aria-valuenow", "896");
+  fireEvent.doubleClick(restored);
+  expect(restored).toHaveAttribute("aria-valuenow", "720");
 });
 
 it.each([

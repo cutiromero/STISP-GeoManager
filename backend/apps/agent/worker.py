@@ -17,6 +17,7 @@ from apps.compute.packages import ComputeError
 from apps.projects.context import ProjectScope, project_scope
 from apps.core.storage import app_path
 from .config import registry
+from .identity import assistant_identity
 from .models import AgentAttachment, AgentRun, AgentRuntime, RunEvent
 from .policy import fresh_user, require_access, policy
 from .provider import stream, check_model, model_window, ModelError
@@ -173,7 +174,7 @@ def input_prompt(run):
     )
 
 
-SYSTEM_CHAT = "你是平台的本地模型助手。使用用户的语言回答。普通聊天不能访问平台数据，不要声称已读取数据、运行代码或执行操作。没有平台证据编号，不能引用[证据 N]或把历史平台依据作为已核实来源。"
+SYSTEM_CHAT = "使用用户的语言回答。普通聊天不能访问平台数据，不要声称已读取数据、运行代码或执行操作。没有平台证据编号，不能引用[证据 N]或把历史平台依据作为已核实来源。"
 SYSTEM_AGENT = """你是当前项目的数据分析智能体。按问题选择必要工具：纯知识问题直接查知识；数据分析先发现数据、读取字段，再计算和检查。需要更多信息时使用ask_user，在原任务中等待回答并继续。
 用户只询问资源数量或分类数量时，调用summarize_resource_catalog；它的total/counts是当前授权范围的全量统计，不是样例。分类使用isComputeResult/origin等真实来源字段，不能根据名称猜测。分析过程中查找资源时用search_resources的query/category/offset/limit筛选与分页；按nextOffset继续，不得把第一页返回数量当成全部数量，也不能仅以“已截断”结束全量统计请求。
 用户问有哪些资源、哪些计算成果/上传数据、或要求完整名称清单时，优先present_resource_catalog，它由平台直接生成真实的分组清单和总数并结束本轮，避免重复抄写名称。只有需要在清单基础上继续分析时才分页search_resources；只问总数时用summarize_resource_catalog。
@@ -501,7 +502,13 @@ def run_task(run_id):
                 + '\n最终回答格式：{"action":"final","answer":"中文回答"}；只有ask_user可用。'
             )
             messages.insert(
-                0, {"role": "system", "content": instructions + QUESTION_INSTRUCTIONS}
+                0,
+                {
+                    "role": "system",
+                    "content": assistant_identity(model)
+                    + instructions
+                    + QUESTION_INSTRUCTIONS,
+                },
             )
             actions = run.execution_state.get("actions", 0)
             corrections = 0
