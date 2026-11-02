@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261102-001 - 普通对话账号三任务并发
+
+- Status: BackendReady
+- Owner: root；roles_monitor后端；agent_layout_modes前端。
+- Endpoints: POST /api/agent/conversations/{conversationId}/runs/；POST /api/agent/runs/{runId}/interaction/；计算完成后的原任务恢复。
+- Change type: 调整现有任务名额和冲突语义，保持请求与响应结构。
+- OpenAPI change: 提交说明明确同账号快速与科研对话合计三条，同会话串行，账号名额满返回409，全站队列和每日额度返回429。
+- Mock examples: 沿用现有AgentRun与ErrorResponse结构，HTTP模型fixture验证并发与恢复。
+- Frontend reason: 多窗口和模式可独立提交，瞬时连接失败不再清空权限和历史。
+- Backend implementation notes: 移除账号单活动任务唯一索引，保留会话唯一索引；提交与恢复在同一队列锁事务中核对名额，等待状态释放模型名额，幂等和取消保留。
+- Verification: 三条混合模式任务、第四条冲突、同会话串行、跨账号与项目、等待恢复、真实并发抢位，以及权限错误与网络失败的独立状态。
+- Result: 本地目标验证完成后进入独立候选与正式验收。
+
 ## API-20261025-001 - 地质完整对比与隔离独立评价
 
 - Status: ContractReady
@@ -177,6 +190,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261102-001 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/interaction/ | account admission and conflict semantics | Updated | Existing run/error fixtures | Passed | Focused passed | Three ordinary tasks; permission and transient failure states separated |
 | API-20261025-001 | ContractReady | /api/agent/workflows/{workflowId}/validation/; validation/files/*; workflow map fields | isolated read-only evaluation and before-layer references | Updated | 102-agent-validation | Pending | Pending | Implementation in progress |
 | API-20261023-001 | BackendReady | /api/agent/research-demos/; /api/agent/workflows/; /confirm/; /api/compute/algorithms/ | multi-element scenario, trial rule bindings, measured suggestions, real map outputs and project tools | Updated | Integration/browser fixtures | Passed | Focused browser, unit and real local workflow passed | Real algorithms and maps verified; model decisions use mock, recorded separately |
 | API-20261021-001 | BackendReady | /api/compute/inputs/; /api/agent/research-demos/; /api/agent/workflows/; /cancel/ | current-project preset, actual input-role checks and conditional replacement | Updated | Integration/browser fixtures | Implemented | Focused verification | Preserve permissions; metadata before plan and complete runtime validation |

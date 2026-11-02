@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.51] - 2026-11-02
+
+### Changed
+- 同账号的快速对话与科研智能体跨会话合计允许三个排队或生成任务，同会话保持串行；问题卡与计算完成后的恢复共用原子名额检查。
+
+### Fixed
+- 集成9954f53，取消智能体权限定时刷新，网络失败或不完整响应保留同账号同项目已确认权限；首次读取失败提供重试，明确区分登录失效和权限拒绝。
+- 运行与历史轮询遇到暂时网络失败时保留已有聊天并继续恢复，账号并发名额满使用409，避免被误解为无权限。
+
 ## [0.1.50] - 2026-11-02
 
 ### Added

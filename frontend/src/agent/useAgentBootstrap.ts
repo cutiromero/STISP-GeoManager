@@ -10,6 +10,19 @@ type BootstrapEntry = {
   value: AgentBootstrap | null;
   pending: Promise<AgentBootstrap> | null;
 };
+export type AgentBootstrapStatus =
+  | "loading"
+  | "ready"
+  | "error"
+  | "unauthenticated"
+  | "forbidden";
+type BootstrapSnapshot = {
+  user: User | null;
+  scope: string;
+  value: AgentBootstrap | null;
+  status: AgentBootstrapStatus;
+  error: string;
+};
 const snapshots = new WeakMap<User, Map<string, BootstrapEntry>>();
 
 export function clearAgentBootstrap(user: User) {
@@ -36,7 +49,7 @@ function loadBootstrap(user: User, scope: string) {
         typeof value?.canChat !== "boolean" ||
         typeof value?.canAgent !== "boolean"
       ) {
-        throw new Error("智能体权限检查返回不完整，请重新打开页面重试");
+        throw new Error("智能体权限检查返回不完整，请重试连接");
       }
       if (snapshots.get(user)?.get(scope) === currentEntry) {
         currentEntry.value = value;
@@ -59,7 +72,7 @@ function loadBootstrap(user: User, scope: string) {
   return currentEntry.pending;
 }
 
-export function useAgentBootstrap() {
+export function useAgentBootstrapState() {
   const { user } = useAppContext();
   const project = useProjectContext()?.current;
   const eligible = Boolean(
@@ -68,7 +81,14 @@ export function useAgentBootstrap() {
   const scope = JSON.stringify([project ?? "", user?.roles, user?.permissions]);
   const cached =
     user && eligible ? (snapshots.get(user)?.get(scope)?.value ?? null) : null;
-  const [snapshot, setSnapshot] = useState({ user, scope, value: cached });
+  const [attempt, setAttempt] = useState(0);
+  const [snapshot, setSnapshot] = useState<BootstrapSnapshot>({
+    user,
+    scope,
+    value: cached,
+    status: cached ? "ready" : "loading",
+    error: "",
+  });
   useEffect(() => {
     let disposed = false;
     if (!user || !eligible) {
@@ -79,17 +99,34 @@ export function useAgentBootstrap() {
       user,
       scope,
       value: snapshots.get(user)?.get(scope)?.value ?? null,
+      status: "loading",
+      error: "",
     });
     const load = async () => {
       try {
         const result = await loadBootstrap(user, scope);
-        if (!disposed) setSnapshot({ user, scope, value: result });
-      } catch {
+        if (!disposed)
+          setSnapshot({
+            user,
+            scope,
+            value: result,
+            status: "ready",
+            error: "",
+          });
+      } catch (error) {
         if (!disposed) {
           setSnapshot({
             user,
             scope,
             value: snapshots.get(user)?.get(scope)?.value ?? null,
+            status:
+              error instanceof ApiError && error.status === 401
+                ? "unauthenticated"
+                : error instanceof ApiError && error.status === 403
+                  ? "forbidden"
+                  : "error",
+            error:
+              error instanceof Error ? error.message : "智能体连接失败，请重试",
           });
         }
       }
@@ -98,9 +135,22 @@ export function useAgentBootstrap() {
     return () => {
       disposed = true;
     };
-  }, [user, scope, eligible]);
-  if (!eligible) return null;
-  return snapshot.user === user && snapshot.scope === scope
-    ? snapshot.value
-    : cached;
+  }, [user, scope, eligible, attempt]);
+  const current = snapshot.user === user && snapshot.scope === scope;
+  return {
+    bootstrap: eligible ? (current ? snapshot.value : cached) : null,
+    status: !user
+      ? ("unauthenticated" as const)
+      : !eligible
+        ? ("forbidden" as const)
+        : current
+          ? snapshot.status
+          : ("loading" as const),
+    error: current ? snapshot.error : "",
+    retry: () => setAttempt((value) => value + 1),
+  };
+}
+
+export function useAgentBootstrap() {
+  return useAgentBootstrapState().bootstrap;
 }

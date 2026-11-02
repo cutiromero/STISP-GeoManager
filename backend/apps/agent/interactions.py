@@ -15,8 +15,13 @@ from django.utils import timezone
 
 from apps.compute.packages import ComputeError
 from .models import ACTIVE, AgentRun, RunEvent
+from .run_concurrency import (
+    WAITING,
+    lock_run_queue,
+    require_run_capacity,
+    retry_run_admission,
+)
 
-WAITING = ("waiting_input", "waiting_review", "waiting_compute")
 BLOCKING = (*ACTIVE, *WAITING)
 
 QUESTION_INSTRUCTIONS = """
@@ -213,6 +218,7 @@ def _fingerprint(value):
     ).hexdigest()
 
 
+@retry_run_admission
 def answer(run, user, value):
     action = value.get("action")
     if action not in {"answer", "cancel"}:
@@ -232,6 +238,7 @@ def answer(run, user, value):
         raise ValidationError("问题版本或提交键无效")
     digest = _fingerprint(value)
     with transaction.atomic():
+        lock_run_queue()
         # Reserve the SQLite write lock before reading the revision.
         AgentRun.objects.filter(pk=run.pk, owner=user).update(updated_at=timezone.now())
         run.refresh_from_db()
@@ -272,12 +279,13 @@ def answer(run, user, value):
                 )
                 for item in question["questions"]
             }
-            if (
-                AgentRun._base_manager.filter(owner=user, status__in=ACTIVE)
-                .exclude(pk=run.pk)
-                .exists()
-            ):
-                raise ComputeError("您有另一个正在执行的任务，请完成或停止后继续", 409)
+        rejected = (
+            action == "answer"
+            and question["kind"] == "review"
+            and answers.get("approval") != "approve"
+        )
+        if action == "answer" and not rejected:
+            require_run_capacity(user.id, run.conversation_id, exclude_run_id=run.pk)
         answers = {key: value for key, value in answers.items() if value is not None}
         submitted = {
             "submittedAt": timezone.now().isoformat(),
@@ -285,11 +293,6 @@ def answer(run, user, value):
             "answers": answers,
             "text": text.strip(),
         }
-        rejected = (
-            action == "answer"
-            and question["kind"] == "review"
-            and answers.get("approval") != "approve"
-        )
         updated = {
             **question,
             "status": "answered" if action == "answer" else "cancelled",
@@ -447,17 +450,24 @@ def resume_compute():
                 if any(task.status in COMPUTE_ACTIVE for task in tasks):
                     continue
                 with transaction.atomic():
+                    lock_run_queue()
                     if not AgentRun.objects.filter(
                         pk=run.pk, status="waiting_compute", cancel_requested=False
                     ).update(updated_at=timezone.now()):
                         continue
-                    if (
-                        AgentRun._base_manager.filter(
-                            owner_id=run.owner_id, status__in=ACTIVE
+                    try:
+                        require_run_capacity(
+                            run.owner_id, run.conversation_id, exclude_run_id=run.pk
                         )
-                        .exclude(pk=run.pk)
-                        .exists()
-                    ):
+                    except ComputeError as exc:
+                        if exc.status not in {409, 429}:
+                            raise
+                        AgentRun.objects.filter(
+                            pk=run.pk, status="waiting_compute"
+                        ).update(
+                            detail="计算已完成，等待处理名额；" + str(exc)[:240],
+                            updated_at=timezone.now(),
+                        )
                         continue
                     state, evidence = dict(run.execution_state), list(run.evidence)
                     for task in tasks:

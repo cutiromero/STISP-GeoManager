@@ -38,6 +38,7 @@ from .policy import (
 from .tools import check_evidence, resources, resolve_resource, brief
 from .attachments import delete_attachment, serialize_attachment, store_attachment
 from .budgets import budget_options, resolve_budget
+from .run_concurrency import lock_run_queue, require_run_capacity, retry_run_admission
 
 
 class ApiProblem(Exception):
@@ -319,6 +320,7 @@ def submit(request, conversation_id):
     return submit_value(request, c, value)
 
 
+@retry_run_admission
 def submit_value(request, c, value, *, available_models=None):
     """The same quota, model, scope and idempotency checks for chat answers."""
     submission_policy = policy()
@@ -392,6 +394,7 @@ def submit_value(request, c, value, *, available_models=None):
         # Model health requests finish before acquiring a database write lock.
         available_models = visible_models(request.user, c.mode, preflight_policy)
     with transaction.atomic():
+        lock_run_queue()
         Conversation.objects.filter(pk=c.pk).update(updated_at=timezone.now())
         existing = c.runs.filter(idempotency_key=key).first()
         if existing:
@@ -492,16 +495,7 @@ def submit_value(request, c, value, *, available_models=None):
         budget_snapshot = resolve_budget(
             request.user, p, budget_profile, output_tokens, serving_window
         )
-        from .interactions import WAITING
-
-        if c.runs.filter(status__in=WAITING).exists():
-            raise ApiProblem("当前任务正在等待回答或计算，请在原任务中继续或取消", 409)
-        if AgentRun._base_manager.filter(
-            owner=request.user, status__in=ACTIVE
-        ).exists():
-            raise ApiProblem("您已有排队或生成中的任务", 409)
-        if AgentRun._base_manager.filter(status__in=ACTIVE).count() >= 30:
-            raise ApiProblem("当前排队已满", 429)
+        require_run_capacity(request.user.id, c.id)
         quota = daily_quota(request.user, p)
         if (
             quota > 0

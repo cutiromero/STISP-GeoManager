@@ -121,11 +121,6 @@ class AgentRun(ProjectScopedModel):
                 fields=("conversation", "idempotency_key"), name="agent_run_idempotency"
             ),
             models.UniqueConstraint(
-                fields=("owner",),
-                condition=models.Q(status__in=ACTIVE),
-                name="agent_one_active_user",
-            ),
-            models.UniqueConstraint(
                 fields=("conversation",),
                 condition=models.Q(status__in=ACTIVE),
                 name="agent_one_active_conversation",

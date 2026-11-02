@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentBootstrap } from "../api/generated/types.gen";
 import { ApiError } from "../api/client";
 import type { User } from "../types";
-import { clearAgentBootstrap, useAgentBootstrap } from "./useAgentBootstrap";
+import {
+  clearAgentBootstrap,
+  useAgentBootstrap,
+  useAgentBootstrapState,
+} from "./useAgentBootstrap";
 
 const { load, session } = vi.hoisted(() => ({
   load: vi.fn(),
@@ -49,6 +53,51 @@ beforeEach(() => {
 });
 
 describe("agent capability snapshots", () => {
+  it("distinguishes unknown and network failure from denial and recovers by retry", async () => {
+    const initial = deferred();
+    load.mockReturnValueOnce(initial.promise).mockResolvedValueOnce(granted);
+    const view = renderHook(useAgentBootstrapState);
+    expect(view.result.current.status).toBe("loading");
+    expect(view.result.current.bootstrap).toBeNull();
+    await act(async () => initial.reject(new Error("connection lost")));
+    expect(view.result.current.status).toBe("error");
+    expect(view.result.current.bootstrap).toBeNull();
+    await act(async () => view.result.current.retry());
+    expect(view.result.current.status).toBe("ready");
+    expect(view.result.current.bootstrap).toEqual(granted);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 403])(
+    "separates explicit %s rejection from a transient failure",
+    async (status) => {
+      load.mockRejectedValueOnce(new ApiError("access rejected", status));
+      const view = renderHook(useAgentBootstrapState);
+      await waitFor(() =>
+        expect(view.result.current.status).toBe(
+          status === 401 ? "unauthenticated" : "forbidden",
+        ),
+      );
+      expect(view.result.current.bootstrap).toBeNull();
+    },
+  );
+
+  it.each([409, 503])(
+    "keeps confirmed access for %s without reporting a permission denial",
+    async (status) => {
+      load.mockResolvedValueOnce(granted);
+      const view = renderHook(useAgentBootstrapState);
+      await waitFor(() => expect(view.result.current.status).toBe("ready"));
+      load.mockRejectedValueOnce(new ApiError("service busy", status));
+      await act(async () => view.result.current.retry());
+      expect(view.result.current.status).toBe("error");
+      expect(view.result.current.bootstrap).toEqual(granted);
+      load.mockResolvedValueOnce(granted);
+      await act(async () => view.result.current.retry());
+      expect(view.result.current.status).toBe("ready");
+    },
+  );
+
   it("does not poll permissions while the page stays open", async () => {
     vi.useFakeTimers();
     try {

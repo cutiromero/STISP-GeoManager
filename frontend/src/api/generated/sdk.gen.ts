@@ -2183,7 +2183,7 @@ export const updateAgentConversation = <ThrowOnError extends boolean = false>(op
 /**
  * 幂等提交模型任务
  *
- * 幂等提交模型任务。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。数据工具不授予额外项目权限。
+ * 幂等提交模型任务。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。同账号跨项目的快速对话与科研智能体合计最多三个排队或生成任务，同会话串行；等待回答、审核或计算时释放模型名额但保持原会话等待，恢复时重新申请名额。账号名额已满返回409，全站队列或每日额度已满返回429。数据工具不授予额外项目权限。
  */
 export const createAgentRun = <ThrowOnError extends boolean = false>(options: Options<CreateAgentRunData, ThrowOnError>): RequestResult<CreateAgentRunResponses, CreateAgentRunErrors, ThrowOnError> => (options.client ?? client).post<CreateAgentRunResponses, CreateAgentRunErrors, ThrowOnError>({
     security: [{

@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -11,12 +12,14 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
+import { ApiError } from "../api/client";
 import type {
   AgentBootstrap,
   AgentRun,
   AgentWorkflow,
 } from "../api/generated/types.gen";
 import AgentPage from "./AgentPage";
+import type { AgentBootstrapStatus } from "./useAgentBootstrap";
 import {
   computeIntent,
   computeRun,
@@ -41,7 +44,19 @@ vi.mock("../projects/ProjectContext", () => ({
     projects: [{ id: 1, name: "公开" }],
   }),
 }));
-vi.mock("./useAgentBootstrap", () => ({ useAgentBootstrap: () => bootstrap }));
+vi.mock("./useAgentBootstrap", () => ({
+  useAgentBootstrapState: () => ({
+    bootstrap: accessState.value === "confirmed" ? bootstrap : null,
+    status: accessState.status,
+    error: "权限服务暂时不可用",
+    retry: accessState.retry,
+  }),
+}));
+const accessState = {
+  value: "confirmed" as "confirmed" | "unknown",
+  status: "ready" as AgentBootstrapStatus,
+  retry: vi.fn(),
+};
 
 const bootstrap: AgentBootstrap = {
   canChat: true,
@@ -300,6 +315,9 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.restoreAllMocks();
+  accessState.value = "confirmed";
+  accessState.status = "ready";
+  accessState.retry.mockReset();
   bootstrap.canManage = false;
   bootstrap.canAgent = true;
   bootstrap.canChat = true;
@@ -2006,5 +2024,236 @@ it("removes recovered workflow activity when agent permission is revoked", async
     ).not.toBeInTheDocument();
   } finally {
     bootstrap.canAgent = true;
+  }
+});
+
+it("keeps unknown and failed permission checks distinct from denied access", async () => {
+  accessState.value = "unknown";
+  accessState.status = "loading";
+  const mounted = showAgent();
+  expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+  expect(agentApi.conversations).not.toHaveBeenCalled();
+  const rerender = () =>
+    mounted.rerender(
+      <AntApp>
+        <MemoryRouter initialEntries={["/agent/chat"]}>
+          <AgentPage />
+        </MemoryRouter>
+      </AntApp>,
+    );
+  accessState.status = "error";
+  rerender();
+  fireEvent.click(await screen.findByRole("button", { name: "重试连接" }));
+  expect(accessState.retry).toHaveBeenCalledOnce();
+  expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+  accessState.value = "confirmed";
+  accessState.status = "ready";
+  rerender();
+  await screen.findByText("旧问题");
+});
+
+it.each(["unauthenticated", "forbidden"] as const)(
+  "shows the correct message for an explicit %s state",
+  async (status) => {
+    accessState.value = "unknown";
+    accessState.status = status;
+    showAgent();
+    if (status === "unauthenticated") {
+      expect(
+        await screen.findByText("登录状态已失效，请重新登录。"),
+      ).toBeVisible();
+      expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+    } else {
+      expect(await screen.findByText(/当前账号未获准/)).toBeVisible();
+      expect(screen.queryByText(/登录状态已失效/)).not.toBeInTheDocument();
+    }
+  },
+);
+
+it("preserves the conversation, pending prompt and access after a concurrency rejection", async () => {
+  vi.mocked(agentApi.submit).mockRejectedValueOnce(
+    new ApiError("最多同时处理3个问题，请稍后再试", 409),
+  );
+  showAgent();
+  await screen.findByText("旧问题");
+  const input = screen.getByRole("textbox", { name: "输入消息" });
+  fireEvent.change(input, { target: { value: "第四个问题" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText("最多同时处理3个问题，请稍后再试");
+  expect(input).toHaveValue("第四个问题");
+  expect(screen.getByText("旧问题")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "历史会话" })).toBeInTheDocument();
+  expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
+});
+
+it("retains streamed history after a connection failure and resumes polling", async () => {
+  const responding = {
+    ...run(5, "正在处理的问题", "已有的部分回答"),
+    status: "running" as const,
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [responding],
+  });
+  const poll = vi
+    .spyOn(agentApi, "poll")
+    .mockRejectedValueOnce(new TypeError("连接暂时中断"))
+    .mockResolvedValue({
+      run: { ...responding, status: "succeeded", answer: "恢复连接后的回答" },
+      events: [],
+      cursor: 1,
+    });
+  showAgent();
+  await screen.findByText("连接暂时中断");
+  expect(screen.getByText("正在处理的问题")).toBeInTheDocument();
+  expect(screen.getByText("已有的部分回答")).toBeInTheDocument();
+  expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+  await screen.findByText("恢复连接后的回答", {}, { timeout: 5000 });
+  expect(poll).toHaveBeenCalledTimes(2);
+});
+
+it("removes restricted conversation content after an explicit poll authorization failure", async () => {
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [
+      { ...run(5, "撤权后隐藏的问题", "撤权后隐藏的回答"), status: "running" },
+    ],
+  });
+  vi.spyOn(agentApi, "poll").mockRejectedValue(
+    new ApiError("当前会话访问权限已撤销", 403),
+  );
+  showAgent();
+  await screen.findByText("当前会话访问权限已撤销");
+  expect(screen.queryByText("撤权后隐藏的问题")).not.toBeInTheDocument();
+  expect(screen.queryByText("撤权后隐藏的回答")).not.toBeInTheDocument();
+});
+
+it("does not share a running conversation lock between quick chat and research windows", async () => {
+  const research = {
+    ...conversation,
+    id: 2,
+    mode: "agent" as const,
+    title: "科研会话",
+  };
+  const responding = {
+    ...run(5, "快速对话正在回答", "已有回答"),
+    status: "running" as const,
+  };
+  vi.mocked(agentApi.conversations).mockImplementation(async (mode) => ({
+    items: [mode === "chat" ? conversation : research],
+  }));
+  vi.mocked(agentApi.detail).mockImplementation(async (id) =>
+    id === 1
+      ? { conversation, runs: [responding] }
+      : {
+          conversation: research,
+          runs: [{ ...run(6, "科研历史"), conversationId: 2 }],
+        },
+  );
+  vi.spyOn(agentApi, "poll").mockResolvedValue({
+    run: responding,
+    events: [],
+    cursor: 0,
+  });
+  const chat = showAgent();
+  const agent = showAgent("workbench");
+  await within(chat.container).findByText("快速对话正在回答");
+  await within(agent.container).findByText("科研历史");
+  expect(
+    within(chat.container).getByRole("button", { name: "停止回答" }),
+  ).toBeEnabled();
+  const input = within(agent.container).getByRole("textbox", {
+    name: "输入消息",
+  });
+  fireEvent.change(input, { target: { value: "另一个会话的独立问题" } });
+  fireEvent.click(
+    within(agent.container).getByRole("button", { name: "发送" }),
+  );
+  await waitFor(() =>
+    expect(agentApi.submit).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ prompt: "另一个会话的独立问题" }),
+    ),
+  );
+  expect(
+    within(chat.container).getByText("快速对话正在回答"),
+  ).toBeInTheDocument();
+});
+
+it("allows a new conversation while another one runs without submitting twice to the current conversation", async () => {
+  const responding = {
+    ...run(5, "原会话仍在处理"),
+    status: "running" as const,
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [responding],
+  });
+  vi.spyOn(agentApi, "poll").mockResolvedValue({
+    run: responding,
+    events: [],
+    cursor: 0,
+  });
+  vi.spyOn(agentApi, "create").mockResolvedValue({
+    ...conversation,
+    id: 3,
+    title: "新会话",
+  });
+  showAgent();
+  await screen.findByRole("button", { name: "停止回答" });
+  expect(
+    screen.queryByRole("button", { name: "发送" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /新建会话/ }));
+  const input = screen.getByRole("textbox", { name: "输入消息" });
+  fireEvent.change(input, { target: { value: "新会话问题" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() =>
+    expect(agentApi.submit).toHaveBeenCalledExactlyOnceWith(
+      3,
+      expect.objectContaining({ prompt: "新会话问题" }),
+    ),
+  );
+});
+
+it("keeps history visible when the model is offline", async () => {
+  const original = bootstrap.models[0].status;
+  bootstrap.models[0].status = "offline";
+  try {
+    showAgent();
+    await screen.findByText("旧问题");
+    expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  } finally {
+    bootstrap.models[0].status = original;
+  }
+});
+
+it("retains confirmed history through a failed refresh and applies the next successful refresh", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.mocked(agentApi.detail)
+      .mockResolvedValueOnce({
+        conversation,
+        runs: [run(1, "已确认的历史问题", "已确认的历史回答")],
+      })
+      .mockRejectedValueOnce(new TypeError("历史连接暂时中断"))
+      .mockResolvedValue({
+        conversation,
+        runs: [run(1, "已确认的历史问题", "恢复后的最新回答")],
+      });
+    const mounted = showAgent();
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(screen.getByText("已确认的历史回答")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(15000));
+    expect(screen.getByText("历史连接暂时中断")).toBeInTheDocument();
+    expect(screen.getByText("已确认的历史回答")).toBeInTheDocument();
+    expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(15000));
+    expect(screen.getByText("恢复后的最新回答")).toBeInTheDocument();
+    mounted.unmount();
+  } finally {
+    vi.useRealTimers();
   }
 });

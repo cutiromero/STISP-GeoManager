@@ -36,6 +36,7 @@ import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
 import { useComputeText } from "../compute/ui";
 import { agentApi } from "../api/agent";
+import { ApiError } from "../api/client";
 import type {
   AgentBudgetProfileId,
   AgentConversation,
@@ -47,7 +48,7 @@ import type {
   AgentResearchScenario,
 } from "../api/generated/types.gen";
 import { createUuid } from "../utils/uuid";
-import { useAgentBootstrap } from "./useAgentBootstrap";
+import { useAgentBootstrapState } from "./useAgentBootstrap";
 import SafeMarkdown from "./SafeMarkdown";
 import RunEvidence from "./RunEvidence";
 import RunComputeTasks from "./RunComputeTasks";
@@ -118,7 +119,12 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const project = useProjectContext();
   const layout = useAgentLayout(`agent-layout:${user?.id ?? "anon"}:${mode}`);
   const { message, modal } = App.useApp();
-  const bootstrap = useAgentBootstrap();
+  const {
+    bootstrap,
+    status: bootstrapStatus,
+    error: bootstrapError,
+    retry: retryBootstrap,
+  } = useAgentBootstrapState();
   const [conversations, setConversations] = useState<AgentConversation[]>([]);
   const [current, setCurrent] = useState<AgentConversation | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
@@ -311,6 +317,10 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const attachmentsAvailable = Boolean(bootstrap?.allowAttachments);
   const internetAvailable = Boolean(bootstrap?.internetEnabled);
   const conversationStorageKey = `agent-conversation:${user?.id ?? "anon"}:${project?.current ?? "1"}:${mode}`;
+  const accessRejected =
+    canUse === false ||
+    bootstrapStatus === "unauthenticated" ||
+    bootstrapStatus === "forbidden";
 
   useEffect(() => {
     alive.current = true;
@@ -319,7 +329,22 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       sequence.current++;
     };
   }, []);
+  const clearRestrictedState = () => {
+    sequence.current++;
+    setManualWorkflow(undefined);
+    setResearchWorkflow(undefined);
+    setWorkflowStatus(undefined);
+    setRuns([]);
+    setComputeActivities({});
+    setEvents([]);
+    setCurrent(null);
+    setConversations([]);
+  };
   const report = (e: unknown) => {
+    if (!alive.current) return;
+    if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+      clearRestrictedState();
+    }
     if (
       alive.current &&
       !(e instanceof DOMException && e.name === "AbortError")
@@ -339,22 +364,16 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     }
   };
   useEffect(() => {
-    if (!canUse) {
-      setManualWorkflow(undefined);
-      setResearchWorkflow(undefined);
-      setWorkflowStatus(undefined);
-      setRuns([]);
-      setComputeActivities({});
-      setEvents([]);
-      setCurrent(null);
-      setConversations([]);
+    if (accessRejected) {
+      clearRestrictedState();
       return;
     }
+    if (canUse !== true) return;
     const timer = setTimeout(() => {
       void refreshList();
     }, 200);
     return () => clearTimeout(timer);
-  }, [mode, canUse, query, archived]);
+  }, [mode, canUse, accessRejected, query, archived]);
   useEffect(() => {
     if (!bootstrap || model) return;
     const candidates = bootstrap.models.filter(
@@ -422,11 +441,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         else void refreshList();
       } catch (e) {
         if (disposed) return;
-        // Do not retain restricted content after any authorization/read failure.
-        setRuns([]);
-        setComputeActivities({});
-        setEvents([]);
         report(e);
+        if (!(e instanceof ApiError && (e.status === 401 || e.status === 403)))
+          timer = setTimeout(poll, 3000);
       }
     };
     void poll();
@@ -445,9 +462,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         if (!disposed) setRuns(data.runs);
       } catch (e) {
         if (!disposed) {
-          setRuns([]);
-          setComputeActivities({});
-          setEvents([]);
           report(e);
         }
       }
@@ -1068,7 +1082,30 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               onClose={() => setError("")}
             />
           )}
-          {bootstrap && canUse === false && (
+          {!bootstrap && bootstrapStatus === "error" && (
+            <Alert
+              type="warning"
+              title={
+                bootstrapError ||
+                ui("连接失败，请重试。", "Connection failed. Please retry.")
+              }
+              action={
+                <Button onClick={retryBootstrap}>
+                  {ui("重试连接", "Retry connection")}
+                </Button>
+              }
+            />
+          )}
+          {bootstrapStatus === "unauthenticated" && (
+            <Alert
+              type="warning"
+              title={ui(
+                "登录状态已失效，请重新登录。",
+                "Your session has expired. Please sign in again.",
+              )}
+            />
+          )}
+          {(canUse === false || bootstrapStatus === "forbidden") && (
             <Alert
               type="info"
               title={ui(
