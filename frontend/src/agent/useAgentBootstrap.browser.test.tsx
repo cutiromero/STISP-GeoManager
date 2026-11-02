@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentBootstrap } from "../api/generated/types.gen";
+import { ApiError } from "../api/client";
 import type { User } from "../types";
 import { clearAgentBootstrap, useAgentBootstrap } from "./useAgentBootstrap";
 
@@ -48,6 +49,22 @@ beforeEach(() => {
 });
 
 describe("agent capability snapshots", () => {
+  it("does not poll permissions while the page stays open", async () => {
+    vi.useFakeTimers();
+    try {
+      load.mockResolvedValue(granted);
+      const view = renderHook(useAgentBootstrap);
+      await act(async () => {});
+      expect(view.result.current).toEqual(granted);
+      await act(async () => vi.advanceTimersByTimeAsync(90000));
+      expect(load).toHaveBeenCalledOnce();
+      expect(view.result.current).toEqual(granted);
+      view.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("retains confirmed access across page remounts while refreshing and applies revocation", async () => {
     load.mockResolvedValueOnce(granted);
     const first = renderHook(useAgentBootstrap);
@@ -109,7 +126,7 @@ describe("agent capability snapshots", () => {
     expect(view.result.current).toEqual(denied);
   });
 
-  it("drops failed refreshes and clears logout snapshots without restoring late requests", async () => {
+  it("retains access after a network failure and clears logout snapshots without restoring late requests", async () => {
     load.mockResolvedValueOnce(granted);
     const first = renderHook(useAgentBootstrap);
     await waitFor(() => expect(first.result.current).toEqual(granted));
@@ -119,17 +136,46 @@ describe("agent capability snapshots", () => {
     const second = renderHook(useAgentBootstrap);
     expect(second.result.current).toEqual(granted);
     await act(async () => failed.reject(new Error("access check failed")));
-    expect(second.result.current).toBeNull();
+    expect(second.result.current).toEqual(granted);
     second.unmount();
     const late = deferred();
     load.mockReturnValueOnce(late.promise);
     const third = renderHook(useAgentBootstrap);
-    expect(third.result.current).toBeNull();
+    expect(third.result.current).toEqual(granted);
     third.unmount();
     clearAgentBootstrap(session.user!);
     await act(async () => late.resolve(granted));
     load.mockReturnValueOnce(deferred().promise);
     const fourth = renderHook(useAgentBootstrap);
     expect(fourth.result.current).toBeNull();
+  });
+
+  it("does not turn an incomplete response into a permission denial", async () => {
+    load.mockResolvedValueOnce(granted);
+    const first = renderHook(useAgentBootstrap);
+    await waitFor(() => expect(first.result.current).toEqual(granted));
+    first.unmount();
+    const refresh = deferred();
+    load.mockReturnValueOnce(refresh.promise);
+    const second = renderHook(useAgentBootstrap);
+    await act(async () =>
+      refresh.resolve({
+        ...granted,
+        canAgent: undefined,
+      } as unknown as AgentBootstrap),
+    );
+    expect(second.result.current).toEqual(granted);
+  });
+
+  it("does not retain cached access after an explicit authentication rejection", async () => {
+    load.mockResolvedValueOnce(granted);
+    const first = renderHook(useAgentBootstrap);
+    await waitFor(() => expect(first.result.current).toEqual(granted));
+    first.unmount();
+    const refresh = deferred();
+    load.mockReturnValueOnce(refresh.promise);
+    const second = renderHook(useAgentBootstrap);
+    await act(async () => refresh.reject(new ApiError("权限已撤销", 403)));
+    expect(second.result.current).toBeNull();
   });
 });

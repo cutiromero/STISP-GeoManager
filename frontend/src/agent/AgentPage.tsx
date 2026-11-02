@@ -1068,7 +1068,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               onClose={() => setError("")}
             />
           )}
-          {bootstrap && !canUse && (
+          {bootstrap && canUse === false && (
             <Alert
               type="info"
               title={ui(

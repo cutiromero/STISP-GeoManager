@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { agentApi } from "../api/agent";
+import { ApiError } from "../api/client";
 import type { AgentBootstrap } from "../api/generated/types.gen";
 import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
@@ -28,21 +29,33 @@ function loadBootstrap(user: User, scope: string) {
   }
   if (entry.pending) return entry.pending;
   const currentEntry = entry;
-  currentEntry.pending = agentApi.bootstrap().then(
-    (value) => {
+  currentEntry.pending = agentApi
+    .bootstrap()
+    .then((value) => {
+      if (
+        typeof value?.canChat !== "boolean" ||
+        typeof value?.canAgent !== "boolean"
+      ) {
+        throw new Error("智能体权限检查返回不完整，请重新打开页面重试");
+      }
       if (snapshots.get(user)?.get(scope) === currentEntry) {
         currentEntry.value = value;
         currentEntry.pending = null;
       }
       return value;
-    },
-    (error: unknown) => {
+    })
+    .catch((error: unknown) => {
       if (snapshots.get(user)?.get(scope) === currentEntry) {
-        snapshots.get(user)?.delete(scope);
+        currentEntry.pending = null;
+        if (
+          error instanceof ApiError &&
+          (error.status === 401 || error.status === 403)
+        ) {
+          snapshots.get(user)?.delete(scope);
+        }
       }
       throw error;
-    },
-  );
+    });
   return currentEntry.pending;
 }
 
@@ -58,7 +71,6 @@ export function useAgentBootstrap() {
   const [snapshot, setSnapshot] = useState({ user, scope, value: cached });
   useEffect(() => {
     let disposed = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     if (!user || !eligible) {
       if (user) clearAgentBootstrap(user);
       return;
@@ -73,14 +85,18 @@ export function useAgentBootstrap() {
         const result = await loadBootstrap(user, scope);
         if (!disposed) setSnapshot({ user, scope, value: result });
       } catch {
-        if (!disposed) setSnapshot({ user, scope, value: null });
+        if (!disposed) {
+          setSnapshot({
+            user,
+            scope,
+            value: snapshots.get(user)?.get(scope)?.value ?? null,
+          });
+        }
       }
-      if (!disposed) timer = setTimeout(load, 30000);
     };
     void load();
     return () => {
       disposed = true;
-      clearTimeout(timer);
     };
   }, [user, scope, eligible]);
   if (!eligible) return null;
