@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.54] - 2026-11-03
+
+### Fixed
+- 邀请分享弹窗的核验提示使用深色标题与说明，修复深色工作台主题下浅底浅字难以辨认的问题，覆盖成功、警告和错误提示。
+
 ## [0.1.53] - 2026-11-03
 
 ### Changed

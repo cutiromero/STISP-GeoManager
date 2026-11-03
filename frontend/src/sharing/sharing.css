@@ -36,6 +36,13 @@
 .share-invite-modal .ant-alert + .ant-alert {
   margin-top: 12px;
 }
+.share-invite-modal .ant-alert-title,
+.share-invite-modal .ant-alert-message {
+  color: #173b66;
+}
+.share-invite-modal .ant-alert-description {
+  color: #405c76;
+}
 .share-center-trigger.ant-btn {
   color: inherit;
   flex: 0 0 auto;
