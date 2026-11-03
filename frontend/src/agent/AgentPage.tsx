@@ -30,7 +30,7 @@ import {
   NodeIndexOutlined,
 } from "@ant-design/icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
@@ -84,6 +84,10 @@ import ReasoningEffortControl, {
 } from "./ReasoningEffortControl";
 import "./agent.css";
 import { workflowStatusLabels } from "./workflowFeedback";
+import {
+  genericGeologyType,
+  isLogicReasoningProject,
+} from "./multiElementScenario";
 
 const active = (r: AgentRun) =>
   ["queued", "running", "waiting_compute"].includes(r.status);
@@ -105,20 +109,56 @@ function mergeRun(old: AgentRun[], next: AgentRun): AgentRun[] {
     : [...updated, next];
 }
 
+// Plain questions a geologist would ask; the agent chooses data and knowledge itself.
+const logicExampleQuestions = [
+  "这个项目里有哪些地质资料？",
+  "八宝山组的时代、岩性和分布有什么特点？",
+  "判断一条构造线是不是假线，主要看哪些依据？",
+  "蚀变找矿远景区是怎样圈定的？",
+];
+
+// Same-named conversations stay distinguishable by when they were last used.
+function conversationTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const today = new Date();
+  const time = date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return date.toDateString() === today.toDateString()
+    ? `今天 ${time}`
+    : `${date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })} ${time}`;
+}
+
 export default function AgentPage() {
   const project = useProjectContext();
   const { user } = useAppContext();
   const location = useLocation();
   const mode = location.pathname.endsWith("workbench") ? "agent" : "chat";
+  // In the logic-reasoning project quick chat and the research agent are one page.
+  const logicProject = isLogicReasoningProject(
+    project?.projects.find((item) => String(item.id) === project.current)?.code,
+  );
+  const { bootstrap } = useAgentBootstrapState();
+  if (logicProject && mode === "chat" && bootstrap?.canAgent)
+    return <Navigate to="/agent/workbench" replace state={location.state} />;
   return (
     <AgentWorkspace
       key={`${user?.id}:${project?.current}:${mode}`}
       mode={mode}
+      logicProject={logicProject}
     />
   );
 }
 
-function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
+function AgentWorkspace({
+  mode,
+  logicProject = false,
+}: {
+  mode: "chat" | "agent";
+  logicProject?: boolean;
+}) {
   const ui = useComputeText();
   const navigate = useNavigate();
   const location = useLocation();
@@ -329,6 +369,31 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const deepThinkingAvailable =
     Boolean(bootstrap?.thinkingEnabled) &&
     Boolean(selectedModel?.supportsThinking);
+  const modeLabel = logicProject
+    ? ui("智能体", "Agent")
+    : mode === "chat"
+      ? ui("快速对话", "Quick chat")
+      : ui("科研智能体", "Research agent");
+  const workflowLabel = logicProject
+    ? ui("逻辑推理", "Logical reasoning")
+    : ui("MH-workflow", "MH-workflow");
+  const workflowButton = mode === "agent" && (
+    <Button
+      type="text"
+      icon={<NodeIndexOutlined />}
+      className={
+        composerWorkflowStatus === "waiting_approval"
+          ? "agent-workflow-attention"
+          : ""
+      }
+      onClick={() => setWorkflowOpen(true)}
+    >
+      {workflowLabel}
+      {composerWorkflowStatus && (
+        <span>{workflowStatusLabels[composerWorkflowStatus]}</span>
+      )}
+    </Button>
+  );
   const attachmentsAvailable = Boolean(bootstrap?.allowAttachments);
   const internetAvailable = Boolean(bootstrap?.internetEnabled);
   const conversationStorageKey = `agent-conversation:${user?.id ?? "anon"}:${project?.current ?? "1"}:${mode}`;
@@ -989,6 +1054,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     <ActivityMark state={sidebarActivity.state} />
                   )}
                   {c.title}
+                  <time className="agent-history-time" dateTime={c.updatedAt}>
+                    {conversationTime(c.updatedAt)}
+                  </time>
                 </button>
                 <Space size={0} className="agent-history-actions">
                   <Button
@@ -1093,6 +1161,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               <nav
                 className="agent-mode-nav"
                 aria-label={ui("对话模式", "Conversation mode")}
+                hidden={logicProject}
               >
                 {bootstrap?.canChat && (
                   <Button
@@ -1118,16 +1187,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 )}
               </nav>
               <div className="agent-conversation-heading">
-                <span>
-                  {mode === "chat"
-                    ? ui("快速对话", "Quick chat")
-                    : ui("科研智能体", "Research agent")}
-                </span>
+                <span>{modeLabel}</span>
                 <strong title={current?.title}>
-                  {current?.title ??
-                    (mode === "chat"
-                      ? ui("快速对话", "Quick chat")
-                      : ui("科研智能体", "Research agent"))}
+                  {current?.title ?? modeLabel}
                 </strong>
               </div>
             </div>
@@ -1289,7 +1351,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         "Discover authorized project data, calculate statistics and inspect the evidence.",
                       )}
                 </p>
-                {mode === "agent" && (
+                {mode === "agent" && !logicProject && (
                   <Button
                     onClick={() =>
                       setPrompt(
@@ -1302,6 +1364,30 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                   >
                     {ui("查看项目数据概况", "Explore project data")}
                   </Button>
+                )}
+                {mode === "agent" && logicProject && (
+                  <div
+                    className="agent-example-questions"
+                    aria-label={ui("示例问题", "Example questions")}
+                  >
+                    {logicExampleQuestions.map((question) => (
+                      <Button
+                        key={question}
+                        onClick={() => setPrompt(question)}
+                      >
+                        {question}
+                      </Button>
+                    ))}
+                    <Button
+                      type="primary"
+                      onClick={() => setWorkflowOpen(true)}
+                    >
+                      {ui(
+                        "上传我的地质资料做逻辑推理",
+                        "Upload my geology data for reasoning",
+                      )}
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
@@ -1659,7 +1745,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 </div>
                 <div className="agent-composer-footer">
                   <div className="agent-composer-tools">
-                    {mode === "agent" && bootstrap && (
+                    {logicProject && workflowButton}
+                    {mode === "agent" && bootstrap && !logicProject && (
                       <AgentToolSelection
                         bootstrap={bootstrap}
                         resources={resources}
@@ -1739,29 +1826,13 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                             );
                           }}
                         >
-                          {ui("逻辑推理", "Logical reasoning")}
+                          {logicProject
+                            ? ui("深度思考", "Deep thinking")
+                            : ui("逻辑推理", "Logical reasoning")}
                         </Button>
                       </>
                     )}
-                    {mode === "agent" && (
-                      <Button
-                        type="text"
-                        icon={<NodeIndexOutlined />}
-                        className={
-                          composerWorkflowStatus === "waiting_approval"
-                            ? "agent-workflow-attention"
-                            : ""
-                        }
-                        onClick={() => setWorkflowOpen(true)}
-                      >
-                        {ui("MH-workflow", "MH-workflow")}
-                        {composerWorkflowStatus && (
-                          <span>
-                            {workflowStatusLabels[composerWorkflowStatus]}
-                          </span>
-                        )}
-                      </Button>
-                    )}
+                    {!logicProject && workflowButton}
                   </div>
                   {running ? (
                     <Button
@@ -1838,7 +1909,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       </div>
       {mode === "agent" && canUse && (
         <Drawer
-          title={ui("MH-workflow", "MH-workflow")}
+          title={workflowLabel}
           open={workflowOpen}
           onClose={() => setWorkflowOpen(false)}
           size={layout.workflow}
@@ -1869,6 +1940,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               bootstrap={bootstrap}
               onStatusChange={setWorkflowStatus}
               onWorkflowChange={setManualWorkflow}
+              fixedScenario={logicProject ? genericGeologyType : undefined}
             />
           </div>
         </Drawer>

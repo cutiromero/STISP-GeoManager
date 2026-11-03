@@ -155,6 +155,12 @@
   font-weight: 500;
   padding: 5px 0;
 }
+.agent-history-time {
+  display: block;
+  margin-top: 2px;
+  color: #8a9ba7;
+  font-size: 11px;
+}
 .agent-history-title > .agent-activity-mark {
   display: inline-grid;
   vertical-align: -3px;
@@ -1756,7 +1762,11 @@
   font-size: 11px;
 }
 .agent-workflow-conclusion {
-  padding: 8px 0 14px;
+  margin: 8px 0 14px;
+  padding: 12px 16px;
+  border-left: 3px solid #2f6f9f;
+  border-radius: 6px;
+  background: #eef5fa;
   line-height: 1.8;
 }
 .agent-workflow-conclusion h3,
@@ -1767,7 +1777,25 @@
   color: #315a76;
 }
 .agent-workflow-conclusion p {
+  margin: 0 0 6px;
+  color: #243f52;
+}
+.agent-workflow-conclusion-main {
+  font-size: 15px;
+}
+.agent-workflow-conclusion strong {
+  color: #163a55;
+  font-weight: 650;
+}
+.agent-research-goal summary {
+  cursor: pointer;
+  color: #637d92;
+  font-size: 12px;
+}
+.agent-research-goal p {
+  margin: 6px 0 0;
   color: #496779;
+  line-height: 1.75;
 }
 .agent-compute-cards.is-compact {
   display: block;
@@ -2102,4 +2130,63 @@
     padding: 16px 14px;
     border-radius: 14px;
   }
+}
+.agent-example-questions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.agent-example-questions .ant-btn {
+  height: auto;
+  white-space: normal;
+  text-align: left;
+}
+.agent-rule-cards {
+  margin: 8px 0 12px;
+}
+.agent-rule-cards summary {
+  cursor: pointer;
+  color: #315a76;
+  font-weight: 600;
+}
+.agent-rule-cards ul {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.agent-rule-cards li {
+  padding: 8px 10px;
+  border: 1px solid #dce6eb;
+  border-radius: 8px;
+  background: #fff;
+}
+.agent-rule-card-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.agent-rule-cards dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+.agent-rule-cards dt {
+  color: #6b8191;
+}
+.agent-rule-cards dd {
+  margin: 0;
+  color: #243f52;
+}
+.multi-element-suggestion-tier {
+  margin: 0 0 6px;
+  color: #315a76;
+  font-size: 12px;
 }

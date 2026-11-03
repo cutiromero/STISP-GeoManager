@@ -178,6 +178,14 @@ export function ProjectSelector() {
   const ui = useAuditText();
   const value = useProjectContext();
   if (!value) return null;
+  const projectLabel = (p: (typeof value.projects)[number]) =>
+    `${p.isDefault ? ui("公开") : p.name}${p.isActive ? "" : ui("（停用）")}`;
+  const currentProject = value.projects.find(
+    (project) => String(project.id) === value.current,
+  );
+  const currentLabel = currentProject
+    ? projectLabel(currentProject)
+    : undefined;
   return (
     <Space size={6} className="project-selector">
       <Tag color="blue" icon={<ColumnIcon name="project" />}>
@@ -193,11 +201,14 @@ export function ProjectSelector() {
         placeholder={ui("暂无可访问项目")}
         disabled={value.projects.length === 0}
         onChange={(id) => value.choose(id)}
-        style={{ width: 150 }}
-        popupMatchSelectWidth={230}
+        title={currentLabel}
+        style={{ width: 168 }}
+        // Long project names are shown in full in the list rather than cut off.
+        popupMatchSelectWidth={false}
         options={value.projects.map((p) => ({
           value: String(p.id),
-          label: `${p.isDefault ? ui("公开") : p.name}${p.isActive ? "" : ui("（停用）")}`,
+          label: projectLabel(p),
+          title: projectLabel(p),
         }))}
       />
     </Space>

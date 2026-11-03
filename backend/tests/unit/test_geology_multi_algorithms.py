@@ -276,7 +276,7 @@ def test_manifest_reproducible_standalone_packages(suffix):
         } <= set(archive.namelist())
 
 
-def test_real_name_code_fix_and_review_not_automatic_reclassification(tmp_path):
+def test_real_name_code_fix_and_reclassification_only_when_approved(tmp_path):
     initial, original = fixture(tmp_path)
     untouched = {key: path.read_bytes() for key, path in initial.inputs.items()}
     findings, report = check(initial)
@@ -287,12 +287,17 @@ def test_real_name_code_fix_and_review_not_automatic_reclassification(tmp_path):
         if row["rule_id"] == "L-01" and row["feature_id"] == "G3"
     )
     assert code["feature_id"] == "G4" and code["target_code"] == "C"
-    assert island["suggested_action"] == "review" and island["status"] == "review"
+    # G3's classification confidence 0.5 is below conf_auto, so reclassifying it to
+    # its host is suggested; keeping it under review leaves the map unchanged.
+    assert island["suggested_action"] == "reclassify"
+    assert island["status"] == "suggested"
     assert json.loads(island["measurements_json"])[
         "shared_boundary_ratio"
     ] == pytest.approx(1)
     assert report["metrics"]["map_modified"] is False
-    edited = approval_context(tmp_path, initial, [code, island])
+    edited = approval_context(
+        tmp_path, initial, [code, island], {island["issue_id"]: "review"}
+    )
     load("apply")(edited)
     result = gpd.read_file(edited.output_path("lithology.gpkg")).set_index("feature_id")
     assert result.at["G4", "geo_sym"] == "C" and result.at["G3", "geo_sym"] == "O"
@@ -318,8 +323,11 @@ def test_alteration_aggregates_same_class_and_preserves_weight_states(tmp_path):
     measured = json.loads(carbonate["measurements_json"])
     assert measured["unit_areas_m2"]["C"] == pytest.approx(20000)
     assert measured["group_ratios"]["carbonate"] == pytest.approx(1)
-    assert carbonate["suggested_action"] == "downweight"
-    edited = approval_context(tmp_path, initial, [carbonate])
+    # Carbonate background is read as lithology; a reviewer may still downweight.
+    assert carbonate["suggested_action"] == "exclude"
+    edited = approval_context(
+        tmp_path, initial, [carbonate], {carbonate["issue_id"]: "downweight"}
+    )
     load("apply")(edited)
     result = gpd.read_file(edited.output_path("alterations.gpkg"))
     selected = result.loc[result.feature_id == carbonate["feature_id"]].iloc[0]
@@ -572,7 +580,9 @@ def test_recheck_keeps_user_review_and_downweight_state(tmp_path):
     initial, _ = fixture(tmp_path)
     findings, _ = check(initial)
     selected = [next(row for row in findings if row["rule_id"] == "A-01")]
-    edited = approval_context(tmp_path, initial, selected)
+    edited = approval_context(
+        tmp_path, initial, selected, {selected[0]["issue_id"]: "downweight"}
+    )
     load("apply")(edited)
     recheck = Context(
         tmp_path / "recheck",

@@ -40,6 +40,7 @@ from .geology_multi import (
     graph as multi_graph,
 )
 from .workflow import _authorize, _scope, _state_hash, checkpoint, step
+from .geology_generic import GENERIC, MULTI_FAMILY
 from .workflow_controls import (
     WorkflowPaused,
     check_pause,
@@ -53,6 +54,7 @@ DEMO_TYPES = {
     "geology_age_correction",
     "geology_map_review",
     "geology_multi_element_reasoning",
+    GENERIC,
 }
 STAGE_TITLES = {
     "early_ndvi": "前期植被指数",
@@ -196,10 +198,12 @@ GRAPHS = {
 
 ROLES[MULTI_TYPE] = MULTI_ROLES
 GRAPHS[MULTI_TYPE] = multi_graph()
+ROLES[GENERIC] = MULTI_ROLES
+GRAPHS[GENERIC] = multi_graph()
 
 
 def stage_title(workflow, stage: dict) -> str:
-    if workflow.workflow_type == MULTI_TYPE:
+    if workflow.workflow_type in MULTI_FAMILY:
         from .geology_multi import TITLES
 
         return TITLES.get(stage["name"], stage["name"])
@@ -282,6 +286,11 @@ def _versions(workflow, graph) -> dict:
 
 
 def prepare_demo(workflow, user, p) -> None:
+    if workflow.workflow_type == GENERIC:
+        from .geology_generic import prepare_generic
+
+        if prepare_generic(workflow, user, p):
+            return
     roles = ROLES[workflow.workflow_type]
     inputs = workflow.plan.get("inputs", {})
     if not isinstance(inputs, dict) or set(inputs) != set(roles):
@@ -290,7 +299,7 @@ def prepare_demo(workflow, user, p) -> None:
         raise ComputeError("场景输入超过当前资源上限")
     validated_versions = None
     multi_knowledge = None
-    if workflow.workflow_type == MULTI_TYPE:
+    if workflow.workflow_type in MULTI_FAMILY:
         from .geology_multi import prepare
 
         multi_knowledge = prepare(workflow, user, p)
@@ -470,7 +479,7 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
     from apps.knowledge.trial_rules import authorize_trial_evidence
 
     trial_ids = authorize_trial_evidence(workflow, user, history=history)
-    if workflow.workflow_type == MULTI_TYPE and not history:
+    if workflow.workflow_type in MULTI_FAMILY and not history:
         from .geology_multi import authorize_frozen
 
         authorize_frozen(workflow, user, p)
@@ -551,19 +560,28 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
             authorize_update(workflow, user, p)
 
 
-def confirm_demo(workflow, user, p, plan_hash, selected_suggestion_ids=None) -> None:
+def confirm_demo(
+    workflow, user, p, plan_hash, selected_suggestion_ids=None, field_mapping=None
+) -> None:
+    if workflow.plan.get("phase") == "review_mapping":
+        from .geology_generic import confirm_mapping
+
+        confirm_mapping(workflow, user, p, plan_hash, field_mapping)
+        return
+    if field_mapping is not None:
+        raise ComputeError("当前阶段不接受字段对应", 400)
     if workflow.status != "waiting_approval" or workflow.cancel_requested:
         raise ComputeError("此场景当前不能确认执行", 409)
     if plan_hash != workflow.plan_hash or _state_hash(workflow.plan) != plan_hash:
         raise ComputeError("场景计划已变化，请刷新后确认", 409)
     authorize_demo(workflow, user, p)
     if workflow.plan["phase"] == "review_modifications":
-        if workflow.workflow_type == MULTI_TYPE:
+        if workflow.workflow_type in MULTI_FAMILY:
             from .geology_multi_review import approve_modifications
         else:
             from .geology_review import approve_modifications
 
-        if workflow.workflow_type not in {"geology_map_review", MULTI_TYPE}:
+        if workflow.workflow_type not in {"geology_map_review", *MULTI_FAMILY}:
             raise ComputeError("当前场景不支持此修改审核", 409)
         approve_modifications(workflow, user, p, selected_suggestion_ids, plan_hash)
         workflow.plan["phase"] = "decide"
@@ -653,7 +671,7 @@ def _submit_stage(workflow, user, p, stage) -> None:
 
 
 def _submit_stage_locked(workflow, user, p, stage) -> None:
-    if workflow.workflow_type == MULTI_TYPE and stage["name"] == "apply":
+    if workflow.workflow_type in MULTI_FAMILY and stage["name"] == "apply":
         from .geology_multi_review import create_approved_changes
 
         workflow.plan["approved_changes"] = create_approved_changes(
@@ -797,7 +815,9 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
                 source = (
                     "" if stage.get("manualApproved") else f"workflow:{workflow.id}"
                 )
-                name = f"{stage_title(workflow, stage)} {output.label} {workflow.created_at:%m%d-%H%M%S}"
+                # Readable, and still unique: the importer rejects duplicate names.
+                created = timezone.localtime(workflow.created_at)
+                name = f"{stage_title(workflow, stage)} · {output.label} · {created:%m-%d %H:%M:%S}"
                 record = request_output_import(
                     user, output, name=name, request_source=source
                 )
@@ -829,7 +849,7 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
         set(workflow.result_resource_ids + [r.resource_id for _, r in records])
     )
     stage["status"] = "completed"
-    if workflow.workflow_type == MULTI_TYPE:
+    if workflow.workflow_type in MULTI_FAMILY:
         from .geology_multi_review import update_map
 
         update_map(workflow)
@@ -1113,7 +1133,7 @@ def advance_demo(workflow_id) -> None:
                     )
                 return
             if (
-                workflow.workflow_type == MULTI_TYPE
+                workflow.workflow_type in MULTI_FAMILY
                 and stage["name"] == "apply"
                 and not stage.get("modificationsApproval")
             ):

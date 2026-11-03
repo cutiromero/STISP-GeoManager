@@ -308,8 +308,14 @@ class GeopackageQueryPushdownTests(SimpleTestCase):
             self.assertEqual(longitude["type"], "number")
 
             with (
-                patch("apps.catalog.vector_store.vector_geopackage_path", return_value=path),
-                patch("apps.catalog.vector_store.runtime_query_result_limit", return_value=30_000),
+                patch(
+                    "apps.catalog.vector_store.vector_geopackage_path",
+                    return_value=path,
+                ),
+                patch(
+                    "apps.catalog.vector_store.runtime_query_result_limit",
+                    return_value=30_000,
+                ),
             ):
                 result = query_resource(
                     resource,
@@ -432,8 +438,12 @@ class QueryResourceSummaryTests(SimpleTestCase):
                     }
                 ],
             ),
-            patch("apps.catalog.vector_store._geopackage_filtered_count", return_value=2),
-            patch("apps.catalog.vector_store.runtime_query_result_limit", return_value=1),
+            patch(
+                "apps.catalog.vector_store._geopackage_filtered_count", return_value=2
+            ),
+            patch(
+                "apps.catalog.vector_store.runtime_query_result_limit", return_value=1
+            ),
         ):
             result = query_resource(
                 resource,
@@ -452,7 +462,9 @@ class QueryResourceSummaryTests(SimpleTestCase):
     def test_returned_bounds_empty_for_empty_gdf(self):
         import geopandas as gpd
 
-        gdf = gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs="EPSG:4326")
+        gdf = gpd.GeoDataFrame(
+            columns=["geometry"], geometry="geometry", crs="EPSG:4326"
+        )
 
         self.assertEqual(_returned_bounds(gdf), [])
 
@@ -480,6 +492,16 @@ class GeojsonGeometryValidationTests(SimpleTestCase):
         self.assertEqual(warning_counts["missing_geometry"], 1)
         self.assertEqual(warning_counts["invalid_longitude"], 1)
         self.assertEqual(warning_counts["invalid_latitude"], 1)
+
+    def test_sub_centimetre_precision_differences_do_not_warn(self):
+        from apps.catalog.importer import coordinate_uncertainty, format_meters
+
+        # 15 vs 7 decimals: both far below a centimetre, as in exported GeoJSON.
+        self.assertIsNone(coordinate_uncertainty(1e-10, 0.005))
+        warning = coordinate_uncertainty(0.05, 5500.0)
+        self.assertIn("5.50 千米", warning["message"])
+        self.assertIn("5.0 厘米", warning["message"])
+        self.assertEqual(format_meters(0.0004), "不足 1 厘米")
 
     def test_warns_when_coordinate_uncertainty_range_exceeds_threshold(self):
         import geopandas as gpd

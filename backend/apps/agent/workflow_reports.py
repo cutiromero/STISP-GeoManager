@@ -22,12 +22,14 @@ from apps.core.storage import app_path, table_data_path
 from .compute_tools import authorized_task
 from .models import AgentWorkflow
 from .tools import resolve_resource
+from .geology_generic import MULTI_FAMILY
 
 CONTENT_TYPE = "text/markdown"
 PREVIEW_LIMIT = 200_000
 MAX_REPORT_BYTES = 2 * 1024 * 1024
 REPORT_NAMES = {
     "geology_multi_element_reasoning": "海德乌拉综合检查报告",
+    "geology_generic": "地质综合检查报告",
     "geology_map_review": "检查报告",
     "ecology_investigation": "生态风险分析报告",
     "geology_correction": "地质纠偏分析报告",
@@ -71,7 +73,7 @@ def _multi_report_version(workflow: AgentWorkflow) -> str:
 
 def _paths(workflow: AgentWorkflow) -> tuple[Path, Path, str]:
     directory = f"workflow-reports/{workflow.id}"
-    if workflow.workflow_type == "geology_multi_element_reasoning":
+    if workflow.workflow_type in MULTI_FAMILY:
         directory += "/" + _multi_report_version(workflow)
     relative = f"{directory}/report.md"
     return (
@@ -83,7 +85,7 @@ def _paths(workflow: AgentWorkflow) -> tuple[Path, Path, str]:
 
 def _source(workflow: AgentWorkflow) -> str:
     value = f"workflow-report:{workflow.id}"
-    if workflow.workflow_type == "geology_multi_element_reasoning":
+    if workflow.workflow_type in MULTI_FAMILY:
         value += ":" + _multi_report_version(workflow)
     return value
 
@@ -183,7 +185,7 @@ def _table_rows(output: ComputeOutput) -> list[str]:
 
 
 def render_report(workflow: AgentWorkflow, user, policy: dict, tasks: list) -> bytes:
-    if workflow.workflow_type == "geology_multi_element_reasoning":
+    if workflow.workflow_type in MULTI_FAMILY:
         from .geology_multi_report import render_report as render_multi_report
 
         return render_multi_report(workflow, tasks)
@@ -343,6 +345,10 @@ def _write_metadata(path: Path, data: dict) -> None:
 
 
 def generate_report(workflow: AgentWorkflow, user, policy: dict, request=None) -> dict:
+    # Viewing a finished task reads its saved report without taking the writer lock.
+    if _paths(workflow)[1].is_file():
+        authorize_context(workflow, user, policy, history=True)
+        return load_report(workflow, user)[0]
     with transaction.atomic():
         # SQLite ignores select_for_update: obtain its writer lock without changing state.
         AgentWorkflow.objects.filter(pk=workflow.id).update(detail=F("detail"))

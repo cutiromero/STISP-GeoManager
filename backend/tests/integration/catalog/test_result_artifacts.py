@@ -201,6 +201,38 @@ class ResultArtifactApiTests(TestCase):
                     self.assertIn("sandbox", preview["Content-Security-Policy"])
                     preview.close()
 
+    def test_image_card_thumbnail_is_bounded_cached_and_pdf_has_none(self):
+        large = BytesIO()
+        Image.new("RGB", (2000, 1000), color=(20, 120, 80)).save(large, format="PNG")
+        with self.result_storage():
+            image = self.create_result(
+                file=uploaded("large.png", large.getvalue(), "image/png"),
+                result_type="image",
+            ).json()
+            document = self.create_result(
+                file=uploaded("report.pdf", valid_pdf(), "application/pdf"),
+                result_type="report",
+            ).json()
+            self.assertIsNone(document["thumbnailUrl"])
+            self.assertEqual(
+                self.client.get(
+                    document["previewUrl"].replace("preview", "thumbnail")
+                ).status_code,
+                400,
+            )
+            bodies = []
+            for _ in range(2):
+                response = self.client.get(image["thumbnailUrl"])
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response["Content-Type"], "image/webp")
+                # Signed-in responses stay no-store so revoked access applies at once.
+                self.assertIn("no-store", response["Cache-Control"])
+                bodies.append(b"".join(response.streaming_content))
+                response.close()
+            self.assertEqual(bodies[0], bodies[1])
+            with Image.open(BytesIO(bodies[0])) as thumbnail:
+                self.assertEqual(thumbnail.size, (640, 320))
+
     def test_rejects_disguised_or_corrupt_preview_files(self):
         with self.result_storage():
             disguised_pdf = self.create_result(

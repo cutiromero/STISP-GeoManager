@@ -1,11 +1,17 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cloneDefaultRasterSymbolization } from "../symbolization";
 import { createEmptyLayerGroup } from "../utils/layerFactory";
 import type { LoadedRasterLayer } from "../types";
 import WorkbenchLegend from "./WorkbenchLegend";
 
 describe("live legend UI", () => {
+  beforeEach(async () => {
+    localStorage.removeItem("workbench-legend");
+    await page.viewport(1440, 900);
+  });
+
   it("automatically displays classes, follows a render update and can be collapsed", () => {
     const layer = {
       id: "land",

@@ -38,6 +38,11 @@ from apps.core.principal_visibility import (
 )
 from apps.core.runtime_config import RuntimeConfigError, runtime_upload_max_mb
 from apps.core.storage import app_path
+from apps.catalog.thumbnails import (
+    CACHE_CONTROL,
+    THUMBNAIL_EXTENSIONS,
+    thumbnail_response,
+)
 
 ALLOWED_RESULT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".pdf", ".csv", ".xlsx"}
 PREVIEWABLE_RESULT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".pdf"}
@@ -349,11 +354,13 @@ def result_artifact_file(request, result_id: int):
     if artifact is None:
         return JsonResponse({"detail": "成果不存在"}, status=404)
     variant = str(request.GET.get("variant", "artifact")).strip()
-    if variant not in {"artifact", "preview"}:
+    if variant not in {"artifact", "preview", "thumbnail"}:
         return JsonResponse(
-            {"detail": "variant 仅支持 artifact 或 preview"}, status=400
+            {"detail": "variant 仅支持 artifact、preview 或 thumbnail"}, status=400
         )
     extension = Path(artifact.file_name).suffix.lower()
+    if variant == "thumbnail" and extension not in THUMBNAIL_EXTENSIONS:
+        return JsonResponse({"detail": "该成果格式没有缩略图"}, status=400)
     if variant == "preview" and extension not in PREVIEWABLE_RESULT_EXTENSIONS:
         return JsonResponse({"detail": "该成果格式不支持在线预览"}, status=400)
     if variant == "artifact" and not has_feature_perm(
@@ -363,6 +370,8 @@ def result_artifact_file(request, result_id: int):
     path = app_path(*artifact.file_path.split("/"))
     if not path.is_file():
         return JsonResponse({"detail": "成果文件不存在"}, status=404)
+    if variant == "thumbnail":
+        return thumbnail_response(path, f"result-{artifact.id}")
     response = FileResponse(
         path.open("rb"),
         as_attachment=variant == "artifact",
@@ -378,6 +387,7 @@ def result_artifact_file(request, result_id: int):
             "style-src 'unsafe-inline'"
         )
         response["Referrer-Policy"] = "no-referrer"
+        response["Cache-Control"] = CACHE_CONTROL
     return response
 
 
@@ -520,6 +530,12 @@ def _serialize_result(artifact: ResultArtifact, request_user) -> dict[str, Any]:
         "fileFormat": extension,
         "sizeBytes": artifact.size_bytes,
         "previewUrl": f"{base}?variant=preview&projectTagId={artifact.project_tag_id}",
+        "thumbnailUrl": (
+            f"{base}?variant=thumbnail&projectTagId={artifact.project_tag_id}"
+            f"&v={int(artifact.updated_at.timestamp())}"
+            if f".{extension}" in THUMBNAIL_EXTENSIONS
+            else None
+        ),
         "downloadUrl": f"{base}?variant=artifact&projectTagId={artifact.project_tag_id}",
         "owner": _serialize_user(owner),
         "accessGroups": [

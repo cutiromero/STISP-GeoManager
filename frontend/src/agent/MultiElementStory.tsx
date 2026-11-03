@@ -6,8 +6,13 @@ import type {
   AgentWorkflow,
 } from "../api/generated/types.gen";
 import { record } from "../map/geologyReviewData";
-import { multiElementSegments } from "./multiElementScenario";
+import { genericRoles } from "./GenericWorkflowUploads";
+import {
+  genericGeologyType,
+  multiElementSegments,
+} from "./multiElementScenario";
 import "./geology-review-story.css";
+import { formatArea } from "../utils/area";
 
 const elements: Record<string, string> = {
   lithology: "岩性",
@@ -28,6 +33,19 @@ const actions: Record<string, string> = {
   keep: "保留",
   review: "待裁定",
 };
+// Rules whose finding is a fact check: these could run without review once the
+// rule is published; while rules are trial drafts every action still needs approval.
+const deterministicRules = new Set(["L-03", "L-05", "A-05"]);
+
+/** Which disposal tier a suggestion belongs to. */
+export function suggestionTier(item: { status?: string; ruleId?: string }) {
+  if (item.status === "exception") return "规则例外候选";
+  if (item.status === "review") return "需地质判断，暂保留";
+  if (deterministicRules.has(item.ruleId ?? ""))
+    return "确定性问题（规则发布后可自动处理）";
+  return "建议处置，批准后执行";
+}
+
 const observationLabels: Record<string, string> = {
   area_km2: "面积（平方公里）",
   area_m2: "面积（平方米）",
@@ -84,13 +102,8 @@ export function formatMultiElementObservation(
   if (typeof value === "number") {
     if (key.includes("ratio") || key.includes("confidence") || key === "conf")
       return `${(value * 100).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}%`;
-    const unit = !withUnit
-      ? ""
-      : key.endsWith("_m2")
-        ? " 平方米"
-        : key.endsWith("_m")
-          ? " 米"
-          : "";
+    if (withUnit && key.endsWith("_m2")) return formatArea(value);
+    const unit = !withUnit ? "" : key.endsWith("_m") ? " 米" : "";
     return `${value.toLocaleString("zh-CN", { maximumFractionDigits: 3 })}${unit}`;
   }
   if (typeof value === "string") {
@@ -222,26 +235,40 @@ export default function MultiElementStory({
   const segment = String(workflow.parameters.segment ?? "all");
   const inputNames = record(workflow.plan.inputNames);
   const upstream = Object.entries(record(workflow.plan.upstreamVersions));
+  const generic = workflow.workflowType === genericGeologyType;
+  const missing = (
+    Array.isArray(workflow.plan.missingRoles) ? workflow.plan.missingRoles : []
+  ).map(
+    (role) =>
+      genericRoles.find((item) => item.key === role)?.label ?? String(role),
+  );
+  const title = generic ? "地质综合推理" : "海德乌拉地质综合推理";
+  const latestText =
+    latest && (latest.resultSummary || latest.judgement || latest.problem);
   return (
     <section
       className="geology-review-story multi-element-story"
-      aria-label="海德乌拉综合推理"
+      aria-label={generic ? title : "海德乌拉综合推理"}
     >
       <div className="geology-story-heading">
-        <strong>海德乌拉地质综合推理</strong>
-        <Tag color="blue">演示案例</Tag>
+        <strong>{title}</strong>
+        <Tag color="blue">{generic ? "本次上传资料" : "演示案例"}</Tag>
         <Tag>
           {multiElementSegments.find((item) => item.value === segment)?.label}
         </Tag>
       </div>
       <p className="agent-demo-hint">
-        岩性与构造为模拟识别输入（演示）；矿物为遥感矿物识别结果（演示案例）。模拟置信度用于演示证据分级。A/B表示优先核查证据组合等级。
+        {generic
+          ? `资料为本次任务上传，字段含义已经您确认。${
+              missing.length
+                ? `未提供：${missing.join("、")}，按计划中的说明处理。`
+                : ""
+            }A/B表示优先核查证据组合等级。`
+          : "岩性与构造为模拟识别输入（演示）；矿物为遥感矿物识别结果（演示案例）。模拟置信度用于演示证据分级。A/B表示优先核查证据组合等级。"}
       </p>
       <div className="geology-story-current">
         <strong>{workflow.detail}</strong>
-        {latest && (
-          <p>{latest.resultSummary || latest.judgement || latest.problem}</p>
-        )}
+        {latestText && latestText !== workflow.detail && <p>{latestText}</p>}
       </div>
       <details className="geology-story-history">
         <summary>本次上游版本、试用知识与真实工具</summary>
@@ -255,7 +282,7 @@ export default function MultiElementStory({
               </li>
             ))}
           </ul>
-          <strong>本案例试用知识</strong>
+          <strong>{generic ? "试用知识" : "本案例试用知识"}</strong>
           <ul>
             {workflow.plan.trialRuleBindings?.map((rule) => (
               <li key={`${rule.id}:${rule.revision}`}>
@@ -337,6 +364,9 @@ export default function MultiElementStory({
                   </Tag>
                 </summary>
                 <div className="multi-element-suggestion-body">
+                  <p className="multi-element-suggestion-tier">
+                    处置分级：{suggestionTier(item)}
+                  </p>
                   {editable &&
                     selectable.some((value) => value.id === item.id) && (
                       <Checkbox
@@ -370,7 +400,7 @@ export default function MultiElementStory({
                   <p>
                     {item.element === "structure" && item.lengthM !== undefined
                       ? `涉及长度 ${item.lengthM.toLocaleString("zh-CN")} 米`
-                      : `涉及面积 ${item.areaM2.toLocaleString("zh-CN", { maximumFractionDigits: 1 })} 平方米`}
+                      : `涉及面积 ${formatArea(item.areaM2)}`}
                   </p>
                   <MultiElementEvidence suggestion={item} />
                   <Link

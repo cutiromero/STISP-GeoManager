@@ -29,6 +29,7 @@ import type { Bootstrap, User } from "./types";
 import i18n, { type AppLocale } from "./i18n";
 import { browserSessionEndedEvent } from "./auth/browserSession";
 import { lazyPage as lazy, RouteRecovery } from "./routing/pageRecovery";
+import { markSessionExpired } from "./auth/sessionNotice";
 
 const AdminAuthPage = lazy(() => import("./admin/AdminAuthPage"));
 const AdminDataBackupPage = lazy(() => import("./admin/AdminDataBackupPage"));
@@ -96,6 +97,8 @@ export default function App({
 } = {}) {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [user, updateUser] = useState<User | null>(null);
+  const signedIn = useRef<User | null>(null);
+  signedIn.current = user;
   const authGeneration = useRef(0);
   const setUser = useCallback((value: User | null) => {
     authGeneration.current += 1;
@@ -106,7 +109,10 @@ export default function App({
   const [startupAttempt, setStartupAttempt] = useState(0);
 
   useEffect(() => {
-    const signedOut = () => setUser(null);
+    const signedOut = () => {
+      if (signedIn.current) markSessionExpired(signedIn.current.id);
+      setUser(null);
+    };
     window.addEventListener(browserSessionEndedEvent, signedOut);
     return () =>
       window.removeEventListener(browserSessionEndedEvent, signedOut);
@@ -121,8 +127,10 @@ export default function App({
       if (
         generation === authGeneration.current &&
         (isApiStatus(error, 401) || isApiStatus(error, 403))
-      )
+      ) {
+        if (signedIn.current) markSessionExpired(signedIn.current.id);
         setUser(null);
+      }
     }
   }, []);
 

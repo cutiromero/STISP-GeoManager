@@ -34,6 +34,8 @@ import type {
   AgentWorkflowReportPreview,
   AgentWorkflowValidation,
   AgentWorkflowConfirmation,
+  AgentWorkflowUpload,
+  AgentWorkflowUploadList,
   AgentInteractionUpdate,
   CancelAgentWorkflowData,
 } from "./generated/types.gen";
@@ -102,6 +104,32 @@ export const agentApi = {
       form,
     );
   },
+  uploadWorkflowFile: (
+    batchId: string,
+    file: File,
+    onUploadProgress?: (percent: number) => void,
+  ) => {
+    const form = new FormData();
+    form.append("batchId", batchId);
+    form.append("file", file);
+    return requestForm<AgentWorkflowUpload>(
+      "/api/agent/workflow-uploads/",
+      form,
+      onUploadProgress ? { onUploadProgress } : {},
+    );
+  },
+  workflowUploads: (batchId: string, options: { signal?: AbortSignal } = {}) =>
+    requestJson<AgentWorkflowUploadList>(
+      `/api/agent/workflow-uploads/?batchId=${encodeURIComponent(batchId)}`,
+      options,
+    ),
+  deleteWorkflowUpload: (id: string) =>
+    requestJson<void>(
+      `/api/agent/workflow-uploads/${encodeURIComponent(id)}/`,
+      {
+        method: "DELETE",
+      },
+    ),
   poll: (id: number, after = 0) =>
     requestJson<AgentRunPoll>(`/api/agent/runs/${id}/?after=${after}`, {
       validate: (data) => {
@@ -181,7 +209,7 @@ export const agentApi = {
     planHash: string,
     review?: Pick<
       AgentWorkflowConfirmation,
-      "decision" | "feedback" | "selectedSuggestionIds"
+      "decision" | "feedback" | "selectedSuggestionIds" | "fieldMapping"
     >,
   ) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/confirm/`, {

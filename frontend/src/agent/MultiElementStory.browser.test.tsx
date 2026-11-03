@@ -79,9 +79,7 @@ it("建议默认收起，展开可核对实测、具体规则和例外，待裁�
   expect(within(details).getByText("模拟分类置信度")).toBeVisible();
   expect(within(details).getByText("主要重叠地质单元")).toBeVisible();
   expect(
-    within(details).getByText(
-      "碳酸盐岩：841,841 平方米；含碳酸盐夹层：626,545 平方米",
-    ),
+    within(details).getByText("碳酸盐岩：84.18 公顷；含碳酸盐夹层：62.65 公顷"),
   ).toBeVisible();
   expect(
     within(details).getByText("碳酸盐岩：57.33%；含碳酸盐夹层：42.67%"),
@@ -117,4 +115,23 @@ it("用户可明确不修改并继续，空建议也能继续，不冒充审批"
     "本轮未形成修改建议，保留数据继续分析",
     [],
   );
+});
+
+it("names an uploaded-data task by its own data and states the missing inputs", () => {
+  const workflow = multiWorkflow();
+  workflow.workflowType = "geology_generic";
+  workflow.plan.missingRoles = ["coverage", "units"];
+  render(
+    <App>
+      <MemoryRouter>
+        <MultiElementStory workflow={workflow} onReview={vi.fn()} />
+      </MemoryRouter>
+    </App>,
+  );
+  const story = screen.getByLabelText("地质综合推理");
+  expect(within(story).getByText("本次上传资料")).toBeVisible();
+  expect(within(story).queryByText("演示案例")).not.toBeInTheDocument();
+  expect(
+    within(story).getByText(/未提供：研究区范围、填图单元表/),
+  ).toBeVisible();
 });

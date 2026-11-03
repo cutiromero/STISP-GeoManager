@@ -287,9 +287,7 @@ def import_geographic_table(
         latitude = _coordinate_decimal(row[latitude_column], is_longitude=False)
         if longitude is None or latitude is None:
             continue
-        geometries.append(
-            Point(float(longitude), float(latitude))
-        )
+        geometries.append(Point(float(longitude), float(latitude)))
 
     working = working[valid_mask].copy()
     working = normalize_coordinate_columns(
@@ -591,25 +589,49 @@ def validate_coordinate_columns(
             )
         )
 
-    if minimum_positive_error is not None and maximum_positive_error is not None:
-        ratio = maximum_positive_error / minimum_positive_error
-        if ratio > COORDINATE_UNCERTAINTY_RATIO_THRESHOLD:
-            issues.append(
-                ImportValidationIssue(
-                    code="coordinate_uncertainty",
-                    blocking=False,
-                    min_meters=round(minimum_positive_error, 6),
-                    max_meters=round(maximum_positive_error, 6),
-                    ratio=round(ratio, 2),
-                    message=(
-                        "坐标不确定性差距超过 "
-                        f"{COORDINATE_UNCERTAINTY_RATIO_THRESHOLD} 倍："
-                        f"最小约 {minimum_positive_error:.6f} 米，"
-                        f"最大约 {maximum_positive_error:.6f} 米。"
-                    ),
-                )
+    uncertainty = coordinate_uncertainty(minimum_positive_error, maximum_positive_error)
+    if uncertainty:
+        issues.append(
+            ImportValidationIssue(
+                code="coordinate_uncertainty", blocking=False, **uncertainty
             )
+        )
     return issues
+
+
+# Precision below a centimetre does not describe positional uncertainty, so it is
+# floored before comparing; mixed precision only matters once it reaches a metre.
+UNCERTAINTY_FLOOR_METERS = 0.01
+UNCERTAINTY_MEANINGFUL_METERS = 1.0
+
+
+def format_meters(value: float) -> str:
+    if value >= 1000:
+        return f"{value / 1000:.2f} 千米"
+    if value >= 1:
+        return f"{value:.1f} 米"
+    if value >= 0.01:
+        return f"{value * 100:.1f} 厘米"
+    return "不足 1 厘米"
+
+
+def coordinate_uncertainty(minimum: float | None, maximum: float | None) -> dict | None:
+    """Values for a mixed-precision warning, or None when it is not meaningful."""
+    if minimum is None or maximum is None or maximum < UNCERTAINTY_MEANINGFUL_METERS:
+        return None
+    ratio = maximum / max(minimum, UNCERTAINTY_FLOOR_METERS)
+    if ratio <= COORDINATE_UNCERTAINTY_RATIO_THRESHOLD:
+        return None
+    return {
+        "min_meters": round(minimum, 6),
+        "max_meters": round(maximum, 6),
+        "ratio": round(ratio, 2),
+        "message": (
+            f"坐标精度差距超过 {COORDINATE_UNCERTAINTY_RATIO_THRESHOLD} 倍："
+            f"最精确的坐标约 {format_meters(minimum)}，"
+            f"最粗略的约 {format_meters(maximum)}。"
+        ),
+    }
 
 
 def position_error_meters(lon_text: str, lat_text: str) -> float:

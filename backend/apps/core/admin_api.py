@@ -33,6 +33,7 @@ from apps.catalog.models import (
     DataResource,
     DataResourceGroup,
     MapLayer,
+    task_resource_q,
 )
 from apps.catalog.importer import ImportDataError, set_resource_access_groups
 from apps.catalog.permissions import (
@@ -1175,9 +1176,8 @@ def admin_data_resources(request):
         return feature_denied_response(request.user)
     try:
         queryset = _filter_admin_data_resources(
-            DataResource.objects.select_related(
-                "category", "category__parent", "maintainer"
-            )
+            DataResource.objects.exclude(task_resource_q())
+            .select_related("category", "category__parent", "maintainer")
             .select_related("inventory_group")
             .prefetch_related("access_groups", "map_layers")
             .order_by("-updated_at", "name"),
@@ -1471,9 +1471,8 @@ def admin_data_resource_detail(request, resource_id: int):
 def admin_data_resources_export(request):
     try:
         queryset = _filter_admin_data_resources(
-            DataResource.objects.select_related(
-                "category", "category__parent", "maintainer"
-            )
+            DataResource.objects.exclude(task_resource_q())
+            .select_related("category", "category__parent", "maintainer")
             .select_related("inventory_group")
             .prefetch_related("access_groups", "map_layers")
             .order_by("-updated_at", "name"),
@@ -1564,27 +1563,28 @@ def admin_dashboard(request):
     if isinstance(period, JsonResponse):
         return period
     cards: dict[str, Any] = {}
+    # Task uploads and working copies belong to one workflow, not the catalog.
+    resources = DataResource.objects.exclude(task_resource_q())
+    layers = MapLayer.objects.exclude(task_resource_q("data_resource"))
     if has_feature_perm(request.user, "core.view_dashboard_resource_card"):
         cards["resources"] = {
-            "total": DataResource.objects.count(),
-            "active": DataResource.objects.filter(
-                status=DataResource.Status.ACTIVE
-            ).count(),
+            "total": resources.count(),
+            "active": resources.filter(status=DataResource.Status.ACTIVE).count(),
         }
     if has_feature_perm(request.user, "core.view_dashboard_layer_card"):
         cards["layers"] = {
-            "total": MapLayer.objects.count(),
-            "active": MapLayer.objects.filter(is_active=True).count(),
+            "total": layers.count(),
+            "active": layers.filter(is_active=True).count(),
         }
     if has_feature_perm(request.user, "core.view_dashboard_raster_card"):
         cards["rasters"] = {
-            "resources": DataResource.objects.filter(
+            "resources": resources.filter(
                 data_type=DataResource.DataType.RASTER
             ).count(),
-            "datasets": RasterDataset.objects.count(),
-            "layers": MapLayer.objects.filter(
-                layer_type=MapLayer.LayerType.RASTER
+            "datasets": RasterDataset.objects.exclude(
+                task_resource_q("data_resource")
             ).count(),
+            "layers": layers.filter(layer_type=MapLayer.LayerType.RASTER).count(),
         }
     if has_feature_perm(request.user, "core.view_dashboard_user_card"):
         User = get_user_model()
@@ -1595,10 +1595,10 @@ def admin_dashboard(request):
             "active": users.filter(is_active=True).count(),
             "disabled": users.filter(is_active=False).count(),
             "groups": groups.count(),
-            "vectorResources": DataResource.objects.filter(
+            "vectorResources": resources.filter(
                 data_type=DataResource.DataType.VECTOR
             ).count(),
-            "tableResources": DataResource.objects.filter(
+            "tableResources": resources.filter(
                 data_type=DataResource.DataType.TABLE
             ).count(),
         }
@@ -1730,13 +1730,14 @@ def _active_user_ranking(login_logs) -> list[dict[str, Any]]:
 def _data_overview_card(
     user, *, include_visible: bool, include_uploaders: bool
 ) -> dict[str, Any]:
-    own_uploads = DataResource.objects.filter(maintainer=user)
+    catalog = DataResource.objects.exclude(task_resource_q())
+    own_uploads = catalog.filter(maintainer=user)
     card: dict[str, Any] = {
         "ownUploads": _data_overview_scope(own_uploads),
     }
     if include_visible:
-        all_resources = DataResource.objects.all()
-        visible_resources = filter_accessible(DataResource.objects.all(), user)
+        all_resources = catalog
+        visible_resources = filter_accessible(catalog, user)
         card.update(
             {
                 **_data_overview_scope(all_resources, include_spatial=False),
@@ -2031,9 +2032,8 @@ def _user_display_name(user) -> str:
 
 def _uploader_stats() -> list[dict[str, Any]]:
     rows = (
-        DataResource.objects.values(
-            "maintainer_id", "maintainer__username", "maintainer__first_name"
-        )
+        DataResource.objects.exclude(task_resource_q())
+        .values("maintainer_id", "maintainer__username", "maintainer__first_name")
         .annotate(
             resource_count=Count("id"),
             size_bytes=Sum("size_bytes"),

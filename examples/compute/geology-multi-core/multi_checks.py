@@ -163,13 +163,21 @@ def lithology_findings(
             ):
                 continue
             confidence = scalar(row.get("conf"))
-            status = (
-                "exception"
-                if confidence is not None
-                and float(confidence) >= params.get("report_conf_max", 0.8)
-                else "review"
-            )
-            reason = f"{row.geo_sym}图斑的{ratio:.1%}外边界由{host}单元包围；这是需要解释的关系，尚不能仅凭面积或新老排序判错。保留当前分类，待核查接触关系、残留体或构造例外。"
+            # Three tiers: a confident classification is an exception candidate,
+            # a weak one is a reclassification suggestion, the rest need a geologist.
+            if confidence is not None and float(confidence) >= params.get(
+                "report_conf_max", 0.8
+            ):
+                status, action = "exception", "review"
+                reason = f"{row.geo_sym}图斑的{ratio:.1%}外边界由{host}单元包围，但分类置信度{float(confidence):.2f}较高，列为规则例外候选，供专家浏览，不作为冲突报出。"
+            elif confidence is not None and float(confidence) < params.get(
+                "conf_auto", 0.6
+            ):
+                status, action = "suggested", "reclassify"
+                reason = f"{row.geo_sym}图斑的{ratio:.1%}外边界由{host}单元包围，分类置信度仅{float(confidence):.2f}，建议重分类为围岩{host}；批准后才修改。"
+            else:
+                status, action = "review", "review"
+                reason = f"{row.geo_sym}图斑的{ratio:.1%}外边界由{host}单元包围；这是需要解释的关系，尚不能仅凭面积或新老排序判错。保留当前分类，待核查接触关系、残留体或构造例外。"
             measurement = {
                 "area_m2": float(geometry.area),
                 "shared_boundary_ratio": ratio,
@@ -195,7 +203,7 @@ def lithology_findings(
                     config,
                     measurement,
                     reason,
-                    "review",
+                    action,
                     host,
                     status,
                     ["keep", "review", "reclassify", "merge"],
@@ -387,8 +395,8 @@ def alteration_findings(alterations, lithology, rules, units, snapshot, config):
                 "A-01",
                 "carbonate",
                 {"方解石化", "白云石化"},
-                "downweight",
-                "碳酸盐矿物可以由碳酸盐原岩背景解释，建议降权；仍不能排除热液叠加。",
+                "exclude",
+                "碳酸盐岩背景上的碳酸盐矿物首先反映原岩，建议改判为岩性信息，不参与蚀变推理；仍不能排除热液叠加，识别范围保留。",
             ),
             (
                 "A-02",
@@ -408,8 +416,8 @@ def alteration_findings(alterations, lithology, rules, units, snapshot, config):
                 "A-04",
                 "loose",
                 set(),
-                "review",
-                "矿物识别主要落在松散覆盖层上，可能为搬运物或结壳，保留并建议补充基岩资料。",
+                "exclude",
+                "矿物识别主要落在松散覆盖层上，可能为搬运物或结壳，建议剔除，不参与蚀变推理；识别范围保留，可补充基岩资料后复核。",
             ),
         ]:
             if (

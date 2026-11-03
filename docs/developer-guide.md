@@ -3,6 +3,14 @@
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 > 版本：v0.1.0
 
+## 通用地质推理与任务资料上传（2026-11-03）
+
+`POST /api/agent/workflow-uploads/` 以 multipart 上传一个文件和客户端生成的 `batchId`（32位小写十六进制）。矢量支持 Shapefile ZIP、GeoPackage、GeoJSON，栅格支持 GeoTIFF，表格支持 CSV、XLSX，校验和大小限制沿用既有导入服务。栅格大小上限为平台 `uploadMaxMb`。资料登记为 `owner_only` 数据资源（栅格在导入写入时即为 `owner_only`），来源标记 `workflow-upload:<batchId>`，不出现在数据目录、搜索、算子输入候选、地图图层列表、后台数据管理列表与导出、首页和看板统计中；返回识别结果（类型、坐标系、几何、要素数、字段与示例取值）和推荐角色 `roleHint`。每个批次最多12个文件。`GET ...?batchId=` 列出本人当前项目该批次的上传；`DELETE .../{uploadId}/` 只能删除尚未绑定任务的上传，否则返回409。上传需要智能体访问、MH-workflow、智能体调用算子及当前项目 `catalog.add_dataresource` 权限。
+
+`POST /api/agent/workflows/` 使用 `workflowType=geology_generic` 时必须提供 `uploadBatchId`，`inputs` 只能引用该批次资料：`lithology` 必需，`faults`、`coverage`、`units` 与五类蚀变角色可选。规则由服务端选用当前项目已绑定的综合推理试用规则，客户端不传 `rules`。`maxResources` 在创建时按实际运行所用资源核对：三份矢量工作副本、已上传的蚀变栅格、缺失蚀变共用的一份全零栅格和规则表。批次在创建时绑定，已绑定批次再次使用返回409。
+
+worker 首先由模型提出字段对应，任务进入 `waiting_approval`，`plan.fieldMappingReview` 给出各资料的规范字段、建议字段与理由。确认接口在该环节须提交 `fieldMapping`（角色 → 规范字段 → 原始字段或 null）；必需字段必须对应真实字段，否则返回400。确认后平台生成字段规范化的工作副本并进入原有计划确认、执行、建议批准与复查流程。设计说明见 [agent-generic-workflow-20261103.md](agent-generic-workflow-20261103.md)。
+
 ## 页面登录生命周期（2026-10-20）
 
 所有角色使用当前页面会话，登录页移除“记住登录状态”。`remember`仅兼容旧请求字段，不再产生持久登录Cookie。登录、注册和游客登录后，客户端生成32字节随机令牌，通过`POST /api/auth/browser-session/`的`start`动作登记页面，再读取私有数据。自动化验收也须完成此步骤，不应仅植入Cookie作为真实登录验收。

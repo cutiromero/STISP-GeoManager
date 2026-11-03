@@ -478,7 +478,7 @@ it("synchronizes running calculation and terminal status without a second pollin
   expect(computeTasks).toHaveBeenCalledTimes(2);
   expect(
     screen
-      .getByRole("button", { name: "历史会话" })
+      .getByRole("button", { name: /^历史会话/ })
       .querySelector(".is-complete"),
   ).toBeInTheDocument();
   expect(
@@ -578,7 +578,7 @@ it("ignores an old computation response after switching conversations", async ()
   );
   showAgent("workbench");
   await waitFor(() => expect(agentApi.computeTasks).toHaveBeenCalledOnce());
-  fireEvent.click(screen.getByRole("button", { name: "另一会话" }));
+  fireEvent.click(screen.getByRole("button", { name: /^另一会话/ }));
   await screen.findByText("另一回答");
   resolveOld({
     items: [
@@ -2148,7 +2148,7 @@ it("preserves the conversation, pending prompt and access after a concurrency re
   await screen.findByText("最多同时处理3个问题，请稍后再试");
   expect(input).toHaveValue("第四个问题");
   expect(screen.getByText("旧问题")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "历史会话" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^历史会话/ })).toBeInTheDocument();
   expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
 });

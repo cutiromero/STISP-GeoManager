@@ -764,7 +764,7 @@ function ResultCard({
 
 function ResultCover({ item }: { item: PublishedResult }) {
   const { t } = useTranslation();
-  const previewUrl = resultPreviewUrl(item);
+  const previewUrl = resultThumbnailUrl(item) ?? resultPreviewUrl(item);
   const format = resultFormat(item);
   const imagePreview = resultPreviewIsImage(item);
   return (
@@ -958,6 +958,13 @@ function resultPreviewUrl(item: PublishedResult) {
   return item.kind === "mapping"
     ? item.item.publishedVersion!.previewUrl
     : item.item.previewUrl;
+}
+
+// Cards load a cached thumbnail; the detail view keeps the full preview.
+function resultThumbnailUrl(item: PublishedResult) {
+  return item.kind === "mapping"
+    ? item.item.publishedVersion!.thumbnailUrl
+    : item.item.thumbnailUrl;
 }
 
 function resultPreviewIsImage(item: PublishedResult) {

@@ -251,9 +251,17 @@ function errorMessage(error: unknown, status: number) {
   if (isRecord(error) && typeof error.detail === "string") {
     return localizedServerDetail(error.detail);
   }
-  return status > 0
-    ? i18n.t("common.requestFailed", { status })
-    : i18n.t("common.networkFailed");
+  return statusMessage(status);
+}
+
+/** What happened and what to do, without server internals; the code helps support. */
+function statusMessage(status: number) {
+  if (status <= 0) return i18n.t("common.networkFailed");
+  if (status === 404) return i18n.t("common.notFound", { status });
+  if ([502, 503, 504].includes(status))
+    return i18n.t("common.serviceBusy", { status });
+  if (status >= 500) return i18n.t("common.serverError", { status });
+  return i18n.t("common.requestFailed", { status });
 }
 
 function localizedServerDetail(detail: string) {
@@ -303,24 +311,10 @@ function localizedServerDetail(detail: string) {
 
 function readableErrorText(text: string, status: number) {
   const trimmed = text.trim();
-  if (/^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) {
-    const title = trimmed.match(/<title>(.*?)<\/title>/is)?.[1];
-    const cleanedTitle = title ? stripHtml(title).trim() : "";
-    return cleanedTitle
-      ? `服务器内部错误：${cleanedTitle}`
-      : `服务器内部错误：${status}`;
-  }
+  // An HTML page is a server or proxy error page, never a message for users.
+  if (/^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed))
+    return statusMessage(status);
   return trimmed.length > 240 ? `${trimmed.slice(0, 240)}...` : trimmed;
-}
-
-function stripHtml(text: string) {
-  return text
-    .replace(/<[^>]*>/g, "")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

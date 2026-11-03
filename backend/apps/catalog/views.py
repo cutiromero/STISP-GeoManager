@@ -45,6 +45,7 @@ from apps.catalog.models import (
     DataResource,
     MapLayer,
     WorkspaceScene,
+    task_resource_q,
 )
 from apps.catalog.permissions import (
     project_access_filter,
@@ -147,9 +148,11 @@ def resources(request):
     if domain_type and domain_type not in DataDomainType.values:
         return JsonResponse({"detail": "无效的数据业务类型"}, status=400)
 
-    queryset = DataResource.objects.filter(
-        status=DataResource.Status.ACTIVE
-    ).select_related("category", "category__parent")
+    queryset = (
+        DataResource.objects.filter(status=DataResource.Status.ACTIVE)
+        .exclude(task_resource_q())
+        .select_related("category", "category__parent")
+    )
     if query:
         queryset = queryset.filter(name__icontains=query)
     if data_type:
@@ -1569,8 +1572,10 @@ def layers(request):
     if not has_feature_perm(request.user, "core.browse_data"):
         return feature_denied_response(request.user)
 
-    queryset = MapLayer.objects.filter(is_active=True).select_related(
-        "category", "data_resource"
+    queryset = (
+        MapLayer.objects.filter(is_active=True)
+        .exclude(task_resource_q("data_resource"))
+        .select_related("category", "data_resource")
     )
     layers_qs = filter_accessible_layers(queryset, request.user)
     items = [serialize_layer(item) for item in layers_qs]
@@ -1587,9 +1592,13 @@ def search(request):
     if not query:
         return JsonResponse({"resources": []})
 
-    resource_qs = DataResource.objects.filter(
-        status=DataResource.Status.ACTIVE, name__icontains=query
-    ).select_related("category", "category__parent")
+    resource_qs = (
+        DataResource.objects.filter(
+            status=DataResource.Status.ACTIVE, name__icontains=query
+        )
+        .exclude(task_resource_q())
+        .select_related("category", "category__parent")
+    )
     items = [
         serialize_resource(item)
         for item in filter_accessible(resource_qs, request.user)

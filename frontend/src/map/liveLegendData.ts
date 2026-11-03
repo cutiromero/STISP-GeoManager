@@ -26,6 +26,16 @@ const palettes: Record<string, string[]> = {
   thermal: ["#23344c", "#c45c46", "#f6cd70"],
 };
 
+// Numeric codes read in order; names sort as Chinese readers expect.
+function legendOrder<T>(items: T[], key: (item: T) => string): T[] {
+  const numeric = items.every((item) => Number.isFinite(Number(key(item))));
+  return [...items].sort((left, right) =>
+    numeric
+      ? Number(key(left)) - Number(key(right))
+      : key(left).localeCompare(key(right), "zh-CN", { numeric: true }),
+  );
+}
+
 export function workbenchLegends(
   layers: LoadedLayer[],
   english = false,
@@ -51,7 +61,9 @@ export function workbenchLegends(
           layer.renderStatus ?? "",
         );
         if (style.mode === "unique") {
-          base.entries = style.uniqueValues.map((item) => ({
+          base.entries = legendOrder(style.uniqueValues, (item) =>
+            String(item.value),
+          ).map((item) => ({
             id: String(item.value),
             color: item.color,
             label: item.label || String(item.value),
@@ -97,7 +109,11 @@ export function workbenchLegends(
         renderer &&
         (isUniqueValueRenderer(renderer) || isGraduatedRenderer(renderer))
       ) {
-        base.entries = [...renderer.classes, renderer.defaultClass]
+        // Graduated classes keep their range order; the default class stays last.
+        const classes = isUniqueValueRenderer(renderer)
+          ? legendOrder(renderer.classes, (item) => item.label)
+          : renderer.classes;
+        base.entries = [...classes, renderer.defaultClass]
           .filter((item) => item.visible)
           .map((item) => ({
             id: item.id,

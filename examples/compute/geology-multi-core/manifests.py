@@ -17,10 +17,10 @@ def create():
         ["Point", "MultiPoint"],
     )
     base = [
-        vector("lithology", "模拟识别岩性图（演示）", polygons),
-        vector("faults", "模拟识别构造图（演示）", lines),
+        vector("lithology", "岩性图", polygons),
+        vector("faults", "构造图", lines),
         vector("coverage", "研究区制图范围", polygons),
-        {"key": "rules", "label": "本案例显式启用的专家规则及版本", "kind": "table"},
+        {"key": "rules", "label": "显式启用的试用规则及版本", "kind": "table"},
     ]
     rasters = [
         {
@@ -84,7 +84,7 @@ def create():
     }
     variants = {
         "check": (
-            "海德乌拉三要素知识检查",
+            "三要素知识检查",
             base + rasters + [optional_state],
             [
                 output("issues", "发现的问题与建议", "table", "issues.csv"),
@@ -96,7 +96,7 @@ def create():
             + maps,
         ),
         "apply": (
-            "海德乌拉获批操作执行",
+            "获批操作执行",
             base
             + rasters
             + [
@@ -122,7 +122,7 @@ def create():
             ],
         ),
         "relations": (
-            "海德乌拉构造关系重建",
+            "构造关系重建",
             [
                 base[1],
                 base[2],
@@ -146,7 +146,7 @@ def create():
             ],
         ),
         "prospect": (
-            "海德乌拉优先核查远景区分析",
+            "优先核查远景区分析",
             base
             + rasters
             + [
@@ -176,7 +176,7 @@ def create():
             "schemaVersion": 1,
             "identifier": directory.name,
             "name": name,
-            "version": "1.0.3",
+            "version": "1.0.4",
             "description": name
             + "。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
             "author": "STISP",
