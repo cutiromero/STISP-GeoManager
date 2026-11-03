@@ -116,11 +116,30 @@ describe("basemapDetail", () => {
       "可访问 / 近期瓦片就绪（含客户端排队）183 ms",
     );
     expect(
-      primaryLatency(
-        classifyBasemapStatus(diagnostics, 2_000),
-        diagnostics,
-        "tianditu",
-      ),
+      primaryLatency(classifyBasemapStatus(diagnostics, 2_000), diagnostics),
     ).toBeNull();
+  });
+
+  it("shows only the label while any basemap is healthy and keeps slow timings", () => {
+    const healthy = {
+      ...initialBasemapDiagnostics({
+        online: true,
+        effectiveType: "4g",
+        rttMs: 100,
+        downlinkMbps: 10,
+      }),
+      basemap: "ready" as const,
+      basemapLatencyMs: 913,
+      platform: "reachable" as const,
+      platformChecking: false,
+      platformLatencyMs: 120,
+    };
+    const presentation = classifyBasemapStatus(healthy, 2_000);
+    expect(presentation.kind).toBe("healthy");
+    expect(primaryLatency(presentation, healthy)).toBeNull();
+    const slow = { ...healthy, platformLatencyMs: 9_000 };
+    const slowPresentation = classifyBasemapStatus(slow, 2_000);
+    expect(slowPresentation.kind).not.toBe("healthy");
+    expect(primaryLatency(slowPresentation, slow)).not.toBeNull();
   });
 });
