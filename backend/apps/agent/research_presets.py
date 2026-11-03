@@ -346,15 +346,14 @@ def _scene_summaries(user, p, projects):
                 from django.db.models import Q
 
                 condition = Q(pk__in=[])
-                for field, marker in markers.values():
-                    condition |= Q(**{field: marker})
-                if scenario == MULTI_TYPE:
-                    condition |= Q(
-                        code__in=[
-                            "geology-multi-lithology-complete-20261025",
-                            "geology-multi-rules-complete-20261025",
-                        ]
-                    )
+                for role, kind in ROLES[scenario].items():
+                    field, marker = markers[role]
+                    matching = Q(**{field: marker})
+                    if role == "context":
+                        matching |= Q(code="demo-ecology-context-updated")
+                    if scenario == MULTI_TYPE and role in {"lithology", "rules"}:
+                        matching |= Q(code=f"geology-multi-{role}-complete-20261025")
+                    condition |= Q(data_type=kind) & matching
                 if query.filter(condition).exists():
                     items.append(
                         {
