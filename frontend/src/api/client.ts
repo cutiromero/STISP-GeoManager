@@ -6,6 +6,10 @@ import {
   releaseProjectResponse,
 } from "../projects/session";
 import { combineAbortSignals } from "../utils/abortSignals";
+import {
+  recordResponseDiagnostic,
+  ResponseFormatError,
+} from "./responseDiagnostics";
 import type {
   AdminDashboard,
   AdminDashboardServer,
@@ -341,6 +345,7 @@ export async function requestJson<T>(
     body?: unknown;
     projectTagId?: string;
     signal?: AbortSignal;
+    validate?: (data: unknown) => void;
   } = {},
 ): Promise<T> {
   const method = options.method ?? "GET";
@@ -366,14 +371,52 @@ export async function requestJson<T>(
   try {
     const request = new Request(url, init);
     const response = await fetch(request);
-    const data = await parseResponseBody(response);
+    if (!response.ok) notifyAuthorizationFailure(response.status, request.url);
+    let data: unknown;
+    try {
+      data = await parseResponseBody(response);
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      if (!options.validate) throw error;
+      recordResponseDiagnostic(
+        request.url,
+        response,
+        undefined,
+        "invalid_json",
+      );
+      if (!response.ok)
+        throw new ApiError(
+          errorMessage(null, response.status),
+          response.status,
+        );
+      throw new ResponseFormatError("response: invalid JSON");
+    }
     if (!response.ok) {
-      notifyAuthorizationFailure(response.status, request.url);
+      if (options.validate)
+        recordResponseDiagnostic(
+          request.url,
+          response,
+          data,
+          `http:${response.status}`,
+        );
       throw new ApiError(
         errorMessage(data, response.status),
         response.status,
         data,
       );
+    }
+    try {
+      options.validate?.(data);
+    } catch (error) {
+      recordResponseDiagnostic(
+        request.url,
+        response,
+        data,
+        error instanceof ResponseFormatError
+          ? error.issue
+          : "invalid_structure",
+      );
+      throw error;
     }
     return data as T;
   } finally {
