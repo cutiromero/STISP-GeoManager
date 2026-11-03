@@ -1703,7 +1703,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
           title={ui("MH-workflow", "MH-workflow")}
           open={workflowOpen}
           onClose={() => setWorkflowOpen(false)}
-          forceRender
           size={layout.workflow}
           classNames={{ root: "agent-workflow-drawer" }}
         >
@@ -1728,6 +1727,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               resourceIds={selected}
               embedded
               open={workflowOpen}
+              userId={user?.id}
               bootstrap={bootstrap}
               onStatusChange={setWorkflowStatus}
               onWorkflowChange={setManualWorkflow}

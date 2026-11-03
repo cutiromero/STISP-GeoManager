@@ -1463,6 +1463,30 @@ export type AgentResearchIntentUpdate = {
 };
 
 /**
+ * 当前项目科研案例轻量入口，不含模型健康检查、预设或算法扫描结果。
+ */
+export type AgentResearchDemoSummaryList = {
+    /**
+     * 当前项目中存在的可见案例。
+     */
+    items: Array<{
+        scenario: AgentResearchScenario;
+        /**
+         * 当前已授权项目
+         */
+        projectId: number;
+        /**
+         * 当前项目名称
+         */
+        projectName: string;
+        /**
+         * 案例标题
+         */
+        title: string;
+    }>;
+};
+
+/**
  * 当前用户授权范围内的体验入口
  */
 export type AgentResearchDemoList = {
@@ -1602,6 +1626,74 @@ export type AgentComputeTaskTracking = {
      * 状态说明
      */
     detail: string;
+};
+
+/**
+ * 本人当前项目工作流的轻量历史；完整计划和证据按需读取详情。
+ */
+export type AgentWorkflowSummary = {
+    /**
+     * 工作流标识
+     */
+    id: string;
+    /**
+     * 所属项目
+     */
+    projectId: number;
+    /**
+     * 工作流类型
+     */
+    workflowType: string;
+    /**
+     * 用户目标
+     */
+    goal: string;
+    /**
+     * 当前实际状态
+     */
+    status: 'queued' | 'running' | 'waiting_compute' | 'waiting_approval' | 'paused' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
+    /**
+     * 可读状态
+     */
+    detail: string;
+    /**
+     * 当前节点
+     */
+    currentStep: string;
+    /**
+     * 创建时间
+     */
+    createdAt: string;
+    /**
+     * 更新时间
+     */
+    updatedAt: string;
+};
+
+/**
+ * 当前项目本人工作流的分页轻量历史。
+ */
+export type AgentWorkflowSummaryList = {
+    /**
+     * 本页工作流摘要。
+     */
+    items: Array<AgentWorkflowSummary>;
+    /**
+     * 当前筛选的历史总数
+     */
+    total: number;
+    /**
+     * 本页偏移
+     */
+    offset: number;
+    /**
+     * 本页条数上限
+     */
+    limit: number;
+    /**
+     * 是否还有下一页
+     */
+    hasMore: boolean;
 };
 
 /**
@@ -2713,7 +2805,7 @@ export type ProjectTag = {
  */
 export type ProjectTagList = {
     /**
-     * 公开和已获分配项目，超管可见全部。
+     * 当前可访问项目；公开访问可由超管按用户关闭，超管可见全部。
      */
     items: Array<ProjectTag>;
     /**
@@ -2724,6 +2816,10 @@ export type ProjectTagList = {
      * 能否分配用户项目标签。
      */
     canAssign: boolean;
+    /**
+     * 可访问的默认项目，优先公开，否则首个启用授权项目；没有可访问项目时为空。业务请求未显式指定项目时使用同一规则。
+     */
+    defaultProjectId: number | null;
     /**
      * 具备标签分配权限时可分配的项目集合，不代表内容访问权限。
      */
@@ -2765,9 +2861,13 @@ export type ProjectAssignment = {
      */
     userId: number;
     /**
-     * 私有项目标签，公开项目自动可读。
+     * 私有项目标签；公开访问单独由allowPublicProject控制。
      */
     projectIds: Array<number>;
+    /**
+     * 是否允许公开项目；GET始终返回，POST省略保留原策略。新旧用户默认true；关闭需至少分配一个启用项目，超级管理员不可关闭。
+     */
+    allowPublicProject?: boolean;
 };
 
 /**
@@ -17214,11 +17314,24 @@ export type ImportComputeOutputResponse = ImportComputeOutputResponses[keyof Imp
 export type ListAgentResearchDemosData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * summary读取当前项目轻量入口；省略时读取完整入口。
+         */
+        view?: 'summary';
+        /**
+         * 只读取当前项目指定场景的完整预设；与summary视图分开使用。
+         */
+        scenario?: AgentResearchScenario;
+    };
     url: '/api/agent/research-demos/';
 };
 
 export type ListAgentResearchDemosErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
     /**
      * 请先登录
      */
@@ -17235,7 +17348,7 @@ export type ListAgentResearchDemosResponses = {
     /**
      * 本人可见的案例入口与就绪状态
      */
-    200: AgentResearchDemoList;
+    200: AgentResearchDemoList | AgentResearchDemoSummaryList;
 };
 
 export type ListAgentResearchDemosResponse = ListAgentResearchDemosResponses[keyof ListAgentResearchDemosResponses];
@@ -18788,11 +18901,32 @@ export type ListAgentWorkflowsData = {
         'X-Project-Id': number;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * summary选择分页轻量历史；省略时返回原完整列表。
+         */
+        view?: 'summary';
+        /**
+         * 可选的工作流类型精确筛选。
+         */
+        workflowType?: string;
+        /**
+         * summary分页起始偏移。
+         */
+        offset?: number;
+        /**
+         * summary每页数量。
+         */
+        limit?: number;
+    };
     url: '/api/agent/workflows/';
 };
 
 export type ListAgentWorkflowsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
     /**
      * 未认证
      */
@@ -18809,7 +18943,7 @@ export type ListAgentWorkflowsResponses = {
     /**
      * 工作流列表
      */
-    200: AgentWorkflowList;
+    200: AgentWorkflowList | AgentWorkflowSummaryList;
 };
 
 export type ListAgentWorkflowsResponse = ListAgentWorkflowsResponses[keyof ListAgentWorkflowsResponses];

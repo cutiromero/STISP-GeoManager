@@ -225,6 +225,8 @@ def valid_accepted(invitation) -> bool:
 
 def can_read_shared_output(output, user) -> bool:
     """A single output grant never participates in task_access()."""
+    if not user.is_authenticated:
+        return False
     if output.task.owner_id == user.id or permission(user, "manage_tasks"):
         try:
             require_features(user, output.task.project_tag_id, "core.browse_data")
@@ -251,6 +253,8 @@ def can_read_shared_output(output, user) -> bool:
 def shared_composition_ids(user) -> list[int]:
     from apps.projects.context import selected_project_id
 
+    if not user.is_authenticated:
+        return []
     return [
         invitation.object_id
         for invitation in ShareInvitation.objects.filter(
@@ -264,6 +268,8 @@ def shared_composition_ids(user) -> list[int]:
 
 
 def has_shared_composition(composition, user) -> bool:
+    if not user.is_authenticated:
+        return False
     return any(
         valid_accepted(invitation)
         for invitation in ShareInvitation._base_manager.filter(

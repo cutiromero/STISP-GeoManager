@@ -1704,7 +1704,7 @@ export const updateProjectTag = <ThrowOnError extends boolean = false>(options: 
 /**
  * 管理员查看用户标签
  *
- * 仅超级管理员查看用户标签。项目上下文使用 X-Project-Id 头或 projectTagId 查询参数；公开项目已发布内容公开可读，超管拥有全部项目权限。
+ * 仅超级管理员查看用户私有项目分配及allowPublicProject公开访问策略；超级管理员始终拥有全部项目权限。
  */
 export const getProjectAssignment = <ThrowOnError extends boolean = false>(options: Options<GetProjectAssignmentData, ThrowOnError>): RequestResult<GetProjectAssignmentResponses, GetProjectAssignmentErrors, ThrowOnError> => (options.client ?? client).get<GetProjectAssignmentResponses, GetProjectAssignmentErrors, ThrowOnError>({
     security: [{
@@ -1719,7 +1719,7 @@ export const getProjectAssignment = <ThrowOnError extends boolean = false>(optio
 /**
  * 超级管理员分配用户标签
  *
- * 仅超级管理员分配用户标签；新用户仅有公开标签，可分配零到多个私有标签。项目上下文使用 X-Project-Id 头或 projectTagId 查询参数；公开项目已发布内容公开可读，超管拥有全部项目权限。
+ * 仅超级管理员替换用户私有项目分配并可设置allowPublicProject；省略该字段保留原策略。默认允许公开。关闭时至少分配一个启用项目，超级管理员不可关闭。策略实时应用于业务API、知识检索、后台任务和分享；不改变平台公共图文的可读性。
  */
 export const setProjectAssignment = <ThrowOnError extends boolean = false>(options: Options<SetProjectAssignmentData, ThrowOnError>): RequestResult<SetProjectAssignmentResponses, SetProjectAssignmentErrors, ThrowOnError> => (options.client ?? client).post<SetProjectAssignmentResponses, SetProjectAssignmentErrors, ThrowOnError>({
     security: [{
@@ -2153,7 +2153,7 @@ export const importComputeOutput = <ThrowOnError extends boolean = false>(option
 /**
  * 获取可体验的科研案例
  *
- * 仅返回当前登录用户已获授权且具备智能体能力的项目入口；不扩展项目或本人资料权限。无需切换当前项目即可读取目录。
+ * 默认保留跨本人授权项目的完整案例入口。view=summary仅返回当前项目轻量入口，执行存在性查询，不调用模型健康检查或扫描算法。scenario只读取当前项目指定场景的完整预设，返回原完整列表结构。所有模式均核对项目和智能体权限。
  */
 export const listAgentResearchDemos = <ThrowOnError extends boolean = false>(options?: Options<ListAgentResearchDemosData, ThrowOnError>): RequestResult<ListAgentResearchDemosResponses, ListAgentResearchDemosErrors, ThrowOnError> => (options?.client ?? client).get<ListAgentResearchDemosResponses, ListAgentResearchDemosErrors, ThrowOnError>({
     security: [{
@@ -2612,7 +2612,7 @@ export const checkKnowledgeConstraints = <ThrowOnError extends boolean = false>(
 /**
  * 恢复本人科研编排记录
  *
- * 返回当前项目内本人最近三十个工作流；重新检查账号、项目和智能体访问权限。
+ * 默认保留当前项目本人最近三十个完整工作流。view=summary返回分页轻量历史，支持workflowType筛选，不读取plan/evidence/steps或重新扫描输入；详情接口另行验证数据权限。所有模式重新检查账号、项目及智能体权限。
  */
 export const listAgentWorkflows = <ThrowOnError extends boolean = false>(options: Options<ListAgentWorkflowsData, ThrowOnError>): RequestResult<ListAgentWorkflowsResponses, ListAgentWorkflowsErrors, ThrowOnError> => (options.client ?? client).get<ListAgentWorkflowsResponses, ListAgentWorkflowsErrors, ThrowOnError>({
     security: [{

@@ -395,6 +395,21 @@ beforeEach(() => {
   });
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "researchDemoSummaries").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "workflowHistory").mockImplementation(
+    async ({ workflowType }) => {
+      const items = (await agentApi.workflows()).items.filter(
+        (item) => item.workflowType === workflowType,
+      );
+      return {
+        items,
+        total: items.length,
+        offset: 0,
+        limit: 30,
+        hasMore: false,
+      };
+    },
+  );
   vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue({
     fileName: "MH-workflow报告.md",
     label: "MH-workflow报告",
@@ -1186,7 +1201,7 @@ it("resizes the workflow from its left edge and restores its saved width", async
   expect(restored).toHaveAttribute("aria-valuenow", "720");
 });
 
-it("does not preload workflow catalogs while switching chat modes and reuses the opened draft", async () => {
+it("loads only scene names on opening workflow and reuses the selected draft", async () => {
   showAgent("workbench");
   await screen.findByText("旧问题");
   expect(computeApi.inputs).not.toHaveBeenCalled();
@@ -1203,9 +1218,19 @@ it("does not preload workflow catalogs while switching chat modes and reuses the
   expect(computeApi.inputs).not.toHaveBeenCalled();
   expect(computeApi.algorithms).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
-  await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledOnce());
   await waitFor(() =>
     expect(screen.getByRole("combobox", { name: "研究场景" })).toBeEnabled(),
+  );
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "研究场景" }));
+  fireEvent.click(
+    await screen.findByText("通用科研计算", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "工作流目标" })).toBeEnabled(),
   );
   fireEvent.change(screen.getByRole("textbox", { name: "工作流目标" }), {
     target: { value: "保持这份草稿" },
@@ -1254,7 +1279,19 @@ it.each([
         expect(bounds.bottom).toBeLessThanOrEqual(areaBounds.bottom + 1);
       };
       fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
-      const goal = await screen.findByRole("textbox", { name: "工作流目标" });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("combobox", { name: "研究场景" }),
+        ).toBeEnabled(),
+      );
+      fireEvent.mouseDown(screen.getByRole("combobox", { name: "研究场景" }));
+      fireEvent.click(
+        await screen.findByText("通用科研计算", {
+          selector: ".ant-select-item-option-content",
+        }),
+      );
+      let goal = await screen.findByRole("textbox", { name: "工作流目标" });
+      await waitFor(() => expect(goal).toBeEnabled());
       const drawer = document.querySelector<HTMLElement>(
         ".agent-workflow-drawer .ant-drawer-body",
       )!;
@@ -1266,6 +1303,7 @@ it.each([
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       await waitFor(() => expect(goal).not.toBeVisible());
       fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+      goal = await screen.findByRole("textbox", { name: "工作流目标" });
       await waitFor(() => expect(goal).toBeVisible());
       expect(screen.getByRole("textbox", { name: "工作流目标" })).toHaveValue(
         "核查研究区数据",
@@ -1336,7 +1374,12 @@ it.each([96, 176, 240])(
   },
 );
 
-it("keeps pending approval visible while the drawer is closed and confirms the frozen plan", async () => {
+it("restores the explicit pending task on open and retains its status after closing", async () => {
+  sessionStorage.setItem("workflow-session:99:1", "research_processing");
+  sessionStorage.setItem(
+    "workflow-session:99:1:research_processing",
+    "workflow-1",
+  );
   vi.mocked(agentApi.workflows).mockResolvedValue({
     items: [workflow("running")],
   });
@@ -1349,10 +1392,16 @@ it("keeps pending approval visible while the drawer is closed and confirms the f
   showAgent("workbench");
   await screen.findByText("旧问题");
   expect(screen.queryByRole("dialog")).toBeNull();
+  expect(agentApi.workflow).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+  await screen.findByRole("button", { name: "确认执行" });
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
   const pending = await screen.findByRole("button", {
     name: /MH-workflow.*等待您审核/,
   });
-  expect(agentApi.workflow).toHaveBeenCalledWith("workflow-1");
+  expect(agentApi.workflow).toHaveBeenCalledWith("workflow-1", {
+    signal: expect.any(AbortSignal),
+  });
   fireEvent.click(pending);
   fireEvent.click(await screen.findByRole("button", { name: "确认执行" }));
   await waitFor(() =>
@@ -1996,10 +2045,20 @@ it("shows the model interpretation after the same run reads the actual output", 
 });
 
 it("removes recovered workflow activity when agent permission is revoked", async () => {
+  sessionStorage.setItem("workflow-session:99:1", "research_processing");
+  sessionStorage.setItem(
+    "workflow-session:99:1:research_processing",
+    "workflow-1",
+  );
+  vi.spyOn(agentApi, "workflow").mockResolvedValue({
+    ...workflow("running"),
+    goal: "撤权后不可保留的研究任务",
+  });
   vi.mocked(agentApi.workflows).mockResolvedValue({
     items: [{ ...workflow("running"), goal: "撤权后不可保留的研究任务" }],
   });
   const mounted = showAgent("workbench");
+  fireEvent.click(await screen.findByRole("button", { name: /MH-workflow/ }));
   await waitFor(() =>
     expect(
       within(screen.getByLabelText("当前任务")).getByText("正在推进研究"),

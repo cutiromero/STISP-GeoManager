@@ -6036,7 +6036,7 @@ paths:
       tags:
       - 管理后台
       summary: 管理员查看用户标签
-      description: 仅超级管理员查看用户标签。项目上下文使用 X-Project-Id 头或 projectTagId 查询参数；公开项目已发布内容公开可读，超管拥有全部项目权限。
+      description: 仅超级管理员查看用户私有项目分配及allowPublicProject公开访问策略；超级管理员始终拥有全部项目权限。
       operationId: getProjectAssignment
       security:
       - sessionAuth: []
@@ -6077,7 +6077,7 @@ paths:
       tags:
       - 管理后台
       summary: 超级管理员分配用户标签
-      description: 仅超级管理员分配用户标签；新用户仅有公开标签，可分配零到多个私有标签。项目上下文使用 X-Project-Id 头或 projectTagId 查询参数；公开项目已发布内容公开可读，超管拥有全部项目权限。
+      description: 仅超级管理员替换用户私有项目分配并可设置allowPublicProject；省略该字段保留原策略。默认允许公开。关闭时至少分配一个启用项目，超级管理员不可关闭。策略实时应用于业务API、知识检索、后台任务和分享；不改变平台公共图文的可读性。
       operationId: setProjectAssignment
       security:
       - sessionAuth: []
@@ -6521,14 +6521,28 @@ paths:
       operationId: listAgentResearchDemos
       tags: [Agent]
       summary: 获取可体验的科研案例
-      description: 仅返回当前登录用户已获授权且具备智能体能力的项目入口；不扩展项目或本人资料权限。无需切换当前项目即可读取目录。
+      description: 默认保留跨本人授权项目的完整案例入口。view=summary仅返回当前项目轻量入口，执行存在性查询，不调用模型健康检查或扫描算法。scenario只读取当前项目指定场景的完整预设，返回原完整列表结构。所有模式均核对项目和智能体权限。
       security: [{sessionAuth: []}]
+      parameters:
+      - name: view
+        in: query
+        description: summary读取当前项目轻量入口；省略时读取完整入口。
+        schema: {type: string, enum: [summary]}
+      - name: scenario
+        in: query
+        description: 只读取当前项目指定场景的完整预设；与summary视图分开使用。
+        schema: {$ref: '#/components/schemas/AgentResearchScenario'}
       responses:
         '200':
           description: 本人可见的案例入口与就绪状态
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/AgentResearchDemoList'}
+              schema:
+                oneOf:
+                - {$ref: '#/components/schemas/AgentResearchDemoList'}
+                - {$ref: '#/components/schemas/AgentResearchDemoSummaryList'}
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           description: 请先登录
           content:
@@ -7841,7 +7855,7 @@ paths:
       tags: [智能体]
       operationId: listAgentWorkflows
       summary: 恢复本人科研编排记录
-      description: 返回当前项目内本人最近三十个工作流；重新检查账号、项目和智能体访问权限。
+      description: 默认保留当前项目本人最近三十个完整工作流。view=summary返回分页轻量历史，支持workflowType筛选，不读取plan/evidence/steps或重新扫描输入；详情接口另行验证数据权限。所有模式重新检查账号、项目及智能体权限。
       security:
       - sessionAuth: []
       parameters:
@@ -7850,13 +7864,33 @@ paths:
         required: true
         description: 当前项目 ID
         schema: {type: integer, minimum: 1}
+      - name: view
+        in: query
+        description: summary选择分页轻量历史；省略时返回原完整列表。
+        schema: {type: string, enum: [summary]}
+      - name: workflowType
+        in: query
+        description: 可选的工作流类型精确筛选。
+        schema: {type: string, maxLength: 40}
+      - name: offset
+        in: query
+        description: summary分页起始偏移。
+        schema: {type: integer, minimum: 0, default: 0}
+      - name: limit
+        in: query
+        description: summary每页数量。
+        schema: {type: integer, minimum: 1, maximum: 100, default: 20}
       responses:
         '200':
           description: 工作流列表
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AgentWorkflowList'
+                oneOf:
+                - {$ref: '#/components/schemas/AgentWorkflowList'}
+                - {$ref: '#/components/schemas/AgentWorkflowSummaryList'}
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -9803,6 +9837,25 @@ components:
         answer: {type: string, maxLength: 12000, description: 用户自由补充说明}
       required: [action, revision]
       additionalProperties: false
+    AgentResearchDemoSummaryList:
+      type: object
+      description: 当前项目科研案例轻量入口，不含模型健康检查、预设或算法扫描结果。
+      required: [items]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          description: 当前项目中存在的可见案例。
+          items:
+            type: object
+            description: 进入指定场景前加载完整预设的入口。
+            required: [scenario, projectId, projectName, title]
+            additionalProperties: false
+            properties:
+              scenario: {$ref: '#/components/schemas/AgentResearchScenario'}
+              projectId: {type: integer, minimum: 1, description: 当前已授权项目}
+              projectName: {type: string, description: 当前项目名称}
+              title: {type: string, description: 案例标题}
     AgentResearchDemoList:
       type: object
       description: 当前用户授权范围内的体验入口
@@ -9934,6 +9987,38 @@ components:
       - trackingStatus
       - detail
       additionalProperties: false
+    AgentWorkflowSummary:
+      type: object
+      description: 本人当前项目工作流的轻量历史；完整计划和证据按需读取详情。
+      required: [id, projectId, workflowType, goal, status, detail, currentStep, createdAt, updatedAt]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid, description: 工作流标识}
+        projectId: {type: integer, description: 所属项目}
+        workflowType: {type: string, description: 工作流类型}
+        goal: {type: string, description: 用户目标}
+        status:
+          type: string
+          description: 当前实际状态
+          enum: [queued, running, waiting_compute, waiting_approval, paused, succeeded, failed, cancelled, interrupted]
+        detail: {type: string, description: 可读状态}
+        currentStep: {type: string, description: 当前节点}
+        createdAt: {type: string, description: 创建时间}
+        updatedAt: {type: string, description: 更新时间}
+    AgentWorkflowSummaryList:
+      type: object
+      description: 当前项目本人工作流的分页轻量历史。
+      required: [items, total, offset, limit, hasMore]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          description: 本页工作流摘要。
+          items: {$ref: '#/components/schemas/AgentWorkflowSummary'}
+        total: {type: integer, minimum: 0, description: 当前筛选的历史总数}
+        offset: {type: integer, minimum: 0, description: 本页偏移}
+        limit: {type: integer, minimum: 1, maximum: 100, description: 本页条数上限}
+        hasMore: {type: boolean, description: 是否还有下一页}
     AgentWorkflowList:
       type: object
       description: 本人当前项目工作流
@@ -10905,10 +10990,11 @@ components:
       - items
       - canManage
       - canAssign
+      - defaultProjectId
       properties:
         items:
           type: array
-          description: 公开和已获分配项目，超管可见全部。
+          description: 当前可访问项目；公开访问可由超管按用户关闭，超管可见全部。
           items:
             $ref: '#/components/schemas/ProjectTag'
         canManage:
@@ -10917,6 +11003,9 @@ components:
         canAssign:
           type: boolean
           description: 能否分配用户项目标签。
+        defaultProjectId:
+          type: [integer, 'null']
+          description: 可访问的默认项目，优先公开，否则首个启用授权项目；没有可访问项目时为空。业务请求未显式指定项目时使用同一规则。
         assignableItems:
           type: array
           description: 具备标签分配权限时可分配的项目集合，不代表内容访问权限。
@@ -10955,9 +11044,13 @@ components:
           description: 用户 ID。
         projectIds:
           type: array
-          description: 私有项目标签，公开项目自动可读。
+          description: 私有项目标签；公开访问单独由allowPublicProject控制。
           items:
             type: integer
+        allowPublicProject:
+          type: boolean
+          default: true
+          description: 是否允许公开项目；GET始终返回，POST省略保留原策略。新旧用户默认true；关闭需至少分配一个启用项目，超级管理员不可关闭。
     ContentArticle:
       type: object
       description: 平台升级数据结构。

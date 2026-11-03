@@ -45,7 +45,7 @@ def require_live_membership():
     """Re-check queued work after membership or account status changes."""
     from django.contrib.auth import get_user_model
     from django.core.exceptions import PermissionDenied
-    from .models import Project, ProjectMembership
+    from .access import can_access_project
 
     scope = current_scope.get()
     if scope is None:
@@ -57,12 +57,5 @@ def require_live_membership():
     user = get_user_model().objects.filter(pk=scope.user_id, is_active=True).first()
     if user is None:
         raise PermissionDenied("任务账号已停用")
-    if is_superadmin(user) or scope.selected == 1:
-        return
-    if (
-        not Project.objects.filter(pk=scope.selected, is_active=True).exists()
-        or not ProjectMembership.objects.filter(
-            user=user, project_id=scope.selected
-        ).exists()
-    ):
+    if not can_access_project(user, scope.selected):
         raise PermissionDenied("项目访问权限已撤回，任务已停止")

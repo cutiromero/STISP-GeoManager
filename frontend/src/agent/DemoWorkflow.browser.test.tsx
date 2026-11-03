@@ -24,6 +24,7 @@ import WorkflowDecisionTimeline from "./WorkflowDecisionTimeline";
 import { liveComputeTask } from "./computeFlow.testFixtures";
 import "./agent.css";
 import { workflowReport } from "./workflowReport.testFixtures";
+import { resetProjectSession, setActiveProject } from "../projects/session";
 
 const candidates: ComputeCandidate[] = [
   [101, "模拟前期影像", "raster"],
@@ -139,11 +140,22 @@ function decisionStep(): AgentWorkflowStep {
   };
 }
 
-function showWorkflow() {
+async function showWorkflow() {
+  const current = (await agentApi.workflows()).items[0];
+  if (current) {
+    sessionStorage.setItem("workflow-session:79:2", current.workflowType);
+    sessionStorage.setItem(
+      `workflow-session:79:2:${current.workflowType}`,
+      current.id,
+    );
+    if (!vi.isMockFunction(agentApi.workflow))
+      vi.spyOn(agentApi, "workflow").mockResolvedValue(current);
+    else vi.mocked(agentApi.workflow).mockResolvedValueOnce(current);
+  }
   return render(
     <AntApp>
       <MemoryRouter>
-        <WorkflowPanel model="mock" resourceIds={[]} embedded />
+        <WorkflowPanel model="mock" resourceIds={[]} userId={79} embedded />
       </MemoryRouter>
     </AntApp>,
   );
@@ -167,10 +179,19 @@ async function select(label: string, option: string) {
       selector: ".ant-select-item-option-content",
     }),
   );
+  if (label === "研究场景")
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "工作流目标" })).toBeEnabled(),
+    );
 }
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  resetProjectSession();
+  setActiveProject("2");
+  sessionStorage.removeItem("workflow-session:79:2");
+  sessionStorage.removeItem("workflow-session:79:2:ecology_investigation");
+  sessionStorage.removeItem("workflow-session:79:2:geology_age_correction");
   vi.spyOn(agentApi, "researchDemos").mockResolvedValue({
     items: [
       {
@@ -186,7 +207,7 @@ beforeEach(() => {
       scenario: item.scenario as
         | "ecology_investigation"
         | "geology_age_correction",
-      projectId: 1,
+      projectId: 2,
       projectName: "测试项目",
       prompt: "分析",
       available: true,
@@ -202,6 +223,23 @@ beforeEach(() => {
     total: candidates.length,
   });
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "researchDemoSummaries").mockImplementation(async () => ({
+    items: (await agentApi.researchDemos()).items,
+  }));
+  vi.spyOn(agentApi, "workflowHistory").mockImplementation(
+    async ({ workflowType }) => {
+      const items = (await agentApi.workflows()).items.filter(
+        (item) => item.workflowType === workflowType,
+      );
+      return {
+        items,
+        total: items.length,
+        offset: 0,
+        limit: 30,
+        hasMore: false,
+      };
+    },
+  );
   vi.spyOn(agentApi, "resources").mockResolvedValue({
     items: candidates.map((entry) => ({
       id: entry.id,
@@ -410,7 +448,7 @@ it("binds ecological input roles, lets the user choose the evidence version, and
   const create = vi
     .spyOn(agentApi, "createWorkflow")
     .mockResolvedValue(savedWorkflow({ status: "queued" }));
-  showWorkflow();
+  await showWorkflow();
   await select("研究场景", "干旱区生态 / 变化与调查优先区");
   fireEvent.click(screen.getByRole("button", { name: "按名称匹配资料" }));
   expect(screen.getByRole("button", { name: "生成执行计划" })).toBeDisabled();
@@ -460,7 +498,7 @@ it("restores a saved multi-stage judgement and scoped knowledge without creating
   });
   const create = vi.spyOn(agentApi, "createWorkflow");
   const confirm = vi.spyOn(agentApi, "confirmWorkflow");
-  showWorkflow();
+  await showWorkflow();
   await screen.findByText("初步优先调查西区");
   expect(
     screen.queryByText("西区平均变化为 -0.21，覆盖率 0.93"),
@@ -502,7 +540,7 @@ it("keeps quality review visible and resumes only when the user approves the can
   const confirm = vi
     .spyOn(agentApi, "confirmWorkflow")
     .mockResolvedValue({ ...saved, status: "running" });
-  showWorkflow();
+  await showWorkflow();
   await screen.findByText("几何修复影响较大，请核对候选结果");
   expect(confirm).not.toHaveBeenCalled();
   fireEvent.change(screen.getByRole("textbox", { name: "审核意见" }), {
@@ -533,7 +571,7 @@ it("uses a real model label for real decisions and clears previous evidence when
   vi.spyOn(agentApi, "workflow").mockRejectedValue(
     Object.assign(new Error("项目权限已撤销"), { status: 403 }),
   );
-  showWorkflow();
+  await showWorkflow();
   fireEvent.click(await screen.findByText("查看分析过程 / 1 步"));
   await screen.findByText("Qwen 分析模型");
   await select("历史工作流", "另一次调查");
@@ -603,7 +641,7 @@ it("keeps the same request key after a lost response and prevents duplicate prev
     .spyOn(agentApi, "createWorkflow")
     .mockRejectedValueOnce(new Error("网络响应中断"))
     .mockResolvedValueOnce(savedWorkflow({ status: "waiting_approval" }));
-  showWorkflow();
+  await showWorkflow();
   await screen.findByText("成果已保存到本项目的数据资源");
   const preview = screen.getByRole("button", { name: "生成执行计划" });
   fireEvent.click(preview);
@@ -639,7 +677,7 @@ it.each(["geology_correction", "geology_age_correction"])(
         }),
       ],
     });
-    showWorkflow();
+    await showWorkflow();
     expect(
       await screen.findByRole("link", { name: "在地理工作台对比成果图层" }),
     ).toHaveAttribute("href", "/map?resources=301,304&projectTagId=2");
@@ -719,7 +757,7 @@ it("binds real-map age roles and uses published manifest parameters in the manua
       status: "queued",
     }),
   );
-  showWorkflow();
+  await showWorkflow();
   await select("研究场景", "真实底图 / 地层时代录入纠偏");
   expect(screen.getByText("真实底图 / 演示录入错误")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "按名称匹配资料" }));
@@ -830,7 +868,7 @@ it("opens only spatial outputs and the retained change image when comparing an e
       }),
     ],
   });
-  showWorkflow();
+  await showWorkflow();
   expect(
     await screen.findByRole("link", { name: "在地理工作台对比成果图层" }),
   ).toHaveAttribute("href", "/map?resources=199,201,203&projectTagId=2");
@@ -844,7 +882,7 @@ it("updates a completed ecological analysis by replacing only its observation ev
     .mockResolvedValue(
       savedWorkflow({ id: "updated-analysis", status: "waiting_approval" }),
     );
-  showWorkflow();
+  await showWorkflow();
   fireEvent.click(
     await screen.findByRole("button", { name: "补充观测后更新判断" }),
   );
@@ -911,7 +949,7 @@ it("restores the earlier judgement, new observation evidence and updated conclus
     ],
   });
   const create = vi.spyOn(agentApi, "createWorkflow");
-  showWorkflow();
+  await showWorkflow();
   fireEvent.click(await screen.findByText("查看分析过程 / 1 步"));
   const comparison = await screen.findByLabelText("补充观测后的判断更新");
   expect(within(comparison).getByText("初步优先调查西区")).toBeInTheDocument();
@@ -961,7 +999,7 @@ it("expands saved knowledge statements, conditions and original citations using 
       }),
     ],
   });
-  showWorkflow();
+  await showWorkflow();
   fireEvent.click(await screen.findByText("有效像元比较依据 / 版本 2"));
   const reference = await screen.findByLabelText("有效像元比较依据原文与出处");
   expect(

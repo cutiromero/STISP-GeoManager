@@ -87,6 +87,8 @@ const saved = (): AgentWorkflow => ({
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  sessionStorage.removeItem("workflow-session:77:1");
+  sessionStorage.removeItem("workflow-session:77:1:geology_map_review");
   vi.spyOn(agentApi, "bootstrap").mockResolvedValue({
     knowledgeDomains: [],
   } as never);
@@ -106,6 +108,23 @@ beforeEach(() => {
   });
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: resources });
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "researchDemoSummaries").mockImplementation(async () => ({
+    items: (await agentApi.researchDemos()).items,
+  }));
+  vi.spyOn(agentApi, "workflowHistory").mockImplementation(
+    async ({ workflowType }) => {
+      const items = (await agentApi.workflows()).items.filter(
+        (item) => item.workflowType === workflowType,
+      );
+      return {
+        items,
+        total: items.length,
+        offset: 0,
+        limit: 30,
+        hasMore: false,
+      };
+    },
+  );
   vi.spyOn(computeApi, "algorithms").mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(computeApi, "inputs").mockResolvedValue({
     items: candidates,
@@ -113,11 +132,26 @@ beforeEach(() => {
   });
 });
 
-function show() {
+async function show() {
+  const current = (await agentApi.workflows()).items[0];
+  if (current) {
+    sessionStorage.setItem("workflow-session:77:1", current.workflowType);
+    sessionStorage.setItem(
+      `workflow-session:77:1:${current.workflowType}`,
+      current.id,
+    );
+    if (!vi.isMockFunction(agentApi.workflow))
+      vi.spyOn(agentApi, "workflow").mockResolvedValue(current);
+  }
   return render(
     <App>
       <MemoryRouter>
-        <WorkflowPanel model="configured-model" resourceIds={[]} embedded />
+        <WorkflowPanel
+          model="configured-model"
+          resourceIds={[]}
+          userId={77}
+          embedded
+        />
       </MemoryRouter>
     </App>,
   );
@@ -154,8 +188,9 @@ it("loads the catalog only on open, aborts a closed request and ignores its late
   const view = render(openedPanel(false));
   expect(computeApi.inputs).not.toHaveBeenCalled();
   expect(computeApi.algorithms).not.toHaveBeenCalled();
-  await waitFor(() => expect(agentApi.workflows).toHaveBeenCalledOnce());
+  expect(agentApi.workflows).not.toHaveBeenCalled();
   view.rerender(openedPanel(true));
+  await select("研究场景", "地质成果智能检查与修正");
   await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledOnce());
   const originalSignal = vi.mocked(computeApi.inputs).mock.calls[0]![1]!
     .signal!;
@@ -177,7 +212,7 @@ it("loads the catalog only on open, aborts a closed request and ignores its late
   expect(computeApi.inputs).toHaveBeenCalledTimes(2);
 });
 
-it("restores and polls an existing task while the catalog drawer remains closed", async () => {
+it("keeps remembered tasks idle while the drawer remains closed and restores on open", async () => {
   const onStatusChange = vi.fn();
   vi.mocked(agentApi.workflows).mockResolvedValue({
     items: [{ ...saved(), status: "running" }],
@@ -186,27 +221,48 @@ it("restores and polls an existing task while the catalog drawer remains closed"
     ...saved(),
     status: "succeeded",
   });
-  render(
+  sessionStorage.setItem("workflow-session:77:1", "geology_map_review");
+  sessionStorage.setItem(
+    "workflow-session:77:1:geology_map_review",
+    "current-plan",
+  );
+  const view = render(
     <App>
       <MemoryRouter>
         <WorkflowPanel
           model="configured-model"
           resourceIds={[]}
           embedded
+          userId={77}
           open={false}
           onStatusChange={onStatusChange}
         />
       </MemoryRouter>
     </App>,
   );
-  await waitFor(() => expect(onStatusChange).toHaveBeenCalledWith("running"));
   expect(computeApi.inputs).not.toHaveBeenCalled();
+  expect(agentApi.workflow).not.toHaveBeenCalled();
+  view.rerender(
+    <App>
+      <MemoryRouter>
+        <WorkflowPanel
+          model="configured-model"
+          resourceIds={[]}
+          embedded
+          userId={77}
+          open
+          onStatusChange={onStatusChange}
+        />
+      </MemoryRouter>
+    </App>,
+  );
   await waitFor(
     () => expect(onStatusChange).toHaveBeenCalledWith("succeeded"),
     { timeout: 3000 },
   );
-  expect(agentApi.workflow).toHaveBeenCalledWith("current-plan");
-  expect(computeApi.inputs).not.toHaveBeenCalled();
+  expect(agentApi.workflow).toHaveBeenCalledWith("current-plan", {
+    signal: expect.any(AbortSignal),
+  });
 });
 
 it("aborts the old project catalog and reloads for the newly selected project", async () => {
@@ -224,17 +280,19 @@ it("aborts the old project catalog and reloads for the newly selected project", 
     )
     .mockResolvedValue({ items: [], total: 0 });
   const view = render(openedPanel(true));
+  await select("研究场景", "地质成果智能检查与修正");
   await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledOnce());
   const originalSignal = vi.mocked(computeApi.inputs).mock.calls[0]![1]!
     .signal!;
   setActiveProject("2");
   view.rerender(openedPanel(true));
-  await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledTimes(2));
-  expect(originalSignal.aborted).toBe(true);
+  await waitFor(() => expect(originalSignal.aborted).toBe(true));
   finishOldPage({ items: candidates, total: 500 });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(computeApi.inputs).toHaveBeenCalledTimes(2);
-  expect(agentApi.workflows).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(computeApi.inputs).mock.calls.length).toBeLessThanOrEqual(2);
+  expect(
+    screen.queryByRole("combobox", { name: "待检查地质图" }),
+  ).not.toBeInTheDocument();
 });
 
 async function select(label: string, option: string) {
@@ -249,27 +307,31 @@ async function select(label: string, option: string) {
   );
 }
 
-it("waits for saved tasks before accepting a new scene so restoration cannot overwrite it", async () => {
-  let restoreTasks: (value: { items: AgentWorkflow[] }) => void = () => {};
-  vi.mocked(agentApi.workflows).mockReturnValue(
-    new Promise((resolve) => {
-      restoreTasks = resolve;
-    }),
+it("does not load saved task details before the user chooses a scene and history item", async () => {
+  vi.mocked(agentApi.workflowHistory).mockResolvedValue({
+    items: [saved()],
+    total: 1,
+    offset: 0,
+    limit: 30,
+    hasMore: false,
+  });
+  await show();
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "研究场景" })).toBeEnabled(),
   );
-  show();
-  expect(screen.getByRole("combobox", { name: "研究场景" })).toBeDisabled();
-  restoreTasks({ items: [saved()] });
-  await screen.findByText("待检查地质图 / 待检查地质图");
+  expect(agentApi.workflowHistory).not.toHaveBeenCalled();
   await select("研究场景", "通用科研计算");
   expect(screen.queryByRole("combobox", { name: "待检查地质图" })).toBeNull();
-  expect(screen.getByRole("combobox", { name: "指定算法" })).toBeEnabled();
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "指定算法" })).toBeEnabled(),
+  );
 });
 
 it("restores the current active preset and really rematches an already selected custom map", async () => {
   const create = vi
     .spyOn(agentApi, "createWorkflow")
     .mockResolvedValue(saved());
-  show();
+  await show();
   await select("研究场景", "地质成果智能检查与修正");
   await screen.findByText("待检查地质图 / 待检查地质图");
   await select("待检查地质图", "新区域地质图");
@@ -300,8 +362,13 @@ it("restores the current active preset and really rematches an already selected 
 });
 
 it("offers different compatible choices for the map, coverage and expert rules", async () => {
-  show();
+  await show();
   await select("研究场景", "地质成果智能检查与修正");
+  await waitFor(() =>
+    expect(
+      screen.getByRole("combobox", { name: "待检查地质图" }),
+    ).toBeEnabled(),
+  );
   for (const [role, name] of Object.entries(names)) {
     fireEvent.mouseDown(screen.getByRole("combobox", { name }));
     const item = await screen.findByText(name, {
@@ -436,7 +503,7 @@ it("requires a new plan after changing an input and cancels only the unexecuted 
   const create = vi
     .spyOn(agentApi, "createWorkflow")
     .mockResolvedValue({ ...saved(), id: "new-plan", status: "queued" });
-  show();
+  await show();
   await screen.findByRole("button", { name: "确认执行" });
   await select("待检查地质图", "新区域地质图");
   expect(await screen.findByText("资料或参数已改变")).toBeVisible();
@@ -468,7 +535,7 @@ it.each(["conflict", "still-running"])(
       );
     else cancel.mockResolvedValue({ ...saved(), status: "running" });
     const create = vi.spyOn(agentApi, "createWorkflow");
-    show();
+    await show();
     await screen.findByRole("button", { name: "确认执行" });
     await select("待检查地质图", "新区域地质图");
     fireEvent.click(screen.getByRole("button", { name: "生成执行计划" }));
@@ -489,7 +556,7 @@ it("loads later catalog pages so a preset beyond the first hundred remains selec
       ? { items: candidates.slice(0, 1), total: candidates.length }
       : { items: candidates.slice(1), total: candidates.length },
   );
-  show();
+  await show();
   await select("研究场景", "地质成果智能检查与修正");
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "预设" })).not.toBeDisabled(),
@@ -554,7 +621,7 @@ it("uses the published geology parameter form and sends the user's revised thres
   const create = vi
     .spyOn(agentApi, "createWorkflow")
     .mockResolvedValue(saved());
-  show();
+  await show();
   await select("研究场景", "地质成果智能检查与修正");
   const field = await screen.findByRole("spinbutton", {
     name: "本轮修改数量上限",
@@ -576,7 +643,7 @@ it("does not replace or cancel a running computation through changed form fields
     items: [{ ...saved(), status: "running" }],
   });
   const cancel = vi.spyOn(agentApi, "cancelWorkflow");
-  show();
+  await show();
   await screen.findByRole("combobox", { name: "待检查地质图" });
   expect(screen.getByRole("button", { name: "预设" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "生成执行计划" })).toBeDisabled();

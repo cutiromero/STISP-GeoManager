@@ -17,7 +17,8 @@ from apps.compute.packages import ComputeError
 from apps.compute.serializers import output_data
 from apps.core.api import api_login_required
 from apps.core.initialization import is_guest_user
-from apps.projects.context import is_superadmin, selected_project_id
+from apps.projects.context import selected_project_id
+from apps.projects.access import available_projects
 from apps.projects.models import Project
 
 from .models import ShareInvitation
@@ -137,9 +138,7 @@ def serialize(invitation, user) -> dict:
 
 
 def personal_query(user):
-    projects = Project.objects.filter(is_active=True)
-    if not is_superadmin(user):
-        projects = projects.filter(Q(is_default=True) | Q(memberships__user=user))
+    projects = available_projects(user).filter(is_active=True)
     return ShareInvitation._base_manager.filter(
         Q(sender=user) | Q(recipient=user),
         project_tag__in=projects,

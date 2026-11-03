@@ -498,7 +498,30 @@ it.each([1200, 390])("在 %s 像素下保留紧凑审核和真实范围", async 
 });
 
 it("MH-workflow表单用角色明确选择新场景，并把选中建议透传API", async () => {
-  const saved = fixture();
+  const saved = { ...fixture(), projectId: 1 };
+  sessionStorage.setItem("workflow-session:80:1", saved.workflowType);
+  sessionStorage.setItem(
+    `workflow-session:80:1:${saved.workflowType}`,
+    saved.id,
+  );
+  vi.spyOn(agentApi, "researchDemoSummaries").mockResolvedValue({
+    items: [
+      {
+        scenario: "geology_map_review",
+        projectId: 1,
+        projectName: "公开",
+        title: "地质成果智能检查与修正",
+      },
+    ],
+  });
+  vi.spyOn(agentApi, "researchDemos").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "workflowHistory").mockResolvedValue({
+    items: [saved],
+    total: 1,
+    offset: 0,
+    limit: 30,
+    hasMore: false,
+  });
   vi.spyOn(agentApi, "bootstrap").mockResolvedValue({
     models: [],
     knowledgeDomains: [],
@@ -513,14 +536,16 @@ it("MH-workflow表单用角色明确选择新场景，并把选中建议透传AP
   const confirm = vi
     .spyOn(agentApi, "confirmWorkflow")
     .mockResolvedValue({ ...saved, status: "queued" });
-  vi.spyOn(agentApi, "workflow").mockResolvedValue({
-    ...saved,
-    status: "queued",
-  });
+  vi.spyOn(agentApi, "workflow")
+    .mockResolvedValueOnce(saved)
+    .mockResolvedValue({
+      ...saved,
+      status: "queued",
+    });
   render(
     <App>
       <MemoryRouter>
-        <WorkflowPanel model="qwen" resourceIds={[]} embedded />
+        <WorkflowPanel model="qwen" resourceIds={[]} userId={80} embedded />
       </MemoryRouter>
     </App>,
   );

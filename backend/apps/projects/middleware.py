@@ -5,7 +5,7 @@ from django.http import JsonResponse, Http404
 from django.utils.deprecation import MiddlewareMixin
 
 from .context import ProjectScope, current_scope, is_superadmin
-from .models import Project
+from .access import available_projects, default_project_id, project_access_query
 
 
 PUBLIC_VIEWS = frozenset(
@@ -87,25 +87,25 @@ class ProjectScopeMiddleware(MiddlewareMixin):
             )
         if header and query and header != query:
             return JsonResponse({"detail": "项目请求头与查询参数冲突"}, status=400)
-        value = header or query or "1"
+        neutral = False
+        value = header or query or str(default_project_id(request.user) or 1)
         if request.path.startswith(
             ("/api/auth/", "/api/projects/", "/api/bootstrap/", "/api/health/")
         ):
-            value = "1"
+            neutral = True
+            value = str(default_project_id(request.user) or 1)
+        if request.path.startswith("/api/content/"):
+            # Editorial content is platform-wide, independent of business access.
+            neutral, value = True, "1"
         if request.path.startswith("/api/sharing/invitations/") and not (
             request.path == "/api/sharing/invitations/" and request.method == "POST"
         ):
             # Personal notification boxes cross authorized projects. Each action
             # re-authorizes the invitation's real project, not the visible tab.
-            value = "1"
+            neutral = True
+            value = str(default_project_id(request.user) or 1)
         superadmin = is_superadmin(request.user)
-        available = (
-            Project.objects.all()
-            if superadmin
-            else Project.objects.filter(is_active=True)
-            .filter(models_q(request.user))
-            .distinct()
-        )
+        available = available_projects(request.user)
         if value == "all":
             return JsonResponse(
                 {"detail": "每次只能选择一个项目，不支持全部项目汇总"}, status=400
@@ -113,7 +113,7 @@ class ProjectScopeMiddleware(MiddlewareMixin):
         if not re.fullmatch(r"[1-9]\d*", value):
             return JsonResponse({"detail": "无效的项目标签"}, status=400)
         selected = int(value)
-        if not available.filter(pk=selected).exists():
+        if not neutral and not available.filter(pk=selected).exists():
             return JsonResponse({"detail": "项目不存在或无权访问"}, status=404)
         ids = (selected,)
         public_read = request.path.startswith(
@@ -161,9 +161,4 @@ class ProjectScopeMiddleware(MiddlewareMixin):
 
 
 def models_q(user):
-    from django.db.models import Q
-
-    query = Q(is_default=True)
-    if user.is_authenticated and user.is_active:
-        query |= Q(memberships__user=user)
-    return query
+    return project_access_query(user)

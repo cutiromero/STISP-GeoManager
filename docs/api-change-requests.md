@@ -190,6 +190,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261103-002 | BackendReady | /api/projects/; /api/projects/assignments/{userId}/; /api/agent/workflows/; /api/agent/research-demos/ | per-user public scope and lightweight workflow history | Updated | Scoped backend and browser fixtures | Implemented | Project/sharing 72; project UI 6 passed | Default true, live authorization, authorized fallback and summary pagination; server acceptance separate |
 | API-20261103-001 | BackendReady | /api/sharing/check/; /api/sharing/invitations/; invitations/{id}/respond/; read/; open/ | exact username invitation and single-object read-only access | Updated | Sharing browser and backend fixtures | Passed | Backend 62; sharing browser 15; response unit 13 passed | Permission checks, accept/decline, notification and single-output isolation verified; release acceptance tracked separately |
 | API-20261102-001 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/interaction/ | account admission and conflict semantics | Updated | Existing run/error fixtures | Passed | Focused passed | Three ordinary tasks; permission and transient failure states separated |
 | API-20261025-001 | ContractReady | /api/agent/workflows/{workflowId}/validation/; validation/files/*; workflow map fields | isolated read-only evaluation and before-layer references | Updated | 102-agent-validation | Pending | Pending | Implementation in progress |
@@ -1152,3 +1153,16 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation notes: 创建限原owner或既有有权管理员；不授项目、功能或owner_only权限。预检/创建/接受/每次打开均重验双方与底层依赖。pending/accepted同对象去重，提交和响应幂等；跨项目通知只返回本人且仍有权项目。接受仅授对象只读，下载/入库各自核权。
 - Verification: 精确账号、自分享拒绝、账号停用/项目/功能/私有依赖失权、重复发送响应、拒绝无授权、单输出隔离、刷新及通知已读、对象失效反馈。
 - Result: 后端62项定向与计算/专题回归通过，含真实文件预览下载及隔离WAL并发；Django检查与迁移一致性通过。仅增加ShareInvitation新表，未写本机业务数据。前端、浏览器及发布验收另计。
+
+## API-20261103-002 - 用户公开项目范围与科研历史轻量读取
+
+- Status: BackendReady
+- Owner: roles_monitor 项目权限、后台UI及统一契约；Root 工作流摘要和场景读取；agent_layout_modes 普通智能体页面。
+- Endpoints: GET /api/projects/；GET/POST /api/projects/assignments/{userId}/；GET /api/agent/workflows/；GET /api/agent/research-demos/。
+- Change type: 默认兼容的按用户公开访问开关、授权默认项目、轻量历史分页与按需场景预设。
+- OpenAPI change: ProjectAssignment.allowPublicProject（省略保留）；ProjectTagList.defaultProjectId；AgentWorkflowSummary/List和AgentResearchDemoSummaryList；view=summary与筛选分页查询。
+- Mock examples: backend/tests/integration/test_project_public_policy.py、工作流摘要集成测试及frontend/src/projects/ProjectContext.browser.test.tsx使用隔离QA数据；保留原有无参数完整列表样例。
+- Frontend reason: 超管可让指定用户仅访问所分配项目；首次加载不误选公开；历史与场景入口按需取详情，减少页面等待。
+- Backend implementation notes: 默认true保留旧用户和游客，超管全部可见；业务API、worker、公开知识复用与分享重验同一范围，已有历史不删除。摘要只限本人当前项目，不带大字段，详情另验数据权限。平台公共图文独立于业务项目。
+- Verification: 未授权账号不得改策略；禁公开后直接资源/历史/分享失败；默认项目一致、游客保持；摘要分页/类型/项目/本人隔离，刷新后恢复与按需读取。
+- Result: 定向自动化与类型生成结果随本轮交付记录，服务器生效以同提交发布回执为准。

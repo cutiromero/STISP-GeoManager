@@ -92,6 +92,17 @@ const workflow: AgentWorkflow = {
 };
 beforeEach(() => {
   vi.restoreAllMocks();
+  sessionStorage.setItem("workflow-session:78:1", "research_processing");
+  sessionStorage.setItem("workflow-session:78:1:research_processing", "wf-1");
+  vi.spyOn(agentApi, "researchDemoSummaries").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "workflowHistory").mockResolvedValue({
+    items: [workflow],
+    total: 1,
+    offset: 0,
+    limit: 30,
+    hasMore: false,
+  });
+  vi.spyOn(agentApi, "workflow").mockResolvedValue(workflow);
   vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue(
     workflowReport(),
   );
@@ -196,7 +207,7 @@ it("restores a saved plan and only executes after confirmation", async () => {
     <AntApp>
       <MemoryRouter>
         <RoutePosition />
-        <WorkflowPanel model="mock" resourceIds={[12]} />
+        <WorkflowPanel model="mock" resourceIds={[12]} userId={78} />
       </MemoryRouter>
     </AntApp>,
   );
@@ -230,7 +241,7 @@ it("shows confirmation failure without claiming successful execution", async () 
   render(
     <AntApp>
       <MemoryRouter>
-        <WorkflowPanel model="mock" resourceIds={[12]} />
+        <WorkflowPanel model="mock" resourceIds={[12]} userId={78} />
       </MemoryRouter>
     </AntApp>,
   );

@@ -18,6 +18,9 @@ import type {
   AgentAttachment,
   AgentComputeIntentUpdate,
   AgentResearchDemoList,
+  AgentResearchDemoSummaryList,
+  AgentResearchScenario,
+  AgentWorkflowSummaryList,
   AgentResearchIntentUpdate,
   AgentWorkflowReport,
   AgentWorkflowReportPreview,
@@ -28,8 +31,18 @@ import type {
 } from "./generated/types.gen";
 
 export const agentApi = {
-  researchDemos: (options: { signal?: AbortSignal } = {}) =>
-    requestJson<AgentResearchDemoList>("/api/agent/research-demos/", options),
+  researchDemos: (
+    options: { scenario?: AgentResearchScenario; signal?: AbortSignal } = {},
+  ) =>
+    requestJson<AgentResearchDemoList>(
+      `/api/agent/research-demos/${options.scenario ? `?scenario=${encodeURIComponent(options.scenario)}` : ""}`,
+      { signal: options.signal },
+    ),
+  researchDemoSummaries: (options: { signal?: AbortSignal } = {}) =>
+    requestJson<AgentResearchDemoSummaryList>(
+      "/api/agent/research-demos/?view=summary",
+      options,
+    ),
   updateResearchIntent: (id: number, body: AgentResearchIntentUpdate) =>
     requestJson<AgentRun>(`/api/agent/runs/${id}/research-intent/`, {
       method: "POST",
@@ -101,8 +114,26 @@ export const agentApi = {
       method: "POST",
       body,
     }),
-  workflow: (id: string) =>
-    requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/`),
+  workflow: (id: string, options: { signal?: AbortSignal } = {}) =>
+    requestJson<AgentWorkflow>(
+      `/api/agent/workflows/${encodeURIComponent(id)}/`,
+      options,
+    ),
+  workflowHistory: (options: {
+    workflowType: string;
+    offset?: number;
+    limit?: number;
+    signal?: AbortSignal;
+  }) =>
+    requestJson<AgentWorkflowSummaryList>(
+      `/api/agent/workflows/?${new URLSearchParams({
+        view: "summary",
+        workflowType: options.workflowType,
+        offset: String(options.offset ?? 0),
+        limit: String(options.limit ?? 20),
+      })}`,
+      { signal: options.signal },
+    ),
   workflowValidation: (id: string) =>
     requestJson<AgentWorkflowValidation>(
       `/api/agent/workflows/${encodeURIComponent(id)}/validation/`,

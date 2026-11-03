@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.53] - 2026-11-03
+
+### Changed
+- MH-workflow首次仅加载当前项目场景，选场景后读取本人历史摘要与资料，选任务再加载详情；关闭停止请求与轮询，明确区分加载、重试和未加载状态。
+- 历史索引按场景分页，不读取完整计划、证据和步骤；场景目录不再首开探测全部项目的算法与运行服务。
+
+### Added
+- 后台按用户配置公开项目访问；默认维持公开可见，可关闭后仅访问分配项目。资源、知识、分享与运行中任务使用统一实时项目边界。
+
 ## [0.1.52] - 2026-11-03
 
 ### Added

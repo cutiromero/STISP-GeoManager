@@ -202,7 +202,7 @@ def _parameters(algorithms: list[dict], sample_images: bool) -> tuple[list, dict
     return list(specs.values()), defaults
 
 
-def discover(user, p: dict, run=None) -> dict:
+def discover(user, p: dict, run=None, *, scenario_filter: str | None = None) -> dict:
     """Current project only; manual selections are a ceiling, never a suggestion."""
     selected = list(run.resource_ids or []) if run else []
     manual = bool(run and run.data_selection_mode == "manual")
@@ -212,6 +212,8 @@ def discover(user, p: dict, run=None) -> dict:
     available_algorithms = _algorithms(run)
     scenarios = []
     for scenario, roles in ROLES.items():
+        if scenario_filter is not None and scenario != scenario_filter:
+            continue
         age = scenario == "geology_age_correction"
         review = scenario == "geology_map_review"
         multi = scenario == MULTI_TYPE
@@ -322,7 +324,50 @@ def discover(user, p: dict, run=None) -> dict:
     return {"scenarios": scenarios}
 
 
-def list_demos(user, p: dict) -> dict:
+def _scene_summaries(user, p, projects):
+    """Discover names from current catalog metadata, without probing services."""
+    items = []
+    for project in projects.order_by("id"):
+        with project_scope(
+            ProjectScope((project.id,), project.id, user.id, is_superadmin(user))
+        ):
+            query = resources(user, p).filter(status="active")
+            for scenario in ("ecology_investigation", "geology_map_review", MULTI_TYPE):
+                markers = (
+                    {
+                        role: ("code", "geology-multi-" + role.replace("_", "-"))
+                        for role in ROLES[scenario]
+                    }
+                    if scenario == MULTI_TYPE
+                    else REVIEW_MARKERS
+                    if scenario == "geology_map_review"
+                    else MARKERS
+                )
+                from django.db.models import Q
+
+                condition = Q(pk__in=[])
+                for field, marker in markers.values():
+                    condition |= Q(**{field: marker})
+                if scenario == MULTI_TYPE:
+                    condition |= Q(
+                        code__in=[
+                            "geology-multi-lithology-complete-20261025",
+                            "geology-multi-rules-complete-20261025",
+                        ]
+                    )
+                if query.filter(condition).exists():
+                    items.append(
+                        {
+                            "scenario": scenario,
+                            "projectId": project.id,
+                            "projectName": project.name,
+                            "title": TITLES[scenario],
+                        }
+                    )
+    return {"items": items}
+
+
+def list_demos(user, p: dict, *, summary=False, scenario=None) -> dict:
     """Navigation across authorized projects, without exposing private input names."""
     if not allowed(user, "agent", p):
         return {"items": []}
@@ -331,6 +376,10 @@ def list_demos(user, p: dict) -> dict:
     superadmin = is_superadmin(user)
     if not superadmin:
         projects = projects.filter(models_q(user)).distinct()
+    if summary or scenario is not None:
+        projects = projects.filter(pk=current_project)
+    if summary:
+        return _scene_summaries(user, p, projects)
     models_ready = any(
         m["status"] == "online" for m in visible_models(user, "agent", p)
     )
@@ -355,7 +404,7 @@ def list_demos(user, p: dict) -> dict:
         with project_scope(
             ProjectScope((project.id,), project.id, user.id, superadmin)
         ):
-            for scene in discover(user, p)["scenarios"]:
+            for scene in discover(user, p, scenario_filter=scenario)["scenarios"]:
                 # Historical workflows remain readable and manually selectable.
                 if scene["scenario"] in {
                     "geology_correction",

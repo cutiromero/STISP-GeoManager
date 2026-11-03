@@ -119,6 +119,14 @@ it("uses the current conversation model without a separate workflow model select
     knowledgeDomains: [],
   } as never);
   vi.spyOn(agentApi, "researchDemos").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "researchDemoSummaries").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "workflowHistory").mockResolvedValue({
+    items: [],
+    total: 0,
+    offset: 0,
+    limit: 30,
+    hasMore: false,
+  });
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [] });
   vi.spyOn(computeApi, "algorithms").mockResolvedValue({ items: [], total: 0 });
@@ -140,6 +148,18 @@ it("uses the current conversation model without a separate workflow model select
   expect(
     screen.queryByRole("combobox", { name: "工作流分析模型" }),
   ).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "研究场景" })).toBeEnabled(),
+  );
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "研究场景" }));
+  fireEvent.click(
+    await screen.findByText("通用科研计算", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "工作流目标" })).toBeEnabled(),
+  );
   fireEvent.change(screen.getByRole("textbox", { name: "工作流目标" }), {
     target: { value: "统计项目数据" },
   });

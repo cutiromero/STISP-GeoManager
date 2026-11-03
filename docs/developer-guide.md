@@ -2473,9 +2473,9 @@ A: 重新提交相同的任务请求即可。
 
 ### 上下文与权限
 
-- 请求携带 `X-Project-Id`，图片/瓦片/文件 URL 可携带 `projectTagId`；二者相异返回 400。普通浏览缺省=公开项目 1；上传提交必须显式指定。`all` 已取消并返回 400。
+- 请求携带 `X-Project-Id`，图片/瓦片/文件 URL 可携带 `projectTagId`；二者相异返回 400。未指定时优先公开项目 1；用户被关闭公开访问后使用首个启用授权项目，与项目列表的 `defaultProjectId` 一致。上传提交必须显式指定。`all` 已取消并返回 400。
 - 业务 `projectTagId` 与地图工程 `projectId` 不同。业务对象只能归属一个项目；用户可加入多个项目。
-- 公开项目允许匿名浏览启用资源和已发布图文/成果；私有项目要求有效账户与成员关系。仅超管分配标签、管理与读取所有项目，其他管理角色仍须获得项目授权。
+- 公开项目默认允许用户和游客浏览启用资源和已发布成果；超管可按用户设置 `allowPublicProject=false`，该账号登录后仅可访问获分配项目。私有项目要求有效账户与成员关系。仅超管分配标签、管理与读取所有项目，其他管理角色仍须获得项目授权。匿名公开内容仍可读，此开关是账号项目范围配置。
 - 所有业务读写均使用一个具体项目。文件预览 URL 包含对象所属标签。科普与团队动态属于平台公共内容，独立于项目切换。
 - 写入与原文件下载仍检查功能权限；草稿、未共享工程、未发布版本、下架内容/附件不随默认标签公开。
 - 匿名可使用默认项目资源查询及默认栅格渲染，不得自定义符号化、导入、导出或管理。异步 render 状态只对同浏览器会话发起的最近至多 20 个任务开放。
@@ -2485,10 +2485,10 @@ A: 重新提交相同的任务请求即可。
 
 | API | 行为与权限 |
 | --- | --- |
-| GET `/api/projects/` | `items` 是可读取标签；`assignableItems` 是管理员可分配列表，两者不要混用 |
+| GET `/api/projects/` | `items` 是可读取标签；`defaultProjectId` 是授权默认项目或 null；`assignableItems` 是管理员可分配列表，两者不要混用 |
 | POST `/api/projects/` | 超管创建；name/code/description/isActive/sortOrder |
 | POST `/api/projects/{projectTagId}/` | 超管维护；内置“公开”项目不能改名/停用 |
-| GET/POST `/api/projects/assignments/{userId}/` | 仅超管；POST 的 projectIds 替换该用户标签集合，公开项目无需成员行 |
+| GET/POST `/api/projects/assignments/{userId}/` | 仅超管；POST 的 projectIds 替换私有标签集合，allowPublicProject 控制公开访问；省略保留旧策略；关闭需至少一个启用私有项目，超管不可关闭 |
 | GET `/api/content/articles/` | kind、category、q、offset、limit；manage=1 需编辑权限 |
 | POST `/api/content/articles/` | 创建内容，编辑权限=超管或 core.manage_auth |
 | GET/POST `/api/content/articles/{articleId}/` | 读取/保存；POST 必须带当前 revision，冲突 409 |
@@ -2764,3 +2764,11 @@ POST `.../{id}/respond/`输入`{decision:accept|reject,idempotencyKey}`，仅收
 GET `.../{id}/open/`仅接受后的参与人调用，再次实时核权，返回安全站内`target.openUrl`及可选单份`output:ComputeOutput`。计算统一从`/compute?sharedInvitation=id`打开独立单输出；地图/预览/下载沿用实际output接口及已接受授权，下载额外要求数据导出，入库额外要求数据新增，不授整任务。工程和专题打开保留原有页面；依赖权限变化后分享不继续生效。
 
 邀请状态为`pending/accepted/rejected/unavailable`，`detail`说明当前反馈，`canRespond`仅表示本人待回应；真正接受仍以实时权限检查为准。跨项目对象、无管理权或第三方邀请统一不可访问，不泄露私有依赖名称。所有文件路径由后端对象生成，客户端不能传入打开URL或存储路径。
+
+### 2026-11-03 项目访问与科研历史摘要
+
+项目访问策略保存在 UserProfile.allow_public_project，迁移默认 true，保留现有用户和游客行为。后台“项目标签管理 → 分配用户标签”可关闭指定账号的公开项目。前端完成范围校验后才挂载业务页面，旧会话缓存的公开项目自动改为授权默认项目。显式请求禁用的公开项目返回404；worker在继续执行时实时重查，已接受分享和公开知识的跨项目复用均不能绕过。公开算法仍作为平台共享工具使用，输入、结果和资料按授权项目隔离。科普和团队动态继续属于平台公共内容。旧聊天和任务保留记录，恢复访问仍需所属项目授权。
+
+`GET /api/agent/workflows/?view=summary&workflowType=...&offset=0&limit=20` 返回 AgentWorkflowSummaryList（items/total/offset/limit/hasMore）。limit范围1–100，workflowType最长40字符；仅本人当前项目。摘要只读取状态、目标和时间，不携带plan/evidence/steps；打开详情后重验原数据权限。省略view仍返回原AgentWorkflowList。
+
+`GET /api/agent/research-demos/?view=summary` 返回当前项目的 AgentResearchDemoSummaryList，条目只有scenario/projectId/projectName/title，通过存在性查询生成，不调用模型健康检测和算法扫描。`?scenario=...`按需获取当前项目该场景的完整预设，返回原AgentResearchDemoList；无参数保留跨本人授权项目的原有入口。

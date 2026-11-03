@@ -53,6 +53,54 @@ def scene(catalog, scenario="ecology_investigation"):
     return next(s for s in catalog["scenarios"] if s["scenario"] == scenario)
 
 
+def test_summary_is_current_project_metadata_without_service_probes(demo):  # noqa: F811
+    env = demo
+    with project_scope(
+        ProjectScope((env["project"].id,), env["project"].id, env["owner"].id)
+    ):
+        mark(env)
+        with (
+            patch(
+                "apps.agent.research_presets.visible_models",
+                side_effect=AssertionError("Model probe"),
+            ),
+            patch(
+                "apps.agent.research_presets.runtime_state",
+                side_effect=AssertionError("Runtime probe"),
+            ),
+            patch(
+                "apps.agent.research_presets._algorithms",
+                side_effect=AssertionError("Algorithm scan"),
+            ),
+        ):
+            result = list_demos(env["owner"], env["policy"], summary=True)
+        assert result["items"]
+        assert all(
+            set(item) == {"scenario", "projectId", "projectName", "title"}
+            for item in result["items"]
+        )
+        assert all(item["projectId"] == env["project"].id for item in result["items"])
+    with project_scope(ProjectScope((1,), 1, env["owner"].id)):
+        assert list_demos(env["owner"], env["policy"], summary=True)["items"] == []
+
+
+def test_selected_preset_only_discovers_selected_scene_in_current_project(demo):  # noqa: F811
+    env = demo
+    with project_scope(
+        ProjectScope((env["project"].id,), env["project"].id, env["owner"].id)
+    ):
+        mark(env)
+        with patch("apps.agent.research_presets.discover", wraps=discover) as selected:
+            result = list_demos(
+                env["owner"], env["policy"], scenario="ecology_investigation"
+            )
+        assert len(result["items"]) == 1
+        assert result["items"][0]["scenario"] == "ecology_investigation"
+        assert "preset" in result["items"][0]
+        assert selected.call_count == 1
+        assert selected.call_args.kwargs["scenario_filter"] == "ecology_investigation"
+
+
 def test_discovery_uses_markers_not_project_name_or_ids(demo):  # noqa: F811
     env = demo
     with project_scope(

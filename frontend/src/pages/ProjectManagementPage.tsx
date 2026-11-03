@@ -26,6 +26,7 @@ export default function ProjectManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [userId, setUserId] = useState<number>();
   const [ids, setIds] = useState<number[]>([]);
+  const [allowPublicProject, setAllowPublicProject] = useState(true);
   const selectionSequence = useRef(0);
   const [loadingAssignment, setLoadingAssignment] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -40,10 +41,14 @@ export default function ProjectManagementPage() {
     const sequence = ++selectionSequence.current;
     setUserId(id);
     setIds([]);
+    setAllowPublicProject(true);
     setLoadingAssignment(true);
     try {
       const result = await platformApi.assignment(id);
-      if (sequence === selectionSequence.current) setIds(result.projectIds);
+      if (sequence === selectionSequence.current) {
+        setIds(result.projectIds);
+        setAllowPublicProject(result.allowPublicProject ?? true);
+      }
     } catch (e) {
       if (sequence === selectionSequence.current) {
         setUserId(undefined);
@@ -66,7 +71,7 @@ export default function ProjectManagementPage() {
       <Typography.Title level={2}>{ui("项目标签管理")}</Typography.Title>
       <Typography.Paragraph type="secondary">
         {ui(
-          "公开项目向所有人开放。项目标签由超管设置，用户的项目访问范围由超管分配。",
+          "用户和游客默认可访问公开项目。超级管理员可按用户关闭公开项目访问，并分配指定项目。",
         )}
       </Typography.Paragraph>
       {!context?.canAssign ? (
@@ -189,6 +194,7 @@ export default function ProjectManagementPage() {
             <Space wrap>
               <Select
                 showSearch
+                aria-label={ui("分配项目的用户")}
                 optionFilterProp="label"
                 placeholder={ui("选择用户")}
                 style={{ width: 220 }}
@@ -201,6 +207,7 @@ export default function ProjectManagementPage() {
               />
               <Select
                 mode="multiple"
+                aria-label={ui("分配的项目")}
                 disabled={!userId || loadingAssignment || saving}
                 placeholder={ui("选择私有项目标签")}
                 style={{ minWidth: 360 }}
@@ -217,7 +224,7 @@ export default function ProjectManagementPage() {
                   if (!userId) return;
                   try {
                     setSaving(true);
-                    await platformApi.assign(userId, ids);
+                    await platformApi.assign(userId, ids, allowPublicProject);
                     await context.refresh();
                     message.success(ui("标签分配已保存"));
                     setSaving(false);
@@ -230,9 +237,18 @@ export default function ProjectManagementPage() {
                 {ui("保存分配")}
               </Button>
             </Space>
+            <Space style={{ marginTop: 16 }}>
+              <Switch
+                aria-label={ui("允许访问公开项目")}
+                checked={allowPublicProject}
+                disabled={!userId || loadingAssignment || saving}
+                onChange={setAllowPublicProject}
+              />
+              <Typography.Text>{ui("允许访问公开项目")}</Typography.Text>
+            </Space>
             <p>
               {ui(
-                "公开项目自动可读，无需分配。超级管理员始终拥有全部项目权限。",
+                "关闭公开项目访问时，至少分配一个启用项目。超级管理员始终拥有全部项目权限。",
               )}
             </p>
           </Card>
