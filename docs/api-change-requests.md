@@ -190,6 +190,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261103-001 | BackendReady | /api/sharing/check/; /api/sharing/invitations/; invitations/{id}/respond/; read/; open/ | exact username invitation and single-object read-only access | Updated | Sharing browser and backend fixtures | Passed | Backend 62; sharing browser 15; response unit 13 passed | Permission checks, accept/decline, notification and single-output isolation verified; release acceptance tracked separately |
 | API-20261102-001 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/interaction/ | account admission and conflict semantics | Updated | Existing run/error fixtures | Passed | Focused passed | Three ordinary tasks; permission and transient failure states separated |
 | API-20261025-001 | ContractReady | /api/agent/workflows/{workflowId}/validation/; validation/files/*; workflow map fields | isolated read-only evaluation and before-layer references | Updated | 102-agent-validation | Pending | Pending | Implementation in progress |
 | API-20261023-001 | BackendReady | /api/agent/research-demos/; /api/agent/workflows/; /confirm/; /api/compute/algorithms/ | multi-element scenario, trial rule bindings, measured suggestions, real map outputs and project tools | Updated | Integration/browser fixtures | Passed | Focused browser, unit and real local workflow passed | Real algorithms and maps verified; model decisions use mock, recorded separately |
@@ -1138,3 +1139,16 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation notes: 模型形成检索意图后真实搜索；编辑前强制review_modifications。planHash及proposalHash绑定实际问题/输入/版本，后端只接收选择而非编辑坐标；拒绝零编辑、漂移重确认，结果返回模型复核。
 - Verification: 真检索与引用、批准子集/拒绝/漂移/权限/恢复、实际修改和统计一致、位置变化与正常区域保护。
 - Result: 本机后端新模块组合73项、审批前端及相关回归通过；契约生成、类型一致和文档检查通过。真实模型、隔离算法、地图和发布状态分别记录于本轮服务器验收回执。
+
+## API-20261103-001 - 工程、专题及单计算输出邀请分享
+
+- Status: BackendReady
+- Owner: roles_monitor 后端/契约；map_panels_legends 分享与通知前端。
+- Endpoints: POST /api/sharing/check/；GET/POST /api/sharing/invitations/；POST .../{invitationId}/respond/、read/；GET .../{invitationId}/open/。
+- Change type: 精确用户名预检、持久待接受邀请、个人跨有权项目收发通知及单对象只读打开。
+- OpenAPI change: ShareKind/Person/Target/CheckRequest/CreateRequest/CheckResponse/Invitation/List/ResponseRequest/OpenResponse；计算打开复用ComputeOutput，绝不返回整任务。
+- Mock examples: frontend/src/sharing/sharingTestFixtures.ts、Sharing.browser.test.tsx、SharedOutputDrawer.browser.test.tsx及backend/tests/integration/catalog/test_sharing.py、test_share_contention.py中的隔离测试样例。
+- Frontend reason: 工程、专题、计算结果可输入准确用户名发邀请，收件人接受/拒绝，分享者收到决定；计算输出独立预览/下载，不暴露兄弟输出。
+- Backend implementation notes: 创建限原owner或既有有权管理员；不授项目、功能或owner_only权限。预检/创建/接受/每次打开均重验双方与底层依赖。pending/accepted同对象去重，提交和响应幂等；跨项目通知只返回本人且仍有权项目。接受仅授对象只读，下载/入库各自核权。
+- Verification: 精确账号、自分享拒绝、账号停用/项目/功能/私有依赖失权、重复发送响应、拒绝无授权、单输出隔离、刷新及通知已读、对象失效反馈。
+- Result: 后端62项定向与计算/专题回归通过，含真实文件预览下载及隔离WAL并发；Django检查与迁移一致性通过。仅增加ShareInvitation新表，未写本机业务数据。前端、浏览器及发布验收另计。

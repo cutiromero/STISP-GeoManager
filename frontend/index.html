@@ -13,7 +13,29 @@
     <title>时空智能服务平台</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div
+        id="startup-notice"
+        style="
+          max-width: 640px;
+          margin: 12vh auto;
+          padding: 24px;
+          color: #244664;
+          font-family: sans-serif;
+          line-height: 1.8;
+        "
+      >
+        <strong>时空智能服务平台正在加载</strong>
+        <p>
+          若长时间停留在这里，请检查网络，并使用较新版本的 Chrome 或 Edge
+          浏览器。
+        </p>
+        <noscript
+          >浏览器已禁用 JavaScript，请允许本站运行 JavaScript 后刷新。</noscript
+        >
+      </div>
+    </div>
+    <script defer src="%BASE_URL%browser-check.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

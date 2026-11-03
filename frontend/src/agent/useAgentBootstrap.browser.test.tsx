@@ -227,4 +227,22 @@ describe("agent capability snapshots", () => {
     await act(async () => refresh.reject(new ApiError("权限已撤销", 403)));
     expect(second.result.current).toBeNull();
   });
+
+  it.each([
+    { models: null },
+    { models: [null] },
+    { budgets: { enabled: true } },
+  ])(
+    "rejects malformed page configuration without replacing a verified snapshot: %j",
+    async (malformed) => {
+      load.mockResolvedValueOnce(granted);
+      const view = renderHook(useAgentBootstrapState);
+      await waitFor(() => expect(view.result.current.status).toBe("ready"));
+      load.mockResolvedValueOnce({ ...granted, ...malformed });
+      await act(async () => view.result.current.retry());
+      expect(view.result.current.status).toBe("error");
+      expect(view.result.current.bootstrap).toEqual(granted);
+      expect(view.result.current.error).toContain("配置返回不完整");
+    },
+  );
 });

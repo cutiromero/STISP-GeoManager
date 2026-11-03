@@ -425,13 +425,21 @@ def create_map_composition_version(request, composition_id: int):
 @require_GET
 @api_login_required
 def map_composition_version_file(request, composition_id: int, version_number: int):
+    from .share_access import has_shared_composition
+
     if not has_feature_perm(request.user, "catalog.view_mapcomposition"):
         return feature_denied_response(request.user)
     composition = _composition_for_user(request.user, composition_id)
     if composition is None:
         return JsonResponse({"detail": "出图稿不存在"}, status=404)
     privileged = _user_can_manage(composition, request.user)
-    if not privileged and composition.published_version_id is not None:
+    shared = not privileged and has_shared_composition(composition, request.user)
+    if shared:
+        current = composition.versions.first()
+        version = (
+            current if current and current.version_number == version_number else None
+        )
+    elif not privileged and composition.published_version_id is not None:
         version = (
             composition.published_version
             if composition.published_version.version_number == version_number
@@ -485,11 +493,15 @@ def restore_map_composition_project(request, composition_id: int):
     if privileged:
         version = composition.versions.filter(version_number=version_number).first()
     else:
+        from .share_access import has_shared_composition
+
+        current = (
+            composition.versions.first()
+            if has_shared_composition(composition, request.user)
+            else composition.published_version
+        )
         version = (
-            composition.published_version
-            if composition.published_version_id
-            and composition.published_version.version_number == version_number
-            else None
+            current if current and current.version_number == version_number else None
         )
     if version is None:
         return JsonResponse({"detail": "专题成果版本不存在"}, status=404)
@@ -562,6 +574,8 @@ def restore_map_composition_project(request, composition_id: int):
 
 
 def _composition_queryset(user):
+    from .share_access import shared_composition_ids
+
     queryset = (
         MapComposition.objects.all()
         .select_related("owner", "project", "published_version", "published_by")
@@ -573,6 +587,7 @@ def _composition_queryset(user):
     return queryset.filter(
         Q(owner_id=getattr(user, "id", None))
         | Q(status=MapComposition.Status.PUBLISHED)
+        | Q(pk__in=shared_composition_ids(user))
     ).distinct()
 
 
@@ -779,19 +794,28 @@ def _delete_composition_export_files(
 
 
 def _serialize_composition(composition: MapComposition, request_user) -> dict[str, Any]:
+    from .share_access import has_shared_composition
+
     privileged = _user_can_manage(composition, request_user)
+    shared = not privileged and has_shared_composition(composition, request_user)
     all_versions = list(composition.versions.all())
     latest_version = all_versions[0] if all_versions else None
     published_version = composition.published_version
     versions = (
         all_versions
         if privileged
-        else ([published_version] if published_version else [])
+        else (
+            [latest_version]
+            if shared and latest_version
+            else [published_version]
+            if published_version
+            else []
+        )
     )
-    current_version = latest_version if privileged else published_version
+    current_version = latest_version if privileged or shared else published_version
     layout = (
         composition.layout
-        if privileged
+        if privileged or shared
         else (published_version.layout_snapshot if published_version else {})
     )
     owner = (

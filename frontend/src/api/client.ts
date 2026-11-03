@@ -2,7 +2,10 @@ import {
   getActiveProject,
   attachProjectHeader,
   projectSignal,
+  fetchProjectRequest,
+  releaseProjectResponse,
 } from "../projects/session";
+import { combineAbortSignals } from "../utils/abortSignals";
 import type {
   AdminDashboard,
   AdminDashboardServer,
@@ -154,7 +157,12 @@ let sdkConfigured = false;
 const sdk = new Proxy({} as SdkModule, {
   get(_target, property: keyof SdkModule) {
     return (...args: never[]) =>
-      getSdk().then((module) => (module[property] as SdkFunction)(...args));
+      getSdk()
+        .then((module) => (module[property] as SdkFunction)(...args))
+        .then((result) => {
+          releaseProjectResponse(result.response);
+          return result;
+        });
   },
 });
 
@@ -162,24 +170,32 @@ function getSdk() {
   sdkPromise ??= Promise.all([
     import("./generated/client.gen"),
     import("./generated/sdk.gen"),
-  ]).then(([clientModule, sdkModule]) => {
-    if (!sdkConfigured) {
-      clientModule.client.setConfig({
-        baseUrl: "",
-        credentials: "include",
-        fetch: (request) => fetch(request),
-      });
-      clientModule.client.interceptors.request.use((request) => {
-        request.headers.set("Accept-Language", currentLocale());
-        if (request.method !== "GET") {
-          request.headers.set("X-CSRFToken", getCookie("csrftoken") ?? "");
-        }
-        return attachProjectHeader(request);
-      });
-      sdkConfigured = true;
-    }
-    return sdkModule;
-  });
+  ])
+    .then(([clientModule, sdkModule]) => {
+      if (!sdkConfigured) {
+        clientModule.client.setConfig({
+          baseUrl: "",
+          credentials: "include",
+          fetch: (request) =>
+            request instanceof Request
+              ? fetchProjectRequest(request)
+              : fetch(request),
+        });
+        clientModule.client.interceptors.request.use((request) => {
+          request.headers.set("Accept-Language", currentLocale());
+          if (request.method !== "GET") {
+            request.headers.set("X-CSRFToken", getCookie("csrftoken") ?? "");
+          }
+          return attachProjectHeader(request);
+        });
+        sdkConfigured = true;
+      }
+      return sdkModule;
+    })
+    .catch((error: unknown) => {
+      sdkPromise = null;
+      throw error;
+    });
   return sdkPromise;
 }
 
@@ -331,13 +347,14 @@ export async function requestJson<T>(
   const headers = new Headers();
   headers.set("Accept-Language", currentLocale());
   headers.set("X-Project-Id", options.projectTagId ?? getActiveProject());
+  const cancellation = combineAbortSignals(
+    options.signal ? [projectSignal(), options.signal] : [projectSignal()],
+  );
   const init: RequestInit = {
     method,
     credentials: "include",
     headers,
-    signal: options.signal
-      ? AbortSignal.any([projectSignal(), options.signal])
-      : projectSignal(),
+    signal: cancellation.signal,
   };
   if (method !== "GET") {
     headers.set("X-CSRFToken", getCookie("csrftoken") ?? "");
@@ -346,18 +363,22 @@ export async function requestJson<T>(
     headers.set("Content-Type", "application/json");
     init.body = JSON.stringify(options.body);
   }
-  const request = new Request(url, init);
-  const response = await fetch(request);
-  const data = await parseResponseBody(response);
-  if (!response.ok) {
-    notifyAuthorizationFailure(response.status, request.url);
-    throw new ApiError(
-      errorMessage(data, response.status),
-      response.status,
-      data,
-    );
+  try {
+    const request = new Request(url, init);
+    const response = await fetch(request);
+    const data = await parseResponseBody(response);
+    if (!response.ok) {
+      notifyAuthorizationFailure(response.status, request.url);
+      throw new ApiError(
+        errorMessage(data, response.status),
+        response.status,
+        data,
+      );
+    }
+    return data as T;
+  } finally {
+    cancellation.dispose();
   }
-  return data as T;
 }
 
 interface FormRequestOptions {

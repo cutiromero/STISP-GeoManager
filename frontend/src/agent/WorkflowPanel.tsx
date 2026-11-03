@@ -28,6 +28,7 @@ import { createUuid } from "../utils/uuid";
 import { useComputeText } from "../compute/ui";
 import { useProjectContext } from "../projects/ProjectContext";
 import { getActiveProject, projectSignal } from "../projects/session";
+import { combineAbortSignals } from "../utils/abortSignals";
 import DemoWorkflowForm, {
   demoGoals,
   demoInputsReady,
@@ -337,7 +338,11 @@ export default function WorkflowPanel({
     if (!open || catalogReady) return;
     let disposed = false;
     const controller = new AbortController();
-    const signal = AbortSignal.any([projectSignal(), controller.signal]);
+    const cancellation = combineAbortSignals([
+      projectSignal(),
+      controller.signal,
+    ]);
+    const signal = cancellation.signal;
     void Promise.all([
       allWorkflowPages(
         (params) => computeApi.algorithms(params, { signal }),
@@ -359,11 +364,13 @@ export default function WorkflowPanel({
         if (!disposed) report(e);
       })
       .finally(() => {
+        cancellation.dispose();
         if (!disposed) setCatalogScope(projectId);
       });
     return () => {
       disposed = true;
       controller.abort();
+      cancellation.dispose();
     };
   }, [open, projectId, catalogReady]);
   useEffect(() => {

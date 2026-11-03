@@ -66,6 +66,32 @@ describe("api client", () => {
     expect(history.signal.aborted).toBe(true);
   });
 
+  it("loads JSON and generated SDK requests without native AbortSignal.any", async () => {
+    const original = AbortSignal.any;
+    Object.defineProperty(AbortSignal, "any", {
+      value: undefined,
+      configurable: true,
+    });
+    try {
+      fetchMock.mockImplementation(() =>
+        Promise.resolve(jsonResponse({ items: [] })),
+      );
+      const caller = new AbortController();
+      await requestJson("/api/compute/inputs/", { signal: caller.signal });
+      await api.resources({});
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(capturedRequest(fetchMock, 0).signal.aborted).toBe(false);
+      expect(capturedRequest(fetchMock, 1).headers.get("X-Project-Id")).toBe(
+        "1",
+      );
+    } finally {
+      Object.defineProperty(AbortSignal, "any", {
+        value: original,
+        configurable: true,
+      });
+    }
+  });
+
   it.each(["1", "9", "all"])(
     "uses the explicit upload destination throughout the flow while browsing %s",
     async (browsing) => {

@@ -1,9 +1,31 @@
 from django.urls import path
 
-from apps.catalog import map_compositions, nongeo, resource_management, results, views
+from apps.catalog import (
+    map_compositions,
+    nongeo,
+    resource_management,
+    results,
+    sharing,
+    views,
+)
 
 
 urlpatterns = [
+    path("sharing/check/", sharing.check, name="share-check"),
+    path("sharing/invitations/", sharing.invitations, name="share-invitations"),
+    path(
+        "sharing/invitations/<int:invitation_id>/respond/",
+        sharing.respond,
+        name="share-respond",
+    ),
+    path(
+        "sharing/invitations/<int:invitation_id>/read/", sharing.read, name="share-read"
+    ),
+    path(
+        "sharing/invitations/<int:invitation_id>/open/",
+        sharing.open_invitation,
+        name="share-open",
+    ),
     path("catalog/directories/", views.directories, name="catalog-directories"),
     path("catalog/resources/", views.resources, name="catalog-resources"),
     path(

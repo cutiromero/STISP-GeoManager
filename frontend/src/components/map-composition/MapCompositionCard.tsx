@@ -10,6 +10,7 @@ import {
 import { Button, Popconfirm, Space, Tag, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 import type { MapComposition } from "../../types";
+import ShareButton from "../../sharing/ShareButton";
 
 interface Props {
   composition: MapComposition;
@@ -98,6 +99,13 @@ export default function MapCompositionCard({
         )}
       </div>
       <Space size={4} wrap>
+        {(composition.isOwner || composition.canEditLayout) && (
+          <ShareButton
+            kind="composition"
+            objectId={composition.id}
+            name={composition.name}
+          />
+        )}
         {composition.canEditLayout ? (
           <Button size="small" icon={<EditOutlined />} onClick={onOpen}>
             {english ? "Edit" : "编辑"}

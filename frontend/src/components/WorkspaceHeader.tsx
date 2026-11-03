@@ -64,6 +64,7 @@ import {
   useAgentBootstrap,
 } from "../agent/useAgentBootstrap";
 import LanguageSwitcher from "./LanguageSwitcher";
+import InvitationCenter from "../sharing/InvitationCenter";
 
 export type WorkspaceTab =
   | "home"
@@ -1339,6 +1340,7 @@ export default function WorkspaceHeader({
           </Button>
         )}
         <LanguageSwitcher compact className="header-language-switcher" />
+        <InvitationCenter />
         <Popover
           trigger="click"
           placement="bottomRight"

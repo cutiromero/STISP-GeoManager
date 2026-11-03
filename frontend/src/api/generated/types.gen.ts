@@ -5,6 +5,187 @@ export type ClientOptions = {
 };
 
 /**
+ * 工程、专题图或单个计算输出；不分享整个计算任务
+ */
+export type ShareKind = 'workspace' | 'composition' | 'compute_output';
+
+/**
+ * 已知邀请双方的最少身份信息，不提供用户枚举
+ */
+export type SharePerson = {
+    /**
+     * 准确用户名
+     */
+    username: string;
+    /**
+     * 显示名称
+     */
+    displayName: string;
+};
+
+/**
+ * 原项目中的只读目标；不复制资料或增加项目权限
+ */
+export type ShareTarget = {
+    kind: ShareKind;
+    /**
+     * 工程/专题图/单输出标识
+     */
+    objectId: number;
+    /**
+     * 分享对象名称
+     */
+    name: string;
+    /**
+     * 业务项目标识
+     */
+    projectTagId: number;
+    /**
+     * 业务项目名称
+     */
+    projectName: string;
+    /**
+     * 安全站内入口；计算输出使用/compute?sharedInvitation=邀请编号，预检时为空
+     */
+    openUrl: string;
+};
+
+/**
+ * 精确用户名与当前项目的一个对象
+ */
+export type ShareCheckRequest = {
+    kind: ShareKind;
+    /**
+     * 单个对象标识
+     */
+    objectId: number;
+    /**
+     * 区分大小写的完整用户名，不接受模糊选择
+     */
+    username: string;
+};
+
+/**
+ * 发出单对象邀请
+ */
+export type ShareCreateRequest = {
+    kind: ShareKind;
+    /**
+     * 单个对象标识
+     */
+    objectId: number;
+    /**
+     * 区分大小写的完整用户名
+     */
+    username: string;
+    /**
+     * 本账号唯一提交键，同键不同请求409
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * 可发送性及明确原因，不可用时不返回目标用户或私有依赖信息
+ */
+export type ShareCheckResponse = {
+    /**
+     * 当前是否允许发送
+     */
+    eligible: boolean;
+    /**
+     * 可理解的成功或失败原因
+     */
+    detail: string;
+    target?: ShareTarget;
+    recipient?: SharePerson;
+};
+
+/**
+ * 持久邀请和本人这侧通知；接受只授该对象只读入口
+ */
+export type ShareInvitation = {
+    /**
+     * 邀请标识
+     */
+    id: number;
+    /**
+     * 等待回应/接受/拒绝/源对象或权限失效
+     */
+    status: 'pending' | 'accepted' | 'rejected' | 'unavailable';
+    sender: SharePerson;
+    recipient: SharePerson;
+    target: ShareTarget;
+    /**
+     * 发出时间
+     */
+    createdAt: string;
+    /**
+     * 决定或确认失效的时间
+     */
+    respondedAt: string | null;
+    /**
+     * 收件通知或分享者决定通知是否未读
+     */
+    unread: boolean;
+    /**
+     * 发出、等待、接受、拒绝或失效的反馈
+     */
+    detail: string;
+    /**
+     * 本人是否为仍待回应的接收人；接受前继续重新核权
+     */
+    canRespond: boolean;
+};
+
+/**
+ * 本人跨仍有权项目收件或发件分页
+ */
+export type ShareInvitationList = {
+    /**
+     * 本页邀请
+     */
+    items: Array<ShareInvitation>;
+    /**
+     * 当前箱邀请总数
+     */
+    total: number;
+    /**
+     * 当前箱全部未读数
+     */
+    unreadCount: number;
+    /**
+     * 每页条数
+     */
+    limit: number;
+    /**
+     * 当前偏移
+     */
+    offset: number;
+};
+
+/**
+ * 接收人明确响应
+ */
+export type ShareResponseRequest = {
+    /**
+     * 接受或拒绝
+     */
+    decision: 'accept' | 'reject';
+    /**
+     * 响应提交键，防重复操作
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * 实时核验后返回目标；计算输出仅一份最少元信息
+ */
+export type ShareOpenResponse = {
+    target: ShareTarget;
+    output?: ComputeOutput;
+};
+
+/**
  * 附加可见范围；不授予功能或项目权限
  */
 export type AgentAudience = {
@@ -9789,6 +9970,11 @@ export type ComputePreflight = {
 };
 
 /**
+ * 邀请标识
+ */
+export type ShareInvitationId = number;
+
+/**
  * 资源 ID
  */
 export type ResourceId = number;
@@ -9797,6 +9983,281 @@ export type ResourceId = number;
  * 异步任务 ID
  */
 export type JobId = string;
+
+export type CheckShareInvitationData = {
+    /**
+     * 分享对象和准确用户名，区分大小写
+     */
+    body: ShareCheckRequest;
+    headers?: {
+        /**
+         * 单个业务项目，缺省公开项目1，不支持all
+         */
+        'X-Project-Id'?: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/sharing/check/';
+};
+
+export type CheckShareInvitationErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type CheckShareInvitationError = CheckShareInvitationErrors[keyof CheckShareInvitationErrors];
+
+export type CheckShareInvitationResponses = {
+    /**
+     * eligible表示能否发送，失败说明不暴露私有依赖名称
+     */
+    200: ShareCheckResponse;
+};
+
+export type CheckShareInvitationResponse = CheckShareInvitationResponses[keyof CheckShareInvitationResponses];
+
+export type ListShareInvitationsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * 收件或发件，默认received
+         */
+        box?: 'received' | 'sent';
+        /**
+         * 每页条数
+         */
+        limit?: number;
+        /**
+         * 分页偏移
+         */
+        offset?: number;
+    };
+    url: '/api/sharing/invitations/';
+};
+
+export type ListShareInvitationsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type ListShareInvitationsError = ListShareInvitationsErrors[keyof ListShareInvitationsErrors];
+
+export type ListShareInvitationsResponses = {
+    /**
+     * 通知及该箱全部未读数
+     */
+    200: ShareInvitationList;
+};
+
+export type ListShareInvitationsResponse = ListShareInvitationsResponses[keyof ListShareInvitationsResponses];
+
+export type CreateShareInvitationData = {
+    /**
+     * 准确用户名、单个对象和提交幂等键
+     */
+    body: ShareCreateRequest;
+    headers?: {
+        /**
+         * 分享源对象所属单个业务项目，缺省公开项目1
+         */
+        'X-Project-Id'?: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/sharing/invitations/';
+};
+
+export type CreateShareInvitationErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type CreateShareInvitationError = CreateShareInvitationErrors[keyof CreateShareInvitationErrors];
+
+export type CreateShareInvitationResponses = {
+    /**
+     * 复用已有邀请，无重复通知
+     */
+    200: ShareInvitation;
+    /**
+     * 邀请已发出，等待对方接受
+     */
+    201: ShareInvitation;
+};
+
+export type CreateShareInvitationResponse = CreateShareInvitationResponses[keyof CreateShareInvitationResponses];
+
+export type RespondShareInvitationData = {
+    /**
+     * 用户明确选择和幂等键
+     */
+    body: ShareResponseRequest;
+    path: {
+        /**
+         * 邀请标识
+         */
+        invitationId: number;
+    };
+    query?: never;
+    url: '/api/sharing/invitations/{invitationId}/respond/';
+};
+
+export type RespondShareInvitationErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type RespondShareInvitationError = RespondShareInvitationErrors[keyof RespondShareInvitationErrors];
+
+export type RespondShareInvitationResponses = {
+    /**
+     * 持久决定或失效状态
+     */
+    200: ShareInvitation;
+};
+
+export type RespondShareInvitationResponse = RespondShareInvitationResponses[keyof RespondShareInvitationResponses];
+
+export type ReadShareInvitationData = {
+    body?: never;
+    path: {
+        /**
+         * 邀请标识
+         */
+        invitationId: number;
+    };
+    query?: never;
+    url: '/api/sharing/invitations/{invitationId}/read/';
+};
+
+export type ReadShareInvitationErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type ReadShareInvitationError = ReadShareInvitationErrors[keyof ReadShareInvitationErrors];
+
+export type ReadShareInvitationResponses = {
+    /**
+     * 更新后的邀请
+     */
+    200: ShareInvitation;
+};
+
+export type ReadShareInvitationResponse = ReadShareInvitationResponses[keyof ReadShareInvitationResponses];
+
+export type OpenShareInvitationData = {
+    body?: never;
+    path: {
+        /**
+         * 邀请标识
+         */
+        invitationId: number;
+    };
+    query?: never;
+    url: '/api/sharing/invitations/{invitationId}/open/';
+};
+
+export type OpenShareInvitationErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type OpenShareInvitationError = OpenShareInvitationErrors[keyof OpenShareInvitationErrors];
+
+export type OpenShareInvitationResponses = {
+    /**
+     * 当次核验后的目标及可选单输出
+     */
+    200: ShareOpenResponse;
+};
+
+export type OpenShareInvitationResponse = OpenShareInvitationResponses[keyof OpenShareInvitationResponses];
 
 export type GetBootstrapData = {
     body?: never;

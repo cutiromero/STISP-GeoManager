@@ -8,6 +8,7 @@ import type { Map as MapboxMap } from "mapbox-gl";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { computeApi } from "../api/compute";
+import { combineAbortSignals } from "../utils/abortSignals";
 import type { ComputeMapPreview } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
 import {
@@ -105,7 +106,11 @@ export default function ComputeOutputMapPreview({
     let currentUrl = "";
     let imageUrl = "";
     const controller = new AbortController();
-    const signal = AbortSignal.any([controller.signal, projectSignal()]);
+    const cancellation = combineAbortSignals([
+      controller.signal,
+      projectSignal(),
+    ]);
+    const signal = cancellation.signal;
     setPreview(null);
     setError("");
     setLoading(true);
@@ -141,6 +146,7 @@ export default function ComputeOutputMapPreview({
     return () => {
       disposed = true;
       controller.abort();
+      cancellation.dispose();
       clearTimeout(timer);
     };
   }, [outputId, projectTagId, revision]);

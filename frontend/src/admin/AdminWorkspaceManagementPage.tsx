@@ -15,6 +15,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import ShareButton from "../sharing/ShareButton";
 import { useAppContext } from "../contexts/AppContext";
 import { localText, useEnglishLanguage } from "../i18n/useEnglishLanguage";
 import type {
@@ -387,18 +388,27 @@ export default function AdminWorkspaceManagementPage({
       render: (_, record) => workspaceLayerCount(record),
     },
     {
-      title: l("地图加载", "Map"),
+      title: l("打开与分享", "Open and share"),
       key: "load",
-      width: 112,
+      width: 190,
       render: (_, record) => (
-        <Button
-          type="link"
-          icon={<GlobalOutlined />}
-          disabled={record.status !== "active"}
-          onClick={() => navigate(`/map?sceneId=${record.id}`)}
-        >
-          {l("打开", "Open")}
-        </Button>
+        <Space size={4}>
+          <Button
+            type="link"
+            icon={<GlobalOutlined />}
+            disabled={record.status !== "active"}
+            onClick={() => navigate(`/map?sceneId=${record.id}`)}
+          >
+            {l("打开", "Open")}
+          </Button>
+          <ShareButton
+            type="link"
+            kind="workspace"
+            objectId={record.id}
+            name={record.name}
+            disabled={record.status !== "active"}
+          />
+        </Space>
       ),
     },
   ];

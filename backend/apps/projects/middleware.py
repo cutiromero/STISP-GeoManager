@@ -92,6 +92,12 @@ class ProjectScopeMiddleware(MiddlewareMixin):
             ("/api/auth/", "/api/projects/", "/api/bootstrap/", "/api/health/")
         ):
             value = "1"
+        if request.path.startswith("/api/sharing/invitations/") and not (
+            request.path == "/api/sharing/invitations/" and request.method == "POST"
+        ):
+            # Personal notification boxes cross authorized projects. Each action
+            # re-authorizes the invitation's real project, not the visible tab.
+            value = "1"
         superadmin = is_superadmin(request.user)
         available = (
             Project.objects.all()

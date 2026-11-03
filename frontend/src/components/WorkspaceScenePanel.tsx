@@ -24,6 +24,7 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import ShareButton from "../sharing/ShareButton";
 import type {
   WorkspaceAccessGroup,
   WorkspaceSceneSummary,
@@ -313,6 +314,13 @@ export default function WorkspaceScenePanel({
                     {english ? "New map output" : "新建出图"}
                   </Button>
                 ) : null}
+                {(scene.isOwner || scene.canManageAccess) && (
+                  <ShareButton
+                    kind="workspace"
+                    objectId={scene.id}
+                    name={scene.name}
+                  />
+                )}
                 {(scene.canEdit || scene.canManageAccess) && (
                   <Tooltip title={english ? `Edit ${label}` : `编辑${label}`}>
                     <Button

@@ -277,6 +277,61 @@ class WorkspaceScene(ProjectScopedModel):
         return f"{self.get_kind_display()}：{self.name}"
 
 
+class ShareInvitation(ProjectScopedModel):
+    """A personal invitation, never a project membership or resource ACL."""
+
+    class Kind(models.TextChoices):
+        WORKSPACE = "workspace", "工程"
+        COMPOSITION = "composition", "专题图"
+        COMPUTE_OUTPUT = "compute_output", "计算结果"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "等待接受"
+        ACCEPTED = "accepted", "已接受"
+        REJECTED = "rejected", "已拒绝"
+        UNAVAILABLE = "unavailable", "已失效"
+
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sent_shares"
+    )
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="received_shares",
+    )
+    kind = models.CharField(max_length=24, choices=Kind.choices)
+    object_id = models.PositiveBigIntegerField()
+    object_name = models.CharField(max_length=160)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.PENDING
+    )
+    request_key = models.CharField(max_length=80)
+    request_hash = models.CharField(max_length=64)
+    response_key = models.CharField(max_length=80, blank=True)
+    response_decision = models.CharField(max_length=8, blank=True)
+    detail = models.CharField(max_length=500, default="邀请已发出，等待对方接受")
+    recipient_read_at = models.DateTimeField(null=True, blank=True)
+    sender_read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("sender", "request_key"), name="share_sender_key"
+            ),
+            models.UniqueConstraint(
+                fields=("sender", "recipient", "project_tag", "kind", "object_id"),
+                condition=models.Q(status__in=("pending", "accepted")),
+                name="share_one_live_invitation",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(sender=models.F("recipient")), name="share_no_self"
+            ),
+        ]
+
+
 class MapComposition(ProjectScopedModel):
     class Status(models.TextChoices):
         DRAFT = "draft", "草稿"

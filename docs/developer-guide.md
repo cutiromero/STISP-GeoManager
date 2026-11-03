@@ -2750,3 +2750,17 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 该接口沿用工作流的当前单项目、本人或管理查看授权。独立参考、准备记录和评价结果由专门只读接口提供，保持在`plan`、模型上下文、知识检索与正常算法输入之外；页面默认折叠，仅在展开时请求。
 
 `files`包含受控`key`、真实文件名、媒体类型、字节数、SHA256、预览和下载地址及`canDownload`。`GET validation/files/{fileKey}/preview/`只预览Markdown并复用`AgentWorkflowReportPreview`，最多200000字符；其余文件`previewUrl=null`。`GET validation/files/{fileKey}/download/`下载完整原始字节，额外要求数据导出权限，返回attachment、nosniff和no-store。每次读取重验清单来源、大小和SHA256；文件键仅接受`[a-z0-9][a-z0-9_-]{0,63}`，不接受路径。未知文件404，内容变化409，其他错误使用统一`ErrorResponse`。
+
+## 工程、专题及单计算输出邀请分享（2026-11-03）
+
+使用Session/CSRF。POST `/api/sharing/check/`输入`{kind,objectId,username}`，用户名须完整准确且区分大小写，不提供用户列表。`kind`为`workspace/composition/compute_output`，`objectId`为整数；预检返回`eligible/detail`，可分享时另含`target/recipient`。POST `/api/sharing/invitations/`在同字段增加1至80字符`idempotencyKey`；每次重新核对，201表示已发出待接受邀请，200表示复用已有pending/accepted。相同键不同请求409。
+
+创建仅原对象owner或已有管理该对象权限的管理员。目标须已拥有功能和所属项目访问权、所有底层数据及计算输入读取权；owner_only不因分享改变。专题草稿和单计算输出只有接受后才授该对象只读，原工程项目范围可见性保持。单输出不授整任务、参数、输入快照、日志和其他输出；已入库资源仍按目录原权限管理。
+
+GET `/api/sharing/invitations/?box=received|sent&limit=30&offset=0`返回本人跨仍有权项目的`items/total/unreadCount/limit/offset`。通知持久保存，`unread`区分收件通知和分享者收到的决定通知；POST `.../{id}/read/`分别标记本人一侧已读。列表不授任何对象访问。
+
+POST `.../{id}/respond/`输入`{decision:accept|reject,idempotencyKey}`，仅收件人处理pending。接受前重新核对双方功能、项目、对象和依赖；失效返回持久`unavailable`及原因，分享者可见结果。首次决定原子保存；重复同决定复用，不同决定409。拒绝不改变对象或授权。刷新恢复原邀请及决定。
+
+GET `.../{id}/open/`仅接受后的参与人调用，再次实时核权，返回安全站内`target.openUrl`及可选单份`output:ComputeOutput`。计算统一从`/compute?sharedInvitation=id`打开独立单输出；地图/预览/下载沿用实际output接口及已接受授权，下载额外要求数据导出，入库额外要求数据新增，不授整任务。工程和专题打开保留原有页面；依赖权限变化后分享不继续生效。
+
+邀请状态为`pending/accepted/rejected/unavailable`，`detail`说明当前反馈，`canRespond`仅表示本人待回应；真正接受仍以实时权限检查为准。跨项目对象、无管理权或第三方邀请统一不可访问，不泄露私有依赖名称。所有文件路径由后端对象生成，客户端不能传入打开URL或存储路径。

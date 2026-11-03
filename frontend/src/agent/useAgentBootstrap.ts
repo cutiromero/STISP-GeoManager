@@ -47,9 +47,17 @@ function loadBootstrap(user: User, scope: string) {
     .then((value) => {
       if (
         typeof value?.canChat !== "boolean" ||
-        typeof value?.canAgent !== "boolean"
+        typeof value?.canAgent !== "boolean" ||
+        !Array.isArray(value?.models) ||
+        value.models.some(
+          (model) =>
+            !model ||
+            typeof model.alias !== "string" ||
+            typeof model.status !== "string",
+        ) ||
+        (value.budgets?.enabled && !Array.isArray(value.budgets.profiles))
       ) {
-        throw new Error("智能体权限检查返回不完整，请重试连接");
+        throw new Error("智能体配置返回不完整，请重试连接");
       }
       if (snapshots.get(user)?.get(scope) === currentEntry) {
         currentEntry.value = value;

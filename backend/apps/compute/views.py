@@ -458,7 +458,13 @@ def authorized_output(request, output_id):
         ).filter(task__project_tag_id=project_id()),
         pk=output_id,
     )
-    task_access(output.task, request.user)
+    try:
+        task_access(output.task, request.user)
+    except ComputeError:
+        from apps.catalog.share_access import can_read_shared_output
+
+        if not can_read_shared_output(output, request.user):
+            raise
     if output.expired:
         raise ComputeError("临时结果已过期；已入库的数据仍可在数据资源中访问", 404)
     return output

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.52] - 2026-11-03
+
+### Added
+- 工程、专题与单份计算输出支持按用户名核验后邀请分享，站内收发通知提供接受、拒绝和处理反馈；接受和打开时重新核对项目、功能与底层数据权限。
+- 页面异常提供恢复导航、重试与本机异常信息；应用尚未加载时显示浏览器和网络排查入口。
+
+### Fixed
+- 为缺少原生AbortSignal.any的浏览器保留请求取消能力，兼容旧版Chromium/Firefox/Safari并清理请求监听。
+- 路由模块加载失败可重试；权限复查遇网络/5xx保留已验证会话，模型/预算配置不完整时进入重试状态。
+- SPA入口HTML禁止复用旧缓存，减少新旧静态模块混用；分享列表畸形响应不会导致整个页面卸载。
+
 ## [0.1.51] - 2026-11-02
 
 ### Changed
