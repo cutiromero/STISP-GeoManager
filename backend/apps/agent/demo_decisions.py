@@ -101,8 +101,12 @@ def validate_decision(
         if not isinstance(ref, dict) or not isinstance(ref.get("kind"), str):
             raise ComputeError("判断引用格式无效")
         actual = available.get((ref.get("kind"), str(ref.get("id"))))
+        # Only knowledge carries a revision; one the model adds to a resource or
+        # output names nothing and is dropped by the canonical reference below.
         if actual is None or (
-            "revision" in ref and str(ref["revision"]) != str(actual.get("revision"))
+            "revision" in ref
+            and "revision" in actual
+            and str(ref["revision"]) != str(actual["revision"])
         ):
             raise ComputeError("模型引用并非本次授权数据、知识修订或结果")
         canonical.append(actual)
