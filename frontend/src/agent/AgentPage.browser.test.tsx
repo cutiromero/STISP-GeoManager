@@ -2329,9 +2329,7 @@ it.each([undefined, null, { items: [] }, [null]])(
       });
     showAgent();
     await screen.findByText("已确认回答");
-    fireEvent.click(
-      screen.getByRole("button", { name: "历史会话", exact: true }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
     await screen.findByText("暂时无法加载所选历史");
     expect(screen.getByText("已确认问题")).toBeVisible();
     expect(screen.getByText("已确认回答")).toBeVisible();
@@ -2384,13 +2382,9 @@ it("keeps the current chat when another history fails and ignores an older recov
     });
   showAgent();
   await screen.findByText("当前回答");
-  fireEvent.click(
-    screen.getByRole("button", { name: "另一历史", exact: true }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: /^另一历史/ }));
   expect(screen.getByText("当前回答")).toBeVisible();
-  fireEvent.click(
-    screen.getByRole("button", { name: "历史会话", exact: true }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
   await screen.findByText("最新当前回答");
   await act(async () =>
     completeOld?.({
@@ -2442,9 +2436,7 @@ it.each([403, 404])(
       .mockRejectedValueOnce(new ApiError("该会话已不可访问", status));
     showAgent();
     await screen.findByText("不再可读的回答");
-    fireEvent.click(
-      screen.getByRole("button", { name: "历史会话", exact: true }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
     await screen.findByText("该会话已不可访问");
     expect(screen.queryByText("不再可读的回答")).not.toBeInTheDocument();
     expect(screen.queryByText("不再可读的问题")).not.toBeInTheDocument();
@@ -2465,9 +2457,7 @@ it("silently retains current messages when history recovery is aborted", async (
     );
   showAgent();
   await screen.findByText("已保存回答");
-  fireEvent.click(
-    screen.getByRole("button", { name: "历史会话", exact: true }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
   await waitFor(() => expect(agentApi.detail).toHaveBeenCalledTimes(2));
   expect(screen.getByText("已保存回答")).toBeVisible();
   expect(screen.queryByText("暂时无法加载所选历史")).not.toBeInTheDocument();
@@ -2499,14 +2489,12 @@ it("does not repopulate conversation titles from a list request started before a
       target: { value: "历史" },
     });
     await act(async () => vi.advanceTimersByTimeAsync(200));
-    fireEvent.click(
-      screen.getByRole("button", { name: "历史会话", exact: true }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
     await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(screen.getByText("会话访问权限已撤销")).toBeVisible();
     await act(async () => completeList?.({ items: [conversation] }));
     expect(
-      screen.queryByRole("button", { name: "历史会话", exact: true }),
+      screen.queryByRole("button", { name: /^历史会话/ }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("授权时的回答")).not.toBeInTheDocument();
     mounted.unmount();

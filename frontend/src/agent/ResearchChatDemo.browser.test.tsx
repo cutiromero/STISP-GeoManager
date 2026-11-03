@@ -218,7 +218,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.spyOn(agentApi, "conversations").mockResolvedValue({
-    items: [oldConversation],
+    items: [newConversation, oldConversation],
   });
   vi.spyOn(agentApi, "create").mockResolvedValue(newConversation);
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
