@@ -199,3 +199,29 @@ def test_invalid_coordinate_evidence_is_not_silently_hidden(geometry):
     results[0]["rows"][0]["geometry_json"] = geometry
     with pytest.raises(ComputeError, match="可核对的几何范围"):
         model_results(results)
+
+
+def test_before_after_statistics_read_as_sentences():
+    from apps.agent.demo_decisions import _row_summary
+
+    assert (
+        _row_summary(
+            {
+                "grade": "A",
+                "before_count": "23",
+                "after_count": "21",
+                "before_area_km2": "13.82",
+                "after_area_km2": "12.4",
+            }
+        )
+        == "A级远景区修正前23处、13.82平方千米，修正后21处、12.4平方千米"
+    )
+    assert "单元T3b修正前3处" in _row_summary(
+        {
+            "geo_sym": "T3b",
+            "before_count": 3,
+            "after_count": 2,
+            "before_area_m2": 1200,
+            "after_area_m2": 800,
+        }
+    )

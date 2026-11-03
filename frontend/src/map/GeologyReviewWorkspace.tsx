@@ -31,6 +31,8 @@ import {
   reviewSuggestionIndex,
 } from "./geologyReviewData";
 import "./geology-review-workspace.css";
+import { isMultiElementFamily } from "../agent/multiElementScenario";
+import { formatArea } from "../utils/area";
 
 type Maps = {
   before: GeoJsonFeatureCollection;
@@ -73,8 +75,9 @@ export default function GeologyReviewWorkspace({
         const value = await agentApi.workflow(workflowId);
         if (disposed) return;
         if (
-          !["geology_map_review", "geology_multi_element_reasoning"].includes(
-            value.workflowType,
+          !(
+            value.workflowType === "geology_map_review" ||
+            isMultiElementFamily(value.workflowType)
           )
         )
           throw new Error("此任务不属于地质成果检查案例");
@@ -83,7 +86,7 @@ export default function GeologyReviewWorkspace({
           getActiveProject() !== currentProject
         )
           throw new Error("检查任务不属于当前项目，请切换项目后查看");
-        if (value.workflowType === "geology_multi_element_reasoning") {
+        if (isMultiElementFamily(value.workflowType)) {
           setWorkflow(value);
           return;
         }
@@ -176,7 +179,8 @@ export default function GeologyReviewWorkspace({
       );
   };
   if (
-    workflow?.workflowType === "geology_multi_element_reasoning" &&
+    workflow &&
+    isMultiElementFamily(workflow.workflowType) &&
     String(workflow.projectId) === currentProject
   )
     return (
@@ -309,11 +313,7 @@ export default function GeologyReviewWorkspace({
                         : "更新地层时代"}
                     </span>
                     <small>
-                      {Number(feature.properties.area_m2 ?? 0).toLocaleString(
-                        "zh-CN",
-                        { maximumFractionDigits: 1 },
-                      )}{" "}
-                      平方米
+                      {formatArea(Number(feature.properties.area_m2 ?? 0))}
                     </small>
                   </button>
                 ))}

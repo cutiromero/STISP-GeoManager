@@ -27,6 +27,7 @@ from .models import AgentRuntime
 from .policy import allowed, visible_models, worker_online
 from .tools import resources
 from .geology_multi import SCENARIO as MULTI_TYPE, LABELS as MULTI_LABELS
+from .geology_generic import GENERIC, generic_ready
 
 SOURCE_NOTE = (
     "明确标注的模拟资料；参数来自样例说明及已发布算法，结论由实际计算和模型判断产生。"
@@ -73,6 +74,7 @@ REVIEW_MARKERS = {
     "rules": ("code", "geology-review-expanded-20261025-rules"),
 }
 TITLES = {
+    GENERIC: "通用地质推理（上传资料）",
     MULTI_TYPE: "海德乌拉地质综合推理",
     "geology_map_review": "地质成果智能检查与修正",
     "geology_age_correction": "地质图件地层时代一致性纠偏",
@@ -80,6 +82,10 @@ TITLES = {
     "geology_correction": "地质逻辑推理与填图纠偏",
 }
 PROMPTS = {
+    GENERIC: (
+        "请检查我上传的地质资料：核对岩性、构造和蚀变是否符合地质规律，"
+        "给出少量可核查的处置建议，等我批准后再修正，最后比较修正前后的优先核查远景区。"
+    ),
     MULTI_TYPE: (
         "请使用当前项目的海德乌拉演示案例，按综合入口检查岩性、构造和五类遥感矿物识别结果。"
         "读取本案例试用知识及实际测量，说明适用条件和例外，给出少量可核查的处置建议。"
@@ -212,7 +218,9 @@ def discover(user, p: dict, run=None, *, scenario_filter: str | None = None) -> 
     available_algorithms = _algorithms(run)
     scenarios = []
     for scenario, roles in ROLES.items():
-        if scenario_filter is not None and scenario != scenario_filter:
+        if scenario == GENERIC or (
+            scenario_filter is not None and scenario != scenario_filter
+        ):
             continue
         age = scenario == "geology_age_correction"
         review = scenario == "geology_map_review"
@@ -363,6 +371,15 @@ def _scene_summaries(user, p, projects):
                             "title": TITLES[scenario],
                         }
                     )
+            if generic_ready(user, p) is not None:
+                items.append(
+                    {
+                        "scenario": GENERIC,
+                        "projectId": project.id,
+                        "projectName": project.name,
+                        "title": TITLES[GENERIC],
+                    }
+                )
     return {"items": items}
 
 
@@ -403,6 +420,21 @@ def list_demos(user, p: dict, *, summary=False, scenario=None) -> dict:
         with project_scope(
             ProjectScope((project.id,), project.id, user.id, superadmin)
         ):
+            generic = generic_ready(user, p)
+            if generic is not None and scenario in {None, GENERIC}:
+                items.append(
+                    {
+                        "scenario": GENERIC,
+                        "projectId": project.id,
+                        "projectName": project.name,
+                        "title": TITLES[GENERIC],
+                        "prompt": PROMPTS[GENERIC],
+                        "sampleNature": "user_upload",
+                        "available": bool(shared_ready and generic),
+                    }
+                )
+            if scenario == GENERIC:
+                continue
             for scene in discover(user, p, scenario_filter=scenario)["scenarios"]:
                 # Historical workflows remain readable and manually selectable.
                 if scene["scenario"] in {

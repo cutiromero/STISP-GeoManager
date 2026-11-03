@@ -448,3 +448,8 @@ body:has(.login-shell),
     padding: 22px;
   }
 }
+
+.login-session-notice {
+  margin-bottom: 16px;
+  text-align: left;
+}

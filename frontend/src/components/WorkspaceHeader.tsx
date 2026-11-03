@@ -942,6 +942,7 @@ export default function WorkspaceHeader({
     <Dropdown
       menu={{ items: dataManagementMenuItems }}
       trigger={["hover"]}
+      mouseEnterDelay={0.35}
       placement="bottom"
       classNames={{ root: "workspace-management-dropdown" }}
     >
@@ -1164,6 +1165,7 @@ export default function WorkspaceHeader({
           <Dropdown
             menu={{ items: mapCategoryMenuItems }}
             trigger={["hover"]}
+            mouseEnterDelay={0.35}
             placement="bottom"
             classNames={{ root: "workspace-management-dropdown" }}
           >
@@ -1201,6 +1203,7 @@ export default function WorkspaceHeader({
           <Dropdown
             menu={{ items: analysisCategoryMenuItems }}
             trigger={["hover"]}
+            mouseEnterDelay={0.35}
             placement="bottom"
             classNames={{ root: "workspace-management-dropdown" }}
           >
@@ -1253,6 +1256,7 @@ export default function WorkspaceHeader({
             <Dropdown
               menu={{ items: adminMenuItems }}
               trigger={["hover"]}
+              mouseEnterDelay={0.35}
               placement="bottom"
               classNames={{ root: "workspace-management-dropdown" }}
             >
@@ -1277,7 +1281,7 @@ export default function WorkspaceHeader({
           )}
           <NavigationButton
             type="text"
-            className={tabClass(activeTab === "knowledge")}
+            className={tabClass(activeTab === "knowledge", true)}
             onClick={() => navigateFromHeader("/knowledge")}
             title={t("navigation.knowledge")}
           >
@@ -1291,7 +1295,7 @@ export default function WorkspaceHeader({
           <NavigationButton
             type="text"
             data-nav-key="news"
-            className={tabClass(activeTab === "news")}
+            className={tabClass(activeTab === "news", true)}
             onClick={() => navigateFromHeader("/news")}
             title={t("navigation.news")}
           >
@@ -1301,6 +1305,7 @@ export default function WorkspaceHeader({
           <Dropdown
             menu={{ items: aboutMenuItems }}
             trigger={["hover"]}
+            mouseEnterDelay={0.35}
             placement="bottom"
             classNames={{ root: "workspace-management-dropdown" }}
           >
@@ -1308,7 +1313,7 @@ export default function WorkspaceHeader({
               ref={aboutTabRef}
               menuTrigger
               type="text"
-              className={tabClass(activeTab === "about")}
+              className={tabClass(activeTab === "about", true)}
               onClick={() => navigateFromHeader("/about/system")}
               title={t("navigation.about")}
             >
@@ -1466,8 +1471,13 @@ function workspaceCategoryMenuItems(
   ];
 }
 
-function tabClass(active: boolean) {
-  return ["workspace-switch-card", active ? "workspace-switch-card-active" : ""]
+function tabClass(active: boolean, secondary = false) {
+  return [
+    "workspace-switch-card",
+    active ? "workspace-switch-card-active" : "",
+    // Low-frequency entries stay icon-only so core modules keep their labels.
+    secondary ? "workspace-switch-card-secondary" : "",
+  ]
     .filter(Boolean)
     .join(" ");
 }

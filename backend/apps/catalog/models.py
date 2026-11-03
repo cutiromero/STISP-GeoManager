@@ -89,6 +89,19 @@ class DataResourceGroup(ProjectScopedModel):
         return self.name
 
 
+# MH-workflow task uploads and their working copies belong to one task only.
+TASK_RESOURCE_SOURCES = ("workflow-upload:", "workflow-working:")
+
+
+def task_resource_q(relation: str = ""):
+    """Task resources, optionally through a relation such as ``data_resource``."""
+    field = f"{relation}__source__startswith" if relation else "source__startswith"
+    query = models.Q(pk__in=[])
+    for prefix in TASK_RESOURCE_SOURCES:
+        query |= models.Q(**{field: prefix})
+    return query
+
+
 class DataResource(ProjectScopedModel):
     class SpatialClass(models.TextChoices):
         SPATIAL = "spatial", "地理数据"

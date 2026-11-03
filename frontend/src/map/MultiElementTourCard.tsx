@@ -2,6 +2,7 @@ import { Tag } from "antd";
 import { MultiElementEvidence } from "../agent/MultiElementStory";
 import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
 import { tourLabels, type TourChange } from "./multiElementTour";
+import { formatArea } from "../utils/area";
 
 type Feature = GeoJsonFeatureCollection["features"][number];
 export default function MultiElementTourCard({
@@ -9,18 +10,24 @@ export default function MultiElementTourCard({
   before,
   after,
   algorithm,
+  loading = false,
 }: {
   change: TourChange;
   before?: Feature;
   after?: Feature;
   algorithm: { name: string; version: string; taskId: string };
+  loading?: boolean;
 }) {
-  const labels = tourLabels(change, before, after);
+  const labels = tourLabels(change, before, after, loading);
   const refs = change.suggestion.ruleRefs ?? [];
   const p = change.feature.properties;
-  const metric = (key: string, suffix: string) =>
-    p[key] !== undefined && Number.isFinite(Number(p[key]))
-      ? `${Number(p[key]).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}${suffix}`
+  const recorded = (key: string) =>
+    p[key] !== undefined && Number.isFinite(Number(p[key]));
+  const metric = (key: string) =>
+    recorded(key) ? formatArea(Number(p[key])) : "本次结果未记录";
+  const length = (key: string) =>
+    recorded(key)
+      ? `${Number(p[key]).toLocaleString("zh-CN", { maximumFractionDigits: 1 })} 米`
       : "本次结果未记录";
   const operation =
     change.action === "set_code"
@@ -30,7 +37,7 @@ export default function MultiElementTourCard({
         : change.action === "downweight"
           ? `${labels.before} → ${labels.after.replace("证据权重 ", "")}；保留识别范围与原记录。`
           : change.action === "merge"
-            ? `按获批范围合并为 ${labels.after}，去除内部接边 ${metric("removed_internal_boundary_m", "米")}。`
+            ? `按获批范围合并为 ${labels.after}，去除内部接边 ${length("removed_internal_boundary_m")}。`
             : change.action === "reclassify"
               ? `岩性由 ${labels.before} 调整为 ${labels.after}，更新类别及对应属性。`
               : `${labels.before} → ${labels.after}。`;
@@ -76,9 +83,9 @@ export default function MultiElementTourCard({
           {algorithm.version}；任务 {algorithm.taskId || "尚无任务编号"}。
         </p>
         <p>
-          涉及对象面积：{metric("involved_area_m2", "平方米")}
-          ；实际覆盖变化面积：{metric("geometry_change_area_m2", "平方米")}
-          ；分类变化面积：{metric("class_change_area_m2", "平方米")}
+          涉及对象面积：{metric("involved_area_m2")}
+          ；实际覆盖变化面积：{metric("geometry_change_area_m2")}
+          ；分类变化面积：{metric("class_change_area_m2")}
           。涉及对象面积包含本次操作触及的对象，覆盖变化面积按实际几何结果统计。
         </p>
         <p title={change.resultRef.checksum}>

@@ -40,6 +40,7 @@ from apps.core.principal_visibility import (
     user_is_visible_to,
 )
 from apps.core.storage import app_path
+from apps.catalog.thumbnails import thumbnail_response
 
 LAYOUT_MAX_BYTES = 512 * 1024
 WORKSPACE_SNAPSHOT_MAX_BYTES = 1024 * 1024
@@ -450,20 +451,22 @@ def map_composition_version_file(request, composition_id: int, version_number: i
     if version is None:
         return JsonResponse({"detail": "专题成果版本不存在"}, status=404)
     variant = str(request.GET.get("variant", "artifact")).strip()
-    if variant not in {"artifact", "preview"}:
+    if variant not in {"artifact", "preview", "thumbnail"}:
         return JsonResponse(
-            {"detail": "variant 仅支持 artifact 或 preview"}, status=400
+            {"detail": "variant 仅支持 artifact、preview 或 thumbnail"}, status=400
         )
     if variant == "artifact" and not has_feature_perm(
         request.user, "catalog.export_mapcomposition"
     ):
         return feature_denied_response(request.user)
     relative_path = (
-        version.preview_path if variant == "preview" else version.artifact_path
+        version.artifact_path if variant == "artifact" else version.preview_path
     )
     path = app_path(*relative_path.split("/"))
     if not path.is_file():
         return JsonResponse({"detail": "专题成果文件不存在"}, status=404)
+    if variant == "thumbnail":
+        return thumbnail_response(path, f"composition-version-{version.id}")
     extension = "png" if variant == "preview" else version.format
     filename = f"{composition.name}_V{version.version_number}.{extension}"
     return FileResponse(
@@ -907,6 +910,7 @@ def _serialize_version(version: MapCompositionVersion) -> dict[str, Any]:
         "snapshotSchemaVersion": version.snapshot_schema_version,
         "snapshotChecksum": version.snapshot_checksum,
         "previewUrl": f"{base}?variant=preview&projectTagId={version.project_tag_id}",
+        "thumbnailUrl": f"{base}?variant=thumbnail&projectTagId={version.project_tag_id}",
         "downloadUrl": f"{base}?variant=artifact&projectTagId={version.project_tag_id}",
         "createdAt": version.created_at.isoformat(),
     }

@@ -219,6 +219,15 @@ def read_rules(user, policy, identity, selected=()):
     return resource, entries, units, aliases
 
 
+def effective_units(workflow, units, aliases):
+    """A generic workflow's uploaded unit table overrides the project defaults."""
+    overrides = workflow.plan.get("unitOverrides") or {}
+    return (
+        {**units, **overrides.get("units", {})},
+        {**aliases, **overrides.get("aliases", {})},
+    )
+
+
 def _binding_integer(value):
     if type(value) not in {str, int, float} or (
         isinstance(value, str) and not value.strip().isdecimal()
@@ -241,6 +250,7 @@ def prepare(workflow, user, policy):
         workflow.parameters,
         workflow.resource_ids,
     )
+    units, aliases = effective_units(workflow, units, aliases)
     stream = io.StringIO(newline="")
     writer = csv.DictWriter(stream, fieldnames=FIELDS)
     writer.writeheader()
@@ -331,6 +341,7 @@ def authorize_frozen(workflow, user, policy):
     source, entries, units, aliases = read_rules(
         user, policy, workflow.plan["inputs"]["rules"]
     )
+    units, aliases = effective_units(workflow, units, aliases)
     stored = workflow.plan["trialRulesSnapshot"]
     path = table_data_path(f"demo/workflows/{workflow.id}/trial-rules.csv")
     resolve_resource(user, policy, workflow.plan["frozen_rules"])

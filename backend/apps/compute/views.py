@@ -15,7 +15,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 
 from apps.audit.service import log_operation
-from apps.catalog.models import DataResource
+from apps.catalog.models import DataResource, task_resource_q
 from apps.catalog.permissions import filter_accessible
 from apps.core.storage import app_path
 from .access import permission, project_id, require_actor, task_access
@@ -389,6 +389,8 @@ def inputs(request):
         except ValueError as exc:
             raise ComputeError("资源编号必须为整数") from exc
         query = query.filter(pk=resource_id)
+    else:
+        query = query.exclude(task_resource_q())
     if request.GET.get("kind"):
         query = query.filter(data_type=request.GET["kind"])
     if request.GET.get("q"):

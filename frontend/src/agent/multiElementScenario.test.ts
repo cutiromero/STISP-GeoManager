@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import type { ComputeCandidate } from "../api/generated/types.gen";
 import { demoInputsReady } from "./DemoWorkflowForm";
 import {
+  isLogicReasoningProject,
   multiElementInputIssues,
   multiElementPrompt,
   multiElementRoles,
@@ -55,4 +56,12 @@ it("三个简短入口明确分段并保留批准和版本要求", () => {
   expect(multiElementPrompt("structure")).toContain("segment=structure");
   expect(multiElementPrompt("alteration")).toContain("上游成果版本");
   expect(multiElementPrompt("lithology")).toContain("逐项建议经我批准");
+});
+
+it("treats only the backend's geology project codes as the logic-reasoning project", () => {
+  expect(isLogicReasoningProject("02")).toBe(true);
+  expect(isLogicReasoningProject("demo-geology-reasoning")).toBe(true);
+  expect(isLogicReasoningProject("default")).toBe(false);
+  expect(isLogicReasoningProject("demo-arid-ecology")).toBe(false);
+  expect(isLogicReasoningProject(undefined)).toBe(false);
 });

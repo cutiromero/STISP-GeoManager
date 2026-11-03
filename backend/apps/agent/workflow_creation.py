@@ -72,6 +72,21 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
         from .geology_input_validation import validate_geology_inputs
 
         validate_geology_inputs(user, p, inputs, parameters, resources_selected)
+    generic_plan = {}
+    if workflow_type == "geology_generic":
+        from .geology_generic import validate_creation
+
+        batch_id = value.get("uploadBatchId")
+        rules_id = validate_creation(user, p, inputs, parameters, batch_id, key)
+        resources_selected = sorted(set(inputs.values()) | {rules_id})
+        generic_plan = {
+            "uploadInputs": inputs,
+            "uploadBatchId": batch_id,
+            "rulesResourceId": rules_id,
+        }
+        inputs = {}
+    elif value.get("uploadBatchId") is not None:
+        raise ComputeError("只有通用地质推理使用上传批次")
     with transaction.atomic():
         if connection.vendor == "sqlite":
             # Reserve the writer before any reads establish a WAL snapshot.
@@ -111,6 +126,7 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
             parameters=parameters,
             plan={
                 "inputs": inputs,
+                **generic_plan,
                 "knowledgeSelection": knowledge_selection,
                 **({"chatExecution": chat_execution} if chat_execution else {}),
                 **(
@@ -134,4 +150,13 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
                 "operatorEnabled": p.get("operatorEnabled", False),
             },
         )
+        if generic_plan:
+            from .workflow_uploads import bind_batch
+
+            bind_batch(
+                workflow,
+                user,
+                generic_plan["uploadBatchId"],
+                generic_plan["uploadInputs"],
+            )
     return workflow

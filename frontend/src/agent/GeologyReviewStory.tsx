@@ -10,6 +10,7 @@ import {
   geologyReviewOutcomeLabel,
 } from "./geologyReviewOutcome";
 import "./geology-review-story.css";
+import { formatArea } from "../utils/area";
 
 type ReviewAction = (
   decision: "approve" | "reject",
@@ -371,11 +372,7 @@ export default function GeologyReviewStory({
                     {suggestion.kind === "fill_gap"
                       ? "内部未分类空白"
                       : "地层时代属性"}{" "}
-                    /{" "}
-                    {suggestion.areaM2.toLocaleString("zh-CN", {
-                      maximumFractionDigits: 2,
-                    })}{" "}
-                    平方米
+                    / {formatArea(suggestion.areaM2)}
                   </small>
                   <details className="geology-suggestion-evidence">
                     <summary>

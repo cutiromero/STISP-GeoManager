@@ -35,6 +35,7 @@ import {
 } from "../symbolization";
 import FeatureDetailPanel from "./FeatureDetailPanel";
 import RasterRenderingControls from "./RasterRenderingControls";
+import { isHiddenField } from "../map/featureFields";
 
 const thumbnailMinIndicatorSizePx = 10;
 const thumbnailTileSize = 256;
@@ -1514,7 +1515,7 @@ function EcologyFactorPanel({
               text={
                 english
                   ? "Not enough numeric fields for a radar profile"
-                  : "数值字段不足，暂不绘制雷达画像"
+                  : "这一层可比较的数值字段少于 3 个，不显示综合画像"
               }
             />
           )}
@@ -1526,7 +1527,9 @@ function EcologyFactorPanel({
           <div className="right-panel-heading">
             <Typography.Text strong>
               {categoryForDomain
-                ? `${categoryForDomain.label} TopN`
+                ? english
+                  ? `Most common ${categoryForDomain.label}`
+                  : `${categoryForDomain.label}：最常见的取值`
                 : english
                   ? "Category ranking"
                   : "分类排行"}
@@ -1540,7 +1543,7 @@ function EcologyFactorPanel({
               text={
                 english
                   ? "No categorical fields are available for ranking"
-                  : "暂无可用于排行的分类字段"
+                  : "这一层没有可以统计的分类字段"
               }
             />
           )}
@@ -1551,10 +1554,10 @@ function EcologyFactorPanel({
               {primaryNumeric
                 ? english
                   ? `${primaryNumeric.label} quantiles`
-                  : `${primaryNumeric.label} 分位`
+                  : `${primaryNumeric.label}：取值分布`
                 : english
                   ? "Numeric quantiles"
-                  : "数值分位"}
+                  : "数值分布"}
             </Typography.Text>
             <SlidersOutlined style={{ fontSize: 14 }} />
           </div>
@@ -1565,7 +1568,7 @@ function EcologyFactorPanel({
               text={
                 english
                   ? "No numeric fields are available for quantile display"
-                  : "暂无可用于分位展示的数值字段"
+                  : "这一层没有可以展示分布的数值字段"
               }
             />
           )}
@@ -3872,6 +3875,11 @@ interface InsightStats {
   fieldNames: string[];
 }
 
+// Identifiers, revisions and checksums describe bookkeeping, not the data.
+const isPlatformField = (field: string) =>
+  isHiddenField(field) ||
+  /(^|_)(id|fid|objectid|revision|version|checksum|hash)$/i.test(field);
+
 function createInsightStats(
   summary: ResourceVisualizationSummary | null,
   layer: LoadedLayer | null,
@@ -3882,12 +3890,12 @@ function createInsightStats(
   const localNumerics = buildLocalNumericStats(layer);
   const localProfile = buildLocalProfile(layer, profile, resource);
   const localSpatialSummary = buildLocalSpatialSummary(layer, localProfile);
-  const categoryStats = summary?.categoryStats.length
-    ? summary.categoryStats
-    : localCategories;
-  const numericStats = summary?.numericStats.length
-    ? summary.numericStats
-    : localNumerics;
+  const categoryStats = (
+    summary?.categoryStats.length ? summary.categoryStats : localCategories
+  ).filter((stat) => !isPlatformField(stat.field));
+  const numericStats = (
+    summary?.numericStats.length ? summary.numericStats : localNumerics
+  ).filter((stat) => !isPlatformField(stat.field));
   const baseQualityIssues = summary?.qualityIssues.length
     ? summary.qualityIssues
     : buildLocalQualityIssues(

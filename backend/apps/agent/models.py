@@ -191,6 +191,36 @@ class AgentWorkflow(ProjectScopedModel):
         ]
 
 
+class WorkflowUpload(ProjectScopedModel):
+    """A file a user supplied to one generic geology workflow.
+
+    The resource is owner-only and marked ``workflow-upload:<batch>``; the batch
+    binds to exactly one workflow at creation and is never listed in the catalog.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    batch_id = models.CharField(max_length=32, db_index=True)
+    resource = models.OneToOneField(
+        "catalog.DataResource", on_delete=models.CASCADE, related_name="+"
+    )
+    workflow = models.ForeignKey(
+        AgentWorkflow,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="uploads",
+    )
+    file_name = models.CharField(max_length=255)
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    role_hint = models.CharField(max_length=24, blank=True)
+    profile = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at", "id")
+
+
 class AgentWorkflowStep(models.Model):
     workflow = models.ForeignKey(
         AgentWorkflow, on_delete=models.CASCADE, related_name="steps"

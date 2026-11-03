@@ -8,7 +8,12 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from apps.catalog.models import DataResource, DictionaryItem, MapLayer
+from apps.catalog.models import (
+    DataResource,
+    DictionaryItem,
+    MapLayer,
+    task_resource_q,
+)
 from apps.core.config import APP_SUBDIRS, RESEARCH_SUBDIRS
 from apps.core.config import (
     load_runtime_config_document,
@@ -190,8 +195,12 @@ def frontend_app(request):
 
 
 def _login_overview_metrics(generated_at: str) -> list[dict]:
-    active_resources = DataResource.objects.filter(status=DataResource.Status.ACTIVE)
-    active_layers = MapLayer.objects.filter(is_active=True)
+    active_resources = DataResource.objects.filter(
+        status=DataResource.Status.ACTIVE
+    ).exclude(task_resource_q())
+    active_layers = MapLayer.objects.filter(is_active=True).exclude(
+        task_resource_q("data_resource")
+    )
     covered_regions = DictionaryItem.objects.filter(
         dict_type=DictionaryItem.DictType.REGION,
         is_active=True,

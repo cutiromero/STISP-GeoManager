@@ -191,6 +191,8 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | API-20261103-002 | BackendReady | /api/projects/; /api/projects/assignments/{userId}/; /api/agent/workflows/; /api/agent/research-demos/ | per-user public scope and lightweight workflow history | Updated | Scoped backend and browser fixtures | Implemented | Project/sharing 72; project UI 6 passed | Default true, live authorization, authorized fallback and summary pagination; server acceptance separate |
+| API-20261103-003 | BackendReady | /api/agent/workflow-uploads/; /api/agent/workflow-uploads/{uploadId}/; /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | task uploads, geology_generic and field-mapping confirmation | Updated | 103-agent-generic-workflow.json | Implemented | Generic 9 backend, 2 browser; local mock end-to-end succeeded | Uploads owner_only and bound once; mapping proposed by model and confirmed by user |
+| API-20261103-004 | BackendReady | /api/catalog/results/{resultId}/file/; /api/catalog/map-compositions/{compositionId}/versions/{versionNumber}/file/ | thumbnail variant and thumbnailUrl for result cards | Updated | Backend tests | Implemented | Thumbnail tests | WebP ≤640px cached under app cache; PDF keeps placeholder |
 | API-20261103-001 | BackendReady | /api/sharing/check/; /api/sharing/invitations/; invitations/{id}/respond/; read/; open/ | exact username invitation and single-object read-only access | Updated | Sharing browser and backend fixtures | Passed | Backend 62; sharing browser 15; response unit 13 passed | Permission checks, accept/decline, notification and single-output isolation verified; release acceptance tracked separately |
 | API-20261102-001 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/interaction/ | account admission and conflict semantics | Updated | Existing run/error fixtures | Passed | Focused passed | Three ordinary tasks; permission and transient failure states separated |
 | API-20261025-001 | ContractReady | /api/agent/workflows/{workflowId}/validation/; validation/files/*; workflow map fields | isolated read-only evaluation and before-layer references | Updated | 102-agent-validation | Pending | Pending | Implementation in progress |
@@ -1166,3 +1168,29 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation notes: 默认true保留旧用户和游客，超管全部可见；业务API、worker、公开知识复用与分享重验同一范围，已有历史不删除。摘要只限本人当前项目，不带大字段，详情另验数据权限。平台公共图文独立于业务项目。
 - Verification: 未授权账号不得改策略；禁公开后直接资源/历史/分享失败；默认项目一致、游客保持；摘要分页/类型/项目/本人隔离，刷新后恢复与按需读取。
 - Result: 定向自动化与类型生成结果随本轮交付记录，服务器生效以同提交发布回执为准。
+
+## API-20261103-003 - 通用地质推理：任务资料上传与字段确认
+
+- Status: BackendReady
+- Owner: codex/agent-generic-workflow（契约、后端与前端同一任务）。
+- Endpoints: GET/POST /api/agent/workflow-uploads/；DELETE /api/agent/workflow-uploads/{uploadId}/；POST /api/agent/workflows/；POST /api/agent/workflows/{workflowId}/confirm/；GET /api/agent/workflows/{workflowId}/。
+- Change type: 新增任务资料上传、识别与删除；新增 geology_generic 场景与 uploadBatchId；confirm 新增 fieldMapping；plan 新增 fieldMappingReview。
+- OpenAPI change: AgentWorkflowUpload、AgentWorkflowUploadList、AgentWorkflowUploadProfile、AgentWorkflowUploadField、AgentFieldMappingReview、AgentFieldMappingRole、AgentFieldMappingTarget；AgentWorkflowInput.uploadBatchId；AgentWorkflowConfirmation.fieldMapping。原有场景的字段与行为不变。
+- Mock examples: mock/prism/examples/103-agent-generic-workflow.json。
+- Frontend reason: 用户在 MH-workflow 中上传自己的资料，无需按固定字段名整理；智能体判断字段含义，用户确认后执行。
+- Backend implementation notes: 上传沿用既有矢量、栅格、表格导入服务，登记为 owner_only，来源标记 workflow-upload:<批次>；批次在创建任务时绑定且只能绑定一次。字段确认在 worker 中由模型提出，校验字段真实存在；确认后生成规范化工作副本，复用综合推理算子与审批流程。设计见 docs/agent-generic-workflow-20261103.md。
+- Verification: 上传识别、批次隔离、重复绑定、删除已绑定、字段确认校验、工作副本字段与几何一致、Mock 模型下全流程走通；真实模型的字段判断在服务器验证。
+- Result: 本机后端新增9项、前端浏览器新增2项通过；工作流相关回归179项通过。本机以模拟模型从上传到远景区比较完整运行成功（检查、执行、复查、交汇重建、远景区五步真实计算）。真实模型的字段判断与服务器运行待候选环境验证。
+
+## API-20261103-004 - 成果与专题卡片缩略图
+
+- Status: BackendReady
+- Owner: codex/agent-generic-workflow（待改项 A3）。
+- Endpoints: GET /api/catalog/results/{resultId}/file/；GET /api/catalog/map-compositions/{compositionId}/versions/{versionNumber}/file/；以及返回 ResultArtifact、MapCompositionVersion 的列表与详情接口。
+- Change type: variant 新增 thumbnail；ResultArtifact、MapCompositionVersion 新增 thumbnailUrl。
+- OpenAPI change: 两个文件端点的 variant 枚举、ResultArtifact.thumbnailUrl（PNG/JPG 有值，其余为 null）、MapCompositionVersion.thumbnailUrl；公开匿名访问的 preview/thumbnail 允许浏览器缓存；登录或私有项目仍由项目中间件设为 no-store。
+- Mock examples: 无新增 mock 文件；结果列表示例中缺省字段由后端测试覆盖。
+- Frontend reason: 成果展示卡片原来直接加载原图，图片多时加载很慢；卡片改用缩略图，详情仍看原图。
+- Backend implementation notes: 缩略图首次请求时由原图（专题为 PNG 预览）生成长边640像素的 WebP，存于业务数据 cache/thumbnails，按文件大小和修改时间命名；权限与 preview 相同。没有 PDF 渲染器，PDF 不提供缩略图。
+- Verification: 缩略图尺寸与缓存复用、权限与 preview 一致、非图片格式返回400、卡片使用 thumbnailUrl。
+- Result: 后端测试通过；前端卡片改用缩略图。

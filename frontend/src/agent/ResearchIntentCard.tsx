@@ -20,6 +20,7 @@ import WorkflowResults from "./WorkflowResults";
 import LiveActivity from "./LiveActivity";
 import { runActivity } from "./agentActivity";
 import { workflowStatusLabels } from "./workflowFeedback";
+import { briefTitle } from "./researchText";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 const labels: Record<AgentResearchIntent["status"], [string, string]> = {
@@ -230,11 +231,17 @@ export default function ResearchIntentCard({
       aria-label={ui("科研任务", "Research task")}
     >
       <div className="agent-research-heading">
-        <strong>{intent.goal}</strong>
+        <strong title={intent.goal}>{briefTitle(intent.goal)}</strong>
         <Tag color={workflow?.status === "failed" ? "red" : "blue"}>
           {workflow ? workflowStatusLabels[workflow.status] : ui(...status)}
         </Tag>
       </div>
+      {briefTitle(intent.goal) !== intent.goal.trim() && (
+        <details className="agent-research-goal">
+          <summary>{ui("完整需求", "Full request")}</summary>
+          <p>{intent.goal}</p>
+        </details>
+      )}
       {!workflow && <LiveActivity activity={runActivity(run)} />}
       {!!intent.inputSummary.length && (
         <div

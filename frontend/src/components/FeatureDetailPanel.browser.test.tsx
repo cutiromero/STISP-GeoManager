@@ -44,7 +44,7 @@ describe("FeatureDetailPanel result properties", () => {
       "地层时代",
       "资料性质",
       "面积（平方米）",
-      "feature_id",
+      "图斑编号",
     ]);
     expect(screen.getByText("J3")).toBeInTheDocument();
     expect(screen.getAllByText("T3")).toHaveLength(2);
@@ -75,7 +75,7 @@ describe("FeatureDetailPanel result properties", () => {
       "修改依据",
       "检查状态",
       "修改字段",
-      "feature_id",
+      "图斑编号",
       "contact_type",
       "custom_zero",
       "custom_false",

@@ -260,7 +260,11 @@ export default function GeologyWorkbenchCompare({
       <header className="geology-workbench-compare-toolbar">
         <div>
           <strong>
-            {data?.tour ? "海德乌拉综合推理对比" : "地质成果检查与修正"}
+            {!data?.tour
+              ? "地质成果检查与修正"
+              : data.workflow.workflowType === "geology_generic"
+                ? "地质综合推理对比"
+                : "海德乌拉综合推理对比"}
           </strong>
           <small>
             {comparisonVisible

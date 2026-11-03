@@ -14,7 +14,7 @@ import WorkflowReportFile from "./WorkflowReportFile";
 import WorkflowDeliverables from "./WorkflowDeliverables";
 import GeologyReviewStory from "./GeologyReviewStory";
 import MultiElementStory from "./MultiElementStory";
-import { multiElementType } from "./multiElementScenario";
+import { isMultiElementFamily, multiElementType } from "./multiElementScenario";
 import {
   geologyReviewOutcome,
   geologyReviewOriginalMapId,
@@ -26,6 +26,8 @@ import {
   workflowStageLabel,
   workflowStatusLabels,
 } from "./workflowFeedback";
+import { emphasizeNumbers } from "./researchText";
+import RuleCards from "./RuleCards";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
@@ -34,13 +36,15 @@ function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
     value && typeof value === "object" && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
-  const demo = [
-    "ecology_investigation",
-    "geology_correction",
-    "geology_age_correction",
-    "geology_map_review",
-    multiElementType,
-  ].includes(workflow.workflowType);
+  const demo =
+    [
+      "ecology_investigation",
+      "geology_correction",
+      "geology_age_correction",
+      "geology_map_review",
+      multiElementType,
+    ].includes(workflow.workflowType) ||
+    isMultiElementFamily(workflow.workflowType);
   const stages = Array.isArray(workflow.plan.stages)
     ? workflow.plan.stages
     : [];
@@ -112,7 +116,7 @@ export default function WorkflowResults({
 }) {
   const ui = useComputeText();
   const isActive = active.includes(workflow.status);
-  const isMultiElement = workflow.workflowType === multiElementType;
+  const isMultiElement = isMultiElementFamily(workflow.workflowType);
   const isGeologyReview =
     workflow.workflowType === "geology_map_review" || isMultiElement;
   const inspectionOnly = Boolean(geologyReviewOutcome(workflow));
@@ -429,6 +433,7 @@ export default function WorkflowResults({
           ]}
         />
       )}
+      {isMultiElement && <RuleCards workflow={workflow} />}
       {workflow.status === "succeeded" && finalDecision && (
         <article
           className="agent-workflow-conclusion"
@@ -441,10 +446,12 @@ export default function WorkflowResults({
               ? "检查结论"
               : ui("研究结论", "Research conclusion")}
           </h3>
-          <p>{finalDecision.judgement}</p>
+          <p className="agent-workflow-conclusion-main">
+            {emphasizeNumbers(finalDecision.judgement)}
+          </p>
           {finalDecision.resultSummary &&
             finalDecision.resultSummary !== finalDecision.judgement && (
-              <p>{finalDecision.resultSummary}</p>
+              <p>{emphasizeNumbers(finalDecision.resultSummary)}</p>
             )}
         </article>
       )}

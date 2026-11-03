@@ -158,6 +158,13 @@ export default function MultiElementWorkspace({
   const [data, setData] = useState<MultiMaps>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [slow, setSlow] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const retryLoad = () => {
+    resourceRequests.current.clear();
+    setAttempt((value) => value + 1);
+  };
   const [focus, setFocus] = useState<[number, number, number, number] | null>(
     null,
   );
@@ -201,6 +208,12 @@ export default function MultiElementWorkspace({
     setLoading(true);
     setError("");
     setData(undefined);
+    setProgress({ done: 0, total: 0 });
+    setSlow(false);
+    // A long read offers a retry instead of an open-ended wait.
+    const slowTimer = window.setTimeout(() => {
+      if (!disposed) setSlow(true);
+    }, 45_000);
     setOptionalData({});
     setOptionalErrors({});
     setOptionalLoading([]);
@@ -212,6 +225,14 @@ export default function MultiElementWorkspace({
       if (!beforeId || !faultsId)
         throw new Error("当前任务尚无完整岩性和构造输入");
       const requests = resourceRequests.current;
+      const counted = <T,>(work: Promise<T>) => {
+        setProgress((value) => ({ ...value, total: value.total + 1 }));
+        return work.then((result) => {
+          if (!disposed)
+            setProgress((value) => ({ ...value, done: value.done + 1 }));
+          return result;
+        });
+      };
       const query = (id: number | undefined) => {
         if (!id) return Promise.resolve(empty);
         if (!requests.has(id))
@@ -243,17 +264,17 @@ export default function MultiElementWorkspace({
         beforeProspects,
         afterProspects,
       ] = await Promise.all([
-        query(beforeId),
+        counted(query(beforeId)),
         map.after?.lithology
-          ? query(map.after.lithology)
+          ? counted(query(map.after.lithology))
           : Promise.resolve(null),
-        query(faultsId),
-        query(map.after?.faults ?? faultsId),
-        merge(map.changes ?? []),
-        query(map.beforeIntersections),
-        query(map.intersections),
-        query(map.beforeProspects),
-        query(map.afterProspects),
+        counted(query(faultsId)),
+        counted(query(map.after?.faults ?? faultsId)),
+        counted(merge(map.changes ?? [])),
+        counted(query(map.beforeIntersections)),
+        counted(query(map.intersections)),
+        counted(query(map.beforeProspects)),
+        counted(query(map.afterProspects)),
       ]);
       if (disposed) return;
       const differences =
@@ -373,12 +394,14 @@ export default function MultiElementWorkspace({
           setError(reason instanceof Error ? reason.message : "地图读取失败");
       })
       .finally(() => {
+        window.clearTimeout(slowTimer);
         if (!disposed) setLoading(false);
       });
     return () => {
       disposed = true;
+      window.clearTimeout(slowTimer);
     };
-  }, [workflow, suggestionId]);
+  }, [workflow, suggestionId, attempt]);
   const allTour = useMemo(
     () => (data ? actualTourChanges(workflow, data.differences) : []),
     [data, workflow],
@@ -703,8 +726,16 @@ export default function MultiElementWorkspace({
     <main className="geology-review-workspace multi-element-workspace">
       <header className="geology-review-workspace-header">
         <div>
-          <span className="geology-review-eyebrow">地理工作台演示案例</span>
-          <h1>海德乌拉地质综合推理</h1>
+          <span className="geology-review-eyebrow">
+            {workflow.workflowType === "geology_generic"
+              ? "地理工作台 · 本次上传资料"
+              : "地理工作台演示案例"}
+          </span>
+          <h1>
+            {workflow.workflowType === "geology_generic"
+              ? "地质综合推理"
+              : "海德乌拉地质综合推理"}
+          </h1>
           <p>从一处修改看懂检查依据、实际处置与调查建议的变化。</p>
         </div>
         <div className="geology-review-workspace-actions">
@@ -742,13 +773,39 @@ export default function MultiElementWorkspace({
       <Alert
         showIcon
         type="info"
-        title="演示案例：岩性与构造为模拟识别；矿物为遥感矿物识别结果。规则在本案例试用，待裁定与未批准对象保留。"
+        title={
+          workflow.workflowType === "geology_generic"
+            ? "用户上传资料：字段含义经确认后生成工作副本。规则为试用规则，待裁定与未批准对象保留。"
+            : "演示案例：岩性与构造为模拟识别；矿物为遥感矿物识别结果。规则在本案例试用，待裁定与未批准对象保留。"
+        }
       />
-      {error && <Alert type="error" showIcon title={error} />}
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          title={error}
+          action={
+            <Button size="small" onClick={() => retryLoad()}>
+              重试
+            </Button>
+          }
+        />
+      )}
       {loading && (
-        <div className="geology-review-workspace-loading">
+        <div className="geology-review-workspace-loading" role="status">
           <Spin />
-          正在读取本次实际任务图层…
+          正在读取本次任务图层
+          {progress.total > 0 &&
+            `（已读取 ${progress.done}/${progress.total} 项）`}
+          …
+          {slow && (
+            <>
+              <span>读取较慢，可能是图层较大或网络较慢。</span>
+              <Button size="small" onClick={() => retryLoad()}>
+                重新读取
+              </Button>
+            </>
+          )}
         </div>
       )}
       {data && (
@@ -897,6 +954,10 @@ export default function MultiElementWorkspace({
                   before={tourBefore}
                   after={tourAfter}
                   algorithm={tourAlgorithm(workflow)}
+                  loading={
+                    currentTour.suggestion.element === "alteration" &&
+                    optionalLoading.some((key) => key.startsWith("alterations"))
+                  }
                 />
               )}
               {viewMode === "outcome" && (
