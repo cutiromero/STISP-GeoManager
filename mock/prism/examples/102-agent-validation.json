@@ -1,0 +1,20 @@
+{
+  "GET /api/agent/workflows/{workflowId}/validation/": {
+    "200": {
+      "workflowId": "00000000-0000-4000-8000-000000000025",
+      "available": false,
+      "scope": "本案例采用模拟识别输入；独立评价仅在存在当次验收材料时展示。",
+      "summary": "当前任务尚未登记独立评价。",
+      "sections": [],
+      "files": []
+    }
+  },
+  "GET /api/agent/workflows/{workflowId}/validation/files/{fileKey}/preview/": {
+    "200": {
+      "content": "# 独立评价\n\n接口预览样例，实际评价由任务绑定文件提供。",
+      "fileName": "独立评价.md",
+      "contentType": "text/markdown",
+      "truncated": false
+    }
+  }
+}

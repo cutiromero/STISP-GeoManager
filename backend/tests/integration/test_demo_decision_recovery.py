@@ -76,6 +76,15 @@ def test_complete_accepted_response_recovers_with_no_new_request(
     assert workflow.plan["actualModelCallCount"] == workflow.iteration == len(audit)
 
 
+def test_configured_output_above_4096_recovers_without_new_request(retry_model):
+    workflow, stage, results, original = saved_response()
+    audit = copy.deepcopy(stage["modelAttempts"])
+    assert audit[0]["outputLimit"] == default_policy()["maxOutputTokens"] == 8192
+    assert replay(workflow, stage, results) == original
+    assert stage["modelAttempts"] == audit
+    assert stage["recoveredModelAttempt"] == 1
+
+
 @pytest.mark.parametrize("retry", [False, True])
 def test_saved_complete_response_is_revalidated_after_pause_without_new_request(
     retry, retry_model

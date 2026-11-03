@@ -1218,6 +1218,11 @@ function LayerItemNode({
             : i18n.t("layerPanel.select")}
         </Button>
       </div>
+      {layer.metadata.对比任务 && (
+        <small className="layer-comparison-role">
+          {String(layer.metadata.对比角色)} / {String(layer.metadata.对比要素)}
+        </small>
+      )}
       <RasterRenderFeedback layer={layer} />
       <LayerLegend layer={layer} />
     </div>

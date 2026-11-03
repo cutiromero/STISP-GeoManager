@@ -205,6 +205,89 @@
 .geology-review-basis small {
   color: #71869a;
 }
+.agent-multi-segment {
+  display: grid;
+  gap: 8px;
+  max-width: 390px;
+  margin-top: 14px;
+}
+.multi-element-suggestion-list {
+  max-height: 580px;
+  overflow: auto;
+  margin-top: 12px;
+}
+.multi-element-suggestion {
+  margin: 8px 0;
+  border: 1px solid #dbe7f0;
+  border-radius: 9px;
+  background: #fff;
+}
+.multi-element-suggestion > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px;
+  color: #365c7b;
+  cursor: pointer;
+  font-size: 13px;
+}
+.multi-element-suggestion > summary > span:first-child {
+  flex: 1;
+  min-width: 150px;
+}
+.multi-element-suggestion > summary::before {
+  content: "+";
+  color: #7c99b1;
+  font-size: 18px;
+}
+.multi-element-suggestion[open] > summary::before {
+  content: "−";
+}
+.multi-element-suggestion-body {
+  padding: 0 14px 16px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.multi-element-evidence {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.multi-element-evidence dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.multi-element-evidence dl > div {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f1f6fa;
+}
+.multi-element-evidence dt {
+  color: #70859a;
+}
+.multi-element-evidence dd {
+  margin: 4px 0 0;
+  color: #294f6e;
+}
+.multi-element-evidence p,
+.multi-element-evidence ul {
+  margin: 0;
+}
+.multi-element-rule {
+  padding-left: 10px;
+  border-left: 2px solid #a1c3de;
+}
+.multi-element-rule small {
+  display: block;
+  color: #70859a;
+}
 @media (max-width: 600px) {
   .geology-review-story {
     padding: 14px;

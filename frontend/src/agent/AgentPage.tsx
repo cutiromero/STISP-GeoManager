@@ -36,6 +36,7 @@ import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
 import { useComputeText } from "../compute/ui";
 import { agentApi } from "../api/agent";
+import { ApiError } from "../api/client";
 import type {
   AgentBudgetProfileId,
   AgentConversation,
@@ -47,7 +48,7 @@ import type {
   AgentResearchScenario,
 } from "../api/generated/types.gen";
 import { createUuid } from "../utils/uuid";
-import { useAgentBootstrap } from "./useAgentBootstrap";
+import { useAgentBootstrapState } from "./useAgentBootstrap";
 import SafeMarkdown from "./SafeMarkdown";
 import RunEvidence from "./RunEvidence";
 import RunComputeTasks from "./RunComputeTasks";
@@ -118,7 +119,12 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const project = useProjectContext();
   const layout = useAgentLayout(`agent-layout:${user?.id ?? "anon"}:${mode}`);
   const { message, modal } = App.useApp();
-  const bootstrap = useAgentBootstrap();
+  const {
+    bootstrap,
+    status: bootstrapStatus,
+    error: bootstrapError,
+    retry: retryBootstrap,
+  } = useAgentBootstrapState();
   const [conversations, setConversations] = useState<AgentConversation[]>([]);
   const [current, setCurrent] = useState<AgentConversation | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
@@ -311,6 +317,10 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const attachmentsAvailable = Boolean(bootstrap?.allowAttachments);
   const internetAvailable = Boolean(bootstrap?.internetEnabled);
   const conversationStorageKey = `agent-conversation:${user?.id ?? "anon"}:${project?.current ?? "1"}:${mode}`;
+  const accessRejected =
+    canUse === false ||
+    bootstrapStatus === "unauthenticated" ||
+    bootstrapStatus === "forbidden";
 
   useEffect(() => {
     alive.current = true;
@@ -319,7 +329,22 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       sequence.current++;
     };
   }, []);
+  const clearRestrictedState = () => {
+    sequence.current++;
+    setManualWorkflow(undefined);
+    setResearchWorkflow(undefined);
+    setWorkflowStatus(undefined);
+    setRuns([]);
+    setComputeActivities({});
+    setEvents([]);
+    setCurrent(null);
+    setConversations([]);
+  };
   const report = (e: unknown) => {
+    if (!alive.current) return;
+    if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+      clearRestrictedState();
+    }
     if (
       alive.current &&
       !(e instanceof DOMException && e.name === "AbortError")
@@ -339,22 +364,16 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     }
   };
   useEffect(() => {
-    if (!canUse) {
-      setManualWorkflow(undefined);
-      setResearchWorkflow(undefined);
-      setWorkflowStatus(undefined);
-      setRuns([]);
-      setComputeActivities({});
-      setEvents([]);
-      setCurrent(null);
-      setConversations([]);
+    if (accessRejected) {
+      clearRestrictedState();
       return;
     }
+    if (canUse !== true) return;
     const timer = setTimeout(() => {
       void refreshList();
     }, 200);
     return () => clearTimeout(timer);
-  }, [mode, canUse, query, archived]);
+  }, [mode, canUse, accessRejected, query, archived]);
   useEffect(() => {
     if (!bootstrap || model) return;
     const candidates = bootstrap.models.filter(
@@ -422,11 +441,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         else void refreshList();
       } catch (e) {
         if (disposed) return;
-        // Do not retain restricted content after any authorization/read failure.
-        setRuns([]);
-        setComputeActivities({});
-        setEvents([]);
         report(e);
+        if (!(e instanceof ApiError && (e.status === 401 || e.status === 403)))
+          timer = setTimeout(poll, 3000);
       }
     };
     void poll();
@@ -445,9 +462,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         if (!disposed) setRuns(data.runs);
       } catch (e) {
         if (!disposed) {
-          setRuns([]);
-          setComputeActivities({});
-          setEvents([]);
           report(e);
         }
       }
@@ -868,30 +882,6 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               onClick={() => setShowHistory(false)}
             />
           </div>
-          <div className="agent-mode-nav">
-            {bootstrap?.canChat && (
-              <Button
-                block
-                icon={<MessageOutlined />}
-                type={mode === "chat" ? "primary" : "text"}
-                disabled={!bootstrap?.canChat}
-                onClick={() => navigate("/agent/chat")}
-              >
-                {ui("快速对话", "Quick chat")}
-              </Button>
-            )}
-            {bootstrap?.canAgent && (
-              <Button
-                block
-                icon={<RobotOutlined />}
-                type={mode === "agent" ? "primary" : "text"}
-                disabled={!bootstrap?.canAgent}
-                onClick={() => navigate("/agent/workbench")}
-              >
-                {ui("科研智能体", "Research agent")}
-              </Button>
-            )}
-          </div>
           <Button
             className="agent-new-conversation"
             block
@@ -1037,6 +1027,33 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               >
                 {ui("会话", "History")}
               </Button>
+              <nav
+                className="agent-mode-nav"
+                aria-label={ui("对话模式", "Conversation mode")}
+              >
+                {bootstrap?.canChat && (
+                  <Button
+                    aria-label={ui("快速对话", "Quick chat")}
+                    icon={<MessageOutlined />}
+                    type={mode === "chat" ? "primary" : "text"}
+                    aria-current={mode === "chat" ? "page" : undefined}
+                    onClick={() => navigate("/agent/chat")}
+                  >
+                    {ui("快速对话", "Quick chat")}
+                  </Button>
+                )}
+                {bootstrap?.canAgent && (
+                  <Button
+                    aria-label={ui("科研智能体", "Research agent")}
+                    icon={<RobotOutlined />}
+                    type={mode === "agent" ? "primary" : "text"}
+                    aria-current={mode === "agent" ? "page" : undefined}
+                    onClick={() => navigate("/agent/workbench")}
+                  >
+                    {ui("科研智能体", "Research agent")}
+                  </Button>
+                )}
+              </nav>
               <div className="agent-conversation-heading">
                 <span>
                   {mode === "chat"
@@ -1065,7 +1082,30 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               onClose={() => setError("")}
             />
           )}
-          {bootstrap && !canUse && (
+          {!bootstrap && bootstrapStatus === "error" && (
+            <Alert
+              type="warning"
+              title={
+                bootstrapError ||
+                ui("连接失败，请重试。", "Connection failed. Please retry.")
+              }
+              action={
+                <Button onClick={retryBootstrap}>
+                  {ui("重试连接", "Retry connection")}
+                </Button>
+              }
+            />
+          )}
+          {bootstrapStatus === "unauthenticated" && (
+            <Alert
+              type="warning"
+              title={ui(
+                "登录状态已失效，请重新登录。",
+                "Your session has expired. Please sign in again.",
+              )}
+            />
+          )}
+          {(canUse === false || bootstrapStatus === "forbidden") && (
             <Alert
               type="info"
               title={ui(
@@ -1139,12 +1179,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 <div className="agent-assistant-message">
                   <Space className="agent-answer-heading">
                     <RobotOutlined />
-                    <strong>
-                      {r.computeIntent
-                        ? ui("平台计算助手", "Platform compute assistant")
-                        : (bootstrap?.models.find((m) => m.alias === r.model)
-                            ?.name ?? r.model)}
-                    </strong>
+                    <strong>MH-Agent</strong>
                     {r.status !== "succeeded" && (
                       <span
                         className={`agent-answer-status${active(r) ? " is-active" : ""}`}
@@ -1668,17 +1703,36 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
           title={ui("MH-workflow", "MH-workflow")}
           open={workflowOpen}
           onClose={() => setWorkflowOpen(false)}
-          forceRender
-          size={640}
+          size={layout.workflow}
           classNames={{ root: "agent-workflow-drawer" }}
         >
-          <WorkflowPanel
-            model={model}
-            resourceIds={selected}
-            embedded
-            onStatusChange={setWorkflowStatus}
-            onWorkflowChange={setManualWorkflow}
+          <AgentResizeHandle
+            orientation="vertical"
+            label={ui("调整工作流宽度", "Resize workflow panel")}
+            hint={ui(
+              "左右拖动调整宽度，双击恢复",
+              "Drag to resize; double-click to reset",
+            )}
+            controls="agent-workflow-content"
+            value={layout.workflow}
+            min={layout.workflowMin}
+            max={layout.workflowMax}
+            defaultValue={layout.defaults.workflow}
+            reverse
+            onChange={layout.setWorkflow}
           />
+          <div id="agent-workflow-content">
+            <WorkflowPanel
+              model={model}
+              resourceIds={selected}
+              embedded
+              open={workflowOpen}
+              userId={user?.id}
+              bootstrap={bootstrap}
+              onStatusChange={setWorkflowStatus}
+              onWorkflowChange={setManualWorkflow}
+            />
+          </div>
         </Drawer>
       )}
       <Modal

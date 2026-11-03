@@ -1,5 +1,45 @@
 # API Change Requests
 
+## API-20261102-001 - 普通对话账号三任务并发
+
+- Status: BackendReady
+- Owner: root；roles_monitor后端；agent_layout_modes前端。
+- Endpoints: POST /api/agent/conversations/{conversationId}/runs/；POST /api/agent/runs/{runId}/interaction/；计算完成后的原任务恢复。
+- Change type: 调整现有任务名额和冲突语义，保持请求与响应结构。
+- OpenAPI change: 提交说明明确同账号快速与科研对话合计三条，同会话串行，账号名额满返回409，全站队列和每日额度返回429。
+- Mock examples: 沿用现有AgentRun与ErrorResponse结构，HTTP模型fixture验证并发与恢复。
+- Frontend reason: 多窗口和模式可独立提交，瞬时连接失败不再清空权限和历史。
+- Backend implementation notes: 移除账号单活动任务唯一索引，保留会话唯一索引；提交与恢复在同一队列锁事务中核对名额，等待状态释放模型名额，幂等和取消保留。
+- Verification: 三条混合模式任务、第四条冲突、同会话串行、跨账号与项目、等待恢复、真实并发抢位，以及权限错误与网络失败的独立状态。
+- Result: 本地目标验证完成后进入独立候选与正式验收。
+
+## API-20261025-001 - 地质完整对比与隔离独立评价
+
+- Status: ContractReady
+- Owner: haide_story前端与契约；root后端及数据；evaluation独立评价。
+- Endpoints: GET /api/agent/workflows/{workflowId}/；GET /api/agent/workflows/{workflowId}/validation/；GET /api/agent/workflows/{workflowId}/validation/files/{fileKey}/preview/、download/。
+- Change type: 现有地图资源增加可选改前交汇和矿物引用；新增隔离只读独立评价及文件访问。
+- OpenAPI change: AgentMultiElementMap.beforeIntersections/beforeAlterations；AgentWorkflowValidation/Section/File；预览复用AgentWorkflowReportPreview。
+- Mock examples: mock/prism/examples/102-agent-validation.json，仅为空评价可用性样例，不充当实测结论。
+- Frontend reason: 两案例任务对比组完整保留改前、改后与修改范围；海德章节可核对交汇前后及展开独立评价。
+- Backend implementation notes: 沿用当前项目、本人或管理工作流授权；独立评价不进入plan、模型、知识检索或正常算法输入。文件键来自受控清单，每次核验SHA256/大小/来源，下载额外验证数据导出权限；读取不创建新成果。
+- Verification: 无评价200明确状态；跨项目/越权/路径/校验漂移拒绝；独立参考隔离；真实表格、文件预览下载及两案例工作台去重恢复。
+- Result: 契约完成，后端与前端实现及必要检查进行中。
+
+## API-20261023-001 - 海德乌拉多要素推理和试用规则
+
+- Status: BackendReady
+- Owner: multi_frontend 契约与地图；multi_workflow 持久流程与批准；multi_algorithms 隔离算子。
+- Endpoints: GET /api/agent/research-demos/；POST /api/agent/workflows/；GET /api/agent/workflows/{workflowId}/；POST /api/agent/workflows/{workflowId}/confirm/；GET /api/compute/algorithms/。
+- Change type: 扩展场景及建议字段，沿用统一端点、会话鉴权、原单项目和本人授权。
+- OpenAPI change: geology_multi_element_reasoning；parameters.segment=all/lithology/structure/alteration；九类明确输入；plan.multiElementMap和trialRuleBindings；multi_element建议、实测值、条件、例外及具体规则版本引用。
+- Frontend reason: 综合入口和三个分段共用持久任务，线点面双图与证据链可核对；明确上游版本和本案例试用性质。
+- Mock examples: 新组件浏览器场景及隔离本机实际数据验证，不用交付包PNG代替运行结果。
+- Backend implementation notes: 仅当前项目、当前场景、显式绑定条目及修订读取draft试用知识；普通知识检索权限不变。批准只传selectedSuggestionIds，后端重验快照和动作。未批准、待裁定、降权和剔除分开存储。算法发现与执行按稳定项目编码统一筛选相关共享工具及本项目登记工具；公开目录和历史任务读取不变。
+- Verification: 旧案例不变；不同segment和输入影响计划；批准范围绑定；真实新图层和地图证据吻合；空输出正常显示。
+- Result: 契约与生成类型已同步；前端角色、批准及线点面浏览器验证通过。本机四项1.0.1算法经真实试运行发布，完整工作流的五个真实计算任务及批准、报告预览下载通过；模型连接未恢复，模型判断仍单列为模拟验证。真实地图读取完整矢量，按需加载密集检查与矿物图层，改前矿物取检查输出、改后取获批处理输出。
+
+
 ## API-20261021-001 - 地质工作流预设与输入角色校验
 
 - Status: BackendReady
@@ -150,6 +190,11 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261103-002 | BackendReady | /api/projects/; /api/projects/assignments/{userId}/; /api/agent/workflows/; /api/agent/research-demos/ | per-user public scope and lightweight workflow history | Updated | Scoped backend and browser fixtures | Implemented | Project/sharing 72; project UI 6 passed | Default true, live authorization, authorized fallback and summary pagination; server acceptance separate |
+| API-20261103-001 | BackendReady | /api/sharing/check/; /api/sharing/invitations/; invitations/{id}/respond/; read/; open/ | exact username invitation and single-object read-only access | Updated | Sharing browser and backend fixtures | Passed | Backend 62; sharing browser 15; response unit 13 passed | Permission checks, accept/decline, notification and single-output isolation verified; release acceptance tracked separately |
+| API-20261102-001 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/interaction/ | account admission and conflict semantics | Updated | Existing run/error fixtures | Passed | Focused passed | Three ordinary tasks; permission and transient failure states separated |
+| API-20261025-001 | ContractReady | /api/agent/workflows/{workflowId}/validation/; validation/files/*; workflow map fields | isolated read-only evaluation and before-layer references | Updated | 102-agent-validation | Pending | Pending | Implementation in progress |
+| API-20261023-001 | BackendReady | /api/agent/research-demos/; /api/agent/workflows/; /confirm/; /api/compute/algorithms/ | multi-element scenario, trial rule bindings, measured suggestions, real map outputs and project tools | Updated | Integration/browser fixtures | Passed | Focused browser, unit and real local workflow passed | Real algorithms and maps verified; model decisions use mock, recorded separately |
 | API-20261021-001 | BackendReady | /api/compute/inputs/; /api/agent/research-demos/; /api/agent/workflows/; /cancel/ | current-project preset, actual input-role checks and conditional replacement | Updated | Integration/browser fixtures | Implemented | Focused verification | Preserve permissions; metadata before plan and complete runtime validation |
 | API-20261020-001 | BackendReady | /api/auth/browser-session/; login/; guest-login/; register/; me/ | browser page leases and session lifecycle | Updated | HTTP/browser fixtures | Passed | 54 backend; 33 browser passed | 20-second refresh; 120-second lost-contact expiry; release acceptance separate |
 | API-20261016-002 | ContractReady | /api/agent/runs/{runId}/interaction/; /api/catalog/resources/delete-preview/; resources/delete/ | persisted questions; confirmed history cleanup | Updated | HTTP/browser fixtures | Focused passed | In progress | Real model, compute and release acceptance recorded separately |
@@ -1095,3 +1140,29 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation notes: 模型形成检索意图后真实搜索；编辑前强制review_modifications。planHash及proposalHash绑定实际问题/输入/版本，后端只接收选择而非编辑坐标；拒绝零编辑、漂移重确认，结果返回模型复核。
 - Verification: 真检索与引用、批准子集/拒绝/漂移/权限/恢复、实际修改和统计一致、位置变化与正常区域保护。
 - Result: 本机后端新模块组合73项、审批前端及相关回归通过；契约生成、类型一致和文档检查通过。真实模型、隔离算法、地图和发布状态分别记录于本轮服务器验收回执。
+
+## API-20261103-001 - 工程、专题及单计算输出邀请分享
+
+- Status: BackendReady
+- Owner: roles_monitor 后端/契约；map_panels_legends 分享与通知前端。
+- Endpoints: POST /api/sharing/check/；GET/POST /api/sharing/invitations/；POST .../{invitationId}/respond/、read/；GET .../{invitationId}/open/。
+- Change type: 精确用户名预检、持久待接受邀请、个人跨有权项目收发通知及单对象只读打开。
+- OpenAPI change: ShareKind/Person/Target/CheckRequest/CreateRequest/CheckResponse/Invitation/List/ResponseRequest/OpenResponse；计算打开复用ComputeOutput，绝不返回整任务。
+- Mock examples: frontend/src/sharing/sharingTestFixtures.ts、Sharing.browser.test.tsx、SharedOutputDrawer.browser.test.tsx及backend/tests/integration/catalog/test_sharing.py、test_share_contention.py中的隔离测试样例。
+- Frontend reason: 工程、专题、计算结果可输入准确用户名发邀请，收件人接受/拒绝，分享者收到决定；计算输出独立预览/下载，不暴露兄弟输出。
+- Backend implementation notes: 创建限原owner或既有有权管理员；不授项目、功能或owner_only权限。预检/创建/接受/每次打开均重验双方与底层依赖。pending/accepted同对象去重，提交和响应幂等；跨项目通知只返回本人且仍有权项目。接受仅授对象只读，下载/入库各自核权。
+- Verification: 精确账号、自分享拒绝、账号停用/项目/功能/私有依赖失权、重复发送响应、拒绝无授权、单输出隔离、刷新及通知已读、对象失效反馈。
+- Result: 后端62项定向与计算/专题回归通过，含真实文件预览下载及隔离WAL并发；Django检查与迁移一致性通过。仅增加ShareInvitation新表，未写本机业务数据。前端、浏览器及发布验收另计。
+
+## API-20261103-002 - 用户公开项目范围与科研历史轻量读取
+
+- Status: BackendReady
+- Owner: roles_monitor 项目权限、后台UI及统一契约；Root 工作流摘要和场景读取；agent_layout_modes 普通智能体页面。
+- Endpoints: GET /api/projects/；GET/POST /api/projects/assignments/{userId}/；GET /api/agent/workflows/；GET /api/agent/research-demos/。
+- Change type: 默认兼容的按用户公开访问开关、授权默认项目、轻量历史分页与按需场景预设。
+- OpenAPI change: ProjectAssignment.allowPublicProject（省略保留）；ProjectTagList.defaultProjectId；AgentWorkflowSummary/List和AgentResearchDemoSummaryList；view=summary与筛选分页查询。
+- Mock examples: backend/tests/integration/test_project_public_policy.py、工作流摘要集成测试及frontend/src/projects/ProjectContext.browser.test.tsx使用隔离QA数据；保留原有无参数完整列表样例。
+- Frontend reason: 超管可让指定用户仅访问所分配项目；首次加载不误选公开；历史与场景入口按需取详情，减少页面等待。
+- Backend implementation notes: 默认true保留旧用户和游客，超管全部可见；业务API、worker、公开知识复用与分享重验同一范围，已有历史不删除。摘要只限本人当前项目，不带大字段，详情另验数据权限。平台公共图文独立于业务项目。
+- Verification: 未授权账号不得改策略；禁公开后直接资源/历史/分享失败；默认项目一致、游客保持；摘要分页/类型/项目/本人隔离，刷新后恢复与按需读取。
+- Result: 定向自动化与类型生成结果随本轮交付记录，服务器生效以同提交发布回执为准。

@@ -64,6 +64,10 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
     if execute_operators:
         raise ComputeError("请先生成计划，再使用确认执行入口")
     resources_selected = sorted(set(resources_selected))
+    if workflow_type == "geology_multi_element_reasoning":
+        from .geology_multi import validate_inputs
+
+        validate_inputs(user, p, inputs, parameters, resources_selected)
     if workflow_type == "geology_map_review":
         from .geology_input_validation import validate_geology_inputs
 

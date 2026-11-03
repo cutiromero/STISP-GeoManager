@@ -64,9 +64,12 @@ def runtime_state(user):
 
 def allowed_algorithms():
     # Explicit public-tool reuse, independent of private input/output managers.
-    return AlgorithmResource._base_manager.filter(
+    from .project_tools import topic_algorithms
+
+    query = AlgorithmResource._base_manager.filter(
         project_tag_id__in={1, project_id()}, project_tag__is_active=True
     )
+    return topic_algorithms(query, project_id())
 
 
 def agent_algorithm_allowed(version):

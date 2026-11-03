@@ -107,3 +107,9 @@
     border-top: 1px solid #dae7f1;
   }
 }
+.research-demo-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}

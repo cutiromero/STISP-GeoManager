@@ -22,6 +22,7 @@ import { useAppContext } from "../contexts/AppContext";
 import { getActiveProject } from "../projects/session";
 import { useProjectContext } from "../projects/ProjectContext";
 import GeologyReviewMaps from "./GeologyReviewMaps";
+import MultiElementWorkspace from "./MultiElementWorkspace";
 import {
   previewSuggestions,
   queryReviewMap,
@@ -65,18 +66,27 @@ export default function GeologyReviewWorkspace({
       setError("");
       setLoading(true);
       setData(null);
+      setWorkflow(null);
       try {
         if (projectTagId && projectTagId !== currentProject)
           throw new Error("请切换到检查任务所属项目后查看");
         const value = await agentApi.workflow(workflowId);
         if (disposed) return;
-        if (value.workflowType !== "geology_map_review")
+        if (
+          !["geology_map_review", "geology_multi_element_reasoning"].includes(
+            value.workflowType,
+          )
+        )
           throw new Error("此任务不属于地质成果检查案例");
         if (
           String(value.projectId) !== currentProject ||
           getActiveProject() !== currentProject
         )
           throw new Error("检查任务不属于当前项目，请切换项目后查看");
+        if (value.workflowType === "geology_multi_element_reasoning") {
+          setWorkflow(value);
+          return;
+        }
         const ids = reviewResourceIds(value);
         const outcome = geologyReviewOutcome(value);
         if (!ids.before) throw new Error("检查记录尚无可用的待检查地质图");
@@ -148,7 +158,11 @@ export default function GeologyReviewWorkspace({
       features.map((feature) => feature.properties.feature_id),
     );
     const area = features.reduce(
-      (sum, feature) => sum + Number(feature.properties.area_m2 ?? 0),
+      (sum, feature) =>
+        sum +
+        (feature.properties.kind === "fill_gap"
+          ? Number(feature.properties.area_m2 ?? 0)
+          : 0),
       0,
     );
     return { count: ids.size, area: Number.isFinite(area) ? area : 0 };
@@ -161,6 +175,17 @@ export default function GeologyReviewWorkspace({
         reviewBounds({ type: "FeatureCollection", features: [feature] }),
       );
   };
+  if (
+    workflow?.workflowType === "geology_multi_element_reasoning" &&
+    String(workflow.projectId) === currentProject
+  )
+    return (
+      <MultiElementWorkspace
+        workflow={workflow}
+        suggestionId={suggestionId}
+        onReload={() => setReload((value) => value + 1)}
+      />
+    );
   return (
     <main className="geology-review-workspace">
       <header className="geology-review-workspace-header">
@@ -178,6 +203,17 @@ export default function GeologyReviewWorkspace({
           </p>
         </div>
         <div className="geology-review-workspace-actions">
+          {workflow && (
+            <Button
+              onClick={() =>
+                navigate(
+                  `/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}${suggestionId ? `&suggestion=${encodeURIComponent(suggestionId)}` : ""}`,
+                )
+              }
+            >
+              在地理工作台对比
+            </Button>
+          )}
           <Button
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate("/agent/workbench")}
@@ -249,7 +285,7 @@ export default function GeologyReviewWorkspace({
                 {outcome
                   ? geologyReviewOutcomeDescription(outcome)
                   : actual
-                    ? `本次修改涉及${summary.count}个图斑，范围合计${(summary.area / 10000).toFixed(2)}公顷。`
+                    ? `本次修改涉及${summary.count}个图斑、${data.differences.features.length}条操作记录；补齐覆盖${(summary.area / 10000).toFixed(2)}公顷，其余为属性更新。`
                     : editSubmitted
                       ? "已提交修正任务，当前显示获批建议范围；实际修改结果就绪后请刷新查看。"
                       : "批准前展示的是建议范围，地图内容保持当前状态。"}

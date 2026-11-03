@@ -19,6 +19,7 @@ const { deleteWorkspaceMock, updateWorkspaceMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/client", () => ({
+  requestJson: vi.fn(),
   api: {
     deleteWorkspace: deleteWorkspaceMock,
     updateWorkspace: updateWorkspaceMock,

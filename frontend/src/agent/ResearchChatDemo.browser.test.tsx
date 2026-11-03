@@ -33,7 +33,14 @@ vi.mock("../projects/ProjectContext", () => ({
     projects: [{ id: 1, name: "演示项目" }],
   }),
 }));
-vi.mock("./useAgentBootstrap", () => ({ useAgentBootstrap: () => bootstrap }));
+vi.mock("./useAgentBootstrap", () => ({
+  useAgentBootstrapState: () => ({
+    bootstrap,
+    status: "ready",
+    error: "",
+    retry: vi.fn(),
+  }),
+}));
 const bootstrap: AgentBootstrap = {
   canAgent: true,
   canChat: true,

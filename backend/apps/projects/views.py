@@ -8,9 +8,10 @@ from django.views.decorators.http import require_http_methods
 from django.core.exceptions import ValidationError
 
 from apps.audit.service import log_operation
+from apps.core.models import UserProfile
+from .access import available_projects, default_project_id, public_project_allowed
 from .context import is_superadmin
 from .models import Project, ProjectMembership
-from .middleware import models_q
 
 
 def can_assign(user):
@@ -42,16 +43,13 @@ def payload(request):
 @require_http_methods(["GET", "POST"])
 def projects(request):
     if request.method == "GET":
-        query = Project.objects.all()
-        if not is_superadmin(request.user):
-            query = (
-                query.filter(is_active=True).filter(models_q(request.user)).distinct()
-            )
+        query = available_projects(request.user)
         return JsonResponse(
             {
                 "items": [serialize(p) for p in query],
                 "canManage": is_superadmin(request.user),
                 "canAssign": can_assign(request.user),
+                "defaultProjectId": default_project_id(request.user),
                 "assignableItems": [serialize(p) for p in Project.objects.all()]
                 if can_assign(request.user)
                 else [],
@@ -118,7 +116,17 @@ def assignments(request, user_id):
         ids = set(ids) - {1}
         if Project.objects.filter(id__in=ids, is_active=True).count() != len(ids):
             raise ValidationError("包含无效或停用项目")
+        allow_public = data.get("allowPublicProject", public_project_allowed(user))
+        if type(allow_public) is not bool:
+            raise ValidationError("allowPublicProject 必须为布尔值")
+        if not allow_public and is_superadmin(user):
+            raise ValidationError("超级管理员始终拥有全部项目权限")
+        if not allow_public and not ids:
+            raise ValidationError("关闭公开项目访问时，请至少分配一个启用项目")
         with transaction.atomic():
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.allow_public_project = allow_public
+            profile.save(update_fields=["allow_public_project", "updated_at"])
             ProjectMembership.objects.filter(user=user).delete()
             ProjectMembership.objects.bulk_create(
                 [
@@ -131,12 +139,13 @@ def assignments(request, user_id):
             "项目标签",
             "分配用户标签",
             "success",
-            f"用户 {user_id}: {sorted(ids)}",
+            f"用户 {user_id}: {sorted(ids)}，公开项目访问：{allow_public}",
             request,
         )
     return JsonResponse(
         {
             "userId": user_id,
+            "allowPublicProject": public_project_allowed(user),
             "projectIds": list(
                 ProjectMembership.objects.filter(user=user).values_list(
                     "project_id", flat=True

@@ -14,6 +14,7 @@ import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import type {
   AgentWorkflow,
+  AgentBootstrap,
   AgentKnowledgeSelection,
   AgentResearchDemoList,
   AgentResource,
@@ -27,6 +28,7 @@ import { createUuid } from "../utils/uuid";
 import { useComputeText } from "../compute/ui";
 import { useProjectContext } from "../projects/ProjectContext";
 import { getActiveProject, projectSignal } from "../projects/session";
+import { combineAbortSignals } from "../utils/abortSignals";
 import DemoWorkflowForm, {
   demoGoals,
   demoInputsReady,
@@ -34,8 +36,13 @@ import DemoWorkflowForm, {
 } from "./DemoWorkflowForm";
 import WorkflowResults from "./WorkflowResults";
 import { allWorkflowPages, workflowGeologyVersions } from "./workflowCatalog";
+import { multiElementType } from "./multiElementScenario";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
+type WorkflowHistory = Pick<
+  AgentWorkflow,
+  "id" | "goal" | "status" | "workflowType" | "updatedAt"
+>;
 
 function planDraftSignature(value: Record<string, unknown>) {
   return JSON.stringify(value, (_key, item: unknown) =>
@@ -49,7 +56,10 @@ function planDraftSignature(value: Record<string, unknown>) {
 
 export function workflowScenarioOptions(
   projectId: string,
-  demos: AgentResearchDemoList["items"],
+  demos: Pick<
+    AgentResearchDemoList["items"][number],
+    "scenario" | "projectId" | "title"
+  >[],
 ) {
   return [
     { value: "research_processing", label: "通用科研计算" },
@@ -94,7 +104,7 @@ function ParameterField({
       <Select
         aria-label={spec.label}
         disabled={disabled}
-        style={{ minWidth: 180 }}
+        style={{ width: "100%", minWidth: 0 }}
         value={value as string | number | undefined}
         onChange={onChange}
         options={values.map((v) => ({ value: v, label: String(v) }))}
@@ -128,20 +138,33 @@ export default function WorkflowPanel({
   model,
   resourceIds,
   embedded = false,
+  open = true,
+  userId,
+  bootstrap,
   onStatusChange,
   onWorkflowChange,
 }: {
   model: string;
   resourceIds: number[];
   embedded?: boolean;
+  open?: boolean;
+  userId?: number;
+  bootstrap?: AgentBootstrap | null;
   onStatusChange?: (status: AgentWorkflow["status"] | undefined) => void;
   onWorkflowChange?: (workflow: AgentWorkflow | undefined) => void;
 }) {
   const ui = useComputeText();
   const project = useProjectContext();
+  const projectId = project?.current ?? getActiveProject();
   const [demos, setDemos] = useState<AgentResearchDemoList["items"]>([]);
+  const [scenes, setScenes] = useState<
+    Pick<
+      AgentResearchDemoList["items"][number],
+      "scenario" | "projectId" | "title"
+    >[]
+  >([]);
   const [goal, setGoal] = useState("");
-  const [workflowType, setWorkflowType] = useState("research_processing");
+  const [workflowType, setWorkflowType] = useState("");
   const [resources, setResources] = useState<AgentResource[]>([]);
   const [knowledgeDomains, setKnowledgeDomains] = useState<
     KnowledgeDomainOption[]
@@ -154,7 +177,39 @@ export default function WorkflowPanel({
   const [inputs, setInputs] = useState<Record<string, number>>({});
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [workflow, setWorkflow] = useState<AgentWorkflow>();
-  const [history, setHistory] = useState<AgentWorkflow[]>([]);
+  const [history, setHistory] = useState<WorkflowHistory[]>([]);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>();
+  const [demosScope, setDemosScope] = useState<string>();
+  const [scenesLoading, setScenesLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [catalogScope, setCatalogScope] = useState<string>();
+  const [contextScope, setContextScope] = useState<string>();
+  const [historyScope, setHistoryScope] = useState<string>();
+  const catalogReady = catalogScope === projectId;
+  const sceneScope = `${projectId}:${workflowType}`;
+  const historyRequestScope = `${sceneScope}:${historyOffset}`;
+  const contextReady = contextScope === sceneScope;
+  const currentScope = useRef(sceneScope);
+  currentScope.current = sceneScope;
+  const currentSelection = useRef({ workflow, selectedWorkflowId });
+  currentSelection.current = { workflow, selectedWorkflowId };
+  const workflowCache = useRef(new Map<string, AgentWorkflow>());
+  const storageKey = userId ? `workflow-session:${userId}:${projectId}` : "";
+  const rememberedTask = (scene: string) => {
+    try {
+      return storageKey
+        ? sessionStorage.getItem(`${storageKey}:${scene}`) || undefined
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [previousWorkflowId, setPreviousWorkflowId] = useState<string>();
@@ -167,15 +222,25 @@ export default function WorkflowPanel({
     workflowType === "ecology_investigation" ||
     workflowType === "geology_correction" ||
     workflowType === "geology_age_correction" ||
-    workflowType === "geology_map_review";
+    workflowType === "geology_map_review" ||
+    workflowType === multiElementType;
   const reviewingPlan =
     workflow?.status === "waiting_approval" &&
     workflow.plan.phase === "review_plan";
-  const locked = Boolean(
-    workflow &&
-    [...active, "paused"].includes(workflow.status) &&
-    !reviewingPlan,
-  );
+  const initializing =
+    Boolean(workflowType) &&
+    (!catalogReady ||
+      !contextReady ||
+      !historyScope?.startsWith(`${sceneScope}:`) ||
+      detailLoading);
+  const locked =
+    !workflowType ||
+    initializing ||
+    Boolean(
+      workflow &&
+      [...active, "paused"].includes(workflow.status) &&
+      !reviewingPlan,
+    );
   const draft = {
     goal,
     model,
@@ -195,9 +260,16 @@ export default function WorkflowPanel({
     new Map(
       workflowGeologyVersions(
         algorithms,
-        workflowType === "geology_map_review"
-          ? ["geology-map-check", "geology-map-correct"]
-          : ["geology-age-check", "geology-age-edit"],
+        workflowType === multiElementType
+          ? [
+              "geology-multi-check",
+              "geology-multi-apply",
+              "geology-multi-relations",
+              "geology-multi-prospect",
+            ]
+          : workflowType === "geology_map_review"
+            ? ["geology-map-check", "geology-map-correct"]
+            : ["geology-age-check", "geology-age-edit"],
       )
         .flatMap((item) => item.manifest.parameters)
         .map((spec) => [spec.key, spec] as const),
@@ -216,6 +288,7 @@ export default function WorkflowPanel({
       setCandidates([]);
       setResources([]);
       setPreviousWorkflowId(undefined);
+      workflowCache.current.clear();
     }
   };
   const restore = (next: AgentWorkflow | undefined) => {
@@ -286,58 +359,244 @@ export default function WorkflowPanel({
     }
   };
   useEffect(() => {
-    let disposed = false;
-    void Promise.allSettled([
-      agentApi.bootstrap(),
-      agentApi.resources(),
-      agentApi.researchDemos(),
-    ]).then(([bootstrap, data, scenes]) => {
-      if (disposed) return;
-      if (bootstrap.status === "fulfilled") {
-        setKnowledgeDomains(bootstrap.value.knowledgeDomains ?? []);
-      }
-      if (data.status === "fulfilled") setResources(data.value.items ?? []);
-      if (scenes.status === "fulfilled") setDemos(scenes.value.items ?? []);
-    });
-    return () => {
-      disposed = true;
-    };
-  }, []);
+    setWorkflow(undefined);
+    setHistory([]);
+    setHistoryOffset(0);
+    setHistoryHasMore(false);
+    setCandidates([]);
+    setResources([]);
+    setDemos([]);
+    setScenes([]);
+    setAlgorithms([]);
+    setCatalogScope(undefined);
+    setContextScope(undefined);
+    setHistoryScope(undefined);
+    setDemosScope(undefined);
+    setGoal("");
+    setInputs({});
+    setParameters({});
+    setError("");
+    workflowCache.current.clear();
+    let remembered = "";
+    try {
+      remembered = storageKey ? sessionStorage.getItem(storageKey) || "" : "";
+    } catch {
+      // Storage can be disabled by browser privacy settings.
+    }
+    setWorkflowType(remembered);
+    setSelectedWorkflowId(rememberedTask(remembered));
+  }, [projectId, storageKey]);
   useEffect(() => {
+    if (!open || demosScope === projectId) return;
     let disposed = false;
-    const projectId = getActiveProject();
-    const signal = projectSignal();
-    void Promise.all([
-      allWorkflowPages(computeApi.algorithms, projectId, signal),
-      allWorkflowPages(computeApi.inputs, projectId, signal),
-      agentApi.workflows(),
-    ])
-      .then(([a, c, w]) => {
+    const controller = new AbortController();
+    setScenesLoading(true);
+    void agentApi
+      .researchDemoSummaries({ signal: controller.signal })
+      .then((result) => {
         if (disposed) return;
-        setAlgorithms(a);
-        setCandidates(c);
-        setHistory(w.items);
-        restore(w.items[0]);
+        setScenes(result.items);
+        setDemosScope(projectId);
       })
-      .catch((e) => {
-        if (!disposed) report(e);
+      .catch((reason) => {
+        if (!disposed) report(reason);
+      })
+      .finally(() => {
+        if (!disposed) setScenesLoading(false);
       });
     return () => {
       disposed = true;
+      controller.abort();
     };
-  }, []);
+  }, [open, projectId, demosScope, loadAttempt]);
+  useEffect(() => {
+    if (!open || !workflowType || contextReady) return;
+    let disposed = false;
+    const controller = new AbortController();
+    setContextLoading(true);
+    void Promise.all([
+      bootstrap
+        ? Promise.resolve(bootstrap)
+        : agentApi.bootstrap({ signal: controller.signal }),
+      agentApi.resources("", { signal: controller.signal }),
+      workflowType === "research_processing"
+        ? Promise.resolve({ items: [] })
+        : agentApi.researchDemos({
+            scenario:
+              workflowType as AgentResearchDemoList["items"][number]["scenario"],
+            signal: controller.signal,
+          }),
+    ])
+      .then(([configuration, data, presets]) => {
+        if (disposed) return;
+        setKnowledgeDomains(configuration.knowledgeDomains ?? []);
+        setResources(data.items ?? []);
+        setDemos(presets.items);
+        if (
+          !currentSelection.current.workflow &&
+          !currentSelection.current.selectedWorkflowId
+        ) {
+          const preset = presets.items.find(
+            (item) => item.scenario === workflowType,
+          )?.preset;
+          setInputs(preset?.inputs ?? {});
+          setParameters(preset?.parameters ?? {});
+        }
+        setContextScope(sceneScope);
+      })
+      .catch((reason) => {
+        if (!disposed) report(reason);
+      })
+      .finally(() => {
+        if (!disposed) setContextLoading(false);
+      });
+    return () => {
+      disposed = true;
+      controller.abort();
+    };
+  }, [open, sceneScope, contextReady, bootstrap, loadAttempt]);
+  useEffect(() => {
+    if (!open || !workflowType || catalogReady) return;
+    let disposed = false;
+    const controller = new AbortController();
+    const cancellation = combineAbortSignals([
+      projectSignal(),
+      controller.signal,
+    ]);
+    const signal = cancellation.signal;
+    setCatalogLoading(true);
+    void Promise.all([
+      allWorkflowPages(
+        (params) => computeApi.algorithms(params, { signal }),
+        projectId,
+        signal,
+      ),
+      allWorkflowPages(
+        (params) => computeApi.inputs(params, { signal }),
+        projectId,
+        signal,
+      ),
+    ])
+      .then(([a, c]) => {
+        if (disposed) return;
+        setAlgorithms(a);
+        setCandidates(c);
+        setCatalogScope(projectId);
+      })
+      .catch((e) => {
+        if (!disposed) report(e);
+      })
+      .finally(() => {
+        cancellation.dispose();
+        if (!disposed) setCatalogLoading(false);
+      });
+    return () => {
+      disposed = true;
+      controller.abort();
+      cancellation.dispose();
+    };
+  }, [open, projectId, catalogReady, Boolean(workflowType), loadAttempt]);
+  useEffect(() => {
+    if (!open || !workflowType || historyScope === historyRequestScope) return;
+    let disposed = false;
+    const controller = new AbortController();
+    if (!historyOffset) setHistory([]);
+    setHistoryLoading(true);
+    void agentApi
+      .workflowHistory({
+        workflowType,
+        offset: historyOffset,
+        limit: 30,
+        signal: controller.signal,
+      })
+      .then((result) => {
+        if (disposed) return;
+        setHistory((previous) =>
+          historyOffset
+            ? [
+                ...previous,
+                ...result.items.filter(
+                  (item) => !previous.some((old) => old.id === item.id),
+                ),
+              ]
+            : result.items,
+        );
+        setHistoryHasMore(result.hasMore);
+        setHistoryScope(historyRequestScope);
+      })
+      .catch((error) => {
+        if (!disposed) report(error);
+      })
+      .finally(() => {
+        if (!disposed) setHistoryLoading(false);
+      });
+    return () => {
+      disposed = true;
+      controller.abort();
+    };
+  }, [open, historyRequestScope, historyScope, loadAttempt]);
+  useEffect(() => {
+    const requestedId = workflow?.id ?? selectedWorkflowId;
+    if (!open || !requestedId) return;
+    let disposed = false;
+    const controller = new AbortController();
+    const requestedScope = sceneScope;
+    setDetailLoading(true);
+    void agentApi
+      .workflow(requestedId, { signal: controller.signal })
+      .then((next) => {
+        if (disposed || currentScope.current !== requestedScope) return;
+        if (
+          String(next.projectId) !== projectId ||
+          next.workflowType !== workflowType
+        )
+          throw new Error("该历史任务不属于当前项目或研究场景，请重新选择。");
+        restore(next);
+      })
+      .catch((reason) => {
+        if (!disposed) report(reason);
+      })
+      .finally(() => {
+        if (!disposed) setDetailLoading(false);
+      });
+    return () => {
+      disposed = true;
+      controller.abort();
+    };
+  }, [open, selectedWorkflowId, sceneScope, loadAttempt]);
+  useEffect(() => {
+    if (!workflow || String(workflow.projectId) !== projectId) return;
+    workflowCache.current.set(
+      `${projectId}:${workflow.workflowType}`,
+      workflow,
+    );
+    if (!storageKey) return;
+    try {
+      sessionStorage.setItem(storageKey, workflow.workflowType);
+      sessionStorage.setItem(
+        `${storageKey}:${workflow.workflowType}`,
+        workflow.id,
+      );
+    } catch {
+      // A disabled session store does not prevent the current task from running.
+    }
+  }, [workflow, storageKey, projectId]);
   useEffect(() => {
     if (
+      !open ||
       !workflow ||
       !active.includes(workflow.status) ||
       workflow.status === "waiting_approval"
     )
       return;
     let disposed = false;
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const next = await agentApi.workflow(workflow.id);
+        const next = await agentApi.workflow(workflow.id, {
+          signal: controller.signal,
+        });
         if (disposed) return;
         setWorkflow(next);
         if (["queued", "running", "waiting_compute"].includes(next.status))
@@ -346,12 +605,13 @@ export default function WorkflowPanel({
         if (!disposed) report(e);
       }
     };
-    timer = setTimeout(poll, 700);
+    timer = setTimeout(poll, 0);
     return () => {
       disposed = true;
+      controller.abort();
       clearTimeout(timer);
     };
-  }, [workflow?.id, workflow?.status]);
+  }, [open, workflow?.id, workflow?.status]);
   const preview = async () => {
     if (mutationInFlight.current) return;
     mutationInFlight.current = true;
@@ -476,15 +736,23 @@ export default function WorkflowPanel({
       setBusy(false);
     }
   };
+  const reportedWorkflow =
+    [
+      workflow,
+      ...[...workflowCache.current.values()].filter(
+        (item) => item.id !== workflow?.id,
+      ),
+    ].find((item) => item && [...active, "paused"].includes(item.status)) ??
+    workflow;
   useEffect(() => {
-    onStatusChange?.(workflow?.status);
-  }, [workflow?.status, onStatusChange]);
+    onStatusChange?.(reportedWorkflow?.status);
+  }, [reportedWorkflow?.status, onStatusChange]);
   useEffect(() => {
-    onWorkflowChange?.(workflow);
-  }, [workflow, onWorkflowChange]);
+    onWorkflowChange?.(reportedWorkflow);
+  }, [reportedWorkflow, onWorkflowChange]);
   const scenarioOptions = workflowScenarioOptions(
     project?.current ?? getActiveProject(),
-    demos,
+    scenes,
   );
   const currentPreset = demos.find(
     (item) =>
@@ -513,8 +781,10 @@ export default function WorkflowPanel({
           <span>研究场景</span>
           <Select
             aria-label="研究场景"
-            value={workflowType}
-            disabled={locked || busy || Boolean(previousWorkflowId)}
+            value={workflowType || undefined}
+            placeholder="请选择研究场景"
+            loading={scenesLoading}
+            disabled={scenesLoading || busy || Boolean(previousWorkflowId)}
             options={scenarioOptions}
             onChange={(value) => {
               const preset = demos.find(
@@ -524,296 +794,388 @@ export default function WorkflowPanel({
                     (project?.current ?? getActiveProject()),
               )?.preset;
               setWorkflowType(value);
+              setWorkflow(undefined);
+              setPreviousWorkflowId(undefined);
+              setPreviewDraft("");
+              setHistory([]);
+              setHistoryOffset(0);
+              setHistoryHasMore(false);
+              setHistoryScope(undefined);
+              setContextScope(undefined);
+              setDetailLoading(false);
+              setError("");
               setInputs(preset?.inputs ?? {});
               setParameters(preset?.parameters ?? {});
               setVersionId(undefined);
-              if (value !== "research_processing")
-                setGoal(demoGoals[value as DemoWorkflowType]);
-            }}
-          />
-        </label>
-      </div>
-      <Input.TextArea
-        aria-label={ui("工作流目标", "Workflow goal")}
-        value={goal}
-        disabled={locked || busy}
-        onChange={(e) => setGoal(e.target.value)}
-        maxLength={12000}
-        autoSize={{ minRows: 2, maxRows: 4 }}
-        placeholder={ui(
-          "例如：使用 NDVI 算法处理所选影像并将结果入库。",
-          "Example: calculate NDVI for the selected image and import the result.",
-        )}
-      />
-      {isDemo ? (
-        <DemoWorkflowForm
-          type={workflowType as DemoWorkflowType}
-          candidates={candidates}
-          resources={resources}
-          inputs={inputs}
-          parameters={parameters}
-          disabled={locked || busy}
-          onInputsChange={setInputs}
-          onParametersChange={setParameters}
-          evidenceOnly={Boolean(previousWorkflowId)}
-          preset={currentPreset}
-          onPresetRestore={() => {
-            if (!currentPreset) return;
-            setInputs(currentPreset.inputs);
-            setParameters(currentPreset.parameters);
-            setGoal(demoGoals[workflowType as DemoWorkflowType]);
-            setKnowledgeSelection({ mode: "auto", domains: [] });
-            setVersionId(undefined);
-          }}
-        />
-      ) : (
-        <>
-          <Select
-            aria-label={ui("指定算法", "Select algorithm")}
-            style={{ width: "100%" }}
-            allowClear
-            showSearch
-            optionFilterProp="label"
-            value={versionId}
-            placeholder={ui(
-              "自动按目标匹配，或指定算法与参数",
-              "Match the goal automatically or choose an algorithm",
-            )}
-            options={algorithms.flatMap((a) =>
-              a.versions
-                .filter((v) => v.status === "published")
-                .map((v) => ({
-                  value: v.id,
-                  label: `${a.name} / ${v.version}`,
-                })),
-            )}
-            onChange={(id) => {
-              setVersionId(id);
-              setInputs({});
-              setParameters({});
-            }}
-          />
-          {version?.manifest.inputs.map((spec) => (
-            <Space key={spec.key} wrap>
-              <Typography.Text>{spec.label}</Typography.Text>
-              <Select
-                aria-label={spec.label}
-                style={{ minWidth: 220 }}
-                value={inputs[spec.key]}
-                allowClear
-                options={candidates
-                  .filter((c) => c.kind === spec.kind)
-                  .map((c) => ({
-                    value: c.id,
-                    label:
-                      resources.find((item) => item.id === c.id)?.name ??
-                      c.name,
-                  }))}
-                onChange={(id) =>
-                  setInputs((old) => {
-                    const next = { ...old };
-                    if (id === undefined) delete next[spec.key];
-                    else next[spec.key] = id;
-                    return next;
-                  })
-                }
-              />
-            </Space>
-          ))}
-          {version?.manifest.parameters
-            .filter(
-              (spec) =>
-                !spec.when ||
-                (parameters[String(spec.when.key)] ??
-                  version.manifest.parameters.find(
-                    (p) => p.key === spec.when?.key,
-                  )?.default) === spec.when.equals,
-            )
-            .map((spec) => (
-              <Space key={spec.key} wrap>
-                <Typography.Text>{spec.label}</Typography.Text>
-                <ParameterField
-                  spec={spec}
-                  value={parameters[spec.key] ?? spec.default}
-                  candidate={
-                    spec.input
-                      ? candidates.find(
-                          (c) => c.id === inputs[spec.input ?? ""],
-                        )
-                      : undefined
-                  }
-                  onChange={(value) =>
-                    setParameters((old) => ({ ...old, [spec.key]: value }))
-                  }
-                />
-              </Space>
-            ))}
-        </>
-      )}
-      {["geology_age_correction", "geology_map_review"].includes(
-        workflowType,
-      ) &&
-        geologyParameterSpecs.length > 0 && (
-          <div className="agent-demo-fields agent-demo-parameters">
-            {geologyParameterSpecs.map((spec) => (
-              <label key={spec.key}>
-                <span>{spec.label}</span>
-                <ParameterField
-                  spec={spec}
-                  value={parameters[spec.key] ?? spec.default}
-                  disabled={locked || busy}
-                  onChange={(value) =>
-                    setParameters((old) => ({ ...old, [spec.key]: value }))
-                  }
-                />
-              </label>
-            ))}
-          </div>
-        )}
-      <div className="agent-workflow-selectors">
-        <label>
-          <span>知识依据</span>
-          <Select
-            aria-label="工作流知识模式"
-            value={knowledgeSelection.mode}
-            disabled={locked || busy}
-            options={[
-              { value: "auto", label: "按场景自动选择" },
-              { value: "manual", label: "指定知识分区" },
-              { value: "all", label: "所有可见知识" },
-              { value: "none", label: "本次不使用知识" },
-            ]}
-            onChange={(mode: AgentKnowledgeSelection["mode"]) =>
-              setKnowledgeSelection({
-                mode,
-                domains: mode === "manual" ? knowledgeSelection.domains : [],
-              })
-            }
-          />
-        </label>
-        {knowledgeSelection.mode === "manual" && (
-          <label>
-            <span>知识分区</span>
-            <Select
-              aria-label="工作流知识分区"
-              mode="multiple"
-              disabled={locked || busy}
-              value={knowledgeSelection.domains}
-              options={knowledgeDomains.map((entry) => ({
-                value: entry.id,
-                label: `${entry.label}（${entry.count}）`,
-              }))}
-              onChange={(domains) =>
-                setKnowledgeSelection({ mode: "manual", domains })
+              setGoal(
+                value === "research_processing"
+                  ? ""
+                  : demoGoals[value as DemoWorkflowType],
+              );
+              setSelectedWorkflowId(rememberedTask(value));
+              const cached = workflowCache.current.get(`${projectId}:${value}`);
+              if (cached) {
+                restore(cached);
+                setSelectedWorkflowId(cached.id);
               }
-            />
-          </label>
-        )}
+              try {
+                if (storageKey) sessionStorage.setItem(storageKey, value);
+              } catch {
+                // Keep the selected scene in memory when storage is unavailable.
+              }
+            }}
+          />
+        </label>
       </div>
-      <Button
-        type="primary"
-        loading={busy}
-        disabled={
-          !goal.trim() ||
-          !model ||
-          locked ||
-          (knowledgeSelection.mode === "manual" &&
-            !knowledgeSelection.domains.length) ||
-          (isDemo &&
-            !demoInputsReady(
-              workflowType as DemoWorkflowType,
-              inputs,
-              candidates,
-            )) ||
-          Boolean(
-            previousWorkflowId &&
-            inputs.context ===
-              (workflow?.plan.inputs &&
-              typeof workflow.plan.inputs === "object" &&
-              "context" in workflow.plan.inputs
-                ? workflow.plan.inputs.context
-                : undefined),
-          ) ||
-          (workflowType === "ecology_investigation" &&
-            (!parameters.early_date || !parameters.late_date))
-        }
-        onClick={() => void preview()}
-      >
-        {previousWorkflowId
-          ? ui("生成更新计划", "Preview evidence update")
-          : ui("生成执行计划", "Preview plan")}
-      </Button>
-      {reviewingPlan && (
-        <Typography.Text type="secondary">
-          重新生成会撤销当前尚未执行的旧计划，并按上方资料、参数与知识范围生成新计划。
+      {(scenesLoading ||
+        historyLoading ||
+        detailLoading ||
+        catalogLoading ||
+        contextLoading) && (
+        <Typography.Text role="status" aria-live="polite" type="secondary">
+          {scenesLoading
+            ? "正在加载研究场景…"
+            : detailLoading
+              ? "正在恢复所选任务…"
+              : "正在加载当前场景的资料与历史…"}
         </Typography.Text>
       )}
-      {previousWorkflowId && (
+      {error && (
         <Alert
-          type="info"
-          title="更新这次调查的观测依据"
-          description="请选择新的生态背景与观测记录。平台会结合已有变化结果更新调查建议，保留本次影像、日期和参数。"
+          type="error"
+          title={error}
           action={
             <Button
               size="small"
-              onClick={() => setPreviousWorkflowId(undefined)}
+              onClick={() => {
+                setError("");
+                setLoadAttempt((value) => value + 1);
+              }}
             >
-              返回普通分析
+              重新加载
             </Button>
           }
         />
       )}
-      {error && <Alert type="error" title={error} />}
-      {planOutdated && (
-        <Alert
-          type="warning"
-          title="资料或参数已改变"
-          description="当前显示的是旧计划。请重新生成执行计划，核对后再确认执行。"
-        />
+      {!workflowType && !scenesLoading && (
+        <Typography.Text type="secondary">
+          选择研究场景后加载本项目资料和您在该场景下的历史任务。
+        </Typography.Text>
       )}
-      {history.length > 1 && (
-        <Select
-          aria-label={ui("历史工作流", "Workflow history")}
-          style={{ width: "100%" }}
-          value={workflow?.id}
-          options={history.map((item) => ({
-            value: item.id,
-            label: item.goal,
-          }))}
-          onChange={(id) => {
-            setError("");
-            void agentApi.workflow(id).then(restore).catch(report);
-          }}
-        />
-      )}
-      {workflow && (
-        <WorkflowResults
-          workflow={workflow}
-          busy={busy}
-          onConfirm={planOutdated ? undefined : () => void action(true)}
-          onCancel={() => void action(false)}
-          onPause={() => void controlWorkflow("pause")}
-          onResume={() => void controlWorkflow("resume")}
-          onReview={(decision, feedback, selectedSuggestionIds) =>
-            void reviewWorkflow(decision, feedback, selectedSuggestionIds)
-          }
-          onRestart={() => {
-            restore(workflow);
-            setWorkflow(undefined);
-            setError("");
-          }}
-          onEvidenceUpdate={
-            !previousWorkflowId
-              ? () => {
-                  restore(workflow);
-                  setPreviousWorkflowId(workflow.id);
+      {workflowType && (
+        <>
+          <Input.TextArea
+            aria-label={ui("工作流目标", "Workflow goal")}
+            value={goal}
+            disabled={locked || busy}
+            onChange={(e) => setGoal(e.target.value)}
+            maxLength={12000}
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            placeholder={ui(
+              "例如：使用 NDVI 算法处理所选影像并将结果入库。",
+              "Example: calculate NDVI for the selected image and import the result.",
+            )}
+          />
+          {isDemo ? (
+            <DemoWorkflowForm
+              type={workflowType as DemoWorkflowType}
+              candidates={candidates}
+              resources={resources}
+              inputs={inputs}
+              parameters={parameters}
+              disabled={locked || busy}
+              onInputsChange={setInputs}
+              onParametersChange={setParameters}
+              evidenceOnly={Boolean(previousWorkflowId)}
+              preset={currentPreset}
+              onPresetRestore={() => {
+                if (!currentPreset) return;
+                setInputs(currentPreset.inputs);
+                setParameters(currentPreset.parameters);
+                setGoal(demoGoals[workflowType as DemoWorkflowType]);
+                setKnowledgeSelection({ mode: "auto", domains: [] });
+                setVersionId(undefined);
+              }}
+            />
+          ) : (
+            <>
+              <Select
+                aria-label={ui("指定算法", "Select algorithm")}
+                style={{ width: "100%" }}
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                value={versionId}
+                placeholder={ui(
+                  "自动按目标匹配，或指定算法与参数",
+                  "Match the goal automatically or choose an algorithm",
+                )}
+                options={algorithms.flatMap((a) =>
+                  a.versions
+                    .filter((v) => v.status === "published")
+                    .map((v) => ({
+                      value: v.id,
+                      label: `${a.name} / ${v.version}`,
+                    })),
+                )}
+                onChange={(id) => {
+                  setVersionId(id);
+                  setInputs({});
+                  setParameters({});
+                }}
+              />
+              {version?.manifest.inputs.map((spec) => (
+                <label key={spec.key} className="agent-workflow-parameter">
+                  <Typography.Text>{spec.label}</Typography.Text>
+                  <Select
+                    aria-label={spec.label}
+                    style={{ width: "100%", minWidth: 0 }}
+                    value={inputs[spec.key]}
+                    allowClear
+                    options={candidates
+                      .filter((c) => c.kind === spec.kind)
+                      .map((c) => ({
+                        value: c.id,
+                        label:
+                          resources.find((item) => item.id === c.id)?.name ??
+                          c.name,
+                      }))}
+                    onChange={(id) =>
+                      setInputs((old) => {
+                        const next = { ...old };
+                        if (id === undefined) delete next[spec.key];
+                        else next[spec.key] = id;
+                        return next;
+                      })
+                    }
+                  />
+                </label>
+              ))}
+              {version?.manifest.parameters
+                .filter(
+                  (spec) =>
+                    !spec.when ||
+                    (parameters[String(spec.when.key)] ??
+                      version.manifest.parameters.find(
+                        (p) => p.key === spec.when?.key,
+                      )?.default) === spec.when.equals,
+                )
+                .map((spec) => (
+                  <label key={spec.key} className="agent-workflow-parameter">
+                    <Typography.Text>{spec.label}</Typography.Text>
+                    <ParameterField
+                      spec={spec}
+                      value={parameters[spec.key] ?? spec.default}
+                      candidate={
+                        spec.input
+                          ? candidates.find(
+                              (c) => c.id === inputs[spec.input ?? ""],
+                            )
+                          : undefined
+                      }
+                      onChange={(value) =>
+                        setParameters((old) => ({ ...old, [spec.key]: value }))
+                      }
+                    />
+                  </label>
+                ))}
+            </>
+          )}
+          {[
+            "geology_age_correction",
+            "geology_map_review",
+            multiElementType,
+          ].includes(workflowType) &&
+            geologyParameterSpecs.length > 0 && (
+              <div className="agent-demo-fields agent-demo-parameters">
+                {geologyParameterSpecs
+                  .filter((spec) => spec.key !== "segment")
+                  .map((spec) => (
+                    <label key={spec.key}>
+                      <span>{spec.label}</span>
+                      <ParameterField
+                        spec={spec}
+                        value={parameters[spec.key] ?? spec.default}
+                        disabled={locked || busy}
+                        onChange={(value) =>
+                          setParameters((old) => ({
+                            ...old,
+                            [spec.key]: value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ))}
+              </div>
+            )}
+          <div className="agent-workflow-selectors">
+            <label>
+              <span>知识依据</span>
+              <Select
+                aria-label="工作流知识模式"
+                value={knowledgeSelection.mode}
+                disabled={locked || busy}
+                options={[
+                  { value: "auto", label: "按场景自动选择" },
+                  { value: "manual", label: "指定知识分区" },
+                  { value: "all", label: "所有可见知识" },
+                  { value: "none", label: "本次不使用知识" },
+                ]}
+                onChange={(mode: AgentKnowledgeSelection["mode"]) =>
+                  setKnowledgeSelection({
+                    mode,
+                    domains:
+                      mode === "manual" ? knowledgeSelection.domains : [],
+                  })
                 }
-              : undefined
-          }
-        />
+              />
+            </label>
+            {knowledgeSelection.mode === "manual" && (
+              <label>
+                <span>知识分区</span>
+                <Select
+                  aria-label="工作流知识分区"
+                  mode="multiple"
+                  disabled={locked || busy}
+                  value={knowledgeSelection.domains}
+                  options={knowledgeDomains.map((entry) => ({
+                    value: entry.id,
+                    label: `${entry.label}（${entry.count}）`,
+                  }))}
+                  onChange={(domains) =>
+                    setKnowledgeSelection({ mode: "manual", domains })
+                  }
+                />
+              </label>
+            )}
+          </div>
+          <Button
+            type="primary"
+            loading={busy}
+            disabled={
+              !goal.trim() ||
+              !model ||
+              locked ||
+              (knowledgeSelection.mode === "manual" &&
+                !knowledgeSelection.domains.length) ||
+              (isDemo &&
+                !demoInputsReady(
+                  workflowType as DemoWorkflowType,
+                  inputs,
+                  candidates,
+                )) ||
+              Boolean(
+                previousWorkflowId &&
+                inputs.context ===
+                  (workflow?.plan.inputs &&
+                  typeof workflow.plan.inputs === "object" &&
+                  "context" in workflow.plan.inputs
+                    ? workflow.plan.inputs.context
+                    : undefined),
+              ) ||
+              (workflowType === "ecology_investigation" &&
+                (!parameters.early_date || !parameters.late_date))
+            }
+            onClick={() => void preview()}
+          >
+            {previousWorkflowId
+              ? ui("生成更新计划", "Preview evidence update")
+              : ui("生成执行计划", "Preview plan")}
+          </Button>
+          {reviewingPlan && (
+            <Typography.Text type="secondary">
+              重新生成会撤销当前尚未执行的旧计划，并按上方资料、参数与知识范围生成新计划。
+            </Typography.Text>
+          )}
+          {previousWorkflowId && (
+            <Alert
+              type="info"
+              title="更新这次调查的观测依据"
+              description="请选择新的生态背景与观测记录。平台会结合已有变化结果更新调查建议，保留本次影像、日期和参数。"
+              action={
+                <Button
+                  size="small"
+                  onClick={() => setPreviousWorkflowId(undefined)}
+                >
+                  返回普通分析
+                </Button>
+              }
+            />
+          )}
+          {planOutdated && (
+            <Alert
+              type="warning"
+              title="资料或参数已改变"
+              description="当前显示的是旧计划。请重新生成执行计划，核对后再确认执行。"
+            />
+          )}
+          {history.length > 0 && (
+            <Select
+              aria-label={ui("历史工作流", "Workflow history")}
+              style={{ width: "100%" }}
+              value={workflow?.id}
+              placeholder="选择历史任务后查看详情"
+              loading={historyLoading || detailLoading}
+              disabled={busy}
+              options={history.map((item) => ({
+                value: item.id,
+                label: item.goal,
+              }))}
+              onChange={(id) => {
+                setError("");
+                setWorkflow(undefined);
+                setSelectedWorkflowId(id);
+              }}
+            />
+          )}
+          {historyHasMore && (
+            <Button
+              size="small"
+              loading={historyLoading}
+              onClick={() => setHistoryOffset(history.length)}
+            >
+              加载更多历史任务
+            </Button>
+          )}
+          {workflow && (
+            <WorkflowResults
+              workflow={workflow}
+              busy={busy}
+              onConfirm={planOutdated ? undefined : () => void action(true)}
+              onCancel={() => void action(false)}
+              onPause={() => void controlWorkflow("pause")}
+              onResume={() => void controlWorkflow("resume")}
+              onReview={(decision, feedback, selectedSuggestionIds) =>
+                void reviewWorkflow(decision, feedback, selectedSuggestionIds)
+              }
+              onRestart={() => {
+                restore(workflow);
+                setWorkflow(undefined);
+                setSelectedWorkflowId(undefined);
+                workflowCache.current.delete(sceneScope);
+                try {
+                  if (storageKey)
+                    sessionStorage.removeItem(`${storageKey}:${workflowType}`);
+                } catch {
+                  // The form can still be restarted without browser persistence.
+                }
+                setError("");
+              }}
+              onEvidenceUpdate={
+                !previousWorkflowId
+                  ? () => {
+                      restore(workflow);
+                      setPreviousWorkflowId(workflow.id);
+                    }
+                  : undefined
+              }
+            />
+          )}
+        </>
       )}
     </Space>
   );
+  if (!open) return null;
   return embedded ? (
     <section className="agent-workflow-content">{content}</section>
   ) : (

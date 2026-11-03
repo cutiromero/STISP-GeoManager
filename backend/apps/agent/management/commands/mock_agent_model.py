@@ -6,8 +6,79 @@ import time
 from django.core.management.base import BaseCommand
 
 
+def mock_research_intent(messages):
+    """Exercise explicit Demo routing, never generate scientific findings."""
+    payload = None
+    for message in reversed(messages):
+        if message.get("role") != "user":
+            continue
+        try:
+            value = json.loads(message.get("content", ""))
+        except (ValueError, TypeError):
+            continue
+        if isinstance(value, dict) and {"authorizedCatalog", "responseContract"} <= set(
+            value
+        ):
+            payload = value
+            break
+    if payload is None:
+        return None
+    scene = next(
+        (
+            item
+            for item in payload.get("authorizedCatalog", {}).get("scenarios", [])
+            if item.get("scenario") == payload.get("demoScenario")
+        ),
+        None,
+    )
+    # Mock routing only follows a user-clicked scenario; ordinary natural
+    # language understanding remains a real-model verification requirement.
+    if scene is None:
+        return {"action": "ordinary"}
+    inputs, questions = {}, []
+    for role, candidates in scene.get("inputs", {}).items():
+        preferred = scene.get("preferredInputs", {}).get(role)
+        chosen = next((item for item in candidates if item["id"] == preferred), None)
+        if chosen is None and len(candidates) == 1:
+            chosen = candidates[0]
+        if chosen is not None:
+            inputs[role] = chosen["id"]
+        else:
+            questions.append(
+                {
+                    "key": role,
+                    "label": "请选择" + scene.get("roleLabels", {}).get(role, role),
+                    "kind": "resource",
+                    "required": True,
+                    "options": [
+                        {"value": str(item["id"]), "label": item["name"]}
+                        for item in candidates
+                    ],
+                }
+            )
+    specs = {item["key"]: item for item in scene.get("parameterSpecs", [])}
+    parameters = {
+        key: value for key, value in scene.get("defaults", {}).items() if key in specs
+    }
+    return {
+        "action": "clarify" if questions else "start",
+        "scenario": scene["scenario"],
+        "goal": payload.get("userMessage") or scene["title"],
+        "message": (
+            "【本地开发模拟解析】按您选定的演示入口与当前授权目录绑定资料和默认参数；"
+            "检查结论由后续真实算法计算，模型判断能力仍需真实模型验证。"
+        ),
+        "inputs": inputs,
+        "parameters": parameters,
+        "questions": questions,
+    }
+
+
 def mock_answer(body):
     messages = body.get("messages", [])
+    research = mock_research_intent(messages)
+    if research is not None:
+        return json.dumps(research, ensure_ascii=False)
     agent_protocol = any(
         m.get("role") == "system" and "只能返回一个JSON对象" in m.get("content", "")
         for m in messages

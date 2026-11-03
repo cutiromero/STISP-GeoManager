@@ -7,7 +7,7 @@ import uuid
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Case, When, Value, IntegerField, Q
+from django.db.models import Case, When, Value, IntegerField, Q, Prefetch
 from django.conf import settings
 from django.db.models.deletion import ProtectedError
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -19,7 +19,8 @@ from apps.catalog.models import DataResource
 from apps.catalog.permissions import filter_accessible
 from apps.core.storage import app_path
 from .access import permission, project_id, require_actor, task_access
-from .data import candidate, preview
+from apps.raster.models import RasterDataset
+from .data import list_candidate, preview
 from .models import (
     AlgorithmCategory,
     AlgorithmResource,
@@ -127,6 +128,11 @@ def categories(request):
     query = AlgorithmCategory._base_manager.filter(
         project_tag_id__in={1, project_id()}
     ).order_by("sort_order", "id")
+    if project_id() != 1:
+        query = query.filter(
+            Q(project_tag_id=project_id())
+            | Q(name__in=allowed_algorithms().values_list("category", flat=True))
+        )
     return JsonResponse(
         {
             "items": [
@@ -387,7 +393,16 @@ def inputs(request):
         query = query.filter(data_type=request.GET["kind"])
     if request.GET.get("q"):
         query = query.filter(name__icontains=request.GET["q"][:160])
-    return page(request, query, candidate)
+    query = query.prefetch_related(
+        Prefetch(
+            "raster_datasets",
+            queryset=RasterDataset.objects.filter(status="ready").only(
+                "data_resource_id", "source_relative_path", "source_gdalinfo"
+            ),
+            to_attr="_compute_ready_rasters",
+        )
+    )
+    return page(request, query, list_candidate)
 
 
 @endpoint(["POST"])
@@ -443,7 +458,13 @@ def authorized_output(request, output_id):
         ).filter(task__project_tag_id=project_id()),
         pk=output_id,
     )
-    task_access(output.task, request.user)
+    try:
+        task_access(output.task, request.user)
+    except ComputeError:
+        from apps.catalog.share_access import can_read_shared_output
+
+        if not can_read_shared_output(output, request.user):
+            raise
     if output.expired:
         raise ComputeError("临时结果已过期；已入库的数据仍可在数据资源中访问", 404)
     return output

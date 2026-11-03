@@ -54,6 +54,9 @@ export function addLoadedStyleLayers(
     fillOpacity,
   } = buildVectorPaintProperties(style, layerOpacity);
   const pointFilter = pointFeatureFilter();
+  const comparisonStructure =
+    Boolean(layer.metadata.对比任务) &&
+    layer.metadata.comparisonElement === "构造";
 
   upsertLayer(map, {
     id: `${sourceId}-fill`,
@@ -93,11 +96,11 @@ export function addLoadedStyleLayers(
     type: "line",
     source: sourceId,
     filter: [
-      "match",
-      ["geometry-type"],
-      ["LineString", "Polygon"],
-      true,
-      false,
+      "all",
+      ["match", ["geometry-type"], ["LineString", "Polygon"], true, false],
+      comparisonStructure
+        ? ["!=", ["get", "state"], "exclude"]
+        : ["literal", true],
     ],
     layout: {
       "line-cap": style.line.lineCap,
@@ -139,6 +142,25 @@ export function addLoadedStyleLayers(
       "line-emissive-strength": style.line.lineEmissiveStrength,
     },
   });
+
+  if (comparisonStructure)
+    upsertLayer(map, {
+      id: `${sourceId}-excluded-line`,
+      type: "line",
+      source: sourceId,
+      filter: [
+        "all",
+        ["==", ["geometry-type"], "LineString"],
+        ["==", ["get", "state"], "exclude"],
+      ],
+      paint: {
+        "line-color": "#8d9baa",
+        "line-width": style.line.lineWidth + 1,
+        "line-opacity": lineOpacity,
+        "line-dasharray": [3, 2],
+      },
+    });
+  else removeStyleLayer(map, `${sourceId}-excluded-line`);
 
   if (shouldClusterVectorLayer(layer)) {
     addClusterStyleLayers(map, sourceId, layer, layerOpacity);
@@ -883,7 +905,10 @@ export function setLoadedLayerGroupVisibility(
   if (!hasMapStyle(map)) return;
   const visibility = visible ? "visible" : "none";
   for (const layerId of loadedStyleLayerIds(sourceId)) {
-    if (map.getLayer(layerId)) {
+    if (
+      map.getLayer(layerId) &&
+      map.getLayoutProperty?.(layerId, "visibility") !== visibility
+    ) {
       map.setLayoutProperty(layerId, "visibility", visibility);
     }
   }
@@ -895,6 +920,7 @@ export function loadedStyleLayerIds(sourceId: string) {
     `${sourceId}-heatmap`,
     `${sourceId}-fill`,
     `${sourceId}-line`,
+    `${sourceId}-excluded-line`,
     `${sourceId}-cluster`,
     `${sourceId}-cluster-count`,
     `${sourceId}-point`,

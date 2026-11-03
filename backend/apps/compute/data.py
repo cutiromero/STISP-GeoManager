@@ -25,8 +25,8 @@ from .models import ComputeImport
 from .packages import ComputeError, checksum
 
 
-def candidate(resource, *, raster_metadata=False):
-    result = {
+def _candidate_record(resource: DataResource) -> dict:
+    return {
         "id": resource.id,
         "name": resource.name,
         "kind": resource.data_type,
@@ -38,6 +38,153 @@ def candidate(resource, *, raster_metadata=False):
         "geometryTypes": [],
         "sizeBytes": resource.size_bytes,
     }
+
+
+def list_candidate(resource: DataResource) -> dict:
+    """Read selector metadata without loading rows, pixels or feature geometries.
+
+    This is advisory catalog information. Submission still calls candidate(),
+    and execution fixes and validates the actual input file independently.
+    """
+    result = _candidate_record(resource)
+    try:
+        if resource.data_type == "raster":
+            datasets = getattr(resource, "_compute_ready_rasters", None)
+            dataset = datasets[0] if datasets else None
+            if datasets is None:
+                dataset = RasterDataset.objects.filter(
+                    data_resource=resource, status="ready"
+                ).first()
+            if not dataset:
+                raise ComputeError("栅格尚未处理完成")
+            source = raster_source_path(dataset.source_relative_path)
+            if not source.is_file():
+                raise ComputeError("输入栅格源文件不存在，请重新导入数据")
+            # The display COG may have another CRS or additional alpha bands.
+            # Use the saved original-file metadata, never its display metadata.
+            metadata = dataset.source_gdalinfo or {}
+            bands = metadata.get("bands")
+            if not isinstance(bands, list) or not bands:
+                return candidate(resource)
+            coordinate = metadata.get("coordinateSystem") or {}
+            wkt = coordinate.get("wkt") if isinstance(coordinate, dict) else None
+            crs = ""
+            if wkt:
+                from rasterio.crs import CRS
+
+                crs = str(CRS.from_wkt(wkt))
+            elif (metadata.get("stac") or {}).get("proj:epsg"):
+                crs = "EPSG:" + str(metadata["stac"]["proj:epsg"])
+            result.update(bands=len(bands), crs=crs)
+        elif resource.data_type == "vector":
+            result.update(_vector_candidate_schema(resource))
+        elif resource.data_type == "table":
+            result["fields"] = _table_candidate_fields(resource)
+        else:
+            raise ComputeError("该资源暂不支持计算")
+    except ComputeError:
+        raise
+    except (OSError, sqlite3.Error, ValueError) as exc:
+        raise ComputeError(
+            f"无法读取计算数据“{resource.name}”的字段或元数据，请检查源文件"
+        ) from exc
+    return result
+
+
+def _vector_candidate_schema(resource: DataResource) -> dict:
+    from rasterio.crs import CRS
+
+    path = vector_geopackage_path()
+    layer = validate_vector_layer_name(resource.storage_path)
+    quoted = '"' + layer.replace('"', '""') + '"'
+    with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as connection:
+        info = connection.execute(
+            "SELECT g.column_name, g.geometry_type_name, g.z, "
+            "s.organization, s.organization_coordsys_id, s.definition "
+            "FROM gpkg_geometry_columns g LEFT JOIN gpkg_spatial_ref_sys s "
+            "ON s.srs_id = g.srs_id WHERE g.table_name = ?",
+            (layer,),
+        ).fetchone()
+        if not info:
+            raise ComputeError("矢量图层不存在，请重新导入数据")
+        columns = connection.execute(f"PRAGMA table_info({quoted})").fetchall()
+    geometry_column, geometry_name, z, organization, authority_id, definition = info
+    geometry_types = {
+        "POINT": "Point",
+        "LINESTRING": "LineString",
+        "POLYGON": "Polygon",
+        "MULTIPOINT": "MultiPoint",
+        "MULTILINESTRING": "MultiLineString",
+        "MULTIPOLYGON": "MultiPolygon",
+        "GEOMETRYCOLLECTION": "GeometryCollection",
+        "GEOMETRY": "Unknown",
+    }
+    geometry_type = geometry_types.get(str(geometry_name).upper())
+    if geometry_type is None:
+        # Preserve GDAL's exact names for uncommon curved geometry schemas.
+        actual = candidate(resource)
+        return {key: actual[key] for key in ("fields", "crs", "geometryTypes")}
+    if z == 1:
+        geometry_type += " Z"
+    if organization and authority_id and int(authority_id) > 0:
+        crs = str(CRS.from_user_input(f"{organization}:{authority_id}"))
+    elif definition and definition != "undefined":
+        crs = str(CRS.from_wkt(definition))
+    else:
+        crs = ""
+    return {
+        "fields": [
+            str(row[1]) for row in columns if row[1] != geometry_column and not row[5]
+        ],
+        "crs": crs,
+        "geometryTypes": [geometry_type],
+    }
+
+
+def _table_candidate_fields(resource: DataResource) -> list[str]:
+    from apps.catalog.nongeo import (
+        NonGeoAnalysisError,
+        SUPPORTED_TABLE_SUFFIXES,
+        _resource_file_path,
+    )
+
+    if resource.file_format.upper() == "SQLITE":
+        path = table_data_path("data.sqlite")
+        quoted = '"' + resource.storage_path.replace('"', '""') + '"'
+        with closing(
+            sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+        ) as connection:
+            columns = connection.execute(f"PRAGMA table_info({quoted})").fetchall()
+        if not columns:
+            raise ComputeError("数据资源对应的后台表格不存在或没有字段")
+        return [str(row[1]) for row in columns]
+    try:
+        path = _resource_file_path(resource)
+    except NonGeoAnalysisError as exc:
+        raise ComputeError(str(exc)) from exc
+    if path.suffix.lower() not in SUPPORTED_TABLE_SUFFIXES:
+        raise ComputeError("该表格文件格式暂不支持在线分析")
+    import pandas as pd
+
+    if path.suffix.lower() in {".csv", ".tsv"}:
+        for encoding in ("utf-8-sig", "gb18030"):
+            try:
+                frame = pd.read_csv(
+                    path,
+                    sep="\t" if path.suffix.lower() == ".tsv" else ",",
+                    encoding=encoding,
+                    nrows=0,
+                )
+                return [str(column) for column in frame.columns]
+            except UnicodeDecodeError:
+                continue
+        raise ComputeError("表格文件编码无法识别")
+    frame = pd.read_excel(path, nrows=0)
+    return [str(column) for column in frame.columns]
+
+
+def candidate(resource, *, raster_metadata=False):
+    result = _candidate_record(resource)
     if resource.data_type == "raster":
         import rasterio
 

@@ -1,4 +1,5 @@
 import { requestJson } from "../api/client";
+import { getActiveProject, projectSignal } from "../projects/session";
 import type {
   AgentWorkflow,
   GeoJsonFeatureCollection,
@@ -33,14 +34,34 @@ export function reviewResourceIds(workflow: AgentWorkflow) {
   };
 }
 
-export async function queryReviewMap(id: number) {
-  const result = await requestJson<QueryResponse>(
-    `/api/catalog/resources/${id}/query/`,
-    {
+let reviewQueryQueue: Promise<unknown> = Promise.resolve();
+
+export async function queryReviewMap(
+  id: number,
+  options: { mixed?: boolean; allowEmpty?: boolean } = {},
+) {
+  return (await queryReviewMapResult(id, options)).geojson;
+}
+
+export async function queryReviewMapResult(
+  id: number,
+  options: { mixed?: boolean; allowEmpty?: boolean } = {},
+) {
+  const projectId = getActiveProject();
+  const signal = projectSignal();
+  const response = reviewQueryQueue.then(() => {
+    if (signal.aborted || getActiveProject() !== projectId)
+      throw new DOMException(
+        "项目已切换，已停止读取旧项目图层。",
+        "AbortError",
+      );
+    return requestJson<QueryResponse>(`/api/catalog/resources/${id}/query/`, {
       method: "POST",
       body: { attributeFilters: [], spatialFilter: null, limit: 10000 },
-    },
-  );
+    });
+  });
+  reviewQueryQueue = response.catch(() => undefined);
+  const result = await response;
   if (result.limitExceeded)
     throw new Error("图件超过双图预览范围，请缩小检查范围后查看");
   if (
@@ -49,15 +70,16 @@ export async function queryReviewMap(id: number) {
     result.totalCount > result.returnedCount
   )
     throw new Error("图件返回不完整，请核对资源后重新查看");
-  if (!result.geojson.features.length)
+  if (!result.geojson.features.length && !options.allowEmpty)
     throw new Error("图件尚无可显示的面数据");
   if (
+    !options.mixed &&
     result.geojson.features.some(
       (feature) => !["Polygon", "MultiPolygon"].includes(feature.geometry.type),
     )
   )
     throw new Error("双图预览需要完整的面图件");
-  return result.geojson;
+  return result;
 }
 
 export function previewSuggestions(
@@ -172,11 +194,15 @@ export function reviewLegend(...data: GeoJsonFeatureCollection[]) {
   data
     .flatMap((collection) => collection.features)
     .forEach(({ properties: p }) => {
-      const key = String(p.class);
+      const key = String(p.class ?? p.geo_sym ?? p.code ?? p.name);
       values.set(key, {
         key,
-        name: `${String(p.name ?? "地质单元")} / ${String(p.code ?? key)}`,
-        color: geologicalColor(p.class),
+        name: `${String(p.name ?? "地质单元")} / ${String(p.geo_sym ?? p.code ?? key)}`,
+        color:
+          typeof p.fill_color === "string" &&
+          /^#[\da-f]{6}$/i.test(p.fill_color)
+            ? p.fill_color
+            : geologicalColor(p.class),
       });
     });
   return [...values.values()].sort((a, b) => Number(a.key) - Number(b.key));

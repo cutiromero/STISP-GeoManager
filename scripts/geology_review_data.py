@@ -22,6 +22,34 @@ SEEDS = {
     "fill_gap": "geology-review-20261014-complete-coverage",
     "set_age": "geology-review-20261014-babaoshan-age",
 }
+EXPANDED_VERSION = "expanded-20261025"
+CASE_VERSIONS = {
+    "natural-island-v1": {
+        "roi": ROI,
+        "features": 11,
+        "code_prefix": "geology-review",
+        "label_suffix": "",
+        "gaps": [("geo-unit-00001", CENTER, (1, 1), 0)],
+        "ages": ["geo-unit-00242"],
+    },
+    EXPANDED_VERSION: {
+        "roi": (
+            763665.899734376,
+            3970740.0897343755,
+            772065.899734376,
+            3979140.0897343755,
+        ),
+        "features": 38,
+        "code_prefix": "geology-review-expanded-20261025",
+        "label_suffix": " 扩展区",
+        "gaps": [
+            ("geo-unit-00070", (765151.9431589821, 3973968.129821988), (0.8, 1), 0),
+            ("geo-unit-00251", (769990.3318091418, 3977097.899927086), (1, 0.85), 1),
+            ("geo-unit-00001", (767122.1416721693, 3975421.613798747), (1.1, 1.1), 2),
+        ],
+        "ages": ["geo-unit-00010", "geo-unit-00254"],
+    },
+}
 
 
 def save_json(path, data):
@@ -163,7 +191,10 @@ def rules():
 
 
 def natural_gap(
-    center: tuple[float, float], grid_reference: Path
+    center: tuple[float, float],
+    grid_reference: Path,
+    size: tuple[float, float] = (1, 1),
+    variant: int = 0,
 ) -> tuple[Polygon, dict]:
     """Build one irregular island on the original classification's pixel grid."""
     with rasterio.open(grid_reference) as reference:
@@ -195,8 +226,17 @@ def natural_gap(
             (-7, 3),
             (-6, 1),
         ]
+        if any(not 0.5 <= value <= 1.5 for value in size) or variant not in (0, 1, 2):
+            raise ValueError("岛状范围尺寸或形态超出已核对范围")
+        if variant == 1:
+            profile = [(-x, y) for x, y in profile]
+        elif variant == 2:
+            profile = [(y, -x) for x, y in profile]
         outline = Polygon(
-            [(center[0] + x * grid.a, center[1] + y * -grid.e) for x, y in profile]
+            [
+                (center[0] + x * grid.a * size[0], center[1] + y * -grid.e * size[1])
+                for x, y in profile
+            ]
         )
         extent = from_bounds(*outline.bounds, transform=grid)
         left, top = math.floor(extent.col_off) - 1, math.floor(extent.row_off) - 1
@@ -244,12 +284,23 @@ def natural_gap(
             "gridCrs": reference.crs.to_string(),
             "gridCellSizeM": [grid.a, -grid.e],
             "gridCellCount": cells,
+            "size": list(size),
+            "variant": variant,
         }
 
 
 def prepare(
-    source, mapping_path, output, offset=(0, 0), structures=None, grid_reference=None
+    source,
+    mapping_path,
+    output,
+    offset=(0, 0),
+    structures=None,
+    grid_reference=None,
+    case_version=EXPANDED_VERSION,
 ):
+    if case_version not in CASE_VERSIONS:
+        raise ValueError("未知演示资料版本")
+    case = CASE_VERSIONS[case_version]
     if grid_reference is None:
         raise ValueError("请提供原分类栅格作为格网参照，保留实际像元尺寸和对齐方式")
     if output.exists() and any(output.iterdir()):
@@ -293,22 +344,35 @@ def prepare(
             "geometry",
         ]
     ]
-    area = box(*ROI)
+    area = box(*case["roi"])
     frame = frame[frame.intersects(area)].copy()
     frame.geometry = frame.geometry.intersection(area)
-    assert len(frame) == 11 and frame.geometry.is_valid.all()
+    assert len(frame) == case["features"] and frame.geometry.is_valid.all()
     assert area.difference(unary_union(frame.geometry)).area < 0.001
     frame.to_file(private / "reference.gpkg", layer="data", driver="GPKG", index=False)
     before = frame.copy(deep=True)
-    gap, gap_preparation = natural_gap(
-        (CENTER[0] + offset[0], CENTER[1] + offset[1]), grid_reference
-    )
-    host = frame.index[frame.feature_id == "geo-unit-00001"][0]
-    assert frame.loc[host].geometry.contains(gap)
-    frame.at[host, "geometry"] = frame.loc[host].geometry.difference(gap)
-    age_id = "geo-unit-00242"
-    assert sum(frame.feature_id == age_id) == 1
-    frame.loc[frame.feature_id == age_id, "geologic_age"] = "J3"
+    gaps, gap_records = [], []
+    for host_id, center, size, variant in case["gaps"]:
+        actual_center = (center[0] + offset[0], center[1] + offset[1])
+        gap, metadata = natural_gap(actual_center, grid_reference, size, variant)
+        hosts = frame[frame.geometry.contains(gap)]
+        assert len(hosts) == 1 and hosts.iloc[0].feature_id == host_id
+        host = hosts.index[0]
+        frame.at[host, "geometry"] = frame.loc[host].geometry.difference(gap)
+        gaps.append(gap)
+        gap_records.append(
+            {
+                "host": host_id,
+                "center": actual_center,
+                "areaM2": gap.area,
+                "preparation": metadata,
+            }
+        )
+    for age_id in case["ages"]:
+        age_rows = frame[frame.feature_id == age_id]
+        assert len(age_rows) == 1 and age_rows.iloc[0].formation == "八宝山组"
+        assert age_rows.iloc[0].geologic_age == "T3"
+        frame.loc[frame.feature_id == age_id, "geologic_age"] = "J3"
     frame.to_file(
         output / "待检查地质图.gpkg", layer="data", driver="GPKG", index=False
     )
@@ -349,7 +413,7 @@ def prepare(
             )
         if rows:
             exclusions = gpd.GeoDataFrame(rows, crs=32646)
-            assert not exclusions.intersects(gap).any()
+            assert all(not exclusions.intersects(gap).any() for gap in gaps)
             coverage = gpd.GeoDataFrame(
                 pd.concat([coverage, exclusions], ignore_index=True), crs=32646
             )
@@ -361,12 +425,11 @@ def prepare(
         {
             "source": str(source),
             "sourceSha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-            "roi": ROI,
-            "gapHost": "geo-unit-00001",
-            "gapAreaM2": gap.area,
-            "gapPreparation": gap_preparation,
-            "ageObject": age_id,
-            "gapCenter": [CENTER[0] + offset[0], CENTER[1] + offset[1]],
+            "caseVersion": case_version,
+            "roi": case["roi"],
+            "coverageAreaM2": area.area,
+            "gaps": gap_records,
+            "ageObjects": case["ages"],
             "correctAge": "T3",
             "unregistered": True,
             "derivedAttributes": "formation,region,geologic_age按辞书口径补录作为演示条件；并非新增野外实测",
@@ -375,9 +438,11 @@ def prepare(
             "structureExclusions": int((coverage.role == "exclusion").sum()),
         },
     )
+    changed_ids = {item["host"] for item in gap_records} | set(case["ages"])
     for i, row in before.iterrows():
-        if row.feature_id not in {"geo-unit-00001", age_id}:
-            assert frame.loc[i].geometry.equals(row.geometry)
+        if row.feature_id not in changed_ids:
+            assert frame.loc[i].geometry.equals_exact(row.geometry, 0)
+            assert frame.loc[i].drop("geometry").equals(row.drop("geometry"))
     descriptions = {
         "geology-review-initial": "演示案例的待检查地质图。稳定类别以class为键；地层和地区字段采用资料整理口径，用于检查制图与属性一致性。",
         "geology-review-coverage": "演示区完整覆盖，无水体和未调查区。构造资料对应的15米保护带以exclusion单独登记，涉及该范围时保留审核。"
@@ -394,8 +459,8 @@ def prepare(
         "schemaVersion": 1,
         "resources": [
             {
-                "code": code,
-                "name": name,
+                "code": code.replace("geology-review", case["code_prefix"], 1),
+                "name": name + case["label_suffix"],
                 "file": file,
                 "kind": kind,
                 "layer": "data",
@@ -405,6 +470,7 @@ def prepare(
             for code, name, file, kind in files
         ],
         "algorithms": ["geology-map-check", "geology-map-correct"],
+        "caseVersion": case_version,
     }
     save_json(output / "manifest.json", manifest)
     print(
@@ -412,7 +478,11 @@ def prepare(
             {
                 "features": len(frame),
                 "classes": sorted(set(frame["class"].tolist())),
-                "gapAreaM2": gap.area,
+                "caseVersion": case_version,
+                "coverageAreaKm2": area.area / 1e6,
+                "gapAreasM2": [gap.area for gap in gaps],
+                "issueCount": len(gaps) + len(case["ages"]),
+                "unchangedFeatures": len(frame) - len(changed_ids),
                 "runtimeDirectory": str(output),
                 "acceptanceDirectory": str(private),
             },
@@ -429,6 +499,9 @@ if __name__ == "__main__":
     parser.add_argument("--offset", type=float, nargs=2, default=(0, 0))
     parser.add_argument("--structures", type=Path)
     parser.add_argument("--grid-reference", type=Path, required=True)
+    parser.add_argument(
+        "--case-version", choices=CASE_VERSIONS, default=EXPANDED_VERSION
+    )
     args = parser.parse_args()
     prepare(
         args.source,
@@ -437,4 +510,5 @@ if __name__ == "__main__":
         tuple(args.offset),
         args.structures,
         args.grid_reference,
+        args.case_version,
     )

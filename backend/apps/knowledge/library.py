@@ -18,6 +18,7 @@ from django.core.validators import URLValidator
 from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
+from apps.projects.access import public_project_allowed
 
 from .models import KnowledgeDocument, KnowledgeLibrary
 from .services import can_edit, require_project
@@ -34,9 +35,12 @@ def visible_documents(user, domains=None):
         raise PermissionDenied("账号已停用")
     pid = require_project(user)
     # Explicit public inclusion: default manager is scoped to the selected project.
+    project_filter = Q(project_tag_id=pid)
+    if public_project_allowed(user):
+        project_filter |= Q(project_tag_id=1, visibility="project")
     qs = (
         KnowledgeDocument._base_manager.select_related("library")
-        .filter(Q(project_tag_id=pid) | Q(project_tag_id=1, visibility="project"))
+        .filter(project_filter)
         .filter(Q(visibility="project") | Q(visibility="owner_only", owner_id=user.pk))
     )
     return (

@@ -1,0 +1,143 @@
+.share-invite-target {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  margin: 8px 0 22px;
+  background: #f1f7ff;
+  border: 1px solid #dbe8f9;
+  border-radius: 12px;
+  color: #2363ae;
+}
+.share-invite-target > .anticon {
+  font-size: 22px;
+}
+.share-invite-target > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.share-invite-target strong {
+  color: #173b66;
+  overflow-wrap: anywhere;
+}
+.share-invite-target span {
+  color: #68809c;
+  font-size: 12px;
+}
+.share-recipient-input {
+  width: 100%;
+}
+.share-invite-note.ant-typography {
+  margin-top: 16px;
+  margin-bottom: 0;
+  font-size: 12px;
+}
+.share-invite-modal .ant-alert + .ant-alert {
+  margin-top: 12px;
+}
+.share-invite-modal .ant-alert-title,
+.share-invite-modal .ant-alert-message {
+  color: #173b66;
+}
+.share-invite-modal .ant-alert-description {
+  color: #405c76;
+}
+.share-center-trigger.ant-btn {
+  color: inherit;
+  flex: 0 0 auto;
+}
+.share-center-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.share-center-list {
+  display: grid;
+  gap: 12px;
+}
+.share-invitation {
+  padding: 17px 18px;
+  border: 1px solid #e0e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+.share-invitation.is-unread {
+  border-color: #b7d3f8;
+  background: linear-gradient(110deg, #f7fbff, #fff 60%);
+}
+.share-invitation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.share-invitation-heading {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.share-invitation-heading strong {
+  color: #163451;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.share-invitation-heading small {
+  color: #6d7e90;
+  line-height: 1.6;
+}
+.share-invitation-detail {
+  margin: 12px 0;
+  color: #597086;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.share-invitation-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.share-invitation-time {
+  color: #8a98a7;
+  font-size: 12px;
+}
+.share-center-pagination {
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+}
+.share-output-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f3f8ff;
+  margin-bottom: 20px;
+}
+.share-output-summary > div {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.share-output-summary strong {
+  overflow-wrap: anywhere;
+}
+.share-output-file {
+  color: #74869a;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 640px) {
+  .share-invitation {
+    padding: 13px;
+  }
+  .share-output-summary {
+    flex-direction: column;
+  }
+}

@@ -15,6 +15,7 @@ import App from "./App";
 import "./i18n";
 import { currentLocale } from "./i18n";
 import { appTheme } from "./theme";
+import { ApplicationErrorBoundary } from "./routing/pageRecovery";
 
 function LocalizedApplication() {
   const { i18n } = useTranslation();
@@ -38,7 +39,9 @@ const rootElement = document.getElementById("root");
 if (rootElement) {
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-      <LocalizedApplication />
+      <ApplicationErrorBoundary>
+        <LocalizedApplication />
+      </ApplicationErrorBoundary>
     </React.StrictMode>,
   );
 }

@@ -28,6 +28,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import ShareButton from "../sharing/ShareButton";
 import { useAppContext } from "../contexts/AppContext";
 import { localText, useEnglishLanguage } from "../i18n/useEnglishLanguage";
 import type {
@@ -600,6 +601,12 @@ export default function AdminTopicCompositionManagementPage() {
       width: 360,
       render: (_, record) => (
         <Space wrap>
+          <ShareButton
+            type="link"
+            kind="composition"
+            objectId={record.id}
+            name={record.name}
+          />
           <Button
             type="link"
             icon={<GlobalOutlined />}

@@ -85,6 +85,21 @@
   background: #f2b36a55;
   border: 2px dashed #c86612;
 }
+.geology-review-lithology-legend {
+  flex-basis: 100%;
+  order: 1;
+}
+.geology-review-lithology-legend summary {
+  width: fit-content;
+  cursor: pointer;
+  color: #386594;
+}
+.geology-review-lithology-legend > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  padding-top: 12px;
+}
 .geology-review-map-inspector {
   padding: 18px;
   border: 1px solid #dce6f1;
@@ -220,4 +235,42 @@
     height: 340px;
     min-height: 300px;
   }
+}
+.multi-element-map-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin: 16px 0;
+  padding: 12px 16px;
+  border: 1px solid #dce6f1;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 12px;
+}
+.multi-element-map-objects {
+  margin: 18px 0;
+  font-size: 12px;
+  color: #526f8b;
+}
+.multi-element-map-objects summary {
+  cursor: pointer;
+}
+.multi-element-map-objects .geology-review-change-list {
+  max-height: 260px;
+  overflow: auto;
+}
+.geology-review-focus-label {
+  max-width: 240px;
+  padding: 6px 12px;
+  color: #193c5b;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #b6cfe1;
+  border-radius: 5px;
+  box-shadow: 0 3px 12px #17344b20;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
 }

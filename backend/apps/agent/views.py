@@ -38,6 +38,7 @@ from .policy import (
 from .tools import check_evidence, resources, resolve_resource, brief
 from .attachments import delete_attachment, serialize_attachment, store_attachment
 from .budgets import budget_options, resolve_budget
+from .run_concurrency import lock_run_queue, require_run_capacity, retry_run_admission
 
 
 class ApiProblem(Exception):
@@ -319,6 +320,7 @@ def submit(request, conversation_id):
     return submit_value(request, c, value)
 
 
+@retry_run_admission
 def submit_value(request, c, value, *, available_models=None):
     """The same quota, model, scope and idempotency checks for chat answers."""
     submission_policy = policy()
@@ -333,6 +335,7 @@ def submit_value(request, c, value, *, available_models=None):
             "geology_correction",
             "geology_age_correction",
             "geology_map_review",
+            "geology_multi_element_reasoning",
         }
         or c.mode != "agent"
     ):
@@ -391,6 +394,7 @@ def submit_value(request, c, value, *, available_models=None):
         # Model health requests finish before acquiring a database write lock.
         available_models = visible_models(request.user, c.mode, preflight_policy)
     with transaction.atomic():
+        lock_run_queue()
         Conversation.objects.filter(pk=c.pk).update(updated_at=timezone.now())
         existing = c.runs.filter(idempotency_key=key).first()
         if existing:
@@ -491,16 +495,7 @@ def submit_value(request, c, value, *, available_models=None):
         budget_snapshot = resolve_budget(
             request.user, p, budget_profile, output_tokens, serving_window
         )
-        from .interactions import WAITING
-
-        if c.runs.filter(status__in=WAITING).exists():
-            raise ApiProblem("当前任务正在等待回答或计算，请在原任务中继续或取消", 409)
-        if AgentRun._base_manager.filter(
-            owner=request.user, status__in=ACTIVE
-        ).exists():
-            raise ApiProblem("您已有排队或生成中的任务", 409)
-        if AgentRun._base_manager.filter(status__in=ACTIVE).count() >= 30:
-            raise ApiProblem("当前排队已满", 429)
+        require_run_capacity(request.user.id, c.id)
         quota = daily_quota(request.user, p)
         if (
             quota > 0
@@ -782,7 +777,17 @@ def research_demos(request):
     from .research_presets import list_demos
 
     p = require_access(request.user, "agent")
-    return JsonResponse(list_demos(request.user, p))
+    view = request.GET.get("view", "")
+    if view not in ("", "summary"):
+        raise ApiProblem("场景列表格式无效")
+    scenario = request.GET.get("scenario")
+    from .demo_workflow import GRAPHS
+
+    if scenario is not None and scenario not in GRAPHS:
+        raise ApiProblem("研究场景无效")
+    return JsonResponse(
+        list_demos(request.user, p, summary=view == "summary", scenario=scenario)
+    )
 
 
 def workflow_json(workflow, include_steps=True):
@@ -848,6 +853,13 @@ def workflow_submit(request):
         from .workflow import authorize_workflow_history
 
         require_access(request.user, "agent")
+        view = request.GET.get("view", "")
+        if view == "summary":
+            from .workflow_history import summary_list
+
+            return JsonResponse(summary_list(request.user, request.GET))
+        if view:
+            raise ApiProblem("历史列表格式无效")
         visible = []
         for workflow in AgentWorkflow.objects.filter(owner=request.user).order_by(
             "-created_at"
@@ -965,6 +977,7 @@ def workflow_confirm(request, workflow_id):
             "geology_correction",
             "geology_age_correction",
             "geology_map_review",
+            "geology_multi_element_reasoning",
         }:
             from .demo_workflow import confirm_demo
 

@@ -1,5 +1,5 @@
 import { selectedMapBasemap, restoreMapBasemap } from "../map/basemapSnapshot";
-import { getActiveProject } from "../projects/session";
+import { getActiveProject, projectSignal } from "../projects/session";
 import { useProjectContext } from "../projects/ProjectContext";
 import {
   AimOutlined,
@@ -55,8 +55,17 @@ import { useRasterRender } from "../hooks/useRasterRender";
 import { useWorkspaceScenes } from "../hooks/useWorkspaceScenes";
 import { workspaceSnapshot } from "../workspace/workspaceSnapshot";
 import { effectiveMapLayers } from "../map/effectiveMapLayers";
+import MapPanelChrome from "../map/MapPanelChrome";
+import WorkbenchLegend from "../map/WorkbenchLegend";
+import { useMapPanelLayout } from "../map/useMapPanelLayout";
+import "../map/map-workbench-panels.css";
+import {
+  displayComparisonLayers,
+  upsertComparisonLayer,
+} from "../map/comparisonLayerGroups";
+import type { ComparisonLayerPlacement } from "../map/geologyWorkbenchCompareData";
+import { reviewBounds } from "../map/geologyReviewData";
 import ComputeOutputMapPreview from "../map/ComputeOutputMapPreview";
-import GeologyReviewWorkspace from "../map/GeologyReviewWorkspace";
 import { clearFeatureState, getMapState } from "../map/mapState";
 import {
   claimMapErrorNotification,
@@ -223,6 +232,12 @@ const emptyPermissions = {
 };
 
 const MapCanvas = lazy(() => import("../components/MapCanvas"));
+const GeologyReviewWorkspace = lazy(
+  () => import("../map/GeologyReviewWorkspace"),
+);
+const GeologyWorkbenchCompare = lazy(
+  () => import("../map/GeologyWorkbenchCompare"),
+);
 const MapCompositionEditor = lazy(
   () => import("../components/map-composition/MapCompositionEditor"),
 );
@@ -625,11 +640,19 @@ export default function MapPage() {
   const workflowId = params.get("geologyReview");
   if (workflowId)
     return (
-      <GeologyReviewWorkspace
-        workflowId={workflowId}
-        projectTagId={params.get("projectTagId")}
-        suggestionId={params.get("suggestion")}
-      />
+      <Suspense
+        fallback={
+          <div className="map-canvas-loading">
+            <Spin />
+          </div>
+        }
+      >
+        <GeologyReviewWorkspace
+          workflowId={workflowId}
+          projectTagId={params.get("projectTagId")}
+          suggestionId={params.get("suggestion")}
+        />
+      </Suspense>
     );
   return <MapWorkspace />;
 }
@@ -642,6 +665,9 @@ function MapWorkspace() {
   const english =
     i18n.resolvedLanguage?.toLowerCase().startsWith("en") ?? false;
   const [searchParams, setSearchParams] = useSearchParams();
+  const comparisonWorkflowId = searchParams.get("geologyCompare")?.trim() ?? "";
+  const comparisonVisible =
+    Boolean(comparisonWorkflowId) && searchParams.get("mapMode") !== "single";
   const initialGeoInsightCache = lastGeoInsightCache;
 
   const [resources, setResources] = useState<ResourceListItem[]>([]);
@@ -720,6 +746,12 @@ function MapWorkspace() {
     { min: 0, max: 22 },
   );
   const mapInstanceRef = useRef<MapboxMap | null>(null);
+  const panelLayout = useMapPanelLayout(
+    `user:${user?.id ?? "anonymous"}`,
+    () => {
+      mapInstanceRef.current?.resize();
+    },
+  );
   const resourceRequestSequenceRef = useRef(0);
   const resourceProfileRequestSequenceRef = useRef(0);
   const spatialProfileRequestSequenceRef = useRef(0);
@@ -840,6 +872,80 @@ function MapWorkspace() {
     () => layerGroups.groups.flatMap((group) => group.children),
     [layerGroups.groups],
   );
+  const comparisonSources = useRef(new Map<number, GeoJsonFeatureCollection>());
+  const registerComparisonLayer = async (
+    profile: DataResourceProfile,
+    result: ResourceQueryResult,
+    placement?: ComparisonLayerPlacement,
+  ) => {
+    if (!permissions.canQueryData || !permissions.canLoadVectorLayer)
+      throw new Error(permissionDeniedMessage);
+    const signal = projectSignal();
+    const projectId = getActiveProject();
+    const resource = profile.resource;
+    if (placement) {
+      if (signal.aborted || getActiveProject() !== projectId)
+        throw new DOMException("项目已切换", "AbortError");
+      comparisonSources.current.set(
+        resource.id,
+        placement.displayData ?? result.geojson,
+      );
+      layerGroups.setGroups((current) =>
+        upsertComparisonLayer(current, profile, result, placement),
+      );
+      setActiveLeftPanel("layers");
+      return;
+    }
+    await uniqueLayerLoad.load(
+      resourceLayerKey({ sourceResource: resource, layerType: "vector" }),
+      async () => {
+        if (signal.aborted || getActiveProject() !== projectId)
+          throw new DOMException("项目已切换", "AbortError");
+        const group = createVectorLayerGroup(resource, profile, result, {
+          attributeFilters: [],
+          spatialFilter: null,
+        });
+        layerGroups.addGroup(group);
+        setSelectedLayerId(group.children[0]?.id ?? null);
+        setActiveLeftPanel("layers");
+        return true;
+      },
+    );
+    if (signal.aborted || getActiveProject() !== projectId)
+      throw new DOMException("项目已切换", "AbortError");
+    // Reuse the registered layer while replacing any earlier partial query
+    // with this complete, validated comparison response.
+    const existing = layerGroups.groups.find((group) =>
+      group.children.some(
+        (layer) =>
+          layer.layerType === "vector" &&
+          resourceLayerKey(layer) === `resource:${resource.id}`,
+      ),
+    );
+    const layer = existing?.children.find(
+      (item) => resourceLayerKey(item) === `resource:${resource.id}`,
+    );
+    if (existing && layer?.layerType === "vector")
+      layerGroups.updateLayer(existing.id, layer.id, (current) =>
+        current.layerType === "vector"
+          ? {
+              ...current,
+              geojson: result.geojson,
+              fields: result.fields,
+              summary: `${result.returnedCount}/${result.totalCount} 条，${profile.geometryType || "空间数据"}`,
+              metadata: {
+                ...current.metadata,
+                返回条数: result.returnedCount,
+                命中条数: result.totalCount,
+              },
+            }
+          : current,
+      );
+  };
+  useEffect(() => {
+    if (!comparisonVisible && mapObject)
+      requestAnimationFrame(() => mapObject.resize());
+  }, [comparisonVisible, mapObject]);
   const spatialQueryResources = useMemo(
     () => loadedQueryResources(allLayers),
     [allLayers],
@@ -2712,7 +2818,9 @@ function MapWorkspace() {
         }}
       />
       <div
-        className={`workspace-body ${
+        ref={panelLayout.containerRef}
+        style={panelLayout.style}
+        className={`workspace-body workspace-map-resizable ${
           spatialWorkbenchOpen
             ? "workspace-body-spatial-open"
             : "workspace-body-spatial-collapsed"
@@ -2773,30 +2881,104 @@ function MapWorkspace() {
               />
             </div>
           )}
-          <Suspense
-            fallback={
-              <div className="map-canvas-loading">
-                <Spin size="large" />
-              </div>
-            }
+          <div
+            className={`geology-workbench-single-map ${comparisonVisible ? "is-covered" : ""}`}
+            style={{ width: "100%", height: "100%" }}
+            aria-hidden={comparisonVisible}
           >
-            <MapCanvas
-              bootstrap={bootstrap}
-              basemapPreferenceScope={`user:${user?.id ?? "anonymous"}`}
-              basemapSwitchDisabled={mapExporting}
-              loadedLayers={mapLayers}
-              drawMode={activeDraw?.mode ?? null}
-              spatialFilter={spatialFilter}
-              layerExtentOverlays={layerExtentOverlays}
-              onDrawComplete={handleDrawComplete}
-              onFeatureSelect={setSelectedFeature}
-              onMapReady={handleMapReady}
-              onMapDestroy={handleMapDestroy}
-              onMapError={handleMapError}
-              onViewStateChange={setCurrentMapView}
-              onBasemapSwitchingChange={setBasemapSwitching}
-            />
-          </Suspense>
+            <Suspense
+              fallback={
+                <div className="map-canvas-loading">
+                  <Spin size="large" />
+                </div>
+              }
+            >
+              <MapCanvas
+                bootstrap={bootstrap}
+                basemapPreferenceScope={`user:${user?.id ?? "anonymous"}`}
+                basemapSwitchDisabled={mapExporting}
+                loadedLayers={mapLayers}
+                drawMode={activeDraw?.mode ?? null}
+                spatialFilter={spatialFilter}
+                layerExtentOverlays={layerExtentOverlays}
+                onDrawComplete={handleDrawComplete}
+                onFeatureSelect={setSelectedFeature}
+                onMapReady={handleMapReady}
+                onMapDestroy={handleMapDestroy}
+                onMapError={handleMapError}
+                onViewStateChange={setCurrentMapView}
+                onBasemapSwitchingChange={setBasemapSwitching}
+              />
+            </Suspense>
+          </div>
+          {comparisonWorkflowId && (
+            <Suspense
+              fallback={
+                <div className="map-canvas-loading">
+                  <Spin />
+                </div>
+              }
+            >
+              <GeologyWorkbenchCompare
+                key={`${getActiveProject()}:${comparisonWorkflowId}`}
+                workflowId={comparisonWorkflowId}
+                projectId={getActiveProject()}
+                projectTagId={searchParams.get("projectTagId")}
+                suggestionId={searchParams.get("suggestion")}
+                accessToken={bootstrap.map.mapboxAccessToken}
+                canLoad={
+                  permissions.canQueryData && permissions.canLoadVectorLayer
+                }
+                comparisonVisible={comparisonVisible}
+                registerLayer={registerComparisonLayer}
+                selectedObject={selectedFeature?.properties ?? null}
+                onLayerDisplay={(side, changes, current) => {
+                  layerGroups.setGroups((groups) =>
+                    displayComparisonLayers(
+                      groups,
+                      comparisonWorkflowId,
+                      side,
+                      changes,
+                      comparisonSources.current,
+                    ),
+                  );
+                  const bounds = reviewBounds(current ?? changes);
+                  if (bounds && mapInstanceRef.current && !comparisonVisible)
+                    mapInstanceRef.current.fitBounds(
+                      [
+                        [bounds[0], bounds[1]],
+                        [bounds[2], bounds[3]],
+                      ],
+                      { padding: 75, maxZoom: 16, duration: 350 },
+                    );
+                }}
+                onVisibilityChange={(visible) => {
+                  const next = new URLSearchParams(searchParams);
+                  if (visible) next.delete("mapMode");
+                  else next.set("mapMode", "single");
+                  setSearchParams(next, { replace: true });
+                }}
+                onSuggestionChange={(id) => {
+                  const next = new URLSearchParams(searchParams);
+                  if (id) next.set("suggestion", id);
+                  else next.delete("suggestion");
+                  setSearchParams(next, { replace: true });
+                }}
+                onSwitchProject={
+                  searchParams.get("projectTagId") !== getActiveProject() &&
+                  projectContext?.projects.some(
+                    (item) =>
+                      String(item.id) === searchParams.get("projectTagId"),
+                  )
+                    ? () =>
+                        projectContext?.choose(
+                          searchParams.get("projectTagId")!,
+                        )
+                    : undefined
+                }
+              />
+            </Suspense>
+          )}
           {/^[1-9]\d*$/.test(searchParams.get("computeOutputId") ?? "") && (
             <ComputeOutputMapPreview
               key={searchParams.get("computeOutputId")}
@@ -2810,129 +2992,160 @@ function MapWorkspace() {
               }}
             />
           )}
+          {!comparisonVisible && (
+            <WorkbenchLegend
+              layers={mapLayers}
+              english={english}
+              mobileHidden={mobileMapPanel !== "map"}
+            />
+          )}
         </main>
         <aside
-          className={`floating-panel floating-panel-left ${
+          className={`floating-panel floating-panel-left ${panelLayout.layout.leftCollapsed ? "map-panel-is-collapsed" : ""} ${
             mobileMapPanel === "left"
               ? "mobile-map-panel-visible"
               : "mobile-map-panel-hidden"
           }`}
         >
-          <ConfigProvider theme={workspacePanelTheme}>
-            <LayerContext.Provider value={layerContextValue}>
-              <Tabs
-                className="workspace-side-tabs workspace-left-tabs"
-                activeKey={activeLeftPanel}
-                onChange={handleLeftPanelChange}
-                size="small"
-                items={[
-                  {
-                    key: "data",
-                    label: (
-                      <span className="tab-label">
-                        <DatabaseOutlined style={{ fontSize: 14 }} />
-                        {english ? "Data" : "数据"}
-                      </span>
-                    ),
-                    children: renderDataPanel(),
-                  },
-                  {
-                    key: "layers",
-                    label: (
-                      <span className="tab-label">
-                        <ApartmentOutlined style={{ fontSize: 14 }} />
-                        {english ? "Layers" : "图层"}
-                      </span>
-                    ),
-                    children: <LayerPanel />,
-                  },
-                  {
-                    key: "projects",
-                    label: (
-                      <span className="tab-label">
-                        <FolderOpenOutlined style={{ fontSize: 14 }} />
-                        {english ? "Projects" : "工程"}
-                      </span>
-                    ),
-                    children: (
-                      <WorkspaceScenePanel
-                        kind="project"
-                        total={workspaceTotal}
-                        query={workspaceQuery}
-                        onQuery={loadWorkspaceScenes}
-                        items={workspaceScenes.filter(
-                          (scene) => scene.kind === "project",
-                        )}
-                        accessGroups={workspaceAccessGroups}
-                        onLoad={loadWorkspaceScene}
-                        onRefresh={loadWorkspaceScenes}
-                        onUpdate={updateWorkspaceScene}
-                        onDelete={deleteWorkspaceScene}
-                        onCreateComposition={handleCreateMapComposition}
-                      />
-                    ),
-                  },
-                  {
-                    key: "topics",
-                    label: (
-                      <span className="tab-label">
-                        <AppstoreOutlined style={{ fontSize: 14 }} />
-                        {english ? "Thematic maps" : "专题"}
-                      </span>
-                    ),
-                    children: (
-                      <MapCompositionPanel
-                        items={mapCompositions.items}
-                        availableAudienceGroups={
-                          mapCompositions.availableAudienceGroups
-                        }
-                        availableProjectAccessGroups={workspaceAccessGroups}
-                        loading={mapCompositions.loading}
-                        onRefresh={mapCompositions.load}
-                        onOpen={handleOpenMapComposition}
-                        onLoadSource={handleLoadMapCompositionSource}
-                        onRestored={handleRestoredMapCompositionProject}
-                        onChanged={mapCompositions.update}
-                        onDeleted={mapCompositions.remove}
-                      />
-                    ),
-                  },
-                ]}
-              />
-              <LayerDataTableModal
-                layer={tableLayer}
-                open={Boolean(tableLayer)}
-                onClose={() => setTableLayer(null)}
-                onSelectionChange={handleSelectionChange}
-              />
-            </LayerContext.Provider>
-          </ConfigProvider>
+          <MapPanelChrome
+            side="left"
+            title={english ? "Data and layers" : "数据与图层"}
+            collapsed={panelLayout.layout.leftCollapsed}
+            width={panelLayout.layout.left}
+            english={english}
+            onToggle={() => panelLayout.toggle("left")}
+            onResizeStart={(event) => panelLayout.beginResize("left", event)}
+            onResize={(amount) => panelLayout.resize("left", amount)}
+          />
+          <div className="map-panel-content">
+            <ConfigProvider theme={workspacePanelTheme}>
+              <LayerContext.Provider value={layerContextValue}>
+                <Tabs
+                  className="workspace-side-tabs workspace-left-tabs"
+                  activeKey={activeLeftPanel}
+                  onChange={handleLeftPanelChange}
+                  size="small"
+                  items={[
+                    {
+                      key: "data",
+                      label: (
+                        <span className="tab-label">
+                          <DatabaseOutlined style={{ fontSize: 14 }} />
+                          {english ? "Data" : "数据"}
+                        </span>
+                      ),
+                      children: renderDataPanel(),
+                    },
+                    {
+                      key: "layers",
+                      label: (
+                        <span className="tab-label">
+                          <ApartmentOutlined style={{ fontSize: 14 }} />
+                          {english ? "Layers" : "图层"}
+                        </span>
+                      ),
+                      children: <LayerPanel />,
+                    },
+                    {
+                      key: "projects",
+                      label: (
+                        <span className="tab-label">
+                          <FolderOpenOutlined style={{ fontSize: 14 }} />
+                          {english ? "Projects" : "工程"}
+                        </span>
+                      ),
+                      children: (
+                        <WorkspaceScenePanel
+                          kind="project"
+                          total={workspaceTotal}
+                          query={workspaceQuery}
+                          onQuery={loadWorkspaceScenes}
+                          items={workspaceScenes.filter(
+                            (scene) => scene.kind === "project",
+                          )}
+                          accessGroups={workspaceAccessGroups}
+                          onLoad={loadWorkspaceScene}
+                          onRefresh={loadWorkspaceScenes}
+                          onUpdate={updateWorkspaceScene}
+                          onDelete={deleteWorkspaceScene}
+                          onCreateComposition={handleCreateMapComposition}
+                        />
+                      ),
+                    },
+                    {
+                      key: "topics",
+                      label: (
+                        <span className="tab-label">
+                          <AppstoreOutlined style={{ fontSize: 14 }} />
+                          {english ? "Thematic maps" : "专题"}
+                        </span>
+                      ),
+                      children: (
+                        <MapCompositionPanel
+                          items={mapCompositions.items}
+                          availableAudienceGroups={
+                            mapCompositions.availableAudienceGroups
+                          }
+                          availableProjectAccessGroups={workspaceAccessGroups}
+                          loading={mapCompositions.loading}
+                          onRefresh={mapCompositions.load}
+                          onOpen={handleOpenMapComposition}
+                          onLoadSource={handleLoadMapCompositionSource}
+                          onRestored={handleRestoredMapCompositionProject}
+                          onChanged={mapCompositions.update}
+                          onDeleted={mapCompositions.remove}
+                        />
+                      ),
+                    },
+                  ]}
+                />
+                <LayerDataTableModal
+                  layer={tableLayer}
+                  open={Boolean(tableLayer)}
+                  onClose={() => setTableLayer(null)}
+                  onSelectionChange={handleSelectionChange}
+                />
+              </LayerContext.Provider>
+            </ConfigProvider>
+          </div>
         </aside>
         <aside
-          className={`floating-panel floating-panel-right ${
+          className={`floating-panel floating-panel-right ${panelLayout.layout.rightCollapsed ? "map-panel-is-collapsed" : ""} ${
             mobileMapPanel === "right"
               ? "mobile-map-panel-visible"
               : "mobile-map-panel-hidden"
           }`}
           aria-label={english ? "Feature information panel" : "要素信息面板"}
         >
-          <ConfigProvider theme={workspacePanelTheme}>
-            <LayerContext.Provider value={layerContextValue}>
-              <RightSidePanel
-                selectedFeature={rightPanelSelectedFeature}
-                selectedResource={rightPanelSelectedResource}
-                selectedResourceProfile={rightPanelSelectedResourceProfile}
-                selectedLayer={rightPanelSelectedLayer}
-                visualizationSummary={rightPanelVisualizationSummary}
-                visualizationSummaryLoading={
-                  rightPanelVisualizationSummaryLoading
-                }
-                visualizationSummaryError={visualizationSummaryError}
-                currentView={currentMapView}
-                mapConfig={bootstrap.map}
-              />
-            </LayerContext.Provider>
-          </ConfigProvider>
+          <MapPanelChrome
+            side="right"
+            title={english ? "Data insights" : "数据洞察"}
+            collapsed={panelLayout.layout.rightCollapsed}
+            width={panelLayout.layout.right}
+            english={english}
+            onToggle={() => panelLayout.toggle("right")}
+            onResizeStart={(event) => panelLayout.beginResize("right", event)}
+            onResize={(amount) => panelLayout.resize("right", amount)}
+          />
+          <div className="map-panel-content">
+            <ConfigProvider theme={workspacePanelTheme}>
+              <LayerContext.Provider value={layerContextValue}>
+                <RightSidePanel
+                  selectedFeature={rightPanelSelectedFeature}
+                  selectedResource={rightPanelSelectedResource}
+                  selectedResourceProfile={rightPanelSelectedResourceProfile}
+                  selectedLayer={rightPanelSelectedLayer}
+                  visualizationSummary={rightPanelVisualizationSummary}
+                  visualizationSummaryLoading={
+                    rightPanelVisualizationSummaryLoading
+                  }
+                  visualizationSummaryError={visualizationSummaryError}
+                  currentView={currentMapView}
+                  mapConfig={bootstrap.map}
+                />
+              </LayerContext.Provider>
+            </ConfigProvider>
+          </div>
         </aside>
         <aside
           id="spatial-query-workbench-panel"

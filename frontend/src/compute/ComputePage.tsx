@@ -40,6 +40,7 @@ import ComputeTaskDetail, { OutputTable } from "./ComputeTaskDetail";
 import { taskStatusLabels, statusText, useComputeText } from "./ui";
 import "./compute.css";
 import "./compute-tasks.css";
+import SharedOutputDrawer from "../sharing/SharedOutputDrawer";
 
 export default function ComputePage({ admin = false }: { admin?: boolean }) {
   const project = useProjectContext();
@@ -58,7 +59,8 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
   const project = useProjectContext();
   const navigate = useNavigate();
   const { message } = App.useApp();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
+  const sharedInvitation = params.get("sharedInvitation");
   const [tab, setTab] = useState(admin ? "manage" : "algorithms");
   const [runtime, setRuntime] = useState<ComputeRuntimeStatus | null>(null);
   const [algorithms, setAlgorithms] = useState<ComputeAlgorithm[]>([]);
@@ -645,6 +647,16 @@ function ComputeWorkspace({ admin }: { admin: boolean }) {
           resourceId={Number(params.get("resourceId")) || undefined}
           onClose={() => setCreating(null)}
           onSubmitted={onSubmitted}
+        />
+      )}
+      {sharedInvitation && /^[1-9]\d*$/.test(sharedInvitation) && (
+        <SharedOutputDrawer
+          invitationId={Number(sharedInvitation)}
+          onClose={() => {
+            const next = new URLSearchParams(params);
+            next.delete("sharedInvitation");
+            setParams(next, { replace: true });
+          }}
         />
       )}
       {selectedTask && (

@@ -44,10 +44,26 @@ vi.mock("../api/platform", () => ({
   },
 }));
 
-vi.mock("../api/client", () => ({
-  api: mockApi,
-  requestJson: agentBootstrapMock,
-  requestForm: vi.fn(),
+vi.mock("../api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/client")>();
+  return {
+    ApiError: actual.ApiError,
+    api: mockApi,
+    requestJson: agentBootstrapMock,
+    requestForm: vi.fn(),
+  };
+});
+
+vi.mock("../api/sharing", () => ({
+  sharingApi: {
+    list: vi.fn().mockResolvedValue({
+      items: [],
+      total: 0,
+      unreadCount: 0,
+      offset: 0,
+      limit: 12,
+    }),
+  },
 }));
 
 vi.mock("../utils/layerWorkspaceStorage", () => ({
@@ -269,7 +285,11 @@ describe("WorkspaceHeader", () => {
   beforeEach(() => {
     clearAgentBootstrap(user);
     agentBootstrapMock.mockReset();
-    agentBootstrapMock.mockResolvedValue({ canChat: false, canAgent: false });
+    agentBootstrapMock.mockResolvedValue({
+      canChat: false,
+      canAgent: false,
+      models: [],
+    });
     for (const fn of Object.values(mockApi)) {
       fn.mockReset();
     }
@@ -632,7 +652,11 @@ describe("WorkspaceHeader", () => {
     async (width) => {
       await page.viewport(width, 900);
       try {
-        agentBootstrapMock.mockResolvedValue({ canChat: true, canAgent: true });
+        agentBootstrapMock.mockResolvedValue({
+          canChat: true,
+          canAgent: true,
+          models: [],
+        });
         const { container } = renderHeader(
           {},
           user,

@@ -23,6 +23,7 @@ import {
 import type { ComputePreview } from "../api/generated/types.gen";
 import { createUuid } from "../utils/uuid";
 import { importStatusLabels, statusText, useComputeText } from "./ui";
+import ShareButton from "../sharing/ShareButton";
 
 export function OutputTable({
   outputs,
@@ -119,6 +120,12 @@ export function OutputTable({
             key: "actions",
             render: (_, output) => (
               <Space wrap>
+                <ShareButton
+                  kind="compute_output"
+                  objectId={output.id}
+                  name={output.label || output.fileName}
+                  disabled={output.expired || !permissions.download_outputs}
+                />
                 <Button
                   size="small"
                   disabled={output.expired}

@@ -48,6 +48,10 @@ def read_output(workflow, user, policy, output) -> dict:
         "rows": [],
     }
     if output.kind == "table":
+        if workflow.workflow_type == "geology_multi_element_reasoning":
+            from .geology_multi_results import table_rows
+
+            return {**result, **table_rows(path, output.key)}
         map_review = workflow.workflow_type == "geology_map_review"
         if path.stat().st_size > (256 if map_review else 64) * 1024:
             limit = 256 if map_review else 64
@@ -189,7 +193,8 @@ def resource_context(workflow, user, policy) -> list[dict]:
             "description": resource.description[:1200],
         }
         if (
-            workflow.workflow_type == "geology_map_review"
+            workflow.workflow_type
+            in {"geology_map_review", "geology_multi_element_reasoning"}
             and resource.data_type == "vector"
         ):
             from apps.compute.data import candidate
@@ -201,6 +206,25 @@ def resource_context(workflow, user, policy) -> list[dict]:
                 raise ComputeError("Demo依据表超过完整读取范围，请整理成100行以内")
             from .tools import clean
 
-            item.update(rows=clean(data.to_dict(orient="records")), scope="all")
+            rows = clean(data.to_dict(orient="records"))
+            if (
+                workflow.workflow_type == "geology_multi_element_reasoning"
+                and role == "rules"
+            ):
+                # Full rule content is the explicitly authorized knowledge packet.
+                # The duplicate table contributes identity/version, not a second copy.
+                rows = [
+                    {
+                        key: row.get(key)
+                        for key in (
+                            "rule_id",
+                            "rule_version",
+                            "knowledge_id",
+                            "knowledge_revision",
+                        )
+                    }
+                    for row in rows
+                ]
+            item.update(rows=rows, scope="all")
         items.append(item)
     return items

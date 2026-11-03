@@ -20,10 +20,10 @@ export const platformApi = {
     requestJson<ProjectTag>(`/api/projects/${id}/`, { method: "POST", body }),
   assignment: (id: number) =>
     requestJson<ProjectAssignment>(`/api/projects/assignments/${id}/`),
-  assign: (userId: number, projectIds: number[]) =>
+  assign: (userId: number, projectIds: number[], allowPublicProject: boolean) =>
     requestJson<ProjectAssignment>(`/api/projects/assignments/${userId}/`, {
       method: "POST",
-      body: { userId, projectIds },
+      body: { userId, projectIds, allowPublicProject },
     }),
   articles: (options: Record<string, string | number> = {}) =>
     requestJson<ContentArticleList>(

@@ -50,6 +50,7 @@ import type {
 } from "../types";
 import { PermissionPanel } from "./PermissionPanel";
 import { UserSummaryCards } from "./UserSummaryCards";
+import { sortRolesByPermissions } from "./roleOrder";
 
 const operationResultText: Record<string, string> = {
   success: "成功",
@@ -208,7 +209,7 @@ export default function AdminAuthPage() {
         isSuperadmin ? api.roleApplications() : Promise.resolve({ items: [] }),
       ]);
       setUsers(userData.items);
-      setGroups(groupData.items);
+      setGroups(sortRolesByPermissions(groupData.items));
       setRoleApplications(roleApplicationData.items);
       setAvailablePermissions(groupData.availablePermissions);
       setGroupDrafts(
@@ -653,7 +654,7 @@ export default function AdminAuthPage() {
         name: values.name,
         permissions: [],
       });
-      setGroups((current) => [...current, group]);
+      setGroups((current) => sortRolesByPermissions([...current, group]));
       setGroupDrafts((current) => ({
         ...current,
         [group.id]: group.permissions,
@@ -1020,7 +1021,9 @@ export default function AdminAuthPage() {
       permissions: groupDrafts[group.id] ?? [],
     });
     setGroups((current) =>
-      current.map((item) => (item.id === updated.id ? updated : item)),
+      sortRolesByPermissions(
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      ),
     );
     setGroupDrafts((current) => ({
       ...current,
@@ -1155,36 +1158,40 @@ export default function AdminAuthPage() {
         <Spin spinning={loading}>
           <div className="admin-page-stack">
             <UserSummaryCards metrics={userStats} />
-            {isSuperadmin && (<ProTable<RoleApplicationListItem>
-              className="admin-table"
-              rowKey="id"
-              headerTitle={
-                <Space>
-                  <span>{l("科研用户申请", "Research-user applications")}</span>
-                  <Tag color="processing">
-                    {l("待审核", "Pending")}{" "}
-                    {
-                      roleApplications.filter(
-                        (item) => item.status === "pending",
-                      ).length
-                    }
-                  </Tag>
-                </Space>
-              }
-              columns={roleApplicationColumns}
-              dataSource={roleApplications}
-              cardBordered
-              options={false}
-              pagination={false}
-              scroll={{ x: 1060 }}
-              search={false}
-              locale={{
-                emptyText: l(
-                  "暂无科研用户申请",
-                  "No research-user applications",
-                ),
-              }}
-            />)}
+            {isSuperadmin && (
+              <ProTable<RoleApplicationListItem>
+                className="admin-table"
+                rowKey="id"
+                headerTitle={
+                  <Space>
+                    <span>
+                      {l("科研用户申请", "Research-user applications")}
+                    </span>
+                    <Tag color="processing">
+                      {l("待审核", "Pending")}{" "}
+                      {
+                        roleApplications.filter(
+                          (item) => item.status === "pending",
+                        ).length
+                      }
+                    </Tag>
+                  </Space>
+                }
+                columns={roleApplicationColumns}
+                dataSource={roleApplications}
+                cardBordered
+                options={false}
+                pagination={false}
+                scroll={{ x: 1060 }}
+                search={false}
+                locale={{
+                  emptyText: l(
+                    "暂无科研用户申请",
+                    "No research-user applications",
+                  ),
+                }}
+              />
+            )}
             <ProTable<User>
               className="admin-table"
               rowKey="id"

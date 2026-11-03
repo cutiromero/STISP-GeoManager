@@ -1,0 +1,310 @@
+.multi-tour-toolbar,
+.multi-tour-pager,
+.multi-tour-view-switch,
+.multi-tour-outcome-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.multi-story-chapters {
+  margin: 10px 0;
+  border: 1px solid #d8e3ef;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+.multi-story-chapters > nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e0e9f2;
+  background: #f5f9fe;
+}
+.multi-story-process > summary {
+  padding: 8px 16px;
+  cursor: pointer;
+  color: #617b96;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.multi-story-chapter-count {
+  margin-left: 7px;
+  opacity: 0.65;
+  font-size: 11px;
+}
+.multi-story-timeline {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 16px;
+  gap: 16px;
+}
+.multi-story-timeline li {
+  border-top: 2px solid #d4dfec;
+  padding-top: 9px;
+  min-width: 0;
+  color: #788b9e;
+}
+.multi-story-timeline li[data-done="true"] {
+  border-color: #4e89c0;
+  color: #284d73;
+}
+.multi-story-timeline strong {
+  display: block;
+  font-size: 13px;
+}
+.multi-story-timeline span {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.multi-story-dispositions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 0 16px 12px;
+  align-items: center;
+}
+.multi-story-dispositions small {
+  color: #7a8ea2;
+  font-size: 11px;
+}
+.multi-story-section-note {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid #e0e9f2;
+  color: #526d88;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.multi-outcome-evidence {
+  margin-top: 14px;
+}
+.multi-outcome-evidence details {
+  margin: 6px 0;
+}
+.multi-outcome-evidence pre {
+  max-height: 180px;
+  white-space: pre-wrap;
+  overflow: auto;
+}
+@media (max-width: 900px) {
+  .multi-story-timeline {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 550px) {
+  .multi-story-timeline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+.multi-tour-toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.multi-element-workspace .geology-review-workspace-header {
+  margin-bottom: 12px;
+}
+.multi-element-workspace {
+  padding: 20px;
+}
+.multi-element-workspace > .ant-alert {
+  padding: 10px 14px;
+  font-size: 12px;
+}
+.multi-element-workspace .geology-review-workspace-header h1 {
+  margin: 4px 0;
+}
+.multi-tour-pager strong {
+  min-width: 118px;
+  text-align: center;
+  color: #254d78;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.multi-tour-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+.multi-tour-layout .geology-review-map-canvas {
+  height: min(29vh, 300px);
+  min-height: 220px;
+}
+.multi-tour-layout .geology-review-map-legend {
+  padding: 11px 18px;
+}
+.multi-tour-layout .geology-review-lithology-legend {
+  flex-basis: auto;
+  order: 0;
+  margin-left: auto;
+}
+.multi-tour-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.multi-tour-card-heading h2 {
+  margin: 0;
+}
+.multi-tour-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6e88a4;
+  font-size: 12px;
+}
+.multi-tour-map-stage {
+  position: relative;
+}
+.multi-tour-card {
+  padding: 16px 22px;
+  border-top: 1px solid #dce6f1;
+  background: linear-gradient(110deg, #f9fbff, #fff 70%);
+}
+.multi-tour-card h2,
+.multi-tour-outcome h2 {
+  margin: 8px 0 14px;
+  font-size: 18px;
+  color: #254b74;
+}
+.multi-tour-explanation {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.15fr;
+  gap: 22px;
+}
+.multi-tour-explanation > div {
+  display: flex;
+  gap: 10px;
+}
+.multi-tour-explanation > div > span {
+  padding-top: 2px;
+  color: #81a4c8;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.multi-tour-explanation p {
+  margin: 0;
+  color: #576d86;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.multi-tour-explanation strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #274c74;
+  font-size: 14px;
+}
+.multi-tour-explanation small {
+  display: block;
+  margin-top: 5px;
+  color: #8190a3;
+  font-size: 11px;
+}
+.multi-tour-interpretation {
+  margin: 12px 0;
+  padding: 11px 14px;
+  border-left: 3px solid #6f9dce;
+  background: #eff5fc;
+  color: #466889;
+  font-size: 13px;
+}
+.multi-tour-evidence {
+  color: #59738e;
+  font-size: 12px;
+}
+.multi-tour-evidence summary {
+  cursor: pointer;
+}
+.multi-tour-evidence > p {
+  overflow-wrap: anywhere;
+}
+.multi-tour-map-note {
+  padding: 0 20px 14px;
+  color: #5f7790;
+  font-size: 12px;
+}
+.multi-tour-outcome {
+  margin-top: 24px;
+  padding: 24px 26px;
+  border: 1px solid #d8e3f0;
+  border-radius: 14px;
+  background: #fff;
+}
+.multi-tour-outcome.is-active {
+  border-color: #749fd0;
+}
+.multi-tour-outcome-heading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.multi-tour-outcome h2 {
+  margin-bottom: 12px;
+}
+.multi-tour-outcome-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 12px 0;
+}
+.multi-tour-outcome-stats button {
+  min-width: 215px;
+  padding: 16px 24px;
+  border: 1px solid #d7e4f2;
+  border-radius: 9px;
+  background: #f5f9fe;
+  color: #355a80;
+  text-align: left;
+  cursor: pointer;
+}
+.multi-tour-outcome-stats button:focus-visible {
+  outline: 2px solid #397ecc;
+  outline-offset: 3px;
+}
+.multi-tour-outcome-stats strong {
+  display: block;
+  margin: 9px 0;
+  font-size: 32px;
+  color: #254f80;
+  font-variant-numeric: tabular-nums;
+}
+.multi-tour-outcome-stats i {
+  margin: 0 15px;
+  font-size: 23px;
+  font-style: normal;
+  color: #9db6d1;
+}
+.multi-tour-outcome-stats small {
+  margin-left: 7px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.multi-tour-outcome p {
+  margin: 0;
+  color: #6d8197;
+  font-size: 12px;
+  line-height: 1.8;
+}
+@media (max-width: 900px) {
+  .multi-tour-explanation {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+@media (max-width: 700px) {
+  .multi-tour-card,
+  .multi-tour-outcome {
+    padding: 18px;
+  }
+  .multi-tour-pager {
+    gap: 7px;
+  }
+  .multi-tour-pager strong {
+    min-width: 100px;
+  }
+}

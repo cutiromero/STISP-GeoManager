@@ -27,10 +27,33 @@ const stageLabels: Record<string, string> = {
   wait_operator: "算法计算",
   wait_import: "结果入库",
   finalize: "整理成果",
+  multi_check: "检查岩性、构造与蚀变",
+  multi_apply: "执行获批操作",
+  multi_recheck: "复核修改结果",
+  relations: "重建构造交汇关系",
+  prospect: "比较前后优先核查远景区",
 };
 
 export function workflowStageLabel(workflow: AgentWorkflow): string {
   if (workflow.plan.phase === "review_modifications") return "等待用户批准";
+  if (workflow.workflowType === "geology_multi_element_reasoning") {
+    const stages = Array.isArray(workflow.plan.stages)
+      ? workflow.plan.stages
+      : [];
+    const value = stages[Number(workflow.plan.stageIndex)];
+    const stage =
+      value && typeof value === "object" && "name" in value
+        ? String(value.name)
+        : workflow.currentStep;
+    const labels: Record<string, string> = {
+      check: "检查岩性、构造与蚀变",
+      apply: "执行获批操作",
+      recheck: "复核修改结果",
+      relations: "重建构造交汇关系",
+      prospect: "比较前后优先核查远景区",
+    };
+    if (labels[stage]) return labels[stage]!;
+  }
   if (workflow.workflowType === "geology_map_review") {
     const names: Record<string, string> = {
       expert_knowledge: "查阅专家知识",

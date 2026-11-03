@@ -50,6 +50,15 @@ def scene(env, run=None):
     )
 
 
+def include_native_limit(env):
+    for identifier in ("geology-map-check", "geology-map-correct"):
+        version = env["versions"][identifier]
+        version.manifest["parameters"] = [
+            {"key": "max_changes", "type": "integer", "default": 2}
+        ]
+        version.save()
+
+
 def parser_value(inputs):
     return {
         "action": "start",
@@ -65,6 +74,7 @@ def parser_value(inputs):
 def test_new_case_discovery_keeps_exact_roles_and_audience_language(review_case):
     env = review_case
     inputs = mark_review(env)
+    include_native_limit(env)
     result = scene(env)
     assert result["available"] and result["preferredInputs"] == inputs
     assert set(result["inputs"]) == {"initial_map", "coverage", "rules"}
@@ -77,6 +87,13 @@ def test_new_case_discovery_keeps_exact_roles_and_audience_language(review_case)
         assert forbidden not in visible
     assert "演示案例" in result["sourceNote"]
     assert "批准" in PROMPTS["geology_map_review"]
+    assert result["defaults"]["max_changes"] == 5
+    assert (
+        next(spec for spec in result["parameterSpecs"] if spec["key"] == "max_changes")[
+            "default"
+        ]
+        == 5
+    )
     assert {
         item["scenario"] for item in discover(env["owner"], env["policy"])["scenarios"]
     } == {
@@ -84,7 +101,34 @@ def test_new_case_discovery_keeps_exact_roles_and_audience_language(review_case)
         "geology_correction",
         "geology_age_correction",
         "geology_map_review",
+        "geology_multi_element_reasoning",
     }
+
+
+def test_expanded_preset_never_mixes_old_coverage_or_overrides_custom_limit(
+    review_case,
+):
+    env = review_case
+    inputs = mark_review(env)
+    include_native_limit(env)
+    coverage = DataResource.objects.get(pk=inputs["coverage"])
+    coverage.code = "geology-review-coverage"
+    coverage.save()
+    automatic = scene(env)
+    assert not automatic["available"]
+    assert "coverage" not in automatic["preferredInputs"]
+    assert not automatic["inputs"]["coverage"]
+    assert automatic["defaults"]["max_changes"] == 2
+    manual = SimpleNamespace(
+        resource_ids=list(inputs.values()),
+        data_selection_mode="manual",
+        algorithm_version_ids=[],
+        algorithm_selection_mode="auto",
+    )
+    result = scene(env, manual)
+    assert result["available"]
+    assert result["defaults"]["max_changes"] == 2
+    assert coverage.id in {item["id"] for item in result["inputs"]["coverage"]}
 
 
 def test_showcase_promotes_only_new_geology_and_ecology_with_budget_floor(review_case):

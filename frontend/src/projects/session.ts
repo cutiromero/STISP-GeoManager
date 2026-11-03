@@ -1,3 +1,7 @@
+import { combineAbortSignals } from "../utils/abortSignals";
+
+const requestCleanups = new WeakMap<Request, () => void>();
+const responseCleanups = new WeakMap<Response, () => void>();
 let activeProject = "1";
 let controller = new AbortController();
 
@@ -40,11 +44,33 @@ export function attachProjectHeader(request: Request) {
   ) {
     if (!request.headers.has("X-Project-Id"))
       request.headers.set("X-Project-Id", activeProject);
-    return new Request(request, {
-      signal: AbortSignal.any([request.signal, controller.signal]),
-    });
+    const group = combineAbortSignals([request.signal, controller.signal]);
+    const scoped = new Request(request, { signal: group.signal });
+    requestCleanups.set(scoped, group.dispose);
+    return scoped;
   }
   return request;
+}
+
+export async function fetchProjectRequest(request: Request) {
+  const dispose = requestCleanups.get(request);
+  try {
+    const response = await fetch(request);
+    if (dispose) responseCleanups.set(response, dispose);
+    return response;
+  } catch (error) {
+    dispose?.();
+    throw error;
+  } finally {
+    requestCleanups.delete(request);
+  }
+}
+
+/** Run after SDK body parsing, so a project switch also cancels body reads. */
+export function releaseProjectResponse(response?: Response) {
+  if (!response) return;
+  responseCleanups.get(response)?.();
+  responseCleanups.delete(response);
 }
 
 export function projectTransformRequest(url: string) {

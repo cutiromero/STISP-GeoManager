@@ -5,8 +5,42 @@ import {
   buildVectorPaintProperties,
   normalizeMapboxColorValue,
   removeStyleLayer,
+  upsertLayer,
 } from "./styleHelpers";
 import { removeLayerGroup } from "./vectorLayerSync";
+
+describe("map style no-op updates", () => {
+  it("skips unchanged filter, layout and paint values but applies a changed color", () => {
+    const layer = {
+      id: "land",
+      type: "fill" as const,
+      source: "data",
+      filter: ["==", ["get", "class"], 1] as never,
+      layout: { visibility: "visible" as const },
+      paint: { "fill-color": "#449955" },
+    };
+    const map = {
+      style: {},
+      getLayer: vi.fn(() => layer),
+      getFilter: vi.fn(() => structuredClone(layer.filter)),
+      getLayoutProperty: vi.fn(() => "visible"),
+      getPaintProperty: vi.fn(() => "#449955"),
+      setFilter: vi.fn(),
+      setLayoutProperty: vi.fn(),
+      setPaintProperty: vi.fn(),
+    } as unknown as MapboxMap;
+    upsertLayer(map, layer);
+    expect(map.setFilter).not.toHaveBeenCalled();
+    expect(map.setLayoutProperty).not.toHaveBeenCalled();
+    expect(map.setPaintProperty).not.toHaveBeenCalled();
+    upsertLayer(map, { ...layer, paint: { "fill-color": "#1177aa" } });
+    expect(map.setPaintProperty).toHaveBeenCalledExactlyOnceWith(
+      "land",
+      "fill-color",
+      "#1177aa",
+    );
+  });
+});
 
 function makeStyle(
   overrides: Partial<VectorSymbolization> = {},

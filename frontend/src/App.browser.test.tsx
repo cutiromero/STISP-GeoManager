@@ -5,7 +5,9 @@ import zhCN from "antd/locale/zh_CN";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { registerForbiddenHandler } from "./api/client";
 import { appTheme } from "./theme";
+import platformStyles from "./styles.css?inline";
 import type {
   Bootstrap,
   DataResourceProfile,
@@ -82,7 +84,20 @@ vi.mock("./api/platform", () => ({
   },
 }));
 
-vi.mock("./api/client", () => ({
+vi.mock("./api/sharing", () => ({
+  sharingApi: {
+    list: vi.fn().mockResolvedValue({
+      items: [],
+      total: 0,
+      unreadCount: 0,
+      limit: 12,
+      offset: 0,
+    }),
+  },
+}));
+
+vi.mock("./api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./api/client")>()),
   ApiError: MockApiError,
   api: mockApi,
   registerForbiddenHandler: vi.fn(),
@@ -97,6 +112,7 @@ vi.mock("./components/MapCanvas", () => ({
   }) => (
     <div
       data-testid="map-canvas"
+      style={{ width: "100%", height: "100%" }}
       data-raster-tile-url={
         loadedLayers.find((layer) => layer.layerType === "raster")?.tileUrl ??
         ""
@@ -659,16 +675,37 @@ describe("application critical flows", () => {
   });
 
   it("opens the public map directly at the root without a homepage", async () => {
-    renderApp("/");
-    expect(
-      await screen.findByTestId("map-canvas", {}, { timeout: 5000 }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^首页$/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^数据资源$/ }),
-    ).toBeInTheDocument();
+    const stylesheet = document.createElement("style");
+    stylesheet.textContent = platformStyles;
+    document.head.append(stylesheet);
+    try {
+      renderApp("/");
+      const canvas = await screen.findByTestId(
+        "map-canvas",
+        {},
+        { timeout: 5000 },
+      );
+      expect(canvas).toBeInTheDocument();
+      const wrapper = canvas.closest<HTMLElement>(
+        ".geology-workbench-single-map",
+      );
+      expect(wrapper).not.toBeNull();
+      expect(wrapper!.getBoundingClientRect().height).toBeGreaterThan(300);
+      expect(canvas.getBoundingClientRect().height).toBeGreaterThan(300);
+      expect(canvas.getBoundingClientRect().width).toBeGreaterThan(300);
+      expect(canvas).toBeVisible();
+      expect(
+        screen.queryByLabelText("地理工作台地质成果对比"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /^首页$/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /^数据资源$/ }),
+      ).toBeInTheDocument();
+    } finally {
+      stylesheet.remove();
+    }
   });
 
   it("upgrades a legacy bootstrap name in the browser tab", async () => {
@@ -798,7 +835,7 @@ describe("application critical flows", () => {
       await screen.findByText("塔里木河胡杨样地监测点", {}, { timeout: 10000 }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "快速加载" }));
+    fireEvent.click(screen.getByRole("button", { name: "加载", exact: true }));
 
     await waitFor(() => {
       expect(mockApi.queryResource).toHaveBeenCalledWith(tarimVectorResource, {
@@ -808,6 +845,20 @@ describe("application critical flows", () => {
       });
     });
     expect(screen.queryByText("请先登录")).not.toBeInTheDocument();
+  });
+
+  it("shows a retry action instead of an endless spinner after startup fails", async () => {
+    mockApi.bootstrap.mockRejectedValue(
+      new MockApiError("浏览器连接失败", 400),
+    );
+    renderApp("/login");
+    expect(await screen.findByText("平台暂时未能加载")).toBeInTheDocument();
+    expect(screen.getByText("浏览器连接失败")).toBeInTheDocument();
+    mockApi.bootstrap.mockResolvedValue(bootstrap);
+    fireEvent.click(screen.getByRole("button", { name: "重新连接" }));
+    expect(
+      await screen.findByRole("heading", { name: "用户登录" }),
+    ).toBeInTheDocument();
   });
 
   it("redirects the old data URL to the resource module", async () => {
@@ -887,7 +938,7 @@ describe("application critical flows", () => {
     expect(
       await screen.findByText(tarimRasterResource.name, {}, { timeout: 10000 }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "快速加载" }));
+    fireEvent.click(screen.getByRole("button", { name: "加载", exact: true }));
 
     const progress = await screen.findByRole("status", {
       name: `${tarimRasterResource.name}加载进度`,
@@ -924,7 +975,7 @@ describe("application critical flows", () => {
     });
   });
 
-  it("isolates non-geographic resources and refreshes the real resource list", async () => {
+  it("shows the built-in poplar dataset and its details in the public project", async () => {
     window.localStorage.setItem(
       `huyang-system.workspace-tour.v1.${normalUser.id}.${normalUser.username}`,
       "completed",
@@ -937,71 +988,89 @@ describe("application critical flows", () => {
     renderApp("/nongeo");
 
     expect(
-      (
-        await screen.findAllByText(
-          nonGeoTableResource.name,
-          {},
-          { timeout: 10000 },
-        )
-      ).length,
-    ).toBeGreaterThan(0);
+      await screen.findByRole("heading", {
+        name: "胡杨群落物种功能性状演示数据",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("内置示例，用于体验图表和明细查询。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(nonGeoTableResource.name),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText(tarimVectorResource.name),
     ).not.toBeInTheDocument();
     expect(await screen.findByText("记录总量")).toBeInTheDocument();
-    expect(screen.getByText("字段角色")).toBeInTheDocument();
     expect(
-      screen.queryByText("非地理分析接口暂不可用"),
-    ).not.toBeInTheDocument();
-    expect(mockApi.resources).toHaveBeenCalledWith({
-      spatialClass: "non_spatial",
-    });
-    expect(mockApi.nonGeoAnalysis).toHaveBeenCalledWith(nonGeoTableResource.id);
+      screen.getByText("2,411", { selector: "strong" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("数据说明与字段")).toBeInTheDocument();
+    expect(mockApi.nonGeoAnalysis).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "查询明细" }));
-    await waitFor(() => {
-      expect(mockApi.nonGeoQuery).toHaveBeenCalledWith(nonGeoTableResource.id, {
-        limit: 80,
-        offset: 0,
-        sortField: "height",
-        sortDirection: "desc",
-      });
-    });
-    expect(await screen.findByText("S-1")).toBeInTheDocument();
-
-    const refreshedResource = {
-      ...nonGeoTableResource,
-      id: 23,
-      name: "刷新后识别的非地理资源",
-    };
-    mockApi.resources.mockResolvedValueOnce({ items: [refreshedResource] });
-    mockApi.nonGeoAnalysis.mockResolvedValueOnce({
-      ...nonGeoAnalytics,
-      resource: refreshedResource,
-      tablePreview: {
-        ...nonGeoAnalytics.tablePreview,
-        resourceId: refreshedResource.id,
-        resourceName: refreshedResource.name,
-      },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "刷新非地理数据资源" }));
-
-    expect(await screen.findByText(refreshedResource.name)).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.queryAllByText(nonGeoTableResource.name)).toHaveLength(0);
-    });
+    expect(await screen.findByRole("tab", { name: /明细/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      await screen.findByRole("columnheader", { name: "株高 (m)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("cell", { name: "巴州地区" }).length,
+    ).toBeGreaterThan(0);
+    expect(mockApi.nonGeoQuery).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "刷新非地理数据资源" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("keeps the legacy analysis URL compatible with the non-geographic workspace", async () => {
-    mockApi.me.mockResolvedValue({ authenticated: true, user: normalUser });
-
-    renderApp("/analysis");
-
-    await waitFor(() => {
-      expect(mockApi.resources).toHaveBeenCalledWith({
-        spatialClass: "non_spatial",
-      });
+  it("keeps the legacy analysis URL compatible while hiding the demo outside its project scope", async () => {
+    const { platformApi } = await import("./api/platform");
+    const projects = await platformApi.projects();
+    const preferenceKey = `project:${normalUser.id}`;
+    const previousProject = sessionStorage.getItem(preferenceKey);
+    vi.mocked(platformApi.projects).mockResolvedValue({
+      ...projects,
+      items: [
+        ...projects.items,
+        {
+          id: 7,
+          name: "逻辑推理",
+          code: "logic-reasoning",
+          isDefault: false,
+          isActive: true,
+          description: "",
+          sortOrder: 1,
+        },
+      ],
     });
+    sessionStorage.setItem(preferenceKey, "7");
+    mockApi.me.mockResolvedValue({ authenticated: true, user: normalUser });
+    try {
+      renderApp("/analysis");
+      expect(
+        await screen.findByRole("main", { name: "数据分析工作台" }),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(document.querySelector(".project-selector")).toHaveTextContent(
+          "逻辑推理",
+        ),
+      );
+      expect(screen.getByText("当前项目暂无演示数据")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: "胡杨群落物种功能性状演示数据" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "查询明细" }),
+      ).not.toBeInTheDocument();
+      expect(mockApi.nonGeoAnalysis).not.toHaveBeenCalled();
+      expect(mockApi.nonGeoQuery).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(platformApi.projects).mockResolvedValue(projects);
+      if (previousProject === null) sessionStorage.removeItem(preferenceKey);
+      else sessionStorage.setItem(preferenceKey, previousProject);
+    }
   });
 
   it("keeps the shared guest account out of personal settings", async () => {
@@ -1161,6 +1230,59 @@ describe("application critical flows", () => {
       await screen.findByTestId("pro-layout", {}, { timeout: 10000 }),
     ).toBeInTheDocument();
   });
+
+  it.each([0, 503])(
+    "retains verified login when a forbidden refresh fails with %s",
+    async (status) => {
+      mockApi.me.mockResolvedValueOnce({
+        authenticated: true,
+        user: normalUser,
+      });
+      renderApp("/map");
+      expect(
+        await screen.findByTestId("map-canvas", {}, { timeout: 10000 }),
+      ).toBeVisible();
+      mockApi.me.mockRejectedValueOnce(
+        new MockApiError("临时连接失败", status),
+      );
+      const handler = vi
+        .mocked(registerForbiddenHandler)
+        .mock.calls.at(-1)?.[0];
+      expect(handler).toBeDefined();
+      await handler?.();
+      fireEvent.click(screen.getByRole("button", { name: "用户信息" }));
+      expect(document.querySelector(".user-button-name")).toHaveTextContent(
+        "科研用户",
+      );
+      expect(
+        screen.queryByRole("button", { name: "账号登录" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([401, 403])(
+    "clears login after an explicit %s session refresh rejection",
+    async (status) => {
+      mockApi.me.mockResolvedValueOnce({
+        authenticated: true,
+        user: normalUser,
+      });
+      renderApp("/map");
+      expect(
+        await screen.findByTestId("map-canvas", {}, { timeout: 10000 }),
+      ).toBeVisible();
+      mockApi.me.mockRejectedValueOnce(new MockApiError("登录已失效", status));
+      const handler = vi
+        .mocked(registerForbiddenHandler)
+        .mock.calls.at(-1)?.[0];
+      await handler?.();
+      await waitFor(() =>
+        expect(document.querySelector(".user-button-name")).toHaveTextContent(
+          "当前用户",
+        ),
+      );
+    },
+  );
 
   it("shows compact workspace navigation for privileged users", async () => {
     mockApi.me.mockResolvedValue({ authenticated: true, user: adminUser });

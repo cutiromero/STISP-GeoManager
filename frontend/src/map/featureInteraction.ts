@@ -21,6 +21,7 @@ export function syncVectorInteractions(
     for (const styleLayerId of [
       `${sourceId}-fill`,
       `${sourceId}-line`,
+      `${sourceId}-excluded-line`,
       `${sourceId}-point`,
       `${sourceId}-symbol`,
     ]) {

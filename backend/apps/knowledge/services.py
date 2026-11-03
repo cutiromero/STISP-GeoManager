@@ -7,7 +7,7 @@ from django.core.validators import URLValidator
 from django.db.models import Q
 
 from apps.projects.context import is_superadmin, selected_project_id
-from apps.projects.models import Project, ProjectMembership
+from apps.projects.access import can_access_project, public_project_allowed
 from .models import KnowledgeEntry
 from .domains import domain_options, search_terms, validate_domain, validate_domains
 
@@ -34,15 +34,7 @@ def require_project(user):
     if not user.is_authenticated or not user.is_active:
         raise PermissionDenied("请先登录有效账号")
     pid = selected_project_id()
-    if not Project.objects.filter(pk=pid, is_active=True).exists():
-        raise PermissionDenied("项目已停用")
-    if (
-        pid != 1
-        and not is_superadmin(user)
-        and not ProjectMembership.objects.filter(
-            project_id=pid, user_id=user.pk
-        ).exists()
-    ):
+    if not can_access_project(user, pid):
         raise PermissionDenied("项目访问权限已撤回")
     return pid
 
@@ -53,9 +45,9 @@ def visible_entries(user, manage=False, domains=None):
     if not (manage and can_edit(user)):
         own &= Q(status="published")
     # Public material is an explicit reusable source, not an all-project query.
-    qs = KnowledgeEntry._base_manager.filter(
-        own | Q(project_tag_id=1, status="published")
-    )
+    if public_project_allowed(user):
+        own |= Q(project_tag_id=1, status="published")
+    qs = KnowledgeEntry._base_manager.filter(own)
     return (
         qs.filter(domain__in=validate_domains(domains)) if domains is not None else qs
     )

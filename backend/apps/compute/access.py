@@ -1,7 +1,7 @@
 from apps.core.permissions import has_feature_perm
 from apps.core.initialization import is_guest_user
-from apps.projects.context import current_scope, is_superadmin
-from apps.projects.models import Project, ProjectMembership
+from apps.projects.context import current_scope
+from apps.projects.access import can_access_project
 from .packages import ComputeError
 
 
@@ -28,15 +28,7 @@ def permission(user, name):
 def require_actor(user, project_id, *perms):
     if not user.is_authenticated or not user.is_active:
         raise ComputeError("请先登录；账号可能已停用", 401)
-    if not Project.objects.filter(pk=project_id, is_active=True).exists():
-        raise ComputeError("项目已停用", 403)
-    if (
-        project_id != 1
-        and not is_superadmin(user)
-        and not ProjectMembership.objects.filter(
-            user=user, project_id=project_id
-        ).exists()
-    ):
+    if not can_access_project(user, project_id):
         raise ComputeError("项目访问权限已撤回", 403)
     for name in perms:
         if not permission(user, name):

@@ -26,6 +26,7 @@ from .geology_reference import REFERENCE_SOURCE_PREFIX
 from .models import AgentRuntime
 from .policy import allowed, visible_models, worker_online
 from .tools import resources
+from .geology_multi import SCENARIO as MULTI_TYPE, LABELS as MULTI_LABELS
 
 SOURCE_NOTE = (
     "明确标注的模拟资料；参数来自样例说明及已发布算法，结论由实际计算和模型判断产生。"
@@ -38,7 +39,7 @@ REAL_SOURCE_NOTE = (
     "本轮独立验证八宝山组3项；闹仓坚沟组辞书地区为青海玛多县一带，当前当地适用尚未核实。"
 )
 REVIEW_SOURCE_NOTE = (
-    "演示案例：小范围地质图，结合专家知识检查完整覆盖与地层属性，修改前由用户批准。"
+    "演示案例：地质图结合专家知识检查完整覆盖与地层属性，修改前由用户批准。"
 )
 ROLE_LABELS = {
     "early_image": "前期影像",
@@ -67,17 +68,25 @@ AGE_MARKERS = {
     "rules": ("code", "real-geology-age-rules"),
 }
 REVIEW_MARKERS = {
-    "initial_map": ("code", "geology-review-initial"),
-    "coverage": ("code", "geology-review-coverage"),
-    "rules": ("code", "geology-review-rules"),
+    "initial_map": ("code", "geology-review-expanded-20261025-initial"),
+    "coverage": ("code", "geology-review-expanded-20261025-coverage"),
+    "rules": ("code", "geology-review-expanded-20261025-rules"),
 }
 TITLES = {
+    MULTI_TYPE: "海德乌拉地质综合推理",
     "geology_map_review": "地质成果智能检查与修正",
     "geology_age_correction": "地质图件地层时代一致性纠偏",
     "ecology_investigation": "干旱区生态风险评估分析决策",
     "geology_correction": "地质逻辑推理与填图纠偏",
 }
 PROMPTS = {
+    MULTI_TYPE: (
+        "请使用当前项目的海德乌拉演示案例，按综合入口检查岩性、构造和五类遥感矿物识别结果。"
+        "读取本案例试用知识及实际测量，说明适用条件和例外，给出少量可核查的处置建议。"
+        "若使用演示整理副本，按同一单元粒度检查冗余内部边界，有充分测量和对应知识支持时提出融合；类别保持。"
+        "等我选中批准后再修正，未批准和待裁定项保留；降权保留原对象。"
+        "重新检查，重建几何交汇及推测交汇，对比优先核查远景区，保存报告并展示地图。"
+    ),
     "geology_map_review": (
         "请检查这个项目的待检查地质图，使用演示案例的制图覆盖资料和样例参数。"
         "先检索专家知识，再核对地图的完整覆盖和地层时代属性，说明发现的问题、依据及建议修改。"
@@ -137,10 +146,21 @@ def _candidate(resource, role: str, scenario: str) -> dict:
     age = scenario == "geology_age_correction"
     review = scenario == "geology_map_review"
     marker_field, marker = (
-        REVIEW_MARKERS if review else AGE_MARKERS if age else MARKERS
-    )[role]
-    simulated = getattr(resource, marker_field) == marker or (
-        role == "context" and resource.code == "demo-ecology-context-updated"
+        ("code", "geology-multi-" + role.replace("_", "-"))
+        if scenario == MULTI_TYPE
+        else (REVIEW_MARKERS if review else AGE_MARKERS if age else MARKERS)[role]
+    )
+    simulated = (
+        getattr(resource, marker_field) == marker
+        or (role == "context" and resource.code == "demo-ecology-context-updated")
+        or (
+            scenario == MULTI_TYPE
+            and resource.code
+            in {
+                "geology-multi-lithology-complete-20261025",
+                "geology-multi-rules-complete-20261025",
+            }
+        )
     )
     return {
         "id": resource.id,
@@ -182,7 +202,7 @@ def _parameters(algorithms: list[dict], sample_images: bool) -> tuple[list, dict
     return list(specs.values()), defaults
 
 
-def discover(user, p: dict, run=None) -> dict:
+def discover(user, p: dict, run=None, *, scenario_filter: str | None = None) -> dict:
     """Current project only; manual selections are a ceiling, never a suggestion."""
     selected = list(run.resource_ids or []) if run else []
     manual = bool(run and run.data_selection_mode == "manual")
@@ -192,13 +212,38 @@ def discover(user, p: dict, run=None) -> dict:
     available_algorithms = _algorithms(run)
     scenarios = []
     for scenario, roles in ROLES.items():
+        if scenario_filter is not None and scenario != scenario_filter:
+            continue
         age = scenario == "geology_age_correction"
         review = scenario == "geology_map_review"
-        markers = REVIEW_MARKERS if review else AGE_MARKERS if age else MARKERS
+        multi = scenario == MULTI_TYPE
+        markers = (
+            {
+                role: ("code", "geology-multi-" + role.replace("_", "-"))
+                for role in roles
+            }
+            if multi
+            else REVIEW_MARKERS
+            if review
+            else AGE_MARKERS
+            if age
+            else MARKERS
+        )
+        if multi:
+            # Prefer the explicitly registered case version; historical resources
+            # remain available through manual selection and saved workflows.
+            for role in ("lithology", "rules"):
+                versioned = f"geology-multi-{role}-complete-20261025"
+                if query.filter(code=versioned).exists():
+                    markers[role] = ("code", versioned)
         inputs, preferred = {}, {}
         for role, kind in roles.items():
             field, marker = markers[role]
             candidates = query.filter(data_type=kind)
+            if multi:
+                candidates = candidates.exclude(
+                    source__startswith="geology-multi-reference:"
+                ).exclude(source__startswith="geology-multi-evaluation:")
             if age or review:
                 candidates = candidates.exclude(
                     source__startswith=REFERENCE_SOURCE_PREFIX
@@ -225,13 +270,37 @@ def discover(user, p: dict, run=None) -> dict:
         algorithms = [a for a in available_algorithms if a["identifier"] in identifiers]
         sample_images = all(role in preferred for role in ("early_image", "late_image"))
         specs, defaults = _parameters(algorithms, sample_images)
+        if review and set(preferred) == set(roles):
+            # These three exact markers identify one prepared input version.
+            # The immutable operator's native default remains for custom inputs.
+            defaults["max_changes"] = 5
+            specs = [
+                {**spec, "default": 5} if spec["key"] == "max_changes" else spec
+                for spec in specs
+            ]
+        if multi:
+            # Stage selectors are scenario inputs, not a draft publication switch.
+            specs = [spec for spec in specs if spec["key"] != "segment"]
+            specs.insert(
+                0,
+                {
+                    "key": "segment",
+                    "label": "演示入口",
+                    "type": "enum",
+                    "choices": ["all", "lithology", "structure", "alteration"],
+                    "default": "all",
+                },
+            )
+            defaults["segment"] = "all"
         scenarios.append(
             {
                 "scenario": scenario,
                 "workflowType": scenario,
                 "title": TITLES[scenario],
                 "roleLabels": {
-                    role: "空间背景与资料说明"
+                    role: MULTI_LABELS[role]
+                    if multi
+                    else "空间背景与资料说明"
                     if age and role == "surveys"
                     else ROLE_LABELS[role]
                     for role in roles
@@ -243,7 +312,9 @@ def discover(user, p: dict, run=None) -> dict:
                 "algorithms": algorithms,
                 "available": all(inputs.values())
                 and len(algorithms) == len(identifiers),
-                "sourceNote": REVIEW_SOURCE_NOTE
+                "sourceNote": "演示案例：岩性与构造为模拟识别输入，五类矿物为遥感识别结果；本轮显式绑定试用知识，获批后执行。整理副本用于展示同单元融合。"
+                if multi
+                else REVIEW_SOURCE_NOTE
                 if review
                 else REAL_SOURCE_NOTE
                 if age
@@ -253,7 +324,49 @@ def discover(user, p: dict, run=None) -> dict:
     return {"scenarios": scenarios}
 
 
-def list_demos(user, p: dict) -> dict:
+def _scene_summaries(user, p, projects):
+    """Discover names from current catalog metadata, without probing services."""
+    items = []
+    for project in projects.order_by("id"):
+        with project_scope(
+            ProjectScope((project.id,), project.id, user.id, is_superadmin(user))
+        ):
+            query = resources(user, p).filter(status="active")
+            for scenario in ("ecology_investigation", "geology_map_review", MULTI_TYPE):
+                markers = (
+                    {
+                        role: ("code", "geology-multi-" + role.replace("_", "-"))
+                        for role in ROLES[scenario]
+                    }
+                    if scenario == MULTI_TYPE
+                    else REVIEW_MARKERS
+                    if scenario == "geology_map_review"
+                    else MARKERS
+                )
+                from django.db.models import Q
+
+                condition = Q(pk__in=[])
+                for role, kind in ROLES[scenario].items():
+                    field, marker = markers[role]
+                    matching = Q(**{field: marker})
+                    if role == "context":
+                        matching |= Q(code="demo-ecology-context-updated")
+                    if scenario == MULTI_TYPE and role in {"lithology", "rules"}:
+                        matching |= Q(code=f"geology-multi-{role}-complete-20261025")
+                    condition |= Q(data_type=kind) & matching
+                if query.filter(condition).exists():
+                    items.append(
+                        {
+                            "scenario": scenario,
+                            "projectId": project.id,
+                            "projectName": project.name,
+                            "title": TITLES[scenario],
+                        }
+                    )
+    return {"items": items}
+
+
+def list_demos(user, p: dict, *, summary=False, scenario=None) -> dict:
     """Navigation across authorized projects, without exposing private input names."""
     if not allowed(user, "agent", p):
         return {"items": []}
@@ -262,6 +375,10 @@ def list_demos(user, p: dict) -> dict:
     superadmin = is_superadmin(user)
     if not superadmin:
         projects = projects.filter(models_q(user)).distinct()
+    if summary or scenario is not None:
+        projects = projects.filter(pk=current_project)
+    if summary:
+        return _scene_summaries(user, p, projects)
     models_ready = any(
         m["status"] == "online" for m in visible_models(user, "agent", p)
     )
@@ -286,7 +403,7 @@ def list_demos(user, p: dict) -> dict:
         with project_scope(
             ProjectScope((project.id,), project.id, user.id, superadmin)
         ):
-            for scene in discover(user, p)["scenarios"]:
+            for scene in discover(user, p, scenario_filter=scenario)["scenarios"]:
                 # Historical workflows remain readable and manually selectable.
                 if scene["scenario"] in {
                     "geology_correction",
@@ -305,7 +422,7 @@ def list_demos(user, p: dict) -> dict:
                         "prompt": PROMPTS[scene["scenario"]],
                         "sampleNature": (
                             "demonstration_case"
-                            if scene["scenario"] == "geology_map_review"
+                            if scene["scenario"] in {"geology_map_review", MULTI_TYPE}
                             else "synthetic"
                         ),
                         "available": bool(

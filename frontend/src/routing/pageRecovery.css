@@ -1,0 +1,60 @@
+.page-recovery {
+  min-height: 100vh;
+  color: #183451;
+  background: #f4f7fb;
+}
+
+.page-recovery-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 28px;
+  padding: 20px 28px;
+  background: white;
+  border-bottom: 1px solid #dce5ef;
+}
+
+.page-recovery-nav nav,
+.page-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.page-recovery a {
+  color: #2463ac;
+}
+
+.page-recovery-content {
+  max-width: 720px;
+  margin: 10vh auto 0;
+  padding: 28px;
+}
+
+.page-recovery-content h1 {
+  font-size: 25px;
+}
+
+.page-recovery-content p {
+  margin: 18px 0 24px;
+  line-height: 1.8;
+}
+
+.page-recovery-actions button {
+  padding: 9px 17px;
+  border: 1px solid #b6cce4;
+  border-radius: 8px;
+  color: #154d8d;
+  background: white;
+  cursor: pointer;
+}
+
+.page-recovery-content details {
+  margin-top: 24px;
+  color: #687b91;
+}
+
+.page-recovery-content pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

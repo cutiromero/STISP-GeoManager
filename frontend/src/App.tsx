@@ -1,14 +1,7 @@
 import { ProjectProvider } from "./projects/ProjectContext";
-import { App as AntApp, Spin } from "antd";
+import { Alert, Button, Spin } from "antd";
 import type { ReactNode } from "react";
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   api,
@@ -35,6 +28,7 @@ import {
 import type { Bootstrap, User } from "./types";
 import i18n, { type AppLocale } from "./i18n";
 import { browserSessionEndedEvent } from "./auth/browserSession";
+import { lazyPage as lazy, RouteRecovery } from "./routing/pageRecovery";
 
 const AdminAuthPage = lazy(() => import("./admin/AdminAuthPage"));
 const AdminDataBackupPage = lazy(() => import("./admin/AdminDataBackupPage"));
@@ -100,7 +94,6 @@ export default function App({
   locale?: AppLocale;
   languageVersion?: string;
 } = {}) {
-  const { message } = AntApp.useApp();
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [user, updateUser] = useState<User | null>(null);
   const authGeneration = useRef(0);
@@ -109,6 +102,8 @@ export default function App({
     updateUser(value);
   }, []);
   const [loading, setLoading] = useState(true);
+  const [startupFailure, setStartupFailure] = useState("");
+  const [startupAttempt, setStartupAttempt] = useState(0);
 
   useEffect(() => {
     const signedOut = () => setUser(null);
@@ -122,8 +117,12 @@ export default function App({
     try {
       const me = await api.me();
       if (generation === authGeneration.current) setUser(me.user);
-    } catch {
-      if (generation === authGeneration.current) setUser(null);
+    } catch (error) {
+      if (
+        generation === authGeneration.current &&
+        (isApiStatus(error, 401) || isApiStatus(error, 403))
+      )
+        setUser(null);
     }
   }, []);
 
@@ -136,6 +135,8 @@ export default function App({
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
+    setStartupFailure("");
     async function boot() {
       try {
         const bootstrapData = await retryTransientStartup(async () => {
@@ -157,11 +158,12 @@ export default function App({
           applyPlatformDocumentTitle(bootstrapData.systemName);
         }
       } catch (error) {
-        message.error(
-          error instanceof Error
-            ? error.message
-            : i18n.t("errors.startupFailed"),
-        );
+        if (mounted)
+          setStartupFailure(
+            error instanceof Error
+              ? error.message
+              : i18n.t("errors.startupFailed"),
+          );
       } finally {
         if (mounted) {
           setLoading(false);
@@ -172,7 +174,7 @@ export default function App({
     return () => {
       mounted = false;
     };
-  }, [message]);
+  }, [startupAttempt]);
 
   useEffect(() => {
     if (bootstrap) {
@@ -180,196 +182,224 @@ export default function App({
     }
   }, [bootstrap, locale]);
 
-  if (loading || !bootstrap) {
+  if (loading) {
     return (
       <div className="boot-screen">
         <Spin size="large" />
       </div>
     );
   }
+  if (!bootstrap) {
+    const english = locale === "en-US";
+    return (
+      <main className="page-recovery-content" role="alert">
+        <h1>{english ? "Platform could not be loaded" : "平台暂时未能加载"}</h1>
+        <Alert
+          type="error"
+          title={startupFailure || i18n.t("errors.startupFailed")}
+        />
+        <p>
+          {english
+            ? "Check your connection and browser version, then try again."
+            : "请检查网络和浏览器版本，然后重新尝试。"}
+        </p>
+        <Button
+          type="primary"
+          onClick={() => setStartupAttempt((value) => value + 1)}
+        >
+          {english ? "Retry connection" : "重新连接"}
+        </Button>
+      </main>
+    );
+  }
 
   return (
     <AppContext.Provider value={{ bootstrap, user, setBootstrap, setUser }}>
       <ProjectProvider>
-        <Suspense fallback={<RouteLoading />}>
-          <Routes>
-            <Route
-              path="/"
-              element={
-                <RouteTransition>
-                  <Navigate to="/map" replace />
-                </RouteTransition>
-              }
-            />
-
-            {/* 已登录用户访问登录页时重定向到首页 */}
-            <Route element={<RedirectIfAuth />}>
+        <RouteRecovery>
+          <Suspense fallback={<RouteLoading />}>
+            <Routes>
               <Route
-                path="/login"
+                path="/"
                 element={
                   <RouteTransition>
-                    <LoginPage />
+                    <Navigate to="/map" replace />
                   </RouteTransition>
                 }
               />
-            </Route>
 
-            <Route path="/map" element={<MapPage />} />
-            <Route path="/compute" element={<ComputePage />} />
-            <Route
-              path="/data"
-              element={<Navigate to="/resources/catalog" replace />}
-            />
-            <Route path="/resources/catalog" element={<DataCatalogPage />} />
-            <Route
-              path="/knowledge"
-              element={<EditorialPage kind="knowledge" />}
-            />
-            <Route
-              path="/knowledge/:articleId"
-              element={<EditorialPage kind="knowledge" />}
-            />
-            <Route path="/news" element={<EditorialPage kind="news" />} />
-            <Route
-              path="/news/:articleId"
-              element={<EditorialPage kind="news" />}
-            />
-            <Route
-              path="/resources"
-              element={<Navigate to="/resources/catalog" replace />}
-            />
-
-            {/* 需要登录才能访问的页面 */}
-            <Route element={<RequireAuth />}>
-              <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
-              <Route
-                path="/projects/manage"
-                element={<Navigate to="/admin/projects" replace />}
-              />
-
-              <Route
-                path="/nongeo"
-                element={
-                  <RouteTransition>
-                    <NonGeoPage />
-                  </RouteTransition>
-                }
-              />
-              <Route
-                path="/analysis"
-                element={<Navigate to="/nongeo" replace />}
-              />
-              <Route
-                path="/results"
-                element={
-                  <RouteTransition>
-                    <ResultsPage />
-                  </RouteTransition>
-                }
-              />
-              <Route
-                path="/warning"
-                element={<Navigate to="/agent/chat" replace />}
-              />
-              <Route
-                path="/agent"
-                element={<Navigate to="/agent/chat" replace />}
-              />
-              <Route path="/agent/chat" element={<AgentPage />} />
-              <Route path="/agent/workbench" element={<AgentPage />} />
-
-              <Route
-                path="/about"
-                element={<Navigate to="/about/system" replace />}
-              />
-              <Route
-                path="/about/knowledge"
-                element={<Navigate to="/knowledge" replace />}
-              />
-              <Route
-                path="/about/:section/:institutionId"
-                element={
-                  <RouteTransition>
-                    <AboutPage />
-                  </RouteTransition>
-                }
-              />
-              <Route
-                path="/about/:section"
-                element={
-                  <RouteTransition>
-                    <AboutPage />
-                  </RouteTransition>
-                }
-              />
-              <Route path="/resources" element={<ResourceLayout />}>
+              {/* 已登录用户访问登录页时重定向到首页 */}
+              <Route element={<RedirectIfAuth />}>
                 <Route
-                  path="dashboard"
-                  element={<AdminDashboardPage scope="data" />}
+                  path="/login"
+                  element={
+                    <RouteTransition>
+                      <LoginPage />
+                    </RouteTransition>
+                  }
                 />
-                <Route element={<RequireDataInventory />}>
-                  <Route
-                    path="data/inventory"
-                    element={<AdminDataInventoryPage />}
-                  />
-                </Route>
-                <Route element={<RequireWorkspaceInventory />}>
-                  <Route
-                    path="manage/projects"
-                    element={<AdminWorkspaceManagementPage kind="project" />}
-                  />
-                  <Route
-                    path="manage/topics"
-                    element={<AdminTopicCompositionManagementPage />}
-                  />
-                </Route>
-                <Route element={<RequireDataUpload />}>
-                  <Route path="data/import" element={<AdminDataImportPage />} />
-                </Route>
               </Route>
-              <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<AdminIndexRedirect />} />
-                <Route element={<RequireAccountSelfService />}>
-                  <Route path="profile" element={<AdminProfilePage />} />
-                </Route>
-                <Route element={<RequireAdminAccess />}>
-                  <Route path="compute" element={<ComputePage admin />} />
-                  <Route element={<RequireManageProjects />}>
-                    <Route path="agent" element={<AgentAdmin />} />
-                    <Route
-                      path="projects"
-                      element={<ProjectManagementPage />}
-                    />
-                  </Route>
+
+              <Route path="/map" element={<MapPage />} />
+              <Route path="/compute" element={<ComputePage />} />
+              <Route
+                path="/data"
+                element={<Navigate to="/resources/catalog" replace />}
+              />
+              <Route path="/resources/catalog" element={<DataCatalogPage />} />
+              <Route
+                path="/knowledge"
+                element={<EditorialPage kind="knowledge" />}
+              />
+              <Route
+                path="/knowledge/:articleId"
+                element={<EditorialPage kind="knowledge" />}
+              />
+              <Route path="/news" element={<EditorialPage kind="news" />} />
+              <Route
+                path="/news/:articleId"
+                element={<EditorialPage kind="news" />}
+              />
+              <Route
+                path="/resources"
+                element={<Navigate to="/resources/catalog" replace />}
+              />
+
+              {/* 需要登录才能访问的页面 */}
+              <Route element={<RequireAuth />}>
+                <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
+                <Route
+                  path="/projects/manage"
+                  element={<Navigate to="/admin/projects" replace />}
+                />
+
+                <Route
+                  path="/nongeo"
+                  element={
+                    <RouteTransition>
+                      <NonGeoPage />
+                    </RouteTransition>
+                  }
+                />
+                <Route
+                  path="/analysis"
+                  element={<Navigate to="/nongeo" replace />}
+                />
+                <Route
+                  path="/results"
+                  element={
+                    <RouteTransition>
+                      <ResultsPage />
+                    </RouteTransition>
+                  }
+                />
+                <Route
+                  path="/warning"
+                  element={<Navigate to="/agent/chat" replace />}
+                />
+                <Route
+                  path="/agent"
+                  element={<Navigate to="/agent/chat" replace />}
+                />
+                <Route path="/agent/chat" element={<AgentPage />} />
+                <Route path="/agent/workbench" element={<AgentPage />} />
+
+                <Route
+                  path="/about"
+                  element={<Navigate to="/about/system" replace />}
+                />
+                <Route
+                  path="/about/knowledge"
+                  element={<Navigate to="/knowledge" replace />}
+                />
+                <Route
+                  path="/about/:section/:institutionId"
+                  element={
+                    <RouteTransition>
+                      <AboutPage />
+                    </RouteTransition>
+                  }
+                />
+                <Route
+                  path="/about/:section"
+                  element={
+                    <RouteTransition>
+                      <AboutPage />
+                    </RouteTransition>
+                  }
+                />
+                <Route path="/resources" element={<ResourceLayout />}>
                   <Route
                     path="dashboard"
-                    element={<AdminDashboardPage scope="operations" />}
+                    element={<AdminDashboardPage scope="data" />}
                   />
-                  <Route element={<RequireViewOperationLogs />}>
-                    <Route path="logs" element={<AdminOperationLogsPage />} />
-                  </Route>
-                  <Route element={<RequireManageSystemSettings />}>
+                  <Route element={<RequireDataInventory />}>
                     <Route
-                      path="settings"
-                      element={<AdminSystemSettingsPage />}
+                      path="data/inventory"
+                      element={<AdminDataInventoryPage />}
                     />
                   </Route>
-                  <Route element={<RequireManageDataBackup />}>
-                    <Route path="backup" element={<AdminDataBackupPage />} />
-                  </Route>
-                  <Route element={<RequireManageAuth />}>
+                  <Route element={<RequireWorkspaceInventory />}>
                     <Route
-                      path="auth"
-                      element={<Navigate to="users" replace />}
+                      path="manage/projects"
+                      element={<AdminWorkspaceManagementPage kind="project" />}
                     />
-                    <Route path="auth/users" element={<AdminAuthPage />} />
-                    <Route path="auth/groups" element={<AdminAuthPage />} />
+                    <Route
+                      path="manage/topics"
+                      element={<AdminTopicCompositionManagementPage />}
+                    />
+                  </Route>
+                  <Route element={<RequireDataUpload />}>
+                    <Route
+                      path="data/import"
+                      element={<AdminDataImportPage />}
+                    />
+                  </Route>
+                </Route>
+                <Route path="/admin" element={<AdminLayout />}>
+                  <Route index element={<AdminIndexRedirect />} />
+                  <Route element={<RequireAccountSelfService />}>
+                    <Route path="profile" element={<AdminProfilePage />} />
+                  </Route>
+                  <Route element={<RequireAdminAccess />}>
+                    <Route path="compute" element={<ComputePage admin />} />
+                    <Route element={<RequireManageProjects />}>
+                      <Route path="agent" element={<AgentAdmin />} />
+                      <Route
+                        path="projects"
+                        element={<ProjectManagementPage />}
+                      />
+                    </Route>
+                    <Route
+                      path="dashboard"
+                      element={<AdminDashboardPage scope="operations" />}
+                    />
+                    <Route element={<RequireViewOperationLogs />}>
+                      <Route path="logs" element={<AdminOperationLogsPage />} />
+                    </Route>
+                    <Route element={<RequireManageSystemSettings />}>
+                      <Route
+                        path="settings"
+                        element={<AdminSystemSettingsPage />}
+                      />
+                    </Route>
+                    <Route element={<RequireManageDataBackup />}>
+                      <Route path="backup" element={<AdminDataBackupPage />} />
+                    </Route>
+                    <Route element={<RequireManageAuth />}>
+                      <Route
+                        path="auth"
+                        element={<Navigate to="users" replace />}
+                      />
+                      <Route path="auth/users" element={<AdminAuthPage />} />
+                      <Route path="auth/groups" element={<AdminAuthPage />} />
+                    </Route>
                   </Route>
                 </Route>
               </Route>
-            </Route>
-          </Routes>
-        </Suspense>
+            </Routes>
+          </Suspense>
+        </RouteRecovery>
       </ProjectProvider>
     </AppContext.Provider>
   );

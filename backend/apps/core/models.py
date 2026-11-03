@@ -32,6 +32,9 @@ class UserProfile(models.Model):
         blank=True,
         verbose_name="可查看日志角色",
     )
+    allow_public_project = models.BooleanField(
+        default=True, verbose_name="允许访问公开项目"
+    )
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
 
     class Meta:

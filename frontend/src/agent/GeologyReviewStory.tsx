@@ -467,16 +467,26 @@ export default function GeologyReviewStory({
       {workflow.status === "succeeded" &&
         !deletedIds.size &&
         (!outcome || mapId > 0) && (
-          <Link
-            className="geology-review-map-link"
-            to={
-              outcome
-                ? `/map?resourceId=${mapId}&projectTagId=${workflow.projectId}`
-                : `/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
-            }
-          >
-            {outcome ? "查看待检查地质图" : "查看待检查地质图与修正后地质图"}
-          </Link>
+          <>
+            <Link
+              className="geology-review-map-link"
+              to={
+                outcome
+                  ? `/map?resourceId=${mapId}&projectTagId=${workflow.projectId}`
+                  : `/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
+              }
+            >
+              {outcome ? "查看待检查地质图" : "查看待检查地质图与修正后地质图"}
+            </Link>
+            {!outcome && (
+              <Link
+                className="geology-review-map-link"
+                to={`/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`}
+              >
+                在地理工作台对比
+              </Link>
+            )}
+          </>
         )}
     </section>
   );

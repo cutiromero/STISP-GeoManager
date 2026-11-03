@@ -24,6 +24,14 @@ from .prepare_real_geology_case import checked_file, digest
 
 PACKAGE_FILES = ("main.py", "review_logic.py", "operator.yaml", "README.md")
 CODES = {"geology-review-initial", "geology-review-coverage", "geology-review-rules"}
+EXPANDED_VERSION = "expanded-20261025"
+VERSION_CODES = {
+    "natural-island-v1": CODES,
+    EXPANDED_VERSION: {
+        code.replace("geology-review", "geology-review-expanded-20261025", 1)
+        for code in CODES
+    },
+}
 ALGORITHMS = {"geology-map-check", "geology-map-correct"}
 
 
@@ -120,10 +128,14 @@ class Command(BaseCommand):
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         root = manifest_path.parent
         rows = manifest.get("resources", [])
+        version_codes = VERSION_CODES.get(
+            manifest.get("caseVersion", "natural-island-v1")
+        )
         if (
             manifest.get("schemaVersion") != 1
             or len(rows) != len(CODES)
-            or {row["code"] for row in rows} != CODES
+            or version_codes is None
+            or {row["code"] for row in rows} != version_codes
             or set(manifest.get("algorithms", [])) != ALGORITHMS
         ):
             raise CommandError("本命令仅接受三项运行资料和两个地质检查算法")
@@ -145,7 +157,12 @@ class Command(BaseCommand):
                 "运行资料、知识和草稿包预检通过；内部验收资料不在导入清单"
             )
             return
-        record = {"projectId": project.id, "resources": {}, "algorithms": {}}
+        record = {
+            "projectId": project.id,
+            "caseVersion": manifest.get("caseVersion", "natural-island-v1"),
+            "resources": {},
+            "algorithms": {},
+        }
         with project_scope(ProjectScope((project.id,), project.id, user.id, True)):
             call_command(
                 "import_geology_case_knowledge",

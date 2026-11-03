@@ -2473,9 +2473,9 @@ A: 重新提交相同的任务请求即可。
 
 ### 上下文与权限
 
-- 请求携带 `X-Project-Id`，图片/瓦片/文件 URL 可携带 `projectTagId`；二者相异返回 400。普通浏览缺省=公开项目 1；上传提交必须显式指定。`all` 已取消并返回 400。
+- 请求携带 `X-Project-Id`，图片/瓦片/文件 URL 可携带 `projectTagId`；二者相异返回 400。未指定时优先公开项目 1；用户被关闭公开访问后使用首个启用授权项目，与项目列表的 `defaultProjectId` 一致。上传提交必须显式指定。`all` 已取消并返回 400。
 - 业务 `projectTagId` 与地图工程 `projectId` 不同。业务对象只能归属一个项目；用户可加入多个项目。
-- 公开项目允许匿名浏览启用资源和已发布图文/成果；私有项目要求有效账户与成员关系。仅超管分配标签、管理与读取所有项目，其他管理角色仍须获得项目授权。
+- 公开项目默认允许用户和游客浏览启用资源和已发布成果；超管可按用户设置 `allowPublicProject=false`，该账号登录后仅可访问获分配项目。私有项目要求有效账户与成员关系。仅超管分配标签、管理与读取所有项目，其他管理角色仍须获得项目授权。匿名公开内容仍可读，此开关是账号项目范围配置。
 - 所有业务读写均使用一个具体项目。文件预览 URL 包含对象所属标签。科普与团队动态属于平台公共内容，独立于项目切换。
 - 写入与原文件下载仍检查功能权限；草稿、未共享工程、未发布版本、下架内容/附件不随默认标签公开。
 - 匿名可使用默认项目资源查询及默认栅格渲染，不得自定义符号化、导入、导出或管理。异步 render 状态只对同浏览器会话发起的最近至多 20 个任务开放。
@@ -2485,10 +2485,10 @@ A: 重新提交相同的任务请求即可。
 
 | API | 行为与权限 |
 | --- | --- |
-| GET `/api/projects/` | `items` 是可读取标签；`assignableItems` 是管理员可分配列表，两者不要混用 |
+| GET `/api/projects/` | `items` 是可读取标签；`defaultProjectId` 是授权默认项目或 null；`assignableItems` 是管理员可分配列表，两者不要混用 |
 | POST `/api/projects/` | 超管创建；name/code/description/isActive/sortOrder |
 | POST `/api/projects/{projectTagId}/` | 超管维护；内置“公开”项目不能改名/停用 |
-| GET/POST `/api/projects/assignments/{userId}/` | 仅超管；POST 的 projectIds 替换该用户标签集合，公开项目无需成员行 |
+| GET/POST `/api/projects/assignments/{userId}/` | 仅超管；POST 的 projectIds 替换私有标签集合，allowPublicProject 控制公开访问；省略保留旧策略；关闭需至少一个启用私有项目，超管不可关闭 |
 | GET `/api/content/articles/` | kind、category、q、offset、limit；manage=1 需编辑权限 |
 | POST `/api/content/articles/` | 创建内容，编辑权限=超管或 core.manage_auth |
 | GET/POST `/api/content/articles/{articleId}/` | 读取/保存；POST 必须带当前 revision，冲突 409 |
@@ -2564,6 +2564,10 @@ API 以 `docs/openapi.yaml` 为准，生成代码实际位于 `frontend/src/api/
 ## 智能体接口（2026-09-21）
 
 `/api/agent/` 接口使用 Session + CSRF，并要求 X-Project-Id 指定单个项目。bootstrap 返回当前用户能力；conversations 仅管理本人会话；runs 提交后返回 202，前端用 after 游标短轮询，终态停止。取消不重放任务，失联任务标记 interrupted。幂等键重复且参数相同返回原任务，参数不同返回 409。
+
+同一账号的快速对话与科研智能体跨项目合计允许三个 `queued/running` 任务；同一会话保持串行。等待回答、审核或计算的任务释放模型名额，仍保留会话及已完成步骤。问题卡回答恢复须重新申请名额，满额返回409并保留卡片；计算完成后名额暂满时保持等待，自动续接。提交和恢复共用数据库事务队列锁，幂等重试不占新名额。全站队列及每日额度沿用429，授权拒绝使用401/403，状态不能混用。模型实际同时执行数量仍受worker与各模型并发配置约束；MH-workflow继续使用独立队列和账号活动工作流限制。
+
+权限引导只在进入页面、切换项目或账号状态变化时重新读取。同一范围的暂时网络异常或不完整响应保留上次已确认权限；首次读取失败提供重试，不显示“未获准”。明确撤权立即生效，旧项目的慢响应不能覆盖新项目状态。运行轮询网络异常保留已有聊天并重试，账号登出或明确权限拒绝仍按后端响应处理。
 
 普通聊天要求 core.use_local_model；数据智能体另需 core.use_data_agent、core.browse_data、core.query_data。游客永远拒绝。默认正式用户有聊天权限，科研用户和管理员有数据智能体权限。超管在 /api/agent/admin/ 管理总开关、用户/组范围、模型、配额、上下文/生成参数、附件和互联网检索开关，策略仅收窄权限。管理更新带 revision；端口和服务 ID 仅由部署 TOML 注册。启用算子后，服务端仍只允许计算中心已登记且通过权限、manifest 和项目隔离校验的操作。
 
@@ -2722,3 +2726,49 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 编辑前必须进入`review_modifications`，返回可选`AgentWorkflow.modificationReview`。建议包含实际图斑、当前与建议状态、理由、知识、规则、平方米面积和WGS84范围预览。批准请求在原`planHash`、`decision`、`feedback`之外提供`selectedSuggestionIds`，只允许当前方案中至少一项；后端保存确切批准范围，生成该子集的修改表。拒绝时停止后续编辑。修改建议、原输入、知识或算法版本变化需重新确认；客户端不能传入修改坐标或目标属性替换批准记录。
 
 计算在既有隔离运行器执行，真实输出和新输入继续绑定任务、校验和与资源修订；模型读取修正和复核统计形成最终说明。报告和地图沿用本人、单项目、资源与输出访问授权。建议JSON只支持预览，不替代真实差异图层。
+
+## 海德乌拉多要素推理演示（2026-10-23）
+
+新增 `geology_multi_element_reasoning`，统一使用原工作流创建、读取、确认及报告端点。`parameters.segment` 为 `all`、`lithology`、`structure`、`alteration`，分别对应综合及三个简短入口。资料绑定使用 `lithology`、`faults`、`coverage`、`rules` 和五类矿物栅格 `hematite`、`chlorite`、`hydromica`、`calcite`、`dolomite`。分段须保存实际使用的上游资源版本。
+
+`plan.trialRuleBindings`保存服务端核验的知识ID、修订、规则编号、版本及实际参数。条目仍为草稿，仅显式绑定的当前项目/场景可读取，普通知识检索继续按原发布权限过滤。建议以 `kind=multi_element` 扩展原批准协议，附 `element/action/observations/ruleConditions/exceptions/ruleRefs/lengthM/status`。确认仍只传当前 `planHash` 与 `selectedSuggestionIds`，不接受客户端新坐标、目标类别或动作；方案改变须重新批准。综合场景允许 `selectedSuggestionIds: []`，表示不修改并继续真实复核；传统地质修正场景继续要求至少一项。
+
+`plan.multiElementMap`仅引用本轮真实任务的输入和输出：before/after岩性与构造，changes、checks、蚀变状态、交汇点及前后远景区。WGS84用于显示，EPSG:32646用于米制计算。交汇点由inferred区分几何相交与推测交汇；A/B为本场景的证据组合等级，显示为优先核查远景区。交付包参考图片和独立评价材料不进入运行成果。
+
+地图默认读取基础双图、构造、交汇与远景区；密集检查记录和矿物状态按勾选读取，继续验证返回完整性。改前矿物读取检查阶段真实输出，改后矿物读取获批处理输出。可选图层读取失败单独提示并允许重试，基础双图保留；切换图层保持当前视角。双图首次按真实研究区边界留白缩放，仅在主地图完成初始化后保存视角，避免React StrictMode首次清理将默认视角误作已恢复视角；综合场景详细岩性图例默认折叠。
+
+### 按项目组织可用算法（2026-10-23）
+
+计算目录与普通科研智能体共用服务端项目筛选。逻辑推理项目保留地质及逻辑推理相关共享工具；干旱区生态项目保留植被、水体指数、生态风险及通用矢量统计修复工具。各项目自行登记的工具保留，公开项目目录不变。执行时使用同一筛选，已存在的历史任务继续可读，不因目录归类改变丢失记录。
+
+### 完整地质对比与独立评价（2026-10-25）
+
+`AgentMultiElementMap.beforeAlterations`可选引用本次检查采用的矿物面，`beforeIntersections`可选引用与修改后相同参数重建的修改前交汇点；历史任务未保存时省略。已有`alterations`和`intersections`继续表示修改后的真实成果。普通工作台按任务组织改前、改后和修改范围，图层名称保持数据目录原名，界面角色单独标识。代号、类别、构造参与状态或矿物权重变化也使用真实变化表定位。
+
+`GET /api/agent/workflows/{workflowId}/validation/`返回`AgentWorkflowValidation`：`available/scope/summary`说明评价是否存在及模拟范围；`sections`按稳定`key`、中文`title`、统计口径`summary`、`columns[{key,label}]`及标量`rows`展示真实分规则、分关系、岩性对照和置信度标定。尚无评价返回200、`available=false`和空分项/文件，不运行评价算法或创建文件。
+
+该接口沿用工作流的当前单项目、本人或管理查看授权。独立参考、准备记录和评价结果由专门只读接口提供，保持在`plan`、模型上下文、知识检索与正常算法输入之外；页面默认折叠，仅在展开时请求。
+
+`files`包含受控`key`、真实文件名、媒体类型、字节数、SHA256、预览和下载地址及`canDownload`。`GET validation/files/{fileKey}/preview/`只预览Markdown并复用`AgentWorkflowReportPreview`，最多200000字符；其余文件`previewUrl=null`。`GET validation/files/{fileKey}/download/`下载完整原始字节，额外要求数据导出权限，返回attachment、nosniff和no-store。每次读取重验清单来源、大小和SHA256；文件键仅接受`[a-z0-9][a-z0-9_-]{0,63}`，不接受路径。未知文件404，内容变化409，其他错误使用统一`ErrorResponse`。
+
+## 工程、专题及单计算输出邀请分享（2026-11-03）
+
+使用Session/CSRF。POST `/api/sharing/check/`输入`{kind,objectId,username}`，用户名须完整准确且区分大小写，不提供用户列表。`kind`为`workspace/composition/compute_output`，`objectId`为整数；预检返回`eligible/detail`，可分享时另含`target/recipient`。POST `/api/sharing/invitations/`在同字段增加1至80字符`idempotencyKey`；每次重新核对，201表示已发出待接受邀请，200表示复用已有pending/accepted。相同键不同请求409。
+
+创建仅原对象owner或已有管理该对象权限的管理员。目标须已拥有功能和所属项目访问权、所有底层数据及计算输入读取权；owner_only不因分享改变。专题草稿和单计算输出只有接受后才授该对象只读，原工程项目范围可见性保持。单输出不授整任务、参数、输入快照、日志和其他输出；已入库资源仍按目录原权限管理。
+
+GET `/api/sharing/invitations/?box=received|sent&limit=30&offset=0`返回本人跨仍有权项目的`items/total/unreadCount/limit/offset`。通知持久保存，`unread`区分收件通知和分享者收到的决定通知；POST `.../{id}/read/`分别标记本人一侧已读。列表不授任何对象访问。
+
+POST `.../{id}/respond/`输入`{decision:accept|reject,idempotencyKey}`，仅收件人处理pending。接受前重新核对双方功能、项目、对象和依赖；失效返回持久`unavailable`及原因，分享者可见结果。首次决定原子保存；重复同决定复用，不同决定409。拒绝不改变对象或授权。刷新恢复原邀请及决定。
+
+GET `.../{id}/open/`仅接受后的参与人调用，再次实时核权，返回安全站内`target.openUrl`及可选单份`output:ComputeOutput`。计算统一从`/compute?sharedInvitation=id`打开独立单输出；地图/预览/下载沿用实际output接口及已接受授权，下载额外要求数据导出，入库额外要求数据新增，不授整任务。工程和专题打开保留原有页面；依赖权限变化后分享不继续生效。
+
+邀请状态为`pending/accepted/rejected/unavailable`，`detail`说明当前反馈，`canRespond`仅表示本人待回应；真正接受仍以实时权限检查为准。跨项目对象、无管理权或第三方邀请统一不可访问，不泄露私有依赖名称。所有文件路径由后端对象生成，客户端不能传入打开URL或存储路径。
+
+### 2026-11-03 项目访问与科研历史摘要
+
+项目访问策略保存在 UserProfile.allow_public_project，迁移默认 true，保留现有用户和游客行为。后台“项目标签管理 → 分配用户标签”可关闭指定账号的公开项目。前端完成范围校验后才挂载业务页面，旧会话缓存的公开项目自动改为授权默认项目。显式请求禁用的公开项目返回404；worker在继续执行时实时重查，已接受分享和公开知识的跨项目复用均不能绕过。公开算法仍作为平台共享工具使用，输入、结果和资料按授权项目隔离。科普和团队动态继续属于平台公共内容。旧聊天和任务保留记录，恢复访问仍需所属项目授权。
+
+`GET /api/agent/workflows/?view=summary&workflowType=...&offset=0&limit=20` 返回 AgentWorkflowSummaryList（items/total/offset/limit/hasMore）。limit范围1–100，workflowType最长40字符；仅本人当前项目。摘要只读取状态、目标和时间，不携带plan/evidence/steps；打开详情后重验原数据权限。省略view仍返回原AgentWorkflowList。
+
+`GET /api/agent/research-demos/?view=summary` 返回当前项目的 AgentResearchDemoSummaryList，条目只有scenario/projectId/projectName/title，通过存在性查询生成，不调用模型健康检测和算法扫描。`?scenario=...`按需获取当前项目该场景的完整预设，返回原AgentResearchDemoList；无参数保留跨本人授权项目的原有入口。

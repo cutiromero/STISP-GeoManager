@@ -182,7 +182,11 @@ def frontend_app(request):
         and not settings.STATIC_ROOT.joinpath("index.html").exists()
     ):
         raise Http404("前端构建产物不存在，请先运行 pnpm build")
-    return render(request, "index.html")
+    response = render(request, "index.html")
+    # A cached entry document can reference removed chunks after a deployment.
+    # Hashed static assets keep their independent cache policy.
+    response["Cache-Control"] = "no-store, max-age=0"
+    return response
 
 
 def _login_overview_metrics(generated_at: str) -> list[dict]:

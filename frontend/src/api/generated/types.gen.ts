@@ -5,6 +5,187 @@ export type ClientOptions = {
 };
 
 /**
+ * 工程、专题图或单个计算输出；不分享整个计算任务
+ */
+export type ShareKind = 'workspace' | 'composition' | 'compute_output';
+
+/**
+ * 已知邀请双方的最少身份信息，不提供用户枚举
+ */
+export type SharePerson = {
+    /**
+     * 准确用户名
+     */
+    username: string;
+    /**
+     * 显示名称
+     */
+    displayName: string;
+};
+
+/**
+ * 原项目中的只读目标；不复制资料或增加项目权限
+ */
+export type ShareTarget = {
+    kind: ShareKind;
+    /**
+     * 工程/专题图/单输出标识
+     */
+    objectId: number;
+    /**
+     * 分享对象名称
+     */
+    name: string;
+    /**
+     * 业务项目标识
+     */
+    projectTagId: number;
+    /**
+     * 业务项目名称
+     */
+    projectName: string;
+    /**
+     * 安全站内入口；计算输出使用/compute?sharedInvitation=邀请编号，预检时为空
+     */
+    openUrl: string;
+};
+
+/**
+ * 精确用户名与当前项目的一个对象
+ */
+export type ShareCheckRequest = {
+    kind: ShareKind;
+    /**
+     * 单个对象标识
+     */
+    objectId: number;
+    /**
+     * 区分大小写的完整用户名，不接受模糊选择
+     */
+    username: string;
+};
+
+/**
+ * 发出单对象邀请
+ */
+export type ShareCreateRequest = {
+    kind: ShareKind;
+    /**
+     * 单个对象标识
+     */
+    objectId: number;
+    /**
+     * 区分大小写的完整用户名
+     */
+    username: string;
+    /**
+     * 本账号唯一提交键，同键不同请求409
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * 可发送性及明确原因，不可用时不返回目标用户或私有依赖信息
+ */
+export type ShareCheckResponse = {
+    /**
+     * 当前是否允许发送
+     */
+    eligible: boolean;
+    /**
+     * 可理解的成功或失败原因
+     */
+    detail: string;
+    target?: ShareTarget;
+    recipient?: SharePerson;
+};
+
+/**
+ * 持久邀请和本人这侧通知；接受只授该对象只读入口
+ */
+export type ShareInvitation = {
+    /**
+     * 邀请标识
+     */
+    id: number;
+    /**
+     * 等待回应/接受/拒绝/源对象或权限失效
+     */
+    status: 'pending' | 'accepted' | 'rejected' | 'unavailable';
+    sender: SharePerson;
+    recipient: SharePerson;
+    target: ShareTarget;
+    /**
+     * 发出时间
+     */
+    createdAt: string;
+    /**
+     * 决定或确认失效的时间
+     */
+    respondedAt: string | null;
+    /**
+     * 收件通知或分享者决定通知是否未读
+     */
+    unread: boolean;
+    /**
+     * 发出、等待、接受、拒绝或失效的反馈
+     */
+    detail: string;
+    /**
+     * 本人是否为仍待回应的接收人；接受前继续重新核权
+     */
+    canRespond: boolean;
+};
+
+/**
+ * 本人跨仍有权项目收件或发件分页
+ */
+export type ShareInvitationList = {
+    /**
+     * 本页邀请
+     */
+    items: Array<ShareInvitation>;
+    /**
+     * 当前箱邀请总数
+     */
+    total: number;
+    /**
+     * 当前箱全部未读数
+     */
+    unreadCount: number;
+    /**
+     * 每页条数
+     */
+    limit: number;
+    /**
+     * 当前偏移
+     */
+    offset: number;
+};
+
+/**
+ * 接收人明确响应
+ */
+export type ShareResponseRequest = {
+    /**
+     * 接受或拒绝
+     */
+    decision: 'accept' | 'reject';
+    /**
+     * 响应提交键，防重复操作
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * 实时核验后返回目标；计算输出仅一份最少元信息
+ */
+export type ShareOpenResponse = {
+    target: ShareTarget;
+    output?: ComputeOutput;
+};
+
+/**
  * 附加可见范围；不授予功能或项目权限
  */
 export type AgentAudience = {
@@ -1142,9 +1323,9 @@ export type AgentRunInput = {
 };
 
 /**
- * 当前授权项目内已登记科研场景；geology_map_review 为专家知识驱动的地质成果检查、选中建议批准、受约束修正与复核演示
+ * 当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确
  */
-export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction' | 'geology_age_correction' | 'geology_map_review';
+export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction' | 'geology_age_correction' | 'geology_map_review' | 'geology_multi_element_reasoning';
 
 /**
  * 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
@@ -1279,6 +1460,30 @@ export type AgentResearchIntentUpdate = {
      * 用户自由补充说明
      */
     answer?: string;
+};
+
+/**
+ * 当前项目科研案例轻量入口，不含模型健康检查、预设或算法扫描结果。
+ */
+export type AgentResearchDemoSummaryList = {
+    /**
+     * 当前项目中存在的可见案例。
+     */
+    items: Array<{
+        scenario: AgentResearchScenario;
+        /**
+         * 当前已授权项目
+         */
+        projectId: number;
+        /**
+         * 当前项目名称
+         */
+        projectName: string;
+        /**
+         * 案例标题
+         */
+        title: string;
+    }>;
 };
 
 /**
@@ -1421,6 +1626,74 @@ export type AgentComputeTaskTracking = {
      * 状态说明
      */
     detail: string;
+};
+
+/**
+ * 本人当前项目工作流的轻量历史；完整计划和证据按需读取详情。
+ */
+export type AgentWorkflowSummary = {
+    /**
+     * 工作流标识
+     */
+    id: string;
+    /**
+     * 所属项目
+     */
+    projectId: number;
+    /**
+     * 工作流类型
+     */
+    workflowType: string;
+    /**
+     * 用户目标
+     */
+    goal: string;
+    /**
+     * 当前实际状态
+     */
+    status: 'queued' | 'running' | 'waiting_compute' | 'waiting_approval' | 'paused' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
+    /**
+     * 可读状态
+     */
+    detail: string;
+    /**
+     * 当前节点
+     */
+    currentStep: string;
+    /**
+     * 创建时间
+     */
+    createdAt: string;
+    /**
+     * 更新时间
+     */
+    updatedAt: string;
+};
+
+/**
+ * 当前项目本人工作流的分页轻量历史。
+ */
+export type AgentWorkflowSummaryList = {
+    /**
+     * 本页工作流摘要。
+     */
+    items: Array<AgentWorkflowSummary>;
+    /**
+     * 当前筛选的历史总数
+     */
+    total: number;
+    /**
+     * 本页偏移
+     */
+    offset: number;
+    /**
+     * 本页条数上限
+     */
+    limit: number;
+    /**
+     * 是否还有下一页
+     */
+    hasMore: boolean;
 };
 
 /**
@@ -2044,6 +2317,111 @@ export type AgentWorkflowStep = {
 };
 
 /**
+ * 与运行输入隔离的工作流独立评价，仅用于授权页面与文件验收
+ */
+export type AgentWorkflowValidation = {
+    /**
+     * 绑定的实际工作流
+     */
+    workflowId: string;
+    /**
+     * 是否已存在可读取的独立评价；false时sections及files为空
+     */
+    available: boolean;
+    /**
+     * 数据性质与评价范围，明确模拟输入及未覆盖项目
+     */
+    scope: string;
+    /**
+     * 通俗评价结论或尚无评价的原因
+     */
+    summary: string;
+    /**
+     * 按规则、关系、岩性对照或置信度标定组织的实际评价统计
+     */
+    sections: Array<AgentWorkflowValidationSection>;
+    /**
+     * 受控独立评价清单中的真实文件
+     */
+    files: Array<AgentWorkflowValidationFile>;
+};
+
+/**
+ * 一项独立评价表格，列定义与每行实际统计对应
+ */
+export type AgentWorkflowValidationSection = {
+    /**
+     * 分项稳定键
+     */
+    key: string;
+    /**
+     * 用户可读的分项名称
+     */
+    title: string;
+    /**
+     * 本项统计口径、结论及证据范围
+     */
+    summary: string;
+    /**
+     * 显示列及其稳定字段键
+     */
+    columns: Array<{
+        /**
+         * 对应rows中的字段键
+         */
+        key: string;
+        /**
+         * 中文列标题
+         */
+        label: string;
+    }>;
+    /**
+     * 独立计算得到的统计行，保持零值、未定义值和未验证结果的区别
+     */
+    rows: Array<{
+        [key: string]: string | number | boolean | null;
+    }>;
+};
+
+/**
+ * 只读独立评价文件，文件访问时再次核验来源、大小和SHA256
+ */
+export type AgentWorkflowValidationFile = {
+    /**
+     * 受控文件键，不是路径
+     */
+    key: string;
+    /**
+     * 用户可读的真实下载文件名
+     */
+    fileName: string;
+    /**
+     * 清单登记的真实文件媒体类型
+     */
+    contentType: string;
+    /**
+     * 已保存文件字节数
+     */
+    sizeBytes: number;
+    /**
+     * 已保存文件SHA256
+     */
+    checksum: string;
+    /**
+     * Markdown预览端点，其余类型为null
+     */
+    previewUrl: string | null;
+    /**
+     * 受工作流授权及数据导出权限保护的下载地址
+     */
+    downloadUrl: string;
+    /**
+     * 当前用户是否具备下载所需权限
+     */
+    canDownload: boolean;
+};
+
+/**
  * 已生成并持久保存的科研Markdown报告，操作能力根据当前权限返回
  */
 export type AgentWorkflowReport = {
@@ -2227,6 +2605,11 @@ export type AgentWorkflow = {
      * 经预检的输入、算法、参数与知识依据
      */
     plan: {
+        multiElementMap?: AgentMultiElementMap;
+        /**
+         * 仅当前项目与综合地质场景可读取的显式试用规则及冻结版本；不改变普通知识检索对草稿的可见性
+         */
+        trialRuleBindings?: Array<AgentTrialRuleBinding>;
         [key: string]: unknown;
     };
     /**
@@ -2249,7 +2632,7 @@ export type AgentWorkflow = {
  */
 export type AgentWorkflowInput = {
     /**
-     * 工作流类型；ecology_investigation 为两期植被调查分析，geology_correction 和 geology_age_correction 保留历史地质流程，geology_map_review 为专家知识驱动的检查、批准后修正和复核；默认 hyperspectral_interpretation
+     * 工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，保留生态与既有地质场景；默认 hyperspectral_interpretation
      */
     workflowType?: string;
     /**
@@ -2269,7 +2652,7 @@ export type AgentWorkflowInput = {
      */
     algorithmVersionId?: number | null;
     /**
-     * 算子参数候选；服务端按 manifest 校验
+     * 算子参数候选；服务端按manifest校验。综合地质场景segment为all、lithology、structure或alteration，分段所用上游资源与版本必须保存在计划中。
      */
     parameters?: {
         [key: string]: unknown;
@@ -2283,7 +2666,7 @@ export type AgentWorkflowInput = {
      */
     idempotencyKey: string;
     /**
-     * 输入端口或场景角色到授权资源的明确绑定。生态使用 early_image、late_image、valid_mask、zones、context；地质逻辑推理使用 initial_map、surveys、rules；地质成果检查使用 initial_map、coverage、rules。真实计算输出入库后按持久来源接入后续步骤。
+     * 输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。
      */
     inputs?: {
         [key: string]: number;
@@ -2422,7 +2805,7 @@ export type ProjectTag = {
  */
 export type ProjectTagList = {
     /**
-     * 公开和已获分配项目，超管可见全部。
+     * 当前可访问项目；公开访问可由超管按用户关闭，超管可见全部。
      */
     items: Array<ProjectTag>;
     /**
@@ -2433,6 +2816,10 @@ export type ProjectTagList = {
      * 能否分配用户项目标签。
      */
     canAssign: boolean;
+    /**
+     * 可访问的默认项目，优先公开，否则首个启用授权项目；没有可访问项目时为空。业务请求未显式指定项目时使用同一规则。
+     */
+    defaultProjectId: number | null;
     /**
      * 具备标签分配权限时可分配的项目集合，不代表内容访问权限。
      */
@@ -2474,9 +2861,13 @@ export type ProjectAssignment = {
      */
     userId: number;
     /**
-     * 私有项目标签，公开项目自动可读。
+     * 私有项目标签；公开访问单独由allowPublicProject控制。
      */
     projectIds: Array<number>;
+    /**
+     * 是否允许公开项目；GET始终返回，POST省略保留原策略。新旧用户默认true；关闭需至少分配一个启用项目，超级管理员不可关闭。
+     */
+    allowPublicProject?: boolean;
 };
 
 /**
@@ -5276,7 +5667,7 @@ export type AgentWorkflowConfirmation = {
      */
     feedback?: string;
     /**
-     * 地质成果review_modifications阶段approve必填，至少一个当前planHash下的建议标识；只执行所选范围，reject省略，其他阶段不得扩大操作范围。
+     * 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项；综合推理场景允许空数组，明确选择不修改并继续复核。reject省略，其他阶段不得扩大操作范围。
      */
     selectedSuggestionIds?: Array<string>;
 };
@@ -5290,13 +5681,109 @@ export type AgentModificationReview = {
      */
     proposalHash: string;
     /**
-     * 由模型选择、由实际检查清单固定对象与空间范围的建议。
+     * 由模型选择、由实际检查清单固定对象与空间范围的建议；综合场景支持按对象和动作集中批准。
      */
     suggestions: Array<AgentModificationSuggestion>;
     /**
      * 后端已保存的获批建议标识；尚未批准时为空。
      */
     approvedSuggestionIds: Array<string>;
+};
+
+/**
+ * 服务端核验项目、场景和修订后的试用知识；状态保持草稿，仅本案例可用
+ */
+export type AgentTrialRuleBinding = {
+    /**
+     * 知识条目编号
+     */
+    id: number;
+    /**
+     * 冻结知识修订
+     */
+    revision: number;
+    /**
+     * 本案例规则编号
+     */
+    ruleId: string;
+    /**
+     * 冻结规则版本
+     */
+    ruleVersion: string;
+    /**
+     * 试用规则标题
+     */
+    title: string;
+    /**
+     * 实际传给算子的规则参数
+     */
+    parameters: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * 当前真实任务的地图资源；输入为模拟识别演示，输出只引用本轮实际计算，不引用交付包PNG
+ */
+export type AgentMultiElementMap = {
+    /**
+     * 当前检查采用的明确上游版本
+     */
+    before?: {
+        /**
+         * 岩性输入资源
+         */
+        lithology?: number;
+        /**
+         * 构造输入资源
+         */
+        faults?: number;
+    };
+    /**
+     * 获批计算形成的新版本，未形成时缺省
+     */
+    after?: {
+        /**
+         * 本轮修正岩性资源
+         */
+        lithology?: number;
+        /**
+         * 本轮修正构造资源
+         */
+        faults?: number;
+    };
+    /**
+     * 真实变化线点面图层，不含未批准建议
+     */
+    changes?: Array<number>;
+    /**
+     * 当前实际检查的疑点及待核查图层
+     */
+    checks?: Array<number>;
+    /**
+     * 本次检查实际读取的修改前矿物面图层，历史任务可缺省
+     */
+    beforeAlterations?: number;
+    /**
+     * 保留原识别信息并标识处理状态的蚀变面图层
+     */
+    alterations?: number;
+    /**
+     * 同参数下修改前实际重建的交汇点，历史任务未保存时可缺省
+     */
+    beforeIntersections?: number;
+    /**
+     * 几何与推测交汇点，inferred字段决定实心或空心
+     */
+    intersections?: number;
+    /**
+     * 同参数下修正前优先核查远景区
+     */
+    beforeProspects?: number;
+    /**
+     * 同参数下修正后优先核查远景区；A/B为证据组合等级
+     */
+    afterProspects?: number;
 };
 
 /**
@@ -5308,9 +5795,9 @@ export type AgentModificationSuggestion = {
      */
     id: string;
     /**
-     * 填补有据内部漏填或更新地层时代属性
+     * 内部漏填、时代属性或多要素建议；综合场景具体操作由action标识
      */
-    kind: 'fill_gap' | 'set_age';
+    kind: 'fill_gap' | 'set_age' | 'multi_element';
     /**
      * 当前数据中的稳定图斑标识
      */
@@ -5339,6 +5826,65 @@ export type AgentModificationSuggestion = {
      * 本次结构化专家规则标识
      */
     ruleId: string;
+    /**
+     * 综合场景建议作用于岩性、构造或蚀变
+     */
+    element?: 'lithology' | 'structure' | 'alteration';
+    /**
+     * 服务端冻结的建议动作；降权、保留、待裁定与剔除分别记录，客户端不提交新动作
+     */
+    action?: string;
+    /**
+     * 当次算法实测值与量纲，用于核对规则条件
+     */
+    observations?: {
+        [key: string]: unknown;
+    };
+    /**
+     * 当次规则成立所需条件
+     */
+    ruleConditions?: Array<string>;
+    /**
+     * 必须保留的地质例外与证据缺口
+     */
+    exceptions?: Array<string>;
+    /**
+     * 本案例试用规则及具体知识版本来源
+     */
+    ruleRefs?: Array<{
+        /**
+         * 规则编号
+         */
+        id: string;
+        /**
+         * 冻结规则版本
+         */
+        version: string;
+        /**
+         * 规则标题
+         */
+        title: string;
+        /**
+         * 已授权试用知识条目编号
+         */
+        knowledgeId: number;
+        /**
+         * 知识修订
+         */
+        revision: number;
+        /**
+         * 原来源及核实程度
+         */
+        source: string;
+    }>;
+    /**
+     * 构造对象实测米制长度；不以面积代替线长度
+     */
+    lengthM?: number;
+    /**
+     * 建议、待裁定、例外、保留、降权或剔除的实际处置状态
+     */
+    status?: string;
     /**
      * 当前检索实际返回的知识与修订，权限继续按原项目检查。
      */
@@ -9524,6 +10070,11 @@ export type ComputePreflight = {
 };
 
 /**
+ * 邀请标识
+ */
+export type ShareInvitationId = number;
+
+/**
  * 资源 ID
  */
 export type ResourceId = number;
@@ -9532,6 +10083,281 @@ export type ResourceId = number;
  * 异步任务 ID
  */
 export type JobId = string;
+
+export type CheckShareInvitationData = {
+    /**
+     * 分享对象和准确用户名，区分大小写
+     */
+    body: ShareCheckRequest;
+    headers?: {
+        /**
+         * 单个业务项目，缺省公开项目1，不支持all
+         */
+        'X-Project-Id'?: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/sharing/check/';
+};
+
+export type CheckShareInvitationErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type CheckShareInvitationError = CheckShareInvitationErrors[keyof CheckShareInvitationErrors];
+
+export type CheckShareInvitationResponses = {
+    /**
+     * eligible表示能否发送，失败说明不暴露私有依赖名称
+     */
+    200: ShareCheckResponse;
+};
+
+export type CheckShareInvitationResponse = CheckShareInvitationResponses[keyof CheckShareInvitationResponses];
+
+export type ListShareInvitationsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * 收件或发件，默认received
+         */
+        box?: 'received' | 'sent';
+        /**
+         * 每页条数
+         */
+        limit?: number;
+        /**
+         * 分页偏移
+         */
+        offset?: number;
+    };
+    url: '/api/sharing/invitations/';
+};
+
+export type ListShareInvitationsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type ListShareInvitationsError = ListShareInvitationsErrors[keyof ListShareInvitationsErrors];
+
+export type ListShareInvitationsResponses = {
+    /**
+     * 通知及该箱全部未读数
+     */
+    200: ShareInvitationList;
+};
+
+export type ListShareInvitationsResponse = ListShareInvitationsResponses[keyof ListShareInvitationsResponses];
+
+export type CreateShareInvitationData = {
+    /**
+     * 准确用户名、单个对象和提交幂等键
+     */
+    body: ShareCreateRequest;
+    headers?: {
+        /**
+         * 分享源对象所属单个业务项目，缺省公开项目1
+         */
+        'X-Project-Id'?: number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/sharing/invitations/';
+};
+
+export type CreateShareInvitationErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type CreateShareInvitationError = CreateShareInvitationErrors[keyof CreateShareInvitationErrors];
+
+export type CreateShareInvitationResponses = {
+    /**
+     * 复用已有邀请，无重复通知
+     */
+    200: ShareInvitation;
+    /**
+     * 邀请已发出，等待对方接受
+     */
+    201: ShareInvitation;
+};
+
+export type CreateShareInvitationResponse = CreateShareInvitationResponses[keyof CreateShareInvitationResponses];
+
+export type RespondShareInvitationData = {
+    /**
+     * 用户明确选择和幂等键
+     */
+    body: ShareResponseRequest;
+    path: {
+        /**
+         * 邀请标识
+         */
+        invitationId: number;
+    };
+    query?: never;
+    url: '/api/sharing/invitations/{invitationId}/respond/';
+};
+
+export type RespondShareInvitationErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type RespondShareInvitationError = RespondShareInvitationErrors[keyof RespondShareInvitationErrors];
+
+export type RespondShareInvitationResponses = {
+    /**
+     * 持久决定或失效状态
+     */
+    200: ShareInvitation;
+};
+
+export type RespondShareInvitationResponse = RespondShareInvitationResponses[keyof RespondShareInvitationResponses];
+
+export type ReadShareInvitationData = {
+    body?: never;
+    path: {
+        /**
+         * 邀请标识
+         */
+        invitationId: number;
+    };
+    query?: never;
+    url: '/api/sharing/invitations/{invitationId}/read/';
+};
+
+export type ReadShareInvitationErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type ReadShareInvitationError = ReadShareInvitationErrors[keyof ReadShareInvitationErrors];
+
+export type ReadShareInvitationResponses = {
+    /**
+     * 更新后的邀请
+     */
+    200: ShareInvitation;
+};
+
+export type ReadShareInvitationResponse = ReadShareInvitationResponses[keyof ReadShareInvitationResponses];
+
+export type OpenShareInvitationData = {
+    body?: never;
+    path: {
+        /**
+         * 邀请标识
+         */
+        invitationId: number;
+    };
+    query?: never;
+    url: '/api/sharing/invitations/{invitationId}/open/';
+};
+
+export type OpenShareInvitationErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type OpenShareInvitationError = OpenShareInvitationErrors[keyof OpenShareInvitationErrors];
+
+export type OpenShareInvitationResponses = {
+    /**
+     * 当次核验后的目标及可选单输出
+     */
+    200: ShareOpenResponse;
+};
+
+export type OpenShareInvitationResponse = OpenShareInvitationResponses[keyof OpenShareInvitationResponses];
 
 export type GetBootstrapData = {
     body?: never;
@@ -16488,11 +17314,24 @@ export type ImportComputeOutputResponse = ImportComputeOutputResponses[keyof Imp
 export type ListAgentResearchDemosData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * summary读取当前项目轻量入口；省略时读取完整入口。
+         */
+        view?: 'summary';
+        /**
+         * 只读取当前项目指定场景的完整预设；与summary视图分开使用。
+         */
+        scenario?: AgentResearchScenario;
+    };
     url: '/api/agent/research-demos/';
 };
 
 export type ListAgentResearchDemosErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
     /**
      * 请先登录
      */
@@ -16509,7 +17348,7 @@ export type ListAgentResearchDemosResponses = {
     /**
      * 本人可见的案例入口与就绪状态
      */
-    200: AgentResearchDemoList;
+    200: AgentResearchDemoList | AgentResearchDemoSummaryList;
 };
 
 export type ListAgentResearchDemosResponse = ListAgentResearchDemosResponses[keyof ListAgentResearchDemosResponses];
@@ -18062,11 +18901,32 @@ export type ListAgentWorkflowsData = {
         'X-Project-Id': number;
     };
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * summary选择分页轻量历史；省略时返回原完整列表。
+         */
+        view?: 'summary';
+        /**
+         * 可选的工作流类型精确筛选。
+         */
+        workflowType?: string;
+        /**
+         * summary分页起始偏移。
+         */
+        offset?: number;
+        /**
+         * summary每页数量。
+         */
+        limit?: number;
+    };
     url: '/api/agent/workflows/';
 };
 
 export type ListAgentWorkflowsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
     /**
      * 未认证
      */
@@ -18083,7 +18943,7 @@ export type ListAgentWorkflowsResponses = {
     /**
      * 工作流列表
      */
-    200: AgentWorkflowList;
+    200: AgentWorkflowList | AgentWorkflowSummaryList;
 };
 
 export type ListAgentWorkflowsResponse = ListAgentWorkflowsResponses[keyof ListAgentWorkflowsResponses];
@@ -18529,6 +19389,158 @@ export type ImportAgentWorkflowReportResponses = {
 };
 
 export type ImportAgentWorkflowReportResponse = ImportAgentWorkflowReportResponses[keyof ImportAgentWorkflowReportResponses];
+
+export type GetAgentWorkflowValidationData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目ID，禁止all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户可查看的工作流UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/validation/';
+};
+
+export type GetAgentWorkflowValidationErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type GetAgentWorkflowValidationError = GetAgentWorkflowValidationErrors[keyof GetAgentWorkflowValidationErrors];
+
+export type GetAgentWorkflowValidationResponses = {
+    /**
+     * 独立评价或尚无评价的明确状态
+     */
+    200: AgentWorkflowValidation;
+};
+
+export type GetAgentWorkflowValidationResponse = GetAgentWorkflowValidationResponses[keyof GetAgentWorkflowValidationResponses];
+
+export type PreviewAgentWorkflowValidationFileData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目ID，禁止all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户可查看的工作流UUID
+         */
+        workflowId: string;
+        /**
+         * 评价清单中的受控文件键，不能传入文件路径
+         */
+        fileKey: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/validation/files/{fileKey}/preview/';
+};
+
+export type PreviewAgentWorkflowValidationFileErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type PreviewAgentWorkflowValidationFileError = PreviewAgentWorkflowValidationFileErrors[keyof PreviewAgentWorkflowValidationFileErrors];
+
+export type PreviewAgentWorkflowValidationFileResponses = {
+    /**
+     * 已保存Markdown评价说明
+     */
+    200: AgentWorkflowReportPreview;
+};
+
+export type PreviewAgentWorkflowValidationFileResponse = PreviewAgentWorkflowValidationFileResponses[keyof PreviewAgentWorkflowValidationFileResponses];
+
+export type DownloadAgentWorkflowValidationFileData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目ID，禁止all
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户可查看的工作流UUID
+         */
+        workflowId: string;
+        /**
+         * 评价清单中的受控文件键，不能传入文件路径
+         */
+        fileKey: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/validation/files/{fileKey}/download/';
+};
+
+export type DownloadAgentWorkflowValidationFileErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type DownloadAgentWorkflowValidationFileError = DownloadAgentWorkflowValidationFileErrors[keyof DownloadAgentWorkflowValidationFileErrors];
+
+export type DownloadAgentWorkflowValidationFileResponses = {
+    /**
+     * 独立评价文件原始字节
+     */
+    200: Blob | File;
+};
+
+export type DownloadAgentWorkflowValidationFileResponse = DownloadAgentWorkflowValidationFileResponses[keyof DownloadAgentWorkflowValidationFileResponses];
 
 export type GetAgentAdminData = {
     body?: never;

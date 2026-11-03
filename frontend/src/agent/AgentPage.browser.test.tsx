@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -11,12 +12,14 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
+import { ApiError } from "../api/client";
 import type {
   AgentBootstrap,
   AgentRun,
   AgentWorkflow,
 } from "../api/generated/types.gen";
 import AgentPage from "./AgentPage";
+import type { AgentBootstrapStatus } from "./useAgentBootstrap";
 import {
   computeIntent,
   computeRun,
@@ -41,7 +44,19 @@ vi.mock("../projects/ProjectContext", () => ({
     projects: [{ id: 1, name: "公开" }],
   }),
 }));
-vi.mock("./useAgentBootstrap", () => ({ useAgentBootstrap: () => bootstrap }));
+vi.mock("./useAgentBootstrap", () => ({
+  useAgentBootstrapState: () => ({
+    bootstrap: accessState.value === "confirmed" ? bootstrap : null,
+    status: accessState.status,
+    error: "权限服务暂时不可用",
+    retry: accessState.retry,
+  }),
+}));
+const accessState = {
+  value: "confirmed" as "confirmed" | "unknown",
+  status: "ready" as AgentBootstrapStatus,
+  retry: vi.fn(),
+};
 
 const bootstrap: AgentBootstrap = {
   canChat: true,
@@ -300,6 +315,9 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.restoreAllMocks();
+  accessState.value = "confirmed";
+  accessState.status = "ready";
+  accessState.retry.mockReset();
   bootstrap.canManage = false;
   bootstrap.canAgent = true;
   bootstrap.canChat = true;
@@ -377,6 +395,21 @@ beforeEach(() => {
   });
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "researchDemoSummaries").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "workflowHistory").mockImplementation(
+    async ({ workflowType }) => {
+      const items = (await agentApi.workflows()).items.filter(
+        (item) => item.workflowType === workflowType,
+      );
+      return {
+        items,
+        total: items.length,
+        offset: 0,
+        limit: 30,
+        hasMore: false,
+      };
+    },
+  );
   vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue({
     fileName: "MH-workflow报告.md",
     label: "MH-workflow报告",
@@ -997,7 +1030,7 @@ it("drags the sidebar and input, stops on cancel, and remembers their sizes", as
   await waitFor(() =>
     expect(
       JSON.parse(localStorage.getItem("agent-layout:99:chat") ?? "null"),
-    ).toEqual({ sidebar: 340, input: 144 }),
+    ).toEqual({ sidebar: 340, input: 144, workflow: 720 }),
   );
   first.unmount();
   showAgent();
@@ -1101,6 +1134,117 @@ it("keeps narrow screens usable with a dismissible sidebar and bounded input", a
   }
 });
 
+it("keeps both allowed conversation modes visible when the history sidebar is hidden", async () => {
+  await page.viewport(390, 844);
+  try {
+    showAgent("workbench");
+    await screen.findByText("旧问题");
+    const sidebar = screen.getByRole("complementary", {
+      hidden: true,
+    });
+    expect(sidebar).not.toBeVisible();
+    const quick = screen.getByRole("button", { name: "快速对话" });
+    expect(quick).toBeVisible();
+    fireEvent.click(quick);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "快速对话" })).toHaveAttribute(
+        "aria-current",
+        "page",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "科研智能体" }));
+    await screen.findByRole("button", { name: /MH-workflow/ });
+    expect(screen.getByRole("button", { name: "科研智能体" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("button", { name: "快速对话" })).toBeVisible();
+  } finally {
+    await page.viewport(1600, 900);
+  }
+});
+
+it("resizes the workflow from its left edge and restores its saved width", async () => {
+  vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(
+    () => {},
+  );
+  const first = showAgent("workbench");
+  await screen.findByText("旧问题");
+  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+  const handle = await screen.findByRole("separator", {
+    name: "调整工作流宽度",
+  });
+  fireEvent.pointerDown(handle, { button: 0, pointerId: 9, clientX: 880 });
+  fireEvent.pointerMove(handle, { pointerId: 9, clientX: 720 });
+  fireEvent.pointerUp(handle, { pointerId: 9 });
+  await waitFor(() => expect(handle).toHaveAttribute("aria-valuenow", "880"));
+  const drawer = document.querySelector<HTMLElement>(
+    ".agent-workflow-drawer .ant-drawer-content-wrapper",
+  )!;
+  expect(drawer.getBoundingClientRect().width).toBe(880);
+  await waitFor(() =>
+    expect(
+      JSON.parse(localStorage.getItem("agent-layout:99:agent") ?? "null")
+        .workflow,
+    ).toBe(880),
+  );
+  first.unmount();
+  showAgent("workbench");
+  fireEvent.click(await screen.findByRole("button", { name: /MH-workflow/ }));
+  const restored = await screen.findByRole("separator", {
+    name: "调整工作流宽度",
+  });
+  expect(restored).toHaveAttribute("aria-valuenow", "880");
+  fireEvent.keyDown(restored, { key: "ArrowLeft" });
+  expect(restored).toHaveAttribute("aria-valuenow", "896");
+  fireEvent.doubleClick(restored);
+  expect(restored).toHaveAttribute("aria-valuenow", "720");
+});
+
+it("loads only scene names on opening workflow and reuses the selected draft", async () => {
+  showAgent("workbench");
+  await screen.findByText("旧问题");
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+  expect(computeApi.algorithms).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "快速对话" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "快速对话" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "科研智能体" }));
+  await screen.findByRole("button", { name: /MH-workflow/ });
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+  expect(computeApi.algorithms).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "研究场景" })).toBeEnabled(),
+  );
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "研究场景" }));
+  fireEvent.click(
+    await screen.findByText("通用科研计算", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "工作流目标" })).toBeEnabled(),
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "工作流目标" }), {
+    target: { value: "保持这份草稿" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+  await screen.findByRole("textbox", { name: "工作流目标" });
+  expect(screen.getByRole("textbox", { name: "工作流目标" })).toHaveValue(
+    "保持这份草稿",
+  );
+  expect(computeApi.inputs).toHaveBeenCalledOnce();
+  expect(computeApi.algorithms).toHaveBeenCalledOnce();
+});
+
 it.each([
   [1366, 768],
   [1024, 600],
@@ -1135,7 +1279,19 @@ it.each([
         expect(bounds.bottom).toBeLessThanOrEqual(areaBounds.bottom + 1);
       };
       fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
-      const goal = await screen.findByRole("textbox", { name: "工作流目标" });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("combobox", { name: "研究场景" }),
+        ).toBeEnabled(),
+      );
+      fireEvent.mouseDown(screen.getByRole("combobox", { name: "研究场景" }));
+      fireEvent.click(
+        await screen.findByText("通用科研计算", {
+          selector: ".ant-select-item-option-content",
+        }),
+      );
+      let goal = await screen.findByRole("textbox", { name: "工作流目标" });
+      await waitFor(() => expect(goal).toBeEnabled());
       const drawer = document.querySelector<HTMLElement>(
         ".agent-workflow-drawer .ant-drawer-body",
       )!;
@@ -1147,6 +1303,7 @@ it.each([
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
       await waitFor(() => expect(goal).not.toBeVisible());
       fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+      goal = await screen.findByRole("textbox", { name: "工作流目标" });
       await waitFor(() => expect(goal).toBeVisible());
       expect(screen.getByRole("textbox", { name: "工作流目标" })).toHaveValue(
         "核查研究区数据",
@@ -1217,7 +1374,12 @@ it.each([96, 176, 240])(
   },
 );
 
-it("keeps pending approval visible while the drawer is closed and confirms the frozen plan", async () => {
+it("restores the explicit pending task on open and retains its status after closing", async () => {
+  sessionStorage.setItem("workflow-session:99:1", "research_processing");
+  sessionStorage.setItem(
+    "workflow-session:99:1:research_processing",
+    "workflow-1",
+  );
   vi.mocked(agentApi.workflows).mockResolvedValue({
     items: [workflow("running")],
   });
@@ -1230,10 +1392,16 @@ it("keeps pending approval visible while the drawer is closed and confirms the f
   showAgent("workbench");
   await screen.findByText("旧问题");
   expect(screen.queryByRole("dialog")).toBeNull();
+  expect(agentApi.workflow).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
+  await screen.findByRole("button", { name: "确认执行" });
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
   const pending = await screen.findByRole("button", {
     name: /MH-workflow.*等待您审核/,
   });
-  expect(agentApi.workflow).toHaveBeenCalledWith("workflow-1");
+  expect(agentApi.workflow).toHaveBeenCalledWith("workflow-1", {
+    signal: expect.any(AbortSignal),
+  });
   fireEvent.click(pending);
   fireEvent.click(await screen.findByRole("button", { name: "确认执行" }));
   await waitFor(() =>
@@ -1877,10 +2045,20 @@ it("shows the model interpretation after the same run reads the actual output", 
 });
 
 it("removes recovered workflow activity when agent permission is revoked", async () => {
+  sessionStorage.setItem("workflow-session:99:1", "research_processing");
+  sessionStorage.setItem(
+    "workflow-session:99:1:research_processing",
+    "workflow-1",
+  );
+  vi.spyOn(agentApi, "workflow").mockResolvedValue({
+    ...workflow("running"),
+    goal: "撤权后不可保留的研究任务",
+  });
   vi.mocked(agentApi.workflows).mockResolvedValue({
     items: [{ ...workflow("running"), goal: "撤权后不可保留的研究任务" }],
   });
   const mounted = showAgent("workbench");
+  fireEvent.click(await screen.findByRole("button", { name: /MH-workflow/ }));
   await waitFor(() =>
     expect(
       within(screen.getByLabelText("当前任务")).getByText("正在推进研究"),
@@ -1905,5 +2083,236 @@ it("removes recovered workflow activity when agent permission is revoked", async
     ).not.toBeInTheDocument();
   } finally {
     bootstrap.canAgent = true;
+  }
+});
+
+it("keeps unknown and failed permission checks distinct from denied access", async () => {
+  accessState.value = "unknown";
+  accessState.status = "loading";
+  const mounted = showAgent();
+  expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+  expect(agentApi.conversations).not.toHaveBeenCalled();
+  const rerender = () =>
+    mounted.rerender(
+      <AntApp>
+        <MemoryRouter initialEntries={["/agent/chat"]}>
+          <AgentPage />
+        </MemoryRouter>
+      </AntApp>,
+    );
+  accessState.status = "error";
+  rerender();
+  fireEvent.click(await screen.findByRole("button", { name: "重试连接" }));
+  expect(accessState.retry).toHaveBeenCalledOnce();
+  expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+  accessState.value = "confirmed";
+  accessState.status = "ready";
+  rerender();
+  await screen.findByText("旧问题");
+});
+
+it.each(["unauthenticated", "forbidden"] as const)(
+  "shows the correct message for an explicit %s state",
+  async (status) => {
+    accessState.value = "unknown";
+    accessState.status = status;
+    showAgent();
+    if (status === "unauthenticated") {
+      expect(
+        await screen.findByText("登录状态已失效，请重新登录。"),
+      ).toBeVisible();
+      expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+    } else {
+      expect(await screen.findByText(/当前账号未获准/)).toBeVisible();
+      expect(screen.queryByText(/登录状态已失效/)).not.toBeInTheDocument();
+    }
+  },
+);
+
+it("preserves the conversation, pending prompt and access after a concurrency rejection", async () => {
+  vi.mocked(agentApi.submit).mockRejectedValueOnce(
+    new ApiError("最多同时处理3个问题，请稍后再试", 409),
+  );
+  showAgent();
+  await screen.findByText("旧问题");
+  const input = screen.getByRole("textbox", { name: "输入消息" });
+  fireEvent.change(input, { target: { value: "第四个问题" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await screen.findByText("最多同时处理3个问题，请稍后再试");
+  expect(input).toHaveValue("第四个问题");
+  expect(screen.getByText("旧问题")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "历史会话" })).toBeInTheDocument();
+  expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
+});
+
+it("retains streamed history after a connection failure and resumes polling", async () => {
+  const responding = {
+    ...run(5, "正在处理的问题", "已有的部分回答"),
+    status: "running" as const,
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [responding],
+  });
+  const poll = vi
+    .spyOn(agentApi, "poll")
+    .mockRejectedValueOnce(new TypeError("连接暂时中断"))
+    .mockResolvedValue({
+      run: { ...responding, status: "succeeded", answer: "恢复连接后的回答" },
+      events: [],
+      cursor: 1,
+    });
+  showAgent();
+  await screen.findByText("连接暂时中断");
+  expect(screen.getByText("正在处理的问题")).toBeInTheDocument();
+  expect(screen.getByText("已有的部分回答")).toBeInTheDocument();
+  expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+  await screen.findByText("恢复连接后的回答", {}, { timeout: 5000 });
+  expect(poll).toHaveBeenCalledTimes(2);
+});
+
+it("removes restricted conversation content after an explicit poll authorization failure", async () => {
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [
+      { ...run(5, "撤权后隐藏的问题", "撤权后隐藏的回答"), status: "running" },
+    ],
+  });
+  vi.spyOn(agentApi, "poll").mockRejectedValue(
+    new ApiError("当前会话访问权限已撤销", 403),
+  );
+  showAgent();
+  await screen.findByText("当前会话访问权限已撤销");
+  expect(screen.queryByText("撤权后隐藏的问题")).not.toBeInTheDocument();
+  expect(screen.queryByText("撤权后隐藏的回答")).not.toBeInTheDocument();
+});
+
+it("does not share a running conversation lock between quick chat and research windows", async () => {
+  const research = {
+    ...conversation,
+    id: 2,
+    mode: "agent" as const,
+    title: "科研会话",
+  };
+  const responding = {
+    ...run(5, "快速对话正在回答", "已有回答"),
+    status: "running" as const,
+  };
+  vi.mocked(agentApi.conversations).mockImplementation(async (mode) => ({
+    items: [mode === "chat" ? conversation : research],
+  }));
+  vi.mocked(agentApi.detail).mockImplementation(async (id) =>
+    id === 1
+      ? { conversation, runs: [responding] }
+      : {
+          conversation: research,
+          runs: [{ ...run(6, "科研历史"), conversationId: 2 }],
+        },
+  );
+  vi.spyOn(agentApi, "poll").mockResolvedValue({
+    run: responding,
+    events: [],
+    cursor: 0,
+  });
+  const chat = showAgent();
+  const agent = showAgent("workbench");
+  await within(chat.container).findByText("快速对话正在回答");
+  await within(agent.container).findByText("科研历史");
+  expect(
+    within(chat.container).getByRole("button", { name: "停止回答" }),
+  ).toBeEnabled();
+  const input = within(agent.container).getByRole("textbox", {
+    name: "输入消息",
+  });
+  fireEvent.change(input, { target: { value: "另一个会话的独立问题" } });
+  fireEvent.click(
+    within(agent.container).getByRole("button", { name: "发送" }),
+  );
+  await waitFor(() =>
+    expect(agentApi.submit).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ prompt: "另一个会话的独立问题" }),
+    ),
+  );
+  expect(
+    within(chat.container).getByText("快速对话正在回答"),
+  ).toBeInTheDocument();
+});
+
+it("allows a new conversation while another one runs without submitting twice to the current conversation", async () => {
+  const responding = {
+    ...run(5, "原会话仍在处理"),
+    status: "running" as const,
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [responding],
+  });
+  vi.spyOn(agentApi, "poll").mockResolvedValue({
+    run: responding,
+    events: [],
+    cursor: 0,
+  });
+  vi.spyOn(agentApi, "create").mockResolvedValue({
+    ...conversation,
+    id: 3,
+    title: "新会话",
+  });
+  showAgent();
+  await screen.findByRole("button", { name: "停止回答" });
+  expect(
+    screen.queryByRole("button", { name: "发送" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /新建会话/ }));
+  const input = screen.getByRole("textbox", { name: "输入消息" });
+  fireEvent.change(input, { target: { value: "新会话问题" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() =>
+    expect(agentApi.submit).toHaveBeenCalledExactlyOnceWith(
+      3,
+      expect.objectContaining({ prompt: "新会话问题" }),
+    ),
+  );
+});
+
+it("keeps history visible when the model is offline", async () => {
+  const original = bootstrap.models[0].status;
+  bootstrap.models[0].status = "offline";
+  try {
+    showAgent();
+    await screen.findByText("旧问题");
+    expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  } finally {
+    bootstrap.models[0].status = original;
+  }
+});
+
+it("retains confirmed history through a failed refresh and applies the next successful refresh", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.mocked(agentApi.detail)
+      .mockResolvedValueOnce({
+        conversation,
+        runs: [run(1, "已确认的历史问题", "已确认的历史回答")],
+      })
+      .mockRejectedValueOnce(new TypeError("历史连接暂时中断"))
+      .mockResolvedValue({
+        conversation,
+        runs: [run(1, "已确认的历史问题", "恢复后的最新回答")],
+      });
+    const mounted = showAgent();
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(screen.getByText("已确认的历史回答")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(15000));
+    expect(screen.getByText("历史连接暂时中断")).toBeInTheDocument();
+    expect(screen.getByText("已确认的历史回答")).toBeInTheDocument();
+    expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(15000));
+    expect(screen.getByText("恢复后的最新回答")).toBeInTheDocument();
+    mounted.unmount();
+  } finally {
+    vi.useRealTimers();
   }
 });

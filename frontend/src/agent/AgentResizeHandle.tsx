@@ -9,6 +9,7 @@ export default function AgentResizeHandle({
   min,
   max,
   defaultValue,
+  reverse = false,
   onChange,
 }: {
   orientation: "horizontal" | "vertical";
@@ -19,6 +20,7 @@ export default function AgentResizeHandle({
   min: number;
   max: number;
   defaultValue: number;
+  reverse?: boolean;
   onChange: (value: number) => void;
 }) {
   const [dragging, setDragging] = useState(false);
@@ -50,8 +52,16 @@ export default function AgentResizeHandle({
       onDoubleClick={() => update(defaultValue)}
       onKeyDown={(event) => {
         const step = event.shiftKey ? 32 : 16;
-        const increase = vertical ? "ArrowRight" : "ArrowUp";
-        const decrease = vertical ? "ArrowLeft" : "ArrowDown";
+        const increase = vertical
+          ? reverse
+            ? "ArrowLeft"
+            : "ArrowRight"
+          : "ArrowUp";
+        const decrease = vertical
+          ? reverse
+            ? "ArrowRight"
+            : "ArrowLeft"
+          : "ArrowDown";
         const next =
           event.key === increase
             ? value + step
@@ -85,7 +95,8 @@ export default function AgentResizeHandle({
         const start = drag.current;
         if (!start || start.pointer !== event.pointerId) return;
         const position = vertical ? event.clientX : event.clientY;
-        update(start.value + (position - start.position) * (vertical ? 1 : -1));
+        const direction = vertical && !reverse ? 1 : -1;
+        update(start.value + (position - start.position) * direction);
       }}
       onPointerUp={(event) => {
         if (drag.current?.pointer !== event.pointerId) return;

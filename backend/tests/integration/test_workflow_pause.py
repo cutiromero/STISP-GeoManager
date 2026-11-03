@@ -95,7 +95,13 @@ def test_running_pause_survives_inflight_decision_save_and_submits_nothing(demo)
 def test_real_model_pause_boundaries_preserve_response_and_never_resend(
     demo, settings, response_saved
 ):
+    from apps.agent.model_guard import ModelStreamGuard
     from tests.integration.test_demo_edit_context import model_response
+
+    poll_time = [0.0]
+
+    def stream_guard(check, deadline):
+        return ModelStreamGuard(check, deadline, clock=lambda: poll_time[0])
 
     workflow = prepared(demo)
     assert claim() == workflow.id
@@ -109,10 +115,13 @@ def test_real_model_pause_boundaries_preserve_response_and_never_resend(
         if response_saved:
             yield json.dumps(value)
         assert control(demo, workflow, "pause").status_code == 200
+        # Simulate the next watchdog poll rather than depending on real sleep.
+        poll_time[0] += 0.5
         if not response_saved:
             guard()
 
     with (
+        patch("apps.agent.demo_workflow.ModelStreamGuard", side_effect=stream_guard),
         patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
         patch("apps.agent.context.count_tokens", return_value=800),
         patch(

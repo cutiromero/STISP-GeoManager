@@ -87,4 +87,41 @@ describe("single-project navigation", () => {
     expect(sessionStorage.getItem("project:42")).toBe("1");
     expect(getActiveProject()).toBe("1");
   });
+
+  it("uses the authorized default when public access is disabled", async () => {
+    sessionStorage.setItem("project:42", "1");
+    mocks.projects.mockResolvedValue({
+      items: [{ id: 2, name: "逻辑推理", isActive: true, isDefault: false }],
+      defaultProjectId: 2,
+      canManage: false,
+      canAssign: false,
+    });
+    show();
+    await waitFor(() =>
+      expect(screen.getByLabelText("实际项目范围")).toHaveTextContent("2"),
+    );
+    expect(getActiveProject()).toBe("2");
+    expect(sessionStorage.getItem("project:42")).toBe("2");
+    expect(screen.queryByText("公开")).not.toBeInTheDocument();
+  });
+
+  it("waits for project authorization before mounting business pages", async () => {
+    let resolve: (value: unknown) => void = () => {};
+    mocks.projects.mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    show();
+    expect(screen.queryByLabelText("实际项目范围")).not.toBeInTheDocument();
+    resolve({
+      items: [{ id: 2, name: "逻辑推理", isActive: true, isDefault: false }],
+      defaultProjectId: 2,
+      canManage: false,
+      canAssign: false,
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("实际项目范围")).toHaveTextContent("2"),
+    );
+  });
 });

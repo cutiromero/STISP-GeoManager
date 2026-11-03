@@ -1,6 +1,6 @@
 import ColumnIcon from "../components/ColumnIcon";
 import { useAuditText } from "../i18n/auditUi";
-import { App, Select, Space, Tag } from "antd";
+import { Alert, App, Button, Select, Space, Spin, Tag } from "antd";
 import {
   createContext,
   useCallback,
@@ -45,7 +45,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
   const [canManage, setCanManage] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
+  const [resolvedIdentity, setResolvedIdentity] = useState<number | null>();
+  const [loadError, setLoadError] = useState("");
   const requestSequence = useRef(0);
+  const currentRef = useRef(current);
+  currentRef.current = current;
   const identity = useRef(user?.id);
   identity.current = user?.id;
   const refresh = useCallback(async () => {
@@ -58,12 +62,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setAssignableProjects(data.assignableItems ?? data.items);
     setCanManage(data.canManage);
     setCanAssign(data.canAssign);
-    if (!data.items.some((p) => String(p.id) === current)) {
-      setActiveProject("1");
-      setCurrent("1");
-      if (userId) sessionStorage.setItem(`project:${userId}`, "1");
+    if (!data.items.some((p) => String(p.id) === currentRef.current)) {
+      const fallback = data.defaultProjectId ?? data.items[0]?.id;
+      if (fallback !== undefined && fallback !== null) {
+        const selected = String(fallback);
+        setActiveProject(selected);
+        setCurrent(selected);
+        if (userId) sessionStorage.setItem(`project:${userId}`, selected);
+      } else if (userId) {
+        sessionStorage.removeItem(`project:${userId}`);
+      }
     }
-  }, [current]);
+    setLoadError("");
+    setResolvedIdentity(userId ?? null);
+  }, []);
   useEffect(() => {
     const preferred = normalizeProjectSelection(
       user ? (sessionStorage.getItem(`project:${user.id}`) ?? "1") : "1",
@@ -75,7 +87,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     void refresh().catch((error) => {
-      if (active) message.error(error.message);
+      if (active) {
+        setLoadError(error.message);
+        message.error(error.message);
+      }
     });
     return () => {
       active = false;
@@ -134,7 +149,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         key={`${user?.id ?? "public"}:${current}`}
         style={{ height: "100%" }}
       >
-        {children}
+        {resolvedIdentity === (user?.id ?? null) ? (
+          children
+        ) : loadError ? (
+          <Alert
+            type="error"
+            title={ui("项目访问范围加载失败")}
+            description={loadError}
+            action={
+              <Button
+                onClick={() =>
+                  void refresh().catch((error) => setLoadError(error.message))
+                }
+              >
+                {ui("重新加载")}
+              </Button>
+            }
+          />
+        ) : (
+          <Spin description={ui("正在加载项目")} fullscreen />
+        )}
       </div>
     </ProjectContext.Provider>
   );
@@ -151,7 +185,13 @@ export function ProjectSelector() {
       </Tag>
       <Select
         aria-label={ui("当前项目标签")}
-        value={value.current}
+        value={
+          value.projects.some((project) => String(project.id) === value.current)
+            ? value.current
+            : undefined
+        }
+        placeholder={ui("暂无可访问项目")}
+        disabled={value.projects.length === 0}
         onChange={(id) => value.choose(id)}
         style={{ width: 150 }}
         popupMatchSelectWidth={230}

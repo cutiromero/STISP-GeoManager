@@ -117,8 +117,12 @@ def authorize_workflow_history(workflow):
 
 def validate_knowledge(workflow, user, *, history=False):
     from apps.knowledge.services import visible_entries
+    from apps.knowledge.trial_rules import authorize_trial_evidence
 
+    trial_ids = authorize_trial_evidence(workflow, user, history=history)
     for entry in workflow.evidence:
+        if entry.get("id") in trial_ids:
+            continue
         visible = visible_entries(user).filter(pk=entry.get("id"))
         if not history:
             visible = visible.filter(revision=entry.get("revision"))

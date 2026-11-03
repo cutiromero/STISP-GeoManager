@@ -7,8 +7,68 @@ import { computeApi } from "../api/compute";
 import DemoWorkflowForm from "./DemoWorkflowForm";
 import WorkflowPanel from "./WorkflowPanel";
 import { geologyRequiredFields } from "./geologyWorkflowInputs";
+import "./agent.css";
 
 beforeEach(() => vi.restoreAllMocks());
+
+it.each([360, 720])(
+  "keeps long resource names inside workflow fields at %s px",
+  (width) => {
+    const roles = ["initial_map", "coverage", "rules"];
+    const candidates = roles.map((role, index) => ({
+      id: 201 + index,
+      name: `研究区地质解译资料${"完整资源名称".repeat(20)}_${role}`,
+      kind: role === "rules" ? "table" : "vector",
+      projectTagId: 1,
+      fields: geologyRequiredFields[role]!,
+      bands: 0,
+      crs: "EPSG:32646",
+      geometryTypes: role === "rules" ? [] : ["Polygon"],
+      sizeBytes: 100,
+    }));
+    const { container } = render(
+      <App>
+        <div className="agent-workflow-content" style={{ width }}>
+          <DemoWorkflowForm
+            type="geology_map_review"
+            candidates={candidates}
+            resources={candidates.map((item) => ({
+              id: item.id,
+              name: item.name,
+              dataType: item.kind,
+              description: "本次资料",
+            }))}
+            inputs={{ initial_map: 201, coverage: 202, rules: 203 }}
+            parameters={{}}
+            disabled={false}
+            onInputsChange={vi.fn()}
+            onParametersChange={vi.fn()}
+          />
+        </div>
+      </App>,
+    );
+    const form = container.querySelector<HTMLElement>(".agent-demo-form")!;
+    const labels = Array.from(
+      container.querySelectorAll<HTMLElement>(".agent-demo-fields > label"),
+    );
+    expect(form.scrollWidth).toBeLessThanOrEqual(form.clientWidth);
+    for (const label of labels) {
+      const select = label.querySelector<HTMLElement>(".ant-select")!;
+      expect(select.getBoundingClientRect().right).toBeLessThanOrEqual(
+        label.getBoundingClientRect().right + 1,
+      );
+    }
+    if (width === 360) {
+      expect(labels[1]!.getBoundingClientRect().top).toBeGreaterThan(
+        labels[0]!.getBoundingClientRect().bottom,
+      );
+    } else {
+      expect(labels[1]!.getBoundingClientRect().top).toBe(
+        labels[0]!.getBoundingClientRect().top,
+      );
+    }
+  },
+);
 
 it("shows the database resource name in the selector and the selected source explanation", async () => {
   const onInputs = vi.fn();
@@ -59,6 +119,14 @@ it("uses the current conversation model without a separate workflow model select
     knowledgeDomains: [],
   } as never);
   vi.spyOn(agentApi, "researchDemos").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "researchDemoSummaries").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "workflowHistory").mockResolvedValue({
+    items: [],
+    total: 0,
+    offset: 0,
+    limit: 30,
+    hasMore: false,
+  });
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "workflows").mockResolvedValue({ items: [] });
   vi.spyOn(computeApi, "algorithms").mockResolvedValue({ items: [], total: 0 });
@@ -80,9 +148,24 @@ it("uses the current conversation model without a separate workflow model select
   expect(
     screen.queryByRole("combobox", { name: "工作流分析模型" }),
   ).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "研究场景" })).toBeEnabled(),
+  );
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "研究场景" }));
+  fireEvent.click(
+    await screen.findByText("通用科研计算", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "工作流目标" })).toBeEnabled(),
+  );
   fireEvent.change(screen.getByRole("textbox", { name: "工作流目标" }), {
     target: { value: "统计项目数据" },
   });
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "生成执行计划" })).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "生成执行计划" }));
   await waitFor(() =>
     expect(preview).toHaveBeenCalledWith(
