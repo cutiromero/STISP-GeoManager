@@ -225,3 +225,43 @@ def test_before_after_statistics_read_as_sentences():
             "after_area_m2": 800,
         }
     )
+
+
+def test_revision_is_checked_only_where_the_reference_has_one():
+    from apps.agent.demo_decisions import validate_decision
+
+    refs = [
+        {
+            "kind": "resource",
+            "id": "547",
+            "role": "faults",
+            "title": "构造线（工作副本）",
+        },
+        {"kind": "output", "id": "405", "role": "statistics", "title": "statistics"},
+        {"kind": "knowledge", "id": "168", "revision": 2, "title": "S-05"},
+    ]
+    decision = {
+        "problem": "核对交汇关系",
+        "findings": [],
+        "judgement": "依据统计继续",
+        "uncertainties": [],
+        "nextAction": "geology-multi-relations",
+        "algorithmReason": "重建交汇",
+        "resultSummary": "",
+        "evidenceRefs": [
+            {"kind": "output", "id": "405", "revision": 1},
+            {"kind": "resource", "id": "547", "revision": 1},
+            {"kind": "knowledge", "id": "168", "revision": 2},
+        ],
+    }
+    value = validate_decision(decision, refs, "geology-multi-relations")
+    assert [ref["id"] for ref in value["evidenceRefs"]] == ["405", "547", "168"]
+    stale = {
+        **decision,
+        "evidenceRefs": [{"kind": "knowledge", "id": "168", "revision": 1}],
+    }
+    with pytest.raises(ComputeError, match="并非本次"):
+        validate_decision(stale, refs, "geology-multi-relations")
+    unknown = {**decision, "evidenceRefs": [{"kind": "resource", "id": "999"}]}
+    with pytest.raises(ComputeError, match="并非本次"):
+        validate_decision(unknown, refs, "geology-multi-relations")
