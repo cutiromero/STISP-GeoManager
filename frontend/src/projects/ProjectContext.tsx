@@ -11,12 +11,14 @@ import {
   type ReactNode,
 } from "react";
 import { platformApi, type ProjectTag } from "../api/platform";
+import { useLocation } from "react-router-dom";
 import { useAppContext } from "../contexts/AppContext";
 import { downloadPageDiagnostics } from "../routing/pageDiagnostics";
 import {
   getActiveProject,
   setActiveProject,
   normalizeProjectSelection,
+  projectSignal,
 } from "./session";
 
 type ProjectContextValue = {
@@ -38,6 +40,7 @@ export const useProjectContext = () => useContext(ProjectContext);
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const ui = useAuditText();
   const { user } = useAppContext();
+  const loginPage = useLocation().pathname === "/login";
   const { message, modal } = App.useApp();
   const [current, setCurrent] = useState(getActiveProject);
   const [projects, setProjects] = useState<ProjectTag[]>([]);
@@ -53,21 +56,33 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   currentRef.current = current;
   const identity = useRef(user?.id);
   identity.current = user?.id;
+  const onLoginPage = useRef(loginPage);
+  onLoginPage.current = loginPage;
   const refresh = useCallback(async () => {
+    if (onLoginPage.current) return;
     const sequence = ++requestSequence.current;
     const userId = identity.current;
+    const signal = projectSignal();
+    const isCurrent = () =>
+      sequence === requestSequence.current &&
+      userId === identity.current &&
+      !onLoginPage.current;
     let data;
     try {
       data = await platformApi.projects();
     } catch (error) {
-      if (sequence === requestSequence.current && userId === identity.current)
-        setLoadError(
-          error instanceof Error ? error.message : "项目列表暂时无法更新",
-        );
+      if (
+        !isCurrent() ||
+        signal.aborted ||
+        (error instanceof Error && error.name === "AbortError")
+      )
+        return;
+      setLoadError(
+        error instanceof Error ? error.message : "项目列表暂时无法更新",
+      );
       throw error;
     }
-    if (sequence !== requestSequence.current || userId !== identity.current)
-      return;
+    if (!isCurrent() || signal.aborted) return;
     setProjects(data.items);
     setAssignableProjects(data.assignableItems ?? data.items);
     setCanManage(data.canManage);
@@ -95,17 +110,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setCurrent(preferred);
   }, [user?.id]);
   useEffect(() => {
+    setLoadError("");
+    if (loginPage) return;
     let active = true;
     void refresh().catch((error) => {
       if (active) {
-        setLoadError(error.message);
         message.error(error.message);
       }
     });
     return () => {
       active = false;
+      requestSequence.current += 1;
     };
-  }, [refresh, user?.id, message]);
+  }, [refresh, user?.id, message, loginPage]);
   useEffect(() => {
     const revalidate = () => {
       if (document.visibilityState === "visible")
@@ -159,7 +176,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         key={`${user?.id ?? "public"}:${current}`}
         style={{ height: "100%" }}
       >
-        {resolvedIdentity === (user?.id ?? null) ? (
+        {loginPage ? (
+          children
+        ) : resolvedIdentity === (user?.id ?? null) ? (
           <>
             {loadError && (
               <Alert

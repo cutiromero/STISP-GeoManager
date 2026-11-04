@@ -17,7 +17,11 @@ from .models import (
     ShareInvitation,
     WorkspaceScene,
 )
-from .permissions import user_can_access, user_has_full_data_access
+from .permissions import (
+    user_can_access,
+    user_can_bypass_owner_only,
+    user_has_full_data_access,
+)
 
 
 @contextmanager
@@ -173,7 +177,12 @@ def validate_share(kind: str, object_id: int, sender, recipient, project_id: int
                 raise ComputeError("账号没有查看计算结果的功能权限", 403)
             _output_dependencies(item, user, project_id)
     else:
-        if item.owner_id != sender.id and not user_has_full_data_access(sender):
+        can_manage = (
+            user_can_bypass_owner_only(sender)
+            if kind == "workspace"
+            else user_has_full_data_access(sender)
+        )
+        if item.owner_id != sender.id and not can_manage:
             raise ComputeError("只有对象所属用户或有权管理员可以分享", 403)
         versions = (
             list(
@@ -248,6 +257,23 @@ def can_read_shared_output(output, user) -> bool:
             status="accepted",
         ).select_related("sender", "recipient")
     )
+
+
+def shared_workspace_ids(user) -> list[int]:
+    from .permissions import project_access_filter
+
+    if not user.is_authenticated:
+        return []
+    return [
+        invitation.object_id
+        for invitation in ShareInvitation.objects.filter(
+            project_access_filter(user),
+            kind="workspace",
+            recipient=user,
+            status="accepted",
+        ).select_related("sender", "recipient")
+        if valid_accepted(invitation)
+    ]
 
 
 def shared_composition_ids(user) -> list[int]:

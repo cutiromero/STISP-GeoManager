@@ -10,7 +10,6 @@ import { Alert, App, Button, Card, Form, Input, Radio, Typography } from "antd";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
-import { sessionExpired } from "../auth/sessionNotice";
 import stispLogoWhite from "../assets/stisp-logo-white.svg";
 import { teamInstitution } from "../about/institution";
 import LanguageSwitcher from "../components/LanguageSwitcher";
@@ -154,15 +153,6 @@ export default function LoginPage() {
             : t("auth.registerSubtitle")}
         </Typography.Text>
 
-        {mode === "login" && sessionExpired() && (
-          <Alert
-            type="warning"
-            showIcon
-            className="login-session-notice"
-            title="登录状态已失效"
-            description="可能是长时间未操作，或在其他页面退出了登录。重新登录后会回到原来的页面。"
-          />
-        )}
         {mode === "login" ? (
           <Form<LoginFormValues>
             key="login"

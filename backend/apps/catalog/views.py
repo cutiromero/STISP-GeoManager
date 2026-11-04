@@ -48,11 +48,11 @@ from apps.catalog.models import (
     task_resource_q,
 )
 from apps.catalog.permissions import (
-    project_access_filter,
     filter_accessible,
     filter_accessible_layers,
     user_can_access,
-    user_has_full_data_access,
+    user_can_bypass_owner_only,
+    workspace_access_filter,
 )
 from apps.catalog.serializers import (
     serialize_catalog,
@@ -702,7 +702,7 @@ def _workspace_for_user(
         .filter(pk=workspace_id, status=WorkspaceScene.Status.ACTIVE)
     )
     if require_owner:
-        if not user_has_full_data_access(user):
+        if not user_can_bypass_owner_only(user):
             queryset = queryset.filter(owner=user)
     else:
         queryset = queryset.filter(_workspace_access_filter(user)).distinct()
@@ -749,7 +749,7 @@ def _serialize_workspace(
     scene: WorkspaceScene, request_user, *, summary=False
 ) -> dict[str, object]:
     is_owner = scene.owner_id == getattr(request_user, "id", None)
-    can_manage_all = user_has_full_data_access(request_user)
+    can_manage_all = user_can_bypass_owner_only(request_user)
     owner = scene.owner if user_is_visible_to(request_user, scene.owner) else None
     return {
         "id": scene.id,
@@ -855,14 +855,14 @@ def admin_workspace_detail(request, workspace_id: int):
 
     action = str(payload.get("action", "update")).strip()
     is_owner = scene.owner_id == request.user.id
-    has_full_data_access = user_has_full_data_access(request.user)
+    can_manage_all = user_can_bypass_owner_only(request.user)
     can_change = has_feature_perm(request.user, "catalog.change_workspacescene") and (
-        has_full_data_access or is_owner
+        can_manage_all or is_owner
     )
     can_delete = has_feature_perm(request.user, "catalog.delete_workspacescene") and (
-        has_full_data_access or is_owner
+        can_manage_all or is_owner
     )
-    can_update_access = has_full_data_access or is_owner
+    can_update_access = can_manage_all or is_owner
     if action == "delete":
         if not can_delete:
             return feature_denied_response(request.user)
@@ -1006,10 +1006,7 @@ def _workspace_admin_access_filter(user):
 
 
 def _workspace_access_filter(user):
-    query = project_access_filter(user)
-    if user_has_full_data_access(user):
-        return query
-    return query & (Q(status="active") | Q(owner_id=getattr(user, "id", None)))
+    return workspace_access_filter(user)
 
 
 def _user_can_see_admin_workspace(scene, user):
@@ -1030,7 +1027,7 @@ def _serialize_admin_workspace(scene: WorkspaceScene, request_user) -> dict[str,
                 )
             ],
             "canManageAccess": bool(
-                user_has_full_data_access(request_user)
+                user_can_bypass_owner_only(request_user)
                 or scene.owner_id == getattr(request_user, "id", None)
             ),
         }

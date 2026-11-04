@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
+from django.contrib.auth.models import Group, Permission
 from django.test import Client
 
 from apps.catalog.models import (
@@ -22,6 +22,7 @@ from apps.compute.models import (
     ComputeOutput,
     ComputeTask,
 )
+from apps.core.initialization import PLATFORM_ADMIN_GROUP_NAME
 from apps.projects.models import Project, ProjectMembership
 
 
@@ -204,6 +205,155 @@ def test_exact_username_precheck_self_and_cross_project(env):
     assert ShareInvitation._base_manager.count() == 0
 
 
+@pytest.mark.parametrize("platform_admin", [False, True])
+def test_workspace_private_list_search_direct_access_and_management(
+    env, platform_admin
+):
+    reader = env["clients"][1]
+    if platform_admin:
+        group, _ = Group.objects.get_or_create(name=PLATFORM_ADMIN_GROUP_NAME)
+        env["recipient"].groups.add(group)
+    env["recipient"].user_permissions.add(
+        *Permission.objects.filter(
+            codename__in=["change_workspacescene", "delete_workspacescene"]
+        )
+    )
+    suffix = f"?projectTagId={env['project'].id}"
+    base = f"/api/catalog/workspaces/{env['scene'].id}/"
+    for url in (
+        "/api/catalog/workspaces/" + suffix,
+        "/api/catalog/workspaces/" + suffix + "&q=共享工程",
+        "/api/admin/workspaces/" + suffix,
+    ):
+        response = reader.get(url)
+        assert response.status_code == 200
+        assert response.json()["items"] == [] and response.json()["total"] == 0
+    assert reader.get(base + suffix).status_code == 404
+    for url, body in (
+        (base, {"name": "不应修改"}),
+        (base, {"action": "delete"}),
+        (
+            f"/api/admin/workspaces/{env['scene'].id}/",
+            {"action": "setStatus", "status": "inactive"},
+        ),
+        (
+            f"/api/admin/workspaces/{env['scene'].id}/",
+            {"action": "delete", "confirmationName": env["scene"].name},
+        ),
+    ):
+        response = reader.post(
+            url + suffix, data=json.dumps(body), content_type="application/json"
+        )
+        assert response.status_code == 404
+    env["scene"].refresh_from_db()
+    assert env["scene"].name == "共享工程" and env["scene"].status == "active"
+    assert (
+        post(
+            env,
+            "invitations/",
+            {
+                "kind": "workspace",
+                "objectId": env["scene"].id,
+                "username": env["stranger"].username,
+                "idempotencyKey": "private-share",
+            },
+            actor=1,
+        ).status_code
+        == 403
+    )
+    env["recipient"].user_permissions.add(
+        Permission.objects.get(codename="add_mapcomposition")
+    )
+    response = reader.post(
+        "/api/catalog/map-compositions/" + suffix,
+        data=json.dumps(
+            {"projectId": env["scene"].id, "name": "越权来源", "layout": {}}
+        ),
+        content_type="application/json",
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("platform_admin", [False, True])
+def test_workspace_accept_grants_read_only_and_pending_or_reject_does_not(
+    env, platform_admin
+):
+    reader = env["clients"][1]
+    if platform_admin:
+        group, _ = Group.objects.get_or_create(name=PLATFORM_ADMIN_GROUP_NAME)
+        env["recipient"].groups.add(group)
+    suffix = f"?projectTagId={env['project'].id}"
+    detail = f"/api/catalog/workspaces/{env['scene'].id}/" + suffix
+    listing = "/api/catalog/workspaces/" + suffix + "&q=共享工程"
+    rejected = invite(env, "workspace").json()["id"]
+    assert reader.get(detail).status_code == 404
+    assert reader.get(listing).json()["items"] == []
+    assert accept(env, rejected, "reject").json()["status"] == "rejected"
+    assert reader.get(detail).status_code == 404
+    invitation = invite(env, "workspace", key="send-workspace-again").json()["id"]
+    assert (
+        accept(env, invitation, key="accept-workspace").json()["status"] == "accepted"
+    )
+    value = reader.get(detail).json()
+    assert value["snapshot"] == env["scene"].snapshot
+    assert not any(
+        value[key] for key in ("isOwner", "canEdit", "canDelete", "canManageAccess")
+    )
+    assert [item["id"] for item in reader.get(listing).json()["items"]] == [
+        env["scene"].id
+    ]
+    for url in (detail, f"/api/admin/workspaces/{env['scene'].id}/" + suffix):
+        response = reader.post(
+            url,
+            data=json.dumps({"action": "update", "name": "不可修改"}),
+            content_type="application/json",
+        )
+        assert response.status_code in (403, 404)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "private_dependency",
+        "sender_membership",
+        "recipient_membership",
+        "sender_owner",
+        "inactive",
+    ],
+)
+def test_accepted_workspace_access_rechecks_live_dependencies(env, change):
+    invitation = invite(env, "workspace").json()["id"]
+    assert accept(env, invitation).json()["status"] == "accepted"
+    reader = env["clients"][1]
+    url = f"/api/catalog/workspaces/{env['scene'].id}/?projectTagId={env['project'].id}"
+    assert reader.get(url).status_code == 200
+    if change == "private_dependency":
+        DataResource._base_manager.filter(pk=env["resource"].id).update(owner_only=True)
+    elif change.endswith("membership"):
+        actor = env["owner" if change.startswith("sender") else "recipient"]
+        ProjectMembership.objects.filter(project=env["project"], user=actor).delete()
+    elif change == "sender_owner":
+        WorkspaceScene._base_manager.filter(pk=env["scene"].id).update(
+            owner=env["stranger"]
+        )
+    else:
+        WorkspaceScene._base_manager.filter(pk=env["scene"].id).update(
+            status="inactive"
+        )
+    assert reader.get(url).status_code in (403, 404)
+
+
+def test_sharing_composition_does_not_grant_private_source_workspace(env):
+    invitation = invite(env, "composition").json()["id"]
+    assert accept(env, invitation).json()["status"] == "accepted"
+    url = f"/api/catalog/map-compositions/{env['composition'].id}/?projectTagId={env['project'].id}"
+    reader = env["clients"][1]
+    assert reader.get(url).json()["canLoadSourceProject"] is False
+    invitation = invite(env, "workspace", key="workspace-source").json()["id"]
+    assert accept(env, invitation, key="accept-source").json()["status"] == "accepted"
+    assert reader.get(url).json()["canLoadSourceProject"] is True
+
+
 def test_send_rechecks_recipient_after_successful_precheck(env):
     body = {
         "kind": "workspace",
@@ -218,14 +368,15 @@ def test_send_rechecks_recipient_after_successful_precheck(env):
     assert ShareInvitation._base_manager.count() == 0
 
 
-def test_existing_superadmin_can_share_managed_objects(env):
+@pytest.mark.parametrize("kind", ["workspace", "compute_output"])
+def test_existing_superadmin_can_share_managed_objects(env, kind):
     get_user_model().objects.filter(pk=env["stranger"].id).update(is_superuser=True)
     response = post(
         env,
         "invitations/",
         {
-            "kind": "compute_output",
-            "objectId": env["output"].id,
+            "kind": kind,
+            "objectId": env["scene" if kind == "workspace" else "output"].id,
             "username": env["recipient"].username,
             "idempotencyKey": "admin-share",
         },

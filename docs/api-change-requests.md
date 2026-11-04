@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261104-001 - 工程默认私有与接受分享只读
+
+- Status: BackendReady
+- Owner: root 契约和前端文案；workspace_privacy 后端及权限回归。
+- Endpoints: GET/POST /api/catalog/workspaces/*；GET/POST /api/admin/workspaces/*；工程搜索；专题来源工程；/api/sharing/*。
+- Change type: 收紧工程对象权限，保持请求、响应和数据库结构。
+- OpenAPI change: 工程默认创建者私有，接受邀请只读，普通管理员不绕过，超级管理员保留当前项目管理；直接ID未授权404。
+- Mock examples: 复用现有工程结构，后端隔离测试覆盖同项目多账号和真实邀请状态。
+- Frontend reason: 用户保存的工程不自动暴露给同项目成员，页面说明与分享机制一致。
+- Backend implementation notes: 集中工程访问判定，统一列表、搜索、后台、详情及来源快照路径；邀请待接受/拒绝不授权，已接受每次重验项目、双方和依赖；写入仅所有者或超管。
+- Verification: 同项目隔离、直接ID、普通管理员、分享接受/拒绝/撤权、来源工程入口与现有专题回归。
+- Result: 后端92项及前端106项定向浏览器回归通过，类型/格式/契约一致性和生产构建通过；候选及正式验收另行记录。
+
 ## API-20261102-001 - 普通对话账号三任务并发
 
 - Status: BackendReady
@@ -190,6 +203,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261104-001 | BackendReady | 工程、工程管理、搜索和分享 | 权限行为收紧 | Updated | Existing fixtures | Implemented | Focused passed | 默认私有，接受后只读，普通管理员不绕过 |
 | API-20261103-002 | BackendReady | /api/projects/; /api/projects/assignments/{userId}/; /api/agent/workflows/; /api/agent/research-demos/ | per-user public scope and lightweight workflow history | Updated | Scoped backend and browser fixtures | Implemented | Project/sharing 72; project UI 6 passed | Default true, live authorization, authorized fallback and summary pagination; server acceptance separate |
 | API-20261103-003 | BackendReady | /api/agent/workflow-uploads/; /api/agent/workflow-uploads/{uploadId}/; /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | task uploads, geology_generic and field-mapping confirmation | Updated | 103-agent-generic-workflow.json | Implemented | Generic 9 backend, 2 browser; local mock end-to-end succeeded | Uploads owner_only and bound once; mapping proposed by model and confirmed by user |
 | API-20261103-004 | BackendReady | /api/catalog/results/{resultId}/file/; /api/catalog/map-compositions/{compositionId}/versions/{versionNumber}/file/ | thumbnail variant and thumbnailUrl for result cards | Updated | Backend tests | Implemented | Thumbnail tests | WebP ≤640px cached under app cache; PDF keeps placeholder |

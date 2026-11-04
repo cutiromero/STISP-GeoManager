@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.58] - 2026-11-04
+
+### Fixed
+- 主动退出立即回到登录页，取消的项目请求与旧身份响应不会显示加载失败；移除登录失效黄条，保留会话鉴权及同账号重新登录后的页面恢复。
+- 退出后立即登录按请求顺序处理，避免旧退出响应干扰新会话。
+- 工程默认仅创建者可见，普通管理员和同项目成员不自动获得访问；接受分享后只读，列表、搜索、后台与直接链接使用同一授权。
+- 专题分享不额外开放来源私人工程，超级管理员保留当前项目管理能力。
+
 ## [0.1.57] - 2026-11-04
 
 ### Added

@@ -133,7 +133,7 @@ describe("WorkspaceScenePanel", () => {
       .closest(".topic-scenario-row");
     expect(sharedRow).not.toBeNull();
     expect(
-      within(sharedRow as HTMLElement).getByText("共享"),
+      within(sharedRow as HTMLElement).getByText("只读"),
     ).toBeInTheDocument();
     expect(
       within(sharedRow as HTMLElement).queryByRole("button", {
@@ -196,7 +196,7 @@ describe("WorkspaceScenePanel", () => {
     ).toBe("rgb(226, 237, 245)");
     expect(
       screen.getByText(
-        "工程对所属项目成员可见；编辑和删除仍由功能权限及所有者身份控制。",
+        "工程默认仅创建者可见。通过分享邀请并被接受后，对方才能只读加载；超级管理员保留管理权限。",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("超级管理员")).not.toBeInTheDocument();

@@ -6857,7 +6857,7 @@ export type WorkspaceScene = {
     snapshot: WorkspaceSceneSnapshot;
     owner: WorkspaceSceneOwner;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 历史兼容元数据；工程按创建者、已接受分享及超级管理员规则访问，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -6867,15 +6867,15 @@ export type WorkspaceScene = {
      */
     isOwner: boolean;
     /**
-     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户且具备 `catalog.change_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户或超级管理员且具备 `catalog.change_workspacescene` 时为 true
      */
     canEdit: boolean;
     /**
-     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户且具备 `catalog.delete_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户或超级管理员且具备 `catalog.delete_workspacescene` 时为 true
      */
     canDelete: boolean;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 兼容管理标记；仅创建者或超级管理员可管理分享，接受分享的用户为 false，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -9538,7 +9538,7 @@ export type WorkspaceSceneSummary = {
     description: string;
     owner: WorkspaceSceneOwner;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 历史兼容元数据；工程按创建者、已接受分享及超级管理员规则访问，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -9548,15 +9548,15 @@ export type WorkspaceSceneSummary = {
      */
     isOwner: boolean;
     /**
-     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户且具备 `catalog.change_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户或超级管理员且具备 `catalog.change_workspacescene` 时为 true
      */
     canEdit: boolean;
     /**
-     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户且具备 `catalog.delete_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户或超级管理员且具备 `catalog.delete_workspacescene` 时为 true
      */
     canDelete: boolean;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 兼容管理标记；仅创建者或超级管理员可管理分享，接受分享的用户为 false，旧角色字段不授予访问。
      *
      * @deprecated
      */

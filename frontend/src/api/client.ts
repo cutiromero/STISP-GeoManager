@@ -594,6 +594,13 @@ export function unregisterForbiddenHandler() {
   authorizationRefreshInFlight = false;
 }
 
+let pendingLogout: Promise<{ detail: string }> | null = null;
+
+async function finishPreviousLogout() {
+  // An earlier logout response may clear cookies; finish it before signing in.
+  await pendingLogout?.catch(() => undefined);
+}
+
 export const api = {
   bootstrap: () => requestJson<Bootstrap>("/api/bootstrap/"),
   loginOverview: () => unwrap<LoginOverviewResponse>(sdk.getLoginOverview()),
@@ -604,6 +611,7 @@ export const api = {
     return requestJson<MeResponse>("/api/auth/me/");
   },
   login: async (username: string, password: string, remember = false) => {
+    await finishPreviousLogout();
     const response = await requestJson<{ user: User }>("/api/auth/login/", {
       method: "POST",
       body: { username, password, remember },
@@ -612,6 +620,7 @@ export const api = {
     return response;
   },
   guestLogin: async () => {
+    await finishPreviousLogout();
     const response = await requestJson<{ user: User }>(
       "/api/auth/guest-login/",
       { method: "POST" },
@@ -620,6 +629,7 @@ export const api = {
     return response;
   },
   register: async (payload: RegisterRequest) => {
+    await finishPreviousLogout();
     const response = await unwrap<RegisterResponse>(
       sdk.register({ body: payload }),
     );
@@ -627,12 +637,23 @@ export const api = {
     return response;
   },
   logout: async () => {
-    const response = await requestJson<{ detail: string }>(
-      "/api/auth/logout/",
-      { method: "POST" },
-    );
-    endBrowserSession();
-    return response;
+    endBrowserSession(true, "logout");
+    if (pendingLogout) return pendingLogout;
+    const cancellation = new AbortController();
+    const timeout = window.setTimeout(() => {
+      cancellation.abort(new Error("退出确认超时，当前页面已退出"));
+    }, 10_000);
+    const operation = requestJson<{ detail: string }>("/api/auth/logout/", {
+      method: "POST",
+      signal: cancellation.signal,
+    });
+    pendingLogout = operation;
+    try {
+      return await operation;
+    } finally {
+      window.clearTimeout(timeout);
+      if (pendingLogout === operation) pendingLogout = null;
+    }
   },
   adminProfile: () => unwrap<AdminProfile>(sdk.getAdminProfile()),
   updateAdminProfile: (payload: AdminProfileUpdate) =>
