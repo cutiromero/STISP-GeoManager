@@ -103,6 +103,25 @@ def test_compact_report_groups_unapproved_and_links_complete_evidence(monkeypatc
     assert "真实编辑算法 1.0.1" in text and "真实模型判断尚未验证" in text
 
 
+def test_clean_report_links_deliverable_layers_not_calculation_states(monkeypatch):
+    workflow, task, _ = report_fixture(monkeypatch)
+    task.version.manifest = {
+        "version": "1.0.5",
+        "outputs": [{"key": "final_faults"}, {"key": "final_alterations"}],
+    }
+    task.outputs = SimpleNamespace(
+        order_by=lambda *args: [
+            SimpleNamespace(id=30, label="计算构造状态", key="faults"),
+            SimpleNamespace(id=31, label="计算蚀变状态", key="alterations"),
+            SimpleNamespace(id=32, label="修正后构造图", key="final_faults"),
+            SimpleNamespace(id=33, label="有效蚀变", key="final_alterations"),
+        ]
+    )
+    text = render_report(workflow, [task]).decode()
+    assert "计算构造状态" not in text and "计算蚀变状态" not in text
+    assert "[修正后构造图]" in text and "[有效蚀变]" in text
+
+
 @pytest.mark.parametrize(
     "change", ["wrong_object", "wrong_action", "extra", "wrong_code", "wrong_weight"]
 )

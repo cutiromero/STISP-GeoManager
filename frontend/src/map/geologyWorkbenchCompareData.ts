@@ -22,7 +22,10 @@ import {
 } from "./multiElementTour";
 import type { ReviewOverlay } from "./reviewVectorLayers";
 import { isMultiElementFamily } from "../agent/multiElementScenario";
-import { queryWorkflowVectors } from "./workflowOutputMaps";
+import {
+  queryWorkflowVectors,
+  usesCleanGeologyResults,
+} from "./workflowOutputMaps";
 
 export type ComparisonRole = "before" | "after" | "changes";
 export function comparisonFeatureKey(
@@ -235,12 +238,17 @@ export async function loadWorkbenchReviewComparison(options: {
         key: "faults",
         label: "构造",
         before: await collection(map.before.faults),
-        after: await collection(map.after?.faults ?? map.before.faults),
+        after: await collection(
+          map.after?.faults ??
+            (usesCleanGeologyResults(workflow) && map.after
+              ? undefined
+              : map.before.faults),
+        ),
         color: "#76566d",
       },
       {
         key: "alterations",
-        label: "矿物与处理状态",
+        label: "有效蚀变",
         before: beforeAlterations
           ? await collection(beforeAlterations)
           : await queryWorkflowVectors(workflow, "check", ["alterations"]),

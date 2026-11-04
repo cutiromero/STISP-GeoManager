@@ -44,6 +44,15 @@ function comparisonStyle(
     return symbolization;
   }
   const features = layer.geojson.features;
+  const hasState = features.some(
+    (feature) => feature.properties.state !== undefined,
+  );
+  if (placement.element === "构造" && !hasState) {
+    symbolization.renderer = { type: "single" };
+    symbolization.line.lineColor = "#76566d";
+    symbolization.line.lineWidth = 2;
+    return symbolization;
+  }
   const lithologyField =
     ["class", "geo_sym", "name"].find((key) =>
       features.some((feature) => feature.properties[key] !== undefined),
@@ -53,7 +62,9 @@ function comparisonStyle(
       ? lithologyField
       : placement.element === "调查建议"
         ? "grade"
-        : "state";
+        : placement.element === "矿物" && !hasState
+          ? "alt"
+          : "state";
   const values = [
     ...new Set(
       features.map((feature) => String(feature.properties[field] ?? "未记录")),

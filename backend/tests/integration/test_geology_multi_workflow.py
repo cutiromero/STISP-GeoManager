@@ -509,7 +509,10 @@ def test_representative_issues_use_actual_size_without_hiding_total(tmp_path):
     assert result["scope"] == "representative_sample"
 
 
-def test_native_published_manifests_prepare_the_actual_stage_protocol(multi):
+@pytest.mark.parametrize("missing_faults", [False, True])
+def test_native_published_manifests_prepare_the_actual_stage_protocol(
+    multi, missing_faults
+):
     from apps.agent.demo_workflow import prepare_demo, confirm_demo
 
     root = Path(__file__).resolve().parents[3]
@@ -535,6 +538,14 @@ def test_native_published_manifests_prepare_the_actual_stage_protocol(multi):
             runtime_digest="sha256:" + "a" * 64,
         )
     wf = multi["workflow"]
+    if missing_faults:
+        wf.workflow_type = "geology_generic"
+        wf.plan.update(
+            phase="inputs_ready",
+            workingCopies={"faults": multi["inputs"]["faults"]},
+            missingRoles=["faults"],
+            uploadInputs={"lithology": multi["inputs"]["lithology"]},
+        )
     prepare_demo(wf, multi["owner"], multi["policy"])
     assert wf.status == "waiting_approval"
     assert [stage["name"] for stage in wf.plan["stages"]] == [
@@ -546,6 +557,9 @@ def test_native_published_manifests_prepare_the_actual_stage_protocol(multi):
     ]
     assert wf.plan["stages"][0]["bindings"]["rules"] == "frozen_rules"
     assert wf.plan["stages"][2]["bindings"]["alterations"] == "apply/alterations"
+    assert wf.plan["stages"][2]["bindings"]["faults"] == (
+        "faults" if missing_faults else "apply/faults"
+    )
     assert wf.plan["stages"][4]["bindings"]["before_lithology"] == "lithology"
     assert wf.plan["stages"][4]["parameters"]["segment"] == "all"
     assert len(wf.plan["upstreamVersions"]) == 9
@@ -597,6 +611,120 @@ def test_before_approval_map_does_not_claim_a_corrected_result(multi):
     assert "after" not in wf.plan["multiElementMap"]
     assert "changes" not in wf.plan["multiElementMap"]
     assert wf.plan["multiElementMap"]["checks"] == [100]
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_map_uses_clean_results_and_never_resurrects_excluded_features(multi, empty):
+    from apps.agent.geology_multi_review import update_map
+
+    workflow, stage, _ = fixture_review(multi)
+    workflow.plan["algorithms"]["geology-multi-apply"]["manifest"] = {
+        "version": "1.0.5",
+        "outputs": [{"key": "final_faults"}, {"key": "final_alterations"}],
+    }
+    stage["outputs"] = [
+        {"key": "lithology", "kind": "vector", "resourceId": 101},
+        {"key": "faults", "kind": "vector", "resourceId": 102},
+        {"key": "alterations", "kind": "vector", "resourceId": 103},
+        {"key": "changes_lithology_issues", "kind": "vector", "resourceId": 104},
+    ]
+    if not empty:
+        stage["outputs"] += [
+            {"key": "final_faults", "kind": "vector", "resourceId": 105},
+            {"key": "final_alterations", "kind": "vector", "resourceId": 106},
+        ]
+    update_map(workflow)
+    result = workflow.plan["multiElementMap"]
+    assert result["after"]["lithology"] == 101
+    assert result["changes"] == [104]
+    if empty:
+        assert "faults" not in result["after"] and "alterations" not in result
+    else:
+        assert result["after"]["faults"] == 105 and result["alterations"] == 106
+
+
+def test_collect_hides_calculation_states_but_retains_downstream_inputs(
+    multi, monkeypatch
+):
+    from apps.agent import demo_workflow
+    from apps.compute.models import ComputeTask, ComputeOutput, ComputeImport
+
+    workflow, stage, _ = fixture_review(multi)
+    algorithm = AlgorithmResource.objects.create(
+        identifier="geology-multi-apply", name="修正", created_by=multi["owner"]
+    )
+    manifest = {
+        "outputs": [
+            {"key": key}
+            for key in ["faults", "alterations", "final_faults", "final_alterations"]
+        ]
+    }
+    version = AlgorithmVersion.objects.create(
+        algorithm=algorithm, version="1.0.5", checksum="a" * 64, manifest=manifest
+    )
+    task = ComputeTask.objects.create(
+        owner=multi["owner"],
+        name="成果集合验证",
+        version=version,
+        status="succeeded",
+        idempotency_key="clean-collect",
+        request_hash="a" * 64,
+    )
+    stage.update(
+        results=[],
+        manualApproved=True,
+        status="running",
+        taskId=str(task.id),
+        bindings={},
+    )
+    workflow.plan["algorithms"]["geology-multi-apply"]["manifest"] = manifest
+    workflow.status = "waiting_compute"
+    workflow.save()
+    resources = {}
+    for key in ["faults", "alterations", "final_faults", "final_alterations"]:
+        output = ComputeOutput.objects.create(
+            task=task,
+            key=key,
+            label=key,
+            kind="vector",
+            file_name=key + ".gpkg",
+            path=key + ".gpkg",
+            size_bytes=1,
+            checksum="b" * 64,
+        )
+        resource = DataResource.objects.create(
+            name=key,
+            code="collect-" + key,
+            data_type="vector",
+            source="compute-output:" + str(output.id),
+        )
+        ComputeImport.objects.create(
+            output=output,
+            requested_by=multi["owner"],
+            name=key,
+            status="ready",
+            resource=resource,
+        )
+        resources[key] = resource
+    monkeypatch.setattr(
+        demo_workflow, "_authorize", lambda *args: (multi["owner"], multi["policy"])
+    )
+    monkeypatch.setattr(demo_workflow, "authorize_demo", lambda *args, **kwargs: None)
+    assert demo_workflow._collect_stage(
+        workflow, multi["owner"], multi["policy"], stage, task
+    )
+    for key in ("faults", "alterations"):
+        resources[key].refresh_from_db()
+        assert resources[key].source.startswith("workflow-working:")
+        assert resources[key].owner_only
+        assert resources[key].id not in workflow.result_resource_ids
+        assert (
+            next(item for item in stage["outputs"] if item["key"] == key)["resourceId"]
+            == resources[key].id
+        )
+    assert set(workflow.result_resource_ids) == {
+        resources[key].id for key in ("final_faults", "final_alterations")
+    }
 
 
 def test_mock_analysis_uses_current_issues_and_keeps_simulation_label(multi):

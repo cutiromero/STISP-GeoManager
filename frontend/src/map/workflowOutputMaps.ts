@@ -5,6 +5,17 @@ import type {
 } from "../api/generated/types.gen";
 import { record } from "./geologyReviewData";
 
+export function usesCleanGeologyResults(workflow: AgentWorkflow) {
+  const algorithm = record(
+    record(workflow.plan.algorithms)["geology-multi-apply"],
+  );
+  const outputs = record(algorithm.manifest).outputs;
+  return (
+    Array.isArray(outputs) &&
+    outputs.some((item) => record(item).key === "final_faults")
+  );
+}
+
 export async function queryWorkflowVectors(
   workflow: AgentWorkflow,
   stageName: string,
@@ -29,8 +40,15 @@ export async function queryWorkflowVectors(
         !output ||
         !Number.isSafeInteger(output.outputId) ||
         Number(output.outputId) <= 0
-      )
+      ) {
+        if (
+          !output &&
+          usesCleanGeologyResults(workflow) &&
+          ["final_faults", "final_alterations"].includes(key)
+        )
+          return { type: "FeatureCollection" as const, features: [] };
         throw new Error(`任务缺少完整空间输出：${stageName}.${key}`);
+      }
       const result = await computeApi.vectorPreview(Number(output.outputId));
       if (!result.geojson)
         throw new Error(`空间输出无法读取：${stageName}.${key}`);

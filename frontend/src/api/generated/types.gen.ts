@@ -5828,9 +5828,13 @@ export type AgentWorkflowUploadProfile = {
 };
 
 /**
- * 通用地质推理任务的一份上传资料
+ * 通用地质推理任务的一份资料，上传文件或系统目录引用
  */
 export type AgentWorkflowUpload = {
+    /**
+     * 资料来源；历史未返回此字段的记录为上传文件。目录引用移除时绝不改变目录资源
+     */
+    source?: 'upload' | 'catalog';
     /**
      * 上传记录 UUID
      */
@@ -5840,15 +5844,15 @@ export type AgentWorkflowUpload = {
      */
     batchId: string;
     /**
-     * 登记的数据资源ID，仅上传者可见
+     * 数据资源ID；上传资源仅本人可见，目录引用沿用原资源访问权限
      */
     resourceId: number;
     /**
-     * 资料名称，取自文件名
+     * 资料名称，目录引用取原资源名称
      */
     name: string;
     /**
-     * 原始文件名
+     * 原始文件名；目录引用为原资源名称
      */
     fileName: string;
     /**
@@ -6068,12 +6072,12 @@ export type AgentMultiElementMap = {
          */
         lithology?: number;
         /**
-         * 本轮修正构造资源
+         * 本轮修正构造资源；算子1.0.5起为删除获批剔除线的干净图层，全剔除时缺省，不回退原图
          */
         faults?: number;
     };
     /**
-     * 真实变化线点面图层，不含未批准建议
+     * 真实变化线点面图层，不含未批准建议；算子1.0.5起为修改前几何的修正记录，含实际动作、原/新代号、宿主编号、规则与批准理由
      */
     changes?: Array<number>;
     /**
@@ -6085,7 +6089,7 @@ export type AgentMultiElementMap = {
      */
     beforeAlterations?: number;
     /**
-     * 保留原识别信息并标识处理状态的蚀变面图层
+     * 算子1.0.5起为仅含有效参与项的干净蚀变面图层（feature_id及alt），全剔除时缺省；历史任务为保留原识别信息和处理状态的图层
      */
     alterations?: number;
     /**
@@ -18595,6 +18599,113 @@ export type ConfirmAgentWorkflowResponses = {
 };
 
 export type ConfirmAgentWorkflowResponse = ConfirmAgentWorkflowResponses[keyof ConfirmAgentWorkflowResponses];
+
+export type ListAgentWorkflowCatalogResourcesData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前具体逻辑推理项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: {
+        /**
+         * 名称或说明搜索词，最多200字
+         */
+        q?: string;
+    };
+    url: '/api/agent/workflow-uploads/references/';
+};
+
+export type ListAgentWorkflowCatalogResourcesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type ListAgentWorkflowCatalogResourcesError = ListAgentWorkflowCatalogResourcesErrors[keyof ListAgentWorkflowCatalogResourcesErrors];
+
+export type ListAgentWorkflowCatalogResourcesResponses = {
+    /**
+     * 有权访问的目录资源
+     */
+    200: AgentResourceList;
+};
+
+export type ListAgentWorkflowCatalogResourcesResponse = ListAgentWorkflowCatalogResourcesResponses[keyof ListAgentWorkflowCatalogResourcesResponses];
+
+export type AddAgentWorkflowCatalogReferencesData = {
+    /**
+     * 批次及目录资源ID
+     */
+    body: {
+        /**
+         * 客户端生成的批次号
+         */
+        batchId: string;
+        /**
+         * 当前项目的目录资源ID，含上传资料合计最多12份
+         */
+        resourceIds: Array<number>;
+    };
+    headers: {
+        /**
+         * 当前具体逻辑推理项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflow-uploads/references/';
+};
+
+export type AddAgentWorkflowCatalogReferencesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type AddAgentWorkflowCatalogReferencesError = AddAgentWorkflowCatalogReferencesErrors[keyof AddAgentWorkflowCatalogReferencesErrors];
+
+export type AddAgentWorkflowCatalogReferencesResponses = {
+    /**
+     * 本次引用的批次条目
+     */
+    200: AgentWorkflowUploadList;
+};
+
+export type AddAgentWorkflowCatalogReferencesResponse = AddAgentWorkflowCatalogReferencesResponses[keyof AddAgentWorkflowCatalogReferencesResponses];
 
 export type UploadAgentWorkflowBatchData = {
     /**

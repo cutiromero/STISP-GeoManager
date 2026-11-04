@@ -15,6 +15,7 @@ import WorkflowDeliverables from "./WorkflowDeliverables";
 import GeologyReviewStory from "./GeologyReviewStory";
 import MultiElementStory from "./MultiElementStory";
 import { isMultiElementFamily, multiElementType } from "./multiElementScenario";
+import { usesCleanGeologyResults } from "../map/workflowOutputMaps";
 import {
   geologyReviewOutcome,
   geologyReviewOriginalMapId,
@@ -54,6 +55,13 @@ export function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
         return Array.isArray(outputs)
           ? outputs.flatMap((value) => {
               const output = record(value);
+              if (
+                isMultiElementFamily(workflow.workflowType) &&
+                usesCleanGeologyResults(workflow) &&
+                record(stage).name === "apply" &&
+                ["faults", "alterations"].includes(String(output.key))
+              )
+                return [];
               return ["raster", "vector"].includes(String(output.kind))
                 ? [output.resourceId]
                 : [];
@@ -471,6 +479,16 @@ export default function WorkflowResults({
                   const outputs = record(stage).outputs;
                   return Array.isArray(outputs)
                     ? outputs
+                        .filter(
+                          (output) =>
+                            !(
+                              usesCleanGeologyResults(workflow) &&
+                              record(stage).name === "apply" &&
+                              ["faults", "alterations"].includes(
+                                String(record(output).key),
+                              )
+                            ),
+                        )
                         .map((output) => Number(record(output).outputId))
                         .filter(Number.isSafeInteger)
                     : [];

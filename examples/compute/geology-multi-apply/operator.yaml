@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-multi-apply",
   "name": "获批操作执行",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "获批操作执行。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -147,13 +147,27 @@
       "label": "修正后构造及处理状态",
       "kind": "vector",
       "file": "faults.gpkg",
-      "required": true
+      "required": false
     },
     {
       "key": "alterations",
       "label": "矿物处理状态",
       "kind": "vector",
       "file": "alterations.gpkg",
+      "required": false
+    },
+    {
+      "key": "final_faults",
+      "label": "修正后构造图",
+      "kind": "vector",
+      "file": "final_faults.gpkg",
+      "required": false
+    },
+    {
+      "key": "final_alterations",
+      "label": "有效蚀变",
+      "kind": "vector",
+      "file": "final_alterations.gpkg",
       "required": false
     },
     {
@@ -170,21 +184,21 @@
     },
     {
       "key": "changes_lithology_issues",
-      "label": "实际修改范围 岩性疑点",
+      "label": "修正记录 岩性疑点",
       "kind": "vector",
       "file": "changes_lithology_issues.gpkg",
       "required": false
     },
     {
       "key": "changes_fault_issues",
-      "label": "实际修改范围 构造疑点",
+      "label": "修正记录 构造疑点",
       "kind": "vector",
       "file": "changes_fault_issues.gpkg",
       "required": false
     },
     {
       "key": "changes_alteration_issues",
-      "label": "实际修改范围 矿物识别疑点",
+      "label": "修正记录 矿物识别疑点",
       "kind": "vector",
       "file": "changes_alteration_issues.gpkg",
       "required": false

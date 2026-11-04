@@ -62,3 +62,26 @@ it("保留权限错误，不退回导入或未校验几何", async () => {
     queryWorkflowVectors(workflow, "check", ["alterations"]),
   ).rejects.toBe(denied);
 });
+
+it("干净成果全部剔除时保持空图，不退回含剔除项的计算输入", async () => {
+  const workflow = reviewWorkflow();
+  workflow.plan.algorithms = {
+    "geology-multi-apply": {
+      manifest: {
+        outputs: [{ key: "final_faults" }, { key: "final_alterations" }],
+      },
+    },
+  };
+  workflow.plan.stages = [
+    {
+      name: "apply",
+      status: "completed",
+      results: [{ key: "alterations", kind: "vector", outputId: 901 }],
+    },
+  ];
+  expect(
+    (await queryWorkflowVectors(workflow, "apply", ["final_alterations"]))
+      .features,
+  ).toEqual([]);
+  expect(computeApi.vectorPreview).not.toHaveBeenCalled();
+});

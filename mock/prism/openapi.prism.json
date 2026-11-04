@@ -21506,6 +21506,200 @@
         }
       }
     },
+    "/api/agent/workflow-uploads/references/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "当前具体逻辑推理项目ID",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Agent"
+        ],
+        "operationId": "listAgentWorkflowCatalogResources",
+        "summary": "搜索可供逻辑推理引用的系统数据",
+        "description": "当前单项目内按资源访问权限筛选活动矢量、栅格、表格，排除任务资料；最多返回50项，可通过搜索缩小范围。需要智能体、工作流、算子和数据登记权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "description": "名称或说明搜索词，最多200字",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "有权访问的目录资源",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResourceList"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": 812,
+                      "name": "八宝山幅地质图",
+                      "dataType": "vector",
+                      "description": "已登记的岩性资料",
+                      "isComputeResult": false,
+                      "origin": "uploaded_data"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Agent"
+        ],
+        "operationId": "addAgentWorkflowCatalogReferences",
+        "summary": "将系统数据引用加入任务批次",
+        "description": "仅逻辑推理项目使用，权限与上传一致。原子加入有权访问的当前项目活动资源，不复制或改变目录资源；同一资源可被多个批次引用。重复加入同批次返回原条目，已发送或绑定批次返回409。移除仅解除引用。资料画像读取真实计算输入（栅格原始数据而非可能增加alpha波段的显示COG）。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "批次及目录资源ID",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "batchId",
+                  "resourceIds"
+                ],
+                "properties": {
+                  "batchId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$",
+                    "description": "客户端生成的批次号"
+                  },
+                  "resourceIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 12,
+                    "uniqueItems": true,
+                    "description": "当前项目的目录资源ID，含上传资料合计最多12份",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "资源ID"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "本次引用的批次条目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowUploadList"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+                      "batchId": "0f3a6c9e2b5d8f1a4c7e0b3d6f9a2c5e",
+                      "resourceId": 812,
+                      "source": "catalog",
+                      "name": "八宝山幅地质图",
+                      "fileName": "八宝山幅地质图",
+                      "dataType": "vector",
+                      "sizeBytes": 2483120,
+                      "roleHint": "lithology",
+                      "workflowId": null,
+                      "createdAt": "2026-11-04T08:00:00Z",
+                      "profile": {
+                        "kind": "vector",
+                        "crs": "EPSG:4326",
+                        "geometryTypes": [
+                          "Polygon"
+                        ],
+                        "featureCount": 486,
+                        "bounds": [
+                          96.82,
+                          35.61,
+                          97.41,
+                          35.95
+                        ],
+                        "bandCount": null,
+                        "width": null,
+                        "height": null,
+                        "fields": [
+                          {
+                            "name": "DCMC",
+                            "type": "text",
+                            "samples": [
+                              "八宝山组"
+                            ],
+                            "distinctCount": 36
+                          }
+                        ],
+                        "warnings": []
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/agent/workflow-uploads/batch/": {
       "post": {
         "tags": [
@@ -22097,7 +22291,7 @@
         ],
         "operationId": "deleteAgentWorkflowUpload",
         "summary": "删除尚未使用的任务资料",
-        "description": "删除本人尚未绑定任务的上传及其数据资源。已绑定任务的资料作为任务依据保留，返回409。",
+        "description": "移除本人当前项目尚未发送或绑定任务的资料。上传条目删除后停用其专有资源；系统目录条目只解除引用，绝不停用、删除或更改原资源。已发送或绑定任务的资料作为任务依据保留，返回409。",
         "security": [
           {
             "sessionAuth": []
@@ -34603,7 +34797,7 @@
       },
       "AgentWorkflowUpload": {
         "type": "object",
-        "description": "通用地质推理任务的一份上传资料",
+        "description": "通用地质推理任务的一份资料，上传文件或系统目录引用",
         "additionalProperties": false,
         "required": [
           "id",
@@ -34619,6 +34813,14 @@
           "createdAt"
         ],
         "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "upload",
+              "catalog"
+            ],
+            "description": "资料来源；历史未返回此字段的记录为上传文件。目录引用移除时绝不改变目录资源"
+          },
           "id": {
             "type": "string",
             "format": "uuid",
@@ -34630,15 +34832,15 @@
           },
           "resourceId": {
             "type": "integer",
-            "description": "登记的数据资源ID，仅上传者可见"
+            "description": "数据资源ID；上传资源仅本人可见，目录引用沿用原资源访问权限"
           },
           "name": {
             "type": "string",
-            "description": "资料名称，取自文件名"
+            "description": "资料名称，目录引用取原资源名称"
           },
           "fileName": {
             "type": "string",
-            "description": "原始文件名"
+            "description": "原始文件名；目录引用为原资源名称"
           },
           "dataType": {
             "type": "string",
@@ -35000,13 +35202,13 @@
               "faults": {
                 "type": "integer",
                 "minimum": 1,
-                "description": "本轮修正构造资源"
+                "description": "本轮修正构造资源；算子1.0.5起为删除获批剔除线的干净图层，全剔除时缺省，不回退原图"
               }
             }
           },
           "changes": {
             "type": "array",
-            "description": "真实变化线点面图层，不含未批准建议",
+            "description": "真实变化线点面图层，不含未批准建议；算子1.0.5起为修改前几何的修正记录，含实际动作、原/新代号、宿主编号、规则与批准理由",
             "items": {
               "type": "integer",
               "minimum": 1,
@@ -35030,7 +35232,7 @@
           "alterations": {
             "type": "integer",
             "minimum": 1,
-            "description": "保留原识别信息并标识处理状态的蚀变面图层"
+            "description": "算子1.0.5起为仅含有效参与项的干净蚀变面图层（feature_id及alt），全剔除时缺省；历史任务为保留原识别信息和处理状态的图层"
           },
           "beforeIntersections": {
             "type": "integer",

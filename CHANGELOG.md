@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.58] - 2026-11-04
+
+### Added
+- 逻辑推理对话可搜索并多选当前项目有权访问的系统矢量、栅格和表格，与上传资料统一识别和核对；目录引用可跨任务复用，移除不改变原资源。
+- 独立修正记录空间图层保存实际动作、代号前后、宿主编号、规则与批准理由，使用修改前几何及统一橙色样式。
+
+### Changed
+- 综合推理算子升级至1.0.5：获批重分类及相邻同单元代号修正融合宿主；最终构造删除剔除线，有效蚀变去掉剔除图斑，远景区仅保留分级、编号和面积。
+- 对比、讲解和交付清单使用干净成果；状态和权重只保存在隐藏计算工作资料，岩性继续按单元名称配色。
+
 ## [0.1.57] - 2026-11-04
 
 ### Added

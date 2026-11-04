@@ -11,12 +11,14 @@ export default function MultiElementTourCard({
   after,
   algorithm,
   loading = false,
+  cleanResults = false,
 }: {
   change: TourChange;
   before?: Feature;
   after?: Feature;
   algorithm: { name: string; version: string; taskId: string };
   loading?: boolean;
+  cleanResults?: boolean;
 }) {
   const labels = tourLabels(change, before, after, loading);
   const refs = change.suggestion.ruleRefs ?? [];
@@ -31,15 +33,17 @@ export default function MultiElementTourCard({
       : "本次结果未记录";
   const operation =
     change.action === "set_code"
-      ? `地质代号由 ${labels.before} 更新为 ${labels.after}。`
+      ? `地质代号由 ${labels.before} 更新为 ${labels.after}。${cleanResults && p.host_feature_id ? `已并入相邻同单元宿主 ${p.host_feature_id}，原编号记入修正记录。` : ""}`
       : change.action === "exclude"
-        ? "原构造记录已保留，改为灰色虚线，本轮不参与后续分析。"
+        ? cleanResults
+          ? "已从最终成果删除；原始资料及修改前范围保留在输入和修正记录中。"
+          : "原构造记录已保留，改为灰色虚线，本轮不参与后续分析。"
         : change.action === "downweight"
           ? `${labels.before} → ${labels.after.replace("证据权重 ", "")}；保留识别范围与原记录。`
           : change.action === "merge"
             ? `按获批范围合并为 ${labels.after}，去除内部接边 ${length("removed_internal_boundary_m")}。`
             : change.action === "reclassify"
-              ? `岩性由 ${labels.before} 调整为 ${labels.after}，更新类别及对应属性。`
+              ? `岩性由 ${labels.before} 调整为 ${labels.after}，${cleanResults ? `并入共享边界最长的宿主 ${p.host_feature_id ?? ""}，保留宿主属性和编号。` : "更新类别及对应属性。"}`
               : `${labels.before} → ${labels.after}。`;
   return (
     <section className="multi-tour-card" aria-label="当前修改故事">

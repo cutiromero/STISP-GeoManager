@@ -995,6 +995,33 @@ def workflow_upload_batch(request):
     return JsonResponse(result)
 
 
+@endpoint(["GET", "POST"])
+def workflow_catalog_references(request):
+    from .workflow_uploads import add_catalog_references, catalog_resources, upload_json
+
+    project = request.headers.get("X-Project-Id")
+    if request.method == "GET":
+        query = request.GET.get("q", "")[:200]
+        found = (
+            catalog_resources(request.user, project)
+            .filter(Q(name__icontains=query) | Q(description__icontains=query))
+            .order_by("name", "id")[:50]
+        )
+        return JsonResponse({"items": [brief(item) for item in found]})
+    value = body(request, ["batchId", "resourceIds"])
+    items = add_catalog_references(
+        request.user, project, value.get("batchId"), value.get("resourceIds")
+    )
+    log_operation(
+        request.user,
+        "agent",
+        "reference_workflow_catalog",
+        "success",
+        f"引用{len(items)}份系统数据",
+    )
+    return JsonResponse({"items": [upload_json(item) for item in items]})
+
+
 @endpoint(["POST"])
 def workflow_recognize_roles(request):
     from .workflow_roles import recognize_roles

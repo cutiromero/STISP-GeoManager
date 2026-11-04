@@ -173,7 +173,7 @@ it("真实WebGL双图支持线点面，沿用岩性配色和Unicode代号，推�
   fireEvent.click(screen.getByText("定位检查记录 / 1 条规则命中"));
   fireEvent.click(await screen.findByText("S-02 / 实际疑点"));
   expect(screen.getByText("沿界比例较高，建议核对影像")).toBeVisible();
-  fireEvent.click(screen.getByLabelText("矿物与处理状态"));
+  fireEvent.click(screen.getByLabelText("有效蚀变"));
   await waitFor(() => {
     const mineralSources = sources.mock.calls
       .filter(([id]) => id === "review-alterations")

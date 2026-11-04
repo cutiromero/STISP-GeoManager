@@ -43,6 +43,8 @@ OUTPUT_KEYS = {
         "lithology",
         "faults",
         "alterations",
+        "final_faults",
+        "final_alterations",
         "changes",
         "statistics",
         "changes_lithology_issues",
@@ -66,10 +68,12 @@ TABLE_KEYS = {"issues", "changes", "evidence", "statistics"}
 @pytest.mark.parametrize(
     "scenario", ["geology_generic", "geology_multi_element_reasoning"]
 )
-def test_collect_only_nine_user_outputs_and_keep_all_task_results(
-    setup_compute, scenario
-):
+def test_collect_only_user_outputs_and_keep_all_task_results(setup_compute, scenario):
     env = setup_compute
+    manifest = env["version"].manifest
+    manifest["outputs"] = [*manifest.get("outputs", []), {"key": "final_faults"}]
+    env["version"].manifest = manifest
+    env["version"].save(update_fields=["manifest"])
     scope = ProjectScope((env["project"].id,), env["project"].id, env["owner"].id)
     with project_scope(scope):
         workflow = AgentWorkflow.objects.create(
@@ -154,8 +158,9 @@ def test_collect_only_nine_user_outputs_and_keep_all_task_results(
                 } == VISIBLE_OUTPUTS[name]
                 assert len(stage["results"]) == len(keys)
             assert color.call_count == 1
-        assert len(imported) == len(workflow.result_resource_ids) == 9
-        assert len(workflow.result_ids) == 27
+        assert len(imported) == 14
+        assert len(workflow.result_resource_ids) == 12
+        assert len(workflow.result_ids) == 29
         ComputeOutput.objects.filter(pk__in=workflow.result_ids).update(
             created_at=timezone.now() - timedelta(days=8)
         )
@@ -178,7 +183,7 @@ def test_collect_only_nine_user_outputs_and_keep_all_task_results(
         workflow.delete()
         clean_expired(force=True)
         assert (
-            ComputeOutput.objects.filter(pk__in=output_ids, expired=True).count() == 27
+            ComputeOutput.objects.filter(pk__in=output_ids, expired=True).count() == 29
         )
 
 

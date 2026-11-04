@@ -41,7 +41,10 @@ import {
   tourLabels,
 } from "./multiElementTour";
 import "./multi-element-tour.css";
-import { queryWorkflowVectors } from "./workflowOutputMaps";
+import {
+  queryWorkflowVectors,
+  usesCleanGeologyResults,
+} from "./workflowOutputMaps";
 
 const empty: GeoJsonFeatureCollection = {
   type: "FeatureCollection",
@@ -200,6 +203,7 @@ export default function MultiElementWorkspace({
               "intersections",
               "prospects",
               "alterations",
+              "changes",
             ].includes(key),
         )
       : ["faults", "intersections", "prospects"];
@@ -272,7 +276,14 @@ export default function MultiElementWorkspace({
           ? counted(query(map.after.lithology))
           : Promise.resolve(null),
         counted(query(faultsId)),
-        counted(query(map.after?.faults ?? faultsId)),
+        counted(
+          query(
+            map.after?.faults ??
+              (usesCleanGeologyResults(workflow) && map.after
+                ? undefined
+                : faultsId),
+          ),
+        ),
         counted(
           map.changes?.length
             ? merge(map.changes)
@@ -314,7 +325,7 @@ export default function MultiElementWorkspace({
         },
         {
           key: "alterations",
-          label: "矿物与处理状态",
+          label: "有效蚀变",
           before: empty,
           after: empty,
           color: "#648e91",
@@ -488,7 +499,11 @@ export default function MultiElementWorkspace({
         visibleKey: "alterations",
         ids: map.alterations ? [map.alterations] : [],
         stage: "apply",
-        outputs: ["alterations"],
+        outputs: [
+          usesCleanGeologyResults(workflow)
+            ? "final_alterations"
+            : "alterations",
+        ],
       },
     ].filter(
       (group) =>
@@ -738,19 +753,23 @@ export default function MultiElementWorkspace({
     const currentLabels = tourLabels(currentTour, tourBefore, tourAfter);
     return {
       before: featureCollection([tourBefore ?? currentTour.feature]),
-      after: featureCollection([
-        tourAfter ?? {
-          ...currentTour.feature,
-          properties: {
-            ...currentTour.feature.properties,
-            state: currentTour.action,
-          },
-        },
-      ]),
+      after: featureCollection(
+        usesCleanGeologyResults(workflow) && currentTour.action === "exclude"
+          ? []
+          : [
+              tourAfter ?? {
+                ...currentTour.feature,
+                properties: {
+                  ...currentTour.feature.properties,
+                  state: currentTour.action,
+                },
+              },
+            ],
+      ),
       beforeLabel: currentLabels.before,
       afterLabel: currentLabels.after,
     };
-  }, [viewMode, focusedOutcome, currentTour, tourBefore, tourAfter]);
+  }, [viewMode, focusedOutcome, currentTour, tourBefore, tourAfter, workflow]);
   const suggestion = workflow.modificationReview?.suggestions.find(
     (item) =>
       selected &&
@@ -902,10 +921,13 @@ export default function MultiElementWorkspace({
             <div className="multi-element-map-controls">
               <strong>联动图层</strong>
               <Checkbox.Group
-                options={data.overlays.map((item) => ({
-                  value: item.key,
-                  label: item.label,
-                }))}
+                options={[
+                  ...data.overlays.map((item) => ({
+                    value: item.key,
+                    label: item.label,
+                  })),
+                  { value: "changes", label: "修正记录" },
+                ]}
                 value={visible}
                 onChange={(items) => setVisible(items.map(String))}
               />
@@ -957,7 +979,9 @@ export default function MultiElementWorkspace({
                 <GeologyReviewMaps
                   before={data.before}
                   after={data.after}
-                  differences={data.differences}
+                  differences={
+                    visible.includes("changes") ? data.differences : empty
+                  }
                   overlays={overlays}
                   bounds={focus}
                   onSelect={(index) => {
@@ -991,6 +1015,7 @@ export default function MultiElementWorkspace({
                   before={tourBefore}
                   after={tourAfter}
                   algorithm={tourAlgorithm(workflow)}
+                  cleanResults={usesCleanGeologyResults(workflow)}
                   loading={
                     currentTour.suggestion.element === "alteration" &&
                     optionalLoading.some((key) => key.startsWith("alterations"))

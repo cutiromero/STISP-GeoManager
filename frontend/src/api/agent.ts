@@ -155,6 +155,16 @@ export const agentApi = {
       `/api/agent/workflow-uploads/?batchId=${encodeURIComponent(batchId)}`,
       options,
     ),
+  workflowCatalogResources: (q = "", options: { signal?: AbortSignal } = {}) =>
+    requestJson<AgentResourceList>(
+      `/api/agent/workflow-uploads/references/?q=${encodeURIComponent(q)}`,
+      options,
+    ),
+  addWorkflowCatalogReferences: (batchId: string, resourceIds: number[]) =>
+    requestJson<AgentWorkflowUploadList>(
+      "/api/agent/workflow-uploads/references/",
+      { method: "POST", body: { batchId, resourceIds } },
+    ),
   deleteWorkflowUpload: (id: string) =>
     requestJson<void>(
       `/api/agent/workflow-uploads/${encodeURIComponent(id)}/`,

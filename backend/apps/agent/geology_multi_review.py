@@ -448,10 +448,26 @@ def update_map(workflow):
         values["after"] = {
             key: apply[key] for key in ("lithology", "faults") if key in apply
         }
+        clean_outputs = (
+            workflow.plan.get("algorithms", {})
+            .get("geology-multi-apply", {})
+            .get("manifest", {})
+            .get("outputs", [])
+        )
+        clean_results = any(item["key"] == "final_faults" for item in clean_outputs)
+        if clean_results:
+            values["after"].pop("faults", None)
+            if apply.get("final_faults"):
+                values["after"]["faults"] = apply["final_faults"]
         values["changes"] = [value for key, value in apply.items() if "change" in key]
     for key, value in (
         ("beforeAlterations", check.get("alterations")),
-        ("alterations", apply.get("alterations") or check.get("alterations")),
+        (
+            "alterations",
+            apply.get("final_alterations")
+            if apply and clean_results
+            else apply.get("alterations") or check.get("alterations"),
+        ),
         ("beforeIntersections", relations.get("before_intersections")),
         ("intersections", relations.get("intersections")),
         ("beforeProspects", prospect.get("before_zones")),

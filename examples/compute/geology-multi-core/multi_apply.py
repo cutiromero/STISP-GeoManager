@@ -5,7 +5,7 @@ import math
 
 from shapely.ops import unary_union
 
-from multi_io import CHANGE_FIELDS, ISSUE_FIELDS, scalar, table
+from multi_io import CHANGE_FIELDS, ISSUE_FIELDS, scalar, table, dump
 from multi_lithology_merge import approved_host
 
 
@@ -109,55 +109,61 @@ def apply(lithology, faults, alterations, operations):
             frame.at[index, "geo_sym"] = operation["target_code"]
             if "code" in frame:
                 frame.at[index, "code"] = operation["target_code"]
-        elif action in {"reclassify", "merge"}:
+        absorbed = []
+        if action in {"set_code", "reclassify", "merge"}:
             hosts = frame.loc[
                 (frame.geo_sym == operation["target_code"])
                 & (frame.feature_id != operation["feature_id"])
-                & frame.geometry.intersects(geometry.buffer(0.5))
+                & frame.geometry.intersects(geometry)
             ]
-            if hosts.empty:
+            hosts = hosts.loc[
+                hosts.geometry.map(
+                    lambda candidate: (
+                        candidate.boundary.intersection(geometry.boundary).length > 0
+                    )
+                )
+            ]
+            if hosts.empty and action != "set_code":
                 raise ValueError("当前地图中没有获批的相邻目标单元")
-            if operation["rule_id"] == "L-05":
+            if not hosts.empty and operation["rule_id"] == "L-05":
                 if action != "merge":
                     raise ValueError("同单元整理规则只支持获批融合")
                 host_index = approved_host(frame, operation, geometry)
-            else:
-                host_index = max(
+            elif not hosts.empty:
+                host_index = min(
                     hosts.index,
                     key=lambda key: (
-                        frame.at[key, "geometry"]
-                        .boundary.intersection(geometry.buffer(0.5))
-                        .length
+                        -frame.at[key, "geometry"]
+                        .boundary.intersection(geometry.boundary)
+                        .length,
+                        str(frame.at[key, "feature_id"]),
                     ),
                 )
-            host_id = str(frame.at[host_index, "feature_id"])
-            if action == "merge":
+            if not hosts.empty:
+                host_id = str(frame.at[host_index, "feature_id"])
                 removed_boundary = geometry.boundary.intersection(
                     frame.at[host_index, "geometry"].boundary
                 ).length
                 involved_geometry = geometry.union(frame.at[host_index, "geometry"])
-                frame.at[host_index, "geometry"] = frame.at[
-                    host_index, "geometry"
-                ].union(geometry)
-                results[operation["element"]] = frame.drop(index=index)
-            else:
-                for key in (
-                    "name",
-                    "geo_sym",
-                    "geo_tex",
-                    "geo_unit",
-                    "class",
-                    "code",
-                    "path",
-                    "fill_color",
-                ):
-                    if key in frame:
-                        frame.at[index, key] = frame.at[host_index, key]
+                frame.at[host_index, "geometry"] = involved_geometry
+                absorbed.append(str(frame.at[index, "feature_id"]))
+                frame = frame.drop(index=index)
+                results[operation["element"]] = frame
         elif operation["element"] in {"structure", "alteration"}:
+            actual_changed = action not in {"keep", "review"} and (
+                frame.at[index, "state"] != action
+                or float(frame.at[index, "weight"]) != operation["weight"]
+            )
             frame.at[index, "state"] = action
             frame.at[index, "weight"] = operation["weight"]
         elif action not in {"keep", "review"}:
             raise ValueError("此资料不支持该动作")
+        if (
+            action == "set_code"
+            and old_code == operation["target_code"]
+            and not host_id
+        ):
+            actual_changed = False
         modifications.append(
             {
                 **operation,
@@ -166,7 +172,8 @@ def apply(lithology, faults, alterations, operations):
                 if action in {"set_code", "reclassify", "merge"}
                 else old_code,
                 "host_feature_id": host_id,
-                "_geometry": involved_geometry,
+                "_geometry": geometry,
+                "absorbed_ids": dump(absorbed),
                 "actual_changed": actual_changed,
                 "area_m2": float(geometry.area),
                 "involved_area_m2": float(involved_geometry.area),
@@ -185,16 +192,15 @@ def apply(lithology, faults, alterations, operations):
             }
         )
     corrected = results["lithology"]
-    if (
-        not corrected.geometry.is_valid.all()
-        or abs(
-            unary_union(lithology.geometry)
-            .symmetric_difference(unary_union(corrected.geometry))
-            .area
-        )
-        > 0.01
-    ):
+    if not corrected.geometry.is_valid.all():
         raise ValueError("修改超出获批覆盖范围或造成无效几何")
+    original_coverage = unary_union(lithology.geometry)
+    corrected_coverage = unary_union(corrected.geometry)
+    if (
+        original_coverage.symmetric_difference(corrected_coverage).area > 0.01
+        or corrected.geometry.area.sum() - corrected_coverage.area > 0.01
+    ):
+        raise ValueError("修正后覆盖范围变化或存在重叠，不能交付最终岩性图")
     touched = {
         item["feature_id"] for item in modifications if item["element"] == "lithology"
     } | {item["host_feature_id"] for item in modifications}
@@ -232,3 +238,102 @@ def statistics(before, after):
             }
         )
     return rows
+
+
+def final_layer(frame, element):
+    processing = {
+        "state",
+        "weight",
+        "status",
+        "rule",
+        "rule_id",
+        "rule_version",
+        "modified",
+        "action",
+        "fill_color",
+        "issue_id",
+        "reason",
+        "snapshot_hash",
+        "knowledge_id",
+        "knowledge_revision",
+        "measurements_json",
+        "conditions",
+        "exceptions",
+        "suggested_action",
+        "target_code",
+        "allowed_actions_json",
+        "geometry_json",
+        "old_code",
+        "new_code",
+        "host_feature_id",
+        "absorbed_ids",
+        "actual_changed",
+        "is_modified",
+    }
+    fields = (
+        {"feature_id", "alt"}
+        if element == "alteration"
+        else {
+            key
+            for key in frame.columns
+            if str(key).lower() not in processing
+            and not str(key)
+            .lower()
+            .startswith(
+                ("rule_", "change_", "modified_", "processing_", "knowledge_", "_")
+            )
+        }
+    )
+    active = (
+        frame.loc[frame.state != "exclude"]
+        if element != "lithology" and "state" in frame
+        else frame
+    )
+    return active[
+        [key for key in active.columns if key in fields or key == "geometry"]
+    ].copy()
+
+
+def modification_maps(context, modifications, config):
+    import geopandas as gpd
+
+    from multi_io import ISSUE_FIELDS, write_vector
+
+    fields = list(
+        dict.fromkeys(
+            ISSUE_FIELDS
+            + [
+                "action",
+                "old_code",
+                "new_code",
+                "host_feature_id",
+                "reason",
+                "absorbed_ids",
+            ]
+        )
+    )
+    for element, filename, geometry_type in [
+        ("lithology", "lithology_issues.gpkg", "MultiPolygon"),
+        ("structure", "fault_issues.gpkg", "MultiLineString"),
+        ("alteration", "alteration_issues.gpkg", "MultiPolygon"),
+    ]:
+        rows = [
+            {
+                **{key: row.get(key, "") for key in fields},
+                "geometry": row["_geometry"],
+            }
+            for row in modifications
+            if row["element"] == element and row["actual_changed"]
+        ]
+        frame = gpd.GeoDataFrame(
+            rows,
+            columns=fields + ["geometry"],
+            geometry="geometry",
+            crs=config["working_epsg"],
+        )
+        write_vector(
+            context.output_path("changes_" + filename),
+            frame,
+            config["working_epsg"],
+            geometry_type,
+        )

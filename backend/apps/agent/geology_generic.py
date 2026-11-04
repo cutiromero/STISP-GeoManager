@@ -116,11 +116,11 @@ def generic_ready(user, policy):
     return published == needed
 
 
-def _uploads(user, inputs):
+def _uploads(user, inputs, batch_id):
     from .models import WorkflowUpload
 
     query = WorkflowUpload.objects.select_related("resource").filter(
-        owner=user, resource_id__in=list(inputs.values())
+        owner=user, resource_id__in=list(inputs.values()), batch_id=batch_id
     )
     return {upload.resource_id: upload for upload in query}
 
@@ -169,6 +169,7 @@ def validate_creation(user, policy, inputs, parameters, batch_id, key):
     ):
         raise ComputeError("上传批次不存在或已用于其他任务", 409)
     for role, identity in inputs.items():
+        resolve_resource(user, policy, identity)
         upload = uploads.get(identity)
         if upload is None:
             raise ComputeError("资料角色只能选择本次任务上传的资料")
@@ -182,6 +183,8 @@ def validate_creation(user, policy, inputs, parameters, batch_id, key):
             raise ComputeError(LABELS[role] + "的几何类型不适用")
         if ROLES[role] != "table" and not profile.get("crs"):
             raise ComputeError(LABELS[role] + "缺少坐标系")
+        if ROLES[role] == "raster" and profile.get("bandCount") != 1:
+            raise ComputeError(LABELS[role] + "须为单波段栅格")
     return project_rules(user, policy).id
 
 
@@ -225,7 +228,7 @@ def heuristic_targets(role, profile):
 
 def _review_roles(workflow, user):
     inputs = workflow.plan["uploadInputs"]
-    uploads = _uploads(user, inputs)
+    uploads = _uploads(user, inputs, workflow.plan["uploadBatchId"])
     roles = []
     for role, identity in inputs.items():
         if role not in TARGETS:

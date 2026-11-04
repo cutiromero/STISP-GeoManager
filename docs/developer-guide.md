@@ -2771,6 +2771,16 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 
 地图默认读取基础双图、构造、交汇与远景区；密集检查记录和矿物状态按勾选读取，继续验证返回完整性。改前矿物读取检查阶段真实输出，改后矿物读取获批处理输出。可选图层读取失败单独提示并允许重试，基础双图保留；切换图层保持当前视角。双图首次按真实研究区边界留白缩放，仅在主地图完成初始化后保存视角，避免React StrictMode首次清理将默认视角误作已恢复视角；综合场景详细岩性图例默认折叠。
 
+### 逻辑推理系统数据引用与干净成果（v0.1.58）
+
+`GET /api/agent/workflow-uploads/references/?q=` 仅在逻辑推理项目使用，要求明确 `X-Project-Id`，按 `resource_access_filter`、当前项目、活动状态及策略允许的数据类型搜索目录矢量/栅格/表格。排除任务上传和工作副本，最多50条，名称及说明支持搜索。需与上传一致的智能体、MH-workflow、算子及数据登记权限；401/403/404沿用平台规范。
+
+`POST /api/agent/workflow-uploads/references/` 接受 `{batchId,resourceIds}`，原子加入1至12份不重复的目录资源；与上传项合计最多12份，返回 `{items: AgentWorkflowUpload[]}`。同批次重试返回已有条目；无权、跨项目、失效或不存在资源统一404，不部分加入；已发送/绑定批次409。资料条目增加 `source=upload|catalog`，旧客户端未返回时按upload理解。迁移 `agent.0020_workflow_catalog_references` 将resource改为ForeignKey；多个任务/批次可引用同一目录资源。`DELETE /api/agent/workflow-uploads/{uploadId}/` 对catalog只删除引用，不停用、删除或更改目录资源。现有上传删除行为不变。
+
+资料画像使用平台已有读取器；栅格读取真实计算源数据而非显示COG，须有CRS且为单波段；显示预处理文件可能有额外alpha波段，不能据此拒绝合法源数据。原始数据缺失则拒绝，不引入兼容分支。后续发送、字段确认、工作副本和计算继续检查资源授权，目录来源与TASK_RESOURCE_SOURCES隔离。
+
+`geology_generic`与`geology_multi_element_reasoning`使用算子1.0.5：岩性重分类及相邻同单元代号修正并入最长共享边界宿主，宿主属性与编号保留，原编号进入独立修正记录。最终岩性不带处理字段；`final_faults`删除获批剔除线，`final_alterations`只含有效图斑。`faults/alterations`保留旧计算契约及降权信息，作为隐藏工作资料供后续算子使用，不作为最终展示。远景区只保留编号、A/B等级和面积，依据在evidence表；修正记录以修改前几何保存实际动作、代号前后、宿主、规则及批准理由，统一橙色。全剔除时不生成假要素，也不回退到原数据。具体字段和成果键见 `docs/agent-generic-workflow-20261103.md`。
+
 ### 按项目组织可用算法（2026-10-23）
 
 计算目录与普通科研智能体共用服务端项目筛选。逻辑推理项目保留地质及逻辑推理相关共享工具；干旱区生态项目保留植被、水体指数、生态风险及通用矢量统计修复工具。各项目自行登记的工具保留，公开项目目录不变。执行时使用同一筛选，已存在的历史任务继续可读，不因目录归类改变丢失记录。

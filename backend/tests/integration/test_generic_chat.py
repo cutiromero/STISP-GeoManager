@@ -32,7 +32,7 @@ def online_model(monkeypatch):
     )
 
 
-def intake(env):
+def intake(env, *, catalog=False):
     env["project"].code = "02"
     env["project"].save(update_fields=["code"])
     for suffix in ("check", "apply", "relations", "prospect"):
@@ -58,6 +58,17 @@ def intake(env):
             runtime_digest="sha256:" + "a" * 64,
         )
     upload = store_upload(env["owner"], env["project"].id, geojson(), env["batch"])
+    if catalog:
+        from apps.agent.workflow_uploads import add_catalog_references
+
+        resource = upload.resource
+        resource.source = "catalog-demo"
+        resource.owner_only = False
+        resource.save(update_fields=["source", "owner_only"])
+        upload.delete()
+        upload = add_catalog_references(
+            env["owner"], env["project"].id, env["batch"], [resource.id]
+        )[0]
     conversation = Conversation.objects.create(owner=env["owner"], mode="agent")
     response = env["client"].post(
         f"/api/agent/conversations/{conversation.id}/runs/",
@@ -92,8 +103,9 @@ def answer(env, run, **value):
     )
 
 
-def test_chat_roles_bind_then_fields_confirm_and_restore(generic):
-    run, upload = intake(generic)
+@pytest.mark.parametrize("catalog", [False, True])
+def test_chat_roles_bind_then_fields_confirm_and_restore(generic, catalog):
+    run, upload = intake(generic, catalog=catalog)
     assert run.research_intent["scenario"] == "geology_generic"
     assert run.research_workflow_id is None
     assert run.research_intent["parameters"]["roleAnswers"] == {

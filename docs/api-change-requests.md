@@ -1,5 +1,14 @@
 # API Change Requests
 
+## 2026-11-04 逻辑推理目录引用
+
+- 接口：`GET/POST /api/agent/workflow-uploads/references/`；批次资料增加可选 `source=upload|catalog`。
+- 前端需要：当前项目搜索、勾选系统数据，与上传项同批进入对话角色及字段确认；移除目录项仅解除引用。
+- Mock：`mock/prism/examples/104-agent-upload-bundle.json`。
+- 后端：ForeignKey 允许跨任务多次引用；目录原资源、隐私和来源标记不改；创建、发送和后续执行重新鉴权，含单项目和 owner_only；画像使用真实计算输入，非显示COG。
+- 验证：引用/重复引用、移除保留原资源、跨用户/项目拒绝、对话流程、混合资料角色识别。
+- 状态：已实现，验证结果以本批实测为准。
+
 ## API-20261104-003 - 当前对话内通用地质推理
 
 - Status: BackendReady

@@ -52,7 +52,17 @@ TITLES = {
 }
 VISIBLE_OUTPUTS = {
     "check": {"issues"},
-    "apply": {"lithology", "faults", "alterations", "changes"},
+    "apply": {
+        "lithology",
+        "faults",
+        "alterations",
+        "final_faults",
+        "final_alterations",
+        "changes",
+        "changes_lithology_issues",
+        "changes_fault_issues",
+        "changes_alteration_issues",
+    },
     "recheck": set(),
     "relations": {"intersections"},
     "prospect": {"before_zones", "after_zones", "evidence"},

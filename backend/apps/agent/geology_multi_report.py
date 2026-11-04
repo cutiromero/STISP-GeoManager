@@ -183,7 +183,9 @@ def render_report(workflow, tasks):
                         "",
                     ]
                 )
-    merges = [row for row in changes if row["action"] == "merge"]
+    merges = [
+        row for row in changes if row["action"] == "merge" or row.get("host_feature_id")
+    ]
     if merges:
         involved = sum(
             float(row.get("involved_area_m2") or row["area_m2"]) for row in merges
@@ -252,9 +254,18 @@ def render_report(workflow, tasks):
         ]
     )
     for task in tasks:
+        manifest = getattr(task.version, "manifest", {})
+        calculation_only = (
+            {"faults", "alterations"}
+            if any(
+                item["key"] == "final_faults" for item in manifest.get("outputs", [])
+            )
+            else set()
+        )
         links = "、".join(
             f"[{_cell(output.label)}](/api/compute/outputs/{output.id}/file/?projectTagId={workflow.project_tag_id})"
             for output in task.outputs.order_by("id")
+            if getattr(output, "key", "") not in calculation_only
         )
         lines.append(
             f"| {_cell(task.name)} | {_cell(task.version.algorithm.name)} {_cell(task.version.version)} | {_cell(task.parameters)} | {links} |"
