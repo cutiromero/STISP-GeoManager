@@ -606,6 +606,23 @@ def _validate_final_review_report(decision, stage, execution_state):
         )
 
 
+def _awaiting_multi_proposal(workflow, stage) -> bool:
+    """Apply step of the multi-element family before any approval or execution."""
+    if (
+        getattr(workflow, "workflow_type", None) not in MULTI_FAMILY
+        or stage["identifier"] != "geology-multi-apply"
+    ):
+        return False
+    stages = {item["name"]: item for item in workflow.plan.get("stages", [])}
+    check, apply = stages.get("check") or {}, stages.get("apply") or {}
+    review = workflow.plan.get("modificationReview") or {}
+    return bool(
+        check.get("taskId")
+        and not apply.get("taskId")
+        and not review.get("approvedSuggestionIds")
+    )
+
+
 def _validate_response(
     raw, workflow, stage, results, refs, *, execution_state=None, allow_partial=False
 ) -> tuple[dict, list]:
@@ -642,6 +659,16 @@ def _validate_response(
             raise ComputeError("判断必须引用最近一次实际计算统计")
     if not isinstance(value["edits"], list) or len(value["edits"]) > 30:
         raise ComputeError("模型提出的修改计划超出允许范围")
+    if (
+        not allow_partial
+        and _awaiting_multi_proposal(workflow, stage)
+        and decision["nextAction"] == "request_review"
+        and not value["edits"]
+    ):
+        raise ComputeError(
+            "apply阶段的edits就是提交给用户逐项批准的建议，尚无批准是正常状态；"
+            "请从检查结果中选出有据的少量对象提出建议，nextAction写geology-multi-apply"
+        )
     assessment = None
     if (
         getattr(workflow, "workflow_type", None) in MULTI_FAMILY
@@ -839,7 +866,8 @@ def decide(
             "对每个建议在decision.evidenceRefs引用该问题rule_id/rule_version对应的具体knowledge编号。"
             "优先解释少量清楚对象，最多30项，不要求把所有疑点都修改；保留/待裁定可用keep/review。"
             "岩石孤岛不能单凭老新关系认定错误，构造短线不能单凭短就认定假线，碳酸盐背景不能排除热液叠加。"
-            "未获批准不可声称已修正；modificationReview.approvedSuggestionIds才是用户批准的建议范围。其余项保留。"
+            "apply阶段提出edits时尚无用户批准属正常状态，不能以尚无批准为由不提建议。"
+            "执行修正后，未获批准不可声称已修正；modificationReview.approvedSuggestionIds才是用户批准的建议范围。其余项保留。"
             "其他阶段edits=[]；执行后读取当次结果及复核统计，说明实际改变、未修改与下一步。"
             "分段入口使用upstreamVersions，不把旧图当新成果。A/B仅表示本案例证据组合下的优先核查等级，不是矿化概率。"
         )
