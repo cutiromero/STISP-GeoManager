@@ -35,33 +35,84 @@ export function reviewResourceIds(workflow: AgentWorkflow) {
   };
 }
 
-let reviewQueryQueue: Promise<unknown> = Promise.resolve();
+let activeReads = 0;
+let fullReadQueue: Promise<unknown> = Promise.resolve();
+const pendingReads: Array<() => void> = [];
+async function readDisplayQuery(
+  id: number,
+  projectId: string | null,
+  signal: AbortSignal,
+) {
+  if (activeReads >= 2)
+    await new Promise<void>((resolve) => pendingReads.push(resolve));
+  else activeReads++;
+  try {
+    if (signal.aborted || getActiveProject() !== projectId)
+      throw new DOMException(
+        "项目已切换，已停止读取旧项目图层。",
+        "AbortError",
+      );
+    return await requestJson<QueryResponse>(
+      `/api/catalog/resources/${id}/query/`,
+      {
+        method: "POST",
+        body: {
+          attributeFilters: [],
+          spatialFilter: null,
+          limit: 10000,
+          displayGeometry: true,
+        },
+      },
+    );
+  } finally {
+    const next = pendingReads.shift();
+    if (next) next();
+    else activeReads--;
+  }
+}
 
 export async function queryReviewMap(
   id: number,
-  options: { mixed?: boolean; allowEmpty?: boolean; loadStyle?: boolean } = {},
+  options: {
+    mixed?: boolean;
+    allowEmpty?: boolean;
+    loadStyle?: boolean;
+    displayGeometry?: boolean;
+  } = {},
 ) {
   return (await queryReviewMapResult(id, options)).geojson;
 }
 
 export async function queryReviewMapResult(
   id: number,
-  options: { mixed?: boolean; allowEmpty?: boolean; loadStyle?: boolean } = {},
+  options: {
+    mixed?: boolean;
+    allowEmpty?: boolean;
+    loadStyle?: boolean;
+    displayGeometry?: boolean;
+  } = {},
 ) {
   const projectId = getActiveProject();
   const signal = projectSignal();
-  const response = reviewQueryQueue.then(() => {
-    if (signal.aborted || getActiveProject() !== projectId)
-      throw new DOMException(
-        "项目已切换，已停止读取旧项目图层。",
-        "AbortError",
-      );
-    return requestJson<QueryResponse>(`/api/catalog/resources/${id}/query/`, {
-      method: "POST",
-      body: { attributeFilters: [], spatialFilter: null, limit: 10000 },
-    });
-  });
-  reviewQueryQueue = response.catch(() => undefined);
+  if (signal.aborted || getActiveProject() !== projectId)
+    throw new DOMException("项目已切换，已停止读取旧项目图层。", "AbortError");
+  const response = options.displayGeometry
+    ? readDisplayQuery(id, projectId, signal)
+    : fullReadQueue.then(() => {
+        if (signal.aborted || getActiveProject() !== projectId)
+          throw new DOMException(
+            "项目已切换，已停止读取旧项目图层。",
+            "AbortError",
+          );
+        return requestJson<QueryResponse>(
+          `/api/catalog/resources/${id}/query/`,
+          {
+            method: "POST",
+            body: { attributeFilters: [], spatialFilter: null, limit: 10000 },
+          },
+        );
+      });
+  if (!options.displayGeometry) fullReadQueue = response.catch(() => undefined);
   const result = await response;
   if (result.limitExceeded)
     throw new Error("图件超过双图预览范围，请缩小检查范围后查看");

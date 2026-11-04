@@ -175,7 +175,7 @@ export default function MultiElementWorkspace({
   const [selected, setSelected] = useState<Feature>();
   const [tourKey, setTourKey] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"tour" | "overview" | "outcome">(
-    "tour",
+    "overview",
   );
   const [outcomeGrade, setOutcomeGrade] = useState<string | null>(null);
   const [optionalData, setOptionalData] = useState<
@@ -247,6 +247,7 @@ export default function MultiElementWorkspace({
               mixed: true,
               allowEmpty: true,
               loadStyle: true,
+              displayGeometry: true,
             }).catch((reason: unknown) => {
               requests.delete(id);
               throw reason;
@@ -532,6 +533,7 @@ export default function MultiElementWorkspace({
                       queryReviewMap(id, {
                         mixed: true,
                         allowEmpty: true,
+                        displayGeometry: true,
                       }).catch((reason: unknown) => {
                         resourceRequests.current.delete(id);
                         throw reason;
@@ -1006,7 +1008,11 @@ export default function MultiElementWorkspace({
                   }
                   previewLabel="当前输入与检查范围，尚无修正版本"
                   compactLegend
-                  spotlight={spotlight}
+                  spotlight={
+                    visible.includes("changes") || viewMode === "outcome"
+                      ? spotlight
+                      : null
+                  }
                 />
               </div>
               {viewMode === "tour" && currentTour && (

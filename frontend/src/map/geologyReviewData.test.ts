@@ -40,7 +40,56 @@ it("对比与讲解使用资源按name分类配色，图例显示单元名称", 
   ]);
 });
 
-it("queues preview reads so the server's single-query gate does not reject the second map", async () => {
+it("loads the primary pair concurrently with display-only geometry", async () => {
+  let finishFirst = (_value: ReturnType<typeof reviewQuery>) => {};
+  request
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishFirst = resolve;
+        }),
+    )
+    .mockResolvedValueOnce(reviewQuery(201, afterReviewMap));
+  const first = queryReviewMap(101, { displayGeometry: true });
+  const second = queryReviewMap(201, { displayGeometry: true });
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  expect(request.mock.calls[0]![1].body.displayGeometry).toBe(true);
+  finishFirst(reviewQuery(101, beforeReviewMap));
+  expect(await first).toEqual(beforeReviewMap);
+  expect(await second).toEqual(afterReviewMap);
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+it("最多同时传输两张显示图层，第三张等待空闲名额", async () => {
+  let finishFirst = (_value: ReturnType<typeof reviewQuery>) => {};
+  let finishSecond = (_value: ReturnType<typeof reviewQuery>) => {};
+  request
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishFirst = resolve;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSecond = resolve;
+        }),
+    )
+    .mockResolvedValueOnce(reviewQuery(301, beforeReviewMap));
+  const pending = [
+    queryReviewMap(101, { displayGeometry: true }),
+    queryReviewMap(201, { displayGeometry: true }),
+    queryReviewMap(301, { displayGeometry: true }),
+  ];
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  finishFirst(reviewQuery(101, beforeReviewMap));
+  await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+  finishSecond(reviewQuery(201, afterReviewMap));
+  await Promise.all(pending);
+});
+
+it("其他地质检查入口保持原精度和串行查询行为", async () => {
   let finishFirst = (_value: ReturnType<typeof reviewQuery>) => {};
   request
     .mockImplementationOnce(
@@ -53,10 +102,9 @@ it("queues preview reads so the server's single-query gate does not reject the s
   const first = queryReviewMap(101);
   const second = queryReviewMap(201);
   await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  expect(request.mock.calls[0]![1].body.displayGeometry).toBeUndefined();
   finishFirst(reviewQuery(101, beforeReviewMap));
-  expect(await first).toEqual(beforeReviewMap);
-  expect(await second).toEqual(afterReviewMap);
-  expect(request).toHaveBeenCalledTimes(2);
+  await Promise.all([first, second]);
 });
 
 it("完成后的建议入口按对象及修改类型定位，区分同一图斑的两项修改", () => {

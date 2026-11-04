@@ -1,6 +1,7 @@
 """Bounded representative readings, with complete file identity and measured totals."""
 
 import csv
+import hashlib
 import json
 import math
 from collections import Counter
@@ -12,6 +13,7 @@ def table_rows(path, key):
     if path.stat().st_size > 64 * 1024 * 1024:
         raise ComputeError("综合检查结果表超过64 MiB，请缩小本次检查范围")
     groups, rows, count, counts = {}, [], 0, Counter()
+    all_issues = []
     evidence_groups, combinations = {}, {}
     seen_zones = set()
     with path.open(encoding="utf-8-sig", newline="") as stream:
@@ -20,17 +22,14 @@ def table_rows(path, key):
             raise ComputeError("综合检查结果表字段无效")
         for row in reader:
             count += 1
-            if count > 100000:
+            if key != "issues" and count > 100000:
                 raise ComputeError("综合检查结果超过十万项，请缩小检查范围")
             if any(value is None or len(value) > 160000 for value in row.values()):
                 raise ComputeError("综合检查结果包含异常单元格")
             group = row.get("rule_id", "statistics")
             counts[group] += 1
             if key == "issues":
-                representatives = groups.setdefault(group, [])
-                representatives.append(row)
-                representatives.sort(key=_measured_size, reverse=True)
-                del representatives[2:]
+                all_issues.append(row)
             elif key == "evidence":
                 zone = (row.get("phase"), row.get("zone_id"))
                 if zone in seen_zones:
@@ -45,8 +44,10 @@ def table_rows(path, key):
                 del representatives[2:]
             elif key in {"statistics", "changes"} or len(rows) < 40:
                 rows.append(row)
-    if key in {"issues", "evidence"}:
+    if key == "evidence":
         rows = [row for representatives in groups.values() for row in representatives]
+    if key == "issues":
+        rows = all_issues
     result = {
         "columns": reader.fieldnames,
         "rows": rows,
@@ -55,7 +56,7 @@ def table_rows(path, key):
         "samplingNote": (
             "全部远景区均参与分期、等级及证据组合汇总；每个分期和等级展示面积最大的两个代表，完整对象证据可下载"
             if key == "evidence"
-            else "每条规则选取实际面积或长度较大的两个代表对象，未进入建议的对象保持原样；完整结果可下载"
+            else "完整检查对象参与分组建议；模型接收分组数量、实测分布及代表样本，未获批对象保持原样"
         ),
         "countsByRule": dict(counts),
     }
@@ -175,18 +176,6 @@ def _finish_groups(groups):
     ]
 
 
-def _measured_size(row):
-    try:
-        measurements = json.loads(row.get("measurements_json") or "{}")
-        area = float(row.get("area_m2") or measurements.get("area_m2") or 0)
-        length = float(row.get("length_m") or measurements.get("length_m") or 0)
-    except (ValueError, TypeError, AttributeError) as exc:
-        raise ComputeError("代表对象的实际面积或长度格式无效") from exc
-    if not all(math.isfinite(value) and value >= 0 for value in (area, length)):
-        raise ComputeError("代表对象的实际面积或长度无效")
-    return area or length, row.get("issue_id", "")
-
-
 def model_results(results, *, stage_name):
     """Geometry is available to the map; narrative decisions use actual measurements."""
     values, shared_metadata = [], {}
@@ -198,6 +187,38 @@ def model_results(results, *, stage_name):
                 for row in item.get("rows", [])
             ],
         }
+        if item["key"] == "issues" and stage_name == "apply":
+            from .geology_issue_groups import group_summaries
+
+            value.update(
+                rows=[],
+                groups=group_summaries(item.get("rows", [])),
+                scope="all_groups",
+            )
+        if item["key"] == "changes":
+            grouped = {}
+            for row in item.get("rows", []):
+                key = (
+                    row.get("element", ""),
+                    row.get("rule_id", ""),
+                    row.get("action", ""),
+                )
+                group = grouped.setdefault(
+                    key,
+                    {
+                        "element": key[0],
+                        "rule_id": key[1],
+                        "action": key[2],
+                        "count": 0,
+                        "actualChanged": 0,
+                    },
+                )
+                group["count"] += 1
+                group["actualChanged"] += str(
+                    row.get("actual_changed", "")
+                ).lower() in {"true", "1"}
+            value.update(rows=list(grouped.values()), scope="all_groups")
+            value.pop("columns", None)
         if item["key"] == "issues" and stage_name != "apply":
             value.update(
                 rows=[],
@@ -215,10 +236,48 @@ def model_results(results, *, stage_name):
             value["metadata"] = _model_metadata(
                 item, shared_metadata, columns=value.get("columns")
             )
-        if item["key"] in {"statistics", "changes"}:
+        if item["key"] == "statistics":
             value.update(_column_rows(value["rows"], value.get("columns")))
         values.append(value)
     return values
+
+
+def public_plan(plan):
+    """Keep display facts, not internal full-resolution checks or model requests."""
+    stages = []
+    for stage in plan.get("stages", []):
+        value = {
+            key: item
+            for key, item in stage.items()
+            if key
+            not in {
+                "edits",
+                "proposedEdits",
+                "modelRequestPayload",
+                "modelRequestInstruction",
+                "modelAttempts",
+            }
+        }
+        if "results" in value:
+            value["results"] = [
+                model_results([item], stage_name="apply")[0]
+                if isinstance(item, dict) and item.get("key") == "issues"
+                else item
+                for item in value["results"]
+            ]
+        stages.append(value)
+    return {
+        **{
+            key: value
+            for key, value in plan.items()
+            if key
+            not in {
+                "modificationReview",
+                "previousAnalysis",
+            }
+        },
+        "stages": stages,
+    }
 
 
 def _column_rows(rows, columns=None):
@@ -369,8 +428,29 @@ def model_review(workflow):
     review = workflow.plan.get("modificationReview")
     if review is None:
         return None
-    suggestions = []
+    suggestions, groups = [], {}
+    approved = set(review.get("approvedSuggestionIds", []))
     for item in review["suggestions"]:
+        key = item.get("groupId") or (
+            item.get("element"),
+            item.get("ruleId"),
+            item.get("action"),
+            item.get("suggestedState"),
+        )
+        group = groups.setdefault(
+            key,
+            {
+                "element": item.get("element"),
+                "ruleId": item.get("ruleId"),
+                "action": item.get("action"),
+                "count": 0,
+                "approvedCount": 0,
+            },
+        )
+        group["count"] += 1
+        group["approvedCount"] += item["id"] in approved
+        if group["count"] > 2:
+            continue
         suggestions.append(
             {
                 **{
@@ -401,8 +481,15 @@ def model_review(workflow):
     check = next(stage for stage in workflow.plan["stages"] if stage["name"] == "check")
     return {
         "proposalHash": review["proposalHash"],
-        "approvedSuggestionIds": review.get("approvedSuggestionIds", []),
-        "unapprovedSuggestionIds": review.get("unapprovedSuggestionIds", []),
+        "approvedSuggestionIds": review.get("approvedSuggestionIds", [])[:3],
+        "unapprovedSuggestionIds": review.get("unapprovedSuggestionIds", [])[:3],
+        "approvedCount": len(approved),
+        "suggestionCount": len(review["suggestions"]),
+        "groups": list(groups.values()),
+        "scope": "all_groups_with_representative_ids",
+        "approvalScopeDigest": hashlib.sha256(
+            json.dumps(sorted(approved)).encode()
+        ).hexdigest(),
         "suggestions": _column_rows(suggestions),
         "sourceOutputs": [
             {key: item[key] for key in ("outputId", "taskId", "key", "checksum")}
@@ -424,9 +511,10 @@ def edit_task(workflow, results):
     ]
     return {
         "issuesOutputIds": [item["outputId"] for item in issues],
-        "requiredFields": ["issue_id", "action", "target_code", "weight", "reason"],
+        "requiredFields": ["group_id", "disposition", "excluded_issue_ids", "reason"],
         "changesInputState": "requires_model_proposal",
-        "limit": 30,
+        "groupDisposition": ["suggested", "review"],
+        "overlapPolicy": "同一对象命中多组时，按原检查清单顺序采用首条已选择的建议；每个对象仅执行一次",
         "unselectedPolicy": "retain_original",
         "issueRuleKnowledge": [
             {

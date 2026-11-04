@@ -86,6 +86,7 @@ from apps.standards.models import DataDomainType
 
 _CATALOG_SCAN_LOCK = threading.Lock()
 _RESOURCE_QUERY_GATE = threading.BoundedSemaphore(value=1)
+_DISPLAY_QUERY_GATE = threading.BoundedSemaphore(value=2)
 
 WORKSPACE_SNAPSHOT_MAX_BODY_BYTES = 1024 * 1024
 RESOURCE_QUERY_MAX_BODY_BYTES = 1024 * 1024
@@ -1283,7 +1284,12 @@ def resource_query(request, pk: int):
     payload = _json_payload(request, max_body_bytes=RESOURCE_QUERY_MAX_BODY_BYTES)
     if isinstance(payload, JsonResponse):
         return payload
-    if not _RESOURCE_QUERY_GATE.acquire(timeout=RESOURCE_QUERY_GATE_WAIT_SECONDS):
+    query_gate = (
+        _DISPLAY_QUERY_GATE
+        if payload.get("displayGeometry") is True
+        else _RESOURCE_QUERY_GATE
+    )
+    if not query_gate.acquire(timeout=RESOURCE_QUERY_GATE_WAIT_SECONDS):
         response = JsonResponse({"detail": "查询任务繁忙，请稍后重试"}, status=503)
         response["Retry-After"] = "2"
         return response
@@ -1305,7 +1311,7 @@ def resource_query(request, pk: int):
             )
             return JsonResponse({"detail": str(exc)}, status=400)
     finally:
-        _RESOURCE_QUERY_GATE.release()
+        query_gate.release()
     log_operation(
         request.user,
         "数据查询",

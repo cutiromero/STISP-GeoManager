@@ -6137,7 +6137,7 @@ export type AgentWorkflowConfirmation = {
      */
     feedback?: string;
     /**
-     * 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项；综合推理场景允许空数组，明确选择不修改并继续复核。reject省略，其他阶段不得扩大操作范围。
+     * 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。reject省略，其他阶段不得扩大操作范围。
      */
     selectedSuggestionIds?: Array<string>;
     /**
@@ -6268,6 +6268,10 @@ export type AgentMultiElementMap = {
  * 一项有实际图斑、规则、知识与空间预览支持的修改建议。
  */
 export type AgentModificationSuggestion = {
+    /**
+     * 综合推理按要素、规则、动作、目标代号及检查状态形成的稳定分组；审批仍提交展开后的对象建议ID，待裁定与例外不纳入整组批准
+     */
+    groupId?: string;
     /**
      * 当前问题与建议内容绑定的标识，不由客户端编造
      */
@@ -9313,6 +9317,10 @@ export type VisualizationMonitorItem = {
 };
 
 export type QueryRequest = {
+    /**
+     * 仅地图显示使用的轻量几何（WGS84下1e-5度保拓扑简化、6位坐标）；属性及对象数量不变，不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
+     */
+    displayGeometry?: boolean;
     /**
      * 属性过滤条件
      */

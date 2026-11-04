@@ -313,6 +313,90 @@ beforeEach(() => {
 });
 afterEach(() => sessionStorage.clear());
 
+it.each([
+  [1461, 812, 7],
+  [360, 800, 7],
+  [1461, 812, 40],
+  [360, 800, 40],
+])(
+  "%ipx×%ipx：%i 份资料及复用提示不挤出输入框和发送按钮",
+  async (width, height, count) => {
+    await page.viewport(width, height);
+    const items = Array.from({ length: count }, (_, index) => ({
+      ...upload,
+      id: `catalog-${812 + index}`,
+      resourceId: 812 + index,
+      fileName: `第${index + 1}份地质调查资料与矿物识别结果.geojson`,
+      source: "catalog" as const,
+    }));
+    vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
+      configuration: {
+        resourceIds: items.map((item) => item.resourceId),
+        roles: { lithology: 812 },
+        fieldMapping: { lithology: { name: "DCMC" } },
+        prompt: "沿用上次的检查要求",
+        reasoningEffort: "low",
+      },
+      items,
+      unavailableResourceIds: [],
+    });
+    const mounted = show();
+    try {
+      fireEvent.click(
+        await screen.findByRole("button", { name: /(^|\s)逻辑推理$/ }),
+      );
+      await screen.findByText("沿用上次已确认的角色和字段");
+      const input = screen.getByRole("textbox", { name: "输入消息" });
+      const send = screen.getByRole("button", { name: "发送" });
+      const assertInViewport = (element: HTMLElement) => {
+        expect(element).toBeVisible();
+        const bounds = element.getBoundingClientRect();
+        expect(bounds.width).toBeGreaterThan(0);
+        expect(bounds.height).toBeGreaterThan(0);
+        expect(bounds.top).toBeGreaterThanOrEqual(0);
+        expect(bounds.bottom).toBeLessThanOrEqual(height);
+        expect(bounds.left).toBeGreaterThanOrEqual(0);
+        expect(bounds.right).toBeLessThanOrEqual(width);
+        const composer = document
+          .querySelector(".agent-composer")!
+          .getBoundingClientRect();
+        expect(bounds.top).toBeGreaterThanOrEqual(composer.top);
+        expect(bounds.bottom).toBeLessThanOrEqual(composer.bottom);
+        expect(
+          element.contains(
+            document.elementFromPoint(
+              bounds.left + bounds.width / 2,
+              bounds.top + bounds.height / 2,
+            ),
+          ),
+        ).toBe(true);
+      };
+      assertInViewport(input);
+      assertInViewport(send);
+      const files = document.querySelector<HTMLElement>(".agent-logic-files")!;
+      expect(files.scrollHeight).toBeGreaterThan(files.clientHeight);
+      files.scrollTop = files.scrollHeight;
+      const context = document.querySelector<HTMLElement>(
+        ".agent-composer-context",
+      )!;
+      context.scrollTop = context.scrollHeight;
+      assertInViewport(input);
+      assertInViewport(send);
+      context.scrollTop = 0;
+      fireEvent.click(screen.getByRole("button", { name: "收起" }));
+      expect(
+        screen.getByRole("button", { name: `已选 ${count} 份资料 · 展开` }),
+      ).toBeVisible();
+      assertInViewport(input);
+      assertInViewport(send);
+      expect(input).toHaveValue("沿用上次的检查要求");
+    } finally {
+      mounted.unmount();
+      await page.viewport(1600, 900);
+    }
+  },
+);
+
 it("360px 输入区恢复服务端配置，收起保留选择且发送显式复用请求", async () => {
   await page.viewport(360, 800);
   vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({

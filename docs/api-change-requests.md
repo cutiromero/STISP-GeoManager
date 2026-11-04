@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261104-008 - 综合推理分组审批与显示几何
+
+- Status: BackendReady
+- Owner: Frontend / Backend
+- Change type: 可选字段与显示参数；原逐对象审批请求保持兼容。
+- Endpoints: GET /api/agent/workflows/{workflowId}/；POST /api/catalog/resources/{id}/query/。
+- OpenAPI change: AgentModificationSuggestion 新增 groupId；QueryRequest 新增 displayGeometry，默认 false；selectedSuggestionIds 移除通用maxItems，综合推理同族不设数量上限，其他场景仍由后端保留30项限制。
+- Frontend reason: 同类疑点按组审批、排除个别对象；前后图优先并发显示岩性，不等待其他成果。
+- Mock examples: mock/prism/examples/105-agent-workflow-card.json；30-catalog-vector.json。
+- Backend implementation notes: 模型分组建议绑定检查快照，完整展开后逐对象校验；review/exception 不得整组执行，同对象多规则按检查顺序执行首个已选择建议。审批仍提交 selectedSuggestionIds，报告和复查使用实际操作。综合推理公开 plan 不返回内部全量检查行、重复建议及模型请求，但保留 approvedEdits 和完整 changes 行，供地图逐对象核验；modificationReview 保留完整对象审批范围，详情支持gzip。displayGeometry 只影响返回几何，不改原数据、权限、属性与计数；显示请求最多并行2路，原查询限流及gzip保留。
+- Verification: 7362对象分组展开、快照和动作校验、保护待裁定/例外、超过30对象批准执行、显示精度与存储隔离、双图首屏不等待后续图层、分组及快速多选浏览器回归。
+- Result: 分组与显示几何已实现；验证结果见任务报告，未部署服务器。
+
 ## API-20261104-007 - 逻辑推理分页选择与已确认配置复用
 
 - Status: BackendReady
@@ -280,6 +293,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261104-008 | BackendReady | /api/agent/workflows/{workflowId}/; /api/catalog/resources/{id}/query/ | groupId and displayGeometry | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Focused regression | Per-object approval, immutable source geometry, original permissions |
 | API-20261104-007 | BackendReady | /api/agent/workflow-uploads/references/; /api/agent/logic-configuration/; /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | Paginated catalog and user/project-owned confirmed configuration | Updated | 104-agent-upload-bundle.json; 107-agent-logic-configuration.json | Implemented | Backend 104 and unit 554 passed; browser sandbox-blocked | Reauthorize references; never reuse plan or disposition approval |
 | API-20261104-003 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | uploadBatchId and explicit generic answers | Updated | 106-agent-generic-chat.json | Implemented | Backend confirmation and isolation passed, unit 550; browser sandbox-blocked | Existing workflow approval and project/owner checks preserved |
 | API-20261104-002 | BackendReady | /api/agent/workflows/{workflowId}/; /api/compute/outputs/{outputId}/preview/; /api/catalog/resources/{id}/profile/ | card view, vector map view, defaultVisualization | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Backend 122, unit 550; browser sandbox-blocked | Full view unchanged; project and owner checks preserved |

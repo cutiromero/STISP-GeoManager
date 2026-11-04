@@ -2777,6 +2777,10 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 
 ### 逻辑推理系统数据引用与干净成果（v0.1.58）
 
+`geology_generic` 与 `geology_multi_element_reasoning` 的疑点建议和批准对象不设30项上限。完整检查清单按要素、规则、建议动作、目标代号、状态及快照分组，模型接收数量、实测范围、代表样本、条件和例外，输出 `{group_id,disposition,excluded_issue_ids,reason}`。`disposition=suggested` 采用整组实测建议，`review` 保留整组待裁定；review/exception 组不得整组执行。后端展开后逐对象校验规则、动作、目标代号、快照和知识引用，同对象多组按原检查清单顺序采用首条已选择建议。少量对象仍可逐项建议。返回的 `modificationReview.suggestions[].groupId` 对应稳定分组；审批卡片支持整组选择、展开对象、单独取消，提交仍为原有 `selectedSuggestionIds`。修改记录、复查、报告及远景区读取实际逐对象获批操作。模型后续读取完整分组批准数量及代表ID，不以样本数代替总量。公开工作流 plan 不包含内部全量检查行、重复建议和模型请求，但保留 approvedEdits 与完整 changes 行，供实际修改范围逐对象核验；完整审批对象在 modificationReview 中返回。综合推理工作流详情支持gzip，其他场景响应保持原行为。
+
+`POST /api/catalog/resources/{id}/query/` 可显式传 `displayGeometry=true`：在WGS84中以1e-5度容差进行保拓扑显示简化，坐标保留6位；资源属性、对象数、存储几何、编辑及计算输入不变。未传或false返回原精度；非布尔值返回400标准错误。显示几何不用于精确量测、编辑或精确导出。显示查询最多两路并发，原查询单路限流与gzip保持。综合推理算子成果 mapUrl 带 displayGeometry=1，工作台只对链接指定资源启用显示几何。对比页先并行读取两张岩性图，再补载构造、蚀变和修改范围；综合推理工作流公开计划使用完整分组摘要，避免重复传输内部全量清单。对比时隐藏两侧面板与空间查询底栏，退出恢复原状态。修正后使用岩性、final_faults、final_alterations，获批剔除对象不再出现；修改记录和实际修改范围默认关闭，可勾选。
+
 `GET /api/agent/workflow-uploads/references/?q=&page=1&pageSize=20&directoryId=` 仅在逻辑推理项目使用，要求明确 `X-Project-Id`，按 `resource_access_filter`、当前项目、活动状态及策略允许的数据类型搜索目录矢量/栅格/表格。排除任务上传和工作副本，按更新时间、登记时间、ID倒序；名称及说明支持搜索。返回 `{items,total,page,pageSize,directories}`，每项含类型、`directoryId/directoryName`、`createdAt/updatedAt`。`page`从1开始，`pageSize`默认20、上限50；参数非法返回400，不静默截断。目录利用现有 `inventory_group`（存量数据组别），0表示未分组，目录选项只包含当前有权访问资源所在的目录。需与上传一致的智能体、MH-workflow、算子及数据登记权限；401/403/404沿用平台规范。
 
 ### 逻辑推理配置与输入区

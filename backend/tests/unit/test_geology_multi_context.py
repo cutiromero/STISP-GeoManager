@@ -191,6 +191,12 @@ def test_statistics_and_changes_are_read_completely_past_forty_rows(tmp_path, ke
     reading = table_rows(path, key)
     assert reading["scope"] == "all" and reading["rowCount"] == 65
     assert len(reading["rows"]) == 65
+    if key == "changes":
+        grouped = model_results([{"key": key, **reading}], stage_name="final_analysis")[
+            0
+        ]
+        assert grouped["scope"] == "all_groups" and grouped["rows"][0]["count"] == 65
+        return
     assert (
         expand_table(
             model_results([{"key": key, **reading}], stage_name="final_analysis")[0]
@@ -218,15 +224,75 @@ def test_only_apply_uses_issue_candidate_rows_and_all_other_stages_keep_full_ref
     }
     original = copy.deepcopy(item)
     apply = model_results([item], stage_name="apply")[0]
-    assert apply["rows"] == [
-        {"issue_id": "actual-issue", "measurements_json": '{"area_m2":5}'}
-    ]
+    assert apply["rows"] == []
+    assert apply["groups"][0]["count"] == 1
+    assert apply["groups"][0]["measurementRanges"] == {"area_m2": [5, 5]}
+    assert "geometry_json" not in apply["groups"][0]["samples"][0]
     for name in ("recheck", "relations", "prospect", "final_analysis"):
         actual = model_results([item], stage_name=name)[0]
         assert actual["rows"] == [] and actual["scope"] == "reference_only"
         for key in ("outputId", "taskId", "checksum", "rowCount", "countsByRule"):
             assert actual[key] == item[key]
     assert item == original
+
+
+def test_public_plan_retains_exact_approval_and_actual_changes_for_map_verification():
+    from apps.agent.geology_multi_results import public_plan
+
+    changes = {
+        "key": "changes",
+        "scope": "all",
+        "rows": [{"feature_id": "F1", "action": "exclude"}],
+        "rowCount": 1,
+    }
+    approved = [{"feature_id": "F1", "action": "exclude", "weight": 0}]
+    plan = {
+        "modificationReview": {"suggestions": []},
+        "stages": [
+            {
+                "name": "apply",
+                "approvedEdits": approved,
+                "results": [changes],
+                "edits": ["internal"],
+                "modelRequestPayload": {"internal": "prompt"},
+            }
+        ],
+    }
+    saved = copy.deepcopy(plan)
+    public = public_plan(plan)
+    assert public["stages"][0]["approvedEdits"] == approved
+    assert public["stages"][0]["results"][0] == changes
+    assert "edits" not in public["stages"][0]
+    assert "modelRequestPayload" not in public["stages"][0]
+    assert "modificationReview" not in public
+    assert plan == saved
+
+
+@pytest.mark.parametrize("result", [{"rows": "legacy details"}, {"rows": []}])
+def test_public_plan_preserves_results_without_a_grouping_key(result):
+    from apps.agent.geology_multi_results import public_plan
+
+    plan = {"stages": [{"name": "check", "results": [result]}]}
+    saved = copy.deepcopy(plan)
+
+    assert public_plan(plan)["stages"][0]["results"] == [result]
+    assert plan == saved
+
+
+def test_public_plan_groups_legacy_issues_without_grouping_fields():
+    from apps.agent.geology_multi_results import public_plan
+
+    rows = [{"issue_id": "legacy-issue", "feature_id": "legacy-feature"}]
+    plan = {"stages": [{"name": "check", "results": [{"key": "issues", "rows": rows}]}]}
+    saved = copy.deepcopy(plan)
+
+    result = public_plan(plan)["stages"][0]["results"][0]
+
+    assert result["rows"] == []
+    assert result["scope"] == "all_groups"
+    assert result["groups"][0]["count"] == 1
+    assert result["groups"][0]["samples"][0]["issue_id"] == "legacy-issue"
+    assert plan == saved
 
 
 def test_model_approval_retains_semantics_and_hashes_without_touching_map_or_saved_plan():

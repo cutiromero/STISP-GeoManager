@@ -4,6 +4,20 @@
       "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
       "projectId": 3,
       "workflowType": "geology_generic",
+      "modificationReview": {
+        "proposalHash": "grouped-example-snapshot",
+        "approvedSuggestionIds": ["object-1"],
+        "suggestions": [{
+          "id": "object-1", "groupId": "alteration-A05-exclude",
+          "kind": "multi_element", "element": "alteration", "featureId": "M00001",
+          "title": "碎斑噪声", "currentState": "原识别图斑", "suggestedState": "exclude",
+          "reason": "实测面积低于本案例阈值，未命中需裁定例外", "action": "exclude",
+          "status": "suggested", "areaM2": 100, "ruleId": "A-05",
+          "knowledgeRefs": [{"id": 601, "revision": 1, "title": "碎斑检查"}],
+          "preview": {"type": "Polygon", "coordinates": [[[98.4,35.6],[98.401,35.6],[98.401,35.601],[98.4,35.6]]]},
+          "bounds": [98.4,35.6,98.401,35.601]
+        }]
+      },
       "goal": "检查上传地质资料",
       "model": "configured",
       "status": "succeeded",

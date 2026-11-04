@@ -1759,145 +1759,155 @@ function AgentWorkspace({
                 onChange={layout.setInput}
               />
               <div className="agent-composer-content">
-                {waitingRun?.interaction?.status === "pending" && (
-                  <div className="agent-answer-target" id="agent-answer-target">
-                    <MessageOutlined />
-                    <span>
-                      <strong>
-                        {waitingRun.interaction.kind === "review"
-                          ? ui(
-                              "请在问题卡中审核",
-                              "Review in the question card",
-                            )
-                          : ui(
-                              "在下方回答当前问题",
-                              "Answer the current question below",
-                            )}
-                      </strong>
-                      <span>{waitingRun.interaction.title}</span>
-                    </span>
-                    <Button
-                      type="link"
-                      onClick={() => revealWaitingQuestion(true)}
+                <div className="agent-composer-context">
+                  {waitingRun?.interaction?.status === "pending" && (
+                    <div
+                      className="agent-answer-target"
+                      id="agent-answer-target"
                     >
-                      {ui("查看问题", "View question")}
-                    </Button>
-                  </div>
-                )}
-                {logicProject && logicPanelMounted && (
-                  <div hidden={!logicUploadsOpen}>
-                    <GenericWorkflowUploads
-                      batchId={uploadBatchId}
-                      model={model}
-                      inputs={logicInputs}
-                      uploadOnly
-                      disabled={
-                        busy || taskLocked || Boolean(current?.archived)
-                      }
-                      onInputsChange={setLogicInputs}
-                      onCountChange={setLogicUploadCount}
-                      onActivityChange={setLogicUploading}
-                      onClose={() => setLogicUploadsOpen(false)}
-                      onSelectionChange={() =>
-                        setReuseLogicConfiguration(false)
-                      }
-                      onRestored={(result) => {
-                        const configuration = result.configuration;
-                        if (!configuration) return;
-                        setPrompt((value) =>
-                          !value ||
-                          value ===
-                            "请检查这些资料的岩性、构造与蚀变关系，识别不一致之处，给出处置建议并生成对比成果。"
-                            ? configuration.prompt
-                            : value,
-                        );
-                        setEffortOverride(configuration.reasoningEffort);
-                        setThinkingMode(
-                          configuration.reasoningEffort === "low"
-                            ? "fast"
-                            : "deep",
-                        );
-                        setReuseLogicConfiguration(
-                          !result.unavailableResourceIds.length &&
-                            Boolean(configuration.roles.lithology),
-                        );
-                      }}
-                    />
-                    {reuseLogicConfiguration && (
+                      <MessageOutlined />
+                      <span>
+                        <strong>
+                          {waitingRun.interaction.kind === "review"
+                            ? ui(
+                                "请在问题卡中审核",
+                                "Review in the question card",
+                              )
+                            : ui(
+                                "在下方回答当前问题",
+                                "Answer the current question below",
+                              )}
+                        </strong>
+                        <span>{waitingRun.interaction.title}</span>
+                      </span>
+                      <Button
+                        type="link"
+                        onClick={() => revealWaitingQuestion(true)}
+                      >
+                        {ui("查看问题", "View question")}
+                      </Button>
+                    </div>
+                  )}
+                  {logicProject && logicPanelMounted && (
+                    <div
+                      className="agent-logic-panel"
+                      hidden={!logicUploadsOpen}
+                    >
+                      <GenericWorkflowUploads
+                        batchId={uploadBatchId}
+                        model={model}
+                        inputs={logicInputs}
+                        uploadOnly
+                        disabled={
+                          busy || taskLocked || Boolean(current?.archived)
+                        }
+                        onInputsChange={setLogicInputs}
+                        onCountChange={setLogicUploadCount}
+                        onActivityChange={setLogicUploading}
+                        onClose={() => setLogicUploadsOpen(false)}
+                        onSelectionChange={() =>
+                          setReuseLogicConfiguration(false)
+                        }
+                        onRestored={(result) => {
+                          const configuration = result.configuration;
+                          if (!configuration) return;
+                          setPrompt((value) =>
+                            !value ||
+                            value ===
+                              "请检查这些资料的岩性、构造与蚀变关系，识别不一致之处，给出处置建议并生成对比成果。"
+                              ? configuration.prompt
+                              : value,
+                          );
+                          setEffortOverride(configuration.reasoningEffort);
+                          setThinkingMode(
+                            configuration.reasoningEffort === "low"
+                              ? "fast"
+                              : "deep",
+                          );
+                          setReuseLogicConfiguration(
+                            !result.unavailableResourceIds.length &&
+                              Boolean(configuration.roles.lithology),
+                          );
+                        }}
+                      />
+                      {reuseLogicConfiguration && (
+                        <Alert
+                          type="info"
+                          title="沿用上次已确认的角色和字段"
+                          action={
+                            <Button
+                              size="small"
+                              onClick={() => setReuseLogicConfiguration(false)}
+                            >
+                              修改角色和字段
+                            </Button>
+                          }
+                        />
+                      )}
+                      {!reuseLogicConfiguration && logicUploadCount > 0 && (
+                        <Typography.Text type="secondary">
+                          发送后核对角色和字段。
+                        </Typography.Text>
+                      )}
+                    </div>
+                  )}
+                  {logicProject &&
+                    !logicUploadsOpen &&
+                    logicUploadCount > 0 && (
+                      <Button type="text" onClick={openLogicPanel}>
+                        已选 {logicUploadCount} 份资料 · 展开
+                      </Button>
+                    )}
+                  {logicProject &&
+                    !logicUploadsOpen &&
+                    composerWorkflowStatus === "failed" &&
+                    dismissedFailure !==
+                      String(
+                        currentResearchWorkflow?.id ?? latestResearch?.id,
+                      ) && (
                       <Alert
-                        type="info"
-                        title="沿用上次已确认的角色和字段"
+                        type="warning"
+                        closable
+                        title="上次任务失败"
+                        onClose={() =>
+                          setDismissedFailure(
+                            String(
+                              currentResearchWorkflow?.id ?? latestResearch?.id,
+                            ),
+                          )
+                        }
                         action={
                           <Button
                             size="small"
-                            onClick={() => setReuseLogicConfiguration(false)}
+                            onClick={() => {
+                              viewport.current
+                                ?.querySelector(".agent-research-intent")
+                                ?.scrollIntoView({ block: "center" });
+                            }}
                           >
-                            修改角色和字段
+                            查看任务
                           </Button>
                         }
                       />
                     )}
-                    {!reuseLogicConfiguration && logicUploadCount > 0 && (
-                      <Typography.Text type="secondary">
-                        发送后核对角色和字段。
-                      </Typography.Text>
-                    )}
-                  </div>
-                )}
-                {logicProject && !logicUploadsOpen && logicUploadCount > 0 && (
-                  <Button type="text" onClick={openLogicPanel}>
-                    已选 {logicUploadCount} 份资料 · 展开
-                  </Button>
-                )}
-                {logicProject &&
-                  !logicUploadsOpen &&
-                  composerWorkflowStatus === "failed" &&
-                  dismissedFailure !==
-                    String(
-                      currentResearchWorkflow?.id ?? latestResearch?.id,
-                    ) && (
-                    <Alert
-                      type="warning"
-                      closable
-                      title="上次任务失败"
-                      onClose={() =>
-                        setDismissedFailure(
-                          String(
-                            currentResearchWorkflow?.id ?? latestResearch?.id,
-                          ),
-                        )
-                      }
-                      action={
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            viewport.current
-                              ?.querySelector(".agent-research-intent")
-                              ?.scrollIntoView({ block: "center" });
-                          }}
+                  {attachments.length > 0 && (
+                    <div className="agent-attachments-row">
+                      {attachments.map((item) => (
+                        <Tag
+                          key={item.id}
+                          closable={!taskLocked && !busy}
+                          onClose={() =>
+                            setAttachments((old) =>
+                              old.filter((entry) => entry.id !== item.id),
+                            )
+                          }
                         >
-                          查看任务
-                        </Button>
-                      }
-                    />
+                          {item.fileName}
+                        </Tag>
+                      ))}
+                    </div>
                   )}
-                {attachments.length > 0 && (
-                  <div className="agent-attachments-row">
-                    {attachments.map((item) => (
-                      <Tag
-                        key={item.id}
-                        closable={!taskLocked && !busy}
-                        onClose={() =>
-                          setAttachments((old) =>
-                            old.filter((entry) => entry.id !== item.id),
-                          )
-                        }
-                      >
-                        {item.fileName}
-                      </Tag>
-                    ))}
-                  </div>
-                )}
+                </div>
                 <div className="agent-input-row">
                   <Input.TextArea
                     id="agent-message-input"

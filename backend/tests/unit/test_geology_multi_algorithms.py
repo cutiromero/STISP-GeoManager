@@ -301,11 +301,11 @@ def test_real_name_code_fix_and_reclassification_only_when_approved(tmp_path):
     load("apply")(edited)
     result = gpd.read_file(edited.output_path("lithology.gpkg")).set_index("feature_id")
     assert "G4" not in result.index and result.at["G3", "geo_sym"] == "O"
-    assert result.at["G2", "geometry"].equals(rect(500, 0, 1000, 1000))
+    assert "G2" not in result.index
     assert all(
         result.at[row.feature_id, "geometry"].equals_exact(row.geometry, 0)
         for _, row in original.iterrows()
-        if row.feature_id not in {"G2", "G4"}
+        if row.feature_id not in {"G1", "G2", "G4"}
     )
     assert all(
         path.read_bytes() == untouched[key] for key, path in initial.inputs.items()
@@ -356,7 +356,7 @@ def test_reclassification_fuses_host_and_preserves_coverage_and_original_record(
     load("apply")(edited)
     result = gpd.read_file(edited.output_path("lithology.gpkg")).set_index("feature_id")
     assert "G3" not in result.index and result.at["G1", "geometry"].equals(
-        rect(0, 0, 500, 1000)
+        rect(0, 0, 1000, 1000).difference(rect(800, 800, 900, 900))
     )
     assert result.geometry.is_valid.all()
     assert (
@@ -371,7 +371,7 @@ def test_reclassification_fuses_host_and_preserves_coverage_and_original_record(
     )
     faults = gpd.read_file(edited.output_path("final_faults.gpkg"))
     assert len(faults) == 2 and set(faults.columns) == {"line_id", "geometry"}
-    for identity in ("G2", "G4"):
+    for identity in ("G4",):
         assert result.loc[identity].equals(
             original.set_index("feature_id").loc[identity]
         )
@@ -380,7 +380,7 @@ def test_reclassification_fuses_host_and_preserves_coverage_and_original_record(
     record = records.iloc[0]
     assert record.action == "reclassify" and record.host_feature_id == "G1"
     assert (record.old_code, record.new_code) == ("O", "C")
-    assert json.loads(record.absorbed_ids) == ["G3"]
+    assert set(json.loads(record.absorbed_ids)) == {"G2", "G3"}
     assert record.geometry.equals(original.set_index("feature_id").at["G3", "geometry"])
 
 
@@ -428,7 +428,7 @@ def test_operator_packages_are_deterministic_and_declare_clean_outputs():
         assert package == builder(identifier)
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
             manifest = validate_manifest(yaml.safe_load(archive.read("operator.yaml")))
-            assert manifest["version"] == "1.0.5" and manifest["deterministic"]
+            assert manifest["version"] == "1.0.6" and manifest["deterministic"]
             assert {"main.py", "multi_apply.py", "multi_io.py", "operator.yaml"} <= set(
                 archive.namelist()
             )
@@ -462,6 +462,7 @@ def test_host_is_longest_shared_boundary_not_point_contact(tmp_path):
             "feature_id": ["source", "short", "long", "point"],
             "name": ["old", "new", "new", "new"],
             "geo_sym": ["O", "N", "N", "N"],
+            "geo_tex": ["旧文字说明", "宿主文字说明", "宿主文字说明", "宿主文字说明"],
         },
         geometry=[
             rect(0, 0, 10, 10),
@@ -483,12 +484,100 @@ def test_host_is_longest_shared_boundary_not_point_contact(tmp_path):
     corrected, _, _, records = apply(lithology, empty_faults, empty_alt, [operation])
     assert records[0]["host_feature_id"] == "long"
     assert "source" not in set(corrected.feature_id)
-    assert len(corrected) == 3
-    assert (
-        corrected.set_index("feature_id")
-        .at["point", "geometry"]
-        .equals(lithology.set_index("feature_id").at["point", "geometry"])
+    assert len(corrected) == 1
+    assert corrected.iloc[0].geo_tex == "宿主文字说明"
+    assert corrected.geometry.union_all().equals(lithology.geometry.union_all())
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_many_sources_same_host_and_chain_are_order_independent(tmp_path, reverse):
+    load("apply")
+    from multi_apply import apply
+
+    lithology = gpd.GeoDataFrame(
+        {
+            "feature_id": [
+                "host",
+                "error-a",
+                "host-copy",
+                "error-b",
+                "point",
+                "untouched",
+            ],
+            "name": ["new", "old", "new", "old", "new", "other"],
+            "geo_sym": ["N", "O", "N", "O", "N", "U"],
+        },
+        geometry=[
+            rect(0, 0, 10, 10),
+            rect(10, 0, 20, 10),
+            rect(20, 0, 30, 10),
+            rect(0, 10, 10, 20),
+            rect(30, 10, 40, 20),
+            rect(100, 100, 110, 110),
+        ],
+        crs=32646,
     )
+    empty_faults = gpd.GeoDataFrame({"line_id": []}, geometry=[], crs=32646)
+    empty_alt = gpd.GeoDataFrame({"feature_id": []}, geometry=[], crs=32646)
+    operations = [
+        {
+            "element": "lithology",
+            "feature_id": identity,
+            "action": "reclassify",
+            "target_code": "N",
+            "rule_id": "L-01",
+        }
+        for identity in ("error-a", "error-b")
+    ]
+    corrected, _, _, records = apply(
+        lithology, empty_faults, empty_alt, operations[::-1] if reverse else operations
+    )
+    assert set(corrected.feature_id) == {"host", "point", "untouched"}
+    assert corrected.geometry.union_all().equals(lithology.geometry.union_all())
+    assert corrected.geometry.is_valid.all()
+    assert corrected.geometry.area.sum() == pytest.approx(
+        corrected.geometry.union_all().area
+    )
+    for identity in ("point", "untouched"):
+        assert (
+            corrected.set_index("feature_id")
+            .at[identity, "geometry"]
+            .equals_exact(lithology.set_index("feature_id").at[identity, "geometry"], 0)
+        )
+    assert sum(
+        item["removed_internal_boundary_m"] for item in records
+    ) == pytest.approx(30)
+
+
+def test_host_reclassified_elsewhere_cannot_silently_change_approved_target(tmp_path):
+    load("apply")
+    from multi_apply import apply
+
+    lithology = gpd.GeoDataFrame(
+        {
+            "feature_id": ["source", "host", "next"],
+            "name": ["old", "middle", "new"],
+            "geo_sym": ["O", "M", "N"],
+        },
+        geometry=[rect(0, 0, 10, 10), rect(10, 0, 20, 10), rect(20, 0, 30, 10)],
+        crs=32646,
+    )
+    empty_faults = gpd.GeoDataFrame({"line_id": []}, geometry=[], crs=32646)
+    empty_alt = gpd.GeoDataFrame({"feature_id": []}, geometry=[], crs=32646)
+    operations = [
+        {
+            "element": "lithology",
+            "feature_id": identity,
+            "action": "reclassify",
+            "target_code": target,
+            "rule_id": "L-01",
+        }
+        for identity, target in (("source", "M"), ("host", "N"))
+    ]
+    corrected, _, _, _ = apply(lithology, empty_faults, empty_alt, operations)
+    assert corrected.set_index("feature_id").at["source", "geo_sym"] == "M"
+    assert set(corrected.geo_sym) == {"M", "N"}
+    assert corrected.geometry.union_all().equals(lithology.geometry.union_all())
 
 
 @pytest.mark.parametrize(
@@ -557,7 +646,7 @@ def test_approval_accepts_catalog_normalized_display_text_only(tmp_path):
     )
     load("apply")(edited)
     result = gpd.read_file(edited.output_path("lithology.gpkg")).set_index("feature_id")
-    assert "G4" not in result.index and result.at["G2", "geo_sym"] == "C"
+    assert "G4" not in result.index and set(result.geo_sym) == {"C", "O"}
 
 
 @pytest.mark.parametrize("field", ["conditions", "measurements_json", "geometry_json"])
@@ -805,9 +894,9 @@ def test_explicit_approved_merge_changes_only_source_and_measured_host(tmp_path)
     load("apply")(edited)
     result = gpd.read_file(edited.output_path("lithology.gpkg")).set_index("feature_id")
     assert "G3" not in result.index and result.at["G1", "geometry"].equals(
-        rect(0, 0, 500, 1000)
+        rect(0, 0, 1000, 1000).difference(rect(800, 800, 900, 900))
     )
-    for identifier in ("G2", "G4"):
+    for identifier in ("G4",):
         assert result.at[identifier, "geometry"].equals_exact(
             original.set_index("feature_id").at[identifier, "geometry"], 0
         )

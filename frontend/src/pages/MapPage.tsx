@@ -666,6 +666,7 @@ function MapWorkspace() {
     i18n.resolvedLanguage?.toLowerCase().startsWith("en") ?? false;
   const [searchParams, setSearchParams] = useSearchParams();
   const comparisonWorkflowId = searchParams.get("geologyCompare")?.trim() ?? "";
+  const [cleanComparison, setCleanComparison] = useState(false);
   const comparisonVisible =
     Boolean(comparisonWorkflowId) && searchParams.get("mapMode") !== "single";
   const initialGeoInsightCache = lastGeoInsightCache;
@@ -1742,6 +1743,10 @@ function MapWorkspace() {
         attributeFilters,
         spatialFilter: options.spatialFilter,
         limit: bootstrap.limits.queryResultLimit,
+        ...(searchParams.get("displayGeometry") === "1" &&
+        String(resource.id) === searchParams.get("resourceId")
+          ? { displayGeometry: true }
+          : {}),
       });
       options.reportProgress?.({
         percent: 82,
@@ -2930,6 +2935,7 @@ function MapWorkspace() {
                   permissions.canQueryData && permissions.canLoadVectorLayer
                 }
                 comparisonVisible={comparisonVisible}
+                onFamilyChange={setCleanComparison}
                 registerLayer={registerComparisonLayer}
                 selectedObject={selectedFeature?.properties ?? null}
                 onLayerDisplay={(side, changes, current) => {
@@ -3001,6 +3007,11 @@ function MapWorkspace() {
           )}
         </main>
         <aside
+          style={
+            comparisonVisible && cleanComparison
+              ? { display: "none" }
+              : undefined
+          }
           className={`floating-panel floating-panel-left ${panelLayout.layout.leftCollapsed ? "map-panel-is-collapsed" : ""} ${
             mobileMapPanel === "left"
               ? "mobile-map-panel-visible"
@@ -3110,6 +3121,11 @@ function MapWorkspace() {
           </div>
         </aside>
         <aside
+          style={
+            comparisonVisible && cleanComparison
+              ? { display: "none" }
+              : undefined
+          }
           className={`floating-panel floating-panel-right ${panelLayout.layout.rightCollapsed ? "map-panel-is-collapsed" : ""} ${
             mobileMapPanel === "right"
               ? "mobile-map-panel-visible"
@@ -3149,6 +3165,11 @@ function MapWorkspace() {
         </aside>
         <aside
           id="spatial-query-workbench-panel"
+          style={
+            comparisonVisible && cleanComparison
+              ? { display: "none" }
+              : undefined
+          }
           className={`floating-panel-bottom spatial-workbench-panel ${
             spatialWorkbenchOpen
               ? "spatial-workbench-panel-open"

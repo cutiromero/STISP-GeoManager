@@ -79,6 +79,7 @@ export async function loadWorkbenchReviewComparison(options: {
   projectTagId: string | null;
   registerLayer: RegisterReviewLayer;
   isCurrent?: () => boolean;
+  onPrimary?: (value: WorkbenchReviewComparison) => void;
 }): Promise<WorkbenchReviewComparison> {
   const signal = projectSignal();
   const assertCurrent = () => {
@@ -117,7 +118,12 @@ export async function loadWorkbenchReviewComparison(options: {
             requestJson<ResourceProfileResponse>(
               `/api/catalog/resources/${id}/profile/`,
             ),
-            queryReviewMapResult(id, { mixed, allowEmpty, loadStyle: false }),
+            queryReviewMapResult(id, {
+              mixed,
+              allowEmpty,
+              loadStyle: false,
+              displayGeometry: isMultiElementFamily(workflow.workflowType),
+            }),
           ]);
           assertCurrent();
           if (profile.resource.id !== id || !profile.resource.isQueryable)
@@ -194,6 +200,21 @@ export async function loadWorkbenchReviewComparison(options: {
     add(map.intersections, "after", "构造交汇");
     add(map.afterProspects, "after", "调查建议");
     (map.changes ?? []).forEach((id) => add(id, "changes", "修改范围"));
+    const [primaryBefore, primaryAfter] = await Promise.all([
+      read(map.before.lithology, true),
+      map.after?.lithology
+        ? read(map.after.lithology, true)
+        : Promise.resolve(null),
+    ]);
+    assertCurrent();
+    options.onPrimary?.({
+      workflow,
+      before: primaryBefore.result.geojson,
+      after: primaryAfter?.result.geojson ?? null,
+      differences: featureCollection([]),
+      beforeName: primaryBefore.profile.resource.name,
+      afterName: primaryAfter?.profile.resource.name ?? "检查方案，尚未执行",
+    });
     await Promise.all([...roles.keys()].map((id) => read(id, true, true)));
     const collection = async (id?: number) =>
       id ? (await read(id, true, true)).result.geojson : featureCollection([]);

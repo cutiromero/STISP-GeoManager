@@ -296,6 +296,118 @@ def test_approval_only_writes_selected_object_action(multi, monkeypatch):
         create_approved_changes(wf, multi["owner"], multi["policy"], stage)
 
 
+def test_large_group_approval_fixes_all_selected_rows_not_thirty(multi, monkeypatch):
+    from apps.agent.geology_issue_groups import group_summaries
+
+    wf, stage, results = fixture_review(multi)
+    template = results[0]["rows"][1]
+    results[0]["rows"] = [
+        {
+            **template,
+            "issue_id": f"I{index}",
+            "feature_id": f"N{index}",
+            "status": "suggested",
+        }
+        for index in range(180)
+    ]
+    group = group_summaries(results[0]["rows"])[0]
+    stage["edits"] = [
+        {
+            "group_id": group["group_id"],
+            "disposition": "suggested",
+            "excluded_issue_ids": ["I179"],
+            "reason": "按实际测量降权，保留需核实对象",
+        }
+    ]
+    accepted, report = assess_edits(
+        stage["edits"], results, workflow=wf, decision=stage["decision"]
+    )
+    assert len(accepted) == 179 and not report["errors"]
+    stage["edits"] = [
+        {
+            key: row[key]
+            for key in ("issue_id", "action", "target_code", "weight", "reason")
+        }
+        for row in accepted
+    ]
+    freeze_proposal(wf, stage)
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.read_results", lambda *args: results
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.authorized_task",
+        lambda *args: SimpleNamespace(),
+    )
+    selected = [item["id"] for item in wf.plan["modificationReview"]["suggestions"]][
+        :-1
+    ]
+    approve_modifications(wf, multi["owner"], multi["policy"], selected, "hash")
+    resource = create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+    assert resource.item_count == 178
+    assert len(stage["approvedEdits"]) == 178
+
+
+def test_http_confirmation_accepts_large_multi_selection_only(
+    multi, client, monkeypatch
+):
+    wf, _, _ = fixture_review(multi)
+    wf.plan_hash = "group-plan"
+    wf.save()
+    accepted = []
+    monkeypatch.setattr(
+        "apps.agent.views.require_access", lambda *args: multi["policy"]
+    )
+    monkeypatch.setattr(
+        "apps.agent.demo_workflow.confirm_demo",
+        lambda workflow, user, policy, plan_hash, selected, mapping: accepted.extend(
+            selected
+        ),
+    )
+    client.force_login(multi["owner"])
+    ids = [f"s-{index}" for index in range(180)]
+    response = client.post(
+        f"/api/agent/workflows/{wf.id}/confirm/",
+        {"planHash": "group-plan", "selectedSuggestionIds": ids},
+        content_type="application/json",
+        HTTP_X_PROJECT_ID=str(wf.project_tag_id),
+    )
+    assert response.status_code == 200 and accepted == ids
+    wf.workflow_type = "geology_map_review"
+    wf.save(update_fields=["workflow_type"])
+    response = client.post(
+        f"/api/agent/workflows/{wf.id}/confirm/",
+        {"planHash": "group-plan", "selectedSuggestionIds": ids},
+        content_type="application/json",
+        HTTP_X_PROJECT_ID=str(wf.project_tag_id),
+    )
+    assert response.status_code == 400
+
+
+def test_multi_detail_gzip_keeps_complete_approval_scope(multi, client, monkeypatch):
+    import gzip
+
+    wf, stage, _ = fixture_review(multi)
+    stage["approvedEdits"] = stage["proposedEdits"]
+    wf.save()
+    client.force_login(multi["owner"])
+    monkeypatch.setattr(
+        "apps.agent.workflow.authorize_workflow_history", lambda *args: None
+    )
+    response = client.get(
+        f"/api/agent/workflows/{wf.id}/",
+        HTTP_X_PROJECT_ID=str(wf.project_tag_id),
+        HTTP_ACCEPT_ENCODING="gzip",
+    )
+    assert response.status_code == 200
+    assert response["Content-Encoding"] == "gzip"
+    value = json.loads(gzip.decompress(response.content))
+    assert value["plan"]["stages"][1]["approvedEdits"] == stage["approvedEdits"]
+    assert (
+        value["modificationReview"]["suggestions"]
+        == wf.plan["modificationReview"]["suggestions"]
+    )
+
+
 def test_no_approval_cannot_execute_and_empty_selection_retains_all(multi, monkeypatch):
     wf, stage, results = fixture_review(multi)
     monkeypatch.setattr(
@@ -474,8 +586,8 @@ def test_large_actual_issue_table_keeps_rule_counts_and_labels_sample(tmp_path):
     value = table_rows(path, "issues")
     assert value["rowCount"] == 300
     assert value["countsByRule"] == {"L-03": 100, "A-01": 200}
-    assert value["scope"] == "representative_sample"
-    assert len(value["rows"]) == 4
+    assert value["scope"] == "all"
+    assert len(value["rows"]) == 300
 
 
 def test_representative_issues_use_actual_size_without_hiding_total(tmp_path):
@@ -500,13 +612,8 @@ def test_representative_issues_use_actual_size_without_hiding_total(tmp_path):
     result = table_rows(path, "issues")
     assert result["rowCount"] == 7
     assert result["countsByRule"] == {"L-03": 4, "S-02": 3}
-    assert [row["issue_id"] for row in result["rows"]] == [
-        "l-100",
-        "l-80",
-        "s-200",
-        "s-20",
-    ]
-    assert result["scope"] == "representative_sample"
+    assert result["rows"] == rows
+    assert result["scope"] == "all"
 
 
 @pytest.mark.parametrize("missing_faults", [False, True])

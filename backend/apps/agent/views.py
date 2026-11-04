@@ -7,6 +7,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, OperationalError, transaction, connection
 from django.db.models import Q, F
 from django.http import HttpResponse, JsonResponse, Http404
+from django.middleware.gzip import GZipMiddleware
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
@@ -833,6 +834,14 @@ def research_demos(request):
 
 def workflow_json(workflow, include_steps=True, view="full"):
     card = view == "card"
+    plan = workflow.plan
+    if not card and workflow.workflow_type in {
+        "geology_generic",
+        "geology_multi_element_reasoning",
+    }:
+        from .geology_multi_results import public_plan
+
+        plan = public_plan(plan)
     data = {
         "id": str(workflow.id),
         "projectId": workflow.project_tag_id,
@@ -852,7 +861,7 @@ def workflow_json(workflow, include_steps=True, view="full"):
         "resourceIds": workflow.resource_ids,
         "algorithmVersionId": workflow.algorithm_version_id,
         "parameters": {} if card else workflow.parameters,
-        "plan": workflow.plan
+        "plan": plan
         if not card
         else {
             "phase": workflow.plan.get("phase"),
@@ -1195,7 +1204,6 @@ def workflow_confirm(request, workflow_id):
         raise ApiProblem("审核结论或意见无效")
     if "selectedSuggestionIds" in value and (
         not isinstance(selected, list)
-        or len(selected) > 30
         or any(
             not isinstance(identity, str) or not 1 <= len(identity) <= 64
             for identity in selected
@@ -1215,6 +1223,13 @@ def workflow_confirm(request, workflow_id):
             pk=workflow_id,
             owner=request.user,
         )
+        if (
+            selected is not None
+            and len(selected) > 30
+            and workflow.workflow_type
+            not in {"geology_generic", "geology_multi_element_reasoning"}
+        ):
+            raise ApiProblem("建议选择格式无效")
         p = require_access(request.user, "agent", workflow.model)
         if not p.get("workflowEnabled", True):
             raise ApiProblem("MH-workflow功能已关闭", 403)
@@ -1334,7 +1349,10 @@ def workflow_detail(request, workflow_id):
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
     )
     authorize_workflow_history(workflow)
-    return JsonResponse(workflow_json(workflow, view=view))
+    response = JsonResponse(workflow_json(workflow, view=view))
+    if workflow.workflow_type in {"geology_generic", "geology_multi_element_reasoning"}:
+        return GZipMiddleware(lambda _: response)(request)
+    return response
 
 
 @endpoint(["POST"])

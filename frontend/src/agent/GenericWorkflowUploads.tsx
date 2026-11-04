@@ -438,7 +438,17 @@ export default function GenericWorkflowUploads({
               {option.data.label}
             </div>
           )}
-          onChange={setCatalogSelected}
+          onSelect={(value) =>
+            setCatalogSelected((current) =>
+              current.includes(value) ? current : [...current, value],
+            )
+          }
+          onDeselect={(value) =>
+            setCatalogSelected((current) =>
+              current.filter((item) => item !== value),
+            )
+          }
+          onClear={() => setCatalogSelected([])}
           disabled={disabled || Boolean(uploading)}
           options={catalogItems.map((item) => ({
             value: item.id,
@@ -508,86 +518,93 @@ export default function GenericWorkflowUploads({
           {recognitionError ? "重试识别" : "识别资料角色"}
         </Button>
       )}
-      {items.map((item) => {
-        const role = roleOf(item);
-        return (
-          <div key={item.id} className="agent-demo-fields">
-            <Space orientation="vertical" size={2} style={{ minWidth: 0 }}>
-              <Space size={6} wrap>
-                <strong>{item.fileName}</strong>
-                <Tag>{item.source === "catalog" ? "系统数据" : "上传资料"}</Tag>
-                <Tag>{kindLabels[item.dataType]}</Tag>
-                {uploadOnly && (
+      <div className={uploadOnly ? "agent-logic-files" : undefined}>
+        {items.map((item) => {
+          const role = roleOf(item);
+          return (
+            <div key={item.id} className="agent-demo-fields">
+              <Space orientation="vertical" size={2} style={{ minWidth: 0 }}>
+                <Space size={6} wrap>
+                  <strong>{item.fileName}</strong>
                   <Tag>
-                    {genericRoles.find((entry) => entry.key === item.roleHint)
-                      ?.label || "发送后识别角色"}
+                    {item.source === "catalog" ? "系统数据" : "上传资料"}
                   </Tag>
+                  <Tag>{kindLabels[item.dataType]}</Tag>
+                  {uploadOnly && (
+                    <Tag>
+                      {genericRoles.find((entry) => entry.key === item.roleHint)
+                        ?.label || "发送后识别角色"}
+                    </Tag>
+                  )}
+                  {!uploadOnly && item.profile.crs && (
+                    <Tag>{item.profile.crs}</Tag>
+                  )}
+                </Space>
+                {!uploadOnly && (
+                  <Typography.Text type="secondary">
+                    {profileSummary(item)}
+                  </Typography.Text>
                 )}
-                {!uploadOnly && item.profile.crs && (
-                  <Tag>{item.profile.crs}</Tag>
+                {suggestions?.items.find((entry) => entry.uploadId === item.id)
+                  ?.reason && (
+                  <Typography.Text type="secondary">
+                    {
+                      suggestions.items.find(
+                        (entry) => entry.uploadId === item.id,
+                      )?.reason
+                    }
+                  </Typography.Text>
                 )}
+                {item.profile.warnings?.map((warning) => (
+                  <Typography.Text key={warning} type="warning">
+                    {warning}
+                  </Typography.Text>
+                ))}
               </Space>
               {!uploadOnly && (
-                <Typography.Text type="secondary">
-                  {profileSummary(item)}
-                </Typography.Text>
+                <label>
+                  <span>资料角色</span>
+                  <Select
+                    aria-label={`${item.fileName}的资料角色`}
+                    allowClear
+                    disabled={disabled || recognizing || Boolean(uploading)}
+                    value={role}
+                    placeholder="不使用"
+                    options={genericRoles
+                      .filter(
+                        (entry) =>
+                          entry.kind === item.dataType &&
+                          (entry.kind !== "vector" ||
+                            item.profile.geometryTypes?.some((geometry) =>
+                              geometry.includes(
+                                entry.key === "faults" ? "Line" : "Polygon",
+                              ),
+                            )),
+                      )
+                      .map((entry) => ({
+                        value: entry.key,
+                        label: entry.label,
+                      }))}
+                    onChange={(value: string | undefined) => {
+                      manual.current.add(item.resourceId);
+                      if (value && inputs[value])
+                        manual.current.add(inputs[value]);
+                      assign(item, value);
+                    }}
+                  />
+                </label>
               )}
-              {suggestions?.items.find((entry) => entry.uploadId === item.id)
-                ?.reason && (
-                <Typography.Text type="secondary">
-                  {
-                    suggestions.items.find(
-                      (entry) => entry.uploadId === item.id,
-                    )?.reason
-                  }
-                </Typography.Text>
-              )}
-              {item.profile.warnings?.map((warning) => (
-                <Typography.Text key={warning} type="warning">
-                  {warning}
-                </Typography.Text>
-              ))}
-            </Space>
-            {!uploadOnly && (
-              <label>
-                <span>资料角色</span>
-                <Select
-                  aria-label={`${item.fileName}的资料角色`}
-                  allowClear
-                  disabled={disabled || recognizing || Boolean(uploading)}
-                  value={role}
-                  placeholder="不使用"
-                  options={genericRoles
-                    .filter(
-                      (entry) =>
-                        entry.kind === item.dataType &&
-                        (entry.kind !== "vector" ||
-                          item.profile.geometryTypes?.some((geometry) =>
-                            geometry.includes(
-                              entry.key === "faults" ? "Line" : "Polygon",
-                            ),
-                          )),
-                    )
-                    .map((entry) => ({ value: entry.key, label: entry.label }))}
-                  onChange={(value: string | undefined) => {
-                    manual.current.add(item.resourceId);
-                    if (value && inputs[value])
-                      manual.current.add(inputs[value]);
-                    assign(item, value);
-                  }}
-                />
-              </label>
-            )}
-            <Button
-              size="small"
-              disabled={disabled || recognizing || Boolean(uploading)}
-              onClick={() => void remove(item)}
-            >
-              移除
-            </Button>
-          </div>
-        );
-      })}
+              <Button
+                size="small"
+                disabled={disabled || recognizing || Boolean(uploading)}
+                onClick={() => void remove(item)}
+              >
+                移除
+              </Button>
+            </div>
+          );
+        })}
+      </div>
       {uploadOnly && items.length > 0 && (
         <Alert
           type="info"

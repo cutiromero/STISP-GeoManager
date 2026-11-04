@@ -19,6 +19,7 @@ from apps.knowledge.trial_rules import digest
 from .compute_tools import authorized_task
 from .demo_results import read_results
 from .tools import resolve_resource
+from .geology_issue_groups import issue_groups
 
 CHANGE_FIELDS = (
     "issue_id",
@@ -58,10 +59,14 @@ class EditValidationError(ComputeError):
 
 
 def assess_edits(edits, results, *, workflow=None, decision=None):
-    if not isinstance(edits, list) or len(edits) > 30:
-        raise ComputeError("本轮最多提出30项有依据的对象处置建议")
+    if not isinstance(edits, list):
+        raise ComputeError("处置建议须为数组")
+    from .geology_issue_groups import expand_groups
+
+    issues = {row["issue_id"]: row for row in issue_rows(results)}
+    edits = expand_groups(edits, list(issues.values()))
     accepted, errors, duplicates = [], [], []
-    normalized, seen, targets = [], set(), set()
+    normalized, seen, targets = set(), set(), set()
     for index, original in enumerate(edits, 1):
         edit = original.copy() if isinstance(original, dict) else original
         if (
@@ -70,23 +75,25 @@ def assess_edits(edits, results, *, workflow=None, decision=None):
             and "target_code" in edit
         ):
             edit["target_code"] = ""
-        if edit in normalized:
+        signature = json.dumps(edit, sort_keys=True, ensure_ascii=False)
+        if signature in normalized:
             duplicates.append(index)
             continue
         try:
-            row = _validate_edit_rows([edit], results)[0]
+            row = _validate_edit_rows([edit], results, issues=issues)[0]
             if row["issue_id"] in seen:
                 raise ComputeError("建议必须唯一对应本次实际检查的问题")
-            issue = next(
-                item
-                for item in issue_rows(results)
-                if item["issue_id"] == row["issue_id"]
-            )
+            issue = issues[row["issue_id"]]
             target = (issue["element"], issue["feature_id"])
             if target in targets:
                 raise ComputeError("同一对象本轮只允许一个处置动作，保留首个合格建议")
             if workflow is not None:
-                proposal(workflow, {"edits": [edit], "decision": decision}, results)
+                proposal(
+                    workflow,
+                    {"edits": [edit], "decision": decision},
+                    results,
+                    issues={issue["issue_id"]: issue},
+                )
         except ComputeError as exc:
             errors.append(
                 {
@@ -98,7 +105,7 @@ def assess_edits(edits, results, *, workflow=None, decision=None):
                 }
             )
             continue
-        normalized.append(edit)
+        normalized.add(signature)
         seen.add(row["issue_id"])
         targets.add(target)
         accepted.append(row)
@@ -117,10 +124,11 @@ def validate_edits(edits, results):
     return rows
 
 
-def _validate_edit_rows(edits, results):
-    if not isinstance(edits, list) or len(edits) > 30:
-        raise ComputeError("本轮最多提出30项有依据的对象处置建议")
-    issues = {row["issue_id"]: row for row in issue_rows(results)}
+def _validate_edit_rows(edits, results, *, issues=None):
+    if not isinstance(edits, list):
+        raise ComputeError("处置建议须为数组")
+    if issues is None:
+        issues = {row["issue_id"]: row for row in issue_rows(results)}
     accepted, seen, targets = [], set(), set()
     for edit in edits:
         if not isinstance(edit, dict) or set(edit) != {
@@ -183,9 +191,10 @@ def _validate_edit_rows(edits, results):
     return accepted
 
 
-def proposal(workflow, stage, results):
-    rows = validate_edits(stage.get("edits", []), results)
-    issues = {row["issue_id"]: row for row in issue_rows(results)}
+def proposal(workflow, stage, results, *, issues=None):
+    if issues is None:
+        issues = {row["issue_id"]: row for row in issue_rows(results)}
+    rows = _validate_edit_rows(stage.get("edits", []), results, issues=issues)
     knowledge = {
         (entry["trialBinding"]["ruleId"], entry["trialBinding"]["ruleVersion"]): entry
         for entry in workflow.evidence
@@ -197,6 +206,11 @@ def proposal(workflow, stage, results):
         if ref["kind"] == "knowledge"
     }
     suggestions = []
+    group_ids = {
+        row["issue_id"]: identity
+        for identity, members in issue_groups(list(issues.values()))
+        for row in members
+    }
     for edit in rows:
         row = issues[edit["issue_id"]]
         entry = knowledge.get((edit["rule_id"], edit["rule_version"]))
@@ -227,6 +241,7 @@ def proposal(workflow, stage, results):
         suggestions.append(
             {
                 "id": digest(edit)[:24],
+                "groupId": group_ids[edit["issue_id"]],
                 "kind": "multi_element",
                 "element": row["element"],
                 "featureId": edit["feature_id"],

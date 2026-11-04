@@ -58,6 +58,46 @@ const load = (options = {}) =>
     ...options,
   });
 
+it("先显示两张岩性图，不等待后续构造和蚀变请求完成", async () => {
+  const workflow = reviewWorkflow(true);
+  workflow.workflowType = "geology_generic";
+  workflow.plan.multiElementMap = {
+    before: { lithology: 101, faults: 102 },
+    after: { lithology: 201, faults: 202 },
+    checks: [],
+    changes: [],
+  };
+  workflow.plan.algorithms = {
+    "geology-multi-apply": { manifest: { outputs: [{ key: "final_faults" }] } },
+  };
+  let finish: (() => void) | undefined;
+  const blocked = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  request.mockImplementation(async (url: string) => {
+    if (url.includes("/workflows/")) return workflow;
+    const id = Number(url.match(/resources\/(\d+)\//)?.[1]);
+    if (id === 102 || id === 202) await blocked;
+    return url.endsWith("/profile/")
+      ? comparisonProfile(id)
+      : reviewQuery(
+          id,
+          id === 101
+            ? beforeReviewMap
+            : id === 201
+              ? afterReviewMap
+              : { type: "FeatureCollection", features: [] },
+        );
+  });
+  const onPrimary = vi.fn();
+  const pending = load({ onPrimary });
+  await vi.waitFor(() => expect(onPrimary).toHaveBeenCalledOnce());
+  expect(onPrimary.mock.calls[0]![0].before).toEqual(beforeReviewMap);
+  expect(onPrimary.mock.calls[0]![0].after).toEqual(afterReviewMap);
+  finish!();
+  await pending;
+});
+
 it.each(["geology_generic", "geology_multi_element_reasoning"])(
   "%s在仅保留正式成果时仍从任务文件生成真实讲解与前后对比",
   async (workflowType) => {

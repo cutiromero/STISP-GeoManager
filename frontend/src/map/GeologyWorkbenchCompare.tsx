@@ -1,11 +1,12 @@
 import { LeftOutlined, ReloadOutlined, RightOutlined } from "@ant-design/icons";
-import { Alert, Button, Segmented, Spin } from "antd";
+import { Alert, Button, Checkbox, Segmented, Spin } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
 import { geologyReviewOutcome } from "../agent/geologyReviewOutcome";
 import GeologyReviewMaps from "./GeologyReviewMaps";
 import MultiElementTourCard from "./MultiElementTourCard";
+import { usesCleanGeologyResults } from "./workflowOutputMaps";
 import {
   featureCollection,
   tourAlgorithm,
@@ -40,6 +41,7 @@ export default function GeologyWorkbenchCompare({
   onLayerDisplay,
   selectedObject,
   onSwitchProject,
+  onFamilyChange,
 }: {
   workflowId: string;
   projectId: string;
@@ -57,6 +59,7 @@ export default function GeologyWorkbenchCompare({
     current: GeoJsonFeatureCollection | null,
   ) => void;
   onSwitchProject?: () => void;
+  onFamilyChange?: (value: boolean) => void;
   selectedObject?: Record<string, unknown> | null;
 }) {
   const [params, setParams] = useSearchParams();
@@ -67,6 +70,15 @@ export default function GeologyWorkbenchCompare({
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState(0);
+  const [showChanges, setShowChanges] = useState(false);
+  const cleanFamily =
+    data?.workflow.workflowType === "geology_generic" ||
+    data?.workflow.workflowType === "geology_multi_element_reasoning";
+  const changesVisible = showChanges || !cleanFamily;
+  useEffect(() => {
+    onFamilyChange?.(cleanFamily);
+    return () => onFamilyChange?.(false);
+  }, [cleanFamily, onFamilyChange]);
   const latest = useRef({ registerLayer, onLayerDisplay });
   latest.current = { registerLayer, onLayerDisplay };
   useEffect(() => {
@@ -86,6 +98,12 @@ export default function GeologyWorkbenchCompare({
       registerLayer: (profile, result, placement) =>
         latest.current.registerLayer(profile, result, placement),
       isCurrent: () => !disposed,
+      onPrimary: (value) => {
+        if (!disposed) {
+          setData(value);
+          setLoading(false);
+        }
+      },
     })
       .then((value) => {
         if (!disposed) setData(value);
@@ -124,10 +142,14 @@ export default function GeologyWorkbenchCompare({
       current = feature ? featureCollection([feature]) : null;
     latest.current.onLayerDisplay?.(
       side,
-      scope === "all" ? data.differences : (current ?? data.differences),
-      current,
+      changesVisible
+        ? scope === "all"
+          ? data.differences
+          : (current ?? data.differences)
+        : featureCollection([]),
+      changesVisible ? current : null,
     );
-  }, [data, selected, side, scope, comparisonVisible]);
+  }, [data, selected, side, scope, comparisonVisible, changesVisible]);
   const updateSetting = (key: string, value: string) => {
     const next = new URLSearchParams(params);
     next.set(key, value);
@@ -149,11 +171,12 @@ export default function GeologyWorkbenchCompare({
     tourFeature(element === "lithology" ? data?.after : overlay?.after, tour);
   const labels = tour ? tourLabels(tour, tourBefore, tourAfter) : null;
   const outcome = geologyReviewOutcome(data?.workflow);
-  const focus = current
-    ? reviewBounds(featureCollection([current]))
-    : data
-      ? reviewBounds(data.before)
-      : null;
+  const focus =
+    changesVisible && current
+      ? reviewBounds(featureCollection([current]))
+      : data
+        ? reviewBounds(data.before)
+        : null;
   const oldSpotlight =
     current && data
       ? {
@@ -254,7 +277,7 @@ export default function GeologyWorkbenchCompare({
   );
   return (
     <section
-      className={`geology-workbench-compare ${comparisonVisible ? "is-comparing" : "is-single"}`}
+      className={`geology-workbench-compare ${comparisonVisible ? "is-comparing" : "is-single"} ${cleanFamily ? "is-clean" : ""}`}
       aria-label="地理工作台地质成果对比"
     >
       <header className="geology-workbench-compare-toolbar">
@@ -294,6 +317,14 @@ export default function GeologyWorkbenchCompare({
         >
           独立对比页
         </Link>
+        {cleanFamily && (
+          <Checkbox
+            checked={showChanges}
+            onChange={(event) => setShowChanges(event.target.checked)}
+          >
+            修正记录 / 实际修改范围
+          </Checkbox>
+        )}
       </header>
       {error && (
         <Alert
@@ -338,7 +369,11 @@ export default function GeologyWorkbenchCompare({
               ]}
               onChange={(value) => updateSetting("compareScope", String(value))}
             />
-            <small>橙色包含边界、类别、代号、分析状态与权重的实际变化</small>
+            <small>
+              {cleanFamily && !changesVisible
+                ? "修正后仅显示干净成果；勾选修正记录可查看实际修改范围。"
+                : "橙色表示实际修改范围；成果图层保留正常单元配色。"}
+            </small>
           </div>
           {comparisonVisible && (
             <div className="geology-workbench-compare-maps">
@@ -346,9 +381,11 @@ export default function GeologyWorkbenchCompare({
                 before={data.before}
                 after={data.after}
                 differences={
-                  scope === "current" && current
-                    ? featureCollection([current])
-                    : data.differences
+                  !changesVisible
+                    ? featureCollection([])
+                    : scope === "current" && current
+                      ? featureCollection([current])
+                      : data.differences
                 }
                 bounds={focus}
                 onSelect={(index) =>
@@ -360,7 +397,7 @@ export default function GeologyWorkbenchCompare({
                 inspectionOnly={Boolean(outcome)}
                 previewLabel={outcome ? "检查后原图，保持不变" : data.afterName}
                 compactLegend
-                spotlight={spotlight}
+                spotlight={changesVisible ? spotlight : null}
                 overlays={data.overlays}
                 onInspect={(feature) => {
                   const index = features.findIndex(
@@ -406,6 +443,7 @@ export default function GeologyWorkbenchCompare({
                     before={tourBefore}
                     after={tourAfter}
                     algorithm={tourAlgorithm(data.workflow)}
+                    cleanResults={usesCleanGeologyResults(data.workflow)}
                   />
                 ) : (
                   <>

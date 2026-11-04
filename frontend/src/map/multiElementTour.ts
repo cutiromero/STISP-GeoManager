@@ -203,8 +203,8 @@ export function tourLabels(
           change.suggestion.element === "alteration"
             ? "原蚀变图斑"
             : "原构造线",
-        after: "本轮不参与分析",
-        note: "保留原记录，本轮不参与分析。",
+        after: "已从最终成果删除",
+        note: "最终成果不包含获批剔除对象；原始资料与修改记录保留。",
       };
     case "downweight":
       return {

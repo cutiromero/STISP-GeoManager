@@ -80,7 +80,14 @@ def output_data(output):
         if record and record.status == "deleted"
         else "",
         "resourceLocation": location,
-        "mapUrl": f"/map?resourceId={resource.id}&projectTagId={output.task.project_tag_id}"
+        "mapUrl": (
+            f"/map?resourceId={resource.id}&projectTagId={output.task.project_tag_id}"
+            + (
+                "&displayGeometry=1"
+                if output.task.version.algorithm.identifier.startswith("geology-multi-")
+                else ""
+            )
+        )
         if resource
         else "",
         "importError": record.error if record else "",

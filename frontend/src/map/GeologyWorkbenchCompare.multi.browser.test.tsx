@@ -426,6 +426,10 @@ async function mapsReady() {
     { timeout: 20000 },
   );
 }
+async function changesReady(position = 1) {
+  await screen.findByText(`第 ${position} 处，共 3 处`);
+  await waitFor(() => expect(layers()).toHaveLength(13));
+}
 function choose(control: string, label: string) {
   fireEvent.click(
     within(screen.getByLabelText(control)).getByText(label, {
@@ -467,6 +471,7 @@ beforeEach(() => {
 
 it("registers every real resource in one deduplicated task group and renders polygon, line and point overlays in both WebGL maps", async () => {
   show();
+  await changesReady();
   await mapsReady();
   expect(observedGroups).toHaveLength(1);
   expect(layers()).toHaveLength(13);
@@ -490,7 +495,10 @@ it("registers every real resource in one deduplicated task group and renders pol
   expect(current.datasets.get(101)!.features[0]!.geometry).toEqual(
     current.datasets.get(201)!.features[0]!.geometry,
   );
-  expect(visibleChanges()).toHaveLength(1);
+  expect(visibleChanges()).toHaveLength(0);
+  fireEvent.click(screen.getByLabelText("修正记录 / 实际修改范围"));
+  await waitFor(() => expect(visibleChanges()).toHaveLength(1));
+  await mapsReady();
   expect(visibleChanges()[0]!.properties.issue_id).toBe("change-code");
   expect(screen.getByLabelText("当前修改故事")).toHaveTextContent(
     "地质代号由 Q 更新为 T₃b",
@@ -523,10 +531,13 @@ it("registers every real resource in one deduplicated task group and renders pol
 
 it("navigates actual attribute and weight changes and changes normal-map controls without rereading", async () => {
   show();
+  await changesReady();
   await mapsReady();
   const reads = request.mock.calls.length;
   fireEvent.click(screen.getByRole("button", { name: /下一处/ }));
   await screen.findByRole("heading", { name: "构造处置" });
+  expect(visibleChanges()).toHaveLength(0);
+  fireEvent.click(screen.getByLabelText("修正记录 / 实际修改范围"));
   await waitFor(() =>
     expect(visibleChanges()[0]!.properties.issue_id).toBe("change-fault"),
   );
@@ -569,6 +580,9 @@ it("restores URL side, scope and selected change, then refreshes without duplica
     `/map?geologyCompare=${workflowId}&projectTagId=3&mapMode=single&compareSide=before&compareScope=all&suggestion=change-mineral`,
   );
   await screen.findByRole("heading", { name: "矿物证据降权" });
+  await changesReady(3);
+  expect(visibleChanges()).toHaveLength(0);
+  fireEvent.click(screen.getByLabelText("修正记录 / 实际修改范围"));
   await waitFor(() => expect(visibleChanges()).toHaveLength(3));
   expect(screen.getByText("第 3 处，共 3 处")).toBeVisible();
   expect(vector(101).visible).toBe(true);
@@ -596,6 +610,7 @@ it("keeps the full comparison, navigation and real WebGL canvases within 390 pix
     show(
       `/map?geologyCompare=${workflowId}&projectTagId=3&suggestion=change-mineral`,
     );
+    await changesReady(3);
     await mapsReady();
     const comparison = screen
       .getByLabelText("地理工作台地质成果对比")
@@ -610,6 +625,15 @@ it("keeps the full comparison, navigation and real WebGL canvases within 390 pix
     }
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
     expect(screen.getByText("第 3 处，共 3 处")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "矿物证据降权" })).toBeVisible();
+    expect(visibleChanges()).toHaveLength(0);
+    const navigation = screen
+      .getByRole("navigation", { name: "切换修改位置" })
+      .getBoundingClientRect();
+    expect(navigation.top).toBeGreaterThanOrEqual(0);
+    expect(navigation.bottom).toBeLessThanOrEqual(844);
+    expect(navigation.left).toBeGreaterThanOrEqual(0);
+    expect(navigation.right).toBeLessThanOrEqual(390);
     await page.screenshot({
       path: "../../test-results/geology-workbench-multi-390.png",
       animations: "disabled",

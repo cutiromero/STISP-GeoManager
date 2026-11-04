@@ -389,12 +389,26 @@
   border-color: #90b4c0;
 }
 .agent-composer-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 14px 10px;
+}
+.agent-composer-context {
   min-height: 0;
   overflow-y: auto;
-  padding: 0 14px 10px;
   scrollbar-width: thin;
 }
+.agent-logic-panel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .agent-input-row {
+  display: flex;
+  flex-direction: column;
+  min-height: 64px;
   width: 100%;
 }
 .agent-answer-target {
@@ -423,6 +437,7 @@
   font-size: inherit;
 }
 .agent-input-row textarea.ant-input {
+  flex-shrink: 1;
   width: 100%;
   min-width: 0;
   min-height: 64px;
@@ -437,6 +452,7 @@
 }
 .agent-composer-footer {
   display: flex;
+  flex-shrink: 0;
   align-items: flex-end;
   gap: 10px;
   margin-top: 4px;
@@ -1254,9 +1270,19 @@
   margin: 0;
 }
 .agent-logic-intake {
-  max-height: min(240px, 30vh);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  max-height: min(300px, 40vh);
+  overflow: hidden;
   min-width: 0;
+}
+.agent-logic-intake > :not(.agent-logic-files) {
+  flex-shrink: 0;
+}
+.agent-logic-files {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 .agent-logic-intake .agent-demo-fields {
   grid-template-columns: minmax(0, 1fr) auto;

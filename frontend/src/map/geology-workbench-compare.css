@@ -23,6 +23,11 @@
   box-shadow: 0 12px 32px #152e4b30;
   overflow: hidden;
 }
+.geology-workbench-compare.is-comparing.is-clean {
+  left: var(--workspace-edge);
+  right: var(--workspace-edge);
+  top: var(--workspace-edge);
+}
 .geology-workbench-compare.is-comparing {
   bottom: calc(
     var(--workspace-edge) + var(--map-control-bottom-clearance) + 8px

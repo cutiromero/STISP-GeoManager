@@ -657,7 +657,10 @@ def _validate_response(
             for ref in decision["evidenceRefs"]
         ):
             raise ComputeError("判断必须引用最近一次实际计算统计")
-    if not isinstance(value["edits"], list) or len(value["edits"]) > 30:
+    if not isinstance(value["edits"], list) or (
+        getattr(workflow, "workflow_type", None) not in MULTI_FAMILY
+        and len(value["edits"]) > 30
+    ):
         raise ComputeError("模型提出的修改计划超出允许范围")
     if (
         not allow_partial
@@ -670,6 +673,9 @@ def _validate_response(
             "请从检查结果中选出有据的少量对象提出建议，nextAction写geology-multi-apply"
         )
     assessment = None
+    group_decisions = [
+        item for item in value["edits"] if isinstance(item, dict) and "group_id" in item
+    ]
     if (
         getattr(workflow, "workflow_type", None) in MULTI_FAMILY
         and stage["identifier"] == "geology-multi-apply"
@@ -734,6 +740,7 @@ def _validate_response(
     _validate_final_review_report(decision, stage, execution_state)
     if assessment is not None:
         stage["editValidation"] = assessment
+        stage["groupDecisions"] = group_decisions
     return decision, value["edits"]
 
 
@@ -855,7 +862,10 @@ def decide(
             "Ref与definitions表示同一次payload内已给出内容的复用，按对应引用读取，不表示缺少证据。"
             "sameAs按knowledge中的字段路径读取原值；rowFormat=columns的rows按columns列顺序逐项对应，保留全部记录。"
             "只有allowedAction和decision.nextAction均为geology-multi-apply时才提出edits，"
-            "每项包含issue_id,action,target_code,weight,reason。"
+            "按actualResults.groups逐组提出建议，每项包含group_id,disposition,excluded_issue_ids,reason。"
+            "disposition=suggested表示整组采用实测建议，review表示整组待裁定；excluded_issue_ids列出不纳入的个别问题。"
+            "每组须解释实测分布、条件及例外；status为review或exception只能整组review，不能整组自动处置。"
+            "少量对象也可沿用issue_id,action,target_code,weight,reason逐项建议。"
             "此时edits仍只是建议，后端须等待用户逐项批准后才执行实际修改；"
             "不能因建议尚待批准就把nextAction写成request_review。"
             "request_review用于证据不足、冲突等无法形成有据建议的情况，此时edits必须为[]；"
@@ -864,10 +874,11 @@ def decide(
             "action只从allowed_actions_json选，set_code/reclassify/merge目标必须是实测支持的target_code；其他动作target_code为空。"
             "降权downweight保留原对象且0<weight<1，exclude权重为0，其他动作weight=1。"
             "对每个建议在decision.evidenceRefs引用该问题rule_id/rule_version对应的具体knowledge编号。"
-            "优先解释少量清楚对象，最多30项，不要求把所有疑点都修改；保留/待裁定可用keep/review。"
+            "疑点与建议不设数量上限；覆盖全部分组，不能逐条输出几千项；整组建议由后端展开并逐对象校验及人工批准。"
             "岩石孤岛不能单凭老新关系认定错误，构造短线不能单凭短就认定假线，碳酸盐背景不能排除热液叠加。"
             "apply阶段提出edits时尚无用户批准属正常状态，不能以尚无批准为由不提建议。"
             "执行修正后，未获批准不可声称已修正；modificationReview.approvedSuggestionIds才是用户批准的建议范围。其余项保留。"
+            "modificationReview.scope=all_groups_with_representative_ids时，ID仅为代表；approvedCount及groups.approvedCount才是完整批准数量，不能以样本数代替总数。"
             "其他阶段edits=[]；执行后读取当次结果及复核统计，说明实际改变、未修改与下一步。"
             "分段入口使用upstreamVersions，不把旧图当新成果。A/B仅表示本案例证据组合下的优先核查等级，不是矿化概率。"
         )
@@ -1444,7 +1455,9 @@ def _mock_decision(model, stage, refs, results, workflow) -> tuple[dict, list]:
             for result in results:
                 if result["key"] != "issues" or result["taskId"] != check.get("taskId"):
                     continue
-                for row in result.get("rows", [])[:30]:
+                for row in result.get("rows", []):
+                    if row.get("status", "suggested") != "suggested":
+                        continue
                     target = (row["element"], row["feature_id"])
                     if target in selected_objects:
                         continue

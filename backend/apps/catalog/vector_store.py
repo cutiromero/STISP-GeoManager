@@ -190,6 +190,9 @@ def query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str,
     from apps.catalog.geojson_validation import validate_geojson_geometries
 
     started_at = perf_counter()
+    display_geometry = payload.get("displayGeometry", False)
+    if not isinstance(display_geometry, bool):
+        raise DataQueryError("displayGeometry须为布尔值")
     if resource.data_type != DataResource.DataType.VECTOR:
         raise DataQueryError("当前只支持矢量 GeoPackage 查询")
 
@@ -220,6 +223,21 @@ def query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str,
 
     bounds = _returned_bounds(returned)
     returned = normalize_for_geojson(returned)
+    if display_geometry:
+        returned = returned.copy()
+        returned.geometry = returned.geometry.simplify(0.00001, preserve_topology=True)
+    geojson = json.loads(returned.to_json())
+    if display_geometry:
+
+        def quantize(value):
+            if isinstance(value, list):
+                return [quantize(item) for item in value]
+            return round(value, 6) if isinstance(value, float) else value
+
+        for feature in geojson["features"]:
+            geometry = feature.get("geometry")
+            if geometry and "coordinates" in geometry:
+                geometry["coordinates"] = quantize(geometry["coordinates"])
 
     return {
         "resourceId": resource.id,
@@ -231,7 +249,7 @@ def query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str,
         "bounds": bounds,
         "elapsedMs": max(0, round((perf_counter() - started_at) * 1000)),
         "fields": fields,
-        "geojson": json.loads(returned.to_json()),
+        "geojson": geojson,
         "warnings": warnings,
     }
 
@@ -380,7 +398,9 @@ def _read_geopackage_layer(
         return gpd.read_file(path, layer=layer_name, **read_options)
     candidate_ids = _rtree_candidate_feature_ids(path, layer_name, read_bbox)
     if candidate_ids == []:
-        empty_options = {key: value for key, value in read_options.items() if key != "rows"}
+        empty_options = {
+            key: value for key, value in read_options.items() if key != "rows"
+        }
         return gpd.read_file(path, layer=layer_name, rows=0, **empty_options)
     if candidate_ids is not None and len(candidate_ids) <= MAX_RTREE_WHERE_IDS:
         where_clause = _feature_id_where_clause(path, layer_name, candidate_ids)
@@ -388,7 +408,10 @@ def _read_geopackage_layer(
             try:
                 combined_where = _combine_where_clauses(where_clause, where)
                 return gpd.read_file(
-                    path, layer=layer_name, where=combined_where, **({"rows": rows} if rows is not None else {})
+                    path,
+                    layer=layer_name,
+                    where=combined_where,
+                    **({"rows": rows} if rows is not None else {}),
                 )
             except Exception:
                 pass
@@ -565,8 +588,7 @@ def _declared_or_sample_field_type(declared_type: str, series) -> str:
     if "DATE" in normalized or "TIME" in normalized:
         return "datetime"
     if any(
-        token in normalized
-        for token in ("INT", "REAL", "FLOA", "DOUB", "NUM", "DEC")
+        token in normalized for token in ("INT", "REAL", "FLOA", "DOUB", "NUM", "DEC")
     ):
         return "number"
     return _field_type(series)
@@ -588,7 +610,9 @@ def _layer_bounds_to_4326(
         )
         return [round(float(value), 6) for value in projected.total_bounds.tolist()]
     except Exception as exc:
-        raise DataQueryError(f"转换 GeoPackage 图层范围失败：{layer_name}：{exc}") from exc
+        raise DataQueryError(
+            f"转换 GeoPackage 图层范围失败：{layer_name}：{exc}"
+        ) from exc
 
 
 def _api_geometry_type(value: str) -> str:
@@ -670,9 +694,7 @@ def _sql_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def _geopackage_filtered_count(
-    path: Path, layer_name: str, where: str | None
-) -> int:
+def _geopackage_filtered_count(path: Path, layer_name: str, where: str | None) -> int:
     statement = f"SELECT COUNT(*) FROM {_quote_sql_identifier(layer_name)}"
     if where:
         statement += f" WHERE {where}"
@@ -809,7 +831,9 @@ def normalize_for_geojson(gdf):
         elif _normalized_field_name(column) in COORDINATE_FIELD_NAMES:
             numeric = _numeric_series(series)
             normalized[column] = (
-                numeric.map(_json_value) if numeric is not None else series.map(_json_value)
+                numeric.map(_json_value)
+                if numeric is not None
+                else series.map(_json_value)
             )
         else:
             normalized[column] = series.map(_json_value)

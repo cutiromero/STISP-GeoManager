@@ -15136,9 +15136,8 @@ components:
           default: ''
         selectedSuggestionIds:
           type: array
-          description: 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项；综合推理场景允许空数组，明确选择不修改并继续复核。reject省略，其他阶段不得扩大操作范围。
+          description: 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。reject省略，其他阶段不得扩大操作范围。
           minItems: 0
-          maxItems: 30
           uniqueItems: true
           items: {type: string, minLength: 1, maxLength: 64, description: 当前实际问题和模型建议绑定的稳定标识}
         fieldMapping:
@@ -15221,6 +15220,7 @@ components:
       additionalProperties: false
       required: [id, kind, featureId, title, currentState, suggestedState, reason, areaM2, ruleId, knowledgeRefs, preview, bounds]
       properties:
+        groupId: {type: string, description: 综合推理按要素、规则、动作、目标代号及检查状态形成的稳定分组；审批仍提交展开后的对象建议ID，待裁定与例外不纳入整组批准}
         id: {type: string, description: 当前问题与建议内容绑定的标识，不由客户端编造}
         kind: {type: string, enum: [fill_gap, set_age, multi_element], description: 内部漏填、时代属性或多要素建议；综合场景具体操作由action标识}
         featureId: {type: string, description: 当前数据中的稳定图斑标识}
@@ -18975,6 +18975,10 @@ components:
       - spatialFilter
       - limit
       properties:
+        displayGeometry:
+          type: boolean
+          default: false
+          description: 仅地图显示使用的轻量几何（WGS84下1e-5度保拓扑简化、6位坐标）；属性及对象数量不变，不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
         attributeFilters:
           type: array
           description: 属性过滤条件

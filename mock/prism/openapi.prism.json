@@ -23843,6 +23843,65 @@
                   "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
                   "projectId": 3,
                   "workflowType": "geology_generic",
+                  "modificationReview": {
+                    "proposalHash": "grouped-example-snapshot",
+                    "approvedSuggestionIds": [
+                      "object-1"
+                    ],
+                    "suggestions": [
+                      {
+                        "id": "object-1",
+                        "groupId": "alteration-A05-exclude",
+                        "kind": "multi_element",
+                        "element": "alteration",
+                        "featureId": "M00001",
+                        "title": "碎斑噪声",
+                        "currentState": "原识别图斑",
+                        "suggestedState": "exclude",
+                        "reason": "实测面积低于本案例阈值，未命中需裁定例外",
+                        "action": "exclude",
+                        "status": "suggested",
+                        "areaM2": 100,
+                        "ruleId": "A-05",
+                        "knowledgeRefs": [
+                          {
+                            "id": 601,
+                            "revision": 1,
+                            "title": "碎斑检查"
+                          }
+                        ],
+                        "preview": {
+                          "type": "Polygon",
+                          "coordinates": [
+                            [
+                              [
+                                98.4,
+                                35.6
+                              ],
+                              [
+                                98.401,
+                                35.6
+                              ],
+                              [
+                                98.401,
+                                35.601
+                              ],
+                              [
+                                98.4,
+                                35.6
+                              ]
+                            ]
+                          ]
+                        },
+                        "bounds": [
+                          98.4,
+                          35.6,
+                          98.401,
+                          35.601
+                        ]
+                      }
+                    ]
+                  },
                   "goal": "检查上传地质资料",
                   "model": "configured",
                   "status": "succeeded",
@@ -35549,9 +35608,8 @@
           },
           "selectedSuggestionIds": {
             "type": "array",
-            "description": "地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项；综合推理场景允许空数组，明确选择不修改并继续复核。reject省略，其他阶段不得扩大操作范围。",
+            "description": "地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。reject省略，其他阶段不得扩大操作范围。",
             "minItems": 0,
-            "maxItems": 30,
             "uniqueItems": true,
             "items": {
               "type": "string",
@@ -35761,6 +35819,10 @@
           "bounds"
         ],
         "properties": {
+          "groupId": {
+            "type": "string",
+            "description": "综合推理按要素、规则、动作、目标代号及检查状态形成的稳定分组；审批仍提交展开后的对象建议ID，待裁定与例外不纳入整组批准"
+          },
           "id": {
             "type": "string",
             "description": "当前问题与建议内容绑定的标识，不由客户端编造"
@@ -41024,6 +41086,11 @@
           "limit"
         ],
         "properties": {
+          "displayGeometry": {
+            "type": "boolean",
+            "default": false,
+            "description": "仅地图显示使用的轻量几何（WGS84下1e-5度保拓扑简化、6位坐标）；属性及对象数量不变，不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。"
+          },
           "attributeFilters": {
             "type": "array",
             "description": "属性过滤条件",
