@@ -7625,19 +7625,22 @@ paths:
       tags: [Agent]
       operationId: listAgentWorkflowCatalogResources
       summary: 搜索可供逻辑推理引用的系统数据
-      description: 当前单项目内按资源访问权限筛选活动矢量、栅格、表格，排除任务资料；最多返回50项，可通过搜索缩小范围。需要智能体、工作流、算子和数据登记权限。
+      description: 当前单项目内按资源访问权限筛选活动矢量、栅格、表格，排除任务资料；按更新时间、登记时间、ID倒序分页，返回总数和可见数据目录。需要智能体、工作流、算子和数据登记权限。
       security: [{sessionAuth: []}]
       parameters:
       - in: query
         name: q
         description: 名称或说明搜索词，最多200字
         schema: {type: string, maxLength: 200}
+      - {in: query, name: page, description: 页码，从1开始, schema: {type: integer, minimum: 1, default: 1}}
+      - {in: query, name: pageSize, description: 每页条数，上限50, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+      - {in: query, name: directoryId, description: 数据目录（存量数据组别）ID，0表示未分组, schema: {type: integer, minimum: 0}}
       responses:
         '200':
           description: 有权访问的目录资源
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/AgentResourceList'}
+              schema: {$ref: '#/components/schemas/AgentWorkflowCatalogPage'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -7719,6 +7722,53 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/agent/logic-configuration/:
+    parameters:
+    - {name: X-Project-Id, in: header, required: true, description: 当前具体逻辑推理项目ID, schema: {type: integer, minimum: 1}}
+    get:
+      tags: [Agent]
+      operationId: getAgentLogicConfiguration
+      summary: 读取本人上次已确认的逻辑推理配置
+      description: 按当前用户和项目隔离，重验资源权限；失效资源仅返回ID，不暴露名称。只保存系统数据，上传资料不进入配置。需要与逻辑推理上传相同的权限。
+      security: [{sessionAuth: []}]
+      responses:
+        '200':
+          description: 配置与失效资源ID；没有配置时configuration为null
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentLogicConfigurationResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      tags: [Agent]
+      operationId: restoreAgentLogicConfiguration
+      summary: 将上次配置的有效系统数据引用加入新批次
+      description: 按本人和当前项目重新鉴权并读取真实画像；不复用临时上传。字段和角色仅在本次发送显式请求复用、资料及画像完全一致时沿用，计划和逐项批准始终重新确认。
+      security: [{sessionAuth: []}]
+      requestBody:
+        required: true
+        description: 尚未发送的新资料批次
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batchId]
+              additionalProperties: false
+              properties:
+                batchId: {type: string, pattern: '^[a-f0-9]{32}$', description: 资料批次号}
+      responses:
+        '200':
+          description: 恢复的引用、配置与失效资源ID
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentLogicConfigurationResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/agent/workflow-uploads/recognize/:
     post:
       tags: [智能体]
@@ -9982,10 +10032,14 @@ components:
       type: object
       description: 提交任务
       properties:
+        reuseConfirmedConfiguration:
+          type: boolean
+          default: false
+          description: 仅逻辑推理资料批次可用；资料、真实画像及资源更新时间与本人当前项目的已确认配置完全一致时沿用角色和字段，不跳过计划及逐项批准
         uploadBatchId:
           type: string
           pattern: '^[a-f0-9]{32}$'
-          description: 逻辑推理项目智能体模式下本人未绑定的上传批次，需求最多12000字；发送后在当前对话核对资料角色，确认后绑定真实工作流，不自动越过字段、计划或处置批准。批次仅能关联一个对话研究任务。
+          description: 逻辑推理项目智能体模式下本人未绑定的资料批次，需求最多12000字；发送后核对资料角色和字段，或显式沿用本人未变化的已确认配置；计划和处置批准始终由用户在本次任务确认。批次仅能关联一个对话研究任务。
         demoScenario:
           $ref: '#/components/schemas/AgentResearchScenario'
         knowledgeSelection:
@@ -10132,7 +10186,7 @@ components:
           type: object
           description: 问题键到用户答案，不把选项标题当作代码执行；通用地质角色核对使用upload_资源ID到角色键（或skip），须完整核对所有资料，角色不得重复
           additionalProperties: {type: string, description: 用户选择或输入的文字}
-        answer: {type: string, maxLength: 12000, description: 用户自由补充说明}
+        answer: {type: string, maxLength: 12000, description: 用户自由补充说明；通用地质任务已沿用配置且尚在本次计划批准前时，明确提交“修改角色和字段”会停止未执行的旧计划，保留历史并重新核对本批资料，不授权执行}
       required: [action, revision]
       additionalProperties: false
     AgentResearchDemoSummaryList:
@@ -10230,6 +10284,64 @@ components:
       - extractedText
       - createdAt
       additionalProperties: false
+    AgentWorkflowCatalogItem:
+      type: object
+      description: 系统数据的目录和登记时间
+      required: [id, name, dataType, description, directoryId, directoryName, createdAt, updatedAt]
+      properties:
+        id: {type: integer, description: 资源ID}
+        name: {type: string, description: 资源名称}
+        dataType: {type: string, description: 数据类型}
+        description: {type: string, description: 资源说明}
+        directoryId: {type: [integer, 'null'], description: 数据目录（存量数据组别）ID}
+        directoryName: {type: string, description: 数据目录名称，未分组为空}
+        createdAt: {type: string, format: date-time, description: 登记时间}
+        updatedAt: {type: string, format: date-time, description: 更新时间}
+    AgentWorkflowCatalogPage:
+      type: object
+      description: 按最近更新时间排序的系统数据页；目录列表只包含当前可见资源所在组别
+      required: [items, total, page, pageSize, directories]
+      properties:
+        items: {type: array, description: 本页资源, items: {$ref: '#/components/schemas/AgentWorkflowCatalogItem'}}
+        total: {type: integer, description: 筛选后的总数}
+        page: {type: integer, description: 当前页码}
+        pageSize: {type: integer, description: 每页条数}
+        directories:
+          type: array
+          description: 当前可见资源的数据目录，0表示未分组
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: integer, description: 目录ID}
+              name: {type: string, description: 目录名称}
+    AgentLogicConfiguration:
+      type: object
+      description: 本人当前项目最近一次已确认配置中的系统数据部分；不含临时上传及其角色和字段，地质图未保存时需重新选择
+      required: [resourceIds, roles, fieldMapping, prompt, reasoningEffort]
+      properties:
+        resourceIds: {type: array, description: 系统数据引用ID, items: {type: integer}}
+        roles: {type: object, description: 角色到系统资源ID的映射, additionalProperties: {type: integer}}
+        fieldMapping:
+          type: object
+          description: 已确认的角色到字段含义映射
+          additionalProperties:
+            type: object
+            additionalProperties: {type: [string, 'null']}
+        prompt: {type: string, description: 上次要求文案}
+        reasoningEffort: {type: string, enum: [low, medium, xhigh], description: 推理强度}
+    AgentLogicConfigurationResult:
+      type: object
+      description: 已重新鉴权的配置和恢复结果，失效资源只返回ID
+      required: [configuration, unavailableResourceIds, items]
+      properties:
+        configuration:
+          oneOf:
+          - {$ref: '#/components/schemas/AgentLogicConfiguration'}
+          - {type: 'null'}
+          description: 最近已确认配置，不存在时为null
+        unavailableResourceIds: {type: array, description: 已失效、变化或无权访问的资源ID，需重新选择, items: {type: integer}}
+        items: {type: array, description: POST恢复到批次中的有效引用，GET为空, items: {$ref: '#/components/schemas/AgentWorkflowUpload'}}
     AgentResource:
       type: object
       description: 当前项目中可分析的数据资源
@@ -11051,6 +11163,9 @@ components:
               items: {$ref: '#/components/schemas/AgentTrialRuleBinding'}
             fieldMappingReview:
               $ref: '#/components/schemas/AgentFieldMappingReview'
+            reusedConfiguration:
+              type: boolean
+              description: 本次资料与服务端已确认配置一致，沿用角色和字段；不表示计划或处置获批
           additionalProperties: true
         planHash:
           type: string

@@ -29,7 +29,7 @@
 
 `GET /api/agent/workflows/active/` 在当前项目智能体与MH-workflow授权后，读取本账号唯一活动任务（含暂停），返回 `{item:null}` 或含 `id/goal/workflowType/status/updatedAt/projectId` 的本人摘要。账号并发限制跨项目生效，摘要不含数据或计划。查看与取消使用既有详情、取消接口，并以目标项目ID重新授权；不绕过项目成员、模型或资料权限。前端提供任务名称、场景、状态、更新时间、查看及二次确认取消，取消中的任务在安全边界停止。
 
-逻辑推理项目将普通对话的深度思考与思考强度合为“思考：关/低/中/高”，分别映射 `fast`、`deep+low`、`deep+medium`、`deep+xhigh`，与 `AgentRunInput`、bootstrap默认值及预算支持的强度一致，模型或策略不支持深度思考时隐藏。固定通用场景不请求算法目录、算子候选、项目资料、场景目录与预设；上传和目标输入不等待历史任务或bootstrap。其他场景保持原加载和控件行为。
+逻辑推理项目使用 `ReasoningEffortControl` 的“轻量 / 标准 / 深入”滑杆，不显示“深度思考”开关。默认轻量对应 `thinkingMode=fast` 且不发送 `reasoningEffort`，保留关闭深度思考时的后端语义；标准和深入分别为 `deep+medium`、`deep+xhigh`。模型或策略不支持深度思考时隐藏控件。固定通用场景不请求算法目录、算子候选、项目资料、场景目录与预设；上传和目标输入不等待历史任务或bootstrap。其他项目保持原控件和加载行为。
 
 `POST /api/agent/workflow-uploads/` 以 multipart 上传一个文件和客户端生成的 `batchId`（32位小写十六进制）。矢量支持 Shapefile ZIP、GeoPackage、GeoJSON，栅格支持 GeoTIFF，表格支持 CSV、XLSX，校验和大小限制沿用既有导入服务。栅格大小上限为平台 `uploadMaxMb`。资料登记为 `owner_only` 数据资源（栅格在导入写入时即为 `owner_only`），来源标记 `workflow-upload:<batchId>`，不出现在数据目录、搜索、算子输入候选、地图图层列表、后台数据管理列表与导出、首页和看板统计中；返回识别结果（类型、坐标系、几何、要素数、字段与示例取值）和推荐角色 `roleHint`。每个批次最多12个文件。`GET ...?batchId=` 列出本人当前项目该批次的上传；`DELETE .../{uploadId}/` 只能删除尚未绑定任务的上传，否则返回409。上传需要智能体访问、MH-workflow、智能体调用算子及当前项目 `catalog.add_dataresource` 权限。
 
@@ -2777,7 +2777,15 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 
 ### 逻辑推理系统数据引用与干净成果（v0.1.58）
 
-`GET /api/agent/workflow-uploads/references/?q=` 仅在逻辑推理项目使用，要求明确 `X-Project-Id`，按 `resource_access_filter`、当前项目、活动状态及策略允许的数据类型搜索目录矢量/栅格/表格。排除任务上传和工作副本，最多50条，名称及说明支持搜索。需与上传一致的智能体、MH-workflow、算子及数据登记权限；401/403/404沿用平台规范。
+`GET /api/agent/workflow-uploads/references/?q=&page=1&pageSize=20&directoryId=` 仅在逻辑推理项目使用，要求明确 `X-Project-Id`，按 `resource_access_filter`、当前项目、活动状态及策略允许的数据类型搜索目录矢量/栅格/表格。排除任务上传和工作副本，按更新时间、登记时间、ID倒序；名称及说明支持搜索。返回 `{items,total,page,pageSize,directories}`，每项含类型、`directoryId/directoryName`、`createdAt/updatedAt`。`page`从1开始，`pageSize`默认20、上限50；参数非法返回400，不静默截断。目录利用现有 `inventory_group`（存量数据组别），0表示未分组，目录选项只包含当前有权访问资源所在的目录。需与上传一致的智能体、MH-workflow、算子及数据登记权限；401/403/404沿用平台规范。
+
+### 逻辑推理配置与输入区
+
+“逻辑推理”打开紧凑资料面板；“选择系统数据”和“上传文件/ZIP”并列，列表显示来源、类型、角色。收起保留资料，输入区显示已选数量；“清空”仅解除本批引用或移除临时上传，不删除系统原数据。要求文案可直接编辑。上次失败状态独立展示、可关闭并定位任务，不拼接到入口按钮。
+
+`GET /api/agent/logic-configuration/`读取本人当前逻辑推理项目最近已确认配置。`POST`接受 `{batchId}`，把仍有效的系统数据引用恢复至新批次。两者返回 `{configuration,unavailableResourceIds,items}`；GET的items为空，无配置时configuration为null。配置包含resourceIds、roles、fieldMapping、prompt和reasoningEffort。权限、Session/CSRF和项目头与上传一致；不能指定他人用户ID。失效、变化或无权访问的资源只返回ID，不暴露名称；界面要求重新选择。400为非法批次或非逻辑项目，401/403/404沿用平台约定，已绑定或发送批次恢复返回409。
+
+`LogicConfiguration`按用户与项目唯一持久化，在字段确认后仅保存系统数据引用及其角色、字段、要求和强度；混合批次中的临时资料及其角色、字段不保存。没有系统数据的批次不覆盖可复用配置；若地质图为临时上传，下次要求重新选择地质图。发送时显式携带 `reuseConfirmedConfiguration=true`；服务端再次核对当前资源权限、完整系统资源集合、更新时间及真实画像，完全一致且包含系统地质图才沿用角色和字段。资料变化或新增上传会回到角色及字段核对，不自动执行。`plan.reusedConfiguration=true`显示“沿用上次已确认的角色和字段”。计划确认及逐项处置批准始终在本次对话完成；批准前可一键“修改角色和字段”，通过既有research-intent的answer明确发送同文案，停止未执行计划并重新核对，保留原任务历史。
 
 `POST /api/agent/workflow-uploads/references/` 接受 `{batchId,resourceIds}`，原子加入1至12份不重复的目录资源；与上传项合计最多12份，返回 `{items: AgentWorkflowUpload[]}`。同批次重试返回已有条目；无权、跨项目、失效或不存在资源统一404，不部分加入；已发送/绑定批次409。资料条目增加 `source=upload|catalog`，旧客户端未返回时按upload理解。迁移 `agent.0020_workflow_catalog_references` 将resource改为ForeignKey；多个任务/批次可引用同一目录资源。`DELETE /api/agent/workflow-uploads/{uploadId}/` 对catalog只删除引用，不停用、删除或更改目录资源。现有上传删除行为不变。
 

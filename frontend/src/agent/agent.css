@@ -1253,6 +1253,20 @@
 .agent-demo-fields .agent-demo-hint {
   margin: 0;
 }
+.agent-logic-intake {
+  max-height: min(320px, 42vh);
+  overflow-y: auto;
+  min-width: 0;
+}
+.agent-logic-intake .agent-demo-fields {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-block: 8px;
+}
+.agent-logic-intake strong {
+  overflow-wrap: anywhere;
+}
 .agent-demo-source-notes {
   display: grid;
   gap: 9px;

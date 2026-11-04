@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Modal,
+  Pagination,
   Select,
   Space,
   Tag,
@@ -19,7 +20,8 @@ import { agentApi } from "../api/agent";
 import type {
   AgentWorkflowUpload,
   AgentWorkflowRoleResult,
-  AgentResource,
+  AgentWorkflowCatalogItem,
+  AgentLogicConfigurationResult,
 } from "../api/generated/types.gen";
 
 type UploadRole = NonNullable<AgentWorkflowUpload["roleHint"]>;
@@ -63,6 +65,9 @@ export default function GenericWorkflowUploads({
   onActivityChange,
   uploadOnly = false,
   onCountChange,
+  onClose,
+  onRestored,
+  onSelectionChange,
 }: {
   batchId: string;
   model: string;
@@ -72,6 +77,9 @@ export default function GenericWorkflowUploads({
   onActivityChange?: (busy: boolean) => void;
   uploadOnly?: boolean;
   onCountChange?: (count: number) => void;
+  onClose?: () => void;
+  onRestored?: (result: AgentLogicConfigurationResult) => void;
+  onSelectionChange?: () => void;
 }) {
   const [items, setItems] = useState<AgentWorkflowUpload[]>([]);
   useEffect(() => onCountChange?.(items.length), [items, onCountChange]);
@@ -79,7 +87,19 @@ export default function GenericWorkflowUploads({
   const [error, setError] = useState("");
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState("");
-  const [catalogItems, setCatalogItems] = useState<AgentResource[]>([]);
+  const [catalogItems, setCatalogItems] = useState<AgentWorkflowCatalogItem[]>(
+    [],
+  );
+  const catalogNames = useRef(new Map<number, string>());
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [directoryId, setDirectoryId] = useState<number>();
+  const [directories, setDirectories] = useState<
+    { id: number; name: string }[]
+  >([]);
+  const [restoreWarning, setRestoreWarning] = useState("");
+  const restoredCallback = useRef(onRestored);
+  restoredCallback.current = onRestored;
   const [catalogSelected, setCatalogSelected] = useState<number[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState("");
@@ -98,9 +118,20 @@ export default function GenericWorkflowUploads({
     setCatalogError("");
     const timer = setTimeout(() => {
       void agentApi
-        .workflowCatalogResources(catalogQuery, { signal: controller.signal })
+        .workflowCatalogResources(
+          catalogQuery,
+          { signal: controller.signal },
+          catalogPage,
+          directoryId,
+        )
         .then((result) => {
-          if (!controller.signal.aborted) setCatalogItems(result.items);
+          if (!controller.signal.aborted) {
+            setCatalogItems(result.items);
+            for (const item of result.items)
+              catalogNames.current.set(item.id, item.name);
+            setCatalogTotal(result.total);
+            setDirectories(result.directories);
+          }
         })
         .catch((reason) => {
           if (!controller.signal.aborted)
@@ -116,7 +147,7 @@ export default function GenericWorkflowUploads({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [catalogOpen, catalogQuery, batchId]);
+  }, [catalogOpen, catalogQuery, batchId, catalogPage, directoryId]);
   useEffect(() => {
     onActivityChange?.(Boolean(uploading) || recognizing);
     return () => onActivityChange?.(false);
@@ -134,8 +165,46 @@ export default function GenericWorkflowUploads({
     setCatalogOpen(false);
     setCatalogSelected([]);
     setCatalogQuery("");
-    if (uploadOnly) return;
     const controller = new AbortController();
+    if (uploadOnly) {
+      setUploading("上次配置");
+      void agentApi
+        .restoreLogicConfiguration(batchId, controller.signal)
+        .then((result) => {
+          if (controller.signal.aborted || currentBatch.current !== batchId)
+            return;
+          setItems(
+            result.items.map((item) => ({
+              ...item,
+              roleHint:
+                genericRoles.find(
+                  (role) =>
+                    result.configuration?.roles[role.key] === item.resourceId,
+                )?.key ?? item.roleHint,
+            })),
+          );
+          setRestoreWarning(
+            result.unavailableResourceIds.length
+              ? `${result.unavailableResourceIds.length} 份上次资料已失效、变化或无权访问，请重新选择并核对。`
+              : result.configuration && !result.configuration.roles.lithology
+                ? "上次地质图为临时资料，未纳入可复用配置，请重新选择地质图。"
+                : "",
+          );
+          restoredCallback.current?.(result);
+        })
+        .catch((reason) => {
+          if (!controller.signal.aborted)
+            setRestoreWarning(
+              reason instanceof Error
+                ? reason.message
+                : "上次配置读取失败，可重新选择资料",
+            );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setUploading(undefined);
+        });
+      return () => controller.abort();
+    }
     void agentApi
       .workflowUploads(batchId, { signal: controller.signal })
       .then((result) => {
@@ -201,6 +270,7 @@ export default function GenericWorkflowUploads({
       const result = await agentApi.uploadWorkflowBatch(batchId, files);
       if (currentBatch.current !== batchId) return;
       setItems((old) => [...old, ...result.items]);
+      if (result.items.length) onSelectionChange?.();
       setError(
         result.errors
           .map((item) => `${item.fileName}：${item.detail}`)
@@ -223,6 +293,7 @@ export default function GenericWorkflowUploads({
       await agentApi.deleteWorkflowUpload(item.id);
       changed.current = true;
       setItems((old) => old.filter((entry) => entry.id !== item.id));
+      onSelectionChange?.();
       assign(item, undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "删除失败");
@@ -248,6 +319,7 @@ export default function GenericWorkflowUploads({
       ]);
       setCatalogOpen(false);
       setCatalogSelected([]);
+      onSelectionChange?.();
       if (!uploadOnly) await recognize();
     } catch (reason) {
       if (currentBatch.current === batchId)
@@ -262,19 +334,60 @@ export default function GenericWorkflowUploads({
     }
   };
   return (
-    <section className="agent-demo-form" aria-label="上传本次资料">
+    <section
+      className={`agent-demo-form${uploadOnly ? " agent-logic-intake" : ""}`}
+      aria-label="上传本次资料"
+    >
       <div className="agent-demo-form-heading">
-        <strong>上传本次资料</strong>
+        <strong>{uploadOnly ? "逻辑推理资料" : "上传本次资料"}</strong>
+        {onClose && (
+          <Button size="small" type="text" onClick={onClose}>
+            收起
+          </Button>
+        )}
       </div>
-      <p className="agent-demo-hint">
-        可上传资料或选择当前项目的系统数据。上传资料只用于本次任务；系统数据仅建立引用，移除不影响原数据。地质图必需，其余资料可选，字段含义将在对话中确认。
-      </p>
-      <Button
-        disabled={disabled || Boolean(uploading) || recognizing}
-        onClick={() => setCatalogOpen(true)}
-      >
-        选择系统数据
-      </Button>
+      {!uploadOnly && (
+        <p className="agent-demo-hint">
+          可上传资料或选择当前项目的系统数据。上传资料只用于本次任务；系统数据仅建立引用，移除不影响原数据。地质图必需，其余资料可选，字段含义将在对话中确认。
+        </p>
+      )}
+      {restoreWarning && <Alert type="warning" title={restoreWarning} />}
+      <Space wrap>
+        <Button
+          disabled={disabled || Boolean(uploading) || recognizing}
+          onClick={() => setCatalogOpen(true)}
+        >
+          选择系统数据
+        </Button>
+        {uploadOnly && (
+          <Upload
+            multiple
+            showUploadList={false}
+            disabled={disabled || Boolean(uploading)}
+            accept=".zip,.shp,.dbf,.shx,.prj,.cpg,.gpkg,.geojson,.json,.tif,.tiff,.csv,.xlsx"
+            beforeUpload={(file, files) => {
+              if (file === files[0]) void upload(files);
+              return false;
+            }}
+          >
+            <Button disabled={disabled || Boolean(uploading)}>
+              上传文件/ZIP
+            </Button>
+          </Upload>
+        )}
+        {uploadOnly && items.length > 0 && (
+          <Button
+            size="small"
+            danger
+            disabled={disabled || Boolean(uploading)}
+            onClick={async () => {
+              for (const item of items) await remove(item);
+            }}
+          >
+            清空
+          </Button>
+        )}
+      </Space>
       <Modal
         title="选择系统数据"
         open={catalogOpen}
@@ -286,10 +399,23 @@ export default function GenericWorkflowUploads({
           disabled: disabled || !catalogSelected.length || Boolean(uploading),
         }}
       >
-        <p>
-          仅列出当前项目有权访问的矢量、栅格和表格。最多显示50份，可搜索缩小范围。
-        </p>
+        <p>最近更新优先，共 {catalogTotal} 份。可搜索名称或说明，跨页选择。</p>
         {catalogError && <Alert type="error" title={catalogError} />}
+        <Select
+          aria-label="按数据目录筛选"
+          allowClear
+          placeholder="全部数据目录"
+          value={directoryId}
+          style={{ width: "100%", marginBottom: 8 }}
+          options={directories.map((item) => ({
+            value: item.id,
+            label: item.name,
+          }))}
+          onChange={(value) => {
+            setDirectoryId(value);
+            setCatalogPage(1);
+          }}
+        />
         <Select
           mode="multiple"
           style={{ width: "100%" }}
@@ -297,33 +423,60 @@ export default function GenericWorkflowUploads({
           placeholder="搜索名称并勾选资料"
           loading={catalogLoading}
           filterOption={false}
-          showSearch={{ onSearch: setCatalogQuery }}
+          showSearch={{
+            onSearch: (value) => {
+              setCatalogQuery(value);
+              setCatalogPage(1);
+            },
+          }}
           value={catalogSelected}
+          labelRender={(option) =>
+            catalogNames.current.get(Number(option.value)) ?? option.label
+          }
+          optionRender={(option) => (
+            <div style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
+              {option.data.label}
+            </div>
+          )}
           onChange={setCatalogSelected}
           disabled={disabled || Boolean(uploading)}
           options={catalogItems.map((item) => ({
             value: item.id,
-            label: `${item.name}（${kindLabels[item.dataType as keyof typeof kindLabels] ?? item.dataType}）`,
+            label: `${item.name}（${kindLabels[item.dataType as keyof typeof kindLabels] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}）`,
             disabled: items.some((entry) => entry.resourceId === item.id),
           }))}
         />
+        <Pagination
+          size="small"
+          current={catalogPage}
+          pageSize={20}
+          total={catalogTotal}
+          showSizeChanger={false}
+          onChange={setCatalogPage}
+          showTotal={(total) => `共 ${total} 份`}
+        />
       </Modal>
-      <Upload.Dragger
-        multiple
-        showUploadList={false}
-        disabled={disabled || Boolean(uploading) || recognizing}
-        accept=".zip,.shp,.dbf,.shx,.prj,.cpg,.sbn,.sbx,.qix,.gpkg,.geojson,.json,.tif,.tiff,.csv,.xlsx"
-        beforeUpload={(file, files) => {
-          if (file === files[0]) void upload(files);
-          return false;
-        }}
-      >
-        <p>
-          {uploading
-            ? `正在上传并读取资料：${uploading}`
-            : "点击或拖入多个文件或总ZIP：Shapefile、GeoPackage、GeoJSON、GeoTIFF、CSV、Excel"}
-        </p>
-      </Upload.Dragger>
+      {!uploadOnly && (
+        <Upload.Dragger
+          multiple
+          showUploadList={false}
+          disabled={disabled || Boolean(uploading) || recognizing}
+          accept=".zip,.shp,.dbf,.shx,.prj,.cpg,.sbn,.sbx,.qix,.gpkg,.geojson,.json,.tif,.tiff,.csv,.xlsx"
+          beforeUpload={(file, files) => {
+            if (file === files[0]) void upload(files);
+            return false;
+          }}
+        >
+          <p>
+            {uploading
+              ? `正在上传并读取资料：${uploading}`
+              : "点击或拖入多个文件或总ZIP：Shapefile、GeoPackage、GeoJSON、GeoTIFF、CSV、Excel"}
+          </p>
+        </Upload.Dragger>
+      )}
+      {uploadOnly && uploading && (
+        <Typography.Text role="status">正在读取：{uploading}</Typography.Text>
+      )}
       {error && <Alert type="error" showIcon title={error} />}
       {recognizing && (
         <Alert type="info" showIcon title="智能体正在识别资料角色…" />
@@ -364,11 +517,21 @@ export default function GenericWorkflowUploads({
                 <strong>{item.fileName}</strong>
                 <Tag>{item.source === "catalog" ? "系统数据" : "上传资料"}</Tag>
                 <Tag>{kindLabels[item.dataType]}</Tag>
-                {item.profile.crs && <Tag>{item.profile.crs}</Tag>}
+                {uploadOnly && (
+                  <Tag>
+                    {genericRoles.find((entry) => entry.key === item.roleHint)
+                      ?.label || "发送后识别角色"}
+                  </Tag>
+                )}
+                {!uploadOnly && item.profile.crs && (
+                  <Tag>{item.profile.crs}</Tag>
+                )}
               </Space>
-              <Typography.Text type="secondary">
-                {profileSummary(item)}
-              </Typography.Text>
+              {!uploadOnly && (
+                <Typography.Text type="secondary">
+                  {profileSummary(item)}
+                </Typography.Text>
+              )}
               {suggestions?.items.find((entry) => entry.uploadId === item.id)
                 ?.reason && (
                 <Typography.Text type="secondary">
@@ -429,7 +592,7 @@ export default function GenericWorkflowUploads({
         <Alert
           type="info"
           showIcon
-          title="资料已就绪。输入要求并发送，随后在对话中核对角色和字段。"
+          title={`已选 ${items.length} 份资料，输入要求后发送。系统数据的已确认配置可复用；上传文件仅用于本次。`}
         />
       )}
       {!uploadOnly && items.length > 0 && !inputs.lithology && (

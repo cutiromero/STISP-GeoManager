@@ -1,0 +1,39 @@
+{
+  "GET /api/agent/logic-configuration/": {
+    "200": {
+      "configuration": {
+        "resourceIds": [812],
+        "roles": {"lithology": 812},
+        "fieldMapping": {"lithology": {"name": "DCMC", "geo_sym": "DH", "conf": null}},
+        "prompt": "检查岩性、构造与蚀变关系，给出处置建议。",
+        "reasoningEffort": "low"
+      },
+      "unavailableResourceIds": [],
+      "items": []
+    }
+  },
+  "POST /api/agent/logic-configuration/": {
+    "200": {
+      "configuration": {
+        "resourceIds": [812],
+        "roles": {"lithology": 812},
+        "fieldMapping": {"lithology": {"name": "DCMC", "geo_sym": "DH", "conf": null}},
+        "prompt": "检查岩性、构造与蚀变关系，给出处置建议。",
+        "reasoningEffort": "low"
+      },
+      "unavailableResourceIds": [],
+      "items": [{
+        "id": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+        "batchId": "0f3a6c9e2b5d8f1a4c7e0b3d6f9a2c5e",
+        "resourceId": 812, "source": "catalog", "name": "八宝山幅地质图", "fileName": "八宝山幅地质图",
+        "dataType": "vector", "sizeBytes": 2483120, "roleHint": "lithology", "workflowId": null,
+        "createdAt": "2026-11-04T08:00:00Z",
+        "profile": {
+          "kind": "vector", "crs": "EPSG:4326", "geometryTypes": ["Polygon"], "featureCount": 486,
+          "bounds": [96.82, 35.61, 97.41, 35.95], "bandCount": null, "width": null, "height": null,
+          "fields": [{"name": "DCMC", "type": "text", "samples": ["八宝山组"], "distinctCount": 36}, {"name": "DH", "type": "text", "samples": ["T3b"], "distinctCount": 34}], "warnings": []
+        }
+      }]
+    }
+  }
+}

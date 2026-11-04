@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261104-007 - 逻辑推理分页选择与已确认配置复用
+
+- Status: BackendReady
+- Owner: 科研智能体。
+- Change type: 选择器分页响应及查询参数；新增本人项目配置读取、恢复；提交增加显式复用标记。
+- Endpoints: GET /api/agent/workflow-uploads/references/；GET/POST /api/agent/logic-configuration/；POST /api/agent/conversations/{conversationId}/runs/；POST /api/agent/runs/{runId}/research-intent/。
+- OpenAPI change: 目录筛选directoryId，分页page/pageSize，返回total/directories及登记、更新时间；配置返回configuration/unavailableResourceIds/items；AgentRunInput.reuseConfirmedConfiguration默认false；plan.reusedConfiguration标明沿用；计划批准前支持“修改角色和字段”。
+- Frontend reason: 演示数据默认可见、无静默截断；新会话跨电脑复用已确认的系统数据配置，避免重复核对。
+- Mock examples: mock/prism/examples/104-agent-upload-bundle.json；mock/prism/examples/107-agent-logic-configuration.json。
+- Backend implementation notes: LogicConfiguration按owner/project_tag唯一；字段确认后仅保存系统数据部分，排除临时上传及其角色、字段；临时地质图需下次补选。恢复、发送、字段沿用均重新鉴权并匹配资源更新时间和真实画像；只沿用角色及字段，不沿用任何计划和处置批准。
+- Verification: 最近排序、分页总数、目录筛选、跨用户及跨项目隔离、失效引用提示、配置持久化与沿用、计划与批准保留人工确认、重新核对、临时资料不保存。
+- Result: 相关后端104项、前端普通单测554项及类型检查通过；浏览器回归已覆盖恢复、收起、分页、强度和360px布局，Chromium在沙箱中启动受限，需外部复跑。
+
 ## API-20261104-006 - 逻辑推理选择系统数据
 
 - Status: BackendReady
@@ -267,6 +280,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261104-007 | BackendReady | /api/agent/workflow-uploads/references/; /api/agent/logic-configuration/; /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | Paginated catalog and user/project-owned confirmed configuration | Updated | 104-agent-upload-bundle.json; 107-agent-logic-configuration.json | Implemented | Backend 104 and unit 554 passed; browser sandbox-blocked | Reauthorize references; never reuse plan or disposition approval |
 | API-20261104-003 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | uploadBatchId and explicit generic answers | Updated | 106-agent-generic-chat.json | Implemented | Backend confirmation and isolation passed, unit 550; browser sandbox-blocked | Existing workflow approval and project/owner checks preserved |
 | API-20261104-002 | BackendReady | /api/agent/workflows/{workflowId}/; /api/compute/outputs/{outputId}/preview/; /api/catalog/resources/{id}/profile/ | card view, vector map view, defaultVisualization | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Backend 122, unit 550; browser sandbox-blocked | Full view unchanged; project and owner checks preserved |
 | API-20261104-001 | BackendReady | /api/agent/workflow-uploads/batch/; /recognize/; /api/agent/workflows/active/ | batch uploads, role suggestions, active task summary | Updated | 104-agent-upload-bundle.json | Implemented | Backend 81, unit 542, types and contract passed; browser sandbox-blocked | Existing responses unchanged; target-project authorization preserved |

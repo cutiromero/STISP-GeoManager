@@ -19,10 +19,12 @@ export default function FieldMappingReview({
   review,
   busy,
   onConfirm,
+  compact = false,
 }: {
   review: AgentFieldMappingReview;
   busy: boolean;
   onConfirm: (mapping: Mapping) => void;
+  compact?: boolean;
 }) {
   const [mapping, setMapping] = useState<Mapping>(() => initialMapping(review));
   const missing = review.roles.flatMap((role) =>
@@ -38,9 +40,11 @@ export default function FieldMappingReview({
           {review.modelMode === "real" ? "智能体判断" : "按字段名推荐"}
         </Tag>
       </div>
-      <p className="agent-demo-hint">
-        平台会按您确认的对应关系生成工作副本，原始文件不变。不需要的字段可以留空；带“必需”的字段必须选择。
-      </p>
+      {!compact && (
+        <p className="agent-demo-hint">
+          平台会按您确认的对应关系生成工作副本，原始文件不变。不需要的字段可以留空；带“必需”的字段必须选择。
+        </p>
+      )}
       {review.questions.map((question) => (
         <Alert key={question} type="warning" showIcon title={question} />
       ))}
@@ -75,11 +79,19 @@ export default function FieldMappingReview({
                   }))
                 }
               />
-              {target.field && (
-                <Typography.Text type="secondary">
-                  {target.reason}
-                </Typography.Text>
-              )}
+              {target.field &&
+                (compact ? (
+                  <details>
+                    <summary>判断依据</summary>
+                    <Typography.Text type="secondary">
+                      {target.reason}
+                    </Typography.Text>
+                  </details>
+                ) : (
+                  <Typography.Text type="secondary">
+                    {target.reason}
+                  </Typography.Text>
+                ))}
             </label>
           ))}
         </div>

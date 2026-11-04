@@ -32,7 +32,7 @@ def online_model(monkeypatch):
     )
 
 
-def intake(env, *, catalog=False):
+def intake(env, *, catalog=False, reuse=False):
     env["project"].code = "02"
     env["project"].save(update_fields=["code"])
     for suffix in ("check", "apply", "relations", "prospect"):
@@ -78,6 +78,7 @@ def intake(env, *, catalog=False):
                 "prompt": "检查地质图并比较远景区",
                 "idempotencyKey": "chat-generic",
                 "uploadBatchId": env["batch"],
+                "reuseConfirmedConfiguration": reuse,
             }
         ),
         content_type="application/json",
@@ -424,3 +425,249 @@ def test_generic_reply_quota_does_not_create_workflow(generic):
     assert response.status_code == 429, response.content
     assert not AgentWorkflow.objects.exists()
     assert AgentRun.objects.count() == 1
+
+
+def confirmed_catalog_configuration(env):
+    run, upload = intake(env, catalog=True)
+    assert answer(env, run, answer="确认资料角色").status_code == 200
+    run.refresh_from_db()
+    workflow = run.research_workflow
+    prepare_demo(workflow, env["owner"], env["policy"])
+    assert answer(env, run, answer="确认字段含义").status_code == 200
+    return run, upload
+
+
+def test_unmatched_reuse_keeps_the_original_submission_idempotent(generic):
+    run, _ = intake(generic, catalog=True, reuse=True)
+    assert run.research_intent["_reuseConfirmedConfiguration"] is False
+    response = generic["client"].post(
+        f"/api/agent/conversations/{run.conversation_id}/runs/",
+        json.dumps(
+            {
+                "model": "mock",
+                "prompt": "检查地质图并比较远景区",
+                "idempotencyKey": "chat-generic",
+                "uploadBatchId": generic["batch"],
+                "reuseConfirmedConfiguration": True,
+            }
+        ),
+        content_type="application/json",
+        HTTP_X_PROJECT_ID=str(generic["project"].id),
+    )
+    assert response.status_code == 202, response.content
+    assert response.json()["id"] == run.id
+
+
+def test_configuration_restore_reuses_roles_fields_but_never_plan_or_approval(
+    generic, monkeypatch
+):
+    import uuid
+    from apps.agent.models import LogicConfiguration
+    from apps.agent.workflow_roles import recognize_roles
+
+    original, upload = confirmed_catalog_configuration(generic)
+    saved = LogicConfiguration.objects.get(
+        owner=generic["owner"], project_tag=generic["project"]
+    )
+    assert saved.value["roles"] == {"lithology": upload.resource_id}
+    url = "/api/agent/logic-configuration/"
+    headers = {"HTTP_X_PROJECT_ID": str(generic["project"].id)}
+    read = generic["client"].get(url, **headers)
+    assert read.status_code == 200, read.content
+    assert read.json()["configuration"]["fieldMapping"]["lithology"]["name"] == "DCMC"
+    batch = uuid.uuid4().hex
+    restored = generic["client"].post(
+        url, json.dumps({"batchId": batch}), content_type="application/json", **headers
+    )
+    assert restored.status_code == 200, restored.content
+    assert restored.json()["items"][0]["source"] == "catalog"
+    original.research_workflow.status = "cancelled"
+    original.research_workflow.save(update_fields=["status"])
+    conversation = Conversation.objects.create(owner=generic["owner"], mode="agent")
+    response = generic["client"].post(
+        f"/api/agent/conversations/{conversation.id}/runs/",
+        json.dumps(
+            {
+                "model": "mock",
+                "prompt": "复用资料检查",
+                "idempotencyKey": "reuse-confirmed",
+                "uploadBatchId": batch,
+                "reuseConfirmedConfiguration": True,
+            }
+        ),
+        content_type="application/json",
+        **headers,
+    )
+    assert response.status_code == 202, response.content
+    run = AgentRun.objects.get(pk=response.json()["id"])
+    monkeypatch.setattr(
+        "apps.agent.workflow_roles.recognize_roles",
+        lambda *args: pytest.fail("不应重复识别角色"),
+    )
+    process(run, generic["owner"], generic["policy"], lambda: None, lambda *args: None)
+    run.refresh_from_db()
+    workflow = run.research_workflow
+    assert workflow and run.research_intent["questions"] == []
+    monkeypatch.setattr(
+        "apps.agent.generic_mapping.model_targets",
+        lambda *args: pytest.fail("不应重复识别字段"),
+    )
+
+    def prepare_trial(workflow, user, policy):
+        from apps.agent.geology_multi import graph
+
+        workflow.plan["multiGraph"] = graph("lithology")
+        return []
+
+    monkeypatch.setattr("apps.agent.geology_multi.prepare", prepare_trial)
+    monkeypatch.setattr("apps.agent.geology_multi.authorize_frozen", lambda *args: None)
+    prepare_demo(workflow, generic["owner"], generic["policy"])
+    workflow.refresh_from_db()
+    assert workflow.plan["reusedConfiguration"] is True
+    assert workflow.plan["confirmedMapping"] == saved.value["fieldMapping"]
+    assert workflow.plan["phase"] == "review_plan"
+    assert workflow.status == "waiting_approval"
+    assert workflow.plan["chatExecution"]["initialPlanAuthorized"] is False
+    assert not workflow.plan.get("modificationReview", {}).get("approved")
+    assert answer(generic, run, answer="批准岩性类建议").status_code == 400
+    run.status = "succeeded"
+    run.save(update_fields=["status"])
+    monkeypatch.setattr("apps.agent.workflow_roles.recognize_roles", recognize_roles)
+    changed = answer(generic, run, answer="修改角色和字段")
+    assert changed.status_code == 200, changed.content
+    run.refresh_from_db()
+    assert run.research_workflow_id is None
+    assert run.research_intent["status"] == "clarifying"
+    workflow.refresh_from_db()
+    assert workflow.status == "cancelled"
+
+
+def test_configuration_invalid_resources_and_user_project_isolation(generic):
+    import uuid
+    from apps.agent.logic_configuration import read_configuration
+    from apps.agent.models import LogicConfiguration
+    from apps.projects.context import ProjectScope, project_scope
+
+    _, upload = confirmed_catalog_configuration(generic)
+    generic["outsider"].is_superuser = True
+    generic["outsider"].save(update_fields=["is_superuser"])
+    with project_scope(
+        ProjectScope(
+            (generic["project"].id,), generic["project"].id, generic["outsider"].id
+        )
+    ):
+        assert read_configuration(generic["outsider"], generic["project"].id)[0] is None
+    assert not LogicConfiguration._base_manager.filter(
+        owner=generic["owner"], project_tag=generic["other_project"]
+    ).exists()
+    upload.resource.owner_only = True
+    upload.resource.maintainer = generic["outsider"]
+    upload.resource.save()
+    headers = {"HTTP_X_PROJECT_ID": str(generic["project"].id)}
+    response = generic["client"].post(
+        "/api/agent/logic-configuration/",
+        json.dumps({"batchId": uuid.uuid4().hex}),
+        content_type="application/json",
+        **headers,
+    )
+    assert response.status_code == 200, response.content
+    assert response.json()["unavailableResourceIds"] == [upload.resource_id]
+    assert response.json()["items"] == []
+    assert upload.file_name not in response.content.decode()
+
+
+def test_temporary_uploads_never_saved_as_reusable_configuration(generic):
+    from apps.agent.models import LogicConfiguration
+
+    run, _ = intake(generic)
+    assert answer(generic, run, answer="确认资料角色").status_code == 200
+    run.refresh_from_db()
+    prepare_demo(run.research_workflow, generic["owner"], generic["policy"])
+    assert answer(generic, run, answer="确认字段含义").status_code == 200
+    assert not LogicConfiguration.objects.exists()
+
+
+@pytest.mark.parametrize(
+    "catalog_role,temporary_role",
+    [("lithology", "coverage"), ("coverage", "lithology")],
+)
+def test_mixed_configuration_saves_only_system_roles_and_fields(
+    generic, catalog_role, temporary_role
+):
+    from apps.agent.logic_configuration import matching_configuration
+    from apps.agent.models import LogicConfiguration
+
+    temporary = store_upload(
+        generic["owner"],
+        generic["project"].id,
+        geojson("研究区范围.geojson"),
+        generic["batch"],
+    )
+    run, catalog = intake(generic, catalog=True)
+    response = answer(
+        generic,
+        run,
+        answers={
+            f"upload_{catalog.resource_id}": catalog_role,
+            f"upload_{temporary.resource_id}": temporary_role,
+        },
+    )
+    assert response.status_code == 200, response.content
+    run.refresh_from_db()
+    prepare_demo(run.research_workflow, generic["owner"], generic["policy"])
+    assert answer(generic, run, answer="确认字段含义").status_code == 200
+    saved = LogicConfiguration.objects.get().value
+    assert saved["resourceIds"] == [catalog.resource_id]
+    assert saved["roles"] == {catalog_role: catalog.resource_id}
+    assert temporary_role not in saved["fieldMapping"]
+    run.refresh_from_db()
+    run.research_intent["_reuseConfirmedConfiguration"] = True
+    assert bool(matching_configuration(run, [catalog])) == (catalog_role == "lithology")
+
+
+@pytest.mark.parametrize(
+    "change", ["profile", "updated", "inactive", "deleted", "cross_project"]
+)
+def test_configuration_changes_disable_silent_role_and_field_reuse(generic, change):
+    from apps.agent.logic_configuration import (
+        matching_configuration,
+        read_configuration,
+    )
+    from apps.catalog.models import DataResource
+
+    run, upload = confirmed_catalog_configuration(generic)
+    run.research_intent["_reuseConfirmedConfiguration"] = True
+    assert matching_configuration(run, [upload]) is not None
+    if change == "profile":
+        upload.profile = {**upload.profile, "fields": []}
+    elif change == "updated":
+        upload.resource.save()
+    elif change == "inactive":
+        upload.resource.status = "inactive"
+        upload.resource.save()
+    elif change == "deleted":
+        upload.resource.delete()
+    else:
+        DataResource._base_manager.filter(pk=upload.resource_id).update(
+            project_tag_id=generic["other_project"].id
+        )
+    assert matching_configuration(run, [upload]) is None
+    if change != "profile":
+        assert read_configuration(generic["owner"], generic["project"].id)[1] == [
+            upload.resource_id
+        ]
+
+
+def test_logic_configuration_endpoint_never_reads_another_users_configuration(generic):
+    from apps.agent.models import LogicConfiguration
+
+    confirmed_catalog_configuration(generic)
+    generic["outsider"].is_superuser = True
+    generic["outsider"].save(update_fields=["is_superuser"])
+    generic["client"].force_login(generic["outsider"])
+    response = generic["client"].get(
+        "/api/agent/logic-configuration/", HTTP_X_PROJECT_ID=str(generic["project"].id)
+    )
+    assert response.status_code == 200, response.content
+    assert response.json()["configuration"] is None
+    assert LogicConfiguration._base_manager.count() == 1

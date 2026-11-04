@@ -55,7 +55,30 @@ def prepare(run, user, policy, guard):
     uploads = validate_batch(user, run.conversation, batch_id, run=run)
     if not policy.get("workflowEnabled", True) or not policy.get("operatorEnabled"):
         raise PermissionDenied("MH-workflow或智能体算法调用已关闭")
-    suggested = recognize_roles(user, run.project_tag_id, batch_id, run.model)
+    from .logic_configuration import matching_configuration
+
+    reusable = matching_configuration(run, uploads)
+    suggested = (
+        {
+            "items": [
+                {
+                    "resourceId": item.resource_id,
+                    "role": next(
+                        (
+                            role
+                            for role, identity in reusable["roles"].items()
+                            if identity == item.resource_id
+                        ),
+                        None,
+                    ),
+                    "reason": "沿用上次已确认角色",
+                }
+                for item in uploads
+            ]
+        }
+        if reusable
+        else recognize_roles(user, run.project_tag_id, batch_id, run.model)
+    )
     suggestions = {item["resourceId"]: item for item in suggested["items"]}
     questions, answers = [], {}
     for index, upload in enumerate(uploads, 1):
@@ -65,11 +88,19 @@ def prepare(run, user, policy, guard):
         questions.append(
             {
                 "key": key,
-                "label": f"第{index}份：{upload.file_name}（{suggestion['reason']}）",
+                "label": f"第{index}份：{upload.file_name}",
                 "kind": "choice",
                 "required": True,
                 "options": [
-                    {"value": role, "label": label}
+                    {
+                        "value": role,
+                        "label": label,
+                        **(
+                            {"description": suggestion["reason"]}
+                            if role == suggestion["role"]
+                            else {}
+                        ),
+                    }
                     for role, label in LABELS.items()
                     if compatible(upload, role)
                 ]
@@ -82,17 +113,33 @@ def prepare(run, user, policy, guard):
         "scenario": "geology_generic",
         "status": "clarifying",
         "goal": run.prompt,
-        "message": "资料已上传。请核对下方角色，确认后才会生成字段建议；原始文件不会被修改。",
+        "message": "请核对资料角色，确认后继续。原始文件不变。",
         "questions": questions,
         "inputs": {},
         "parameters": {"roleAnswers": answers},
         "inputSummary": [],
         "workflowId": None,
         "_uploadBatchId": batch_id,
+        "_reuseConfirmedConfiguration": bool(reusable),
+        "_requestedReuse": run.research_intent.get("_requestedReuse", False),
     }
     intent["revision"] = _state_hash(intent)
     guard()
     _save(run, intent)
+    if reusable:
+        reused_answers = {
+            f"upload_{item.resource_id}": next(
+                (
+                    role
+                    for role, identity in reusable["roles"].items()
+                    if identity == item.resource_id
+                ),
+                "skip",
+            )
+            for item in uploads
+        }
+        answer(run, user, policy, reused_answers, "")
+        return "沿用上次已确认的角色和字段；本次计划与处置仍需确认。"
     return intent["message"]
 
 
@@ -108,6 +155,34 @@ def answer(source, user, policy, answers, text):
         from .workflow import _authorize
 
         _authorize(workflow)
+        if text.strip() == "修改角色和字段":
+            if (
+                not workflow.plan.get("reusedConfiguration")
+                or workflow.status != "waiting_approval"
+                or workflow.plan.get("phase") != "review_plan"
+                or workflow.plan.get("chatExecution", {}).get("initialPlanAuthorized")
+            ):
+                raise ComputeError("仅在本次计划批准前可以重新核对角色和字段", 409)
+            from .demo_workflow import _save as save_workflow
+            from .models import WorkflowUpload
+
+            workflow.status = "cancelled"
+            workflow.cancel_requested = True
+            workflow.detail = "用户重新核对角色和字段，原计划未执行"
+            save_workflow(workflow)
+            WorkflowUpload.objects.filter(workflow=workflow, owner=user).update(
+                workflow=None
+            )
+            source.research_workflow = None
+            _save(
+                source,
+                {
+                    "_uploadBatchId": intent["_uploadBatchId"],
+                    "_requestedReuse": intent.get("_requestedReuse", False),
+                },
+            )
+            prepare(source, user, policy, lambda: None)
+            return
         if answers:
             raise ComputeError("当前阶段请使用字段、计划或逐项批准卡片")
         if text.strip() in {
@@ -262,3 +337,13 @@ def answer(source, user, policy, answers, text):
     intent["parameters"] = {}
     intent["message"] = "资料角色已确认，正在判断字段含义；请等待字段确认卡片。"
     _save(source, intent, workflow)
+    if intent.get("_reuseConfirmedConfiguration"):
+        from .logic_configuration import matching_configuration
+
+        uploads = validate_batch(
+            user, source.conversation, intent["_uploadBatchId"], run=source
+        )
+        reusable = matching_configuration(source, uploads)
+        if reusable:
+            workflow.plan["reusedFieldMapping"] = reusable["fieldMapping"]
+            workflow.save(update_fields=["plan", "updated_at"])

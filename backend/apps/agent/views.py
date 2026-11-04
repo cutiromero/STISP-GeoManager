@@ -315,6 +315,7 @@ def submit(request, conversation_id):
             "dataSelectionMode",
             "demoScenario",
             "uploadBatchId",
+            "reuseConfirmedConfiguration",
         ],
         max_bytes=max(256000, prompt_limit * 6 + 8192),
     )
@@ -330,6 +331,11 @@ def submit_value(request, c, value, *, available_models=None):
     ]
     demo_scenario = value.get("demoScenario")
     upload_batch = value.get("uploadBatchId")
+    reuse_configuration = value.get("reuseConfirmedConfiguration", False)
+    if type(reuse_configuration) is not bool or (
+        reuse_configuration and not upload_batch
+    ):
+        raise ApiProblem("复用配置需要逻辑推理资料批次")
     if upload_batch is not None:
         from .generic_chat import validate_batch
 
@@ -433,6 +439,7 @@ def submit_value(request, c, value, *, available_models=None):
                 existing.data_selection_mode,
                 existing.research_intent.get("_demoScenario"),
                 existing.research_intent.get("_uploadBatchId"),
+                existing.research_intent.get("_requestedReuse", False),
             ) != (
                 alias,
                 prompt.strip(),
@@ -449,6 +456,7 @@ def submit_value(request, c, value, *, available_models=None):
                 selections["data_selection_mode"],
                 demo_scenario,
                 upload_batch,
+                reuse_configuration,
             ):
                 raise ApiProblem("幂等键已用于不同请求", 409)
             return JsonResponse(run_json(existing, request.user), status=202)
@@ -549,7 +557,11 @@ def submit_value(request, c, value, *, available_models=None):
             budget_profile=budget_profile,
             budget_snapshot=budget_snapshot,
             research_intent=(
-                {"_uploadBatchId": upload_batch}
+                {
+                    "_uploadBatchId": upload_batch,
+                    "_reuseConfirmedConfiguration": reuse_configuration,
+                    "_requestedReuse": reuse_configuration,
+                }
                 if upload_batch
                 else {"_demoScenario": demo_scenario}
                 if demo_scenario
@@ -1002,12 +1014,56 @@ def workflow_catalog_references(request):
     project = request.headers.get("X-Project-Id")
     if request.method == "GET":
         query = request.GET.get("q", "")[:200]
-        found = (
-            catalog_resources(request.user, project)
-            .filter(Q(name__icontains=query) | Q(description__icontains=query))
-            .order_by("name", "id")[:50]
+        available = catalog_resources(request.user, project)
+        try:
+            page = int(request.GET.get("page", "1"))
+            size = int(request.GET.get("pageSize", "20"))
+            directory = request.GET.get("directoryId")
+            directory = int(directory) if directory is not None else None
+            if (
+                page < 1
+                or not 1 <= size <= 50
+                or (directory is not None and directory < 0)
+            ):
+                raise ValueError
+        except ValueError:
+            raise ApiProblem("分页或目录参数无效")
+        directories = list(
+            available.order_by("inventory_group_id")
+            .values_list("inventory_group_id", "inventory_group__name")
+            .distinct()
         )
-        return JsonResponse({"items": [brief(item) for item in found]})
+        found = (
+            available.select_related("inventory_group")
+            .filter(Q(name__icontains=query) | Q(description__icontains=query))
+            .order_by("-updated_at", "-created_at", "-id")
+        )
+        if directory is not None:
+            found = found.filter(inventory_group_id=directory or None)
+        total = found.count()
+        return JsonResponse(
+            {
+                "items": [
+                    {
+                        **brief(item),
+                        "directoryId": item.inventory_group_id,
+                        "directoryName": item.inventory_group.name
+                        if item.inventory_group
+                        else "",
+                        "createdAt": item.created_at.isoformat(),
+                        "updatedAt": item.updated_at.isoformat(),
+                    }
+                    for item in found[(page - 1) * size : page * size]
+                ],
+                "total": total,
+                "page": page,
+                "pageSize": size,
+                "directories": [
+                    {"id": identity or 0, "name": name or "未分组"}
+                    for identity, name in directories
+                ],
+            }
+        )
     value = body(request, ["batchId", "resourceIds"])
     items = add_catalog_references(
         request.user, project, value.get("batchId"), value.get("resourceIds")
@@ -1020,6 +1076,43 @@ def workflow_catalog_references(request):
         f"引用{len(items)}份系统数据",
     )
     return JsonResponse({"items": [upload_json(item) for item in items]})
+
+
+@endpoint(["GET", "POST"])
+def logic_configuration(request):
+    from .logic_configuration import configuration_json, read_configuration
+    from .workflow_uploads import add_catalog_references, upload_json
+
+    project = request.headers.get("X-Project-Id")
+    value, unavailable = read_configuration(request.user, project)
+    items = []
+    if request.method == "POST":
+        payload = body(request, ["batchId"])
+        from .workflow_uploads import checked_batch
+
+        batch = checked_batch(payload.get("batchId"))
+        valid = (
+            [
+                identity
+                for identity in value["resourceIds"]
+                if identity not in unavailable
+            ]
+            if value
+            else []
+        )
+        if valid:
+            items = [
+                upload_json(item)
+                for item in add_catalog_references(request.user, project, batch, valid)
+            ]
+        log_operation(
+            request.user,
+            "agent",
+            "restore_logic_configuration",
+            "success",
+            f"恢复{len(items)}份系统数据引用",
+        )
+    return JsonResponse(configuration_json(value, unavailable, items))
 
 
 @endpoint(["POST"])

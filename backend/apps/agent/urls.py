@@ -26,6 +26,7 @@ urlpatterns = [
     path("workflow-uploads/", views.workflow_uploads),
     path("workflow-uploads/batch/", views.workflow_upload_batch),
     path("workflow-uploads/references/", views.workflow_catalog_references),
+    path("logic-configuration/", views.logic_configuration),
     path("workflow-uploads/recognize/", views.workflow_recognize_roles),
     path("workflow-uploads/<uuid:upload_id>/", views.workflow_upload_detail),
     path("workflows/", views.workflow_submit),

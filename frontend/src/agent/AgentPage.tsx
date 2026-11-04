@@ -83,7 +83,6 @@ import useAgentLayout from "./useAgentLayout";
 import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "./ReasoningEffortControl";
-import LogicThinkingControl from "./LogicThinkingControl";
 import "./agent.css";
 import { workflowStatusLabels } from "./workflowFeedback";
 import {
@@ -245,11 +244,16 @@ function AgentWorkspace({
     createUuid().replace(/-/g, "").toLowerCase(),
   );
   const [logicUploadsOpen, setLogicUploadsOpen] = useState(false);
+  const [logicPanelMounted, setLogicPanelMounted] = useState(false);
+  const [dismissedFailure, setDismissedFailure] = useState<string>();
+  const [reuseLogicConfiguration, setReuseLogicConfiguration] = useState(false);
   const [logicUploadCount, setLogicUploadCount] = useState(0);
   const [logicUploading, setLogicUploading] = useState(false);
   const [logicInputs, setLogicInputs] = useState<Record<string, number>>({});
   const clearLogicUploads = () => {
     setLogicUploadsOpen(false);
+    setLogicPanelMounted(false);
+    setReuseLogicConfiguration(false);
     setLogicUploadCount(0);
     setLogicUploading(false);
     setLogicInputs({});
@@ -303,6 +307,8 @@ function AgentWorkspace({
     maxOutputTokens?: number;
     toolPreferences: ToolPreferences;
     demoScenario?: AgentResearchScenario;
+    uploadBatchId?: string;
+    reuseConfirmedConfiguration?: boolean;
   } | null>(null);
   const running = runs.find(active);
   const waitingRun = [...runs].reverse().find(waiting);
@@ -393,6 +399,15 @@ function AgentWorkspace({
   const workflowLabel = logicProject
     ? ui("逻辑推理", "Logical reasoning")
     : ui("MH-workflow", "MH-workflow");
+  const openLogicPanel = () => {
+    setLogicPanelMounted(true);
+    setLogicUploadsOpen(true);
+    setPrompt(
+      (value) =>
+        value ||
+        "请检查这些资料的岩性、构造与蚀变关系，识别不一致之处，给出处置建议并生成对比成果。",
+    );
+  };
   const workflowButton = mode === "agent" && (
     <Button
       type="text"
@@ -402,12 +417,10 @@ function AgentWorkspace({
           ? "agent-workflow-attention"
           : ""
       }
-      onClick={() =>
-        logicProject ? setLogicUploadsOpen(true) : setWorkflowOpen(true)
-      }
+      onClick={() => (logicProject ? openLogicPanel() : setWorkflowOpen(true))}
     >
-      {logicProject ? "上传资料并开始逻辑推理" : workflowLabel}
-      {composerWorkflowStatus && (
+      {workflowLabel}
+      {!logicProject && composerWorkflowStatus && (
         <span>{workflowStatusLabels[composerWorkflowStatus]}</span>
       )}
     </Button>
@@ -511,13 +524,22 @@ function AgentWorkspace({
     );
   }, [bootstrap, mode, model, user?.id]);
   useEffect(() => {
+    if (logicProject) return;
     const preferred = localStorage.getItem(
       `agent-thinking:${user?.id}:${mode}`,
     );
     const next =
       preferred === "deep" && deepThinkingAvailable ? "deep" : "fast";
     setThinkingMode(next);
-  }, [deepThinkingAvailable, mode, user?.id]);
+  }, [deepThinkingAvailable, mode, user?.id, logicProject]);
+  useEffect(() => {
+    if (logicProject)
+      setThinkingMode(
+        deepThinkingAvailable && effortOverride && effortOverride !== "low"
+          ? "deep"
+          : "fast",
+      );
+  }, [deepThinkingAvailable, effortOverride, logicProject]);
   useEffect(() => {
     if (!deepThinkingAvailable && thinkingMode !== "fast")
       setThinkingMode("fast");
@@ -859,6 +881,12 @@ function AgentWorkspace({
         previous.prompt === text &&
         previous.model === model &&
         previous.demoScenario === demoScenario &&
+        previous.uploadBatchId ===
+          (logicProject && logicUploadCount ? uploadBatchId : undefined) &&
+        previous.reuseConfirmedConfiguration ===
+          (logicProject && logicUploadCount
+            ? reuseLogicConfiguration
+            : undefined) &&
         JSON.stringify(previous.selected) === JSON.stringify(selected) &&
         previous.thinkingMode === thinkingMode &&
         previous.reasoningEffort === requestedEffort &&
@@ -890,6 +918,12 @@ function AgentWorkspace({
             maxOutputTokens: undefined,
             toolPreferences,
             demoScenario,
+            uploadBatchId:
+              logicProject && logicUploadCount ? uploadBatchId : undefined,
+            reuseConfirmedConfiguration:
+              logicProject && logicUploadCount
+                ? reuseLogicConfiguration
+                : undefined,
           };
       failedSubmission.current = submission;
       const run = await agentApi.submit(c.id, {
@@ -897,7 +931,10 @@ function AgentWorkspace({
         prompt: text,
         idempotencyKey: submission.key,
         ...(!demoScenario && logicProject && logicUploadCount
-          ? { uploadBatchId }
+          ? {
+              uploadBatchId,
+              reuseConfirmedConfiguration: reuseLogicConfiguration,
+            }
           : {}),
         ...(demoScenario ? { demoScenario } : {}),
         ...(bootstrap?.budgets?.enabled
@@ -1439,10 +1476,7 @@ function AgentWorkspace({
                         {question}
                       </Button>
                     ))}
-                    <Button
-                      type="primary"
-                      onClick={() => setLogicUploadsOpen(true)}
-                    >
+                    <Button type="primary" onClick={openLogicPanel}>
                       {ui(
                         "上传我的地质资料做逻辑推理",
                         "Upload my geology data for reasoning",
@@ -1750,18 +1784,103 @@ function AgentWorkspace({
                     </Button>
                   </div>
                 )}
-                {logicProject && logicUploadsOpen && (
-                  <GenericWorkflowUploads
-                    batchId={uploadBatchId}
-                    model={model}
-                    inputs={logicInputs}
-                    uploadOnly
-                    disabled={busy || taskLocked || Boolean(current?.archived)}
-                    onInputsChange={setLogicInputs}
-                    onCountChange={setLogicUploadCount}
-                    onActivityChange={setLogicUploading}
-                  />
+                {logicProject && logicPanelMounted && (
+                  <div hidden={!logicUploadsOpen}>
+                    <GenericWorkflowUploads
+                      batchId={uploadBatchId}
+                      model={model}
+                      inputs={logicInputs}
+                      uploadOnly
+                      disabled={
+                        busy || taskLocked || Boolean(current?.archived)
+                      }
+                      onInputsChange={setLogicInputs}
+                      onCountChange={setLogicUploadCount}
+                      onActivityChange={setLogicUploading}
+                      onClose={() => setLogicUploadsOpen(false)}
+                      onSelectionChange={() =>
+                        setReuseLogicConfiguration(false)
+                      }
+                      onRestored={(result) => {
+                        const configuration = result.configuration;
+                        if (!configuration) return;
+                        setPrompt((value) =>
+                          !value ||
+                          value ===
+                            "请检查这些资料的岩性、构造与蚀变关系，识别不一致之处，给出处置建议并生成对比成果。"
+                            ? configuration.prompt
+                            : value,
+                        );
+                        setEffortOverride(configuration.reasoningEffort);
+                        setThinkingMode(
+                          configuration.reasoningEffort === "low"
+                            ? "fast"
+                            : "deep",
+                        );
+                        setReuseLogicConfiguration(
+                          !result.unavailableResourceIds.length &&
+                            Boolean(configuration.roles.lithology),
+                        );
+                      }}
+                    />
+                    {reuseLogicConfiguration && (
+                      <Alert
+                        type="info"
+                        title="沿用上次已确认的角色和字段"
+                        action={
+                          <Button
+                            size="small"
+                            onClick={() => setReuseLogicConfiguration(false)}
+                          >
+                            修改角色和字段
+                          </Button>
+                        }
+                      />
+                    )}
+                    {!reuseLogicConfiguration && logicUploadCount > 0 && (
+                      <Typography.Text type="secondary">
+                        发送后核对角色和字段。
+                      </Typography.Text>
+                    )}
+                  </div>
                 )}
+                {logicProject && !logicUploadsOpen && logicUploadCount > 0 && (
+                  <Button type="text" onClick={openLogicPanel}>
+                    已选 {logicUploadCount} 份资料 · 展开
+                  </Button>
+                )}
+                {logicProject &&
+                  !logicUploadsOpen &&
+                  composerWorkflowStatus === "failed" &&
+                  dismissedFailure !==
+                    String(
+                      currentResearchWorkflow?.id ?? latestResearch?.id,
+                    ) && (
+                    <Alert
+                      type="warning"
+                      closable
+                      title="上次任务失败"
+                      onClose={() =>
+                        setDismissedFailure(
+                          String(
+                            currentResearchWorkflow?.id ?? latestResearch?.id,
+                          ),
+                        )
+                      }
+                      action={
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            viewport.current
+                              ?.querySelector(".agent-research-intent")
+                              ?.scrollIntoView({ block: "center" });
+                          }}
+                        >
+                          查看任务
+                        </Button>
+                      }
+                    />
+                  )}
                 {attachments.length > 0 && (
                   <div className="agent-attachments-row">
                     {attachments.map((item) => (
@@ -1861,34 +1980,23 @@ function AgentWorkspace({
                         </Button>
                       </Upload>
                     )}
-                    {deepThinkingAvailable && logicProject && (
-                      <LogicThinkingControl
-                        value={
-                          thinkingMode === "deep"
-                            ? (effortOverride ?? defaultEffort)
-                            : "off"
-                        }
-                        disabled={taskLocked || busy}
-                        onChange={(value) => {
-                          const next = value === "off" ? "fast" : "deep";
-                          setThinkingMode(next);
-                          setEffortOverride(
-                            value === "off" ? undefined : value,
-                          );
-                          localStorage.setItem(
-                            `agent-thinking:${user?.id}:${mode}`,
-                            next,
-                          );
-                        }}
-                      />
-                    )}
-                    {deepThinkingAvailable && !logicProject && (
+                    {deepThinkingAvailable && (
                       <ReasoningEffortControl
-                        value={effortOverride ?? defaultEffort}
+                        value={
+                          logicProject
+                            ? (effortOverride ?? "low")
+                            : (effortOverride ?? defaultEffort)
+                        }
                         overridden={effortOverride !== undefined}
-                        effortEnabled={thinkingMode === "deep"}
+                        effortEnabled={logicProject || thinkingMode === "deep"}
                         disabled={taskLocked || busy}
                         onChange={(value) => {
+                          if (logicProject) {
+                            const effort = value ?? "low";
+                            setEffortOverride(value);
+                            setThinkingMode(effort === "low" ? "fast" : "deep");
+                            return;
+                          }
                           setEffortOverride(value);
                           if (value !== undefined) {
                             setThinkingMode("deep");

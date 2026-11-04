@@ -35,6 +35,56 @@ def reference(env, resource_ids, batch=None):
     )
 
 
+def test_catalog_recent_pagination_total_and_directory(generic):
+    from apps.catalog.models import DataResourceGroup
+
+    resource = catalog_entry(generic)
+    group = DataResourceGroup.objects.create(
+        name="演示资料", project_tag=generic["project"]
+    )
+    resource.inventory_group = group
+    resource.save()
+    for index in range(54):
+        DataResource.objects.create(
+            name=f"其他资料{index}",
+            code=f"other-{index}",
+            data_type="table",
+            project_tag=generic["project"],
+            inventory_group=group,
+        )
+    resource.save()
+    url = "/api/agent/workflow-uploads/references/"
+    headers = {"HTTP_X_PROJECT_ID": str(generic["project"].id)}
+    first = generic["client"].get(url, **headers).json()
+    assert first["total"] >= 55 and len(first["items"]) == 20
+    assert first["items"][0]["id"] == resource.id
+    assert first["items"][0]["directoryName"] == "演示资料"
+    assert first["items"][0]["createdAt"]
+    last = (
+        generic["client"]
+        .get(url, {"page": 3, "directoryId": group.id}, **headers)
+        .json()
+    )
+    assert len(last["items"]) == 15 and last["total"] == 55
+    assert not {row["id"] for row in first["items"]} & {
+        row["id"] for row in last["items"]
+    }
+    filtered = (
+        generic["client"]
+        .get(url, {"q": resource.name, "directoryId": group.id}, **headers)
+        .json()
+    )
+    assert filtered["total"] == 1
+    assert (
+        generic["client"]
+        .get(url, {"q": resource.name, "directoryId": 0}, **headers)
+        .json()["total"]
+        == 0
+    )
+    for params in ({"page": 0}, {"pageSize": 51}, {"directoryId": -1}, {"page": "bad"}):
+        assert generic["client"].get(url, params, **headers).status_code == 400
+
+
 def test_references_are_non_owning_idempotent_and_reusable(generic):
     resource = catalog_entry(generic)
     original = DataResource.objects.filter(pk=resource.pk).values().get()

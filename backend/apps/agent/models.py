@@ -18,6 +18,20 @@ class AgentRuntime(models.Model):
     detail = models.JSONField(default=dict)
 
 
+class LogicConfiguration(ProjectScopedModel):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    value = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("owner", "project_tag"),
+                name="agent_logic_configuration_owner_project",
+            )
+        ]
+
+
 class Conversation(ProjectScopedModel):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     mode = models.CharField(

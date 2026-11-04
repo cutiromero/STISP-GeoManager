@@ -435,29 +435,27 @@ beforeEach(() => {
 });
 
 it.each([
-  ["关", "fast", undefined],
-  ["低", "deep", "low"],
-  ["中", "deep", "medium"],
-  ["高", "deep", "xhigh"],
+  [0, "fast", undefined],
+  [1, "deep", "medium"],
+  [2, "deep", "xhigh"],
 ])(
-  "logic project merges thinking controls and submits %s correctly",
-  async (label, mode, effort) => {
+  "logic project uses effort slider at %s without a deep-thinking switch",
+  async (index, mode, effort) => {
     projectCode.value = "02";
     showAgent("workbench");
     await screen.findByText("旧问题");
-    const control = screen.getByRole("combobox", { name: "思考" });
+    const control = screen.getByRole("button", { name: "调整思考强度" });
     expect(
-      screen.queryByRole("button", { name: "调整思考强度" }),
+      screen.queryByRole("combobox", { name: "思考" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "深度思考" }),
     ).not.toBeInTheDocument();
-    fireEvent.mouseDown(control);
-    fireEvent.click(
-      await screen.findByText(label, {
-        selector: ".ant-select-item-option-content",
-      }),
-    );
+    fireEvent.click(control);
+    const slider = await screen.findByRole("slider", { name: "思考强度" });
+    for (let step = 0; step < index; step++)
+      fireEvent.keyDown(slider, { key: "ArrowRight", keyCode: 39 });
+    fireEvent.click(control);
     fireEvent.change(
       screen.getByPlaceholderText("输入问题，Enter 发送，Shift+Enter 换行"),
       { target: { value: "核对思考档位" } },

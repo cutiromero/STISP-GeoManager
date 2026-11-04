@@ -252,7 +252,10 @@ export default function ResearchIntentCard({
       if (alive.current) setBusy(false);
     }
   };
-  const update = async (action: AgentResearchIntentUpdate["action"]) => {
+  const update = async (
+    action: AgentResearchIntentUpdate["action"],
+    explicitAnswer?: string,
+  ) => {
     if (inFlight.current) return;
     if (
       action === "answer" &&
@@ -278,9 +281,10 @@ export default function ResearchIntentCard({
         revision: intent.revision,
         ...(action === "answer"
           ? intent.scenario === "geology_generic" && answer.trim()
-            ? { answer: answer.trim() }
+            ? { answer: explicitAnswer ?? answer.trim() }
             : { answers, answer: answer.trim() }
           : {}),
+        ...(explicitAnswer ? { answer: explicitAnswer, answers: {} } : {}),
       });
       if (alive.current) {
         onUpdate.current(next);
@@ -432,6 +436,7 @@ export default function ResearchIntentCard({
         workflow.plan.phase === "review_mapping" &&
         workflow.plan.fieldMappingReview && (
           <FieldMappingReview
+            compact
             key={`${workflow.id}:${workflow.planHash}`}
             review={workflow.plan.fieldMappingReview}
             busy={busy}
@@ -439,23 +444,43 @@ export default function ResearchIntentCard({
           />
         )}
       {workflow && (
-        <WorkflowCard
-          compact
-          workflow={workflow}
-          busy={busy}
-          onConfirm={
-            workflow.plan.phase === "review_mapping"
-              ? undefined
-              : () => void update("confirm")
-          }
-          onCancel={() => void update("cancel")}
-          onPause={() => void controlWorkflow("pause")}
-          onResume={() => void controlWorkflow("resume")}
-          onReview={(decision, feedback, selectedSuggestionIds) =>
-            void reviewWorkflow(decision, feedback, selectedSuggestionIds)
-          }
-          onRestart={onRestart}
-        />
+        <>
+          {workflow.plan.reusedConfiguration === true && (
+            <Alert
+              type="info"
+              title="沿用上次已确认的角色和字段"
+              description="本次仍需确认执行计划，并逐项批准处置。"
+              action={
+                workflow.status === "waiting_approval" &&
+                workflow.plan.phase === "review_plan" ? (
+                  <Button
+                    disabled={busy}
+                    onClick={() => void update("answer", "修改角色和字段")}
+                  >
+                    修改角色和字段
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
+          <WorkflowCard
+            compact
+            workflow={workflow}
+            busy={busy}
+            onConfirm={
+              workflow.plan.phase === "review_mapping"
+                ? undefined
+                : () => void update("confirm")
+            }
+            onCancel={() => void update("cancel")}
+            onPause={() => void controlWorkflow("pause")}
+            onResume={() => void controlWorkflow("resume")}
+            onReview={(decision, feedback, selectedSuggestionIds) =>
+              void reviewWorkflow(decision, feedback, selectedSuggestionIds)
+            }
+            onRestart={onRestart}
+          />
+        </>
       )}
     </section>
   );

@@ -1270,7 +1270,11 @@ export type AgentConversationUpdate = {
  */
 export type AgentRunInput = {
     /**
-     * 逻辑推理项目智能体模式下本人未绑定的上传批次，需求最多12000字；发送后在当前对话核对资料角色，确认后绑定真实工作流，不自动越过字段、计划或处置批准。批次仅能关联一个对话研究任务。
+     * 仅逻辑推理资料批次可用；资料、真实画像及资源更新时间与本人当前项目的已确认配置完全一致时沿用角色和字段，不跳过计划及逐项批准
+     */
+    reuseConfirmedConfiguration?: boolean;
+    /**
+     * 逻辑推理项目智能体模式下本人未绑定的资料批次，需求最多12000字；发送后核对资料角色和字段，或显式沿用本人未变化的已确认配置；计划和处置批准始终由用户在本次任务确认。批次仅能关联一个对话研究任务。
      */
     uploadBatchId?: string;
     demoScenario?: AgentResearchScenario;
@@ -1461,7 +1465,7 @@ export type AgentResearchIntentUpdate = {
         [key: string]: string;
     };
     /**
-     * 用户自由补充说明
+     * 用户自由补充说明；通用地质任务已沿用配置且尚在本次计划批准前时，明确提交“修改角色和字段”会停止未执行的旧计划，保留历史并重新核对本批资料，不授权执行
      */
     answer?: string;
 };
@@ -1579,6 +1583,129 @@ export type AgentAttachment = {
      * 上传时间
      */
     createdAt: string;
+};
+
+/**
+ * 系统数据的目录和登记时间
+ */
+export type AgentWorkflowCatalogItem = {
+    /**
+     * 资源ID
+     */
+    id: number;
+    /**
+     * 资源名称
+     */
+    name: string;
+    /**
+     * 数据类型
+     */
+    dataType: string;
+    /**
+     * 资源说明
+     */
+    description: string;
+    /**
+     * 数据目录（存量数据组别）ID
+     */
+    directoryId: number | null;
+    /**
+     * 数据目录名称，未分组为空
+     */
+    directoryName: string;
+    /**
+     * 登记时间
+     */
+    createdAt: string;
+    /**
+     * 更新时间
+     */
+    updatedAt: string;
+};
+
+/**
+ * 按最近更新时间排序的系统数据页；目录列表只包含当前可见资源所在组别
+ */
+export type AgentWorkflowCatalogPage = {
+    /**
+     * 本页资源
+     */
+    items: Array<AgentWorkflowCatalogItem>;
+    /**
+     * 筛选后的总数
+     */
+    total: number;
+    /**
+     * 当前页码
+     */
+    page: number;
+    /**
+     * 每页条数
+     */
+    pageSize: number;
+    /**
+     * 当前可见资源的数据目录，0表示未分组
+     */
+    directories: Array<{
+        /**
+         * 目录ID
+         */
+        id: number;
+        /**
+         * 目录名称
+         */
+        name: string;
+    }>;
+};
+
+/**
+ * 本人当前项目最近一次已确认配置中的系统数据部分；不含临时上传及其角色和字段，地质图未保存时需重新选择
+ */
+export type AgentLogicConfiguration = {
+    /**
+     * 系统数据引用ID
+     */
+    resourceIds: Array<number>;
+    /**
+     * 角色到系统资源ID的映射
+     */
+    roles: {
+        [key: string]: number;
+    };
+    /**
+     * 已确认的角色到字段含义映射
+     */
+    fieldMapping: {
+        [key: string]: {
+            [key: string]: string | null;
+        };
+    };
+    /**
+     * 上次要求文案
+     */
+    prompt: string;
+    /**
+     * 推理强度
+     */
+    reasoningEffort: 'low' | 'medium' | 'xhigh';
+};
+
+/**
+ * 已重新鉴权的配置和恢复结果，失效资源只返回ID
+ */
+export type AgentLogicConfigurationResult = {
+    /**
+     * 最近已确认配置，不存在时为null
+     */
+    configuration: AgentLogicConfiguration | null;
+    /**
+     * 已失效、变化或无权访问的资源ID，需重新选择
+     */
+    unavailableResourceIds: Array<number>;
+    /**
+     * POST恢复到批次中的有效引用，GET为空
+     */
+    items: Array<AgentWorkflowUpload>;
 };
 
 /**
@@ -2623,6 +2750,10 @@ export type AgentWorkflow = {
          */
         trialRuleBindings?: Array<AgentTrialRuleBinding>;
         fieldMappingReview?: AgentFieldMappingReview;
+        /**
+         * 本次资料与服务端已确认配置一致，沿用角色和字段；不表示计划或处置获批
+         */
+        reusedConfiguration?: boolean;
         [key: string]: unknown;
     };
     /**
@@ -18637,6 +18768,18 @@ export type ListAgentWorkflowCatalogResourcesData = {
          * 名称或说明搜索词，最多200字
          */
         q?: string;
+        /**
+         * 页码，从1开始
+         */
+        page?: number;
+        /**
+         * 每页条数，上限50
+         */
+        pageSize?: number;
+        /**
+         * 数据目录（存量数据组别）ID，0表示未分组
+         */
+        directoryId?: number;
     };
     url: '/api/agent/workflow-uploads/references/';
 };
@@ -18666,7 +18809,7 @@ export type ListAgentWorkflowCatalogResourcesResponses = {
     /**
      * 有权访问的目录资源
      */
-    200: AgentResourceList;
+    200: AgentWorkflowCatalogPage;
 };
 
 export type ListAgentWorkflowCatalogResourcesResponse = ListAgentWorkflowCatalogResourcesResponses[keyof ListAgentWorkflowCatalogResourcesResponses];
@@ -18792,6 +18935,104 @@ export type UploadAgentWorkflowBatchResponses = {
 };
 
 export type UploadAgentWorkflowBatchResponse = UploadAgentWorkflowBatchResponses[keyof UploadAgentWorkflowBatchResponses];
+
+export type GetAgentLogicConfigurationData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前具体逻辑推理项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/logic-configuration/';
+};
+
+export type GetAgentLogicConfigurationErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type GetAgentLogicConfigurationError = GetAgentLogicConfigurationErrors[keyof GetAgentLogicConfigurationErrors];
+
+export type GetAgentLogicConfigurationResponses = {
+    /**
+     * 配置与失效资源ID；没有配置时configuration为null
+     */
+    200: AgentLogicConfigurationResult;
+};
+
+export type GetAgentLogicConfigurationResponse = GetAgentLogicConfigurationResponses[keyof GetAgentLogicConfigurationResponses];
+
+export type RestoreAgentLogicConfigurationData = {
+    /**
+     * 尚未发送的新资料批次
+     */
+    body: {
+        /**
+         * 资料批次号
+         */
+        batchId: string;
+    };
+    headers: {
+        /**
+         * 当前具体逻辑推理项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/logic-configuration/';
+};
+
+export type RestoreAgentLogicConfigurationErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type RestoreAgentLogicConfigurationError = RestoreAgentLogicConfigurationErrors[keyof RestoreAgentLogicConfigurationErrors];
+
+export type RestoreAgentLogicConfigurationResponses = {
+    /**
+     * 恢复的引用、配置与失效资源ID
+     */
+    200: AgentLogicConfigurationResult;
+};
+
+export type RestoreAgentLogicConfigurationResponse = RestoreAgentLogicConfigurationResponses[keyof RestoreAgentLogicConfigurationResponses];
 
 export type RecognizeAgentWorkflowRolesData = {
     /**

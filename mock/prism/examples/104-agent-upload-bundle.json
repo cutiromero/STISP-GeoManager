@@ -1,6 +1,6 @@
 {
   "GET /api/agent/workflow-uploads/references/": {
-    "200": { "items": [{ "id": 812, "name": "八宝山幅地质图", "dataType": "vector", "description": "已登记的岩性资料", "isComputeResult": false, "origin": "uploaded_data" }] }
+    "200": { "items": [{ "id": 812, "name": "八宝山幅地质图", "dataType": "vector", "description": "已登记的岩性资料", "directoryId": 4, "directoryName": "逻辑推理演示", "createdAt": "2026-11-04T08:00:00Z", "updatedAt": "2026-11-04T08:00:00Z" }], "total": 67, "page": 1, "pageSize": 20, "directories": [{"id": 4, "name": "逻辑推理演示"}] }
   },
   "POST /api/agent/workflow-uploads/references/": {
     "200": { "items": [{

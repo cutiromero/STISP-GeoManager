@@ -335,6 +335,9 @@ def confirm_mapping(workflow, user, policy, plan_hash, mapping):
     workflow.status, workflow.detail = "queued", "已确认字段含义，正在生成工作副本"
     with transaction.atomic():
         _save(workflow)
+        from .logic_configuration import save_configuration
+
+        save_configuration(workflow, confirmed)
         step(
             workflow,
             "field_mapping_confirmed",
@@ -356,6 +359,45 @@ def prepare_generic(workflow, user, policy) -> bool:
 
     phase = workflow.plan.get("phase")
     if phase is None:
+        reused = workflow.plan.pop("reusedFieldMapping", None)
+        if reused is not None:
+            from .logic_configuration import matching_configuration
+            from .models import AgentRun
+            from .workflow_uploads import batch_uploads
+
+            origin = (
+                AgentRun.objects.filter(research_workflow=workflow, owner=user)
+                .order_by("id")
+                .first()
+            )
+            uploads = list(batch_uploads(user, workflow.plan["uploadBatchId"]))
+            if origin and matching_configuration(origin, uploads):
+                roles = _review_roles(workflow, user)
+                for item in roles:
+                    item.pop("_profile")
+                review = {
+                    "roles": roles,
+                    "questions": [],
+                    "modelMode": "mock",
+                    "confirmed": False,
+                }
+                try:
+                    confirmed = validate_mapping(review, reused)
+                except ComputeError:
+                    pass
+                else:
+                    review["confirmed"] = True
+                    workflow.plan.update(
+                        fieldMappingReview=review,
+                        confirmedMapping=confirmed,
+                        phase="build_inputs",
+                        reusedConfiguration=True,
+                    )
+                    _save(workflow)
+                    from .logic_configuration import save_configuration
+
+                    save_configuration(workflow, confirmed)
+                    return prepare_generic(workflow, user, policy)
         review = propose_mapping(workflow, user, policy)
         workflow.plan.update(fieldMappingReview=review, phase="review_mapping")
         workflow.status, workflow.current_step = "waiting_approval", "review_mapping"

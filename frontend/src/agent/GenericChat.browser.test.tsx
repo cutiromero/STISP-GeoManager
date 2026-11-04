@@ -8,6 +8,7 @@ import {
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { agentApi } from "../api/agent";
 import type {
   AgentBootstrap,
@@ -226,6 +227,11 @@ beforeEach(() => {
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "researchDemoSummaries").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "workflowUploads").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "restoreLogicConfiguration").mockResolvedValue({
+    configuration: null,
+    items: [],
+    unavailableResourceIds: [],
+  });
   vi.spyOn(agentApi, "uploadWorkflowBatch").mockResolvedValue({
     items: [upload],
     errors: [],
@@ -307,10 +313,92 @@ beforeEach(() => {
 });
 afterEach(() => sessionStorage.clear());
 
+it("360px 输入区恢复服务端配置，收起保留选择且发送显式复用请求", async () => {
+  await page.viewport(360, 800);
+  vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
+    configuration: {
+      resourceIds: [812],
+      roles: { lithology: 812 },
+      fieldMapping: { lithology: { name: "DCMC" } },
+      prompt: "沿用上次的检查要求",
+      reasoningEffort: "low",
+    },
+    items: [{ ...upload, source: "catalog" }],
+    unavailableResourceIds: [],
+  });
+  const mounted = show();
+  try {
+    const trigger = await screen.findByRole("button", {
+      name: /(^|\s)逻辑推理$/,
+    });
+    expect(trigger).not.toHaveTextContent("执行失败");
+    fireEvent.click(trigger);
+    await screen.findByText("沿用上次已确认的角色和字段");
+    const input = screen.getByPlaceholderText(
+      "输入问题，Enter 发送，Shift+Enter 换行",
+    );
+    expect(input).toHaveValue("沿用上次的检查要求");
+    const panel = screen.getByRole("region", { name: "上传本次资料" });
+    expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(360);
+    fireEvent.click(screen.getByRole("button", { name: "收起" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "已选 1 份资料 · 展开" }),
+    );
+    expect(agentApi.restoreLogicConfiguration).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(upload.fileName)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() =>
+      expect(agentApi.submit).toHaveBeenCalledWith(
+        44,
+        expect.objectContaining({
+          prompt: "沿用上次的检查要求",
+          reuseConfirmedConfiguration: true,
+          thinkingMode: "fast",
+        }),
+      ),
+    );
+  } finally {
+    mounted.unmount();
+    await page.viewport(1600, 900);
+  }
+});
+
+it("沿用配置的对话卡片仍要求本次计划确认，并提供一键重新核对", async () => {
+  workflow.plan = {
+    ...workflow.plan,
+    reusedConfiguration: true,
+    phase: "review_plan",
+  };
+  workflow.status = "waiting_approval";
+  syncIntent();
+  runs = [chatRun()];
+  const mounted = show();
+  try {
+    await screen.findByText("沿用上次已确认的角色和字段");
+    expect(screen.getByRole("button", { name: "确认执行" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "修改角色和字段" }));
+    await waitFor(() =>
+      expect(agentApi.updateResearchIntent).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          action: "answer",
+          answer: "修改角色和字段",
+          answers: {},
+        }),
+      ),
+    );
+  } finally {
+    mounted.unmount();
+  }
+});
+
 it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留成果地图入口", async () => {
   const mounted = show();
   fireEvent.click(
-    await screen.findByRole("button", { name: /上传资料并开始逻辑推理/ }),
+    await screen.findByRole("button", { name: /(^|\s)逻辑推理$/ }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "上传文件/ZIP" })).toBeEnabled(),
   );
   const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
   fireEvent.change(input, {
@@ -320,7 +408,7 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
       ],
     },
   });
-  await screen.findByText(/资料已就绪/);
+  await screen.findByText(/已选 1 份资料/);
   expect(agentApi.recognizeWorkflowRoles).not.toHaveBeenCalled();
   fireEvent.change(
     screen.getByPlaceholderText("输入问题，Enter 发送，Shift+Enter 换行"),
@@ -435,8 +523,6 @@ it("其他项目仍保留MH-workflow入口，不显示对话内资料上传", as
   expect(
     await screen.findByRole("button", { name: /MH-workflow/ }),
   ).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: /上传资料并开始逻辑推理/ }),
-  ).toBeNull();
+  expect(screen.queryByRole("button", { name: /(^|\s)逻辑推理$/ })).toBeNull();
   expect(agentApi.workflowUploads).not.toHaveBeenCalled();
 });

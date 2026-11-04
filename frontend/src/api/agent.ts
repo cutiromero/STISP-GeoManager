@@ -24,6 +24,8 @@ import type {
   AgentRunInput,
   AgentRunPoll,
   AgentResourceList,
+  AgentWorkflowCatalogPage,
+  AgentLogicConfigurationResult,
   AgentAdmin,
   AgentAdminUpdate,
   AgentWorkflow,
@@ -155,10 +157,24 @@ export const agentApi = {
       `/api/agent/workflow-uploads/?batchId=${encodeURIComponent(batchId)}`,
       options,
     ),
-  workflowCatalogResources: (q = "", options: { signal?: AbortSignal } = {}) =>
-    requestJson<AgentResourceList>(
-      `/api/agent/workflow-uploads/references/?q=${encodeURIComponent(q)}`,
+  workflowCatalogResources: (
+    q = "",
+    options: { signal?: AbortSignal } = {},
+    page = 1,
+    directoryId?: number,
+  ) =>
+    requestJson<AgentWorkflowCatalogPage>(
+      `/api/agent/workflow-uploads/references/?q=${encodeURIComponent(q)}&page=${page}&pageSize=20${directoryId === undefined ? "" : `&directoryId=${directoryId}`}`,
       options,
+    ),
+  restoreLogicConfiguration: (batchId: string, signal?: AbortSignal) =>
+    requestJson<AgentLogicConfigurationResult>(
+      "/api/agent/logic-configuration/",
+      {
+        method: "POST",
+        body: { batchId },
+        signal,
+      },
     ),
   addWorkflowCatalogReferences: (batchId: string, resourceIds: number[]) =>
     requestJson<AgentWorkflowUploadList>(
