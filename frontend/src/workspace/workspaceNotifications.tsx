@@ -35,18 +35,23 @@ export function showGeojsonWarnings(
   notification: AppNotification,
   warnings?: GeoJsonValidationWarning[],
 ) {
-  if (!warnings?.length) {
+  // Decimal precision estimates do not measure positional accuracy and require
+  // no decision when loading a layer. Import validation handles them separately.
+  const actionableWarnings = warnings?.filter(
+    (warning) => warning.code !== "coordinate_uncertainty",
+  );
+  if (!actionableWarnings?.length) {
     return;
   }
   notification.warning({
-    key: `geojson-warning-${warnings
+    key: `geojson-warning-${actionableWarnings
       .map((warning) => warning.code)
       .sort()
       .join("-")}`,
     message: "地理坐标数据警告",
     description: (
       <div className="geojson-warning-list">
-        {warnings.map((warning) => (
+        {actionableWarnings.map((warning) => (
           <div key={`${warning.code}-${warning.message}`}>
             {warning.message}
           </div>

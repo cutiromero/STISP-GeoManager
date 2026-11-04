@@ -15,6 +15,7 @@ from apps.compute.access import require_actor
 from apps.core.storage import app_path, table_data_path
 from .compute_tools import authorized_task
 from .tools import resolve_resource, frame
+from .geology_generic import MULTI_FAMILY
 
 EDIT_FIELDS = (
     "feature_id",
@@ -48,7 +49,7 @@ def read_output(workflow, user, policy, output) -> dict:
         "rows": [],
     }
     if output.kind == "table":
-        if workflow.workflow_type == "geology_multi_element_reasoning":
+        if workflow.workflow_type in MULTI_FAMILY:
             from .geology_multi_results import table_rows
 
             return {**result, **table_rows(path, output.key)}
@@ -193,8 +194,7 @@ def resource_context(workflow, user, policy) -> list[dict]:
             "description": resource.description[:1200],
         }
         if (
-            workflow.workflow_type
-            in {"geology_map_review", "geology_multi_element_reasoning"}
+            workflow.workflow_type in {"geology_map_review", *MULTI_FAMILY}
             and resource.data_type == "vector"
         ):
             from apps.compute.data import candidate
@@ -207,10 +207,7 @@ def resource_context(workflow, user, policy) -> list[dict]:
             from .tools import clean
 
             rows = clean(data.to_dict(orient="records"))
-            if (
-                workflow.workflow_type == "geology_multi_element_reasoning"
-                and role == "rules"
-            ):
+            if workflow.workflow_type in MULTI_FAMILY and role == "rules":
                 # Full rule content is the explicitly authorized knowledge packet.
                 # The duplicate table contributes identity/version, not a second copy.
                 rows = [

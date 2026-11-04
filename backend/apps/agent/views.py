@@ -6,7 +6,7 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, OperationalError, transaction, connection
 from django.db.models import Q, F
-from django.http import JsonResponse, Http404
+from django.http import HttpResponse, JsonResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
@@ -885,6 +885,7 @@ def workflow_submit(request):
             "importResults",
             "knowledgeSelection",
             "previousWorkflowId",
+            "uploadBatchId",
         ],
     )
     from .workflow_creation import create_workflow
@@ -893,11 +894,62 @@ def workflow_submit(request):
     return JsonResponse(workflow_json(workflow), status=202)
 
 
+@endpoint(["GET", "POST"])
+def workflow_uploads(request):
+    from .workflow_uploads import (
+        batch_uploads,
+        require_upload_access,
+        store_upload,
+        upload_json,
+    )
+
+    project = request.headers.get("X-Project-Id")
+    if request.method == "GET":
+        require_upload_access(request.user, project)
+        items = batch_uploads(request.user, request.GET.get("batchId"))
+        return JsonResponse({"items": [upload_json(item) for item in items]})
+    if set(request.POST) - {"batchId"} or set(request.FILES) != {"file"}:
+        raise ApiProblem("请上传一个文件并提供批次号")
+    upload = store_upload(
+        request.user, project, request.FILES["file"], request.POST.get("batchId")
+    )
+    log_operation(
+        request.user,
+        "agent",
+        "upload_workflow_file",
+        "success",
+        upload.file_name,
+        target_type="data_resource",
+        target_id=upload.resource_id,
+    )
+    return JsonResponse(upload_json(upload), status=201)
+
+
+@endpoint(["DELETE"])
+def workflow_upload_detail(request, upload_id):
+    from .workflow_uploads import delete_upload, require_upload_access
+
+    require_upload_access(request.user, request.headers.get("X-Project-Id"))
+    delete_upload(request.user, upload_id)
+    log_operation(
+        request.user,
+        "agent",
+        "delete_workflow_upload",
+        "success",
+        target_type="workflow_upload",
+        target_code=str(upload_id),
+    )
+    return HttpResponse(status=204)
+
+
 @endpoint(["POST"])
 def workflow_confirm(request, workflow_id):
     from .workflow import validate_confirmed_plan
 
-    value = body(request, ["planHash", "decision", "feedback", "selectedSuggestionIds"])
+    value = body(
+        request,
+        ["planHash", "decision", "feedback", "selectedSuggestionIds", "fieldMapping"],
+    )
     decision, feedback = value.get("decision", "approve"), value.get("feedback", "")
     selected = value.get("selectedSuggestionIds")
     if (
@@ -952,7 +1004,7 @@ def workflow_confirm(request, workflow_id):
                 from .demo_workflow import authorize_demo
 
                 authorize_demo(workflow, request.user, p)
-            else:
+            elif workflow.plan.get("phase") != "review_mapping":
                 validate_confirmed_plan(workflow, request.user, p)
             record_workflow_review(
                 workflow, "reject", feedback, value["planHash"], review_outputs
@@ -978,6 +1030,7 @@ def workflow_confirm(request, workflow_id):
             "geology_age_correction",
             "geology_map_review",
             "geology_multi_element_reasoning",
+            "geology_generic",
         }:
             from .demo_workflow import confirm_demo
 
@@ -987,6 +1040,7 @@ def workflow_confirm(request, workflow_id):
                 p,
                 value["planHash"],
                 value.get("selectedSuggestionIds"),
+                value.get("fieldMapping"),
             )
             record_workflow_review(
                 workflow, "approve", feedback, value["planHash"], review_outputs

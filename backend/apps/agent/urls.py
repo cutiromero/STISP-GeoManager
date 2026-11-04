@@ -23,6 +23,8 @@ urlpatterns = [
     path("runs/<int:run_id>/research-intent/", views.research_intent),
     path("research-demos/", views.research_demos),
     path("resources/", views.resource_list),
+    path("workflow-uploads/", views.workflow_uploads),
+    path("workflow-uploads/<uuid:upload_id>/", views.workflow_upload_detail),
     path("workflows/", views.workflow_submit),
     path("workflows/<uuid:workflow_id>/", views.workflow_detail),
     path("workflows/<uuid:workflow_id>/cancel/", views.workflow_cancel),

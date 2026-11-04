@@ -161,13 +161,15 @@ export function tourLabels(
   change: TourChange,
   before?: Feature,
   after?: Feature,
+  loading = false,
 ) {
   const p = change.feature.properties;
   const weight = (feature: Feature | undefined, fallback?: unknown) => {
     const value = feature?.properties.weight ?? fallback;
-    return value === undefined || value === null || value === ""
-      ? "未读取"
-      : String(value);
+    if (value !== undefined && value !== null && value !== "")
+      return String(value);
+    // A layer still being read must not look like missing evidence.
+    return loading ? "读取中…" : "原记录未提供";
   };
   switch (change.action) {
     case "reclassify":

@@ -330,7 +330,8 @@ describe("api client", () => {
 
     await expect(api.adminDataResources()).rejects.toMatchObject({
       status: 500,
-      message: "服务器内部错误：OperationalError at /api/admin/data/resources/",
+      message:
+        "平台处理时出错，本次操作没有完成。请稍后重试；如果一直出现，请联系管理员。（错误代码 500）",
     });
   });
 

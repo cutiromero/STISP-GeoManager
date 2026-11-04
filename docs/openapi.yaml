@@ -4093,8 +4093,9 @@ paths:
           enum:
           - artifact
           - preview
+          - thumbnail
           default: artifact
-        description: artifact 下载原文件，preview 在浏览器内预览
+        description: artifact 下载原文件，preview 在浏览器内预览；thumbnail 返回长边不超过640像素的WebP缩略图，仅PNG、JPG/JPEG成果提供，其余格式返回400
       - name: X-Project-Id
         in: header
         required: false
@@ -4659,8 +4660,9 @@ paths:
           enum:
           - artifact
           - preview
+          - thumbnail
           default: artifact
-        description: artifact 返回正式成果并触发下载；preview 返回 PNG 预览
+        description: artifact 返回正式成果并触发下载；preview 返回 PNG 预览；thumbnail 返回由预览生成的长边不超过640像素的WebP缩略图
       - name: X-Project-Id
         in: header
         required: false
@@ -7612,6 +7614,113 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AgentWorkflowConfirmation'
+  /api/agent/workflow-uploads/:
+    get:
+      tags: [智能体]
+      operationId: listAgentWorkflowUploads
+      summary: 列出本次任务上传的资料
+      description: 列出本人在当前项目某个上传批次中的资料及识别结果。需要智能体与MH-workflow权限；只返回本人上传，已删除或停用的资料不返回。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID
+        schema: {type: integer, minimum: 1}
+      - name: batchId
+        in: query
+        required: true
+        description: 客户端生成的上传批次号，32位小写十六进制
+        schema: {type: string, pattern: '^[0-9a-f]{32}$'}
+      responses:
+        '200':
+          description: 上传列表
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentWorkflowUploadList'}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [智能体]
+      operationId: uploadAgentWorkflowFile
+      summary: 上传任务资料并识别
+      description: 上传一个文件作为通用地质推理任务的资料。经既有导入服务校验后登记为仅上传者可见的数据资源，不进入项目数据目录；返回类型、坐标系、几何、字段与示例取值，以及推荐角色。需要智能体访问、MH-workflow、智能体调用算子及当前项目数据登记权限。每个批次最多12个文件；批次已绑定任务时返回409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID
+        schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        description: 一个资料文件及其批次号
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              description: 矢量支持Shapefile ZIP、GeoPackage、GeoJSON；栅格支持GeoTIFF；表格支持CSV、XLSX。大小沿用平台导入限制。
+              additionalProperties: false
+              required: [file, batchId]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 资料文件
+                batchId:
+                  type: string
+                  pattern: '^[0-9a-f]{32}$'
+                  description: 客户端生成的上传批次号
+      responses:
+        '201':
+          description: 已登记并完成识别
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentWorkflowUpload'}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/agent/workflow-uploads/{uploadId}/:
+    delete:
+      tags: [智能体]
+      operationId: deleteAgentWorkflowUpload
+      summary: 删除尚未使用的任务资料
+      description: 删除本人尚未绑定任务的上传及其数据资源。已绑定任务的资料作为任务依据保留，返回409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID
+        schema: {type: integer, minimum: 1}
+      - name: uploadId
+        in: path
+        required: true
+        description: 上传记录 UUID
+        schema: {type: string, format: uuid}
+      responses:
+        '204':
+          description: 已删除
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   "/api/knowledge/documents/": {"get": {"tags": ["知识库"], "operationId": "listKnowledgeDocuments", "summary": "列出文档与处理状态", "description": "列出文档与处理状态。需要有效登录与当前项目权限。读取当前项目、公共基础资料及本人owner_only空间；空间分开索引和生成，禁止跨权限域Wiki合成。写入须知识维护权限。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前项目ID；后端验证项目成员关系", "schema": {"type": "integer", "minimum": 1}}, {"name": "domain", "in": "query", "description": "限定知识领域；省略读取全部可见领域", "schema": {"$ref": "#/components/schemas/KnowledgeDomain"}}], "responses": {"200": {"description": "操作成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/KnowledgeDocumentList"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}, "503": {"description": "知识引擎暂不可用，原资料保留，可重试", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}, "post": {"tags": ["知识库"], "operationId": "uploadKnowledgeDocument", "summary": "上传并索引资料、自动生成Wiki", "description": "上传并索引资料、自动生成Wiki。需要有效登录与当前项目权限。读取当前项目、公共基础资料及本人owner_only空间；空间分开索引和生成，禁止跨权限域Wiki合成。写入须知识维护权限。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前项目ID；后端验证项目成员关系", "schema": {"type": "integer", "minimum": 1}}], "responses": {"200": {"description": "操作成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/KnowledgeDocument"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}, "503": {"description": "知识引擎暂不可用，原资料保留，可重试", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "提交内容", "content": {"multipart/form-data": {"schema": {"type": "object", "description": "最多20MiB；PDF/DOCX先提取带页号/段号文本，扫描PDF须先有可提取文字", "properties": {"file": {"type": "string", "description": "PDF、DOCX、TXT、MD、CSV或JSON文件", "format": "binary"}, "title": {"type": "string", "description": "标题，最多180字"}, "sourceUrl": {"type": "string", "description": "来源HTTP(S)地址，不触发下载"}, "visibility": {"type": "string", "description": "可见范围", "enum": ["project", "owner_only"], "default": "project"}, "domain": {"$ref": "#/components/schemas/KnowledgeDomain"}}, "required": ["file", "title", "visibility"], "additionalProperties": false}}}}}}
   "/api/knowledge/documents/{documentId}/retry/": {"post": {"tags": ["知识库"], "operationId": "retryKnowledgeDocument", "summary": "重新处理失败资料", "description": "重新处理失败资料。需要有效登录与当前项目权限。读取当前项目、公共基础资料及本人owner_only空间；空间分开索引和生成，禁止跨权限域Wiki合成。写入须知识维护权限。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前项目ID；后端验证项目成员关系", "schema": {"type": "integer", "minimum": 1}}, {"name": "documentId", "in": "path", "required": true, "description": "本地资料ID", "schema": {"type": "integer"}}], "responses": {"200": {"description": "操作成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/KnowledgeDocument"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}, "503": {"description": "知识引擎暂不可用，原资料保留，可重试", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
   "/api/knowledge/documents/search/": {"post": {"tags": ["知识库"], "operationId": "searchKnowledgeDocuments", "summary": "按语义和关键词检索文档原文", "description": "按语义和关键词检索文档原文。需要有效登录与当前项目权限。读取当前项目、公共基础资料及本人owner_only空间；空间分开索引和生成，禁止跨权限域Wiki合成。写入须知识维护权限。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前项目ID；后端验证项目成员关系", "schema": {"type": "integer", "minimum": 1}}], "responses": {"200": {"description": "操作成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/KnowledgeDocumentSearch"}}}}, "400": {"$ref": "#/components/responses/BadRequest"}, "401": {"$ref": "#/components/responses/Unauthorized"}, "403": {"$ref": "#/components/responses/Forbidden"}, "404": {"$ref": "#/components/responses/NotFound"}, "409": {"$ref": "#/components/responses/Conflict"}, "503": {"description": "知识引擎暂不可用，原资料保留，可重试", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "提交内容", "content": {"application/json": {"schema": {"type": "object", "description": "检索输入", "properties": {"query": {"type": "string", "description": "自然语言问题", "minLength": 1, "maxLength": 1000}, "limit": {"type": "integer", "description": "最多返回数量", "default": 6, "minimum": 1, "maximum": 12}, "domains": {"type": "array", "description": "限定文档领域，省略为所有可见领域", "maxItems": 4, "items": {"$ref": "#/components/schemas/KnowledgeDomain"}}}, "required": ["query"], "additionalProperties": false}}}}}}
@@ -9761,8 +9870,8 @@ components:
       additionalProperties: false
     AgentResearchScenario:
       type: string
-      description: 当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确
-      enum: [ecology_investigation, geology_correction, geology_age_correction, geology_map_review, geology_multi_element_reasoning]
+      description: 当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确；geology_generic 为用户上传资料的通用地质推理，资料在任务中上传，不提供预设
+      enum: [ecology_investigation, geology_correction, geology_age_correction, geology_map_review, geology_multi_element_reasoning, geology_generic]
     AgentResearchQuestion:
       type: object
       description: 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
@@ -9872,7 +9981,7 @@ components:
               projectName: {type: string, description: 当前项目名称}
               title: {type: string, description: 案例标题}
               prompt: {type: string, description: 启动用自然语言，明确资料性质、预设与成果保存目标}
-              sampleNature: {type: string, enum: [synthetic, real_map_with_demonstration_errors, demonstration_case], description: synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例}
+              sampleNature: {type: string, enum: [synthetic, real_map_with_demonstration_errors, demonstration_case, user_upload], description: synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例；user_upload为用户在任务中上传资料}
               available: {type: boolean, description: 资料、已发布算法与模型等必要服务是否就绪}
               preset:
                 type: object
@@ -10743,6 +10852,8 @@ components:
               type: array
               description: 仅当前项目与综合地质场景可读取的显式试用规则及冻结版本；不改变普通知识检索对草稿的可见性
               items: {$ref: '#/components/schemas/AgentTrialRuleBinding'}
+            fieldMappingReview:
+              $ref: '#/components/schemas/AgentFieldMappingReview'
           additionalProperties: true
         planHash:
           type: string
@@ -10791,7 +10902,7 @@ components:
       properties:
         workflowType:
           type: string
-          description: 工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，保留生态与既有地质场景；默认 hyperspectral_interpretation
+          description: 工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，geology_generic 为上传资料的通用地质推理，保留生态与既有地质场景；默认 hyperspectral_interpretation
           default: hyperspectral_interpretation
           maxLength: 40
         goal:
@@ -10827,7 +10938,7 @@ components:
           maxLength: 80
         inputs:
           type: object
-          description: 输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。
+          description: 输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。通用地质场景使用lithology（必需）及可选的faults、coverage、units和五类蚀变角色，规则由服务端选用当前项目已绑定的试用规则。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。
           additionalProperties:
             type: integer
             minimum: 1
@@ -10841,6 +10952,10 @@ components:
           type: string
           format: uuid
           description: 可选的本人当前项目已完成生态分析；仅替换观测证据，复用实际变化结果并保存旧判断与新增证据，用于更新调查建议。
+        uploadBatchId:
+          type: string
+          pattern: '^[0-9a-f]{32}$'
+          description: geology_generic必填。本人当前项目尚未绑定任务的上传批次；inputs只能引用该批次资料，创建后批次绑定到本任务。
       required:
       - goal
       - model
@@ -14352,6 +14467,7 @@ components:
         - fileFormat
         - sizeBytes
         - previewUrl
+        - thumbnailUrl
         - downloadUrl
         - owner
         - accessGroups
@@ -14403,6 +14519,9 @@ components:
         previewUrl:
           type: string
           description: 成果预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
+        thumbnailUrl:
+          type: [string, 'null']
+          description: 卡片用缩略图地址，包含所属项目的 projectTagId；仅PNG、JPG/JPEG成果提供，其余格式为null。首次请求时生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。
         downloadUrl:
           type: string
           description: 成果下载地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
@@ -14481,6 +14600,123 @@ components:
           items:
             $ref: "#/components/schemas/AdminDataResourceAccessGroup"
           deprecated: true
+    AgentWorkflowUploadField:
+      type: object
+      description: 上传资料中的一个字段及示例取值
+      additionalProperties: false
+      required: [name, type, samples, distinctCount]
+      properties:
+        name: {type: string, description: 原始字段名}
+        type: {type: string, description: 推断的字段类型，例如text、integer、number}
+        samples:
+          type: array
+          description: 最多8个不同的示例取值，统一为文本
+          maxItems: 8
+          items: {type: string, description: 示例取值}
+        distinctCount: {type: integer, minimum: 0, description: 前1000条记录中的不同取值个数}
+    AgentWorkflowUploadProfile:
+      type: object
+      description: 平台读取的资料识别结果
+      additionalProperties: false
+      required: [kind, fields]
+      properties:
+        kind: {type: string, enum: [vector, raster, table], description: 资料类型}
+        crs: {type: [string, 'null'], description: 坐标系，例如EPSG:32646；无法识别时为null}
+        geometryTypes:
+          type: array
+          description: 矢量几何类型
+          items: {type: string, description: 几何类型}
+        featureCount: {type: [integer, 'null'], description: 要素数或表格行数}
+        bounds:
+          type: [array, 'null']
+          description: WGS84外包范围[west,south,east,north]
+          items: {type: number, description: 坐标}
+        bandCount: {type: [integer, 'null'], description: 栅格波段数}
+        width: {type: [integer, 'null'], description: 栅格列数}
+        height: {type: [integer, 'null'], description: 栅格行数}
+        fields:
+          type: array
+          description: 矢量或表格字段；栅格为空数组
+          items: {$ref: '#/components/schemas/AgentWorkflowUploadField'}
+        warnings:
+          type: array
+          description: 识别中发现的问题，例如缺少坐标系
+          items: {type: string, description: 问题说明}
+    AgentWorkflowUpload:
+      type: object
+      description: 通用地质推理任务的一份上传资料
+      additionalProperties: false
+      required: [id, batchId, resourceId, name, fileName, dataType, sizeBytes, roleHint, profile, workflowId, createdAt]
+      properties:
+        id: {type: string, format: uuid, description: 上传记录 UUID}
+        batchId: {type: string, description: 上传批次号}
+        resourceId: {type: integer, description: 登记的数据资源ID，仅上传者可见}
+        name: {type: string, description: 资料名称，取自文件名}
+        fileName: {type: string, description: 原始文件名}
+        dataType: {type: string, enum: [vector, raster, table], description: 资料类型}
+        sizeBytes: {type: integer, minimum: 0, description: 原始文件大小}
+        roleHint:
+          type: [string, 'null']
+          description: 平台推荐的资料角色；无法判断时为null
+          enum: [lithology, faults, coverage, units, hematite, chlorite, hydromica, calcite, dolomite, null]
+        profile: {$ref: '#/components/schemas/AgentWorkflowUploadProfile'}
+        workflowId: {type: [string, 'null'], description: 已绑定的工作流UUID；未绑定时为null}
+        createdAt: {type: string, format: date-time, description: 上传时间}
+    AgentWorkflowUploadList:
+      type: object
+      description: 一个批次的上传资料
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: 按上传时间排列
+          items: {$ref: '#/components/schemas/AgentWorkflowUpload'}
+    AgentFieldMappingTarget:
+      type: object
+      description: 一个规范字段的对应建议
+      additionalProperties: false
+      required: [key, label, required, field, reason]
+      properties:
+        key: {type: string, description: 规范字段名，例如name、geo_sym}
+        label: {type: string, description: 规范字段的中文说明}
+        required: {type: boolean, description: 是否必须对应}
+        field: {type: [string, 'null'], description: 建议对应的原始字段；不对应时为null}
+        reason: {type: string, description: 智能体给出的判断依据}
+    AgentFieldMappingRole:
+      type: object
+      description: 一份资料的字段对应建议
+      additionalProperties: false
+      required: [role, label, resourceId, fileName, fields, targets]
+      properties:
+        role: {type: string, description: 资料角色}
+        label: {type: string, description: 角色中文名}
+        resourceId: {type: integer, description: 上传资料的数据资源ID}
+        fileName: {type: string, description: 原始文件名}
+        fields:
+          type: array
+          description: 可选择的原始字段
+          items: {type: string, description: 字段名}
+        targets:
+          type: array
+          description: 规范字段及建议
+          items: {$ref: '#/components/schemas/AgentFieldMappingTarget'}
+    AgentFieldMappingReview:
+      type: object
+      description: 通用地质推理的字段确认环节；只在geology_generic场景出现
+      additionalProperties: false
+      required: [roles, questions, modelMode, confirmed]
+      properties:
+        roles:
+          type: array
+          description: 需要确认字段的资料；栅格资料不出现
+          items: {$ref: '#/components/schemas/AgentFieldMappingRole'}
+        questions:
+          type: array
+          description: 智能体需要用户回答的问题，例如无法识别地层字段
+          items: {type: string, description: 问题}
+        modelMode: {type: string, enum: [real, mock], description: 建议来自真实模型或模拟模型}
+        confirmed: {type: boolean, description: 用户是否已确认}
     AgentWorkflowConfirmation:
       type: object
       description: 用户对当前预览计划或候选结果的审核选择。
@@ -14510,6 +14746,18 @@ components:
           maxItems: 30
           uniqueItems: true
           items: {type: string, minLength: 1, maxLength: 64, description: 当前实际问题和模型建议绑定的稳定标识}
+        fieldMapping:
+          type: object
+          description: 通用地质推理字段确认环节approve必填。键为资料角色，值为规范字段到原始字段的对应；null表示不对应。必需字段必须对应真实字段，其他阶段不得提交。
+          maxProperties: 9
+          additionalProperties:
+            type: object
+            description: 一份资料的字段对应
+            maxProperties: 8
+            additionalProperties:
+              type: [string, 'null']
+              description: 原始字段名
+              maxLength: 120
     AgentModificationReview:
       type: object
       description: 地质成果修改建议及持久批准范围；仅相应工作流提供，客户端不提交修改坐标或目标值。
@@ -15623,6 +15871,7 @@ components:
       - snapshotSchemaVersion
       - snapshotChecksum
       - previewUrl
+      - thumbnailUrl
       - downloadUrl
       - createdAt
       properties:
@@ -15667,6 +15916,9 @@ components:
         previewUrl:
           type: string
           description: PNG 预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
+        thumbnailUrl:
+          type: string
+          description: 卡片用缩略图地址，包含所属项目的 projectTagId；由PNG预览生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。
         downloadUrl:
           type: string
           description: 正式成果下载地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。

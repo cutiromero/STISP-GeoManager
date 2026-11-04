@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "identifier": "geology-multi-relations",
-  "name": "海德乌拉构造关系重建",
-  "version": "1.0.3",
-  "description": "海德乌拉构造关系重建。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
+  "name": "构造关系重建",
+  "version": "1.0.4",
+  "description": "构造关系重建。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
   "agent": {
@@ -15,7 +15,7 @@
   "inputs": [
     {
       "key": "faults",
-      "label": "模拟识别构造图（演示）",
+      "label": "构造图",
       "kind": "vector",
       "geometryTypes": [
         "LineString",
@@ -33,7 +33,7 @@
     },
     {
       "key": "rules",
-      "label": "本案例显式启用的专家规则及版本",
+      "label": "显式启用的试用规则及版本",
       "kind": "table"
     },
     {

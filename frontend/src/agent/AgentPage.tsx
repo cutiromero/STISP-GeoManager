@@ -30,13 +30,20 @@ import {
   NodeIndexOutlined,
 } from "@ant-design/icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
 import { useComputeText } from "../compute/ui";
 import { agentApi } from "../api/agent";
 import { ApiError } from "../api/client";
+import {
+  assertAgentRun,
+  assertConversationDetail,
+  assertConversationList,
+  assertRunPoll,
+} from "../api/agentResponse";
+import { downloadResponseDiagnostics } from "../api/responseDiagnostics";
 import type {
   AgentBudgetProfileId,
   AgentConversation,
@@ -77,6 +84,10 @@ import ReasoningEffortControl, {
 } from "./ReasoningEffortControl";
 import "./agent.css";
 import { workflowStatusLabels } from "./workflowFeedback";
+import {
+  genericGeologyType,
+  isLogicReasoningProject,
+} from "./multiElementScenario";
 
 const active = (r: AgentRun) =>
   ["queued", "running", "waiting_compute"].includes(r.status);
@@ -98,20 +109,56 @@ function mergeRun(old: AgentRun[], next: AgentRun): AgentRun[] {
     : [...updated, next];
 }
 
+// Plain questions a geologist would ask; the agent chooses data and knowledge itself.
+const logicExampleQuestions = [
+  "这个项目里有哪些地质资料？",
+  "八宝山组的时代、岩性和分布有什么特点？",
+  "判断一条构造线是不是假线，主要看哪些依据？",
+  "蚀变找矿远景区是怎样圈定的？",
+];
+
+// Same-named conversations stay distinguishable by when they were last used.
+function conversationTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const today = new Date();
+  const time = date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return date.toDateString() === today.toDateString()
+    ? `今天 ${time}`
+    : `${date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })} ${time}`;
+}
+
 export default function AgentPage() {
   const project = useProjectContext();
   const { user } = useAppContext();
   const location = useLocation();
   const mode = location.pathname.endsWith("workbench") ? "agent" : "chat";
+  // In the logic-reasoning project quick chat and the research agent are one page.
+  const logicProject = isLogicReasoningProject(
+    project?.projects.find((item) => String(item.id) === project.current)?.code,
+  );
+  const { bootstrap } = useAgentBootstrapState();
+  if (logicProject && mode === "chat" && bootstrap?.canAgent)
+    return <Navigate to="/agent/workbench" replace state={location.state} />;
   return (
     <AgentWorkspace
       key={`${user?.id}:${project?.current}:${mode}`}
       mode={mode}
+      logicProject={logicProject}
     />
   );
 }
 
-function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
+function AgentWorkspace({
+  mode,
+  logicProject = false,
+}: {
+  mode: "chat" | "agent";
+  logicProject?: boolean;
+}) {
   const ui = useComputeText();
   const navigate = useNavigate();
   const location = useLocation();
@@ -165,6 +212,14 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
   const [error, setError] = useState("");
+  const [historyLoading, setHistoryLoading] =
+    useState<AgentConversation | null>(null);
+  const [historyFailure, setHistoryFailure] = useState<{
+    conversation: AgentConversation;
+    message: string;
+  } | null>(null);
+  const [pollFailure, setPollFailure] = useState("");
+  const [pollAttempt, setPollAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [resources, setResources] = useState<AgentResource[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
@@ -314,6 +369,31 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   const deepThinkingAvailable =
     Boolean(bootstrap?.thinkingEnabled) &&
     Boolean(selectedModel?.supportsThinking);
+  const modeLabel = logicProject
+    ? ui("智能体", "Agent")
+    : mode === "chat"
+      ? ui("快速对话", "Quick chat")
+      : ui("科研智能体", "Research agent");
+  const workflowLabel = logicProject
+    ? ui("逻辑推理", "Logical reasoning")
+    : ui("MH-workflow", "MH-workflow");
+  const workflowButton = mode === "agent" && (
+    <Button
+      type="text"
+      icon={<NodeIndexOutlined />}
+      className={
+        composerWorkflowStatus === "waiting_approval"
+          ? "agent-workflow-attention"
+          : ""
+      }
+      onClick={() => setWorkflowOpen(true)}
+    >
+      {workflowLabel}
+      {composerWorkflowStatus && (
+        <span>{workflowStatusLabels[composerWorkflowStatus]}</span>
+      )}
+    </Button>
+  );
   const attachmentsAvailable = Boolean(bootstrap?.allowAttachments);
   const internetAvailable = Boolean(bootstrap?.internetEnabled);
   const conversationStorageKey = `agent-conversation:${user?.id ?? "anon"}:${project?.current ?? "1"}:${mode}`;
@@ -331,6 +411,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
   }, []);
   const clearRestrictedState = () => {
     sequence.current++;
+    listSequence.current++;
     setManualWorkflow(undefined);
     setResearchWorkflow(undefined);
     setWorkflowStatus(undefined);
@@ -339,6 +420,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     setEvents([]);
     setCurrent(null);
     setConversations([]);
+    setHistoryLoading(null);
+    setHistoryFailure(null);
+    setPollFailure("");
   };
   const report = (e: unknown) => {
     if (!alive.current) return;
@@ -353,14 +437,27 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         e instanceof Error ? e.message : ui("操作失败", "Operation failed"),
       );
   };
+  const updateRun = (next: AgentRun, replace = false) => {
+    try {
+      assertAgentRun(next);
+      if (!replace && current && next.conversationId !== current.id)
+        throw new Error("返回的任务与当前对话不一致，当前聊天记录已保留。");
+      setRuns((old) => mergeRun(replace ? [] : old, next));
+      return true;
+    } catch (reason) {
+      report(reason);
+      return false;
+    }
+  };
   const refreshList = async () => {
     const seq = ++listSequence.current;
     try {
       const data = await agentApi.conversations(mode, query, archived);
+      assertConversationList(data);
       if (alive.current && seq === listSequence.current)
         setConversations(data.items);
     } catch (e) {
-      report(e);
+      if (alive.current && seq === listSequence.current) report(e);
     }
   };
   useEffect(() => {
@@ -417,7 +514,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       .catch(report);
   }, [mode, canUse]);
   useEffect(() => {
-    if (!running) return;
+    if (!running || historyLoading) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let cursor = 0;
@@ -425,8 +522,15 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       try {
         const data = await agentApi.poll(running.id, cursor);
         if (disposed) return;
+        assertRunPoll(data);
+        if (
+          data.run.id !== running.id ||
+          data.run.conversationId !== running.conversationId
+        )
+          throw new Error("返回的任务与当前对话不一致，当前聊天记录已保留。");
         cursor = data.cursor;
         setRuns((old) => mergeRun(old, data.run));
+        setPollFailure("");
         setEvents((old) =>
           [
             ...old,
@@ -441,9 +545,17 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         else void refreshList();
       } catch (e) {
         if (disposed) return;
-        report(e);
-        if (!(e instanceof ApiError && (e.status === 401 || e.status === 403)))
+        if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
+          clearRestrictedState();
+          report(e);
+        } else {
+          setPollFailure(
+            e instanceof Error
+              ? e.message
+              : "暂时无法更新回答，当前聊天记录已保留。",
+          );
           timer = setTimeout(poll, 3000);
+        }
       }
     };
     void poll();
@@ -451,28 +563,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       disposed = true;
       clearTimeout(timer);
     };
-  }, [running?.id]);
-  useEffect(() => {
-    if (!current || running || !canUse) return;
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const reauthorize = async () => {
-      try {
-        const data = await agentApi.detail(current.id);
-        if (!disposed) setRuns(data.runs);
-      } catch (e) {
-        if (!disposed) {
-          report(e);
-        }
-      }
-      if (!disposed) timer = setTimeout(reauthorize, 15000);
-    };
-    timer = setTimeout(reauthorize, 15000);
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, [current?.id, running?.id, canUse]);
+  }, [running?.id, historyLoading, pollAttempt]);
   useLayoutEffect(() => {
     const box = viewport.current;
     if (box && pendingScroll.current !== null) {
@@ -510,18 +601,28 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
 
   const open = async (c: AgentConversation) => {
     const seq = ++sequence.current;
-    setCurrent(c);
-    setResearchWorkflow(undefined);
-    followLatest.current = true;
-    setRuns([]);
-    setComputeActivities({});
-    setEvents([]);
+    setHistoryLoading(c);
+    setHistoryFailure(null);
     setError("");
     setShowHistory(false);
     failedSubmission.current = null;
     try {
       const detail = await agentApi.detail(c.id);
       if (alive.current && seq === sequence.current) {
+        assertConversationDetail(detail);
+        if (
+          detail.conversation.id !== c.id ||
+          detail.conversation.projectId !== c.projectId ||
+          detail.conversation.mode !== c.mode
+        )
+          throw new Error(
+            "返回的历史记录与所选会话不一致，当前聊天记录已保留。",
+          );
+        setResearchWorkflow(undefined);
+        followLatest.current = true;
+        setComputeActivities({});
+        setEvents([]);
+        setPollFailure("");
         setCurrent(detail.conversation);
         setRuns(detail.runs);
         if (mode === "agent") {
@@ -544,7 +645,28 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         }
       }
     } catch (e) {
-      if (seq === sequence.current) report(e);
+      if (!alive.current || seq !== sequence.current) return;
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      if (e instanceof ApiError && [401, 403].includes(e.status)) {
+        report(e);
+      } else if (e instanceof ApiError && e.status === 404) {
+        if (current?.id === c.id) {
+          setCurrent(null);
+          setRuns([]);
+          setEvents([]);
+          setComputeActivities({});
+          setResearchWorkflow(undefined);
+        }
+        setConversations((old) => old.filter((item) => item.id !== c.id));
+        setError(e.message);
+      } else {
+        setHistoryFailure({
+          conversation: c,
+          message: e instanceof Error ? e.message : "暂时无法读取历史记录。",
+        });
+      }
+    } finally {
+      if (alive.current && seq === sequence.current) setHistoryLoading(null);
     }
   };
   useEffect(() => {
@@ -573,6 +695,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     if (
       !canUse ||
       busy ||
+      historyLoading ||
       running ||
       uploadingAttachment ||
       !text.trim() ||
@@ -609,7 +732,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
           text,
         });
         if (!alive.current || seq !== sequence.current) return;
-        setRuns((old) => mergeRun(old, next));
+        if (!updateRun(next)) return;
         setPrompt("");
         setEvents([]);
         followLatest.current = true;
@@ -618,10 +741,12 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         report(failure);
         try {
           const latest = await agentApi.poll(waitingRun.id);
-          if (alive.current && seq === sequence.current)
-            setRuns((old) => mergeRun(old, latest.run));
-        } catch {
-          // The normal history authorization refresh handles revoked access.
+          if (alive.current && seq === sequence.current) {
+            assertRunPoll(latest);
+            updateRun(latest.run);
+          }
+        } catch (reason) {
+          if (alive.current && seq === sequence.current) report(reason);
         }
       } finally {
         if (alive.current && seq === sequence.current) setBusy(false);
@@ -668,7 +793,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
         );
         if (!alive.current || seq !== sequence.current) return;
         pendingScroll.current = run.id;
-        setRuns((old) => mergeRun(old, run));
+        if (!updateRun(run)) return;
         setPrompt("");
         setEvents([]);
         void refreshList();
@@ -732,7 +857,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       });
       if (!alive.current || seq !== sequence.current) return;
       pendingScroll.current = run.id;
-      setRuns((old) => mergeRun(demoScenario ? [] : old, run));
+      if (!updateRun(run, Boolean(demoScenario))) return;
       setPrompt("");
       setEvents([]);
       failedSubmission.current = null;
@@ -767,6 +892,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
     setComputeActivities({});
     setEvents([]);
     setError("");
+    setHistoryLoading(null);
+    setHistoryFailure(null);
+    setPollFailure("");
     setPrompt("");
     setAttachments([]);
     setInternetEnabled(false);
@@ -926,6 +1054,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                     <ActivityMark state={sidebarActivity.state} />
                   )}
                   {c.title}
+                  <time className="agent-history-time" dateTime={c.updatedAt}>
+                    {conversationTime(c.updatedAt)}
+                  </time>
                 </button>
                 <Space size={0} className="agent-history-actions">
                   <Button
@@ -1030,6 +1161,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               <nav
                 className="agent-mode-nav"
                 aria-label={ui("对话模式", "Conversation mode")}
+                hidden={logicProject}
               >
                 {bootstrap?.canChat && (
                   <Button
@@ -1055,16 +1187,9 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 )}
               </nav>
               <div className="agent-conversation-heading">
-                <span>
-                  {mode === "chat"
-                    ? ui("快速对话", "Quick chat")
-                    : ui("科研智能体", "Research agent")}
-                </span>
+                <span>{modeLabel}</span>
                 <strong title={current?.title}>
-                  {current?.title ??
-                    (mode === "chat"
-                      ? ui("快速对话", "Quick chat")
-                      : ui("科研智能体", "Research agent"))}
+                  {current?.title ?? modeLabel}
                 </strong>
               </div>
             </div>
@@ -1080,6 +1205,75 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               showIcon
               closable
               onClose={() => setError("")}
+              action={
+                <Button size="small" onClick={downloadResponseDiagnostics}>
+                  {ui("下载异常诊断", "Download diagnostics")}
+                </Button>
+              }
+            />
+          )}
+          {historyLoading && (
+            <Typography.Text role="status" aria-live="polite">
+              {ui("正在加载会话：", "Loading conversation: ")}
+              {historyLoading.title}
+            </Typography.Text>
+          )}
+          {historyFailure && (
+            <Alert
+              type="warning"
+              showIcon
+              title={ui(
+                "暂时无法加载所选历史",
+                "Unable to load selected history",
+              )}
+              description={
+                <>
+                  {historyFailure.message}
+                  <p>
+                    {ui(
+                      "当前聊天记录已保留，请重试加载。",
+                      "Current messages are retained. Retry loading the history.",
+                    )}
+                  </p>
+                </>
+              }
+              action={
+                <Space wrap>
+                  <Button
+                    size="small"
+                    onClick={() => void open(historyFailure.conversation)}
+                  >
+                    {ui("重试加载历史", "Retry history")}
+                  </Button>
+                  <Button size="small" onClick={downloadResponseDiagnostics}>
+                    {ui("下载异常诊断", "Download diagnostics")}
+                  </Button>
+                </Space>
+              }
+            />
+          )}
+          {pollFailure && (
+            <Alert
+              type="warning"
+              showIcon
+              title={pollFailure}
+              description={ui(
+                "当前回答已保留，正在重新连接。",
+                "The current answer is retained. Reconnecting.",
+              )}
+              action={
+                <Space wrap>
+                  <Button
+                    size="small"
+                    onClick={() => setPollAttempt((value) => value + 1)}
+                  >
+                    {ui("重试更新回答", "Retry answer update")}
+                  </Button>
+                  <Button size="small" onClick={downloadResponseDiagnostics}>
+                    {ui("下载异常诊断", "Download diagnostics")}
+                  </Button>
+                </Space>
+              }
             />
           )}
           {!bootstrap && bootstrapStatus === "error" && (
@@ -1135,7 +1329,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               lastScrollTop.current = box.scrollTop;
             }}
           >
-            {!runs.length && (
+            {!runs.length && !historyLoading && !historyFailure && (
               <div className="agent-welcome">
                 <RobotOutlined />
                 <Typography.Title level={2}>
@@ -1157,7 +1351,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         "Discover authorized project data, calculate statistics and inspect the evidence.",
                       )}
                 </p>
-                {mode === "agent" && (
+                {mode === "agent" && !logicProject && (
                   <Button
                     onClick={() =>
                       setPrompt(
@@ -1170,6 +1364,30 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                   >
                     {ui("查看项目数据概况", "Explore project data")}
                   </Button>
+                )}
+                {mode === "agent" && logicProject && (
+                  <div
+                    className="agent-example-questions"
+                    aria-label={ui("示例问题", "Example questions")}
+                  >
+                    {logicExampleQuestions.map((question) => (
+                      <Button
+                        key={question}
+                        onClick={() => setPrompt(question)}
+                      >
+                        {question}
+                      </Button>
+                    ))}
+                    <Button
+                      type="primary"
+                      onClick={() => setWorkflowOpen(true)}
+                    >
+                      {ui(
+                        "上传我的地质资料做逻辑推理",
+                        "Upload my geology data for reasoning",
+                      )}
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
@@ -1273,13 +1491,13 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       <ComputeIntentCard
                         runId={r.id}
                         intent={r.computeIntent}
-                        onChanged={(next) =>
-                          setRuns((old) =>
-                            old.map((item) =>
-                              item.id === next.id ? next : item,
-                            ),
+                        onChanged={(next) => {
+                          if (
+                            alive.current &&
+                            conversationSequence === sequence.current
                           )
-                        }
+                            updateRun(next);
+                        }}
                       />
                     )}
                   {mode === "agent" &&
@@ -1317,13 +1535,18 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         }}
                         onChanged={(next) => {
                           if (
+                            !alive.current ||
+                            conversationSequence !== sequence.current
+                          )
+                            return;
+                          if (!updateRun(next)) return;
+                          if (
                             next.id !== r.id &&
                             !runs.some((old) => old.id === next.id)
                           ) {
                             pendingScroll.current = next.id;
                             void refreshList();
                           }
-                          setRuns((old) => mergeRun(old, next));
                         }}
                       />
                     )}
@@ -1338,7 +1561,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                         return;
                       followLatest.current = true;
                       setEvents([]);
-                      setRuns((old) => mergeRun(old, next));
+                      updateRun(next);
                       void refreshList();
                     }}
                   />
@@ -1522,7 +1745,8 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                 </div>
                 <div className="agent-composer-footer">
                   <div className="agent-composer-tools">
-                    {mode === "agent" && bootstrap && (
+                    {logicProject && workflowButton}
+                    {mode === "agent" && bootstrap && !logicProject && (
                       <AgentToolSelection
                         bootstrap={bootstrap}
                         resources={resources}
@@ -1602,29 +1826,13 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                             );
                           }}
                         >
-                          {ui("逻辑推理", "Logical reasoning")}
+                          {logicProject
+                            ? ui("深度思考", "Deep thinking")
+                            : ui("逻辑推理", "Logical reasoning")}
                         </Button>
                       </>
                     )}
-                    {mode === "agent" && (
-                      <Button
-                        type="text"
-                        icon={<NodeIndexOutlined />}
-                        className={
-                          composerWorkflowStatus === "waiting_approval"
-                            ? "agent-workflow-attention"
-                            : ""
-                        }
-                        onClick={() => setWorkflowOpen(true)}
-                      >
-                        {ui("MH-workflow", "MH-workflow")}
-                        {composerWorkflowStatus && (
-                          <span>
-                            {workflowStatusLabels[composerWorkflowStatus]}
-                          </span>
-                        )}
-                      </Button>
-                    )}
+                    {!logicProject && workflowButton}
                   </div>
                   {running ? (
                     <Button
@@ -1656,7 +1864,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                                 alive.current &&
                                 activeSequence === sequence.current
                               )
-                                setRuns((old) => mergeRun(old, result));
+                                updateRun(result);
                             } catch (error) {
                               report(error);
                               throw error;
@@ -1683,6 +1891,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
                       loading={busy}
                       disabled={
                         !canUse ||
+                        Boolean(historyLoading) ||
                         uploadingAttachment ||
                         !modelOnline ||
                         !bootstrap?.workerOnline ||
@@ -1700,7 +1909,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
       </div>
       {mode === "agent" && canUse && (
         <Drawer
-          title={ui("MH-workflow", "MH-workflow")}
+          title={workflowLabel}
           open={workflowOpen}
           onClose={() => setWorkflowOpen(false)}
           size={layout.workflow}
@@ -1731,6 +1940,7 @@ function AgentWorkspace({ mode }: { mode: "chat" | "agent" }) {
               bootstrap={bootstrap}
               onStatusChange={setWorkflowStatus}
               onWorkflowChange={setManualWorkflow}
+              fixedScenario={logicProject ? genericGeologyType : undefined}
             />
           </div>
         </Drawer>

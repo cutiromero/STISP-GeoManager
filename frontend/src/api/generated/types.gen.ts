@@ -1323,9 +1323,9 @@ export type AgentRunInput = {
 };
 
 /**
- * 当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确
+ * 当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确；geology_generic 为用户上传资料的通用地质推理，资料在任务中上传，不提供预设
  */
-export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction' | 'geology_age_correction' | 'geology_map_review' | 'geology_multi_element_reasoning';
+export type AgentResearchScenario = 'ecology_investigation' | 'geology_correction' | 'geology_age_correction' | 'geology_map_review' | 'geology_multi_element_reasoning' | 'geology_generic';
 
 /**
  * 模型提出的必要澄清；选择与自由文本均由后续模型重新解析
@@ -1512,9 +1512,9 @@ export type AgentResearchDemoList = {
          */
         prompt: string;
         /**
-         * synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例
+         * synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例；user_upload为用户在任务中上传资料
          */
-        sampleNature: 'synthetic' | 'real_map_with_demonstration_errors' | 'demonstration_case';
+        sampleNature: 'synthetic' | 'real_map_with_demonstration_errors' | 'demonstration_case' | 'user_upload';
         /**
          * 资料、已发布算法与模型等必要服务是否就绪
          */
@@ -2610,6 +2610,7 @@ export type AgentWorkflow = {
          * 仅当前项目与综合地质场景可读取的显式试用规则及冻结版本；不改变普通知识检索对草稿的可见性
          */
         trialRuleBindings?: Array<AgentTrialRuleBinding>;
+        fieldMappingReview?: AgentFieldMappingReview;
         [key: string]: unknown;
     };
     /**
@@ -2632,7 +2633,7 @@ export type AgentWorkflow = {
  */
 export type AgentWorkflowInput = {
     /**
-     * 工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，保留生态与既有地质场景；默认 hyperspectral_interpretation
+     * 工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，geology_generic 为上传资料的通用地质推理，保留生态与既有地质场景；默认 hyperspectral_interpretation
      */
     workflowType?: string;
     /**
@@ -2666,7 +2667,7 @@ export type AgentWorkflowInput = {
      */
     idempotencyKey: string;
     /**
-     * 输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。
+     * 输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。通用地质场景使用lithology（必需）及可选的faults、coverage、units和五类蚀变角色，规则由服务端选用当前项目已绑定的试用规则。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。
      */
     inputs?: {
         [key: string]: number;
@@ -2680,6 +2681,10 @@ export type AgentWorkflowInput = {
      * 可选的本人当前项目已完成生态分析；仅替换观测证据，复用实际变化结果并保存旧判断与新增证据，用于更新调查建议。
      */
     previousWorkflowId?: string;
+    /**
+     * geology_generic必填。本人当前项目尚未绑定任务的上传批次；inputs只能引用该批次资料，创建后批次绑定到本任务。
+     */
+    uploadBatchId?: string;
 };
 
 /**
@@ -5568,6 +5573,10 @@ export type ResultArtifact = {
      */
     previewUrl: string;
     /**
+     * 卡片用缩略图地址，包含所属项目的 projectTagId；仅PNG、JPG/JPEG成果提供，其余格式为null。首次请求时生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。
+     */
+    thumbnailUrl: string | null;
+    /**
      * 成果下载地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
      */
     downloadUrl: string;
@@ -5651,6 +5660,209 @@ export type ResultArtifactListResponse = {
 };
 
 /**
+ * 上传资料中的一个字段及示例取值
+ */
+export type AgentWorkflowUploadField = {
+    /**
+     * 原始字段名
+     */
+    name: string;
+    /**
+     * 推断的字段类型，例如text、integer、number
+     */
+    type: string;
+    /**
+     * 最多8个不同的示例取值，统一为文本
+     */
+    samples: Array<string>;
+    /**
+     * 前1000条记录中的不同取值个数
+     */
+    distinctCount: number;
+};
+
+/**
+ * 平台读取的资料识别结果
+ */
+export type AgentWorkflowUploadProfile = {
+    /**
+     * 资料类型
+     */
+    kind: 'vector' | 'raster' | 'table';
+    /**
+     * 坐标系，例如EPSG:32646；无法识别时为null
+     */
+    crs?: string | null;
+    /**
+     * 矢量几何类型
+     */
+    geometryTypes?: Array<string>;
+    /**
+     * 要素数或表格行数
+     */
+    featureCount?: number | null;
+    /**
+     * WGS84外包范围[west,south,east,north]
+     */
+    bounds?: Array<number> | null;
+    /**
+     * 栅格波段数
+     */
+    bandCount?: number | null;
+    /**
+     * 栅格列数
+     */
+    width?: number | null;
+    /**
+     * 栅格行数
+     */
+    height?: number | null;
+    /**
+     * 矢量或表格字段；栅格为空数组
+     */
+    fields: Array<AgentWorkflowUploadField>;
+    /**
+     * 识别中发现的问题，例如缺少坐标系
+     */
+    warnings?: Array<string>;
+};
+
+/**
+ * 通用地质推理任务的一份上传资料
+ */
+export type AgentWorkflowUpload = {
+    /**
+     * 上传记录 UUID
+     */
+    id: string;
+    /**
+     * 上传批次号
+     */
+    batchId: string;
+    /**
+     * 登记的数据资源ID，仅上传者可见
+     */
+    resourceId: number;
+    /**
+     * 资料名称，取自文件名
+     */
+    name: string;
+    /**
+     * 原始文件名
+     */
+    fileName: string;
+    /**
+     * 资料类型
+     */
+    dataType: 'vector' | 'raster' | 'table';
+    /**
+     * 原始文件大小
+     */
+    sizeBytes: number;
+    /**
+     * 平台推荐的资料角色；无法判断时为null
+     */
+    roleHint: 'lithology' | 'faults' | 'coverage' | 'units' | 'hematite' | 'chlorite' | 'hydromica' | 'calcite' | 'dolomite' | null;
+    profile: AgentWorkflowUploadProfile;
+    /**
+     * 已绑定的工作流UUID；未绑定时为null
+     */
+    workflowId: string | null;
+    /**
+     * 上传时间
+     */
+    createdAt: string;
+};
+
+/**
+ * 一个批次的上传资料
+ */
+export type AgentWorkflowUploadList = {
+    /**
+     * 按上传时间排列
+     */
+    items: Array<AgentWorkflowUpload>;
+};
+
+/**
+ * 一个规范字段的对应建议
+ */
+export type AgentFieldMappingTarget = {
+    /**
+     * 规范字段名，例如name、geo_sym
+     */
+    key: string;
+    /**
+     * 规范字段的中文说明
+     */
+    label: string;
+    /**
+     * 是否必须对应
+     */
+    required: boolean;
+    /**
+     * 建议对应的原始字段；不对应时为null
+     */
+    field: string | null;
+    /**
+     * 智能体给出的判断依据
+     */
+    reason: string;
+};
+
+/**
+ * 一份资料的字段对应建议
+ */
+export type AgentFieldMappingRole = {
+    /**
+     * 资料角色
+     */
+    role: string;
+    /**
+     * 角色中文名
+     */
+    label: string;
+    /**
+     * 上传资料的数据资源ID
+     */
+    resourceId: number;
+    /**
+     * 原始文件名
+     */
+    fileName: string;
+    /**
+     * 可选择的原始字段
+     */
+    fields: Array<string>;
+    /**
+     * 规范字段及建议
+     */
+    targets: Array<AgentFieldMappingTarget>;
+};
+
+/**
+ * 通用地质推理的字段确认环节；只在geology_generic场景出现
+ */
+export type AgentFieldMappingReview = {
+    /**
+     * 需要确认字段的资料；栅格资料不出现
+     */
+    roles: Array<AgentFieldMappingRole>;
+    /**
+     * 智能体需要用户回答的问题，例如无法识别地层字段
+     */
+    questions: Array<string>;
+    /**
+     * 建议来自真实模型或模拟模型
+     */
+    modelMode: 'real' | 'mock';
+    /**
+     * 用户是否已确认
+     */
+    confirmed: boolean;
+};
+
+/**
  * 用户对当前预览计划或候选结果的审核选择。
  */
 export type AgentWorkflowConfirmation = {
@@ -5670,6 +5882,14 @@ export type AgentWorkflowConfirmation = {
      * 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项；综合推理场景允许空数组，明确选择不修改并继续复核。reject省略，其他阶段不得扩大操作范围。
      */
     selectedSuggestionIds?: Array<string>;
+    /**
+     * 通用地质推理字段确认环节approve必填。键为资料角色，值为规范字段到原始字段的对应；null表示不对应。必需字段必须对应真实字段，其他阶段不得提交。
+     */
+    fieldMapping?: {
+        [key: string]: {
+            [key: string]: string | null;
+        };
+    };
 };
 
 /**
@@ -6808,6 +7028,10 @@ export type MapCompositionVersion = {
      * PNG 预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
      */
     previewUrl: string;
+    /**
+     * 卡片用缩略图地址，包含所属项目的 projectTagId；由PNG预览生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。
+     */
+    thumbnailUrl: string;
     /**
      * 正式成果下载地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
      */
@@ -13966,9 +14190,9 @@ export type DownloadResultArtifactData = {
          */
         projectTagId?: string;
         /**
-         * artifact 下载原文件，preview 在浏览器内预览
+         * artifact 下载原文件，preview 在浏览器内预览；thumbnail 返回长边不超过640像素的WebP缩略图，仅PNG、JPG/JPEG成果提供，其余格式返回400
          */
-        variant?: 'artifact' | 'preview';
+        variant?: 'artifact' | 'preview' | 'thumbnail';
     };
     url: '/api/catalog/results/{resultId}/file/';
 };
@@ -14457,9 +14681,9 @@ export type DownloadMapCompositionVersionData = {
          */
         projectTagId?: string;
         /**
-         * artifact 返回正式成果并触发下载；preview 返回 PNG 预览
+         * artifact 返回正式成果并触发下载；preview 返回 PNG 预览；thumbnail 返回由预览生成的长边不超过640像素的WebP缩略图
          */
-        variant?: 'artifact' | 'preview';
+        variant?: 'artifact' | 'preview' | 'thumbnail';
     };
     url: '/api/catalog/map-compositions/{compositionId}/versions/{versionNumber}/file/';
 };
@@ -18252,6 +18476,153 @@ export type ConfirmAgentWorkflowResponses = {
 };
 
 export type ConfirmAgentWorkflowResponse = ConfirmAgentWorkflowResponses[keyof ConfirmAgentWorkflowResponses];
+
+export type ListAgentWorkflowUploadsData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query: {
+        /**
+         * 客户端生成的上传批次号，32位小写十六进制
+         */
+        batchId: string;
+    };
+    url: '/api/agent/workflow-uploads/';
+};
+
+export type ListAgentWorkflowUploadsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type ListAgentWorkflowUploadsError = ListAgentWorkflowUploadsErrors[keyof ListAgentWorkflowUploadsErrors];
+
+export type ListAgentWorkflowUploadsResponses = {
+    /**
+     * 上传列表
+     */
+    200: AgentWorkflowUploadList;
+};
+
+export type ListAgentWorkflowUploadsResponse = ListAgentWorkflowUploadsResponses[keyof ListAgentWorkflowUploadsResponses];
+
+export type UploadAgentWorkflowFileData = {
+    /**
+     * 矢量支持Shapefile ZIP、GeoPackage、GeoJSON；栅格支持GeoTIFF；表格支持CSV、XLSX。大小沿用平台导入限制。
+     */
+    body: {
+        /**
+         * 资料文件
+         */
+        file: Blob | File;
+        /**
+         * 客户端生成的上传批次号
+         */
+        batchId: string;
+    };
+    headers: {
+        /**
+         * 唯一当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflow-uploads/';
+};
+
+export type UploadAgentWorkflowFileErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type UploadAgentWorkflowFileError = UploadAgentWorkflowFileErrors[keyof UploadAgentWorkflowFileErrors];
+
+export type UploadAgentWorkflowFileResponses = {
+    /**
+     * 已登记并完成识别
+     */
+    201: AgentWorkflowUpload;
+};
+
+export type UploadAgentWorkflowFileResponse = UploadAgentWorkflowFileResponses[keyof UploadAgentWorkflowFileResponses];
+
+export type DeleteAgentWorkflowUploadData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 上传记录 UUID
+         */
+        uploadId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflow-uploads/{uploadId}/';
+};
+
+export type DeleteAgentWorkflowUploadErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type DeleteAgentWorkflowUploadError = DeleteAgentWorkflowUploadErrors[keyof DeleteAgentWorkflowUploadErrors];
+
+export type DeleteAgentWorkflowUploadResponses = {
+    /**
+     * 已删除
+     */
+    204: void;
+};
+
+export type DeleteAgentWorkflowUploadResponse = DeleteAgentWorkflowUploadResponses[keyof DeleteAgentWorkflowUploadResponses];
 
 export type ListKnowledgeDocumentsData = {
     body?: never;

@@ -1,4 +1,5 @@
 import type { AgentWorkflow } from "../api/generated/types.gen";
+import { isMultiElementFamily } from "./multiElementScenario";
 
 export const workflowStatusLabels: Record<AgentWorkflow["status"], string> = {
   queued: "等待处理",
@@ -36,7 +37,7 @@ const stageLabels: Record<string, string> = {
 
 export function workflowStageLabel(workflow: AgentWorkflow): string {
   if (workflow.plan.phase === "review_modifications") return "等待用户批准";
-  if (workflow.workflowType === "geology_multi_element_reasoning") {
+  if (isMultiElementFamily(workflow.workflowType)) {
     const stages = Array.isArray(workflow.plan.stages)
       ? workflow.plan.stages
       : [];

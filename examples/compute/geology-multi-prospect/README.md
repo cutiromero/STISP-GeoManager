@@ -1,4 +1,4 @@
-# 海德乌拉优先核查远景区分析
+# 优先核查远景区分析
 
 使用 `../geology-multi-core/build.py` 构建独立 ZIP。不要只打包本目录，worker 必须包含共享核心。
 

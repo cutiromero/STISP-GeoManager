@@ -15,6 +15,7 @@ import { computeApi } from "../api/compute";
 import { ApiError } from "../api/client";
 import type {
   AgentBootstrap,
+  AgentConversationDetail,
   AgentRun,
   AgentWorkflow,
 } from "../api/generated/types.gen";
@@ -477,7 +478,7 @@ it("synchronizes running calculation and terminal status without a second pollin
   expect(computeTasks).toHaveBeenCalledTimes(2);
   expect(
     screen
-      .getByRole("button", { name: "历史会话" })
+      .getByRole("button", { name: /^历史会话/ })
       .querySelector(".is-complete"),
   ).toBeInTheDocument();
   expect(
@@ -577,7 +578,7 @@ it("ignores an old computation response after switching conversations", async ()
   );
   showAgent("workbench");
   await waitFor(() => expect(agentApi.computeTasks).toHaveBeenCalledOnce());
-  fireEvent.click(screen.getByRole("button", { name: "另一会话" }));
+  fireEvent.click(screen.getByRole("button", { name: /^另一会话/ }));
   await screen.findByText("另一回答");
   resolveOld({
     items: [
@@ -2008,6 +2009,9 @@ it("sends a free-text answer to the original run and resumes it without a new tu
 });
 
 it("gives the current question priority over the legacy parameter form", async () => {
+  vi.mocked(agentApi.conversations).mockResolvedValue({
+    items: [{ ...conversation, mode: "agent" }],
+  });
   vi.mocked(agentApi.detail).mockResolvedValue({
     conversation: { ...conversation, mode: "agent" },
     runs: [{ ...waitingQuestion(), computeIntent }],
@@ -2019,6 +2023,9 @@ it("gives the current question priority over the legacy parameter form", async (
 });
 
 it("shows the model interpretation after the same run reads the actual output", async () => {
+  vi.mocked(agentApi.conversations).mockResolvedValue({
+    items: [{ ...conversation, mode: "agent" }],
+  });
   const completed = computeRun({
     ...computeIntent,
     status: "submitted",
@@ -2141,7 +2148,7 @@ it("preserves the conversation, pending prompt and access after a concurrency re
   await screen.findByText("最多同时处理3个问题，请稍后再试");
   expect(input).toHaveValue("第四个问题");
   expect(screen.getByText("旧问题")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "历史会话" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^历史会话/ })).toBeInTheDocument();
   expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
 });
@@ -2289,28 +2296,207 @@ it("keeps history visible when the model is offline", async () => {
   }
 });
 
-it("retains confirmed history through a failed refresh and applies the next successful refresh", async () => {
+it("does not repeatedly fetch full conversation history while idle", async () => {
   vi.useFakeTimers();
   try {
+    const mounted = showAgent();
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(screen.getByText("旧问题")).toBeInTheDocument();
+    await act(async () => vi.advanceTimersByTimeAsync(45000));
+    expect(agentApi.detail).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("旧问题")).toBeInTheDocument();
+    mounted.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each([undefined, null, { items: [] }, [null]])(
+  "retains confirmed messages when reopened history has malformed runs %j and retries the same conversation",
+  async (invalidRuns) => {
     vi.mocked(agentApi.detail)
       .mockResolvedValueOnce({
         conversation,
-        runs: [run(1, "已确认的历史问题", "已确认的历史回答")],
+        runs: [run(1, "已确认问题", "已确认回答")],
       })
-      .mockRejectedValueOnce(new TypeError("历史连接暂时中断"))
+      .mockResolvedValueOnce({
+        conversation,
+        runs: invalidRuns,
+      } as unknown as AgentConversationDetail)
       .mockResolvedValue({
         conversation,
-        runs: [run(1, "已确认的历史问题", "恢复后的最新回答")],
+        runs: [run(1, "已确认问题", "恢复后的真实回答")],
       });
+    showAgent();
+    await screen.findByText("已确认回答");
+    fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
+    await screen.findByText("暂时无法加载所选历史");
+    expect(screen.getByText("已确认问题")).toBeVisible();
+    expect(screen.getByText("已确认回答")).toBeVisible();
+    expect(screen.queryByText("有什么想讨论的？")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载异常诊断" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "重试加载历史" }));
+    await screen.findByText("恢复后的真实回答");
+    expect(agentApi.detail).toHaveBeenNthCalledWith(3, 1);
+    expect(screen.queryByText("暂时无法加载所选历史")).not.toBeInTheDocument();
+  },
+);
+
+it("shows a recoverable first-load failure instead of pretending malformed history is an empty conversation", async () => {
+  vi.mocked(agentApi.detail)
+    .mockResolvedValueOnce({
+      conversation,
+      messages: [{ prompt: "错误字段" }],
+    } as unknown as AgentConversationDetail)
+    .mockResolvedValue({
+      conversation,
+      runs: [run(1, "原始历史问题", "原始历史回答")],
+    });
+  showAgent();
+  await screen.findByText("暂时无法加载所选历史");
+  expect(screen.queryByText("有什么想讨论的？")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "重试加载历史" }));
+  await screen.findByText("原始历史回答");
+});
+
+it("keeps the current chat when another history fails and ignores an older recovery response", async () => {
+  const second = { ...conversation, id: 2, title: "另一历史" };
+  vi.mocked(agentApi.conversations).mockResolvedValue({
+    items: [conversation, second],
+  });
+  let completeOld: ((value: AgentConversationDetail) => void) | undefined;
+  vi.mocked(agentApi.detail)
+    .mockResolvedValueOnce({
+      conversation,
+      runs: [run(1, "当前问题", "当前回答")],
+    })
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          completeOld = resolve;
+        }),
+    )
+    .mockResolvedValueOnce({
+      conversation,
+      runs: [run(1, "当前问题", "最新当前回答")],
+    });
+  showAgent();
+  await screen.findByText("当前回答");
+  fireEvent.click(screen.getByRole("button", { name: /^另一历史/ }));
+  expect(screen.getByText("当前回答")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
+  await screen.findByText("最新当前回答");
+  await act(async () =>
+    completeOld?.({
+      conversation: second,
+      runs: [{ ...run(2, "迟到问题", "迟到回答"), conversationId: 2 }],
+    }),
+  );
+  expect(screen.getByText("最新当前回答")).toBeVisible();
+  expect(screen.queryByText("迟到回答")).not.toBeInTheDocument();
+});
+
+it("retains the last answer when a running task poll has an invalid payload and permits an immediate retry", async () => {
+  const responding = {
+    ...run(5, "处理中问题", "已保存部分回答"),
+    status: "running" as const,
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [responding],
+  });
+  vi.spyOn(agentApi, "poll")
+    .mockResolvedValueOnce({
+      run: null,
+      events: null,
+      cursor: 1,
+    } as unknown as Awaited<ReturnType<typeof agentApi.poll>>)
+    .mockResolvedValue({
+      run: { ...responding, status: "succeeded", answer: "计算完毕的回答" },
+      events: [],
+      cursor: 2,
+    });
+  showAgent();
+  await screen.findByRole("button", { name: "重试更新回答" });
+  expect(screen.getByText("已保存部分回答")).toBeVisible();
+  expect(screen.getByText("处理中问题")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "重试更新回答" }));
+  await screen.findByText("计算完毕的回答");
+  expect(agentApi.poll).toHaveBeenCalledTimes(2);
+});
+
+it.each([403, 404])(
+  "hides the unavailable current history after an explicit %i response",
+  async (status) => {
+    vi.mocked(agentApi.detail)
+      .mockResolvedValueOnce({
+        conversation,
+        runs: [run(1, "不再可读的问题", "不再可读的回答")],
+      })
+      .mockRejectedValueOnce(new ApiError("该会话已不可访问", status));
+    showAgent();
+    await screen.findByText("不再可读的回答");
+    fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
+    await screen.findByText("该会话已不可访问");
+    expect(screen.queryByText("不再可读的回答")).not.toBeInTheDocument();
+    expect(screen.queryByText("不再可读的问题")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试加载历史" }),
+    ).not.toBeInTheDocument();
+  },
+);
+
+it("silently retains current messages when history recovery is aborted", async () => {
+  vi.mocked(agentApi.detail)
+    .mockResolvedValueOnce({
+      conversation,
+      runs: [run(1, "已保存问题", "已保存回答")],
+    })
+    .mockRejectedValueOnce(
+      new DOMException("Navigation cancelled", "AbortError"),
+    );
+  showAgent();
+  await screen.findByText("已保存回答");
+  fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
+  await waitFor(() => expect(agentApi.detail).toHaveBeenCalledTimes(2));
+  expect(screen.getByText("已保存回答")).toBeVisible();
+  expect(screen.queryByText("暂时无法加载所选历史")).not.toBeInTheDocument();
+});
+
+it("does not repopulate conversation titles from a list request started before access was revoked", async () => {
+  vi.useFakeTimers();
+  try {
+    let completeList:
+      | ((value: Awaited<ReturnType<typeof agentApi.conversations>>) => void)
+      | undefined;
+    vi.mocked(agentApi.conversations)
+      .mockResolvedValueOnce({ items: [conversation] })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            completeList = resolve;
+          }),
+      );
+    vi.mocked(agentApi.detail)
+      .mockResolvedValueOnce({
+        conversation,
+        runs: [run(1, "授权时的问题", "授权时的回答")],
+      })
+      .mockRejectedValueOnce(new ApiError("会话访问权限已撤销", 403));
     const mounted = showAgent();
     await act(async () => vi.advanceTimersByTimeAsync(200));
-    expect(screen.getByText("已确认的历史回答")).toBeInTheDocument();
-    await act(async () => vi.advanceTimersByTimeAsync(15000));
-    expect(screen.getByText("历史连接暂时中断")).toBeInTheDocument();
-    expect(screen.getByText("已确认的历史回答")).toBeInTheDocument();
-    expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();
-    await act(async () => vi.advanceTimersByTimeAsync(15000));
-    expect(screen.getByText("恢复后的最新回答")).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "搜索会话" }), {
+      target: { value: "历史" },
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("会话访问权限已撤销")).toBeVisible();
+    await act(async () => completeList?.({ items: [conversation] }));
+    expect(
+      screen.queryByRole("button", { name: /^历史会话/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("授权时的回答")).not.toBeInTheDocument();
     mounted.unmount();
   } finally {
     vi.useRealTimers();

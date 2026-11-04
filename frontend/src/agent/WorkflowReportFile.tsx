@@ -15,6 +15,20 @@ import type {
 import { useComputeText } from "../compute/ui";
 import SafeMarkdown from "./SafeMarkdown";
 
+// Cards that open together for the same task share one prepare request.
+const pendingReports = new Map<string, Promise<AgentWorkflowReport>>();
+
+function prepareReport(workflowId: string) {
+  let pending = pendingReports.get(workflowId);
+  if (!pending) {
+    pending = agentApi
+      .prepareWorkflowReport(workflowId)
+      .finally(() => pendingReports.delete(workflowId));
+    pendingReports.set(workflowId, pending);
+  }
+  return pending;
+}
+
 export default function WorkflowReportFile({
   workflowId,
   projectId,
@@ -39,8 +53,7 @@ export default function WorkflowReportFile({
     setPreview(undefined);
     setError("");
     setBusy("prepare");
-    void agentApi
-      .prepareWorkflowReport(workflowId)
+    void prepareReport(workflowId)
       .then((result) => {
         if (sequence.current === request) setReport(result);
       })

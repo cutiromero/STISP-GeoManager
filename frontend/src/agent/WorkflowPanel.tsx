@@ -36,13 +36,21 @@ import DemoWorkflowForm, {
 } from "./DemoWorkflowForm";
 import WorkflowResults from "./WorkflowResults";
 import { allWorkflowPages, workflowGeologyVersions } from "./workflowCatalog";
-import { multiElementType } from "./multiElementScenario";
+import {
+  genericGeologyGoal,
+  genericGeologyType,
+  multiElementType,
+} from "./multiElementScenario";
+import FieldMappingReview from "./FieldMappingReview";
+import GenericWorkflowUploads from "./GenericWorkflowUploads";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 type WorkflowHistory = Pick<
   AgentWorkflow,
   "id" | "goal" | "status" | "workflowType" | "updatedAt"
 >;
+
+const newBatchId = () => createUuid().replace(/-/g, "").toLowerCase();
 
 function planDraftSignature(value: Record<string, unknown>) {
   return JSON.stringify(value, (_key, item: unknown) =>
@@ -143,6 +151,7 @@ export default function WorkflowPanel({
   bootstrap,
   onStatusChange,
   onWorkflowChange,
+  fixedScenario,
 }: {
   model: string;
   resourceIds: number[];
@@ -152,6 +161,8 @@ export default function WorkflowPanel({
   bootstrap?: AgentBootstrap | null;
   onStatusChange?: (status: AgentWorkflow["status"] | undefined) => void;
   onWorkflowChange?: (workflow: AgentWorkflow | undefined) => void;
+  /** Opens one scenario directly and hides the scene and knowledge selectors. */
+  fixedScenario?: string;
 }) {
   const ui = useComputeText();
   const project = useProjectContext();
@@ -210,6 +221,7 @@ export default function WorkflowPanel({
       return undefined;
     }
   };
+  const [batchId, setBatchId] = useState(newBatchId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [previousWorkflowId, setPreviousWorkflowId] = useState<string>();
@@ -224,6 +236,12 @@ export default function WorkflowPanel({
     workflowType === "geology_age_correction" ||
     workflowType === "geology_map_review" ||
     workflowType === multiElementType;
+  const generic = workflowType === genericGeologyType;
+  const fieldMappingReview =
+    workflow?.status === "waiting_approval" &&
+    workflow.plan.phase === "review_mapping"
+      ? workflow.plan.fieldMappingReview
+      : undefined;
   const reviewingPlan =
     workflow?.status === "waiting_approval" &&
     workflow.plan.phase === "review_plan";
@@ -301,7 +319,11 @@ export default function WorkflowPanel({
     setVersionId(next.algorithmVersionId ?? undefined);
     setParameters(next.parameters);
     const savedInputs = next.plan.inputs;
+    // Generic tasks run on working copies of a used batch; a new task re-uploads.
+    const reuploads = next.workflowType === genericGeologyType;
+    if (reuploads) setBatchId(newBatchId());
     const restoredInputs =
+      !reuploads &&
       savedInputs &&
       typeof savedInputs === "object" &&
       !Array.isArray(savedInputs)
@@ -383,9 +405,11 @@ export default function WorkflowPanel({
     } catch {
       // Storage can be disabled by browser privacy settings.
     }
-    setWorkflowType(remembered);
-    setSelectedWorkflowId(rememberedTask(remembered));
-  }, [projectId, storageKey]);
+    const scene = fixedScenario ?? remembered;
+    setWorkflowType(scene);
+    setSelectedWorkflowId(rememberedTask(scene));
+    if (fixedScenario === genericGeologyType) setGoal(genericGeologyGoal);
+  }, [projectId, storageKey, fixedScenario]);
   useEffect(() => {
     if (!open || demosScope === projectId) return;
     let disposed = false;
@@ -638,8 +662,10 @@ export default function WorkflowPanel({
         workflowType,
         algorithmVersionId: isDemo ? undefined : versionId,
         inputs,
-        parameters:
-          workflowType === "ecology_investigation"
+        ...(generic ? { uploadBatchId: batchId, resourceIds: [] } : {}),
+        parameters: generic
+          ? {}
+          : workflowType === "ecology_investigation"
             ? {
                 red: 1,
                 nir: 2,
@@ -662,7 +688,12 @@ export default function WorkflowPanel({
       });
       lastPreviewRequest.current = undefined;
       setWorkflow(result);
-      setPreviewDraft(planDraftSignature(draft));
+      setPreviewDraft(generic ? "" : planDraftSignature(draft));
+      if (generic) {
+        // A batch belongs to one task; the next task starts a fresh upload set.
+        setBatchId(newBatchId());
+        setInputs({});
+      }
       setPreviousWorkflowId(undefined);
       setHistory((old) => [result, ...old]);
     } catch (e) {
@@ -689,6 +720,26 @@ export default function WorkflowPanel({
       );
     } catch (e) {
       report(e);
+    } finally {
+      mutationInFlight.current = false;
+      setBusy(false);
+    }
+  };
+  const confirmFieldMapping = async (
+    fieldMapping: Record<string, Record<string, string | null>>,
+  ) => {
+    if (!workflow || mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      setWorkflow(
+        await agentApi.confirmWorkflow(workflow.id, workflow.planHash, {
+          fieldMapping,
+        }),
+      );
+    } catch (reason) {
+      report(reason);
     } finally {
       mutationInFlight.current = false;
       setBusy(false);
@@ -776,7 +827,7 @@ export default function WorkflowPanel({
           "Describe a goal, review the data and algorithm, then confirm. The platform tracks calculation, knowledge checks and import even after you leave.",
         )}
       </Typography.Text>
-      <div className="agent-workflow-selectors">
+      <div className="agent-workflow-selectors" hidden={Boolean(fixedScenario)}>
         <label>
           <span>研究场景</span>
           <Select
@@ -807,10 +858,13 @@ export default function WorkflowPanel({
               setInputs(preset?.inputs ?? {});
               setParameters(preset?.parameters ?? {});
               setVersionId(undefined);
+              setBatchId(newBatchId());
               setGoal(
                 value === "research_processing"
                   ? ""
-                  : demoGoals[value as DemoWorkflowType],
+                  : value === genericGeologyType
+                    ? genericGeologyGoal
+                    : demoGoals[value as DemoWorkflowType],
               );
               setSelectedWorkflowId(rememberedTask(value));
               const cached = workflowCache.current.get(`${projectId}:${value}`);
@@ -896,6 +950,13 @@ export default function WorkflowPanel({
                 setKnowledgeSelection({ mode: "auto", domains: [] });
                 setVersionId(undefined);
               }}
+            />
+          ) : generic ? (
+            <GenericWorkflowUploads
+              batchId={batchId}
+              inputs={inputs}
+              disabled={locked || busy}
+              onInputsChange={setInputs}
             />
           ) : (
             <>
@@ -1008,7 +1069,10 @@ export default function WorkflowPanel({
                   ))}
               </div>
             )}
-          <div className="agent-workflow-selectors">
+          <div
+            className="agent-workflow-selectors"
+            hidden={Boolean(fixedScenario)}
+          >
             <label>
               <span>知识依据</span>
               <Select
@@ -1058,6 +1122,7 @@ export default function WorkflowPanel({
               locked ||
               (knowledgeSelection.mode === "manual" &&
                 !knowledgeSelection.domains.length) ||
+              (generic && !inputs.lithology) ||
               (isDemo &&
                 !demoInputsReady(
                   workflowType as DemoWorkflowType,
@@ -1137,11 +1202,23 @@ export default function WorkflowPanel({
               加载更多历史任务
             </Button>
           )}
+          {fieldMappingReview && (
+            <FieldMappingReview
+              key={workflow?.planHash}
+              review={fieldMappingReview}
+              busy={busy}
+              onConfirm={(mapping) => void confirmFieldMapping(mapping)}
+            />
+          )}
           {workflow && (
             <WorkflowResults
               workflow={workflow}
               busy={busy}
-              onConfirm={planOutdated ? undefined : () => void action(true)}
+              onConfirm={
+                planOutdated || fieldMappingReview
+                  ? undefined
+                  : () => void action(true)
+              }
               onCancel={() => void action(false)}
               onPause={() => void controlWorkflow("pause")}
               onResume={() => void controlWorkflow("resume")}

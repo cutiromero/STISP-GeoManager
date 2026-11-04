@@ -3,10 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from apps.catalog.importer import position_error_meters
-
-
-UNCERTAINTY_RATIO_THRESHOLD = 200
+from apps.catalog.importer import coordinate_uncertainty, position_error_meters
 
 
 class GeometryValidationAccumulator:
@@ -121,23 +118,17 @@ def _append_uncertainty_warning(
     minimum: float | None,
     maximum: float | None,
 ) -> None:
-    if minimum is None or maximum is None or minimum <= 0:
-        return
-    ratio = maximum / minimum
-    if ratio <= UNCERTAINTY_RATIO_THRESHOLD:
-        return
-    warnings.append(
-        {
-            "code": "coordinate_uncertainty",
-            "minMeters": round(minimum, 6),
-            "maxMeters": round(maximum, 6),
-            "ratio": round(ratio, 2),
-            "message": (
-                f"坐标不确定性差距超过 {UNCERTAINTY_RATIO_THRESHOLD} 倍："
-                f"最小约 {minimum:.6f} 米，最大约 {maximum:.6f} 米。"
-            ),
-        }
-    )
+    uncertainty = coordinate_uncertainty(minimum, maximum)
+    if uncertainty:
+        warnings.append(
+            {
+                "code": "coordinate_uncertainty",
+                "minMeters": uncertainty["min_meters"],
+                "maxMeters": uncertainty["max_meters"],
+                "ratio": uncertainty["ratio"],
+                "message": uncertainty["message"],
+            }
+        )
 
 
 def _coordinate_pairs(geometry):

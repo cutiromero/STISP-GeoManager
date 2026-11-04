@@ -20,6 +20,7 @@ import {
   type TourChange,
 } from "./multiElementTour";
 import type { ReviewOverlay } from "./reviewVectorLayers";
+import { isMultiElementFamily } from "../agent/multiElementScenario";
 
 export type ComparisonRole = "before" | "after" | "changes";
 export function comparisonFeatureKey(
@@ -89,8 +90,9 @@ export async function loadWorkbenchReviewComparison(options: {
   const workflow = await agentApi.workflow(options.workflowId);
   assertCurrent();
   if (
-    !["geology_map_review", "geology_multi_element_reasoning"].includes(
-      workflow.workflowType,
+    !(
+      workflow.workflowType === "geology_map_review" ||
+      isMultiElementFamily(workflow.workflowType)
     )
   )
     throw new Error("此入口用于地质成果智能检查与修正，请打开对应案例");
@@ -132,14 +134,16 @@ export async function loadWorkbenchReviewComparison(options: {
       title:
         workflow.workflowType === "geology_multi_element_reasoning"
           ? "海德乌拉综合推理"
-          : "地质成果检查修正",
+          : workflow.workflowType === "geology_generic"
+            ? "地质综合推理"
+            : "地质成果检查修正",
       roles,
       element,
       displayData,
     });
     assertCurrent();
   };
-  if (workflow.workflowType === "geology_multi_element_reasoning") {
+  if (isMultiElementFamily(workflow.workflowType)) {
     const map = workflow.plan.multiElementMap;
     if (!map?.before?.lithology || !map.before.faults)
       throw new Error("综合推理记录缺少本次岩性和构造输入");

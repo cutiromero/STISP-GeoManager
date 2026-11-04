@@ -1,4 +1,8 @@
-import type { Map as MapboxMap, MapLayerMouseEvent } from "mapbox-gl";
+import mapboxgl, {
+  type Map as MapboxMap,
+  type MapLayerMouseEvent,
+} from "mapbox-gl";
+import { summaryEntries } from "./featureFields";
 import type { FeatureInfo, LoadedVectorLayer } from "../types";
 import { sourceIdFor } from "../utils/geometry";
 import { clearFeatureState, featureStateTarget, getMapState } from "./mapState";
@@ -73,6 +77,7 @@ function addVectorInteraction(
       selected.id === target.id
     ) {
       clearFeatureState(map, "selectedFeature", "selected");
+      closeFeaturePopup(map);
       onFeatureSelect?.(null);
       return;
     }
@@ -87,6 +92,15 @@ function addVectorInteraction(
       (context?.layerBySourceId as
         | Map<string, LoadedVectorLayer>
         | undefined) ?? layerBySourceId;
+    const clickedLayer = currentLayerBySourceId.get(sourceId);
+    if (clickedLayer)
+      showFeaturePopup(
+        map,
+        layerId,
+        event.lngLat,
+        clickedLayer.name,
+        (feature as FeatureWithProperties).properties ?? {},
+      );
     const currentOnFeatureSelect =
       (context?.onFeatureSelect as
         | ((feature: FeatureInfo | null) => void)
@@ -153,4 +167,53 @@ export function removeVectorInteraction(map: MapboxMap, layerId: string) {
   map.off("mouseleave", layerId, handler.mouseleave);
   handlers.delete(layerId);
   getMapState(map).interactiveContexts.delete(layerId);
+  if (popups.get(map)?.layerId === layerId) closeFeaturePopup(map);
+}
+
+const popups = new WeakMap<
+  MapboxMap,
+  { popup: mapboxgl.Popup; layerId: string }
+>();
+
+function closeFeaturePopup(map: MapboxMap) {
+  popups.get(map)?.popup.remove();
+  popups.delete(map);
+}
+
+/** A short summary where the user clicked; full attributes stay in the side panel. */
+function showFeaturePopup(
+  map: MapboxMap,
+  layerId: string,
+  lngLat: mapboxgl.LngLat,
+  layerName: string,
+  properties: Record<string, unknown>,
+) {
+  closeFeaturePopup(map);
+  const body = document.createElement("div");
+  body.className = "feature-click-popup";
+  const title = document.createElement("strong");
+  title.textContent = layerName;
+  body.append(title);
+  const list = document.createElement("dl");
+  for (const [label, value] of summaryEntries(properties)) {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = value;
+    list.append(term, detail);
+  }
+  body.append(list);
+  const hint = document.createElement("small");
+  hint.textContent = "完整属性见右侧面板";
+  body.append(hint);
+  const popup = new mapboxgl.Popup({
+    closeButton: true,
+    closeOnClick: false,
+    maxWidth: "280px",
+    offset: 8,
+  })
+    .setLngLat(lngLat)
+    .setDOMContent(body)
+    .addTo(map);
+  popups.set(map, { popup, layerId });
 }

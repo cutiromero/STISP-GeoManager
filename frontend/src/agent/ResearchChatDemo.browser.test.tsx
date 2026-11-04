@@ -218,7 +218,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.spyOn(agentApi, "conversations").mockResolvedValue({
-    items: [oldConversation],
+    items: [newConversation, oldConversation],
   });
   vi.spyOn(agentApi, "create").mockResolvedValue(newConversation);
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
@@ -443,7 +443,9 @@ it("accepts an online selection plus free explanation, continues and shows actua
   expect(screen.getAllByLabelText("科研任务")).toHaveLength(1);
   expect(
     within(screen.getByLabelText("研究结论")).getByText(
-      "实际计算得到 4 个分区",
+      (_, element) =>
+        element?.tagName === "P" &&
+        element.textContent === "实际计算得到 4 个分区",
     ),
   ).toBeInTheDocument();
   expect(

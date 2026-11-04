@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.55] - 2026-11-03
+
+### Fixed
+- 智能体历史仅在响应结构与会话身份通过核验后更新；异常时保留已有消息，提供局部重试及异常诊断下载。运行中的增量回答同样核验，取消空闲15秒全量历史刷新。
+- 异常响应记录内容类型、最终地址、跳转标志与字段结构；本会话最多保留20项，地址查询值脱敏，诊断不保存聊天正文。
+- 地图加载不再弹出仅根据坐标小数位估算的“坐标不确定性差距”提醒；缺失几何、坐标越界及后台导入核验继续保留。
+
+具体边界与验证见[智能体历史与响应诊断](docs/agent-history-response-20261103.md)。
+
 ## [0.1.54] - 2026-11-03
 
 ### Fixed

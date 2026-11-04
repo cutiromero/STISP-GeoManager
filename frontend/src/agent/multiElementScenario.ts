@@ -1,6 +1,16 @@
 import type { ComputeCandidate } from "../api/generated/types.gen";
 
 export const multiElementType = "geology_multi_element_reasoning";
+export const genericGeologyType = "geology_generic";
+/** Matches the backend's GEOLOGY_PROJECT_CODES: the 核地院 logic-reasoning projects. */
+export const logicReasoningProjectCodes = ["02", "demo-geology-reasoning"];
+export const isLogicReasoningProject = (code: string | undefined) =>
+  Boolean(code && logicReasoningProjectCodes.includes(code));
+export const genericGeologyGoal =
+  "请检查我上传的地质资料：核对岩性、构造和蚀变是否符合地质规律，给出少量可核查的处置建议，等我批准后再修正，最后比较修正前后的优先核查远景区。";
+/** The generic upload workflow reuses the multi-element results and approvals. */
+export const isMultiElementFamily = (workflowType: string) =>
+  workflowType === multiElementType || workflowType === genericGeologyType;
 export const multiElementSegments = [
   { value: "all", label: "综合推理全流程" },
   { value: "lithology", label: "岩性检查与纠偏" },

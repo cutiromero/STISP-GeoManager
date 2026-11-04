@@ -70,11 +70,7 @@ export default function BasemapStatusIndicator({
     ),
     english,
   );
-  const latency = primaryLatency(
-    presentation,
-    diagnostics,
-    activeBasemap?.provider,
-  );
+  const latency = primaryLatency(presentation, diagnostics);
   const content = (
     <div className="basemap-status-details">
       <div className="basemap-status-details-heading">
@@ -318,7 +314,6 @@ function tiandituFailureKindLabel(
 export function primaryLatency(
   presentation: BasemapStatusPresentation,
   diagnostics: ReturnType<typeof useBasemapStatus>["diagnostics"],
-  provider?: ActiveBasemapDescriptor["provider"],
 ) {
   if (
     presentation.tone === "error" ||
@@ -333,6 +328,7 @@ export function primaryLatency(
   if (presentation.kind === "network" && diagnostics.network.rttMs !== null) {
     return diagnostics.network.rttMs;
   }
-  if (provider === "tianditu" && presentation.kind === "healthy") return null;
+  // A healthy status shows only the label; timings stay in the details popover.
+  if (presentation.kind === "healthy") return null;
   return diagnostics.basemapLatencyMs;
 }

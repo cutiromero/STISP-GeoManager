@@ -21,6 +21,8 @@ def upsert_catalog_records(
     uploader_id: int | None = None,
     access_group_ids: list[int] | None = None,
     category_code: str = "",
+    owner_only: bool = False,
+    resource_source: str = "",
 ) -> tuple[DataResource, MapLayer]:
     spatial_extent = (
         ",".join(f"{value:.6f}" for value in bounds_4326) if bounds_4326 else ""
@@ -48,6 +50,11 @@ def upsert_catalog_records(
         "maintainer_id": uploader_id,
         "status": DataResource.Status.ACTIVE,
     }
+    # Set only when requested, so re-importing a shared raster keeps its visibility.
+    if owner_only:
+        resource_defaults["owner_only"] = True
+    if resource_source:
+        resource_defaults["source"] = resource_source
     if category_code:
         resource_defaults["category"] = resolve_data_category(category_code)
     data_resource, _ = DataResource.objects.update_or_create(

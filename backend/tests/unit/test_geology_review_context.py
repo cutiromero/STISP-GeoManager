@@ -199,3 +199,69 @@ def test_invalid_coordinate_evidence_is_not_silently_hidden(geometry):
     results[0]["rows"][0]["geometry_json"] = geometry
     with pytest.raises(ComputeError, match="可核对的几何范围"):
         model_results(results)
+
+
+def test_before_after_statistics_read_as_sentences():
+    from apps.agent.demo_decisions import _row_summary
+
+    assert (
+        _row_summary(
+            {
+                "grade": "A",
+                "before_count": "23",
+                "after_count": "21",
+                "before_area_km2": "13.82",
+                "after_area_km2": "12.4",
+            }
+        )
+        == "A级远景区修正前23处、13.82平方千米，修正后21处、12.4平方千米"
+    )
+    assert "单元T3b修正前3处" in _row_summary(
+        {
+            "geo_sym": "T3b",
+            "before_count": 3,
+            "after_count": 2,
+            "before_area_m2": 1200,
+            "after_area_m2": 800,
+        }
+    )
+
+
+def test_revision_is_checked_only_where_the_reference_has_one():
+    from apps.agent.demo_decisions import validate_decision
+
+    refs = [
+        {
+            "kind": "resource",
+            "id": "547",
+            "role": "faults",
+            "title": "构造线（工作副本）",
+        },
+        {"kind": "output", "id": "405", "role": "statistics", "title": "statistics"},
+        {"kind": "knowledge", "id": "168", "revision": 2, "title": "S-05"},
+    ]
+    decision = {
+        "problem": "核对交汇关系",
+        "findings": [],
+        "judgement": "依据统计继续",
+        "uncertainties": [],
+        "nextAction": "geology-multi-relations",
+        "algorithmReason": "重建交汇",
+        "resultSummary": "",
+        "evidenceRefs": [
+            {"kind": "output", "id": "405", "revision": 1},
+            {"kind": "resource", "id": "547", "revision": 1},
+            {"kind": "knowledge", "id": "168", "revision": 2},
+        ],
+    }
+    value = validate_decision(decision, refs, "geology-multi-relations")
+    assert [ref["id"] for ref in value["evidenceRefs"]] == ["405", "547", "168"]
+    stale = {
+        **decision,
+        "evidenceRefs": [{"kind": "knowledge", "id": "168", "revision": 1}],
+    }
+    with pytest.raises(ComputeError, match="并非本次"):
+        validate_decision(stale, refs, "geology-multi-relations")
+    unknown = {**decision, "evidenceRefs": [{"kind": "resource", "id": "999"}]}
+    with pytest.raises(ComputeError, match="并非本次"):
+        validate_decision(unknown, refs, "geology-multi-relations")

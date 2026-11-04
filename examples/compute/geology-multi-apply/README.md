@@ -1,4 +1,4 @@
-# 海德乌拉获批操作执行
+# 获批操作执行
 
 使用 `../geology-multi-core/build.py` 构建独立 ZIP。不要只打包本目录，worker 必须包含共享核心。
 

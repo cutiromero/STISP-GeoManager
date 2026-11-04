@@ -67,9 +67,12 @@ export const zhCN = {
       image: "图片",
       document: "文档",
       records: "{{count}} 条",
-      requestFailed: "请求失败：{{status}}",
-      networkFailed: "网络请求失败",
-      serverError: "服务器内部错误：{{detail}}",
+      requestFailed: "请求没有完成，请稍后重试。（错误代码 {{status}}）",
+      networkFailed: "无法连接到平台，请检查网络后重试。",
+      serverError:
+        "平台处理时出错，本次操作没有完成。请稍后重试；如果一直出现，请联系管理员。（错误代码 {{status}}）",
+      serviceBusy: "平台正在重启或繁忙，请稍后重试。（错误代码 {{status}}）",
+      notFound: "请求的内容不存在或已被删除。（错误代码 {{status}}）",
       exportEmpty: "导出响应内容为空",
     },
     dataDomain: {
@@ -1053,9 +1056,16 @@ export const enUS = {
       image: "Image",
       document: "Document",
       records: "{{count}} records",
-      requestFailed: "Request failed: {{status}}",
-      networkFailed: "Network request failed",
-      serverError: "Internal server error: {{detail}}",
+      requestFailed:
+        "The request did not complete. Please try again. (Error {{status}})",
+      networkFailed:
+        "Cannot reach the platform. Check your network and try again.",
+      serverError:
+        "The platform hit an error and the action did not complete. Try again; contact an administrator if it persists. (Error {{status}})",
+      serviceBusy:
+        "The platform is restarting or busy. Please try again shortly. (Error {{status}})",
+      notFound:
+        "The requested item does not exist or was deleted. (Error {{status}})",
       exportEmpty: "The export response is empty",
     },
     dataDomain: {

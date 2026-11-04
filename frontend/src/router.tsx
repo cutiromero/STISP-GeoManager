@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { clearSessionExpired, expiredReturnPath } from "./auth/sessionNotice";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAppContext } from "./contexts/AppContext";
 
@@ -161,8 +163,12 @@ export function RequireManageProjects() {
 /** 已登录用户访问登录页时重定向到首页 */
 export function RedirectIfAuth() {
   const { user } = useAppContext();
+  useEffect(() => {
+    if (user) clearSessionExpired();
+  }, [user]);
   if (user) {
-    return <Navigate to="/map" replace />;
+    // After an expired session the user returns to the page they were on.
+    return <Navigate to={expiredReturnPath(user.id) ?? "/map"} replace />;
   }
   return <Outlet />;
 }

@@ -159,7 +159,10 @@ it("代号和权重由实际输入输出读取，不猜测矿物原权重", () =
   expect(tourLabels(changes[0]!).before).toBe("Q");
   expect(tourLabels(changes[0]!).after).toBe("T₃b");
   const mineral = changes[2]!;
-  expect(tourLabels(mineral).before).toBe("证据权重 未读取");
+  expect(tourLabels(mineral).before).toBe("证据权重 原记录未提供");
+  expect(tourLabels(mineral, undefined, undefined, true).before).toBe(
+    "证据权重 读取中…",
+  );
   expect(
     tourLabels(
       mineral,

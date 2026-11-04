@@ -108,7 +108,10 @@ def authorize_trial_evidence(workflow, user, *, history=False):
     entries = read_bound_rules(
         user,
         workflow.project_tag_id,
-        workflow.workflow_type,
+        # The generic upload workflow runs the same bound multi-element rule set.
+        SCENARIO
+        if workflow.workflow_type == "geology_generic"
+        else workflow.workflow_type,
         [
             {key: item[key] for key in ("id", "revision", "ruleId", "ruleVersion")}
             for item in bindings
