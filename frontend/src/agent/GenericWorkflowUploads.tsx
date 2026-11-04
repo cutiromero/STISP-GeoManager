@@ -51,6 +51,8 @@ export default function GenericWorkflowUploads({
   disabled = false,
   onInputsChange,
   onActivityChange,
+  uploadOnly = false,
+  onCountChange,
 }: {
   batchId: string;
   model: string;
@@ -58,8 +60,11 @@ export default function GenericWorkflowUploads({
   disabled?: boolean;
   onInputsChange: Dispatch<SetStateAction<Record<string, number>>>;
   onActivityChange?: (busy: boolean) => void;
+  uploadOnly?: boolean;
+  onCountChange?: (count: number) => void;
 }) {
   const [items, setItems] = useState<AgentWorkflowUpload[]>([]);
+  useEffect(() => onCountChange?.(items.length), [items, onCountChange]);
   const [uploading, setUploading] = useState<string>();
   const [error, setError] = useState("");
   const [recognizing, setRecognizing] = useState(false);
@@ -84,6 +89,7 @@ export default function GenericWorkflowUploads({
     inFlight.current = false;
     changed.current = false;
     manual.current.clear();
+    if (uploadOnly) return;
     const controller = new AbortController();
     void agentApi
       .workflowUploads(batchId, { signal: controller.signal })
@@ -95,7 +101,7 @@ export default function GenericWorkflowUploads({
         // A new batch has nothing to restore.
       });
     return () => controller.abort();
-  }, [batchId]);
+  }, [batchId, uploadOnly]);
   const roleOf = (item: AgentWorkflowUpload) =>
     Object.entries(inputs).find(([, id]) => id === item.resourceId)?.[0];
   const assign = (item: AgentWorkflowUpload, role: string | undefined) =>
@@ -155,7 +161,7 @@ export default function GenericWorkflowUploads({
           .map((item) => `${item.fileName}：${item.detail}`)
           .join("；"),
       );
-      if (result.items.length) await recognize();
+      if (result.items.length && !uploadOnly) await recognize();
     } catch (reason) {
       if (currentBatch.current === batchId)
         setError(reason instanceof Error ? reason.message : "上传失败");
@@ -197,7 +203,7 @@ export default function GenericWorkflowUploads({
       >
         <p>
           {uploading
-            ? `正在上传并识别：${uploading}`
+            ? `正在上传并读取资料：${uploading}`
             : "点击或拖入多个文件或总ZIP：Shapefile、GeoPackage、GeoJSON、GeoTIFF、CSV、Excel"}
         </p>
       </Upload.Dragger>
@@ -223,7 +229,7 @@ export default function GenericWorkflowUploads({
           description="可重试识别或手动选择资料角色"
         />
       )}
-      {items.length > 0 && (
+      {!uploadOnly && items.length > 0 && (
         <Button
           loading={recognizing}
           disabled={disabled || Boolean(uploading)}
@@ -261,33 +267,36 @@ export default function GenericWorkflowUploads({
                 </Typography.Text>
               ))}
             </Space>
-            <label>
-              <span>资料角色</span>
-              <Select
-                aria-label={`${item.fileName}的资料角色`}
-                allowClear
-                disabled={disabled || recognizing || Boolean(uploading)}
-                value={role}
-                placeholder="不使用"
-                options={genericRoles
-                  .filter(
-                    (entry) =>
-                      entry.kind === item.dataType &&
-                      (entry.kind !== "vector" ||
-                        item.profile.geometryTypes?.some((geometry) =>
-                          geometry.includes(
-                            entry.key === "faults" ? "Line" : "Polygon",
-                          ),
-                        )),
-                  )
-                  .map((entry) => ({ value: entry.key, label: entry.label }))}
-                onChange={(value: string | undefined) => {
-                  manual.current.add(item.resourceId);
-                  if (value && inputs[value]) manual.current.add(inputs[value]);
-                  assign(item, value);
-                }}
-              />
-            </label>
+            {!uploadOnly && (
+              <label>
+                <span>资料角色</span>
+                <Select
+                  aria-label={`${item.fileName}的资料角色`}
+                  allowClear
+                  disabled={disabled || recognizing || Boolean(uploading)}
+                  value={role}
+                  placeholder="不使用"
+                  options={genericRoles
+                    .filter(
+                      (entry) =>
+                        entry.kind === item.dataType &&
+                        (entry.kind !== "vector" ||
+                          item.profile.geometryTypes?.some((geometry) =>
+                            geometry.includes(
+                              entry.key === "faults" ? "Line" : "Polygon",
+                            ),
+                          )),
+                    )
+                    .map((entry) => ({ value: entry.key, label: entry.label }))}
+                  onChange={(value: string | undefined) => {
+                    manual.current.add(item.resourceId);
+                    if (value && inputs[value])
+                      manual.current.add(inputs[value]);
+                    assign(item, value);
+                  }}
+                />
+              </label>
+            )}
             <Button
               size="small"
               disabled={disabled || recognizing || Boolean(uploading)}
@@ -298,7 +307,14 @@ export default function GenericWorkflowUploads({
           </div>
         );
       })}
-      {items.length > 0 && !inputs.lithology && (
+      {uploadOnly && items.length > 0 && (
+        <Alert
+          type="info"
+          showIcon
+          title="资料已就绪。输入要求并发送，随后在对话中核对角色和字段。"
+        />
+      )}
+      {!uploadOnly && items.length > 0 && !inputs.lithology && (
         <Alert type="warning" showIcon title="请把一份矢量面资料指定为地质图" />
       )}
     </section>

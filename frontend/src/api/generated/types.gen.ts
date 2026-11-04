@@ -1269,6 +1269,10 @@ export type AgentConversationUpdate = {
  * 提交任务
  */
 export type AgentRunInput = {
+    /**
+     * 逻辑推理项目智能体模式下本人未绑定的上传批次，需求最多12000字；发送后在当前对话核对资料角色，确认后绑定真实工作流，不自动越过字段、计划或处置批准。批次仅能关联一个对话研究任务。
+     */
+    uploadBatchId?: string;
     demoScenario?: AgentResearchScenario;
     knowledgeSelection?: AgentKnowledgeSelection;
     /**
@@ -1443,7 +1447,7 @@ export type AgentResearchIntent = {
  */
 export type AgentResearchIntentUpdate = {
     /**
-     * 回答、明确审核确认或取消
+     * 回答、明确审核确认或取消；通用地质推理的answer按当前阶段严格解析自然语言，不明确时保留卡片确认，不自动批准
      */
     action: 'answer' | 'confirm' | 'cancel';
     /**
@@ -1451,7 +1455,7 @@ export type AgentResearchIntentUpdate = {
      */
     revision: string;
     /**
-     * 问题键到用户答案，不把选项标题当作代码执行
+     * 问题键到用户答案，不把选项标题当作代码执行；通用地质角色核对使用upload_资源ID到角色键（或skip），须完整核对所有资料，角色不得重复
      */
     answers?: {
         [key: string]: string;
@@ -17731,6 +17735,10 @@ export type UpdateAgentResearchIntentErrors = {
      */
     409: ErrorResponse;
     /**
+     * 每日运行额度或全站模型队列额度已满，不创建新回答或执行批准
+     */
+    429: ErrorResponse;
+    /**
      * 模型或计算服务暂不可用
      */
     503: ErrorResponse;
@@ -17740,7 +17748,7 @@ export type UpdateAgentResearchIntentError = UpdateAgentResearchIntentErrors[key
 
 export type UpdateAgentResearchIntentResponses = {
     /**
-     * 已确认审核或取消，返回原运行最新状态
+     * 已确认审核或取消时返回原运行；通用地质明确回答返回已保存的后续对话运行
      */
     200: AgentRun;
     /**

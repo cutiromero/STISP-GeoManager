@@ -6560,7 +6560,7 @@ paths:
       operationId: updateAgentResearchIntent
       tags: [Agent]
       summary: 回答科研任务澄清或确认审核
-      description: 仅原用户在原项目操作，重新核对资料、算法与权限。answer创建后续模型解析运行并返回202；confirm只明确确认当前审核计划，不代替模型判断；cancel停止关联任务。相同revision与相同答案重试复用运行，不重复提交计算。
+      description: 仅原用户在原项目操作，重新核对资料、算法与权限。answer通常创建后续模型解析运行并返回202；通用地质推理的明确角色或阶段回答由服务端严格解析，返回200及已保存的后续对话运行，不调用模型猜测批准。confirm明确确认当前计划；cancel停止关联任务。相同revision与相同答案重试返回202并复用运行，不重复提交计算；新增回答遵守每日运行额度。
       security: [{sessionAuth: []}]
       parameters:
       - name: runId
@@ -6581,7 +6581,7 @@ paths:
             schema: {$ref: '#/components/schemas/AgentResearchIntentUpdate'}
       responses:
         '200':
-          description: 已确认审核或取消，返回原运行最新状态
+          description: 已确认审核或取消时返回原运行；通用地质明确回答返回已保存的后续对话运行
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AgentRun'}
@@ -6612,6 +6612,11 @@ paths:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
         '409':
           description: 修订、输入或审核计划已变化，请刷新后回答
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '429':
+          description: 每日运行额度或全站模型队列额度已满，不创建新回答或执行批准
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
@@ -9919,6 +9924,10 @@ components:
       type: object
       description: 提交任务
       properties:
+        uploadBatchId:
+          type: string
+          pattern: '^[a-f0-9]{32}$'
+          description: 逻辑推理项目智能体模式下本人未绑定的上传批次，需求最多12000字；发送后在当前对话核对资料角色，确认后绑定真实工作流，不自动越过字段、计划或处置批准。批次仅能关联一个对话研究任务。
         demoScenario:
           $ref: '#/components/schemas/AgentResearchScenario'
         knowledgeSelection:
@@ -10059,11 +10068,11 @@ components:
       type: object
       description: 回答或确认当前计划；自由文本与结构化选项由模型共同解析
       properties:
-        action: {type: string, enum: [answer, confirm, cancel], description: 回答、明确审核确认或取消}
+        action: {type: string, enum: [answer, confirm, cancel], description: 回答、明确审核确认或取消；通用地质推理的answer按当前阶段严格解析自然语言，不明确时保留卡片确认，不自动批准}
         revision: {type: string, minLength: 1, description: 最后读取的意图修订}
         answers:
           type: object
-          description: 问题键到用户答案，不把选项标题当作代码执行
+          description: 问题键到用户答案，不把选项标题当作代码执行；通用地质角色核对使用upload_资源ID到角色键（或skip），须完整核对所有资料，角色不得重复
           additionalProperties: {type: string, description: 用户选择或输入的文字}
         answer: {type: string, maxLength: 12000, description: 用户自由补充说明}
       required: [action, revision]

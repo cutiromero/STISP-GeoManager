@@ -62,6 +62,7 @@ import RunComputeTasks from "./RunComputeTasks";
 import ComputeIntentCard from "./ComputeIntentCard";
 import InteractionCard from "./InteractionCard";
 import WorkflowPanel from "./WorkflowPanel";
+import GenericWorkflowUploads from "./GenericWorkflowUploads";
 import ResearchIntentCard from "./ResearchIntentCard";
 import LiveActivity, { ActivityMark } from "./LiveActivity";
 import ThinkingStream from "./ThinkingStream";
@@ -240,6 +241,20 @@ function AgentWorkspace({
   const [renameText, setRenameText] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [uploadBatchId, setUploadBatchId] = useState(() =>
+    createUuid().replace(/-/g, "").toLowerCase(),
+  );
+  const [logicUploadsOpen, setLogicUploadsOpen] = useState(false);
+  const [logicUploadCount, setLogicUploadCount] = useState(0);
+  const [logicUploading, setLogicUploading] = useState(false);
+  const [logicInputs, setLogicInputs] = useState<Record<string, number>>({});
+  const clearLogicUploads = () => {
+    setLogicUploadsOpen(false);
+    setLogicUploadCount(0);
+    setLogicUploading(false);
+    setLogicInputs({});
+    setUploadBatchId(createUuid().replace(/-/g, "").toLowerCase());
+  };
   const [workflowStatus, setWorkflowStatus] =
     useState<AgentWorkflow["status"]>();
   const [manualWorkflow, setManualWorkflow] = useState<AgentWorkflow>();
@@ -387,9 +402,11 @@ function AgentWorkspace({
           ? "agent-workflow-attention"
           : ""
       }
-      onClick={() => setWorkflowOpen(true)}
+      onClick={() =>
+        logicProject ? setLogicUploadsOpen(true) : setWorkflowOpen(true)
+      }
     >
-      {workflowLabel}
+      {logicProject ? "上传资料并开始逻辑推理" : workflowLabel}
       {composerWorkflowStatus && (
         <span>{workflowStatusLabels[composerWorkflowStatus]}</span>
       )}
@@ -601,6 +618,7 @@ function AgentWorkspace({
   }, [runs.length]);
 
   const open = async (c: AgentConversation) => {
+    clearLogicUploads();
     const seq = ++sequence.current;
     setHistoryLoading(c);
     setHistoryFailure(null);
@@ -699,6 +717,7 @@ function AgentWorkspace({
       historyLoading ||
       running ||
       uploadingAttachment ||
+      logicUploading ||
       !text.trim() ||
       !modelOnline
     )
@@ -754,12 +773,47 @@ function AgentWorkspace({
       }
       return;
     }
-    const clarification = !demoScenario
-      ? [...runs]
-          .reverse()
-          .find((run) => run.researchIntent?.status === "clarifying")
-          ?.researchIntent
-      : undefined;
+    const genericRun =
+      !demoScenario && !logicUploadCount
+        ? [...runs].reverse().find((item) => item.researchIntent)
+            ?.researchIntent
+        : undefined;
+    if (
+      logicProject &&
+      genericRun?.scenario === "geology_generic" &&
+      (["clarifying", "waiting_approval"].includes(genericRun.status) ||
+        /^(进度|当前进度|查看进度|结果|查看结果|查看报告)$/.test(text.trim()))
+    ) {
+      const seq = sequence.current;
+      setBusy(true);
+      setError("");
+      try {
+        const next = await agentApi.updateResearchIntent(
+          genericRun.originRunId,
+          {
+            action: "answer",
+            revision: genericRun.revision,
+            answer: text,
+          },
+        );
+        if (alive.current && seq === sequence.current) {
+          updateRun(next);
+          setPrompt("");
+        }
+      } catch (reason) {
+        report(reason);
+      } finally {
+        if (alive.current && seq === sequence.current) setBusy(false);
+      }
+      return;
+    }
+    const clarification =
+      !demoScenario && !logicUploadCount
+        ? [...runs]
+            .reverse()
+            .find((run) => run.researchIntent?.status === "clarifying")
+            ?.researchIntent
+        : undefined;
     const invalidSelection =
       mode === "agent" && !clarification
         ? selectionError(toolPreferences, selected)
@@ -842,6 +896,9 @@ function AgentWorkspace({
         model,
         prompt: text,
         idempotencyKey: submission.key,
+        ...(!demoScenario && logicProject && logicUploadCount
+          ? { uploadBatchId }
+          : {}),
         ...(demoScenario ? { demoScenario } : {}),
         ...(bootstrap?.budgets?.enabled
           ? { budgetProfile, maxOutputTokens: undefined }
@@ -860,6 +917,8 @@ function AgentWorkspace({
       pendingScroll.current = run.id;
       if (!updateRun(run, Boolean(demoScenario))) return;
       setPrompt("");
+      if (!demoScenario && logicProject && logicUploadCount)
+        clearLogicUploads();
       setEvents([]);
       failedSubmission.current = null;
       handoffSelection.current = null;
@@ -884,6 +943,7 @@ function AgentWorkspace({
     void send(demoLaunch.current.prompt, demoLaunch.current.scenario);
   }, [canUse, modelOnline, busy]);
   const reset = () => {
+    clearLogicUploads();
     sequence.current++;
     demoLaunch.current = null;
     setCurrent(null);
@@ -1381,7 +1441,7 @@ function AgentWorkspace({
                     ))}
                     <Button
                       type="primary"
-                      onClick={() => setWorkflowOpen(true)}
+                      onClick={() => setLogicUploadsOpen(true)}
                     >
                       {ui(
                         "上传我的地质资料做逻辑推理",
@@ -1690,6 +1750,18 @@ function AgentWorkspace({
                     </Button>
                   </div>
                 )}
+                {logicProject && logicUploadsOpen && (
+                  <GenericWorkflowUploads
+                    batchId={uploadBatchId}
+                    model={model}
+                    inputs={logicInputs}
+                    uploadOnly
+                    disabled={busy || taskLocked || Boolean(current?.archived)}
+                    onInputsChange={setLogicInputs}
+                    onCountChange={setLogicUploadCount}
+                    onActivityChange={setLogicUploading}
+                  />
+                )}
                 {attachments.length > 0 && (
                   <div className="agent-attachments-row">
                     {attachments.map((item) => (
@@ -1915,6 +1987,7 @@ function AgentWorkspace({
                         !canUse ||
                         Boolean(historyLoading) ||
                         uploadingAttachment ||
+                        logicUploading ||
                         !modelOnline ||
                         !bootstrap?.workerOnline ||
                         !prompt.trim() ||

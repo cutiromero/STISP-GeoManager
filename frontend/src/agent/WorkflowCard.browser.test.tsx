@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { agentApi } from "../api/agent";
@@ -19,8 +25,11 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.useRealTimers());
 
 it("完成的研究历史只发一次card请求，不补读原run或定时轮询", async () => {
+  vi.useFakeTimers();
   const workflow = {
     ...reviewWorkflow(true),
+    status: "succeeded" as const,
+    plan: { ...reviewWorkflow(true).plan, phase: "completed" },
     view: "card" as const,
     steps: [],
     evidence: [],
@@ -59,14 +68,12 @@ it("完成的研究历史只发一次card请求，不补读原run或定时轮询
       <ResearchIntentCard run={run} onChanged={vi.fn()} />
     </MemoryRouter>,
   );
-  await waitFor(() =>
-    expect(agentApi.workflow).toHaveBeenCalledExactlyOnceWith(workflow.id, {
-      view: "card",
-    }),
-  );
-  await screen.findByRole("region", { name: "工作流进度卡片" });
-  vi.useFakeTimers();
-  await vi.advanceTimersByTimeAsync(30000);
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(agentApi.workflow).toHaveBeenCalledExactlyOnceWith(workflow.id, {
+    view: "card",
+  });
+  expect(screen.getByRole("region", { name: "工作流进度卡片" })).toBeVisible();
+  await act(() => vi.advanceTimersByTimeAsync(30000));
   expect(agentApi.workflow).toHaveBeenCalledOnce();
   expect(agentApi.poll).not.toHaveBeenCalled();
 });
@@ -110,6 +117,15 @@ it.each(["geology_generic", "geology_multi_element_reasoning"])(
       workflowType,
       view: "card" as const,
       resultResourceIds: [201],
+      plan: {
+        phase: "completed",
+        stages: [
+          {
+            name: "prospect",
+            outputs: [{ key: "after_zones", kind: "vector", resourceId: 201 }],
+          },
+        ],
+      },
       steps: [],
       evidence: [],
     };

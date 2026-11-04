@@ -314,6 +314,7 @@ def submit(request, conversation_id):
             "algorithmVersionIds",
             "dataSelectionMode",
             "demoScenario",
+            "uploadBatchId",
         ],
         max_bytes=max(256000, prompt_limit * 6 + 8192),
     )
@@ -328,6 +329,18 @@ def submit_value(request, c, value, *, available_models=None):
         "maxPromptCharacters"
     ]
     demo_scenario = value.get("demoScenario")
+    upload_batch = value.get("uploadBatchId")
+    if upload_batch is not None:
+        from .generic_chat import validate_batch
+
+        validate_batch(
+            request.user,
+            c,
+            upload_batch,
+            run=c.runs.filter(idempotency_key=value.get("idempotencyKey")).first(),
+        )
+        if demo_scenario:
+            raise ApiProblem("上传资料与演示场景不能同时提交")
     if demo_scenario is not None and (
         demo_scenario
         not in {
@@ -358,6 +371,12 @@ def submit_value(request, c, value, *, available_models=None):
         raise ApiProblem("思考强度须在逻辑推理模式下选择低、标准或高")
     budget_profile = value.get("budgetProfile", "")
     output_tokens = value.get("maxOutputTokens")
+    if (
+        upload_batch is not None
+        and isinstance(prompt, str)
+        and len(prompt.strip()) > 12000
+    ):
+        raise ApiProblem("逻辑推理需求最多12000字，请精简后发送")
     if (
         not isinstance(alias, str)
         or not isinstance(prompt, str)
@@ -413,6 +432,7 @@ def submit_value(request, c, value, *, available_models=None):
                 existing.algorithm_version_ids,
                 existing.data_selection_mode,
                 existing.research_intent.get("_demoScenario"),
+                existing.research_intent.get("_uploadBatchId"),
             ) != (
                 alias,
                 prompt.strip(),
@@ -428,12 +448,15 @@ def submit_value(request, c, value, *, available_models=None):
                 selections["algorithm_version_ids"],
                 selections["data_selection_mode"],
                 demo_scenario,
+                upload_batch,
             ):
                 raise ApiProblem("幂等键已用于不同请求", 409)
             return JsonResponse(run_json(existing, request.user), status=202)
         c.refresh_from_db()
         if c.archived:
             raise ApiProblem("请先恢复归档会话", 409)
+        if upload_batch is not None:
+            validate_batch(request.user, c, upload_batch)
         p = require_access(request.user, c.mode, alias)
         model_config = registry()[alias]
         if thinking_mode == "deep":
@@ -525,7 +548,13 @@ def submit_value(request, c, value, *, available_models=None):
             internet_enabled=internet_enabled,
             budget_profile=budget_profile,
             budget_snapshot=budget_snapshot,
-            research_intent={"_demoScenario": demo_scenario} if demo_scenario else {},
+            research_intent=(
+                {"_uploadBatchId": upload_batch}
+                if upload_batch
+                else {"_demoScenario": demo_scenario}
+                if demo_scenario
+                else {}
+            ),
         )
         if c.title == "新会话":
             c.title = prompt.strip()[:60]

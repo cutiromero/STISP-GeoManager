@@ -73,6 +73,14 @@ def batch_uploads(user, batch_id):
     )
 
 
+def chat_claim(user, batch_id):
+    from .models import AgentRun
+
+    return AgentRun._base_manager.filter(
+        owner=user, research_intent___uploadBatchId=batch_id
+    ).first()
+
+
 def upload_json(upload) -> dict:
     return {
         "id": str(upload.id),
@@ -331,6 +339,8 @@ def store_upload(user, project_id, uploaded, batch_id) -> WorkflowUpload:
     get_user_model().objects.filter(pk=user.pk).update(last_login=F("last_login"))
     require_upload_access(user, project_id)
     existing = WorkflowUpload.objects.filter(owner=user, batch_id=batch_id)
+    if chat_claim(user, batch_id):
+        raise ComputeError("该批次已发送到对话，请新建批次", 409)
     if existing.filter(workflow__isnull=False).exists():
         raise ComputeError("该批次资料已用于任务，请新建批次", 409)
     if existing.filter(resource__status="active").count() >= MAX_FILES:
@@ -378,7 +388,7 @@ def delete_upload(user, upload_id) -> None:
         )
         if upload is None:
             raise ComputeError("上传资料不存在", 404)
-        if upload.workflow_id:
+        if upload.workflow_id or chat_claim(user, upload.batch_id):
             raise ComputeError("资料已用于任务，作为任务依据保留", 409)
         resource = upload.resource
         upload.delete()
@@ -388,6 +398,9 @@ def delete_upload(user, upload_id) -> None:
 
 def bind_batch(workflow, user, batch_id, inputs) -> None:
     """Attach an unbound batch to a new workflow; inputs must come from it."""
+    claim = chat_claim(user, batch_id)
+    if claim and workflow.plan.get("chatExecution", {}).get("originRunId") != claim.id:
+        raise ComputeError("上传批次已关联其他对话研究任务", 409)
     uploads = list(
         batch_uploads(user, batch_id)
         .select_for_update()

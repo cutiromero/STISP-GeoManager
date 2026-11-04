@@ -242,6 +242,18 @@ def test_card_is_small_and_never_leaks_large_nested_details(setup_agent, scenari
     data = card.json()
     assert data["view"] == "card" and data["stepCount"] == 1
     assert data["steps"] == data["evidence"] == []
+    for stage, full_stage in zip(data["plan"]["stages"], full.json()["plan"]["stages"]):
+        assert stage["outputs"] == full_stage["outputs"]
+        assert all(
+            output["kind"] in {"vector", "table"}
+            and isinstance(output["resourceId"], int)
+            for output in stage["outputs"]
+        )
+    assert any(
+        output["kind"] == "vector"
+        for stage in data["plan"]["stages"]
+        for output in stage["outputs"]
+    )
     assert (
         not {"modificationReview", "finalStage", "modelAttempts", "results"}
         & data["plan"].keys()

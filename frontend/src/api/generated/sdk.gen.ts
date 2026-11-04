@@ -2168,7 +2168,7 @@ export const listAgentResearchDemos = <ThrowOnError extends boolean = false>(opt
 /**
  * 回答科研任务澄清或确认审核
  *
- * 仅原用户在原项目操作，重新核对资料、算法与权限。answer创建后续模型解析运行并返回202；confirm只明确确认当前审核计划，不代替模型判断；cancel停止关联任务。相同revision与相同答案重试复用运行，不重复提交计算。
+ * 仅原用户在原项目操作，重新核对资料、算法与权限。answer通常创建后续模型解析运行并返回202；通用地质推理的明确角色或阶段回答由服务端严格解析，返回200及已保存的后续对话运行，不调用模型猜测批准。confirm明确确认当前计划；cancel停止关联任务。相同revision与相同答案重试返回202并复用运行，不重复提交计算；新增回答遵守每日运行额度。
  */
 export const updateAgentResearchIntent = <ThrowOnError extends boolean = false>(options: Options<UpdateAgentResearchIntentData, ThrowOnError>): RequestResult<UpdateAgentResearchIntentResponses, UpdateAgentResearchIntentErrors, ThrowOnError> => (options.client ?? client).post<UpdateAgentResearchIntentResponses, UpdateAgentResearchIntentErrors, ThrowOnError>({
     security: [{

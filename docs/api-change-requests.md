@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261104-003 - 当前对话内通用地质推理
+
+- Status: BackendReady
+- Owner: phaseB；本任务显式贯通契约、后端与前端。
+- Change type: 现有提交接口新增可选字段，扩展既有研究交互语义。
+- Endpoints: POST /api/agent/conversations/{conversationId}/runs/；POST /api/agent/runs/{runId}/research-intent/。
+- OpenAPI change: AgentRunInput新增可选uploadBatchId（需求最多12000字）；既有answer支持严格的阶段确认，返回200及持久化后续对话运行，重复回答返回202；补齐每日额度429。无法确定时保留卡片，无新增接口。
+- Frontend reason: 上传、角色、字段、计划和批准均在当前对话，历史对话恢复真实AgentWorkflow。
+- Mock examples: mock/prism/examples/106-agent-generic-chat.json。
+- Backend implementation notes: 批次限本人、当前逻辑推理项目、单一研究任务；不绕过字段、计划、逐项处置和快照校验。
+- Verification: 对话绑定、角色修改、阶段确认、重复提交、会话恢复及他人隔离；非逻辑项目保持原入口。
+- Result: 本地后端确认点、权限及相关回归通过；前端单元550项通过，浏览器因沙箱Chromium MachPort权限未执行。未部署服务器；完整交互与公网加载耗时需外部复跑。
+
 ## API-20261104-002 - 轻量工作流卡片与任务矢量按需读取
 
 - Status: BackendReady
@@ -216,6 +229,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261104-003 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | uploadBatchId and explicit generic answers | Updated | 106-agent-generic-chat.json | Implemented | Backend confirmation and isolation passed, unit 550; browser sandbox-blocked | Existing workflow approval and project/owner checks preserved |
 | API-20261104-002 | BackendReady | /api/agent/workflows/{workflowId}/; /api/compute/outputs/{outputId}/preview/; /api/catalog/resources/{id}/profile/ | card view, vector map view, defaultVisualization | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Backend 122, unit 550; browser sandbox-blocked | Full view unchanged; project and owner checks preserved |
 | API-20261104-001 | BackendReady | /api/agent/workflow-uploads/batch/; /recognize/; /api/agent/workflows/active/ | batch uploads, role suggestions, active task summary | Updated | 104-agent-upload-bundle.json | Implemented | Backend 81, unit 542, types and contract passed; browser sandbox-blocked | Existing responses unchanged; target-project authorization preserved |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |

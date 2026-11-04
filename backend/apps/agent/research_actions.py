@@ -8,8 +8,10 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from apps.audit.service import log_operation
+
 from .models import AgentRun, AgentWorkflow, Conversation
-from .policy import require_access, visible_models
+from .policy import daily_quota, require_access, visible_models
 from .research_intents import serialize
 from .selections import knowledge_selection
 from .workflow import _state_hash
@@ -38,7 +40,7 @@ def update(request, run_id, value):
     if value["action"] == "answer":
         before = get_object_or_404(AgentRun.objects, pk=run_id, owner=request.user)
         digest = _state_hash(value)
-        if not any(
+        if not before.research_intent.get("_uploadBatchId") and not any(
             r["digest"] == digest
             for r in before.research_intent.get("_answerReceipts", [])
         ):
@@ -71,6 +73,77 @@ def update(request, run_id, value):
                 return JsonResponse(run_json(answered, request.user), status=202)
         if data["revision"] != value["revision"]:
             raise ApiProblem("科研问题或审核计划已变化，请刷新后操作", 409)
+        if value["action"] == "answer" and source.research_intent.get("_uploadBatchId"):
+            from .generic_chat import answer
+
+            if source.conversation.archived:
+                raise ApiProblem("请先恢复归档会话", 409)
+            quota = daily_quota(request.user, p)
+            if (
+                quota > 0
+                and AgentRun._base_manager.filter(
+                    owner=request.user, created_at__date=timezone.localdate()
+                ).count()
+                >= quota
+            ):
+                raise ApiProblem("今日使用额度已用完", 429)
+            answer(source, request.user, p, answers, text)
+            source.refresh_from_db()
+            labels = {question["key"]: question for question in data["questions"]}
+            prompt = text.strip() or "核对资料角色：\n" + "\n".join(
+                labels[key]["label"]
+                + " → "
+                + next(
+                    option["label"]
+                    for option in labels[key]["options"]
+                    if option["value"] == role
+                )
+                for key, role in answers.items()
+            )
+            saved = AgentRun.objects.create(
+                conversation=source.conversation,
+                owner=request.user,
+                model=source.model,
+                thinking_mode=source.thinking_mode,
+                reasoning_effort=source.reasoning_effort,
+                resource_ids=source.resource_ids,
+                knowledge_selection=source.knowledge_selection,
+                algorithm_selection_mode=source.algorithm_selection_mode,
+                algorithm_version_ids=source.algorithm_version_ids,
+                data_selection_mode=source.data_selection_mode,
+                budget_profile=source.budget_profile,
+                budget_snapshot=source.budget_snapshot,
+                status="succeeded",
+                prompt=prompt,
+                answer=source.research_workflow.detail
+                if source.research_workflow_id
+                else source.research_intent["message"],
+                idempotency_key="generic-answer-" + digest[:48],
+                research_intent={
+                    key: val
+                    for key, val in source.research_intent.items()
+                    if key not in {"_uploadBatchId", "_answerReceipts"}
+                },
+                research_workflow=source.research_workflow,
+            )
+            source.research_intent["_answerReceipts"] = [
+                *receipts,
+                {"digest": digest, "runId": saved.id},
+            ][-20:]
+            source.save(update_fields=["research_intent", "updated_at"])
+            Conversation.objects.filter(pk=source.conversation_id).update(
+                updated_at=timezone.now()
+            )
+            log_operation(
+                request.user,
+                "agent",
+                "research_answer",
+                "success",
+                target_type="agent_run",
+                target_id=saved.id,
+                message="generic conversation confirmation",
+            )
+            return JsonResponse(run_json(saved, request.user))
         if value["action"] == "answer":
             if data["status"] != "clarifying":
                 raise ApiProblem("当前任务没有待回答问题", 409)

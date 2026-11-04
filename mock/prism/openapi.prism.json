@@ -19574,7 +19574,7 @@
           "Agent"
         ],
         "summary": "回答科研任务澄清或确认审核",
-        "description": "仅原用户在原项目操作，重新核对资料、算法与权限。answer创建后续模型解析运行并返回202；confirm只明确确认当前审核计划，不代替模型判断；cancel停止关联任务。相同revision与相同答案重试复用运行，不重复提交计算。",
+        "description": "仅原用户在原项目操作，重新核对资料、算法与权限。answer通常创建后续模型解析运行并返回202；通用地质推理的明确角色或阶段回答由服务端严格解析，返回200及已保存的后续对话运行，不调用模型猜测批准。confirm明确确认当前计划；cancel停止关联任务。相同revision与相同答案重试返回202并复用运行，不重复提交计算；新增回答遵守每日运行额度。",
         "security": [
           {
             "sessionAuth": []
@@ -19617,7 +19617,7 @@
         },
         "responses": {
           "200": {
-            "description": "已确认审核或取消，返回原运行最新状态",
+            "description": "已确认审核或取消时返回原运行；通用地质明确回答返回已保存的后续对话运行",
             "content": {
               "application/json": {
                 "schema": {
@@ -19723,6 +19723,16 @@
           },
           "409": {
             "description": "修订、输入或审核计划已变化，请刷新后回答",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "每日运行额度或全站模型队列额度已满，不创建新回答或执行批准",
             "content": {
               "application/json": {
                 "schema": {
@@ -20562,6 +20572,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentRun"
+                },
+                "example": {
+                  "id": 106,
+                  "conversationId": 31,
+                  "model": "mock",
+                  "status": "succeeded",
+                  "prompt": "检查上传地质资料并比较远景区",
+                  "answer": "资料已上传，请核对角色。",
+                  "detail": "等待核对资料角色",
+                  "evidence": [],
+                  "attachments": [],
+                  "interaction": null,
+                  "interactionHistory": [],
+                  "contextTruncated": false,
+                  "createdAt": "2026-11-04T09:00:00Z",
+                  "updatedAt": "2026-11-04T09:00:00Z",
+                  "researchIntent": {
+                    "originRunId": 106,
+                    "revision": "generic-chat-roles-v1",
+                    "scenario": "geology_generic",
+                    "status": "clarifying",
+                    "goal": "检查上传地质资料并比较远景区",
+                    "message": "核对角色后生成字段建议，尚未执行任何修改。",
+                    "questions": [
+                      {
+                        "key": "upload_812",
+                        "label": "第1份：地质图.zip（按文件名、类型和几何判断）",
+                        "kind": "choice",
+                        "required": true,
+                        "options": [
+                          {
+                            "value": "lithology",
+                            "label": "地质图"
+                          },
+                          {
+                            "value": "coverage",
+                            "label": "研究区范围"
+                          },
+                          {
+                            "value": "skip",
+                            "label": "不使用"
+                          }
+                        ]
+                      }
+                    ],
+                    "inputs": {},
+                    "parameters": {
+                      "roleAnswers": {
+                        "upload_812": "lithology"
+                      }
+                    },
+                    "inputSummary": [],
+                    "workflowId": null
+                  }
                 }
               }
             }
@@ -27066,6 +27130,11 @@
         "type": "object",
         "description": "提交任务",
         "properties": {
+          "uploadBatchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$",
+            "description": "逻辑推理项目智能体模式下本人未绑定的上传批次，需求最多12000字；发送后在当前对话核对资料角色，确认后绑定真实工作流，不自动越过字段、计划或处置批准。批次仅能关联一个对话研究任务。"
+          },
           "demoScenario": {
             "$ref": "#/components/schemas/AgentResearchScenario"
           },
@@ -27376,7 +27445,7 @@
               "confirm",
               "cancel"
             ],
-            "description": "回答、明确审核确认或取消"
+            "description": "回答、明确审核确认或取消；通用地质推理的answer按当前阶段严格解析自然语言，不明确时保留卡片确认，不自动批准"
           },
           "revision": {
             "type": "string",
@@ -27385,7 +27454,7 @@
           },
           "answers": {
             "type": "object",
-            "description": "问题键到用户答案，不把选项标题当作代码执行",
+            "description": "问题键到用户答案，不把选项标题当作代码执行；通用地质角色核对使用upload_资源ID到角色键（或skip），须完整核对所有资料，角色不得重复",
             "additionalProperties": {
               "type": "string",
               "description": "用户选择或输入的文字"
