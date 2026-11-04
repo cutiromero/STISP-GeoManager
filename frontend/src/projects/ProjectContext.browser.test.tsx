@@ -107,6 +107,28 @@ describe("single-project navigation", () => {
     expect(await screen.findByLabelText("实际项目范围")).toBeVisible();
   });
 
+  it("adopts the linked project in a new tab and falls back when it is not accessible", async () => {
+    const original = window.location.href;
+    try {
+      window.history.replaceState(null, "", "/map?projectTagId=2");
+      const first = show();
+      await waitFor(() =>
+        expect(screen.getByLabelText("实际项目范围")).toHaveTextContent("2"),
+      );
+      expect(getActiveProject()).toBe("2");
+      first.unmount();
+      resetProjectSession();
+      sessionStorage.removeItem("project:42");
+      window.history.replaceState(null, "", "/map?projectTagId=9");
+      show();
+      await waitFor(() =>
+        expect(screen.getByLabelText("实际项目范围")).toHaveTextContent("1"),
+      );
+    } finally {
+      window.history.replaceState(null, "", original);
+    }
+  });
+
   it("keeps the selected project and mounted page when an idle focus refresh fails, then retries", async () => {
     sessionStorage.setItem("project:42", "2");
     show();

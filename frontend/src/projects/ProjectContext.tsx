@@ -102,8 +102,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setResolvedIdentity(userId ?? null);
   }, []);
   useEffect(() => {
+    // A new tab has no stored choice; links such as the workbench comparison
+    // carry projectTagId, and refresh() falls back if it is not accessible.
+    const linked = new URLSearchParams(window.location.search).get(
+      "projectTagId",
+    );
     const preferred = normalizeProjectSelection(
-      user ? (sessionStorage.getItem(`project:${user.id}`) ?? "1") : "1",
+      user
+        ? (sessionStorage.getItem(`project:${user.id}`) ?? linked ?? "1")
+        : "1",
     );
     if (user) sessionStorage.setItem(`project:${user.id}`, preferred);
     setActiveProject(preferred);

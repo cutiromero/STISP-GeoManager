@@ -369,6 +369,22 @@ class ResourceQueryApiTests(IsolatedCatalogStorageMixin, TestCase):
         )
         self.assertIn("warnings", payload)
 
+    def test_resource_query_is_gzip_compressed_when_accepted(self):
+        import gzip
+        import json as jsonlib
+
+        response = self.client.post(
+            f"/api/catalog/resources/{self.resource.id}/query/",
+            data={"attributeFilters": [], "limit": 10},
+            content_type="application/json",
+            HTTP_ACCEPT_ENCODING="gzip",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Encoding"], "gzip")
+        payload = jsonlib.loads(gzip.decompress(response.content))
+        self.assertEqual(payload["resourceId"], self.resource.id)
+
     def test_resource_query_filters_by_spatial_polygon(self):
         response = self.client.post(
             f"/api/catalog/resources/{self.resource.id}/query/",

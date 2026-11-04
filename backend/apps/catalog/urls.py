@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.decorators.gzip import gzip_page
 
 from apps.catalog import (
     map_compositions,
@@ -143,7 +144,8 @@ urlpatterns = [
     ),
     path(
         "catalog/resources/<int:pk>/query/",
-        views.resource_query,
+        # Full-map GeoJSON for comparison views is several MB; gzip cuts it ~3x.
+        gzip_page(views.resource_query),
         name="catalog-resource-query",
     ),
     path("catalog/export/", views.export_loaded_layers, name="catalog-export"),
