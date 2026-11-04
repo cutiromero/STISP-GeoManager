@@ -1,7 +1,16 @@
 import { Alert, Button, Select, Space, Tag, Typography, Upload } from "antd";
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { agentApi } from "../api/agent";
-import type { AgentWorkflowUpload } from "../api/generated/types.gen";
+import type {
+  AgentWorkflowUpload,
+  AgentWorkflowRoleResult,
+} from "../api/generated/types.gen";
 
 type UploadRole = NonNullable<AgentWorkflowUpload["roleHint"]>;
 
@@ -37,25 +46,51 @@ function profileSummary(item: AgentWorkflowUpload) {
 
 export default function GenericWorkflowUploads({
   batchId,
+  model,
   inputs,
   disabled = false,
   onInputsChange,
+  onActivityChange,
 }: {
   batchId: string;
+  model: string;
   inputs: Record<string, number>;
   disabled?: boolean;
   onInputsChange: Dispatch<SetStateAction<Record<string, number>>>;
+  onActivityChange?: (busy: boolean) => void;
 }) {
   const [items, setItems] = useState<AgentWorkflowUpload[]>([]);
   const [uploading, setUploading] = useState<string>();
   const [error, setError] = useState("");
+  const [recognizing, setRecognizing] = useState(false);
+  const [suggestions, setSuggestions] = useState<AgentWorkflowRoleResult>();
+  const [recognitionError, setRecognitionError] = useState("");
+  const manual = useRef(new Set<number>());
+  const currentBatch = useRef(batchId);
+  currentBatch.current = batchId;
+  const inFlight = useRef(false);
+  const changed = useRef(false);
+  useEffect(() => {
+    onActivityChange?.(Boolean(uploading) || recognizing);
+    return () => onActivityChange?.(false);
+  }, [uploading, recognizing, onActivityChange]);
   useEffect(() => {
     setItems([]);
     setError("");
+    setSuggestions(undefined);
+    setRecognitionError("");
+    setUploading(undefined);
+    setRecognizing(false);
+    inFlight.current = false;
+    changed.current = false;
+    manual.current.clear();
     const controller = new AbortController();
     void agentApi
       .workflowUploads(batchId, { signal: controller.signal })
-      .then((result) => setItems(result.items))
+      .then((result) => {
+        if (!controller.signal.aborted && !changed.current)
+          setItems(result.items);
+      })
       .catch(() => {
         // A new batch has nothing to restore.
       });
@@ -73,29 +108,69 @@ export default function GenericWorkflowUploads({
       if (role) next[role] = item.resourceId;
       return next;
     });
-  const upload = async (file: File) => {
-    setError("");
-    setUploading(file.name);
+  const recognize = async () => {
+    setRecognizing(true);
+    setRecognitionError("");
     try {
-      const item = await agentApi.uploadWorkflowFile(batchId, file);
-      setItems((old) => [...old, item]);
-      const hint = item.roleHint;
-      if (hint)
-        onInputsChange((old) =>
-          old[hint] ? old : { ...old, [hint]: item.resourceId },
+      const result = await agentApi.recognizeWorkflowRoles(batchId, model);
+      if (currentBatch.current !== batchId) return;
+      setSuggestions(result);
+      onInputsChange((old) => {
+        const next = Object.fromEntries(
+          Object.entries(old).filter(([, id]) => manual.current.has(id)),
         );
+        for (const item of result.items) {
+          if (
+            item.role &&
+            !manual.current.has(item.resourceId) &&
+            !next[item.role]
+          )
+            next[item.role] = item.resourceId;
+        }
+        return next;
+      });
     } catch (reason) {
-      setError(
-        `${file.name}：${reason instanceof Error ? reason.message : "上传失败"}`,
-      );
+      if (currentBatch.current === batchId)
+        setRecognitionError(
+          reason instanceof Error
+            ? reason.message
+            : "角色识别失败，请重试或手动选择",
+        );
     } finally {
-      setUploading(undefined);
+      if (currentBatch.current === batchId) setRecognizing(false);
+    }
+  };
+  const upload = async (files: File[]) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    changed.current = true;
+    setError("");
+    setUploading(`${files.length}个文件`);
+    try {
+      const result = await agentApi.uploadWorkflowBatch(batchId, files);
+      if (currentBatch.current !== batchId) return;
+      setItems((old) => [...old, ...result.items]);
+      setError(
+        result.errors
+          .map((item) => `${item.fileName}：${item.detail}`)
+          .join("；"),
+      );
+      if (result.items.length) await recognize();
+    } catch (reason) {
+      if (currentBatch.current === batchId)
+        setError(reason instanceof Error ? reason.message : "上传失败");
+    } finally {
+      if (currentBatch.current === batchId) {
+        setUploading(undefined);
+        inFlight.current = false;
+      }
     }
   };
   const remove = async (item: AgentWorkflowUpload) => {
     setError("");
     try {
       await agentApi.deleteWorkflowUpload(item.id);
+      changed.current = true;
       setItems((old) => old.filter((entry) => entry.id !== item.id));
       assign(item, undefined);
     } catch (reason) {
@@ -113,20 +188,50 @@ export default function GenericWorkflowUploads({
       <Upload.Dragger
         multiple
         showUploadList={false}
-        disabled={disabled || Boolean(uploading)}
-        accept=".zip,.gpkg,.geojson,.json,.tif,.tiff,.csv,.xlsx"
-        beforeUpload={(file) => {
-          void upload(file);
+        disabled={disabled || Boolean(uploading) || recognizing}
+        accept=".zip,.shp,.dbf,.shx,.prj,.cpg,.sbn,.sbx,.qix,.gpkg,.geojson,.json,.tif,.tiff,.csv,.xlsx"
+        beforeUpload={(file, files) => {
+          if (file === files[0]) void upload(files);
           return false;
         }}
       >
         <p>
           {uploading
             ? `正在上传并识别：${uploading}`
-            : "点击或拖入文件：Shapefile（ZIP）、GeoPackage、GeoJSON、GeoTIFF、CSV、Excel"}
+            : "点击或拖入多个文件或总ZIP：Shapefile、GeoPackage、GeoJSON、GeoTIFF、CSV、Excel"}
         </p>
       </Upload.Dragger>
       {error && <Alert type="error" showIcon title={error} />}
+      {recognizing && (
+        <Alert type="info" showIcon title="智能体正在识别资料角色…" />
+      )}
+      {suggestions && !recognizing && (
+        <Alert
+          type="success"
+          showIcon
+          title="智能体已识别资料角色，请核对后生成执行计划"
+        />
+      )}
+      {!inputs.lithology &&
+        suggestions?.questions.map((question) => (
+          <Alert key={question} type="warning" title={question} />
+        ))}
+      {recognitionError && (
+        <Alert
+          type="error"
+          title={recognitionError}
+          description="可重试识别或手动选择资料角色"
+        />
+      )}
+      {items.length > 0 && (
+        <Button
+          loading={recognizing}
+          disabled={disabled || Boolean(uploading)}
+          onClick={() => void recognize()}
+        >
+          {recognitionError ? "重试识别" : "识别资料角色"}
+        </Button>
+      )}
       {items.map((item) => {
         const role = roleOf(item);
         return (
@@ -140,6 +245,16 @@ export default function GenericWorkflowUploads({
               <Typography.Text type="secondary">
                 {profileSummary(item)}
               </Typography.Text>
+              {suggestions?.items.find((entry) => entry.uploadId === item.id)
+                ?.reason && (
+                <Typography.Text type="secondary">
+                  {
+                    suggestions.items.find(
+                      (entry) => entry.uploadId === item.id,
+                    )?.reason
+                  }
+                </Typography.Text>
+              )}
               {item.profile.warnings?.map((warning) => (
                 <Typography.Text key={warning} type="warning">
                   {warning}
@@ -151,18 +266,31 @@ export default function GenericWorkflowUploads({
               <Select
                 aria-label={`${item.fileName}的资料角色`}
                 allowClear
-                disabled={disabled}
+                disabled={disabled || recognizing || Boolean(uploading)}
                 value={role}
                 placeholder="不使用"
                 options={genericRoles
-                  .filter((entry) => entry.kind === item.dataType)
+                  .filter(
+                    (entry) =>
+                      entry.kind === item.dataType &&
+                      (entry.kind !== "vector" ||
+                        item.profile.geometryTypes?.some((geometry) =>
+                          geometry.includes(
+                            entry.key === "faults" ? "Line" : "Polygon",
+                          ),
+                        )),
+                  )
                   .map((entry) => ({ value: entry.key, label: entry.label }))}
-                onChange={(value: string | undefined) => assign(item, value)}
+                onChange={(value: string | undefined) => {
+                  manual.current.add(item.resourceId);
+                  if (value && inputs[value]) manual.current.add(inputs[value]);
+                  assign(item, value);
+                }}
               />
             </label>
             <Button
               size="small"
-              disabled={disabled}
+              disabled={disabled || recognizing || Boolean(uploading)}
               onClick={() => void remove(item)}
             >
               删除

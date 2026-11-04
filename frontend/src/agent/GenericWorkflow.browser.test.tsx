@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -13,7 +19,10 @@ import { resetProjectSession } from "../projects/session";
 import FieldMappingReview from "./FieldMappingReview";
 import WorkflowPanel from "./WorkflowPanel";
 
-afterEach(() => resetProjectSession());
+afterEach(() => {
+  resetProjectSession();
+  sessionStorage.clear();
+});
 
 const upload: AgentWorkflowUpload = {
   id: "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
@@ -112,6 +121,8 @@ const queued: AgentWorkflow = {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  sessionStorage.clear();
+  vi.spyOn(agentApi, "activeWorkflow").mockResolvedValue({ item: null });
   sessionStorage.setItem("workflow-session:77:1", "geology_generic");
   const item = {
     scenario: "geology_generic" as const,
@@ -144,7 +155,22 @@ beforeEach(() => {
 });
 
 it("uploads a file, assigns the recommended role and creates the task with its batch", async () => {
-  vi.spyOn(agentApi, "uploadWorkflowFile").mockResolvedValue(upload);
+  vi.spyOn(agentApi, "uploadWorkflowBatch").mockResolvedValue({
+    items: [upload],
+    errors: [],
+  });
+  vi.spyOn(agentApi, "recognizeWorkflowRoles").mockResolvedValue({
+    source: "rules",
+    questions: [],
+    items: [
+      {
+        uploadId: upload.id,
+        resourceId: upload.resourceId,
+        role: "lithology",
+        reason: "按文件名、类型和几何判断",
+      },
+    ],
+  });
   const created = vi
     .spyOn(agentApi, "createWorkflow")
     .mockResolvedValue(queued);
@@ -172,7 +198,7 @@ it("uploads a file, assigns the recommended role and creates the task with its b
     target: { files: [new File(["{}"], "八宝山幅地质图.zip")] },
   });
   expect(await screen.findByText("八宝山幅地质图.zip")).toBeInTheDocument();
-  const batchId = vi.mocked(agentApi.uploadWorkflowFile).mock.calls[0]![0];
+  const batchId = vi.mocked(agentApi.uploadWorkflowBatch).mock.calls[0]![0];
   expect(batchId).toMatch(/^[0-9a-f]{32}$/);
   expect(screen.getByText(/486 个要素/)).toBeInTheDocument();
   fireEvent.change(screen.getByRole("textbox", { name: "工作流目标" }), {
@@ -187,6 +213,168 @@ it("uploads a file, assigns the recommended role and creates the task with its b
     inputs: { lithology: 812 },
     parameters: {},
   });
+});
+
+it("opens fixed logic uploads without catalog, context, bootstrap or history completion", async () => {
+  vi.mocked(agentApi.workflowHistory).mockReturnValue(new Promise(() => {}));
+  vi.mocked(agentApi.bootstrap).mockReturnValue(new Promise(() => {}));
+  const { container } = render(
+    <App>
+      <MemoryRouter>
+        <WorkflowPanel
+          model="configured-model"
+          resourceIds={[]}
+          userId={78}
+          fixedScenario="geology_generic"
+          embedded
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  const target = screen.getByRole("textbox", { name: "工作流目标" });
+  expect(target).toBeEnabled();
+  expect(container.querySelector('input[type="file"]')).not.toBeDisabled();
+  expect(agentApi.bootstrap).not.toHaveBeenCalled();
+  expect(agentApi.resources).not.toHaveBeenCalled();
+  expect(agentApi.researchDemoSummaries).not.toHaveBeenCalled();
+  expect(agentApi.researchDemos).not.toHaveBeenCalled();
+  expect(computeApi.algorithms).not.toHaveBeenCalled();
+  expect(computeApi.inputs).not.toHaveBeenCalled();
+});
+
+it("uploads multiple files together, prefills roles and preserves a manual edit", async () => {
+  const second = {
+    ...upload,
+    id: "other-upload",
+    resourceId: 813,
+    fileName: "研究区.geojson",
+  };
+  const uploadBatch = vi
+    .spyOn(agentApi, "uploadWorkflowBatch")
+    .mockResolvedValue({
+      items: [upload, second],
+      errors: [{ fileName: "说明.txt", detail: "不支持的资料类型" }],
+    });
+  vi.spyOn(agentApi, "recognizeWorkflowRoles").mockResolvedValue({
+    source: "model",
+    questions: [],
+    items: [
+      {
+        uploadId: upload.id,
+        resourceId: 812,
+        role: "lithology",
+        reason: "字段含地层名称，且为面",
+      },
+      {
+        uploadId: second.id,
+        resourceId: 813,
+        role: "coverage",
+        reason: "仅包含研究区边界",
+      },
+    ],
+  });
+  const { container } = render(
+    <App>
+      <MemoryRouter>
+        <WorkflowPanel
+          model="configured-model"
+          resourceIds={[]}
+          fixedScenario="geology_generic"
+          userId={78}
+          embedded
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  const files = [
+    new File(["{}"], "总资料.zip"),
+    new File(["{}"], "研究区.geojson"),
+  ];
+  fireEvent.change(container.querySelector('input[type="file"]')!, {
+    target: { files },
+  });
+  await screen.findByText("智能体已识别资料角色，请核对后生成执行计划");
+  expect(uploadBatch).toHaveBeenCalledTimes(1);
+  expect(uploadBatch.mock.calls[0]![1]).toHaveLength(2);
+  expect(screen.getByText("字段含地层名称，且为面")).toBeVisible();
+  expect(screen.getByText("说明.txt：不支持的资料类型")).toBeVisible();
+  fireEvent.mouseDown(
+    screen.getByRole("combobox", { name: "研究区.geojson的资料角色" }),
+  );
+  fireEvent.click(
+    await screen.findByText("地质图（必需）", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "识别资料角色" }));
+  await waitFor(() =>
+    expect(agentApi.recognizeWorkflowRoles).toHaveBeenCalledTimes(2),
+  );
+  const create = vi.spyOn(agentApi, "createWorkflow").mockResolvedValue(queued);
+  const button = screen.getByRole("button", { name: "生成执行计划" });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(create).toHaveBeenCalled());
+  expect(create.mock.calls[0]![0].inputs).toEqual({ lithology: 813 });
+});
+
+it("allows manual roles and retry after recognition fails", async () => {
+  vi.spyOn(agentApi, "uploadWorkflowBatch").mockResolvedValue({
+    items: [upload],
+    errors: [],
+  });
+  const recognize = vi
+    .spyOn(agentApi, "recognizeWorkflowRoles")
+    .mockRejectedValueOnce(new Error("识别连接中断"));
+  const { container } = render(
+    <App>
+      <MemoryRouter>
+        <WorkflowPanel
+          model="configured-model"
+          resourceIds={[]}
+          fixedScenario="geology_generic"
+          userId={78}
+          embedded
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  fireEvent.change(container.querySelector('input[type="file"]')!, {
+    target: { files: [new File(["{}"], "资料.zip")] },
+  });
+  const uploads = within(screen.getByRole("region", { name: "上传本次资料" }));
+  expect(await uploads.findByText("识别连接中断")).toBeVisible();
+  expect(uploads.getByText("可重试识别或手动选择资料角色")).toBeVisible();
+  const retry = uploads.getByRole("button", { name: "重试识别" });
+  expect(retry).toBeEnabled();
+  const role = uploads.getByRole("combobox", {
+    name: "八宝山幅地质图.zip的资料角色",
+  });
+  expect(role).toBeEnabled();
+  fireEvent.mouseDown(role);
+  fireEvent.click(
+    await screen.findByText("地质图（必需）", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "生成执行计划" })).toBeEnabled(),
+  );
+  recognize.mockResolvedValue({
+    source: "rules",
+    questions: [],
+    items: [
+      {
+        uploadId: upload.id,
+        resourceId: 812,
+        role: "lithology",
+        reason: "按文件名、类型和几何判断",
+      },
+    ],
+  });
+  fireEvent.click(retry);
+  await screen.findByText("智能体已识别资料角色，请核对后生成执行计划");
+  expect(recognize).toHaveBeenCalledTimes(2);
 });
 
 it("blocks confirmation until the required stratum field is chosen", async () => {

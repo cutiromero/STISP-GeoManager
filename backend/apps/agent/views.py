@@ -927,6 +927,72 @@ def workflow_uploads(request):
     return JsonResponse(upload_json(upload), status=201)
 
 
+@endpoint(["POST"])
+def workflow_upload_batch(request):
+    from .workflow_bundles import store_batch
+
+    if set(request.POST) != {"batchId"} or set(request.FILES) != {"files"}:
+        raise ApiProblem("请上传资料文件并提供批次号")
+    result = store_batch(
+        request.user,
+        request.headers.get("X-Project-Id"),
+        request.FILES.getlist("files"),
+        request.POST.get("batchId"),
+    )
+    log_operation(
+        request.user,
+        "agent",
+        "upload_workflow_batch",
+        "success",
+        f"登记{len(result['items'])}份资料，失败{len(result['errors'])}份",
+    )
+    return JsonResponse(result)
+
+
+@endpoint(["POST"])
+def workflow_recognize_roles(request):
+    from .workflow_roles import recognize_roles
+
+    value = body(request, ["batchId", "model"])
+    if not isinstance(value.get("model"), str):
+        raise ApiProblem("请选择模型")
+    return JsonResponse(
+        recognize_roles(
+            request.user,
+            request.headers.get("X-Project-Id"),
+            value.get("batchId"),
+            value["model"],
+        )
+    )
+
+
+@endpoint(["GET"])
+def workflow_active(request):
+    policy = require_access(request.user, "agent")
+    if not policy.get("workflowEnabled", True):
+        raise ApiProblem("MH-workflow功能已关闭", 403)
+    workflow = (
+        AgentWorkflow._base_manager.filter(
+            owner=request.user, status__in=WORKFLOW_ACTIVE
+        )
+        .order_by("-updated_at")
+        .first()
+    )
+    item = (
+        None
+        if workflow is None
+        else {
+            "id": str(workflow.id),
+            "goal": workflow.goal,
+            "workflowType": workflow.workflow_type,
+            "status": workflow.status,
+            "updatedAt": workflow.updated_at.isoformat(),
+            "projectId": workflow.project_tag_id,
+        }
+    )
+    return JsonResponse({"item": item})
+
+
 @endpoint(["DELETE"])
 def workflow_upload_detail(request, upload_id):
     from .workflow_uploads import delete_upload, require_upload_access

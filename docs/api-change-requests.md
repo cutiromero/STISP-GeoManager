@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261104-001 - 任务资料批量上传、角色识别与活动任务摘要
+
+- Status: BackendReady
+- Owner: logic-upload-bundle；本任务显式贯通契约、后端、前端。
+- Endpoints: POST /api/agent/workflow-uploads/batch/; POST /api/agent/workflow-uploads/recognize/; GET /api/agent/workflows/active/。
+- Change type: 新增接口；已有单文件上传、工作流详情及取消响应不变。
+- OpenAPI change: AgentWorkflowBatchResult、AgentWorkflowRoleResult、AgentActiveWorkflow；角色枚举、类型校验、逐份错误及跨项目本人摘要边界。
+- Mock examples: mock/prism/examples/104-agent-upload-bundle.json，响应状态键仅使用小写字母数字和 `-_`。
+- Frontend reason: 多资料与总ZIP上传后自动识别并供人工核查；可定位及取消挡路任务。
+- Backend implementation notes: 安全解包最多512条目、总解压上限min(uploadMaxMb,512MiB)，每批最多12份；同目录同名Shapefile归组；模型无效或不可用退回规则。仅本人跨项目摘要，详情和取消仍按目标项目原权限校验。
+- Verification: 解包安全、部分失败、批次上限、角色校验和规则退回、本人摘要隔离；前端上传、角色修改、取消确认、思考控件与固定场景惰性加载。
+- Result: 本机相关后端81项、前端单元542项、TypeScript与契约检查通过；新增浏览器回归因沙箱Chromium启动权限未能执行。未部署服务器，真实模型与公网首开耗时未验收。
+
 ## API-20261102-001 - 普通对话账号三任务并发
 
 - Status: BackendReady
@@ -189,6 +202,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261104-001 | BackendReady | /api/agent/workflow-uploads/batch/; /recognize/; /api/agent/workflows/active/ | batch uploads, role suggestions, active task summary | Updated | 104-agent-upload-bundle.json | Implemented | Backend 81, unit 542, types and contract passed; browser sandbox-blocked | Existing responses unchanged; target-project authorization preserved |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | API-20261103-002 | BackendReady | /api/projects/; /api/projects/assignments/{userId}/; /api/agent/workflows/; /api/agent/research-demos/ | per-user public scope and lightweight workflow history | Updated | Scoped backend and browser fixtures | Implemented | Project/sharing 72; project UI 6 passed | Default true, live authorization, authorized fallback and summary pagination; server acceptance separate |
 | API-20261103-003 | BackendReady | /api/agent/workflow-uploads/; /api/agent/workflow-uploads/{uploadId}/; /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | task uploads, geology_generic and field-mapping confirmation | Updated | 103-agent-generic-workflow.json | Implemented | Generic 9 backend, 2 browser; local mock end-to-end succeeded | Uploads owner_only and bound once; mapping proposed by model and confirmed by user |

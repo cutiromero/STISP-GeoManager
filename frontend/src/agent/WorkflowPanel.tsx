@@ -43,6 +43,7 @@ import {
 } from "./multiElementScenario";
 import FieldMappingReview from "./FieldMappingReview";
 import GenericWorkflowUploads from "./GenericWorkflowUploads";
+import ActiveWorkflowNotice from "./ActiveWorkflowNotice";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 type WorkflowHistory = Pick<
@@ -174,8 +175,9 @@ export default function WorkflowPanel({
       "scenario" | "projectId" | "title"
     >[]
   >([]);
-  const [goal, setGoal] = useState("");
-  const [workflowType, setWorkflowType] = useState("");
+  const fixedGeneric = fixedScenario === genericGeologyType;
+  const [goal, setGoal] = useState(fixedGeneric ? genericGeologyGoal : "");
+  const [workflowType, setWorkflowType] = useState(fixedScenario ?? "");
   const [resources, setResources] = useState<AgentResource[]>([]);
   const [knowledgeDomains, setKnowledgeDomains] = useState<
     KnowledgeDomainOption[]
@@ -223,6 +225,7 @@ export default function WorkflowPanel({
   };
   const [batchId, setBatchId] = useState(newBatchId);
   const [busy, setBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const [error, setError] = useState("");
   const [previousWorkflowId, setPreviousWorkflowId] = useState<string>();
   const [previewDraft, setPreviewDraft] = useState("");
@@ -247,10 +250,12 @@ export default function WorkflowPanel({
     workflow.plan.phase === "review_plan";
   const initializing =
     Boolean(workflowType) &&
-    (!catalogReady ||
-      !contextReady ||
-      !historyScope?.startsWith(`${sceneScope}:`) ||
-      detailLoading);
+    (fixedGeneric
+      ? Boolean(selectedWorkflowId && (!workflow || detailLoading))
+      : !catalogReady ||
+        !contextReady ||
+        !historyScope?.startsWith(`${sceneScope}:`) ||
+        detailLoading);
   const locked =
     !workflowType ||
     initializing ||
@@ -411,7 +416,7 @@ export default function WorkflowPanel({
     if (fixedScenario === genericGeologyType) setGoal(genericGeologyGoal);
   }, [projectId, storageKey, fixedScenario]);
   useEffect(() => {
-    if (!open || demosScope === projectId) return;
+    if (!open || fixedGeneric || demosScope === projectId) return;
     let disposed = false;
     const controller = new AbortController();
     setScenesLoading(true);
@@ -432,9 +437,9 @@ export default function WorkflowPanel({
       disposed = true;
       controller.abort();
     };
-  }, [open, projectId, demosScope, loadAttempt]);
+  }, [open, projectId, demosScope, loadAttempt, fixedGeneric]);
   useEffect(() => {
-    if (!open || !workflowType || contextReady) return;
+    if (!open || fixedGeneric || !workflowType || contextReady) return;
     let disposed = false;
     const controller = new AbortController();
     setContextLoading(true);
@@ -478,9 +483,9 @@ export default function WorkflowPanel({
       disposed = true;
       controller.abort();
     };
-  }, [open, sceneScope, contextReady, bootstrap, loadAttempt]);
+  }, [open, sceneScope, contextReady, bootstrap, loadAttempt, fixedGeneric]);
   useEffect(() => {
-    if (!open || !workflowType || catalogReady) return;
+    if (!open || fixedGeneric || !workflowType || catalogReady) return;
     let disposed = false;
     const controller = new AbortController();
     const cancellation = combineAbortSignals([
@@ -519,7 +524,14 @@ export default function WorkflowPanel({
       controller.abort();
       cancellation.dispose();
     };
-  }, [open, projectId, catalogReady, Boolean(workflowType), loadAttempt]);
+  }, [
+    open,
+    projectId,
+    catalogReady,
+    Boolean(workflowType),
+    loadAttempt,
+    fixedGeneric,
+  ]);
   useEffect(() => {
     if (!open || !workflowType || historyScope === historyRequestScope) return;
     let disposed = false;
@@ -821,6 +833,13 @@ export default function WorkflowPanel({
   }
   const content = (
     <Space orientation="vertical" style={{ width: "100%" }}>
+      {open && (
+        <ActiveWorkflowNotice
+          projectId={projectId}
+          currentId={workflow?.id}
+          refreshKey={`${error}:${workflow?.status ?? ""}`}
+        />
+      )}
       <Typography.Text type="secondary">
         {ui(
           "描述目标，核对数据与算法后确认执行。平台持续跟踪计算、知识检查和结果入库，离开页面后仍可恢复查看。",
@@ -953,6 +972,8 @@ export default function WorkflowPanel({
             />
           ) : generic ? (
             <GenericWorkflowUploads
+              model={model}
+              onActivityChange={setUploadBusy}
               batchId={batchId}
               inputs={inputs}
               disabled={locked || busy}
@@ -1122,7 +1143,7 @@ export default function WorkflowPanel({
               locked ||
               (knowledgeSelection.mode === "manual" &&
                 !knowledgeSelection.domains.length) ||
-              (generic && !inputs.lithology) ||
+              (generic && (!inputs.lithology || uploadBusy)) ||
               (isDemo &&
                 !demoInputsReady(
                   workflowType as DemoWorkflowType,

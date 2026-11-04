@@ -13,7 +13,9 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import F
 
 from apps.catalog.importer import ImportDataError
 from apps.catalog.models import DataResource
@@ -323,8 +325,10 @@ def _store_raster(uploaded, user, name, source):
     return dataset.data_resource, profile
 
 
+@transaction.atomic
 def store_upload(user, project_id, uploaded, batch_id) -> WorkflowUpload:
     batch_id = checked_batch(batch_id)
+    get_user_model().objects.filter(pk=user.pk).update(last_login=F("last_login"))
     require_upload_access(user, project_id)
     existing = WorkflowUpload.objects.filter(owner=user, batch_id=batch_id)
     if existing.filter(workflow__isnull=False).exists():

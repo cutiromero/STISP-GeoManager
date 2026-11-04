@@ -82,6 +82,7 @@ import useAgentLayout from "./useAgentLayout";
 import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "./ReasoningEffortControl";
+import LogicThinkingControl from "./LogicThinkingControl";
 import "./agent.css";
 import { workflowStatusLabels } from "./workflowFeedback";
 import {
@@ -1788,7 +1789,28 @@ function AgentWorkspace({
                         </Button>
                       </Upload>
                     )}
-                    {deepThinkingAvailable && (
+                    {deepThinkingAvailable && logicProject && (
+                      <LogicThinkingControl
+                        value={
+                          thinkingMode === "deep"
+                            ? (effortOverride ?? defaultEffort)
+                            : "off"
+                        }
+                        disabled={taskLocked || busy}
+                        onChange={(value) => {
+                          const next = value === "off" ? "fast" : "deep";
+                          setThinkingMode(next);
+                          setEffortOverride(
+                            value === "off" ? undefined : value,
+                          );
+                          localStorage.setItem(
+                            `agent-thinking:${user?.id}:${mode}`,
+                            next,
+                          );
+                        }}
+                      />
+                    )}
+                    {deepThinkingAvailable && !logicProject && (
                       <ReasoningEffortControl
                         value={effortOverride ?? defaultEffort}
                         overridden={effortOverride !== undefined}
@@ -1806,7 +1828,7 @@ function AgentWorkspace({
                         }}
                       />
                     )}
-                    {deepThinkingAvailable && (
+                    {deepThinkingAvailable && !logicProject && (
                       <>
                         <Button
                           type="text"

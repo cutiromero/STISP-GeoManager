@@ -5,6 +5,14 @@
 
 ## 通用地质推理与任务资料上传（2026-11-03）
 
+批量入口 `POST /api/agent/workflow-uploads/batch/` 接收 multipart 的 `batchId` 和重复 `files` 字段，支持多个文件或一个含子目录的总ZIP。ZIP先完成安全预检，拒绝绝对路径、父目录、符号链接、特殊文件、重复路径与加密条目；累计最多512条目、解压总量不超过 `min(uploadMaxMb, 512MiB)`，不展开嵌套ZIP。系统文件、锁文件及 `.aux.xml`、`.shp.xml` 旁车文件忽略；同目录同名Shapefile组成文件合为一份。每批最多12份资料，沿用单文件导入校验。返回200 `{items, errors}`：成功资料与逐份 `{fileName, detail}` 错误可同时存在；不安全ZIP整包不登记，其他文件继续。请求格式错误或整体上传超限返回400，未登录401，权限不足403，已绑定批次409；旧单文件接口响应不变。
+
+上传完成后请求 `POST /api/agent/workflow-uploads/recognize/`，JSON为 `{batchId, model}`。权限与上传一致，且核验模型授权；仅识别本人当前项目未绑定批次。响应 `{items:[{uploadId,resourceId,role,reason}],questions,source}`，`source` 为 `model` 或 `rules`。模型读取文件名、类型、几何、坐标系、字段与取值示例、要素数和波段数；非法角色、重复角色、错误几何/资料类型或模型失败均退回规则，理由明确“按文件名、类型和几何判断”。未识别地质图返回提示问题。用户可修改建议，生成任务仍走字段含义及执行计划两次确认，不自动执行。
+
+`GET /api/agent/workflows/active/` 在当前项目智能体与MH-workflow授权后，读取本账号唯一活动任务（含暂停），返回 `{item:null}` 或含 `id/goal/workflowType/status/updatedAt/projectId` 的本人摘要。账号并发限制跨项目生效，摘要不含数据或计划。查看与取消使用既有详情、取消接口，并以目标项目ID重新授权；不绕过项目成员、模型或资料权限。前端提供任务名称、场景、状态、更新时间、查看及二次确认取消，取消中的任务在安全边界停止。
+
+逻辑推理项目将普通对话的深度思考与思考强度合为“思考：关/低/中/高”，分别映射 `fast`、`deep+low`、`deep+medium`、`deep+xhigh`，与 `AgentRunInput`、bootstrap默认值及预算支持的强度一致，模型或策略不支持深度思考时隐藏。固定通用场景不请求算法目录、算子候选、项目资料、场景目录与预设；上传和目标输入不等待历史任务或bootstrap。其他场景保持原加载和控件行为。
+
 `POST /api/agent/workflow-uploads/` 以 multipart 上传一个文件和客户端生成的 `batchId`（32位小写十六进制）。矢量支持 Shapefile ZIP、GeoPackage、GeoJSON，栅格支持 GeoTIFF，表格支持 CSV、XLSX，校验和大小限制沿用既有导入服务。栅格大小上限为平台 `uploadMaxMb`。资料登记为 `owner_only` 数据资源（栅格在导入写入时即为 `owner_only`），来源标记 `workflow-upload:<batchId>`，不出现在数据目录、搜索、算子输入候选、地图图层列表、后台数据管理列表与导出、首页和看板统计中；返回识别结果（类型、坐标系、几何、要素数、字段与示例取值）和推荐角色 `roleHint`。每个批次最多12个文件。`GET ...?batchId=` 列出本人当前项目该批次的上传；`DELETE .../{uploadId}/` 只能删除尚未绑定任务的上传，否则返回409。上传需要智能体访问、MH-workflow、智能体调用算子及当前项目 `catalog.add_dataresource` 权限。
 
 `POST /api/agent/workflows/` 使用 `workflowType=geology_generic` 时必须提供 `uploadBatchId`，`inputs` 只能引用该批次资料：`lithology` 必需，`faults`、`coverage`、`units` 与五类蚀变角色可选。规则由服务端选用当前项目已绑定的综合推理试用规则，客户端不传 `rules`。`maxResources` 在创建时按实际运行所用资源核对：三份矢量工作副本、已上传的蚀变栅格、缺失蚀变共用的一份全零栅格和规则表。批次在创建时绑定，已绑定批次再次使用返回409。

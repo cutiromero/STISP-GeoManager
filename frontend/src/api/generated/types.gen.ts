@@ -5660,6 +5660,94 @@ export type ResultArtifactListResponse = {
 };
 
 /**
+ * 本人账号活动工作流摘要，不含资料与计划
+ */
+export type AgentActiveWorkflow = {
+    /**
+     * 工作流ID
+     */
+    id: string;
+    /**
+     * 任务目标
+     */
+    goal: string;
+    /**
+     * 任务场景
+     */
+    workflowType: string;
+    /**
+     * 活动状态
+     */
+    status: 'queued' | 'running' | 'waiting_compute' | 'waiting_approval' | 'paused';
+    /**
+     * 最近更新时间
+     */
+    updatedAt: string;
+    /**
+     * 所属项目ID，后续操作需该项目权限
+     */
+    projectId: number;
+};
+
+/**
+ * 批量上传的逐份结果
+ */
+export type AgentWorkflowBatchResult = {
+    /**
+     * 成功登记的资料
+     */
+    items: Array<AgentWorkflowUpload>;
+    /**
+     * 未登记资料或安全预检失败压缩包
+     */
+    errors: Array<{
+        /**
+         * 原文件或包内相对路径
+         */
+        fileName: string;
+        /**
+         * 失败原因
+         */
+        detail: string;
+    }>;
+};
+
+/**
+ * 整批资料的互斥角色建议
+ */
+export type AgentWorkflowRoleResult = {
+    /**
+     * 建议来源
+     */
+    source: 'model' | 'rules';
+    /**
+     * 需要用户核查的问题
+     */
+    questions: Array<string>;
+    /**
+     * 每份资料的建议，未识别时role为null
+     */
+    items: Array<{
+        /**
+         * 上传记录ID
+         */
+        uploadId: string;
+        /**
+         * 资料资源ID
+         */
+        resourceId: number;
+        /**
+         * 建议角色
+         */
+        role: 'lithology' | 'faults' | 'coverage' | 'units' | 'hematite' | 'chlorite' | 'hydromica' | 'calcite' | 'dolomite' | null;
+        /**
+         * 判断依据或规则退回说明
+         */
+        reason: string;
+    }>;
+};
+
+/**
  * 上传资料中的一个字段及示例取值
  */
 export type AgentWorkflowUploadField = {
@@ -18476,6 +18564,184 @@ export type ConfirmAgentWorkflowResponses = {
 };
 
 export type ConfirmAgentWorkflowResponse = ConfirmAgentWorkflowResponses[keyof ConfirmAgentWorkflowResponses];
+
+export type UploadAgentWorkflowBatchData = {
+    /**
+     * 同批次的多个文件或总ZIP
+     */
+    body: {
+        /**
+         * 客户端批次号
+         */
+        batchId: string;
+        /**
+         * 资料文件、Shapefile组成文件或总ZIP
+         */
+        files: Array<Blob | File>;
+    };
+    headers: {
+        /**
+         * 唯一当前项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflow-uploads/batch/';
+};
+
+export type UploadAgentWorkflowBatchErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type UploadAgentWorkflowBatchError = UploadAgentWorkflowBatchErrors[keyof UploadAgentWorkflowBatchErrors];
+
+export type UploadAgentWorkflowBatchResponses = {
+    /**
+     * 逐份登记结果，允许部分或全部失败
+     */
+    200: AgentWorkflowBatchResult;
+};
+
+export type UploadAgentWorkflowBatchResponse = UploadAgentWorkflowBatchResponses[keyof UploadAgentWorkflowBatchResponses];
+
+export type RecognizeAgentWorkflowRolesData = {
+    /**
+     * 批次和当前可用模型
+     */
+    body: {
+        /**
+         * 上传批次号
+         */
+        batchId: string;
+        /**
+         * 当前授权模型标识
+         */
+        model: string;
+    };
+    headers: {
+        /**
+         * 唯一当前项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflow-uploads/recognize/';
+};
+
+export type RecognizeAgentWorkflowRolesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type RecognizeAgentWorkflowRolesError = RecognizeAgentWorkflowRolesErrors[keyof RecognizeAgentWorkflowRolesErrors];
+
+export type RecognizeAgentWorkflowRolesResponses = {
+    /**
+     * 可由用户修改的角色建议
+     */
+    200: AgentWorkflowRoleResult;
+};
+
+export type RecognizeAgentWorkflowRolesResponse = RecognizeAgentWorkflowRolesResponses[keyof RecognizeAgentWorkflowRolesResponses];
+
+export type GetActiveAgentWorkflowData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflows/active/';
+};
+
+export type GetActiveAgentWorkflowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type GetActiveAgentWorkflowError = GetActiveAgentWorkflowErrors[keyof GetActiveAgentWorkflowErrors];
+
+export type GetActiveAgentWorkflowResponses = {
+    /**
+     * 本人活动任务摘要，没有时item为null
+     */
+    200: {
+        /**
+         * 挡路任务摘要或null
+         */
+        item: AgentActiveWorkflow | null;
+    };
+};
+
+export type GetActiveAgentWorkflowResponse = GetActiveAgentWorkflowResponses[keyof GetActiveAgentWorkflowResponses];
 
 export type ListAgentWorkflowUploadsData = {
     body?: never;
