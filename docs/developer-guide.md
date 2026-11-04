@@ -1,6 +1,20 @@
 ﻿# 开发者指南（Developer Guide）
 
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
+
+## 工作流卡片与逻辑推理成果
+
+`GET /api/agent/workflows/{workflowId}/?view=card` 复用完整详情的本人、项目与资源鉴权，只返回卡片需要的状态、阶段名称/状态/任务及已入库成果引用、`stepCount`；`steps`、`evidence` 为空，`parameters` 为空，不返回模型交互、完整阶段结果、`finalStage` 或 `modificationReview`。省略 `view` 或 `view=full` 返回原有完整详情。无效 `view` 返回标准 400 错误。对话历史先读 card，展开过程、证据、模型交互或审核时再读 full；已完成任务不轮询，也不再次读取原始对话任务。
+
+综合推理族 `geology_multi_element_reasoning` 与 `geology_generic` 自动入库的成果为 `check.issues`、`apply.lithology/faults/alterations/changes`、`relations.intersections`、`prospect.before_zones/after_zones/evidence`。其余输出仍保留在计算任务中，可下载、用于模型判断、复查、报告和评价，但不创建资源或成果记录。输入绑定所需输出均在上述保留集合内。
+
+上述综合推理仍有工作流步骤引用的计算任务，其全部输出不参与普通计算临时文件的到期清理；删除工作流引用后恢复普通保留周期。此规则不恢复已经过期或已删除的历史文件，也不自动删除历史已入库的中间资源。
+
+对比及讲解的原始蚀变、原始断裂交汇、问题空间范围和实际修改空间范围，按阶段 `results[].outputId` 调用 `GET /api/compute/outputs/{outputId}/preview/?view=map`，直接读取经过 checksum 校验的矢量文件，返回 `geojson`（WGS84），不创建资源。该视图最多 30000 要素，超限、校验失败或缺少 CRS 返回 409，非矢量或无效视图返回 400；原属性预览保持不变。访问仍须实时通过计算输出的项目、任务或已接受共享权限校验。
+
+智能体成果地图入口使用新标签页和 `noopener`，链接携带 `projectTagId` 与工作流标识，不传令牌。新页面沿用页面登录生命周期，通过同源 `BroadcastChannel` 向仍在线的原页面取得令牌，再登记独立页面租约；智能体原页面保持在线。
+
+岩性工作副本与修正后成果通过 `default_visualization.symbolization` 的 `uniqueValue` renderer 按 `name` 分类。配色表为仓库内 `backend/apps/agent/data/lithology_colors.json`，来自海德乌拉 ArcGIS 图层的 38 类 CIMSolidFill RGB；未命中名称沿用现有调色板，图例使用单元名称。`GET /api/catalog/resources/{id}/profile/` 的 `defaultVisualization` 返回默认方案（未配置为 `{}`），资源列表不附带方案。常规工作台、对比/讲解页均读取这一矢量符号化；用户已经手动修改的图层样式不覆盖。不涉及栅格前端处理。
 > 版本：v0.1.0
 
 ## 通用地质推理与任务资料上传（2026-11-03）

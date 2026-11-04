@@ -35,6 +35,14 @@ function comparisonStyle(
     symbolization.circle.circleStrokeColor = "#c86612";
     return symbolization;
   }
+  if (
+    ["岩性", "地质图"].includes(placement.element) &&
+    symbolization.renderer?.type === "uniqueValue" &&
+    symbolization.renderer.field === "name"
+  ) {
+    symbolization.fill.fillOpacity = 0.95;
+    return symbolization;
+  }
   const features = layer.geojson.features;
   const lithologyField =
     ["class", "geo_sym", "name"].find((key) =>

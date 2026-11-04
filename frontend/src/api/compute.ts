@@ -117,6 +117,8 @@ export const computeApi = {
     }),
   preview: (id: number) =>
     requestJson<ComputePreview>(`/api/compute/outputs/${id}/preview/`),
+  vectorPreview: (id: number) =>
+    requestJson<ComputePreview>(`/api/compute/outputs/${id}/preview/?view=map`),
   mapPreview: (id: number) =>
     requestJson<ComputeMapPreview>(`/api/compute/outputs/${id}/map-preview/`),
   upload: async (id: number, file: File): Promise<ComputeVersion> => {

@@ -7,6 +7,7 @@ stand-ins (map extent, empty fault layer, all-zero alteration raster).
 
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -22,6 +23,11 @@ from .workflow_uploads import register_vector
 
 PLACEHOLDER_NAME = "未提供的蚀变识别结果（全零）"
 MAX_PIXELS = 4000
+LITHOLOGY_COLORS = json.loads(
+    (Path(__file__).parent / "data" / "lithology_colors.json").read_text(
+        encoding="utf-8"
+    )
+)["colors"]
 
 
 def _read(resource):
@@ -208,7 +214,7 @@ def name_symbolization(frame, field="name"):
                     "id": f"unit-{index}",
                     "value": name,
                     "label": name,
-                    "color": PALETTE[index % len(PALETTE)],
+                    "color": LITHOLOGY_COLORS.get(name, PALETTE[index % len(PALETTE)]),
                 }
                 for index, name in enumerate(names)
             ],
@@ -216,6 +222,22 @@ def name_symbolization(frame, field="name"):
         },
         "line": {"lineColor": "#64748b", "lineWidth": 0.5},
     }
+
+
+def style_lithology(resource):
+    import geopandas as gpd
+
+    visualization = dict(resource.default_visualization or {})
+    data = gpd.read_file(
+        vector_geopackage_path(),
+        layer=resource.storage_path,
+        columns=["name"],
+        ignore_geometry=True,
+    )
+    visualization["symbolization"] = name_symbolization(data)
+    if resource.default_visualization != visualization:
+        resource.default_visualization = visualization
+        resource.save(update_fields=["default_visualization", "updated_at"])
 
 
 def _register_copies(workflow, user, uploads, lithology, coverage, faults, created):

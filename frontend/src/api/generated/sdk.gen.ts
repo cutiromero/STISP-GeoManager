@@ -2750,7 +2750,7 @@ export const createAgentWorkflow = <ThrowOnError extends boolean = false>(option
 /**
  * 查询科研工作流
  *
- * 查询当前用户在当前项目内的工作流、步骤、证据和结果引用。
+ * 查询当前用户在当前项目内的工作流。默认返回完整步骤、证据和结果引用；view=card仅返回卡片所需状态、计数和阶段成果引用，steps与evidence为空，不包含模型交互、完整计划或修改审核。展开明细时请求默认视图。
  */
 export const getAgentWorkflow = <ThrowOnError extends boolean = false>(options: Options<GetAgentWorkflowData, ThrowOnError>): RequestResult<GetAgentWorkflowResponses, GetAgentWorkflowErrors, ThrowOnError> => (options.client ?? client).get<GetAgentWorkflowResponses, GetAgentWorkflowErrors, ThrowOnError>({
     security: [{

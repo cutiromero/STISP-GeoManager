@@ -790,7 +790,8 @@ def research_demos(request):
     )
 
 
-def workflow_json(workflow, include_steps=True):
+def workflow_json(workflow, include_steps=True, view="full"):
+    card = view == "card"
     data = {
         "id": str(workflow.id),
         "projectId": workflow.project_tag_id,
@@ -809,18 +810,34 @@ def workflow_json(workflow, include_steps=True):
         "executeOperators": workflow.execute_operators,
         "resourceIds": workflow.resource_ids,
         "algorithmVersionId": workflow.algorithm_version_id,
-        "parameters": workflow.parameters,
-        "plan": workflow.plan,
+        "parameters": {} if card else workflow.parameters,
+        "plan": workflow.plan
+        if not card
+        else {
+            "phase": workflow.plan.get("phase"),
+            "stageIndex": workflow.plan.get("stageIndex"),
+            "deletedResources": workflow.plan.get("deletedResources", []),
+            "stages": [
+                {
+                    key: stage[key]
+                    for key in ("name", "identifier", "status", "taskId", "outputs")
+                    if key in stage
+                }
+                for stage in workflow.plan.get("stages", [])
+            ],
+        },
         "planHash": workflow.plan_hash,
         "importResults": workflow.import_results,
         "resultResourceIds": workflow.result_resource_ids,
         "resultIds": workflow.result_ids,
-        "evidence": workflow.evidence,
+        "evidence": [] if card else workflow.evidence,
         "createdAt": workflow.created_at.isoformat(),
         "updatedAt": workflow.updated_at.isoformat(),
         "runtime": "durable_state_machine",
     }
-    if include_steps:
+    if card:
+        data.update(view="card", steps=[], stepCount=workflow.steps.count())
+    elif include_steps:
         data["steps"] = [
             {
                 "id": item.id,
@@ -844,7 +861,7 @@ def workflow_json(workflow, include_steps=True):
             }
             for item in workflow.steps.all()
         ]
-    if workflow.plan.get("modificationReview") is not None:
+    if not card and workflow.plan.get("modificationReview") is not None:
         data["modificationReview"] = workflow.plan["modificationReview"]
     return data
 
@@ -1161,11 +1178,14 @@ def record_workflow_review(workflow, decision, feedback, plan_hash, review_outpu
 def workflow_detail(request, workflow_id):
     from .workflow import authorize_workflow_history
 
+    view = request.GET.get("view", "full")
+    if view not in {"full", "card"}:
+        raise ApiProblem("工作流详情视图无效")
     workflow = get_object_or_404(
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
     )
     authorize_workflow_history(workflow)
-    return JsonResponse(workflow_json(workflow))
+    return JsonResponse(workflow_json(workflow, view=view))
 
 
 @endpoint(["POST"])

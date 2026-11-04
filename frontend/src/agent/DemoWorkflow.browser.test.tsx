@@ -187,6 +187,7 @@ async function select(label: string, option: string) {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(window, "open").mockReturnValue(null);
   resetProjectSession();
   setActiveProject("2");
   sessionStorage.removeItem("workflow-session:79:2");
@@ -607,8 +608,13 @@ it("deduplicates workflow task IDs and opens an imported vector through the actu
   );
   expect(load).toHaveBeenCalledOnce();
   expect(runPoll).not.toHaveBeenCalled();
-  expect(screen.getByRole("status", { name: "当前位置" })).toHaveTextContent(
+  expect(window.open).toHaveBeenCalledWith(
     "/map?resourceId=203&projectTagId=2",
+    "_blank",
+    "noopener",
+  );
+  expect(screen.getByRole("status", { name: "当前位置" }).textContent).toBe(
+    "/",
   );
   expect(screen.queryByText(task.id)).not.toBeInTheDocument();
 });

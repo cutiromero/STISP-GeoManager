@@ -59,6 +59,7 @@ export function createVectorLayerGroup(
     fields: queryResult.fields,
     geojson: queryResult.geojson,
     base: cloneDefaultVectorSymbolization(),
+    defaultVisualization: profile.defaultVisualization,
   });
   return {
     id: groupId,

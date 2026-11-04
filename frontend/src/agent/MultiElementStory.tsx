@@ -404,6 +404,8 @@ export default function MultiElementStory({
                   </p>
                   <MultiElementEvidence suggestion={item} />
                   <Link
+                    target="_blank"
+                    rel="noopener"
                     to={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}&suggestion=${encodeURIComponent(item.id)}`}
                   >
                     在地图上定位此对象
@@ -482,6 +484,8 @@ export default function MultiElementStory({
         </Button>
       )}
       <Link
+        target="_blank"
+        rel="noopener"
         className="geology-review-map-link"
         to={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`}
       >

@@ -506,14 +506,14 @@ function AgentWorkspace({
       setThinkingMode("fast");
   }, [deepThinkingAvailable, thinkingMode]);
   useEffect(() => {
-    if (mode !== "agent" || !canUse) return;
+    if (mode !== "agent" || !canUse || logicProject) return;
     void agentApi
       .resources()
       .then((r) => {
         if (alive.current) setResources(r.items);
       })
       .catch(report);
-  }, [mode, canUse]);
+  }, [mode, canUse, logicProject]);
   useEffect(() => {
     if (!running || historyLoading) return;
     let disposed = false;

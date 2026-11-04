@@ -805,6 +805,11 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
         return False
     records = []
     for output in outputs:
+        if workflow.workflow_type in MULTI_FAMILY:
+            from .geology_multi import VISIBLE_OUTPUTS
+
+            if output.key not in VISIBLE_OUTPUTS.get(stage["name"], set()):
+                continue
         with transaction.atomic():
             if _collection_cancelled(workflow):
                 return False
@@ -833,6 +838,14 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
     stage["outputs"] = []
     for output, record in records:
         resource = resolve_resource(user, p, record.resource_id)
+        if (
+            workflow.workflow_type in MULTI_FAMILY
+            and stage["name"] == "apply"
+            and output.key == "lithology"
+        ):
+            from .generic_inputs import style_lithology
+
+            style_lithology(resource)
         stage["outputs"].append(
             {
                 "outputId": output.id,

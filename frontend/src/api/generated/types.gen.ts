@@ -2498,9 +2498,17 @@ export type AgentWorkflowReportPreview = {
 };
 
 /**
- * 可恢复的项目科研工作流
+ * 可恢复的项目科研工作流；card视图省略完整计划和审核，steps/evidence为空
  */
 export type AgentWorkflow = {
+    /**
+     * 详情投影视图；省略等同full
+     */
+    view?: 'full' | 'card';
+    /**
+     * 实际步骤总数，card视图用于按需展开入口
+     */
+    stepCount?: number;
     /**
      * 工作流 UUID
      */
@@ -8449,6 +8457,12 @@ export type ValidationIssue = {
 };
 
 export type ResourceProfileResponse = {
+    /**
+     * 资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。
+     */
+    defaultVisualization?: {
+        [key: string]: unknown;
+    };
     resource: DataResource;
     /**
      * 属性字段信息
@@ -10273,6 +10287,10 @@ export type ComputePreview = {
      * 列表
      */
     rows: Array<Array<unknown>>;
+    /**
+     * 仅view=map返回的完整矢量几何；直接读取任务输出，不登记资源
+     */
+    geojson?: GeoJsonFeatureCollection;
 };
 
 /**
@@ -17522,7 +17540,12 @@ export type PreviewComputeOutputData = {
          */
         outputId: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * 默认table返回最多100行属性；map读取经校验的矢量任务文件并返回完整WGS84 GeoJSON，最多30000要素，超限409，不创建资源
+         */
+        view?: 'table' | 'map';
+    };
     url: '/api/compute/outputs/{outputId}/preview/';
 };
 
@@ -19649,11 +19672,20 @@ export type GetAgentWorkflowData = {
          */
         workflowId: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * full为完整详情（默认）；card为轻量卡片，鉴权和项目边界不变
+         */
+        view?: 'full' | 'card';
+    };
     url: '/api/agent/workflows/{workflowId}/';
 };
 
 export type GetAgentWorkflowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
     /**
      * 未认证
      */

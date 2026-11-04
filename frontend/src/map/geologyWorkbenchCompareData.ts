@@ -13,6 +13,7 @@ import {
   queryReviewMapResult,
   reviewResourceIds,
   record,
+  colorReviewMap,
 } from "./geologyReviewData";
 import {
   actualTourChanges,
@@ -21,6 +22,7 @@ import {
 } from "./multiElementTour";
 import type { ReviewOverlay } from "./reviewVectorLayers";
 import { isMultiElementFamily } from "../agent/multiElementScenario";
+import { queryWorkflowVectors } from "./workflowOutputMaps";
 
 export type ComparisonRole = "before" | "after" | "changes";
 export function comparisonFeatureKey(
@@ -112,11 +114,12 @@ export async function loadWorkbenchReviewComparison(options: {
             requestJson<ResourceProfileResponse>(
               `/api/catalog/resources/${id}/profile/`,
             ),
-            queryReviewMapResult(id, { mixed, allowEmpty }),
+            queryReviewMapResult(id, { mixed, allowEmpty, loadStyle: false }),
           ]);
           assertCurrent();
           if (profile.resource.id !== id || !profile.resource.isQueryable)
             throw new Error("检查成果元信息不一致或不支持地图查询");
+          colorReviewMap(result.geojson, profile.defaultVisualization ?? {});
           return { profile, result };
         })(),
       );
@@ -188,14 +191,20 @@ export async function loadWorkbenchReviewComparison(options: {
     add(map.intersections, "after", "构造交汇");
     add(map.afterProspects, "after", "调查建议");
     (map.changes ?? []).forEach((id) => add(id, "changes", "修改范围"));
-    for (const id of roles.keys()) await read(id, true, true);
+    await Promise.all([...roles.keys()].map((id) => read(id, true, true)));
     const collection = async (id?: number) =>
       id ? (await read(id, true, true)).result.geojson : featureCollection([]);
-    const mergedChanges = featureCollection(
-      (await Promise.all((map.changes ?? []).map(collection))).flatMap(
-        (item) => item.features,
-      ),
-    );
+    const mergedChanges = map.changes?.length
+      ? featureCollection(
+          (await Promise.all((map.changes ?? []).map(collection))).flatMap(
+            (item) => item.features,
+          ),
+        )
+      : await queryWorkflowVectors(workflow, "apply", [
+          "changes_lithology_issues",
+          "changes_fault_issues",
+          "changes_alteration_issues",
+        ]);
     const tour = actualTourChanges(workflow, mergedChanges);
     const differences =
       map.changes !== undefined
@@ -232,14 +241,20 @@ export async function loadWorkbenchReviewComparison(options: {
       {
         key: "alterations",
         label: "矿物与处理状态",
-        before: await collection(beforeAlterations),
+        before: beforeAlterations
+          ? await collection(beforeAlterations)
+          : await queryWorkflowVectors(workflow, "check", ["alterations"]),
         after: await collection(map.alterations),
         color: "#648e91",
       },
       {
         key: "intersections",
         label: "构造交汇",
-        before: await collection(map.beforeIntersections),
+        before: map.beforeIntersections
+          ? await collection(map.beforeIntersections)
+          : await queryWorkflowVectors(workflow, "relations", [
+              "before_intersections",
+            ]),
         after: await collection(map.intersections),
         color: "#b4526e",
       },

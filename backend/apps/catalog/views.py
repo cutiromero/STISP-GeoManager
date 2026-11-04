@@ -1214,6 +1214,7 @@ def resource_profile(request, pk: int):
             "geometryType": profile.geometry_type,
             "bounds": profile.bounds,
             "raster": profile.raster,
+            "defaultVisualization": resource.default_visualization,
         }
     )
 

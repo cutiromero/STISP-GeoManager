@@ -351,13 +351,15 @@ it("拒绝需要确认，查看知识来源与地图位置不会执行修改", a
       .getAllByRole("link", { name: "在地图上查看位置" })[0]
       ?.getAttribute("href"),
   ).toContain("geologyReview=map-review-actual&suggestion=suggestion-gap");
-  expect(
-    fireEvent.click(
-      screen.getAllByRole("link", { name: "在地图上查看位置" })[0]!,
-    ),
-  ).toBe(false);
+  // The map opens in a new tab; the agent page stays where it is.
+  const locationLink = screen.getAllByRole("link", {
+    name: "在地图上查看位置",
+  })[0]!;
+  expect(locationLink).toHaveAttribute("target", "_blank");
+  const pathBefore = screen.getByLabelText("当前页面路径").textContent;
+  fireEvent.click(locationLink);
   expect(screen.getByLabelText("当前页面路径")).toHaveTextContent(
-    "/map?resourceId=101&projectTagId=3&geologyReview=map-review-actual&suggestion=suggestion-gap",
+    pathBefore ?? "",
   );
   expect(review).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "拒绝建议" }));
@@ -459,15 +461,14 @@ it("复核解释来自实际模型结果，更换问题位置会更新范围预�
       .getByRole("link", { name: "查看待检查地质图与修正后地质图" })
       .getAttribute("href"),
   ).toBe("/map?geologyReview=map-review-actual&projectTagId=3");
-  expect(
-    fireEvent.click(
-      screen.getByRole("link", {
-        name: "查看待检查地质图与修正后地质图",
-      }),
-    ),
-  ).toBe(false);
+  const compareLink = screen.getByRole("link", {
+    name: "查看待检查地质图与修正后地质图",
+  });
+  expect(compareLink).toHaveAttribute("target", "_blank");
+  const pathBefore = screen.getByLabelText("当前页面路径").textContent;
+  fireEvent.click(compareLink);
   expect(screen.getByLabelText("当前页面路径")).toHaveTextContent(
-    "/map?geologyReview=map-review-actual&projectTagId=3",
+    pathBefore ?? "",
   );
 });
 

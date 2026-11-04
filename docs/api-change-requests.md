@@ -1,5 +1,19 @@
 # API Change Requests
 
+## API-20261104-002 - 轻量工作流卡片与任务矢量按需读取
+
+- Status: BackendReady
+- Owner: phaseA；本任务显式贯通契约、后端、前端。
+- Change type: 默认兼容的详情投影、矢量输出地图读取和资源默认方案详情。
+- Endpoints: GET /api/agent/workflows/{workflowId}/?view=card；GET /api/compute/outputs/{outputId}/preview/?view=map。
+- OpenAPI change: AgentWorkflow新增可选view/stepCount；card投影清空steps/evidence，仅保留阶段状态与成果引用，不含modelAttempts、finalStage或modificationReview；默认full不变。ComputePreview新增可选geojson，map视图最多30000要素，超限409，不截断。
+- Profile contract: GET /api/catalog/resources/{id}/profile/新增可选defaultVisualization（默认方案对象），仅详情返回，不扩大资源列表体积。mock/prism/examples/30-catalog-vector.json补充空方案示例。
+- Frontend reason: 对话历史不预取过程、报告和计算详情；对比/讲解直接读取未入库中间文件。
+- Mock examples: mock/prism/examples/105-agent-workflow-card.json。
+- Backend implementation notes: 保持本人、项目及计算输出访问鉴权；map校验文件checksum，输出WGS84。综合推理族只自动入库九类用户成果，全部计算输出与报告追溯保留。
+- Verification: 两个综合推理类型的入库集合、card大小与字段、默认详情、矢量校验/上限；新标签入口与页面会话租约、按需加载回归。
+- Result: 后端相关122项与前端单元550项通过；TypeScript与契约生成一致。浏览器因沙箱Chromium MachPort权限失败未执行，部署与公网耗时未验收。
+
 ## API-20261104-001 - 任务资料批量上传、角色识别与活动任务摘要
 
 - Status: BackendReady
@@ -202,6 +216,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261104-002 | BackendReady | /api/agent/workflows/{workflowId}/; /api/compute/outputs/{outputId}/preview/; /api/catalog/resources/{id}/profile/ | card view, vector map view, defaultVisualization | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Backend 122, unit 550; browser sandbox-blocked | Full view unchanged; project and owner checks preserved |
 | API-20261104-001 | BackendReady | /api/agent/workflow-uploads/batch/; /recognize/; /api/agent/workflows/active/ | batch uploads, role suggestions, active task summary | Updated | 104-agent-upload-bundle.json | Implemented | Backend 81, unit 542, types and contract passed; browser sandbox-blocked | Existing responses unchanged; target-project authorization preserved |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | API-20261103-002 | BackendReady | /api/projects/; /api/projects/assignments/{userId}/; /api/agent/workflows/; /api/agent/research-demos/ | per-user public scope and lightweight workflow history | Updated | Scoped backend and browser fixtures | Implemented | Project/sharing 72; project UI 6 passed | Default true, live authorization, authorized fallback and summary pagination; server acceptance separate |

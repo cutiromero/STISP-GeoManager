@@ -81,19 +81,87 @@ export function vectorSymbolizationWithDefaultTemplate({
   fields,
   geojson,
   base,
+  defaultVisualization,
 }: {
   resource: ResourceListItem;
   fields: ResourceField[];
   geojson: GeoJsonFeatureCollection;
   base?: VectorSymbolization;
+  defaultVisualization?: Record<string, unknown>;
 }): VectorSymbolization {
   const next = base ? { ...base } : cloneDefaultVectorSymbolization();
   if (next.renderer?.updatedByUser) return next;
   return (
+    applyResourceDefaultTemplate(defaultVisualization, geojson, next) ??
     applyAnalysisResultTemplate(fields, geojson, next) ??
     applyBusinessDefaultTemplate(resource, fields, geojson, next) ??
     next
   );
+}
+
+function applyResourceDefaultTemplate(
+  visualization: Record<string, unknown> | undefined,
+  geojson: GeoJsonFeatureCollection,
+  base: VectorSymbolization,
+) {
+  const object = (value: unknown): Record<string, unknown> =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const style = object(visualization?.symbolization);
+  const renderer = object(style.renderer);
+  if (
+    renderer.type !== "uniqueValue" ||
+    typeof renderer.field !== "string" ||
+    !Array.isArray(renderer.classes)
+  )
+    return null;
+  const counts = countFeatureValues(geojson.features, renderer.field);
+  const classes = renderer.classes.map((value, index) => {
+    const item = object(value);
+    return {
+      ...defaultUniqueValueClass,
+      id: String(item.id ?? `resource-${index}`),
+      values: [String(item.value)],
+      label: String(item.label ?? item.value),
+      color: String(item.color),
+      count: counts.get(String(item.value)) ?? 0,
+    };
+  });
+  const fallback = object(renderer.defaultClass);
+  const line = object(style.line);
+  return {
+    ...base,
+    opacity: typeof style.opacity === "number" ? style.opacity : base.opacity,
+    line: {
+      ...base.line,
+      lineColor:
+        typeof line.lineColor === "string"
+          ? line.lineColor
+          : base.line.lineColor,
+      lineWidth:
+        typeof line.lineWidth === "number"
+          ? line.lineWidth
+          : base.line.lineWidth,
+    },
+    renderer: {
+      type: "uniqueValue" as const,
+      field: renderer.field,
+      templateId: "resource.default-visualization.v1",
+      updatedByUser: false,
+      classes,
+      defaultClass: {
+        ...defaultUniqueValueClass,
+        label: String(fallback.label ?? "其他"),
+        color: String(fallback.color ?? defaultUniqueValueClass.color),
+        count: Math.max(
+          0,
+          geojson.features.length -
+            classes.reduce((sum, item) => sum + item.count, 0),
+        ),
+      },
+    },
+  };
 }
 
 function applyAnalysisResultTemplate(

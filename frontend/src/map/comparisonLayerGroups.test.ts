@@ -84,6 +84,34 @@ function add(
     placement(roles, element),
   );
 }
+
+it("对比图层不把默认按name分类的岩性覆盖为代号分类", () => {
+  const resource = profile(101);
+  resource.defaultVisualization = {
+    symbolization: {
+      renderer: {
+        type: "uniqueValue",
+        field: "name",
+        classes: [{ value: "八宝山组", label: "八宝山组", color: "#ffffd8" }],
+        defaultClass: { color: "#cbd5e1" },
+      },
+    },
+  };
+  const groups = upsertComparisonLayer(
+    [],
+    resource,
+    query(resource, beforeReviewMap),
+    placement(["before"], "岩性"),
+  );
+  const layer = groups
+    .flatMap((group) => group.children)
+    .find((item) => item.layerType === "vector") as LoadedVectorLayer;
+  expect(layer.symbolization.renderer).toMatchObject({
+    type: "uniqueValue",
+    field: "name",
+    classes: [{ label: "八宝山组", color: "#ffffd8", values: ["八宝山组"] }],
+  });
+});
 function taskGroup(groups: LoadedLayerGroup[]) {
   const group = groups.find(
     (item) => item.id === comparisonGroupId(workflowId),

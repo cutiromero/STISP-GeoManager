@@ -211,10 +211,14 @@ export const agentApi = {
     }),
   workflow: (
     id: string,
-    options: { signal?: AbortSignal; projectTagId?: string } = {},
+    options: {
+      signal?: AbortSignal;
+      projectTagId?: string;
+      view?: "card" | "full";
+    } = {},
   ) =>
     requestJson<AgentWorkflow>(
-      `/api/agent/workflows/${encodeURIComponent(id)}/`,
+      `/api/agent/workflows/${encodeURIComponent(id)}/${options.view ? `?view=${options.view}` : ""}`,
       {
         ...options,
         validate: (value) => {

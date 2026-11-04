@@ -16,7 +16,7 @@ import type {
   AgentWorkflow,
 } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
-import WorkflowResults from "./WorkflowResults";
+import WorkflowCard from "./WorkflowCard";
 import LiveActivity from "./LiveActivity";
 import { runActivity } from "./agentActivity";
 import { workflowStatusLabels } from "./workflowFeedback";
@@ -80,17 +80,21 @@ export default function ResearchIntentCard({
     setWorkflow(undefined);
     const poll = async () => {
       try {
-        const next = await agentApi.workflow(id);
+        const [next, latest] = await Promise.all([
+          agentApi.workflow(id, { view: "card" }),
+          active.includes(currentIntent.current.status)
+            ? agentApi.poll(intent.originRunId)
+            : Promise.resolve(undefined),
+        ]);
         if (disposed) return;
         setError("");
         failures = 0;
-        const latest = await agentApi.poll(intent.originRunId);
-        if (disposed) return;
         setWorkflow(next);
         onWorkflow.current?.(next);
         if (
+          latest &&
           JSON.stringify(latest.run.researchIntent) !==
-          JSON.stringify(currentIntent.current)
+            JSON.stringify(currentIntent.current)
         )
           onUpdate.current(latest.run);
         if (active.includes(next.status))
@@ -351,7 +355,7 @@ export default function ResearchIntentCard({
       )}
       {error && <Alert type="error" title={error} />}
       {workflow && (
-        <WorkflowResults
+        <WorkflowCard
           compact
           workflow={workflow}
           busy={busy}

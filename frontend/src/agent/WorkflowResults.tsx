@@ -30,12 +30,12 @@ import { emphasizeNumbers } from "./researchText";
 import RuleCards from "./RuleCards";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
-function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
+const record = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+export function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
   if (!workflow) return [];
-  const record = (value: unknown): Record<string, unknown> =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
   const demo =
     [
       "ecology_investigation",
@@ -465,6 +465,18 @@ export default function WorkflowResults({
           compact
           report={report}
           primaryTaskIds={primaryTaskIds}
+          visibleOutputIds={
+            isMultiElement && Array.isArray(workflow.plan.stages)
+              ? workflow.plan.stages.flatMap((stage) => {
+                  const outputs = record(stage).outputs;
+                  return Array.isArray(outputs)
+                    ? outputs
+                        .map((output) => Number(record(output).outputId))
+                        .filter(Number.isSafeInteger)
+                    : [];
+                })
+              : undefined
+          }
           taskIds={workflow.steps
             .map((step) => step.computeTaskId)
             .filter(Boolean)}
@@ -595,6 +607,8 @@ export default function WorkflowResults({
           (!inspectionOnly || originalMapId) &&
           !(isGeologyReview && deletedResources.length) ? (
             <Link
+              target="_blank"
+              rel="noopener"
               to={
                 isGeologyReview && !inspectionOnly
                   ? `/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`

@@ -224,13 +224,12 @@ it("restores a saved plan and only executes after confirmation", async () => {
     screen.getByRole("link", { name: "在地理工作台对比成果图层" }),
   ).toHaveAttribute("href", "/map?resources=42&projectTagId=1");
   expect(
-    fireEvent.click(
-      screen.getByRole("link", { name: "在地理工作台对比成果图层" }),
-    ),
-  ).toBe(false);
-  expect(screen.getByLabelText("当前页面路径")).toHaveTextContent(
-    "/map?resources=42&projectTagId=1",
-  );
+    screen.getByRole("link", { name: "在地理工作台对比成果图层" }),
+  ).toHaveAttribute("target", "_blank");
+  expect(
+    screen.getByRole("link", { name: "在地理工作台对比成果图层" }),
+  ).toHaveAttribute("rel", "noopener");
+  expect(screen.getByLabelText("当前页面路径").textContent).toBe("/");
 });
 
 it("shows confirmation failure without claiming successful execution", async () => {

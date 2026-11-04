@@ -10518,6 +10518,7 @@
                   "$ref": "#/components/schemas/ResourceProfileResponse"
                 },
                 "example": {
+                  "defaultVisualization": {},
                   "resource": {
                     "id": 3,
                     "name": "塔里木河胡杨样地监测点",
@@ -19235,6 +19236,20 @@
               "type": "integer",
               "description": "标识"
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "description": "默认table返回最多100行属性；map读取经校验的矢量任务文件并返回完整WGS84 GeoJSON，最多30000要素，超限409，不创建资源",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "table",
+                "map"
+              ],
+              "default": "table"
+            }
           }
         ],
         "responses": {
@@ -19244,6 +19259,18 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ComputePreview"
+                },
+                "example": {
+                  "kind": "vector",
+                  "metadata": {
+                    "layer": "before_intersections"
+                  },
+                  "columns": [],
+                  "rows": [],
+                  "geojson": {
+                    "type": "FeatureCollection",
+                    "features": []
+                  }
                 }
               }
             }
@@ -23258,7 +23285,7 @@
         ],
         "operationId": "getAgentWorkflow",
         "summary": "查询科研工作流",
-        "description": "查询当前用户在当前项目内的工作流、步骤、证据和结果引用。",
+        "description": "查询当前用户在当前项目内的工作流。默认返回完整步骤、证据和结果引用；view=card仅返回卡片所需状态、计数和阶段成果引用，steps与evidence为空，不包含模型交互、完整计划或修改审核。展开明细时请求默认视图。",
         "security": [
           {
             "sessionAuth": []
@@ -23284,6 +23311,20 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "description": "full为完整详情（默认）；card为轻量卡片，鉴权和项目边界不变",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "full",
+                "card"
+              ],
+              "default": "full"
+            }
           }
         ],
         "responses": {
@@ -23293,9 +23334,101 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentWorkflow"
+                },
+                "example": {
+                  "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
+                  "projectId": 3,
+                  "workflowType": "geology_generic",
+                  "goal": "检查上传地质资料",
+                  "model": "configured",
+                  "status": "succeeded",
+                  "detail": "九项成果已保存",
+                  "currentStep": "finalize",
+                  "iteration": 5,
+                  "operatorSteps": 5,
+                  "maxIterations": 12,
+                  "maxOperatorSteps": 16,
+                  "executeOperators": true,
+                  "resourceIds": [
+                    812
+                  ],
+                  "algorithmVersionId": null,
+                  "parameters": {},
+                  "resultIds": [
+                    1001,
+                    1002,
+                    1003,
+                    1004,
+                    1005,
+                    1006,
+                    1007,
+                    1008,
+                    1009,
+                    1010,
+                    1011,
+                    1012,
+                    1013,
+                    1014,
+                    1015,
+                    1016,
+                    1017,
+                    1018,
+                    1019,
+                    1020,
+                    1021,
+                    1022,
+                    1023,
+                    1024,
+                    1025,
+                    1026,
+                    1027
+                  ],
+                  "resultResourceIds": [
+                    820,
+                    821,
+                    822,
+                    823,
+                    824,
+                    825,
+                    826,
+                    827,
+                    828
+                  ],
+                  "importResults": true,
+                  "evidence": [],
+                  "steps": [],
+                  "stepCount": 22,
+                  "view": "card",
+                  "runtime": "durable_state_machine",
+                  "createdAt": "2026-11-04T08:00:00Z",
+                  "updatedAt": "2026-11-04T08:10:00Z",
+                  "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "plan": {
+                    "phase": "completed",
+                    "deletedResources": [],
+                    "stages": [
+                      {
+                        "name": "apply",
+                        "status": "completed",
+                        "taskId": "67ac90d1-999f-44b7-9b68-1da1f726a142",
+                        "outputs": [
+                          {
+                            "outputId": 1007,
+                            "key": "lithology",
+                            "kind": "vector",
+                            "resourceId": 821,
+                            "label": "修正后岩性图"
+                          }
+                        ]
+                      }
+                    ]
+                  }
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -28881,8 +29014,21 @@
       },
       "AgentWorkflow": {
         "type": "object",
-        "description": "可恢复的项目科研工作流",
+        "description": "可恢复的项目科研工作流；card视图省略完整计划和审核，steps/evidence为空",
         "properties": {
+          "view": {
+            "type": "string",
+            "enum": [
+              "full",
+              "card"
+            ],
+            "description": "详情投影视图；省略等同full"
+          },
+          "stepCount": {
+            "type": "integer",
+            "description": "实际步骤总数，card视图用于按需展开入口",
+            "minimum": 0
+          },
           "id": {
             "type": "string",
             "format": "uuid",
@@ -38811,6 +38957,11 @@
           "bounds"
         ],
         "properties": {
+          "defaultVisualization": {
+            "type": "object",
+            "description": "资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。",
+            "additionalProperties": true
+          },
           "resource": {
             "$ref": "#/components/schemas/DataResource"
           },
@@ -41919,6 +42070,10 @@
                 "description": "单元格值"
               }
             }
+          },
+          "geojson": {
+            "$ref": "#/components/schemas/GeoJSONFeatureCollection",
+            "description": "仅view=map返回的完整矢量几何；直接读取任务输出，不登记资源"
           }
         },
         "required": [

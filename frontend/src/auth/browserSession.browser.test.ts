@@ -125,7 +125,10 @@ describe("browser page session lifecycle", () => {
     },
   );
 
-  it("registers a distinct page using a still-online peer's handoff", async () => {
+  it("registers a noopener page without copied storage using a still-online peer's handoff", async () => {
+    vi.stubGlobal("opener", null);
+    sessionStorage.removeItem(browserSessionStorageKey);
+    expect(savedPage()).toBeNull();
     const token = "b".repeat(64);
     const peer = new TestChannel("stisp.browser-session");
     peers.push(peer);
@@ -141,6 +144,7 @@ describe("browser page session lifecycle", () => {
       sequence: 1,
     });
     expect(savedPage()?.pageId).toMatch(/^[a-f0-9]{32}$/);
+    expect(window.opener).toBeNull();
   });
 
   it("restores a suspended back-forward-cache page rather than logging it out", async () => {

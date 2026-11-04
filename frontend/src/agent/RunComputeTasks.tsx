@@ -153,6 +153,7 @@ export default function RunComputeTasks({
   compact = false,
   report,
   primaryTaskIds,
+  visibleOutputIds,
 }: (
   | {
       runId: number;
@@ -173,6 +174,7 @@ export default function RunComputeTasks({
   compact?: boolean;
   report?: ReactNode;
   primaryTaskIds?: string[];
+  visibleOutputIds?: number[];
 }) {
   const ui = useComputeText();
   const [items, setItems] = useState<AgentComputeTaskTracking[]>([]);
@@ -390,6 +392,7 @@ export default function RunComputeTasks({
             report={report}
             taskDisplayNames={taskDisplayNames}
             primaryTaskIds={primaryTaskIds}
+            visibleOutputIds={visibleOutputIds}
             busy={busy}
             reviewing={reviewing}
             onImport={(output, task) => void importOutput(output, task)}
