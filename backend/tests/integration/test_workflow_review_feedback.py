@@ -49,6 +49,13 @@ def test_review_feedback_is_persisted_and_does_not_edit_data(demo, decision):
         feedback="已核对修改位置，需要保留边界核验说明",
     )
     assert response.status_code == 200, response.content
+    review_step = next(
+        entry
+        for entry in response.json()["steps"]
+        if entry["kind"] == "review_feedback"
+    )
+    assert review_step["decision"] is None
+    assert review_step["action"]["decision"] == decision
     workflow.refresh_from_db()
     record = workflow.steps.get(kind="review_feedback")
     assert record.action == {
@@ -118,6 +125,40 @@ def test_invalid_review_is_not_persisted(demo, body):
     workflow.refresh_from_db()
     assert workflow.status == "waiting_approval"
     assert not workflow.steps.filter(kind="review_feedback").exists()
+
+
+def test_workflow_json_preserves_model_decision_and_separates_human_review(demo):
+    from apps.agent.models import AgentWorkflowStep
+    from apps.agent.views import workflow_json
+
+    workflow = scenario(demo)
+    judgement = {
+        "problem": "核对地图完整性",
+        "findings": ["读取到制图范围"],
+        "judgement": "继续检查",
+        "uncertainties": [],
+        "nextAction": "inspect",
+        "algorithmReason": "依据实际范围检查",
+        "evidenceRefs": [],
+        "modelMode": "real",
+        "modelName": "configured",
+    }
+    AgentWorkflowStep.objects.create(
+        workflow=workflow,
+        sequence=1,
+        kind="analysis_decision",
+        action={"decision": judgement},
+    )
+    AgentWorkflowStep.objects.create(
+        workflow=workflow,
+        sequence=2,
+        kind="review_feedback",
+        action={"decision": "approve", "feedback": "已核对"},
+    )
+    steps = workflow_json(workflow)["steps"]
+    assert steps[0]["decision"] == judgement
+    assert steps[1]["decision"] is None
+    assert steps[1]["action"] == {"decision": "approve", "feedback": "已核对"}
 
 
 def test_next_model_request_receives_actual_user_feedback_as_scoped_review_context(

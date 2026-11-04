@@ -44,6 +44,26 @@ beforeEach(() => {
 });
 
 describe("single-project navigation", () => {
+  it("keeps the selected project and mounted page when an idle focus refresh fails, then retries", async () => {
+    sessionStorage.setItem("project:42", "2");
+    show();
+    await screen.findByText("项目甲");
+    const page = screen.getByLabelText("实际项目范围");
+    mocks.projects.mockRejectedValueOnce(new Error("项目列表返回内容异常"));
+    fireEvent(window, new Event("focus"));
+    await screen.findByText("项目列表暂时无法更新，当前页面已保留");
+    expect(screen.getByLabelText("实际项目范围")).toBe(page);
+    expect(page).toHaveTextContent("2");
+    expect(getActiveProject()).toBe("2");
+    fireEvent.click(screen.getByRole("button", { name: "重试更新项目" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByText("项目列表暂时无法更新，当前页面已保留"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText("实际项目范围")).toBe(page);
+  });
+
   it("restores a legacy aggregate session to Public and only offers individual projects", async () => {
     sessionStorage.setItem("project:42", "all");
     show();

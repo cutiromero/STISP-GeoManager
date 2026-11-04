@@ -218,7 +218,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.spyOn(agentApi, "conversations").mockResolvedValue({
-    items: [newConversation, oldConversation],
+    items: [newConversation],
   });
   vi.spyOn(agentApi, "create").mockResolvedValue(newConversation);
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
@@ -236,6 +236,7 @@ beforeEach(() => {
     cursor: 0,
     events: [],
   });
+  vi.spyOn(agentApi, "computeTasks").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "workflow").mockResolvedValue(workflow());
   vi.spyOn(computeApi, "task").mockResolvedValue(liveComputeTask("succeeded"));
 });
@@ -360,6 +361,9 @@ it("shows a live research cursor, pauses for approval and restores without repla
 });
 
 it("starts in a new conversation once, consumes the entry state, and restores on refresh", async () => {
+  vi.mocked(agentApi.conversations).mockResolvedValue({
+    items: [oldConversation],
+  });
   sessionStorage.setItem("agent-conversation:99:1:agent", "1");
   const mounted = show({
     researchDemo: {
