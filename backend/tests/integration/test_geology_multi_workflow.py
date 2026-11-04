@@ -21,6 +21,7 @@ from apps.agent.geology_multi_review import (
     create_approved_changes,
     freeze_proposal,
     validate_edits,
+    assess_edits,
 )
 from apps.agent.geology_multi_results import table_rows
 from apps.agent.models import AgentWorkflow
@@ -312,6 +313,137 @@ def test_no_approval_cannot_execute_and_empty_selection_retains_all(multi, monke
     assert wf.plan["modificationReview"]["unapprovedSuggestionIds"]
 
 
+def test_identical_edits_are_normalized_and_deduplicated(multi):
+    _, stage, results = fixture_review(multi)
+    original = copy.deepcopy(stage["edits"])
+    edits = copy.deepcopy(original)
+    edits[1]["target_code"] = "不应改变类别"
+    edits.append(copy.deepcopy(original[1]))
+    rows, assessment = assess_edits(edits, results)
+    assert len(rows) == 2 and rows[1]["target_code"] == ""
+    assert assessment == {
+        "discardedCount": 0,
+        "errors": [],
+        "duplicateCount": 1,
+        "duplicateIndices": [3],
+    }
+    assert stage["edits"] == original
+    assert edits[1]["target_code"] == "不应改变类别"
+
+
+@pytest.mark.parametrize(
+    "action,weight", [("keep", 1), ("review", 1), ("downweight", 0.5), ("exclude", 0)]
+)
+def test_non_category_actions_ignore_target_code(multi, action, weight):
+    _, stage, results = fixture_review(multi)
+    results[0]["rows"][1]["allowed_actions_json"] = json.dumps([action])
+    edit = {
+        **stage["edits"][1],
+        "action": action,
+        "weight": weight,
+        "target_code": "T3",
+    }
+    assert validate_edits([edit], results)[0]["target_code"] == ""
+    assert edit["target_code"] == "T3"
+
+
+def test_conflicting_object_actions_keep_first_valid_edit(multi):
+    _, stage, results = fixture_review(multi)
+    first = stage["edits"][0]
+    same_issue = {**first, "action": "keep", "target_code": ""}
+    other_issue = {**results[0]["rows"][0], "issue_id": "other"}
+    results[0]["rows"].append(other_issue)
+    rows, assessment = assess_edits(
+        [first, same_issue, {**same_issue, "issue_id": "other"}], results
+    )
+    assert len(rows) == 1 and rows[0]["action"] == "set_code"
+    assert [item["index"] for item in assessment["errors"]] == [2, 3]
+    assert "唯一" in assessment["errors"][0]["reason"]
+    assert "保留首个合格建议" in assessment["errors"][1]["reason"]
+
+
+@pytest.mark.parametrize(
+    "mode", ["mixed", "all_invalid", "missing_knowledge", "recovered"]
+)
+@pytest.mark.parametrize(
+    "workflow_type", ["geology_multi_element_reasoning", "geology_generic"]
+)
+def test_multi_retry_reports_each_error_and_preserves_only_valid_edits(
+    multi, settings, mode, workflow_type
+):
+    from apps.agent.demo_decisions import decide
+    from apps.agent.policy import default_policy
+    from tests.integration.test_demo_decision_retry import run
+    from tests.integration.test_demo_edit_context import model_response
+
+    settings.AGENT_MODELS = [
+        {
+            "alias": "mock",
+            "name": "真实接口测试",
+            "model_id": "qwen-fixture",
+            "base_url": "http://127.0.0.1:19100/v1",
+            "agent": True,
+        }
+    ]
+    wf, stage, results = fixture_review(multi)
+    wf.workflow_type = workflow_type
+    edits = stage.pop("edits")
+    decision = stage.pop("decision")
+    answer = model_response("geology-multi-apply", [])
+    answer["decision"]["evidenceRefs"] = [
+        {"kind": "output", "id": "2"},
+        *decision["evidenceRefs"],
+    ]
+    invalid = [{**edits[0], "issue_id": "missing"}, {**edits[1], "weight": 2}]
+    if mode == "missing_knowledge":
+        answer["decision"]["evidenceRefs"] = answer["decision"]["evidenceRefs"][:2]
+        answer["edits"] = edits
+    else:
+        answer["edits"] = invalid if mode == "all_invalid" else [edits[0], *invalid]
+    before = copy.deepcopy(answer)
+    if mode == "all_invalid":
+        with pytest.raises(ComputeError, match="第1项.*missing.*第2项.*I1"):
+            run([answer, answer], wf, stage, results)
+        assert all(not attempt["accepted"] for attempt in stage["modelAttempts"])
+        return
+    (accepted_decision, accepted), requests = run([answer, answer], wf, stage, results)
+    assert accepted == [edits[0]]
+    assessment = stage["editValidation"]
+    assert assessment["discardedCount"] == (1 if mode == "missing_knowledge" else 2)
+    feedback = json.loads(requests[1][-1]["content"])
+    assert feedback["invalidEdits"] == assessment["errors"]
+    if mode != "missing_knowledge":
+        assert [item["index"] for item in feedback["invalidEdits"]] == [2, 3]
+        assert [item["issue_id"] for item in feedback["invalidEdits"]] == [
+            "missing",
+            "I1",
+        ]
+        assert "实际检查" in feedback["validationError"]
+        assert "权重范围" in feedback["validationError"]
+    assert answer == before
+    assert stage["modelAttempts"][-1]["accepted"]
+    assert not wf.plan["modificationReview"]["approvedSuggestionIds"]
+    if mode == "recovered":
+        audit = copy.deepcopy(stage["modelAttempts"])
+        wf.max_iterations = wf.iteration = 2
+        wf.plan["actualModelCallCount"] = 2
+        with patch("apps.agent.demo_decisions.resource_context", return_value=[]):
+            _, recovered = decide(
+                wf, None, default_policy(), stage, results, lambda: None
+            )
+        assert recovered == accepted
+        assert stage["modelAttempts"] == audit
+        assert stage["editValidation"] == assessment
+    stage.update(edits=accepted, decision=accepted_decision)
+    freeze_proposal(wf, stage)
+    assert wf.status == "waiting_approval"
+    assert len(wf.plan["modificationReview"]["suggestions"]) == 1
+    assert not wf.plan["modificationReview"]["approvedSuggestionIds"]
+    wf.save(update_fields=["plan", "status"])
+    wf.refresh_from_db()
+    assert wf.plan["stages"][1]["editValidation"] == assessment
+
+
 def test_model_cannot_change_target_or_turn_downweight_into_delete(multi):
     _, stage, results = fixture_review(multi)
     changed = copy.deepcopy(stage["edits"])
@@ -523,7 +655,9 @@ def test_multi_model_protocol_distinguishes_proposal_from_insufficient_evidence(
                     for entry in multi["entries"]
                 ],
             ],
-            "resultSummary": "建议需逐项批准" if action.endswith("apply") else "等待补证",
+            "resultSummary": "建议需逐项批准"
+            if action.endswith("apply")
+            else "等待补证",
         },
         "edits": proposal_edits if action.endswith("apply") else [],
     }
@@ -545,7 +679,9 @@ def test_multi_model_protocol_distinguishes_proposal_from_insufficient_evidence(
     assert decision["nextAction"] == action and decision["modelMode"] == "real"
     assert edits == response["edits"]
     instruction = stream.call_args_list[0].args[1][0]["content"]
-    assert "只有allowedAction和decision.nextAction均为geology-multi-apply" in instruction
+    assert (
+        "只有allowedAction和decision.nextAction均为geology-multi-apply" in instruction
+    )
     assert "后端须等待用户逐项批准后才执行实际修改" in instruction
     assert "不能因建议尚待批准就把nextAction写成request_review" in instruction
     assert "request_review用于证据不足、冲突" in instruction

@@ -46,7 +46,78 @@ def issue_rows(results):
     ]
 
 
+class EditValidationError(ComputeError):
+    def __init__(self, errors):
+        self.errors = errors
+        super().__init__(
+            "；".join(
+                f"第{item['index']}项（issue_id={item['issue_id']}）：{item['reason']}"
+                for item in errors
+            )
+        )
+
+
+def assess_edits(edits, results, *, workflow=None, decision=None):
+    if not isinstance(edits, list) or len(edits) > 30:
+        raise ComputeError("本轮最多提出30项有依据的对象处置建议")
+    accepted, errors, duplicates = [], [], []
+    normalized, seen, targets = [], set(), set()
+    for index, original in enumerate(edits, 1):
+        edit = original.copy() if isinstance(original, dict) else original
+        if (
+            isinstance(edit, dict)
+            and edit.get("action") in ("keep", "review", "downweight", "exclude")
+            and "target_code" in edit
+        ):
+            edit["target_code"] = ""
+        if edit in normalized:
+            duplicates.append(index)
+            continue
+        try:
+            row = _validate_edit_rows([edit], results)[0]
+            if row["issue_id"] in seen:
+                raise ComputeError("建议必须唯一对应本次实际检查的问题")
+            issue = next(
+                item
+                for item in issue_rows(results)
+                if item["issue_id"] == row["issue_id"]
+            )
+            target = (issue["element"], issue["feature_id"])
+            if target in targets:
+                raise ComputeError("同一对象本轮只允许一个处置动作，保留首个合格建议")
+            if workflow is not None:
+                proposal(workflow, {"edits": [edit], "decision": decision}, results)
+        except ComputeError as exc:
+            errors.append(
+                {
+                    "index": index,
+                    "issue_id": original.get("issue_id", "")
+                    if isinstance(original, dict)
+                    else "",
+                    "reason": str(exc),
+                }
+            )
+            continue
+        normalized.append(edit)
+        seen.add(row["issue_id"])
+        targets.add(target)
+        accepted.append(row)
+    return accepted, {
+        "discardedCount": len(errors),
+        "errors": errors,
+        "duplicateCount": len(duplicates),
+        "duplicateIndices": duplicates,
+    }
+
+
 def validate_edits(edits, results):
+    rows, assessment = assess_edits(edits, results)
+    if assessment["errors"]:
+        raise EditValidationError(assessment["errors"])
+    return rows
+
+
+def _validate_edit_rows(edits, results):
     if not isinstance(edits, list) or len(edits) > 30:
         raise ComputeError("本轮最多提出30项有依据的对象处置建议")
     issues = {row["issue_id"]: row for row in issue_rows(results)}
@@ -90,8 +161,6 @@ def validate_edits(edits, results):
                 row.get("target_code", "")
             ):
                 raise ComputeError("目标代号必须对应本次测量支持的候选类别")
-        elif edit["target_code"]:
-            raise ComputeError("保留、复核、降权及剔除不允许改变地质类别")
         if (
             not isinstance(edit["reason"], str)
             or not 1 <= len(edit["reason"].strip()) <= 1000

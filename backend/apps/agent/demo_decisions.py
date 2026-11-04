@@ -607,7 +607,7 @@ def _validate_final_review_report(decision, stage, execution_state):
 
 
 def _validate_response(
-    raw, workflow, stage, results, refs, *, execution_state=None
+    raw, workflow, stage, results, refs, *, execution_state=None, allow_partial=False
 ) -> tuple[dict, list]:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
     try:
@@ -642,21 +642,32 @@ def _validate_response(
             raise ComputeError("判断必须引用最近一次实际计算统计")
     if not isinstance(value["edits"], list) or len(value["edits"]) > 30:
         raise ComputeError("模型提出的修改计划超出允许范围")
+    assessment = None
     if (
         getattr(workflow, "workflow_type", None) in MULTI_FAMILY
         and stage["identifier"] == "geology-multi-apply"
         and decision["nextAction"] == stage["identifier"]
     ):
-        from .geology_multi_review import proposal
+        from .geology_multi_review import assess_edits, EditValidationError
 
         check = next(
             item for item in workflow.plan["stages"] if item["name"] == "check"
         )
-        proposal(
-            workflow,
-            {**stage, "edits": value["edits"], "decision": decision},
+        rows, assessment = assess_edits(
+            value["edits"],
             [item for item in results if item.get("taskId") == check.get("taskId")],
+            workflow=workflow,
+            decision=decision,
         )
+        if assessment["errors"] and (not allow_partial or not rows):
+            raise EditValidationError(assessment["errors"])
+        value["edits"] = [
+            {
+                key: row[key]
+                for key in ("issue_id", "action", "target_code", "weight", "reason")
+            }
+            for row in rows
+        ]
     elif (
         stage["identifier"] in EDIT_CHECKS
         and decision["nextAction"] == stage["identifier"]
@@ -694,6 +705,8 @@ def _validate_response(
         old = (workflow.plan.get("previousAnalysis") or {}).get("actualResults", [])
         execution_state = _execution_state(workflow, stage, results, old)
     _validate_final_review_report(decision, stage, execution_state)
+    if assessment is not None:
+        stage["editValidation"] = assessment
     return decision, value["edits"]
 
 
@@ -949,6 +962,7 @@ def decide(
                 results,
                 refs,
                 execution_state=payload["executionState"],
+                allow_partial=bool(attempt),
             )
         except ComputeError as exc:
             record.update(status="rejected", accepted=False, validationError=str(exc))
@@ -983,6 +997,8 @@ def _repair_feedback(stage, payload, error):
         "引用实际最新统计；编辑逐项对应真实问题，证据不足可request_review。"
         "平台不会代补引用或修改计划。",
     }
+    if hasattr(error, "errors"):
+        feedback["invalidEdits"] = error.errors
     if stage["identifier"] == "geology-map-correct":
         feedback["knowledgeCitationInstruction"] = (
             "逐项对照editTask.issueKnowledgeRequirements；每项采纳的修改在decision.evidenceRefs"
@@ -1118,6 +1134,7 @@ def _recover_decision(
         results,
         refs,
         execution_state=payload["executionState"],
+        allow_partial=len(attempts) == 2,
     )
     decision.update(modelMode="real", modelName=model.name)
     stage["recoveredModelAttempt"] = last["attempt"]

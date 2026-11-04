@@ -232,6 +232,16 @@ export default function MultiElementStory({
     Array.isArray(workflow.plan.stages) ? workflow.plan.stages : []
   ).map(record);
   const algorithms = record(workflow.plan.algorithms);
+  const editValidation = record(
+    stages.find((stage) => stage.name === "apply")?.editValidation,
+  );
+  const discardedReasons = Array.isArray(editValidation.errors)
+    ? [
+        ...new Set(
+          editValidation.errors.map((item) => String(record(item).reason)),
+        ),
+      ].join("；")
+    : "";
   const segment = String(workflow.parameters.segment ?? "all");
   const inputNames = record(workflow.plan.inputNames);
   const upstream = Object.entries(record(workflow.plan.upstreamVersions));
@@ -316,6 +326,12 @@ export default function MultiElementStory({
       </details>
       {suggestions.length > 0 && (
         <section className="geology-suggestions" aria-label="多要素检查建议">
+          {Number(editValidation.discardedCount) > 0 && (
+            <p role="status">
+              模型另提出 {Number(editValidation.discardedCount)} 项建议因
+              {discardedReasons}未采用；其余建议仍需逐项人工确认。
+            </p>
+          )}
           <div className="geology-suggestions-heading">
             <h3>发现的问题与建议 / {suggestions.length} 项</h3>
             <Select
