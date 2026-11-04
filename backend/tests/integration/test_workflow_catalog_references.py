@@ -240,3 +240,58 @@ def test_raster_profile_uses_real_compute_source_not_display_alpha(generic):
     assert response.status_code == 200, response.content
     profile = response.json()["items"][0]["profile"]
     assert profile["bandCount"] == 1 and profile["crs"] == "EPSG:32646"
+
+
+def test_operator_trial_outputs_are_not_offered_as_system_data(generic):
+    from apps.agent.workflow_uploads import catalog_resources
+    from apps.compute.models import (
+        AlgorithmVersion,
+        ComputeImport,
+        ComputeOutput,
+        ComputeTask,
+    )
+
+    resource = catalog_entry(generic)
+    version = AlgorithmVersion.objects.first()
+    imported = {}
+    for trial in (True, False):
+        task = ComputeTask.objects.create(
+            name=f"trial-{trial}",
+            owner=generic["owner"],
+            version=version,
+            status="succeeded",
+            trial=trial,
+            idempotency_key=f"trial-{trial}",
+        )
+        output = ComputeOutput.objects.create(
+            task=task,
+            key="lithology",
+            label="lithology",
+            kind="vector",
+            file_name="lithology.gpkg",
+            path="lithology.gpkg",
+            size_bytes=0,
+            checksum="a" * 64,
+        )
+        imported[trial] = DataResource.objects.create(
+            name=f"计算结果{trial}",
+            code=f"compute-{trial}",
+            data_type="vector",
+            project_tag=generic["project"],
+            source=f"compute-output:{uuid.uuid4()}",
+        )
+        ComputeImport.objects.create(
+            output=output,
+            requested_by=generic["owner"],
+            name=f"import-{trial}",
+            status="ready",
+            resource=imported[trial],
+        )
+    offered = set(
+        catalog_resources(generic["owner"], generic["project"].id).values_list(
+            "pk", flat=True
+        )
+    )
+    assert resource.id in offered
+    assert imported[False].id in offered
+    assert imported[True].id not in offered

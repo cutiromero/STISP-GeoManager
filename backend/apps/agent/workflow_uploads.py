@@ -416,12 +416,22 @@ def catalog_resources(user, project_id):
         pk=project_id, code__in=GEOLOGY_PROJECT_CODES
     ).exists():
         raise ComputeError("请在逻辑推理项目选择系统数据", 400)
-    return DataResource.objects.filter(
-        resource_access_filter(user),
-        project_tag_id=project_id,
-        status="active",
-        data_type__in=set(policy["dataTypes"]) & {"vector", "raster", "table"},
-    ).exclude(task_resource_q())
+    from apps.compute.models import ComputeImport
+
+    # Operator release trials import their outputs; they are not user data.
+    trial_outputs = ComputeImport.objects.filter(
+        output__task__trial=True, resource__isnull=False
+    ).values("resource_id")
+    return (
+        DataResource.objects.filter(
+            resource_access_filter(user),
+            project_tag_id=project_id,
+            status="active",
+            data_type__in=set(policy["dataTypes"]) & {"vector", "raster", "table"},
+        )
+        .exclude(task_resource_q())
+        .exclude(pk__in=trial_outputs)
+    )
 
 
 def catalog_profile(resource):

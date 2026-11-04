@@ -784,7 +784,7 @@ export default function MultiElementWorkspace({
         <div>
           <span className="geology-review-eyebrow">
             {workflow.workflowType === "geology_generic"
-              ? "地理工作台 · 本次上传资料"
+              ? "地理工作台 · 本次资料"
               : "地理工作台演示案例"}
           </span>
           <h1>

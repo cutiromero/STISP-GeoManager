@@ -1254,7 +1254,7 @@
   margin: 0;
 }
 .agent-logic-intake {
-  max-height: min(320px, 42vh);
+  max-height: min(240px, 30vh);
   overflow-y: auto;
   min-width: 0;
 }

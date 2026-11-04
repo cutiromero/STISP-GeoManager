@@ -158,7 +158,7 @@ it("names an uploaded-data task by its own data and states the missing inputs", 
     </App>,
   );
   const story = screen.getByLabelText("地质综合推理");
-  expect(within(story).getByText("本次上传资料")).toBeVisible();
+  expect(within(story).getByText("本次资料")).toBeVisible();
   expect(within(story).queryByText("演示案例")).not.toBeInTheDocument();
   expect(
     within(story).getByText(/未提供：研究区范围、填图单元表/),

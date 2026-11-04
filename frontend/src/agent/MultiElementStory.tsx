@@ -262,14 +262,14 @@ export default function MultiElementStory({
     >
       <div className="geology-story-heading">
         <strong>{title}</strong>
-        <Tag color="blue">{generic ? "本次上传资料" : "演示案例"}</Tag>
+        <Tag color="blue">{generic ? "本次资料" : "演示案例"}</Tag>
         <Tag>
           {multiElementSegments.find((item) => item.value === segment)?.label}
         </Tag>
       </div>
       <p className="agent-demo-hint">
         {generic
-          ? `资料为本次任务上传，字段含义已经您确认。${
+          ? `资料由您为本次任务提供，字段含义已经您确认。${
               missing.length
                 ? `未提供：${missing.join("、")}，按计划中的说明处理。`
                 : ""
