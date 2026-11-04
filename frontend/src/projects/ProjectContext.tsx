@@ -12,6 +12,7 @@ import {
 } from "react";
 import { platformApi, type ProjectTag } from "../api/platform";
 import { useAppContext } from "../contexts/AppContext";
+import { downloadPageDiagnostics } from "../routing/pageDiagnostics";
 import {
   getActiveProject,
   setActiveProject,
@@ -55,7 +56,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const sequence = ++requestSequence.current;
     const userId = identity.current;
-    const data = await platformApi.projects();
+    let data;
+    try {
+      data = await platformApi.projects();
+    } catch (error) {
+      if (sequence === requestSequence.current && userId === identity.current)
+        setLoadError(
+          error instanceof Error ? error.message : "项目列表暂时无法更新",
+        );
+      throw error;
+    }
     if (sequence !== requestSequence.current || userId !== identity.current)
       return;
     setProjects(data.items);
@@ -150,7 +160,34 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         style={{ height: "100%" }}
       >
         {resolvedIdentity === (user?.id ?? null) ? (
-          children
+          <>
+            {loadError && (
+              <Alert
+                type="warning"
+                showIcon
+                title={ui("项目列表暂时无法更新，当前页面已保留")}
+                description={loadError}
+                style={{
+                  position: "fixed",
+                  top: 72,
+                  right: 20,
+                  maxWidth: 460,
+                  zIndex: 1050,
+                }}
+                action={
+                  <Space orientation="vertical">
+                    <Button onClick={() => void refresh().catch(() => {})}>
+                      {ui("重试更新项目")}
+                    </Button>
+                    <Button onClick={() => downloadPageDiagnostics()}>
+                      {ui("导出诊断")}
+                    </Button>
+                  </Space>
+                }
+              />
+            )}
+            {children}
+          </>
         ) : loadError ? (
           <Alert
             type="error"

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.56] - 2026-11-04
+
+### Fixed
+- 项目、算法、计算任务与工作流响应在写入页面状态前核验结构；异常刷新保留已加载内容，并提供局部错误反馈和重试。
+- 工作流审批文字保留在审批动作中，模型判断字段按既有契约输出对象或空值，避免历史审批记录被当成模型判断渲染。
+
+### Added
+- 异常恢复页增加“导出诊断”，自动记录错误栈、组件栈、前端版本、脚本名称和异常接口结构；项目刷新失败也可直接导出。
+
+验证范围见[智能体静置异常与诊断](docs/szf-agent-response-20261104.md)。
+
 ## [0.1.55] - 2026-11-03
 
 ### Fixed

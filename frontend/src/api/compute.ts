@@ -1,4 +1,11 @@
 import { requestJson } from "./client";
+import {
+  assertAlgorithmList,
+  assertCandidateList,
+  assertComputeOutput,
+  assertComputeTask,
+  assertComputeTaskList,
+} from "./computeResponse";
 import { getActiveProject, projectSignal } from "../projects/session";
 import type {
   ComputeAlgorithm,
@@ -46,7 +53,7 @@ export const computeApi = {
   ) =>
     requestJson<ComputeAlgorithmList>(
       `/api/compute/algorithms/?${query(params)}`,
-      options,
+      { ...options, validate: assertAlgorithmList },
     ),
   saveAlgorithm: (id: number | null, body: ComputeAlgorithmWrite) =>
     requestJson<ComputeAlgorithm>(
@@ -73,29 +80,40 @@ export const computeApi = {
     params: Record<string, string | number | undefined> = {},
     options: { signal?: AbortSignal } = {},
   ) =>
-    requestJson<ComputeCandidateList>(
-      `/api/compute/inputs/?${query(params)}`,
-      options,
-    ),
+    requestJson<ComputeCandidateList>(`/api/compute/inputs/?${query(params)}`, {
+      ...options,
+      validate: assertCandidateList,
+    }),
   preflight: (body: ComputeTaskCreate) =>
     requestJson<ComputePreflight>("/api/compute/preflight/", {
       method: "POST",
       body,
     }),
   submit: (body: ComputeTaskCreate) =>
-    requestJson<ComputeTask>("/api/compute/tasks/", { method: "POST", body }),
+    requestJson<ComputeTask>("/api/compute/tasks/", {
+      method: "POST",
+      body,
+      validate: assertComputeTask,
+    }),
   tasks: (params: Record<string, string | number | undefined> = {}) =>
-    requestJson<ComputeTaskList>(`/api/compute/tasks/?${query(params)}`),
-  task: (id: string) => requestJson<ComputeTask>(`/api/compute/tasks/${id}/`),
+    requestJson<ComputeTaskList>(`/api/compute/tasks/?${query(params)}`, {
+      validate: assertComputeTaskList,
+    }),
+  task: (id: string) =>
+    requestJson<ComputeTask>(`/api/compute/tasks/${id}/`, {
+      validate: assertComputeTask,
+    }),
   action: (id: string, action: "cancel" | "retry" | "read") =>
     requestJson<ComputeTask>(`/api/compute/tasks/${id}/`, {
       method: "POST",
       body: { action },
+      validate: assertComputeTask,
     }),
   importOutput: (id: number, body: ComputeImportRequest = { name: "" }) =>
     requestJson<ComputeOutput>(`/api/compute/outputs/${id}/import/`, {
       method: "POST",
       body,
+      validate: assertComputeOutput,
     }),
   preview: (id: number) =>
     requestJson<ComputePreview>(`/api/compute/outputs/${id}/preview/`),

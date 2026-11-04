@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { currentLocale } from "../i18n";
+import { downloadPageDiagnostics, recordPageError } from "./pageDiagnostics";
 import "./pageRecovery.css";
 
 const failedLoads = new Set<() => void>();
@@ -77,20 +78,7 @@ export class ApplicationErrorBoundary extends Component<
   componentDidCatch(caught: unknown, info: ErrorInfo) {
     const error = asPageError(caught);
     console.error("Platform page failed", error, info.componentStack);
-    try {
-      sessionStorage.setItem(
-        "platform:last-page-error",
-        JSON.stringify({
-          time: new Date().toISOString(),
-          path: this.props.path ?? window.location.pathname,
-          name: error.name,
-          message: error.message.slice(0, 800),
-          componentStack: info.componentStack?.slice(0, 4000),
-        }),
-      );
-    } catch {
-      // Recovery remains usable when browser storage is unavailable.
-    }
+    recordPageError(error, info.componentStack, this.props.path);
   }
 
   render() {
@@ -141,7 +129,18 @@ export class ApplicationErrorBoundary extends Component<
             <button type="button" onClick={() => window.location.reload()}>
               {en ? "Reload platform" : "重新加载平台"}
             </button>
+            <button
+              type="button"
+              onClick={() => downloadPageDiagnostics(error)}
+            >
+              {en ? "Download diagnostics" : "导出诊断"}
+            </button>
           </div>
+          <p>
+            {en
+              ? "Diagnostics are collected automatically. Send the exported file to the administrator."
+              : "已自动记录异常位置和接口信息，可导出文件交给管理员。"}
+          </p>
           <details>
             <summary>{en ? "Error details" : "异常信息"}</summary>
             <pre>{`${error.name}: ${error.message}`}</pre>

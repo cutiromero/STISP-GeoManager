@@ -7,6 +7,13 @@ import {
   assertConversationList,
   assertRunPoll,
 } from "./agentResponse";
+import {
+  assertAgentComputeTasks,
+  assertAgentResources,
+  assertWorkflow,
+  assertWorkflowList,
+  assertWorkflowSummaryList,
+} from "./workflowResponse";
 import type {
   AgentBootstrap,
   AgentConversation,
@@ -122,7 +129,9 @@ export const agentApi = {
       validate: assertAgentRun,
     }),
   computeTasks: (id: number) =>
-    requestJson<AgentComputeTaskList>(`/api/agent/runs/${id}/compute-tasks/`),
+    requestJson<AgentComputeTaskList>(`/api/agent/runs/${id}/compute-tasks/`, {
+      validate: assertAgentComputeTasks,
+    }),
   computeIntent: (id: number) =>
     requestJson<AgentRun>(`/api/agent/runs/${id}/compute-intent/`, {
       validate: assertAgentRun,
@@ -136,7 +145,7 @@ export const agentApi = {
   resources: (q = "", options: { signal?: AbortSignal } = {}) =>
     requestJson<AgentResourceList>(
       `/api/agent/resources/?q=${encodeURIComponent(q)}`,
-      options,
+      { ...options, validate: assertAgentResources },
     ),
   admin: () => requestJson<AgentAdmin>("/api/agent/admin/"),
   savePolicy: (body: AgentAdminUpdate) =>
@@ -145,11 +154,19 @@ export const agentApi = {
     requestJson<AgentWorkflow>("/api/agent/workflows/", {
       method: "POST",
       body,
+      validate: assertWorkflow,
     }),
   workflow: (id: string, options: { signal?: AbortSignal } = {}) =>
     requestJson<AgentWorkflow>(
       `/api/agent/workflows/${encodeURIComponent(id)}/`,
-      options,
+      {
+        ...options,
+        validate: (value) => {
+          assertWorkflow(value);
+          if (value.id !== id)
+            throw new ResponseFormatError("workflow.id: request mismatch");
+        },
+      },
     ),
   workflowHistory: (options: {
     workflowType: string;
@@ -164,7 +181,7 @@ export const agentApi = {
         offset: String(options.offset ?? 0),
         limit: String(options.limit ?? 20),
       })}`,
-      { signal: options.signal },
+      { signal: options.signal, validate: assertWorkflowSummaryList },
     ),
   workflowValidation: (id: string) =>
     requestJson<AgentWorkflowValidation>(
@@ -175,7 +192,10 @@ export const agentApi = {
       `/api/agent/workflows/${encodeURIComponent(id)}/validation/files/${encodeURIComponent(fileKey)}/preview/`,
     ),
   workflows: (options: { signal?: AbortSignal } = {}) =>
-    requestJson<AgentWorkflowList>("/api/agent/workflows/", options),
+    requestJson<AgentWorkflowList>("/api/agent/workflows/", {
+      ...options,
+      validate: assertWorkflowList,
+    }),
   confirmWorkflow: (
     id: string,
     planHash: string,
@@ -187,19 +207,23 @@ export const agentApi = {
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/confirm/`, {
       method: "POST",
       body: { planHash, ...review },
+      validate: assertWorkflow,
     }),
   cancelWorkflow: (id: string, body?: CancelAgentWorkflowData["body"]) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/cancel/`, {
       method: "POST",
       ...(body ? { body } : {}),
+      validate: assertWorkflow,
     }),
   pauseWorkflow: (id: string) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/pause/`, {
       method: "POST",
+      validate: assertWorkflow,
     }),
   resumeWorkflow: (id: string) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/resume/`, {
       method: "POST",
+      validate: assertWorkflow,
     }),
   prepareWorkflowReport: (id: string) =>
     requestJson<AgentWorkflowReport>(`/api/agent/workflows/${id}/report/`, {

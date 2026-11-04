@@ -12,8 +12,11 @@ type FieldStructure = {
 export class ResponseFormatError extends Error {
   readonly issue: string;
 
-  constructor(issue: string) {
-    super("对话服务返回内容异常，请重试，当前聊天记录已保留");
+  constructor(
+    issue: string,
+    message = "对话服务返回内容异常，请重试，当前聊天记录已保留",
+  ) {
+    super(message);
     this.name = "ResponseFormatError";
     this.issue = issue;
   }

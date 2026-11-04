@@ -829,7 +829,9 @@ def workflow_json(workflow, include_steps=True):
                 "status": item.status,
                 "message": item.message,
                 "action": item.action,
-                "decision": item.action.get("decision"),
+                "decision": item.action.get("decision")
+                if isinstance(item.action.get("decision"), dict)
+                else None,
                 "inputRefs": item.input_refs,
                 "outputRefs": item.output_refs,
                 "metrics": item.metrics,
