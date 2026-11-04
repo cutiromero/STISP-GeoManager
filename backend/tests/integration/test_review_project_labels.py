@@ -45,7 +45,7 @@ def team():
     return admin, member, outsider, a, b
 
 
-def test_tag_members_read_others_objects_without_role_sharing(
+def test_tag_members_read_project_data_but_keep_workspaces_private(
     client, team, tmp_path, monkeypatch
 ):
     admin, member, outsider, a, b = team
@@ -84,13 +84,16 @@ def test_tag_members_read_others_objects_without_role_sharing(
     client.force_login(member)
     for url, expected in [
         ("/api/catalog/resources/", resource.id),
-        ("/api/catalog/workspaces/", scene.id),
         ("/api/catalog/map-compositions/", composition.id),
         ("/api/catalog/results/", artifact.id),
     ]:
         response = client.get(url, **headers)
         assert response.status_code == 200, (url, response.content)
         assert expected in {item["id"] for item in response.json()["items"]}
+    assert client.get("/api/catalog/workspaces/", **headers).json()["items"] == []
+    assert (
+        client.get(f"/api/catalog/workspaces/{scene.id}/", **headers).status_code == 404
+    )
     file_url = f"/api/catalog/results/{artifact.id}/file/?variant=artifact"
     response = client.get(file_url, **headers)
     assert response.status_code == 200

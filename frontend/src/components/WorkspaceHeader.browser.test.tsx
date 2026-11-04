@@ -567,9 +567,33 @@ describe("WorkspaceHeader", () => {
     expect(mockApi.logout.mock.invocationCallOrder[0]).toBeLessThan(
       clearCachedLayerGroupsMock.mock.invocationCallOrder[0],
     );
-    expect(clearCachedLayerGroupsMock.mock.invocationCallOrder[0]).toBeLessThan(
-      setUser.mock.invocationCallOrder[0],
+    expect(setUser.mock.invocationCallOrder[0]).toBeLessThan(
+      mockApi.logout.mock.invocationCallOrder[0],
     );
+  });
+
+  it("returns to login while the server logout and cache cleanup are still pending", async () => {
+    const setUser = vi.fn();
+    let finishLogout: (value: { detail: string }) => void = () => {};
+    mockApi.logout.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLogout = resolve;
+      }),
+    );
+    clearCachedLayerGroupsMock.mockReturnValueOnce(new Promise(() => {}));
+    sessionStorage.setItem(
+      "auth:expired-return",
+      JSON.stringify({ path: "/map", userId: user.id }),
+    );
+    renderHeader({}, user, setUser);
+    fireEvent.click(screen.getByRole("button", { name: "用户信息" }));
+    fireEvent.click(await screen.findByRole("button", { name: /安全退出/ }));
+    expect(setUser).toHaveBeenCalledWith(null);
+    await waitFor(() =>
+      expect(screen.getByTestId("location-path")).toHaveTextContent("/login"),
+    );
+    expect(sessionStorage.getItem("auth:expired-return")).toBeNull();
+    finishLogout({ detail: "已退出" });
   });
 
   it.each([1500, 1280, 1024])(

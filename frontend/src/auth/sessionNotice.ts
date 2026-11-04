@@ -25,10 +25,6 @@ export function markSessionExpired(userId: number) {
   }
 }
 
-export function sessionExpired(): boolean {
-  return stored() !== null;
-}
-
 /** The saved page, only for the account whose session ended there. */
 export function expiredReturnPath(userId: number): string | null {
   const value = stored();

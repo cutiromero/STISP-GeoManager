@@ -7,6 +7,7 @@ import { localeStorageKey, setLocale } from "../i18n";
 import { appTheme } from "../theme";
 import type { Bootstrap } from "../types";
 import LoginPage from "./LoginPage";
+import { clearSessionExpired } from "../auth/sessionNotice";
 import "../styles.css";
 import { page } from "vitest/browser";
 
@@ -60,8 +61,22 @@ function renderLoginPage() {
 describe("LoginPage", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    clearSessionExpired();
     await setLocale("zh-CN");
     mockApi.loginOverview.mockRejectedValue(new Error("offline"));
+  });
+
+  it("shows the login form without an expired-session warning", () => {
+    sessionStorage.setItem(
+      "auth:expired-return",
+      JSON.stringify({ path: "/agent/workbench", userId: 42 }),
+    );
+    renderLoginPage();
+    expect(screen.getByLabelText("账号")).toBeVisible();
+    expect(screen.queryByText("登录状态已失效")).not.toBeInTheDocument();
+    expect(document.querySelector(".login-session-notice")).toBeNull();
+    // Keep the same-account return path without a warning banner.
+    expect(sessionStorage.getItem("auth:expired-return")).not.toBeNull();
   });
 
   it("does not offer remembered login and registers the current page after sign in", async () => {

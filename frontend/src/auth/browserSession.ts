@@ -7,6 +7,7 @@ export const browserSessionStorageKey = "stisp.browser-page-session";
 export const browserSessionEndedEvent = "stisp:browser-session-ended";
 const channelName = "stisp.browser-session";
 const endpoint = "/api/auth/browser-session/";
+type SessionEndReason = "logout" | "expired";
 
 interface PageCredentials {
   pageId: string;
@@ -20,6 +21,7 @@ let timer: ReturnType<typeof setInterval> | undefined;
 let channel: BroadcastChannel | null = null;
 let startup: Promise<boolean> | null = null;
 let handlersInstalled = false;
+let lifecycle = 0;
 
 function randomHex(bytes: number) {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) =>
@@ -104,6 +106,7 @@ function ensureChannel() {
       kind?: string;
       requestId?: string;
       token?: string;
+      reason?: SessionEndReason;
     } | null;
     if (!data) return;
     if (
@@ -121,7 +124,7 @@ function ensureChannel() {
       data.kind === "signed-out" &&
       credentials?.token === data.token
     ) {
-      endBrowserSession(false);
+      endBrowserSession(false, data.reason === "logout" ? "logout" : "expired");
     }
   });
   return channel;
@@ -165,8 +168,17 @@ function install(value: PageCredentials) {
   if (timer) clearInterval(timer);
   timer = setInterval(() => {
     if (!credentials || !active) return;
-    void send(payload("heartbeat", credentials)).catch((error) => {
-      if (error instanceof Error && "status" in error && error.status === 401)
+    const page = credentials;
+    const generation = lifecycle;
+    void send(payload("heartbeat", page)).catch((error) => {
+      if (
+        generation === lifecycle &&
+        credentials === page &&
+        active &&
+        error instanceof Error &&
+        "status" in error &&
+        error.status === 401
+      )
         endBrowserSession();
     });
   }, 30_000);
@@ -181,17 +193,28 @@ function install(value: PageCredentials) {
   window.addEventListener("pageshow", (event) => {
     if (!event.persisted || !credentials) return;
     const saved = credentials;
+    const generation = lifecycle;
     void send(payload("resume", saved))
-      .then(() => install(saved))
-      .catch(() => endBrowserSession());
+      .then(() => {
+        if (generation === lifecycle && credentials === saved) install(saved);
+      })
+      .catch(() => {
+        if (generation === lifecycle && credentials === saved)
+          endBrowserSession();
+      });
   });
 }
 
-export function endBrowserSession(broadcast = true) {
+export function endBrowserSession(
+  broadcast = true,
+  reason: SessionEndReason = "expired",
+) {
+  lifecycle += 1;
   if (broadcast && credentials)
     ensureChannel()?.postMessage({
       kind: "signed-out",
       token: credentials.token,
+      reason,
     });
   credentials = null;
   active = false;
@@ -199,13 +222,18 @@ export function endBrowserSession(broadcast = true) {
   if (timer) clearInterval(timer);
   timer = undefined;
   sessionStorage.removeItem(browserSessionStorageKey);
-  window.dispatchEvent(new Event(browserSessionEndedEvent));
+  window.dispatchEvent(
+    new CustomEvent(browserSessionEndedEvent, { detail: { reason } }),
+  );
 }
 
 export async function startBrowserSession() {
+  const generation = ++lifecycle;
   const token = randomHex(32);
   const value = { pageId: randomHex(16), token, sequence: 0 };
   await send(payload("start", value));
+  if (generation !== lifecycle)
+    throw new DOMException("登录操作已取消，请重新登录", "AbortError");
   install(value);
   startup = Promise.resolve(true);
 }
@@ -216,6 +244,7 @@ export function resumeBrowserSession(): Promise<boolean> {
 }
 
 async function restore(): Promise<boolean> {
+  const generation = lifecycle;
   if (active && credentials) return true;
   const navigation = performance.getEntriesByType("navigation")[0] as
     | PerformanceNavigationTiming
@@ -225,6 +254,7 @@ async function restore(): Promise<boolean> {
   if (!value) {
     sessionStorage.removeItem(browserSessionStorageKey);
     const token = await onlinePeerToken();
+    if (generation !== lifecycle) return false;
     if (token) value = { pageId: randomHex(16), token, sequence: 0 };
   }
   try {
@@ -233,9 +263,11 @@ async function restore(): Promise<boolean> {
       return false;
     }
     await send(payload("resume", value));
+    if (generation !== lifecycle) return false;
     install(value);
     return true;
   } catch (error) {
+    if (generation !== lifecycle) return false;
     if (!(error instanceof Error && "status" in error && error.status === 401))
       throw error;
     endBrowserSession(false);

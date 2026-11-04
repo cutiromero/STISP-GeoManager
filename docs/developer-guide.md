@@ -482,6 +482,10 @@ response = session.post(f"{base_url}/auth/register/", json={
 
 当前阶段尚未接入邮件验证码和邮件找回密码。登录页“忘记密码”入口应提示用户联系平台管理员；管理员继续通过 `POST /api/users/{userId}/password/reset/` 生成一次性展示的新密码。
 
+超级管理员在后台 `POST /api/users/` 创建账号时邮箱选填；普通管理员仍须填写邮箱，自助注册要求保持。非空邮箱继续校验格式并规范化去重。仅超级管理员可同时提交 `projectIds`（启用私有项目数组）和 `allowPublicProject`（默认true）设置可见项目；普通管理员提交任一项目配置字段返回403。关闭公开项目须至少选择一个启用私有项目。账号、角色、资料和项目成员关系在同一事务保存，验证失败不会留下半成品账号；省略项目配置保留默认公开行为。初始密码仅在创建响应展示/复制一次，登录密码按单向哈希保存。
+
+后台用户操作新增“修改用户名”：仅超级管理员可在 `POST /api/users/{userId}/` 单独提交 `username`；`UserInfo.canRenameUsername`提供可用性标记。用户名按Django字段规则及唯一性校验，改名保留用户ID、密码哈希、项目、工程和聊天关系；新登录使用新名。初始化管理员与系统游客仍以系统专用名称识别，禁止改名或将其他账号改为其保留名。普通管理员提交username返回403。状态更新和删除规则保持。
+
 #### Step 5: 检查登录状态
 
 前端应用可以通过此接口检查当前用户的登录状态和权限信息。
@@ -1650,7 +1654,7 @@ map.addLayer({
 
 ### 工程和专题快照
 
-工程和专题是服务器端轻量工作台快照，保存当前图层组、顺序、查询条件、空间范围、资源引用、可视化方案、栅格渲染引用元数据、底图和地图视图。可见性由所属项目决定，历史 `accessGroupIds` 不改变范围；服务器端快照不能保存原始 GeoJSON 要素集合、属性表行或查询结果数据本体，矢量图层恢复时按资源引用和查询条件重新查询。
+工程和专题是服务器端轻量工作台快照，保存当前图层组、顺序、查询条件、空间范围、资源引用、可视化方案、栅格渲染引用元数据、底图和地图视图。工程默认仅创建者可见，接受邀请后授予该工程只读访问；普通平台管理员、同项目成员和游客不自动获得访问。超级管理员保留当前项目管理能力，历史 `accessGroupIds` 不授予访问；每次读取仍须核验项目、功能和底层数据权限。服务器端快照不能保存原始 GeoJSON 要素集合、属性表行或查询结果数据本体，矢量图层恢复时按资源引用和查询条件重新查询。
 
 关键接口：
 
@@ -2254,9 +2258,9 @@ A: 搜索结果按相关性排序，与关键词匹配度越高的结果越靠�
 关键接口：
 
 - `GET /api/admin/workspaces/`：按关键词、类型、状态和分页参数查询工程专题，返回 `accessGroups`、`owner` 和 `canManageAccess`。
-- `POST /api/admin/workspaces/{workspaceId}/`：通过 `action` 执行 `setStatus`、`updateAccess`、`update` 或 `delete`。拥有者本人或具备 `catalog.change_workspacescene` 的用户可执行 `updateAccess`；启停和信息修改需要 `catalog.change_workspacescene`，删除需要 `catalog.delete_workspacescene`。删除必须提交与工程专题名称完全一致的 `confirmationName`；无关联工程会移除记录，已被专题出图稿引用的工程会转为停用隐藏。
+- `POST /api/admin/workspaces/{workspaceId}/`：通过 `action` 执行 `setStatus`、`updateAccess`、`update` 或 `delete`，仅拥有者本人或超级管理员可维护。启停和信息修改需要 `catalog.change_workspacescene`，删除需要 `catalog.delete_workspacescene`；`updateAccess`仅兼容旧元数据，实际分享通过邀请接受。删除必须提交与工程专题名称完全一致的 `confirmationName`；无关联工程会移除记录，已被专题出图稿引用的工程会转为停用隐藏。
 
-工程专题访问范围与存量数据一致：超级管理员角色由后端强制可见，选择游客角色表示对象公开，游客会话和其他已登录角色均可访问。普通业务搜索和工作台加载接口必须继续按对象访问范围过滤，前端菜单和按钮控制只作为可用性提示，不能替代后端权限校验。
+工程访问规则统一用于工作台、搜索、后台列表和直接 ID 请求：创建者及超级管理员可维护，接受邀请的用户只读；普通平台管理员不能绕过。未获授权的直接 ID 请求返回404。分享需收件人明确接受，并在读取时重验双方及依赖权限；旧角色字段不承担公开授权。前端菜单和按钮控制只作为可用性提示，不能替代后端权限校验。
 
 工程和成果的启停/发布、信息修改、访问范围配置和删除都应写入 `OperationLog`；前端分别使用“工程管理”和“成果管理”，动作和说明使用中文。
 
@@ -2799,7 +2803,7 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 
 使用Session/CSRF。POST `/api/sharing/check/`输入`{kind,objectId,username}`，用户名须完整准确且区分大小写，不提供用户列表。`kind`为`workspace/composition/compute_output`，`objectId`为整数；预检返回`eligible/detail`，可分享时另含`target/recipient`。POST `/api/sharing/invitations/`在同字段增加1至80字符`idempotencyKey`；每次重新核对，201表示已发出待接受邀请，200表示复用已有pending/accepted。相同键不同请求409。
 
-创建仅原对象owner或已有管理该对象权限的管理员。目标须已拥有功能和所属项目访问权、所有底层数据及计算输入读取权；owner_only不因分享改变。专题草稿和单计算输出只有接受后才授该对象只读，原工程项目范围可见性保持。单输出不授整任务、参数、输入快照、日志和其他输出；已入库资源仍按目录原权限管理。
+创建仅原对象owner或已有管理该对象权限的管理员；工程仅创建者和超级管理员可发起。目标须已拥有功能和所属项目访问权、所有底层数据及计算输入读取权；owner_only不因分享改变。工程默认私有，工程、专题草稿和单计算输出只有接受后才授该对象只读；待接受或拒绝不授权，接受后不可修改、删除或转分享工程。单输出不授整任务、参数、输入快照、日志和其他输出；已入库资源仍按目录原权限管理。
 
 GET `/api/sharing/invitations/?box=received|sent&limit=30&offset=0`返回本人跨仍有权项目的`items/total/unreadCount/limit/offset`。通知持久保存，`unread`区分收件通知和分享者收到的决定通知；POST `.../{id}/read/`分别标记本人一侧已读。列表不授任何对象访问。
 

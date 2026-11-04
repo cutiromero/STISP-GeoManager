@@ -1,15 +1,18 @@
 # API Change Requests
 
-## 2026-11-04 逻辑推理目录引用
+## API-20261104-006 - 逻辑推理选择系统数据
 
-- 接口：`GET/POST /api/agent/workflow-uploads/references/`；批次资料增加可选 `source=upload|catalog`。
-- 前端需要：当前项目搜索、勾选系统数据，与上传项同批进入对话角色及字段确认；移除目录项仅解除引用。
-- Mock：`mock/prism/examples/104-agent-upload-bundle.json`。
-- 后端：ForeignKey 允许跨任务多次引用；目录原资源、隐私和来源标记不改；创建、发送和后续执行重新鉴权，含单项目和 owner_only；画像使用真实计算输入，非显示COG。
-- 验证：引用/重复引用、移除保留原资源、跨用户/项目拒绝、对话流程、混合资料角色识别。
-- 状态：已实现，验证结果以本批实测为准。
+- Status: BackendReady
+- Change type: 新增接口，批次资料新增可选字段。
+- Endpoints: GET/POST /api/agent/workflow-uploads/references/。
+- OpenAPI change: 新增目录资源搜索与引用加入批次；批次资料新增可选 source（upload 或 catalog）。
+- Frontend reason: 逻辑推理对话输入区可搜索、勾选当前项目的系统数据，与上传资料同批进入角色与字段确认；移除目录项只解除引用。
+- Mock examples: mock/prism/examples/104-agent-upload-bundle.json。
+- Backend implementation notes: 批次资料对资源改为可重复引用，同一资源可用于多个任务；目录原资源的状态、隐私与来源不变；创建、发送和执行时按当前项目与资源权限重新鉴权；资料画像读取计算用原始数据。
+- Verification: 引用与重复引用、移除后原资源保持可用、跨用户与跨项目拒绝、对话流程、上传与目录资料混合识别。
+- Result: 后端与前端回归通过；候选环境以目录中的演示岩性、构造和五类蚀变完成真实模型全流程，原资源保持可用。
 
-## API-20261104-003 - 当前对话内通用地质推理
+## API-20261104-005 - 当前对话内通用地质推理
 
 - Status: BackendReady
 - Owner: phaseB；本任务显式贯通契约、后端与前端。
@@ -22,7 +25,7 @@
 - Verification: 对话绑定、角色修改、阶段确认、重复提交、会话恢复及他人隔离；非逻辑项目保持原入口。
 - Result: 本地后端确认点、权限及相关回归通过；前端单元550项通过，浏览器因沙箱Chromium MachPort权限未执行。未部署服务器；完整交互与公网加载耗时需外部复跑。
 
-## API-20261104-002 - 轻量工作流卡片与任务矢量按需读取
+## API-20261104-004 - 轻量工作流卡片与任务矢量按需读取
 
 - Status: BackendReady
 - Owner: phaseA；本任务显式贯通契约、后端、前端。
@@ -36,7 +39,7 @@
 - Verification: 两个综合推理类型的入库集合、card大小与字段、默认详情、矢量校验/上限；新标签入口与页面会话租约、按需加载回归。
 - Result: 后端相关122项与前端单元550项通过；TypeScript与契约生成一致。浏览器因沙箱Chromium MachPort权限失败未执行，部署与公网耗时未验收。
 
-## API-20261104-001 - 任务资料批量上传、角色识别与活动任务摘要
+## API-20261104-003 - 任务资料批量上传、角色识别与活动任务摘要
 
 - Status: BackendReady
 - Owner: logic-upload-bundle；本任务显式贯通契约、后端、前端。
@@ -48,6 +51,32 @@
 - Backend implementation notes: 安全解包最多512条目、总解压上限min(uploadMaxMb,512MiB)，每批最多12份；同目录同名Shapefile归组；模型无效或不可用退回规则。仅本人跨项目摘要，详情和取消仍按目标项目原权限校验。
 - Verification: 解包安全、部分失败、批次上限、角色校验和规则退回、本人摘要隔离；前端上传、角色修改、取消确认、思考控件与固定场景惰性加载。
 - Result: 本机相关后端81项、前端单元542项、TypeScript与契约检查通过；新增浏览器回归因沙箱Chromium启动权限未能执行。未部署服务器，真实模型与公网首开耗时未验收。
+
+## API-20261104-002 - 超级管理员创建用户和修改登录名
+
+- Status: BackendReady
+- Owner: root 契约；workspace_privacy 后端；logout_frontend 后台表单。
+- Endpoints: POST /api/users/、/api/users/{userId}/；复用 /api/projects/ 可分配项目与 /api/projects/assignments/{userId}/ 规则。
+- Change type: UserCreateRequest邮箱改条件必填，新增仅超管projectIds/allowPublicProject；UserUpdateRequest增加username，UserInfo增加canRenameUsername。
+- OpenAPI change: 超管邮箱选填、创建时配置启用项目，已有账号可改名；普通管理员保持限制。无配置默认公开，关闭公开须分配私有项目；系统专用账号保护。
+- Mock examples: 后端隔离账号与浏览器创建表单fixtures；初始密码仍复用原一次性生成响应。
+- Frontend reason: 超级管理员一次创建并分配用户可见项目，不需要先创建再去项目管理设置。
+- Backend implementation notes: 复用项目分配校验；用户、角色、资料、成员关系原子保存，无数据库迁移；密码单向哈希不增加可逆存储。
+- Verification: 超管无邮箱、多无邮箱、非空邮箱唯一性、普通管理员保持限制、项目有效性和原子失败、创建后访问范围；改名唯一性/保留名/关系及密码保持。
+- Result: 后端135项与7个子测试、后台57项浏览器回归通过；契约、类型和构建核验，候选及正式验收另记。
+
+## API-20261104-001 - 工程默认私有与接受分享只读
+
+- Status: BackendReady
+- Owner: root 契约和前端文案；workspace_privacy 后端及权限回归。
+- Endpoints: GET/POST /api/catalog/workspaces/*；GET/POST /api/admin/workspaces/*；工程搜索；专题来源工程；/api/sharing/*。
+- Change type: 收紧工程对象权限，保持请求、响应和数据库结构。
+- OpenAPI change: 工程默认创建者私有，接受邀请只读，普通管理员不绕过，超级管理员保留当前项目管理；直接ID未授权404。
+- Mock examples: 复用现有工程结构，后端隔离测试覆盖同项目多账号和真实邀请状态。
+- Frontend reason: 用户保存的工程不自动暴露给同项目成员，页面说明与分享机制一致。
+- Backend implementation notes: 集中工程访问判定，统一列表、搜索、后台、详情及来源快照路径；邀请待接受/拒绝不授权，已接受每次重验项目、双方和依赖；写入仅所有者或超管。
+- Verification: 同项目隔离、直接ID、普通管理员、分享接受/拒绝/撤权、来源工程入口与现有专题回归。
+- Result: 后端92项及前端106项定向浏览器回归通过，类型/格式/契约一致性和生产构建通过；候选及正式验收另行记录。
 
 ## API-20261102-001 - 普通对话账号三任务并发
 
@@ -242,6 +271,8 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 | API-20261104-002 | BackendReady | /api/agent/workflows/{workflowId}/; /api/compute/outputs/{outputId}/preview/; /api/catalog/resources/{id}/profile/ | card view, vector map view, defaultVisualization | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Backend 122, unit 550; browser sandbox-blocked | Full view unchanged; project and owner checks preserved |
 | API-20261104-001 | BackendReady | /api/agent/workflow-uploads/batch/; /recognize/; /api/agent/workflows/active/ | batch uploads, role suggestions, active task summary | Updated | 104-agent-upload-bundle.json | Implemented | Backend 81, unit 542, types and contract passed; browser sandbox-blocked | Existing responses unchanged; target-project authorization preserved |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261104-002 | BackendReady | POST /api/users/ 及单用户更新 | 新增输入及条件校验 | Updated | Existing fixtures | Implemented | Focused passed | 超管无邮箱创建、分配项目与改登录名 |
+| API-20261104-001 | BackendReady | 工程、工程管理、搜索和分享 | 权限行为收紧 | Updated | Existing fixtures | Implemented | Focused passed | 默认私有，接受后只读，普通管理员不绕过 |
 | API-20261103-002 | BackendReady | /api/projects/; /api/projects/assignments/{userId}/; /api/agent/workflows/; /api/agent/research-demos/ | per-user public scope and lightweight workflow history | Updated | Scoped backend and browser fixtures | Implemented | Project/sharing 72; project UI 6 passed | Default true, live authorization, authorized fallback and summary pagination; server acceptance separate |
 | API-20261103-003 | BackendReady | /api/agent/workflow-uploads/; /api/agent/workflow-uploads/{uploadId}/; /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | task uploads, geology_generic and field-mapping confirmation | Updated | 103-agent-generic-workflow.json | Implemented | Generic 9 backend, 2 browser; local mock end-to-end succeeded | Uploads owner_only and bound once; mapping proposed by model and confirmed by user |
 | API-20261103-004 | BackendReady | /api/catalog/results/{resultId}/file/; /api/catalog/map-compositions/{compositionId}/versions/{versionNumber}/file/ | thumbnail variant and thumbnailUrl for result cards | Updated | Backend tests | Implemented | Thumbnail tests | WebP ≤640px cached under app cache; PDF keeps placeholder |

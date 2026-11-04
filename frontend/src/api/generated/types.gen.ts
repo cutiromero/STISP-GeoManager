@@ -4633,6 +4633,10 @@ export type AdminDashboardGpuDevice = {
 
 export type UserInfo = BaseUserInfo & {
     /**
+     * 当前请求者可否为该账号改名；仅超级管理员且目标不是初始化管理员或系统游客时为true。旧客户端缺省按false处理。
+     */
+    canRenameUsername?: boolean;
+    /**
      * 用户所属角色 ID 列表；后端实现使用 Django Group
      */
     groupIds: Array<number>;
@@ -4672,9 +4676,9 @@ export type UserCreateRequest = {
      */
     displayName?: string;
     /**
-     * 必填用户邮箱；后端统一转为小写并保证非空邮箱唯一
+     * 超级管理员创建时可省略或留空，普通管理员必填；非空邮箱统一转为小写并保证唯一。
      */
-    email: string;
+    email?: string | '';
     /**
      * 用户所在部门
      */
@@ -4687,6 +4691,14 @@ export type UserCreateRequest = {
      * 是否启用账号，默认 true
      */
     isActive?: boolean;
+    /**
+     * 仅超级管理员可提交的启用私有项目ID；公开项目由allowPublicProject单独控制。省略时不分配私有项目，重复ID去重。
+     */
+    projectIds?: Array<number>;
+    /**
+     * 仅超级管理员可提交，是否允许访问公开项目；关闭时须至少分配一个启用私有项目。普通管理员不得提交，即使为默认值。
+     */
+    allowPublicProject?: boolean;
 };
 
 export type AdminProfileAvatarUploadRequest = {
@@ -4739,11 +4751,22 @@ export type UserPermissionUpdateRequest = {
     operationLogGroupIds?: Array<number>;
 };
 
+/**
+ * 提交username或isActive至少一项；删除沿用action=delete。改名不重建用户、不改变密码和关联对象。
+ */
 export type UserUpdateRequest = {
+    /**
+     * 仅超级管理员可提交的新登录名；使用Django用户名校验，规范化后须唯一，系统专用账号及其保留名称不可修改或占用。
+     */
+    username?: string;
     /**
      * 用户账号是否启用
      */
-    isActive: boolean;
+    isActive?: boolean;
+    /**
+     * 删除账号；继续遵守当前登录用户、初始化管理员和游客保护。
+     */
+    action?: 'delete';
 };
 
 export type Group = {
@@ -6961,7 +6984,7 @@ export type WorkspaceScene = {
     snapshot: WorkspaceSceneSnapshot;
     owner: WorkspaceSceneOwner;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 历史兼容元数据；工程按创建者、已接受分享及超级管理员规则访问，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -6971,15 +6994,15 @@ export type WorkspaceScene = {
      */
     isOwner: boolean;
     /**
-     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户且具备 `catalog.change_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户或超级管理员且具备 `catalog.change_workspacescene` 时为 true
      */
     canEdit: boolean;
     /**
-     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户且具备 `catalog.delete_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户或超级管理员且具备 `catalog.delete_workspacescene` 时为 true
      */
     canDelete: boolean;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 兼容管理标记；仅创建者或超级管理员可管理分享，接受分享的用户为 false，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -9648,7 +9671,7 @@ export type WorkspaceSceneSummary = {
     description: string;
     owner: WorkspaceSceneOwner;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 历史兼容元数据；工程按创建者、已接受分享及超级管理员规则访问，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -9658,15 +9681,15 @@ export type WorkspaceSceneSummary = {
      */
     isOwner: boolean;
     /**
-     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户且具备 `catalog.change_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户或超级管理员且具备 `catalog.change_workspacescene` 时为 true
      */
     canEdit: boolean;
     /**
-     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户且具备 `catalog.delete_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户或超级管理员且具备 `catalog.delete_workspacescene` 时为 true
      */
     canDelete: boolean;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 兼容管理标记；仅创建者或超级管理员可管理分享，接受分享的用户为 false，旧角色字段不授予访问。
      *
      * @deprecated
      */

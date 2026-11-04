@@ -55,7 +55,7 @@ export const listShareInvitations = <ThrowOnError extends boolean = false>(optio
 /**
  * 发出待接受邀请
  *
- * 当前单项目重新核对预检条件。相同幂等键复用原邀请；同对象同收件人已有pending/accepted时复用，不重复通知。只允许对象owner或既有有权管理员发送，不赋予项目成员或owner_only权限。
+ * 当前单项目重新核对预检条件。相同幂等键复用原邀请；同对象同收件人已有pending/accepted时复用，不重复通知。只允许对象owner或既有有权管理员发送，工程限创建者或超级管理员；工程默认私有，接受后才授予只读，待接受或拒绝不授权。不赋予项目成员或owner_only权限。
  */
 export const createShareInvitation = <ThrowOnError extends boolean = false>(options: Options<CreateShareInvitationData, ThrowOnError>): RequestResult<CreateShareInvitationResponses, CreateShareInvitationErrors, ThrowOnError> => (options.client ?? client).post<CreateShareInvitationResponses, CreateShareInvitationErrors, ThrowOnError>({
     security: [{
@@ -457,7 +457,7 @@ export const listUsers = <ThrowOnError extends boolean = false>(options?: Option
 /**
  * 创建用户
  *
- * 具备 `core.manage_auth` 和 `core.create_user` 权限的管理员创建用户账号，邮箱必填，创建时必须指定至少一个非超级管理员用户组。密码由后端自动生成并返回。该接口不受自助注册开关影响；`游客` 角色只允许系统专用 guest 账号持有，不能分配给新账号；只有超级管理员可以分配平台管理员角色。
+ * 具备 `core.manage_auth` 和 `core.create_user` 权限的管理员创建用户账号。超级管理员创建时邮箱选填，可用 projectIds 和 allowPublicProject 同时配置可见项目；普通管理员邮箱必填且不得提交项目配置。未配置时默认允许公开项目。创建账号、角色和项目范围原子保存，项目无效或关闭公开却未分配启用私有项目时返回400。必须指定至少一个非超级管理员用户组。密码由后端自动生成并仅在本次响应返回。该接口不受自助注册开关影响；`游客` 角色只允许系统专用 guest 账号持有，不能分配给新账号；只有超级管理员可以分配平台管理员角色。密码按单向哈希保存，不提供原密码查询。
  */
 export const createUser = <ThrowOnError extends boolean = false>(options: Options<CreateUserData, ThrowOnError>): RequestResult<CreateUserResponses, CreateUserErrors, ThrowOnError> => (options.client ?? client).post<CreateUserResponses, CreateUserErrors, ThrowOnError>({
     security: [{
@@ -527,13 +527,13 @@ export const resetUserPassword = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * 更新用户状态或删除用户
+ * 修改用户名、更新状态或删除用户
  *
  * 根据请求体中的 `action` 字段执行不同操作：
- * - 不提供 `action`：启用或停用指定用户账号
+ * - 不提供 `action`：更新 isActive；超级管理员也可单独提交 username 修改登录名
  * - `delete`：删除指定用户账号
  *
- * 不能操作当前登录用户、初始化管理员或系统 guest 账号；非超级管理员主体不能看到或操作超级管理员用户，也不能停用或删除平台管理员账号。需要 `core.manage_auth`。
+ * 停用和删除继续保护当前登录用户、初始化管理员和系统 guest 账号。仅超级管理员可修改用户名，普通管理员提交username返回403；初始化管理员和系统guest禁止改名，其保留用户名不可用于其他账号。用户名须符合合法字符、长度和唯一性要求，冲突返回400。改名保留用户ID、密码哈希和关联数据，登录改用新名称。非超级管理员主体不能看到或操作超级管理员用户，也不能停用或删除平台管理员账号。需要 `core.manage_auth`。
  *
  */
 export const updateUserOrDelete = <ThrowOnError extends boolean = false>(options: Options<UpdateUserOrDeleteData, ThrowOnError>): RequestResult<UpdateUserOrDeleteResponses, UpdateUserOrDeleteErrors, ThrowOnError> => (options.client ?? client).post<UpdateUserOrDeleteResponses, UpdateUserOrDeleteErrors, ThrowOnError>({
@@ -927,7 +927,7 @@ export const updateAdminDataResource = <ThrowOnError extends boolean = false>(op
 /**
  * 获取工程管理列表
  *
- * 返回工程和专题管理列表，支持按类型、状态和关键词筛选。需要 `catalog.view_workspacescene`、`catalog.change_workspacescene` 或 `catalog.delete_workspacescene`；后端仍需按对象所有者和访问用户组裁剪可见范围。
+ * 返回当前项目中有权读取的工程管理列表，支持按类型、状态和关键词筛选。需要 `catalog.view_workspacescene`、`catalog.change_workspacescene` 或 `catalog.delete_workspacescene`；工程默认创建者私有，接受邀请后只读。普通管理员不绕过所有者边界，超级管理员可管理当前项目全部工程。
  */
 export const listAdminWorkspaces = <ThrowOnError extends boolean = false>(options?: Options<ListAdminWorkspacesData, ThrowOnError>): RequestResult<ListAdminWorkspacesResponses, ListAdminWorkspacesErrors, ThrowOnError> => (options?.client ?? client).get<ListAdminWorkspacesResponses, ListAdminWorkspacesErrors, ThrowOnError>({
     security: [{
@@ -942,7 +942,7 @@ export const listAdminWorkspaces = <ThrowOnError extends boolean = false>(option
 /**
  * 操作单个工程
  *
- * 支持更新工程状态、基础信息、访问用户组和删除确认。启停和信息修改需要 `catalog.change_workspacescene`；删除需要 `catalog.delete_workspacescene`；所属用户、超级管理员和平台管理员可以修改可见范围。删除无关联工程时移除记录；若工程已被专题出图稿引用，则转为停用以保留成果来源。成功操作会写入审计日志。
+ * 支持更新工程状态、基础信息、访问用户组和删除确认。启停和信息修改需要 `catalog.change_workspacescene`；删除需要 `catalog.delete_workspacescene`，并且仅所属用户或超级管理员可维护；接受分享不授予修改或转分享权限。旧访问用户组仅保留兼容元数据。删除无关联工程时移除记录；若工程已被专题出图稿引用，则转为停用以保留成果来源。成功操作会写入审计日志。
  */
 export const updateAdminWorkspace = <ThrowOnError extends boolean = false>(options: Options<UpdateAdminWorkspaceData, ThrowOnError>): RequestResult<UpdateAdminWorkspaceResponses, UpdateAdminWorkspaceErrors, ThrowOnError> => (options.client ?? client).post<UpdateAdminWorkspaceResponses, UpdateAdminWorkspaceErrors, ThrowOnError>({
     security: [{
@@ -1028,14 +1028,14 @@ export const scanCatalogSources = <ThrowOnError extends boolean = false>(options
 /**
  * 获取工程和专题列表
  *
- * 仅列出当前具体项目中可访问的启用工程摘要；按更新时间分页，详情和图层快照按需获取。
+ * 仅列出当前具体项目中本人创建或已接受邀请的启用工程摘要；普通管理员不绕过隐私边界，超级管理员可查看当前项目全部工程。匿名用户及游客不读取他人的私有工程。按更新时间分页，详情和图层快照按需获取；旧 accessGroupIds 不授予访问权。
  */
 export const listCatalogWorkspaces = <ThrowOnError extends boolean = false>(options?: Options<ListCatalogWorkspacesData, ThrowOnError>): RequestResult<ListCatalogWorkspacesResponses, ListCatalogWorkspacesErrors, ThrowOnError> => (options?.client ?? client).get<ListCatalogWorkspacesResponses, ListCatalogWorkspacesErrors, ThrowOnError>({ url: '/api/catalog/workspaces/', ...options });
 
 /**
  * 保存工程
  *
- * 在当前项目创建工程；项目成员可按功能权限访问，旧 accessGroupIds 不改变访问范围。
+ * 在当前项目创建默认仅创建者可见的工程；接受分享的用户获得该工程只读访问，仍须满足项目、功能和底层数据权限。旧 accessGroupIds 不授予访问权，超级管理员保留管理能力。
  */
 export const createCatalogWorkspace = <ThrowOnError extends boolean = false>(options: Options<CreateCatalogWorkspaceData, ThrowOnError>): RequestResult<CreateCatalogWorkspaceResponses, CreateCatalogWorkspaceErrors, ThrowOnError> => (options.client ?? client).post<CreateCatalogWorkspaceResponses, CreateCatalogWorkspaceErrors, ThrowOnError>({
     security: [{
@@ -1054,14 +1054,14 @@ export const createCatalogWorkspace = <ThrowOnError extends boolean = false>(opt
 /**
  * 获取工程详情
  *
- * 返回当前用户拥有、所属角色获准访问或管理员全量可见的单个启用工程快照。需要 `catalog.view_workspacescene`。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。
+ * 返回本人创建、已接受邀请或超级管理员有权读取的单个启用工程快照。需要 `catalog.view_workspacescene` 及所属项目和全部底层资源访问权。普通管理员和同项目成员不自动获得访问，未获授权的对象 ID 返回404；公开项目内工程同样默认私有。
  */
 export const getCatalogWorkspace = <ThrowOnError extends boolean = false>(options: Options<GetCatalogWorkspaceData, ThrowOnError>): RequestResult<GetCatalogWorkspaceResponses, GetCatalogWorkspaceErrors, ThrowOnError> => (options.client ?? client).get<GetCatalogWorkspaceResponses, GetCatalogWorkspaceErrors, ThrowOnError>({ url: '/api/catalog/workspaces/{workspaceId}/', ...options });
 
 /**
  * 更新或删除工程
  *
- * 所属用户可以维护自己的工程；超级管理员和平台管理员可以维护全部工程。名称、说明、类型和快照更新需要 `catalog.change_workspacescene`，删除需要 `catalog.delete_workspacescene`；若工程已被专题出图稿引用，删除会转为停用隐藏以保留成果来源；后端始终保留管理员访问，snapshot 不得包含原始 GeoJSON 要素集合或查询结果数据本体。
+ * 所属用户可以维护自己的工程；超级管理员可以维护当前项目全部工程。普通管理员不绕过所有者边界，接受分享只允许读取。名称、说明、类型和快照更新需要 `catalog.change_workspacescene`，删除需要 `catalog.delete_workspacescene`；若工程已被专题出图稿引用，删除会转为停用隐藏以保留成果来源；snapshot 不得包含原始 GeoJSON 要素集合或查询结果数据本体。
  */
 export const updateCatalogWorkspace = <ThrowOnError extends boolean = false>(options: Options<UpdateCatalogWorkspaceData, ThrowOnError>): RequestResult<UpdateCatalogWorkspaceResponses, UpdateCatalogWorkspaceErrors, ThrowOnError> => (options.client ?? client).post<UpdateCatalogWorkspaceResponses, UpdateCatalogWorkspaceErrors, ThrowOnError>({
     security: [{
@@ -1253,7 +1253,7 @@ export const listMapCompositions = <ThrowOnError extends boolean = false>(option
 /**
  * 新建出图稿
  *
- * 从当前用户拥有的工程创建版式出图草稿；超级管理员和平台管理员可从任意可用工程创建。创建时固化来源工程快照，发布前仅所属用户和管理员可见。需要 `catalog.add_mapcomposition`。
+ * 从当前用户拥有的工程创建版式出图草稿；超级管理员可从当前项目任意可用工程创建。普通管理员不能从他人的私有工程创建，接受分享不授予来源工程写入或派生成果权限。创建时固化来源工程快照，专题仍沿用其发布规则。需要 `catalog.add_mapcomposition`。
  */
 export const createMapComposition = <ThrowOnError extends boolean = false>(options: Options<CreateMapCompositionData, ThrowOnError>): RequestResult<CreateMapCompositionResponses, CreateMapCompositionErrors, ThrowOnError> => (options.client ?? client).post<CreateMapCompositionResponses, CreateMapCompositionErrors, ThrowOnError>({
     security: [{

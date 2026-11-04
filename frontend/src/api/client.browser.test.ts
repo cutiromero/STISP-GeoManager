@@ -9,7 +9,11 @@ import {
 } from "./client";
 import { setLocale } from "../i18n";
 import { setActiveProject, resetProjectSession } from "../projects/session";
-import { endBrowserSession } from "../auth/browserSession";
+import {
+  browserSessionStorageKey,
+  endBrowserSession,
+  startBrowserSession,
+} from "../auth/browserSession";
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   const headers = new Headers(init.headers);
@@ -46,6 +50,76 @@ describe("api client", () => {
     resetProjectSession();
     unregisterForbiddenHandler();
     vi.unstubAllGlobals();
+  });
+
+  it("ends the local lease immediately and signs in only after the previous logout response", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ detail: "ok" })),
+    );
+    await startBrowserSession();
+    let finishLogout: (response: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLogout = resolve;
+      }),
+    );
+    const logout = api.logout();
+    expect(sessionStorage.getItem(browserSessionStorageKey)).toBeNull();
+    const login = api.login("next-user", "next-password");
+    await Promise.resolve();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    finishLogout(jsonResponse({ detail: "已退出" }));
+    await logout;
+    await login;
+    expect(requestPath(capturedRequest(fetchMock, 2))).toBe("/api/auth/login/");
+    expect(sessionStorage.getItem(browserSessionStorageKey)).not.toBeNull();
+  });
+
+  it("keeps the local lease ended even when server logout fails", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ detail: "ok" })),
+    );
+    await startBrowserSession();
+    fetchMock.mockRejectedValueOnce(new TypeError("network unavailable"));
+    await expect(api.logout()).rejects.toThrow("network unavailable");
+    expect(sessionStorage.getItem(browserSessionStorageKey)).toBeNull();
+    await api.login("retry-user", "retry-password");
+    expect(requestPath(capturedRequest(fetchMock, 2))).toBe("/api/auth/login/");
+    expect(sessionStorage.getItem(browserSessionStorageKey)).not.toBeNull();
+  });
+
+  it("bounds a hanging logout and releases the next login after the timeout", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ detail: "ok" })),
+    );
+    const timeoutSpy = vi.spyOn(window, "setTimeout");
+    try {
+      fetchMock.mockImplementationOnce(
+        (request: Request) =>
+          new Promise((_, reject) => {
+            request.signal.addEventListener(
+              "abort",
+              () => reject(request.signal.reason),
+              { once: true },
+            );
+          }),
+      );
+      const logout = api.logout();
+      const login = api.login("after-timeout", "retry-password");
+      const rejection = expect(logout).rejects.toThrow("退出确认超时");
+      const timeout = timeoutSpy.mock.calls.find(
+        (call) => call[1] === 10_000,
+      )?.[0];
+      expect(typeof timeout).toBe("function");
+      if (typeof timeout === "function") timeout();
+      await rejection;
+      await login;
+      expect(requestPath(capturedRequest(fetchMock, 1))).toBe(
+        "/api/auth/login/",
+      );
+    } finally {
+      timeoutSpy.mockRestore();
+    }
   });
 
   it("forwards caller cancellation to the real Request without aborting other project reads", async () => {

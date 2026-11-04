@@ -278,8 +278,8 @@ export default function WorkspaceScenePanel({
                           ? "Mine"
                           : "我的"
                         : english
-                          ? "Shared"
-                          : "共享"}
+                          ? "Read only"
+                          : "只读"}
                     </Tag>
                   </small>
                   <small>
@@ -408,8 +408,8 @@ export default function WorkspaceScenePanel({
           <ProjectNotice />
           <div className="workspace-scene-fixed-access">
             {english
-              ? "Project members can view this item. Editing and deletion still depend on feature permissions and ownership."
-              : "工程对所属项目成员可见；编辑和删除仍由功能权限及所有者身份控制。"}
+              ? "Private to its owner by default. Recipients can read it after accepting an invitation; superadministrators retain management access."
+              : "工程默认仅创建者可见。通过分享邀请并被接受后，对方才能只读加载；超级管理员保留管理权限。"}
           </div>
         </Form>
       </Modal>
