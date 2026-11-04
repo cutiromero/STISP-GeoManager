@@ -19,7 +19,9 @@ def grant(apps, schema_editor):
         defaults={"name": "可使用数据智能体"},
     )
     # Fresh installs let core initialize complete default groups after migration.
-    for group in Group.objects.filter(name__in=("普通用户", "科研用户", "平台管理员", "超级管理员")):
+    for group in Group.objects.filter(
+        name__in=("普通用户", "科研用户", "平台管理员", "超级管理员")
+    ):
         group.permissions.add(chat)
         if group.name != "普通用户":
             group.permissions.add(agent)
