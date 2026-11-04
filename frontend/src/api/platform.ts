@@ -1,4 +1,5 @@
 import { requestJson } from "./client";
+import { assertProjectList } from "./projectResponse";
 import { projectSignal } from "../projects/session";
 import type {
   ContentArticle,
@@ -13,7 +14,10 @@ import type {
 
 export type { ContentArticle, ContentArticleInput, ProjectTag };
 export const platformApi = {
-  projects: () => requestJson<ProjectTagList>("/api/projects/"),
+  projects: () =>
+    requestJson<ProjectTagList>("/api/projects/", {
+      validate: assertProjectList,
+    }),
   createProject: (body: ProjectTagInput) =>
     requestJson<ProjectTag>("/api/projects/", { method: "POST", body }),
   updateProject: (id: number, body: ProjectTagInput) =>

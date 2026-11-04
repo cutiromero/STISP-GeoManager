@@ -119,6 +119,7 @@ describe("page recovery", () => {
       "/map",
     );
     expect(screen.getByRole("button", { name: "重新加载平台" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "导出诊断" })).toBeVisible();
     await waitFor(() => expect(console.error).toHaveBeenCalled());
   });
 

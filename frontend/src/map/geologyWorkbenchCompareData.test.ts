@@ -86,7 +86,10 @@ it("uses complete real responses once and registers all three normal layers with
   ).toHaveLength(3);
   expect(
     request.mock.calls.every(
-      ([url, options]) => !options || String(url).endsWith("/query/"),
+      ([url, options]) =>
+        !options ||
+        String(url).endsWith("/query/") ||
+        Object.keys(options).every((key) => key === "validate"),
     ),
   ).toBe(true);
 });
