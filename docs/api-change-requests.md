@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261104-002 - 超级管理员创建用户和修改登录名
+
+- Status: BackendReady
+- Owner: root 契约；workspace_privacy 后端；logout_frontend 后台表单。
+- Endpoints: POST /api/users/、/api/users/{userId}/；复用 /api/projects/ 可分配项目与 /api/projects/assignments/{userId}/ 规则。
+- Change type: UserCreateRequest邮箱改条件必填，新增仅超管projectIds/allowPublicProject；UserUpdateRequest增加username，UserInfo增加canRenameUsername。
+- OpenAPI change: 超管邮箱选填、创建时配置启用项目，已有账号可改名；普通管理员保持限制。无配置默认公开，关闭公开须分配私有项目；系统专用账号保护。
+- Mock examples: 后端隔离账号与浏览器创建表单fixtures；初始密码仍复用原一次性生成响应。
+- Frontend reason: 超级管理员一次创建并分配用户可见项目，不需要先创建再去项目管理设置。
+- Backend implementation notes: 复用项目分配校验；用户、角色、资料、成员关系原子保存，无数据库迁移；密码单向哈希不增加可逆存储。
+- Verification: 超管无邮箱、多无邮箱、非空邮箱唯一性、普通管理员保持限制、项目有效性和原子失败、创建后访问范围；改名唯一性/保留名/关系及密码保持。
+- Result: 后端135项与7个子测试、后台57项浏览器回归通过；契约、类型和构建核验，候选及正式验收另记。
+
 ## API-20261104-001 - 工程默认私有与接受分享只读
 
 - Status: BackendReady
@@ -203,6 +216,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261104-002 | BackendReady | POST /api/users/ 及单用户更新 | 新增输入及条件校验 | Updated | Existing fixtures | Implemented | Focused passed | 超管无邮箱创建、分配项目与改登录名 |
 | API-20261104-001 | BackendReady | 工程、工程管理、搜索和分享 | 权限行为收紧 | Updated | Existing fixtures | Implemented | Focused passed | 默认私有，接受后只读，普通管理员不绕过 |
 | API-20261103-002 | BackendReady | /api/projects/; /api/projects/assignments/{userId}/; /api/agent/workflows/; /api/agent/research-demos/ | per-user public scope and lightweight workflow history | Updated | Scoped backend and browser fixtures | Implemented | Project/sharing 72; project UI 6 passed | Default true, live authorization, authorized fallback and summary pagination; server acceptance separate |
 | API-20261103-003 | BackendReady | /api/agent/workflow-uploads/; /api/agent/workflow-uploads/{uploadId}/; /api/agent/workflows/; /api/agent/workflows/{workflowId}/confirm/ | task uploads, geology_generic and field-mapping confirmation | Updated | 103-agent-generic-workflow.json | Implemented | Generic 9 backend, 2 browser; local mock end-to-end succeeded | Uploads owner_only and bound once; mapping proposed by model and confirmed by user |

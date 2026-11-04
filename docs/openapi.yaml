@@ -1203,8 +1203,8 @@ paths:
       tags:
       - 用户管理
       summary: 创建用户
-      description: 具备 `core.manage_auth` 和 `core.create_user` 权限的管理员创建用户账号，邮箱必填，创建时必须指定至少一个非超级管理员用户组。密码由后端自动生成并返回。该接口不受自助注册开关影响；`游客`
-        角色只允许系统专用 guest 账号持有，不能分配给新账号；只有超级管理员可以分配平台管理员角色。
+      description: 具备 `core.manage_auth` 和 `core.create_user` 权限的管理员创建用户账号。超级管理员创建时邮箱选填，可用 projectIds 和 allowPublicProject 同时配置可见项目；普通管理员邮箱必填且不得提交项目配置。未配置时默认允许公开项目。创建账号、角色和项目范围原子保存，项目无效或关闭公开却未分配启用私有项目时返回400。必须指定至少一个非超级管理员用户组。密码由后端自动生成并仅在本次响应返回。该接口不受自助注册开关影响；`游客`
+        角色只允许系统专用 guest 账号持有，不能分配给新账号；只有超级管理员可以分配平台管理员角色。密码按单向哈希保存，不提供原密码查询。
       operationId: createUser
       security:
       - sessionAuth: []
@@ -1345,15 +1345,15 @@ paths:
     post:
       tags:
       - 用户管理
-      summary: 更新用户状态或删除用户
+      summary: 修改用户名、更新状态或删除用户
       description: '根据请求体中的 `action` 字段执行不同操作：
 
-        - 不提供 `action`：启用或停用指定用户账号
+        - 不提供 `action`：更新 isActive；超级管理员也可单独提交 username 修改登录名
 
         - `delete`：删除指定用户账号
 
 
-        不能操作当前登录用户、初始化管理员或系统 guest 账号；非超级管理员主体不能看到或操作超级管理员用户，也不能停用或删除平台管理员账号。需要 `core.manage_auth`。
+        停用和删除继续保护当前登录用户、初始化管理员和系统 guest 账号。仅超级管理员可修改用户名，普通管理员提交username返回403；初始化管理员和系统guest禁止改名，其保留用户名不可用于其他账号。用户名须符合合法字符、长度和唯一性要求，冲突返回400。改名保留用户ID、密码哈希和关联数据，登录改用新名称。非超级管理员主体不能看到或操作超级管理员用户，也不能停用或删除平台管理员账号。需要 `core.manage_auth`。
 
         '
       operationId: updateUserOrDelete
@@ -13281,6 +13281,9 @@ components:
         - effectivePermissions
         - operationLogGroupIds
         properties:
+          canRenameUsername:
+            type: boolean
+            description: 当前请求者可否为该账号改名；仅超级管理员且目标不是初始化管理员或系统游客时为true。旧客户端缺省按false处理。
           groupIds:
             type: array
             description: 用户所属角色 ID 列表；后端实现使用 Django Group
@@ -13318,7 +13321,6 @@ components:
       type: object
       required:
       - username
-      - email
       - groupIds
       properties:
         username:
@@ -13328,9 +13330,12 @@ components:
           type: string
           description: 显示名称
         email:
-          type: string
-          format: email
-          description: 必填用户邮箱；后端统一转为小写并保证非空邮箱唯一
+          description: 超级管理员创建时可省略或留空，普通管理员必填；非空邮箱统一转为小写并保证唯一。
+          anyOf:
+          - type: string
+            format: email
+          - type: string
+            const: ''
         department:
           type: string
           description: 用户所在部门
@@ -13343,6 +13348,16 @@ components:
         isActive:
           type: boolean
           description: 是否启用账号，默认 true
+        projectIds:
+          type: array
+          description: 仅超级管理员可提交的启用私有项目ID；公开项目由allowPublicProject单独控制。省略时不分配私有项目，重复ID去重。
+          items:
+            type: integer
+            minimum: 1
+        allowPublicProject:
+          type: boolean
+          default: true
+          description: 仅超级管理员可提交，是否允许访问公开项目；关闭时须至少分配一个启用私有项目。普通管理员不得提交，即使为默认值。
     AdminProfileAvatarUploadRequest:
       type: object
       required:
@@ -13413,12 +13428,21 @@ components:
             type: integer
     UserUpdateRequest:
       type: object
-      required:
-      - isActive
+      description: 提交username或isActive至少一项；删除沿用action=delete。改名不重建用户、不改变密码和关联对象。
+      minProperties: 1
       properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 150
+          description: 仅超级管理员可提交的新登录名；使用Django用户名校验，规范化后须唯一，系统专用账号及其保留名称不可修改或占用。
         isActive:
           type: boolean
           description: 用户账号是否启用
+        action:
+          type: string
+          enum: [delete]
+          description: 删除账号；继续遵守当前登录用户、初始化管理员和游客保护。
     Group:
       type: object
       required:

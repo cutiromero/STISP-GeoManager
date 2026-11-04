@@ -457,7 +457,7 @@ export const listUsers = <ThrowOnError extends boolean = false>(options?: Option
 /**
  * 创建用户
  *
- * 具备 `core.manage_auth` 和 `core.create_user` 权限的管理员创建用户账号，邮箱必填，创建时必须指定至少一个非超级管理员用户组。密码由后端自动生成并返回。该接口不受自助注册开关影响；`游客` 角色只允许系统专用 guest 账号持有，不能分配给新账号；只有超级管理员可以分配平台管理员角色。
+ * 具备 `core.manage_auth` 和 `core.create_user` 权限的管理员创建用户账号。超级管理员创建时邮箱选填，可用 projectIds 和 allowPublicProject 同时配置可见项目；普通管理员邮箱必填且不得提交项目配置。未配置时默认允许公开项目。创建账号、角色和项目范围原子保存，项目无效或关闭公开却未分配启用私有项目时返回400。必须指定至少一个非超级管理员用户组。密码由后端自动生成并仅在本次响应返回。该接口不受自助注册开关影响；`游客` 角色只允许系统专用 guest 账号持有，不能分配给新账号；只有超级管理员可以分配平台管理员角色。密码按单向哈希保存，不提供原密码查询。
  */
 export const createUser = <ThrowOnError extends boolean = false>(options: Options<CreateUserData, ThrowOnError>): RequestResult<CreateUserResponses, CreateUserErrors, ThrowOnError> => (options.client ?? client).post<CreateUserResponses, CreateUserErrors, ThrowOnError>({
     security: [{
@@ -527,13 +527,13 @@ export const resetUserPassword = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * 更新用户状态或删除用户
+ * 修改用户名、更新状态或删除用户
  *
  * 根据请求体中的 `action` 字段执行不同操作：
- * - 不提供 `action`：启用或停用指定用户账号
+ * - 不提供 `action`：更新 isActive；超级管理员也可单独提交 username 修改登录名
  * - `delete`：删除指定用户账号
  *
- * 不能操作当前登录用户、初始化管理员或系统 guest 账号；非超级管理员主体不能看到或操作超级管理员用户，也不能停用或删除平台管理员账号。需要 `core.manage_auth`。
+ * 停用和删除继续保护当前登录用户、初始化管理员和系统 guest 账号。仅超级管理员可修改用户名，普通管理员提交username返回403；初始化管理员和系统guest禁止改名，其保留用户名不可用于其他账号。用户名须符合合法字符、长度和唯一性要求，冲突返回400。改名保留用户ID、密码哈希和关联数据，登录改用新名称。非超级管理员主体不能看到或操作超级管理员用户，也不能停用或删除平台管理员账号。需要 `core.manage_auth`。
  *
  */
 export const updateUserOrDelete = <ThrowOnError extends boolean = false>(options: Options<UpdateUserOrDeleteData, ThrowOnError>): RequestResult<UpdateUserOrDeleteResponses, UpdateUserOrDeleteErrors, ThrowOnError> => (options.client ?? client).post<UpdateUserOrDeleteResponses, UpdateUserOrDeleteErrors, ThrowOnError>({
