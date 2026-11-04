@@ -1114,7 +1114,7 @@ class WorkspaceSceneApiTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"], "工程不存在")
 
-    def test_shared_workspace_scene_can_be_listed_and_loaded_but_not_modified(self):
+    def test_legacy_group_sharing_does_not_expose_another_users_workspace(self):
         owner = get_user_model().objects.create_user(
             username="shared-workspace-owner", password="pass12345"
         )
@@ -1137,13 +1137,8 @@ class WorkspaceSceneApiTests(TestCase):
         )
 
         self.assertEqual(list_response.status_code, 200)
-        shared_item = list_response.json()["items"][0]
-        self.assertEqual(shared_item["name"], "共享退化工程")
-        self.assertFalse(shared_item["isOwner"])
-        self.assertFalse(shared_item["canEdit"])
-        self.assertFalse(shared_item["canDelete"])
-        self.assertFalse(shared_item["canManageAccess"])
-        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(list_response.json()["items"], [])
+        self.assertEqual(detail_response.status_code, 404)
         self.assertEqual(update_response.status_code, 404)
         scene.refresh_from_db()
         self.assertEqual(scene.name, "共享退化工程")
@@ -1215,7 +1210,7 @@ class WorkspaceSceneApiTests(TestCase):
         )
         self.assertEqual(detail_response.status_code, 200)
 
-    def test_platform_admin_lists_and_maintains_every_workspace(self):
+    def test_platform_admin_cannot_list_or_maintain_other_users_workspaces(self):
         superadmin, _ = ensure_superadmin_defaults()
         platform_group = Group.objects.get(name=PLATFORM_ADMIN_GROUP_NAME)
         platform_admin = get_user_model().objects.create_user(
@@ -1256,23 +1251,17 @@ class WorkspaceSceneApiTests(TestCase):
         )
 
         self.assertEqual(list_response.status_code, 200)
-        self.assertIn(scene.id, {item["id"] for item in list_response.json()["items"]})
-        hidden_item = next(
-            item
-            for item in list_response.json()["items"]
-            if item["id"] == hidden_owner_scene.id
-        )
-        self.assertEqual(hidden_item["owner"]["id"], 0)
-        self.assertEqual(hidden_item["owner"]["username"], "")
-        self.assertEqual(hidden_item["owner"]["displayName"], "系统维护")
+        visible = {item["id"] for item in list_response.json()["items"]}
+        self.assertNotIn(scene.id, visible)
+        self.assertNotIn(hidden_owner_scene.id, visible)
         self.assertEqual(admin_list_response.status_code, 200)
-        self.assertIn(
+        self.assertNotIn(
             scene.id,
             {item["id"] for item in admin_list_response.json()["items"]},
         )
-        self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.status_code, 404)
         scene.refresh_from_db()
-        self.assertEqual(scene.status, WorkspaceScene.Status.INACTIVE)
+        self.assertEqual(scene.status, WorkspaceScene.Status.ACTIVE)
 
     def test_workspace_scene_rejects_duplicate_name_per_owner_and_kind(self):
         WorkspaceScene.objects.create(

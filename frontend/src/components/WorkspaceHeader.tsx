@@ -37,6 +37,8 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { api } from "../api/client";
+import { endBrowserSession } from "../auth/browserSession";
+import { clearSessionExpired } from "../auth/sessionNotice";
 import ColumnIcon from "./ColumnIcon";
 import stispLogoWhite from "../assets/stisp-logo-white.svg";
 import { platformBrand } from "../config/platformBrand";
@@ -532,25 +534,26 @@ export default function WorkspaceHeader({
   );
 
   async function handleLogout() {
+    setUser(null);
+    endBrowserSession(true, "logout");
+    clearSessionExpired();
+    resetProjectSession();
+    if (user) {
+      clearAgentBootstrap(user);
+      sessionStorage.removeItem(`project:${user.id}`);
+    }
+    navigate("/login", { replace: true });
+    // End the server session as well; local cache cleanup must not delay login.
+    const logoutRequest = api.logout();
+    void clearCachedLayerGroups().catch((error) => {
+      console.warn("清理本地图层缓存失败", error);
+    });
     try {
-      await api.logout();
+      await logoutRequest;
     } catch (error) {
       message.warning(
         error instanceof Error ? error.message : t("navigation.logoutFallback"),
       );
-    } finally {
-      try {
-        await clearCachedLayerGroups();
-      } catch (error) {
-        console.warn("清理本地图层缓存失败", error);
-      }
-      resetProjectSession();
-      if (user) {
-        clearAgentBootstrap(user);
-        sessionStorage.removeItem(`project:${user.id}`);
-      }
-      setUser(null);
-      navigate("/login", { replace: true });
     }
   }
 

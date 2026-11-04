@@ -41,6 +41,10 @@ import {
   tourLabels,
 } from "./multiElementTour";
 import "./multi-element-tour.css";
+import {
+  queryWorkflowVectors,
+  usesCleanGeologyResults,
+} from "./workflowOutputMaps";
 
 const empty: GeoJsonFeatureCollection = {
   type: "FeatureCollection",
@@ -199,6 +203,7 @@ export default function MultiElementWorkspace({
               "intersections",
               "prospects",
               "alterations",
+              "changes",
             ].includes(key),
         )
       : ["faults", "intersections", "prospects"];
@@ -238,12 +243,14 @@ export default function MultiElementWorkspace({
         if (!requests.has(id))
           requests.set(
             id,
-            queryReviewMap(id, { mixed: true, allowEmpty: true }).catch(
-              (reason: unknown) => {
-                requests.delete(id);
-                throw reason;
-              },
-            ),
+            queryReviewMap(id, {
+              mixed: true,
+              allowEmpty: true,
+              loadStyle: true,
+            }).catch((reason: unknown) => {
+              requests.delete(id);
+              throw reason;
+            }),
           );
         return requests.get(id)!;
       };
@@ -269,9 +276,30 @@ export default function MultiElementWorkspace({
           ? counted(query(map.after.lithology))
           : Promise.resolve(null),
         counted(query(faultsId)),
-        counted(query(map.after?.faults ?? faultsId)),
-        counted(merge(map.changes ?? [])),
-        counted(query(map.beforeIntersections)),
+        counted(
+          query(
+            map.after?.faults ??
+              (usesCleanGeologyResults(workflow) && map.after
+                ? undefined
+                : faultsId),
+          ),
+        ),
+        counted(
+          map.changes?.length
+            ? merge(map.changes)
+            : queryWorkflowVectors(workflow, "apply", [
+                "changes_lithology_issues",
+                "changes_fault_issues",
+                "changes_alteration_issues",
+              ]),
+        ),
+        counted(
+          map.beforeIntersections
+            ? query(map.beforeIntersections)
+            : queryWorkflowVectors(workflow, "relations", [
+                "before_intersections",
+              ]),
+        ),
         counted(query(map.intersections)),
         counted(query(map.beforeProspects)),
         counted(query(map.afterProspects)),
@@ -297,7 +325,7 @@ export default function MultiElementWorkspace({
         },
         {
           key: "alterations",
-          label: "矿物与处理状态",
+          label: "有效蚀变",
           before: empty,
           after: empty,
           color: "#648e91",
@@ -452,46 +480,70 @@ export default function MultiElementWorkspace({
         checkOutputs.find((output) => output.key === "alterations")?.resourceId,
       );
     const groups = [
-      { key: "checks", visibleKey: "checks", ids: map.checks ?? [] },
+      {
+        key: "checks",
+        visibleKey: "checks",
+        ids: map.checks ?? [],
+        stage: "check",
+        outputs: ["lithology_issues", "fault_issues", "alteration_issues"],
+      },
       {
         key: "alterations-before",
         visibleKey: "alterations",
         ids: beforeAlterations > 0 ? [beforeAlterations] : [],
+        stage: "check",
+        outputs: ["alterations"],
       },
       {
         key: "alterations-after",
         visibleKey: "alterations",
         ids: map.alterations ? [map.alterations] : [],
+        stage: "apply",
+        outputs: [
+          usesCleanGeologyResults(workflow)
+            ? "final_alterations"
+            : "alterations",
+        ],
       },
     ].filter(
       (group) =>
         (visible.includes(group.visibleKey) ||
           (group.visibleKey === "alterations" && storyNeedsAlterations)) &&
-        group.ids.length > 0,
+        (group.ids.length > 0 ||
+          (Array.isArray(workflow.plan.stages) &&
+            workflow.plan.stages
+              .map(record)
+              .some(
+                (stage) =>
+                  stage.name === group.stage && stage.status === "completed",
+              ))),
     );
     setOptionalLoading(groups.map((group) => group.key));
     void Promise.allSettled(
-      groups.map(async ({ key, ids }) => {
+      groups.map(async ({ key, ids, stage, outputs }) => {
         const cacheKey = `${workflow.id}:${key}:${ids.join(",")}`;
         if (!optionalRequests.current.has(cacheKey)) {
-          const query = Promise.all(
-            ids.map((id) => {
-              if (!resourceRequests.current.has(id))
-                resourceRequests.current.set(
-                  id,
-                  queryReviewMap(id, { mixed: true, allowEmpty: true }).catch(
-                    (reason: unknown) => {
-                      resourceRequests.current.delete(id);
-                      throw reason;
-                    },
-                  ),
-                );
-              return resourceRequests.current.get(id)!;
-            }),
-          ).then((items) => ({
-            type: "FeatureCollection" as const,
-            features: items.flatMap((item) => item.features),
-          }));
+          const query = ids.length
+            ? Promise.all(
+                ids.map((id) => {
+                  if (!resourceRequests.current.has(id))
+                    resourceRequests.current.set(
+                      id,
+                      queryReviewMap(id, {
+                        mixed: true,
+                        allowEmpty: true,
+                      }).catch((reason: unknown) => {
+                        resourceRequests.current.delete(id);
+                        throw reason;
+                      }),
+                    );
+                  return resourceRequests.current.get(id)!;
+                }),
+              ).then((items) => ({
+                type: "FeatureCollection" as const,
+                features: items.flatMap((item) => item.features),
+              }))
+            : queryWorkflowVectors(workflow, stage, outputs);
           optionalRequests.current.set(cacheKey, query);
         }
         const features = await optionalRequests.current.get(cacheKey)!;
@@ -701,19 +753,23 @@ export default function MultiElementWorkspace({
     const currentLabels = tourLabels(currentTour, tourBefore, tourAfter);
     return {
       before: featureCollection([tourBefore ?? currentTour.feature]),
-      after: featureCollection([
-        tourAfter ?? {
-          ...currentTour.feature,
-          properties: {
-            ...currentTour.feature.properties,
-            state: currentTour.action,
-          },
-        },
-      ]),
+      after: featureCollection(
+        usesCleanGeologyResults(workflow) && currentTour.action === "exclude"
+          ? []
+          : [
+              tourAfter ?? {
+                ...currentTour.feature,
+                properties: {
+                  ...currentTour.feature.properties,
+                  state: currentTour.action,
+                },
+              },
+            ],
+      ),
       beforeLabel: currentLabels.before,
       afterLabel: currentLabels.after,
     };
-  }, [viewMode, focusedOutcome, currentTour, tourBefore, tourAfter]);
+  }, [viewMode, focusedOutcome, currentTour, tourBefore, tourAfter, workflow]);
   const suggestion = workflow.modificationReview?.suggestions.find(
     (item) =>
       selected &&
@@ -865,10 +921,13 @@ export default function MultiElementWorkspace({
             <div className="multi-element-map-controls">
               <strong>联动图层</strong>
               <Checkbox.Group
-                options={data.overlays.map((item) => ({
-                  value: item.key,
-                  label: item.label,
-                }))}
+                options={[
+                  ...data.overlays.map((item) => ({
+                    value: item.key,
+                    label: item.label,
+                  })),
+                  { value: "changes", label: "修正记录" },
+                ]}
                 value={visible}
                 onChange={(items) => setVisible(items.map(String))}
               />
@@ -920,7 +979,9 @@ export default function MultiElementWorkspace({
                 <GeologyReviewMaps
                   before={data.before}
                   after={data.after}
-                  differences={data.differences}
+                  differences={
+                    visible.includes("changes") ? data.differences : empty
+                  }
                   overlays={overlays}
                   bounds={focus}
                   onSelect={(index) => {
@@ -954,6 +1015,7 @@ export default function MultiElementWorkspace({
                   before={tourBefore}
                   after={tourAfter}
                   algorithm={tourAlgorithm(workflow)}
+                  cleanResults={usesCleanGeologyResults(workflow)}
                   loading={
                     currentTour.suggestion.element === "alteration" &&
                     optionalLoading.some((key) => key.startsWith("alterations"))

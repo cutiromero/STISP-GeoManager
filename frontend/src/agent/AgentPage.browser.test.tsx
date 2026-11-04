@@ -42,9 +42,10 @@ vi.mock("../contexts/AppContext", () => ({
 vi.mock("../projects/ProjectContext", () => ({
   useProjectContext: () => ({
     current: "1",
-    projects: [{ id: 1, name: "公开" }],
+    projects: [{ id: 1, name: "公开", code: projectCode.value }],
   }),
 }));
+const projectCode = { value: "default" };
 vi.mock("./useAgentBootstrap", () => ({
   useAgentBootstrapState: () => ({
     bootstrap: accessState.value === "confirmed" ? bootstrap : null,
@@ -313,6 +314,7 @@ it("uses the live report instead of the initial queued answer and retains later 
   expect(screen.getByText(followup.answer)).toBeVisible();
 });
 beforeEach(() => {
+  projectCode.value = "default";
   localStorage.clear();
   sessionStorage.clear();
   vi.restoreAllMocks();
@@ -431,6 +433,47 @@ beforeEach(() => {
     run(2, input.prompt),
   );
 });
+
+it.each([
+  ["关", "fast", undefined],
+  ["低", "deep", "low"],
+  ["中", "deep", "medium"],
+  ["高", "deep", "xhigh"],
+])(
+  "logic project merges thinking controls and submits %s correctly",
+  async (label, mode, effort) => {
+    projectCode.value = "02";
+    showAgent("workbench");
+    await screen.findByText("旧问题");
+    const control = screen.getByRole("combobox", { name: "思考" });
+    expect(
+      screen.queryByRole("button", { name: "调整思考强度" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "深度思考" }),
+    ).not.toBeInTheDocument();
+    fireEvent.mouseDown(control);
+    fireEvent.click(
+      await screen.findByText(label, {
+        selector: ".ant-select-item-option-content",
+      }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("输入问题，Enter 发送，Shift+Enter 换行"),
+      { target: { value: "核对思考档位" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /发送/ }));
+    await waitFor(() =>
+      expect(agentApi.submit).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          thinkingMode: mode,
+          reasoningEffort: effort,
+        }),
+      ),
+    );
+  },
+);
 
 it("synchronizes running calculation and terminal status without a second polling request", async () => {
   const task = liveComputeTask("running");

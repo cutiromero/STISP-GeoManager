@@ -36,9 +36,14 @@ import {
   Typography,
 } from "antd";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { api } from "../api/client";
+import { platformApi, type ProjectTag } from "../api/platform";
+import type {
+  UserCreateRequest,
+  UserUpdateRequest,
+} from "../api/generated/types.gen";
 import { useAppContext } from "../contexts/AppContext";
 import { localText, useEnglishLanguage } from "../i18n/useEnglishLanguage";
 import type {
@@ -148,7 +153,7 @@ export default function AdminAuthPage() {
   const { message, modal } = App.useApp();
   const english = useEnglishLanguage();
   const l = (zh: string, en: string) => localText(english, zh, en);
-  const { user } = useAppContext();
+  const { user, setUser } = useAppContext();
   const location = useLocation();
   const activeSection = location.pathname.endsWith("/groups")
     ? "groups"
@@ -160,15 +165,8 @@ export default function AdminAuthPage() {
   );
   const isSuperadmin = Boolean(user?.roles.includes("超级管理员"));
   const [createGroupForm] = Form.useForm<{ name: string }>();
-  const [createUserForm] = Form.useForm<{
-    username: string;
-    password: string;
-    displayName?: string;
-    email?: string;
-    department?: string;
-    groupIds?: number[];
-    isActive?: boolean;
-  }>();
+  const [createUserForm] = Form.useForm<UserCreateRequest>();
+  const [renameUserForm] = Form.useForm<Pick<UserUpdateRequest, "username">>();
   const [users, setUsers] = useState<User[]>([]);
   const [roleApplications, setRoleApplications] = useState<
     RoleApplicationListItem[]
@@ -185,6 +183,16 @@ export default function AdminAuthPage() {
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>([]);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [renameUser, setRenameUser] = useState<User | null>(null);
+  const [renamingUser, setRenamingUser] = useState(false);
+  const [renameError, setRenameError] = useState("");
+  const [createProjects, setCreateProjects] = useState<ProjectTag[]>([]);
+  const [createProjectsStatus, setCreateProjectsStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [createProjectsError, setCreateProjectsError] = useState("");
+  const createProjectsSequence = useRef(0);
   const [groupDrafts, setGroupDrafts] = useState<Record<number, string[]>>({});
   const [userPermissionDrafts, setUserPermissionDrafts] = useState<
     Record<number, string[]>
@@ -255,6 +263,42 @@ export default function AdminAuthPage() {
   useEffect(() => {
     loadAuthData();
   }, [loadAuthData]);
+
+  const loadCreateProjects = useCallback(async () => {
+    if (!isSuperadmin) return;
+    const sequence = ++createProjectsSequence.current;
+    setCreateProjectsStatus("loading");
+    setCreateProjectsError("");
+    try {
+      const result = await platformApi.projects();
+      if (sequence !== createProjectsSequence.current) return;
+      if (!result.canAssign)
+        throw new Error(
+          l("当前账号不能分配项目", "Project assignment is unavailable"),
+        );
+      setCreateProjects(
+        (result.assignableItems ?? result.items).filter(
+          (project) => project.isActive && !project.isDefault,
+        ),
+      );
+      setCreateProjectsStatus("ready");
+    } catch (error) {
+      if (sequence !== createProjectsSequence.current) return;
+      setCreateProjectsError(
+        error instanceof Error
+          ? error.message
+          : l("项目列表加载失败", "Failed to load projects"),
+      );
+      setCreateProjectsStatus("error");
+    }
+  }, [isSuperadmin, english]);
+
+  useEffect(() => {
+    if (createUserOpen && isSuperadmin) void loadCreateProjects();
+    return () => {
+      createProjectsSequence.current += 1;
+    };
+  }, [createUserOpen, isSuperadmin, loadCreateProjects]);
 
   const groupNameById = useMemo(
     () =>
@@ -670,7 +714,9 @@ export default function AdminAuthPage() {
   }
 
   async function handleCreateUser() {
-    if (!canCreateUser) return;
+    if (!canCreateUser || creatingUser) return;
+    if (isSuperadmin && createProjectsStatus !== "ready") return;
+    setCreatingUser(true);
     try {
       const values = await createUserForm.validateFields();
       if (guestRoleId && values.groupIds?.includes(guestRoleId)) {
@@ -689,6 +735,12 @@ export default function AdminAuthPage() {
         department: values.department ?? "",
         groupIds: values.groupIds as [number, ...number[]],
         isActive: values.isActive ?? true,
+        ...(isSuperadmin
+          ? {
+              projectIds: values.projectIds ?? [],
+              allowPublicProject: values.allowPublicProject ?? true,
+            }
+          : {}),
       });
       createUserForm.resetFields();
       setCreateUserOpen(false);
@@ -706,6 +758,8 @@ export default function AdminAuthPage() {
       message.error(
         formOrApiError(error, l("用户创建失败", "Failed to create user")),
       );
+    } finally {
+      setCreatingUser(false);
     }
   }
 
@@ -758,6 +812,16 @@ export default function AdminAuthPage() {
           : "";
     const cannotEditOwnPermissions = record.id === user?.id;
     return [
+      ...(isSuperadmin
+        ? [
+            {
+              key: "username",
+              icon: <UserOutlined />,
+              label: l("修改用户名", "Change username"),
+              disabled: !record.canRenameUsername || cannotEditGuest,
+            },
+          ]
+        : []),
       {
         key: "groups",
         icon: <TeamOutlined />,
@@ -820,6 +884,18 @@ export default function AdminAuthPage() {
   }
 
   function handleUserAction(key: string, targetUser: User) {
+    if (key === "username") {
+      if (
+        !isSuperadmin ||
+        !targetUser.canRenameUsername ||
+        isGuestAccount(targetUser)
+      )
+        return;
+      renameUserForm.setFieldsValue({ username: targetUser.username });
+      setRenameError("");
+      setRenameUser(targetUser);
+      return;
+    }
     if (key === "groups") {
       openUserGroupDrawer(targetUser);
       return;
@@ -841,6 +917,37 @@ export default function AdminAuthPage() {
     }
   }
 
+  async function handleRenameUser() {
+    if (!isSuperadmin || !renameUser?.canRenameUsername || renamingUser) return;
+    setRenamingUser(true);
+    setRenameError("");
+    try {
+      const values = await renameUserForm.validateFields();
+      const username = values.username?.trim() ?? "";
+      if (username !== renameUser.username) {
+        const updated = await api.updateAdminUser(renameUser.id, { username });
+        setUsers((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        if (activeUser?.id === updated.id) setActiveUser(updated);
+        if (user?.id === updated.id) setUser(updated);
+        message.success(
+          l(
+            "用户名已修改，下次登录请使用新用户名",
+            "Username changed. Use the new username at the next sign in.",
+          ),
+        );
+      }
+      setRenameUser(null);
+    } catch (error) {
+      setRenameError(
+        formOrApiError(error, l("用户名修改失败", "Failed to change username")),
+      );
+    } finally {
+      setRenamingUser(false);
+    }
+  }
+
   function showGeneratedPasswordModal({
     title,
     username,
@@ -850,7 +957,7 @@ export default function AdminAuthPage() {
     username: string;
     password: string;
   }) {
-    Modal.success({
+    modal.success({
       title,
       content: (
         <div>
@@ -1211,7 +1318,8 @@ export default function AdminAuthPage() {
                         type="primary"
                         icon={<PlusOutlined />}
                         onClick={() => {
-                          createUserForm.setFieldsValue({ isActive: true });
+                          createUserForm.resetFields();
+                          if (isSuperadmin) setCreateProjectsStatus("loading");
                           setCreateUserOpen(true);
                         }}
                       >
@@ -1514,6 +1622,45 @@ export default function AdminAuthPage() {
       </Drawer>
 
       <Modal
+        title={l("修改用户名", "Change username")}
+        open={Boolean(renameUser)}
+        confirmLoading={renamingUser}
+        cancelButtonProps={{ disabled: renamingUser }}
+        closable={!renamingUser}
+        mask={{ closable: !renamingUser }}
+        onCancel={() => setRenameUser(null)}
+        onOk={handleRenameUser}
+        destroyOnHidden
+      >
+        <Typography.Paragraph>
+          {l(
+            "修改后请使用新用户名登录。",
+            "Use the new username to sign in after saving.",
+          )}
+        </Typography.Paragraph>
+        <Typography.Paragraph type="secondary">
+          {l("显示名称", "Display name")}：
+          {renameUser?.displayName || l("未设置", "Not set")}
+        </Typography.Paragraph>
+        {renameError && <Alert type="error" showIcon title={renameError} />}
+        <Form form={renameUserForm} layout="vertical">
+          <Form.Item
+            name="username"
+            label={l("用户名", "Username")}
+            rules={[
+              {
+                required: true,
+                whitespace: true,
+                message: l("请输入用户名", "Enter a username"),
+              },
+            ]}
+          >
+            <Input maxLength={150} autoComplete="off" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
         title={l("新建角色", "Create role")}
         open={createGroupOpen}
         onOk={handleCreateGroup}
@@ -1588,6 +1735,13 @@ export default function AdminAuthPage() {
       <Modal
         title={l("新建用户", "Create user")}
         open={createUserOpen}
+        styles={{
+          body: { maxHeight: "calc(100dvh - 240px)", overflowY: "auto" },
+        }}
+        confirmLoading={creatingUser}
+        okButtonProps={{
+          disabled: isSuperadmin && createProjectsStatus !== "ready",
+        }}
         onOk={handleCreateUser}
         onCancel={() => setCreateUserOpen(false)}
         destroyOnHidden
@@ -1595,7 +1749,12 @@ export default function AdminAuthPage() {
         <Form
           form={createUserForm}
           layout="vertical"
-          initialValues={{ isActive: true, groupIds: [] }}
+          initialValues={{
+            isActive: true,
+            groupIds: [],
+            projectIds: [],
+            allowPublicProject: true,
+          }}
         >
           <Form.Item
             name="username"
@@ -1630,10 +1789,14 @@ export default function AdminAuthPage() {
           </Form.Item>
           <Form.Item
             name="email"
-            label={l("邮箱", "Email")}
+            label={
+              isSuperadmin
+                ? l("邮箱（选填）", "Email (optional)")
+                : l("邮箱", "Email")
+            }
             rules={[
               {
-                required: true,
+                required: !isSuperadmin,
                 message: l("请输入邮箱", "Enter an email address"),
               },
               {
@@ -1647,6 +1810,104 @@ export default function AdminAuthPage() {
           <Form.Item name="department" label={l("部门", "Department")}>
             <Input />
           </Form.Item>
+          {isSuperadmin && (
+            <>
+              {createProjectsStatus === "loading" && (
+                <Typography.Paragraph role="status">
+                  <Spin size="small" />{" "}
+                  {l("正在加载可分配项目", "Loading available projects")}
+                </Typography.Paragraph>
+              )}
+              {createProjectsStatus === "error" && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  title={l(
+                    "可见项目暂时无法加载",
+                    "Available projects could not be loaded",
+                  )}
+                  description={createProjectsError}
+                  action={
+                    <Button onClick={() => void loadCreateProjects()}>
+                      {l("重试加载项目", "Retry loading projects")}
+                    </Button>
+                  }
+                />
+              )}
+              <Form.Item
+                name="allowPublicProject"
+                label={l("允许访问公开项目", "Allow access to Public")}
+                valuePropName="checked"
+                extra={l(
+                  "关闭后，该用户只看到下面选中的项目。",
+                  "When disabled, this user only sees the selected projects below.",
+                )}
+              >
+                <Switch disabled={createProjectsStatus !== "ready"} />
+              </Form.Item>
+              <Form.Item
+                name="projectIds"
+                label={l("其他可见项目", "Other visible projects")}
+                extra={
+                  <Button
+                    type="link"
+                    size="small"
+                    disabled={createProjectsStatus === "loading"}
+                    onClick={() => void loadCreateProjects()}
+                  >
+                    {l("刷新项目列表", "Refresh project list")}
+                  </Button>
+                }
+                dependencies={["allowPublicProject"]}
+                rules={[
+                  ({ getFieldValue }) => ({
+                    validator: async (_, value: number[] | undefined) => {
+                      const selected = value ?? [];
+                      if (
+                        !getFieldValue("allowPublicProject") &&
+                        selected.length === 0
+                      )
+                        throw new Error(
+                          l(
+                            "关闭公开项目后，请至少选择一个项目",
+                            "Select at least one project when Public access is disabled",
+                          ),
+                        );
+                      if (
+                        selected.some(
+                          (id) =>
+                            !createProjects.some(
+                              (project) => project.id === id,
+                            ),
+                        )
+                      )
+                        throw new Error(
+                          l(
+                            "所选项目已不可分配，请重新选择",
+                            "A selected project is no longer available; update the selection",
+                          ),
+                        );
+                    },
+                  }),
+                ]}
+              >
+                <Select
+                  mode="multiple"
+                  showSearch
+                  optionFilterProp="label"
+                  disabled={createProjectsStatus !== "ready"}
+                  placeholder={l(
+                    "选择该用户可见的项目",
+                    "Select projects visible to this user",
+                  )}
+                  options={createProjects.map((project) => ({
+                    value: project.id,
+                    label: project.name,
+                  }))}
+                />
+              </Form.Item>
+            </>
+          )}
           <Form.Item
             name="isActive"
             label={l("启用账号", "Enable account")}

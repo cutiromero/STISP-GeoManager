@@ -10,6 +10,66 @@ import type {
   ResourceListItem,
 } from "./types";
 
+it("普通工作台优先使用资源默认name分类，保留手动样式", () => {
+  const resource = { dataType: "vector" } as ResourceListItem;
+  const geojson: GeoJsonFeatureCollection = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { name: "全新世冲积物qhal" },
+        geometry: { type: "Polygon", coordinates: [] },
+      },
+    ],
+  };
+  const defaultVisualization = {
+    symbolization: {
+      opacity: 85,
+      renderer: {
+        type: "uniqueValue",
+        field: "name",
+        classes: [
+          {
+            value: "全新世冲积物qhal",
+            label: "全新世冲积物qhal",
+            color: "#ffffd8",
+          },
+        ],
+        defaultClass: { color: "#cbd5e1" },
+      },
+    },
+  };
+  const result = vectorSymbolizationWithDefaultTemplate({
+    resource,
+    fields: [],
+    geojson,
+    defaultVisualization,
+  });
+  expect(result.renderer).toMatchObject({
+    type: "uniqueValue",
+    field: "name",
+    classes: [
+      {
+        values: ["全新世冲积物qhal"],
+        label: "全新世冲积物qhal",
+        color: "#ffffd8",
+        count: 1,
+      },
+    ],
+  });
+  const base = cloneDefaultVectorSymbolization();
+  base.renderer = { type: "single", updatedByUser: true };
+  expect(
+    vectorSymbolizationWithDefaultTemplate({
+      resource,
+      fields: [],
+      geojson,
+      defaultVisualization,
+      base,
+    }).renderer,
+  ).toEqual(base.renderer);
+});
+
 function styleFor(rows: Array<Record<string, unknown>>) {
   const fields: ResourceField[] = Object.keys(rows[0] ?? {}).map((name) => ({
     name,

@@ -1,9 +1,35 @@
 ﻿# 开发者指南（Developer Guide）
 
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
+
+## 工作流卡片与逻辑推理成果
+
+`GET /api/agent/workflows/{workflowId}/?view=card` 复用完整详情的本人、项目与资源鉴权，只返回卡片需要的状态、阶段名称/状态/任务及已入库成果引用、`stepCount`；`steps`、`evidence` 为空，`parameters` 为空，不返回模型交互、完整阶段结果、`finalStage` 或 `modificationReview`。省略 `view` 或 `view=full` 返回原有完整详情。无效 `view` 返回标准 400 错误。对话历史先读 card，展开过程、证据、模型交互或审核时再读 full；已完成任务不轮询，也不再次读取原始对话任务。
+
+综合推理族 `geology_multi_element_reasoning` 与 `geology_generic` 自动入库的成果为 `check.issues`、`apply.lithology/faults/alterations/changes`、`relations.intersections`、`prospect.before_zones/after_zones/evidence`。其余输出仍保留在计算任务中，可下载、用于模型判断、复查、报告和评价，但不创建资源或成果记录。输入绑定所需输出均在上述保留集合内。
+
+上述综合推理仍有工作流步骤引用的计算任务，其全部输出不参与普通计算临时文件的到期清理；删除工作流引用后恢复普通保留周期。此规则不恢复已经过期或已删除的历史文件，也不自动删除历史已入库的中间资源。
+
+对比及讲解的原始蚀变、原始断裂交汇、问题空间范围和实际修改空间范围，按阶段 `results[].outputId` 调用 `GET /api/compute/outputs/{outputId}/preview/?view=map`，直接读取经过 checksum 校验的矢量文件，返回 `geojson`（WGS84），不创建资源。该视图最多 30000 要素，超限、校验失败或缺少 CRS 返回 409，非矢量或无效视图返回 400；原属性预览保持不变。访问仍须实时通过计算输出的项目、任务或已接受共享权限校验。
+
+智能体成果地图入口使用新标签页和 `noopener`，链接携带 `projectTagId` 与工作流标识，不传令牌。新页面沿用页面登录生命周期，通过同源 `BroadcastChannel` 向仍在线的原页面取得令牌，再登记独立页面租约；智能体原页面保持在线。
+
+岩性工作副本与修正后成果通过 `default_visualization.symbolization` 的 `uniqueValue` renderer 按 `name` 分类。配色表为仓库内 `backend/apps/agent/data/lithology_colors.json`，来自海德乌拉 ArcGIS 图层的 38 类 CIMSolidFill RGB；未命中名称沿用现有调色板，图例使用单元名称。`GET /api/catalog/resources/{id}/profile/` 的 `defaultVisualization` 返回默认方案（未配置为 `{}`），资源列表不附带方案。常规工作台、对比/讲解页均读取这一矢量符号化；用户已经手动修改的图层样式不覆盖。不涉及栅格前端处理。
 > 版本：v0.1.0
 
 ## 通用地质推理与任务资料上传（2026-11-03）
+
+逻辑推理项目（code为`02`或`demo-geology-reasoning`）在对话输入区上传资料，发送`AgentRunInput.uploadBatchId`，无需打开工作流抽屉。批次限本人当前项目且不能重复关联其他研究请求，普通项目和演示入口不变。返回的`researchIntent`使用`geology_generic`场景，角色问题键为`upload_资源ID`，答案为角色键或`skip`；`parameters.roleAnswers`为可编辑建议，完整提交表示明确确认，重复角色或缺失地质图拒绝创建。确认后关联真实`AgentWorkflow`，工作流字段映射、计划和逐项批准接口保持不变。
+
+研究交互`answer`可在角色阶段修改“把第3份资料改为构造线”，只有“确认资料角色”才创建工作流；字段阶段“确认字段含义”、计划阶段“确认计划”、建议阶段“只批准岩性类建议”仅作用于当前修订，仍走原有字段、计划哈希及建议批准校验。不能精确识别的文字仅提示使用当前卡片，不由模型推断批准。通用地质明确回答返回200及已完成的后续对话运行，幂等重试返回202；新增回答沿用每日额度，超限429且不执行批准。上传需求最多12000字。会话历史保存同一研究任务与工作流关联，重开时先取轻量card；等待人工操作自动取一次full以展示确认卡，执行中只轮询card，完成后停止。
+
+批量入口 `POST /api/agent/workflow-uploads/batch/` 接收 multipart 的 `batchId` 和重复 `files` 字段，支持多个文件或一个含子目录的总ZIP。ZIP先完成安全预检，拒绝绝对路径、父目录、符号链接、特殊文件、重复路径与加密条目；累计最多512条目、解压总量不超过 `min(uploadMaxMb, 512MiB)`，不展开嵌套ZIP。系统文件、锁文件及 `.aux.xml`、`.shp.xml` 旁车文件忽略；同目录同名Shapefile组成文件合为一份。每批最多12份资料，沿用单文件导入校验。返回200 `{items, errors}`：成功资料与逐份 `{fileName, detail}` 错误可同时存在；不安全ZIP整包不登记，其他文件继续。请求格式错误或整体上传超限返回400，未登录401，权限不足403，已绑定批次409；旧单文件接口响应不变。
+
+上传完成后请求 `POST /api/agent/workflow-uploads/recognize/`，JSON为 `{batchId, model}`。权限与上传一致，且核验模型授权；仅识别本人当前项目未绑定批次。响应 `{items:[{uploadId,resourceId,role,reason}],questions,source}`，`source` 为 `model` 或 `rules`。模型读取文件名、类型、几何、坐标系、字段与取值示例、要素数和波段数；非法角色、重复角色、错误几何/资料类型或模型失败均退回规则，理由明确“按文件名、类型和几何判断”。未识别地质图返回提示问题。用户可修改建议，生成任务仍走字段含义及执行计划两次确认，不自动执行。
+
+`GET /api/agent/workflows/active/` 在当前项目智能体与MH-workflow授权后，读取本账号唯一活动任务（含暂停），返回 `{item:null}` 或含 `id/goal/workflowType/status/updatedAt/projectId` 的本人摘要。账号并发限制跨项目生效，摘要不含数据或计划。查看与取消使用既有详情、取消接口，并以目标项目ID重新授权；不绕过项目成员、模型或资料权限。前端提供任务名称、场景、状态、更新时间、查看及二次确认取消，取消中的任务在安全边界停止。
+
+逻辑推理项目将普通对话的深度思考与思考强度合为“思考：关/低/中/高”，分别映射 `fast`、`deep+low`、`deep+medium`、`deep+xhigh`，与 `AgentRunInput`、bootstrap默认值及预算支持的强度一致，模型或策略不支持深度思考时隐藏。固定通用场景不请求算法目录、算子候选、项目资料、场景目录与预设；上传和目标输入不等待历史任务或bootstrap。其他场景保持原加载和控件行为。
 
 `POST /api/agent/workflow-uploads/` 以 multipart 上传一个文件和客户端生成的 `batchId`（32位小写十六进制）。矢量支持 Shapefile ZIP、GeoPackage、GeoJSON，栅格支持 GeoTIFF，表格支持 CSV、XLSX，校验和大小限制沿用既有导入服务。栅格大小上限为平台 `uploadMaxMb`。资料登记为 `owner_only` 数据资源（栅格在导入写入时即为 `owner_only`），来源标记 `workflow-upload:<batchId>`，不出现在数据目录、搜索、算子输入候选、地图图层列表、后台数据管理列表与导出、首页和看板统计中；返回识别结果（类型、坐标系、几何、要素数、字段与示例取值）和推荐角色 `roleHint`。每个批次最多12个文件。`GET ...?batchId=` 列出本人当前项目该批次的上传；`DELETE .../{uploadId}/` 只能删除尚未绑定任务的上传，否则返回409。上传需要智能体访问、MH-workflow、智能体调用算子及当前项目 `catalog.add_dataresource` 权限。
 
@@ -455,6 +481,10 @@ response = session.post(f"{base_url}/auth/register/", json={
 平台管理员和超级管理员都不能通过自助注册或角色申请获得。平台管理员角色只能由超级管理员在后台创建用户或调整角色时分配；超级管理员继续由系统初始化和受保护的管理员流程维护。
 
 当前阶段尚未接入邮件验证码和邮件找回密码。登录页“忘记密码”入口应提示用户联系平台管理员；管理员继续通过 `POST /api/users/{userId}/password/reset/` 生成一次性展示的新密码。
+
+超级管理员在后台 `POST /api/users/` 创建账号时邮箱选填；普通管理员仍须填写邮箱，自助注册要求保持。非空邮箱继续校验格式并规范化去重。仅超级管理员可同时提交 `projectIds`（启用私有项目数组）和 `allowPublicProject`（默认true）设置可见项目；普通管理员提交任一项目配置字段返回403。关闭公开项目须至少选择一个启用私有项目。账号、角色、资料和项目成员关系在同一事务保存，验证失败不会留下半成品账号；省略项目配置保留默认公开行为。初始密码仅在创建响应展示/复制一次，登录密码按单向哈希保存。
+
+后台用户操作新增“修改用户名”：仅超级管理员可在 `POST /api/users/{userId}/` 单独提交 `username`；`UserInfo.canRenameUsername`提供可用性标记。用户名按Django字段规则及唯一性校验，改名保留用户ID、密码哈希、项目、工程和聊天关系；新登录使用新名。初始化管理员与系统游客仍以系统专用名称识别，禁止改名或将其他账号改为其保留名。普通管理员提交username返回403。状态更新和删除规则保持。
 
 #### Step 5: 检查登录状态
 
@@ -1624,7 +1654,7 @@ map.addLayer({
 
 ### 工程和专题快照
 
-工程和专题是服务器端轻量工作台快照，保存当前图层组、顺序、查询条件、空间范围、资源引用、可视化方案、栅格渲染引用元数据、底图和地图视图。可见性由所属项目决定，历史 `accessGroupIds` 不改变范围；服务器端快照不能保存原始 GeoJSON 要素集合、属性表行或查询结果数据本体，矢量图层恢复时按资源引用和查询条件重新查询。
+工程和专题是服务器端轻量工作台快照，保存当前图层组、顺序、查询条件、空间范围、资源引用、可视化方案、栅格渲染引用元数据、底图和地图视图。工程默认仅创建者可见，接受邀请后授予该工程只读访问；普通平台管理员、同项目成员和游客不自动获得访问。超级管理员保留当前项目管理能力，历史 `accessGroupIds` 不授予访问；每次读取仍须核验项目、功能和底层数据权限。服务器端快照不能保存原始 GeoJSON 要素集合、属性表行或查询结果数据本体，矢量图层恢复时按资源引用和查询条件重新查询。
 
 关键接口：
 
@@ -2228,9 +2258,9 @@ A: 搜索结果按相关性排序，与关键词匹配度越高的结果越靠�
 关键接口：
 
 - `GET /api/admin/workspaces/`：按关键词、类型、状态和分页参数查询工程专题，返回 `accessGroups`、`owner` 和 `canManageAccess`。
-- `POST /api/admin/workspaces/{workspaceId}/`：通过 `action` 执行 `setStatus`、`updateAccess`、`update` 或 `delete`。拥有者本人或具备 `catalog.change_workspacescene` 的用户可执行 `updateAccess`；启停和信息修改需要 `catalog.change_workspacescene`，删除需要 `catalog.delete_workspacescene`。删除必须提交与工程专题名称完全一致的 `confirmationName`；无关联工程会移除记录，已被专题出图稿引用的工程会转为停用隐藏。
+- `POST /api/admin/workspaces/{workspaceId}/`：通过 `action` 执行 `setStatus`、`updateAccess`、`update` 或 `delete`，仅拥有者本人或超级管理员可维护。启停和信息修改需要 `catalog.change_workspacescene`，删除需要 `catalog.delete_workspacescene`；`updateAccess`仅兼容旧元数据，实际分享通过邀请接受。删除必须提交与工程专题名称完全一致的 `confirmationName`；无关联工程会移除记录，已被专题出图稿引用的工程会转为停用隐藏。
 
-工程专题访问范围与存量数据一致：超级管理员角色由后端强制可见，选择游客角色表示对象公开，游客会话和其他已登录角色均可访问。普通业务搜索和工作台加载接口必须继续按对象访问范围过滤，前端菜单和按钮控制只作为可用性提示，不能替代后端权限校验。
+工程访问规则统一用于工作台、搜索、后台列表和直接 ID 请求：创建者及超级管理员可维护，接受邀请的用户只读；普通平台管理员不能绕过。未获授权的直接 ID 请求返回404。分享需收件人明确接受，并在读取时重验双方及依赖权限；旧角色字段不承担公开授权。前端菜单和按钮控制只作为可用性提示，不能替代后端权限校验。
 
 工程和成果的启停/发布、信息修改、访问范围配置和删除都应写入 `OperationLog`；前端分别使用“工程管理”和“成果管理”，动作和说明使用中文。
 
@@ -2745,6 +2775,16 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 
 地图默认读取基础双图、构造、交汇与远景区；密集检查记录和矿物状态按勾选读取，继续验证返回完整性。改前矿物读取检查阶段真实输出，改后矿物读取获批处理输出。可选图层读取失败单独提示并允许重试，基础双图保留；切换图层保持当前视角。双图首次按真实研究区边界留白缩放，仅在主地图完成初始化后保存视角，避免React StrictMode首次清理将默认视角误作已恢复视角；综合场景详细岩性图例默认折叠。
 
+### 逻辑推理系统数据引用与干净成果（v0.1.58）
+
+`GET /api/agent/workflow-uploads/references/?q=` 仅在逻辑推理项目使用，要求明确 `X-Project-Id`，按 `resource_access_filter`、当前项目、活动状态及策略允许的数据类型搜索目录矢量/栅格/表格。排除任务上传和工作副本，最多50条，名称及说明支持搜索。需与上传一致的智能体、MH-workflow、算子及数据登记权限；401/403/404沿用平台规范。
+
+`POST /api/agent/workflow-uploads/references/` 接受 `{batchId,resourceIds}`，原子加入1至12份不重复的目录资源；与上传项合计最多12份，返回 `{items: AgentWorkflowUpload[]}`。同批次重试返回已有条目；无权、跨项目、失效或不存在资源统一404，不部分加入；已发送/绑定批次409。资料条目增加 `source=upload|catalog`，旧客户端未返回时按upload理解。迁移 `agent.0020_workflow_catalog_references` 将resource改为ForeignKey；多个任务/批次可引用同一目录资源。`DELETE /api/agent/workflow-uploads/{uploadId}/` 对catalog只删除引用，不停用、删除或更改目录资源。现有上传删除行为不变。
+
+资料画像使用平台已有读取器；栅格读取真实计算源数据而非显示COG，须有CRS且为单波段；显示预处理文件可能有额外alpha波段，不能据此拒绝合法源数据。原始数据缺失则拒绝，不引入兼容分支。后续发送、字段确认、工作副本和计算继续检查资源授权，目录来源与TASK_RESOURCE_SOURCES隔离。
+
+`geology_generic`与`geology_multi_element_reasoning`使用算子1.0.5：岩性重分类及相邻同单元代号修正并入最长共享边界宿主，宿主属性与编号保留，原编号进入独立修正记录。最终岩性不带处理字段；`final_faults`删除获批剔除线，`final_alterations`只含有效图斑。`faults/alterations`保留旧计算契约及降权信息，作为隐藏工作资料供后续算子使用，不作为最终展示。远景区只保留编号、A/B等级和面积，依据在evidence表；修正记录以修改前几何保存实际动作、代号前后、宿主、规则及批准理由，统一橙色。全剔除时不生成假要素，也不回退到原数据。具体字段和成果键见 `docs/agent-generic-workflow-20261103.md`。
+
 ### 按项目组织可用算法（2026-10-23）
 
 计算目录与普通科研智能体共用服务端项目筛选。逻辑推理项目保留地质及逻辑推理相关共享工具；干旱区生态项目保留植被、水体指数、生态风险及通用矢量统计修复工具。各项目自行登记的工具保留，公开项目目录不变。执行时使用同一筛选，已存在的历史任务继续可读，不因目录归类改变丢失记录。
@@ -2763,7 +2803,7 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 
 使用Session/CSRF。POST `/api/sharing/check/`输入`{kind,objectId,username}`，用户名须完整准确且区分大小写，不提供用户列表。`kind`为`workspace/composition/compute_output`，`objectId`为整数；预检返回`eligible/detail`，可分享时另含`target/recipient`。POST `/api/sharing/invitations/`在同字段增加1至80字符`idempotencyKey`；每次重新核对，201表示已发出待接受邀请，200表示复用已有pending/accepted。相同键不同请求409。
 
-创建仅原对象owner或已有管理该对象权限的管理员。目标须已拥有功能和所属项目访问权、所有底层数据及计算输入读取权；owner_only不因分享改变。专题草稿和单计算输出只有接受后才授该对象只读，原工程项目范围可见性保持。单输出不授整任务、参数、输入快照、日志和其他输出；已入库资源仍按目录原权限管理。
+创建仅原对象owner或已有管理该对象权限的管理员；工程仅创建者和超级管理员可发起。目标须已拥有功能和所属项目访问权、所有底层数据及计算输入读取权；owner_only不因分享改变。工程默认私有，工程、专题草稿和单计算输出只有接受后才授该对象只读；待接受或拒绝不授权，接受后不可修改、删除或转分享工程。单输出不授整任务、参数、输入快照、日志和其他输出；已入库资源仍按目录原权限管理。
 
 GET `/api/sharing/invitations/?box=received|sent&limit=30&offset=0`返回本人跨仍有权项目的`items/total/unreadCount/limit/offset`。通知持久保存，`unread`区分收件通知和分享者收到的决定通知；POST `.../{id}/read/`分别标记本人一侧已读。列表不授任何对象访问。
 

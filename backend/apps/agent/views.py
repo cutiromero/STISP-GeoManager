@@ -314,6 +314,7 @@ def submit(request, conversation_id):
             "algorithmVersionIds",
             "dataSelectionMode",
             "demoScenario",
+            "uploadBatchId",
         ],
         max_bytes=max(256000, prompt_limit * 6 + 8192),
     )
@@ -328,6 +329,18 @@ def submit_value(request, c, value, *, available_models=None):
         "maxPromptCharacters"
     ]
     demo_scenario = value.get("demoScenario")
+    upload_batch = value.get("uploadBatchId")
+    if upload_batch is not None:
+        from .generic_chat import validate_batch
+
+        validate_batch(
+            request.user,
+            c,
+            upload_batch,
+            run=c.runs.filter(idempotency_key=value.get("idempotencyKey")).first(),
+        )
+        if demo_scenario:
+            raise ApiProblem("上传资料与演示场景不能同时提交")
     if demo_scenario is not None and (
         demo_scenario
         not in {
@@ -358,6 +371,12 @@ def submit_value(request, c, value, *, available_models=None):
         raise ApiProblem("思考强度须在逻辑推理模式下选择低、标准或高")
     budget_profile = value.get("budgetProfile", "")
     output_tokens = value.get("maxOutputTokens")
+    if (
+        upload_batch is not None
+        and isinstance(prompt, str)
+        and len(prompt.strip()) > 12000
+    ):
+        raise ApiProblem("逻辑推理需求最多12000字，请精简后发送")
     if (
         not isinstance(alias, str)
         or not isinstance(prompt, str)
@@ -413,6 +432,7 @@ def submit_value(request, c, value, *, available_models=None):
                 existing.algorithm_version_ids,
                 existing.data_selection_mode,
                 existing.research_intent.get("_demoScenario"),
+                existing.research_intent.get("_uploadBatchId"),
             ) != (
                 alias,
                 prompt.strip(),
@@ -428,12 +448,15 @@ def submit_value(request, c, value, *, available_models=None):
                 selections["algorithm_version_ids"],
                 selections["data_selection_mode"],
                 demo_scenario,
+                upload_batch,
             ):
                 raise ApiProblem("幂等键已用于不同请求", 409)
             return JsonResponse(run_json(existing, request.user), status=202)
         c.refresh_from_db()
         if c.archived:
             raise ApiProblem("请先恢复归档会话", 409)
+        if upload_batch is not None:
+            validate_batch(request.user, c, upload_batch)
         p = require_access(request.user, c.mode, alias)
         model_config = registry()[alias]
         if thinking_mode == "deep":
@@ -525,7 +548,13 @@ def submit_value(request, c, value, *, available_models=None):
             internet_enabled=internet_enabled,
             budget_profile=budget_profile,
             budget_snapshot=budget_snapshot,
-            research_intent={"_demoScenario": demo_scenario} if demo_scenario else {},
+            research_intent=(
+                {"_uploadBatchId": upload_batch}
+                if upload_batch
+                else {"_demoScenario": demo_scenario}
+                if demo_scenario
+                else {}
+            ),
         )
         if c.title == "新会话":
             c.title = prompt.strip()[:60]
@@ -790,7 +819,8 @@ def research_demos(request):
     )
 
 
-def workflow_json(workflow, include_steps=True):
+def workflow_json(workflow, include_steps=True, view="full"):
+    card = view == "card"
     data = {
         "id": str(workflow.id),
         "projectId": workflow.project_tag_id,
@@ -809,18 +839,34 @@ def workflow_json(workflow, include_steps=True):
         "executeOperators": workflow.execute_operators,
         "resourceIds": workflow.resource_ids,
         "algorithmVersionId": workflow.algorithm_version_id,
-        "parameters": workflow.parameters,
-        "plan": workflow.plan,
+        "parameters": {} if card else workflow.parameters,
+        "plan": workflow.plan
+        if not card
+        else {
+            "phase": workflow.plan.get("phase"),
+            "stageIndex": workflow.plan.get("stageIndex"),
+            "deletedResources": workflow.plan.get("deletedResources", []),
+            "stages": [
+                {
+                    key: stage[key]
+                    for key in ("name", "identifier", "status", "taskId", "outputs")
+                    if key in stage
+                }
+                for stage in workflow.plan.get("stages", [])
+            ],
+        },
         "planHash": workflow.plan_hash,
         "importResults": workflow.import_results,
         "resultResourceIds": workflow.result_resource_ids,
         "resultIds": workflow.result_ids,
-        "evidence": workflow.evidence,
+        "evidence": [] if card else workflow.evidence,
         "createdAt": workflow.created_at.isoformat(),
         "updatedAt": workflow.updated_at.isoformat(),
         "runtime": "durable_state_machine",
     }
-    if include_steps:
+    if card:
+        data.update(view="card", steps=[], stepCount=workflow.steps.count())
+    elif include_steps:
         data["steps"] = [
             {
                 "id": item.id,
@@ -844,7 +890,7 @@ def workflow_json(workflow, include_steps=True):
             }
             for item in workflow.steps.all()
         ]
-    if workflow.plan.get("modificationReview") is not None:
+    if not card and workflow.plan.get("modificationReview") is not None:
         data["modificationReview"] = workflow.plan["modificationReview"]
     return data
 
@@ -925,6 +971,99 @@ def workflow_uploads(request):
         target_id=upload.resource_id,
     )
     return JsonResponse(upload_json(upload), status=201)
+
+
+@endpoint(["POST"])
+def workflow_upload_batch(request):
+    from .workflow_bundles import store_batch
+
+    if set(request.POST) != {"batchId"} or set(request.FILES) != {"files"}:
+        raise ApiProblem("请上传资料文件并提供批次号")
+    result = store_batch(
+        request.user,
+        request.headers.get("X-Project-Id"),
+        request.FILES.getlist("files"),
+        request.POST.get("batchId"),
+    )
+    log_operation(
+        request.user,
+        "agent",
+        "upload_workflow_batch",
+        "success",
+        f"登记{len(result['items'])}份资料，失败{len(result['errors'])}份",
+    )
+    return JsonResponse(result)
+
+
+@endpoint(["GET", "POST"])
+def workflow_catalog_references(request):
+    from .workflow_uploads import add_catalog_references, catalog_resources, upload_json
+
+    project = request.headers.get("X-Project-Id")
+    if request.method == "GET":
+        query = request.GET.get("q", "")[:200]
+        found = (
+            catalog_resources(request.user, project)
+            .filter(Q(name__icontains=query) | Q(description__icontains=query))
+            .order_by("name", "id")[:50]
+        )
+        return JsonResponse({"items": [brief(item) for item in found]})
+    value = body(request, ["batchId", "resourceIds"])
+    items = add_catalog_references(
+        request.user, project, value.get("batchId"), value.get("resourceIds")
+    )
+    log_operation(
+        request.user,
+        "agent",
+        "reference_workflow_catalog",
+        "success",
+        f"引用{len(items)}份系统数据",
+    )
+    return JsonResponse({"items": [upload_json(item) for item in items]})
+
+
+@endpoint(["POST"])
+def workflow_recognize_roles(request):
+    from .workflow_roles import recognize_roles
+
+    value = body(request, ["batchId", "model"])
+    if not isinstance(value.get("model"), str):
+        raise ApiProblem("请选择模型")
+    return JsonResponse(
+        recognize_roles(
+            request.user,
+            request.headers.get("X-Project-Id"),
+            value.get("batchId"),
+            value["model"],
+        )
+    )
+
+
+@endpoint(["GET"])
+def workflow_active(request):
+    policy = require_access(request.user, "agent")
+    if not policy.get("workflowEnabled", True):
+        raise ApiProblem("MH-workflow功能已关闭", 403)
+    workflow = (
+        AgentWorkflow._base_manager.filter(
+            owner=request.user, status__in=WORKFLOW_ACTIVE
+        )
+        .order_by("-updated_at")
+        .first()
+    )
+    item = (
+        None
+        if workflow is None
+        else {
+            "id": str(workflow.id),
+            "goal": workflow.goal,
+            "workflowType": workflow.workflow_type,
+            "status": workflow.status,
+            "updatedAt": workflow.updated_at.isoformat(),
+            "projectId": workflow.project_tag_id,
+        }
+    )
+    return JsonResponse({"item": item})
 
 
 @endpoint(["DELETE"])
@@ -1095,11 +1234,14 @@ def record_workflow_review(workflow, decision, feedback, plan_hash, review_outpu
 def workflow_detail(request, workflow_id):
     from .workflow import authorize_workflow_history
 
+    view = request.GET.get("view", "full")
+    if view not in {"full", "card"}:
+        raise ApiProblem("工作流详情视图无效")
     workflow = get_object_or_404(
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
     )
     authorize_workflow_history(workflow)
-    return JsonResponse(workflow_json(workflow))
+    return JsonResponse(workflow_json(workflow, view=view))
 
 
 @endpoint(["POST"])

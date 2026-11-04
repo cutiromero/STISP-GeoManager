@@ -251,7 +251,18 @@ def _execution_requested(run, previous) -> bool:
 
 
 def process(run, user, policy, guard, event):
+    if run.research_intent.get("_uploadBatchId"):
+        if run.research_intent.get("originRunId"):
+            return serialize(run, user, policy)["message"]
+        from .generic_chat import prepare
+
+        return prepare(run, user, policy, guard)
     previous = previous_run(run)
+    if previous and previous.research_intent.get("scenario") == "geology_generic":
+        if run.research_intent.get("_demoScenario"):
+            previous = None
+        else:
+            return None
     selection_before = run.knowledge_selection
     if previous:
         continuation_selection = _auto_continuation_selection(previous, run)

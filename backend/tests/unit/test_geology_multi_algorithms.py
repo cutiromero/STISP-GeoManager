@@ -300,10 +300,12 @@ def test_real_name_code_fix_and_reclassification_only_when_approved(tmp_path):
     )
     load("apply")(edited)
     result = gpd.read_file(edited.output_path("lithology.gpkg")).set_index("feature_id")
-    assert result.at["G4", "geo_sym"] == "C" and result.at["G3", "geo_sym"] == "O"
+    assert "G4" not in result.index and result.at["G3", "geo_sym"] == "O"
+    assert result.at["G2", "geometry"].equals(rect(500, 0, 1000, 1000))
     assert all(
         result.at[row.feature_id, "geometry"].equals_exact(row.geometry, 0)
         for _, row in original.iterrows()
+        if row.feature_id not in {"G2", "G4"}
     )
     assert all(
         path.read_bytes() == untouched[key] for key, path in initial.inputs.items()
@@ -333,6 +335,160 @@ def test_alteration_aggregates_same_class_and_preserves_weight_states(tmp_path):
     selected = result.loc[result.feature_id == carbonate["feature_id"]].iloc[0]
     assert selected.state == "downweight" and selected.weight == 0.5
     assert len(result) == 3 and selected.geometry.area == pytest.approx(20000)
+    clean = gpd.read_file(edited.output_path("final_alterations.gpkg"))
+    assert set(clean.columns) == {"feature_id", "alt", "geometry"}
+    assert len(clean) == len(result)
+
+
+def test_reclassification_fuses_host_and_preserves_coverage_and_original_record(
+    tmp_path,
+):
+    initial, original = fixture(tmp_path)
+    findings, _ = check(initial)
+    island = next(
+        row
+        for row in findings
+        if row["rule_id"] == "L-01" and row["feature_id"] == "G3"
+    )
+    edited = approval_context(
+        tmp_path, initial, [island], {island["issue_id"]: "reclassify"}
+    )
+    load("apply")(edited)
+    result = gpd.read_file(edited.output_path("lithology.gpkg")).set_index("feature_id")
+    assert "G3" not in result.index and result.at["G1", "geometry"].equals(
+        rect(0, 0, 500, 1000)
+    )
+    assert result.geometry.is_valid.all()
+    assert (
+        result.geometry.union_all()
+        .symmetric_difference(original.geometry.union_all())
+        .area
+        < 0.01
+    )
+    assert result.geometry.area.sum() == pytest.approx(result.geometry.union_all().area)
+    assert not {"state", "weight", "rule_id", "modified", "fill_color"} & set(
+        result.columns
+    )
+    faults = gpd.read_file(edited.output_path("final_faults.gpkg"))
+    assert len(faults) == 2 and set(faults.columns) == {"line_id", "geometry"}
+    for identity in ("G2", "G4"):
+        assert result.loc[identity].equals(
+            original.set_index("feature_id").loc[identity]
+        )
+    records = gpd.read_file(edited.output_path("changes_lithology_issues.gpkg"))
+    assert len(records) == 1
+    record = records.iloc[0]
+    assert record.action == "reclassify" and record.host_feature_id == "G1"
+    assert (record.old_code, record.new_code) == ("O", "C")
+    assert json.loads(record.absorbed_ids) == ["G3"]
+    assert record.geometry.equals(original.set_index("feature_id").at["G3", "geometry"])
+
+
+def test_final_alterations_exclude_approved_items_only(tmp_path):
+    initial, _ = fixture(tmp_path)
+    findings, _ = check(initial)
+    selected = next(row for row in findings if row["rule_id"] == "A-01")
+    edited = approval_context(
+        tmp_path, initial, [selected], {selected["issue_id"]: "exclude"}
+    )
+    load("apply")(edited)
+    clean = gpd.read_file(edited.output_path("final_alterations.gpkg"))
+    computation = gpd.read_file(edited.output_path("alterations.gpkg"))
+    assert selected["feature_id"] not in set(clean.feature_id)
+    assert set(clean.feature_id) == set(
+        computation.loc[computation.state != "exclude", "feature_id"]
+    )
+    assert set(clean.columns) == {"feature_id", "alt", "geometry"}
+    assert clean.geometry.is_valid.all()
+
+
+def test_absent_faults_are_explicit_empty_optional_outputs(tmp_path):
+    initial, _ = fixture(tmp_path)
+    faults = gpd.read_file(initial.inputs["faults"])
+    store(faults.iloc[:0], initial.inputs["faults"])
+    check(initial)
+    edited = approval_context(tmp_path, initial, [])
+    load("apply")(edited)
+    assert not edited.output_path("faults.gpkg").exists()
+    assert not edited.output_path("final_faults.gpkg").exists()
+    manifest = json.loads(
+        (ROOT / "examples/compute/geology-multi-apply/operator.yaml").read_text()
+    )
+    assert (
+        next(row for row in manifest["outputs"] if row["key"] == "faults")["required"]
+        is False
+    )
+
+
+def test_operator_packages_are_deterministic_and_declare_clean_outputs():
+    builder = runpy.run_path(str(CORE / "build.py"))["build"]
+    for suffix in ("check", "apply", "relations", "prospect"):
+        identifier = "geology-multi-" + suffix
+        package = builder(identifier)
+        assert package == builder(identifier)
+        with zipfile.ZipFile(io.BytesIO(package)) as archive:
+            manifest = validate_manifest(yaml.safe_load(archive.read("operator.yaml")))
+            assert manifest["version"] == "1.0.5" and manifest["deterministic"]
+            assert {"main.py", "multi_apply.py", "multi_io.py", "operator.yaml"} <= set(
+                archive.namelist()
+            )
+            if suffix == "apply":
+                assert {"final_faults", "final_alterations"} <= {
+                    item["key"] for item in manifest["outputs"]
+                }
+
+
+def test_clean_lithology_strips_processing_fields_without_filtering_coverage(tmp_path):
+    load("apply")
+    from multi_apply import final_layer
+
+    _, original = fixture(tmp_path)
+    original["state"] = "exclude"
+    original["weight"] = 0
+    original["rule_id"] = "old-rule"
+    original["change_flag"] = True
+    clean = final_layer(original, "lithology")
+    assert len(clean) == len(original)
+    assert not {"state", "weight", "rule_id", "change_flag"} & set(clean.columns)
+    assert clean.geometry.union_all().equals(original.geometry.union_all())
+
+
+def test_host_is_longest_shared_boundary_not_point_contact(tmp_path):
+    load("apply")
+    from multi_apply import apply
+
+    lithology = gpd.GeoDataFrame(
+        {
+            "feature_id": ["source", "short", "long", "point"],
+            "name": ["old", "new", "new", "new"],
+            "geo_sym": ["O", "N", "N", "N"],
+        },
+        geometry=[
+            rect(0, 0, 10, 10),
+            rect(-2, 0, 0, 4),
+            rect(10, 0, 12, 10),
+            rect(10, 10, 12, 12),
+        ],
+        crs=32646,
+    )
+    empty_faults = gpd.GeoDataFrame({"line_id": []}, geometry=[], crs=32646)
+    empty_alt = gpd.GeoDataFrame({"feature_id": []}, geometry=[], crs=32646)
+    operation = {
+        "element": "lithology",
+        "feature_id": "source",
+        "action": "reclassify",
+        "target_code": "N",
+        "rule_id": "L-01",
+    }
+    corrected, _, _, records = apply(lithology, empty_faults, empty_alt, [operation])
+    assert records[0]["host_feature_id"] == "long"
+    assert "source" not in set(corrected.feature_id)
+    assert len(corrected) == 3
+    assert (
+        corrected.set_index("feature_id")
+        .at["point", "geometry"]
+        .equals(lithology.set_index("feature_id").at["point", "geometry"])
+    )
 
 
 @pytest.mark.parametrize(
@@ -401,7 +557,7 @@ def test_approval_accepts_catalog_normalized_display_text_only(tmp_path):
     )
     load("apply")(edited)
     result = gpd.read_file(edited.output_path("lithology.gpkg")).set_index("feature_id")
-    assert result.at["G4", "geo_sym"] == "C"
+    assert "G4" not in result.index and result.at["G2", "geo_sym"] == "C"
 
 
 @pytest.mark.parametrize("field", ["conditions", "measurements_json", "geometry_json"])
@@ -455,6 +611,7 @@ def test_relations_and_prospect_have_real_grades_mask_and_matching_evidence(
     load("prospect")(prospect)
     zones = gpd.read_file(prospect.output_path("after_zones.gpkg"))
     assert len(zones) > 0 and set(zones.grade) == {"B"}
+    assert set(zones.columns) == {"zone_id", "grade", "area_km2", "geometry"}
     assert zones.geometry.difference(rect(0, 0, 1000, 1000)).area.sum() < 0.001
     for row in read(prospect.output_path("evidence.csv")):
         measured = json.loads(row["conditions_json"])
@@ -613,6 +770,11 @@ def test_approved_exclusion_does_not_reappear_as_unresolved_structure(tmp_path):
     load("apply")(edited)
     states = gpd.read_file(edited.output_path("faults.gpkg"))
     assert states.state.tolist() == ["exclude"] and states.weight.tolist() == [0]
+    assert not edited.output_path("final_faults.gpkg").exists()
+    changes = gpd.read_file(edited.output_path("changes_fault_issues.gpkg"))
+    assert changes.action.tolist() == ["exclude"]
+    assert changes.reason.iloc[0]
+    assert changes.geometry.iloc[0].equals(short.geometry.iloc[0])
     recheck = Context(
         tmp_path / "recheck",
         {**initial.inputs, "faults": edited.output_path("faults.gpkg")},
@@ -721,7 +883,7 @@ def test_same_unit_merge_requires_measurement_approval_and_preserves_class_area(
     assert float(actual["class_change_area_m2"]) == 0
     assert float(actual["removed_internal_boundary_m"]) == pytest.approx(1000)
     highlight = gpd.read_file(edited.output_path("changes_lithology_issues.gpkg"))
-    assert highlight.geometry.area.sum() == pytest.approx(980000)
+    assert highlight.geometry.area.sum() == pytest.approx(490000)
     for identity in ("G3", "G4"):
         assert (
             result.set_index("feature_id")

@@ -50,6 +50,23 @@ TITLES = {
     "prospect": "优先核查远景区比较",
     "final_analysis": "综合检查报告",
 }
+VISIBLE_OUTPUTS = {
+    "check": {"issues"},
+    "apply": {
+        "lithology",
+        "faults",
+        "alterations",
+        "final_faults",
+        "final_alterations",
+        "changes",
+        "changes_lithology_issues",
+        "changes_fault_issues",
+        "changes_alteration_issues",
+    },
+    "recheck": set(),
+    "relations": {"intersections"},
+    "prospect": {"before_zones", "after_zones", "evidence"},
+}
 FIELDS = (
     "rule_id",
     "rule_version",

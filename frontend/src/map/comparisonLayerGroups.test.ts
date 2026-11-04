@@ -84,6 +84,59 @@ function add(
     placement(roles, element),
   );
 }
+
+it("对比图层不把默认按name分类的岩性覆盖为代号分类", () => {
+  const resource = profile(101);
+  resource.defaultVisualization = {
+    symbolization: {
+      renderer: {
+        type: "uniqueValue",
+        field: "name",
+        classes: [{ value: "八宝山组", label: "八宝山组", color: "#ffffd8" }],
+        defaultClass: { color: "#cbd5e1" },
+      },
+    },
+  };
+  const groups = upsertComparisonLayer(
+    [],
+    resource,
+    query(resource, beforeReviewMap),
+    placement(["before"], "岩性"),
+  );
+  const layer = groups
+    .flatMap((group) => group.children)
+    .find((item) => item.layerType === "vector") as LoadedVectorLayer;
+  expect(layer.symbolization.renderer).toMatchObject({
+    type: "uniqueValue",
+    field: "name",
+    classes: [{ label: "八宝山组", color: "#ffffd8", values: ["八宝山组"] }],
+  });
+});
+
+it("干净构造使用统一线样式，有效蚀变按类型而非处理状态分类", () => {
+  const faults = add(
+    [],
+    301,
+    collection([feature({ line_id: "F1" })]),
+    ["after"],
+    "构造",
+  );
+  expect(vector(faults, 301).symbolization.renderer).toEqual({
+    type: "single",
+  });
+  const alterations = add(
+    [],
+    302,
+    collection([feature({ feature_id: "A1", alt: "赤铁矿化" })]),
+    ["after"],
+    "矿物",
+  );
+  expect(vector(alterations, 302).symbolization.renderer).toMatchObject({
+    type: "uniqueValue",
+    field: "alt",
+    classes: [{ label: "赤铁矿化" }],
+  });
+});
 function taskGroup(groups: LoadedLayerGroup[]) {
   const group = groups.find(
     (item) => item.id === comparisonGroupId(workflowId),

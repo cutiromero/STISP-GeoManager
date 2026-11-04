@@ -7,6 +7,7 @@ import {
   reviewLegend,
   reviewResourceIds,
   reviewSuggestionIndex,
+  colorReviewMap,
 } from "./geologyReviewData";
 import {
   afterReviewMap,
@@ -18,6 +19,26 @@ import {
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("../api/client", () => ({ requestJson: request }));
 beforeEach(() => request.mockReset());
+
+it("对比与讲解使用资源按name分类配色，图例显示单元名称", () => {
+  const data = structuredClone(beforeReviewMap);
+  colorReviewMap(data, {
+    symbolization: {
+      renderer: {
+        type: "uniqueValue",
+        field: "name",
+        classes: [{ value: "八宝山组", label: "八宝山组", color: "#123456" }],
+        defaultClass: { color: "#abcdef" },
+      },
+    },
+  });
+  expect(data.features[0]!.properties.fill_color).toBe("#123456");
+  expect(data.features[1]!.properties.fill_color).toBe("#abcdef");
+  expect(reviewLegend(data).map((item) => item.name)).toEqual([
+    "八宝山组",
+    "第四系",
+  ]);
+});
 
 it("queues preview reads so the server's single-query gate does not reject the second map", async () => {
   let finishFirst = (_value: ReturnType<typeof reviewQuery>) => {};

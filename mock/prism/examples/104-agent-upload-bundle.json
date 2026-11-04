@@ -1,0 +1,68 @@
+{
+  "GET /api/agent/workflow-uploads/references/": {
+    "200": { "items": [{ "id": 812, "name": "八宝山幅地质图", "dataType": "vector", "description": "已登记的岩性资料", "isComputeResult": false, "origin": "uploaded_data" }] }
+  },
+  "POST /api/agent/workflow-uploads/references/": {
+    "200": { "items": [{
+      "id": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+      "batchId": "0f3a6c9e2b5d8f1a4c7e0b3d6f9a2c5e",
+      "resourceId": 812, "source": "catalog", "name": "八宝山幅地质图", "fileName": "八宝山幅地质图",
+      "dataType": "vector", "sizeBytes": 2483120, "roleHint": "lithology", "workflowId": null,
+      "createdAt": "2026-11-04T08:00:00Z",
+      "profile": {
+        "kind": "vector", "crs": "EPSG:4326", "geometryTypes": ["Polygon"], "featureCount": 486,
+        "bounds": [96.82, 35.61, 97.41, 35.95], "bandCount": null, "width": null, "height": null,
+        "fields": [{ "name": "DCMC", "type": "text", "samples": ["八宝山组"], "distinctCount": 36 }], "warnings": []
+      }
+    }] }
+  },
+  "POST /api/agent/workflow-uploads/batch/": {
+    "200": {
+      "items": [{
+        "id": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+        "batchId": "0f3a6c9e2b5d8f1a4c7e0b3d6f9a2c5e",
+        "resourceId": 812,
+        "name": "地质图",
+        "fileName": "地质图.zip",
+        "dataType": "vector",
+        "sizeBytes": 2483120,
+        "roleHint": "lithology",
+        "workflowId": null,
+        "createdAt": "2026-11-04T08:00:00Z",
+        "profile": {
+          "kind": "vector", "crs": "EPSG:4326",
+          "geometryTypes": ["Polygon"], "featureCount": 486,
+          "bounds": [96.82, 35.61, 97.41, 35.95],
+          "bandCount": null, "width": null, "height": null,
+          "fields": [{ "name": "DCMC", "type": "text", "samples": ["八宝山组"], "distinctCount": 36 }],
+          "warnings": []
+        }
+      }],
+      "errors": [{ "fileName": "资料/说明.txt", "detail": "不支持的资料类型" }]
+    }
+  },
+  "POST /api/agent/workflow-uploads/recognize/": {
+    "200": {
+      "source": "rules",
+      "items": [{
+        "uploadId": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+        "resourceId": 812,
+        "role": "lithology",
+        "reason": "按文件名、类型和几何判断"
+      }],
+      "questions": []
+    }
+  },
+  "GET /api/agent/workflows/active/": {
+    "200": {
+      "item": {
+        "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
+        "goal": "检查研究区地质图。核对字段后执行。",
+        "workflowType": "geology_map_review",
+        "status": "waiting_approval",
+        "updatedAt": "2026-11-04T08:00:00Z",
+        "projectId": 1
+      }
+    }
+  }
+}

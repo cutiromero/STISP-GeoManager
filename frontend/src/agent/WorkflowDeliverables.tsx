@@ -63,6 +63,7 @@ export default function WorkflowDeliverables({
   heading = true,
   taskDisplayNames,
   primaryTaskIds,
+  visibleOutputIds,
   onImport,
 }: {
   items: AgentComputeTaskTracking[];
@@ -72,6 +73,7 @@ export default function WorkflowDeliverables({
   heading?: boolean;
   taskDisplayNames?: Record<string, string>;
   primaryTaskIds?: string[];
+  visibleOutputIds?: number[];
   onImport: (output: ComputeOutput, task: ComputeTask) => void;
 }) {
   const ui = useComputeText();
@@ -112,7 +114,11 @@ export default function WorkflowDeliverables({
     }
   };
   const files = items.flatMap((item) =>
-    item.task.outputs.map((output) => ({ ...item, output })),
+    item.task.outputs
+      .filter(
+        (output) => !visibleOutputIds || visibleOutputIds.includes(output.id),
+      )
+      .map((output) => ({ ...item, output })),
   );
   const primary = primaryTaskIds?.length
     ? files.filter(({ task }) => primaryTaskIds.includes(task.id))
@@ -189,9 +195,11 @@ export default function WorkflowDeliverables({
                           type="link"
                           icon={<EnvironmentOutlined aria-hidden="true" />}
                           onClick={() =>
-                            navigate(
+                            window.open(
                               output.mapUrl ||
                                 `/map?computeOutputId=${output.id}&projectTagId=${task.projectTagId}`,
+                              "_blank",
+                              "noopener",
                             )
                           }
                         >

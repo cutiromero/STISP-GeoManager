@@ -21,6 +21,7 @@ from apps.agent.geology_multi_review import (
     create_approved_changes,
     freeze_proposal,
     validate_edits,
+    assess_edits,
 )
 from apps.agent.geology_multi_results import table_rows
 from apps.agent.models import AgentWorkflow
@@ -312,6 +313,137 @@ def test_no_approval_cannot_execute_and_empty_selection_retains_all(multi, monke
     assert wf.plan["modificationReview"]["unapprovedSuggestionIds"]
 
 
+def test_identical_edits_are_normalized_and_deduplicated(multi):
+    _, stage, results = fixture_review(multi)
+    original = copy.deepcopy(stage["edits"])
+    edits = copy.deepcopy(original)
+    edits[1]["target_code"] = "不应改变类别"
+    edits.append(copy.deepcopy(original[1]))
+    rows, assessment = assess_edits(edits, results)
+    assert len(rows) == 2 and rows[1]["target_code"] == ""
+    assert assessment == {
+        "discardedCount": 0,
+        "errors": [],
+        "duplicateCount": 1,
+        "duplicateIndices": [3],
+    }
+    assert stage["edits"] == original
+    assert edits[1]["target_code"] == "不应改变类别"
+
+
+@pytest.mark.parametrize(
+    "action,weight", [("keep", 1), ("review", 1), ("downweight", 0.5), ("exclude", 0)]
+)
+def test_non_category_actions_ignore_target_code(multi, action, weight):
+    _, stage, results = fixture_review(multi)
+    results[0]["rows"][1]["allowed_actions_json"] = json.dumps([action])
+    edit = {
+        **stage["edits"][1],
+        "action": action,
+        "weight": weight,
+        "target_code": "T3",
+    }
+    assert validate_edits([edit], results)[0]["target_code"] == ""
+    assert edit["target_code"] == "T3"
+
+
+def test_conflicting_object_actions_keep_first_valid_edit(multi):
+    _, stage, results = fixture_review(multi)
+    first = stage["edits"][0]
+    same_issue = {**first, "action": "keep", "target_code": ""}
+    other_issue = {**results[0]["rows"][0], "issue_id": "other"}
+    results[0]["rows"].append(other_issue)
+    rows, assessment = assess_edits(
+        [first, same_issue, {**same_issue, "issue_id": "other"}], results
+    )
+    assert len(rows) == 1 and rows[0]["action"] == "set_code"
+    assert [item["index"] for item in assessment["errors"]] == [2, 3]
+    assert "唯一" in assessment["errors"][0]["reason"]
+    assert "保留首个合格建议" in assessment["errors"][1]["reason"]
+
+
+@pytest.mark.parametrize(
+    "mode", ["mixed", "all_invalid", "missing_knowledge", "recovered"]
+)
+@pytest.mark.parametrize(
+    "workflow_type", ["geology_multi_element_reasoning", "geology_generic"]
+)
+def test_multi_retry_reports_each_error_and_preserves_only_valid_edits(
+    multi, settings, mode, workflow_type
+):
+    from apps.agent.demo_decisions import decide
+    from apps.agent.policy import default_policy
+    from tests.integration.test_demo_decision_retry import run
+    from tests.integration.test_demo_edit_context import model_response
+
+    settings.AGENT_MODELS = [
+        {
+            "alias": "mock",
+            "name": "真实接口测试",
+            "model_id": "qwen-fixture",
+            "base_url": "http://127.0.0.1:19100/v1",
+            "agent": True,
+        }
+    ]
+    wf, stage, results = fixture_review(multi)
+    wf.workflow_type = workflow_type
+    edits = stage.pop("edits")
+    decision = stage.pop("decision")
+    answer = model_response("geology-multi-apply", [])
+    answer["decision"]["evidenceRefs"] = [
+        {"kind": "output", "id": "2"},
+        *decision["evidenceRefs"],
+    ]
+    invalid = [{**edits[0], "issue_id": "missing"}, {**edits[1], "weight": 2}]
+    if mode == "missing_knowledge":
+        answer["decision"]["evidenceRefs"] = answer["decision"]["evidenceRefs"][:2]
+        answer["edits"] = edits
+    else:
+        answer["edits"] = invalid if mode == "all_invalid" else [edits[0], *invalid]
+    before = copy.deepcopy(answer)
+    if mode == "all_invalid":
+        with pytest.raises(ComputeError, match="第1项.*missing.*第2项.*I1"):
+            run([answer, answer], wf, stage, results)
+        assert all(not attempt["accepted"] for attempt in stage["modelAttempts"])
+        return
+    (accepted_decision, accepted), requests = run([answer, answer], wf, stage, results)
+    assert accepted == [edits[0]]
+    assessment = stage["editValidation"]
+    assert assessment["discardedCount"] == (1 if mode == "missing_knowledge" else 2)
+    feedback = json.loads(requests[1][-1]["content"])
+    assert feedback["invalidEdits"] == assessment["errors"]
+    if mode != "missing_knowledge":
+        assert [item["index"] for item in feedback["invalidEdits"]] == [2, 3]
+        assert [item["issue_id"] for item in feedback["invalidEdits"]] == [
+            "missing",
+            "I1",
+        ]
+        assert "实际检查" in feedback["validationError"]
+        assert "权重范围" in feedback["validationError"]
+    assert answer == before
+    assert stage["modelAttempts"][-1]["accepted"]
+    assert not wf.plan["modificationReview"]["approvedSuggestionIds"]
+    if mode == "recovered":
+        audit = copy.deepcopy(stage["modelAttempts"])
+        wf.max_iterations = wf.iteration = 2
+        wf.plan["actualModelCallCount"] = 2
+        with patch("apps.agent.demo_decisions.resource_context", return_value=[]):
+            _, recovered = decide(
+                wf, None, default_policy(), stage, results, lambda: None
+            )
+        assert recovered == accepted
+        assert stage["modelAttempts"] == audit
+        assert stage["editValidation"] == assessment
+    stage.update(edits=accepted, decision=accepted_decision)
+    freeze_proposal(wf, stage)
+    assert wf.status == "waiting_approval"
+    assert len(wf.plan["modificationReview"]["suggestions"]) == 1
+    assert not wf.plan["modificationReview"]["approvedSuggestionIds"]
+    wf.save(update_fields=["plan", "status"])
+    wf.refresh_from_db()
+    assert wf.plan["stages"][1]["editValidation"] == assessment
+
+
 def test_model_cannot_change_target_or_turn_downweight_into_delete(multi):
     _, stage, results = fixture_review(multi)
     changed = copy.deepcopy(stage["edits"])
@@ -377,7 +509,10 @@ def test_representative_issues_use_actual_size_without_hiding_total(tmp_path):
     assert result["scope"] == "representative_sample"
 
 
-def test_native_published_manifests_prepare_the_actual_stage_protocol(multi):
+@pytest.mark.parametrize("missing_faults", [False, True])
+def test_native_published_manifests_prepare_the_actual_stage_protocol(
+    multi, missing_faults
+):
     from apps.agent.demo_workflow import prepare_demo, confirm_demo
 
     root = Path(__file__).resolve().parents[3]
@@ -403,6 +538,14 @@ def test_native_published_manifests_prepare_the_actual_stage_protocol(multi):
             runtime_digest="sha256:" + "a" * 64,
         )
     wf = multi["workflow"]
+    if missing_faults:
+        wf.workflow_type = "geology_generic"
+        wf.plan.update(
+            phase="inputs_ready",
+            workingCopies={"faults": multi["inputs"]["faults"]},
+            missingRoles=["faults"],
+            uploadInputs={"lithology": multi["inputs"]["lithology"]},
+        )
     prepare_demo(wf, multi["owner"], multi["policy"])
     assert wf.status == "waiting_approval"
     assert [stage["name"] for stage in wf.plan["stages"]] == [
@@ -414,6 +557,9 @@ def test_native_published_manifests_prepare_the_actual_stage_protocol(multi):
     ]
     assert wf.plan["stages"][0]["bindings"]["rules"] == "frozen_rules"
     assert wf.plan["stages"][2]["bindings"]["alterations"] == "apply/alterations"
+    assert wf.plan["stages"][2]["bindings"]["faults"] == (
+        "faults" if missing_faults else "apply/faults"
+    )
     assert wf.plan["stages"][4]["bindings"]["before_lithology"] == "lithology"
     assert wf.plan["stages"][4]["parameters"]["segment"] == "all"
     assert len(wf.plan["upstreamVersions"]) == 9
@@ -465,6 +611,120 @@ def test_before_approval_map_does_not_claim_a_corrected_result(multi):
     assert "after" not in wf.plan["multiElementMap"]
     assert "changes" not in wf.plan["multiElementMap"]
     assert wf.plan["multiElementMap"]["checks"] == [100]
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_map_uses_clean_results_and_never_resurrects_excluded_features(multi, empty):
+    from apps.agent.geology_multi_review import update_map
+
+    workflow, stage, _ = fixture_review(multi)
+    workflow.plan["algorithms"]["geology-multi-apply"]["manifest"] = {
+        "version": "1.0.5",
+        "outputs": [{"key": "final_faults"}, {"key": "final_alterations"}],
+    }
+    stage["outputs"] = [
+        {"key": "lithology", "kind": "vector", "resourceId": 101},
+        {"key": "faults", "kind": "vector", "resourceId": 102},
+        {"key": "alterations", "kind": "vector", "resourceId": 103},
+        {"key": "changes_lithology_issues", "kind": "vector", "resourceId": 104},
+    ]
+    if not empty:
+        stage["outputs"] += [
+            {"key": "final_faults", "kind": "vector", "resourceId": 105},
+            {"key": "final_alterations", "kind": "vector", "resourceId": 106},
+        ]
+    update_map(workflow)
+    result = workflow.plan["multiElementMap"]
+    assert result["after"]["lithology"] == 101
+    assert result["changes"] == [104]
+    if empty:
+        assert "faults" not in result["after"] and "alterations" not in result
+    else:
+        assert result["after"]["faults"] == 105 and result["alterations"] == 106
+
+
+def test_collect_hides_calculation_states_but_retains_downstream_inputs(
+    multi, monkeypatch
+):
+    from apps.agent import demo_workflow
+    from apps.compute.models import ComputeTask, ComputeOutput, ComputeImport
+
+    workflow, stage, _ = fixture_review(multi)
+    algorithm = AlgorithmResource.objects.create(
+        identifier="geology-multi-apply", name="修正", created_by=multi["owner"]
+    )
+    manifest = {
+        "outputs": [
+            {"key": key}
+            for key in ["faults", "alterations", "final_faults", "final_alterations"]
+        ]
+    }
+    version = AlgorithmVersion.objects.create(
+        algorithm=algorithm, version="1.0.5", checksum="a" * 64, manifest=manifest
+    )
+    task = ComputeTask.objects.create(
+        owner=multi["owner"],
+        name="成果集合验证",
+        version=version,
+        status="succeeded",
+        idempotency_key="clean-collect",
+        request_hash="a" * 64,
+    )
+    stage.update(
+        results=[],
+        manualApproved=True,
+        status="running",
+        taskId=str(task.id),
+        bindings={},
+    )
+    workflow.plan["algorithms"]["geology-multi-apply"]["manifest"] = manifest
+    workflow.status = "waiting_compute"
+    workflow.save()
+    resources = {}
+    for key in ["faults", "alterations", "final_faults", "final_alterations"]:
+        output = ComputeOutput.objects.create(
+            task=task,
+            key=key,
+            label=key,
+            kind="vector",
+            file_name=key + ".gpkg",
+            path=key + ".gpkg",
+            size_bytes=1,
+            checksum="b" * 64,
+        )
+        resource = DataResource.objects.create(
+            name=key,
+            code="collect-" + key,
+            data_type="vector",
+            source="compute-output:" + str(output.id),
+        )
+        ComputeImport.objects.create(
+            output=output,
+            requested_by=multi["owner"],
+            name=key,
+            status="ready",
+            resource=resource,
+        )
+        resources[key] = resource
+    monkeypatch.setattr(
+        demo_workflow, "_authorize", lambda *args: (multi["owner"], multi["policy"])
+    )
+    monkeypatch.setattr(demo_workflow, "authorize_demo", lambda *args, **kwargs: None)
+    assert demo_workflow._collect_stage(
+        workflow, multi["owner"], multi["policy"], stage, task
+    )
+    for key in ("faults", "alterations"):
+        resources[key].refresh_from_db()
+        assert resources[key].source.startswith("workflow-working:")
+        assert resources[key].owner_only
+        assert resources[key].id not in workflow.result_resource_ids
+        assert (
+            next(item for item in stage["outputs"] if item["key"] == key)["resourceId"]
+            == resources[key].id
+        )
+    assert set(workflow.result_resource_ids) == {
+        resources[key].id for key in ("final_faults", "final_alterations")
+    }
 
 
 def test_mock_analysis_uses_current_issues_and_keeps_simulation_label(multi):
@@ -523,7 +783,9 @@ def test_multi_model_protocol_distinguishes_proposal_from_insufficient_evidence(
                     for entry in multi["entries"]
                 ],
             ],
-            "resultSummary": "建议需逐项批准" if action.endswith("apply") else "等待补证",
+            "resultSummary": "建议需逐项批准"
+            if action.endswith("apply")
+            else "等待补证",
         },
         "edits": proposal_edits if action.endswith("apply") else [],
     }
@@ -545,7 +807,9 @@ def test_multi_model_protocol_distinguishes_proposal_from_insufficient_evidence(
     assert decision["nextAction"] == action and decision["modelMode"] == "real"
     assert edits == response["edits"]
     instruction = stream.call_args_list[0].args[1][0]["content"]
-    assert "只有allowedAction和decision.nextAction均为geology-multi-apply" in instruction
+    assert (
+        "只有allowedAction和decision.nextAction均为geology-multi-apply" in instruction
+    )
     assert "后端须等待用户逐项批准后才执行实际修改" in instruction
     assert "不能因建议尚待批准就把nextAction写成request_review" in instruction
     assert "request_review用于证据不足、冲突" in instruction

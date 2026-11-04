@@ -1,7 +1,7 @@
 """Reinspect current evidence, validate approvals and produce new versioned layers."""
 
-from multi_apply import apply, approved, statistics
-from multi_checks import inspect, issue_maps
+from multi_apply import apply, approved, final_layer, modification_maps, statistics
+from multi_checks import inspect
 from multi_io import (
     CHANGE_FIELDS,
     inputs,
@@ -26,9 +26,19 @@ def run(context):
     )
     # Approval validation completes before any output is written.
     for filename, frame, geometry_type in [
-        ("lithology.gpkg", corrected, "MultiPolygon"),
+        ("lithology.gpkg", final_layer(corrected, "lithology"), "MultiPolygon"),
         ("faults.gpkg", final_faults, "MultiLineString"),
         ("alterations.gpkg", final_alterations, "MultiPolygon"),
+        (
+            "final_faults.gpkg",
+            final_layer(final_faults, "structure"),
+            "MultiLineString",
+        ),
+        (
+            "final_alterations.gpkg",
+            final_layer(final_alterations, "alteration"),
+            "MultiPolygon",
+        ),
     ]:
         write_vector(
             context.output_path(filename), frame, config["working_epsg"], geometry_type
@@ -57,6 +67,7 @@ def run(context):
             "old_code",
             "new_code",
             "host_feature_id",
+            "absorbed_ids",
             "actual_changed",
             "area_m2",
             "involved_area_m2",
@@ -68,9 +79,7 @@ def run(context):
             "measurements_json",
         ],
     )
-    issue_maps(
-        context, [row for row in actual if row["actual_changed"]], config, "changes_"
-    )
+    modification_maps(context, actual, config)
     metrics = {
         "approved_count": len(actual),
         "actual_change_count": sum(row["actual_changed"] for row in actual),

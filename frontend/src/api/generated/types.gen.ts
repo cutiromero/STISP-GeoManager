@@ -1269,6 +1269,10 @@ export type AgentConversationUpdate = {
  * 提交任务
  */
 export type AgentRunInput = {
+    /**
+     * 逻辑推理项目智能体模式下本人未绑定的上传批次，需求最多12000字；发送后在当前对话核对资料角色，确认后绑定真实工作流，不自动越过字段、计划或处置批准。批次仅能关联一个对话研究任务。
+     */
+    uploadBatchId?: string;
     demoScenario?: AgentResearchScenario;
     knowledgeSelection?: AgentKnowledgeSelection;
     /**
@@ -1443,7 +1447,7 @@ export type AgentResearchIntent = {
  */
 export type AgentResearchIntentUpdate = {
     /**
-     * 回答、明确审核确认或取消
+     * 回答、明确审核确认或取消；通用地质推理的answer按当前阶段严格解析自然语言，不明确时保留卡片确认，不自动批准
      */
     action: 'answer' | 'confirm' | 'cancel';
     /**
@@ -1451,7 +1455,7 @@ export type AgentResearchIntentUpdate = {
      */
     revision: string;
     /**
-     * 问题键到用户答案，不把选项标题当作代码执行
+     * 问题键到用户答案，不把选项标题当作代码执行；通用地质角色核对使用upload_资源ID到角色键（或skip），须完整核对所有资料，角色不得重复
      */
     answers?: {
         [key: string]: string;
@@ -2498,9 +2502,17 @@ export type AgentWorkflowReportPreview = {
 };
 
 /**
- * 可恢复的项目科研工作流
+ * 可恢复的项目科研工作流；card视图省略完整计划和审核，steps/evidence为空
  */
 export type AgentWorkflow = {
+    /**
+     * 详情投影视图；省略等同full
+     */
+    view?: 'full' | 'card';
+    /**
+     * 实际步骤总数，card视图用于按需展开入口
+     */
+    stepCount?: number;
     /**
      * 工作流 UUID
      */
@@ -4621,6 +4633,10 @@ export type AdminDashboardGpuDevice = {
 
 export type UserInfo = BaseUserInfo & {
     /**
+     * 当前请求者可否为该账号改名；仅超级管理员且目标不是初始化管理员或系统游客时为true。旧客户端缺省按false处理。
+     */
+    canRenameUsername?: boolean;
+    /**
      * 用户所属角色 ID 列表；后端实现使用 Django Group
      */
     groupIds: Array<number>;
@@ -4660,9 +4676,9 @@ export type UserCreateRequest = {
      */
     displayName?: string;
     /**
-     * 必填用户邮箱；后端统一转为小写并保证非空邮箱唯一
+     * 超级管理员创建时可省略或留空，普通管理员必填；非空邮箱统一转为小写并保证唯一。
      */
-    email: string;
+    email?: string | '';
     /**
      * 用户所在部门
      */
@@ -4675,6 +4691,14 @@ export type UserCreateRequest = {
      * 是否启用账号，默认 true
      */
     isActive?: boolean;
+    /**
+     * 仅超级管理员可提交的启用私有项目ID；公开项目由allowPublicProject单独控制。省略时不分配私有项目，重复ID去重。
+     */
+    projectIds?: Array<number>;
+    /**
+     * 仅超级管理员可提交，是否允许访问公开项目；关闭时须至少分配一个启用私有项目。普通管理员不得提交，即使为默认值。
+     */
+    allowPublicProject?: boolean;
 };
 
 export type AdminProfileAvatarUploadRequest = {
@@ -4727,11 +4751,22 @@ export type UserPermissionUpdateRequest = {
     operationLogGroupIds?: Array<number>;
 };
 
+/**
+ * 提交username或isActive至少一项；删除沿用action=delete。改名不重建用户、不改变密码和关联对象。
+ */
 export type UserUpdateRequest = {
+    /**
+     * 仅超级管理员可提交的新登录名；使用Django用户名校验，规范化后须唯一，系统专用账号及其保留名称不可修改或占用。
+     */
+    username?: string;
     /**
      * 用户账号是否启用
      */
-    isActive: boolean;
+    isActive?: boolean;
+    /**
+     * 删除账号；继续遵守当前登录用户、初始化管理员和游客保护。
+     */
+    action?: 'delete';
 };
 
 export type Group = {
@@ -5660,6 +5695,94 @@ export type ResultArtifactListResponse = {
 };
 
 /**
+ * 本人账号活动工作流摘要，不含资料与计划
+ */
+export type AgentActiveWorkflow = {
+    /**
+     * 工作流ID
+     */
+    id: string;
+    /**
+     * 任务目标
+     */
+    goal: string;
+    /**
+     * 任务场景
+     */
+    workflowType: string;
+    /**
+     * 活动状态
+     */
+    status: 'queued' | 'running' | 'waiting_compute' | 'waiting_approval' | 'paused';
+    /**
+     * 最近更新时间
+     */
+    updatedAt: string;
+    /**
+     * 所属项目ID，后续操作需该项目权限
+     */
+    projectId: number;
+};
+
+/**
+ * 批量上传的逐份结果
+ */
+export type AgentWorkflowBatchResult = {
+    /**
+     * 成功登记的资料
+     */
+    items: Array<AgentWorkflowUpload>;
+    /**
+     * 未登记资料或安全预检失败压缩包
+     */
+    errors: Array<{
+        /**
+         * 原文件或包内相对路径
+         */
+        fileName: string;
+        /**
+         * 失败原因
+         */
+        detail: string;
+    }>;
+};
+
+/**
+ * 整批资料的互斥角色建议
+ */
+export type AgentWorkflowRoleResult = {
+    /**
+     * 建议来源
+     */
+    source: 'model' | 'rules';
+    /**
+     * 需要用户核查的问题
+     */
+    questions: Array<string>;
+    /**
+     * 每份资料的建议，未识别时role为null
+     */
+    items: Array<{
+        /**
+         * 上传记录ID
+         */
+        uploadId: string;
+        /**
+         * 资料资源ID
+         */
+        resourceId: number;
+        /**
+         * 建议角色
+         */
+        role: 'lithology' | 'faults' | 'coverage' | 'units' | 'hematite' | 'chlorite' | 'hydromica' | 'calcite' | 'dolomite' | null;
+        /**
+         * 判断依据或规则退回说明
+         */
+        reason: string;
+    }>;
+};
+
+/**
  * 上传资料中的一个字段及示例取值
  */
 export type AgentWorkflowUploadField = {
@@ -5728,9 +5851,13 @@ export type AgentWorkflowUploadProfile = {
 };
 
 /**
- * 通用地质推理任务的一份上传资料
+ * 通用地质推理任务的一份资料，上传文件或系统目录引用
  */
 export type AgentWorkflowUpload = {
+    /**
+     * 资料来源；历史未返回此字段的记录为上传文件。目录引用移除时绝不改变目录资源
+     */
+    source?: 'upload' | 'catalog';
     /**
      * 上传记录 UUID
      */
@@ -5740,15 +5867,15 @@ export type AgentWorkflowUpload = {
      */
     batchId: string;
     /**
-     * 登记的数据资源ID，仅上传者可见
+     * 数据资源ID；上传资源仅本人可见，目录引用沿用原资源访问权限
      */
     resourceId: number;
     /**
-     * 资料名称，取自文件名
+     * 资料名称，目录引用取原资源名称
      */
     name: string;
     /**
-     * 原始文件名
+     * 原始文件名；目录引用为原资源名称
      */
     fileName: string;
     /**
@@ -5968,12 +6095,12 @@ export type AgentMultiElementMap = {
          */
         lithology?: number;
         /**
-         * 本轮修正构造资源
+         * 本轮修正构造资源；算子1.0.5起为删除获批剔除线的干净图层，全剔除时缺省，不回退原图
          */
         faults?: number;
     };
     /**
-     * 真实变化线点面图层，不含未批准建议
+     * 真实变化线点面图层，不含未批准建议；算子1.0.5起为修改前几何的修正记录，含实际动作、原/新代号、宿主编号、规则与批准理由
      */
     changes?: Array<number>;
     /**
@@ -5985,7 +6112,7 @@ export type AgentMultiElementMap = {
      */
     beforeAlterations?: number;
     /**
-     * 保留原识别信息并标识处理状态的蚀变面图层
+     * 算子1.0.5起为仅含有效参与项的干净蚀变面图层（feature_id及alt），全剔除时缺省；历史任务为保留原识别信息和处理状态的图层
      */
     alterations?: number;
     /**
@@ -6857,7 +6984,7 @@ export type WorkspaceScene = {
     snapshot: WorkspaceSceneSnapshot;
     owner: WorkspaceSceneOwner;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 历史兼容元数据；工程按创建者、已接受分享及超级管理员规则访问，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -6867,15 +6994,15 @@ export type WorkspaceScene = {
      */
     isOwner: boolean;
     /**
-     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户且具备 `catalog.change_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户或超级管理员且具备 `catalog.change_workspacescene` 时为 true
      */
     canEdit: boolean;
     /**
-     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户且具备 `catalog.delete_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户或超级管理员且具备 `catalog.delete_workspacescene` 时为 true
      */
     canDelete: boolean;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 兼容管理标记；仅创建者或超级管理员可管理分享，接受分享的用户为 false，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -8361,6 +8488,12 @@ export type ValidationIssue = {
 };
 
 export type ResourceProfileResponse = {
+    /**
+     * 资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。
+     */
+    defaultVisualization?: {
+        [key: string]: unknown;
+    };
     resource: DataResource;
     /**
      * 属性字段信息
@@ -9538,7 +9671,7 @@ export type WorkspaceSceneSummary = {
     description: string;
     owner: WorkspaceSceneOwner;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 历史兼容元数据；工程按创建者、已接受分享及超级管理员规则访问，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -9548,15 +9681,15 @@ export type WorkspaceSceneSummary = {
      */
     isOwner: boolean;
     /**
-     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户且具备 `catalog.change_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台编辑该工程专题；仅所属用户或超级管理员且具备 `catalog.change_workspacescene` 时为 true
      */
     canEdit: boolean;
     /**
-     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户且具备 `catalog.delete_workspacescene` 时为 true
+     * 当前用户是否可在普通工作台删除该工程专题；仅所属用户或超级管理员且具备 `catalog.delete_workspacescene` 时为 true
      */
     canDelete: boolean;
     /**
-     * 历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。
+     * 兼容管理标记；仅创建者或超级管理员可管理分享，接受分享的用户为 false，旧角色字段不授予访问。
      *
      * @deprecated
      */
@@ -10185,6 +10318,10 @@ export type ComputePreview = {
      * 列表
      */
     rows: Array<Array<unknown>>;
+    /**
+     * 仅view=map返回的完整矢量几何；直接读取任务输出，不登记资源
+     */
+    geojson?: GeoJsonFeatureCollection;
 };
 
 /**
@@ -17434,7 +17571,12 @@ export type PreviewComputeOutputData = {
          */
         outputId: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * 默认table返回最多100行属性；map读取经校验的矢量任务文件并返回完整WGS84 GeoJSON，最多30000要素，超限409，不创建资源
+         */
+        view?: 'table' | 'map';
+    };
     url: '/api/compute/outputs/{outputId}/preview/';
 };
 
@@ -17620,6 +17762,10 @@ export type UpdateAgentResearchIntentErrors = {
      */
     409: ErrorResponse;
     /**
+     * 每日运行额度或全站模型队列额度已满，不创建新回答或执行批准
+     */
+    429: ErrorResponse;
+    /**
      * 模型或计算服务暂不可用
      */
     503: ErrorResponse;
@@ -17629,7 +17775,7 @@ export type UpdateAgentResearchIntentError = UpdateAgentResearchIntentErrors[key
 
 export type UpdateAgentResearchIntentResponses = {
     /**
-     * 已确认审核或取消，返回原运行最新状态
+     * 已确认审核或取消时返回原运行；通用地质明确回答返回已保存的后续对话运行
      */
     200: AgentRun;
     /**
@@ -18476,6 +18622,291 @@ export type ConfirmAgentWorkflowResponses = {
 };
 
 export type ConfirmAgentWorkflowResponse = ConfirmAgentWorkflowResponses[keyof ConfirmAgentWorkflowResponses];
+
+export type ListAgentWorkflowCatalogResourcesData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前具体逻辑推理项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: {
+        /**
+         * 名称或说明搜索词，最多200字
+         */
+        q?: string;
+    };
+    url: '/api/agent/workflow-uploads/references/';
+};
+
+export type ListAgentWorkflowCatalogResourcesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type ListAgentWorkflowCatalogResourcesError = ListAgentWorkflowCatalogResourcesErrors[keyof ListAgentWorkflowCatalogResourcesErrors];
+
+export type ListAgentWorkflowCatalogResourcesResponses = {
+    /**
+     * 有权访问的目录资源
+     */
+    200: AgentResourceList;
+};
+
+export type ListAgentWorkflowCatalogResourcesResponse = ListAgentWorkflowCatalogResourcesResponses[keyof ListAgentWorkflowCatalogResourcesResponses];
+
+export type AddAgentWorkflowCatalogReferencesData = {
+    /**
+     * 批次及目录资源ID
+     */
+    body: {
+        /**
+         * 客户端生成的批次号
+         */
+        batchId: string;
+        /**
+         * 当前项目的目录资源ID，含上传资料合计最多12份
+         */
+        resourceIds: Array<number>;
+    };
+    headers: {
+        /**
+         * 当前具体逻辑推理项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflow-uploads/references/';
+};
+
+export type AddAgentWorkflowCatalogReferencesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type AddAgentWorkflowCatalogReferencesError = AddAgentWorkflowCatalogReferencesErrors[keyof AddAgentWorkflowCatalogReferencesErrors];
+
+export type AddAgentWorkflowCatalogReferencesResponses = {
+    /**
+     * 本次引用的批次条目
+     */
+    200: AgentWorkflowUploadList;
+};
+
+export type AddAgentWorkflowCatalogReferencesResponse = AddAgentWorkflowCatalogReferencesResponses[keyof AddAgentWorkflowCatalogReferencesResponses];
+
+export type UploadAgentWorkflowBatchData = {
+    /**
+     * 同批次的多个文件或总ZIP
+     */
+    body: {
+        /**
+         * 客户端批次号
+         */
+        batchId: string;
+        /**
+         * 资料文件、Shapefile组成文件或总ZIP
+         */
+        files: Array<Blob | File>;
+    };
+    headers: {
+        /**
+         * 唯一当前项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflow-uploads/batch/';
+};
+
+export type UploadAgentWorkflowBatchErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type UploadAgentWorkflowBatchError = UploadAgentWorkflowBatchErrors[keyof UploadAgentWorkflowBatchErrors];
+
+export type UploadAgentWorkflowBatchResponses = {
+    /**
+     * 逐份登记结果，允许部分或全部失败
+     */
+    200: AgentWorkflowBatchResult;
+};
+
+export type UploadAgentWorkflowBatchResponse = UploadAgentWorkflowBatchResponses[keyof UploadAgentWorkflowBatchResponses];
+
+export type RecognizeAgentWorkflowRolesData = {
+    /**
+     * 批次和当前可用模型
+     */
+    body: {
+        /**
+         * 上传批次号
+         */
+        batchId: string;
+        /**
+         * 当前授权模型标识
+         */
+        model: string;
+    };
+    headers: {
+        /**
+         * 唯一当前项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflow-uploads/recognize/';
+};
+
+export type RecognizeAgentWorkflowRolesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type RecognizeAgentWorkflowRolesError = RecognizeAgentWorkflowRolesErrors[keyof RecognizeAgentWorkflowRolesErrors];
+
+export type RecognizeAgentWorkflowRolesResponses = {
+    /**
+     * 可由用户修改的角色建议
+     */
+    200: AgentWorkflowRoleResult;
+};
+
+export type RecognizeAgentWorkflowRolesResponse = RecognizeAgentWorkflowRolesResponses[keyof RecognizeAgentWorkflowRolesResponses];
+
+export type GetActiveAgentWorkflowData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/workflows/active/';
+};
+
+export type GetActiveAgentWorkflowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type GetActiveAgentWorkflowError = GetActiveAgentWorkflowErrors[keyof GetActiveAgentWorkflowErrors];
+
+export type GetActiveAgentWorkflowResponses = {
+    /**
+     * 本人活动任务摘要，没有时item为null
+     */
+    200: {
+        /**
+         * 挡路任务摘要或null
+         */
+        item: AgentActiveWorkflow | null;
+    };
+};
+
+export type GetActiveAgentWorkflowResponse = GetActiveAgentWorkflowResponses[keyof GetActiveAgentWorkflowResponses];
 
 export type ListAgentWorkflowUploadsData = {
     body?: never;
@@ -19383,11 +19814,20 @@ export type GetAgentWorkflowData = {
          */
         workflowId: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * full为完整详情（默认）；card为轻量卡片，鉴权和项目边界不变
+         */
+        view?: 'full' | 'card';
+    };
     url: '/api/agent/workflows/{workflowId}/';
 };
 
 export type GetAgentWorkflowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
     /**
      * 未认证
      */

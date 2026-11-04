@@ -4,6 +4,7 @@ import type {
   AgentWorkflow,
   GeoJsonFeatureCollection,
   QueryResponse,
+  ResourceProfileResponse,
 } from "../api/generated/types.gen";
 
 export const record = (value: unknown): Record<string, unknown> =>
@@ -38,14 +39,14 @@ let reviewQueryQueue: Promise<unknown> = Promise.resolve();
 
 export async function queryReviewMap(
   id: number,
-  options: { mixed?: boolean; allowEmpty?: boolean } = {},
+  options: { mixed?: boolean; allowEmpty?: boolean; loadStyle?: boolean } = {},
 ) {
   return (await queryReviewMapResult(id, options)).geojson;
 }
 
 export async function queryReviewMapResult(
   id: number,
-  options: { mixed?: boolean; allowEmpty?: boolean } = {},
+  options: { mixed?: boolean; allowEmpty?: boolean; loadStyle?: boolean } = {},
 ) {
   const projectId = getActiveProject();
   const signal = projectSignal();
@@ -79,7 +80,43 @@ export async function queryReviewMapResult(
     )
   )
     throw new Error("双图预览需要完整的面图件");
+  if (
+    options.loadStyle === true &&
+    result.geojson.features.some(
+      (feature) =>
+        ["Polygon", "MultiPolygon"].includes(feature.geometry.type) &&
+        typeof feature.properties.name === "string",
+    )
+  ) {
+    const profile = await requestJson<ResourceProfileResponse>(
+      `/api/catalog/resources/${id}/profile/`,
+    );
+    colorReviewMap(result.geojson, profile.defaultVisualization ?? {});
+  }
   return result;
+}
+
+export function colorReviewMap(
+  data: GeoJsonFeatureCollection,
+  visualization: Record<string, unknown>,
+) {
+  const renderer = record(record(visualization.symbolization).renderer);
+  if (renderer.type !== "uniqueValue" || renderer.field !== "name") return;
+  const classes = (Array.isArray(renderer.classes) ? renderer.classes : []).map(
+    record,
+  );
+  const colors = new Map(
+    classes.map((item) => [String(item.value), String(item.color)]),
+  );
+  const fallback = record(renderer.defaultClass).color;
+  data.features = data.features.map((feature) => ({
+    ...feature,
+    properties: {
+      ...feature.properties,
+      fill_color: colors.get(String(feature.properties.name)) ?? fallback,
+      unit_color_by_name: true,
+    },
+  }));
 }
 
 export function previewSuggestions(
@@ -194,10 +231,16 @@ export function reviewLegend(...data: GeoJsonFeatureCollection[]) {
   data
     .flatMap((collection) => collection.features)
     .forEach(({ properties: p }) => {
-      const key = String(p.class ?? p.geo_sym ?? p.code ?? p.name);
+      const key = String(
+        p.unit_color_by_name
+          ? p.name
+          : (p.class ?? p.geo_sym ?? p.code ?? p.name),
+      );
       values.set(key, {
         key,
-        name: `${String(p.name ?? "地质单元")} / ${String(p.geo_sym ?? p.code ?? key)}`,
+        name: p.unit_color_by_name
+          ? String(p.name)
+          : `${String(p.name ?? "地质单元")} / ${String(p.geo_sym ?? p.code ?? key)}`,
         color:
           typeof p.fill_color === "string" &&
           /^#[\da-f]{6}$/i.test(p.fill_color)
@@ -205,5 +248,9 @@ export function reviewLegend(...data: GeoJsonFeatureCollection[]) {
             : geologicalColor(p.class),
       });
     });
-  return [...values.values()].sort((a, b) => Number(a.key) - Number(b.key));
+  return [...values.values()].sort((a, b) =>
+    Number.isFinite(Number(a.key)) && Number.isFinite(Number(b.key))
+      ? Number(a.key) - Number(b.key)
+      : a.name.localeCompare(b.name, "zh-CN"),
+  );
 }

@@ -443,7 +443,7 @@ def inspect_output(path, kind):
     raise ComputeError("未知输出类型")
 
 
-def preview(output):
+def preview(output, view="table"):
     path = app_path(output.path)
     result = {
         "kind": output.kind,
@@ -451,6 +451,20 @@ def preview(output):
         "columns": [],
         "rows": [],
     }
+    if view == "map":
+        if output.kind != "vector":
+            raise ComputeError("地图预览仅支持矢量输出")
+        if not path.is_file() or path.is_symlink() or checksum(path) != output.checksum:
+            raise ComputeError("结果文件内容已变化，无法读取地图", 409)
+        import geopandas as gpd
+
+        frame = gpd.read_file(path, layer=output.metadata["layer"], rows=30001)
+        if len(frame) > 30000:
+            raise ComputeError("图件超过30000要素，请缩小范围后查看", 409)
+        if frame.crs is None:
+            raise ComputeError("矢量输出缺少坐标系", 409)
+        result["geojson"] = json.loads(frame.to_crs(4326).to_json())
+        return result
     if output.kind == "table":
         with path.open(encoding="utf-8-sig", newline="") as stream:
             reader = csv.reader(stream)

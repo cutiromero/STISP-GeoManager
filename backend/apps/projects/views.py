@@ -1,15 +1,14 @@
 import json
 
 from django.contrib.auth import get_user_model
-from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 from django.core.exceptions import ValidationError
 
 from apps.audit.service import log_operation
-from apps.core.models import UserProfile
 from .access import available_projects, default_project_id, public_project_allowed
+from .assignments import set_project_assignments
 from .context import is_superadmin
 from .models import Project, ProjectMembership
 
@@ -110,30 +109,10 @@ def assignments(request, user_id):
         return JsonResponse({"detail": "只有超管可维护超管账号"}, status=403)
     if request.method == "POST":
         data = payload(request)
-        ids = data.get("projectIds")
-        if not isinstance(ids, list) or any(type(i) is not int or i < 1 for i in ids):
-            raise ValidationError("projectIds 必须为项目 ID 数组")
-        ids = set(ids) - {1}
-        if Project.objects.filter(id__in=ids, is_active=True).count() != len(ids):
-            raise ValidationError("包含无效或停用项目")
         allow_public = data.get("allowPublicProject", public_project_allowed(user))
-        if type(allow_public) is not bool:
-            raise ValidationError("allowPublicProject 必须为布尔值")
-        if not allow_public and is_superadmin(user):
-            raise ValidationError("超级管理员始终拥有全部项目权限")
-        if not allow_public and not ids:
-            raise ValidationError("关闭公开项目访问时，请至少分配一个启用项目")
-        with transaction.atomic():
-            profile, _ = UserProfile.objects.get_or_create(user=user)
-            profile.allow_public_project = allow_public
-            profile.save(update_fields=["allow_public_project", "updated_at"])
-            ProjectMembership.objects.filter(user=user).delete()
-            ProjectMembership.objects.bulk_create(
-                [
-                    ProjectMembership(project_id=i, user=user, assigned_by=request.user)
-                    for i in ids
-                ]
-            )
+        ids = set_project_assignments(
+            user, data.get("projectIds"), allow_public, assigned_by=request.user
+        )
         log_operation(
             request.user,
             "项目标签",

@@ -63,9 +63,363 @@
     {
       "name": "智能体",
       "description": "本地模型对话与当前项目只读数据智能体"
+    },
+    {
+      "name": "邀请分享",
+      "description": "精确用户名邀请及本人站内通知，不扩张项目和私有资源权限"
     }
   ],
   "paths": {
+    "/api/sharing/check/": {
+      "post": {
+        "tags": [
+          "邀请分享"
+        ],
+        "summary": "精确用户名分享预检",
+        "description": "当前单项目内检查分享者对象管理权、目标账号及双方功能/项目/全部依赖权限，不列出或搜索用户，不创建邀请或授予访问。",
+        "operationId": "checkShareInvitation",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "description": "单个业务项目，缺省公开项目1，不支持all",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "分享对象和准确用户名，区分大小写",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "eligible表示能否发送，失败说明不暴露私有依赖名称",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareCheckResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/sharing/invitations/": {
+      "get": {
+        "tags": [
+          "邀请分享"
+        ],
+        "summary": "本人跨有权项目收发通知",
+        "description": "仅本人收件或发件，跨当前仍有权访问的项目；通知不授予访问，打开和接受时重新核对权限。",
+        "operationId": "listShareInvitations",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "box",
+            "in": "query",
+            "description": "收件或发件，默认received",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "received",
+                "sent"
+              ],
+              "default": "received"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "每页条数",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 30
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "分页偏移",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "通知及该箱全部未读数",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareInvitationList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "邀请分享"
+        ],
+        "summary": "发出待接受邀请",
+        "description": "当前单项目重新核对预检条件。相同幂等键复用原邀请；同对象同收件人已有pending/accepted时复用，不重复通知。只允许对象owner或既有有权管理员发送，工程限创建者或超级管理员；工程默认私有，接受后才授予只读，待接受或拒绝不授权。不赋予项目成员或owner_only权限。",
+        "operationId": "createShareInvitation",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "description": "分享源对象所属单个业务项目，缺省公开项目1",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "准确用户名、单个对象和提交幂等键",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "复用已有邀请，无重复通知",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareInvitation"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "邀请已发出，等待对方接受",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareInvitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/sharing/invitations/{invitationId}/respond/": {
+      "post": {
+        "tags": [
+          "邀请分享"
+        ],
+        "summary": "接受或拒绝邀请",
+        "description": "仅收件人响应pending邀请。接受前在邀请所属项目重验双方及所有依赖权限；失效记录unavailable并通知分享者。首次决定持久保存，重复同决定幂等，不同决定409。拒绝不授予任何访问。",
+        "operationId": "respondShareInvitation",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShareInvitationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "用户明确选择和幂等键",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareResponseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "持久决定或失效状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareInvitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/sharing/invitations/{invitationId}/read/": {
+      "post": {
+        "tags": [
+          "邀请分享"
+        ],
+        "summary": "标记本人这侧通知已读",
+        "description": "仅邀请参与人；收件标记与分享者决定通知标记分别保存，重复请求无副作用。",
+        "operationId": "readShareInvitation",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShareInvitationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "更新后的邀请",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareInvitation"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/sharing/invitations/{invitationId}/open/": {
+      "get": {
+        "tags": [
+          "邀请分享"
+        ],
+        "summary": "核对并打开已接受的单个对象",
+        "description": "仅参与人，邀请须accepted。每次重新核对双方功能、当前项目、源对象及依赖；返回安全站内地址。单计算输出不返回整任务、输入快照、日志或兄弟输出；预览下载/入库继续各自鉴权。",
+        "operationId": "openShareInvitation",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ShareInvitationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "当次核验后的目标及可选单输出",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareOpenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/bootstrap/": {
       "get": {
         "tags": [
@@ -3787,7 +4141,7 @@
           "用户管理"
         ],
         "summary": "创建用户",
-        "description": "具备 `core.manage_auth` 和 `core.create_user` 权限的管理员创建用户账号，邮箱必填，创建时必须指定至少一个非超级管理员用户组。密码由后端自动生成并返回。该接口不受自助注册开关影响；`游客` 角色只允许系统专用 guest 账号持有，不能分配给新账号；只有超级管理员可以分配平台管理员角色。",
+        "description": "具备 `core.manage_auth` 和 `core.create_user` 权限的管理员创建用户账号。超级管理员创建时邮箱选填，可用 projectIds 和 allowPublicProject 同时配置可见项目；普通管理员邮箱必填且不得提交项目配置。未配置时默认允许公开项目。创建账号、角色和项目范围原子保存，项目无效或关闭公开却未分配启用私有项目时返回400。必须指定至少一个非超级管理员用户组。密码由后端自动生成并仅在本次响应返回。该接口不受自助注册开关影响；`游客` 角色只允许系统专用 guest 账号持有，不能分配给新账号；只有超级管理员可以分配平台管理员角色。密码按单向哈希保存，不提供原密码查询。",
         "operationId": "createUser",
         "security": [
           {
@@ -4304,8 +4658,8 @@
         "tags": [
           "用户管理"
         ],
-        "summary": "更新用户状态或删除用户",
-        "description": "根据请求体中的 `action` 字段执行不同操作：\n- 不提供 `action`：启用或停用指定用户账号\n- `delete`：删除指定用户账号\n\n不能操作当前登录用户、初始化管理员或系统 guest 账号；非超级管理员主体不能看到或操作超级管理员用户，也不能停用或删除平台管理员账号。需要 `core.manage_auth`。\n",
+        "summary": "修改用户名、更新状态或删除用户",
+        "description": "根据请求体中的 `action` 字段执行不同操作：\n- 不提供 `action`：更新 isActive；超级管理员也可单独提交 username 修改登录名\n- `delete`：删除指定用户账号\n\n停用和删除继续保护当前登录用户、初始化管理员和系统 guest 账号。仅超级管理员可修改用户名，普通管理员提交username返回403；初始化管理员和系统guest禁止改名，其保留用户名不可用于其他账号。用户名须符合合法字符、长度和唯一性要求，冲突返回400。改名保留用户ID、密码哈希和关联数据，登录改用新名称。非超级管理员主体不能看到或操作超级管理员用户，也不能停用或删除平台管理员账号。需要 `core.manage_auth`。\n",
         "operationId": "updateUserOrDelete",
         "security": [
           {
@@ -8036,7 +8390,7 @@
           "管理后台"
         ],
         "summary": "获取工程管理列表",
-        "description": "返回工程和专题管理列表，支持按类型、状态和关键词筛选。需要 `catalog.view_workspacescene`、`catalog.change_workspacescene` 或 `catalog.delete_workspacescene`；后端仍需按对象所有者和访问用户组裁剪可见范围。",
+        "description": "返回当前项目中有权读取的工程管理列表，支持按类型、状态和关键词筛选。需要 `catalog.view_workspacescene`、`catalog.change_workspacescene` 或 `catalog.delete_workspacescene`；工程默认创建者私有，接受邀请后只读。普通管理员不绕过所有者边界，超级管理员可管理当前项目全部工程。",
         "operationId": "listAdminWorkspaces",
         "security": [
           {
@@ -8268,7 +8622,7 @@
           "管理后台"
         ],
         "summary": "操作单个工程",
-        "description": "支持更新工程状态、基础信息、访问用户组和删除确认。启停和信息修改需要 `catalog.change_workspacescene`；删除需要 `catalog.delete_workspacescene`；所属用户、超级管理员和平台管理员可以修改可见范围。删除无关联工程时移除记录；若工程已被专题出图稿引用，则转为停用以保留成果来源。成功操作会写入审计日志。",
+        "description": "支持更新工程状态、基础信息、访问用户组和删除确认。启停和信息修改需要 `catalog.change_workspacescene`；删除需要 `catalog.delete_workspacescene`，并且仅所属用户或超级管理员可维护；接受分享不授予修改或转分享权限。旧访问用户组仅保留兼容元数据。删除无关联工程时移除记录；若工程已被专题出图稿引用，则转为停用以保留成果来源。成功操作会写入审计日志。",
         "operationId": "updateAdminWorkspace",
         "security": [
           {
@@ -9181,7 +9535,7 @@
           "数据目录"
         ],
         "summary": "获取工程和专题列表",
-        "description": "仅列出当前具体项目中可访问的启用工程摘要；按更新时间分页，详情和图层快照按需获取。",
+        "description": "仅列出当前具体项目中本人创建或已接受邀请的启用工程摘要；普通管理员不绕过隐私边界，超级管理员可查看当前项目全部工程。匿名用户及游客不读取他人的私有工程。按更新时间分页，详情和图层快照按需获取；旧 accessGroupIds 不授予访问权。",
         "operationId": "listCatalogWorkspaces",
         "security": [],
         "parameters": [
@@ -9327,7 +9681,7 @@
           "数据目录"
         ],
         "summary": "保存工程",
-        "description": "在当前项目创建工程；项目成员可按功能权限访问，旧 accessGroupIds 不改变访问范围。",
+        "description": "在当前项目创建默认仅创建者可见的工程；接受分享的用户获得该工程只读访问，仍须满足项目、功能和底层数据权限。旧 accessGroupIds 不授予访问权，超级管理员保留管理能力。",
         "operationId": "createCatalogWorkspace",
         "security": [
           {
@@ -9443,7 +9797,7 @@
           "数据目录"
         ],
         "summary": "获取工程详情",
-        "description": "返回当前用户拥有、所属角色获准访问或管理员全量可见的单个启用工程快照。需要 `catalog.view_workspacescene`。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。",
+        "description": "返回本人创建、已接受邀请或超级管理员有权读取的单个启用工程快照。需要 `catalog.view_workspacescene` 及所属项目和全部底层资源访问权。普通管理员和同项目成员不自动获得访问，未获授权的对象 ID 返回404；公开项目内工程同样默认私有。",
         "operationId": "getCatalogWorkspace",
         "security": [],
         "parameters": [
@@ -9554,7 +9908,7 @@
           "数据目录"
         ],
         "summary": "更新或删除工程",
-        "description": "所属用户可以维护自己的工程；超级管理员和平台管理员可以维护全部工程。名称、说明、类型和快照更新需要 `catalog.change_workspacescene`，删除需要 `catalog.delete_workspacescene`；若工程已被专题出图稿引用，删除会转为停用隐藏以保留成果来源；后端始终保留管理员访问，snapshot 不得包含原始 GeoJSON 要素集合或查询结果数据本体。",
+        "description": "所属用户可以维护自己的工程；超级管理员可以维护当前项目全部工程。普通管理员不绕过所有者边界，接受分享只允许读取。名称、说明、类型和快照更新需要 `catalog.change_workspacescene`，删除需要 `catalog.delete_workspacescene`；若工程已被专题出图稿引用，删除会转为停用隐藏以保留成果来源；snapshot 不得包含原始 GeoJSON 要素集合或查询结果数据本体。",
         "operationId": "updateCatalogWorkspace",
         "security": [
           {
@@ -10164,6 +10518,7 @@
                   "$ref": "#/components/schemas/ResourceProfileResponse"
                 },
                 "example": {
+                  "defaultVisualization": {},
                   "resource": {
                     "id": 3,
                     "name": "塔里木河胡杨样地监测点",
@@ -10928,11 +11283,12 @@
               "type": "string",
               "enum": [
                 "artifact",
-                "preview"
+                "preview",
+                "thumbnail"
               ],
               "default": "artifact"
             },
-            "description": "artifact 下载原文件，preview 在浏览器内预览"
+            "description": "artifact 下载原文件，preview 在浏览器内预览；thumbnail 返回长边不超过640像素的WebP缩略图，仅PNG、JPG/JPEG成果提供，其余格式返回400"
           },
           {
             "name": "X-Project-Id",
@@ -11220,7 +11576,7 @@
           "专题制图"
         ],
         "summary": "新建出图稿",
-        "description": "从当前用户拥有的工程创建版式出图草稿；超级管理员和平台管理员可从任意可用工程创建。创建时固化来源工程快照，发布前仅所属用户和管理员可见。需要 `catalog.add_mapcomposition`。",
+        "description": "从当前用户拥有的工程创建版式出图草稿；超级管理员可从当前项目任意可用工程创建。普通管理员不能从他人的私有工程创建，接受分享不授予来源工程写入或派生成果权限。创建时固化来源工程快照，专题仍沿用其发布规则。需要 `catalog.add_mapcomposition`。",
         "operationId": "createMapComposition",
         "security": [
           {
@@ -12089,11 +12445,12 @@
               "type": "string",
               "enum": [
                 "artifact",
-                "preview"
+                "preview",
+                "thumbnail"
               ],
               "default": "artifact"
             },
-            "description": "artifact 返回正式成果并触发下载；preview 返回 PNG 预览"
+            "description": "artifact 返回正式成果并触发下载；preview 返回 PNG 预览；thumbnail 返回由预览生成的长边不超过640像素的WebP缩略图"
           },
           {
             "name": "X-Project-Id",
@@ -16007,7 +16364,7 @@
           "管理后台"
         ],
         "summary": "管理员查看用户标签",
-        "description": "仅超级管理员查看用户标签。项目上下文使用 X-Project-Id 头或 projectTagId 查询参数；公开项目已发布内容公开可读，超管拥有全部项目权限。",
+        "description": "仅超级管理员查看用户私有项目分配及allowPublicProject公开访问策略；超级管理员始终拥有全部项目权限。",
         "operationId": "getProjectAssignment",
         "security": [
           {
@@ -16072,7 +16429,7 @@
           "管理后台"
         ],
         "summary": "超级管理员分配用户标签",
-        "description": "仅超级管理员分配用户标签；新用户仅有公开标签，可分配零到多个私有标签。项目上下文使用 X-Project-Id 头或 projectTagId 查询参数；公开项目已发布内容公开可读，超管拥有全部项目权限。",
+        "description": "仅超级管理员替换用户私有项目分配并可设置allowPublicProject；省略该字段保留原策略。默认允许公开。关闭时至少分配一个启用项目，超级管理员不可关闭。策略实时应用于业务API、知识检索、后台任务和分享；不改变平台公共图文的可读性。",
         "operationId": "setProjectAssignment",
         "security": [
           {
@@ -18742,7 +19099,7 @@
           "Compute"
         ],
         "summary": "downloadComputeOutput",
-        "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。",
+        "description": "计算中心。服务端重新检查项目及功能权限；单个输出另允许接受邀请且实时通过双方项目/功能/输入权限复核的接收人访问，不授整任务；下载仍需数据导出权限。写入必须显式传当前项目。",
         "security": [
           {
             "sessionAuth": []
@@ -18853,7 +19210,7 @@
           "Compute"
         ],
         "summary": "previewComputeOutput",
-        "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。",
+        "description": "计算中心。服务端重新检查项目及功能权限；单个输出另允许接受邀请且实时通过双方项目/功能/输入权限复核的接收人访问，不授整任务；下载仍需数据导出权限。写入必须显式传当前项目。",
         "security": [
           {
             "sessionAuth": []
@@ -18879,6 +19236,20 @@
               "type": "integer",
               "description": "标识"
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "description": "默认table返回最多100行属性；map读取经校验的矢量任务文件并返回完整WGS84 GeoJSON，最多30000要素，超限409，不创建资源",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "table",
+                "map"
+              ],
+              "default": "table"
+            }
           }
         ],
         "responses": {
@@ -18888,6 +19259,18 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ComputePreview"
+                },
+                "example": {
+                  "kind": "vector",
+                  "metadata": {
+                    "layer": "before_intersections"
+                  },
+                  "columns": [],
+                  "rows": [],
+                  "geojson": {
+                    "type": "FeatureCollection",
+                    "features": []
+                  }
                 }
               }
             }
@@ -18962,7 +19345,7 @@
           "Compute"
         ],
         "summary": "importComputeOutput",
-        "description": "计算输出异步入库，统一归入计算结果目录。服务端重新检查原项目、功能权限及输入可见性；写入必须显式传当前项目。",
+        "description": "计算输出异步入库，统一归入计算结果目录。服务端重新检查原项目、数据新增权限及输入可见性；单输出邀请接收人仍须通过实时授权，写入必须显式传当前项目。",
         "security": [
           {
             "sessionAuth": []
@@ -19082,10 +19465,31 @@
           "Agent"
         ],
         "summary": "获取可体验的科研案例",
-        "description": "仅返回当前登录用户已获授权且具备智能体能力的项目入口；不扩展项目或本人资料权限。无需切换当前项目即可读取目录。",
+        "description": "默认保留跨本人授权项目的完整案例入口。view=summary仅返回当前项目轻量入口，执行存在性查询，不调用模型健康检查或扫描算法。scenario只读取当前项目指定场景的完整预设，返回原完整列表结构。所有模式均核对项目和智能体权限。",
         "security": [
           {
             "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "view",
+            "in": "query",
+            "description": "summary读取当前项目轻量入口；省略时读取完整入口。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "summary"
+              ]
+            }
+          },
+          {
+            "name": "scenario",
+            "in": "query",
+            "description": "只读取当前项目指定场景的完整预设；与summary视图分开使用。",
+            "schema": {
+              "$ref": "#/components/schemas/AgentResearchScenario"
+            }
           }
         ],
         "responses": {
@@ -19094,7 +19498,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AgentResearchDemoList"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AgentResearchDemoList"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AgentResearchDemoSummaryList"
+                    }
+                  ]
                 },
                 "example": {
                   "items": [
@@ -19130,6 +19541,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "401": {
             "description": "请先登录",
             "content": {
@@ -19160,7 +19574,7 @@
           "Agent"
         ],
         "summary": "回答科研任务澄清或确认审核",
-        "description": "仅原用户在原项目操作，重新核对资料、算法与权限。answer创建后续模型解析运行并返回202；confirm只明确确认当前审核计划，不代替模型判断；cancel停止关联任务。相同revision与相同答案重试复用运行，不重复提交计算。",
+        "description": "仅原用户在原项目操作，重新核对资料、算法与权限。answer通常创建后续模型解析运行并返回202；通用地质推理的明确角色或阶段回答由服务端严格解析，返回200及已保存的后续对话运行，不调用模型猜测批准。confirm明确确认当前计划；cancel停止关联任务。相同revision与相同答案重试返回202并复用运行，不重复提交计算；新增回答遵守每日运行额度。",
         "security": [
           {
             "sessionAuth": []
@@ -19203,7 +19617,7 @@
         },
         "responses": {
           "200": {
-            "description": "已确认审核或取消，返回原运行最新状态",
+            "description": "已确认审核或取消时返回原运行；通用地质明确回答返回已保存的后续对话运行",
             "content": {
               "application/json": {
                 "schema": {
@@ -19309,6 +19723,16 @@
           },
           "409": {
             "description": "修订、输入或审核计划已变化，请刷新后回答",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "每日运行额度或全站模型队列额度已满，不创建新回答或执行批准",
             "content": {
               "application/json": {
                 "schema": {
@@ -20135,7 +20559,7 @@
         ],
         "operationId": "createAgentRun",
         "summary": "幂等提交模型任务",
-        "description": "幂等提交模型任务。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。数据工具不授予额外项目权限。",
+        "description": "幂等提交模型任务。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。同账号跨项目的快速对话与科研智能体合计最多三个排队或生成任务，同会话串行；等待回答、审核或计算时释放模型名额但保持原会话等待，恢复时重新申请名额。账号名额已满返回409，全站队列或每日额度已满返回429。数据工具不授予额外项目权限。",
         "security": [
           {
             "sessionAuth": []
@@ -20148,6 +20572,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentRun"
+                },
+                "example": {
+                  "id": 106,
+                  "conversationId": 31,
+                  "model": "mock",
+                  "status": "succeeded",
+                  "prompt": "检查上传地质资料并比较远景区",
+                  "answer": "资料已上传，请核对角色。",
+                  "detail": "等待核对资料角色",
+                  "evidence": [],
+                  "attachments": [],
+                  "interaction": null,
+                  "interactionHistory": [],
+                  "contextTruncated": false,
+                  "createdAt": "2026-11-04T09:00:00Z",
+                  "updatedAt": "2026-11-04T09:00:00Z",
+                  "researchIntent": {
+                    "originRunId": 106,
+                    "revision": "generic-chat-roles-v1",
+                    "scenario": "geology_generic",
+                    "status": "clarifying",
+                    "goal": "检查上传地质资料并比较远景区",
+                    "message": "核对角色后生成字段建议，尚未执行任何修改。",
+                    "questions": [
+                      {
+                        "key": "upload_812",
+                        "label": "第1份：地质图.zip（按文件名、类型和几何判断）",
+                        "kind": "choice",
+                        "required": true,
+                        "options": [
+                          {
+                            "value": "lithology",
+                            "label": "地质图"
+                          },
+                          {
+                            "value": "coverage",
+                            "label": "研究区范围"
+                          },
+                          {
+                            "value": "skip",
+                            "label": "不使用"
+                          }
+                        ]
+                      }
+                    ],
+                    "inputs": {},
+                    "parameters": {
+                      "roleAnswers": {
+                        "upload_812": "lithology"
+                      }
+                    },
+                    "inputSummary": [],
+                    "workflowId": null
+                  }
                 }
               }
             }
@@ -21024,6 +21502,838 @@
                 "$ref": "#/components/schemas/AgentWorkflowConfirmation"
               }
             }
+          }
+        }
+      }
+    },
+    "/api/agent/workflow-uploads/references/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "当前具体逻辑推理项目ID",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Agent"
+        ],
+        "operationId": "listAgentWorkflowCatalogResources",
+        "summary": "搜索可供逻辑推理引用的系统数据",
+        "description": "当前单项目内按资源访问权限筛选活动矢量、栅格、表格，排除任务资料；最多返回50项，可通过搜索缩小范围。需要智能体、工作流、算子和数据登记权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "description": "名称或说明搜索词，最多200字",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "有权访问的目录资源",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResourceList"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": 812,
+                      "name": "八宝山幅地质图",
+                      "dataType": "vector",
+                      "description": "已登记的岩性资料",
+                      "isComputeResult": false,
+                      "origin": "uploaded_data"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Agent"
+        ],
+        "operationId": "addAgentWorkflowCatalogReferences",
+        "summary": "将系统数据引用加入任务批次",
+        "description": "仅逻辑推理项目使用，权限与上传一致。原子加入有权访问的当前项目活动资源，不复制或改变目录资源；同一资源可被多个批次引用。重复加入同批次返回原条目，已发送或绑定批次返回409。移除仅解除引用。资料画像读取真实计算输入（栅格原始数据而非可能增加alpha波段的显示COG）。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "批次及目录资源ID",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "batchId",
+                  "resourceIds"
+                ],
+                "properties": {
+                  "batchId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$",
+                    "description": "客户端生成的批次号"
+                  },
+                  "resourceIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 12,
+                    "uniqueItems": true,
+                    "description": "当前项目的目录资源ID，含上传资料合计最多12份",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "资源ID"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "本次引用的批次条目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowUploadList"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+                      "batchId": "0f3a6c9e2b5d8f1a4c7e0b3d6f9a2c5e",
+                      "resourceId": 812,
+                      "source": "catalog",
+                      "name": "八宝山幅地质图",
+                      "fileName": "八宝山幅地质图",
+                      "dataType": "vector",
+                      "sizeBytes": 2483120,
+                      "roleHint": "lithology",
+                      "workflowId": null,
+                      "createdAt": "2026-11-04T08:00:00Z",
+                      "profile": {
+                        "kind": "vector",
+                        "crs": "EPSG:4326",
+                        "geometryTypes": [
+                          "Polygon"
+                        ],
+                        "featureCount": 486,
+                        "bounds": [
+                          96.82,
+                          35.61,
+                          97.41,
+                          35.95
+                        ],
+                        "bandCount": null,
+                        "width": null,
+                        "height": null,
+                        "fields": [
+                          {
+                            "name": "DCMC",
+                            "type": "text",
+                            "samples": [
+                              "八宝山组"
+                            ],
+                            "distinctCount": 36
+                          }
+                        ],
+                        "warnings": []
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflow-uploads/batch/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "uploadAgentWorkflowBatch",
+        "summary": "批量上传任务资料或总压缩包",
+        "description": "权限与单文件上传相同。多个文件或ZIP内子目录中的资料登记到同一批次，Shapefile同目录同名组成文件合并。忽略系统及旁车文件。拒绝绝对路径、父目录、链接、重复路径、加密条目；最多512个条目，累计解压上限为uploadMaxMb与512MiB的较小值，每批最多12份资料。安全预检失败的ZIP不登记任何资料，其余逐份返回错误；已有单Shapefile ZIP接口不变。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "同批次的多个文件或总ZIP",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "batchId",
+                  "files"
+                ],
+                "properties": {
+                  "batchId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$",
+                    "description": "客户端批次号"
+                  },
+                  "files": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 512,
+                    "description": "资料文件、Shapefile组成文件或总ZIP",
+                    "items": {
+                      "type": "string",
+                      "format": "binary",
+                      "description": "上传文件"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "逐份登记结果，允许部分或全部失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowBatchResult"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+                      "batchId": "0f3a6c9e2b5d8f1a4c7e0b3d6f9a2c5e",
+                      "resourceId": 812,
+                      "name": "地质图",
+                      "fileName": "地质图.zip",
+                      "dataType": "vector",
+                      "sizeBytes": 2483120,
+                      "roleHint": "lithology",
+                      "workflowId": null,
+                      "createdAt": "2026-11-04T08:00:00Z",
+                      "profile": {
+                        "kind": "vector",
+                        "crs": "EPSG:4326",
+                        "geometryTypes": [
+                          "Polygon"
+                        ],
+                        "featureCount": 486,
+                        "bounds": [
+                          96.82,
+                          35.61,
+                          97.41,
+                          35.95
+                        ],
+                        "bandCount": null,
+                        "width": null,
+                        "height": null,
+                        "fields": [
+                          {
+                            "name": "DCMC",
+                            "type": "text",
+                            "samples": [
+                              "八宝山组"
+                            ],
+                            "distinctCount": 36
+                          }
+                        ],
+                        "warnings": []
+                      }
+                    }
+                  ],
+                  "errors": [
+                    {
+                      "fileName": "资料/说明.txt",
+                      "detail": "不支持的资料类型"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/agent/workflow-uploads/recognize/": {
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "recognizeAgentWorkflowRoles",
+        "summary": "识别本批次资料角色",
+        "description": "与上传相同权限；只处理本人当前项目的未绑定批次。真实模型依据完整资料画像给出建议；模拟模型、模型失败或结果校验失败时退回规则，并明确规则理由。每个角色最多一份且类型与几何必须匹配；未识别地质图时返回问题。不创建工作流，不执行算法。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "批次和当前可用模型",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "batchId",
+                  "model"
+                ],
+                "properties": {
+                  "batchId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$",
+                    "description": "上传批次号"
+                  },
+                  "model": {
+                    "type": "string",
+                    "description": "当前授权模型标识"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "可由用户修改的角色建议",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowRoleResult"
+                },
+                "example": {
+                  "source": "rules",
+                  "items": [
+                    {
+                      "uploadId": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+                      "resourceId": 812,
+                      "role": "lithology",
+                      "reason": "按文件名、类型和几何判断"
+                    }
+                  ],
+                  "questions": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/agent/workflows/active/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "getActiveAgentWorkflow",
+        "summary": "读取本人挡路的活动工作流",
+        "description": "需要当前项目智能体和MH-workflow权限。按账号查询唯一活动工作流（包括暂停），跨项目仅返回本人任务摘要及项目ID，不返回资料或计划。查看详情与取消仍使用原接口及目标项目权限，不扩大数据访问范围。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "本人活动任务摘要，没有时item为null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "item"
+                  ],
+                  "properties": {
+                    "item": {
+                      "description": "挡路任务摘要或null",
+                      "oneOf": [
+                        {
+                          "$ref": "#/components/schemas/AgentActiveWorkflow"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "example": {
+                  "item": {
+                    "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
+                    "goal": "检查研究区地质图。核对字段后执行。",
+                    "workflowType": "geology_map_review",
+                    "status": "waiting_approval",
+                    "updatedAt": "2026-11-04T08:00:00Z",
+                    "projectId": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/agent/workflow-uploads/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "listAgentWorkflowUploads",
+        "summary": "列出本次任务上传的资料",
+        "description": "列出本人在当前项目某个上传批次中的资料及识别结果。需要智能体与MH-workflow权限；只返回本人上传，已删除或停用的资料不返回。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "batchId",
+            "in": "query",
+            "required": true,
+            "description": "客户端生成的上传批次号，32位小写十六进制",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "上传列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowUploadList"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "id": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+                      "batchId": "0f3a6c9e2b5d8f1a4c7e0b3d6f9a2c5e",
+                      "resourceId": 812,
+                      "name": "八宝山幅地质图",
+                      "fileName": "八宝山幅地质图.zip",
+                      "dataType": "vector",
+                      "sizeBytes": 2483120,
+                      "roleHint": "lithology",
+                      "profile": {
+                        "kind": "vector",
+                        "crs": "EPSG:4326",
+                        "geometryTypes": [
+                          "Polygon",
+                          "MultiPolygon"
+                        ],
+                        "featureCount": 486,
+                        "bounds": [
+                          96.82,
+                          35.61,
+                          97.41,
+                          35.95
+                        ],
+                        "bandCount": null,
+                        "width": null,
+                        "height": null,
+                        "fields": [
+                          {
+                            "name": "DCMC",
+                            "type": "text",
+                            "samples": [
+                              "八宝山组二段",
+                              "闹仓坚沟组一段",
+                              "全新统冲积物"
+                            ],
+                            "distinctCount": 36
+                          },
+                          {
+                            "name": "DH",
+                            "type": "text",
+                            "samples": [
+                              "T3b2",
+                              "O1n1",
+                              "Qh"
+                            ],
+                            "distinctCount": 34
+                          },
+                          {
+                            "name": "MJ",
+                            "type": "number",
+                            "samples": [
+                              "1.82",
+                              "0.37",
+                              "12.4"
+                            ],
+                            "distinctCount": 486
+                          }
+                        ],
+                        "warnings": []
+                      },
+                      "workflowId": null,
+                      "createdAt": "2026-11-03T09:30:00+08:00"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "uploadAgentWorkflowFile",
+        "summary": "上传任务资料并识别",
+        "description": "上传一个文件作为通用地质推理任务的资料。经既有导入服务校验后登记为仅上传者可见的数据资源，不进入项目数据目录；返回类型、坐标系、几何、字段与示例取值，以及推荐角色。需要智能体访问、MH-workflow、智能体调用算子及当前项目数据登记权限。每个批次最多12个文件；批次已绑定任务时返回409。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "一个资料文件及其批次号",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "description": "矢量支持Shapefile ZIP、GeoPackage、GeoJSON；栅格支持GeoTIFF；表格支持CSV、XLSX。大小沿用平台导入限制。",
+                "additionalProperties": false,
+                "required": [
+                  "file",
+                  "batchId"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "资料文件"
+                  },
+                  "batchId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$",
+                    "description": "客户端生成的上传批次号"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已登记并完成识别",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentWorkflowUpload"
+                },
+                "example": {
+                  "id": "4f1c2a9e-7b3d-4c61-9a2e-1d5f6b7c8a90",
+                  "batchId": "0f3a6c9e2b5d8f1a4c7e0b3d6f9a2c5e",
+                  "resourceId": 812,
+                  "name": "八宝山幅地质图",
+                  "fileName": "八宝山幅地质图.zip",
+                  "dataType": "vector",
+                  "sizeBytes": 2483120,
+                  "roleHint": "lithology",
+                  "profile": {
+                    "kind": "vector",
+                    "crs": "EPSG:4326",
+                    "geometryTypes": [
+                      "Polygon",
+                      "MultiPolygon"
+                    ],
+                    "featureCount": 486,
+                    "bounds": [
+                      96.82,
+                      35.61,
+                      97.41,
+                      35.95
+                    ],
+                    "bandCount": null,
+                    "width": null,
+                    "height": null,
+                    "fields": [
+                      {
+                        "name": "DCMC",
+                        "type": "text",
+                        "samples": [
+                          "八宝山组二段",
+                          "闹仓坚沟组一段",
+                          "全新统冲积物"
+                        ],
+                        "distinctCount": 36
+                      },
+                      {
+                        "name": "DH",
+                        "type": "text",
+                        "samples": [
+                          "T3b2",
+                          "O1n1",
+                          "Qh"
+                        ],
+                        "distinctCount": 34
+                      },
+                      {
+                        "name": "MJ",
+                        "type": "number",
+                        "samples": [
+                          "1.82",
+                          "0.37",
+                          "12.4"
+                        ],
+                        "distinctCount": 486
+                      }
+                    ],
+                    "warnings": []
+                  },
+                  "workflowId": null,
+                  "createdAt": "2026-11-03T09:30:00+08:00"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/agent/workflow-uploads/{uploadId}/": {
+      "delete": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "deleteAgentWorkflowUpload",
+        "summary": "删除尚未使用的任务资料",
+        "description": "移除本人当前项目尚未发送或绑定任务的资料。上传条目删除后停用其专有资源；系统目录条目只解除引用，绝不停用、删除或更改原资源。已发送或绑定任务的资料作为任务依据保留，返回409。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "唯一当前项目 ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "uploadId",
+            "in": "path",
+            "required": true,
+            "description": "上传记录 UUID",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "已删除"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
           }
         }
       }
@@ -22071,7 +23381,7 @@
         ],
         "operationId": "listAgentWorkflows",
         "summary": "恢复本人科研编排记录",
-        "description": "返回当前项目内本人最近三十个工作流；重新检查账号、项目和智能体访问权限。",
+        "description": "默认保留当前项目本人最近三十个完整工作流。view=summary返回分页轻量历史，支持workflowType筛选，不读取plan/evidence/steps或重新扫描输入；详情接口另行验证数据权限。所有模式重新检查账号、项目及智能体权限。",
         "security": [
           {
             "sessionAuth": []
@@ -22087,6 +23397,47 @@
               "type": "integer",
               "minimum": 1
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "description": "summary选择分页轻量历史；省略时返回原完整列表。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "summary"
+              ]
+            }
+          },
+          {
+            "name": "workflowType",
+            "in": "query",
+            "description": "可选的工作流类型精确筛选。",
+            "schema": {
+              "type": "string",
+              "maxLength": 40
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "summary分页起始偏移。",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "summary每页数量。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
           }
         ],
         "responses": {
@@ -22095,13 +23446,23 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AgentWorkflowList"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AgentWorkflowList"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AgentWorkflowSummaryList"
+                    }
+                  ]
                 },
                 "example": {
                   "items": []
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -22182,7 +23543,7 @@
         ],
         "operationId": "getAgentWorkflow",
         "summary": "查询科研工作流",
-        "description": "查询当前用户在当前项目内的工作流、步骤、证据和结果引用。",
+        "description": "查询当前用户在当前项目内的工作流。默认返回完整步骤、证据和结果引用；view=card仅返回卡片所需状态、计数和阶段成果引用，steps与evidence为空，不包含模型交互、完整计划或修改审核。展开明细时请求默认视图。",
         "security": [
           {
             "sessionAuth": []
@@ -22208,6 +23569,20 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "description": "full为完整详情（默认）；card为轻量卡片，鉴权和项目边界不变",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "full",
+                "card"
+              ],
+              "default": "full"
+            }
           }
         ],
         "responses": {
@@ -22217,9 +23592,101 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentWorkflow"
+                },
+                "example": {
+                  "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
+                  "projectId": 3,
+                  "workflowType": "geology_generic",
+                  "goal": "检查上传地质资料",
+                  "model": "configured",
+                  "status": "succeeded",
+                  "detail": "九项成果已保存",
+                  "currentStep": "finalize",
+                  "iteration": 5,
+                  "operatorSteps": 5,
+                  "maxIterations": 12,
+                  "maxOperatorSteps": 16,
+                  "executeOperators": true,
+                  "resourceIds": [
+                    812
+                  ],
+                  "algorithmVersionId": null,
+                  "parameters": {},
+                  "resultIds": [
+                    1001,
+                    1002,
+                    1003,
+                    1004,
+                    1005,
+                    1006,
+                    1007,
+                    1008,
+                    1009,
+                    1010,
+                    1011,
+                    1012,
+                    1013,
+                    1014,
+                    1015,
+                    1016,
+                    1017,
+                    1018,
+                    1019,
+                    1020,
+                    1021,
+                    1022,
+                    1023,
+                    1024,
+                    1025,
+                    1026,
+                    1027
+                  ],
+                  "resultResourceIds": [
+                    820,
+                    821,
+                    822,
+                    823,
+                    824,
+                    825,
+                    826,
+                    827,
+                    828
+                  ],
+                  "importResults": true,
+                  "evidence": [],
+                  "steps": [],
+                  "stepCount": 22,
+                  "view": "card",
+                  "runtime": "durable_state_machine",
+                  "createdAt": "2026-11-04T08:00:00Z",
+                  "updatedAt": "2026-11-04T08:10:00Z",
+                  "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "plan": {
+                    "phase": "completed",
+                    "deletedResources": [],
+                    "stages": [
+                      {
+                        "name": "apply",
+                        "status": "completed",
+                        "taskId": "67ac90d1-999f-44b7-9b68-1da1f726a142",
+                        "outputs": [
+                          {
+                            "outputId": 1007,
+                            "key": "lithology",
+                            "kind": "vector",
+                            "resourceId": 821,
+                            "label": "修正后岩性图"
+                          }
+                        ]
+                      }
+                    ]
+                  }
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -23419,7 +24886,7 @@
           "Compute"
         ],
         "summary": "previewComputeOutputMap",
-        "description": "同一用户、当前项目及真实任务绑定；所有引用每次重新授权，变更计划409，临时过期404",
+        "description": "原本人/管理权限或已接受的单输出邀请；当前项目及真实任务绑定，所有输入每次重新授权，分享不授整任务，临时过期404",
         "security": [
           {
             "sessionAuth": []
@@ -23557,7 +25024,7 @@
           "Compute"
         ],
         "summary": "renderComputeOutputMap",
-        "description": "同一用户、当前项目及真实任务绑定；所有引用每次重新授权，变更计划409，临时过期404",
+        "description": "原本人/管理权限或已接受的单输出邀请；当前项目及真实任务绑定，所有输入每次重新授权，分享不授整任务，临时过期404",
         "security": [
           {
             "sessionAuth": []
@@ -23674,6 +25141,17 @@
       }
     },
     "parameters": {
+      "ShareInvitationId": {
+        "name": "invitationId",
+        "in": "path",
+        "required": true,
+        "description": "本人收发邀请的整数标识",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "邀请标识"
+        }
+      },
       "ResourceId": {
         "name": "id",
         "in": "path",
@@ -23796,6 +25274,298 @@
       }
     },
     "schemas": {
+      "ShareKind": {
+        "type": "string",
+        "description": "工程、专题图或单个计算输出；不分享整个计算任务",
+        "enum": [
+          "workspace",
+          "composition",
+          "compute_output"
+        ]
+      },
+      "SharePerson": {
+        "type": "object",
+        "description": "已知邀请双方的最少身份信息，不提供用户枚举",
+        "required": [
+          "username",
+          "displayName"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "准确用户名"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "显示名称"
+          }
+        }
+      },
+      "ShareTarget": {
+        "type": "object",
+        "description": "原项目中的只读目标；不复制资料或增加项目权限",
+        "required": [
+          "kind",
+          "objectId",
+          "name",
+          "projectTagId",
+          "projectName",
+          "openUrl"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ShareKind"
+          },
+          "objectId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "工程/专题图/单输出标识"
+          },
+          "name": {
+            "type": "string",
+            "description": "分享对象名称"
+          },
+          "projectTagId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "业务项目标识"
+          },
+          "projectName": {
+            "type": "string",
+            "description": "业务项目名称"
+          },
+          "openUrl": {
+            "type": "string",
+            "description": "安全站内入口；计算输出使用/compute?sharedInvitation=邀请编号，预检时为空"
+          }
+        }
+      },
+      "ShareCheckRequest": {
+        "type": "object",
+        "description": "精确用户名与当前项目的一个对象",
+        "required": [
+          "kind",
+          "objectId",
+          "username"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ShareKind"
+          },
+          "objectId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "单个对象标识"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 150,
+            "description": "区分大小写的完整用户名，不接受模糊选择"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShareCreateRequest": {
+        "type": "object",
+        "description": "发出单对象邀请",
+        "required": [
+          "kind",
+          "objectId",
+          "username",
+          "idempotencyKey"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ShareKind"
+          },
+          "objectId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "单个对象标识"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 150,
+            "description": "区分大小写的完整用户名"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "本账号唯一提交键，同键不同请求409"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShareCheckResponse": {
+        "type": "object",
+        "description": "可发送性及明确原因，不可用时不返回目标用户或私有依赖信息",
+        "required": [
+          "eligible",
+          "detail"
+        ],
+        "properties": {
+          "eligible": {
+            "type": "boolean",
+            "description": "当前是否允许发送"
+          },
+          "detail": {
+            "type": "string",
+            "description": "可理解的成功或失败原因"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ShareTarget"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/SharePerson"
+          }
+        }
+      },
+      "ShareInvitation": {
+        "type": "object",
+        "description": "持久邀请和本人这侧通知；接受只授该对象只读入口",
+        "required": [
+          "id",
+          "status",
+          "sender",
+          "recipient",
+          "target",
+          "createdAt",
+          "respondedAt",
+          "unread",
+          "detail",
+          "canRespond"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "邀请标识"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected",
+              "unavailable"
+            ],
+            "description": "等待回应/接受/拒绝/源对象或权限失效"
+          },
+          "sender": {
+            "$ref": "#/components/schemas/SharePerson"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/SharePerson"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ShareTarget"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "发出时间"
+          },
+          "respondedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "决定或确认失效的时间"
+          },
+          "unread": {
+            "type": "boolean",
+            "description": "收件通知或分享者决定通知是否未读"
+          },
+          "detail": {
+            "type": "string",
+            "description": "发出、等待、接受、拒绝或失效的反馈"
+          },
+          "canRespond": {
+            "type": "boolean",
+            "description": "本人是否为仍待回应的接收人；接受前继续重新核权"
+          }
+        }
+      },
+      "ShareInvitationList": {
+        "type": "object",
+        "description": "本人跨仍有权项目收件或发件分页",
+        "required": [
+          "items",
+          "total",
+          "unreadCount",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "本页邀请",
+            "items": {
+              "$ref": "#/components/schemas/ShareInvitation"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "当前箱邀请总数"
+          },
+          "unreadCount": {
+            "type": "integer",
+            "description": "当前箱全部未读数"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "每页条数"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "当前偏移"
+          }
+        }
+      },
+      "ShareResponseRequest": {
+        "type": "object",
+        "description": "接收人明确响应",
+        "required": [
+          "decision",
+          "idempotencyKey"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "reject"
+            ],
+            "description": "接受或拒绝"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "响应提交键，防重复操作"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShareOpenResponse": {
+        "type": "object",
+        "description": "实时核验后返回目标；计算输出仅一份最少元信息",
+        "required": [
+          "target"
+        ],
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/ShareTarget"
+          },
+          "output": {
+            "$ref": "#/components/schemas/ComputeOutput"
+          }
+        }
+      },
       "AgentAudience": {
         "type": "object",
         "description": "附加可见范围；不授予功能或项目权限",
@@ -25554,6 +27324,11 @@
         "type": "object",
         "description": "提交任务",
         "properties": {
+          "uploadBatchId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$",
+            "description": "逻辑推理项目智能体模式下本人未绑定的上传批次，需求最多12000字；发送后在当前对话核对资料角色，确认后绑定真实工作流，不自动越过字段、计划或处置批准。批次仅能关联一个对话研究任务。"
+          },
           "demoScenario": {
             "$ref": "#/components/schemas/AgentResearchScenario"
           },
@@ -25659,13 +27434,14 @@
       },
       "AgentResearchScenario": {
         "type": "string",
-        "description": "当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确",
+        "description": "当前授权项目内已登记科研场景；geology_map_review 为已有地质检查；geology_multi_element_reasoning 为海德乌拉岩性、构造与蚀变综合推理演示，分段由parameters.segment明确；geology_generic 为用户上传资料的通用地质推理，资料在任务中上传，不提供预设",
         "enum": [
           "ecology_investigation",
           "geology_correction",
           "geology_age_correction",
           "geology_map_review",
-          "geology_multi_element_reasoning"
+          "geology_multi_element_reasoning",
+          "geology_generic"
         ]
       },
       "AgentResearchQuestion": {
@@ -25863,7 +27639,7 @@
               "confirm",
               "cancel"
             ],
-            "description": "回答、明确审核确认或取消"
+            "description": "回答、明确审核确认或取消；通用地质推理的answer按当前阶段严格解析自然语言，不明确时保留卡片确认，不自动批准"
           },
           "revision": {
             "type": "string",
@@ -25872,7 +27648,7 @@
           },
           "answers": {
             "type": "object",
-            "description": "问题键到用户答案，不把选项标题当作代码执行",
+            "description": "问题键到用户答案，不把选项标题当作代码执行；通用地质角色核对使用upload_资源ID到角色键（或skip），须完整核对所有资料，角色不得重复",
             "additionalProperties": {
               "type": "string",
               "description": "用户选择或输入的文字"
@@ -25889,6 +27665,49 @@
           "revision"
         ],
         "additionalProperties": false
+      },
+      "AgentResearchDemoSummaryList": {
+        "type": "object",
+        "description": "当前项目科研案例轻量入口，不含模型健康检查、预设或算法扫描结果。",
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "当前项目中存在的可见案例。",
+            "items": {
+              "type": "object",
+              "description": "进入指定场景前加载完整预设的入口。",
+              "required": [
+                "scenario",
+                "projectId",
+                "projectName",
+                "title"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "scenario": {
+                  "$ref": "#/components/schemas/AgentResearchScenario"
+                },
+                "projectId": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "当前已授权项目"
+                },
+                "projectName": {
+                  "type": "string",
+                  "description": "当前项目名称"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "案例标题"
+                }
+              }
+            }
+          }
+        }
       },
       "AgentResearchDemoList": {
         "type": "object",
@@ -25926,9 +27745,10 @@
                   "enum": [
                     "synthetic",
                     "real_map_with_demonstration_errors",
-                    "demonstration_case"
+                    "demonstration_case",
+                    "user_upload"
                   ],
-                  "description": "synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例"
+                  "description": "synthetic为模拟样例；real_map_with_demonstration_errors为历史时代一致性案例；demonstration_case为按专家规则准备的小范围地质成果检查演示案例；user_upload为用户在任务中上传资料"
                 },
                 "available": {
                   "type": "boolean",
@@ -26106,6 +27926,113 @@
           "detail"
         ],
         "additionalProperties": false
+      },
+      "AgentWorkflowSummary": {
+        "type": "object",
+        "description": "本人当前项目工作流的轻量历史；完整计划和证据按需读取详情。",
+        "required": [
+          "id",
+          "projectId",
+          "workflowType",
+          "goal",
+          "status",
+          "detail",
+          "currentStep",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "工作流标识"
+          },
+          "projectId": {
+            "type": "integer",
+            "description": "所属项目"
+          },
+          "workflowType": {
+            "type": "string",
+            "description": "工作流类型"
+          },
+          "goal": {
+            "type": "string",
+            "description": "用户目标"
+          },
+          "status": {
+            "type": "string",
+            "description": "当前实际状态",
+            "enum": [
+              "queued",
+              "running",
+              "waiting_compute",
+              "waiting_approval",
+              "paused",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "description": "可读状态"
+          },
+          "currentStep": {
+            "type": "string",
+            "description": "当前节点"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "创建时间"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "更新时间"
+          }
+        }
+      },
+      "AgentWorkflowSummaryList": {
+        "type": "object",
+        "description": "当前项目本人工作流的分页轻量历史。",
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit",
+          "hasMore"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "本页工作流摘要。",
+            "items": {
+              "$ref": "#/components/schemas/AgentWorkflowSummary"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "当前筛选的历史总数"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "本页偏移"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "本页条数上限"
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "是否还有下一页"
+          }
+        }
       },
       "AgentWorkflowList": {
         "type": "object",
@@ -27350,8 +29277,21 @@
       },
       "AgentWorkflow": {
         "type": "object",
-        "description": "可恢复的项目科研工作流",
+        "description": "可恢复的项目科研工作流；card视图省略完整计划和审核，steps/evidence为空",
         "properties": {
+          "view": {
+            "type": "string",
+            "enum": [
+              "full",
+              "card"
+            ],
+            "description": "详情投影视图；省略等同full"
+          },
+          "stepCount": {
+            "type": "integer",
+            "description": "实际步骤总数，card视图用于按需展开入口",
+            "minimum": 0
+          },
           "id": {
             "type": "string",
             "format": "uuid",
@@ -27493,6 +29433,9 @@
                 "items": {
                   "$ref": "#/components/schemas/AgentTrialRuleBinding"
                 }
+              },
+              "fieldMappingReview": {
+                "$ref": "#/components/schemas/AgentFieldMappingReview"
               }
             },
             "additionalProperties": true
@@ -27552,7 +29495,7 @@
         "properties": {
           "workflowType": {
             "type": "string",
-            "description": "工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，保留生态与既有地质场景；默认 hyperspectral_interpretation",
+            "description": "工作流类型；geology_multi_element_reasoning 为海德乌拉综合推理，geology_generic 为上传资料的通用地质推理，保留生态与既有地质场景；默认 hyperspectral_interpretation",
             "default": "hyperspectral_interpretation",
             "maxLength": 40
           },
@@ -27600,7 +29543,7 @@
           },
           "inputs": {
             "type": "object",
-            "description": "输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。",
+            "description": "输入端口或场景角色到授权资源的明确绑定。综合地质场景使用lithology、faults、coverage、rules、hematite、chlorite、hydromica、calcite、dolomite。通用地质场景使用lithology（必需）及可选的faults、coverage、units和五类蚀变角色，规则由服务端选用当前项目已绑定的试用规则。既有生态和地质角色保持原协议。真实计算输出按持久来源接入后续步骤。",
             "additionalProperties": {
               "type": "integer",
               "minimum": 1
@@ -27618,6 +29561,11 @@
             "type": "string",
             "format": "uuid",
             "description": "可选的本人当前项目已完成生态分析；仅替换观测证据，复用实际变化结果并保存旧判断与新增证据，用于更新调查建议。"
+          },
+          "uploadBatchId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "description": "geology_generic必填。本人当前项目尚未绑定任务的上传批次；inputs只能引用该批次资料，创建后批次绑定到本任务。"
           }
         },
         "required": [
@@ -27817,12 +29765,13 @@
         "required": [
           "items",
           "canManage",
-          "canAssign"
+          "canAssign",
+          "defaultProjectId"
         ],
         "properties": {
           "items": {
             "type": "array",
-            "description": "公开和已获分配项目，超管可见全部。",
+            "description": "当前可访问项目；公开访问可由超管按用户关闭，超管可见全部。",
             "items": {
               "$ref": "#/components/schemas/ProjectTag"
             }
@@ -27834,6 +29783,13 @@
           "canAssign": {
             "type": "boolean",
             "description": "能否分配用户项目标签。"
+          },
+          "defaultProjectId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "可访问的默认项目，优先公开，否则首个启用授权项目；没有可访问项目时为空。业务请求未显式指定项目时使用同一规则。"
           },
           "assignableItems": {
             "type": "array",
@@ -27887,10 +29843,15 @@
           },
           "projectIds": {
             "type": "array",
-            "description": "私有项目标签，公开项目自动可读。",
+            "description": "私有项目标签；公开访问单独由allowPublicProject控制。",
             "items": {
               "type": "integer"
             }
+          },
+          "allowPublicProject": {
+            "type": "boolean",
+            "default": true,
+            "description": "是否允许公开项目；GET始终返回，POST省略保留原策略。新旧用户默认true；关闭需至少分配一个启用项目，超级管理员不可关闭。"
           }
         }
       },
@@ -30715,6 +32676,10 @@
               "operationLogGroupIds"
             ],
             "properties": {
+              "canRenameUsername": {
+                "type": "boolean",
+                "description": "当前请求者可否为该账号改名；仅超级管理员且目标不是初始化管理员或系统游客时为true。旧客户端缺省按false处理。"
+              },
               "groupIds": {
                 "type": "array",
                 "description": "用户所属角色 ID 列表；后端实现使用 Django Group",
@@ -30769,7 +32734,6 @@
         "type": "object",
         "required": [
           "username",
-          "email",
           "groupIds"
         ],
         "properties": {
@@ -30782,9 +32746,17 @@
             "description": "显示名称"
           },
           "email": {
-            "type": "string",
-            "format": "email",
-            "description": "必填用户邮箱；后端统一转为小写并保证非空邮箱唯一"
+            "description": "超级管理员创建时可省略或留空，普通管理员必填；非空邮箱统一转为小写并保证唯一。",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "string",
+                "const": ""
+              }
+            ]
           },
           "department": {
             "type": "string",
@@ -30801,6 +32773,19 @@
           "isActive": {
             "type": "boolean",
             "description": "是否启用账号，默认 true"
+          },
+          "projectIds": {
+            "type": "array",
+            "description": "仅超级管理员可提交的启用私有项目ID；公开项目由allowPublicProject单独控制。省略时不分配私有项目，重复ID去重。",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "allowPublicProject": {
+            "type": "boolean",
+            "default": true,
+            "description": "仅超级管理员可提交，是否允许访问公开项目；关闭时须至少分配一个启用私有项目。普通管理员不得提交，即使为默认值。"
           }
         }
       },
@@ -30914,13 +32899,25 @@
       },
       "UserUpdateRequest": {
         "type": "object",
-        "required": [
-          "isActive"
-        ],
+        "description": "提交username或isActive至少一项；删除沿用action=delete。改名不重建用户、不改变密码和关联对象。",
+        "minProperties": 1,
         "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 150,
+            "description": "仅超级管理员可提交的新登录名；使用Django用户名校验，规范化后须唯一，系统专用账号及其保留名称不可修改或占用。"
+          },
           "isActive": {
             "type": "boolean",
             "description": "用户账号是否启用"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "delete"
+            ],
+            "description": "删除账号；继续遵守当前登录用户、初始化管理员和游客保护。"
           }
         }
       },
@@ -32341,6 +34338,7 @@
           "fileFormat",
           "sizeBytes",
           "previewUrl",
+          "thumbnailUrl",
           "downloadUrl",
           "owner",
           "accessGroups",
@@ -32406,6 +34404,13 @@
           "previewUrl": {
             "type": "string",
             "description": "成果预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。"
+          },
+          "thumbnailUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "卡片用缩略图地址，包含所属项目的 projectTagId；仅PNG、JPG/JPEG成果提供，其余格式为null。首次请求时生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。"
           },
           "downloadUrl": {
             "type": "string",
@@ -32538,6 +34543,531 @@
           }
         }
       },
+      "AgentActiveWorkflow": {
+        "type": "object",
+        "description": "本人账号活动工作流摘要，不含资料与计划",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "goal",
+          "workflowType",
+          "status",
+          "updatedAt",
+          "projectId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "工作流ID"
+          },
+          "goal": {
+            "type": "string",
+            "description": "任务目标"
+          },
+          "workflowType": {
+            "type": "string",
+            "description": "任务场景"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "waiting_compute",
+              "waiting_approval",
+              "paused"
+            ],
+            "description": "活动状态"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "最近更新时间"
+          },
+          "projectId": {
+            "type": "integer",
+            "description": "所属项目ID，后续操作需该项目权限"
+          }
+        }
+      },
+      "AgentWorkflowBatchResult": {
+        "type": "object",
+        "description": "批量上传的逐份结果",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "errors"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "成功登记的资料",
+            "items": {
+              "$ref": "#/components/schemas/AgentWorkflowUpload"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "description": "未登记资料或安全预检失败压缩包",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "fileName",
+                "detail"
+              ],
+              "properties": {
+                "fileName": {
+                  "type": "string",
+                  "description": "原文件或包内相对路径"
+                },
+                "detail": {
+                  "type": "string",
+                  "description": "失败原因"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AgentWorkflowRoleResult": {
+        "type": "object",
+        "description": "整批资料的互斥角色建议",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "questions",
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "model",
+              "rules"
+            ],
+            "description": "建议来源"
+          },
+          "questions": {
+            "type": "array",
+            "description": "需要用户核查的问题",
+            "items": {
+              "type": "string",
+              "description": "问题"
+            }
+          },
+          "items": {
+            "type": "array",
+            "description": "每份资料的建议，未识别时role为null",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "uploadId",
+                "resourceId",
+                "role",
+                "reason"
+              ],
+              "properties": {
+                "uploadId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "description": "上传记录ID"
+                },
+                "resourceId": {
+                  "type": "integer",
+                  "description": "资料资源ID"
+                },
+                "role": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "lithology",
+                    "faults",
+                    "coverage",
+                    "units",
+                    "hematite",
+                    "chlorite",
+                    "hydromica",
+                    "calcite",
+                    "dolomite",
+                    null
+                  ],
+                  "description": "建议角色"
+                },
+                "reason": {
+                  "type": "string",
+                  "description": "判断依据或规则退回说明"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AgentWorkflowUploadField": {
+        "type": "object",
+        "description": "上传资料中的一个字段及示例取值",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "type",
+          "samples",
+          "distinctCount"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "原始字段名"
+          },
+          "type": {
+            "type": "string",
+            "description": "推断的字段类型，例如text、integer、number"
+          },
+          "samples": {
+            "type": "array",
+            "description": "最多8个不同的示例取值，统一为文本",
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "description": "示例取值"
+            }
+          },
+          "distinctCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "前1000条记录中的不同取值个数"
+          }
+        }
+      },
+      "AgentWorkflowUploadProfile": {
+        "type": "object",
+        "description": "平台读取的资料识别结果",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "fields"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "vector",
+              "raster",
+              "table"
+            ],
+            "description": "资料类型"
+          },
+          "crs": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "坐标系，例如EPSG:32646；无法识别时为null"
+          },
+          "geometryTypes": {
+            "type": "array",
+            "description": "矢量几何类型",
+            "items": {
+              "type": "string",
+              "description": "几何类型"
+            }
+          },
+          "featureCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "要素数或表格行数"
+          },
+          "bounds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "description": "WGS84外包范围[west,south,east,north]",
+            "items": {
+              "type": "number",
+              "description": "坐标"
+            }
+          },
+          "bandCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "栅格波段数"
+          },
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "栅格列数"
+          },
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "栅格行数"
+          },
+          "fields": {
+            "type": "array",
+            "description": "矢量或表格字段；栅格为空数组",
+            "items": {
+              "$ref": "#/components/schemas/AgentWorkflowUploadField"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "description": "识别中发现的问题，例如缺少坐标系",
+            "items": {
+              "type": "string",
+              "description": "问题说明"
+            }
+          }
+        }
+      },
+      "AgentWorkflowUpload": {
+        "type": "object",
+        "description": "通用地质推理任务的一份资料，上传文件或系统目录引用",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "batchId",
+          "resourceId",
+          "name",
+          "fileName",
+          "dataType",
+          "sizeBytes",
+          "roleHint",
+          "profile",
+          "workflowId",
+          "createdAt"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "upload",
+              "catalog"
+            ],
+            "description": "资料来源；历史未返回此字段的记录为上传文件。目录引用移除时绝不改变目录资源"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "上传记录 UUID"
+          },
+          "batchId": {
+            "type": "string",
+            "description": "上传批次号"
+          },
+          "resourceId": {
+            "type": "integer",
+            "description": "数据资源ID；上传资源仅本人可见，目录引用沿用原资源访问权限"
+          },
+          "name": {
+            "type": "string",
+            "description": "资料名称，目录引用取原资源名称"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "原始文件名；目录引用为原资源名称"
+          },
+          "dataType": {
+            "type": "string",
+            "enum": [
+              "vector",
+              "raster",
+              "table"
+            ],
+            "description": "资料类型"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "原始文件大小"
+          },
+          "roleHint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "平台推荐的资料角色；无法判断时为null",
+            "enum": [
+              "lithology",
+              "faults",
+              "coverage",
+              "units",
+              "hematite",
+              "chlorite",
+              "hydromica",
+              "calcite",
+              "dolomite",
+              null
+            ]
+          },
+          "profile": {
+            "$ref": "#/components/schemas/AgentWorkflowUploadProfile"
+          },
+          "workflowId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "已绑定的工作流UUID；未绑定时为null"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "上传时间"
+          }
+        }
+      },
+      "AgentWorkflowUploadList": {
+        "type": "object",
+        "description": "一个批次的上传资料",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "按上传时间排列",
+            "items": {
+              "$ref": "#/components/schemas/AgentWorkflowUpload"
+            }
+          }
+        }
+      },
+      "AgentFieldMappingTarget": {
+        "type": "object",
+        "description": "一个规范字段的对应建议",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "required",
+          "field",
+          "reason"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "规范字段名，例如name、geo_sym"
+          },
+          "label": {
+            "type": "string",
+            "description": "规范字段的中文说明"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "是否必须对应"
+          },
+          "field": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "建议对应的原始字段；不对应时为null"
+          },
+          "reason": {
+            "type": "string",
+            "description": "智能体给出的判断依据"
+          }
+        }
+      },
+      "AgentFieldMappingRole": {
+        "type": "object",
+        "description": "一份资料的字段对应建议",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "label",
+          "resourceId",
+          "fileName",
+          "fields",
+          "targets"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "资料角色"
+          },
+          "label": {
+            "type": "string",
+            "description": "角色中文名"
+          },
+          "resourceId": {
+            "type": "integer",
+            "description": "上传资料的数据资源ID"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "原始文件名"
+          },
+          "fields": {
+            "type": "array",
+            "description": "可选择的原始字段",
+            "items": {
+              "type": "string",
+              "description": "字段名"
+            }
+          },
+          "targets": {
+            "type": "array",
+            "description": "规范字段及建议",
+            "items": {
+              "$ref": "#/components/schemas/AgentFieldMappingTarget"
+            }
+          }
+        }
+      },
+      "AgentFieldMappingReview": {
+        "type": "object",
+        "description": "通用地质推理的字段确认环节；只在geology_generic场景出现",
+        "additionalProperties": false,
+        "required": [
+          "roles",
+          "questions",
+          "modelMode",
+          "confirmed"
+        ],
+        "properties": {
+          "roles": {
+            "type": "array",
+            "description": "需要确认字段的资料；栅格资料不出现",
+            "items": {
+              "$ref": "#/components/schemas/AgentFieldMappingRole"
+            }
+          },
+          "questions": {
+            "type": "array",
+            "description": "智能体需要用户回答的问题，例如无法识别地层字段",
+            "items": {
+              "type": "string",
+              "description": "问题"
+            }
+          },
+          "modelMode": {
+            "type": "string",
+            "enum": [
+              "real",
+              "mock"
+            ],
+            "description": "建议来自真实模型或模拟模型"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "description": "用户是否已确认"
+          }
+        }
+      },
       "AgentWorkflowConfirmation": {
         "type": "object",
         "description": "用户对当前预览计划或候选结果的审核选择。",
@@ -32578,6 +35108,24 @@
               "minLength": 1,
               "maxLength": 64,
               "description": "当前实际问题和模型建议绑定的稳定标识"
+            }
+          },
+          "fieldMapping": {
+            "type": "object",
+            "description": "通用地质推理字段确认环节approve必填。键为资料角色，值为规范字段到原始字段的对应；null表示不对应。必需字段必须对应真实字段，其他阶段不得提交。",
+            "maxProperties": 9,
+            "additionalProperties": {
+              "type": "object",
+              "description": "一份资料的字段对应",
+              "maxProperties": 8,
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "原始字段名",
+                "maxLength": 120
+              }
             }
           }
         }
@@ -32690,13 +35238,13 @@
               "faults": {
                 "type": "integer",
                 "minimum": 1,
-                "description": "本轮修正构造资源"
+                "description": "本轮修正构造资源；算子1.0.5起为删除获批剔除线的干净图层，全剔除时缺省，不回退原图"
               }
             }
           },
           "changes": {
             "type": "array",
-            "description": "真实变化线点面图层，不含未批准建议",
+            "description": "真实变化线点面图层，不含未批准建议；算子1.0.5起为修改前几何的修正记录，含实际动作、原/新代号、宿主编号、规则与批准理由",
             "items": {
               "type": "integer",
               "minimum": 1,
@@ -32720,7 +35268,7 @@
           "alterations": {
             "type": "integer",
             "minimum": 1,
-            "description": "保留原识别信息并标识处理状态的蚀变面图层"
+            "description": "算子1.0.5起为仅含有效参与项的干净蚀变面图层（feature_id及alt），全剔除时缺省；历史任务为保留原识别信息和处理状态的图层"
           },
           "beforeIntersections": {
             "type": "integer",
@@ -34145,7 +36693,7 @@
           },
           "accessGroups": {
             "type": "array",
-            "description": "历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。",
+            "description": "历史兼容元数据；工程按创建者、已接受分享及超级管理员规则访问，旧角色字段不授予访问。",
             "items": {
               "$ref": "#/components/schemas/AdminDataResourceAccessGroup"
             },
@@ -34157,15 +36705,15 @@
           },
           "canEdit": {
             "type": "boolean",
-            "description": "当前用户是否可在普通工作台编辑该工程专题；仅所属用户且具备 `catalog.change_workspacescene` 时为 true"
+            "description": "当前用户是否可在普通工作台编辑该工程专题；仅所属用户或超级管理员且具备 `catalog.change_workspacescene` 时为 true"
           },
           "canDelete": {
             "type": "boolean",
-            "description": "当前用户是否可在普通工作台删除该工程专题；仅所属用户且具备 `catalog.delete_workspacescene` 时为 true"
+            "description": "当前用户是否可在普通工作台删除该工程专题；仅所属用户或超级管理员且具备 `catalog.delete_workspacescene` 时为 true"
           },
           "canManageAccess": {
             "type": "boolean",
-            "description": "历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。",
+            "description": "兼容管理标记；仅创建者或超级管理员可管理分享，接受分享的用户为 false，旧角色字段不授予访问。",
             "deprecated": true
           },
           "createdAt": {
@@ -34329,6 +36877,7 @@
           "snapshotSchemaVersion",
           "snapshotChecksum",
           "previewUrl",
+          "thumbnailUrl",
           "downloadUrl",
           "createdAt"
         ],
@@ -34385,6 +36934,10 @@
           "previewUrl": {
             "type": "string",
             "description": "PNG 预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。"
+          },
+          "thumbnailUrl": {
+            "type": "string",
+            "description": "卡片用缩略图地址，包含所属项目的 projectTagId；由PNG预览生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。"
           },
           "downloadUrl": {
             "type": "string",
@@ -36711,6 +39264,11 @@
           "bounds"
         ],
         "properties": {
+          "defaultVisualization": {
+            "type": "object",
+            "description": "资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。",
+            "additionalProperties": true
+          },
           "resource": {
             "$ref": "#/components/schemas/DataResource"
           },
@@ -38923,7 +41481,7 @@
           },
           "accessGroups": {
             "type": "array",
-            "description": "历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。",
+            "description": "历史兼容元数据；工程按创建者、已接受分享及超级管理员规则访问，旧角色字段不授予访问。",
             "items": {
               "$ref": "#/components/schemas/AdminDataResourceAccessGroup"
             },
@@ -38935,15 +41493,15 @@
           },
           "canEdit": {
             "type": "boolean",
-            "description": "当前用户是否可在普通工作台编辑该工程专题；仅所属用户且具备 `catalog.change_workspacescene` 时为 true"
+            "description": "当前用户是否可在普通工作台编辑该工程专题；仅所属用户或超级管理员且具备 `catalog.change_workspacescene` 时为 true"
           },
           "canDelete": {
             "type": "boolean",
-            "description": "当前用户是否可在普通工作台删除该工程专题；仅所属用户且具备 `catalog.delete_workspacescene` 时为 true"
+            "description": "当前用户是否可在普通工作台删除该工程专题；仅所属用户或超级管理员且具备 `catalog.delete_workspacescene` 时为 true"
           },
           "canManageAccess": {
             "type": "boolean",
-            "description": "历史角色元数据，不参与对象可见性判断。访问由当前项目标签、发布状态和功能权限控制；新界面不提供角色可见性配置。",
+            "description": "兼容管理标记；仅创建者或超级管理员可管理分享，接受分享的用户为 false，旧角色字段不授予访问。",
             "deprecated": true
           },
           "createdAt": {
@@ -39819,6 +42377,10 @@
                 "description": "单元格值"
               }
             }
+          },
+          "geojson": {
+            "$ref": "#/components/schemas/GeoJSONFeatureCollection",
+            "description": "仅view=map返回的完整矢量几何；直接读取任务输出，不登记资源"
           }
         },
         "required": [

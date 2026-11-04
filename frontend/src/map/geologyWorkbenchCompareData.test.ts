@@ -58,6 +58,145 @@ const load = (options = {}) =>
     ...options,
   });
 
+it.each(["geology_generic", "geology_multi_element_reasoning"])(
+  "%s在仅保留正式成果时仍从任务文件生成真实讲解与前后对比",
+  async (workflowType) => {
+    const workflow = reviewWorkflow(true);
+    workflow.workflowType = workflowType;
+    const suggestion = {
+      ...workflow.modificationReview!.suggestions[0]!,
+      kind: "multi_element" as const,
+      featureId: "unit-a",
+      ruleId: "L-01",
+      action: "set_code",
+      element: "lithology" as const,
+    };
+    workflow.modificationReview = {
+      proposalHash: "frozen",
+      suggestions: [suggestion],
+      approvedSuggestionIds: [suggestion.id],
+    };
+    workflow.plan.multiElementMap = {
+      before: { lithology: 101, faults: 102 },
+      after: { lithology: 201, faults: 202 },
+      checks: [],
+      changes: [],
+      alterations: 601,
+      intersections: 401,
+      beforeProspects: 501,
+      afterProspects: 502,
+    };
+    workflow.plan.stages = [
+      {
+        name: "check",
+        status: "completed",
+        results: [{ key: "alterations", kind: "vector", outputId: 700 }],
+      },
+      {
+        name: "apply",
+        status: "completed",
+        taskId: "actual-task",
+        approvedEdits: [
+          {
+            feature_id: "unit-a",
+            rule_id: "L-01",
+            action: "set_code",
+            target_code: "T3b",
+            weight: 1,
+          },
+        ],
+        results: [
+          {
+            key: "changes",
+            taskId: "actual-task",
+            outputId: 709,
+            checksum: "a".repeat(64),
+            scope: "all",
+            rowCount: 1,
+            rows: [
+              {
+                feature_id: "unit-a",
+                rule_id: "L-01",
+                action: "set_code",
+                target_code: "T3b",
+                weight: "1",
+                actual_changed: "True",
+                new_code: "T3b",
+              },
+            ],
+          },
+          ...[
+            "changes_lithology_issues",
+            "changes_fault_issues",
+            "changes_alteration_issues",
+          ].map((key, index) => ({
+            key,
+            kind: "vector",
+            outputId: 710 + index,
+          })),
+        ],
+      },
+      {
+        name: "relations",
+        status: "completed",
+        results: [
+          { key: "before_intersections", kind: "vector", outputId: 720 },
+        ],
+      },
+    ];
+    request.mockImplementation(async (url: string) => {
+      if (url.includes("/workflows/")) return workflow;
+      if (url.includes("/compute/outputs/")) {
+        const outputId = Number(url.match(/outputs\/(\d+)\//)?.[1]);
+        const feature = structuredClone(beforeReviewMap.features[0]!);
+        feature.properties = {
+          feature_id: "unit-a",
+          rule_id: "L-01",
+          suggested_action: "set_code",
+          state: "keep",
+        };
+        return {
+          kind: "vector",
+          columns: [],
+          rows: [],
+          metadata: {},
+          geojson: {
+            type: "FeatureCollection",
+            features: [700, 710, 720].includes(outputId) ? [feature] : [],
+          },
+        };
+      }
+      const id = Number(url.match(/resources\/(\d+)\//)?.[1]);
+      if (url.endsWith("/profile/")) return comparisonProfile(id);
+      return reviewQuery(id, beforeReviewMap);
+    });
+    const result = await load();
+    expect(result.tour).toHaveLength(1);
+    expect(result.tour[0]!.action).toBe("set_code");
+    expect(
+      result.overlays.find((item) => item.key === "alterations")!.before
+        .features,
+    ).toHaveLength(1);
+    expect(
+      result.overlays.find((item) => item.key === "intersections")!.before
+        .features,
+    ).toHaveLength(1);
+    expect(
+      request.mock.calls.filter(([url]) =>
+        String(url).includes("/compute/outputs/"),
+      ),
+    ).toHaveLength(5);
+    expect(
+      request.mock.calls.some(([url]) => String(url).includes("/import/")),
+    ).toBe(false);
+    expect(
+      registerLayer.mock.calls.some(([profile]) =>
+        [700, 710, 711, 712, 720].includes(profile.resource.id),
+      ),
+    ).toBe(false);
+  },
+);
+
 beforeEach(() => {
   request.mockReset();
   registerLayer.mockClear();

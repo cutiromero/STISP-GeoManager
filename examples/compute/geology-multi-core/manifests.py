@@ -108,13 +108,17 @@ def create():
                 output("lithology", "修正后岩性图", "vector", "lithology.gpkg"),
                 output("faults", "修正后构造及处理状态", "vector", "faults.gpkg"),
                 output("alterations", "矿物处理状态", "vector", "alterations.gpkg"),
+                output("final_faults", "修正后构造图", "vector", "final_faults.gpkg"),
+                output(
+                    "final_alterations", "有效蚀变", "vector", "final_alterations.gpkg"
+                ),
                 output("changes", "实际执行的操作", "table", "changes.csv"),
                 output("statistics", "岩性前后面积统计", "table", "statistics.csv"),
             ]
             + [
                 output(
                     "changes_" + row["key"],
-                    "实际修改范围 " + row["label"],
+                    "修正记录 " + row["label"],
                     "vector",
                     "changes_" + row["file"],
                 )
@@ -176,7 +180,7 @@ def create():
             "schemaVersion": 1,
             "identifier": directory.name,
             "name": name,
-            "version": "1.0.4",
+            "version": "1.0.5",
             "description": name
             + "。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
             "author": "STISP",
@@ -194,7 +198,10 @@ def create():
                 row["required"] = (
                     row["key"]
                     not in {
+                        "faults",
                         "alterations",
+                        "final_faults",
+                        "final_alterations",
                         "intersections",
                         "before_intersections",
                         "before_zones",

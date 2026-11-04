@@ -15,6 +15,7 @@ import WorkflowDeliverables from "./WorkflowDeliverables";
 import GeologyReviewStory from "./GeologyReviewStory";
 import MultiElementStory from "./MultiElementStory";
 import { isMultiElementFamily, multiElementType } from "./multiElementScenario";
+import { usesCleanGeologyResults } from "../map/workflowOutputMaps";
 import {
   geologyReviewOutcome,
   geologyReviewOriginalMapId,
@@ -30,12 +31,12 @@ import { emphasizeNumbers } from "./researchText";
 import RuleCards from "./RuleCards";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
-function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
+const record = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+export function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
   if (!workflow) return [];
-  const record = (value: unknown): Record<string, unknown> =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
   const demo =
     [
       "ecology_investigation",
@@ -54,6 +55,13 @@ function workflowMapResourceIds(workflow: AgentWorkflow | undefined) {
         return Array.isArray(outputs)
           ? outputs.flatMap((value) => {
               const output = record(value);
+              if (
+                isMultiElementFamily(workflow.workflowType) &&
+                usesCleanGeologyResults(workflow) &&
+                record(stage).name === "apply" &&
+                ["faults", "alterations"].includes(String(output.key))
+              )
+                return [];
               return ["raster", "vector"].includes(String(output.kind))
                 ? [output.resourceId]
                 : [];
@@ -465,6 +473,28 @@ export default function WorkflowResults({
           compact
           report={report}
           primaryTaskIds={primaryTaskIds}
+          visibleOutputIds={
+            isMultiElement && Array.isArray(workflow.plan.stages)
+              ? workflow.plan.stages.flatMap((stage) => {
+                  const outputs = record(stage).outputs;
+                  return Array.isArray(outputs)
+                    ? outputs
+                        .filter(
+                          (output) =>
+                            !(
+                              usesCleanGeologyResults(workflow) &&
+                              record(stage).name === "apply" &&
+                              ["faults", "alterations"].includes(
+                                String(record(output).key),
+                              )
+                            ),
+                        )
+                        .map((output) => Number(record(output).outputId))
+                        .filter(Number.isSafeInteger)
+                    : [];
+                })
+              : undefined
+          }
           taskIds={workflow.steps
             .map((step) => step.computeTaskId)
             .filter(Boolean)}
@@ -595,6 +625,8 @@ export default function WorkflowResults({
           (!inspectionOnly || originalMapId) &&
           !(isGeologyReview && deletedResources.length) ? (
             <Link
+              target="_blank"
+              rel="noopener"
               to={
                 isGeologyReview && !inspectionOnly
                   ? `/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`

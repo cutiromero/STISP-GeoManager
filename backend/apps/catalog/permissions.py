@@ -98,6 +98,20 @@ def access_filter(user):
     return project_access_filter(user)
 
 
+def workspace_access_filter(user):
+    """Workspace ownership is private; accepted invitations grant read access."""
+    query = project_access_filter(user)
+    if user_can_bypass_owner_only(user):
+        return query
+    if not user.is_authenticated:
+        return query & Q(pk__in=[])
+    from .share_access import shared_workspace_ids
+
+    return query & (
+        Q(owner_id=user.id) | Q(status="active", pk__in=shared_workspace_ids(user))
+    )
+
+
 def resource_access_filter(user):
     query = project_access_filter(user)
     if not user.is_authenticated:
@@ -125,9 +139,8 @@ def related_access_filter(user, relation: str):
     visible = Q(**{relation_prefix + "owner_only": False}) | Q(
         **{relation_prefix + "maintainer": user}
     )
-    return (
-        Q(**{relation: None})
-        | (Q(**{relation_prefix + "status": "active"}) & visible)
+    return Q(**{relation: None}) | (
+        Q(**{relation_prefix + "status": "active"}) & visible
     )
 
 
@@ -149,11 +162,14 @@ def filter_accessible_layers(queryset, user):
 def user_can_access(obj, user) -> bool:
     if not type(obj).objects.filter(project_access_filter(user), pk=obj.pk).exists():
         return False
-    if hasattr(obj, "owner_only") and obj.owner_only and not (
-        user_can_bypass_owner_only(user)
-        or (
-            user.is_authenticated
-            and getattr(obj, "maintainer_id", None) == user.id
+    if (
+        hasattr(obj, "owner_only")
+        and obj.owner_only
+        and not (
+            user_can_bypass_owner_only(user)
+            or (
+                user.is_authenticated and getattr(obj, "maintainer_id", None) == user.id
+            )
         )
     ):
         return False

@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { registerForbiddenHandler } from "./api/client";
+import { platformApi } from "./api/platform";
 import { appTheme } from "./theme";
 import platformStyles from "./styles.css?inline";
 import type {
@@ -672,6 +673,43 @@ describe("application critical flows", () => {
       content: "",
       generatedAt: "2026-06-20T09:45:10+08:00",
     });
+  });
+
+  it("exits directly to login while a project refresh and logout confirmation are pending", async () => {
+    mockApi.me.mockResolvedValueOnce({ authenticated: true, user: normalUser });
+    let finishLogout: (value: { detail: string }) => void = () => {};
+    mockApi.logout.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLogout = resolve;
+      }),
+    );
+    renderApp("/map");
+    expect(
+      await screen.findByTestId("map-canvas", {}, { timeout: 10000 }),
+    ).toBeVisible();
+    let rejectRefresh: (error: unknown) => void = () => {};
+    vi.mocked(platformApi.projects).mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectRefresh = reject;
+      }),
+    );
+    fireEvent(window, new Event("focus"));
+    fireEvent.click(screen.getByRole("button", { name: "用户信息" }));
+    fireEvent.click(await screen.findByRole("button", { name: /安全退出/ }));
+    expect(
+      await screen.findByLabelText("账号", {}, { timeout: 10000 }),
+    ).toBeVisible();
+    rejectRefresh(
+      new DOMException("signal is aborted without reason", "AbortError"),
+    );
+    finishLogout({ detail: "已退出" });
+    await waitFor(() => expect(mockApi.logout).toHaveBeenCalledOnce());
+    expect(screen.queryByText("项目访问范围加载失败")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("signal is aborted without reason"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("登录状态已失效")).not.toBeInTheDocument();
+    expect(sessionStorage.getItem("auth:expired-return")).toBeNull();
   });
 
   it("opens the public map directly at the root without a homepage", async () => {

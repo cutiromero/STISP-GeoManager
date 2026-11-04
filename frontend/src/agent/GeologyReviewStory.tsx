@@ -403,6 +403,8 @@ export default function GeologyReviewStory({
                   <small>修改范围示意</small>
                   {mapId > 0 && !deletedIds.has(mapId) && (
                     <Link
+                      target="_blank"
+                      rel="noopener"
                       to={`/map?resourceId=${mapId}&projectTagId=${workflow.projectId}&geologyReview=${encodeURIComponent(workflow.id)}&suggestion=${encodeURIComponent(suggestion.id)}`}
                     >
                       在地图上查看位置
@@ -466,6 +468,8 @@ export default function GeologyReviewStory({
         (!outcome || mapId > 0) && (
           <>
             <Link
+              target="_blank"
+              rel="noopener"
               className="geology-review-map-link"
               to={
                 outcome
@@ -477,6 +481,8 @@ export default function GeologyReviewStory({
             </Link>
             {!outcome && (
               <Link
+                target="_blank"
+                rel="noopener"
                 className="geology-review-map-link"
                 to={`/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`}
               >

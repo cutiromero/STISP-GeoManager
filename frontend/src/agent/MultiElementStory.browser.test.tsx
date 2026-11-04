@@ -117,6 +117,35 @@ it("用户可明确不修改并继续，空建议也能继续，不冒充审批"
   );
 });
 
+it("批准卡片说明未采用建议，不自动勾选保留的建议", () => {
+  const workflow = multiWorkflow();
+  workflow.plan.stages = [
+    {
+      name: "apply",
+      editValidation: {
+        discardedCount: 2,
+        errors: [
+          { index: 2, issue_id: "bad-1", reason: "权重超出范围" },
+          { index: 3, issue_id: "bad-2", reason: "权重超出范围" },
+        ],
+      },
+    },
+  ];
+  const review = vi.fn();
+  render(
+    <MemoryRouter>
+      <MultiElementStory workflow={workflow} onReview={review} />
+    </MemoryRouter>,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "模型另提出 2 项建议因权重超出范围未采用；其余建议仍需逐项人工确认。",
+  );
+  expect(
+    screen.getByRole("checkbox", { name: /选择全部可执行建议/ }),
+  ).not.toBeChecked();
+  expect(review).not.toHaveBeenCalled();
+});
+
 it("names an uploaded-data task by its own data and states the missing inputs", () => {
   const workflow = multiWorkflow();
   workflow.workflowType = "geology_generic";

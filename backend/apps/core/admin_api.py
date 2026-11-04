@@ -18,7 +18,7 @@ from typing import Any
 from django.conf import settings
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.models import Group
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q, Sum
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -66,6 +66,7 @@ from apps.core.config import (
 )
 from apps.core.initialization import (
     GUEST_GROUP_NAME,
+    GUEST_USERNAME,
     SUPERADMIN_GROUP_NAME,
     DEFAULT_USER_GROUP_NAME,
     ensure_superadmin_defaults,
@@ -79,6 +80,7 @@ from apps.core.initialization import (
     is_superadmin_user,
     protected_group_permissions,
     superadmin_group_locked_permissions,
+    superadmin_username,
 )
 from apps.core.backup_config import (
     BackupConfigError,
@@ -128,6 +130,8 @@ from apps.core.storage import (
     app_path,
 )
 from apps.raster.models import RasterDataset
+from apps.projects.assignments import set_project_assignments
+from apps.projects.context import is_superadmin
 
 logger = logging.getLogger(__name__)
 
@@ -666,6 +670,9 @@ def user_detail(request, user_id: int):
     if isinstance(payload, JsonResponse):
         return payload
 
+    if "username" in payload and not is_superadmin(request.user):
+        return JsonResponse({"detail": "只有超级管理员可以修改用户名"}, status=403)
+
     # 检查是否是删除操作
     if payload.get("action") == "delete":
         if user.pk == request.user.pk:
@@ -688,28 +695,54 @@ def user_detail(request, user_id: int):
         )
         return JsonResponse({"detail": "用户已删除"})
 
-    payload = _json_payload(request)
-    if isinstance(payload, JsonResponse):
-        return payload
-    if "isActive" not in payload:
-        return JsonResponse({"detail": "缺少 isActive"}, status=400)
-    is_active = bool(payload["isActive"])
-    if not is_active and user.pk == request.user.pk:
-        return JsonResponse({"detail": "不能停用当前登录用户"}, status=400)
-    if not is_active and is_initial_superadmin_user(user):
-        return JsonResponse({"detail": "初始化管理员不能停用"}, status=400)
-    if not is_active and is_guest_user(user):
-        return JsonResponse({"detail": f"{GUEST_GROUP_NAME}账号不能停用"}, status=400)
-    user.is_active = is_active
-    user.save(update_fields=["is_active"])
-    log_operation(
-        request.user,
-        "认证授权",
-        "更新用户状态",
-        "success",
-        f"{user.get_username()} {'启用' if is_active else '停用'}",
-        request,
-    )
+    old_username = user.get_username()
+    update_fields = []
+    if "username" in payload:
+        username = _admin_username_value(user, payload["username"])
+        if isinstance(username, JsonResponse):
+            return username
+        user.username = username
+        update_fields.append("username")
+    if "isActive" in payload:
+        is_active = bool(payload["isActive"])
+        if not is_active and user.pk == request.user.pk:
+            return JsonResponse({"detail": "不能停用当前登录用户"}, status=400)
+        if not is_active and is_initial_superadmin_user(user):
+            return JsonResponse({"detail": "初始化管理员不能停用"}, status=400)
+        if not is_active and is_guest_user(user):
+            return JsonResponse(
+                {"detail": f"{GUEST_GROUP_NAME}账号不能停用"}, status=400
+            )
+        user.is_active = is_active
+        update_fields.append("is_active")
+    if not update_fields:
+        return JsonResponse({"detail": "缺少 isActive 或 username"}, status=400)
+    try:
+        with transaction.atomic():
+            user.save(update_fields=update_fields)
+    except IntegrityError:
+        return JsonResponse({"detail": "用户名已存在"}, status=400)
+    if "username" in update_fields and old_username != user.username:
+        log_operation(
+            request.user,
+            "认证授权",
+            "修改用户名",
+            "success",
+            f"{old_username} → {user.username}",
+            request,
+            target_type="user",
+            target_id=user.id,
+            target_name=user.username,
+        )
+    if "is_active" in update_fields:
+        log_operation(
+            request.user,
+            "认证授权",
+            "更新用户状态",
+            "success",
+            f"{user.get_username()} {'启用' if user.is_active else '停用'}",
+            request,
+        )
     return JsonResponse(_serialize_admin_user(user, request.user))
 
 
@@ -3048,6 +3081,12 @@ def _serialize_profile(user) -> dict[str, Any]:
 
 def _serialize_admin_user(user, request_user=None) -> dict[str, Any]:
     serialized = serialize_user(user)
+    serialized["canRenameUsername"] = bool(
+        request_user is not None
+        and is_superadmin(request_user)
+        and not is_initial_superadmin_user(user)
+        and not is_guest_user(user)
+    )
     serialized["groupIds"] = list(user.groups.values_list("id", flat=True))
     serialized["isActive"] = user.is_active
     serialized["groupPermissions"] = sorted(_group_feature_permissions(user))
@@ -3370,7 +3409,36 @@ def _positive_query_int(value: Any, *, default: int) -> int | JsonResponse:
     return parsed
 
 
+def _admin_username_value(user, value: object) -> str | JsonResponse:
+    if is_initial_superadmin_user(user):
+        return JsonResponse({"detail": "初始化管理员用户名不能修改"}, status=400)
+    if is_guest_user(user):
+        return JsonResponse({"detail": "游客账号用户名不能修改"}, status=400)
+    value = _required_string(value, "username")
+    if isinstance(value, JsonResponse):
+        return value
+    User = get_user_model()
+    username = User.normalize_username(value)
+    if username in {superadmin_username(), GUEST_USERNAME}:
+        return JsonResponse({"detail": "系统专用用户名不能使用"}, status=400)
+    try:
+        User._meta.get_field(User.USERNAME_FIELD).clean(username, user)
+    except ValidationError as exc:
+        return JsonResponse(
+            {"detail": "用户名无效：" + "；".join(exc.messages)}, status=400
+        )
+    if User.objects.exclude(pk=user.pk).filter(username=username).exists():
+        return JsonResponse({"detail": "用户名已存在"}, status=400)
+    return username
+
+
 def _create_admin_user(User, payload: dict[str, Any], request_user=None):
+    can_assign_projects = request_user is not None and is_superadmin(request_user)
+    has_project_policy = "projectIds" in payload or "allowPublicProject" in payload
+    if has_project_policy and not can_assign_projects:
+        return JsonResponse(
+            {"detail": "只有超级管理员可以分配项目访问范围"}, status=403
+        )
     username = _required_string(payload.get("username"), "username")
     if isinstance(username, JsonResponse):
         return username
@@ -3420,10 +3488,19 @@ def _create_admin_user(User, payload: dict[str, Any], request_user=None):
             {"detail": "只有超级管理员可以分配平台管理员角色"}, status=400
         )
 
-    try:
-        email = validate_account_email(payload.get("email"))
-    except AccountEmailError as exc:
-        return JsonResponse({"detail": str(exc)}, status=400)
+    raw_email = payload.get("email")
+    if can_assign_projects and (
+        raw_email is None
+        or raw_email == ""
+        or isinstance(raw_email, str)
+        and not raw_email.strip()
+    ):
+        email = ""
+    else:
+        try:
+            email = validate_account_email(raw_email)
+        except AccountEmailError as exc:
+            return JsonResponse({"detail": str(exc)}, status=400)
 
     try:
         with transaction.atomic():
@@ -3437,10 +3514,19 @@ def _create_admin_user(User, payload: dict[str, Any], request_user=None):
             user.groups.set(groups)
             profile = _ensure_profile(user)
             profile.department = department
-            profile.normalized_email = email
+            profile.normalized_email = email or None
             profile.save(update_fields=["department", "normalized_email", "updated_at"])
+            if has_project_policy:
+                set_project_assignments(
+                    user,
+                    payload.get("projectIds", []),
+                    payload.get("allowPublicProject", True),
+                    assigned_by=request_user,
+                )
+    except ValidationError as exc:
+        return JsonResponse({"detail": "；".join(exc.messages)}, status=400)
     except IntegrityError:
-        if User.objects.filter(email__iexact=email).exists():
+        if email and User.objects.filter(email__iexact=email).exists():
             return JsonResponse({"detail": "邮箱已被使用"}, status=400)
         return JsonResponse({"detail": "用户名已存在"}, status=400)
     return user, password

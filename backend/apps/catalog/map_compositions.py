@@ -26,7 +26,9 @@ from apps.catalog.models import (
 from apps.catalog.permissions import (
     project_access_filter,
     resource_access_filter,
+    user_can_bypass_owner_only,
     user_has_full_data_access,
+    workspace_access_filter,
 )
 from apps.core.api import api_login_required
 from apps.core.initialization import (
@@ -102,7 +104,7 @@ def _create_map_composition(request):
         kind=WorkspaceScene.Kind.PROJECT,
         status=WorkspaceScene.Status.ACTIVE,
     )
-    if not user_has_full_data_access(request.user):
+    if not user_can_bypass_owner_only(request.user):
         project_query = project_query.filter(owner=request.user)
     project = project_query.first()
     if project is None:
@@ -628,7 +630,7 @@ def _user_can_load_source_project(composition: MapComposition, user) -> bool:
     if not has_feature_perm(user, "catalog.view_workspacescene"):
         return False
     return WorkspaceScene.objects.filter(
-        project_access_filter(user), pk=composition.project_id, status="active"
+        workspace_access_filter(user), pk=composition.project_id, status="active"
     ).exists()
 
 

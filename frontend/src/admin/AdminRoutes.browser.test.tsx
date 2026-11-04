@@ -10,6 +10,7 @@ import zhCN from "antd/locale/zh_CN";
 import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppContext } from "../contexts/AppContext";
+import { platformApi } from "../api/platform";
 import { applyPlatformDocumentTitle } from "../config/platformBrand";
 import {
   RequireDataInventory,
@@ -685,6 +686,12 @@ describe("admin routes", () => {
     for (const fn of Object.values(mockApi)) {
       fn.mockReset();
     }
+    vi.mocked(platformApi.projects).mockReset().mockResolvedValue({
+      items: [],
+      canManage: false,
+      canAssign: false,
+      defaultProjectId: null,
+    });
     window.localStorage.setItem(
       `huyang-system.workspace-tour.v1.${adminUser.id}.${adminUser.username}`,
       "completed",
@@ -1846,6 +1853,7 @@ describe("admin routes", () => {
       <MemoryRouter initialEntries={["/admin/auth/users"]}>
         <AdminAuthPage />
       </MemoryRouter>,
+      { ...adminUser, roles: ["超级管理员"] },
     );
 
     expect(await screen.findByText("科研用户申请")).toBeInTheDocument();
@@ -1887,8 +1895,11 @@ describe("admin routes", () => {
     );
 
     expect(await screen.findByText("用户列表")).toBeInTheDocument();
-    const userLinks = document.querySelectorAll(".admin-user-link");
-    expect(userLinks[0]).toHaveTextContent("admin");
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll(".admin-user-link")[0],
+      ).toHaveTextContent("admin"),
+    );
 
     fireEvent.click(screen.getAllByRole("button", { name: /操作/ })[0]);
     const ownPermissionItem = await screen.findByRole("menuitem", {
@@ -1899,6 +1910,403 @@ describe("admin routes", () => {
       within(ownPermissionItem).getByTitle("请到用户设置中修改自己的权限"),
     ).toBeInTheDocument();
   }, 30000);
+
+  async function openUserCreation(superadmin = true) {
+    const operator = superadmin
+      ? { ...adminUser, roles: ["超级管理员"] }
+      : adminUser;
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/admin/auth/users"]}>
+        <AdminAuthPage />
+      </MemoryRouter>,
+      operator,
+    );
+    await screen.findByText("用户列表");
+    fireEvent.click(await screen.findByRole("button", { name: /新建用户/ }));
+    return screen.findByRole("dialog", { name: /新建用户/ });
+  }
+
+  async function fillNewUser(dialog: HTMLElement) {
+    fireEvent.change(within(dialog).getByLabelText("用户名"), {
+      target: { value: "new_researcher" },
+    });
+    fireEvent.mouseDown(within(dialog).getByRole("combobox", { name: "角色" }));
+    fireEvent.click(
+      await screen.findByText("系统管理员", {
+        selector: ".ant-select-item-option-content",
+      }),
+    );
+    fireEvent.mouseDown(within(dialog).getByLabelText("用户名"));
+  }
+
+  function allowCreateProjects() {
+    const common = { code: "demo", description: "", sortOrder: 0 };
+    vi.mocked(platformApi.projects).mockResolvedValue({
+      items: [],
+      defaultProjectId: 1,
+      canManage: true,
+      canAssign: true,
+      assignableItems: [
+        { ...common, id: 1, name: "公开", isActive: true, isDefault: true },
+        {
+          ...common,
+          id: 3,
+          name: "逻辑推理",
+          isActive: true,
+          isDefault: false,
+        },
+        {
+          ...common,
+          id: 4,
+          name: "已停用项目",
+          isActive: false,
+          isDefault: false,
+        },
+      ],
+    });
+    mockApi.createAdminUser.mockResolvedValue({
+      ...adminApiUser,
+      id: 20,
+      username: "new_researcher",
+      generatedPassword: "Generated123!",
+    });
+  }
+
+  it("creates a user as superadmin without email and keeps default Public access", async () => {
+    allowCreateProjects();
+    const dialog = await openUserCreation();
+    await fillNewUser(dialog);
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("邮箱（选填）")).toBeVisible(),
+    );
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("switch", { name: "允许访问公开项目" }),
+      ).toBeEnabled(),
+    );
+    expect(
+      within(dialog).getByRole("switch", { name: "允许访问公开项目" }),
+    ).toBeChecked();
+    fireEvent.click(within(dialog).getByRole("button", { name: /确\s*定/ }));
+    await waitFor(() =>
+      expect(mockApi.createAdminUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          username: "new_researcher",
+          email: "",
+          projectIds: [],
+          allowPublicProject: true,
+        }),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Generated123!")).toBeVisible(),
+    );
+    expect(
+      screen.getByText("Generated123!").querySelector(".ant-typography-copy"),
+    ).not.toBeNull();
+    expect(
+      screen.queryByText("关闭公开项目后，请至少选择一个项目"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("requires a private project when disabling Public and resets scope after creation", async () => {
+    allowCreateProjects();
+    const dialog = await openUserCreation();
+    await fillNewUser(dialog);
+    const toggle = within(dialog).getByRole("switch", {
+      name: "允许访问公开项目",
+    });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    fireEvent.click(toggle);
+    fireEvent.click(within(dialog).getByRole("button", { name: /确\s*定/ }));
+    expect(
+      (await screen.findAllByText("关闭公开项目后，请至少选择一个项目")).length,
+    ).toBeGreaterThan(0);
+    expect(mockApi.createAdminUser).not.toHaveBeenCalled();
+    fireEvent.mouseDown(
+      within(dialog).getByRole("combobox", { name: "其他可见项目" }),
+    );
+    expect(screen.queryByText("已停用项目")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("公开", {
+        selector: ".ant-select-item-option-content",
+      }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      await screen.findByText("逻辑推理", {
+        selector: ".ant-select-item-option-content",
+      }),
+    );
+    fireEvent.mouseDown(within(dialog).getByLabelText("用户名"));
+    fireEvent.click(within(dialog).getByRole("button", { name: /确\s*定/ }));
+    await waitFor(() =>
+      expect(mockApi.createAdminUser).toHaveBeenCalledWith(
+        expect.objectContaining({ projectIds: [3], allowPublicProject: false }),
+      ),
+    );
+    const success = await screen.findByRole("dialog", { name: "用户创建成功" });
+    fireEvent.click(
+      within(success).getByRole("button", { name: /知道了|确\s*定/ }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "用户创建成功" }),
+      ).not.toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /新建用户/ }));
+    const reopened = await screen.findByRole("dialog", { name: /新建用户/ });
+    expect(
+      within(reopened).getByRole("switch", { name: "允许访问公开项目" }),
+    ).toBeChecked();
+    expect(within(reopened).getByLabelText("用户名")).toHaveValue("");
+    expect(
+      within(reopened).queryByText("逻辑推理", {
+        selector: ".ant-select-selection-item-content",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps email required and project assignment hidden for ordinary administrators", async () => {
+    mockApi.createAdminUser.mockResolvedValue({
+      ...adminApiUser,
+      id: 20,
+      username: "new_researcher",
+    });
+    const dialog = await openUserCreation(false);
+    await fillNewUser(dialog);
+    expect(
+      within(dialog).queryByRole("switch", { name: "允许访问公开项目" }),
+    ).not.toBeInTheDocument();
+    expect(platformApi.projects).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: /确\s*定/ }));
+    expect((await screen.findAllByText("请输入邮箱")).length).toBeGreaterThan(
+      0,
+    );
+    expect(mockApi.createAdminUser).not.toHaveBeenCalled();
+    fireEvent.change(within(dialog).getByLabelText("邮箱"), {
+      target: { value: "new@example.org" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /确\s*定/ }));
+    await waitFor(() => expect(mockApi.createAdminUser).toHaveBeenCalledOnce());
+    expect(mockApi.createAdminUser.mock.calls[0][0]).not.toHaveProperty(
+      "projectIds",
+    );
+    expect(mockApi.createAdminUser.mock.calls[0][0]).not.toHaveProperty(
+      "allowPublicProject",
+    );
+  });
+
+  it("shows project loading and retries failures without clearing the current selection", async () => {
+    allowCreateProjects();
+    let finish: (
+      value: Awaited<ReturnType<typeof platformApi.projects>>,
+    ) => void = () => {};
+    const valid = await platformApi.projects();
+    vi.mocked(platformApi.projects)
+      .mockClear()
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+    const dialog = await openUserCreation();
+    expect(within(dialog).getByRole("status")).toHaveTextContent(
+      "正在加载可分配项目",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: /确\s*定/ }),
+    ).toBeDisabled();
+    finish(valid);
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("combobox", { name: "其他可见项目" }),
+      ).toBeEnabled(),
+    );
+    fireEvent.mouseDown(
+      within(dialog).getByRole("combobox", { name: "其他可见项目" }),
+    );
+    fireEvent.click(
+      await screen.findByText("逻辑推理", {
+        selector: ".ant-select-item-option-content",
+      }),
+    );
+    fireEvent.mouseDown(within(dialog).getByLabelText("用户名"));
+    vi.mocked(platformApi.projects).mockRejectedValueOnce(
+      new Error("项目网络失败"),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "刷新项目列表" }),
+    );
+    await waitFor(() =>
+      expect(within(dialog).getByText("可见项目暂时无法加载")).toBeVisible(),
+    );
+    expect(
+      within(dialog).getByText("逻辑推理", {
+        selector: ".ant-select-selection-item-content",
+      }),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", { name: /确\s*定/ }),
+    ).toBeDisabled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "重试加载项目" }),
+    );
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", { name: /确\s*定/ }),
+      ).toBeEnabled(),
+    );
+    expect(
+      within(dialog).getByText("逻辑推理", {
+        selector: ".ant-select-selection-item-content",
+      }),
+    ).toBeVisible();
+    await fillNewUser(dialog);
+    fireEvent.click(within(dialog).getByRole("button", { name: /确\s*定/ }));
+    await waitFor(() =>
+      expect(mockApi.createAdminUser).toHaveBeenCalledWith(
+        expect.objectContaining({ projectIds: [3] }),
+      ),
+    );
+  });
+
+  async function openUsernameEdit(target: User, superadmin = true) {
+    mockApi.adminUsers.mockResolvedValue({ items: [adminApiUser, target] });
+    renderWithProviders(
+      <MemoryRouter initialEntries={["/admin/auth/users"]}>
+        <AdminAuthPage />
+      </MemoryRouter>,
+      superadmin ? { ...adminUser, roles: ["超级管理员"] } : adminUser,
+    );
+    const row = (
+      await screen.findByRole("button", { name: target.username })
+    ).closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: /操作/ }));
+    return row;
+  }
+
+  it("renames an allowed user with a username-only payload and keeps the display name", async () => {
+    const target = {
+      ...adminApiUser,
+      id: 22,
+      username: "old_geologist",
+      displayName: "地质研究员",
+      canRenameUsername: true,
+    };
+    mockApi.updateAdminUser.mockResolvedValue({
+      ...target,
+      username: "new_geologist",
+    });
+    await openUsernameEdit(target);
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: /修改用户名/ }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "修改用户名" });
+    expect(
+      within(dialog).getByText("显示名称：地质研究员"),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("修改后请使用新用户名登录。"),
+    ).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("用户名"), {
+      target: { value: "new_geologist" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /确\s*定/ }));
+    await waitFor(() =>
+      expect(mockApi.updateAdminUser).toHaveBeenCalledWith(22, {
+        username: "new_geologist",
+      }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "new_geologist" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("地质研究员")).toBeInTheDocument();
+  });
+
+  it("keeps a duplicate username editable and saves the corrected name", async () => {
+    const target = {
+      ...adminApiUser,
+      id: 22,
+      username: "old_geologist",
+      canRenameUsername: true,
+    };
+    mockApi.updateAdminUser
+      .mockRejectedValueOnce(new Error("用户名已存在，请使用其他用户名"))
+      .mockResolvedValueOnce({ ...target, username: "unique_geologist" });
+    await openUsernameEdit(target);
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: /修改用户名/ }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "修改用户名" });
+    fireEvent.change(within(dialog).getByLabelText("用户名"), {
+      target: { value: "existing_name" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /确\s*定/ }));
+    expect(
+      await within(dialog).findByText("用户名已存在，请使用其他用户名"),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("用户名")).toHaveValue(
+      "existing_name",
+    );
+    expect(
+      screen.getByRole("button", { name: "old_geologist" }),
+    ).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("用户名"), {
+      target: { value: "unique_geologist" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /确\s*定/ }));
+    expect(
+      await screen.findByRole("button", { name: "unique_geologist" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides username editing from ordinary administrators and sends only status changes", async () => {
+    const target = {
+      ...adminApiUser,
+      id: 22,
+      username: "regular_target",
+      canRenameUsername: true,
+    };
+    mockApi.updateAdminUser.mockResolvedValue({ ...target, isActive: false });
+    await openUsernameEdit(target, false);
+    expect(
+      screen.queryByRole("menuitem", { name: /修改用户名/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("menuitem", { name: /停用/ }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "确认停用用户？",
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /停\s*用/ }));
+    await waitFor(() =>
+      expect(mockApi.updateAdminUser).toHaveBeenCalledWith(22, {
+        isActive: false,
+      }),
+    );
+    expect(mockApi.updateAdminUser.mock.calls[0][1]).not.toHaveProperty(
+      "username",
+    );
+  });
+
+  it.each([
+    {
+      username: "configured_initial",
+      roles: ["超级管理员"],
+      canRenameUsername: false,
+    },
+    { username: "guest", roles: ["游客"], canRenameUsername: true },
+  ])(
+    "protects username editing for $username using server capability and guest rules",
+    async (fields) => {
+      await openUsernameEdit({ ...adminApiUser, id: 22, ...fields });
+      const item = await screen.findByRole("menuitem", { name: /修改用户名/ });
+      expect(item).toHaveAttribute("aria-disabled", "true");
+      fireEvent.click(item);
+      expect(
+        screen.queryByRole("dialog", { name: "修改用户名" }),
+      ).not.toBeInTheDocument();
+      expect(mockApi.updateAdminUser).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps the built-in guest role unavailable when creating users", async () => {
     const guestGroup = {

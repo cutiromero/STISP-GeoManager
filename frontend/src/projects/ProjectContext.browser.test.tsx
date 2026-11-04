@@ -1,6 +1,7 @@
 import { App as AntApp } from "antd";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import {
   ProjectProvider,
   ProjectSelector,
@@ -8,7 +9,10 @@ import {
 } from "./ProjectContext";
 import { getActiveProject, resetProjectSession } from "./session";
 
-const mocks = vi.hoisted(() => ({ user: { id: 42 }, projects: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  user: { id: 42 } as { id: number } | null,
+  projects: vi.fn(),
+}));
 vi.mock("../contexts/AppContext", () => ({
   useAppContext: () => ({ user: mocks.user }),
 }));
@@ -20,17 +24,36 @@ function CurrentProject() {
   const context = useProjectContext();
   return <output aria-label="实际项目范围">{context?.current}</output>;
 }
-function show() {
+function Logout() {
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => {
+        mocks.user = null;
+        resetProjectSession();
+        navigate("/login");
+      }}
+    >
+      退出测试
+    </button>
+  );
+}
+function show(path = "/map") {
   return render(
     <AntApp>
-      <ProjectProvider>
-        <ProjectSelector />
-        <CurrentProject />
-      </ProjectProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <Logout />
+        <ProjectProvider>
+          <ProjectSelector />
+          <CurrentProject />
+        </ProjectProvider>
+      </MemoryRouter>
     </AntApp>,
   );
 }
 beforeEach(() => {
+  mocks.user = { id: 42 };
+  mocks.projects.mockReset();
   resetProjectSession();
   sessionStorage.removeItem("project:42");
   mocks.projects.mockResolvedValue({
@@ -44,6 +67,46 @@ beforeEach(() => {
 });
 
 describe("single-project navigation", () => {
+  it("shows login immediately without loading project authorization", () => {
+    mocks.user = null;
+    mocks.projects.mockRejectedValue(new Error("项目不可用"));
+    show("/login");
+    expect(screen.getByLabelText("实际项目范围")).toBeVisible();
+    expect(mocks.projects).not.toHaveBeenCalled();
+    expect(screen.queryByText("项目访问范围加载失败")).not.toBeInTheDocument();
+  });
+
+  it("ignores a canceled refresh after logout and does not gate login", async () => {
+    show();
+    await screen.findByLabelText("实际项目范围");
+    let rejectRefresh: (reason: unknown) => void = () => {};
+    mocks.projects.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectRefresh = reject;
+      }),
+    );
+    fireEvent(window, new Event("focus"));
+    fireEvent.click(screen.getByRole("button", { name: "退出测试" }));
+    rejectRefresh(
+      new DOMException("signal is aborted without reason", "AbortError"),
+    );
+    await waitFor(() => expect(mocks.projects).toHaveBeenCalledTimes(2));
+    expect(screen.getByLabelText("实际项目范围")).toBeVisible();
+    expect(screen.queryByText("项目访问范围加载失败")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("signal is aborted without reason"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a genuine initial project failure visible and retryable", async () => {
+    mocks.projects.mockRejectedValueOnce(new Error("真实网络失败"));
+    show();
+    expect(await screen.findByText("项目访问范围加载失败")).toBeVisible();
+    expect(screen.queryByLabelText("实际项目范围")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    expect(await screen.findByLabelText("实际项目范围")).toBeVisible();
+  });
+
   it("keeps the selected project and mounted page when an idle focus refresh fails, then retries", async () => {
     sessionStorage.setItem("project:42", "2");
     show();

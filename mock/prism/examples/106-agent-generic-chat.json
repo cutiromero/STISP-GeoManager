@@ -1,0 +1,39 @@
+{
+  "POST /api/agent/conversations/{conversationId}/runs/": {
+    "202": {
+      "id": 106,
+      "conversationId": 31,
+      "model": "mock",
+      "status": "succeeded",
+      "prompt": "检查上传地质资料并比较远景区",
+      "answer": "资料已上传，请核对角色。",
+      "detail": "等待核对资料角色",
+      "evidence": [],
+      "attachments": [],
+      "interaction": null,
+      "interactionHistory": [],
+      "contextTruncated": false,
+      "createdAt": "2026-11-04T09:00:00Z",
+      "updatedAt": "2026-11-04T09:00:00Z",
+      "researchIntent": {
+        "originRunId": 106,
+        "revision": "generic-chat-roles-v1",
+        "scenario": "geology_generic",
+        "status": "clarifying",
+        "goal": "检查上传地质资料并比较远景区",
+        "message": "核对角色后生成字段建议，尚未执行任何修改。",
+        "questions": [{
+          "key": "upload_812",
+          "label": "第1份：地质图.zip（按文件名、类型和几何判断）",
+          "kind": "choice",
+          "required": true,
+          "options": [{"value": "lithology", "label": "地质图"}, {"value": "coverage", "label": "研究区范围"}, {"value": "skip", "label": "不使用"}]
+        }],
+        "inputs": {},
+        "parameters": {"roleAnswers": {"upload_812": "lithology"}},
+        "inputSummary": [],
+        "workflowId": null
+      }
+    }
+  }
+}

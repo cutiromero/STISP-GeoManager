@@ -237,14 +237,23 @@ def recover():
 
 
 def clean_expired(*, force=False):
+    from apps.agent.geology_generic import MULTI_FAMILY
+    from apps.agent.models import AgentWorkflowStep
+
     global _last_cleanup
     if not force and time.monotonic() - _last_cleanup < 60:
         return
     _last_cleanup = time.monotonic()
     cutoff = timezone.now() - timedelta(days=config().retention_days)
-    for output in ComputeOutput.objects.filter(
-        expired=False, created_at__lt=cutoff
-    ).exclude(import_record__status__in=("queued", "running"))[:50]:
+    retained_tasks = AgentWorkflowStep.objects.filter(
+        workflow__workflow_type__in=MULTI_FAMILY,
+        compute_task_id__isnull=False,
+    ).values("compute_task_id")
+    for output in (
+        ComputeOutput.objects.filter(expired=False, created_at__lt=cutoff)
+        .exclude(import_record__status__in=("queued", "running"))
+        .exclude(task_id__in=retained_tasks)[:50]
+    ):
         path = app_path(output.path)
         try:
             path.unlink(missing_ok=True)

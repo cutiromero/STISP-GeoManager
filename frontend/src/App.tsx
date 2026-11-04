@@ -29,7 +29,7 @@ import type { Bootstrap, User } from "./types";
 import i18n, { type AppLocale } from "./i18n";
 import { browserSessionEndedEvent } from "./auth/browserSession";
 import { lazyPage as lazy, RouteRecovery } from "./routing/pageRecovery";
-import { markSessionExpired } from "./auth/sessionNotice";
+import { clearSessionExpired, markSessionExpired } from "./auth/sessionNotice";
 
 const AdminAuthPage = lazy(() => import("./admin/AdminAuthPage"));
 const AdminDataBackupPage = lazy(() => import("./admin/AdminDataBackupPage"));
@@ -102,6 +102,7 @@ export default function App({
   const authGeneration = useRef(0);
   const setUser = useCallback((value: User | null) => {
     authGeneration.current += 1;
+    signedIn.current = value;
     updateUser(value);
   }, []);
   const [loading, setLoading] = useState(true);
@@ -109,8 +110,10 @@ export default function App({
   const [startupAttempt, setStartupAttempt] = useState(0);
 
   useEffect(() => {
-    const signedOut = () => {
-      if (signedIn.current) markSessionExpired(signedIn.current.id);
+    const signedOut = (event: Event) => {
+      if (event instanceof CustomEvent && event.detail?.reason === "logout")
+        clearSessionExpired();
+      else if (signedIn.current) markSessionExpired(signedIn.current.id);
       setUser(null);
     };
     window.addEventListener(browserSessionEndedEvent, signedOut);

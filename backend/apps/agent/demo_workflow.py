@@ -359,6 +359,14 @@ def prepare_demo(workflow, user, p) -> None:
         raise ComputeError("请将场景算子步骤上限至少设为" + str(required_steps))
     stages = []
     for name, identifier, bindings in graph:
+        if (
+            workflow.workflow_type == "geology_generic"
+            and "faults" in workflow.plan.get("missingRoles", [])
+        ):
+            bindings = {
+                key: "faults" if value == "apply/faults" else value
+                for key, value in bindings.items()
+            }
         manifest = versions[identifier]["manifest"]
         required = {i["key"] for i in manifest["inputs"] if i["required"]}
         declared = {i["key"] for i in manifest["inputs"]}
@@ -421,7 +429,14 @@ def prepare_demo(workflow, user, p) -> None:
         "phase": "review_plan",
         "reviewOutputs": [],
     }
-    workflow.resource_ids = sorted(set(inputs.values()))
+    workflow.resource_ids = sorted(
+        set(inputs.values())
+        | set(
+            workflow.plan.get("uploadInputs", {}).values()
+            if workflow.workflow_type == "geology_generic"
+            else []
+        )
+    )
     workflow.evidence = knowledge
     workflow.status, workflow.current_step = "waiting_approval", "review_plan"
     workflow.detail = "输入角色与算法已匹配，请确认场景计划后执行"
@@ -805,6 +820,11 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
         return False
     records = []
     for output in outputs:
+        if workflow.workflow_type in MULTI_FAMILY:
+            from .geology_multi import VISIBLE_OUTPUTS
+
+            if output.key not in VISIBLE_OUTPUTS.get(stage["name"], set()):
+                continue
         with transaction.atomic():
             if _collection_cancelled(workflow):
                 return False
@@ -831,8 +851,53 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
         _save(workflow)
         return False
     stage["outputs"] = []
+    internal_resource_ids = set()
     for output, record in records:
         resource = resolve_resource(user, p, record.resource_id)
+        if (
+            workflow.workflow_type in MULTI_FAMILY
+            and stage["name"] == "apply"
+            and output.key in {"faults", "alterations"}
+            and any(
+                item["key"] == "final_faults"
+                for item in task.version.manifest["outputs"]
+            )
+        ):
+            marker = f"workflow-working:{workflow.id}:calculation"
+            if resource.source != marker:
+                resource.source = marker
+                resource.owner_only = True
+                resource.maintainer = user
+                resource.save(
+                    update_fields=["source", "owner_only", "maintainer", "updated_at"]
+                )
+            internal_resource_ids.add(resource.id)
+        if (
+            workflow.workflow_type in MULTI_FAMILY
+            and stage["name"] == "apply"
+            and output.key == "lithology"
+        ):
+            from .generic_inputs import style_lithology
+
+            style_lithology(resource)
+        if (
+            workflow.workflow_type in MULTI_FAMILY
+            and stage["name"] == "apply"
+            and output.key.startswith("changes_")
+        ):
+            resource.default_visualization = {
+                "symbolization": {
+                    "opacity": 65,
+                    "renderer": {"type": "single"},
+                    "fill": {
+                        "fillColor": "#f97316",
+                        "fillOpacity": 0.25,
+                        "fillOutlineColor": "#f97316",
+                    },
+                    "line": {"lineColor": "#f97316", "lineWidth": 2},
+                }
+            }
+            resource.save(update_fields=["default_visualization", "updated_at"])
         stage["outputs"].append(
             {
                 "outputId": output.id,
@@ -846,7 +911,14 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
         )
     workflow.result_ids = sorted(set(workflow.result_ids + [o.id for o in outputs]))
     workflow.result_resource_ids = sorted(
-        set(workflow.result_resource_ids + [r.resource_id for _, r in records])
+        set(
+            workflow.result_resource_ids
+            + [
+                record.resource_id
+                for _, record in records
+                if record.resource_id not in internal_resource_ids
+            ]
+        )
     )
     stage["status"] = "completed"
     if workflow.workflow_type in MULTI_FAMILY:

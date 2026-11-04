@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import io
 import re
+import sqlite3
 import tempfile
 import uuid
 from pathlib import Path
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import F
 
 from apps.catalog.importer import ImportDataError
 from apps.catalog.models import DataResource
@@ -66,14 +69,29 @@ def checked_batch(value) -> str:
 
 
 def batch_uploads(user, batch_id):
+    from apps.catalog.permissions import resource_access_filter
+
+    visible = DataResource.objects.filter(resource_access_filter(user)).values("pk")
     return WorkflowUpload.objects.select_related("resource").filter(
-        owner=user, batch_id=checked_batch(batch_id), resource__status="active"
+        owner=user,
+        batch_id=checked_batch(batch_id),
+        resource__status="active",
+        resource_id__in=visible,
     )
+
+
+def chat_claim(user, batch_id):
+    from .models import AgentRun
+
+    return AgentRun._base_manager.filter(
+        owner=user, research_intent___uploadBatchId=batch_id
+    ).first()
 
 
 def upload_json(upload) -> dict:
     return {
         "id": str(upload.id),
+        "source": upload.source,
         "batchId": upload.batch_id,
         "resourceId": upload.resource_id,
         "name": upload.resource.name,
@@ -323,10 +341,14 @@ def _store_raster(uploaded, user, name, source):
     return dataset.data_resource, profile
 
 
+@transaction.atomic
 def store_upload(user, project_id, uploaded, batch_id) -> WorkflowUpload:
     batch_id = checked_batch(batch_id)
+    get_user_model().objects.filter(pk=user.pk).update(last_login=F("last_login"))
     require_upload_access(user, project_id)
     existing = WorkflowUpload.objects.filter(owner=user, batch_id=batch_id)
+    if chat_claim(user, batch_id):
+        raise ComputeError("该批次已发送到对话，请新建批次", 409)
     if existing.filter(workflow__isnull=False).exists():
         raise ComputeError("该批次资料已用于任务，请新建批次", 409)
     if existing.filter(resource__status="active").count() >= MAX_FILES:
@@ -374,16 +396,118 @@ def delete_upload(user, upload_id) -> None:
         )
         if upload is None:
             raise ComputeError("上传资料不存在", 404)
-        if upload.workflow_id:
+        if upload.workflow_id or chat_claim(user, upload.batch_id):
             raise ComputeError("资料已用于任务，作为任务依据保留", 409)
         resource = upload.resource
         upload.delete()
-        resource.status = "inactive"
-        resource.save(update_fields=["status", "updated_at"])
+        if upload.source == "upload":
+            resource.status = "inactive"
+            resource.save(update_fields=["status", "updated_at"])
+
+
+def catalog_resources(user, project_id):
+    from apps.catalog.models import task_resource_q
+    from apps.catalog.permissions import resource_access_filter
+    from apps.compute.project_tools import GEOLOGY_PROJECT_CODES
+    from apps.projects.models import Project
+
+    policy = require_upload_access(user, project_id)
+    if not Project.objects.filter(
+        pk=project_id, code__in=GEOLOGY_PROJECT_CODES
+    ).exists():
+        raise ComputeError("请在逻辑推理项目选择系统数据", 400)
+    return DataResource.objects.filter(
+        resource_access_filter(user),
+        project_tag_id=project_id,
+        status="active",
+        data_type__in=set(policy["dataTypes"]) & {"vector", "raster", "table"},
+    ).exclude(task_resource_q())
+
+
+def catalog_profile(resource):
+    if resource.data_type == "vector":
+        from .generic_inputs import _read
+
+        return vector_profile(_read(resource))
+    if resource.data_type == "table":
+        from apps.catalog.nongeo import _resource_dataframe
+
+        frame, total, _ = _resource_dataframe(resource, limit=SAMPLE_ROWS, offset=0)
+        profile = table_profile(frame)
+        profile["featureCount"] = total
+        return profile
+    from apps.core.storage import raster_source_path
+    from apps.raster.models import RasterDataset
+
+    dataset = RasterDataset.objects.filter(
+        data_resource=resource, status="ready"
+    ).first()
+    if dataset is None:
+        raise ComputeError("栅格尚未处理完成")
+    profile = raster_profile(raster_source_path(dataset.source_relative_path))
+    if not profile["crs"] or profile["bandCount"] != 1:
+        raise ComputeError("蚀变识别结果须为带坐标系的单波段栅格")
+    return profile
+
+
+@transaction.atomic
+def add_catalog_references(user, project_id, batch_id, resource_ids):
+    from pyogrio.errors import DataLayerError, DataSourceError
+
+    batch_id = checked_batch(batch_id)
+    if (
+        not isinstance(resource_ids, list)
+        or not 1 <= len(resource_ids) <= MAX_FILES
+        or any(type(value) is not int or value < 1 for value in resource_ids)
+        or len(set(resource_ids)) != len(resource_ids)
+    ):
+        raise ComputeError("请选择1至12份不重复的系统数据")
+    available = catalog_resources(user, project_id)
+    get_user_model().objects.filter(pk=user.pk).update(last_login=F("last_login"))
+    existing = WorkflowUpload.objects.filter(owner=user, batch_id=batch_id)
+    if chat_claim(user, batch_id) or existing.filter(workflow__isnull=False).exists():
+        raise ComputeError("该批次已用于任务，请新建批次", 409)
+    resources = {item.id: item for item in available.filter(pk__in=resource_ids)}
+    if len(resources) != len(resource_ids):
+        raise ComputeError("资源不存在、已失效或无权访问", 404)
+    prior = {item.resource_id: item for item in existing}
+    if len(prior) + len(set(resource_ids) - prior.keys()) > MAX_FILES:
+        raise ComputeError(f"每个任务最多选择{MAX_FILES}份资料")
+    result = []
+    for identity in resource_ids:
+        resource = resources[identity]
+        item = prior.get(identity)
+        if item is None:
+            try:
+                profile = catalog_profile(resource)
+            except (
+                OSError,
+                ValueError,
+                sqlite3.Error,
+                DataSourceError,
+                DataLayerError,
+            ) as exc:
+                raise ComputeError("无法读取系统数据资料画像，请核对资源文件") from exc
+            item = WorkflowUpload.objects.create(
+                owner=user,
+                project_tag_id=resource.project_tag_id,
+                batch_id=batch_id,
+                resource=resource,
+                source="catalog",
+                file_name=resource.name,
+                size_bytes=resource.size_bytes or 0,
+                profile=profile,
+                role_hint=role_hint(resource.name, profile) or "",
+            )
+        result.append(item)
+    return result
 
 
 def bind_batch(workflow, user, batch_id, inputs) -> None:
     """Attach an unbound batch to a new workflow; inputs must come from it."""
+    claim = chat_claim(user, batch_id)
+    if claim and workflow.plan.get("chatExecution", {}).get("originRunId") != claim.id:
+        raise ComputeError("上传批次已关联其他对话研究任务", 409)
     uploads = list(
         batch_uploads(user, batch_id)
         .select_for_update()

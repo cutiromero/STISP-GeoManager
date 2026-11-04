@@ -10,6 +10,7 @@ import {
   prospectChanges,
   prospectSignature,
   tourAlgorithm,
+  tourFeature,
   tourLabels,
 } from "./multiElementTour";
 
@@ -96,6 +97,29 @@ it("导览仅显示实际执行、已批准并与冻结操作一致的变化，�
   expect(actualTourChanges(workflow, differences)).toHaveLength(1);
   workflow.plan.stages = [];
   expect(actualTourChanges(workflow, differences)).toHaveLength(0);
+});
+
+it("修正记录优先采用实际批准动作，而不是原始建议动作", () => {
+  const { workflow, differences } = fixture();
+  differences.features[2]!.properties.action = "downweight";
+  differences.features[2]!.properties.suggested_action = "exclude";
+  expect(
+    actualTourChanges(workflow, differences).map((item) => item.action),
+  ).toEqual(["set_code", "exclude", "downweight"]);
+});
+
+it("重分类和代号修正融合后通过宿主编号读取干净成果", () => {
+  const { workflow, differences } = fixture();
+  const change = actualTourChanges(workflow, differences)[0]!;
+  change.feature.properties.host_feature_id = "host";
+  const host = {
+    ...feature,
+    properties: { feature_id: "host", geo_sym: "T₃b" },
+  };
+  for (const action of ["reclassify", "set_code", "merge"]) {
+    change.action = action;
+    expect(tourFeature(featureCollection([host]), change)).toBe(host);
+  }
 });
 
 it("从完整实际变更表匹配几何，保留任务、文件和行定位，不把空间疑点当成已执行结果", () => {

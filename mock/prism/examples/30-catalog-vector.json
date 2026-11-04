@@ -500,6 +500,7 @@
   },
   "GET /api/catalog/resources/{id}/profile/": {
     "200": {
+      "defaultVisualization": {},
       "resource": {
         "id": 3,
         "name": "塔里木河胡杨样地监测点",

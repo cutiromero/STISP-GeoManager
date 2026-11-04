@@ -98,11 +98,9 @@ export default function AdminWorkspaceManagementPage({
     const inactive = data.items.filter(
       (item) => item.status === "inactive",
     ).length;
-    const shared = data.items.filter(
-      (item) => item.accessGroups.length > 0,
-    ).length;
-    return { active, inactive, shared };
-  }, [data.items]);
+    const mine = data.items.filter((item) => item.owner.id === user?.id).length;
+    return { active, inactive, mine };
+  }, [data.items, user?.id]);
 
   const loadItems = useCallback(
     async (nextFilters: AdminWorkspaceFilters) => {
@@ -375,7 +373,7 @@ export default function AdminWorkspaceManagementPage({
       ),
     },
     {
-      title: l("可见范围", "Visibility"),
+      title: l("所属项目", "Project"),
       key: "accessGroups",
       width: 240,
       render: (_, record) => <ProjectLabel id={record.projectTagId} />,
@@ -401,13 +399,15 @@ export default function AdminWorkspaceManagementPage({
           >
             {l("打开", "Open")}
           </Button>
-          <ShareButton
-            type="link"
-            kind="workspace"
-            objectId={record.id}
-            name={record.name}
-            disabled={record.status !== "active"}
-          />
+          {record.canManageAccess && (
+            <ShareButton
+              type="link"
+              kind="workspace"
+              objectId={record.id}
+              name={record.name}
+              disabled={record.status !== "active"}
+            />
+          )}
         </Space>
       ),
     },
@@ -434,8 +434,8 @@ export default function AdminWorkspaceManagementPage({
           value: metrics.inactive,
         },
         {
-          title: l("本页已共享", "Shared on this page"),
-          value: metrics.shared,
+          title: l("本页我的工程", "My projects on this page"),
+          value: metrics.mine,
         },
       ]}
       rowName={(item) => item.name}
@@ -449,8 +449,8 @@ export default function AdminWorkspaceManagementPage({
       accessScopeNotice={
         <Typography.Text type="secondary">
           {l(
-            "所属用户本人始终可见；平台会自动保留必要的系统访问范围。",
-            "The owner can always see this item; the platform also preserves required system access.",
+            "工程默认创建者私有，接受分享后只读；超级管理员保留管理权限。",
+            "Private to its owner by default; accepted invitations grant read access. Superadministrators retain management access.",
           )}
         </Typography.Text>
       }

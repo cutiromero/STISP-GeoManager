@@ -58,6 +58,7 @@ function result(task: ComputeTask) {
 }
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(window, "open").mockReturnValue(null);
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -77,8 +78,13 @@ it("offers map preview without first importing and avoids displaying task or res
   ).toBeInTheDocument();
   expect(screen.queryByText(task.id)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "在地理工作台查看" }));
-  expect(screen.getByRole("status", { name: "当前位置" })).toHaveTextContent(
+  expect(window.open).toHaveBeenCalledWith(
     "/map?computeOutputId=30&projectTagId=1",
+    "_blank",
+    "noopener",
+  );
+  expect(screen.getByRole("status", { name: "当前位置" }).textContent).toBe(
+    "/",
   );
   expect(importOutput).not.toHaveBeenCalled();
 });
@@ -110,8 +116,13 @@ it("imports once then follows the current state to the friendly database locatio
   expect(importOutput).toHaveBeenCalledWith(30, { name: task.name });
   expect(screen.queryByText("180", { exact: true })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "在地理工作台查看" }));
-  expect(screen.getByRole("status", { name: "当前位置" })).toHaveTextContent(
+  expect(window.open).toHaveBeenCalledWith(
     "/map?resourceId=180&projectTagId=1",
+    "_blank",
+    "noopener",
+  );
+  expect(screen.getByRole("status", { name: "当前位置" }).textContent).toBe(
+    "/",
   );
 });
 
@@ -199,8 +210,13 @@ it("opens the permanent resource even when its temporary output has expired", as
   fireEvent.click(
     await screen.findByRole("button", { name: "在地理工作台查看" }),
   );
-  expect(screen.getByRole("status", { name: "当前位置" })).toHaveTextContent(
+  expect(window.open).toHaveBeenCalledWith(
     "/map?resourceId=180&projectTagId=1",
+    "_blank",
+    "noopener",
+  );
+  expect(screen.getByRole("status", { name: "当前位置" }).textContent).toBe(
+    "/",
   );
 });
 

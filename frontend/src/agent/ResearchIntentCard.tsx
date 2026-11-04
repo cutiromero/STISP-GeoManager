@@ -16,11 +16,12 @@ import type {
   AgentWorkflow,
 } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
-import WorkflowResults from "./WorkflowResults";
+import WorkflowCard from "./WorkflowCard";
 import LiveActivity from "./LiveActivity";
 import { runActivity } from "./agentActivity";
 import { workflowStatusLabels } from "./workflowFeedback";
 import { briefTitle } from "./researchText";
+import FieldMappingReview from "./FieldMappingReview";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 const labels: Record<AgentResearchIntent["status"], [string, string]> = {
@@ -67,33 +68,69 @@ export default function ResearchIntentCard({
     };
   }, []);
   useEffect(() => {
-    setAnswers({});
+    const suggested = intent.parameters.roleAnswers;
+    setAnswers(
+      suggested && typeof suggested === "object"
+        ? Object.fromEntries(
+            Object.entries(suggested).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[1] === "string",
+            ),
+          )
+        : {},
+    );
     setAnswer("");
     setError("");
   }, [intent.revision]);
+  useEffect(() => setWorkflow(undefined), [intent.workflowId]);
   useEffect(() => {
     const id = intent.workflowId;
     if (!id) return;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let failures = 0;
-    setWorkflow(undefined);
     const poll = async () => {
       try {
-        const next = await agentApi.workflow(id);
+        const generic = intent.scenario === "geology_generic";
+        const [card, prior] = await Promise.all([
+          agentApi.workflow(id, { view: "card" }),
+          !generic && active.includes(currentIntent.current.status)
+            ? agentApi.poll(intent.originRunId)
+            : Promise.resolve(undefined),
+        ]);
+        if (disposed) return;
+        const status =
+          card.status === "queued"
+            ? "planning"
+            : ["waiting_compute", "paused"].includes(card.status)
+              ? "running"
+              : card.status;
+        const [next, latest] = await Promise.all([
+          generic && card.status === "waiting_approval"
+            ? agentApi.workflow(id)
+            : Promise.resolve(card),
+          generic && status !== currentIntent.current.status
+            ? agentApi.poll(intent.originRunId)
+            : Promise.resolve(prior),
+        ]);
         if (disposed) return;
         setError("");
         failures = 0;
-        const latest = await agentApi.poll(intent.originRunId);
-        if (disposed) return;
         setWorkflow(next);
         onWorkflow.current?.(next);
         if (
+          latest &&
           JSON.stringify(latest.run.researchIntent) !==
-          JSON.stringify(currentIntent.current)
+            JSON.stringify(currentIntent.current)
         )
           onUpdate.current(latest.run);
-        if (active.includes(next.status))
+        if (
+          active.includes(next.status) &&
+          !(
+            intent.scenario === "geology_generic" &&
+            next.status === "waiting_approval"
+          )
+        )
           timer = setTimeout(poll, document.hidden ? 6000 : 1800);
       } catch (reason) {
         if (disposed) return;
@@ -123,6 +160,36 @@ export default function ResearchIntentCard({
       onWorkflow.current?.(undefined);
     };
   }, [intent.workflowId, run.id, workflowRevision]);
+  const confirmMapping = async (
+    fieldMapping: Record<string, Record<string, string | null>>,
+  ) => {
+    if (!workflow || inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const next = await agentApi.confirmWorkflow(
+        workflow.id,
+        workflow.planHash,
+        { fieldMapping },
+      );
+      if (!alive.current) return;
+      setWorkflow(next);
+      onWorkflow.current?.(next);
+      const latest = await agentApi.poll(intent.originRunId);
+      if (!alive.current) return;
+      onUpdate.current(latest.run);
+      setWorkflowRevision((value) => value + 1);
+    } catch (reason) {
+      if (alive.current)
+        setError(
+          reason instanceof Error ? reason.message : "字段确认失败，请重试",
+        );
+    } finally {
+      inFlight.current = false;
+      if (alive.current) setBusy(false);
+    }
+  };
   const controlWorkflow = async (action: "pause" | "resume") => {
     if (!workflow || inFlight.current) return;
     inFlight.current = true;
@@ -209,9 +276,17 @@ export default function ResearchIntentCard({
       const next = await agentApi.updateResearchIntent(intent.originRunId, {
         action,
         revision: intent.revision,
-        ...(action === "answer" ? { answers, answer: answer.trim() } : {}),
+        ...(action === "answer"
+          ? intent.scenario === "geology_generic" && answer.trim()
+            ? { answer: answer.trim() }
+            : { answers, answer: answer.trim() }
+          : {}),
       });
-      if (alive.current) onUpdate.current(next);
+      if (alive.current) {
+        onUpdate.current(next);
+        if (workflow && intent.scenario === "geology_generic")
+          setWorkflowRevision((value) => value + 1);
+      }
     } catch (reason) {
       if (alive.current)
         setError(
@@ -350,12 +425,29 @@ export default function ResearchIntentCard({
         </div>
       )}
       {error && <Alert type="error" title={error} />}
+      {intent.workflowId && !workflow && !error && (
+        <p role="status">正在恢复逻辑推理进度…</p>
+      )}
+      {workflow?.status === "waiting_approval" &&
+        workflow.plan.phase === "review_mapping" &&
+        workflow.plan.fieldMappingReview && (
+          <FieldMappingReview
+            key={`${workflow.id}:${workflow.planHash}`}
+            review={workflow.plan.fieldMappingReview}
+            busy={busy}
+            onConfirm={(mapping) => void confirmMapping(mapping)}
+          />
+        )}
       {workflow && (
-        <WorkflowResults
+        <WorkflowCard
           compact
           workflow={workflow}
           busy={busy}
-          onConfirm={() => void update("confirm")}
+          onConfirm={
+            workflow.plan.phase === "review_mapping"
+              ? undefined
+              : () => void update("confirm")
+          }
           onCancel={() => void update("cancel")}
           onPause={() => void controlWorkflow("pause")}
           onResume={() => void controlWorkflow("resume")}

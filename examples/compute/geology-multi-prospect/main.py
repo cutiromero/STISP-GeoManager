@@ -87,13 +87,13 @@ def run(context):
     )
     write_vector(
         context.output_path("before_zones.gpkg"),
-        before,
+        before[["zone_id", "grade", "area_km2", "geometry"]],
         config["working_epsg"],
         "MultiPolygon",
     )
     write_vector(
         context.output_path("after_zones.gpkg"),
-        after,
+        after[["zone_id", "grade", "area_km2", "geometry"]],
         config["working_epsg"],
         "MultiPolygon",
     )

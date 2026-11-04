@@ -43,11 +43,36 @@ import type {
   AgentWorkflowConfirmation,
   AgentWorkflowUpload,
   AgentWorkflowUploadList,
+  AgentWorkflowBatchResult,
+  AgentWorkflowRoleResult,
+  GetActiveAgentWorkflowResponses,
   AgentInteractionUpdate,
   CancelAgentWorkflowData,
 } from "./generated/types.gen";
 
 export const agentApi = {
+  uploadWorkflowBatch: (batchId: string, files: File[]) => {
+    const form = new FormData();
+    form.append("batchId", batchId);
+    files.forEach((file) => form.append("files", file));
+    return requestForm<AgentWorkflowBatchResult>(
+      "/api/agent/workflow-uploads/batch/",
+      form,
+    );
+  },
+  recognizeWorkflowRoles: (batchId: string, model: string) =>
+    requestJson<AgentWorkflowRoleResult>(
+      "/api/agent/workflow-uploads/recognize/",
+      {
+        method: "POST",
+        body: { batchId, model },
+      },
+    ),
+  activeWorkflow: (options: { signal?: AbortSignal } = {}) =>
+    requestJson<GetActiveAgentWorkflowResponses[200]>(
+      "/api/agent/workflows/active/",
+      options,
+    ),
   researchDemos: (
     options: { scenario?: AgentResearchScenario; signal?: AbortSignal } = {},
   ) =>
@@ -130,6 +155,16 @@ export const agentApi = {
       `/api/agent/workflow-uploads/?batchId=${encodeURIComponent(batchId)}`,
       options,
     ),
+  workflowCatalogResources: (q = "", options: { signal?: AbortSignal } = {}) =>
+    requestJson<AgentResourceList>(
+      `/api/agent/workflow-uploads/references/?q=${encodeURIComponent(q)}`,
+      options,
+    ),
+  addWorkflowCatalogReferences: (batchId: string, resourceIds: number[]) =>
+    requestJson<AgentWorkflowUploadList>(
+      "/api/agent/workflow-uploads/references/",
+      { method: "POST", body: { batchId, resourceIds } },
+    ),
   deleteWorkflowUpload: (id: string) =>
     requestJson<void>(
       `/api/agent/workflow-uploads/${encodeURIComponent(id)}/`,
@@ -184,9 +219,16 @@ export const agentApi = {
       body,
       validate: assertWorkflow,
     }),
-  workflow: (id: string, options: { signal?: AbortSignal } = {}) =>
+  workflow: (
+    id: string,
+    options: {
+      signal?: AbortSignal;
+      projectTagId?: string;
+      view?: "card" | "full";
+    } = {},
+  ) =>
     requestJson<AgentWorkflow>(
-      `/api/agent/workflows/${encodeURIComponent(id)}/`,
+      `/api/agent/workflows/${encodeURIComponent(id)}/${options.view ? `?view=${options.view}` : ""}`,
       {
         ...options,
         validate: (value) => {
@@ -237,9 +279,14 @@ export const agentApi = {
       body: { planHash, ...review },
       validate: assertWorkflow,
     }),
-  cancelWorkflow: (id: string, body?: CancelAgentWorkflowData["body"]) =>
+  cancelWorkflow: (
+    id: string,
+    body?: CancelAgentWorkflowData["body"],
+    projectTagId?: string,
+  ) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/cancel/`, {
       method: "POST",
+      projectTagId,
       ...(body ? { body } : {}),
       validate: assertWorkflow,
     }),

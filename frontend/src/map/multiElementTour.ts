@@ -67,7 +67,7 @@ export function actualTourChanges(
     const matches = rows.flatMap((row, index) =>
       sameId(row.feature_id, p.feature_id) &&
       sameId(row.rule_id, p.rule_id) &&
-      row.action === (p.suggested_action ?? p.action) &&
+      row.action === (p.action ?? p.suggested_action) &&
       changed(row.actual_changed) &&
       (!p.issue_id || sameId(row.issue_id, p.issue_id))
         ? [{ row, index }]
@@ -146,7 +146,7 @@ export function tourFeature(
             feature.id,
         ) === change.suggestion.featureId,
     ) ??
-    (change.action === "merge" &&
+    (["merge", "reclassify", "set_code"].includes(change.action) &&
     String(change.feature.properties.host_feature_id ?? "").trim()
       ? data?.features.find(
           (feature) =>
@@ -197,8 +197,12 @@ export function tourLabels(
       };
     case "exclude":
       return {
-        title: "构造处置",
-        before: "原构造线",
+        title:
+          change.suggestion.element === "alteration" ? "蚀变剔除" : "构造处置",
+        before:
+          change.suggestion.element === "alteration"
+            ? "原蚀变图斑"
+            : "原构造线",
         after: "本轮不参与分析",
         note: "保留原记录，本轮不参与分析。",
       };

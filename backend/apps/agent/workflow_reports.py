@@ -61,6 +61,8 @@ def _cell(value: object) -> str:
 
 def _multi_report_version(workflow: AgentWorkflow) -> str:
     versions = workflow.plan.get("algorithms", {}).values()
+    if any(item.get("manifest", {}).get("version") == "1.0.5" for item in versions):
+        return "clean-v4"
     return (
         "complete-v3"
         if any(

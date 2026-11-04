@@ -483,7 +483,10 @@ def output_file(request, output_id):
 @endpoint(["GET"])
 def output_preview(request, output_id):
     output = authorized_output(request, output_id)
-    return JsonResponse(preview(output))
+    view = request.GET.get("view", "table")
+    if view not in {"table", "map"}:
+        raise ComputeError("结果预览视图无效")
+    return JsonResponse(preview(output, view=view))
 
 
 def authorized_map_output(request, output_id):

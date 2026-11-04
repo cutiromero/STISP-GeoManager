@@ -91,6 +91,93 @@ describe("browser page session lifecycle", () => {
     expect(request.credentials).toBe("include");
   });
 
+  it("distinguishes explicit logout and immediately removes the browser lease", async () => {
+    await startBrowserSession();
+    const ended = vi.fn();
+    window.addEventListener(browserSessionEndedEvent, ended, { once: true });
+    endBrowserSession(true, "logout");
+    expect(savedPage()).toBeNull();
+    expect((ended.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      reason: "logout",
+    });
+  });
+
+  it("ignores an old heartbeat rejection after logout and a new sign in", async () => {
+    const intervals = vi.spyOn(window, "setInterval");
+    await startBrowserSession();
+    let finishHeartbeat: (value: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishHeartbeat = resolve;
+      }),
+    );
+    const heartbeat = intervals.mock.calls.find(
+      (call) => call[1] === 30_000,
+    )?.[0];
+    expect(typeof heartbeat).toBe("function");
+    if (typeof heartbeat === "function") heartbeat();
+    endBrowserSession(false, "logout");
+    await startBrowserSession();
+    const current = savedPage();
+    finishHeartbeat(
+      new Response(JSON.stringify({ detail: "旧会话已结束" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(savedPage()).toEqual(current);
+  });
+
+  it("does not restore an old page lease after logout or overwrite a newer login", async () => {
+    await startBrowserSession();
+    const original = sessionStorage.getItem(browserSessionStorageKey)!;
+    endBrowserSession(false);
+    sessionStorage.setItem(browserSessionStorageKey, original);
+    vi.mocked(performance.getEntriesByType).mockReturnValue([
+      { type: "reload" } as PerformanceNavigationTiming,
+    ]);
+    let finishRestore: (value: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishRestore = resolve;
+      }),
+    );
+    const restoring = resumeBrowserSession();
+    endBrowserSession(false, "logout");
+    await startBrowserSession();
+    const current = savedPage();
+    finishRestore(
+      new Response(JSON.stringify({ detail: "ok", active: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    expect(await restoring).toBe(false);
+    expect(savedPage()).toEqual(current);
+
+    let finishPageShow: (value: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishPageShow = resolve;
+      }),
+    );
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+    endBrowserSession(false, "logout");
+    await startBrowserSession();
+    const newest = savedPage();
+    finishPageShow(
+      new Response(JSON.stringify({ detail: "ok", active: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(savedPage()).toEqual(newest);
+  });
+
   it("resumes the same page after reload with a newer sequence", async () => {
     await startBrowserSession();
     window.dispatchEvent(new PageTransitionEvent("pagehide"));
@@ -125,7 +212,10 @@ describe("browser page session lifecycle", () => {
     },
   );
 
-  it("registers a distinct page using a still-online peer's handoff", async () => {
+  it("registers a noopener page without copied storage using a still-online peer's handoff", async () => {
+    vi.stubGlobal("opener", null);
+    sessionStorage.removeItem(browserSessionStorageKey);
+    expect(savedPage()).toBeNull();
     const token = "b".repeat(64);
     const peer = new TestChannel("stisp.browser-session");
     peers.push(peer);
@@ -141,6 +231,7 @@ describe("browser page session lifecycle", () => {
       sequence: 1,
     });
     expect(savedPage()?.pageId).toMatch(/^[a-f0-9]{32}$/);
+    expect(window.opener).toBeNull();
   });
 
   it("restores a suspended back-forward-cache page rather than logging it out", async () => {
