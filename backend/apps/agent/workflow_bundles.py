@@ -66,7 +66,16 @@ def extract_bundle(uploaded, root, budget):
             raise ComputeError(f"总压缩包最多包含{MAX_ENTRIES}个条目")
         seen, accepted = set(), []
         for entry in entries:
-            path = safe_path(entry.filename)
+            name = entry.filename
+            if not entry.flag_bits & 0x800:
+                raw_name = name.encode("cp437")
+                for encoding in ("utf-8", "gb18030"):
+                    try:
+                        name = raw_name.decode(encoding)
+                        break
+                    except UnicodeDecodeError:
+                        continue
+            path = safe_path(name)
             mode = entry.external_attr >> 16
             if stat.S_ISLNK(mode) or (
                 stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR)

@@ -31,6 +31,14 @@ def archive(entries):
     return SimpleUploadedFile("总资料.zip", output.getvalue())
 
 
+def unflagged_archive(entries, encoding):
+    class UnflaggedZipInfo(zipfile.ZipInfo):
+        def _encodeFilenameFlags(self):
+            return self.filename.encode(encoding), self.flag_bits & ~0x800
+
+    return archive([(UnflaggedZipInfo(name), content) for name, content in entries])
+
+
 def post_batch(env, files):
     return env["client"].post(
         "/api/agent/workflow-uploads/batch/",
@@ -46,6 +54,62 @@ def recognize(env):
         content_type="application/json",
         HTTP_X_PROJECT_ID=str(env["project"].id),
     )
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "gbk"])
+def test_unflagged_chinese_names_and_filename_role_hint(generic, encoding):
+    names = ["海德乌拉_模拟识别岩性图.geojson", "海德乌拉_研究区.geojson"]
+    uploaded = unflagged_archive(
+        [(f"上传用/{name}", json.dumps(GEOLOGY)) for name in names], encoding
+    )
+    with zipfile.ZipFile(uploaded) as zipped:
+        assert all(not entry.flag_bits & 0x800 for entry in zipped.infolist())
+        assert all("海德乌拉" not in entry.filename for entry in zipped.infolist())
+    uploaded.seek(0)
+    response = post_batch(generic, [uploaded])
+    assert response.status_code == 200, response.content
+    value = response.json()
+    assert value["errors"] == []
+    assert {item["fileName"]: item["roleHint"] for item in value["items"]} == {
+        names[0]: "lithology",
+        names[1]: "coverage",
+    }
+    assert all(item["profile"]["featureCount"] == 4 for item in value["items"])
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "gbk"])
+@pytest.mark.parametrize("name", ["上传用/../越界.csv", "上传用\\..\\越界.csv"])
+def test_unflagged_chinese_traversal_is_rejected(generic, encoding, name):
+    response = post_batch(
+        generic,
+        [unflagged_archive([("正常.csv", "code\nA"), (name, "code\nA")], encoding)],
+    )
+    assert response.status_code == 200, response.content
+    assert response.json()["items"] == []
+    assert "不安全路径" in response.json()["errors"][0]["detail"]
+    assert not WorkflowUpload._base_manager.filter(batch_id=generic["batch"]).exists()
+
+
+def test_duplicate_paths_checked_after_filename_recovery(generic):
+    output = io.BytesIO(unflagged_archive([("研究区.csv", "code\nA")], "gbk").read())
+    with zipfile.ZipFile(output, "a") as zipped:
+        zipped.writestr("研究区.csv", "code\nB")
+    response = post_batch(generic, [SimpleUploadedFile("重复.zip", output.getvalue())])
+    assert response.status_code == 200, response.content
+    assert response.json()["items"] == []
+    assert "重复路径" in response.json()["errors"][0]["detail"]
+    assert not WorkflowUpload._base_manager.filter(batch_id=generic["batch"]).exists()
+
+
+@pytest.mark.parametrize("flagged", [False, True])
+def test_unrecoverable_or_flagged_names_are_unchanged(generic, flagged):
+    name = "é.csv"
+    entries = [(name, "code\nA")]
+    uploaded = archive(entries) if flagged else unflagged_archive(entries, "cp437")
+    response = post_batch(generic, [uploaded])
+    assert response.status_code == 200, response.content
+    assert response.json()["errors"] == []
+    assert [item["fileName"] for item in response.json()["items"]] == [name]
 
 
 def test_bundle_partial_registration_and_rule_roles(generic):
