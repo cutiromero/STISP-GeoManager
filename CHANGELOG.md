@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.60] - 2026-11-04
+
+### Added
+- 逻辑推理记住本人在当前项目上次确认的系统数据、资料角色、字段含义、要求和思考强度；新对话点“逻辑推理”即恢复，资料未变化时直接沿用角色和字段，计划确认与逐项批准仍在本次对话完成。
+
+### Changed
+- 输入区入口改名为“逻辑推理”，资料面板可收起、再次展开保留已选资料，清空单独操作；上次任务状态单独提示。
+- 选择系统数据按最近更新排列，支持搜索、按数据目录筛选和翻页，并显示总数。
+- 逻辑推理项目恢复思考强度控件，去掉深度思考开关；默认轻量。
+
 ## [0.1.59] - 2026-11-04
 
 ### Added
