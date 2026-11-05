@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type {
   AgentWorkflow,
+  ComputeMapPreview,
   GeoJsonFeatureCollection,
 } from "../api/generated/types.gen";
 import {
@@ -17,6 +18,7 @@ import {
   formatMultiElementObservation,
 } from "../agent/MultiElementStory";
 import WorkflowReportFile from "../agent/WorkflowReportFile";
+import { computeApi } from "../api/compute";
 import GeologyReviewMaps from "./GeologyReviewMaps";
 import {
   previewSuggestions,
@@ -144,7 +146,10 @@ export default function MultiElementWorkspace({
   workflow: AgentWorkflow;
   suggestionId: string | null;
   onReload: () => void;
-  onPage?: (offset: number) => Promise<void>;
+  onPage?: (
+    offset: number,
+    element?: "all" | "lithology" | "structure" | "alteration",
+  ) => Promise<void>;
 }) {
   const navigate = useNavigate();
   const [chapter, setChapter] = useState<StoryChapter>(() => {
@@ -163,12 +168,58 @@ export default function MultiElementWorkspace({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [pageLoading, setPageLoading] = useState(false);
-  const changePage = async (offset: number) => {
+  const [rasterLayers, setRasterLayers] = useState<
+    { key: string; before?: ComputeMapPreview; after?: ComputeMapPreview }[]
+  >([]);
+  const [rasterError, setRasterError] = useState("");
+  const rasterRefs = workflow.plan.multiElementMap?.alterationRasters;
+  const rasterKey = JSON.stringify(rasterRefs ?? []);
+  useEffect(() => {
+    let disposed = false;
+    const refs = JSON.parse(rasterKey) as NonNullable<typeof rasterRefs>;
+    setRasterError("");
+    if (!refs.length) {
+      setRasterLayers([]);
+      return;
+    }
+    void Promise.all(
+      refs.map(async (item) => {
+        const [before, after, changes] = await Promise.all([
+          computeApi.mapPreview(item.beforeOutputId),
+          item.afterOutputId
+            ? computeApi.mapPreview(item.afterOutputId)
+            : Promise.resolve(undefined),
+          item.changesOutputId
+            ? computeApi.mapPreview(item.changesOutputId)
+            : Promise.resolve(undefined),
+        ]);
+        return [
+          { key: `alteration:${item.mineral}`, before, after: after ?? before },
+          { key: `alteration-changes:${item.mineral}`, after: changes },
+        ];
+      }),
+    )
+      .then((layers) => {
+        if (!disposed) setRasterLayers(layers.flat());
+      })
+      .catch((reason: unknown) => {
+        if (!disposed)
+          setRasterError(
+            reason instanceof Error
+              ? reason.message
+              : "蚀变栅格预览读取失败，请刷新重试",
+          );
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [rasterKey]);
+  const changePage = async (offset: number, element = chapter) => {
     if (!onPage || pageLoading) return;
     setPageLoading(true);
     setError("");
     try {
-      await onPage(offset);
+      await onPage(offset, element === "investigation" ? "all" : element);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "修改详情读取失败");
     } finally {
@@ -706,6 +757,7 @@ export default function MultiElementWorkspace({
   };
   const showChapter = (next: StoryChapter) => {
     setChapter(next);
+    if (onPage && next !== "investigation") void changePage(0, next);
     if (next === "investigation") {
       showOutcome();
       return;
@@ -837,12 +889,30 @@ export default function MultiElementWorkspace({
           showIcon
           title={error}
           action={
-            <Button size="small" onClick={() => retryLoad()}>
-              重试
+            <Button
+              size="small"
+              onClick={() =>
+                error.includes("成果已更新") ? onReload() : retryLoad()
+              }
+            >
+              {error.includes("成果已更新") ? "刷新并保留当前位置" : "重试"}
             </Button>
           }
         />
       )}
+      {rasterError && (
+        <Alert
+          type="error"
+          title={`蚀变栅格：${rasterError}`}
+          action={<Button onClick={onReload}>刷新</Button>}
+        />
+      )}
+      {rasterRefs?.length ? (
+        <p aria-label="蚀变栅格图例">
+          矿物前后：青绿色；规则变更：A-01 红色、A-02 紫色、A-03 橙色、A-04
+          棕色、A-05 蓝色；透明为无识别或无变更。降权保留识别像元，权重另存。
+        </p>
+      ) : null}
       {loading && (
         <div className="geology-review-workspace-loading" role="status">
           <Spin />
@@ -907,7 +977,14 @@ export default function MultiElementWorkspace({
                   </Button>
                   <span>
                     共 {Number(record(workflow.plan.pagination).total)}{" "}
-                    处，当前按页读取
+                    {chapter === "alteration" &&
+                    workflow.plan.multiElementMap?.alterationRasters?.length
+                      ? "组"
+                      : "处"}
+                    ，当前按要素分页
+                    {workflow.plan.multiElementMap?.alterationRasters?.length
+                      ? `；蚀变 ${Number(record(record(workflow.plan.pagination).counts).alteration ?? 0)} 组，${Number(record(workflow.plan.pagination).alterationPixels ?? 0).toLocaleString("zh-CN")} 像元 / ${(Number(record(workflow.plan.pagination).alterationAreaM2 ?? 0) / 10000).toFixed(2)} 公顷`
+                      : ""}
                   </span>
                 </div>
               )}
@@ -921,7 +998,8 @@ export default function MultiElementWorkspace({
                   上一处
                 </Button>
                 <strong aria-live="polite">
-                  第{tourIndex + 1}处，共{tour.length}处
+                  本页第{tourIndex + 1}处，共{tour.length}
+                  {chapter === "alteration" && rasterRefs?.length ? "组" : "处"}
                 </strong>
                 <Button
                   icon={<RightOutlined />}
@@ -1012,6 +1090,17 @@ export default function MultiElementWorkspace({
               >
                 <GeologyReviewMaps
                   before={data.before}
+                  rasterOverlays={rasterLayers.filter(
+                    (layer) =>
+                      (layer.key.startsWith("alteration-changes:")
+                        ? visible.includes("changes")
+                        : visible.includes("alterations")) &&
+                      (viewMode !== "tour" ||
+                        !currentTour?.suggestion.observations?.mineral ||
+                        layer.key.endsWith(
+                          `:${String(currentTour.suggestion.observations.mineral)}`,
+                        )),
+                  )}
                   after={data.after}
                   differences={
                     visible.includes("changes") ? data.differences : empty

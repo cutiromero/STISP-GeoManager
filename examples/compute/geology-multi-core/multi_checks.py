@@ -412,6 +412,10 @@ def structure_findings(faults, lithology, rules, units, snapshot, config):
 
 
 def alteration_findings(alterations, lithology, rules, units, snapshot, config):
+    from multi_raster import RasterAlterations
+
+    if isinstance(alterations, RasterAlterations):
+        return alterations.inspect(lithology, rules, units, snapshot)
     if alterations.empty:
         return [], alterations
     # Aggregate every intersected fragment of the same unit, and separately each rock group.
@@ -540,6 +544,8 @@ def inspect(
             alterations, lithology, rules, units, snapshot, config
         )
         findings.extend(extra)
+    elif hasattr(alterations, "inspect"):
+        alterations.inspect(lithology, rules, units, snapshot)
 
     # Representative sampling downstream should start with visible, measured objects.
     def ordering(row):
@@ -563,7 +569,11 @@ def issue_maps(context, findings, config, prefix=""):
         ("structure", "fault_issues.gpkg", "MultiLineString"),
         ("alteration", "alteration_issues.gpkg", "MultiPolygon"),
     ]:
-        subset = [item for item in findings if item["element"] == element]
+        subset = [
+            item
+            for item in findings
+            if item["element"] == element and not item["feature_id"].startswith("AG-")
+        ]
         frame = gpd.GeoDataFrame(
             [
                 {

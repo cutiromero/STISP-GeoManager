@@ -1,3 +1,4 @@
+import { approvalSelection, type AlterationActions } from "./approvalSelection";
 import {
   Alert,
   Button,
@@ -51,6 +52,7 @@ export default function ResearchIntentCard({
   const [answer, setAnswer] = useState("");
   const [workflow, setWorkflow] = useState<AgentWorkflow>();
   const [error, setError] = useState("");
+  const [reviewError, setReviewError] = useState("");
   const [busy, setBusy] = useState(false);
   const [workflowRevision, setWorkflowRevision] = useState(0);
   const inFlight = useRef(false);
@@ -81,6 +83,7 @@ export default function ResearchIntentCard({
     );
     setAnswer("");
     setError("");
+    setReviewError("");
   }, [intent.revision]);
   useEffect(() => setWorkflow(undefined), [intent.workflowId]);
   useEffect(() => {
@@ -216,11 +219,13 @@ export default function ResearchIntentCard({
     decision: "approve" | "reject",
     feedback: string,
     selectedSuggestionIds?: string[],
+    alterationActions?: AlterationActions,
   ) => {
     if (!workflow || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
+    setReviewError("");
     try {
       const next = await agentApi.confirmWorkflow(
         workflow.id,
@@ -228,7 +233,10 @@ export default function ResearchIntentCard({
         {
           decision,
           feedback,
-          ...(selectedSuggestionIds ? { selectedSuggestionIds } : {}),
+          ...(await approvalSelection(workflow, selectedSuggestionIds)),
+          ...(alterationActions && Object.keys(alterationActions).length
+            ? { alterationActions }
+            : {}),
         },
       );
       if (!alive.current) return;
@@ -239,12 +247,14 @@ export default function ResearchIntentCard({
       onUpdate.current(latest.run);
       setWorkflowRevision((value) => value + 1);
     } catch (reason) {
-      if (alive.current)
-        setError(
+      if (alive.current) {
+        const message =
           reason instanceof Error
             ? reason.message
-            : "审核反馈暂未保存，请重试。",
-        );
+            : "审核反馈暂未保存，请重试。";
+        setError(message);
+        setReviewError(message);
+      }
     } finally {
       inFlight.current = false;
       if (alive.current) setBusy(false);
@@ -464,6 +474,7 @@ export default function ResearchIntentCard({
           <WorkflowCard
             compact
             workflow={workflow}
+            reviewError={reviewError || error}
             busy={busy}
             onConfirm={
               workflow.plan.phase === "review_mapping"
@@ -473,8 +484,18 @@ export default function ResearchIntentCard({
             onCancel={() => void update("cancel")}
             onPause={() => void controlWorkflow("pause")}
             onResume={() => void controlWorkflow("resume")}
-            onReview={(decision, feedback, selectedSuggestionIds) =>
-              void reviewWorkflow(decision, feedback, selectedSuggestionIds)
+            onReview={(
+              decision,
+              feedback,
+              selectedSuggestionIds,
+              alterationActions,
+            ) =>
+              void reviewWorkflow(
+                decision,
+                feedback,
+                selectedSuggestionIds,
+                alterationActions,
+              )
             }
             onRestart={onRestart}
           />

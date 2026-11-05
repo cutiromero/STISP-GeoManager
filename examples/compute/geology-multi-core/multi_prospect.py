@@ -79,8 +79,16 @@ def conditions(
         burn(structure_geometries, transform, dimensions, structure_weights) >= 1
     )
     type_count = np.zeros(dimensions, dtype="float32")
-    allowed_types = second.get("alteration_types", sorted(alterations.alt.unique()))
-    for name, group in alterations.groupby("alt"):
+    raster = hasattr(alterations, "aggregate")
+    allowed_types = second.get(
+        "alteration_types",
+        list(alterations.alt) if raster else sorted(alterations.alt.unique()),
+    )
+    if raster:
+        type_count = alterations.aggregate(
+            transform, dimensions, config["working_epsg"], allowed_types
+        )
+    for name, group in [] if raster else alterations.groupby("alt"):
         if name not in allowed_types:
             continue
         active = (
@@ -212,20 +220,34 @@ def zones(
                         "gap_m": float(point.gap_m),
                     }
                 )
-        active = (
-            alterations.loc[alterations.get("state", "keep") != "exclude"]
-            if "state" in alterations
-            else alterations
-        )
-        near_alt = active.iloc[
-            active.sindex.query(
-                geometry.buffer(second.get("search_m", 250)), predicate="intersects"
+        if hasattr(alterations, "aggregate"):
+            from multi_io import RASTERS
+
+            mineral_types = [
+                name
+                for name in RASTERS.values()
+                if (
+                    alterations.aggregate(
+                        transform, dimensions, config["working_epsg"], [name]
+                    )[cells]
+                    > 0
+                ).any()
+            ]
+        else:
+            active = (
+                alterations.loc[alterations.state != "exclude"]
+                if "state" in alterations
+                else alterations
             )
-        ]
-        mineral_types = sorted(
-            set(near_alt.alt)
-            & set(second.get("alteration_types", near_alt.alt.unique()))
-        )
+            near_alt = active.iloc[
+                active.sindex.query(
+                    geometry.buffer(second.get("search_m", 250)), predicate="intersects"
+                )
+            ]
+            mineral_types = sorted(
+                set(near_alt.alt)
+                & set(second.get("alteration_types", near_alt.alt.unique()))
+            )
         rock_areas = {}
         for code, group in lithology.loc[
             lithology.geometry.intersects(geometry)

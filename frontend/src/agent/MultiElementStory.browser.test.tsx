@@ -52,6 +52,115 @@ export function multiWorkflow() {
   return workflow;
 }
 
+it("6268项建议全选可批准，待裁定和例外不隐式加入且失败原因就地显示", async () => {
+  const workflow = multiWorkflow();
+  const review = vi.fn();
+  const template = workflow.modificationReview!.suggestions[0]!;
+  const ordinary = Array.from({ length: 6268 }, (_, index) => ({
+    ...template,
+    id: `ordinary-${index}`,
+    featureId: `unit-${index}`,
+  }));
+  workflow.modificationReview!.approvedSuggestionIds = [];
+  workflow.modificationReview!.suggestions = [
+    ...ordinary,
+    ...(["review", "exception"] as const).map((status) => ({
+      ...template,
+      id: status,
+      featureId: status,
+      status,
+      action: "review" as const,
+      candidateAction: "exclude",
+    })),
+  ];
+  const view = render(
+    <App>
+      <MemoryRouter>
+        <MultiElementStory workflow={workflow} onReview={review} />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(screen.getByText(/已选择 6268/)).toBeVisible();
+  const wholeGroup = screen.getByRole("checkbox", {
+    name: "整组批准（6268 个对象）",
+  });
+  fireEvent.click(wholeGroup);
+  expect(screen.getByText(/已选择 0/)).toBeVisible();
+  fireEvent.click(wholeGroup);
+  expect(screen.getByText(/已选择 6268/)).toBeVisible();
+  expect(
+    screen.getByRole("checkbox", { name: "全部待裁定与例外按候选处置" }),
+  ).not.toBeChecked();
+  fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
+  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
+  await waitFor(() =>
+    expect(review).toHaveBeenCalledWith(
+      "approve",
+      "",
+      ordinary.map((item) => item.id),
+    ),
+  );
+  view.rerender(
+    <App>
+      <MemoryRouter>
+        <MultiElementStory
+          workflow={workflow}
+          onReview={review}
+          reviewError="冻结方案已更新，请刷新审批卡"
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "审批未提交：冻结方案已更新，请刷新审批卡",
+  );
+});
+
+it("蚀变组可明确选择降权并随审批提交稳定组标识", async () => {
+  const workflow = multiWorkflow();
+  const template = workflow.modificationReview!.suggestions[0]!;
+  workflow.modificationReview!.suggestions = [
+    {
+      ...template,
+      featureId: "AG-stable",
+      element: "alteration",
+      action: "exclude",
+      ruleId: "A-01",
+    },
+  ];
+  workflow.modificationReview!.approvedSuggestionIds = [];
+  const review = vi.fn();
+  render(
+    <App>
+      <MemoryRouter>
+        <MultiElementStory workflow={workflow} onReview={review} />
+      </MemoryRouter>
+    </App>,
+  );
+  fireEvent.click(
+    screen.getByText(/个对象/, {
+      selector: ".multi-element-suggestion-list > div > details > summary",
+    }),
+  );
+  const detail = (await screen.findByText("对象：AG-stable")).closest(
+    "details",
+  )!;
+  if (!detail.open) fireEvent.click(detail.querySelector("summary")!);
+  const control = await within(detail).findByRole("combobox", {
+    name: "蚀变组动作 AG-stable",
+  });
+  expect(control).toBeVisible();
+  fireEvent.mouseDown(control);
+  fireEvent.click(await screen.findByText("降权（0.5）"));
+  fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
+  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
+  await waitFor(() =>
+    expect(review).toHaveBeenCalledWith("approve", "", [template.id], {
+      "AG-stable": "downweight",
+    }),
+  );
+});
+
 it("建议默认收起，展开可核对实测、具体规则和例外，待裁定不被全选", async () => {
   const review = vi.fn();
   const workflow = multiWorkflow();

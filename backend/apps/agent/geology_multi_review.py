@@ -354,6 +354,27 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
         for row in rows
         if issues[row["issue_id"]]["status"] not in {"review", "exception"}
     ]
+    raster_ids = {
+        row["issue_id"]
+        for row in issues.values()
+        if row["element"] == "alteration" and row["feature_id"].startswith("AG-")
+    }
+    rows = [row for row in rows if row["issue_id"] not in raster_ids]
+    rows.extend(
+        {
+            **{key: str(issue[key]) for key in CHANGE_FIELDS[:5]},
+            "action": issue["suggested_action"],
+            "target_code": "",
+            "weight": 0
+            if issue["suggested_action"] == "exclude"
+            else 0.5
+            if issue["suggested_action"] == "downweight"
+            else 1,
+            "reason": issue["reason"],
+        }
+        for issue in issues.values()
+        if issue["issue_id"] in raster_ids and issue["status"] == "suggested"
+    )
     for issue in issues.values():
         action = issue.get("candidate_action")
         if issue["status"] not in {"review", "exception"} or not action:
@@ -384,7 +405,7 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
     for edit in rows:
         row = issues[edit["issue_id"]]
         held = row["status"] in {"review", "exception"}
-        if held:
+        if held or row["issue_id"] in raster_ids:
             entry = next(
                 (
                     entry
@@ -532,7 +553,9 @@ def execution_hash(workflow, stage):
     )
 
 
-def approve_modifications(workflow, user, policy, selected, plan_hash):
+def approve_modifications(
+    workflow, user, policy, selected, plan_hash, alteration_actions=None
+):
     from .workflow import step, checkpoint
 
     if (
@@ -546,25 +569,30 @@ def approve_modifications(workflow, user, policy, selected, plan_hash):
     ids = [item["id"] for item in review["suggestions"]]
     if set(selected) - set(ids):
         raise ComputeError("所选处置不属于本次方案", 409)
-    selected = [identity for identity in ids if identity in selected]
+    selected_set = set(selected)
+    selected = [identity for identity in ids if identity in selected_set]
+    actions = validate_alteration_actions(
+        review, selected_set, {} if alteration_actions is None else alteration_actions
+    )
     approval = {
         "proposalHash": review["proposalHash"],
         "planHash": plan_hash,
         "selectedSuggestionIds": selected,
         "executionHash": execution_hash(workflow, stage),
+        **({"alterationActions": actions} if actions else {}),
     }
     targets = [
         (row["element"], row["featureId"])
         for row in review["suggestions"]
-        if row["id"] in selected
+        if row["id"] in selected_set
     ]
     if len(set(targets)) != len(targets):
         raise ComputeError("同一对象只能选择一个候选或建议处置")
     stage["modificationsApproval"] = approval
-    stage["approvedEdits"] = selected_edits(rows, review, selected)
+    stage["approvedEdits"] = selected_edits(rows, review, selected, actions)
     workflow.plan["modificationReview"]["approvedSuggestionIds"] = selected
     workflow.plan["modificationReview"]["unapprovedSuggestionIds"] = [
-        i for i in ids if i not in selected
+        i for i in ids if i not in selected_set
     ]
     step(
         workflow,
@@ -576,13 +604,44 @@ def approve_modifications(workflow, user, policy, selected, plan_hash):
     stage["status"] = "pending"
 
 
-def selected_edits(rows, review, selected):
-    return [
+def validate_alteration_actions(review, selected, actions):
+    if not isinstance(actions, dict):
+        raise ComputeError("蚀变组动作须为分组到动作的映射")
+    allowed = {
+        item["featureId"]
+        for item in review["suggestions"]
+        if item["id"] in selected
+        and item.get("element") == "alteration"
+        and item.get("featureId", "").startswith("AG-")
+    }
+    if set(actions) - allowed or any(
+        action not in {"keep", "downweight", "exclude"} for action in actions.values()
+    ):
+        raise ComputeError("蚀变组动作超出本次已选择的冻结组或允许动作", 409)
+    return actions
+
+
+def selected_edits(rows, review, selected, actions=None):
+    selected = set(selected)
+    edits = [
         {**row, "reason": "用户裁定（规则为待裁定/例外）：" + row["reason"]}
         if suggestion.get("candidateAction")
         else row
         for row, suggestion in zip(rows, review["suggestions"])
         if suggestion["id"] in selected
+    ]
+    return [
+        {
+            **row,
+            "action": actions[row["feature_id"]],
+            "weight": {"keep": 1, "downweight": 0.5, "exclude": 0}[
+                actions[row["feature_id"]]
+            ],
+            "reason": "用户裁定（规则为待裁定/例外）/蚀变组动作：" + row["reason"],
+        }
+        if actions and row["feature_id"] in actions
+        else row
+        for row in edits
     ]
 
 
@@ -593,7 +652,10 @@ def create_approved_changes(workflow, user, policy, stage):
     review, rows = _fresh(workflow, user, policy, stage)
     approval = stage.get("modificationsApproval", {})
     selected = approval.get("selectedSuggestionIds", [])
-    expected = selected_edits(rows, review, selected)
+    actions = validate_alteration_actions(
+        review, set(selected), approval.get("alterationActions", {})
+    )
+    expected = selected_edits(rows, review, selected, actions)
     if (
         approval.get("executionHash") != execution_hash(workflow, stage)
         or approval.get("proposalHash") != review["proposalHash"]
@@ -697,3 +759,34 @@ def update_map(workflow):
         if value:
             values[key] = value
     workflow.plan["multiElementMap"] = values
+    check_outputs = {
+        item["key"]: item["outputId"]
+        for stage in workflow.plan["stages"]
+        if stage["name"] == "check"
+        for item in stage.get("results", [])
+        if item.get("outputId")
+    }
+    apply_outputs = {
+        item["key"]: item["outputId"]
+        for stage in workflow.plan["stages"]
+        if stage["name"] == "apply"
+        for item in stage.get("results", [])
+        if item.get("outputId")
+    }
+    rasters = []
+    for mineral in ("hematite", "chlorite", "hydromica", "calcite", "dolomite"):
+        if mineral + "_before" not in check_outputs:
+            continue
+        entry = {
+            "mineral": mineral,
+            "beforeOutputId": check_outputs[mineral + "_before"],
+        }
+        for field, suffix in (
+            ("afterOutputId", "corrected"),
+            ("changesOutputId", "changes"),
+        ):
+            if mineral + "_" + suffix in apply_outputs:
+                entry[field] = apply_outputs[mineral + "_" + suffix]
+        rasters.append(entry)
+    if rasters:
+        values["alterationRasters"] = rasters

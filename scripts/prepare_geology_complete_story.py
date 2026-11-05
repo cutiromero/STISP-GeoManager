@@ -10,6 +10,47 @@ import geopandas as gpd
 from prepare_geology_multi import SCENARIO, dump, sha
 
 
+def raster_rules(bundle):
+    definitions = {
+        "A-01": (
+            "方解石化或白云石化像元中心属于碳酸盐岩单元时，按像元提出剔除建议；跨岩性连通区的其他部分保持。",
+            "建议逐像元剔除，原始识别保留，仍不能排除热液叠加",
+        ),
+        "A-02": (
+            "方解石化或白云石化像元中心属于含碳酸盐夹层单元时，归为待裁定组；不能仅凭背景证明为原岩或热液。",
+            "默认保留，用户可对冻结组明确选择保留、降权或剔除",
+        ),
+        "A-03": (
+            "赤铁矿化像元中心属于红色碎屑岩单元时，按像元提出降权建议。",
+            "建议降权0.5，保留矿物识别",
+        ),
+        "A-04": (
+            "矿物识别像元中心属于松散覆盖层单元时，按像元提出剔除建议；相连但落在基岩上的部分不连带剔除。",
+            "建议逐像元剔除，原始识别保留",
+        ),
+        "A-05": (
+            "同一矿物、同一岩性单元内按8邻域计算连通分量；像元数乘像元面积小于min_area_m2时为小斑。",
+            "默认建议降权0.5，不默认删除",
+        ),
+        "P-02": (
+            "在同一分析网格内按每种矿物的识别像元比例乘已批准权重，累加为加权矿物覆盖比例和；达到min_types为蚀变组合条件。不对蚀变面或像元额外缓冲。",
+            "用于远景核查证据组合，不代表矿化概率",
+        ),
+    }
+    for rule in bundle["rules"]:
+        if rule["id"] not in definitions:
+            continue
+        condition, action = definitions[rule["id"]]
+        rule.update(
+            version="2026-11-05-raster-trial", condition=condition, action=action
+        )
+        rule["basis"] = {
+            **rule.get("basis", {}),
+            "statement": condition + " 本案例逐像元试用判据，需区域地质核验。",
+        }
+    return bundle
+
+
 def alluvium_shape_rule():
     return {
         "id": "L-06",
@@ -73,7 +114,7 @@ def enclave_continuity_rule():
     }
 
 
-def prepare(prepared: Path, lithology: Path, output: Path):
+def prepare(prepared: Path, lithology: Path, output: Path, alteration_raster=False):
     prepared, lithology, output = (
         prepared.resolve(),
         lithology.resolve(),
@@ -85,7 +126,10 @@ def prepare(prepared: Path, lithology: Path, output: Path):
         raise ValueError("Use a new empty output directory")
     manifest = json.loads((prepared / "manifest.json").read_text(encoding="utf-8"))
     bundle = json.loads((prepared / "trial_knowledge.json").read_text(encoding="utf-8"))
-    if manifest["scenario"] != SCENARIO or len(bundle["rules"]) != 17:
+    original_rules = list(bundle["rules"])
+    if manifest["scenario"] != SCENARIO or len(bundle["rules"]) not in (
+        {17, 20} if alteration_raster else {17}
+    ):
         raise ValueError("Expected the verified original trial bundle")
     resources = manifest["resources"]
     for item in resources:
@@ -136,7 +180,12 @@ def prepare(prepared: Path, lithology: Path, output: Path):
     )
     bundle["rules"].append(alluvium_shape_rule())
     bundle["rules"].append(enclave_continuity_rule())
+    if len(original_rules) == 20:
+        bundle["rules"] = original_rules
     manifest.update(artifacts=[], rulesCode="geology-multi-rules-complete-20261105")
+    if alteration_raster:
+        raster_rules(bundle)
+        manifest["rulesCode"] = "geology-multi-rules-raster-20261105"
     manifest["counts"].update(
         lithology=len(gpd.read_file(lithology)), rules=len(bundle["rules"])
     )
@@ -151,9 +200,11 @@ if __name__ == "__main__":
     parser.add_argument("--prepared", type=Path, required=True)
     parser.add_argument("--lithology", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--alteration-raster", action="store_true")
     args = parser.parse_args()
     print(
         json.dumps(
-            prepare(args.prepared, args.lithology, args.output), ensure_ascii=False
+            prepare(args.prepared, args.lithology, args.output, args.alteration_raster),
+            ensure_ascii=False,
         )
     )

@@ -1197,10 +1197,21 @@ def workflow_confirm(request, workflow_id):
 
     value = body(
         request,
-        ["planHash", "decision", "feedback", "selectedSuggestionIds", "fieldMapping"],
+        [
+            "planHash",
+            "decision",
+            "feedback",
+            "selectedSuggestionIds",
+            "suggestionSelection",
+            "alterationActions",
+            "fieldMapping",
+        ],
+        max_bytes=1024 * 1024,
     )
     decision, feedback = value.get("decision", "approve"), value.get("feedback", "")
     selected = value.get("selectedSuggestionIds")
+    if "suggestionSelection" in value and "selectedSuggestionIds" in value:
+        raise ApiProblem("请只提交一种审批选择方式")
     if (
         not isinstance(decision, str)
         or decision not in {"approve", "reject"}
@@ -1229,6 +1240,24 @@ def workflow_confirm(request, workflow_id):
             pk=workflow_id,
             owner=request.user,
         )
+        if "suggestionSelection" in value:
+            if (
+                workflow.workflow_type
+                not in {"geology_generic", "geology_multi_element_reasoning"}
+                or workflow.plan.get("phase") != "review_modifications"
+                or decision != "approve"
+            ):
+                raise ApiProblem("当前阶段不支持紧凑审批选择")
+            from .workflow_projection import resolve_selection
+
+            selected = resolve_selection(workflow.plan, value["suggestionSelection"])
+        if "alterationActions" in value and (
+            workflow.workflow_type
+            not in {"geology_generic", "geology_multi_element_reasoning"}
+            or workflow.plan.get("phase") != "review_modifications"
+            or decision != "approve"
+        ):
+            raise ApiProblem("当前阶段不支持蚀变组动作选择")
         if (
             selected is not None
             and len(selected) > 30
@@ -1294,8 +1323,13 @@ def workflow_confirm(request, workflow_id):
                 request.user,
                 p,
                 value["planHash"],
-                value.get("selectedSuggestionIds"),
+                selected,
                 value.get("fieldMapping"),
+                **(
+                    {"alteration_actions": value["alterationActions"]}
+                    if "alterationActions" in value
+                    else {}
+                ),
             )
             record_workflow_review(
                 workflow, "approve", feedback, value["planHash"], review_outputs
@@ -1362,6 +1396,13 @@ def workflow_detail(request, workflow_id):
         from .workflow_projection import page_options, project_workflow
 
         part, offset, limit = page_options(request.GET, view)
+        element = request.GET.get("element", "all")
+        if (
+            element not in {"all", "lithology", "structure", "alteration"}
+            or view != "compare"
+            and element != "all"
+        ):
+            raise ApiProblem("工作流分页要素无效")
         data = project_workflow(
             workflow,
             workflow_json(workflow, view="card"),
@@ -1370,6 +1411,7 @@ def workflow_detail(request, workflow_id):
             offset,
             limit,
             request.GET.get("suggestionId", "")[:100],
+            element,
         )
     else:
         data = workflow_json(workflow, view=view)

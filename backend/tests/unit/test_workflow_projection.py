@@ -12,6 +12,59 @@ from apps.agent.workflow_projection import page_options, project_workflow
 OBJECT_COUNT = 5200
 
 
+def test_element_pages_keep_global_counts_and_comparison_revision():
+    workflow = large_workflow(150)
+    for index, item in enumerate(workflow.plan["modificationReview"]["suggestions"]):
+        item["element"] = (
+            "lithology" if index < 70 else "structure" if index < 90 else "alteration"
+        )
+        if index >= 90:
+            workflow.plan["stages"][0]["results"][0]["rows"][index].update(
+                pixel_count=100, area_m2=2500
+            )
+    first = project_workflow(
+        workflow,
+        {"planHash": "frozen"},
+        "compare",
+        "changes",
+        0,
+        25,
+        element="alteration",
+    )
+    second = project_workflow(
+        workflow,
+        {"planHash": "frozen"},
+        "compare",
+        "changes",
+        25,
+        25,
+        element="alteration",
+    )
+    page = first["plan"]["pagination"]
+    assert page["counts"] == {
+        "all": 150,
+        "lithology": 70,
+        "structure": 20,
+        "alteration": 60,
+    }
+    assert page["total"] == 60 and page["alterationPixels"] == 6000
+    assert page["alterationAreaM2"] == 150000
+    assert second["plan"]["pagination"]["counts"] == page["counts"]
+    assert second["plan"]["pagination"]["revision"] == page["revision"]
+    assert first["planHash"] == second["planHash"] == "frozen"
+    assert all(
+        item["element"] == "alteration"
+        for item in first["modificationReview"]["suggestions"]
+    )
+    assert (
+        second["plan"]["compareFeatures"]["features"][0]["properties"]["_rowIndex"]
+        == 116
+    )
+    workflow.plan["unrelatedHeartbeat"] = 42
+    unchanged = project_workflow(workflow, {}, "compare", "changes", 0, 25)
+    assert unchanged["plan"]["pagination"]["revision"] == page["revision"]
+
+
 def large_workflow(count=OBJECT_COUNT):
     suggestions, rows, edits = [], [], []
     for index in range(count):

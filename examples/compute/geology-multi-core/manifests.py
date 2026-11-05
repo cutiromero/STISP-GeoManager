@@ -175,12 +175,58 @@ def create():
         ),
     }
     for suffix, (name, inputs, outputs) in variants.items():
+        if suffix in {"check", "apply", "prospect"}:
+            inputs = [row for row in inputs if row["key"] != "alterations"]
+            inputs += [
+                {
+                    "key": row["key"] + "_weight",
+                    "label": row["label"] + "权重",
+                    "kind": "raster",
+                    "minBands": 1,
+                    "required": False,
+                }
+                for row in rasters
+            ]
+        if suffix == "prospect":
+            inputs += [
+                {**row, "key": "before_" + row["key"], "label": "修改前" + row["label"]}
+                for row in rasters
+            ]
+        if suffix in {"check", "apply"}:
+            outputs = [row for row in outputs if "alteration" not in row["key"]]
+            outputs += [
+                output(
+                    "alteration_summary",
+                    "蚀变逐像元归类汇总",
+                    "table",
+                    "alteration_summary.csv",
+                ),
+                output(
+                    "alteration_quality",
+                    "蚀变像元质量统计",
+                    "table",
+                    "alteration_quality.csv",
+                ),
+                output(
+                    "group_index", "稳定组与栅格整数索引", "table", "group_index.csv"
+                ),
+            ]
+            for row in rasters:
+                for kind in (
+                    ["hits", "groups", "before"]
+                    if suffix == "check"
+                    else ["corrected", "weight", "changes"]
+                ):
+                    key = row["key"] + "_" + kind
+                    outputs.append(
+                        output(key, row["label"] + " " + kind, "raster", key + ".tif")
+                    )
         directory = Path(__file__).resolve().parent.parent / ("geology-multi-" + suffix)
         manifest = {
             "schemaVersion": 1,
             "identifier": directory.name,
             "name": name,
-            "version": "1.0.8",
+            "version": "1.1.0",
             "description": name
             + "。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
             "author": "STISP",

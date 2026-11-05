@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261105-014 - 蚀变归类组审批与按要素对比分页
+
+- Status: BackendReady
+- Owner: 本任务显式贯通算子、契约、后端、前端及测试。
+- Endpoints: GET /api/agent/workflows/{workflowId}/；POST /api/agent/workflows/{workflowId}/confirm/。
+- Change type: 增加compare的element过滤、全局计数/面积/稳定revision、蚀变栅格输出引用和紧凑审批选择/组动作。
+- OpenAPI change: AgentWorkflowPage、AgentMultiElementMap、AgentWorkflowConfirmation；generated类型由契约重新生成。
+- Mock examples: mock/prism/examples/105-agent-workflow-card.json。
+- Frontend reason: 任意要素可直接分页查看，数千项全选不提交冗长编号，组动作和失败原因在审批处可见。
+- Backend implementation notes: 本人、当前项目和资源权限不变；紧凑选择仅在当前冻结方案展开，待裁定/例外须显式纳入；蚀变动作只能覆盖已选AG组，批准记录和执行CSV双重校验；旧对象任务仍可读取。
+- Verification: 算子像元级测试、6268项审批、冻结越界检查、按要素投影与报告/预算测试；OpenAPI全流程；浏览器用例只更新，不运行。
+- Result: 本地实现，未发布。真实模型token与正式资料效果须在候选站验收。
+
 ## API-20261105-013 - 模型尝试审计响应与精确校验反馈
 
 - Status: BackendReady
@@ -359,6 +372,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261105-014 | BackendReady | /api/agent/workflows/{workflowId}/; /confirm/ | Raster groups, compact approval and element pages | Updated | 105-agent-workflow-card.json | Implemented | Focused regression; browser cases prepared | Existing owner/project/resource authorization |
 | API-20261105-013 | BackendReady | /api/agent/workflows/{workflow_id}/ | Model attempt audit response | Updated | Backend fixtures | Implemented | Focused backend tests; browser cases prepared | Existing workflow authorization |
 | API-20261105-011 | BackendReady | /api/catalog/resources/{id}/query/ | Shared-boundary grid quantization without simplification | Updated | 30-catalog-vector.json; backend geometry fixtures | Implemented | Focused unit tests; browser cases prepared | Storage, permissions and precise queries unchanged |
 | API-20261105-012 | BackendReady | /api/catalog/resources/{id}/profile/ | All-category model color advice and class provenance | Updated | 30-catalog-vector.json | Implemented | Focused color and shared-style tests | No permission or data-path change |

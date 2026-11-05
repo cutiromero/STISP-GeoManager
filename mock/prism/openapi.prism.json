@@ -23923,6 +23923,21 @@
             }
           },
           {
+            "name": "element",
+            "in": "query",
+            "description": "compare实际修改按要素过滤后分页；all保留全部。页签counts始终为全局数量，蚀变新流程以组计数并提供像元数与面积。其他视图仅允许all。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "lithology",
+                "structure",
+                "alteration"
+              ],
+              "default": "all"
+            }
+          },
+          {
             "name": "offset",
             "in": "query",
             "description": "分页起始位置；compare按要素、规则及动作分组连续排列。",
@@ -23963,18 +23978,29 @@
                     "suggestions": [
                       {
                         "id": "object-1",
-                        "groupId": "alteration-A05-exclude",
+                        "groupId": "AG-example-calcite-C-A05",
                         "kind": "multi_element",
                         "element": "alteration",
-                        "featureId": "M00001",
-                        "title": "碎斑噪声",
-                        "currentState": "原识别图斑",
-                        "suggestedState": "exclude",
-                        "reason": "实测面积低于本案例阈值，未命中需裁定例外",
-                        "action": "exclude",
+                        "featureId": "AG-example-calcite-C-A05",
+                        "title": "同矿物同岩性单元小斑",
+                        "currentState": "原识别像元",
+                        "suggestedState": "downweight",
+                        "reason": "同单元内8邻域连通分量小于面积阈值，默认降权而非删除",
+                        "action": "downweight",
                         "status": "suggested",
-                        "areaM2": 100,
+                        "areaM2": 1000,
                         "ruleId": "A-05",
+                        "observations": {
+                          "raster_protocol": "alteration-pixels-v1",
+                          "group_id": "AG-example-calcite-C-A05",
+                          "pixel_count": 10,
+                          "area_m2": 1000,
+                          "component_count": 2,
+                          "mineral": "calcite",
+                          "unit_code": "C",
+                          "rock_group": "carbonate",
+                          "boundary": false
+                        },
                         "knowledgeRefs": [
                           {
                             "id": 601,
@@ -24111,7 +24137,27 @@
                       "offset": 0,
                       "limit": 50,
                       "total": 2,
-                      "groups": []
+                      "groups": [],
+                      "element": "all",
+                      "counts": {
+                        "all": 1,
+                        "lithology": 0,
+                        "structure": 0,
+                        "alteration": 1
+                      },
+                      "alterationPixels": 10,
+                      "alterationAreaM2": 1000,
+                      "revision": "frozen-raster-comparison"
+                    },
+                    "multiElementMap": {
+                      "alterationRasters": [
+                        {
+                          "mineral": "calcite",
+                          "beforeOutputId": 1025,
+                          "afterOutputId": 1026,
+                          "changesOutputId": 1027
+                        }
+                      ]
                     },
                     "reviewIndex": {
                       "total": 2,
@@ -24125,7 +24171,7 @@
                         {
                           "element": "alteration",
                           "ruleId": "A-05",
-                          "action": "exclude",
+                          "action": "downweight",
                           "held": false,
                           "count": 1,
                           "ids": [
@@ -29642,7 +29688,34 @@
           },
           "outputRefs": {
             "type": "object",
-            "description": "输出引用",
+            "description": "输出引用。analysis_model_attempt 节点包含 modelResponse 审计产物；仅当前工作流授权用户可读，不含请求提示词。inspection 的 steps 分页保留此产物，不使用普通摘要裁剪。",
+            "properties": {
+              "modelResponse": {
+                "type": "object",
+                "description": "本次尝试的持久化审计响应，成功、校验失败及流式异常均保留。",
+                "required": [
+                  "content",
+                  "truncated",
+                  "sizeBytes"
+                ],
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "description": "凭据脱敏后的原始模型正文，含原始发现与待核实项；UTF-8 最多2 MiB，超出附中文截断标记；未返回正文时为空字符串。"
+                  },
+                  "truncated": {
+                    "type": "boolean",
+                    "description": "是否因审计体积上限截断。"
+                  },
+                  "sizeBytes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "脱敏后、截断前的 UTF-8 字节数。"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
             "additionalProperties": true
           },
           "metrics": {
@@ -30266,6 +30339,40 @@
           "groups"
         ],
         "properties": {
+          "element": {
+            "type": "string",
+            "enum": [
+              "all",
+              "lithology",
+              "structure",
+              "alteration"
+            ],
+            "description": "当前分页要素"
+          },
+          "counts": {
+            "type": "object",
+            "description": "全局实际修改数量，不随页变化；蚀变以归类组计数，旧任务仍以对象计数",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "该要素完整修改数"
+            }
+          },
+          "alterationPixels": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "新栅格流程全部实际修改像元数"
+          },
+          "alterationAreaM2": {
+            "type": "number",
+            "minimum": 0,
+            "description": "新栅格流程全部实际修改像元面积，平方米"
+          },
+          "revision": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "冻结批准与真实执行输出的内容哈希，分页与无关阶段状态不改变此值"
+          },
           "part": {
             "type": "string",
             "enum": [
@@ -35971,7 +36078,7 @@
           },
           "selectedSuggestionIds": {
             "type": "array",
-            "description": "地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。待裁定/例外仅在用户明确选择候选编号后执行，不属于普通建议全选；模型不得裁定。只接受快照的候选动作和目标，不接受额外目标参数。reject省略，其他阶段不得扩大操作范围。",
+            "description": "地质成果review_modifications阶段approve提交本字段或综合推理紧凑选择suggestionSelection，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改。新蚀变流程每组一个ID，岩性构造及旧任务按对象。待裁定/例外只有明确选择候选编号后执行，不属于普通建议全选；模型不得裁定。只接受快照的候选动作和目标，不接受额外目标参数。reject省略，其他阶段不得扩大操作范围。",
             "minItems": 0,
             "uniqueItems": true,
             "items": {
@@ -35979,6 +36086,58 @@
               "minLength": 1,
               "maxLength": 64,
               "description": "当前实际问题与模型建议或用户候选绑定的稳定标识"
+            }
+          },
+          "suggestionSelection": {
+            "type": "object",
+            "description": "综合推理审批的紧凑选择，与selectedSuggestionIds互斥。后端在当前planHash冻结方案内展开；普通建议默认全选，待裁定和例外只有includedIds显式选择才纳入。新蚀变组视为一个建议。",
+            "additionalProperties": false,
+            "required": [
+              "base",
+              "excludedIds",
+              "includedIds"
+            ],
+            "properties": {
+              "base": {
+                "type": "string",
+                "const": "suggested",
+                "description": "以本次冻结方案中可执行普通建议为基集，不含待裁定和例外"
+              },
+              "excludedIds": {
+                "type": "array",
+                "uniqueItems": true,
+                "description": "从普通建议基集排除的建议ID",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "description": "冻结建议ID"
+                }
+              },
+              "includedIds": {
+                "type": "array",
+                "uniqueItems": true,
+                "description": "额外明确批准的待裁定或例外候选ID",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "description": "冻结候选建议ID"
+                }
+              }
+            }
+          },
+          "alterationActions": {
+            "type": "object",
+            "description": "新蚀变流程用户对已选择稳定组的动作覆盖；键为AG组标识，值为保留、降权或剔除。仅综合推理review_modifications批准时允许，必须属于本次冻结且已选择的组；系统校验后冻结并执行。岩性构造及历史对象不得使用。",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "keep",
+                "downweight",
+                "exclude"
+              ],
+              "description": "用户明确批准的组动作，降权固定0.5，保留1，剔除0"
             }
           },
           "fieldMapping": {
@@ -36079,6 +36238,39 @@
         "description": "当前真实任务的地图资源；输入为模拟识别演示，输出只引用本轮实际计算，不引用交付包PNG",
         "additionalProperties": false,
         "properties": {
+          "alterationRasters": {
+            "type": "array",
+            "description": "新栅格流程各矿物的修改前后与变更栅格，引用本次计算输出ID，经现有map-preview接口鉴权读取统一配色PNG；不是资源ID",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mineral",
+                "beforeOutputId"
+              ],
+              "properties": {
+                "mineral": {
+                  "type": "string",
+                  "description": "矿物角色名"
+                },
+                "beforeOutputId": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "修改前识别栅格计算输出ID"
+                },
+                "afterOutputId": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "修正后COG计算输出ID"
+                },
+                "changesOutputId": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "规则变更编码栅格计算输出ID"
+                }
+              }
+            }
+          },
           "before": {
             "type": "object",
             "description": "当前检查采用的明确上游版本",

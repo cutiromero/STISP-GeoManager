@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-multi-prospect",
   "name": "优先核查远景区分析",
-  "version": "1.0.8",
+  "version": "1.1.0",
   "description": "优先核查远景区分析。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -94,16 +94,6 @@
       ]
     },
     {
-      "key": "alterations",
-      "label": "获批矿物处理状态",
-      "kind": "vector",
-      "geometryTypes": [
-        "Polygon",
-        "MultiPolygon"
-      ],
-      "required": false
-    },
-    {
       "key": "intersections",
       "label": "当前构造交汇点",
       "kind": "vector",
@@ -112,6 +102,71 @@
         "MultiPoint"
       ],
       "required": false
+    },
+    {
+      "key": "hematite_weight",
+      "label": "赤铁矿遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "chlorite_weight",
+      "label": "绿泥石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "hydromica_weight",
+      "label": "水云母遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "calcite_weight",
+      "label": "方解石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "dolomite_weight",
+      "label": "白云石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "before_hematite",
+      "label": "修改前赤铁矿遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "before_chlorite",
+      "label": "修改前绿泥石遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "before_hydromica",
+      "label": "修改前水云母遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "before_calcite",
+      "label": "修改前方解石遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "before_dolomite",
+      "label": "修改前白云石遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
     }
   ],
   "parameters": [

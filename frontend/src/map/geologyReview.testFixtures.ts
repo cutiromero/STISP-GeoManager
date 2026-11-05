@@ -36,7 +36,17 @@ export function comparisonProjection(
           /true|1/i.test(String(row.actual_changed)),
       ),
   );
-  const page = suggestions.slice(offset, offset + limit);
+  const requestedElement = query.get("element");
+  const element =
+    requestedElement === "lithology" ||
+    requestedElement === "structure" ||
+    requestedElement === "alteration"
+      ? requestedElement
+      : "all";
+  const filtered = suggestions.filter(
+    (item) => element === "all" || item.element === element,
+  );
+  const page = filtered.slice(offset, offset + limit);
   const outputs = (apply?.outputs ?? []) as Array<Record<string, unknown>>;
   projected.plan.compareFeatures = {
     type: "FeatureCollection",
@@ -67,11 +77,20 @@ export function comparisonProjection(
   };
   projected.plan.pagination = {
     part: "changes",
-    total: suggestions.length,
+    total: filtered.length,
+    element,
+    revision: workflow.modificationReview?.proposalHash ?? workflow.planHash,
+    counts: Object.fromEntries(
+      ["all", "lithology", "structure", "alteration"].map((key) => [
+        key,
+        suggestions.filter((item) => key === "all" || item.element === key)
+          .length,
+      ]),
+    ),
     offset,
     limit,
     focusOffset: 0,
-    groups: suggestions.map((item, index) => ({
+    groups: filtered.map((item, index) => ({
       key: item.id,
       element: item.element ?? null,
       ruleId: item.ruleId,

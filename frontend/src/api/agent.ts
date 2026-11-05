@@ -245,6 +245,7 @@ export const agentApi = {
       offset?: number;
       limit?: number;
       suggestionId?: string;
+      element?: "all" | "lithology" | "structure" | "alteration";
     } = {},
   ) =>
     requestJson<AgentWorkflow>(
@@ -260,6 +261,7 @@ export const agentApi = {
                       "offset",
                       "limit",
                       "suggestionId",
+                      "element",
                     ].includes(key) && value !== undefined,
                 )
                 .map(([key, value]) => [key, String(value)]),
@@ -308,7 +310,12 @@ export const agentApi = {
     planHash: string,
     review?: Pick<
       AgentWorkflowConfirmation,
-      "decision" | "feedback" | "selectedSuggestionIds" | "fieldMapping"
+      | "decision"
+      | "feedback"
+      | "selectedSuggestionIds"
+      | "suggestionSelection"
+      | "alterationActions"
+      | "fieldMapping"
     >,
   ) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/confirm/`, {

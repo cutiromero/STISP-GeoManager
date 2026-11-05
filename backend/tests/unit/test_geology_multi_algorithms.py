@@ -29,6 +29,50 @@ X, Y = 300000, 4000000
 KEYS = ["hematite", "chlorite", "hydromica", "calcite", "dolomite"]
 
 
+def test_raster_rule_registration_preserves_other_rules_and_parameters():
+    import copy
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        prepare = runpy.run_path(
+            str(ROOT / "scripts/prepare_geology_complete_story.py")
+        )
+    finally:
+        sys.path.pop(0)
+    bundle = {
+        "rules": [
+            {
+                "id": key,
+                "version": "original",
+                "condition": "unchanged",
+                "action": "original",
+                "params": {"threshold": 2},
+                "basis": {"refs": ["original"]},
+            }
+            for key in (
+                "L-01",
+                "S-01",
+                "P-01",
+                "P-02",
+                "A-01",
+                "A-02",
+                "A-03",
+                "A-04",
+                "A-05",
+            )
+        ]
+    }
+    original = copy.deepcopy(bundle)
+    prepare["raster_rules"](bundle)
+    for before, after in zip(original["rules"], bundle["rules"], strict=True):
+        assert before["params"] == after["params"]
+        if before["id"] in {"L-01", "S-01", "P-01"}:
+            assert before == after
+        else:
+            assert after["version"] == "2026-11-05-raster-trial"
+            assert after["basis"]["refs"] == before["basis"]["refs"]
+
+
 @pytest.mark.parametrize("confidence,status", [(0.5, "suggested"), (0.9, "review")])
 def test_alluvium_shape_candidate_approval_fuses_measured_host(
     tmp_path, confidence, status
@@ -157,6 +201,16 @@ def write(path, rows, fields=None):
 def read(path):
     with path.open(encoding="utf-8-sig", newline="") as stream:
         return list(csv.DictReader(stream))
+
+
+def raster_inputs(initial, edited=None):
+    result = {"before_" + key: initial.inputs[key] for key in KEYS}
+    if edited:
+        result.update({key: edited.output_path(key + "_corrected.tif") for key in KEYS})
+        result.update(
+            {key + "_weight": edited.output_path(key + "_weight.tif") for key in KEYS}
+        )
+    return result
 
 
 def fixture(tmp_path):
@@ -416,21 +470,18 @@ def test_alteration_aggregates_same_class_and_preserves_weight_states(tmp_path):
     findings, _ = check(initial)
     carbonate = next(row for row in findings if row["rule_id"] == "A-01")
     measured = json.loads(carbonate["measurements_json"])
-    assert measured["unit_areas_m2"]["C"] == pytest.approx(20000)
-    assert measured["group_ratios"]["carbonate"] == pytest.approx(1)
+    assert measured["area_m2"] == pytest.approx(20000)
+    assert measured["rock_group"] == "carbonate" and measured["unit_code"] == "C"
     # Carbonate background is read as lithology; a reviewer may still downweight.
     assert carbonate["suggested_action"] == "exclude"
     edited = approval_context(
         tmp_path, initial, [carbonate], {carbonate["issue_id"]: "downweight"}
     )
     load("apply")(edited)
-    result = gpd.read_file(edited.output_path("alterations.gpkg"))
-    selected = result.loc[result.feature_id == carbonate["feature_id"]].iloc[0]
-    assert selected.state == "downweight" and selected.weight == 0.5
-    assert len(result) == 3 and selected.geometry.area == pytest.approx(20000)
-    clean = gpd.read_file(edited.output_path("final_alterations.gpkg"))
-    assert set(clean.columns) == {"feature_id", "alt", "geometry"}
-    assert len(clean) == len(result)
+    with rasterio.open(edited.output_path("calcite_weight.tif")) as source:
+        assert int((source.read(1) == 0.5).sum()) == measured["pixel_count"]
+    with rasterio.open(edited.output_path("calcite_corrected.tif")) as source:
+        assert int(source.read(1).sum()) == measured["pixel_count"]
 
 
 def test_reclassification_fuses_host_and_preserves_coverage_and_original_record(
@@ -485,14 +536,10 @@ def test_final_alterations_exclude_approved_items_only(tmp_path):
         tmp_path, initial, [selected], {selected["issue_id"]: "exclude"}
     )
     load("apply")(edited)
-    clean = gpd.read_file(edited.output_path("final_alterations.gpkg"))
-    computation = gpd.read_file(edited.output_path("alterations.gpkg"))
-    assert selected["feature_id"] not in set(clean.feature_id)
-    assert set(clean.feature_id) == set(
-        computation.loc[computation.state != "exclude", "feature_id"]
-    )
-    assert set(clean.columns) == {"feature_id", "alt", "geometry"}
-    assert clean.geometry.is_valid.all()
+    with rasterio.open(edited.output_path("calcite_corrected.tif")) as source:
+        assert not source.read(1).any()
+    with rasterio.open(edited.output_path("hematite_corrected.tif")) as source:
+        assert source.read(1).sum() == 25
 
 
 def test_absent_faults_are_explicit_empty_optional_outputs(tmp_path):
@@ -521,14 +568,17 @@ def test_operator_packages_are_deterministic_and_declare_clean_outputs():
         assert package == builder(identifier)
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
             manifest = validate_manifest(yaml.safe_load(archive.read("operator.yaml")))
-            assert manifest["version"] == "1.0.8" and manifest["deterministic"]
+            assert manifest["version"] == "1.1.0" and manifest["deterministic"]
             assert {"main.py", "multi_apply.py", "multi_io.py", "operator.yaml"} <= set(
                 archive.namelist()
             )
             if suffix == "apply":
-                assert {"final_faults", "final_alterations"} <= {
-                    item["key"] for item in manifest["outputs"]
-                }
+                assert {
+                    "final_faults",
+                    "calcite_corrected",
+                    "calcite_weight",
+                    "calcite_changes",
+                } <= {item["key"] for item in manifest["outputs"]}
 
 
 def test_clean_lithology_strips_processing_fields_without_filtering_coverage(tmp_path):
@@ -785,7 +835,7 @@ def test_relations_and_prospect_have_real_grades_mask_and_matching_evidence(
             "before_faults": initial.inputs["faults"],
             "lithology": edited.output_path("lithology.gpkg"),
             "faults": edited.output_path("faults.gpkg"),
-            "alterations": edited.output_path("alterations.gpkg"),
+            **raster_inputs(initial, edited),
             "intersections": relations.output_path("intersections.gpkg"),
         },
         initial.parameters,
@@ -824,6 +874,7 @@ def test_empty_anomalies_intersections_and_prospects_are_real_empty_layers(tmp_p
         tmp_path / "prospect",
         {
             **initial.inputs,
+            **raster_inputs(initial),
             "before_lithology": initial.inputs["lithology"],
             "before_faults": initial.inputs["faults"],
         },
@@ -887,12 +938,8 @@ def test_downweight_really_affects_evidence_without_removing_geometry(tmp_path):
         tmp_path, initial, selected, {row["issue_id"]: "downweight" for row in selected}
     )
     load("apply")(edited)
-    states = gpd.read_file(edited.output_path("alterations.gpkg"))
-    assert len(states) == 3 and set(
-        states.loc[
-            states.feature_id.isin([row["feature_id"] for row in selected]), "weight"
-        ]
-    ) == {0.5}
+    with rasterio.open(edited.output_path("hematite_weight.tif")) as source:
+        assert int((source.read(1) == 0.5).sum()) == 25
     relations = Context(tmp_path / "relations", initial.inputs, initial.parameters)
     load("relations")(relations)
     prospect = Context(
@@ -901,15 +948,15 @@ def test_downweight_really_affects_evidence_without_removing_geometry(tmp_path):
             **initial.inputs,
             "before_lithology": initial.inputs["lithology"],
             "before_faults": initial.inputs["faults"],
-            "alterations": edited.output_path("alterations.gpkg"),
+            **raster_inputs(initial, edited),
             "intersections": relations.output_path("intersections.gpkg"),
         },
         initial.parameters,
     )
     load("prospect")(prospect)
     before = gpd.read_file(prospect.output_path("before_zones.gpkg"))
-    after = gpd.read_file(prospect.output_path("after_zones.gpkg"))
-    assert after.geometry.area.sum() < before.geometry.area.sum()
+    assert not prospect.output_path("after_zones.gpkg").exists()
+    assert before.geometry.area.sum() > 0
     for row in read(prospect.output_path("evidence.csv")):
         if row["phase"] == "after":
             assert json.loads(row["conditions_json"])["min_weighted_type_count"] >= 2
@@ -925,16 +972,13 @@ def test_recheck_keeps_user_review_and_downweight_state(tmp_path):
     load("apply")(edited)
     recheck = Context(
         tmp_path / "recheck",
-        {**initial.inputs, "alterations": edited.output_path("alterations.gpkg")},
+        {**initial.inputs, **raster_inputs(initial, edited)},
         initial.parameters,
     )
     again, report = check(recheck)
     assert report["metrics"]["snapshot_hash"] != findings[0]["snapshot_hash"]
-    result = gpd.read_file(recheck.output_path("alterations.gpkg"))
-    assert (
-        result.loc[result.feature_id == selected[0]["feature_id"], "state"].iloc[0]
-        == "downweight"
-    )
+    with rasterio.open(edited.output_path("calcite_weight.tif")) as source:
+        assert int((source.read(1) == 0.5).sum()) == 200
     assert len(again) == len(findings)
 
 

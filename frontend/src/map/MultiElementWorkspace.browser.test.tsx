@@ -65,6 +65,56 @@ beforeEach(() => {
   request.mockReset();
 });
 
+it("页签使用全局计数并按要素分页，成果更新可一键刷新", async () => {
+  const workflow = reviewWorkflow();
+  workflow.workflowType = "geology_multi_element_reasoning";
+  workflow.plan.inputs = { lithology: 101, faults: 102 };
+  workflow.plan.pagination = {
+    part: "changes",
+    total: 5572,
+    offset: 0,
+    limit: 25,
+    groups: [],
+    counts: { all: 5572, lithology: 76, structure: 38, alteration: 5458 },
+    revision: "frozen",
+  };
+  request.mockImplementation(async (url: string) =>
+    reviewQuery(
+      Number(url.match(/resources\/(\d+)\/query/)?.[1]),
+      beforeReviewMap,
+    ),
+  );
+  const onPage = vi.fn().mockResolvedValue(undefined);
+  const onReload = vi.fn();
+  render(
+    <App>
+      <MemoryRouter>
+        <MultiElementWorkspace
+          workflow={workflow}
+          suggestionId={null}
+          onPage={onPage}
+          onReload={onReload}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(
+    await screen.findByRole("button", { name: "查看构造章节" }),
+  ).toHaveTextContent("38");
+  expect(
+    screen.getByRole("button", { name: "查看矿物章节" }),
+  ).toHaveTextContent("5458");
+  fireEvent.click(screen.getByRole("button", { name: "查看构造章节" }));
+  await waitFor(() => expect(onPage).toHaveBeenCalledWith(0, "structure"));
+  onPage.mockRejectedValueOnce(new Error("成果已更新，请刷新后继续浏览"));
+  fireEvent.click(screen.getByRole("button", { name: "查看矿物章节" }));
+  await waitFor(() => expect(onPage).toHaveBeenCalledWith(0, "alteration"));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "刷新并保留当前位置" }),
+  );
+  expect(onReload).toHaveBeenCalledOnce();
+});
+
 it("讲解页双图同类采用成果原色并支持线点面、Unicode代号与空心交汇点", async () => {
   const worker = vi.spyOn(window, "Worker");
   const started = performance.now();
@@ -470,13 +520,13 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
       </MemoryRouter>
     </App>,
   );
-  expect(await screen.findByText("第2处，共3处")).toBeVisible();
+  expect(await screen.findByText("本页第2处，共3处")).toBeVisible();
   expect(document.querySelector(".multi-tour-map-stage")).toHaveAttribute(
     "data-current-change",
     "change-1",
   );
   fireEvent.click(screen.getByLabelText("上一处修改"));
-  expect(await screen.findByText("第1处，共3处")).toBeVisible();
+  expect(await screen.findByText("本页第1处，共3处")).toBeVisible();
   await waitFor(
     () =>
       expect(screen.getByLabelText("待检查地质图地图")).toHaveAttribute(
@@ -568,7 +618,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     .closest(".multi-tour-explanation")!;
   expect(narrative.getBoundingClientRect().bottom).toBeLessThanOrEqual(800);
   fireEvent.click(screen.getByLabelText("下一处修改"));
-  expect(screen.getByText("第2处，共3处")).toBeVisible();
+  expect(screen.getByText("本页第2处，共3处")).toBeVisible();
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
       "已从最终成果删除",
@@ -584,7 +634,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     ).not.toHaveLength(0),
   );
   fireEvent.click(screen.getByLabelText("上一处修改"));
-  expect(screen.getByText("第2处，共3处")).toBeVisible();
+  expect(screen.getByText("本页第2处，共3处")).toBeVisible();
   completeMineralRead();
   await expectFocusInBothMaps();
   expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
@@ -606,7 +656,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   fireEvent.click(screen.getByLabelText("上一处修改"));
   fireEvent.click(screen.getByLabelText("下一处修改"));
   fireEvent.click(screen.getByLabelText("下一处修改"));
-  expect(screen.getByText("第3处，共3处")).toBeVisible();
+  expect(screen.getByText("本页第3处，共3处")).toBeVisible();
   await expectFocusInBothMaps();
   expect(
     request.mock.calls.filter(([url]) => String(url).includes("/301/query/")),
@@ -633,7 +683,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   expect(screen.getByText("对象与依据")).toBeVisible();
   await waitFor(() => expect(beforeCanvas!.clientHeight).toBeGreaterThan(400));
   await page.getByRole("button", { name: "逐处看修改", exact: true }).click();
-  expect(screen.getByText("第3处，共3处")).toBeVisible();
+  expect(screen.getByText("本页第3处，共3处")).toBeVisible();
   await expectFocusInBothMaps();
   for (const [width, height] of [
     [820, 620],
@@ -681,14 +731,14 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   });
   const reads = request.mock.calls.length;
   fireEvent.click(screen.getByRole("button", { name: "查看构造章节" }));
-  expect(screen.getByText("第1处，共1处")).toBeVisible();
+  expect(screen.getByText("本页第1处，共1处")).toBeVisible();
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
       "已从最终成果删除",
     ),
   );
   fireEvent.click(screen.getByRole("button", { name: "查看矿物章节" }));
-  expect(screen.getByText("第1处，共1处")).toBeVisible();
+  expect(screen.getByText("本页第1处，共1处")).toBeVisible();
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
       "证据权重 0.4",
@@ -716,7 +766,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
       </MemoryRouter>
     </App>,
   );
-  expect(await screen.findByText("第1处，共1处")).toBeVisible();
+  expect(await screen.findByText("本页第1处，共1处")).toBeVisible();
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
       "证据权重 0.4",

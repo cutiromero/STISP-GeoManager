@@ -4,26 +4,27 @@ from multi_checks import inspect, issue_maps
 from multi_io import (
     ISSUE_FIELDS,
     inputs,
-    load_alterations,
     report,
     settings,
     write_table,
     write_vector,
 )
+from multi_raster import RasterAlterations, empty_vectors
 
 
 def run(context):
     config = settings(context)
     lithology, faults, area, rules, units, aliases, snapshot = inputs(context, config)
-    alterations, snapshot = load_alterations(context, config, area, snapshot)
+    alterations = RasterAlterations(context, config, area)
     findings, alterations = inspect(
         lithology, faults, alterations, area, rules, units, aliases, snapshot, config
     )
     write_table(context.output_path("issues.csv"), findings, ISSUE_FIELDS)
     issue_maps(context, findings, config)
+    alterations.outputs(context)
     write_vector(
         context.output_path("alterations.gpkg"),
-        alterations,
+        empty_vectors(config["working_epsg"]),
         config["working_epsg"],
         "MultiPolygon",
     )
@@ -52,6 +53,9 @@ def run(context):
         "lithology_count": len(lithology),
         "fault_count": len(faults),
         "alteration_count": len(alterations),
+        "alteration_pixel_count": sum(
+            row["original_pixels"] for row in alterations.quality
+        ),
         "issue_count": len(findings),
         "suggested_count": sum(row["status"] == "suggested" for row in findings),
         "review_count": sum(row["status"] == "review" for row in findings),
@@ -66,5 +70,5 @@ def run(context):
     report(
         context,
         metrics,
-        f"检查{len(lithology)}个岩性图斑、{len(faults)}条构造及{len(alterations)}处矿物识别范围，发现{len(findings)}条可核查建议；尚未修改资料。",
+        f"检查{len(lithology)}个岩性图斑、{len(faults)}条构造及{metrics['alteration_pixel_count']}个矿物像元，发现{len(findings)}条可核查建议（蚀变按组计数）；尚未修改资料。",
     )

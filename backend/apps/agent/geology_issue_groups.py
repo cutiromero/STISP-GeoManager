@@ -22,8 +22,15 @@ def issue_groups(rows):
                 "rule_version",
             )
         )
+        if row.get("element") == "alteration" and str(
+            row.get("feature_id", "")
+        ).startswith("AG-"):
+            key += (row["feature_id"],)
         grouped[key].append(row)
-    return [(digest(key)[:24], members) for key, members in sorted(grouped.items())]
+    return [
+        (members[0]["feature_id"] if len(key) > 7 else digest(key)[:24], members)
+        for key, members in sorted(grouped.items())
+    ]
 
 
 def group_summaries(rows):

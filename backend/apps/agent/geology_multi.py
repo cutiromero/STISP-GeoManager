@@ -67,6 +67,12 @@ VISIBLE_OUTPUTS = {
     "relations": {"intersections"},
     "prospect": {"before_zones", "after_zones", "evidence"},
 }
+VISIBLE_OUTPUTS["apply"].update(
+    mineral + "_" + suffix
+    for mineral, kind in ROLES.items()
+    if kind == "raster"
+    for suffix in ("corrected", "weight")
+)
 FIELDS = (
     "rule_id",
     "rule_version",
@@ -79,7 +85,7 @@ FIELDS = (
 )
 
 
-def graph(segment="all"):
+def graph(segment="all", raster=False):
     initial = {key: key for key in ROLES if key != "rules"}
     initial["rules"] = "frozen_rules"
     edit = {**initial, "issues": "check/issues", "approved_changes": "approved_changes"}
@@ -134,6 +140,16 @@ def graph(segment="all"):
                 },
             )
         )
+    if raster:
+        minerals = [key for key, kind in ROLES.items() if kind == "raster"]
+        for name, _, bindings in stages:
+            bindings.pop("alterations", None)
+            if name in {"recheck", "prospect"}:
+                for mineral in minerals:
+                    bindings[mineral] = "apply/" + mineral + "_corrected"
+                    bindings[mineral + "_weight"] = "apply/" + mineral + "_weight"
+                    if name == "prospect":
+                        bindings["before_" + mineral] = mineral
     return stages
 
 
@@ -335,7 +351,16 @@ def prepare(workflow, user, policy):
             "contentDigest": digest([entries, units, aliases]),
             "frozenChecksum": checksum(path),
         },
-        multiGraph=graph(workflow.parameters.get("segment", "all")),
+        multiGraph=graph(
+            workflow.parameters.get("segment", "all"),
+            raster=any(
+                item.get("key") == "alteration_summary"
+                for item in workflow.plan.get("algorithms", {})
+                .get("geology-multi-check", {})
+                .get("manifest", {})
+                .get("outputs", [])
+            ),
+        ),
         upstreamVersions={
             key: {
                 "resourceId": identity,

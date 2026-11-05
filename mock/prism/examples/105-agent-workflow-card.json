@@ -8,11 +8,12 @@
         "proposalHash": "grouped-example-snapshot",
         "approvedSuggestionIds": ["object-1"],
         "suggestions": [{
-          "id": "object-1", "groupId": "alteration-A05-exclude",
-          "kind": "multi_element", "element": "alteration", "featureId": "M00001",
-          "title": "碎斑噪声", "currentState": "原识别图斑", "suggestedState": "exclude",
-          "reason": "实测面积低于本案例阈值，未命中需裁定例外", "action": "exclude",
-          "status": "suggested", "areaM2": 100, "ruleId": "A-05",
+          "id": "object-1", "groupId": "AG-example-calcite-C-A05",
+          "kind": "multi_element", "element": "alteration", "featureId": "AG-example-calcite-C-A05",
+          "title": "同矿物同岩性单元小斑", "currentState": "原识别像元", "suggestedState": "downweight",
+          "reason": "同单元内8邻域连通分量小于面积阈值，默认降权而非删除", "action": "downweight",
+          "status": "suggested", "areaM2": 1000, "ruleId": "A-05",
+          "observations": {"raster_protocol": "alteration-pixels-v1", "group_id": "AG-example-calcite-C-A05", "pixel_count": 10, "area_m2": 1000, "component_count": 2, "mineral": "calcite", "unit_code": "C", "rock_group": "carbonate", "boundary": false},
           "knowledgeRefs": [{"id": 601, "revision": 1, "title": "碎斑检查"}],
           "preview": {"type": "Polygon", "coordinates": []},
           "bounds": [98.4,35.6,98.401,35.601]
@@ -97,13 +98,14 @@
         "phase": "completed",
         "reusedConfiguration": true,
         "fieldMappingReview": {"roles": [], "questions": [], "modelMode": "mock", "confirmed": true},
-        "pagination": {"part": "suggestions", "offset": 0, "limit": 50, "total": 2, "groups": []},
+        "pagination": {"part": "suggestions", "offset": 0, "limit": 50, "total": 2, "groups": [], "element": "all", "counts": {"all": 1, "lithology": 0, "structure": 0, "alteration": 1}, "alterationPixels": 10, "alterationAreaM2": 1000, "revision": "frozen-raster-comparison"},
+        "multiElementMap": {"alterationRasters": [{"mineral": "calcite", "beforeOutputId": 1025, "afterOutputId": 1026, "changesOutputId": 1027}]},
         "reviewIndex": {
           "total": 2,
           "suggestedIds": ["object-1"],
           "candidateIds": ["held-lithology-1"],
           "groups": [
-            {"element": "alteration", "ruleId": "A-05", "action": "exclude", "held": false, "count": 1, "ids": ["object-1"], "reasons": {}},
+            {"element": "alteration", "ruleId": "A-05", "action": "downweight", "held": false, "count": 1, "ids": ["object-1"], "reasons": {}},
             {"element": "lithology", "ruleId": "L-06", "action": null, "held": true, "count": 1, "ids": ["held-lithology-1"], "reasons": {"规则判定，需专家裁定": 1}}
           ]
         },

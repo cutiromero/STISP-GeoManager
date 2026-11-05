@@ -1,6 +1,6 @@
 FROM python:3.12-slim-bookworm
 RUN pip install --no-cache-dir \
-    numpy==2.2.6 pandas==2.3.3 rasterio==1.4.3 \
+    numpy==2.2.6 pandas==2.3.3 rasterio==1.4.3 scipy==1.17.1 \
     geopandas==1.1.1 pyogrio==0.11.1 shapely==2.1.2 pyproj==3.7.2 \
     pillow==11.3.0
 RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 && \

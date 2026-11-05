@@ -139,7 +139,12 @@ def approved(context, findings, snapshot):
             "review",
         }:
             if (
-                action != row.get("candidate_action")
+                (
+                    action != row.get("candidate_action")
+                    and not (
+                        row["feature_id"].startswith("AG-") and action == "downweight"
+                    )
+                )
                 or change["target_code"] != row.get("candidate_target_code", "")
                 or not change["reason"].startswith("用户裁定（规则为待裁定/例外）")
             ):
@@ -436,7 +441,9 @@ def modification_maps(context, modifications, config):
                 "geometry": row["_geometry"],
             }
             for row in modifications
-            if row["element"] == element and row["actual_changed"]
+            if row["element"] == element
+            and row["actual_changed"]
+            and not row["feature_id"].startswith("AG-")
         ]
         frame = gpd.GeoDataFrame(
             rows,

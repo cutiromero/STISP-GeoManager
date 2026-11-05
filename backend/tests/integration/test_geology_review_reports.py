@@ -26,6 +26,35 @@ from tests.integration.test_workflow_reports import completed, request  # noqa: 
 pytestmark = pytest.mark.django_db
 
 
+def test_report_reads_large_actual_change_table_without_old_256k_limit(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+    from apps.agent.geology_review_report import actual_table
+
+    path = tmp_path / "changes.csv"
+    with path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=["group_id", "action", "reason"])
+        writer.writeheader()
+        writer.writerows(
+            {
+                "group_id": f"AG-{index}",
+                "action": "downweight",
+                "reason": "获批范围内确定性处理，原始资料保留" * 3,
+            }
+            for index in range(7385)
+        )
+    assert path.stat().st_size > 256 * 1024
+    output = SimpleNamespace(expired=False, path="changes.csv", checksum=checksum(path))
+    task = SimpleNamespace(
+        outputs=SimpleNamespace(
+            filter=lambda **kwargs: SimpleNamespace(first=lambda: output)
+        )
+    )
+    monkeypatch.setattr("apps.agent.geology_review_report.app_path", lambda _: path)
+    assert len(actual_table(task, "changes")) == 7385
+
+
 def output(env, task, key, rows):
     path = app_path(f"compute/geology-report/{task.id}/{key}.csv")
     path.parent.mkdir(parents=True, exist_ok=True)

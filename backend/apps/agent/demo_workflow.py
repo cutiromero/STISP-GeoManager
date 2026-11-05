@@ -302,6 +302,8 @@ def prepare_demo(workflow, user, p) -> None:
     if workflow.workflow_type in MULTI_FAMILY:
         from .geology_multi import prepare
 
+        validated_versions = _versions(workflow, GRAPHS[workflow.workflow_type])
+        workflow.plan["algorithms"] = validated_versions
         multi_knowledge = prepare(workflow, user, p)
     if workflow.workflow_type == "geology_map_review":
         from .geology_input_validation import validate_geology_inputs
@@ -577,7 +579,13 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
 
 @transaction.atomic
 def confirm_demo(
-    workflow, user, p, plan_hash, selected_suggestion_ids=None, field_mapping=None
+    workflow,
+    user,
+    p,
+    plan_hash,
+    selected_suggestion_ids=None,
+    field_mapping=None,
+    alteration_actions=None,
 ) -> None:
     from .workflow_slots import require_compute_slot
 
@@ -602,7 +610,18 @@ def confirm_demo(
 
         if workflow.workflow_type not in {"geology_map_review", *MULTI_FAMILY}:
             raise ComputeError("当前场景不支持此修改审核", 409)
-        approve_modifications(workflow, user, p, selected_suggestion_ids, plan_hash)
+        approve_modifications(
+            workflow,
+            user,
+            p,
+            selected_suggestion_ids,
+            plan_hash,
+            **(
+                {"alteration_actions": alteration_actions}
+                if workflow.workflow_type in MULTI_FAMILY
+                else {}
+            ),
+        )
         workflow.plan["phase"] = "decide"
         workflow.status = "queued"
     elif workflow.plan["phase"] == "review_results":

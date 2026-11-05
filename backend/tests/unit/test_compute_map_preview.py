@@ -64,6 +64,46 @@ def source_path(output) -> Path:
     return map_preview.app_path(output.path)
 
 
+@pytest.mark.parametrize(
+    "key", ["calcite_before", "calcite_corrected", "calcite_changes"]
+)
+def test_alteration_preview_keeps_class_colors_and_zero_transparent(output, key):
+    output.key = key
+    path = source_path(output)
+    values = np.tile(np.arange(6, dtype="uint8"), (30, 1)).repeat(20, axis=1)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        width=120,
+        height=30,
+        count=1,
+        dtype="uint8",
+        crs="EPSG:4326",
+        transform=from_bounds(87, 39, 88, 40, 120, 30),
+    ) as target:
+        target.write(
+            values if key.endswith("changes") else (values > 0).astype("uint8"), 1
+        )
+    output.checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+    png, _ = map_preview.ensure_map_preview(output)
+    pixels = np.asarray(Image.open(io.BytesIO(png)))
+    palette = set(map(tuple, pixels.reshape(-1, 4)))
+    expected = (
+        {
+            (0, 0, 0, 0),
+            (211, 47, 47, 230),
+            (123, 31, 162, 230),
+            (245, 124, 0, 230),
+            (93, 64, 55, 230),
+            (25, 118, 210, 230),
+        }
+        if key.endswith("changes")
+        else {(0, 0, 0, 0), (38, 166, 154, 210)}
+    )
+    assert palette == expected
+
+
 def replace_raster(
     output,
     crs="EPSG:4326",

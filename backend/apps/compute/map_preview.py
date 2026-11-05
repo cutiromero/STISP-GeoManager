@@ -24,7 +24,7 @@ from apps.core.storage import StoragePathError, app_path
 from .packages import ComputeError, checksum
 
 
-RENDER_VERSION = 1
+RENDER_VERSION = 2
 MAX_PREVIEW_SIDE = 1024
 MAX_MEMORY_CACHE_ENTRIES = 8
 MAX_MAP_LATITUDE = 85.051129
@@ -37,6 +37,21 @@ _CACHE_LOCK = threading.Lock()
 
 
 def _rules(output) -> dict:
+    mineral, _, kind = output.key.rpartition("_")
+    if mineral in {
+        "hematite",
+        "chlorite",
+        "hydromica",
+        "calcite",
+        "dolomite",
+    } and kind in {"before", "corrected", "changes", "hits"}:
+        return {
+            "band": 1,
+            "palette": "alteration-changes"
+            if kind in {"changes", "hits"}
+            else "alteration",
+            "range": None,
+        }
     return {
         "band": 1,
         "palette": "blue",

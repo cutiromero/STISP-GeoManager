@@ -1,11 +1,9 @@
 """Compare prospect evidence with identical masks, grid and knowledge parameters."""
 
 from multi_io import (
-    alterations,
     digest,
     frame_identity,
     inputs,
-    load_alterations,
     report,
     settings,
     vector,
@@ -14,12 +12,14 @@ from multi_io import (
 )
 from multi_prospect import grid, zones
 from multi_relations import FIELDS, reconstruct
+from multi_raster import RasterAlterations
 
 
 def run(context):
     config = settings(context)
     lithology, faults, area, rules, units, _, snapshot = inputs(context, config)
-    final_alterations, snapshot = load_alterations(context, config, area, snapshot)
+    final_alterations = RasterAlterations(context, config, area)
+    final_alterations.inspect(lithology, rules, units, snapshot)
     before_lithology = vector(
         context.input_path("before_lithology"),
         config["working_epsg"],
@@ -57,7 +57,15 @@ def run(context):
     ):
         raise ValueError("交汇成果与当前构造及规则不一致，请重新重建关系")
     before_intersections = reconstruct(before_faults, area, rules)
-    original_alterations = alterations(context, config, area)
+
+    class OriginalContext:
+        def input_path(self, key):
+            if key.endswith("_weight"):
+                raise KeyError(key)
+            return context.input_path("before_" + key)
+
+    original_alterations = RasterAlterations(OriginalContext(), config, area)
+    original_alterations.inspect(before_lithology, rules, units, snapshot)
     transform, dimensions = grid(area, config)
     before, old_evidence = zones(
         before_lithology,

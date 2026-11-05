@@ -5,24 +5,32 @@ from multi_checks import inspect
 from multi_io import (
     CHANGE_FIELDS,
     inputs,
-    load_alterations,
     report,
     settings,
     write_table,
     write_vector,
 )
+from multi_raster import RasterAlterations, empty_vectors
 
 
 def run(context):
     config = settings(context)
     lithology, faults, area, rules, units, aliases, snapshot = inputs(context, config)
-    alterations, snapshot = load_alterations(context, config, area, snapshot)
+    alterations = RasterAlterations(context, config, area)
     findings, alterations = inspect(
         lithology, faults, alterations, area, rules, units, aliases, snapshot, config
     )
     operations = approved(context, findings, snapshot)
     corrected, final_faults, final_alterations, actual = apply(
-        lithology, faults, alterations, operations
+        lithology,
+        faults,
+        empty_vectors(config["working_epsg"]),
+        [row for row in operations if row["element"] != "alteration"],
+    )
+    actual.extend(
+        alterations.outputs(
+            context, [row for row in operations if row["element"] == "alteration"]
+        )
     )
     # Approval validation completes before any output is written.
     for filename, frame, geometry_type in [
@@ -62,6 +70,8 @@ def run(context):
         CHANGE_FIELDS
         + [
             "element",
+            "group_id",
+            "pixel_count",
             "knowledge_id",
             "knowledge_revision",
             "old_code",

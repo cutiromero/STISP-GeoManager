@@ -292,6 +292,14 @@ def inputs(context, config, include_rasters=True):
                         + np.ma.getmaskarray(values).tobytes()
                     ).hexdigest(),
                 }
+            try:
+                weight_path = context.input_path(key + "_weight")
+            except KeyError:
+                weight_path = None
+            if weight_path:
+                raster_identity[key + "_weight"] = hashlib.sha256(
+                    Path(weight_path).read_bytes()
+                ).hexdigest()
     payload = {
         "lithology": frame_identity(lithology),
         "faults": frame_identity(faults),

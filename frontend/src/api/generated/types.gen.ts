@@ -2840,6 +2840,28 @@ export type AgentWorkflowGroup = {
  */
 export type AgentWorkflowPage = {
     /**
+     * 当前分页要素
+     */
+    element?: 'all' | 'lithology' | 'structure' | 'alteration';
+    /**
+     * 全局实际修改数量，不随页变化；蚀变以归类组计数，旧任务仍以对象计数
+     */
+    counts?: {
+        [key: string]: number;
+    };
+    /**
+     * 新栅格流程全部实际修改像元数
+     */
+    alterationPixels?: number;
+    /**
+     * 新栅格流程全部实际修改像元面积，平方米
+     */
+    alterationAreaM2?: number;
+    /**
+     * 冻结批准与真实执行输出的内容哈希，分页与无关阶段状态不改变此值
+     */
+    revision?: string;
+    /**
      * 当前页内容类型
      */
     part: 'suggestions' | 'steps' | 'changes';
@@ -6261,9 +6283,32 @@ export type AgentWorkflowConfirmation = {
      */
     feedback?: string;
     /**
-     * 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。待裁定/例外仅在用户明确选择候选编号后执行，不属于普通建议全选；模型不得裁定。只接受快照的候选动作和目标，不接受额外目标参数。reject省略，其他阶段不得扩大操作范围。
+     * 地质成果review_modifications阶段approve提交本字段或综合推理紧凑选择suggestionSelection，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改。新蚀变流程每组一个ID，岩性构造及旧任务按对象。待裁定/例外只有明确选择候选编号后执行，不属于普通建议全选；模型不得裁定。只接受快照的候选动作和目标，不接受额外目标参数。reject省略，其他阶段不得扩大操作范围。
      */
     selectedSuggestionIds?: Array<string>;
+    /**
+     * 综合推理审批的紧凑选择，与selectedSuggestionIds互斥。后端在当前planHash冻结方案内展开；普通建议默认全选，待裁定和例外只有includedIds显式选择才纳入。新蚀变组视为一个建议。
+     */
+    suggestionSelection?: {
+        /**
+         * 以本次冻结方案中可执行普通建议为基集，不含待裁定和例外
+         */
+        base: 'suggested';
+        /**
+         * 从普通建议基集排除的建议ID
+         */
+        excludedIds: Array<string>;
+        /**
+         * 额外明确批准的待裁定或例外候选ID
+         */
+        includedIds: Array<string>;
+    };
+    /**
+     * 新蚀变流程用户对已选择稳定组的动作覆盖；键为AG组标识，值为保留、降权或剔除。仅综合推理review_modifications批准时允许，必须属于本次冻结且已选择的组；系统校验后冻结并执行。岩性构造及历史对象不得使用。
+     */
+    alterationActions?: {
+        [key: string]: 'keep' | 'downweight' | 'exclude';
+    };
     /**
      * 通用地质推理字段确认环节approve必填。键为资料角色，值为规范字段到原始字段的对应；null表示不对应。必需字段必须对应真实字段，其他阶段不得提交。
      */
@@ -6328,6 +6373,27 @@ export type AgentTrialRuleBinding = {
  * 当前真实任务的地图资源；输入为模拟识别演示，输出只引用本轮实际计算，不引用交付包PNG
  */
 export type AgentMultiElementMap = {
+    /**
+     * 新栅格流程各矿物的修改前后与变更栅格，引用本次计算输出ID，经现有map-preview接口鉴权读取统一配色PNG；不是资源ID
+     */
+    alterationRasters?: Array<{
+        /**
+         * 矿物角色名
+         */
+        mineral: string;
+        /**
+         * 修改前识别栅格计算输出ID
+         */
+        beforeOutputId: number;
+        /**
+         * 修正后COG计算输出ID
+         */
+        afterOutputId?: number;
+        /**
+         * 规则变更编码栅格计算输出ID
+         */
+        changesOutputId?: number;
+    }>;
     /**
      * 当前检查采用的明确上游版本
      */
@@ -20276,6 +20342,10 @@ export type GetAgentWorkflowData = {
          * compare或inspection定位指定审批对象，返回其所在页；compare摘要同时提供focusOffset用于深链接按需读取。不匹配时保持offset。
          */
         suggestionId?: string;
+        /**
+         * compare实际修改按要素过滤后分页；all保留全部。页签counts始终为全局数量，蚀变新流程以组计数并提供像元数与面积。其他视图仅允许all。
+         */
+        element?: 'all' | 'lithology' | 'structure' | 'alteration';
         /**
          * 分页起始位置；compare按要素、规则及动作分组连续排列。
          */

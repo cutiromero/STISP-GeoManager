@@ -41,6 +41,7 @@ export default function MultiElementChapters({
     Array.isArray(workflow.plan.stages) ? workflow.plan.stages : []
   ).map(record);
   const suggestions = workflow.modificationReview?.suggestions ?? [];
+  const counts = record(record(workflow.plan.pagination).counts);
   const approved = new Set(
     workflow.modificationReview?.approvedSuggestionIds ?? [],
   );
@@ -83,13 +84,14 @@ export default function MultiElementChapters({
             {chapter.label}
             {chapter.key !== "investigation" && (
               <span className="multi-story-chapter-count">
-                {
-                  tour.filter(
-                    (item) =>
-                      chapter.key === "all" ||
-                      item.suggestion.element === chapter.key,
-                  ).length
-                }
+                {Number(
+                  counts[chapter.key] ??
+                    tour.filter(
+                      (item) =>
+                        chapter.key === "all" ||
+                        item.suggestion.element === chapter.key,
+                    ).length,
+                )}
               </span>
             )}
           </Button>

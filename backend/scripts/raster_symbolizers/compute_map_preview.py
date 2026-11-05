@@ -103,7 +103,12 @@ def render(payload: dict) -> dict:
     ):
         raise PreviewError("地图预览尺寸无效")
     rules = payload.get("rules") or {}
-    if rules.get("band") != 1 or rules.get("palette") != "blue":
+    palette = rules.get("palette")
+    if rules.get("band") != 1 or palette not in {
+        "blue",
+        "alteration",
+        "alteration-changes",
+    }:
         raise PreviewError("地图预览渲染规则无效")
     fixed_range = rules.get("range")
     if fixed_range not in (None, [-1, 1]):
@@ -132,7 +137,9 @@ def render(payload: dict) -> dict:
                 width=width,
                 height=height,
                 add_alpha=ColorInterp.alpha not in src.colorinterp,
-                resampling=Resampling.bilinear,
+                resampling=Resampling.bilinear
+                if palette == "blue"
+                else Resampling.nearest,
                 warp_mem_limit=64,
                 warp_extras={"NUM_THREADS": "1"},
             ) as vrt:
@@ -142,7 +149,25 @@ def render(payload: dict) -> dict:
                 if ColorInterp.alpha in vrt.colorinterp:
                     alpha_band = vrt.colorinterp.index(ColorInterp.alpha) + 1
                     values = np.ma.masked_where(vrt.read(alpha_band) <= 0, values)
-            rgba = colorize(values, fixed_range)
+            if palette == "blue":
+                rgba = colorize(values, fixed_range)
+            else:
+                colors = np.array(
+                    [[0, 0, 0, 0], [38, 166, 154, 210]]
+                    if palette == "alteration"
+                    else [
+                        [0, 0, 0, 0],
+                        [211, 47, 47, 230],
+                        [123, 31, 162, 230],
+                        [245, 124, 0, 230],
+                        [93, 64, 55, 230],
+                        [25, 118, 210, 230],
+                    ],
+                    dtype="uint8",
+                )
+                indices = np.clip(values.filled(0), 0, len(colors) - 1).astype("uint8")
+                rgba = colors[indices]
+                rgba[np.ma.getmaskarray(values)] = 0
     path = Path(payload["output_png_path"])
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(rgba).save(path, format="PNG")

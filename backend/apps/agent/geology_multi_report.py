@@ -43,7 +43,20 @@ def render_report(workflow, tasks):
         raise ComputeError("报告实际处置数量与批准对象不一致", 409)
     for item in approved:
         row = actual.get((item["featureId"], item["ruleId"]))
-        if row is None or row["action"] != item["action"]:
+        selected_action = (
+            next(
+                (
+                    stage.get("modificationsApproval", {})
+                    .get("alterationActions", {})
+                    .get(item["featureId"])
+                    for stage in workflow.plan["stages"]
+                    if stage["name"] == "apply"
+                ),
+                None,
+            )
+            or item["action"]
+        )
+        if row is None or row["action"] != selected_action:
             raise ComputeError("报告实际处置不能对应获批对象及动作", 409)
         edit = approved_edits.get((item["featureId"], item["ruleId"]))
         if (
@@ -78,9 +91,7 @@ def render_report(workflow, tasks):
         },
     )
     if "mock" in modes:
-        actions = Counter(
-            ACTIONS.get(item["action"], item["action"]) for item in approved
-        )
+        actions = Counter(ACTIONS.get(row["action"], row["action"]) for row in changes)
         lines.extend(
             [
                 "实际处置："
@@ -109,7 +120,7 @@ def render_report(workflow, tasks):
     )
     for index, item in enumerate(approved, 1):
         row = actual[(item["featureId"], item["ruleId"])]
-        action = ACTIONS.get(item["action"], item["action"])
+        action = ACTIONS.get(row["action"], row["action"])
         result = (
             "已执行"
             if row.get("actual_changed", "").casefold() == "true"
@@ -163,6 +174,25 @@ def render_report(workflow, tasks):
                     "",
                 ]
             )
+            if (
+                stages[name]
+                .outputs.filter(key="alteration_quality", kind="table")
+                .exists()
+            ):
+                quality = actual_table(stages[name], "alteration_quality")
+                lines.extend(
+                    [
+                        f"{label}蚀变逐像元统计（面积单位：平方米）：",
+                        "",
+                        "| 矿物 | 原始像元 | 命中像元 | 保留像元 | 命中面积 | 可能热液叠加像元 |",
+                        "| --- | ---: | ---: | ---: | ---: | ---: |",
+                    ]
+                )
+                lines.extend(
+                    f"| {_cell(row['mineral'])} | {_cell(row['original_pixels'])} | {_cell(row['hit_pixels'])} | {_cell(row['retained_pixels'])} | {_cell(row['hit_area_m2'])} | {_cell(row['hydrothermal_pixels'])} |"
+                    for row in quality
+                )
+                lines.append("")
     if "relations" in stages:
         counts = {
             row["kind"]: row["count"]

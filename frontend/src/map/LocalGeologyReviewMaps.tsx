@@ -1,5 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
+import type {
+  ComputeMapPreview,
+  GeoJsonFeatureCollection,
+} from "../api/generated/types.gen";
 import type { ReviewOverlay } from "./reviewVectorLayers";
 import { sharedComparisonMaps } from "./comparisonColors";
 import type { ReviewMapSpotlight } from "./reviewMapSpotlight";
@@ -32,6 +35,11 @@ type Props = {
   afterLabel?: string;
   compactLegend?: boolean;
   spotlight?: ReviewMapSpotlight | null;
+  rasterOverlays?: {
+    key: string;
+    before?: ComputeMapPreview;
+    after?: ComputeMapPreview;
+  }[];
 };
 const emptyOverlays: NonNullable<Props["overlays"]> = [];
 
@@ -191,6 +199,7 @@ export default function LocalGeologyReviewMaps({
   afterLabel = "修正后地质图",
   compactLegend = false,
   spotlight,
+  rasterOverlays = [],
 }: Props) {
   const [before, after] = useMemo(
     () => sharedComparisonMaps(originalBefore, originalAfter),
@@ -408,6 +417,29 @@ export default function LocalGeologyReviewMaps({
                     radius={radius}
                     onFeature={onInspect}
                   />
+                  {rasterOverlays.map((layer) => {
+                    const image = side === 0 ? layer.before : layer.after;
+                    if (!image) return null;
+                    const [west, north] = projectReviewPosition(
+                      image.imageCoordinates[0],
+                    );
+                    const [east, south] = projectReviewPosition(
+                      image.imageCoordinates[2],
+                    );
+                    return (
+                      <image
+                        key={layer.key}
+                        data-layer={layer.key}
+                        href={image.imageUrl}
+                        x={west}
+                        y={north}
+                        width={east - west}
+                        height={south - north}
+                        preserveAspectRatio="none"
+                        style={{ imageRendering: "pixelated" }}
+                      />
+                    );
+                  })}
                   {overlays.map((overlay) => {
                     const data = side
                       ? (overlay.after ?? overlay.before)

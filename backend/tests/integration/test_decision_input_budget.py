@@ -35,6 +35,42 @@ def expand(value, definitions):
     return value
 
 
+def test_raster_protocol_caps_first_request_and_generation(retry_model):
+    workflow, stage, payload, _ = large_payload()
+    workflow.workflow_type = "geology_multi_element_reasoning"
+    workflow.plan["algorithms"] = {
+        "geology-multi-check": {
+            "manifest": {"outputs": [{"key": "alteration_summary"}]}
+        }
+    }
+    requests = []
+    answer = model_response(stage["identifier"], [])
+    policy = {**default_policy(), "maxContextTokens": 49152, "maxOutputTokens": 8000}
+
+    def tokenizer(model, messages, thinking, effort):
+        return sum(len(item["content"].encode("utf-8")) for item in messages) // 4 + 64
+
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.decision_payload", return_value=payload),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=65536),
+        patch("apps.agent.context.count_tokens", side_effect=tokenizer),
+        patch(
+            "apps.agent.demo_decisions.provider.stream",
+            side_effect=responses([answer], requests),
+        ),
+        patch(
+            "apps.agent.demo_decisions._validate_response",
+            return_value=(answer["decision"], []),
+        ),
+    ):
+        decide(workflow, None, policy, stage, [], lambda: None)
+    assert len(requests) == 1
+    attempt = stage["modelAttempts"][0]
+    assert attempt["inputTokens"] <= attempt["inputLimit"] == 15000
+    assert attempt["outputLimit"] == 2000
+
+
 def large_payload():
     workflow, stage, _ = ordinary_stage()
     rows = []

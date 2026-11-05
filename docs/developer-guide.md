@@ -2,6 +2,33 @@
 
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 
+## 蚀变栅格组、审批与对比分页
+
+综合推理算子1.1.0启用`alteration-pixels-v1`：岩性、构造仍使用对象级矢量流程；蚀变由逐像元规则生成有界归类组。栅格结构、规则优先级、稳定ID和完整表字段见`examples/compute/geology-multi-core/README.md`。旧任务保留其冻结算法版本、批准记录和矢量成果，不迁移或回写科研数据。
+
+`GET /api/agent/workflows/{workflowId}/?view=compare&element=alteration&offset=0&limit=25`在要素过滤后分页。`plan.pagination.total`是当前要素总数，`counts`是all/lithology/structure/alteration的全局总数，`alterationPixels/alterationAreaM2`是全部蚀变修改像元与面积。蚀变新任务按组计数，旧任务按图斑计数。`revision`绑定冻结批准和实际changes输出校验和，与页码及无关状态更新无关；只有它确实改变时要求刷新。刷新保留当前要素、分页及已保存讲解位置。
+
+`plan.multiElementMap.alterationRasters`按矿物提供beforeOutputId/afterOutputId/changesOutputId。这些是计算输出ID，沿用计算结果map-preview接口重新鉴权、生成后端PNG；不是catalog资源ID。矿物前后统一青绿色、0值透明，变更按A-01至A-05编码固定配色，分类预览用nearest。前端只叠加后端影像，不做栅格判别或符号化。
+
+`POST /api/agent/workflows/{workflowId}/confirm/`仍绑定当前planHash、本人和当前项目。综合推理review_modifications支持`selectedSuggestionIds`或互斥的紧凑选择`{"suggestionSelection":{"base":"suggested","excludedIds":[],"includedIds":[]}}`。基集只含冻结方案中可执行普通建议；待裁定、例外不随基集选中，只能由includedIds明确纳入。所有编号重验，越界409并显示中文原因。传统场景的30项边界不变；该端点请求体安全上限1 MiB，超限400；紧凑全选通常小于200字节。
+
+可额外提交`alterationActions:{"AG-稳定组编号":"downweight"}`覆盖已选栅格组的动作，值仅限keep/downweight/exclude，权重为1/0.5/0。后端校验组身份、已选范围和允许动作，随批准记录冻结，执行前重新验证；不能借此改变岩性、构造、历史图斑或未选择的组。模型不重新列举蚀变执行清单，系统由冻结组执行。真实模型请求先用服务端tokenizer校验，栅格协议输入上限15000 token、生成上限2000 token；必要证据无法容纳则停在人工审核，不发送超限请求。该上限不构成真实模型在正式资料下已验收的证明。
+
+综合检查报告读取规则统计、质量统计和实际变更，不读取逐像元/逐图斑问题几何。读取上限为单表64 MiB、十万行；文件过期与超过安全上限使用不同中文说明。权限、TOML数据根及旧矢量渲染不变。
+
+### 算子与规则登记
+
+以下命令使用项目解释器、独立新目录和实际配置；不覆盖旧发布包、旧规则资源或业务数据库。native worker先检查scipy；Docker模式需按更新后的`deploy/compute/Dockerfile`重建并登记新digest，不能复用旧digest声明新依赖。
+
+```bash
+<worker-python> -c "import numpy, rasterio, scipy; from scipy import ndimage; print(scipy.__version__)"
+<project-python> examples/compute/geology-multi-core/build.py <新算子包目录>
+<project-python> scripts/prepare_geology_complete_story.py --prepared <原17条或现有20条准备目录> --lithology <本次待检查岩性文件> --output <全新栅格案例目录> --alteration-raster
+<project-python> backend/manage.py prepare_geology_multi_case --manifest <全新栅格案例目录>/manifest.json --project-id 3 --user-id <实际管理员ID> --packages <新算子包目录> --record <新回执路径> --dry-run --config <正式TOML>
+```
+
+核对预检后去掉`--dry-run`登记，后台验收并发布四个1.1.0算子版本；不覆盖1.0.8。准备命令保留20条包中的岩性、构造规则原文和版本，只更新A-01至A-05及P-02为逐像元试用修订，保持现有参数；新规则资源编码为`geology-multi-rules-raster-20261105`。已有知识若不是draft，登记会停止，须先人工审查，不能绕过。P-02从缓冲邻近改为加权覆盖比例，须在候选站核对min_types的适用性，不以旧远景区面积为新结果真值。发布后新建工作流并重新批准，不恢复旧任务来替代新流程验收。
+
 ## 模型分析校验与审计响应
 
 工作流的发现、待核实项接受字符串或对象，转换为中文文本并去空去重；每项最多2000字，超过12项保留前11项并将其余合并到第12项。问题、判断、依据、结果摘要及修改理由超长时带标记截断，不截断动作名称、对象标识、修改值或证据身份。普通场景的可执行修改数量上限仍严格执行，避免静默丢弃操作；引用全部校验真实性及修订后去重，展示最多30条，必要结果和知识引用要求不变。
@@ -20,9 +47,9 @@
 
 逻辑推理项目的默认对话标题由主资料名、任务、运行时间及运行编号构成，自定义标题保持不变。正式环境使用应用现有 Conda 和正式配置运行 `python manage.py backfill_logic_titles --config <正式配置路径>` 预览待回填数量，追加 `--apply` 写入；重复执行不会改写已回填标题。其他项目不适用该规则。
 
-逻辑成果配色由本次工作流选定的模型决定全部实际类别，不先固定已知类别。模型收到分类字段、完整取值及按名称/代号/别名检索的相关色表候选（每类最多4条），优先选择合适色表色，无对应条目再建议新色。参考库为 `backend/apps/agent/data/result_color_library.json`：38个海德乌拉岩性单元、8组蚀变矿物、A/B/C三级远景区及6种常见岩类；每条含名称、别名、颜色和来源。原岩性色见 `lithology_colors.json`，来自 ExportedFiles.lyrx 的 CIMUniqueValueRenderer；因原色存在浅色和重复，库中 `referenceColor` 原样保留，`color` 为满足对比与区分要求的展示色，`adjustmentReasons` 记录校正原因。蚀变、等级及常见岩类是项目参考约定，不宣称国家或行业强制标准。
+逻辑成果配色由本次工作流选定的模型决定全部实际类别，不先固定已知类别。模型收到分类字段、完整取值及按名称/代号/别名检索的相关色表候选（每类最多4条），优先选择合适色表色，无对应条目再建议新色。参考库为 `backend/apps/agent/data/result_color_library.json`：38个海德乌拉岩性单元、8组蚀变矿物、A/B/C三级远景区及6种常见岩类；每条含名称、别名、颜色和来源。原岩性色见 `lithology_colors.json`，来自 ExportedFiles.lyrx 的 CIMUniqueValueRenderer；库中岩性、蚀变与等级条目的 `color` 与 `referenceColor` 相同，按原约定色原样采用。原表中完全同色的类别保留原色，以图例名称区分，并记录同色原因。蚀变、等级及常见岩类是项目参考约定，不宣称国家或行业强制标准。
 
-全部建议必须类别全覆盖、无重复取值、颜色为合法六位十六进制且不重复；CIELAB D65 的 ΔE76 不低于12、对白背景对比不低于3、对深色边框 `#202938` 对比不低于1.25，图例名称非空且最多80字。对所有类别两两校验，涵盖相邻和相近类别。首次不合格时反馈具体问题及上次方案，最多修正一次；两次请求共用8秒截止时间，模型不可用、调用失败或预算不足不阻塞登记。Mock、关闭策略及未授权或未在线模型不发探测、分词或生成请求，整套采用色表加确定性调色板；仍不合格的模型类别也优先由有效色表色补齐，无可用条目才系统补色。极多类别导致调色板无法维持色差下限时保留唯一颜色并在 `remainingIssues` 明示，不伪称全部通过。请求复用阶段输入预算投影，先去重，再删弱相关候选、每类保留一个精确候选，最后仅保留完整类别；每档均受字节、实际分词与模型窗口/生成预留限制，按任务预算启用时同时服从本次预算。
+全部建议必须类别全覆盖、无重复取值、颜色为合法六位十六进制；模型建议色与系统补色须与其它类别颜色不重复，CIELAB D65 的 ΔE76 不低于12，面填充对深色边框 `#202938` 对比不低于1.25，线、点符号对白背景对比不低于3；色表条目之间不做色差校正，冲突时调整非色表一方，图例名称非空且最多80字。对所有类别两两校验，涵盖相邻和相近类别。首次不合格时反馈具体问题及上次方案，最多修正一次；两次请求共用8秒截止时间，模型不可用、调用失败或预算不足不阻塞登记。Mock、关闭策略及未授权或未在线模型不发探测、分词或生成请求，整套采用色表加确定性调色板；仍不合格的模型类别也优先由有效色表色补齐，无可用条目才系统补色。极多类别导致调色板无法维持色差下限时保留唯一颜色并在 `remainingIssues` 明示，不伪称全部通过。请求复用阶段输入预算投影，先去重，再删弱相关候选、每类保留一个精确候选，最后仅保留完整类别；每档均受字节、实际分词与模型窗口/生成预留限制，按任务预算启用时同时服从本次预算。
 
 资源 `default_visualization.colorAdvice.classes` 逐类记录 `source=library_selected|model_suggestion|system_palette`、色表编号/来源、原始参考色与校正原因、模型替换原因及最终未满足约束；离线命中色表同样是 `library_selected`。`attempts` 保留模型方案、逐类问题和请求预算，`result_color_advice` 审计保存最终方案。普通工作台与对比/讲解共用资源分类颜色、图例名称、填充透明度与边框；不新增界面控件。已有成果可运行 `python manage.py style_logic_results --workflow <完整工作流UUID> --config <正式配置路径>` 预览完整新方案，预览不写资源或业务审计，追加 `--apply` 强制重新配色并保存；`--no-model` 使用色表与确定性调色板。预览和应用分别运行模型，不保证两次模型建议相同。命令只处理指定任务的矢量输出，不改原始上传与计算数据。
 

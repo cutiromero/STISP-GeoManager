@@ -1,5 +1,6 @@
-import { Button, Checkbox, Input, Popconfirm, Select, Tag } from "antd";
+import { Alert, Button, Checkbox, Input, Popconfirm, Select, Tag } from "antd";
 import { useState } from "react";
+import type { AlterationActions } from "./approvalSelection";
 import { Link } from "react-router-dom";
 import type {
   AgentModificationSuggestion,
@@ -41,6 +42,15 @@ export function suggestionTier(item: { status?: string; ruleId?: string }) {
 const observationLabels: Record<string, string> = {
   area_km2: "面积（平方公里）",
   area_m2: "面积（平方米）",
+  pixel_count: "像元数",
+  component_count: "连通区数",
+  group_id: "稳定组标识",
+  unit_code: "岩性单元",
+  rock_group: "岩性分组",
+  boundary: "边界混合像元",
+  bbox: "组范围",
+  representatives: "代表连通区（最多3个）",
+  raster_protocol: "栅格协议",
   length_m: "长度（米）",
   boundary_ratio: "沿界比例",
   dominant_ratio: "主体岩性占比",
@@ -179,13 +189,16 @@ export default function MultiElementStory({
   workflow,
   busy = false,
   onReview,
+  reviewError,
 }: {
   workflow: AgentWorkflow;
   busy?: boolean;
+  reviewError?: string;
   onReview?: (
     decision: "approve" | "reject",
     feedback: string,
     selectedSuggestionIds?: string[],
+    alterationActions?: AlterationActions,
   ) => void;
 }) {
   const review = workflow.modificationReview;
@@ -217,6 +230,21 @@ export default function MultiElementStory({
   const [groupPages, setGroupPages] = useState<Record<string, number>>({});
   const [groupSearch, setGroupSearch] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState("");
+  const [actionSelection, setActionSelection] = useState<{
+    hash: string;
+    actions: AlterationActions;
+  }>({ hash: review?.proposalHash ?? "", actions: {} });
+  const alterationActions =
+    actionSelection.hash === review?.proposalHash
+      ? actionSelection.actions
+      : {};
+  const setAlterationActions = (
+    updateActions: (current: AlterationActions) => AlterationActions,
+  ) =>
+    setActionSelection({
+      hash: review?.proposalHash ?? "",
+      actions: updateActions(alterationActions),
+    });
   const suggestions = review?.suggestions ?? [];
   const ids =
     selection.hash === review?.proposalHash ? selection.ids : initialIds;
@@ -410,7 +438,7 @@ export default function MultiElementStory({
                 update(
                   event.target.checked
                     ? [...new Set([...ids, ...candidateIds])]
-                    : ids.filter((id) => !candidateIds.includes(id)),
+                    : ids.filter((id) => !userIds.has(id)),
                 )
               }
             >
@@ -545,6 +573,38 @@ export default function MultiElementStory({
                               </Tag>
                             </summary>
                             <div className="multi-element-suggestion-body">
+                              {editable &&
+                                item.featureId?.startsWith("AG-") && (
+                                  <Select
+                                    aria-label={`蚀变组动作 ${item.featureId}`}
+                                    value={
+                                      alterationActions[item.featureId] ??
+                                      (item.action === "exclude"
+                                        ? "exclude"
+                                        : item.action === "downweight"
+                                          ? "downweight"
+                                          : "keep")
+                                    }
+                                    disabled={busy}
+                                    options={[
+                                      { value: "exclude", label: "剔除" },
+                                      {
+                                        value: "downweight",
+                                        label: "降权（0.5）",
+                                      },
+                                      { value: "keep", label: "保留" },
+                                    ]}
+                                    onChange={(
+                                      action: "exclude" | "downweight" | "keep",
+                                    ) => {
+                                      setAlterationActions((current) => ({
+                                        ...current,
+                                        [item.featureId!]: action,
+                                      }));
+                                      update([...new Set([...ids, item.id])]);
+                                    }}
+                                  />
+                                )}
                               <p className="multi-element-suggestion-tier">
                                 处置分级：{suggestionTier(item)}
                               </p>
@@ -790,6 +850,37 @@ export default function MultiElementStory({
                                     )
                                   }
                                 />
+                                {editable &&
+                                  item.featureId?.startsWith("AG-") && (
+                                    <Select
+                                      aria-label={`蚀变组动作 ${item.featureId}`}
+                                      value={
+                                        alterationActions[item.featureId] ??
+                                        "keep"
+                                      }
+                                      disabled={busy}
+                                      options={[
+                                        { value: "exclude", label: "明确剔除" },
+                                        {
+                                          value: "downweight",
+                                          label: "降权（0.5）",
+                                        },
+                                        { value: "keep", label: "保留" },
+                                      ]}
+                                      onChange={(
+                                        action:
+                                          | "exclude"
+                                          | "downweight"
+                                          | "keep",
+                                      ) => {
+                                        setAlterationActions((current) => ({
+                                          ...current,
+                                          [item.featureId!]: action,
+                                        }));
+                                        update([...new Set([...ids, item.id])]);
+                                      }}
+                                    />
+                                  )}
                                 <MultiElementEvidence suggestion={item} />
                                 <p>{item.reason}</p>
                                 <Link
@@ -823,6 +914,14 @@ export default function MultiElementStory({
           </div>
           {editable && (
             <div className="geology-review-controls">
+              {reviewError && (
+                <Alert
+                  type="error"
+                  showIcon
+                  role="alert"
+                  title={`审批未提交：${reviewError}`}
+                />
+              )}
               <Input.TextArea
                 aria-label="综合推理审核意见"
                 placeholder="可补充核对意见；未选对象保持不变"
@@ -842,7 +941,20 @@ export default function MultiElementStory({
                   description={`模型建议 ${ids.filter((id) => modelIds.has(id)).length} 项、用户裁定 ${ids.filter((id) => userIds.has(id)).length} 项。仅执行当前方案所选对象与冻结动作，保存新成果版本。`}
                   okText="批准并继续"
                   cancelText="返回核对"
-                  onConfirm={() => onReview?.("approve", feedback.trim(), ids)}
+                  onConfirm={() => {
+                    const actions = Object.fromEntries(
+                      Object.entries(alterationActions).filter(([group]) =>
+                        suggestions.some(
+                          (item) =>
+                            item.featureId === group &&
+                            selectedIds.has(item.id),
+                        ),
+                      ),
+                    );
+                    if (Object.keys(actions).length)
+                      onReview?.("approve", feedback.trim(), ids, actions);
+                    else onReview?.("approve", feedback.trim(), ids);
+                  }}
                 >
                   <Button type="primary" loading={busy} disabled={!ids.length}>
                     批准所选操作并继续

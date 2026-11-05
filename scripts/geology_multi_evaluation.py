@@ -325,7 +325,7 @@ def evaluate(
         structure_measurement_rows(first, labels),
     )
     label_agreement = area_agreement(gpd.read_file(inputs["lithology"]), reference)
-    minerals = gpd.read_file(test / "first-frozen/alterations.gpkg")
+    mineral_quality = read_csv(test / "first-frozen/alteration_quality.csv")
     mineral_findings = [row for row in first if row["element"] == "alteration"]
     # Relation labels are deliberately narrower than the original package grouping.
     summary = {
@@ -345,7 +345,9 @@ def evaluate(
         "lithologyAreaAgreementBefore": label_agreement,
         "controls": {"calibration": calibration_control, "test": test_control},
         "mineral": {
-            "count": len(minerals),
+            "countUnit": "group",
+            "count": len(mineral_findings),
+            "pixelCount": sum(int(row["original_pixels"]) for row in mineral_quality),
             "ruleHitCount": len(mineral_findings),
             "accuracy": None,
             "reason": "矿物识别无独立标注真值，只统计规则命中，不计算准确率。",

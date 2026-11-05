@@ -20,10 +20,86 @@ from apps.compute.packages import ComputeError
 pytestmark = pytest.mark.unit
 
 
+def test_raster_model_summary_aggregates_units_without_geometry_or_group_ids():
+    rows = [
+        {
+            "group_id": f"AG-{index}",
+            "rule_id": "A-05",
+            "rule_version": "raster",
+            "knowledge_id": "10",
+            "knowledge_revision": "1",
+            "mineral": "calcite",
+            "unit_code": f"unit-{index}",
+            "rock_group": "other",
+            "boundary": "false",
+            "suggested_action": "downweight",
+            "status": "suggested",
+            "pixel_count": "2",
+            "area_m2": "200",
+            "component_count": "1",
+            "bbox_json": "[]",
+            "representatives_json": "[]",
+        }
+        for index in range(1000)
+    ]
+    value = model_results(
+        [{"key": "alteration_summary", "rows": rows}], stage_name="apply"
+    )[0]
+    summary = expand_table(value)
+    assert len(summary) == 1
+    assert summary[0]["group_count"] == 1000
+    assert summary[0]["pixel_count"] == 2000
+    assert summary[0]["area_m2"] == 200000
+    assert summary[0]["unit_count"] == 1000
+    assert len(summary[0]["unit_codes"]) == 20
+    assert not {"group_id", "bbox_json", "representatives_json"} & set(summary[0])
+
+
 def expand_table(table):
     if table.get("rowFormat") != "columns":
         return table["rows"]
     return [dict(zip(table["columns"], row, strict=True)) for row in table["rows"]]
+
+
+def test_raster_review_summary_uses_frozen_user_action_not_original_recommendation():
+    workflow = SimpleNamespace(
+        plan={
+            "modificationReview": {
+                "proposalHash": "frozen",
+                "approvedSuggestionIds": ["chosen"],
+                "suggestions": [
+                    {
+                        "id": "chosen",
+                        "featureId": "AG-stable",
+                        "element": "alteration",
+                        "ruleId": "A-01",
+                        "action": "exclude",
+                        "areaM2": 200,
+                        "observations": {
+                            "pixel_count": 2,
+                            "mineral": "calcite",
+                            "rock_group": "carbonate",
+                            "boundary": False,
+                        },
+                    }
+                ],
+            },
+            "stages": [
+                {"name": "check", "results": []},
+                {
+                    "name": "apply",
+                    "modificationsApproval": {
+                        "alterationActions": {"AG-stable": "downweight"}
+                    },
+                },
+            ],
+        }
+    )
+    summary = model_review(workflow)
+    assert summary["groups"][0]["action"] == "downweight"
+    assert summary["groups"][0]["approvedCount"] == 1
+    assert summary["groups"][0]["pixelCount"] == 2
+    assert not summary["suggestions"]["rows"]
 
 
 def expand_evidence(value, definitions):

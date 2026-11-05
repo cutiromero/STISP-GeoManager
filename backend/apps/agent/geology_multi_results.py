@@ -42,7 +42,11 @@ def table_rows(path, key):
                     key=lambda item: float(item["area_km2"]), reverse=True
                 )
                 del representatives[2:]
-            elif key in {"statistics", "changes"} or len(rows) < 40:
+            elif (
+                key
+                in {"statistics", "changes", "alteration_summary", "alteration_quality"}
+                or len(rows) < 40
+            ):
                 rows.append(row)
     if key == "evidence":
         rows = [row for representatives in groups.values() for row in representatives]
@@ -192,7 +196,13 @@ def model_results(results, *, stage_name):
 
             value.update(
                 rows=[],
-                groups=group_summaries(item.get("rows", [])),
+                groups=group_summaries(
+                    [
+                        row
+                        for row in item.get("rows", [])
+                        if not row.get("feature_id", "").startswith("AG-")
+                    ]
+                ),
                 scope="all_groups",
             )
         if item["key"] == "changes":
@@ -238,6 +248,49 @@ def model_results(results, *, stage_name):
             )
         if item["key"] == "statistics":
             value.update(_column_rows(value["rows"], value.get("columns")))
+        if item["key"] == "alteration_summary":
+            grouped = {}
+            for row in value["rows"]:
+                keys = (
+                    "rule_id",
+                    "rule_version",
+                    "knowledge_id",
+                    "knowledge_revision",
+                    "mineral",
+                    "rock_group",
+                    "boundary",
+                    "suggested_action",
+                    "status",
+                )
+                identity = tuple(row[key] for key in keys)
+                group = grouped.setdefault(
+                    identity,
+                    {
+                        **{key: row[key] for key in keys},
+                        "group_count": 0,
+                        "pixel_count": 0,
+                        "area_m2": 0.0,
+                        "component_count": 0,
+                        "unit_codes": set(),
+                    },
+                )
+                group["group_count"] += 1
+                group["pixel_count"] += int(row["pixel_count"])
+                group["area_m2"] += float(row["area_m2"])
+                group["component_count"] += int(row["component_count"])
+                group["unit_codes"].add(row["unit_code"])
+            value["rows"] = [
+                {
+                    **group,
+                    "unit_count": len(group["unit_codes"]),
+                    "unit_codes": sorted(group["unit_codes"])[:20],
+                }
+                for group in grouped.values()
+            ]
+            value.update(_column_rows(value["rows"]))
+            value["scope"] = "all_raster_groups_aggregated_by_rock_group"
+        if item["key"] == "group_index":
+            value.update(rows=[], scope="reference_only")
         values.append(value)
     return values
 
@@ -431,12 +484,35 @@ def model_review(workflow):
         return None
     suggestions, groups = [], {}
     approved = set(review.get("approvedSuggestionIds", []))
+    actions = {
+        group_id: action
+        for stage in workflow.plan.get("stages", [])
+        for group_id, action in stage.get("modificationsApproval", {})
+        .get("alterationActions", {})
+        .items()
+    }
     for item in review["suggestions"]:
-        key = item.get("groupId") or (
-            item.get("element"),
-            item.get("ruleId"),
-            item.get("action"),
-            item.get("suggestedState"),
+        if item["id"] in approved and item.get("featureId") in actions:
+            item = {**item, "action": actions[item["featureId"]]}
+        raster = str(item.get("featureId", "")).startswith("AG-")
+        observations = item.get("observations", {})
+        key = (
+            (
+                item.get("element"),
+                item.get("ruleId"),
+                item.get("action"),
+                observations.get("mineral"),
+                observations.get("rock_group"),
+                observations.get("boundary"),
+            )
+            if raster
+            else item.get("groupId")
+            or (
+                item.get("element"),
+                item.get("ruleId"),
+                item.get("action"),
+                item.get("suggestedState"),
+            )
         )
         group = groups.setdefault(
             key,
@@ -450,6 +526,17 @@ def model_review(workflow):
         )
         group["count"] += 1
         group["approvedCount"] += item["id"] in approved
+        if raster:
+            group["pixelCount"] = group.get("pixelCount", 0) + observations.get(
+                "pixel_count", 0
+            )
+            group["areaM2"] = group.get("areaM2", 0) + item.get("areaM2", 0)
+            group.update(
+                mineral=observations.get("mineral"),
+                rockGroup=observations.get("rock_group"),
+                boundary=observations.get("boundary"),
+            )
+            continue
         if group["count"] > 2:
             continue
         suggestions.append(

@@ -39,13 +39,12 @@ def actual_table(task, key):
     if output is None:
         raise ComputeError("检查报告缺少实际计算表：" + key, 409)
     path = app_path(output.path)
-    if (
-        output.expired
-        or not path.is_file()
-        or path.is_symlink()
-        or path.stat().st_size > 256 * 1024
-    ):
-        raise ComputeError("检查报告对应结果已过期或超过读取范围", 409)
+    if output.expired or not path.is_file() or path.is_symlink():
+        raise ComputeError("检查报告对应结果已过期或文件不可读取，请重新生成结果", 409)
+    if path.stat().st_size > 64 * 1024 * 1024:
+        raise ComputeError(
+            "检查报告统计表超过64 MiB安全读取上限，请缩小检查范围或下载完整统计", 409
+        )
     if checksum(path) != output.checksum:
         raise ComputeError("检查报告实际结果文件内容已变化", 409)
     with path.open(encoding="utf-8-sig", newline="") as stream:
@@ -53,8 +52,10 @@ def actual_table(task, key):
         if not reader.fieldnames or len(reader.fieldnames) > 64:
             raise ComputeError("检查报告实际统计字段无效", 409)
         rows = list(reader)
-    if len(rows) > 100 or any(None in row for row in rows):
-        raise ComputeError("检查报告实际统计行无效或超过读取范围", 409)
+    if len(rows) > 100000 or any(None in row for row in rows):
+        raise ComputeError(
+            "检查报告统计表结构无效或超过十万行安全上限，请下载完整统计", 409
+        )
     return rows
 
 

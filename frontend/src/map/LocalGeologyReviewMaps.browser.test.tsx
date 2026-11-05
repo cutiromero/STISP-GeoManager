@@ -16,6 +16,58 @@ const props = {
   bounds: [98.4, 35.6, 98.45, 35.62] as [number, number, number, number],
 };
 
+it("蚀变前后与规则变更使用后端PNG图层，不在前端重做符号化", () => {
+  const preview = (imageUrl: string) => ({
+    name: "方解石",
+    kind: "raster" as const,
+    metadata: {},
+    temporary: true as const,
+    imageUrl,
+    imageCoordinates: [
+      [98.4, 35.62],
+      [98.45, 35.62],
+      [98.45, 35.6],
+      [98.4, 35.6],
+    ] as [
+      [number, number],
+      [number, number],
+      [number, number],
+      [number, number],
+    ],
+  });
+  render(
+    <LocalGeologyReviewMaps
+      {...props}
+      onSelect={vi.fn()}
+      rasterOverlays={[
+        {
+          key: "alteration:calcite",
+          before: preview("/before.png"),
+          after: preview("/after.png"),
+        },
+        { key: "alteration-changes:calcite", after: preview("/changes.png") },
+      ]}
+    />,
+  );
+  const [before, after] = maps();
+  expect(
+    before!.querySelector('image[data-layer="alteration:calcite"]'),
+  ).toHaveAttribute("href", "/before.png");
+  expect(
+    before!.querySelector('image[data-layer="alteration-changes:calcite"]'),
+  ).toBeNull();
+  expect(
+    after!.querySelector('image[data-layer="alteration:calcite"]'),
+  ).toHaveAttribute("href", "/after.png");
+  expect(
+    after!.querySelector('image[data-layer="alteration-changes:calcite"]'),
+  ).toHaveAttribute("href", "/changes.png");
+  for (const image of document.querySelectorAll("image")) {
+    expect(Number(image.getAttribute("width"))).toBeGreaterThan(0);
+    expect(Number(image.getAttribute("height"))).toBeGreaterThan(0);
+  }
+});
+
 it("routes standalone comparison and explanation maps to the same service-free renderer", () => {
   expect(GeologyReviewMaps).toBe(LocalGeologyReviewMaps);
 });

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-multi-apply",
   "name": "获批操作执行",
-  "version": "1.0.8",
+  "version": "1.1.0",
   "description": "获批操作执行。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -76,16 +76,6 @@
       "minBands": 1
     },
     {
-      "key": "alterations",
-      "label": "已有矿物处理状态（可选）",
-      "kind": "vector",
-      "geometryTypes": [
-        "Polygon",
-        "MultiPolygon"
-      ],
-      "required": false
-    },
-    {
       "key": "issues",
       "label": "本轮完整检查清单",
       "kind": "table"
@@ -94,6 +84,41 @@
       "key": "approved_changes",
       "label": "逐项批准的操作",
       "kind": "table"
+    },
+    {
+      "key": "hematite_weight",
+      "label": "赤铁矿遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "chlorite_weight",
+      "label": "绿泥石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "hydromica_weight",
+      "label": "水云母遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "calcite_weight",
+      "label": "方解石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "dolomite_weight",
+      "label": "白云石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
     }
   ],
   "parameters": [
@@ -150,24 +175,10 @@
       "required": false
     },
     {
-      "key": "alterations",
-      "label": "矿物处理状态",
-      "kind": "vector",
-      "file": "alterations.gpkg",
-      "required": false
-    },
-    {
       "key": "final_faults",
       "label": "修正后构造图",
       "kind": "vector",
       "file": "final_faults.gpkg",
-      "required": false
-    },
-    {
-      "key": "final_alterations",
-      "label": "有效蚀变",
-      "kind": "vector",
-      "file": "final_alterations.gpkg",
       "required": false
     },
     {
@@ -197,11 +208,112 @@
       "required": false
     },
     {
-      "key": "changes_alteration_issues",
-      "label": "修正记录 矿物识别疑点",
-      "kind": "vector",
-      "file": "changes_alteration_issues.gpkg",
-      "required": false
+      "key": "alteration_summary",
+      "label": "蚀变逐像元归类汇总",
+      "kind": "table",
+      "file": "alteration_summary.csv"
+    },
+    {
+      "key": "alteration_quality",
+      "label": "蚀变像元质量统计",
+      "kind": "table",
+      "file": "alteration_quality.csv"
+    },
+    {
+      "key": "group_index",
+      "label": "稳定组与栅格整数索引",
+      "kind": "table",
+      "file": "group_index.csv"
+    },
+    {
+      "key": "hematite_corrected",
+      "label": "赤铁矿遥感矿物识别结果 corrected",
+      "kind": "raster",
+      "file": "hematite_corrected.tif"
+    },
+    {
+      "key": "hematite_weight",
+      "label": "赤铁矿遥感矿物识别结果 weight",
+      "kind": "raster",
+      "file": "hematite_weight.tif"
+    },
+    {
+      "key": "hematite_changes",
+      "label": "赤铁矿遥感矿物识别结果 changes",
+      "kind": "raster",
+      "file": "hematite_changes.tif"
+    },
+    {
+      "key": "chlorite_corrected",
+      "label": "绿泥石遥感矿物识别结果 corrected",
+      "kind": "raster",
+      "file": "chlorite_corrected.tif"
+    },
+    {
+      "key": "chlorite_weight",
+      "label": "绿泥石遥感矿物识别结果 weight",
+      "kind": "raster",
+      "file": "chlorite_weight.tif"
+    },
+    {
+      "key": "chlorite_changes",
+      "label": "绿泥石遥感矿物识别结果 changes",
+      "kind": "raster",
+      "file": "chlorite_changes.tif"
+    },
+    {
+      "key": "hydromica_corrected",
+      "label": "水云母遥感矿物识别结果 corrected",
+      "kind": "raster",
+      "file": "hydromica_corrected.tif"
+    },
+    {
+      "key": "hydromica_weight",
+      "label": "水云母遥感矿物识别结果 weight",
+      "kind": "raster",
+      "file": "hydromica_weight.tif"
+    },
+    {
+      "key": "hydromica_changes",
+      "label": "水云母遥感矿物识别结果 changes",
+      "kind": "raster",
+      "file": "hydromica_changes.tif"
+    },
+    {
+      "key": "calcite_corrected",
+      "label": "方解石遥感矿物识别结果 corrected",
+      "kind": "raster",
+      "file": "calcite_corrected.tif"
+    },
+    {
+      "key": "calcite_weight",
+      "label": "方解石遥感矿物识别结果 weight",
+      "kind": "raster",
+      "file": "calcite_weight.tif"
+    },
+    {
+      "key": "calcite_changes",
+      "label": "方解石遥感矿物识别结果 changes",
+      "kind": "raster",
+      "file": "calcite_changes.tif"
+    },
+    {
+      "key": "dolomite_corrected",
+      "label": "白云石遥感矿物识别结果 corrected",
+      "kind": "raster",
+      "file": "dolomite_corrected.tif"
+    },
+    {
+      "key": "dolomite_weight",
+      "label": "白云石遥感矿物识别结果 weight",
+      "kind": "raster",
+      "file": "dolomite_weight.tif"
+    },
+    {
+      "key": "dolomite_changes",
+      "label": "白云石遥感矿物识别结果 changes",
+      "kind": "raster",
+      "file": "dolomite_changes.tif"
     }
   ],
   "timeoutSeconds": 900,

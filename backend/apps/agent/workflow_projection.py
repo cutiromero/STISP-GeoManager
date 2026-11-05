@@ -149,6 +149,39 @@ def review_index(suggestions):
     }
 
 
+def resolve_selection(plan, selection):
+    from apps.compute.packages import ComputeError
+
+    if (
+        not isinstance(selection, dict)
+        or set(selection) != {"base", "excludedIds", "includedIds"}
+        or selection["base"] != "suggested"
+    ):
+        raise ComputeError("紧凑审批选择格式无效")
+    for key in ("excludedIds", "includedIds"):
+        values = selection[key]
+        if (
+            not isinstance(values, list)
+            or any(
+                not isinstance(value, str) or not 1 <= len(value) <= 64
+                for value in values
+            )
+            or len(set(values)) != len(values)
+        ):
+            raise ComputeError("紧凑审批选择编号无效")
+    index = review_index(plan.get("modificationReview", {}).get("suggestions", []))
+    excluded, included = set(selection["excludedIds"]), set(selection["includedIds"])
+    suggested, candidates = set(index["suggestedIds"]), set(index["candidateIds"])
+    if excluded - suggested or included - candidates or excluded & included:
+        raise ComputeError("紧凑审批选择超出本次冻结建议或候选范围", 409)
+    selected = (suggested - excluded) | included
+    return [
+        item["id"]
+        for item in plan.get("modificationReview", {}).get("suggestions", [])
+        if item["id"] in selected
+    ]
+
+
 def compare_items(plan):
     review = plan.get("modificationReview") or {}
     approved = set(review.get("approvedSuggestionIds", []))
@@ -160,6 +193,17 @@ def compare_items(plan):
     stage = next(
         (item for item in plan.get("stages", []) if item["name"] == "apply"), {}
     )
+    actions = stage.get("modificationsApproval", {}).get("alterationActions", {})
+    suggestions = {
+        identity[:-1] + (actions.get(item.get("featureId"), item.get("action")),): {
+            **item,
+            "action": actions.get(item.get("featureId"), item.get("action")),
+            "suggestedState": actions.get(
+                item.get("featureId"), item.get("suggestedState", "")
+            ),
+        }
+        for identity, item in suggestions.items()
+    }
     result = next(
         (item for item in stage.get("results", []) if item.get("key") == "changes"), {}
     )
@@ -228,7 +272,9 @@ def _same_weight(left, right):
         return False
 
 
-def project_workflow(workflow, data, view, part, offset, limit, suggestion_id=""):
+def project_workflow(
+    workflow, data, view, part, offset, limit, suggestion_id="", element="all"
+):
     source = workflow.plan
     plan = {
         key: copy.deepcopy(source[key])
@@ -323,6 +369,44 @@ def project_workflow(workflow, data, view, part, offset, limit, suggestion_id=""
     plan["pagination"] = page
     if view == "compare":
         values, result = compare_items(source)
+        from apps.knowledge.trial_rules import digest
+
+        page["revision"] = digest(
+            {
+                "proposal": (source.get("modificationReview") or {}).get(
+                    "proposalHash"
+                ),
+                "approved": (source.get("modificationReview") or {}).get(
+                    "approvedSuggestionIds", []
+                ),
+                "output": {
+                    key: result.get(key) for key in ("taskId", "outputId", "checksum")
+                },
+            }
+        )
+        counts = Counter(item.get("element", "") for item, _ in values)
+        counts["all"] = len(values)
+        page.update(
+            element=element,
+            counts={
+                key: counts[key]
+                for key in ("all", "lithology", "structure", "alteration")
+            },
+            alterationPixels=sum(
+                int(float(row.get("pixel_count") or 0))
+                for item, row in values
+                if item.get("element") == "alteration"
+            ),
+            alterationAreaM2=sum(
+                float(row.get("area_m2") or 0)
+                for item, row in values
+                if item.get("element") == "alteration"
+            ),
+        )
+        if element != "all":
+            values = [
+                (item, row) for item, row in values if item.get("element") == element
+            ]
         page["total"] = len(values)
         position = next(
             (

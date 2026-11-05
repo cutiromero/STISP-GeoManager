@@ -14,6 +14,7 @@ import WorkflowReportFile from "./WorkflowReportFile";
 import WorkflowDeliverables from "./WorkflowDeliverables";
 import GeologyReviewStory from "./GeologyReviewStory";
 import MultiElementStory from "./MultiElementStory";
+import type { AlterationActions } from "./approvalSelection";
 import { isMultiElementFamily, multiElementType } from "./multiElementScenario";
 import { usesCleanGeologyResults } from "../map/workflowOutputMaps";
 import {
@@ -103,6 +104,7 @@ export default function WorkflowResults({
   onPause,
   onResume,
   onReview,
+  reviewError,
   onRestart,
   onEvidenceUpdate,
   compact = false,
@@ -111,6 +113,7 @@ export default function WorkflowResults({
 }: {
   workflow: AgentWorkflow;
   busy?: boolean;
+  reviewError?: string;
   onConfirm?: () => void;
   onCancel?: () => void;
   onPause?: () => void;
@@ -119,6 +122,7 @@ export default function WorkflowResults({
     decision: "approve" | "reject",
     feedback: string,
     selectedSuggestionIds?: string[],
+    alterationActions?: AlterationActions,
   ) => void;
   onRestart?: () => void;
   onEvidenceUpdate?: () => void;
@@ -390,6 +394,7 @@ export default function WorkflowResults({
           workflow={workflow}
           busy={busy}
           onReview={onReview}
+          reviewError={reviewError}
         />
       )}
       {isGeologyReview && !isMultiElement && workflow.view !== "card" && (

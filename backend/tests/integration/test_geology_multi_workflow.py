@@ -427,7 +427,7 @@ def test_http_confirmation_accepts_large_multi_selection_only(
         ),
     )
     client.force_login(multi["owner"])
-    ids = [f"s-{index}" for index in range(180)]
+    ids = [f"s-{index:062d}" for index in range(6268)]
     response = client.post(
         f"/api/agent/workflows/{wf.id}/confirm/",
         {"planHash": "group-plan", "selectedSuggestionIds": ids},
@@ -444,6 +444,118 @@ def test_http_confirmation_accepts_large_multi_selection_only(
         HTTP_X_PROJECT_ID=str(wf.project_tag_id),
     )
     assert response.status_code == 400
+
+
+def test_compact_all_approval_excludes_held_candidates_and_reports_invalid_scope(
+    multi, client, monkeypatch
+):
+    wf, _, _ = fixture_review(multi)
+    template = wf.plan["modificationReview"]["suggestions"][1]
+    suggestions = [
+        {**template, "id": f"s-{index:062d}", "featureId": f"M{index}"}
+        for index in range(6268)
+    ]
+    suggestions += [
+        {**template, "id": status, "status": status, "candidateAction": "exclude"}
+        for status in ("review", "exception")
+    ]
+    wf.plan["modificationReview"]["suggestions"] = suggestions
+    wf.plan_hash = "group-plan"
+    wf.save()
+    accepted = []
+    monkeypatch.setattr(
+        "apps.agent.views.require_access", lambda *args: multi["policy"]
+    )
+    monkeypatch.setattr(
+        "apps.agent.demo_workflow.confirm_demo",
+        lambda workflow, user, policy, plan_hash, selected, mapping: accepted.extend(
+            selected
+        ),
+    )
+    client.force_login(multi["owner"])
+    body = {
+        "planHash": "group-plan",
+        "suggestionSelection": {
+            "base": "suggested",
+            "excludedIds": [],
+            "includedIds": [],
+        },
+    }
+    assert len(json.dumps(body).encode()) < 200
+    url = f"/api/agent/workflows/{wf.id}/confirm/"
+    response = client.post(
+        url,
+        body,
+        content_type="application/json",
+        HTTP_X_PROJECT_ID=str(wf.project_tag_id),
+    )
+    assert response.status_code == 200 and len(accepted) == 6268
+    assert "review" not in accepted and "exception" not in accepted
+    body["suggestionSelection"].update(
+        excludedIds=[suggestions[0]["id"]], includedIds=["exception"]
+    )
+    accepted.clear()
+    response = client.post(
+        url,
+        body,
+        content_type="application/json",
+        HTTP_X_PROJECT_ID=str(wf.project_tag_id),
+    )
+    assert (
+        response.status_code == 200
+        and "exception" in accepted
+        and suggestions[0]["id"] not in accepted
+    )
+    body["suggestionSelection"]["includedIds"] = ["not-in-snapshot"]
+    response = client.post(
+        url,
+        body,
+        content_type="application/json",
+        HTTP_X_PROJECT_ID=str(wf.project_tag_id),
+    )
+    assert response.status_code == 409 and "冻结" in response.json()["detail"]
+
+
+def test_raster_group_default_and_user_weight_override_are_frozen(multi, monkeypatch):
+    wf, stage, results = fixture_review(multi)
+    issue = results[0]["rows"][1]
+    issue.update(
+        issue_id="AG-stable",
+        feature_id="AG-stable",
+        allowed_actions_json='["keep","exclude","downweight","review"]',
+        suggested_action="exclude",
+        measurements_json='{"raster_protocol":"alteration-pixels-v1","pixel_count":50000,"area_m2":5000000}',
+    )
+    stage["edits"] = []
+    freeze_proposal(wf, stage)
+    review = wf.plan["modificationReview"]
+    assert (
+        len(review["suggestions"]) == 1
+        and review["suggestions"][0]["groupId"] == "AG-stable"
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.read_results", lambda *args: results
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.authorized_task",
+        lambda *args: SimpleNamespace(),
+    )
+    selected = [review["suggestions"][0]["id"]]
+    approve_modifications(
+        wf,
+        multi["owner"],
+        multi["policy"],
+        selected,
+        "hash",
+        {"AG-stable": "downweight"},
+    )
+    resource = create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+    assert resource.item_count == 1
+    assert stage["approvedEdits"][0]["action"] == "downweight"
+    assert stage["approvedEdits"][0]["weight"] == 0.5
+    stage["modificationsApproval"]["alterationActions"]["AG-stable"] = "exclude"
+    with pytest.raises(ComputeError, match="有效批准"):
+        create_approved_changes(wf, multi["owner"], multi["policy"], stage)
 
 
 def test_multi_detail_gzip_keeps_complete_approval_scope(multi, client, monkeypatch):
@@ -915,7 +1027,9 @@ def test_native_published_manifests_prepare_the_actual_stage_protocol(
         "prospect",
     ]
     assert wf.plan["stages"][0]["bindings"]["rules"] == "frozen_rules"
-    assert wf.plan["stages"][2]["bindings"]["alterations"] == "apply/alterations"
+    assert wf.plan["stages"][2]["bindings"]["calcite"] == "apply/calcite_corrected"
+    assert wf.plan["stages"][2]["bindings"]["calcite_weight"] == "apply/calcite_weight"
+    assert wf.plan["stages"][4]["bindings"]["before_calcite"] == "calcite"
     assert wf.plan["stages"][2]["bindings"]["faults"] == (
         "faults" if missing_faults else "apply/faults"
     )

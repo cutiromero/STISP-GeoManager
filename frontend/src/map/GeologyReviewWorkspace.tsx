@@ -5,7 +5,7 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Empty, Spin, Tag } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { agentApi } from "../api/agent";
 import type {
@@ -25,6 +25,7 @@ import MultiElementWorkspace from "./MultiElementWorkspace";
 import {
   previewSuggestions,
   queryReviewMap,
+  record,
   reviewBounds,
   reviewResourceIds,
   reviewSuggestionIndex,
@@ -56,6 +57,10 @@ export default function GeologyReviewWorkspace({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
+  const comparePage = useRef<{
+    offset: number;
+    element: "all" | "lithology" | "structure" | "alteration";
+  }>({ offset: 0, element: "all" });
   const [selected, setSelected] = useState(0);
   const [focus, setFocus] = useState<[number, number, number, number] | null>(
     null,
@@ -73,6 +78,7 @@ export default function GeologyReviewWorkspace({
         const value = await agentApi.workflow(workflowId, {
           view: "compare",
           limit: 25,
+          ...comparePage.current,
           suggestionId: suggestionId ?? undefined,
         });
         if (disposed) return;
@@ -192,14 +198,20 @@ export default function GeologyReviewWorkspace({
         workflow={workflow}
         suggestionId={suggestionId}
         onReload={() => setReload((value) => value + 1)}
-        onPage={async (offset) => {
+        onPage={async (offset, element = "all") => {
+          comparePage.current = { offset, element };
           const next = await agentApi.workflow(workflowId, {
             view: "compare",
             limit: 25,
             offset,
+            element,
           });
           if (getActiveProject() !== currentProject) return;
-          if (next.planHash !== workflow.planHash)
+          const previousRevision =
+            record(workflow.plan.pagination).revision ?? workflow.planHash;
+          const nextRevision =
+            record(next.plan.pagination).revision ?? next.planHash;
+          if (nextRevision !== previousRevision)
             throw new Error("成果已更新，请刷新后继续浏览");
           setWorkflow(next);
         }}

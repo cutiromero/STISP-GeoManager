@@ -921,6 +921,14 @@ def decide(
             "不能解释为研究区没有该类地质现象，应在不确定性中说明。"
         )
     payload = decision_payload(workflow, stage, context, results)
+    if any(
+        item.get("key") == "alteration_summary"
+        for item in workflow.plan.get("algorithms", {})
+        .get("geology-multi-check", {})
+        .get("manifest", {})
+        .get("outputs", [])
+    ):
+        instruction += "蚀变使用alteration-pixels-v1逐像元确定性规则，actualResults.alteration_summary是完整归类汇总。系统自动形成蚀变组建议，模型不得在edits重新列举蚀变组或像元；edits只提出岩性和构造的分组建议。获批后系统直接执行冻结动作，不由模型重写清单。只写简短说明，输出不超过2000 token。A-05默认降权，不默认删除；非碳酸盐基岩上的碳酸盐化为可能热液叠加证据。"
     if payload.get("humanReviewFeedback"):
         instruction += (
             "humanReviewFeedback为本任务已保存的用户审核结论和意见，绑定其原阶段及候选输出。"
@@ -964,6 +972,19 @@ def decide(
     window = provider.model_window(model)
     output_limit = policy["maxOutputTokens"]
     parameters = {**policy, "maxOutputTokens": output_limit}
+    raster_protocol = any(
+        item.get("key") == "alteration_summary"
+        for item in workflow.plan.get("algorithms", {})
+        .get("geology-multi-check", {})
+        .get("manifest", {})
+        .get("outputs", [])
+    )
+    if raster_protocol:
+        output_limit = min(output_limit, 2000)
+        parameters.update(
+            maxOutputTokens=output_limit,
+            maxContextTokens=min(policy["maxContextTokens"], 15000),
+        )
     feedback_text = ""
     raw = ""
     base_messages = [dict(message) for message in messages]
@@ -1019,7 +1040,9 @@ def decide(
             "truncated": truncated,
             "outputLimit": output_limit,
             "window": window,
-            "inputLimit": min(policy["maxContextTokens"], window - output_limit - 256),
+            "inputLimit": min(
+                parameters["maxContextTokens"], window - output_limit - 256
+            ),
             "modelId": model.model_id,
             "usage": {},
         }

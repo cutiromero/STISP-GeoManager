@@ -1,3 +1,4 @@
+import { approvalSelection, type AlterationActions } from "./approvalSelection";
 import {
   Alert,
   Button,
@@ -792,6 +793,7 @@ export default function WorkflowPanel({
     decision: "approve" | "reject",
     feedback: string,
     selectedSuggestionIds?: string[],
+    alterationActions?: AlterationActions,
   ) => {
     if (!workflow || mutationInFlight.current) return;
     mutationInFlight.current = true;
@@ -802,7 +804,10 @@ export default function WorkflowPanel({
         await agentApi.confirmWorkflow(workflow.id, workflow.planHash, {
           decision,
           feedback,
-          ...(selectedSuggestionIds ? { selectedSuggestionIds } : {}),
+          ...(await approvalSelection(workflow, selectedSuggestionIds)),
+          ...(alterationActions && Object.keys(alterationActions).length
+            ? { alterationActions }
+            : {}),
         }),
       );
     } catch (reason) {
@@ -1256,8 +1261,19 @@ export default function WorkflowPanel({
               onCancel={() => void action(false)}
               onPause={() => void controlWorkflow("pause")}
               onResume={() => void controlWorkflow("resume")}
-              onReview={(decision, feedback, selectedSuggestionIds) =>
-                void reviewWorkflow(decision, feedback, selectedSuggestionIds)
+              reviewError={error}
+              onReview={(
+                decision,
+                feedback,
+                selectedSuggestionIds,
+                alterationActions,
+              ) =>
+                void reviewWorkflow(
+                  decision,
+                  feedback,
+                  selectedSuggestionIds,
+                  alterationActions,
+                )
               }
               onRestart={() => {
                 restore(workflow);
