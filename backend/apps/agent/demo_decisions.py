@@ -13,6 +13,7 @@ from .context import InputBudgetError, prepare_context
 from .demo_results import EDIT_FIELDS, resource_context, validate_edits
 from .model_guard import ModelStreamGuard
 from .geology_generic import MULTI_FAMILY
+from .decision_budget import MAX_LEVEL, budget_review, projected_messages
 
 FIELDS = {
     "problem",
@@ -936,6 +937,8 @@ def decide(
     feedback_text = ""
     raw = ""
     base_messages = [dict(message) for message in messages]
+    original_messages = [dict(message) for message in messages]
+    budget_level = 0
     repair_level = 0
     for attempt in range(2):
         guard()
@@ -946,12 +949,21 @@ def decide(
                     messages, current, model, parameters, window, False
                 )
                 break
-            except InputBudgetError:
-                if not attempt or repair_level >= 6:
-                    raise
-                repair_level += 1
-                messages = _retry_messages(
-                    base_messages, raw, feedback_text, repair_level
+            except InputBudgetError as exc:
+                if attempt and repair_level < 6:
+                    repair_level += 1
+                elif budget_level < MAX_LEVEL:
+                    budget_level += 1
+                    base_messages = projected_messages(
+                        original_messages, payload, budget_level
+                    )
+                else:
+                    stage["modelRequestInstruction"] = instruction
+                    return budget_review(stage, payload, exc)
+                messages = (
+                    _retry_messages(base_messages, raw, feedback_text, repair_level)
+                    if attempt
+                    else [dict(message) for message in base_messages]
                 )
                 current = messages[1]
         if truncated:
@@ -969,6 +981,7 @@ def decide(
             "requestSha256": hashlib.sha256(request.encode("utf-8")).hexdigest(),
             "feedback": feedback_text,
             "repairLevel": repair_level,
+            "budgetLevel": budget_level,
             "inputTokens": tokens,
             "contentBytes": sum(
                 len(item["content"].encode("utf-8")) for item in messages
@@ -1172,6 +1185,7 @@ def _recover_decision(
     )
     if not valid:
         reject()
+    original_messages = [dict(message) for message in messages]
     for index, attempt in enumerate(attempts):
         if not isinstance(attempt, dict):
             reject()
@@ -1200,6 +1214,10 @@ def _recover_decision(
         )
         if not valid:
             reject()
+        budget_level = attempt.get("budgetLevel", 0)
+        if type(budget_level) is not int or not 0 <= budget_level <= MAX_LEVEL:
+            reject()
+        messages = projected_messages(original_messages, payload, budget_level)
         if index:
             previous = attempts[index - 1]
             try:

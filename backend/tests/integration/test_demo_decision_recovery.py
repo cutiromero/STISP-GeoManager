@@ -86,6 +86,33 @@ def test_configured_output_above_4096_recovers_without_new_request(retry_model):
 
 
 @pytest.mark.parametrize("retry", [False, True])
+@pytest.mark.parametrize("budget_level", [1, 2, 3, 4])
+def test_budgeted_first_request_recovers_exact_projection_without_network(
+    retry, budget_level, retry_model
+):
+    workflow, stage, results = ordinary_stage()
+    answer = model_response(stage["identifier"], [])
+    raws = ["invalid-json", answer] if retry else [answer]
+    outcome, requests = run(
+        raws, workflow, stage, results, tokens=[49904] * budget_level + [800, 1200]
+    )
+    workflow.max_iterations = workflow.iteration = len(raws)
+    workflow.plan["actualModelCallCount"] = len(raws)
+    assert stage["modelAttempts"][0]["budgetLevel"] == budget_level
+    assert stage["modelAttempts"][0]["inputTokens"] == 800
+    assert len(requests) == len(raws)
+    assert replay(workflow, stage, results) == outcome
+
+
+@pytest.mark.parametrize("level", [-1, 5, True])
+def test_invalid_projection_level_cannot_recover_a_saved_reply(level, retry_model):
+    workflow, stage, results, _ = saved_response()
+    stage["modelAttempts"][0]["budgetLevel"] = level
+    with pytest.raises(ComputeError, match="本步已有模型请求记录"):
+        replay(workflow, stage, results)
+
+
+@pytest.mark.parametrize("retry", [False, True])
 def test_saved_complete_response_is_revalidated_after_pause_without_new_request(
     retry, retry_model
 ):

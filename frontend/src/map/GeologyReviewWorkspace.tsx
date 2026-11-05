@@ -72,7 +72,11 @@ export default function GeologyReviewWorkspace({
       try {
         if (projectTagId && projectTagId !== currentProject)
           throw new Error("请切换到检查任务所属项目后查看");
-        const value = await agentApi.workflow(workflowId);
+        const value = await agentApi.workflow(workflowId, {
+          view: "compare",
+          limit: 25,
+          suggestionId: suggestionId ?? undefined,
+        });
         if (disposed) return;
         if (
           !(
@@ -188,6 +192,17 @@ export default function GeologyReviewWorkspace({
         workflow={workflow}
         suggestionId={suggestionId}
         onReload={() => setReload((value) => value + 1)}
+        onPage={async (offset) => {
+          const next = await agentApi.workflow(workflowId, {
+            view: "compare",
+            limit: 25,
+            offset,
+          });
+          if (getActiveProject() !== currentProject) return;
+          if (next.planHash !== workflow.planHash)
+            throw new Error("成果已更新，请刷新后继续浏览");
+          setWorkflow(next);
+        }}
       />
     );
   return (

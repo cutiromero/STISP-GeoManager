@@ -262,7 +262,9 @@ it("keeps remembered tasks idle while the drawer remains closed and restores on 
   );
   expect(agentApi.workflow).toHaveBeenCalledWith("current-plan", {
     signal: expect.any(AbortSignal),
+    view: "full",
   });
+  expect(agentApi.workflow).toHaveBeenCalledOnce();
 });
 
 it("aborts the old project catalog and reloads for the newly selected project", async () => {

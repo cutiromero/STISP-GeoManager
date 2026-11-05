@@ -19,6 +19,7 @@ const item: AgentActiveWorkflow = {
   projectId: 2,
 };
 const saved: AgentWorkflow = {
+  view: "inspection",
   id: item.id,
   projectId: 2,
   goal: item.goal,
@@ -74,7 +75,10 @@ it("shows blocking task identity and uses the target project for viewing and con
   await screen.findByText("在安全边界暂停");
   expect(agentApi.workflow).toHaveBeenCalledWith(item.id, {
     projectTagId: "2",
+    view: "inspection",
+    part: "steps",
   });
+  expect(agentApi.workflow).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),

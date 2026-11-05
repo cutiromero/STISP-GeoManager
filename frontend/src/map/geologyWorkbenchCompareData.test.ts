@@ -8,6 +8,7 @@ import {
   reviewDifferences,
   reviewQuery,
   reviewWorkflow,
+  comparisonProjection,
 } from "./geologyReview.testFixtures";
 import { loadWorkbenchReviewComparison } from "./geologyWorkbenchCompareData";
 
@@ -98,7 +99,7 @@ it("先显示两张岩性图，不等待后续构造和蚀变请求完成", asyn
   await pending;
 });
 
-it("按需加载模式不读取辅助图层，先返回主图及记录；展开时复用主图并去重辅助请求", async () => {
+it("按需加载模式不读取辅助图层与修改记录；展开时复用主图并去重辅助请求", async () => {
   const workflow = reviewWorkflow(true);
   workflow.workflowType = "geology_generic";
   workflow.plan.multiElementMap = {
@@ -126,23 +127,28 @@ it("按需加载模式不读取辅助图层，先返回主图及记录；展开�
         );
   });
   const result = await load({ deferOverlays: true });
+  expect(
+    request.mock.calls.filter(([url]) => String(url).includes("/workflows/")),
+  ).toHaveLength(1);
+  expect(String(request.mock.calls[0]![0])).toContain("view=compare");
+  expect(result.differences.features).toHaveLength(0);
   expect(result.overlays).toBeUndefined();
   const queryIds = () =>
     request.mock.calls
       .filter(([url]) => String(url).endsWith("/query/"))
       .map(([url]) => Number(String(url).match(/resources\/(\d+)\//)?.[1]));
-  expect(queryIds()).toEqual([101, 201, 202]);
+  expect(queryIds()).toEqual([101, 201]);
   expect(
     registerLayer.mock.calls.map(([profile]) => profile.resource.id),
-  ).toEqual([101, 201, 202]);
+  ).toEqual([101, 201]);
   await result.loadOverlays!("faults");
-  expect(queryIds().sort()).toEqual([101, 102, 201, 202, 302]);
+  expect(queryIds().sort()).toEqual([101, 102, 201, 302]);
   const [first, second] = await Promise.all([
     result.loadOverlays!(),
     result.loadOverlays!(),
   ]);
   expect(first).toBe(second);
-  expect(queryIds().sort()).toEqual([101, 102, 201, 202, 302, 600, 601]);
+  expect(queryIds().sort()).toEqual([101, 102, 201, 302, 600, 601]);
 });
 
 it.each(["geology_generic", "geology_multi_element_reasoning"])(
@@ -232,7 +238,8 @@ it.each(["geology_generic", "geology_multi_element_reasoning"])(
       },
     ];
     request.mockImplementation(async (url: string) => {
-      if (url.includes("/workflows/")) return workflow;
+      if (url.includes("/workflows/"))
+        return comparisonProjection(workflow, url);
       if (url.includes("/compute/outputs/")) {
         const outputId = Number(url.match(/outputs\/(\d+)\//)?.[1]);
         const feature = structuredClone(beforeReviewMap.features[0]!);
@@ -258,8 +265,10 @@ it.each(["geology_generic", "geology_multi_element_reasoning"])(
       return reviewQuery(id, beforeReviewMap);
     });
     const result = await load();
-    expect(result.tour).toHaveLength(1);
-    expect(result.tour[0]!.action).toBe("set_code");
+    expect(result.tour).toBeUndefined();
+    const page = await result.loadChanges!(0);
+    expect(page.tour).toHaveLength(1);
+    expect(page.tour![0]!.action).toBe("set_code");
     expect(
       result.overlays.find((item) => item.key === "alterations")!.before
         .features,
@@ -272,7 +281,7 @@ it.each(["geology_generic", "geology_multi_element_reasoning"])(
       request.mock.calls.filter(([url]) =>
         String(url).includes("/compute/outputs/"),
       ),
-    ).toHaveLength(5);
+    ).toHaveLength(2);
     expect(
       request.mock.calls.some(([url]) => String(url).includes("/import/")),
     ).toBe(false);
@@ -315,7 +324,9 @@ it("uses complete real responses once and registers all three normal layers with
       ([url, options]) =>
         !options ||
         String(url).endsWith("/query/") ||
-        Object.keys(options).every((key) => key === "validate"),
+        Object.keys(options).every((key) =>
+          ["validate", "view", "signal", "suggestionId"].includes(key),
+        ),
     ),
   ).toBe(true);
 });

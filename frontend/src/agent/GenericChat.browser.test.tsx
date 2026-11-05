@@ -258,10 +258,15 @@ beforeEach(() => {
           steps: [],
           evidence: [],
           modificationReview: undefined,
-          plan: { phase: workflow.plan.phase, stages: workflow.plan.stages },
+          plan: {
+            phase: workflow.plan.phase,
+            stages: workflow.plan.stages,
+            reusedConfiguration: workflow.plan.reusedConfiguration,
+            fieldMappingReview: workflow.plan.fieldMappingReview,
+          },
           stepCount: 3,
         }
-      : structuredClone(workflow),
+      : { ...structuredClone(workflow), view: options?.view ?? "full" },
   );
   vi.spyOn(agentApi, "poll").mockImplementation(async () => {
     syncIntent();
@@ -562,6 +567,7 @@ it("沿用配置的对话卡片仍要求本次计划确认，并提供一键重�
 });
 
 it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留成果地图入口", async () => {
+  workflow.updatedAt = "2026-11-05T00:00:00Z";
   const mounted = show();
   fireEvent.click(
     await screen.findByRole("button", { name: /(^|\s)逻辑推理$/ }),
@@ -607,6 +613,7 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
     ...workflow,
     status: "waiting_approval",
     planHash: "suggestions-v1",
+    updatedAt: "2026-11-05T00:00:01Z",
     plan: { ...workflow.plan, phase: "review_modifications" },
     modificationReview: {
       ...review,
@@ -624,6 +631,14 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
     { name: "多要素检查建议" },
     { timeout: 5000 },
   );
+  expect(agentApi.workflow).toHaveBeenCalledWith(workflow.id, {
+    signal: expect.any(AbortSignal),
+    view: "inspection",
+    part: "suggestions",
+  });
+  expect(
+    screen.getByRole("button", { name: /查看过程、证据与模型交互/ }),
+  ).toBeVisible();
   const group = screen
     .getByText(/岩性 \/ .* \/ 改代号/, { selector: "summary" })
     .closest("details")!;
@@ -631,20 +646,24 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
   const first = await screen.findByText("岩性 / 填补内部漏填");
   const object = first.closest("details")!;
   fireEvent.click(object.querySelector("summary")!);
-  fireEvent.click(within(object).getByRole("checkbox"));
+  // Model suggestions start selected; the user only approves.
+  expect(within(object).getByRole("checkbox")).toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
   fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() =>
     expect(agentApi.confirmWorkflow).toHaveBeenCalledWith(
       workflow.id,
       "suggestions-v1",
-      expect.objectContaining({ selectedSuggestionIds: ["suggest-gap"] }),
+      expect.objectContaining({
+        selectedSuggestionIds: ["suggest-gap", "suggest-age"],
+      }),
     ),
   );
   workflow = {
     ...workflow,
     status: "succeeded",
     planHash: "done",
+    updatedAt: "2026-11-05T00:00:02Z",
     detail: "复查与远景区比较完成",
     resultResourceIds: [201, 202],
     plan: {

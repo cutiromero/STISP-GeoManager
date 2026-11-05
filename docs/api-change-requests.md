@@ -408,6 +408,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 | API-20260802-001 | Verified | bootstrap/admin settings and upload endpoints | validation / deployment safety | Updated | N/A | Implemented | Passed | Raises the disk-backed upload ceiling to 1024 MB while retaining parser-specific memory limits |
 | API-20260806-001 | Verified | bootstrap/admin settings map configuration | accepted configuration value / response enum | Updated | N/A | Implemented | Passed | Adds `tianditu-imagery` as the fourth formal and configurable default basemap |
 | API-20260810-001 | Verified | `GET /api/bootstrap/`, `GET/POST /api/admin/settings/`, `GET /api/login/overview/` | response/example value normalization | Updated | N/A | Implemented | Passed | Temporarily presents the arid-region intelligent-monitoring brand while normalizing the previous canonical name and preserving unrelated custom deployments |
+| API-20261105-001 | BackendReady | /api/agent/workflows/{workflowId}/; /api/catalog/resources/{resourceId}/query/ | compare/inspection projections and display geometry budget | Updated | Scoped integration and browser fixtures | Implemented | Local focused tests | Owner/project authorization and original computation geometry unchanged; browser and production verification separate |
 
 ## Entry Template
 
@@ -1337,3 +1338,16 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation notes: 缩略图首次请求时由原图（专题为 PNG 预览）生成长边640像素的 WebP，存于业务数据 cache/thumbnails，按文件大小和修改时间命名；权限与 preview 相同。没有 PDF 渲染器，PDF 不提供缩略图。
 - Verification: 缩略图尺寸与缓存复用、权限与 preview 一致、非图片格式返回400、卡片使用 thumbnailUrl。
 - Result: 后端测试通过；前端卡片改用缩略图。
+
+## API-20261105-001 - 地质审批与对比的按需投影
+
+- Status: BackendReady
+- Owner: codex/logic-demo-ux（契约、后端与前端跨栈交接）。
+- Endpoints: GET /api/agent/workflows/{workflowId}/；POST /api/catalog/resources/{resourceId}/query/。
+- Change type: 新增 compare、inspection 视图及 part/offset/limit；displayGeometry 自适应压缩显示几何。
+- OpenAPI change: AgentWorkflow.view 枚举；AgentWorkflowPage、AgentWorkflowGroup、AgentWorkflowReviewIndex；plan.pagination 保存页总数、分组索引、偏移；plan.compareFeatures 仅含本页实际修改几何；plan.reviewIndex 保存审批默认集合；suggestionId定位深链接对象。默认 full 语义不变。
+- Mock examples: mock/prism/examples/105-agent-workflow-card.json；隔离集成样例覆盖5000对象、分页及权限边界。
+- Frontend reason: 低带宽首屏不读取完整工作流和完整修改记录，审批默认选择模型建议但不代用户批准例外。
+- Backend implementation notes: compare 只以已保存批准、执行明细与实际变化交集构造分页，inspection 不发送完整计算输入、模型请求和预览几何；card/inspection 保留 fieldMappingReview、reusedConfiguration，前端校验分页及卡片字段；显示几何不回写存储，无过滤显示结果按资源修订持久缓存，由成果登记 worker 预热。
+- Verification: 摘要体积、实际修改分页、用户隔离、建议默认选择、对象完整原因按需、原精度查询不变。
+- Result: 本地后端定向33项、前端单元573项、类型及完整契约流程通过。后端全套2411项通过、5项跳过、31项失败，其中20项为沙箱禁止端口绑定，其余11项未在此范围处理；离线成果与新对话复用旅程通过。缓存复测确认预热后同版查询不重读原始数据、不重复简化，资源修订或查询上限改变后重算。Chromium 因监听端口 EPERM 未启动，视口尺寸及交互断言仍需沙箱外复跑；未部署正式站。海德乌拉本地原始岩性显示投影gzip为230144字节，正式运行的修正后资源体积仍需部署后核验。

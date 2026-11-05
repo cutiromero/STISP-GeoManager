@@ -240,11 +240,32 @@ export const agentApi = {
     options: {
       signal?: AbortSignal;
       projectTagId?: string;
-      view?: "card" | "full";
+      view?: "card" | "full" | "compare" | "inspection";
+      part?: "suggestions" | "steps" | "changes";
+      offset?: number;
+      limit?: number;
+      suggestionId?: string;
     } = {},
   ) =>
     requestJson<AgentWorkflow>(
-      `/api/agent/workflows/${encodeURIComponent(id)}/${options.view ? `?view=${options.view}` : ""}`,
+      `/api/agent/workflows/${encodeURIComponent(id)}/${
+        options.view
+          ? `?${new URLSearchParams(
+              Object.entries(options)
+                .filter(
+                  ([key, value]) =>
+                    [
+                      "view",
+                      "part",
+                      "offset",
+                      "limit",
+                      "suggestionId",
+                    ].includes(key) && value !== undefined,
+                )
+                .map(([key, value]) => [key, String(value)]),
+            )}`
+          : ""
+      }`,
       {
         ...options,
         validate: (value) => {

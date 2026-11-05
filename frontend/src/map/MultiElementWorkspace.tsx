@@ -140,10 +140,12 @@ export default function MultiElementWorkspace({
   workflow,
   suggestionId,
   onReload,
+  onPage,
 }: {
   workflow: AgentWorkflow;
   suggestionId: string | null;
   onReload: () => void;
+  onPage?: (offset: number) => Promise<void>;
 }) {
   const navigate = useNavigate();
   const { bootstrap } = useAppContext();
@@ -162,6 +164,19 @@ export default function MultiElementWorkspace({
   const [data, setData] = useState<MultiMaps>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
+  const changePage = async (offset: number) => {
+    if (!onPage || pageLoading) return;
+    setPageLoading(true);
+    setError("");
+    try {
+      await onPage(offset);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "修改详情读取失败");
+    } finally {
+      setPageLoading(false);
+    }
+  };
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [slow, setSlow] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -255,12 +270,6 @@ export default function MultiElementWorkspace({
           );
         return requests.get(id)!;
       };
-      const merge = async (ids: number[]) => ({
-        type: "FeatureCollection" as const,
-        features: (await Promise.all(ids.map(query))).flatMap(
-          (item) => item.features,
-        ),
-      });
       const [
         before,
         after,
@@ -285,14 +294,10 @@ export default function MultiElementWorkspace({
                 : faultsId),
           ),
         ),
-        counted(
-          map.changes?.length
-            ? merge(map.changes)
-            : queryWorkflowVectors(workflow, "apply", [
-                "changes_lithology_issues",
-                "changes_fault_issues",
-                "changes_alteration_issues",
-              ]),
+        Promise.resolve(
+          (workflow.plan.compareFeatures as
+            | GeoJsonFeatureCollection
+            | undefined) ?? empty,
         ),
         counted(
           map.beforeIntersections
@@ -879,6 +884,44 @@ export default function MultiElementWorkspace({
           />
           {tour.length > 0 && (
             <nav className="multi-tour-toolbar" aria-label="修改导览">
+              {onPage && (
+                <div>
+                  <Button
+                    loading={pageLoading}
+                    disabled={
+                      Number(record(workflow.plan.pagination).offset) <= 0
+                    }
+                    onClick={() =>
+                      void changePage(
+                        Math.max(
+                          0,
+                          Number(record(workflow.plan.pagination).offset) - 25,
+                        ),
+                      )
+                    }
+                  >
+                    上一页修改
+                  </Button>
+                  <Button
+                    loading={pageLoading}
+                    disabled={
+                      Number(record(workflow.plan.pagination).offset) + 25 >=
+                      Number(record(workflow.plan.pagination).total)
+                    }
+                    onClick={() =>
+                      void changePage(
+                        Number(record(workflow.plan.pagination).offset) + 25,
+                      )
+                    }
+                  >
+                    下一页修改
+                  </Button>
+                  <span>
+                    共 {Number(record(workflow.plan.pagination).total)}{" "}
+                    处，当前按页读取
+                  </span>
+                </div>
+              )}
               <div className="multi-tour-pager">
                 <Button
                   icon={<LeftOutlined />}

@@ -106,9 +106,7 @@ export default function ResearchIntentCard({
               ? "running"
               : card.status;
         const [next, latest] = await Promise.all([
-          generic && card.status === "waiting_approval"
-            ? agentApi.workflow(id)
-            : Promise.resolve(card),
+          Promise.resolve(card),
           generic && status !== currentIntent.current.status
             ? agentApi.poll(intent.originRunId)
             : Promise.resolve(prior),

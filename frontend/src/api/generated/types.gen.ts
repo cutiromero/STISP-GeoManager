@@ -2635,7 +2635,7 @@ export type AgentWorkflow = {
     /**
      * 详情投影视图；省略等同full
      */
-    view?: 'full' | 'card';
+    view?: 'full' | 'card' | 'compare' | 'inspection';
     /**
      * 实际步骤总数，card视图用于按需展开入口
      */
@@ -2751,9 +2751,12 @@ export type AgentWorkflow = {
         trialRuleBindings?: Array<AgentTrialRuleBinding>;
         fieldMappingReview?: AgentFieldMappingReview;
         /**
-         * 本次资料与服务端已确认配置一致，沿用角色和字段；不表示计划或处置获批
+         * 本次资料与服务端已确认配置一致，沿用角色和字段；card和inspection视图也保留此值，不表示计划或处置获批
          */
         reusedConfiguration?: boolean;
+        pagination?: AgentWorkflowPage;
+        reviewIndex?: AgentWorkflowReviewIndex;
+        compareFeatures?: GeoJsonFeatureCollection;
         [key: string]: unknown;
     };
     /**
@@ -2769,6 +2772,102 @@ export type AgentWorkflow = {
      * 实际完成入库的数据资源 ID
      */
     resultResourceIds: Array<number>;
+};
+
+/**
+ * 不包含对象完整原因或几何的规则分组索引
+ */
+export type AgentWorkflowGroup = {
+    /**
+     * 对比页分组稳定标识
+     */
+    key?: string;
+    /**
+     * lithology、structure或alteration，旧场景可为空
+     */
+    element: string | null;
+    /**
+     * 冻结规则编号
+     */
+    ruleId: string;
+    /**
+     * 本组执行动作，待裁定组按规则聚合时为空
+     */
+    action: string | null;
+    /**
+     * 完整分组对象数，不仅为本页数量
+     */
+    count: number;
+    /**
+     * 对比页组内首个实际修改在完整导航中的位置
+     */
+    offset?: number;
+    /**
+     * 是否为默认保留的待裁定或例外组
+     */
+    held?: boolean;
+    /**
+     * 审批组完整对象ID；待裁定组仅列冻结候选，不能由模型批准
+     */
+    ids?: Array<string>;
+    /**
+     * 原因类别及完整计数，不拼接对象原因原文
+     */
+    reasons?: {
+        [key: string]: number;
+    };
+};
+
+/**
+ * 工作流按需投影的分页与分组索引
+ */
+export type AgentWorkflowPage = {
+    /**
+     * 当前页内容类型
+     */
+    part: 'suggestions' | 'steps' | 'changes';
+    /**
+     * 当前页起点
+     */
+    offset: number;
+    /**
+     * 当前页最多对象数，0表示摘要
+     */
+    limit: number;
+    /**
+     * 当前类型完整对象数量
+     */
+    total: number;
+    /**
+     * suggestionId深链接对象所在页起点
+     */
+    focusOffset?: number;
+    /**
+     * 完整实际修改的分组索引；其他分页为空
+     */
+    groups: Array<AgentWorkflowGroup>;
+};
+
+/**
+ * 冻结方案的审批集合索引，完整对象原因按suggestions分页返回
+ */
+export type AgentWorkflowReviewIndex = {
+    /**
+     * 完整方案对象数
+     */
+    total: number;
+    /**
+     * 模型建议默认勾选集合，不包含待裁定或例外
+     */
+    suggestedIds: Array<string>;
+    /**
+     * 只有用户明确选择才可批准的冻结待裁定或例外候选
+     */
+    candidateIds: Array<string>;
+    /**
+     * 完整审批分组与分类原因计数
+     */
+    groups: Array<AgentWorkflowGroup>;
 };
 
 /**
@@ -9334,7 +9433,7 @@ export type VisualizationMonitorItem = {
 
 export type QueryRequest = {
     /**
-     * 仅地图显示使用的轻量几何（WGS84下1e-5度保拓扑简化、6位坐标）；属性及对象数量不变，不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
+     * 仅地图显示使用的轻量几何（WGS84下按响应压缩预算自适应保拓扑简化、5位坐标、移除连续重复点；最大简化容差0.001度）；不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
      */
     displayGeometry?: boolean;
     /**
@@ -20085,9 +20184,25 @@ export type GetAgentWorkflowData = {
     };
     query?: {
         /**
-         * full为完整详情（默认）；card为轻量卡片，鉴权和项目边界不变
+         * full为完整详情（默认）；card为轻量卡片，保留当前字段确认卡与沿用配置提示所需字段；compare为对比摘要及按需实际修改分页；inspection为审批摘要及按需建议或步骤分页，同样保留字段确认与沿用配置状态。全部沿用本人、项目及资源权限校验。
          */
-        view?: 'full' | 'card';
+        view?: 'full' | 'card' | 'compare' | 'inspection';
+        /**
+         * inspection分页内容；compare仅支持changes。省略时inspection取suggestions，compare取changes。
+         */
+        part?: 'suggestions' | 'steps' | 'changes';
+        /**
+         * compare或inspection定位指定审批对象，返回其所在页；compare摘要同时提供focusOffset用于深链接按需读取。不匹配时保持offset。
+         */
+        suggestionId?: string;
+        /**
+         * 分页起始位置；compare按要素、规则及动作分组连续排列。
+         */
+        offset?: number;
+        /**
+         * 最多返回对象数，0仅取摘要；compare默认0，inspection默认50。单对象完整原因只在该对象所在页返回。
+         */
+        limit?: number;
     };
     url: '/api/agent/workflows/{workflowId}/';
 };

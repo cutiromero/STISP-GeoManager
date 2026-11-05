@@ -107,6 +107,7 @@ export default function WorkflowResults({
   onEvidenceUpdate,
   compact = false,
   showMapLink = true,
+  detailsExpanded = true,
 }: {
   workflow: AgentWorkflow;
   busy?: boolean;
@@ -123,6 +124,7 @@ export default function WorkflowResults({
   onEvidenceUpdate?: () => void;
   compact?: boolean;
   showMapLink?: boolean;
+  detailsExpanded?: boolean;
 }) {
   const ui = useComputeText();
   const isActive = active.includes(workflow.status);
@@ -165,7 +167,7 @@ export default function WorkflowResults({
     .reverse()
     .find((step) => step.decision?.nextAction === "finish")?.decision;
   const report =
-    workflow.status === "succeeded" ? (
+    workflow.status === "succeeded" && workflow.view !== "card" ? (
       <WorkflowReportFile
         key={workflow.id}
         workflowId={workflow.id}
@@ -382,7 +384,7 @@ export default function WorkflowResults({
             {lastReview.action.feedback}
           </p>
         )}
-      {isMultiElement && (
+      {isMultiElement && workflow.view !== "card" && (
         <MultiElementStory
           key={workflow.id}
           workflow={workflow}
@@ -390,7 +392,7 @@ export default function WorkflowResults({
           onReview={onReview}
         />
       )}
-      {isGeologyReview && !isMultiElement && (
+      {isGeologyReview && !isMultiElement && workflow.view !== "card" && (
         <GeologyReviewStory
           key={workflow.id}
           workflow={workflow}
@@ -398,121 +400,131 @@ export default function WorkflowResults({
           onReview={onReview}
         />
       )}
-      {workflow.planHash &&
-        (compact || isGeologyReview ? (
+      <div hidden={!detailsExpanded} inert={!detailsExpanded}>
+        {workflow.planHash &&
+          (compact || isGeologyReview ? (
+            <Collapse
+              size="small"
+              className="agent-research-settings"
+              items={[
+                {
+                  key: "settings",
+                  label: ui("本次采用的资料与设置", "Data and settings used"),
+                  children: settingsSummary,
+                },
+              ]}
+            />
+          ) : (
+            settingsSummary
+          ))}
+        {workflow.steps.length > 0 && (
           <Collapse
-            size="small"
-            className="agent-research-settings"
+            ghost
+            className="agent-workflow-process"
+            activeKey={processExpanded ? ["process"] : []}
+            onChange={(keys) => setProcessExpanded(keys.includes("process"))}
             items={[
               {
-                key: "settings",
-                label: ui("本次采用的资料与设置", "Data and settings used"),
-                children: settingsSummary,
+                key: "process",
+                label: ui(
+                  `查看分析过程 / ${workflow.steps.length} 步`,
+                  `Analysis process / ${workflow.steps.length} steps`,
+                ),
+                children: (
+                  <>
+                    <WorkflowEvidenceUpdate
+                      previousAnalysis={workflow.plan.previousAnalysis}
+                      steps={workflow.steps}
+                    />
+                    <WorkflowDecisionTimeline
+                      key={workflow.id}
+                      steps={workflow.steps}
+                    />
+                  </>
+                ),
               },
             ]}
           />
-        ) : (
-          settingsSummary
-        ))}
-      {workflow.steps.length > 0 && (
-        <Collapse
-          ghost
-          className="agent-workflow-process"
-          activeKey={processExpanded ? ["process"] : []}
-          onChange={(keys) => setProcessExpanded(keys.includes("process"))}
-          items={[
-            {
-              key: "process",
-              label: ui(
-                `查看分析过程 / ${workflow.steps.length} 步`,
-                `Analysis process / ${workflow.steps.length} steps`,
-              ),
-              children: (
-                <>
-                  <WorkflowEvidenceUpdate
-                    previousAnalysis={workflow.plan.previousAnalysis}
-                    steps={workflow.steps}
-                  />
-                  <WorkflowDecisionTimeline
-                    key={workflow.id}
-                    steps={workflow.steps}
-                  />
-                </>
-              ),
-            },
-          ]}
-        />
-      )}
-      {isMultiElement && <RuleCards workflow={workflow} />}
-      {workflow.status === "succeeded" && finalDecision && (
-        <article
-          className="agent-workflow-conclusion"
-          aria-label={
-            isGeologyReview ? "检查结论" : ui("研究结论", "Research conclusion")
-          }
-        >
-          <h3>
-            {isGeologyReview
-              ? "检查结论"
-              : ui("研究结论", "Research conclusion")}
-          </h3>
-          <p className="agent-workflow-conclusion-main">
-            {emphasizeNumbers(finalDecision.judgement)}
-          </p>
-          {finalDecision.resultSummary &&
-            finalDecision.resultSummary !== finalDecision.judgement && (
-              <p>{emphasizeNumbers(finalDecision.resultSummary)}</p>
-            )}
-        </article>
-      )}
+        )}
+        {isMultiElement && <RuleCards workflow={workflow} />}
+        {workflow.status === "succeeded" && finalDecision && (
+          <article
+            className="agent-workflow-conclusion"
+            aria-label={
+              isGeologyReview
+                ? "检查结论"
+                : ui("研究结论", "Research conclusion")
+            }
+          >
+            <h3>
+              {isGeologyReview
+                ? "检查结论"
+                : ui("研究结论", "Research conclusion")}
+            </h3>
+            <p className="agent-workflow-conclusion-main">
+              {emphasizeNumbers(finalDecision.judgement)}
+            </p>
+            {finalDecision.resultSummary &&
+              finalDecision.resultSummary !== finalDecision.judgement && (
+                <p>{emphasizeNumbers(finalDecision.resultSummary)}</p>
+              )}
+          </article>
+        )}
+      </div>
       {workflow.workflowType === "ecology_investigation" &&
         workflow.status === "succeeded" &&
         onEvidenceUpdate && (
           <Button onClick={onEvidenceUpdate}>补充观测后更新判断</Button>
         )}
-      {workflow.steps.some((step) => step.computeTaskId) && (
-        <RunComputeTasks
-          compact
-          report={report}
-          primaryTaskIds={primaryTaskIds}
-          visibleOutputIds={
-            isMultiElement && Array.isArray(workflow.plan.stages)
-              ? workflow.plan.stages.flatMap((stage) => {
-                  const outputs = record(stage).outputs;
-                  return Array.isArray(outputs)
-                    ? outputs
-                        .filter(
-                          (output) =>
-                            !(
-                              usesCleanGeologyResults(workflow) &&
-                              record(stage).name === "apply" &&
-                              ["faults", "alterations"].includes(
-                                String(record(output).key),
-                              )
-                            ),
-                        )
-                        .map((output) => Number(record(output).outputId))
-                        .filter(Number.isSafeInteger)
-                    : [];
-                })
-              : undefined
-          }
-          taskIds={workflow.steps
-            .map((step) => step.computeTaskId)
-            .filter(Boolean)}
-          autoImport={workflow.importResults}
-          reviewing={
-            workflow.status === "waiting_approval" &&
-            Array.isArray(workflow.plan.reviewOutputs) &&
-            workflow.plan.reviewOutputs.length > 0
-          }
-          refreshKey={`${workflow.id}:${workflow.status}`}
-          taskDisplayNames={taskDisplayNames}
-        />
-      )}
-      {!workflow.steps.some((step) => step.computeTaskId) && report && (
-        <WorkflowDeliverables items={[]} report={report} onImport={() => {}} />
-      )}
+      <div hidden={!detailsExpanded} inert={!detailsExpanded}>
+        {workflow.steps.some((step) => step.computeTaskId) && (
+          <RunComputeTasks
+            compact
+            report={report}
+            primaryTaskIds={primaryTaskIds}
+            visibleOutputIds={
+              isMultiElement && Array.isArray(workflow.plan.stages)
+                ? workflow.plan.stages.flatMap((stage) => {
+                    const outputs = record(stage).outputs;
+                    return Array.isArray(outputs)
+                      ? outputs
+                          .filter(
+                            (output) =>
+                              !(
+                                usesCleanGeologyResults(workflow) &&
+                                record(stage).name === "apply" &&
+                                ["faults", "alterations"].includes(
+                                  String(record(output).key),
+                                )
+                              ),
+                          )
+                          .map((output) => Number(record(output).outputId))
+                          .filter(Number.isSafeInteger)
+                      : [];
+                  })
+                : undefined
+            }
+            taskIds={workflow.steps
+              .map((step) => step.computeTaskId)
+              .filter(Boolean)}
+            autoImport={workflow.importResults}
+            reviewing={
+              workflow.status === "waiting_approval" &&
+              Array.isArray(workflow.plan.reviewOutputs) &&
+              workflow.plan.reviewOutputs.length > 0
+            }
+            refreshKey={`${workflow.id}:${workflow.status}`}
+            taskDisplayNames={taskDisplayNames}
+          />
+        )}
+        {!workflow.steps.some((step) => step.computeTaskId) && report && (
+          <WorkflowDeliverables
+            items={[]}
+            report={report}
+            onImport={() => {}}
+          />
+        )}
+      </div>
       {needsReview && onReview ? (
         <section className="agent-workflow-review" aria-label="人工审核反馈">
           <strong>请审核候选结果</strong>

@@ -50,6 +50,55 @@ describe("durable workflow response boundaries", () => {
     expect(saved).toEqual(before);
   });
 
+  it.each(["card", "inspection", "compare"])(
+    "accepts %s projections and validates their card and paging fields",
+    (view) => {
+      const saved = {
+        ...workflow(),
+        view,
+        steps: [],
+        plan: {
+          reusedConfiguration: true,
+          fieldMappingReview: {
+            roles: [],
+            questions: [],
+            modelMode: "mock",
+            confirmed: false,
+          },
+          pagination: {
+            part: "suggestions",
+            offset: 0,
+            limit: 50,
+            total: 3,
+            groups: [],
+          },
+        },
+      };
+      expect(() => assertWorkflow(saved)).not.toThrow();
+      expect(() =>
+        assertWorkflow({
+          ...saved,
+          plan: { ...saved.plan, reusedConfiguration: "true" },
+        }),
+      ).toThrow(ResponseFormatError);
+      expect(() =>
+        assertWorkflow({
+          ...saved,
+          plan: {
+            ...saved.plan,
+            pagination: { ...saved.plan.pagination, limit: 51 },
+          },
+        }),
+      ).toThrow(ResponseFormatError);
+      expect(() =>
+        assertWorkflow({
+          ...saved,
+          plan: { ...saved.plan, fieldMappingReview: {} },
+        }),
+      ).toThrow(ResponseFormatError);
+    },
+  );
+
   it.each(["plan", "parameters"])("rejects missing object %s", (key) => {
     for (const bad of [undefined, null, []])
       expect(() => assertWorkflow({ ...workflow(), [key]: bad })).toThrow(

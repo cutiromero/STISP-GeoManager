@@ -318,6 +318,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   vi.restoreAllMocks();
+  vi.spyOn(agentApi, "computeTasks").mockResolvedValue({ items: [] });
   accessState.value = "confirmed";
   accessState.status = "ready";
   accessState.retry.mockReset();
@@ -1443,7 +1444,9 @@ it("restores the explicit pending task on open and retains its status after clos
   });
   expect(agentApi.workflow).toHaveBeenCalledWith("workflow-1", {
     signal: expect.any(AbortSignal),
+    view: "full",
   });
+  expect(agentApi.workflow).toHaveBeenCalledOnce();
   fireEvent.click(pending);
   fireEvent.click(await screen.findByRole("button", { name: "确认执行" }));
   await waitFor(() =>

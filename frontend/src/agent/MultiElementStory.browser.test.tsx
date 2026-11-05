@@ -94,7 +94,10 @@ it("建议默认收起，展开可核对实测、具体规则和例外，待裁�
     within(details).getByText("L-03 / 单元名称与代号一致性"),
   ).toBeVisible();
   expect(within(details).getByText("新单元需专家确认")).toBeVisible();
-  fireEvent.click(screen.getByText("选择全部可执行建议（待裁定和例外保留）"));
+  expect(screen.getByText(/已选择 1/)).toBeVisible();
+  expect(
+    screen.getByRole("checkbox", { name: "全部待裁定与例外按候选处置" }),
+  ).not.toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
   fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() =>
@@ -147,7 +150,7 @@ it("批准卡片说明未采用建议，不自动勾选保留的建议", () => {
     "模型另提出 2 项建议因权重超出范围未采用；其余建议仍需逐项人工确认。",
   );
   expect(
-    screen.getByRole("checkbox", { name: /选择全部可执行建议/ }),
+    screen.getByRole("checkbox", { name: /全部待裁定与例外按候选处置/ }),
   ).not.toBeChecked();
   expect(review).not.toHaveBeenCalled();
 });

@@ -16,6 +16,7 @@ import {
   displayComparisonLayers,
   upsertComparisonLayer,
 } from "./comparisonLayerGroups";
+import { colorReviewMap } from "./geologyReviewData";
 import type {
   ComparisonLayerPlacement,
   ComparisonRole,
@@ -34,6 +35,59 @@ const collection = (features: Feature[]): GeoJsonFeatureCollection => ({
   features,
 });
 const empty = collection([]);
+
+it("蚀变分类在对比页和普通工作台沿用同一资源符号化与图例名称", () => {
+  const data = collection(
+    ["赤铁矿化", "绿泥石化"].map((alt, index) => ({
+      ...beforeReviewMap.features[0]!,
+      id: `mineral-${index}`,
+      properties: { alt },
+    })),
+  );
+  const resource = profile(601, "有效蚀变", data);
+  resource.defaultVisualization = {
+    symbolization: {
+      renderer: {
+        type: "uniqueValue",
+        field: "alt",
+        classes: [
+          { id: "red", value: "赤铁矿化", label: "赤铁矿化", color: "#c84545" },
+          {
+            id: "green",
+            value: "绿泥石化",
+            label: "绿泥石化",
+            color: "#35824b",
+          },
+        ],
+        defaultClass: { label: "其他", color: "#64748b" },
+      },
+    },
+  };
+  const response = query(resource, data);
+  const normal = createVectorLayerGroup(resource.resource, resource, response, {
+    attributeFilters: [],
+    spatialFilter: null,
+  }).children[0] as LoadedVectorLayer;
+  const comparison = upsertComparisonLayer(
+    [],
+    resource,
+    response,
+    placement(["after"], "矿物"),
+  );
+  const compared = vector(comparison, 601);
+  expect(compared.symbolization.renderer).toEqual(
+    normal.symbolization.renderer,
+  );
+  colorReviewMap(data, resource.defaultVisualization);
+  expect(data.features.map((item) => item.properties.fill_color)).toEqual([
+    "#c84545",
+    "#35824b",
+  ]);
+  expect(data.features.map((item) => item.properties.legend_label)).toEqual([
+    "赤铁矿化",
+    "绿泥石化",
+  ]);
+});
 function profile(
   id: number,
   name = `目录资源-${id}`,

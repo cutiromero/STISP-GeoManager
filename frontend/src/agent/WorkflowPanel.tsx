@@ -34,6 +34,7 @@ import DemoWorkflowForm, {
   demoInputsReady,
   type DemoWorkflowType,
 } from "./DemoWorkflowForm";
+import WorkflowCard from "./WorkflowCard";
 import WorkflowResults from "./WorkflowResults";
 import { allWorkflowPages, workflowGeologyVersions } from "./workflowCatalog";
 import {
@@ -240,6 +241,10 @@ export default function WorkflowPanel({
     workflowType === "geology_map_review" ||
     workflowType === multiElementType;
   const generic = workflowType === genericGeologyType;
+  const WorkflowPresentation =
+    generic || workflowType === multiElementType
+      ? WorkflowCard
+      : WorkflowResults;
   const fieldMappingReview =
     workflow?.status === "waiting_approval" &&
     workflow.plan.phase === "review_mapping"
@@ -579,7 +584,11 @@ export default function WorkflowPanel({
     const requestedScope = sceneScope;
     setDetailLoading(true);
     void agentApi
-      .workflow(requestedId, { signal: controller.signal })
+      .workflow(requestedId, {
+        signal: controller.signal,
+        view:
+          generic || workflowType === multiElementType ? "inspection" : "full",
+      })
       .then((next) => {
         if (disposed || currentScope.current !== requestedScope) return;
         if (
@@ -632,6 +641,10 @@ export default function WorkflowPanel({
       try {
         const next = await agentApi.workflow(workflow.id, {
           signal: controller.signal,
+          view:
+            generic || workflowType === multiElementType
+              ? "inspection"
+              : "full",
         });
         if (disposed) return;
         setWorkflow(next);
@@ -1232,7 +1245,7 @@ export default function WorkflowPanel({
             />
           )}
           {workflow && (
-            <WorkflowResults
+            <WorkflowPresentation
               workflow={workflow}
               busy={busy}
               onConfirm={

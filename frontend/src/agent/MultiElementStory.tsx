@@ -189,9 +189,28 @@ export default function MultiElementStory({
   ) => void;
 }) {
   const review = workflow.modificationReview;
+  const reviewIndex = record(workflow.plan.reviewIndex);
+  const indexGroups = Array.isArray(reviewIndex.groups)
+    ? reviewIndex.groups.map(record)
+    : [];
+  const suggestedIds = Array.isArray(reviewIndex.suggestedIds)
+    ? reviewIndex.suggestedIds.map(String)
+    : (review?.suggestions ?? [])
+        .filter(
+          (item) => item.status === "suggested" && selectableModification(item),
+        )
+        .map((item) => item.id);
+  const candidateIds = Array.isArray(reviewIndex.candidateIds)
+    ? reviewIndex.candidateIds.map(String)
+    : (review?.suggestions ?? [])
+        .filter((item) => item.candidateAction)
+        .map((item) => item.id);
+  const initialIds = review?.approvedSuggestionIds.length
+    ? review.approvedSuggestionIds
+    : suggestedIds;
   const [selection, setSelection] = useState<{ hash: string; ids: string[] }>({
     hash: review?.proposalHash ?? "",
-    ids: review?.approvedSuggestionIds ?? [],
+    ids: initialIds,
   });
   const [filter, setFilter] = useState("all");
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
@@ -199,14 +218,11 @@ export default function MultiElementStory({
   const [groupSearch, setGroupSearch] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState("");
   const suggestions = review?.suggestions ?? [];
-  const suggestionIds = new Set(suggestions.map((item) => item.id));
   const ids =
-    selection.hash === review?.proposalHash
-      ? selection.ids.filter((id) => suggestionIds.has(id))
-      : (review?.approvedSuggestionIds ?? []).filter((id) =>
-          suggestionIds.has(id),
-        );
+    selection.hash === review?.proposalHash ? selection.ids : initialIds;
   const selectedIds = new Set(ids);
+  const modelIds = new Set(suggestedIds);
+  const userIds = new Set(candidateIds);
   const approved = review?.approvedSuggestionIds ?? [];
   const editable =
     workflow.status === "waiting_approval" &&
@@ -217,7 +233,7 @@ export default function MultiElementStory({
     (item) => filter === "all" || item.element === filter,
   );
   const selectableIds = new Set(selectable.map((item) => item.id));
-  const held = suggestions.filter((item) => item.candidateAction);
+  const held = suggestions.filter((item) => !selectableModification(item));
   const update = (values: string[]) =>
     setSelection({ hash: review?.proposalHash ?? "", ids: values });
   const groups = presentationGroups(visible);
@@ -229,7 +245,40 @@ export default function MultiElementStory({
     Array.isArray(workflow.plan.stages) ? workflow.plan.stages : []
   ).map(record);
   const algorithms = record(workflow.plan.algorithms);
-  const retainedGroups = heldModificationGroups(suggestions, stages, filter);
+  const retainedGroups = indexGroups.length
+    ? indexGroups
+        .filter(
+          (group) =>
+            group.held && (filter === "all" || group.element === filter),
+        )
+        .map((group) => ({
+          element: String(group.element),
+          ruleId: String(group.ruleId),
+          count: Number(group.count),
+          reasons: new Set<string>(),
+          reasonCounts: record(group.reasons),
+          candidateIds: Array.isArray(group.ids) ? group.ids.map(String) : [],
+        }))
+    : heldModificationGroups(suggestions, stages, filter).map((group) => {
+        const members = suggestions.filter(
+          (item) =>
+            item.element === group.element &&
+            item.ruleId === group.ruleId &&
+            !selectableModification(item),
+        );
+        const reasonCounts: Record<string, number> = {};
+        for (const item of members) {
+          const tier = suggestionTier(item);
+          reasonCounts[tier] = (reasonCounts[tier] ?? 0) + 1;
+        }
+        return {
+          ...group,
+          reasonCounts,
+          candidateIds: members
+            .filter((item) => item.candidateAction)
+            .map((item) => item.id),
+        };
+      });
   const editValidation = record(
     stages.find((stage) => stage.name === "apply")?.editValidation,
   );
@@ -349,28 +398,23 @@ export default function MultiElementStory({
           {editable && (
             <Checkbox
               checked={
-                selectable.length > 0 &&
-                selectable.every((item) => selectedIds.has(item.id))
+                candidateIds.length > 0 &&
+                candidateIds.every((id) => selectedIds.has(id))
               }
               indeterminate={
-                selectable.some((item) => selectedIds.has(item.id)) &&
-                !selectable.every((item) => selectedIds.has(item.id))
+                candidateIds.some((id) => selectedIds.has(id)) &&
+                !candidateIds.every((id) => selectedIds.has(id))
               }
               disabled={busy}
               onChange={(event) =>
                 update(
                   event.target.checked
-                    ? [
-                        ...new Set([
-                          ...ids,
-                          ...selectable.map((item) => item.id),
-                        ]),
-                      ]
-                    : ids.filter((id) => !selectableIds.has(id)),
+                    ? [...new Set([...ids, ...candidateIds])]
+                    : ids.filter((id) => !candidateIds.includes(id)),
                 )
               }
             >
-              选择全部可执行建议（待裁定和例外保留）
+              全部待裁定与例外按候选处置
             </Checkbox>
           )}
           <div className="multi-element-suggestion-list">
@@ -379,10 +423,21 @@ export default function MultiElementStory({
               const eligible = members.filter((item) =>
                 selectableIds.has(item.id),
               );
-              const chosen = eligible.filter((item) =>
-                selectedIds.has(item.id),
+              const indexed = indexGroups.find(
+                (group) =>
+                  !group.held &&
+                  group.element === first.element &&
+                  group.ruleId === first.ruleId &&
+                  group.action === first.action,
               );
-              const eligibleIds = new Set(eligible.map((item) => item.id));
+              const eligibleIds = new Set(
+                indexed && Array.isArray(indexed.ids)
+                  ? indexed.ids.map(String)
+                  : eligible.map((item) => item.id),
+              );
+              const chosenCount = [...eligibleIds].filter((id) =>
+                selectedIds.has(id),
+              ).length;
               const matches = members.filter((item) =>
                 item.featureId
                   .toLowerCase()
@@ -394,24 +449,19 @@ export default function MultiElementStory({
                   {editable && eligible.length > 0 && (
                     <Checkbox
                       disabled={busy}
-                      checked={chosen.length === eligible.length}
+                      checked={chosenCount === eligibleIds.size}
                       indeterminate={
-                        chosen.length > 0 && chosen.length < eligible.length
+                        chosenCount > 0 && chosenCount < eligibleIds.size
                       }
                       onChange={(event) =>
                         update(
                           event.target.checked
-                            ? [
-                                ...new Set([
-                                  ...ids,
-                                  ...eligible.map((item) => item.id),
-                                ]),
-                              ]
+                            ? [...new Set([...ids, ...eligibleIds])]
                             : ids.filter((id) => !eligibleIds.has(id)),
                         )
                       }
                     >
-                      整组批准（{eligible.length} 个对象）
+                      整组批准（{eligibleIds.size} 个对象）
                     </Checkbox>
                   )}
                   <details
@@ -433,7 +483,7 @@ export default function MultiElementStory({
                             ...first,
                             suggestedState: first.action ?? "",
                           })}{" "}
-                      · {members.length} 个对象
+                      · {Number(indexed?.count ?? members.length)} 个对象
                     </summary>
                     <p>{first.reason}</p>
                     <p>
@@ -563,6 +613,54 @@ export default function MultiElementStory({
                 </div>
               );
             })}
+            {indexGroups
+              .filter(
+                (group) =>
+                  !group.held &&
+                  !visible.some(
+                    (item) =>
+                      item.element === group.element &&
+                      item.ruleId === group.ruleId &&
+                      item.action === group.action,
+                  ),
+              )
+              .map((group) => {
+                const groupIds = Array.isArray(group.ids)
+                  ? group.ids.map(String)
+                  : [];
+                return (
+                  <div
+                    key={JSON.stringify([
+                      group.element,
+                      group.ruleId,
+                      group.action,
+                    ])}
+                  >
+                    <p>
+                      {elements[String(group.element)]} / {String(group.ruleId)}{" "}
+                      / {String(group.action)} · {Number(group.count)} 个对象
+                    </p>
+                    <Checkbox
+                      disabled={!editable || busy}
+                      checked={groupIds.every((id) => selectedIds.has(id))}
+                      indeterminate={
+                        groupIds.some((id) => selectedIds.has(id)) &&
+                        !groupIds.every((id) => selectedIds.has(id))
+                      }
+                      onChange={(event) =>
+                        update(
+                          event.target.checked
+                            ? [...new Set([...ids, ...groupIds])]
+                            : ids.filter((id) => !groupIds.includes(id)),
+                        )
+                      }
+                    >
+                      整组批准（{groupIds.length} 个对象）
+                    </Checkbox>
+                    <p>对象原因按页读取，可在卡片末尾读取更多审批对象。</p>
+                  </div>
+                );
+              })}
             {retainedGroups.length > 0 && (
               <details className="multi-element-held-groups">
                 <summary>
@@ -579,7 +677,7 @@ export default function MultiElementStory({
                       item.element === group.element &&
                       item.ruleId === group.ruleId,
                   );
-                  const candidateIds = new Set(members.map((item) => item.id));
+                  const candidateIds = new Set(group.candidateIds);
                   const groupKey = JSON.stringify([
                     group.element,
                     group.ruleId,
@@ -591,117 +689,132 @@ export default function MultiElementStory({
                     <details
                       key={groupKey}
                       open={expandedGroups.includes(groupKey)}
-                      onToggle={(event) => {
-                        const open = event.currentTarget.open;
-                        setExpandedGroups((current) =>
-                          open
-                            ? [...new Set([...current, groupKey])]
-                            : current.filter((key) => key !== groupKey),
-                        );
-                      }}
                     >
-                      <summary>
+                      <summary
+                        onClick={(event) => {
+                          event.preventDefault();
+                          setExpandedGroups((current) =>
+                            current.includes(groupKey)
+                              ? current.filter((key) => key !== groupKey)
+                              : [...current, groupKey],
+                          );
+                        }}
+                      >
                         {elements[group.element] ?? "检查"} / {group.ruleId} ·{" "}
                         {group.count} 个对象
                       </summary>
-                      <p>{[...group.reasons].join("；")}</p>
                       <p>
-                        默认保留，不纳入可执行建议全选。候选仅供用户裁定，规则状态及例外原因不变。
+                        {group.ruleId} 规则共 {group.count}{" "}
+                        个对象，因规则判定需人工裁定或符合例外条件，默认保留。
                       </p>
-                      {members.length > 0 &&
-                        expandedGroups.includes(groupKey) && (
-                          <>
-                            <Select
-                              style={{ width: "100%" }}
-                              aria-label={`${group.ruleId}组待裁定处置`}
-                              value={
-                                members.every((item) =>
-                                  selectedIds.has(item.id),
-                                )
-                                  ? "candidate"
-                                  : members.some((item) =>
-                                        selectedIds.has(item.id),
-                                      )
-                                    ? "mixed"
-                                    : "keep"
-                              }
-                              disabled={!editable || busy}
-                              options={[
-                                { value: "keep", label: "保留本组" },
-                                {
-                                  value: "candidate",
-                                  label: `按本组候选处置：${candidateLabel}`,
-                                },
-                                {
-                                  value: "mixed",
-                                  label: "逐对象选择",
-                                  disabled: true,
-                                },
-                              ]}
-                              onChange={(value) =>
-                                update(
-                                  value === "candidate"
-                                    ? [...new Set([...ids, ...candidateIds])]
-                                    : ids.filter((id) => !candidateIds.has(id)),
-                                )
-                              }
-                            />
-                            {members
-                              .slice(0, groupPages[groupKey] ?? 50)
-                              .map((item) => (
-                                <details key={item.id}>
-                                  <summary>
-                                    {item.featureId} / {suggestionTier(item)} /{" "}
-                                    {modificationAction(item)}
-                                  </summary>
-                                  <Select
-                                    style={{ width: "100%" }}
-                                    aria-label={`${item.featureId}待裁定处置`}
-                                    value={
-                                      selectedIds.has(item.id)
-                                        ? "candidate"
-                                        : "keep"
-                                    }
-                                    disabled={!editable || busy}
-                                    options={[
-                                      { value: "keep", label: "保留" },
-                                      {
-                                        value: "candidate",
-                                        label: `按候选处置：${modificationAction(item)}`,
-                                      },
-                                    ]}
-                                    onChange={(value) =>
-                                      update(
-                                        value === "candidate"
-                                          ? [...new Set([...ids, item.id])]
-                                          : ids.filter((id) => id !== item.id),
-                                      )
-                                    }
-                                  />
-                                  <MultiElementEvidence suggestion={item} />
-                                  <Link
-                                    target="_blank"
-                                    rel="noopener"
-                                    to={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}&suggestion=${encodeURIComponent(item.id)}`}
-                                  >
-                                    在地图上定位此对象
-                                  </Link>
-                                </details>
-                              ))}
-                            {members.length > (groupPages[groupKey] ?? 50) && (
-                              <Button
-                                onClick={() =>
-                                  setGroupPages((current) => ({
-                                    ...current,
-                                    [groupKey]: (current[groupKey] ?? 50) + 50,
-                                  }))
-                                }
-                              >
-                                查看更多待裁定对象
-                              </Button>
-                            )}
-                          </>
+                      <ul>
+                        {Object.entries(group.reasonCounts).map(
+                          ([reason, count]) => (
+                            <li key={reason}>
+                              {reason}：{String(count)} 处
+                            </li>
+                          ),
                         )}
+                      </ul>
+                      <p>
+                        默认保留；仅您明确选择后按冻结候选处置，规则状态及例外原因不变。
+                      </p>
+                      {expandedGroups.includes(groupKey) && (
+                        <>
+                          <Select
+                            style={{ width: "100%" }}
+                            aria-label={`${group.ruleId}组待裁定处置`}
+                            value={
+                              [...candidateIds].every((id) =>
+                                selectedIds.has(id),
+                              )
+                                ? "candidate"
+                                : [...candidateIds].some((id) =>
+                                      selectedIds.has(id),
+                                    )
+                                  ? "mixed"
+                                  : "keep"
+                            }
+                            disabled={!editable || busy || !candidateIds.size}
+                            options={[
+                              { value: "keep", label: "保留本组" },
+                              {
+                                value: "candidate",
+                                label: `按本组候选处置：${candidateLabel}`,
+                              },
+                              {
+                                value: "mixed",
+                                label: "逐对象选择",
+                                disabled: true,
+                              },
+                            ]}
+                            onChange={(value) =>
+                              update(
+                                value === "candidate"
+                                  ? [...new Set([...ids, ...candidateIds])]
+                                  : ids.filter((id) => !candidateIds.has(id)),
+                              )
+                            }
+                          />
+                          {members
+                            .slice(0, groupPages[groupKey] ?? 50)
+                            .map((item) => (
+                              <details key={item.id}>
+                                <summary>
+                                  {item.featureId} / {suggestionTier(item)} /{" "}
+                                  {modificationAction(item)}
+                                </summary>
+                                <Select
+                                  style={{ width: "100%" }}
+                                  aria-label={`${item.featureId}待裁定处置`}
+                                  value={
+                                    selectedIds.has(item.id)
+                                      ? "candidate"
+                                      : "keep"
+                                  }
+                                  disabled={
+                                    !editable || busy || !item.candidateAction
+                                  }
+                                  options={[
+                                    { value: "keep", label: "保留" },
+                                    {
+                                      value: "candidate",
+                                      label: `按候选处置：${modificationAction(item)}`,
+                                    },
+                                  ]}
+                                  onChange={(value) =>
+                                    update(
+                                      value === "candidate"
+                                        ? [...new Set([...ids, item.id])]
+                                        : ids.filter((id) => id !== item.id),
+                                    )
+                                  }
+                                />
+                                <MultiElementEvidence suggestion={item} />
+                                <p>{item.reason}</p>
+                                <Link
+                                  target="_blank"
+                                  rel="noopener"
+                                  to={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}&suggestion=${encodeURIComponent(item.id)}`}
+                                >
+                                  在地图上定位此对象
+                                </Link>
+                              </details>
+                            ))}
+                          {members.length > (groupPages[groupKey] ?? 50) && (
+                            <Button
+                              onClick={() =>
+                                setGroupPages((current) => ({
+                                  ...current,
+                                  [groupKey]: (current[groupKey] ?? 50) + 50,
+                                }))
+                              }
+                            >
+                              查看更多待裁定对象
+                            </Button>
+                          )}
+                        </>
+                      )}
                     </details>
                   );
                 })}
@@ -726,7 +839,7 @@ export default function MultiElementStory({
               <div className="geology-review-buttons">
                 <Popconfirm
                   title={`批准选中的 ${ids.length} 项操作？`}
-                  description="仅执行当前方案所选对象与动作，保存新成果版本。"
+                  description={`模型建议 ${ids.filter((id) => modelIds.has(id)).length} 项、用户裁定 ${ids.filter((id) => userIds.has(id)).length} 项。仅执行当前方案所选对象与冻结动作，保存新成果版本。`}
                   okText="批准并继续"
                   cancelText="返回核对"
                   onConfirm={() => onReview?.("approve", feedback.trim(), ids)}

@@ -26,6 +26,8 @@ type Props = Omit<ComponentProps<typeof GeologyReviewMaps>, "accessToken">;
 const emptyOverlays: NonNullable<Props["overlays"]> = [];
 
 function featureColor(feature: Feature, fallback: string) {
+  if (typeof feature.properties.fill_color === "string")
+    return feature.properties.fill_color;
   const { grade, state, status } = feature.properties;
   if (grade === "A") return "#db9a35";
   if (grade === "B") return "#537fc0";
@@ -429,12 +431,35 @@ export default function LocalGeologyReviewMaps({
         })}
       </div>
       <div className="geology-review-map-legend" aria-label="统一地质类别配色">
-        {overlays.map((overlay) => (
-          <span key={overlay.key}>
-            <i style={{ background: overlay.color }} />
-            {overlay.label}
-          </span>
-        ))}
+        {overlays.flatMap((overlay) => {
+          const classes = new Map<string, string>();
+          for (const feature of [
+            ...(overlay.before?.features ?? []),
+            ...(overlay.after?.features ?? []),
+          ]) {
+            if (
+              typeof feature.properties.legend_label === "string" &&
+              typeof feature.properties.fill_color === "string"
+            )
+              classes.set(
+                feature.properties.legend_label,
+                feature.properties.fill_color,
+              );
+          }
+          return classes.size
+            ? [...classes].map(([label, color]) => (
+                <span key={`${overlay.key}:${label}`}>
+                  <i style={{ background: color }} />
+                  {overlay.label} / {label}
+                </span>
+              ))
+            : [
+                <span key={overlay.key}>
+                  <i style={{ background: overlay.color }} />
+                  {overlay.label}
+                </span>,
+              ];
+        })}
         {overlays.some((overlay) => overlay.key === "intersections") && (
           <span>● 几何交汇 / ○ 推测交汇</span>
         )}

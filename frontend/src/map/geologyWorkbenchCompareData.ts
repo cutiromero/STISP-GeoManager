@@ -14,6 +14,7 @@ import {
   reviewResourceIds,
   record,
   colorReviewMap,
+  reviewBounds,
 } from "./geologyReviewData";
 import {
   actualTourChanges,
@@ -66,6 +67,15 @@ export interface WorkbenchReviewComparison {
   overlays?: ReviewOverlay[];
   tour?: TourChange[];
   loadOverlays?: (key?: string) => Promise<ReviewOverlay[]>;
+  pagination?: AgentWorkflow["plan"]["pagination"];
+  loadChanges?: (
+    offset: number,
+  ) => Promise<
+    Pick<
+      WorkbenchReviewComparison,
+      "workflow" | "tour" | "differences" | "pagination"
+    >
+  >;
 }
 
 export type RegisterReviewLayer = (
@@ -82,6 +92,7 @@ export async function loadWorkbenchReviewComparison(options: {
   isCurrent?: () => boolean;
   onPrimary?: (value: WorkbenchReviewComparison) => void;
   deferOverlays?: boolean;
+  suggestionId?: string;
 }): Promise<WorkbenchReviewComparison> {
   const signal = projectSignal();
   const assertCurrent = () => {
@@ -95,7 +106,11 @@ export async function loadWorkbenchReviewComparison(options: {
   assertCurrent();
   if (options.projectTagId && options.projectTagId !== options.projectId)
     throw new Error("请切换到检查任务所属项目后查看");
-  const workflow = await agentApi.workflow(options.workflowId);
+  const workflow = await agentApi.workflow(options.workflowId, {
+    view: "compare",
+    signal,
+    suggestionId: options.suggestionId,
+  });
   assertCurrent();
   if (
     !(
@@ -229,39 +244,69 @@ export async function loadWorkbenchReviewComparison(options: {
     ]);
     const collection = async (id?: number) =>
       id ? (await read(id, true, true)).result.geojson : featureCollection([]);
-    const mergedChanges = map.changes?.length
-      ? featureCollection(
-          (await Promise.all((map.changes ?? []).map(collection))).flatMap(
-            (item) => item.features,
-          ),
-        )
-      : await queryWorkflowVectors(workflow, "apply", [
-          "changes_lithology_issues",
-          "changes_fault_issues",
-          "changes_alteration_issues",
-        ]);
-    const tour = actualTourChanges(workflow, mergedChanges);
-    const differences =
-      map.changes !== undefined
-        ? featureCollection(tour.map((item) => item.feature))
-        : previewSuggestions(workflow);
-    for (const [id, placement] of roles) {
-      if (!placement.roles.includes("changes")) continue;
-      const result = (await read(id, true, true)).result;
-      const keys = new Set(
-        result.geojson.features
-          .map(comparisonFeatureKey)
-          .filter((key) => key !== null),
-      );
-      const displayData = placement.roles.includes("changes")
-        ? featureCollection(
-            differences.features.filter((feature) =>
-              keys.has(comparisonFeatureKey(feature) ?? ""),
+    const loadChanges = async (offset: number) => {
+      const page = await agentApi.workflow(options.workflowId, {
+        view: "compare",
+        offset,
+        limit: 25,
+        signal,
+        suggestionId:
+          Number(record(workflow.plan.pagination).total) === 0
+            ? options.suggestionId
+            : undefined,
+      });
+      assertCurrent();
+      if (page.planHash !== workflow.planHash)
+        throw new Error("成果已更新，请刷新对比页");
+      const features = page.plan.compareFeatures as
+        | GeoJsonFeatureCollection
+        | undefined;
+      const tour = actualTourChanges(page, features ?? featureCollection([]));
+      const differences = featureCollection(tour.map((item) => item.feature));
+      await Promise.all(
+        (map.changes ?? []).map(async (id) => {
+          const profile = await requestJson<ResourceProfileResponse>(
+            `/api/catalog/resources/${id}/profile/`,
+          );
+          assertCurrent();
+          const geojson = featureCollection(
+            differences.features.filter(
+              (feature) => feature.properties.display_resource_id === id,
             ),
-          )
-        : undefined;
-      await register(id, placement.roles, placement.element, displayData);
-    }
+          );
+          await options.registerLayer(
+            profile,
+            {
+              resourceId: id,
+              resourceName: profile.resource.name,
+              geojson,
+              fields: profile.fields,
+              totalCount: geojson.features.length,
+              returnedCount: geojson.features.length,
+              limit: 25,
+              limitExceeded: false,
+              elapsedMs: 0,
+              warnings: [],
+              bounds: reviewBounds(geojson) ?? [],
+            },
+            {
+              workflowId: workflow.id,
+              title: "地质推理成果",
+              roles: ["changes"],
+              element: "修改范围",
+              displayData: geojson,
+            },
+          );
+        }),
+      );
+      return {
+        workflow: page,
+        tour,
+        differences,
+        pagination: page.plan
+          .pagination as WorkbenchReviewComparison["pagination"],
+      };
+    };
     const before = await read(map.before.lithology, true),
       after = map.after?.lithology
         ? await read(map.after.lithology, true)
@@ -359,12 +404,14 @@ export async function loadWorkbenchReviewComparison(options: {
       workflow,
       before: before.result.geojson,
       after: after?.result.geojson ?? null,
-      differences,
+      differences: featureCollection([]),
       beforeName: before.profile.resource.name,
       afterName: after?.profile.resource.name ?? "检查方案，尚未执行",
       overlays: options.deferOverlays ? undefined : await cachedOverlays(),
       loadOverlays: cachedOverlays,
-      tour,
+      pagination: workflow.plan
+        .pagination as WorkbenchReviewComparison["pagination"],
+      loadChanges,
     };
   }
   const ids = reviewResourceIds(workflow);

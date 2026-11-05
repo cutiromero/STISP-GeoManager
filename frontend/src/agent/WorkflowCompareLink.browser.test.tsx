@@ -45,9 +45,8 @@ it("keeps exactly one comparison link through expand, collapse and reopen withou
     check();
     const nested = container.querySelector(".agent-workflow-status")!;
     fireEvent.click(screen.getByRole("button", { name: "收起明细" }));
-    expect(nested).not.toBeVisible();
-    expect(nested.parentElement).toHaveAttribute("hidden");
-    expect(nested.parentElement).toHaveAttribute("inert");
+    expect(nested).toBeVisible();
+    expect(nested.querySelector("[hidden][inert]")).not.toBeNull();
     check();
     fireEvent.click(
       screen.getByRole("button", { name: /查看过程、证据与模型交互/ }),

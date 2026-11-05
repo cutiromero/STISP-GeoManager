@@ -25,6 +25,8 @@ export function reviewOverlayColor(fallback: string): ExpressionSpecification {
   ];
   return [
     "case",
+    ["has", "fill_color"],
+    ["get", "fill_color"],
     ["==", ["get", "grade"], "A"],
     "#db9a35",
     ["==", ["get", "grade"], "B"],

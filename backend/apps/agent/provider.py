@@ -10,9 +10,9 @@ class ModelError(Exception):
     pass
 
 
-def model_request(model, path, body=None):
+def model_request(model, path, body=None, *, timeout=20):
     url = urlsplit(model.base_url)
-    conn = http.client.HTTPConnection(url.hostname, url.port, timeout=20)
+    conn = http.client.HTTPConnection(url.hostname, url.port, timeout=timeout)
     try:
         conn.request(
             "POST" if body is not None else "GET",

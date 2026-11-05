@@ -4,6 +4,87 @@ import type {
   QueryResponse,
 } from "../api/generated/types.gen";
 
+export function comparisonProjection(
+  workflow: AgentWorkflow,
+  url: string,
+): AgentWorkflow {
+  if (
+    !["geology_generic", "geology_multi_element_reasoning"].includes(
+      workflow.workflowType,
+    )
+  )
+    return structuredClone(workflow);
+  const query = new URL(url, "http://localhost").searchParams;
+  const limit = Number(query.get("limit") ?? 0);
+  const offset = Number(query.get("offset") ?? 0);
+  const projected = structuredClone(workflow);
+  projected.view = "compare";
+  const stages = (workflow.plan.stages ?? []) as Array<Record<string, unknown>>;
+  const apply = stages.find((stage) => stage.name === "apply");
+  const result = (
+    apply?.results as Array<Record<string, unknown>> | undefined
+  )?.find((item) => item.key === "changes");
+  const rows = (result?.rows ?? []) as Array<Record<string, unknown>>;
+  const suggestions = (workflow.modificationReview?.suggestions ?? []).filter(
+    (item) =>
+      workflow.modificationReview?.approvedSuggestionIds.includes(item.id) &&
+      rows.some(
+        (row) =>
+          String(row.feature_id) === item.featureId &&
+          row.rule_id === item.ruleId &&
+          row.action === item.action &&
+          /true|1/i.test(String(row.actual_changed)),
+      ),
+  );
+  const page = suggestions.slice(offset, offset + limit);
+  const outputs = (apply?.outputs ?? []) as Array<Record<string, unknown>>;
+  projected.plan.compareFeatures = {
+    type: "FeatureCollection",
+    features: page.map((item) => ({
+      type: "Feature",
+      id: item.id,
+      geometry: item.preview,
+      properties: {
+        ...rows.find(
+          (row) =>
+            String(row.feature_id) === item.featureId &&
+            row.rule_id === item.ruleId &&
+            row.action === item.action,
+        ),
+        display_resource_id: outputs.find(
+          (output) =>
+            output.key ===
+            (
+              {
+                lithology: "changes_lithology_issues",
+                structure: "changes_fault_issues",
+                alteration: "changes_alteration_issues",
+              } as Record<string, string>
+            )[item.element ?? ""],
+        )?.resourceId,
+      },
+    })),
+  };
+  projected.plan.pagination = {
+    part: "changes",
+    total: suggestions.length,
+    offset,
+    limit,
+    focusOffset: 0,
+    groups: suggestions.map((item, index) => ({
+      key: item.id,
+      element: item.element ?? null,
+      ruleId: item.ruleId,
+      action: item.action ?? null,
+      offset: index,
+      count: 1,
+    })),
+  };
+  if (projected.modificationReview)
+    projected.modificationReview.suggestions = page;
+  return projected;
+}
+
 const exterior = [
   [98.4, 35.6],
   [98.43, 35.6],

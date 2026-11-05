@@ -17,8 +17,8 @@ vi.mock("../api/agent", () => ({
   agentApi: { workflow: vi.fn(), poll: vi.fn() },
 }));
 vi.mock("./WorkflowResults", () => ({
-  default: () => (
-    <div>
+  default: ({ detailsExpanded }: { detailsExpanded: boolean }) => (
+    <div hidden={!detailsExpanded} inert={!detailsExpanded}>
       <span>完整步骤与模型交互</span>
       <details>
         <summary>测试证据</summary>证据内容
@@ -105,7 +105,7 @@ it("完成卡片不预取过程、计算或报告，展开才请求完整详情"
     </MemoryRouter>,
   );
   expect(agentApi.workflow).not.toHaveBeenCalled();
-  expect(screen.queryByText("完整步骤与模型交互")).toBeNull();
+  expect(screen.getByText("完整步骤与模型交互")).not.toBeVisible();
   fireEvent.click(
     screen.getByRole("button", { name: /查看过程、证据与模型交互/ }),
   );
@@ -114,6 +114,8 @@ it("完成卡片不预取过程、计算或报告，展开才请求完整详情"
   );
   expect(agentApi.workflow).toHaveBeenCalledExactlyOnceWith(detail.id, {
     signal: expect.any(AbortSignal),
+    view: "inspection",
+    part: "steps",
   });
   fireEvent.click(screen.getByRole("button", { name: "收起明细" }));
   expect(screen.getByText("完整步骤与模型交互")).not.toBeVisible();

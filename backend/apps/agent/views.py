@@ -569,7 +569,9 @@ def submit_value(request, c, value, *, available_models=None):
                 else {}
             ),
         )
-        if c.title == "新会话":
+        from .conversation_titles import update_logic_title
+
+        if not update_logic_title(r) and c.title == "新会话":
             c.title = prompt.strip()[:60]
             c.save(update_fields=["title", "updated_at"])
     log_operation(
@@ -867,6 +869,11 @@ def workflow_json(workflow, include_steps=True, view="full"):
             "phase": workflow.plan.get("phase"),
             "stageIndex": workflow.plan.get("stageIndex"),
             "deletedResources": workflow.plan.get("deletedResources", []),
+            **{
+                key: workflow.plan[key]
+                for key in ("fieldMappingReview", "reusedConfiguration")
+                if key in workflow.plan
+            },
             "stages": [
                 {
                     key: stage[key]
@@ -1345,13 +1352,28 @@ def workflow_detail(request, workflow_id):
     from .workflow import authorize_workflow_history
 
     view = request.GET.get("view", "full")
-    if view not in {"full", "card"}:
+    if view not in {"full", "card", "compare", "inspection"}:
         raise ApiProblem("工作流详情视图无效")
     workflow = get_object_or_404(
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
     )
     authorize_workflow_history(workflow)
-    response = JsonResponse(workflow_json(workflow, view=view))
+    if view in {"compare", "inspection"}:
+        from .workflow_projection import page_options, project_workflow
+
+        part, offset, limit = page_options(request.GET, view)
+        data = project_workflow(
+            workflow,
+            workflow_json(workflow, view="card"),
+            view,
+            part,
+            offset,
+            limit,
+            request.GET.get("suggestionId", "")[:100],
+        )
+    else:
+        data = workflow_json(workflow, view=view)
+    response = JsonResponse(data)
     if workflow.workflow_type in {"geology_generic", "geology_multi_element_reasoning"}:
         return GZipMiddleware(lambda _: response)(request)
     return response

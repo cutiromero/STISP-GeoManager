@@ -607,13 +607,32 @@ def confirm_demo(
         workflow.status = "queued"
     elif workflow.plan["phase"] == "review_results":
         stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
+        budget_retry = bool(stage.get("contextBudgetReview"))
+        if budget_retry:
+            stage.setdefault("modelBudgetHistory", []).append(
+                {
+                    key: stage.pop(key)
+                    for key in (
+                        "contextBudgetReview",
+                        "modelRequestPayload",
+                        "modelRequestInstruction",
+                        "modelAttempts",
+                    )
+                    if key in stage
+                }
+            )
         reviewing_output = bool(stage.get("taskId"))
-        stage["manualApproved" if reviewing_output else "decisionApproved"] = True
+        if not budget_retry:
+            stage["manualApproved" if reviewing_output else "decisionApproved"] = True
         step(
             workflow,
             "human_review",
             action={"approvedOutputs": workflow.plan["reviewOutputs"]},
-            message="用户已确认候选结果，保留原质量记录",
+            message=(
+                "用户请求重新分析输入预算，未批准任何候选结果"
+                if budget_retry
+                else "用户已确认候选结果，保留原质量记录"
+            ),
         )
         workflow.plan["reviewOutputs"] = []
         if reviewing_output:
@@ -902,6 +921,13 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
                 }
             }
             resource.save(update_fields=["default_visualization", "updated_at"])
+        if workflow.workflow_type in MULTI_FAMILY:
+            from .result_colors import style_result
+
+            style_result(workflow, resource, output.key)
+            from apps.catalog.display_geometry import prewarm_display_geometry
+
+            prewarm_display_geometry(resource)
         stage["outputs"].append(
             {
                 "outputId": output.id,
@@ -1091,16 +1117,27 @@ def advance_demo(workflow_id) -> None:
                     if blocked:
                         raise ComputeError("已达到场景真实模型请求次数上限")
 
-                decision, edits = decide(
-                    workflow,
-                    user,
-                    p,
-                    stage,
-                    results,
-                    guard,
-                    record_attempt,
-                    on_response=lambda: _save(workflow),
-                )
+                from .decision_budget import BudgetReviewRequired
+
+                try:
+                    decision, edits = decide(
+                        workflow,
+                        user,
+                        p,
+                        stage,
+                        results,
+                        guard,
+                        record_attempt,
+                        on_response=lambda: _save(workflow),
+                    )
+                except BudgetReviewRequired as exc:
+                    guard.poll()
+                    if not stage.get("modelAttempts") and not recovering_response:
+                        workflow.iteration -= 1
+                    if index >= len(stages):
+                        workflow.plan["stages"].append(stage)
+                    _pause(workflow, stage, str(exc))
+                    return
                 guard.poll()
                 stage.update(decision=decision, edits=edits)
                 with transaction.atomic():

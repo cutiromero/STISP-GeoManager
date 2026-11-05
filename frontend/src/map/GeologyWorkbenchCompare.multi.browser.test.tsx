@@ -28,6 +28,7 @@ import {
   beforeReviewMap,
   reviewQuery,
   reviewWorkflow,
+  comparisonProjection,
 } from "./geologyReview.testFixtures";
 import platformStyles from "../styles.css?inline";
 import reviewStyles from "./geology-review-workspace.css?inline";
@@ -190,6 +191,11 @@ function fixture() {
       identifier: "actual-edit",
       taskId: "haide-actual-task",
       approvedEdits: edits,
+      outputs: [
+        { key: "changes_lithology_issues", resourceId: 301 },
+        { key: "changes_fault_issues", resourceId: 302 },
+        { key: "changes_alteration_issues", resourceId: 303 },
+      ],
       results: [
         {
           key: "changes",
@@ -457,7 +463,8 @@ beforeEach(() => {
   resetProjectSession();
   setActiveProject("3");
   request.mockImplementation(async (url: string) => {
-    if (url.includes("/workflows/")) return structuredClone(current.workflow);
+    if (url.includes("/workflows/"))
+      return comparisonProjection(current.workflow, url);
     const id = Number(url.match(/resources\/(\d+)\//)?.[1]);
     if (!current.datasets.has(id)) throw new Error(`未知资源: ${url}`);
     if (url.endsWith("/profile/")) return profile(id);
@@ -483,7 +490,7 @@ it("registers every real resource in one deduplicated task group and renders pol
       request.mock.calls.filter(([url]) =>
         String(url).includes(`/${id}/query/`),
       ),
-    ).toHaveLength(1);
+    ).toHaveLength([301, 302, 303].includes(id) ? 0 : 1);
   }
   expect(vector(401).metadata.comparisonRoles).toBe("before");
   expect(vector(402).metadata.comparisonRoles).toBe("after");
@@ -615,7 +622,7 @@ it("restores URL side, scope and selected change, then refreshes without duplica
   await waitFor(() =>
     expect(
       request.mock.calls.filter(([url]) => String(url).includes("/workflows/")),
-    ).toHaveLength(2),
+    ).toHaveLength(4),
   );
   await screen.findByRole("heading", { name: "矿物证据降权" });
   expect(observedGroups).toHaveLength(1);
@@ -643,6 +650,7 @@ it.each([1461, 360])(
       expect(comparison.left).toBeGreaterThanOrEqual(0);
       expect(comparison.right).toBeLessThanOrEqual(width);
       expect(comparison.bottom).toBeGreaterThan(790);
+      expect(comparison.bottom).toBeLessThanOrEqual(812);
       const toolbar = screen
         .getByRole("button", { name: /刷新成果/ })
         .getBoundingClientRect();

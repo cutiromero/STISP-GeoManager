@@ -58,6 +58,37 @@ export function assertWorkflow(
   for (const key of ["inputs", "parameters", "knowledgeSelection"])
     if (plan[key] !== undefined)
       responseObject(plan[key], `${path}.plan.${key}`);
+  if (
+    workflow.view !== undefined &&
+    !["full", "card", "inspection", "compare"].includes(String(workflow.view))
+  )
+    throw new ResponseFormatError(`${path}.view: invalid view`);
+  if (plan.reusedConfiguration !== undefined)
+    responseField(plan, "reusedConfiguration", "boolean", `${path}.plan`);
+  if (plan.fieldMappingReview !== undefined) {
+    const mappingPath = `${path}.plan.fieldMappingReview`;
+    const mapping = responseObject(plan.fieldMappingReview, mappingPath);
+    responseArray(mapping.roles, `${mappingPath}.roles`);
+    responseValues(mapping.questions, "string", `${mappingPath}.questions`);
+    responseField(mapping, "confirmed", "boolean", mappingPath);
+    if (!["real", "mock"].includes(String(mapping.modelMode)))
+      throw new ResponseFormatError(`${mappingPath}.modelMode: invalid mode`);
+  }
+  if (plan.pagination !== undefined) {
+    const pagePath = `${path}.plan.pagination`;
+    const page = responseObject(plan.pagination, pagePath);
+    for (const key of ["offset", "limit", "total"]) {
+      responseField(page, key, "number", pagePath);
+      if (!Number.isInteger(page[key]) || Number(page[key]) < 0)
+        throw new ResponseFormatError(`${pagePath}.${key}: invalid count`);
+    }
+    if (
+      Number(page.limit) > 50 ||
+      !["suggestions", "steps", "changes"].includes(String(page.part))
+    )
+      throw new ResponseFormatError(`${pagePath}: invalid page`);
+    responseArray(page.groups, `${pagePath}.groups`);
+  }
   responseArray(workflow.evidence, `${path}.evidence`).forEach((entry, index) =>
     responseObject(entry, `${path}.evidence[${index}]`),
   );

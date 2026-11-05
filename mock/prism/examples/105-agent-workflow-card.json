@@ -14,7 +14,7 @@
           "reason": "实测面积低于本案例阈值，未命中需裁定例外", "action": "exclude",
           "status": "suggested", "areaM2": 100, "ruleId": "A-05",
           "knowledgeRefs": [{"id": 601, "revision": 1, "title": "碎斑检查"}],
-          "preview": {"type": "Polygon", "coordinates": [[[98.4,35.6],[98.401,35.6],[98.401,35.601],[98.4,35.6]]]},
+          "preview": {"type": "Polygon", "coordinates": []},
           "bounds": [98.4,35.6,98.401,35.601]
         }, {
           "id": "held-lithology-1", "groupId": "lithology-L06-review",
@@ -25,7 +25,7 @@
           "candidateAction": "reclassify", "candidateTargetCode": "Qp₃ᵖᵃˡ",
           "areaM2": 500000, "ruleId": "L-06", "observations": {"compactness": 0.8, "aspect_ratio": 1.2},
           "knowledgeRefs": [{"id": 601, "revision": 1, "title": "本案例形态试用规则"}],
-          "preview": {"type": "Polygon", "coordinates": [[[98.4,35.6],[98.401,35.6],[98.401,35.601],[98.4,35.6]]]},
+          "preview": {"type": "Polygon", "coordinates": []},
           "bounds": [98.4,35.6,98.401,35.601]
         }]
       },
@@ -88,13 +88,25 @@
       "evidence": [],
       "steps": [],
       "stepCount": 22,
-      "view": "card",
+      "view": "inspection",
       "runtime": "durable_state_machine",
       "createdAt": "2026-11-04T08:00:00Z",
       "updatedAt": "2026-11-04T08:10:00Z",
       "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "plan": {
         "phase": "completed",
+        "reusedConfiguration": true,
+        "fieldMappingReview": {"roles": [], "questions": [], "modelMode": "mock", "confirmed": true},
+        "pagination": {"part": "suggestions", "offset": 0, "limit": 50, "total": 2, "groups": []},
+        "reviewIndex": {
+          "total": 2,
+          "suggestedIds": ["object-1"],
+          "candidateIds": ["held-lithology-1"],
+          "groups": [
+            {"element": "alteration", "ruleId": "A-05", "action": "exclude", "held": false, "count": 1, "ids": ["object-1"], "reasons": {}},
+            {"element": "lithology", "ruleId": "L-06", "action": null, "held": true, "count": 1, "ids": ["held-lithology-1"], "reasons": {"规则判定，需专家裁定": 1}}
+          ]
+        },
         "deletedResources": [],
         "stages": [
           {

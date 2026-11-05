@@ -11,6 +11,7 @@ import pytest
 from django.core.exceptions import PermissionDenied
 
 from apps.agent.demo_decisions import decide
+from apps.agent.decision_budget import BudgetReviewRequired
 from apps.agent.demo_results import EDIT_FIELDS
 from apps.agent.policy import default_policy
 from apps.agent.provider import ModelError
@@ -100,7 +101,7 @@ def test_configured_output_limit_reaches_model_and_reserves_context(
     )
 
 
-def test_larger_output_reservation_still_rejects_oversized_input(retry_model):
+def test_irreducible_input_requests_review_without_sending_oversized_input(retry_model):
     workflow, stage, results = ordinary_stage()
     policy = {**default_policy(), "maxOutputTokens": 8192}
     with (
@@ -108,11 +109,14 @@ def test_larger_output_reservation_still_rejects_oversized_input(retry_model):
         patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
         patch("apps.agent.context.count_tokens", return_value=25000),
         patch("apps.agent.demo_decisions.provider.stream") as stream,
-        pytest.raises(ModelError, match="25000 token，可用 24320"),
+        pytest.raises(BudgetReviewRequired, match="必要证据"),
     ):
         decide(workflow, None, policy, stage, results, lambda: None)
     stream.assert_not_called()
     assert not stage.get("modelAttempts")
+    assert stage["contextBudgetReview"]["reason"].startswith(
+        "本轮输入需要 25000 token，可用 24320"
+    )
 
 
 def test_wrong_statistics_retries_real_model_without_adding_refs(retry_model):

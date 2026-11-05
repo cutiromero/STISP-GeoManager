@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from apps.agent.demo_decisions import decide, decision_payload
-from apps.agent.provider import ModelError
+from apps.agent.decision_budget import BudgetReviewRequired
 from apps.compute.packages import ComputeError
 from tests.integration.test_compute import setup_compute  # noqa: F401
 from tests.integration.test_demo_workflow import demo, scenario  # noqa: F401
@@ -337,16 +337,25 @@ def test_update_budget_checks_complete_evidence_without_sampling(demo, settings)
         patch("apps.agent.demo_decisions.provider.model_window", return_value=32768),
         patch("apps.agent.context.count_tokens", return_value=100000) as tokens,
         patch("apps.agent.demo_decisions.provider.stream") as stream,
-        pytest.raises(ModelError, match="本轮输入需要"),
+        pytest.raises(BudgetReviewRequired, match="必要证据"),
     ):
         decide(workflow, demo["owner"], demo["policy"], stage, [old], lambda: None)
     stream.assert_not_called()
-    payload = json.loads(tokens.call_args.args[1][-1]["content"])
+    payload = stage["modelRequestPayload"]
     assert payload["actualResults"] == [old]
     assert len(payload["actualResults"][0]["rows"]) == 100
     assert len(payload["previousAnalysis"]["addedEvidence"]) == 100
     assert payload["executionState"]["currentRun"]["actualResultOutputIds"] == []
-    assert workflow.plan == original_plan
+    preserved = copy.deepcopy(workflow.plan)
+    for item in preserved["stages"]:
+        for key in (
+            "contextBudgetReview",
+            "modelRequestPayload",
+            "modelRequestInstruction",
+        ):
+            item.pop(key, None)
+    assert preserved == original_plan
+    assert tokens.call_count == 5
 
 
 @pytest.mark.parametrize("changed", ["missing", "row", "checksum", "metadata"])

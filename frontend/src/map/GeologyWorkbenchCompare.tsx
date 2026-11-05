@@ -81,6 +81,7 @@ export default function GeologyWorkbenchCompare({
   const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState(0);
   const [showChanges, setShowChanges] = useState(false);
+  const [changesRequested, setChangesRequested] = useState(false);
   const cleanFamily =
     data?.workflow.workflowType === "geology_generic" ||
     data?.workflow.workflowType === "geology_multi_element_reasoning";
@@ -99,6 +100,7 @@ export default function GeologyWorkbenchCompare({
     setRecordsLoading(true);
     setShowOverlays(false);
     setOverlaysLoading(false);
+    setChangesRequested(false);
     if (!canLoad) {
       setError("当前账号没有查询和加载检查成果图层的权限");
       setLoading(false);
@@ -107,6 +109,7 @@ export default function GeologyWorkbenchCompare({
     }
     void loadWorkbenchReviewComparison({
       workflowId,
+      suggestionId: suggestionId ?? undefined,
       projectId,
       projectTagId,
       registerLayer: (profile, result, placement) =>
@@ -139,6 +142,39 @@ export default function GeologyWorkbenchCompare({
       disposed = true;
     };
   }, [workflowId, projectId, projectTagId, canLoad, revision]);
+  const loadChangePage = async (offset: number) => {
+    if (!data?.loadChanges) return;
+    setRecordsLoading(true);
+    setChangesRequested(true);
+    setError("");
+    try {
+      const page = await data.loadChanges(offset);
+      setData((current) =>
+        current && current.workflow.id === page.workflow.id
+          ? { ...current, ...page }
+          : current,
+      );
+      setSelected(0);
+      setChangesRequested(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "修改记录读取失败");
+    } finally {
+      setRecordsLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (
+      !changesRequested &&
+      data?.loadChanges &&
+      (suggestionId || Number(data.pagination?.total) > 0)
+    )
+      void loadChangePage(data.pagination?.focusOffset ?? 0);
+  }, [
+    data?.loadChanges,
+    data?.pagination?.total,
+    suggestionId,
+    changesRequested,
+  ]);
   const selectedElement = data?.tour?.[selected]?.suggestion.element;
   const selectedOverlay =
     selectedElement === "structure"
@@ -477,7 +513,11 @@ export default function GeologyWorkbenchCompare({
         {cleanFamily && (
           <Checkbox
             checked={showChanges}
-            onChange={(event) => setShowChanges(event.target.checked)}
+            onChange={(event) => {
+              setShowChanges(event.target.checked);
+              if (event.target.checked && !changesRequested)
+                void loadChangePage(0);
+            }}
           >
             修正记录 / 实际修改范围
           </Checkbox>
@@ -530,7 +570,14 @@ export default function GeologyWorkbenchCompare({
               value={scope}
               options={[
                 { label: "当前修改", value: "current" },
-                { label: "全部修改", value: "all" },
+                {
+                  label:
+                    data.pagination &&
+                    data.pagination.total > data.pagination.limit
+                      ? "本页修改"
+                      : "全部修改",
+                  value: "all",
+                },
               ]}
               onChange={(value) => updateSetting("compareScope", String(value))}
             />
@@ -608,6 +655,57 @@ export default function GeologyWorkbenchCompare({
                     <p>{group.reason}</p>
                   </div>
                 )}
+                {data.pagination &&
+                  data.pagination.total > data.pagination.limit && (
+                    <div>
+                      <Select
+                        aria-label="全部修改分组"
+                        disabled={recordsLoading}
+                        style={{ width: "100%" }}
+                        placeholder="按要素与规则跳转分组"
+                        options={data.pagination.groups.map((item) => ({
+                          value: item.offset ?? 0,
+                          label: `${item.element} / ${item.ruleId} / ${item.action} · ${item.count} 处`,
+                        }))}
+                        onChange={(offset) => void loadChangePage(offset)}
+                      />
+                      <Button
+                        disabled={
+                          recordsLoading || data.pagination.offset === 0
+                        }
+                        onClick={() =>
+                          void loadChangePage(
+                            Math.max(0, data.pagination!.offset - 25),
+                          )
+                        }
+                      >
+                        上一页修改
+                      </Button>
+                      <Button
+                        disabled={
+                          recordsLoading ||
+                          data.pagination.offset + data.pagination.limit >=
+                            data.pagination.total
+                        }
+                        onClick={() =>
+                          void loadChangePage(
+                            data.pagination!.offset + data.pagination!.limit,
+                          )
+                        }
+                      >
+                        下一页修改
+                      </Button>
+                      <p>
+                        当前第 {data.pagination.offset + 1}–
+                        {Math.min(
+                          data.pagination.offset + data.pagination.limit,
+                          data.pagination.total,
+                        )}{" "}
+                        处，共 {data.pagination.total}{" "}
+                        处实际修改；按需读取几何与完整原因。
+                      </p>
+                    </div>
+                  )}
                 <nav aria-label="切换修改位置">
                   <Button
                     aria-label="上一处修改"
@@ -621,7 +719,8 @@ export default function GeologyWorkbenchCompare({
                     上一处
                   </Button>
                   <strong>
-                    第 {selected + 1} 处，共 {features.length} 处
+                    第 {selected + (data.pagination?.offset ?? 0) + 1} 处，共{" "}
+                    {data.pagination?.total ?? features.length} 处
                   </strong>
                   <Button
                     aria-label="下一处修改"
@@ -700,13 +799,24 @@ export default function GeologyWorkbenchCompare({
               </>
             ) : (
               <p>
-                {recordsLoading
-                  ? "正在加载修改记录…"
-                  : error
-                    ? "修改记录未能完整读取，请刷新成果重试。"
-                    : outcome
-                      ? "本轮保留原图；检查结论与待核查事项见报告。"
-                      : "当前尚无可显示的修改范围，请刷新成果或返回对话继续。"}
+                {!changesRequested &&
+                data.loadChanges &&
+                Number(data.pagination?.total) > 0 ? (
+                  <Button
+                    loading={recordsLoading}
+                    onClick={() => void loadChangePage(0)}
+                  >
+                    开始逐处讲解（{data.pagination?.total} 处实际修改）
+                  </Button>
+                ) : recordsLoading ? (
+                  "正在加载修改记录…"
+                ) : error ? (
+                  "修改记录未能完整读取，请刷新成果重试。"
+                ) : outcome ? (
+                  "本轮保留原图；检查结论与待核查事项见报告。"
+                ) : (
+                  "当前尚无可显示的修改范围，请刷新成果或返回对话继续。"
+                )}
               </p>
             )}
           </div>

@@ -85,6 +85,8 @@ export default function ActiveWorkflowNotice({
           )
         : await agentApi.workflow(selected.id, {
             projectTagId: String(selected.projectId),
+            view: "inspection",
+            part: "steps",
           });
       if (currentProject.current !== requestedProject) return;
       if (cancel) setAttempt((old) => old + 1);
@@ -182,6 +184,44 @@ export default function ActiveWorkflowNotice({
                 {step.kind}：{step.message}
               </Typography.Paragraph>
             ))}
+            {detail.steps.length < (detail.stepCount ?? 0) && (
+              <Button
+                loading={busy}
+                onClick={async () => {
+                  const requestedProject = projectId;
+                  setBusy(true);
+                  try {
+                    const page = await agentApi.workflow(detail.id, {
+                      projectTagId: String(detail.projectId),
+                      view: "inspection",
+                      part: "steps",
+                      offset: detail.steps.length,
+                    });
+                    if (currentProject.current === requestedProject)
+                      setDetail((previous) =>
+                        previous?.id === page.id
+                          ? {
+                              ...page,
+                              steps: [...previous.steps, ...page.steps],
+                            }
+                          : previous,
+                      );
+                  } catch (reason) {
+                    if (currentProject.current === requestedProject)
+                      setError(
+                        reason instanceof Error
+                          ? reason.message
+                          : "读取步骤失败",
+                      );
+                  } finally {
+                    if (currentProject.current === requestedProject)
+                      setBusy(false);
+                  }
+                }}
+              >
+                读取后续步骤
+              </Button>
+            )}
           </Space>
         )}
       </Modal>

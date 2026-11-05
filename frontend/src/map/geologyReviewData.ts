@@ -152,7 +152,8 @@ export function colorReviewMap(
   visualization: Record<string, unknown>,
 ) {
   const renderer = record(record(visualization.symbolization).renderer);
-  if (renderer.type !== "uniqueValue" || renderer.field !== "name") return;
+  if (renderer.type !== "uniqueValue" || typeof renderer.field !== "string")
+    return;
   const classes = (Array.isArray(renderer.classes) ? renderer.classes : []).map(
     record,
   );
@@ -164,7 +165,12 @@ export function colorReviewMap(
     ...feature,
     properties: {
       ...feature.properties,
-      fill_color: colors.get(String(feature.properties.name)) ?? fallback,
+      fill_color:
+        colors.get(String(feature.properties[renderer.field as string])) ??
+        fallback,
+      legend_label: String(
+        feature.properties[renderer.field as string] ?? "其他",
+      ),
       unit_color_by_name: true,
     },
   }));

@@ -406,6 +406,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
       },
     })),
   };
+  workflow.plan.compareFeatures = changes;
   const zones = structuredClone(before);
   zones.features.forEach((item, index) => {
     item.properties = {
@@ -586,7 +587,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   await expectFocusInBothMaps();
   expect(
     request.mock.calls.filter(([url]) => String(url).includes("/301/query/")),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
   expect(
     screen.getByLabelText("待检查地质图地图").querySelector("canvas"),
   ).toBe(beforeCanvas);
@@ -654,7 +655,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
       request.mock.calls.filter(([url]) =>
         String(url).includes(`/${id}/query/`),
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(id === 301 ? 0 : 1);
   await page.screenshot({
     path: "../../test-results/multi-element-change-tour.png",
     animations: "disabled",

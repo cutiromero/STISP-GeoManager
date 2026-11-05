@@ -49,7 +49,7 @@ function show(
 }
 function respond(actual = false) {
   request.mockImplementation(async (url: string) => {
-    if (url === "/api/agent/workflows/review-workflow/")
+    if (url.startsWith("/api/agent/workflows/review-workflow/"))
       return reviewWorkflow(actual);
     const id = Number(url.match(/resources\/(\d+)\/query/)?.[1]);
     if (id === 101) return reviewQuery(id, beforeReviewMap);
@@ -131,7 +131,8 @@ it.each(["no_changes", "requires_evidence"])(
     workflow.modificationReview = undefined;
     workflow.plan.reviewOutcome = { kind, checkTaskId: "actual-check" };
     request.mockImplementation(async (url: string) => {
-      if (url === "/api/agent/workflows/review-workflow/") return workflow;
+      if (url.startsWith("/api/agent/workflows/review-workflow/"))
+        return workflow;
       if (url === "/api/catalog/resources/101/query/")
         return reviewQuery(101, beforeReviewMap);
       throw new Error(`未预期的接口：${url}`);
@@ -251,8 +252,8 @@ it("完成后的建议链接和刷新均恢复同一条实际修改", async () =
     "is-selected",
   );
   expect(
-    request.mock.calls.filter(
-      ([url]) => url === "/api/agent/workflows/review-workflow/",
+    request.mock.calls.filter(([url]) =>
+      String(url).startsWith("/api/agent/workflows/review-workflow/"),
     ),
   ).toHaveLength(2);
 });

@@ -8300,11 +8300,37 @@ paths:
       - name: view
         in: query
         required: false
-        description: full为完整详情（默认）；card为轻量卡片，鉴权和项目边界不变
+        description: full为完整详情（默认）；card为轻量卡片，保留当前字段确认卡与沿用配置提示所需字段；compare为对比摘要及按需实际修改分页；inspection为审批摘要及按需建议或步骤分页，同样保留字段确认与沿用配置状态。全部沿用本人、项目及资源权限校验。
         schema:
           type: string
-          enum: [full, card]
+          enum: [full, card, compare, inspection]
           default: full
+      - name: part
+        in: query
+        description: inspection分页内容；compare仅支持changes。省略时inspection取suggestions，compare取changes。
+        schema:
+          type: string
+          enum: [suggestions, steps, changes]
+      - name: suggestionId
+        in: query
+        description: compare或inspection定位指定审批对象，返回其所在页；compare摘要同时提供focusOffset用于深链接按需读取。不匹配时保持offset。
+        schema:
+          type: string
+          maxLength: 100
+      - name: offset
+        in: query
+        description: 分页起始位置；compare按要素、规则及动作分组连续排列。
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: limit
+        in: query
+        description: 最多返回对象数，0仅取摘要；compare默认0，inspection默认50。单对象完整原因只在该对象所在页返回。
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 50
       responses:
         '200':
           description: 操作成功
@@ -11056,7 +11082,7 @@ components:
       properties:
         view:
           type: string
-          enum: [full, card]
+          enum: [full, card, compare, inspection]
           description: 详情投影视图；省略等同full
         stepCount:
           type: integer
@@ -11169,7 +11195,13 @@ components:
               $ref: '#/components/schemas/AgentFieldMappingReview'
             reusedConfiguration:
               type: boolean
-              description: 本次资料与服务端已确认配置一致，沿用角色和字段；不表示计划或处置获批
+              description: 本次资料与服务端已确认配置一致，沿用角色和字段；card和inspection视图也保留此值，不表示计划或处置获批
+            pagination:
+              $ref: '#/components/schemas/AgentWorkflowPage'
+            reviewIndex:
+              $ref: '#/components/schemas/AgentWorkflowReviewIndex'
+            compareFeatures:
+              $ref: '#/components/schemas/GeoJSONFeatureCollection'
           additionalProperties: true
         planHash:
           type: string
@@ -11211,6 +11243,103 @@ components:
       - steps
       - createdAt
       - updatedAt
+      additionalProperties: false
+    AgentWorkflowGroup:
+      type: object
+      description: 不包含对象完整原因或几何的规则分组索引
+      required: [element, ruleId, action, count]
+      properties:
+        key:
+          type: string
+          description: 对比页分组稳定标识
+        element:
+          type: [string, 'null']
+          description: lithology、structure或alteration，旧场景可为空
+        ruleId:
+          type: string
+          description: 冻结规则编号
+        action:
+          type: [string, 'null']
+          description: 本组执行动作，待裁定组按规则聚合时为空
+        count:
+          type: integer
+          minimum: 0
+          description: 完整分组对象数，不仅为本页数量
+        offset:
+          type: integer
+          minimum: 0
+          description: 对比页组内首个实际修改在完整导航中的位置
+        held:
+          type: boolean
+          description: 是否为默认保留的待裁定或例外组
+        ids:
+          type: array
+          description: 审批组完整对象ID；待裁定组仅列冻结候选，不能由模型批准
+          items:
+            type: string
+            description: 冻结审批对象ID
+        reasons:
+          type: object
+          description: 原因类别及完整计数，不拼接对象原因原文
+          additionalProperties:
+            type: integer
+            minimum: 0
+            description: 此原因类别命中的对象数
+      additionalProperties: false
+    AgentWorkflowPage:
+      type: object
+      description: 工作流按需投影的分页与分组索引
+      required: [part, offset, limit, total, groups]
+      properties:
+        part:
+          type: string
+          enum: [suggestions, steps, changes]
+          description: 当前页内容类型
+        offset:
+          type: integer
+          minimum: 0
+          description: 当前页起点
+        limit:
+          type: integer
+          minimum: 0
+          maximum: 50
+          description: 当前页最多对象数，0表示摘要
+        total:
+          type: integer
+          minimum: 0
+          description: 当前类型完整对象数量
+        focusOffset:
+          type: integer
+          minimum: 0
+          description: suggestionId深链接对象所在页起点
+        groups:
+          type: array
+          description: 完整实际修改的分组索引；其他分页为空
+          items:
+            $ref: '#/components/schemas/AgentWorkflowGroup'
+      additionalProperties: false
+    AgentWorkflowReviewIndex:
+      type: object
+      description: 冻结方案的审批集合索引，完整对象原因按suggestions分页返回
+      required: [total, suggestedIds, candidateIds, groups]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: 完整方案对象数
+        suggestedIds:
+          type: array
+          description: 模型建议默认勾选集合，不包含待裁定或例外
+          items: {type: string, description: 模型建议对象ID}
+        candidateIds:
+          type: array
+          description: 只有用户明确选择才可批准的冻结待裁定或例外候选
+          items: {type: string, description: 用户裁定候选对象ID}
+        groups:
+          type: array
+          description: 完整审批分组与分类原因计数
+          items:
+            $ref: '#/components/schemas/AgentWorkflowGroup'
       additionalProperties: false
     AgentWorkflowInput:
       type: object
@@ -18986,7 +19115,7 @@ components:
         displayGeometry:
           type: boolean
           default: false
-          description: 仅地图显示使用的轻量几何（WGS84下1e-5度保拓扑简化、6位坐标）；属性及对象数量不变，不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
+          description: 仅地图显示使用的轻量几何（WGS84下按响应压缩预算自适应保拓扑简化、5位坐标、移除连续重复点；最大简化容差0.001度）；不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
         attributeFilters:
           type: array
           description: 属性过滤条件

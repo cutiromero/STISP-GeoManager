@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import gzip
+import hashlib
+import json
+import logging
+import os
+import tempfile
+from time import perf_counter
+
+from shapely import set_precision
+from shapely.geometry import mapping
+
+from apps.core.storage import app_path, vector_geopackage_path
+
+
+DISPLAY_BUDGET_BYTES = 280 * 1024
+DISPLAY_TOLERANCES = (0.00001, 0.00005, 0.0001, 0.0002, 0.0005, 0.001)
+DISPLAY_GRID = 0.00001
+DISPLAY_CACHE_VERSION = 1
+logger = logging.getLogger(__name__)
+
+
+def cached_display_query(resource, payload, compute):
+    if (
+        payload.get("displayGeometry") is not True
+        or payload.get("spatialFilter")
+        or payload.get("attributeFilters")
+        or resource.data_type != "vector"
+        or not getattr(resource, "updated_at", None)
+    ):
+        return compute()
+    started = perf_counter()
+    identity = json.dumps(
+        [str(vector_geopackage_path()), resource.id, payload], sort_keys=True
+    )
+    key = hashlib.sha256(identity.encode()).hexdigest()
+    revision = json.dumps(
+        [DISPLAY_CACHE_VERSION, resource.updated_at.isoformat(), resource.storage_path]
+    )
+    path = app_path("cache", "vector-display", f"{key}.json")
+    try:
+        cached = json.loads(path.read_text(encoding="utf-8"))
+        if cached["revision"] == revision:
+            result = cached["result"]
+            result["elapsedMs"] = max(0, round((perf_counter() - started) * 1000))
+            return result
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    result = compute()
+    temporary = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, delete=False
+        ) as stream:
+            temporary = stream.name
+            json.dump(
+                {"revision": revision, "result": result},
+                stream,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        os.replace(temporary, path)
+    except OSError:
+        logger.warning("无法保存矢量显示缓存 resource=%s", resource.id, exc_info=True)
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
+    return result
+
+
+def prewarm_display_geometry(resource):
+    from .vector_store import query_resource
+
+    if resource.data_type != "vector":
+        return
+    try:
+        query_resource(
+            resource,
+            {
+                "displayGeometry": True,
+                "limit": 10000,
+                "attributeFilters": [],
+                "spatialFilter": None,
+            },
+        )
+    except Exception:
+        logger.warning("矢量显示缓存预热失败 resource=%s", resource.id, exc_info=True)
+
+
+def compact_display_geojson(frame):
+    features = json.loads(frame.to_json())
+    shapes = list(frame.geometry)
+    for tolerance in DISPLAY_TOLERANCES:
+        for feature, geometry in zip(features["features"], shapes, strict=True):
+            if geometry is None or geometry.is_empty:
+                continue
+            simplified = geometry.simplify(tolerance, preserve_topology=True)
+            quantized = set_precision(simplified, DISPLAY_GRID)
+            display = simplified if quantized.is_empty else quantized
+            feature["geometry"] = json.loads(
+                json.dumps(mapping(display)),
+                parse_float=lambda value: round(
+                    float(value), 5 if not quantized.is_empty else 8
+                ),
+            )
+        encoded = json.dumps(features).encode()
+        if (
+            len(gzip.compress(encoded, compresslevel=6, mtime=0))
+            <= DISPLAY_BUDGET_BYTES
+        ):
+            return features, []
+    return features, [
+        "显示几何已达到最大简化容差，传输体积仍超过目标；精确编辑与计算使用原始数据。"
+    ]

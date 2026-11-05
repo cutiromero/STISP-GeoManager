@@ -256,6 +256,7 @@ def public_plan(plan):
                 "modelRequestPayload",
                 "modelRequestInstruction",
                 "modelAttempts",
+                "modelBudgetHistory",
             }
         }
         if "results" in value:

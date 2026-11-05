@@ -167,7 +167,9 @@ it("loads a selected history detail instead of automatically expanding completed
   await screen.findByRole("button", { name: "确认执行" });
   expect(agentApi.workflow).toHaveBeenCalledWith("saved-map-check", {
     signal: expect.any(AbortSignal),
+    view: "full",
   });
+  expect(agentApi.workflow).toHaveBeenCalledOnce();
 });
 
 it("shows loading and discards the late history response after changing scenes", async () => {

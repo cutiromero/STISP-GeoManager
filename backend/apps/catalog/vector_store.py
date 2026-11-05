@@ -187,6 +187,17 @@ def resource_profile(resource: DataResource) -> ResourceProfile:
 
 
 def query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("displayGeometry") is not True:
+        return _query_resource(resource, payload)
+    from .display_geometry import cached_display_query
+
+    cache_payload = {**payload, "limit": _limit(payload.get("limit"))}
+    return cached_display_query(
+        resource, cache_payload, lambda: _query_resource(resource, payload)
+    )
+
+
+def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str, Any]:
     from apps.catalog.geojson_validation import validate_geojson_geometries
 
     started_at = perf_counter()
@@ -224,20 +235,12 @@ def query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str,
     bounds = _returned_bounds(returned)
     returned = normalize_for_geojson(returned)
     if display_geometry:
-        returned = returned.copy()
-        returned.geometry = returned.geometry.simplify(0.00001, preserve_topology=True)
-    geojson = json.loads(returned.to_json())
-    if display_geometry:
+        from .display_geometry import compact_display_geojson
 
-        def quantize(value):
-            if isinstance(value, list):
-                return [quantize(item) for item in value]
-            return round(value, 6) if isinstance(value, float) else value
-
-        for feature in geojson["features"]:
-            geometry = feature.get("geometry")
-            if geometry and "coordinates" in geometry:
-                geometry["coordinates"] = quantize(geometry["coordinates"])
+        geojson, display_warnings = compact_display_geojson(returned)
+        warnings = [*warnings, *display_warnings]
+    else:
+        geojson = json.loads(returned.to_json())
 
     return {
         "resourceId": resource.id,

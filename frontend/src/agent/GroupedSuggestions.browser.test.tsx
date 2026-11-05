@@ -37,7 +37,93 @@ const { api } = vi.hoisted(() => ({
 }));
 vi.mock("../api/agent", () => ({ agentApi: api }));
 
-it("待裁定候选默认保留，普通全选不纳入，用户按组选择后才批准", async () => {
+it("组摘要按原因计数，全量候选仅经用户勾选纳入，确认分别显示两种批准数量", async () => {
+  const workflow = reviewWorkflow();
+  workflow.workflowType = "geology_generic";
+  const first = workflow.modificationReview!.suggestions[0]!;
+  const ordinary = {
+    ...first,
+    id: "model-one",
+    kind: "multi_element" as const,
+    element: "lithology" as const,
+    status: "suggested" as const,
+    action: "remove",
+  };
+  const held = Array.from({ length: 11 }, (_, index) => ({
+    ...ordinary,
+    id: `held-${index}`,
+    featureId: `H${index}`,
+    status: index < 8 ? ("review" as const) : ("exception" as const),
+    candidateAction: "remove",
+    reason: `对象H${index}独有的完整核查原因，不应拼接到组摘要`,
+  }));
+  workflow.modificationReview!.suggestions = [ordinary, ...held];
+  workflow.plan.reviewIndex = {
+    total: 12,
+    suggestedIds: [ordinary.id],
+    candidateIds: held.map((item) => item.id),
+    groups: [
+      {
+        element: "lithology",
+        ruleId: first.ruleId,
+        action: null,
+        held: true,
+        count: 11,
+        ids: held.map((item) => item.id),
+        reasons: {
+          "置信度0.6–0.8，需专家裁定": 8,
+          "置信度≥0.8，规则例外候选": 3,
+        },
+      },
+    ],
+  };
+  const review = vi.fn();
+  render(
+    <App>
+      <MemoryRouter>
+        <MultiElementStory workflow={workflow} onReview={review} />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(screen.getByText(/已选择 1/)).toBeVisible();
+  const all = screen.getByRole("checkbox", {
+    name: "全部待裁定与例外按候选处置",
+  });
+  expect(all).not.toBeChecked();
+  fireEvent.click(all);
+  expect(screen.getByText(/已选择 12/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
+  await waitFor(() =>
+    expect(screen.getByText(/模型建议 1 项、用户裁定 11 项/)).toBeVisible(),
+  );
+  expect(review).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "返回核对" }));
+  fireEvent.click(all);
+  expect(screen.getByText(/已选择 1/)).toBeVisible();
+  fireEvent.click(
+    screen.getByText(/待裁定与例外（共/, { selector: "summary" }),
+  );
+  fireEvent.click(
+    screen.getByText(new RegExp(`岩性 / ${first.ruleId} · 11 个对象`), {
+      selector: "summary",
+    }),
+  );
+  expect(screen.getByText(/置信度0.6–0.8，需专家裁定.*8\s*处/)).toBeVisible();
+  expect(screen.getByText(/置信度≥0.8，规则例外候选.*3\s*处/)).toBeVisible();
+  for (const node of await screen.findAllByText(held[0]!.reason))
+    expect(node).not.toBeVisible();
+  fireEvent.click(
+    screen.getByText(/H0 \/ 需地质判断/, { selector: "summary" }),
+  );
+  expect(
+    screen.getAllByText(held[0]!.reason).some((node) => {
+      const box = node.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    }),
+  ).toBe(true);
+});
+
+it("模型建议默认选择，待裁定候选仅在用户明确选择后批准", async () => {
   const workflow = reviewWorkflow();
   workflow.workflowType = "geology_generic";
   const first = workflow.modificationReview!.suggestions[0]!;
@@ -72,9 +158,10 @@ it("待裁定候选默认保留，普通全选不纳入，用户按组选择后�
       </MemoryRouter>
     </App>,
   );
-  expect(screen.getByText(/已选择 0/)).toBeVisible();
-  fireEvent.click(screen.getByRole("checkbox", { name: /选择全部可执行建议/ }));
   expect(screen.getByText(/已选择 1/)).toBeVisible();
+  expect(
+    screen.getByRole("checkbox", { name: /全部待裁定与例外按候选处置/ }),
+  ).not.toBeChecked();
   fireEvent.click(
     screen.getByText(/待裁定与例外（共/, { selector: "summary" }),
   );
@@ -149,7 +236,7 @@ it("按组批准超过30对象，展开后可取消个别对象，例外不被�
   expect(
     screen.getByText(/70 个对象/, { selector: "summary" }).closest("details"),
   ).not.toHaveAttribute("open");
-  fireEvent.click(await screen.findByLabelText("整组批准（70 个对象）"));
+  expect(await screen.findByLabelText("整组批准（70 个对象）")).toBeChecked();
   fireEvent.click(screen.getByText(/70 个对象/, { selector: "summary" }));
   await waitFor(() =>
     expect(document.querySelectorAll(".multi-element-suggestion")).toHaveLength(
@@ -369,7 +456,7 @@ it("5552对象默认零对象行，展开每次50条，可搜索编号并取消�
   expect(
     mounted.container.querySelectorAll(".multi-element-suggestion"),
   ).toHaveLength(0);
-  fireEvent.click(screen.getByLabelText("整组批准（5552 个对象）"));
+  expect(screen.getByLabelText("整组批准（5552 个对象）")).toBeChecked();
   const summary = screen.getByText(/5552 个对象/, { selector: "summary" });
   fireEvent.click(summary);
   await waitFor(() =>

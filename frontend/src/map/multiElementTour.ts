@@ -137,7 +137,7 @@ export function actualTourChanges(
           taskId: String(result.taskId),
           outputId: Number(result.outputId),
           checksum: String(result.checksum),
-          rowIndex: index + 1,
+          rowIndex: Number(row._rowIndex ?? index + 1),
         },
       },
     ];

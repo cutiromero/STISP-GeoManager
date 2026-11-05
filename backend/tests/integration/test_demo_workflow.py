@@ -553,6 +553,34 @@ def test_decision_approval_does_not_bypass_later_output_quality_review(demo):
     assert not ComputeImport.objects.exists()
 
 
+def test_input_budget_review_preserves_audit_and_confirmation_retries_analysis(demo):
+    from apps.agent.decision_budget import budget_review
+
+    workflow = scenario(demo)
+    prepare_demo(workflow, demo["owner"], demo["policy"])
+    confirm_demo(workflow, demo["owner"], demo["policy"], workflow.plan_hash)
+
+    def oversized(workflow, user, policy, stage, *args, **kwargs):
+        stage["modelRequestInstruction"] = "完整系统指令"
+        budget_review(stage, {"originalEvidence": "完整必要证据"}, "超出输入预算")
+
+    with patch("apps.agent.demo_workflow.decide", side_effect=oversized):
+        advance_demo(workflow.id)
+    workflow.refresh_from_db()
+    stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
+    assert workflow.status == "waiting_approval"
+    assert not ComputeTask.objects.exists() and not stage.get("decision")
+    assert workflow.iteration == 0
+    assert stage["modelRequestPayload"] == {"originalEvidence": "完整必要证据"}
+    confirm_demo(workflow, demo["owner"], demo["policy"], workflow.plan_hash)
+    stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
+    assert workflow.status == "queued" and workflow.plan["phase"] == "decide"
+    assert not stage.get("decisionApproved") and not stage.get("modelAttempts")
+    assert stage["modelBudgetHistory"][0]["modelRequestPayload"] == {
+        "originalEvidence": "完整必要证据"
+    }
+
+
 def test_derived_resource_change_blocks_next_stage(demo):
     workflow = scenario(demo)
     prepare_demo(workflow, demo["owner"], demo["policy"])

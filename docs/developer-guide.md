@@ -4,6 +4,18 @@
 
 ## 工作流卡片与逻辑推理成果
 
+工作流详情支持 `view=compare`（摘要默认 `limit=0`）和 `view=inspection`（默认50项），`offset` 从0开始，`limit` 为0–50。inspection 的 `part=suggestions|steps` 分别读取审批对象与执行步骤；compare 仅支持 `part=changes`，按要素、规则、动作排序，只返回已批准且实际执行成功的对象。`plan.pagination` 包含 total、offset、limit 和分组索引（key、element、ruleId、action、offset、count）；`plan.compareFeatures` 是当前页显示几何，不能用于计算。inspection 的 `plan.reviewIndex` 提供 suggestedIds、candidateIds，前者默认勾选，后者只有用户明确选择才可提交。完整原因随对象页返回，完整执行输出仍保存在计算成果中。所有投影沿用本人、当前项目和资源授权，不扩大数据可见范围。
+
+`card` 与 `inspection` 均保留 `plan.fieldMappingReview` 和 `plan.reusedConfiguration`，用于字段确认卡与沿用配置提示；沿用不等于已批准本次计划。普通计划确认不自动读取过程，只有修改审批自动读取建议；展开过程时读取步骤。对比摘要就绪后自动按需读取首个实际修改页并定位；单页展示“全部修改”，多页展示“本页修改”并提供全量分组和翻页。
+
+`displayGeometry=true` 采用5位坐标及自适应保拓扑简化，压缩响应目标为280 KiB；最大容差0.001度，无法达到预算时保留最后一档，不删除对象或继续降低精度。无过滤显示查询持久缓存于 TOML 业务数据根目录下的 `cache/vector-display/`，按项目 GeoPackage 路径、资源 ID、查询参数及资源 `updated_at`、存储图层和压缩算法版本隔离；版本变更后原缓存不再命中，相同查询原子替换缓存。命中时不重读原始几何或重复简化，仍由查询入口先执行权限校验。成果登记 worker 预热工作台的10000对象显示查询，不占用地图 HTTP 请求；预热失败不阻止成果登记。过滤查询及原精度查询不复用显示缓存。该选项不修改存储数据，编辑、计算、精确导出必须使用默认原精度查询。
+
+成果配色仅使用本次工作流所选模型。Mock 模型、已关闭策略、未授权或未在线模型不调用服务；调用失败或超预算时使用确定性配色，不切换其他模型。
+
+逻辑推理项目的默认对话标题由主资料名、任务、运行时间及运行编号构成，自定义标题保持不变。正式环境使用应用现有 Conda 和正式配置运行 `python manage.py backfill_logic_titles --config <正式配置路径>` 预览待回填数量，追加 `--apply` 写入；重复执行不会改写已回填标题。其他项目不适用该规则。
+
+逻辑成果的分类字段与实际类别决定资源默认符号化。岩性约定色见 `backend/apps/agent/data/lithology_colors.json`，蚀变约定色见 `backend/apps/agent/data/alteration_colors.json`；未知类别的模型建议须通过颜色格式、白底对比度及类别色差检查，遗漏或非法建议由确定性调色板补齐。模型关闭、失败或超过8秒预算时采用确定性配色，不影响成果登记。资源 `default_visualization.colorAdvice` 与 `result_color_advice` 审计记录保留来源、模型建议、替换类别及最终符号化。已有成果可运行 `python manage.py style_logic_results --workflow <完整工作流UUID> --config <正式配置路径>` 预览，追加 `--apply` 写入；`--no-model` 使用纯确定性配色。此命令只处理指定任务的矢量输出，不改原始上传与计算数据。
+
 `GET /api/agent/workflows/{workflowId}/?view=card` 复用完整详情的本人、项目与资源鉴权，只返回卡片需要的状态、阶段名称/状态/任务及已入库成果引用、`stepCount`；`steps`、`evidence` 为空，`parameters` 为空，不返回模型交互、完整阶段结果、`finalStage` 或 `modificationReview`。省略 `view` 或 `view=full` 返回原有完整详情。无效 `view` 返回标准 400 错误。对话历史先读 card，展开过程、证据、模型交互或审核时再读 full；已完成任务不轮询，也不再次读取原始对话任务。
 
 综合推理族 `geology_multi_element_reasoning` 与 `geology_generic` 自动入库的成果为 `check.issues`、`apply.lithology/faults/alterations/changes`、`relations.intersections`、`prospect.before_zones/after_zones/evidence`。其余输出仍保留在计算任务中，可下载、用于模型判断、复查、报告和评价，但不创建资源或成果记录。输入绑定所需输出均在上述保留集合内。
@@ -2785,7 +2797,7 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 
 `geology_generic` 与 `geology_multi_element_reasoning` 的疑点建议和批准对象不设30项上限。完整检查清单按要素、规则、建议动作、目标代号、状态及快照分组，模型接收数量、实测范围、代表样本、条件和例外，输出 `{group_id,disposition,excluded_issue_ids,reason}`。`disposition=suggested` 采用整组实测建议，`review` 保留整组待裁定；review/exception 组不得整组执行。后端展开后逐对象校验规则、动作、目标代号、快照和知识引用，同对象多组按原检查清单顺序采用首条已选择建议。少量对象仍可逐项建议。返回的 `modificationReview.suggestions[].groupId` 对应稳定分组；审批卡片支持整组选择、展开对象、单独取消，提交仍为原有 `selectedSuggestionIds`。修改记录、复查、报告及远景区读取实际逐对象获批操作。模型后续读取完整分组批准数量及代表ID，不以样本数代替总量。公开工作流 plan 不包含内部全量检查行、重复建议和模型请求，但保留 approvedEdits 与完整 changes 行，供实际修改范围逐对象核验；完整审批对象在 modificationReview 中返回。综合推理工作流详情支持gzip，其他场景响应保持原行为。
 
-`POST /api/catalog/resources/{id}/query/` 可显式传 `displayGeometry=true`：在WGS84中以1e-5度容差进行保拓扑显示简化，坐标保留6位；资源属性、对象数、存储几何、编辑及计算输入不变。未传或false返回原精度；非布尔值返回400标准错误。显示几何不用于精确量测、编辑或精确导出。显示查询最多两路并发，原查询单路限流与gzip保持。综合推理算子成果 mapUrl 带 displayGeometry=1，工作台只对链接指定资源启用显示几何。对比页并行读取两张岩性图及其元信息，主图就绪即可操作，再独立补载实际修改记录；补载期间显示“正在加载修改记录…”，完整读取后才判定空态。构造、蚀变、交汇及调查建议默认不请求，勾选辅助图层时加载；浏览构造或蚀变修改时只按需补载对应要素，核对修改前后属性。相同资源及辅助要素请求复用，失败请求允许重试；辅助图层失败不清空主图。综合推理工作流公开计划使用完整分组摘要，避免重复传输内部全量清单。对比时隐藏两侧面板与空间查询底栏，退出恢复原状态。修正后使用岩性、final_faults、final_alterations，获批剔除对象不再出现；修改记录和实际修改范围默认关闭，可勾选。
+`POST /api/catalog/resources/{id}/query/` 可显式传 `displayGeometry=true`：在WGS84中从1e-5度开始自适应保拓扑简化，坐标保留5位，压缩目标为280 KiB，最大容差0.001度；量化后为空的对象保留简化几何及8位坐标。资源属性、对象数、存储几何、编辑及计算输入不变。未传或false返回原精度；非布尔值返回400标准错误。显示几何不用于精确量测、编辑或精确导出。无过滤显示结果按资源修订持久缓存，显示查询最多两路并发，原查询单路限流与gzip保持。综合推理算子成果 mapUrl 带 displayGeometry=1，工作台只对链接指定资源启用显示几何。对比页并行读取两张岩性图及其元信息，主图就绪即可操作，再独立补载首个实际修改页并定位；补载期间显示“正在加载修改记录…”，完整读取后才判定空态。构造、蚀变、交汇及调查建议默认不请求，勾选辅助图层时加载；浏览构造或蚀变修改时只按需补载对应要素，核对修改前后属性。相同资源及辅助要素请求复用，失败请求允许重试；辅助图层失败不清空主图。综合推理工作流公开计划使用完整分组摘要，避免重复传输内部全量清单。对比时隐藏两侧面板与空间查询底栏，退出恢复原状态。修正后使用岩性、final_faults、final_alterations，获批剔除对象不再出现；修改记录和实际修改范围默认关闭，可勾选。
 
 对比讲解按“要素+规则+动作”选择分组，显示数量与说明，支持跳到组内第N处及组内上一处/下一处。首次进入及切换修改时双图自动定位到当前对象范围。临时轮廓独立于修改范围开关，保留底图单元配色且不添加面填充；修正后定位到结果对象或融合宿主，剔除对象以修改前范围提示删除位置。切换讲解只更新当前对象及修改范围源，不重建Mapbox实例，也不重复发送整张岩性图。对比标题栏位于工作台全局导航下方，讲解区可滚动，地图区域填满剩余高度。
 
