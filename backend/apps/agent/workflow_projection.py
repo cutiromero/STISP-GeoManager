@@ -252,6 +252,19 @@ def project_workflow(workflow, data, view, part, offset, limit, suggestion_id=""
         {key: stage[key] for key in STAGE_KEYS if key in stage}
         for stage in source.get("stages", [])
     ]
+    if view == "compare":
+        # Pages read spatial outputs by stage; identifiers only, no rows.
+        for stage, original in zip(
+            plan["stages"], source.get("stages", []), strict=True
+        ):
+            stage["results"] = [
+                {
+                    key: result.get(key)
+                    for key in ("key", "kind", "taskId", "outputId", "checksum")
+                }
+                for result in original.get("results", [])
+                if result.get("kind") == "vector"
+            ]
     if view == "inspection":
         for key in (
             "reviewOutputs",
@@ -417,6 +430,7 @@ def project_workflow(workflow, data, view, part, offset, limit, suggestion_id=""
         for stage in plan["stages"]:
             if stage["name"] == "apply":
                 stage["results"] = [
+                    *stage.get("results", []),
                     {
                         **{
                             key: result.get(key)
