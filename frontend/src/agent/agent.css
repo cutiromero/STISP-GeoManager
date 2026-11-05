@@ -556,6 +556,14 @@
   border-radius: 8px;
   background: #f8fbff;
 }
+.agent-answer-preview-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+.agent-model-activity {
+  margin-top: 12px;
+}
 .agent-thinking-content {
   max-height: 280px;
   margin: 0;

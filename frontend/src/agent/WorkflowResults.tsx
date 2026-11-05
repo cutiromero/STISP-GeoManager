@@ -9,6 +9,7 @@ import WorkflowDecisionTimeline, {
 import RunComputeTasks from "./RunComputeTasks";
 import WorkflowKnowledgeReferences from "./WorkflowKnowledgeReferences";
 import LiveActivity from "./LiveActivity";
+import WorkflowModelActivity from "./WorkflowModelActivity";
 import { workflowActivity } from "./agentActivity";
 import WorkflowReportFile from "./WorkflowReportFile";
 import WorkflowDeliverables from "./WorkflowDeliverables";
@@ -674,6 +675,7 @@ export default function WorkflowResults({
           )}
         </div>
       )}
+      <WorkflowModelActivity workflow={workflow} />
       {isActive &&
         workflow.status !== "waiting_approval" &&
         !workflow.pauseRequested && (

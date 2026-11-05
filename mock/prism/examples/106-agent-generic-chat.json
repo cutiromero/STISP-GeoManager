@@ -35,5 +35,25 @@
         "workflowId": null
       }
     }
+  },
+  "GET /api/agent/runs/{runId}/": {
+    "200": {
+      "run": {
+        "id": 106,
+        "conversationId": 31,
+        "model": "configured",
+        "status": "running",
+        "prompt": "解释地质资料",
+        "answer": "",
+        "answerPreview": "依据本轮资料，正在整理地质解释。",
+        "detail": "正在接收模型答复",
+        "evidence": [],
+        "attachments": [],
+        "createdAt": "2026-11-06T09:00:00Z",
+        "updatedAt": "2026-11-06T09:00:01Z"
+      },
+      "events": [],
+      "cursor": 0
+    }
   }
 }

@@ -26,8 +26,18 @@ from .budgets import apply_budget, check_budget_access
 from .tools import TOOLS, execute, evidence_items
 from .compute_intent_text import user_cancelled_pending_compute
 from .citations import historical_answer, historical_text, validate_answer_citations
+from .answer_preview import (
+    AnswerPreviewParser,
+    PREVIEW_EVENT_KIND,
+    stored_answer_preview,
+)
+from .model_guard import ModelStreamGuard
 
 logger = logging.getLogger(__name__)
+
+# Configuration: durable previews follow provider chunks, with bounded writes.
+PREVIEW_FLUSH_SECONDS = 0.3
+PREVIEW_FLUSH_CHARACTERS = 256
 
 
 class Cancelled(Exception):
@@ -376,7 +386,11 @@ def run_task(run_id):
     run = AgentRun._base_manager.select_related("conversation").get(pk=run_id)
     deadline = time.monotonic() + 600
     thinking_buffer = ""
-    thinking_saved_at = time.monotonic()
+    thinking_saved_at = float("-inf")
+    preview_parts = []
+    preview_pending = 0
+    preview_saved_at = 0.0
+    preview_active = bool(stored_answer_preview(run))
 
     def check():
         guard(run.id, deadline)
@@ -390,14 +404,53 @@ def run_task(run_id):
         if thinking_buffer and (
             force or now - thinking_saved_at >= 0.6 or len(thinking_buffer) >= 500
         ):
+            check()
             event(run, "thinking", thinking_buffer)
             thinking_buffer = ""
             thinking_saved_at = now
+
+    def flush_preview(*, force=False):
+        nonlocal preview_pending, preview_saved_at, preview_active
+        if not preview_pending:
+            return
+        now = time.monotonic()
+        if (
+            not force
+            and now - preview_saved_at < PREVIEW_FLUSH_SECONDS
+            and preview_pending < PREVIEW_FLUSH_CHARACTERS
+        ):
+            return
+        check()
+        event(run, PREVIEW_EVENT_KIND, "".join(preview_parts))
+        preview_pending, preview_saved_at, preview_active = 0, now, True
+
+    def reset_preview():
+        nonlocal preview_pending, preview_saved_at, preview_active
+        if preview_active:
+            event(run, PREVIEW_EVENT_KIND, "")
+        preview_parts.clear()
+        preview_pending, preview_saved_at, preview_active = 0, 0.0, False
+
+    def record_preview(change):
+        nonlocal preview_pending
+        if change.reset:
+            reset_preview()
+        elif change.text:
+            preview_parts.append(change.text)
+            preview_pending += len(change.text)
+            flush_preview()
+
+    def research_event(kind, text):
+        if kind == "thinking":
+            record_thinking(text)
+        else:
+            event(run, kind, text)
 
     status, detail = "succeeded", "已完成"
     try:
         with project_scope(scope_for(run)):
             check()
+            reset_preview()
             p = require_access(
                 fresh_user(run.owner_id), run.conversation.mode, run.model
             )
@@ -412,7 +465,7 @@ def run_task(run_id):
                     fresh_user(run.owner_id),
                     p,
                     check,
-                    lambda kind, text: event(run, kind, text),
+                    research_event,
                 )
                 deterministic_answer = research_answer
                 if deterministic_answer is not None:
@@ -514,22 +567,31 @@ def run_task(run_id):
             corrections = 0
             while True:
                 check()
+                reset_preview()
                 prepare()
-                raw = "".join(
-                    stream(
-                        model,
-                        messages,
-                        p["maxOutputTokens"],
-                        check,
-                        structured=is_agent,
-                        thinking=run.thinking_mode == "deep",
-                        temperature=p["temperature"],
-                        top_p=p["topP"],
-                        on_thinking=record_thinking,
-                        reasoning_effort=p["reasoningEffort"],
-                        on_usage=usage,
-                    )
-                )
+                parser = AnswerPreviewParser(allow_plain=not is_agent)
+                chunks = []
+                stream_guard = ModelStreamGuard(check, deadline)
+                for chunk in stream(
+                    model,
+                    messages,
+                    p["maxOutputTokens"],
+                    stream_guard,
+                    structured=is_agent,
+                    thinking=run.thinking_mode == "deep",
+                    temperature=p["temperature"],
+                    top_p=p["topP"],
+                    on_thinking=record_thinking,
+                    reasoning_effort=p["reasoningEffort"],
+                    on_usage=usage,
+                    monitor_guard=stream_guard.poll,
+                ):
+                    if not chunks:
+                        record_thinking("", force=True)
+                    chunks.append(chunk)
+                    record_preview(parser.feed(chunk))
+                flush_preview(force=True)
+                raw = "".join(chunks)
                 try:
                     if (
                         not is_agent
@@ -602,6 +664,7 @@ def run_task(run_id):
                             else command["answer"]
                         )
                         AgentRun.objects.filter(pk=run.id).update(answer=run.answer)
+                        reset_preview()
                         event(run, "text", run.answer)
                         break
                     if set(command) != {"action", "arguments"} or not isinstance(
@@ -613,6 +676,7 @@ def run_task(run_id):
                             "已达到工具步骤上限，已完成的证据已保留，请缩小问题"
                         )
                     name = command["action"]
+                    reset_preview()
                     if name == "ask_user":
                         check()
                         state = snapshot(
@@ -695,6 +759,7 @@ def run_task(run_id):
                         )
                         break
                 except (ValueError, ValidationError, TypeError, KeyError) as exc:
+                    reset_preview()
                     if corrections >= p["maxProtocolRetries"]:
                         raise ModelError("模型未能遵循工具协议，请调整问题或切换模型")
                     corrections += 1
@@ -712,7 +777,6 @@ def run_task(run_id):
                             ),
                         }
                     )
-            record_thinking("", force=True)
     except Cancelled:
         status, detail = (
             "cancelled",
@@ -748,7 +812,13 @@ def run_task(run_id):
         status, detail = "failed", "运行未能完成，请稍后重试或联系管理员"
     finally:
         with project_scope(scope_for(run)):
-            record_thinking("", force=True)
+            if status == "succeeded":
+                try:
+                    record_thinking("", force=True)
+                except (Cancelled, PermissionDenied, ModelError):
+                    # Keep previously authorized fragments without publishing
+                    # buffered text after cancellation, revocation or timeout.
+                    pass
             AgentRun.objects.filter(pk=run.id, status="running").update(
                 status=status, detail=detail, updated_at=timezone.now()
             )

@@ -28,6 +28,8 @@ from apps.knowledge.services import search_entries, visible_entries
 from apps.projects.context import project_scope
 from .models import AgentWorkflow
 from .model_guard import ModelStreamGuard
+from .model_activity import WorkflowModelActivity
+from .config import registry
 from .geology_reference import is_reference_resource
 from .provider import ModelError
 from .tools import resolve_resource
@@ -1078,6 +1080,13 @@ def advance_demo(workflow_id) -> None:
                         heartbeat_at[0] = time.monotonic()
 
                 guard = ModelStreamGuard(check_stream_authorization, deadline)
+                activity = WorkflowModelActivity(
+                    workflow,
+                    stage_title(workflow, stage),
+                    registry()[workflow.model],
+                    p,
+                    guard,
+                )
 
                 # Reserve the decision count before contacting the configured model.
                 if not recovering_response:
@@ -1184,8 +1193,12 @@ def advance_demo(workflow_id) -> None:
                         guard,
                         record_attempt,
                         on_response=lambda: record_attempt(stage["modelAttempts"][-1]),
+                        on_thinking=activity.thinking,
+                        on_progress=activity.progress,
                     )
+                    guard.poll()
                 except BudgetReviewRequired as exc:
+                    activity.fail()
                     guard.poll()
                     if not stage.get("modelAttempts") and not recovering_response:
                         workflow.iteration -= 1
@@ -1193,7 +1206,9 @@ def advance_demo(workflow_id) -> None:
                         workflow.plan["stages"].append(stage)
                     _pause(workflow, stage, str(exc))
                     return
-                guard.poll()
+                except Exception:
+                    activity.fail()
+                    raise
                 stage.update(decision=decision, edits=edits)
                 with transaction.atomic():
                     step(

@@ -137,6 +137,7 @@ export default function WorkflowCard(
           status: workflow.status,
           detail: workflow.detail,
           pauseRequested: workflow.pauseRequested,
+          modelActivity: workflow.modelActivity,
           planHash: workflow.planHash,
           plan: { ...detail.plan, phase: workflow.plan.phase },
         }

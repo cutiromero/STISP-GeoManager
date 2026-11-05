@@ -20926,6 +20926,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentRunPoll"
+                },
+                "example": {
+                  "run": {
+                    "id": 106,
+                    "conversationId": 31,
+                    "model": "configured",
+                    "status": "running",
+                    "prompt": "解释地质资料",
+                    "answer": "",
+                    "answerPreview": "依据本轮资料，正在整理地质解释。",
+                    "detail": "正在接收模型答复",
+                    "evidence": [],
+                    "attachments": [],
+                    "createdAt": "2026-11-06T09:00:00Z",
+                    "updatedAt": "2026-11-06T09:00:01Z"
+                  },
+                  "events": [],
+                  "cursor": 0
                 }
               }
             }
@@ -24061,6 +24079,19 @@
                   },
                   "goal": "检查上传地质资料",
                   "model": "configured",
+                  "modelActivity": {
+                    "stage": "整理研究报告",
+                    "status": "complete",
+                    "thinkingText": "已核对本轮成果与证据，整理报告。",
+                    "truncated": false,
+                    "reasoningEffort": "xhigh",
+                    "thinkingEnabled": true,
+                    "attempt": 1,
+                    "outputChars": 830,
+                    "thinkingChars": 19,
+                    "modelName": "configured",
+                    "updatedAt": "2026-11-04T08:10:00Z"
+                  },
                   "status": "succeeded",
                   "detail": "九项成果已保存",
                   "currentStep": "finalize",
@@ -26826,7 +26857,7 @@
               "medium",
               "xhigh"
             ],
-            "description": "后台默认思考强度；开启任务预算时以当前方案默认值为准"
+            "description": "后台默认思考强度，新策略为xhigh；开启任务预算时以当前方案默认值为准。逻辑项目界面默认显式选择deep+xhigh"
           },
           "budgets": {
             "$ref": "#/components/schemas/AgentBudgetOptions"
@@ -27631,7 +27662,7 @@
           },
           "thinkingMode": {
             "type": "string",
-            "description": "思考模式",
+            "description": "思考模式；逻辑项目界面默认deep，转入科研工作流后继承本人本项目已绑定运行的选择",
             "enum": [
               "fast",
               "deep"
@@ -27672,6 +27703,11 @@
           "answer": {
             "type": "string",
             "description": "已生成文字，失败时保留已生成内容"
+          },
+          "answerPreview": {
+            "type": "string",
+            "maxLength": 24000,
+            "description": "尚未通过最终校验的真实增量预览；普通chat允许自然语言正文，agent仅允许已确认action=final的answer字符串增量解码结果。不含工具参数或原始JSON，前端仅纯文本展示。上限24000个Unicode字符，最终answer不截断；成功后清空，失败、断流或取消保留已接收片段，重试或工具调用时重置。"
           },
           "detail": {
             "type": "string",
@@ -27724,7 +27760,7 @@
       },
       "AgentEvent": {
         "type": "object",
-        "description": "操作状态事件；thinking 仅来自模型返回的思考片段",
+        "description": "操作状态事件；thinking仅来自模型思考，answer_preview为内部未核验答复快照（普通chat自然正文或agent确认final后的answer），不进入进度日志",
         "properties": {
           "id": {
             "type": "integer",
@@ -27737,6 +27773,7 @@
               "status",
               "text",
               "thinking",
+              "answer_preview",
               "tool_started",
               "tool_completed",
               "context",
@@ -27748,7 +27785,7 @@
           },
           "text": {
             "type": "string",
-            "description": "增量文字或简要操作说明"
+            "description": "增量文字或简要操作说明；answer_preview为当前最多24000个Unicode字符的纯文本预览快照，普通chat允许自然正文，agent仅提取已确认action=final的answer字符串，不含工具参数或原始JSON。空串表示重置，界面仅通过run.answerPreview显示而不拼接此事件"
           },
           "createdAt": {
             "type": "string",
@@ -27932,7 +27969,7 @@
           },
           "thinkingMode": {
             "type": "string",
-            "description": "思考模式",
+            "description": "思考模式；逻辑项目界面默认显式发送deep与reasoningEffort=xhigh；选择fast时不得传reasoningEffort。关联科研工作流继承本人当前项目绑定运行的选择，服务端仍复核模型能力与策略",
             "enum": [
               "fast",
               "deep"
@@ -30033,6 +30070,85 @@
           "truncated"
         ]
       },
+      "AgentWorkflowModelActivity": {
+        "type": "object",
+        "description": "当前或最近一次实际模型请求的轻量活动快照；不含工具参数或原始响应正文，暂停、取消和终态优先使用工作流状态",
+        "additionalProperties": false,
+        "properties": {
+          "stage": {
+            "type": "string",
+            "description": "实际模型请求对应的工作流阶段"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "requesting",
+              "thinking",
+              "responding",
+              "validating",
+              "complete",
+              "failed"
+            ],
+            "description": "模型请求状态；complete仅表示该次模型请求完成，不代表算子或工作流完成"
+          },
+          "thinkingText": {
+            "type": "string",
+            "maxLength": 12000,
+            "description": "模型真实返回的最近12000个思考字符，无实际思考时为空，不由前端生成"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "思考内容超过12000字符并省略较早部分；仅描述thinkingText，不描述响应正文"
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "xhigh"
+            ],
+            "description": "本次请求实际采用的思考强度"
+          },
+          "thinkingEnabled": {
+            "type": "boolean",
+            "description": "本次请求实际是否启用思考"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "当前阶段模型请求尝试序号"
+          },
+          "outputChars": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "实际收到的响应正文字符数，仅作进度计数，不展示原始JSON"
+          },
+          "thinkingChars": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "模型实际返回的思考字符累计数，含因预览上限而省略的部分"
+          },
+          "modelName": {
+            "type": "string",
+            "description": "本次请求实际模型名"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "活动快照最近持久化时间"
+          }
+        },
+        "required": [
+          "stage",
+          "status",
+          "thinkingText",
+          "truncated",
+          "reasoningEffort",
+          "thinkingEnabled",
+          "attempt",
+          "outputChars"
+        ]
+      },
       "AgentWorkflow": {
         "type": "object",
         "description": "可恢复的项目科研工作流；card视图省略完整计划和审核，steps/evidence为空",
@@ -30051,6 +30167,9 @@
             "type": "integer",
             "description": "实际步骤总数，card视图用于按需展开入口",
             "minimum": 0
+          },
+          "modelActivity": {
+            "$ref": "#/components/schemas/AgentWorkflowModelActivity"
           },
           "id": {
             "type": "string",

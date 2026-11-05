@@ -22,6 +22,30 @@ pytestmark = pytest.mark.django_db
 pytest_plugins = ["tests.integration.test_geology_generic_workflow"]
 
 
+def test_upload_role_thinking_reaches_the_run_event(generic, monkeypatch):
+    from apps.agent import workflow_roles
+
+    run, _ = intake(generic)
+    run.research_intent = {"_uploadBatchId": generic["batch"]}
+    run.save(update_fields=["research_intent"])
+    original = workflow_roles.recognize_roles
+
+    def recognize(*args, **options):
+        options["on_thinking"]("读取资料类型的真实模型片段")
+        return original(*args, **options)
+
+    monkeypatch.setattr(workflow_roles, "recognize_roles", recognize)
+    events = []
+    process(
+        run,
+        generic["owner"],
+        generic["policy"],
+        lambda: None,
+        lambda kind, value: events.append((kind, value)),
+    )
+    assert ("thinking", "读取资料类型的真实模型片段") in events
+
+
 @pytest.fixture(autouse=True)
 def online_model(monkeypatch):
     online = [{"alias": "mock", "status": "online", "contextWindowTokens": 32768}]

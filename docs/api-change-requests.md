@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261106-002 - 真实答复增量预览与轻量模型活动
+
+- Status: BackendReady
+- Owner: Frontend / Backend。
+- Endpoints: GET /api/agent/runs/{runId}/；GET /api/agent/conversations/{conversationId}/；GET /api/agent/workflows/{workflowId}/。
+- Change type: 既有响应增加可选字段；轮询、历史恢复与访问权限不变。
+- OpenAPI change: AgentRun.answerPreview（最多24000字符）；AgentEvent.kind增加内部answer_preview快照事件；AgentWorkflow.modelActivity及AgentWorkflowModelActivity定义真实阶段、请求状态、思考内容与接收字符数，card/inspection/full详情均可包含，不扩大工作流列表摘要。
+- Mock examples: mock/prism/examples/106-agent-generic-chat.json、105-agent-workflow-card.json。
+- Frontend reason: 最终答复校验前显示真实增量纯文本，标明生成中或中断片段；工作流模型活动与算子进度分别显示，使用现有轻量card轮询。
+- Backend implementation notes: 普通chat允许真实自然语言正文预览；agent仅在确认action=final后预览answer字符串增量解码结果，不返回工具参数或原始JSON。重试及工具调用重置，成功后清空，失败或取消保留。小型answer_preview事件保存当前快照，空串重置，前端进度日志隐藏且仅从run.answerPreview读取；预览截断不影响最终answer。普通运行思考首片立即持久化，正文开始时保存批量处理中剩余思考尾部。工作流仅实际模型回调提供思考，保留最近12000字符并以truncated标记省略早期思考，thinkingChars累计；outputChars仅计数。小型持久步骤保存快照，沿用本人、项目和工作流权限；暂停和终态优先于模型活动状态。
+- Verification: 普通chat自然正文、agent最终answer首片、转义及拆分字符串、工具参数排除、成功替换、失败取消与恢复；短思考首片和尾部持久化；真实思考及接收计数、算子/终态优先、轻量轮询和按需明细；专项浏览器、真实UI与SSE模拟fixture端到端、两项TypeScript及五项契约检查。
+- Result: 可选兼容契约与前端状态显示；增量片段只表示已接收文字，最终校验及原有审批继续生效。
+
 ## API-20261106-001 - 逻辑推理默认深入与科研任务思考选择继承
 
 - Status: BackendReady
@@ -385,6 +398,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261106-002 | BackendReady | /api/agent/runs/{runId}/; /conversations/{conversationId}/; /workflows/{workflowId}/ | Real final-answer preview and persisted lightweight model activity | Updated | 105-agent-workflow-card; 106-agent-generic-chat | Implemented | Scoped browser, typechecks and API checks | Existing owner, project and workflow authorization |
 | API-20261106-001 | BackendReady | /api/agent/bootstrap/; /conversations/{conversationId}/runs/; /workflows/; /workflow-uploads/recognize/ | Explicit deep default and verified run policy inheritance | Updated | Existing agent fixtures; scoped HTTP model captures | Implemented | Focused frontend and backend regression; API checks | Existing project, owner, model and budget authorization |
 | API-20261105-014 | BackendReady | /api/agent/workflows/{workflowId}/; /confirm/ | Raster groups, compact approval and element pages | Updated | 105-agent-workflow-card.json | Implemented | Focused regression; browser cases prepared | Existing owner/project/resource authorization |
 | API-20261105-013 | BackendReady | /api/agent/workflows/{workflow_id}/ | Model attempt audit response | Updated | Backend fixtures | Implemented | Focused backend tests; browser cases prepared | Existing workflow authorization |

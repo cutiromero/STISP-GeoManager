@@ -256,7 +256,9 @@ def process(run, user, policy, guard, event):
             return serialize(run, user, policy)["message"]
         from .generic_chat import prepare
 
-        return prepare(run, user, policy, guard)
+        return prepare(
+            run, user, policy, guard, on_thinking=lambda text: event("thinking", text)
+        )
     previous = previous_run(run)
     if previous and previous.research_intent.get("scenario") == "geology_generic":
         if run.research_intent.get("_demoScenario"):

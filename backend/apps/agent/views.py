@@ -107,6 +107,7 @@ def conversation_json(c):
 def run_json(r, user):
     from .selections import check_history_evidence, serialize as selection_json
     from .interactions import public_question
+    from .answer_preview import stored_answer_preview
 
     p = require_access(user, r.conversation.mode)
     if r.conversation.mode == "agent":
@@ -122,6 +123,7 @@ def run_json(r, user):
         "status": r.status,
         "prompt": r.prompt,
         "answer": r.answer,
+        "answerPreview": stored_answer_preview(r),
         "detail": r.detail,
         "evidence": r.evidence,
         "computeIntent": _compute_intent(r, user, p),
@@ -892,6 +894,11 @@ def workflow_json(workflow, include_steps=True, view="full"):
         "updatedAt": workflow.updated_at.isoformat(),
         "runtime": "durable_state_machine",
     }
+    from .model_activity import latest_model_activity
+
+    activity = latest_model_activity(workflow)
+    if activity is not None:
+        data["modelActivity"] = activity
     if card:
         data.update(view="card", steps=[], stepCount=workflow.steps.count())
     elif include_steps:

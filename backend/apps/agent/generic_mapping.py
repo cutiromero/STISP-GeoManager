@@ -17,6 +17,7 @@ from . import provider
 from .config import registry
 from .context import prepare_context
 from .demo_decisions import _response_text
+from .model_activity import WorkflowModelActivity
 from .model_guard import ModelStreamGuard
 
 INSTRUCTION = (
@@ -78,7 +79,7 @@ def _validate(raw, roles):
     return result
 
 
-def model_targets(workflow, policy, roles, *, on_thinking=None):
+def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None):
     model = registry()[workflow.model]
     if model.model_id.casefold().startswith("mock") or not roles:
         return None
@@ -141,61 +142,87 @@ def model_targets(workflow, policy, roles, *, on_thinking=None):
             raise PermissionDenied("模型思考设置或预算已变化，请重新发起字段判断")
 
     guard = ModelStreamGuard(authorize, deadline)
+    activity = WorkflowModelActivity(
+        workflow, "确认字段含义", model, {**policy, "_thinking": thinking}, guard
+    )
+
+    def progress(status, **values):
+        update = {"status": status, **values}
+        activity.progress(update)
+        if on_progress:
+            on_progress(update)
+
+    def thinking_received(text):
+        activity.thinking(text)
+        if on_thinking:
+            on_thinking(text)
 
     messages = [
         {"role": "system", "content": INSTRUCTION},
         {"role": "user", "content": json.dumps(_payload(roles), ensure_ascii=False)},
     ]
-    error = None
-    guard.poll()
     try:
-        window = provider.model_window(model)
-    except provider.ModelError as exc:
+        error = None
         guard.poll()
-        raise ComputeError(str(exc)) from exc
-    for _ in range(2):
         try:
-            guard.poll()
-            _, truncated = prepare_context(
-                messages, messages[1], model, policy, window, thinking
-            )
-            if truncated:
-                raise provider.ModelError(
-                    "字段判断须保留完整资料，请缩小资料范围后重试"
-                )
-            guard.poll()
-            raw = _response_text(
-                "".join(
-                    provider.stream(
-                        model,
-                        messages,
-                        policy["maxOutputTokens"],
-                        guard,
-                        structured=True,
-                        thinking=thinking,
-                        temperature=policy["temperature"],
-                        top_p=policy["topP"],
-                        reasoning_effort=policy["reasoningEffort"],
-                        on_thinking=on_thinking,
-                        monitor_guard=guard.poll,
-                    )
-                )
-            )
-            guard.poll()
+            window = provider.model_window(model)
         except provider.ModelError as exc:
             guard.poll()
             raise ComputeError(str(exc)) from exc
-        try:
-            return _validate(raw, roles)
-        except ComputeError as exc:
-            error = exc
-            messages += [
-                {"role": "assistant", "content": raw},
-                {
-                    "role": "user",
-                    "content": "上次回答未通过校验："
-                    + str(exc)
-                    + "。请按要求重新输出。",
-                },
-            ]
-    raise error
+        for attempt in range(1, 3):
+            try:
+                guard.poll()
+                _, truncated = prepare_context(
+                    messages, messages[1], model, policy, window, thinking
+                )
+                if truncated:
+                    raise provider.ModelError(
+                        "字段判断须保留完整资料，请缩小资料范围后重试"
+                    )
+                guard.poll()
+                chunks, output_chars = [], 0
+                progress("requesting", attempt=attempt, outputChars=0)
+                for chunk in provider.stream(
+                    model,
+                    messages,
+                    policy["maxOutputTokens"],
+                    guard,
+                    structured=True,
+                    thinking=thinking,
+                    temperature=policy["temperature"],
+                    top_p=policy["topP"],
+                    reasoning_effort=policy["reasoningEffort"],
+                    on_thinking=thinking_received,
+                    monitor_guard=guard.poll,
+                ):
+                    chunks.append(chunk)
+                    output_chars += len(chunk)
+                    progress("responding", outputChars=output_chars)
+                raw = _response_text("".join(chunks))
+                guard.poll()
+            except provider.ModelError as exc:
+                guard.poll()
+                raise ComputeError(str(exc)) from exc
+            progress("validating", outputChars=output_chars)
+            try:
+                result = _validate(raw, roles)
+            except ComputeError as exc:
+                error = exc
+                progress("failed")
+                messages += [
+                    {"role": "assistant", "content": raw},
+                    {
+                        "role": "user",
+                        "content": "上次回答未通过校验："
+                        + str(exc)
+                        + "。请按要求重新输出。",
+                    },
+                ]
+            else:
+                guard.poll()
+                progress("complete")
+                return result
+        raise error
+    except Exception:
+        activity.fail()
+        raise

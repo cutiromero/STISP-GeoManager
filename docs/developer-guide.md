@@ -53,7 +53,7 @@
 
 资源 `default_visualization.colorAdvice.classes` 逐类记录 `source=library_selected|model_suggestion|system_palette`、色表编号/来源、原始参考色与校正原因、模型替换原因及最终未满足约束；离线命中色表同样是 `library_selected`。`attempts` 保留模型方案、逐类问题和请求预算，`result_color_advice` 审计保存最终方案。普通工作台与对比/讲解共用资源分类颜色、图例名称、填充透明度与边框；不新增界面控件。已有成果可运行 `python manage.py style_logic_results --workflow <完整工作流UUID> --config <正式配置路径>` 预览完整新方案，预览不写资源或业务审计，追加 `--apply` 强制重新配色并保存；`--no-model` 使用色表与确定性调色板。预览和应用分别运行模型，不保证两次模型建议相同。命令只处理指定任务的矢量输出，不改原始上传与计算数据。
 
-`GET /api/agent/workflows/{workflowId}/?view=card` 复用完整详情的本人、项目与资源鉴权，只返回卡片需要的状态、阶段名称/状态/任务及已入库成果引用、`stepCount`；`steps`、`evidence` 为空，`parameters` 为空，不返回模型交互、完整阶段结果、`finalStage` 或 `modificationReview`。省略 `view` 或 `view=full` 返回原有完整详情。无效 `view` 返回标准 400 错误。对话历史先读 card，展开过程、证据、模型交互或审核时再读 full；已完成任务不轮询，也不再次读取原始对话任务。
+`GET /api/agent/workflows/{workflowId}/?view=card` 复用完整详情的本人、项目与资源鉴权，只返回卡片需要的状态、阶段名称/状态/任务、已入库成果引用、`stepCount` 和可选的轻量 `modelActivity`；`steps`、`evidence` 为空，`parameters` 为空，不返回原始模型交互、完整阶段结果、`finalStage` 或 `modificationReview`。省略 `view` 或 `view=full` 返回原有完整详情。无效 `view` 返回标准 400 错误。对话历史先读 card，展开过程或审核时按需读 `view=inspection&part=steps|suggestions` 分页；展开实际思考直接使用card快照，不补读明细。已完成任务不轮询，也不再次读取原始对话任务。
 
 综合推理族 `geology_multi_element_reasoning` 与 `geology_generic` 自动入库的成果为 `check.issues`、`apply.lithology/faults/alterations/changes`、`relations.intersections`、`prospect.before_zones/after_zones/evidence`。其余输出仍保留在计算任务中，可下载、用于模型判断、复查、报告和评价，但不创建资源或成果记录。输入绑定所需输出均在上述保留集合内。
 
@@ -2663,6 +2663,10 @@ API 以 `docs/openapi.yaml` 为准，生成代码实际位于 `frontend/src/api/
 数据、证据、历史及后续生成均重新授权；资源撤权后旧会话返回 403。统计默认最多读取 10000 条并明确标记全量或前缀样本；模型不能把截断数据视为总体。长任务由独立 agent_worker 执行，不占用 Waitress 请求线程。新表随业务 SQLite 备份，科研目录布局不变。
 
 模型注册的 `context_window_tokens` 用于显示和上下文安全预算，默认 Qwen3.8-27B 为 32768 token。超级管理员可以在 `/api/agent/admin/` 修改 UTF-8 上下文字节预算、回答 token 上限、Temperature、Top P、工具/算子步骤上限、协议纠错次数、单次运行时限、附件大小/数量和互联网检索策略；worker 会按模型窗口为回答预留空间。运行提交可带 `thinkingMode=fast|deep`、`attachmentIds` 和 `internetEnabled`，服务端会重新核对模型能力和策略。深度模式只接受注册为支持思考的模型。模型真实返回的 `reasoning_content`、`reasoning`、`thinking` 或 `<think>` 片段只写入 `thinking` 事件，并持久化为思考摘要和耗时；前端生成时展开 bordered 面板，完成后收起并显示耗时，不混入最终回答。
+
+普通运行的可选 `answerPreview` 最多24000个Unicode字符。普通 `chat` 允许预览模型真实返回的自然语言正文；`agent` 仅预览已经确认 `action=final` 的 `answer` 字符串增量解码结果，不展示工具参数或原始JSON。最终校验前以纯文本显示并标注状态，不解析Markdown、链接或引用。成功后使用完整 `answer`，重试和工具调用重置预览，失败、取消或断流保留已接收片段。内部 `answer_preview` 事件存当前小型快照，空串表示重置；客户端不将其显示为进度日志，也不拼接事件文本，而是使用轮询或会话恢复返回的 `run.answerPreview`。普通运行的首个非空真实思考片段立即持久化，后续思考按时间和字符批量保存；开始接收正文时立即保存剩余思考尾部，使短思考也能在运行中恢复和展示。
+
+工作流详情的可选 `modelActivity` 在 `card`、`inspection` 和 `full` 中提供实际请求阶段、六态模型状态及真实接收字符计数。`thinkingText` 只保留模型实际返回的最近12000个思考字符，`truncated` 仅标记省略较早思考，`thinkingChars` 为累计数；`outputChars` 只报告真实正文字符数，不暴露原始JSON。前端通过现有轻量card轮询更新，展开思考不读取工作流完整计划或过程。算子计算、人工确认、暂停和终态优先于最近一次模型请求，停止后保留实际内容并停止动效；`complete`只代表单次模型分析完成。
 
 `POST /api/agent/attachments/` 接收当前项目内的文档或图片，附件只能由上传者及有权管理员引用；服务端执行 MIME、大小和项目权限校验，并在提交时再次复核。支持的文档会提取文本，图片仅在实际探测到模型视觉能力时发送给多模态模型。互联网检索默认关闭，打开后仅通过受控 HTTP 检索器访问公开地址，结果必须带来源和时间，不能绕过数据权限。
 

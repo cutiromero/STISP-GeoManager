@@ -390,6 +390,7 @@ def test_workflow_attempts_are_durable_and_retries_consume_real_call_budget(
                 == 1
             )
         requests.append(copy.deepcopy(messages))
+        options["on_thinking"]("正在核对当前真实资料")
         if mode == "network" and len(requests) == 2:
             raise ModelError("第二次模型连接失败")
         value = next(values)
@@ -403,6 +404,15 @@ def test_workflow_attempts_are_durable_and_retries_consume_real_call_budget(
     ):
         advance_demo(workflow.id)
     workflow.refresh_from_db()
+    from apps.agent.model_activity import latest_model_activity
+
+    activity = latest_model_activity(workflow)
+    assert activity["thinkingText"] == "正在核对当前真实资料"
+    assert activity["status"] == ("complete" if mode == "recover" else "failed")
+    assert activity["attempt"] == (1 if mode == "quota" else 2)
+    assert workflow.steps.filter(kind="model_activity").count() == (
+        1 if mode == "quota" else 2
+    )
     assert workflow.iteration == 1
     assert workflow.plan["actualModelCallCount"] == (1 if mode == "quota" else 2)
     attempts = workflow.plan["stages"][0]["modelAttempts"]

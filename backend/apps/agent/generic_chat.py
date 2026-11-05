@@ -49,7 +49,7 @@ def validate_batch(user, conversation, batch_id, *, run=None):
     return uploads
 
 
-def prepare(run, user, policy, guard):
+def prepare(run, user, policy, guard, *, on_thinking=None):
     from .research_intents import _save
     from .workflow_roles import compatible, recognize_roles
 
@@ -80,7 +80,12 @@ def prepare(run, user, policy, guard):
         }
         if reusable
         else recognize_roles(
-            user, run.project_tag_id, batch_id, run.model, source_run=run
+            user,
+            run.project_tag_id,
+            batch_id,
+            run.model,
+            source_run=run,
+            on_thinking=on_thinking,
         )
     )
     suggestions = {item["resourceId"]: item for item in suggested["items"]}

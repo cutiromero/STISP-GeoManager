@@ -193,6 +193,281 @@ it("requires confirmation before stopping a streamed response", async () => {
   expect(screen.getByText("已生成部分回答")).toBeInTheDocument();
 });
 
+it("real answer preview arrives before terminal and is replaced by the verified final answer", async () => {
+  const responding: AgentRun = { ...run(5, "预览本轮答复"), status: "running" };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [responding],
+  });
+  let finish:
+    | ((value: Awaited<ReturnType<typeof agentApi.poll>>) => void)
+    | undefined;
+  vi.spyOn(agentApi, "poll")
+    .mockResolvedValueOnce({
+      run: {
+        ...responding,
+        answerPreview: "**真实片段** [链接](https://example.test) <img src=x>",
+      },
+      events: [
+        {
+          id: 1,
+          kind: "answer_preview",
+          text: "内部快照不应单独显示",
+          createdAt: "",
+        },
+      ],
+      cursor: 1,
+    })
+    .mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+  showAgent();
+  const preview = await screen.findByRole("region", { name: "答复增量预览" });
+  expect(preview).toHaveTextContent("正在生成答复，尚未最终校验");
+  expect(preview).toHaveTextContent(
+    "**真实片段** [链接](https://example.test) <img src=x>",
+  );
+  expect(within(preview).queryByRole("link")).not.toBeInTheDocument();
+  expect(preview.querySelector("img")).toBeNull();
+  expect(screen.queryByText("内部快照不应单独显示")).not.toBeInTheDocument();
+  expect(screen.queryByText("已经核验的最终答复")).not.toBeInTheDocument();
+  await waitFor(() => expect(finish).toBeDefined());
+  await act(async () =>
+    finish?.({
+      run: {
+        ...responding,
+        status: "succeeded",
+        answerPreview: "",
+        answer: "**已经核验的最终答复**",
+      },
+      events: [],
+      cursor: 2,
+    }),
+  );
+  await screen.findByText("已经核验的最终答复");
+  expect(
+    screen.queryByRole("region", { name: "答复增量预览" }),
+  ).not.toBeInTheDocument();
+});
+
+it.each(["failed", "cancelled", "interrupted"] as const)(
+  "real answer preview restores %s partial text without claiming a complete answer",
+  async (status) => {
+    vi.mocked(agentApi.detail).mockResolvedValue({
+      conversation,
+      runs: [
+        {
+          ...run(5, "未完成的答复"),
+          status,
+          answerPreview: "实际收到的部分文字",
+        },
+      ],
+    });
+    const poll = vi.spyOn(agentApi, "poll");
+    showAgent();
+    const preview = await screen.findByRole("region", { name: "答复增量预览" });
+    expect(preview).toHaveTextContent(
+      "本轮已中断或停止；以下为尚未最终校验的部分答复",
+    );
+    expect(preview).toHaveTextContent("实际收到的部分文字");
+    expect(poll).not.toHaveBeenCalled();
+  },
+);
+
+it("real answer preview survives cancellation and a transient polling disconnect", async () => {
+  const responding: AgentRun = {
+    ...run(5, "取消前保留真实片段"),
+    status: "running",
+    answerPreview: "中断前的真实片段",
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [responding],
+  });
+  vi.spyOn(agentApi, "poll").mockRejectedValue(
+    new TypeError("预览连接暂时中断"),
+  );
+  vi.spyOn(agentApi, "cancel").mockResolvedValue({
+    ...responding,
+    status: "cancelled",
+  });
+  showAgent();
+  await screen.findByText("预览连接暂时中断");
+  expect(
+    screen.getByRole("region", { name: "答复增量预览" }),
+  ).toHaveTextContent("中断前的真实片段");
+  fireEvent.click(screen.getByRole("button", { name: "停止回答" }));
+  fireEvent.click(
+    within(await screen.findByRole("dialog")).getByRole("button", {
+      name: "停止回答",
+    }),
+  );
+  await screen.findByText("本轮已中断或停止；以下为尚未最终校验的部分答复");
+  expect(
+    screen.getByRole("region", { name: "答复增量预览" }),
+  ).toHaveTextContent("中断前的真实片段");
+});
+
+it("real thinking animation stops for answer preview, calculation and polling disconnect", async () => {
+  const thinking: AgentRun = {
+    ...run(5, "观察真实思考阶段"),
+    status: "running",
+    thinkingMode: "deep",
+    thinkingText: "实际模型思考片段",
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [thinking],
+  });
+  const pending: Array<
+    (value: Awaited<ReturnType<typeof agentApi.poll>>) => void
+  > = [];
+  let fail: ((reason: unknown) => void) | undefined;
+  vi.spyOn(agentApi, "poll").mockImplementation(
+    () =>
+      new Promise((resolve, reject) => {
+        pending.push(resolve);
+        fail = reject;
+      }),
+  );
+  showAgent();
+  const content = await screen.findByLabelText("模型思考内容");
+  expect(content).toHaveClass("is-streaming");
+  await waitFor(() => expect(pending).toHaveLength(1));
+  await act(async () =>
+    pending[0]!({
+      run: { ...thinking, answerPreview: "实际答复片段" },
+      events: [],
+      cursor: 1,
+    }),
+  );
+  expect(content).not.toHaveClass("is-streaming");
+  expect(screen.getByText("模型思考过程")).toBeInTheDocument();
+  expect(screen.queryByText("模型思考过程（生成中）")).not.toBeInTheDocument();
+  expect(
+    within(screen.getByLabelText("当前任务")).getByRole("status"),
+  ).toHaveTextContent("正在组织回答");
+  await waitFor(() => expect(pending).toHaveLength(2));
+  await act(async () =>
+    pending[1]!({
+      run: { ...thinking, status: "waiting_compute" },
+      events: [],
+      cursor: 2,
+    }),
+  );
+  expect(content).not.toHaveClass("is-streaming");
+  expect(screen.queryByText("模型思考过程（生成中）")).not.toBeInTheDocument();
+  expect(
+    within(screen.getByLabelText("当前任务")).getByRole("status"),
+  ).toHaveTextContent("算法正在计算");
+  await waitFor(() => expect(pending).toHaveLength(3));
+  await act(async () => pending[2]!({ run: thinking, events: [], cursor: 3 }));
+  expect(content).toHaveClass("is-streaming");
+  await waitFor(() => expect(pending).toHaveLength(4));
+  await act(async () => fail?.(new TypeError("思考轮询断开")));
+  await screen.findByText("思考轮询断开", { selector: ".ant-alert-title" });
+  expect(
+    within(screen.getByLabelText("当前任务")).getByRole("status"),
+  ).toHaveTextContent("连接暂时中断，正在恢复");
+  expect(
+    within(screen.getByLabelText("当前任务")).getByRole("status"),
+  ).toHaveAttribute("data-activity-state", "waiting");
+  expect(content).not.toHaveClass("is-streaming");
+  expect(screen.queryByText("模型思考过程（生成中）")).not.toBeInTheDocument();
+  expect(content).toHaveTextContent("实际模型思考片段");
+});
+
+it("real answer preview is empty during a tool call and real reasoning remains visible on a computation turn", async () => {
+  const toolRun: AgentRun = {
+    ...computeRun({ ...computeIntent, status: "ready" }),
+    thinkingMode: "deep",
+    thinkingText: "真实的计算前思考",
+    answer: "",
+    answerPreview: "",
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [toolRun],
+  });
+  showAgent("workbench");
+  fireEvent.click(await screen.findByText("模型思考过程"));
+  expect(await screen.findByLabelText("模型思考内容")).toHaveTextContent(
+    "真实的计算前思考",
+  );
+  expect(
+    screen.queryByRole("region", { name: "答复增量预览" }),
+  ).not.toBeInTheDocument();
+});
+
+it.each(["conversation", "project"] as const)(
+  "real answer preview ignores a delayed old poll after switching %s",
+  async (scope) => {
+    const second = { ...conversation, id: 2, title: "第二个会话" };
+    const pending: AgentRun = {
+      ...run(5, "第一轮问题"),
+      status: "running",
+      answerPreview: "旧会话真实片段",
+    };
+    vi.mocked(agentApi.conversations).mockResolvedValue({
+      items: [conversation, second],
+    });
+    vi.mocked(agentApi.detail).mockImplementation(async (id) =>
+      id === 1
+        ? { conversation, runs: [pending] }
+        : {
+            conversation: second,
+            runs: [
+              { ...run(8, "新会话问题", "新会话答复"), conversationId: 2 },
+            ],
+          },
+    );
+    let finish:
+      | ((value: Awaited<ReturnType<typeof agentApi.poll>>) => void)
+      | undefined;
+    vi.spyOn(agentApi, "poll").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const mounted = showAgent();
+    await screen.findByText("旧会话真实片段");
+    await waitFor(() => expect(finish).toBeDefined());
+    if (scope === "conversation") {
+      fireEvent.click(screen.getByRole("button", { name: /^第二个会话/ }));
+      await screen.findByText("新会话答复");
+    } else {
+      projectCode.current = "2";
+      vi.mocked(agentApi.conversations).mockResolvedValue({ items: [] });
+      mounted.rerender(
+        <AntApp>
+          <MemoryRouter initialEntries={["/agent/chat"]}>
+            <AgentPage />
+          </MemoryRouter>
+        </AntApp>,
+      );
+      await waitFor(() =>
+        expect(screen.queryByText("旧会话真实片段")).not.toBeInTheDocument(),
+      );
+    }
+    await act(async () =>
+      finish?.({
+        run: { ...pending, answerPreview: "旧请求迟到的片段" },
+        events: [],
+        cursor: 1,
+      }),
+    );
+    expect(screen.queryByText("旧会话真实片段")).not.toBeInTheDocument();
+    expect(screen.queryByText("旧请求迟到的片段")).not.toBeInTheDocument();
+    if (scope === "conversation")
+      expect(screen.getByText("新会话答复")).toBeInTheDocument();
+    mounted.unmount();
+  },
+);
+
 it("restores the parameter card and starts a real task from the same conversation turn", async () => {
   vi.spyOn(agentApi, "detail").mockResolvedValue({
     conversation,

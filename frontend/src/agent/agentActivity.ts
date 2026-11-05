@@ -32,8 +32,6 @@ export function workflowActivity(workflow: AgentWorkflow): LiveActivity {
   const { status, plan, detail } = workflow;
   if (status === "paused")
     return { state: "waiting", label: "科研任务已暂停", detail };
-  if (workflow.pauseRequested)
-    return { state: "working", label: "正在保存进度并暂停", detail };
   if (status === "waiting_approval")
     return { state: "waiting", label: "等待您确认", detail };
   if (status === "succeeded")
@@ -49,6 +47,8 @@ export function workflowActivity(workflow: AgentWorkflow): LiveActivity {
             : "任务已停止",
       detail,
     };
+  if (workflow.pauseRequested)
+    return { state: "waiting", label: "正在保存进度并暂停", detail };
   if (status === "queued")
     return { state: "working", label: "等待研究任务开始", detail };
   const stages = Array.isArray(plan.stages) ? plan.stages : [];
@@ -72,6 +72,22 @@ export function workflowActivity(workflow: AgentWorkflow): LiveActivity {
           : "算法正在计算",
       detail: detail || stageLabel,
     };
+  const modelActivity = workflow.modelActivity;
+  if (modelActivity && !["complete", "failed"].includes(modelActivity.status)) {
+    const labels = {
+      requesting: "等待模型响应",
+      thinking: "模型正在思考",
+      responding: "正在接收模型响应",
+      validating: "正在校验模型响应",
+      complete: "本阶段模型分析已完成",
+      failed: "本阶段模型请求失败",
+    };
+    return {
+      state: "working",
+      label: labels[modelActivity.status],
+      detail: `已接收响应正文 ${modelActivity.outputChars} 字符`,
+    };
+  }
   if (requesting)
     return { state: "working", label: "模型正在分析", detail: stageLabel };
   return {
@@ -85,6 +101,7 @@ export function runActivity(
   run: AgentRun,
   events: AgentEvent[] = [],
   computeActivity?: LiveActivity,
+  pollFailure?: string,
 ): LiveActivity {
   if (["waiting_input", "waiting_review"].includes(run.status))
     return {
@@ -149,6 +166,12 @@ export function runActivity(
     return { state: "complete", label: "回答已完成", detail: "" };
   if (!["queued", "running"].includes(run.status))
     return { state: "stopped", label: "本轮已结束", detail: run.detail };
+  if (pollFailure)
+    return {
+      state: "waiting",
+      label: "连接暂时中断，正在恢复",
+      detail: pollFailure,
+    };
   const last = events[events.length - 1];
   const tool = last?.kind.startsWith("tool_");
   return {
@@ -158,7 +181,7 @@ export function runActivity(
         ? "正在等待模型"
         : tool
           ? "正在查阅资料与处理数据"
-          : run.thinkingText && !run.answer
+          : run.thinkingText && !run.answer && !run.answerPreview
             ? "正在思考"
             : "正在组织回答",
     detail: run.detail || "",

@@ -79,6 +79,11 @@ export function assertAgentRun(
   if (!RUN_STATUSES.has(run.status as string)) {
     throw new ResponseFormatError(`${path}.status: invalid status`);
   }
+  if (run.answerPreview !== undefined) {
+    field(run, "answerPreview", "string", path);
+    if (Array.from(run.answerPreview as string).length > 24000)
+      throw new ResponseFormatError(`${path}.answerPreview: too long`);
+  }
   for (const key of ["evidence", "attachments"]) {
     array(run[key], `${path}.${key}`).forEach((item, index) => {
       const itemPath = `${path}.${key}[${index}]`;

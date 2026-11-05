@@ -1164,6 +1164,10 @@ export type AgentRun = {
      */
     answer: string;
     /**
+     * 尚未通过最终校验的真实增量预览；普通chat允许自然语言正文，agent仅允许已确认action=final的answer字符串增量解码结果。不含工具参数或原始JSON，前端仅纯文本展示。上限24000个Unicode字符，最终answer不截断；成功后清空，失败、断流或取消保留已接收片段，重试或工具调用时重置。
+     */
+    answerPreview?: string;
+    /**
      * 可读状态说明
      */
     detail: string;
@@ -1190,7 +1194,7 @@ export type AgentRun = {
 };
 
 /**
- * 操作状态事件；thinking 仅来自模型返回的思考片段
+ * 操作状态事件；thinking仅来自模型思考，answer_preview为内部未核验答复快照（普通chat自然正文或agent确认final后的answer），不进入进度日志
  */
 export type AgentEvent = {
     /**
@@ -1200,9 +1204,9 @@ export type AgentEvent = {
     /**
      * 事件类别
      */
-    kind: 'status' | 'text' | 'thinking' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage' | 'interaction' | 'continuation';
+    kind: 'status' | 'text' | 'thinking' | 'answer_preview' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage' | 'interaction' | 'continuation';
     /**
-     * 增量文字或简要操作说明
+     * 增量文字或简要操作说明；answer_preview为当前最多24000个Unicode字符的纯文本预览快照，普通chat允许自然正文，agent仅提取已确认action=final的answer字符串，不含工具参数或原始JSON。空串表示重置，界面仅通过run.answerPreview显示而不拼接此事件
      */
     text: string;
     /**
@@ -2646,6 +2650,56 @@ export type AgentWorkflowReportPreview = {
 };
 
 /**
+ * 当前或最近一次实际模型请求的轻量活动快照；不含工具参数或原始响应正文，暂停、取消和终态优先使用工作流状态
+ */
+export type AgentWorkflowModelActivity = {
+    /**
+     * 实际模型请求对应的工作流阶段
+     */
+    stage: string;
+    /**
+     * 模型请求状态；complete仅表示该次模型请求完成，不代表算子或工作流完成
+     */
+    status: 'requesting' | 'thinking' | 'responding' | 'validating' | 'complete' | 'failed';
+    /**
+     * 模型真实返回的最近12000个思考字符，无实际思考时为空，不由前端生成
+     */
+    thinkingText: string;
+    /**
+     * 思考内容超过12000字符并省略较早部分；仅描述thinkingText，不描述响应正文
+     */
+    truncated: boolean;
+    /**
+     * 本次请求实际采用的思考强度
+     */
+    reasoningEffort: 'low' | 'medium' | 'xhigh';
+    /**
+     * 本次请求实际是否启用思考
+     */
+    thinkingEnabled: boolean;
+    /**
+     * 当前阶段模型请求尝试序号
+     */
+    attempt: number;
+    /**
+     * 实际收到的响应正文字符数，仅作进度计数，不展示原始JSON
+     */
+    outputChars: number;
+    /**
+     * 模型实际返回的思考字符累计数，含因预览上限而省略的部分
+     */
+    thinkingChars?: number;
+    /**
+     * 本次请求实际模型名
+     */
+    modelName?: string;
+    /**
+     * 活动快照最近持久化时间
+     */
+    updatedAt?: string;
+};
+
+/**
  * 可恢复的项目科研工作流；card视图省略完整计划和审核，steps/evidence为空
  */
 export type AgentWorkflow = {
@@ -2657,6 +2711,7 @@ export type AgentWorkflow = {
      * 实际步骤总数，card视图用于按需展开入口
      */
     stepCount?: number;
+    modelActivity?: AgentWorkflowModelActivity;
     /**
      * 工作流 UUID
      */

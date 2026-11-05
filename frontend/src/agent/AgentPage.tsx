@@ -66,6 +66,7 @@ import GenericWorkflowUploads from "./GenericWorkflowUploads";
 import ActiveWorkflowNotice from "./ActiveWorkflowNotice";
 import ResearchIntentCard from "./ResearchIntentCard";
 import LiveActivity, { ActivityMark } from "./LiveActivity";
+import AnswerPreview from "./AnswerPreview";
 import ThinkingStream from "./ThinkingStream";
 import {
   runActivity,
@@ -385,6 +386,7 @@ function AgentWorkspace({
           sidebarRun,
           sidebarRun.id === running?.id ? events : [],
           computeActivities[sidebarRun.id],
+          sidebarRun.id === running?.id ? pollFailure : undefined,
         )
       : undefined;
   const conversationSequence = sequence.current;
@@ -587,7 +589,10 @@ function AgentWorkspace({
         setEvents((old) =>
           [
             ...old,
-            ...data.events.filter((e) => !old.some((p) => p.id === e.id)),
+            ...data.events.filter(
+              (e) =>
+                e.kind !== "answer_preview" && !old.some((p) => p.id === e.id),
+            ),
           ].slice(-80),
         );
         if (active(data.run))
@@ -1615,53 +1620,71 @@ function AgentWorkspace({
                       )}
                     </p>
                   )}
-                  {!r.computeIntent &&
-                    !r.researchIntent &&
-                    (r.thinkingMode === "deep" || r.thinkingText) && (
-                      <Collapse
-                        size="small"
-                        className="agent-thinking-panel"
-                        defaultActiveKey={active(r) ? ["thinking"] : []}
-                        items={[
-                          {
-                            key: "thinking",
-                            label: active(r)
+                  {(r.thinkingMode === "deep" || r.thinkingText) && (
+                    <Collapse
+                      size="small"
+                      className="agent-thinking-panel"
+                      defaultActiveKey={active(r) ? ["thinking"] : []}
+                      items={[
+                        {
+                          key: "thinking",
+                          label:
+                            r.status === "running" &&
+                            !r.answerPreview &&
+                            !pollFailure
                               ? ui(
                                   "模型思考过程（生成中）",
                                   "Model reasoning (generating)",
                                 )
                               : `${ui("模型思考过程", "Model reasoning")}${r.thinkingDurationMs ? ` / ${(r.thinkingDurationMs / 1000).toFixed(1)}s` : ""}`,
-                            children: (
-                              <ThinkingStream
-                                working={active(r)}
-                                text={
+                          children: (
+                            <ThinkingStream
+                              working={
+                                r.status === "running" &&
+                                !r.answerPreview &&
+                                !pollFailure &&
+                                Boolean(
                                   r.thinkingText ||
-                                  (r.id === running?.id
-                                    ? events
-                                        .filter((e) => e.kind === "thinking")
-                                        .map((e) => e.text)
-                                        .join("") ||
-                                      ui(
-                                        "正在等待模型返回思考内容…",
-                                        "Waiting for the model reasoning stream…",
-                                      )
-                                    : ui(
-                                        "已开启逻辑推理，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
-                                        "Deep thinking is enabled, but no displayable reasoning was received. See the answer and tool results below.",
-                                      ))
-                                }
-                              />
-                            ),
-                          },
-                        ]}
-                      />
-                    )}
+                                  (r.id === running?.id &&
+                                    events.some(
+                                      (event) =>
+                                        event.kind === "thinking" && event.text,
+                                    )),
+                                )
+                              }
+                              text={
+                                r.thinkingText ||
+                                (r.id === running?.id
+                                  ? events
+                                      .filter((e) => e.kind === "thinking")
+                                      .map((e) => e.text)
+                                      .join("") ||
+                                    ui(
+                                      "正在等待模型返回思考内容…",
+                                      "Waiting for the model reasoning stream…",
+                                    )
+                                  : ui(
+                                      "已开启逻辑推理，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
+                                      "Deep thinking is enabled, but no displayable reasoning was received. See the answer and tool results below.",
+                                    ))
+                              }
+                            />
+                          ),
+                        },
+                      ]}
+                    />
+                  )}
                   {(!(mode === "agent" && r.computeIntent?.taskId) ||
                     r.evidence.some((item) =>
                       ["read_compute_output", "get_compute_task"].includes(
                         item.tool,
                       ),
-                    )) && <SafeMarkdown text={r.answer} />}
+                    )) && (
+                    <>
+                      <AnswerPreview run={r} />
+                      <SafeMarkdown text={r.answer} />
+                    </>
+                  )}
                   {mode === "agent" &&
                     r.computeIntent &&
                     r.interaction?.status !== "pending" && (
@@ -1749,6 +1772,8 @@ function AgentWorkspace({
                         activity={runActivity(
                           r,
                           r.id === running?.id ? events : [],
+                          undefined,
+                          r.id === running?.id ? pollFailure : undefined,
                         )}
                       />
                     )}

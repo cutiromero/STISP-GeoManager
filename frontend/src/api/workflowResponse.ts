@@ -50,6 +50,39 @@ export function assertWorkflow(
   path = "workflow",
 ): asserts value is AgentWorkflow {
   const workflow = summary(value, path);
+  if (workflow.modelActivity !== undefined) {
+    const activityPath = `${path}.modelActivity`;
+    const activity = responseObject(workflow.modelActivity, activityPath);
+    for (const key of ["stage", "thinkingText", "reasoningEffort", "status"])
+      responseField(activity, key, "string", activityPath);
+    for (const key of ["truncated", "thinkingEnabled"])
+      responseField(activity, key, "boolean", activityPath);
+    if (
+      ![
+        "requesting",
+        "thinking",
+        "responding",
+        "validating",
+        "complete",
+        "failed",
+      ].includes(String(activity.status)) ||
+      !["low", "medium", "xhigh"].includes(String(activity.reasoningEffort)) ||
+      Array.from(activity.thinkingText as string).length > 12000
+    )
+      throw new ResponseFormatError(`${activityPath}: invalid model activity`);
+    for (const key of ["attempt", "outputChars", "thinkingChars"]) {
+      if (key === "thinkingChars" && activity[key] === undefined) continue;
+      responseField(activity, key, "number", activityPath);
+      if (
+        !Number.isInteger(activity[key]) ||
+        Number(activity[key]) < (key === "attempt" ? 1 : 0)
+      )
+        throw new ResponseFormatError(`${activityPath}.${key}: invalid count`);
+    }
+    for (const key of ["modelName", "updatedAt"])
+      if (activity[key] !== undefined)
+        responseField(activity, key, "string", activityPath);
+  }
   const plan = responseObject(workflow.plan, `${path}.plan`);
   responseObject(workflow.parameters, `${path}.parameters`);
   responseField(workflow, "planHash", "string", path);
