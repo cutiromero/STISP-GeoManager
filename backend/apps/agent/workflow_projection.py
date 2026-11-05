@@ -444,7 +444,7 @@ def project_workflow(workflow, data, view, part, offset, limit, suggestion_id=""
                         },
                         "rows": [row for _, row in selected],
                         "rowCount": len(selected),
-                    }
+                    },
                 ]
                 identities = {_identity(row) for _, row in selected}
                 stage["approvedEdits"] = [
@@ -490,7 +490,13 @@ def project_workflow(workflow, data, view, part, offset, limit, suggestion_id=""
                 "status": item.status,
                 "message": item.message,
                 "action": bounded(item.action),
-                "decision": bounded(item.action.get("decision")),
+                # Review steps store "approve"/"reject" here; only analysis
+                # decisions are objects.
+                "decision": (
+                    bounded(item.action["decision"])
+                    if isinstance(item.action.get("decision"), dict)
+                    else None
+                ),
                 "inputRefs": bounded(item.input_refs),
                 "outputRefs": (
                     item.output_refs

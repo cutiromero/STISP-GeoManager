@@ -123,3 +123,52 @@ def test_attempt_response_pagination_preserves_full_audit_and_owner_scope(setup_
     assert env["client"].get(
         f"/api/agent/workflows/{workflow.id}/{query}", HTTP_X_PROJECT_ID="1"
     ).status_code in (403, 404)
+
+
+def test_review_steps_do_not_expose_string_decisions_as_analysis(setup_agent):
+    env = setup_agent
+    decision = {
+        "problem": "检查",
+        "judgement": "判断",
+        "nextAction": "geology-multi-apply",
+        "algorithmReason": "依据",
+        "findings": [],
+        "uncertainties": [],
+        "evidenceRefs": [],
+    }
+    with project_scope(env["scope"]):
+        workflow = AgentWorkflow.objects.create(
+            owner=env["user"],
+            workflow_type="geology_generic",
+            model="mock",
+            idempotency_key="review-step-decision",
+            plan={"phase": "completed"},
+        )
+    workflow.steps.create(
+        sequence=1,
+        kind="analysis_decision",
+        status="succeeded",
+        action={"decision": decision},
+    )
+    workflow.steps.create(
+        sequence=2,
+        kind="review_feedback",
+        status="succeeded",
+        action={"decision": "approve", "feedback": "", "planHash": "x"},
+    )
+    for query in ("?view=card", "?view=inspection&part=steps&offset=0&limit=25"):
+        response = env["client"].get(
+            f"/api/agent/workflows/{workflow.id}/{query}", **env["header"]
+        )
+        assert response.status_code == 200, response.content
+        for step in response.json()["steps"]:
+            if step["kind"] == "review_feedback":
+                assert step["decision"] is None
+                assert step["action"]["decision"] == "approve"
+            else:
+                assert step["decision"]["problem"] == "检查"
+    steps = response.json()["steps"]
+    assert {step["kind"] for step in steps} == {
+        "analysis_decision",
+        "review_feedback",
+    }
