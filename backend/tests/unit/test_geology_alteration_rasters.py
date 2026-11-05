@@ -149,6 +149,12 @@ def test_unaligned_lithology_boundary_is_reported_separately(tmp_path):
 
 def test_weighted_prospect_aggregation_uses_pixel_fraction(tmp_path):
     context = scene(tmp_path)
+    with rasterio.open(context.inputs["calcite"]) as source:
+        profile = {**source.profile, "dtype": "float32"}
+        weights = np.full(source.shape, 0.5, dtype="float32")
+    context.inputs["calcite_weight"] = tmp_path / "calcite_weight.tif"
+    with rasterio.open(context.inputs["calcite_weight"], "w", **profile) as target:
+        target.write(weights, 1)
     load("check")
     from multi_raster import RasterAlterations
     from multi_io import inputs, settings
@@ -157,7 +163,6 @@ def test_weighted_prospect_aggregation_uses_pixel_fraction(tmp_path):
     lithology, _, area, rules, units, _, snapshot = inputs(context, config)
     raster = RasterAlterations(context, config, area)
     raster.inspect(lithology, rules, units, snapshot)
-    raster.minerals["calcite"]["weights"][:] = 0.5
     aggregate = raster.aggregate(
         from_origin(X, Y + 1000, 100, 100), (10, 10), 32646, ["方解石化"]
     )

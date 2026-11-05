@@ -684,7 +684,16 @@ def test_model_citation_retry_cannot_exceed_existing_shared_request_budget(
     wf.refresh_from_db()
     assert len(messages) == 1
     assert wf.plan["actualModelCallCount"] == wf.max_iterations
-    assert wf.status == "failed" and "请求次数上限" in wf.detail
+    assert wf.status == "failed" and wf.plan["phase"] == "budget_exhausted"
+    summary = wf.plan["budgetExhausted"]
+    assert summary["usedRequests"] == summary["limit"] == wf.max_iterations
+    assert summary["minimumRemainingRequests"] == 3
+    attempts = wf.plan["stages"][wf.plan["stageIndex"]]["modelAttempts"]
+    assert len(attempts) == 2
+    assert attempts[0]["requested"] is True and attempts[0]["status"] == "rejected"
+    assert attempts[1]["requested"] is False
+    assert attempts[1]["status"] == "budget_blocked"
+    assert "调整并重新发起" in wf.detail
     assert ComputeTask.objects.count() == 1
 
 
