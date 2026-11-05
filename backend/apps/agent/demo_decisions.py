@@ -23,6 +23,7 @@ from .decision_budget import (
 )
 from .decision_text import clipped, normalize_items
 from .decision_audit import response_artifact
+from .demo_execution_evidence import execution_evidence_scope
 
 FIELDS = {
     "problem",
@@ -878,6 +879,14 @@ def decide(
     )
 
 
+def _execution_evidence_decision(workflow, payload):
+    return (
+        getattr(workflow, "workflow_type", None) in MULTI_FAMILY
+        and execution_evidence_scope(payload)
+        and not payload.get("modelBatch")
+    )
+
+
 def _decide_once(
     workflow,
     user,
@@ -1169,7 +1178,8 @@ def _decide_once(
         .get("manifest", {})
         .get("outputs", [])
     )
-    if raster_protocol or _batch:
+    execution_evidence = _execution_evidence_decision(workflow, payload) and not _batch
+    if _batch or (raster_protocol and not execution_evidence):
         parameters.update(
             maxContextTokens=min(policy["maxContextTokens"], 15000),
         )
@@ -1177,10 +1187,13 @@ def _decide_once(
     raw = ""
     base_messages = [dict(message) for message in messages]
     original_messages = [dict(message) for message in messages]
-    base_messages = projected_messages(original_messages, payload, 0)
+    # Later non-edit decisions need complete statistics and approval facts.
+    # Start with the dedicated execution view before using the selected policy
+    # window; initial checks and full-member edit reviews retain their ceiling.
+    budget_level = 3 if execution_evidence else 0
+    base_messages = projected_messages(original_messages, payload, budget_level)
     messages = [dict(message) for message in base_messages]
     current = messages[1]
-    budget_level = 0
     repair_level = 0
     for attempt in range(2):
         guard()
@@ -1483,12 +1496,15 @@ def _recover_decision(
                 "本步已有模型请求记录，但完整分析响应未保存；本步尚未提交计算。"
                 "请重新发起分析，已完成的前序计算与审计记录保留。"
             )
-    bounded_protocol = bool(payload.get("modelBatch")) or any(
+    raster_protocol = any(
         item.get("key") == "alteration_summary"
         for item in workflow.plan.get("algorithms", {})
         .get("geology-multi-check", {})
         .get("manifest", {})
         .get("outputs", [])
+    )
+    bounded_protocol = bool(payload.get("modelBatch")) or (
+        raster_protocol and not _execution_evidence_decision(workflow, payload)
     )
     limit = policy["maxOutputTokens"]
     input_ceiling = (
@@ -1542,6 +1558,12 @@ def _recover_decision(
             reject()
         budget_level = attempt.get("budgetLevel", 0)
         if type(budget_level) is not int or not 0 <= budget_level <= MAX_LEVEL:
+            reject()
+        if (
+            _execution_evidence_decision(workflow, payload)
+            and input_limit > 15000
+            and budget_level < 3
+        ):
             reject()
         messages = projected_messages(original_messages, payload, budget_level)
         if index:

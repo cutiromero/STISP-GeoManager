@@ -7,6 +7,13 @@ import math
 import re
 from collections import Counter
 
+from .demo_execution_evidence import (
+    QUALITY_KEYS,
+    execution_evidence_scope,
+    execution_fact_paths,
+    project_execution_evidence,
+)
+
 
 MAX_LEVEL = 4
 ROW_LIMITS = (40, 30, 20, 10, 5)
@@ -64,7 +71,7 @@ def _deduplicate(payload):
     def count(value):
         if isinstance(value, (dict, list, str)):
             signature = dumps(value)
-            if len(signature) >= 64:
+            if len(signature.encode("utf-8")) >= 64:
                 counts[signature] += 1
         if isinstance(value, dict):
             for item in value.values():
@@ -461,6 +468,8 @@ def _focus_batch(payload, level):
 def _bounded_evidence(payload, level):
     """Project tables before sending; complete inputs remain in the stage audit."""
     projections = []
+    complete_facts = execution_fact_paths(payload)
+    execution_scope = execution_evidence_scope(payload)
 
     def bounded(items, limit, path, columns=None):
         if len(items) <= limit:
@@ -538,6 +547,7 @@ def _bounded_evidence(payload, level):
                     and isinstance(item, list)
                     and not batch_groups
                     and not batch_totals
+                    and child not in complete_facts
                 ):
                     limit = (
                         GROUP_LIMITS[level] if name == "groups" else ROW_LIMITS[level]
@@ -549,7 +559,9 @@ def _bounded_evidence(payload, level):
                         value.setdefault("sourceScope", value.get("scope"))
                         value["scope"] = "bounded_model_sample"
                 # Rule predicates and knowledge exceptions must remain exact.
-                if name not in {"ruleConfig", "conditions", "exceptions"}:
+                if name not in {"ruleConfig", "conditions", "exceptions"} and not (
+                    execution_scope and name in QUALITY_KEYS
+                ):
                     walk(item, child)
         elif isinstance(value, list):
             for index, item in enumerate(value):
@@ -581,6 +593,7 @@ def project_payload(original, level):
             candidates = []
         payload["colorCandidates"] = candidates
         return _deduplicate(_bounded_evidence(payload, level))
+    payload = project_execution_evidence(payload, level)
     payload = _execution_batch_evidence(payload, level)
     payload = _execution_knowledge(payload, level, original)
     bindings = {}
