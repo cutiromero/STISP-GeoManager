@@ -121,7 +121,12 @@ it("synchronizes zoom, pan, reset and selection in both real vector views", () =
   const unit = within(left!).getAllByRole("button", { name: "八宝山组" })[0]!;
   fireEvent.keyDown(unit, { key: "Enter" });
   expect(inspect).toHaveBeenCalledExactlyOnceWith(
-    beforeReviewMap.features[0],
+    expect.objectContaining({
+      ...beforeReviewMap.features[0],
+      properties: expect.objectContaining(
+        beforeReviewMap.features[0]!.properties,
+      ),
+    }),
     0,
   );
 });

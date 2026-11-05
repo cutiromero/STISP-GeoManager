@@ -48,6 +48,7 @@ function show(
 }
 function respond(actual = false) {
   request.mockImplementation(async (url: string) => {
+    if (url.endsWith("/profile/")) return { defaultVisualization: {} };
     if (url.startsWith("/api/agent/workflows/review-workflow/"))
       return reviewWorkflow(actual);
     const id = Number(url.match(/resources\/(\d+)\/query/)?.[1]);
@@ -128,6 +129,7 @@ it.each(["no_changes", "requires_evidence"])(
     workflow.modificationReview = undefined;
     workflow.plan.reviewOutcome = { kind, checkTaskId: "actual-check" };
     request.mockImplementation(async (url: string) => {
+      if (url.endsWith("/profile/")) return { defaultVisualization: {} };
       if (url.startsWith("/api/agent/workflows/review-workflow/"))
         return workflow;
       if (url === "/api/catalog/resources/101/query/")

@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
 import type { ReviewOverlay } from "./reviewVectorLayers";
+import { sharedComparisonMaps } from "./comparisonColors";
 import type { ReviewMapSpotlight } from "./reviewMapSpotlight";
 import "./geology-review-workspace.css";
 import {
@@ -177,20 +178,36 @@ const VectorFeatures = memo(function VectorFeatures({
 });
 
 export default function LocalGeologyReviewMaps({
-  before,
-  after,
+  before: originalBefore,
+  after: originalAfter,
   differences,
   bounds,
   onSelect,
   previewLabel = "建议修改范围，尚未执行",
   inspectionOnly = false,
-  overlays = emptyOverlays,
+  overlays: originalOverlays = emptyOverlays,
   onInspect,
   beforeLabel = "待检查地质图",
   afterLabel = "修正后地质图",
   compactLegend = false,
   spotlight,
 }: Props) {
+  const [before, after] = useMemo(
+    () => sharedComparisonMaps(originalBefore, originalAfter),
+    [originalBefore, originalAfter],
+  );
+  const overlays = useMemo(
+    () =>
+      originalOverlays.map((overlay) => {
+        if (!overlay.before || !overlay.after) return overlay;
+        const [before, after] = sharedComparisonMaps(
+          overlay.before,
+          overlay.after,
+        );
+        return { ...overlay, before, after: after ?? undefined };
+      }),
+    [originalOverlays],
+  );
   const fitted = useMemo(
     () => reviewViewport(bounds ?? reviewBounds(before) ?? [95, 35, 97, 37]),
     [bounds, before],

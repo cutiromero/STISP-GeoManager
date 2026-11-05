@@ -60,11 +60,11 @@ def lab(color):
     return (116 * y_value - 16, 500 * (x_value - y_value), 200 * (y_value - z_value))
 
 
-def color_issues(color, used):
+def color_issues(color, used, *, polygon=True):
     if not isinstance(color, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
         return ["invalid_color"]
     issues = []
-    if contrast(color, "#ffffff") < MIN_WHITE_CONTRAST:
+    if not polygon and contrast(color, "#ffffff") < MIN_WHITE_CONTRAST:
         issues.append("low_background_contrast")
     if contrast(color, OUTLINE_COLOR) < MIN_OUTLINE_CONTRAST:
         issues.append("low_outline_contrast")
@@ -75,12 +75,12 @@ def color_issues(color, used):
     return issues
 
 
-def valid_color(color, used):
-    return not color_issues(color, used)
+def valid_color(color, used, *, polygon=True):
+    return not color_issues(color, used, polygon=polygon)
 
 
-@lru_cache(maxsize=1)
-def palette():
+@lru_cache(maxsize=2)
+def palette(polygon=True):
     colors = []
     for hue in range(0, 360, 3):
         for lightness in (0.27, 0.36, 0.45, 0.54, 0.63):
@@ -89,22 +89,24 @@ def palette():
                 color = "#" + "".join(
                     f"{round(channel * 255):02x}" for channel in channels
                 )
-                if valid_color(color, []):
+                if valid_color(color, [], polygon=polygon):
                     colors.append(color)
     return tuple(dict.fromkeys(colors))
 
 
-def fallback_color(name, used, reference=None):
+def fallback_color(name, used, reference=None, *, polygon=True):
     used = [color.lower() for color in used]
-    colors = palette()
+    colors = palette(polygon)
     seed = int(hashlib.sha256(name.encode()).hexdigest()[:8], 16) % len(colors)
     ordered = colors[seed:] + colors[:seed]
     if not reference:
         for color in ordered:
-            if valid_color(color, used):
+            if valid_color(color, used, polygon=polygon):
                 return color
     available = (
-        [color for color in ordered if valid_color(color, used)] if reference else []
+        [color for color in ordered if valid_color(color, used, polygon=polygon)]
+        if reference
+        else []
     )
     if available:
         return (
@@ -116,7 +118,7 @@ def fallback_color(name, used, reference=None):
     if not remaining:
         for index in range(4096):
             color = "#" + hashlib.sha256(f"{name}:{index}".encode()).hexdigest()[:6]
-            if color not in used and valid_color(color, []):
+            if color not in used and valid_color(color, [], polygon=polygon):
                 return color
     return max(
         remaining,

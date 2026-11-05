@@ -10,6 +10,7 @@ import {
 } from "../utils/layerFactory";
 import { resourceLayerKey } from "../utils/uniqueLoadedLayers";
 import { geologicalColor } from "./geologyReviewData";
+import { sharedComparisonRenderer } from "./comparisonColors";
 import {
   comparisonFeatureKey,
   type ComparisonLayerPlacement,
@@ -188,7 +189,48 @@ export function upsertComparisonLayer(
     ...(cleaned.find((group) => group.id === groupId)?.children ??
       target.children),
     layer,
-  ];
+  ].map((child) => ({ ...child }));
+  for (const after of children) {
+    if (
+      after.layerType !== "vector" ||
+      !String(after.metadata.comparisonRoles).split(",").includes("after")
+    )
+      continue;
+    for (const before of children) {
+      if (
+        before.layerType !== "vector" ||
+        !String(before.metadata.comparisonRoles)
+          .split(",")
+          .includes("before") ||
+        before.metadata.comparisonElement !== after.metadata.comparisonElement
+      )
+        continue;
+      if (
+        before.symbolization.renderer?.type !== "uniqueValue" ||
+        after.symbolization.renderer?.type !== "uniqueValue" ||
+        before.symbolization.renderer.field !==
+          after.symbolization.renderer.field
+      )
+        continue;
+      const renderer = sharedComparisonRenderer(
+        before.symbolization.renderer,
+        after.symbolization.renderer,
+        [before, after].every((layer) =>
+          layer.geojson.features.every((feature) =>
+            ["Polygon", "MultiPolygon"].includes(feature.geometry.type),
+          ),
+        ),
+      );
+      before.symbolization = {
+        ...structuredClone(after.symbolization),
+        renderer,
+      };
+      after.symbolization = {
+        ...after.symbolization,
+        renderer: structuredClone(renderer),
+      };
+    }
+  }
   const hasAfter = children.some((child) =>
     String(child.metadata.comparisonRoles).split(",").includes("after"),
   );

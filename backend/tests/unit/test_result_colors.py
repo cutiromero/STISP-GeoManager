@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from apps.agent import result_colors
-from apps.agent.color_library import candidates, library
+from apps.agent.color_library import candidates, color_issues, library, valid_color
 from apps.agent.generic_inputs import LITHOLOGY_COLORS
 
 
@@ -28,6 +28,8 @@ def test_standard_lithology_model_selection_and_offline_fallback_are_identical()
     assert {
         entry["name"]: entry["referenceColor"] for entry in entries
     } == LITHOLOGY_COLORS
+    assert {entry["name"]: entry["color"] for entry in entries} == LITHOLOGY_COLORS
+    assert all(not entry["adjustmentReasons"] for entry in entries)
     proposal = {
         "field": "name",
         "classes": [
@@ -53,7 +55,7 @@ def test_library_searches_aliases_codes_and_generic_fields():
     assert len(candidates("name", ["花岗岩"])) <= 4
 
 
-def test_reference_library_colors_do_not_bypass_validation():
+def test_reference_library_polygon_colors_are_used_unchanged():
     value = "全新世冲积物qhal"
     audit = []
     style, replaced = result_colors.category_style(
@@ -65,14 +67,14 @@ def test_reference_library_colors_do_not_bypass_validation():
         },
         audit=audit,
     )
-    assert replaced == [value]
+    assert not replaced
     assert audit[0]["source"] == "library_selected"
-    assert "low_background_contrast" in audit[0]["replacementReasons"]
+    assert not audit[0]["replacementReasons"]
     assert not audit[0]["remainingIssues"]
-    assert classes(style)[value]["color"] != LITHOLOGY_COLORS[value]
+    assert classes(style)[value]["color"] == LITHOLOGY_COLORS[value]
 
 
-def test_known_categories_are_not_forced_to_use_library_color():
+def test_known_categories_override_model_colors_with_library_color():
     audit = []
     style, replaced = result_colors.category_style(
         "alt",
@@ -83,9 +85,58 @@ def test_known_categories_are_not_forced_to_use_library_color():
         },
         audit=audit,
     )
+    assert replaced == ["赤铁矿化"]
+    assert classes(style)["赤铁矿化"]["color"] == "#c84545"
+    assert audit[0]["source"] == "library_selected"
+    assert audit[0]["replacementReasons"] == ["standard_color_required"]
+
+
+@pytest.mark.parametrize("color", ["#ffdfa4", "#ffffff"])
+def test_polygon_model_fills_skip_white_background_validation(color):
+    proposal = {"field": "alt", "classes": [{"value": "未知", "color": color}]}
+    style, replaced = result_colors.category_style("alt", ["未知"], proposal)
     assert not replaced
-    assert classes(style)["赤铁矿化"]["color"] == "#416fa4"
-    assert audit[0]["source"] == "model_suggestion"
+    assert classes(style)["未知"]["color"] == color
+    assert not color_issues(color, [])
+    assert "low_background_contrast" in color_issues(color, [], polygon=False)
+    line_style, replaced = result_colors.category_style(
+        "alt", ["未知"], proposal, polygon=False
+    )
+    assert replaced == ["未知"]
+    assert valid_color(classes(line_style)["未知"]["color"], [], polygon=False)
+
+
+@pytest.mark.parametrize(
+    "color,reason", [("#c84545", "duplicate_color"), ("#c84645", "low_delta_e")]
+)
+def test_model_conflicts_only_adjust_non_library_category(color, reason):
+    audit = []
+    proposal = {
+        "field": "alt",
+        "classes": [
+            {"value": "未知", "color": color},
+            {"value": "赤铁矿化", "color": "#416fa4"},
+        ],
+    }
+    style, _ = result_colors.category_style(
+        "alt", ["未知", "赤铁矿化"], proposal, audit=audit
+    )
+    assert classes(style)["赤铁矿化"]["color"] == "#c84545"
+    assert valid_color(classes(style)["未知"]["color"], ["#c84545"])
+    unknown = next(item for item in audit if item["value"] == "未知")
+    assert unknown["source"] == "system_palette"
+    assert reason in unknown["replacementReasons"]
+
+
+def test_duplicate_reference_fills_keep_exact_original_colors_and_audit_reason():
+    values = ["中元古代灰白色细粒片麻状石英闪长岩pt2oo", "全新世冲积物qhal"]
+    audit = []
+    style, _ = result_colors.category_style("name", values, audit=audit)
+    assert {item["color"] for item in classes(style).values()} == {"#ffffd8"}
+    assert all(
+        "duplicate_standard_color_preserved" in item["replacementReasons"]
+        for item in audit
+    )
 
 
 def test_unknown_model_colors_and_library_fallback_have_correct_audit():
@@ -102,7 +153,7 @@ def test_unknown_model_colors_and_library_fallback_have_correct_audit():
     sources = {item["value"]: item for item in audit}
     assert sources["未知"]["source"] == "model_suggestion"
     assert sources["赤铁矿化"]["source"] == "library_selected"
-    assert sources["赤铁矿化"]["replacementReasons"] == ["missing_class"]
+    assert not sources["赤铁矿化"]["replacementReasons"]
     assert classes(style)["未知"]["label"] == "未知矿物"
 
 
@@ -124,7 +175,7 @@ def registration(monkeypatch, values):
     [
         ("#c84545", "duplicate_color"),
         ("#c84645", "low_delta_e"),
-        ("#ffffff", "low_background_contrast"),
+        ("#202939", "low_outline_contrast"),
         ("red", "invalid_color"),
         ("#202938", "low_outline_contrast"),
     ],
@@ -379,6 +430,54 @@ def test_management_command_previews_and_reapplies_current_flow(monkeypatch, app
     assert '"colorAdvice"' in output.getvalue()
 
 
+def test_management_preview_has_38_original_lithology_library_colors(monkeypatch):
+    from apps.agent.management.commands import style_logic_results as command
+
+    workflow, resource, audit = registration(monkeypatch, [])
+    workflow.project_tag_id, workflow.owner_id = 1, 2
+    workflow.plan = {
+        "stages": [
+            {
+                "outputs": [
+                    {
+                        "resourceId": resource.id,
+                        "key": "apply.lithology",
+                        "kind": "vector",
+                    }
+                ]
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        result_colors,
+        "read_resource",
+        lambda resource: pd.DataFrame({"name": sorted(LITHOLOGY_COLORS)}),
+    )
+    monkeypatch.setattr(result_colors, "model_colors", Mock(return_value=None))
+    monkeypatch.setattr(
+        command.AgentWorkflow.objects,
+        "filter",
+        Mock(return_value=SimpleNamespace(first=lambda: workflow)),
+    )
+    monkeypatch.setattr(command, "project_scope", lambda scope: nullcontext())
+    monkeypatch.setattr(
+        command, "authorize_workflow_history", lambda workflow: (workflow.owner, {})
+    )
+    monkeypatch.setattr(command, "resolve_resource", lambda *args: resource)
+    output = StringIO()
+    command.Command(stdout=output).handle(
+        workflow=workflow.id, apply=False, no_model=True
+    )
+    preview = json.loads(output.getvalue().splitlines()[0])["visualization"]
+    records = preview["colorAdvice"]["classes"]
+    assert len(records) == 38
+    assert {item["source"] for item in records} == {"library_selected"}
+    assert {item["value"]: item["color"] for item in records} == LITHOLOGY_COLORS
+    assert all(item["color"] == item["referenceColor"] for item in records)
+    resource.save.assert_not_called()
+    audit.assert_not_called()
+
+
 def test_multiple_alterations_have_conventional_colors_and_named_legends():
     style, _ = result_colors.category_style(
         "alt", ["赤铁矿化", "绿泥石化", "碳酸盐化", "水云母化"]
@@ -396,12 +495,12 @@ def test_unknown_classes_are_complete_and_deterministic():
     assert set(replaced) == {"新矿物A", "新矿物B"}
     used = []
     for item in classes(style).values():
-        assert result_colors.valid_color(item["color"], used)
+        assert valid_color(item["color"], used)
         used.append(item["color"])
 
 
 @pytest.mark.parametrize(
-    "color", ["red", "#fff", "#ffffff", "url(javascript:bad)", "#gg3322"]
+    "color", ["red", "#fff", "#202938", "url(javascript:bad)", "#gg3322"]
 )
 def test_invalid_or_low_contrast_model_colors_are_replaced(color):
     proposal = {
@@ -410,7 +509,7 @@ def test_invalid_or_low_contrast_model_colors_are_replaced(color):
     }
     style, replaced = result_colors.category_style("alt", ["未知", "遗漏"], proposal)
     assert set(replaced) == {"未知", "遗漏"}
-    assert result_colors.valid_color(classes(style)["未知"]["color"], [])
+    assert valid_color(classes(style)["未知"]["color"], [])
 
 
 def test_duplicate_model_colors_are_replaced():

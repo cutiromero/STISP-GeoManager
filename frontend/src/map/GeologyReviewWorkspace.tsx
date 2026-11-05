@@ -105,8 +105,10 @@ export default function GeologyReviewWorkspace({
         if (Boolean(ids.after) !== Boolean(ids.differences))
           throw new Error("修正结果与实际修改范围尚未全部就绪，请稍后刷新");
         const [before, after, actual] = await Promise.all([
-          queryReviewMap(ids.before),
-          ids.after ? queryReviewMap(ids.after) : Promise.resolve(null),
+          queryReviewMap(ids.before, { loadStyle: true }),
+          ids.after
+            ? queryReviewMap(ids.after, { loadStyle: true })
+            : Promise.resolve(null),
           ids.differences
             ? queryReviewMap(ids.differences)
             : Promise.resolve(null),

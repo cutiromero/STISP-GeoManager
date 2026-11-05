@@ -159,6 +159,49 @@ function add(
   );
 }
 
+it.each([false, true])(
+  "工作台按成果映射统一前后符号化，与加载顺序无关 (%s)",
+  (reverse) => {
+    const before = profile(101),
+      after = profile(201);
+    for (const item of [before, after])
+      item.defaultVisualization = {
+        symbolization: {
+          fill: { fillOpacity: 1, fillOutlineColor: "#202938" },
+          renderer: {
+            type: "uniqueValue",
+            field: "name",
+            classes: [
+              {
+                value: "八宝山组",
+                color: item === before ? "#b98a5b" : "#ffdfa4",
+              },
+            ],
+            defaultClass: { color: "#64748b" },
+          },
+        },
+      };
+    const initial = structuredClone([before, after]);
+    let groups: LoadedLayerGroup[] = [];
+    for (const item of reverse ? [after, before] : [before, after]) {
+      groups = upsertComparisonLayer(
+        groups,
+        item,
+        query(item, beforeReviewMap),
+        placement([item === before ? "before" : "after"]),
+      );
+    }
+    expect(vector(groups, 101).symbolization).toEqual(
+      vector(groups, 201).symbolization,
+    );
+    const renderer = vector(groups, 101).symbolization.renderer;
+    expect(renderer?.type).toBe("uniqueValue");
+    if (renderer?.type === "uniqueValue")
+      expect(renderer.classes[0]!.color).toBe("#ffdfa4");
+    expect([before, after]).toEqual(initial);
+  },
+);
+
 it("对比图层不把默认按name分类的岩性覆盖为代号分类", () => {
   const resource = profile(101);
   resource.defaultVisualization = {

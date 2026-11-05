@@ -40,6 +40,50 @@ it("对比与讲解使用资源按name分类配色，图例显示单元名称", 
   ]);
 });
 
+it.each(["LineString", "Point"] as const)(
+  "讲解页读取%s成果的分类符号化，不仅处理具名面",
+  async (type) => {
+    const data = structuredClone(beforeReviewMap);
+    data.features = [
+      {
+        ...data.features[0]!,
+        geometry:
+          type === "Point"
+            ? { type, coordinates: [98.4, 35.6] }
+            : {
+                type,
+                coordinates: [
+                  [98.4, 35.6],
+                  [98.45, 35.62],
+                ],
+              },
+        properties: { state: "keep" },
+      },
+    ];
+    request
+      .mockResolvedValueOnce(reviewQuery(201, data))
+      .mockResolvedValueOnce({
+        defaultVisualization: {
+          symbolization: {
+            renderer: {
+              type: "uniqueValue",
+              field: "state",
+              classes: [{ value: "keep", color: "#416fa4" }],
+            },
+          },
+        },
+      });
+    const result = await queryReviewMap(201, { mixed: true, loadStyle: true });
+    expect(result.features[0]!.properties.fill_color).toBe("#416fa4");
+    expect(result.features[0]!.properties._review_classification_field).toBe(
+      "state",
+    );
+    expect(request.mock.calls[1]![0]).toBe(
+      "/api/catalog/resources/201/profile/",
+    );
+  },
+);
+
 it("loads the primary pair concurrently with display-only geometry", async () => {
   let finishFirst = (_value: ReturnType<typeof reviewQuery>) => {};
   request

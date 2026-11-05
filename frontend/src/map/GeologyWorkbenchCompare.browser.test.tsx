@@ -135,6 +135,51 @@ beforeEach(() => {
   });
 });
 
+it("同一分类字段的前后图采用成果原色，不改写输入资源符号化", async () => {
+  const before = structuredClone(beforeReviewMap);
+  const after = structuredClone(afterReviewMap);
+  request.mockImplementation(async (url: string) => {
+    if (url.includes("/workflows/")) return reviewWorkflow(true);
+    const id = Number(url.match(/resources\/(\d+)\//)?.[1]);
+    if (url.endsWith("/profile/"))
+      return {
+        ...profile(id),
+        defaultVisualization: {
+          symbolization: {
+            fill: { fillOpacity: 1, fillOutlineColor: "#202938" },
+            renderer: {
+              type: "uniqueValue",
+              field: "name",
+              classes: [
+                {
+                  value: "八宝山组",
+                  color: id === 101 ? "#b98a5b" : "#ffdfa4",
+                },
+              ],
+              defaultClass: { color: "#ffffd8" },
+            },
+          },
+        },
+      };
+    return reviewQuery(
+      id,
+      id === 101 ? before : id === 201 ? after : reviewDifferences,
+    );
+  });
+  show();
+  await mapsReady();
+  const units = document.querySelectorAll('[data-layer="geological-units"]');
+  expect(units).toHaveLength(2);
+  for (const unit of units)
+    expect(unit.querySelector("path")).toHaveAttribute("fill", "#ffdfa4");
+  const inputProfile = registered.mock.calls.find(
+    ([item]) => item.resource.id === 101,
+  )![0];
+  expect(
+    inputProfile.defaultVisualization.symbolization.renderer.classes[0].color,
+  ).toBe("#b98a5b");
+});
+
 it("embeds synchronized real maps while registering the same catalog layers, and switches to ordinary map tools without rereading", async () => {
   show();
   await mapsReady();

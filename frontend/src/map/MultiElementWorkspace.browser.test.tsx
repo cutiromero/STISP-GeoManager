@@ -65,7 +65,7 @@ beforeEach(() => {
   request.mockReset();
 });
 
-it("本地SVG双图支持线点面，沿用岩性配色和Unicode代号，推测交汇用空心点", async () => {
+it("讲解页双图同类采用成果原色并支持线点面、Unicode代号与空心交汇点", async () => {
   const worker = vi.spyOn(window, "Worker");
   const started = performance.now();
   const workflow = reviewWorkflow();
@@ -87,6 +87,8 @@ it("本地SVG双图支持线点面，沿用岩性配色和Unicode代号，推测
   const base = structuredClone(beforeReviewMap);
   base.features[0]!.properties.fill_color = "#4abb83";
   base.features[0]!.properties.geo_sym = "T₃b²";
+  const styledAfter = structuredClone(base);
+  styledAfter.features[0]!.properties.fill_color = "#ffdfa4";
   const zones = structuredClone(base);
   zones.features[0]!.properties = {
     zone_id: "A01",
@@ -110,7 +112,9 @@ it("本地SVG双图支持线点面，沿用岩性配色和Unicode代号，推测
           ? points
           : [501, 502].includes(id)
             ? zones
-            : base,
+            : id === 201
+              ? styledAfter
+              : base,
     );
   });
   render(
@@ -144,6 +148,11 @@ it("本地SVG双图支持线点面，沿用岩性配色和Unicode代号，推测
   expect(screen.getAllByRole("group", { name: "本地矢量图层" })).toHaveLength(
     2,
   );
+  for (const unit of document.querySelectorAll(
+    '[data-layer="geological-units"]',
+  ))
+    expect(unit.querySelector("path")).toHaveAttribute("fill", "#ffdfa4");
+  expect(base.features[0]!.properties.fill_color).toBe("#4abb83");
   expect(document.querySelector('[class*="mapbox"], canvas')).toBeNull();
   expect(worker).not.toHaveBeenCalled();
   expect(

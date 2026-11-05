@@ -131,14 +131,7 @@ export async function queryReviewMapResult(
     )
   )
     throw new Error("双图预览需要完整的面图件");
-  if (
-    options.loadStyle === true &&
-    result.geojson.features.some(
-      (feature) =>
-        ["Polygon", "MultiPolygon"].includes(feature.geometry.type) &&
-        typeof feature.properties.name === "string",
-    )
-  ) {
+  if (options.loadStyle === true) {
     const profile = await requestJson<ResourceProfileResponse>(
       `/api/catalog/resources/${id}/profile/`,
     );
@@ -181,6 +174,7 @@ export function colorReviewMap(
     ...feature,
     properties: {
       ...feature.properties,
+      _review_classification_field: renderer.field,
       fill_color:
         colors.get(String(feature.properties[renderer.field as string])) ??
         fallback,
