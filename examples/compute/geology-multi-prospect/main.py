@@ -19,7 +19,6 @@ def run(context):
     config = settings(context)
     lithology, faults, area, rules, units, _, snapshot = inputs(context, config)
     final_alterations = RasterAlterations(context, config, area)
-    final_alterations.inspect(lithology, rules, units, snapshot)
     before_lithology = vector(
         context.input_path("before_lithology"),
         config["working_epsg"],
@@ -64,8 +63,10 @@ def run(context):
                 raise KeyError(key)
             return context.input_path("before_" + key)
 
+        def output_path(self, filename):
+            return context.output_path(filename)
+
     original_alterations = RasterAlterations(OriginalContext(), config, area)
-    original_alterations.inspect(before_lithology, rules, units, snapshot)
     transform, dimensions = grid(area, config)
     before, old_evidence = zones(
         before_lithology,

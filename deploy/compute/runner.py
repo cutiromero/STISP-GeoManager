@@ -6,8 +6,33 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
+
+
+def failure_details(error):
+    error_type = type(error).__name__
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,63}", error_type):
+        error_type = "Exception"
+    detail = "算法执行异常"
+    if isinstance(error, MemoryError):
+        allocation = re.search(
+            r"Unable to allocate (\d{1,12}(?:\.\d{1,12})? (?:[KMGT]i?B|bytes))",
+            str(error)[:1024],
+        )
+        detail = "内存不足" + ("：无法分配 " + allocation[1] if allocation else "")
+    elif isinstance(error, (ValueError, TypeError, KeyError)):
+        detail = "输入或参数校验失败"
+    elif isinstance(error, ImportError):
+        detail = "缺少输入或依赖"
+    elif isinstance(error, OSError):
+        detail = "文件读写失败"
+    elif isinstance(error, ArithmeticError):
+        detail = "计算数值异常"
+    elif isinstance(error, SystemExit):
+        detail = "算法主动退出"
+    return {"error_type": error_type, "error_detail": detail}
 
 
 class Context:
@@ -51,6 +76,7 @@ def main():
     request = json.loads((input_dir / "context.json").read_text(encoding="utf-8"))
     sys.path.insert(0, str(algorithm_dir))
     status = "failed"
+    failure = {}
     try:
         with (
             open(os.devnull, "w") as null,
@@ -64,10 +90,10 @@ def main():
             spec.loader.exec_module(module)
             module.run(Context(request, input_dir, output_dir))
         status = "succeeded"
-    except BaseException:
-        pass
+    except BaseException as error:
+        failure = failure_details(error)
     temporary = output_dir / "__platform_status.tmp"
-    temporary.write_text(json.dumps({"status": status}), encoding="utf-8")
+    temporary.write_text(json.dumps({"status": status, **failure}), encoding="utf-8")
     temporary.replace(output_dir / "__platform_status.json")
     # Keep bounded tmpfs alive for the host to retrieve declared files.
     while True:

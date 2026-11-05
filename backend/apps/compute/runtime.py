@@ -35,6 +35,23 @@ NATIVE_PACKAGES = (
 )
 
 
+def _failure_message(status):
+    generic = "算法运行失败，请检查输入条件、参数和算法实现；可在修正后重试"
+    error_type = status.get("error_type", "")
+    detail = status.get("error_detail", "")
+    if not isinstance(error_type, str) or not re.fullmatch(
+        r"[A-Za-z_][A-Za-z_0-9]{0,63}", error_type
+    ):
+        return generic
+    if not isinstance(detail, str) or not re.fullmatch(
+        r"内存不足(?:：无法分配 \d{1,12}(?:\.\d{1,12})? (?:[KMGT]i?B|bytes))?"
+        r"|输入或参数校验失败|缺少输入或依赖|文件读写失败|计算数值异常|算法主动退出|算法执行异常",
+        detail,
+    ):
+        return generic
+    return f"算法运行失败：{detail}（{error_type}）"
+
+
 def command(*args, timeout=15, check=True):
     try:
         result = subprocess.run(
@@ -298,9 +315,7 @@ def _execute_native(attempt, package, inputs, destination, manifest, heartbeat):
                 except ValueError as exc:
                     raise ComputeError("算法返回的状态信息不合法") from exc
                 if status.get("status") != "succeeded":
-                    raise ComputeError(
-                        "算法运行失败，请检查输入条件、参数和算法实现；可在修正后重试"
-                    )
+                    raise ComputeError(_failure_message(status))
                 break
             if process.poll() is not None:
                 raise ComputeError("计算进程提前退出，可能超出内存限制或算法异常")
@@ -418,9 +433,7 @@ def execute(attempt, package, inputs, destination, manifest, heartbeat):
                 except ValueError as exc:
                     raise ComputeError("算法返回的状态信息不合法") from exc
                 if status.get("status") != "succeeded":
-                    raise ComputeError(
-                        "算法运行失败，请检查输入条件、参数和算法实现；可在修正后重试"
-                    )
+                    raise ComputeError(_failure_message(status))
                 break
             running = command(
                 "inspect", "--format", "{{.State.Running}}", name

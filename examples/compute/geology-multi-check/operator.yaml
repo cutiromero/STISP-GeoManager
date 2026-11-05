@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-multi-check",
   "name": "三要素知识检查",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "三要素知识检查。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
