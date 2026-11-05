@@ -3,15 +3,29 @@
 import copy
 import hashlib
 import json
+import re
+from collections import Counter
 
 from apps.compute.packages import ComputeError
 from .config import registry
 from .decision_budget import BudgetReviewRequired, _expand_knowledge
-from .geology_issue_groups import group_summaries, issue_groups
+from .geology_issue_groups import group_summaries
 
 # Configuration: request size adapts downward through the real tokenizer gate.
 MAX_BATCH_ROWS = 128
 MAX_BATCH_GROUPS = 8
+MODEL_GROUP_FIELDS = (
+    "element",
+    "rule_id",
+    "rule_version",
+    "suggested_action",
+    "status",
+    "snapshot_hash",
+    "conditions",
+    "exceptions",
+    "knowledge_id",
+    "knowledge_revision",
+)
 SOURCE_POLICY_KEYS = (
     "maxContextTokens",
     "maxContextBytes",
@@ -39,42 +53,40 @@ def review_issues(workflow, results):
     check = next(
         (item for item in workflow.plan["stages"] if item["name"] == "check"), {}
     )
-    return [
+    members = [
         (result, index, row)
         for result in results
         if result["key"] == "issues" and result.get("taskId") == check.get("taskId")
         for index, row in enumerate(result.get("rows", []))
     ]
+    # Keep compatible members adjacent before applying the group/row caps.
+    # The original output row index remains the source locator and audit key.
+    return sorted(
+        members,
+        key=lambda item: (_model_group_key(item[2]), str(item[0]["outputId"]), item[1]),
+    )
+
+
+def _model_group_key(row):
+    raster = row.get("element") == "alteration" and str(
+        row.get("feature_id", "")
+    ).startswith("AG-")
+    return tuple(str(row.get(name, "")) for name in MODEL_GROUP_FIELDS) + (
+        "raster_unit" if raster else "feature",
+    )
 
 
 def model_issue_groups(rows):
-    """AG rows already describe complete raster units; retain every such unit."""
-    vector, raster = [], {}
+    """Pack complete members sharing a rule; keep individual target/evidence values."""
+    grouped = {}
     for row in rows:
-        if row.get("element") != "alteration" or not str(
-            row.get("feature_id", "")
-        ).startswith("AG-"):
-            vector.append(row)
-            continue
-        measured = json.loads(row.get("measurements_json") or "{}")
-        key = tuple(
-            row.get(name, "")
-            for name in (
-                "rule_id",
-                "rule_version",
-                "suggested_action",
-                "target_code",
-                "status",
-                "snapshot_hash",
-            )
-        ) + tuple(
-            json.dumps(measured.get(name, ""), sort_keys=True)
-            for name in ("mineral", "rock_group", "boundary")
-        )
-        raster.setdefault(key, []).append(row)
+        grouped.setdefault(_model_group_key(row), []).append(row)
     return [
-        *issue_groups(vector),
-        *[("AGB-" + signature(key)[:24], members) for key, members in raster.items()],
+        (
+            ("AGB-" if key[-1] == "raster_unit" else "MGB-") + signature(key)[:24],
+            members,
+        )
+        for key, members in sorted(grouped.items())
     ]
 
 
@@ -83,17 +95,23 @@ def model_group_summaries(rows):
     for identity, members in model_issue_groups(rows):
         parts = group_summaries(members)
         value = {**parts[0], "group_id": identity, "count": len(members)}
-        if identity.startswith("AGB-"):
-            ranges = {}
-            for part in parts:
-                for name, bounds in part["measurementRanges"].items():
-                    current = ranges.setdefault(name, list(bounds))
-                    current[:] = [
-                        min(current[0], bounds[0]),
-                        max(current[1], bounds[1]),
-                    ]
+        ranges = {}
+        for part in parts:
+            for name, bounds in part["measurementRanges"].items():
+                current = ranges.setdefault(name, list(bounds))
+                current[:] = [min(current[0], bounds[0]), max(current[1], bounds[1])]
+        value["measurementRanges"] = ranges
+        value["modelGroupKind"] = (
+            "complete_raster_units"
+            if identity.startswith("AGB-")
+            else "complete_vector_members"
+        )
+        targets = Counter(row.get("target_code", "") for row in members)
+        if len(targets) > 1:
             value.update(
-                measurementRanges=ranges, modelGroupKind="complete_raster_units"
+                target_code=None,
+                targetCodeMode="per_member",
+                targetCodeDistribution=dict(sorted(targets.items())),
             )
         summaries.append(value)
     return summaries
@@ -162,13 +180,125 @@ def scoped_results(results, scope):
     ]
 
 
+def _member_projection(row, knowledge):
+    member = {key: cell for key, cell in row.items() if key != "geometry_json"}
+    if row.get("element") != "alteration" or not str(
+        row.get("feature_id", "")
+    ).startswith("AG-"):
+        return member
+    measured = json.loads(row.get("measurements_json") or "{}")
+    if measured.get("raster_protocol") != "alteration-pixels-v1":
+        return member
+    predicates = [row.get("conditions"), row.get("exceptions")]
+    predicates.extend(
+        {key: entry.get(key) for key in ("conditions", "exceptions", "ruleConfig")}
+        for entry in knowledge
+        if not entry.get("trialBinding", {}).get("ruleId")
+        or entry["trialBinding"]["ruleId"] == row.get("rule_id")
+    )
+    if re.search(
+        r"bbox|coordinates?|包围框|边界框|坐标|representatives[^\n]*(?:location|longitude|latitude|\.(?:x|y|lon|lat)\b)",
+        json.dumps(predicates, ensure_ascii=False),
+        re.I,
+    ):
+        return member
+    omitted = []
+    if "bbox" in measured:
+        measured.pop("bbox")
+        omitted.append("measurements_json.bbox")
+    representatives = measured.get("representatives")
+    for representative in representatives if isinstance(representatives, list) else []:
+        if isinstance(representative, dict) and "bbox" in representative:
+            representative.pop("bbox")
+            path = "measurements_json.representatives[].bbox"
+            if path not in omitted:
+                omitted.append(path)
+    if omitted:
+        member.update(
+            measurements_json=json.dumps(
+                measured, ensure_ascii=False, separators=(",", ":")
+            ),
+            omittedGeometryPaths=omitted,
+            geometryStoredInOriginal=True,
+        )
+    return member
+
+
+def _measurement_columns(group, members):
+    measured = [json.loads(row.get("measurements_json") or "{}") for row in members]
+    aliases = {}
+    if all(
+        "group_id" in values
+        and "feature_id" in row
+        and signature(values["group_id"]) == signature(row["feature_id"])
+        for row, values in zip(members, measured)
+    ):
+        aliases["group_id"] = "feature_id"
+    first_signatures = {key: signature(value) for key, value in measured[0].items()}
+    common = {
+        key: value
+        for key, value in measured[0].items()
+        if key not in aliases
+        and all(
+            key in values and signature(values[key]) == first_signatures[key]
+            for values in measured
+        )
+    }
+    columns = sorted(
+        {key for values in measured for key in values} - set(common) - set(aliases)
+    )
+    group.update(
+        measurementCommon=common,
+        measurementColumns=columns,
+        measurementAliases=aliases,
+    )
+    group["memberCommon"].pop("measurements_json", None)
+    for sample, values in zip(group["samples"], measured):
+        sample.pop("measurements_json", None)
+        sample["measurements"] = [values.get(key) for key in columns]
+        absent = [index for index, key in enumerate(columns) if key not in values]
+        if absent:
+            sample["measurementAbsentColumns"] = absent
+
+
 def batch_payload(payload, results, scope, batch_index):
     """Every member is visible; a group refers only to this request's scope."""
     value = _expand_knowledge(payload)
+    rules = {row["rule_id"] for _, _, row in scope}
+    original_knowledge = value["knowledge"]
+    bound = [
+        entry
+        for entry in original_knowledge
+        if entry.get("trialBinding", {}).get("ruleId") in rules
+    ]
+    background = [
+        entry
+        for entry in original_knowledge
+        if not entry.get("trialBinding", {}).get("ruleId")
+    ]
+    if bound:
+        value["knowledge"] = bound
+        if background:
+            value["batchKnowledgeScope"] = {
+                "reviewedRuleIds": sorted(rules),
+                "sourceSha256": signature(original_knowledge),
+                "deferredBackground": [
+                    {
+                        key: entry[key]
+                        for key in ("id", "revision", "title")
+                        if key in entry
+                    }
+                    for entry in background
+                ],
+                "note": "本批只审阅绑定规则的完整条件、例外与配置；背景知识正文留在原审计，"
+                "尚未在本批审阅，不能引用其内容。需要这些背景才能裁定时须request_review。",
+            }
+    else:
+        value["knowledge"] = background or original_knowledge
     selected = {}
     sources = {}
     for result, index, row in scope:
-        member = {key: cell for key, cell in row.items() if key != "geometry_json"}
+        member = _member_projection(row, value["knowledge"])
         sources[str(result["outputId"])] = {
             "outputId": result["outputId"],
             "checksum": result.get("checksum"),
@@ -176,13 +306,6 @@ def batch_payload(payload, results, scope, batch_index):
         }
         member["sourceRowIndex"] = index
         selected.setdefault(str(result["outputId"]), []).append(member)
-    rules = {row["rule_id"] for _, _, row in scope}
-    value["knowledge"] = [
-        entry
-        for entry in value["knowledge"]
-        if not entry.get("trialBinding", {}).get("ruleId")
-        or entry["trialBinding"]["ruleId"] in rules
-    ]
     knowledge_ids = {str(entry["id"]) for entry in value["knowledge"]}
     value["availableEvidence"] = [
         ref
@@ -209,13 +332,27 @@ def batch_payload(payload, results, scope, batch_index):
                 {key: cell for key, cell in member.items() if key not in common}
                 for member in group_members
             ]
+            _measurement_columns(group, group_members)
             group["memberCoverage"] = "complete_batch_members"
         result.update(rows=[], groups=groups, scope="complete_batch_members")
     for role in value["inputRoles"]:
         if role.get("role") == "rules":
-            role["rows"] = [
-                row for row in role.get("rows", []) if row.get("rule_id") in rules
-            ]
+            source_rows = role.get("rows", [])
+            rows = [row for row in source_rows if row.get("rule_id") in rules]
+            original_reading = copy.deepcopy(role.get("readingScope"))
+            role.update(
+                rows=rows,
+                sourceRowCount=role.get("rowCount", len(source_rows)),
+                sourceScope=role.get("scope"),
+                rowCount=len(rows),
+                scope="batch_rule_bindings",
+                readingScope={
+                    "scope": "batch_rule_bindings",
+                    "sourceRowsSha256": signature(source_rows),
+                    "originalReading": original_reading,
+                    "note": "原读取范围记录于originalReading及完整输入审计；这里只列本批绑定规则，不是完整原表。",
+                },
+            )
     value["modelBatch"] = {
         "index": batch_index,
         "completeMembers": True,
@@ -223,6 +360,14 @@ def batch_payload(payload, results, scope, batch_index):
         "scopeSha256": scope_signature(scope),
         "instruction": "本批groups的samples包含全部本批成员。group_id仅在本批范围展开；"
         "每个成员继承该组memberCommon的完全相同原值；memberSource与sourceRowIndex定位原始行。"
+        "原measurements_json由measurementCommon与measurementColumns对应的成员measurements数组合并还原；"
+        "measurementAbsentColumns列出原本缺少的列索引（从0开始），不能把缺失当null。"
+        "measurementAliases将测量键精确指向该成员的原字段，例如group_id=feature_id；"
+        "这些是无损编码，所有未省几何的原JSON键、值、类型和嵌套结构完整保留。"
+        "分组只是展示打包；targetCodeMode为per_member时目标按每个成员的target_code，"
+        "矿物、岩性背景、边界与测量均按各成员原值核查，不能将一个成员的证据用于其他成员。"
+        "omittedGeometryPaths所列包围框留在原输出，本批未审阅这些坐标几何；"
+        "不能声称已做原始几何或空间复核。"
         "逐成员核对必要测量、知识条件及例外，不能把本批建议扩大到其余同组对象。",
     }
     return value
@@ -273,7 +418,7 @@ def _merged_decision(batches, edits, total):
 def batch_source(workflow, policy, stage, results, context):
     return signature(
         {
-            "batchProtocol": "complete_vector_and_raster_units_v2",
+            "batchProtocol": "complete_rule_members_measurement_columns_v5",
             "results": results,
             "context": context,
             "knowledge": workflow.evidence,
@@ -297,6 +442,14 @@ def batch_source(workflow, policy, stage, results, context):
     )
 
 
+def _new_child_stage(stage):
+    return {
+        key: copy.deepcopy(stage[key])
+        for key in ("name", "identifier", "bindings", "parameters")
+        if key in stage
+    }
+
+
 def plan_batches(workflow, user, policy, stage, results, guard, context=None):
     """Use the serving tokenizer and production request builder, without generation."""
     from .demo_decisions import _decide_once
@@ -311,11 +464,7 @@ def plan_batches(workflow, user, policy, stage, results, guard, context=None):
         while lower <= upper:
             guard()
             scope = rows[offset:end]
-            child = {
-                key: copy.deepcopy(stage[key])
-                for key in ("name", "identifier", "bindings", "parameters")
-                if key in stage
-            }
+            child = _new_child_stage(stage)
             try:
                 measured = _decide_once(
                     workflow,
@@ -420,17 +569,30 @@ def run_batches(
             end = item["end"]
         if end != len(rows):
             raise ComputeError("分批预算规划未覆盖全部证据")
-    offset, edits, seen = 0, [], set()
+    offset, edits, chosen = 0, [], {}
     targets = {
         row["issue_id"]: (row["element"], row["feature_id"]) for _, _, row in rows
     }
+    selected_sources = {(str(result["outputId"]), index) for result, index, _ in rows}
+    original_rows = [
+        row
+        for result in results
+        if result["key"] == "issues"
+        for index, row in enumerate(result.get("rows", []))
+        if (str(result["outputId"]), index) in selected_sources
+    ]
+    priority = {row["issue_id"]: index for index, row in enumerate(original_rows)}
 
     def merge(proposed):
         for edit in proposed:
             target = targets[edit["issue_id"]]
-            if target not in seen:
-                edits.append(edit)
-                seen.add(target)
+            previous = chosen.get(target)
+            if (
+                previous is None
+                or priority[edit["issue_id"]] < priority[previous["issue_id"]]
+            ):
+                chosen[target] = edit
+        edits[:] = sorted(chosen.values(), key=lambda edit: priority[edit["issue_id"]])
 
     def valid_range(batch, start):
         return (
@@ -460,6 +622,11 @@ def run_batches(
             guard,
             _context=context,
             _batch=(scope, index + 1),
+            **(
+                {"_expected_request_sha": preflight["batches"][index]["requestSha256"]}
+                if preflight
+                else {}
+            ),
         )
         if recovered != (batch["stage"]["decision"], batch["stage"]["edits"]):
             raise ComputeError("已完成批次与实际模型响应不一致，已停止恢复")
@@ -477,18 +644,7 @@ def run_batches(
                 if preflight
                 else _end_offset(rows, offset),
                 "status": "pending",
-                "stage": {
-                    key: copy.deepcopy(value)
-                    for key, value in stage.items()
-                    if key
-                    not in {
-                        "modelBatches",
-                        "modelAttempts",
-                        "modelRequestPayload",
-                        "modelRequestInstruction",
-                        "contextBudgetReview",
-                    }
-                },
+                "stage": _new_child_stage(stage),
             }
             state["batches"].append(batch)
         if not valid_range(batch, offset):
@@ -545,9 +701,18 @@ def run_batches(
                 response if on_response else None,
                 _context=context,
                 _batch=(scope, index + 1),
+                **(
+                    {
+                        "_expected_request_sha": preflight["batches"][index][
+                            "requestSha256"
+                        ]
+                    }
+                    if preflight
+                    else {}
+                ),
                 **callbacks,
             )
-        except BudgetReviewRequired:
+        except BudgetReviewRequired as exc:
             if not preflight and not child.get("modelAttempts") and len(scope) > 1:
                 batch["end"] = offset + max(1, len(scope) // 2)
                 batch.pop("scopeSha256", None)
@@ -560,7 +725,8 @@ def run_batches(
                 continue
             state["status"] = "paused"
             stage["contextBudgetReview"] = {
-                "reason": "本批必要证据超出输入预算",
+                **copy.deepcopy(child.get("contextBudgetReview", {})),
+                "reason": str(exc),
                 "batchIndex": index + 1,
             }
             raise

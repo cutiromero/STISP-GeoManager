@@ -16,7 +16,14 @@ from apps.agent.decision_budget import (
     project_payload,
 )
 from apps.agent.demo_decisions import decide
-from apps.agent.demo_decision_batches import plan_batches
+from apps.agent.demo_decision_batches import (
+    MAX_BATCH_GROUPS,
+    MAX_BATCH_ROWS,
+    batch_payload,
+    model_issue_groups,
+    plan_batches,
+    review_issues,
+)
 from apps.agent.demo_results import read_output
 from apps.agent.geology_multi_review import (
     assess_edits,
@@ -99,6 +106,25 @@ def scenario(count=257):
         },
     ]
     return workflow, stage, results
+
+
+def restore_member(group, sample):
+    member = copy.deepcopy({**group["memberCommon"], **sample})
+    values = member.pop("measurements")
+    absent = set(member.pop("measurementAbsentColumns", []))
+    measured = copy.deepcopy(group["measurementCommon"])
+    measured.update(
+        {
+            key: values[index]
+            for index, key in enumerate(group["measurementColumns"])
+            if index not in absent
+        }
+    )
+    measured.update(
+        {key: member[field] for key, field in group["measurementAliases"].items()}
+    )
+    member["measurements_json"] = measured
+    return member
 
 
 def provider_fixture(requests, seen, fail_at=None, disposition=None):
@@ -222,6 +248,83 @@ def test_requested_interrupted_batch_is_not_sent_again(retry_model):
     with pytest.raises(ComputeError, match="完整分析响应未保存"):
         run(workflow, stage, results, requests, seen)
     assert len(requests) == workflow.plan["actualModelCallCount"] == 2
+
+
+def test_interleaved_groups_are_packed_with_original_row_locators_and_full_coverage(
+    retry_model,
+):
+    workflow, stage, results = scenario(100)
+    for index, row in enumerate(results[0]["rows"]):
+        row["conditions"] = f"实测条件-{index % 10}"
+    original = copy.deepcopy(results)
+    requests, seen = [], []
+    _, edits = run(workflow, stage, results, requests, seen)
+    assert len(requests) == 2
+    assert len(edits) == len(seen) == len(set(seen)) == 100
+    locators = []
+    for request in requests:
+        projected = json.loads(request[1]["content"])
+        value = expand(projected, projected.get("contextDefinitions", {}))
+        groups = value["actualResults"][0]["groups"]
+        assert len(groups) <= MAX_BATCH_GROUPS
+        assert value["modelBatch"]["memberCount"] <= MAX_BATCH_ROWS
+        for group in groups:
+            for member in group["samples"]:
+                restored = restore_member(group, member)
+                index = restored.pop("sourceRowIndex")
+                locators.append(index)
+                assert restored == {
+                    key: json.loads(cell) if key == "measurements_json" else cell
+                    for key, cell in original[0]["rows"][index].items()
+                    if key != "geometry_json"
+                }
+    assert sorted(locators) == list(range(100))
+    assert locators != list(range(100)) and results == original
+
+
+def test_heterogeneous_targets_remain_per_member_when_one_model_group_expands(
+    retry_model,
+):
+    workflow, stage, results = scenario(36)
+    for index, row in enumerate(results[0]["rows"]):
+        row["target_code"] = f"T{index % 12}"
+    requests, seen = [], []
+    _, edits = run(workflow, stage, results, requests, seen)
+    assert len(requests) == 1 and len(model_issue_groups(results[0]["rows"])) == 1
+    projected = json.loads(requests[0][1]["content"])
+    value = expand(projected, projected.get("contextDefinitions", {}))
+    group = value["actualResults"][0]["groups"][0]
+    assert group["target_code"] is None and group["targetCodeMode"] == "per_member"
+    assert group["targetCodeDistribution"] == {f"T{i}": 3 for i in range(12)}
+    assert "target_code" not in group["memberCommon"]
+    assert {row["issue_id"]: row["target_code"] for row in edits} == {
+        row["issue_id"]: row["target_code"] for row in results[0]["rows"]
+    }
+
+
+def test_original_issue_priority_wins_even_when_its_model_batch_runs_later(retry_model):
+    workflow, stage, results = scenario(257)
+    original_first = results[0]["rows"][0]
+    packed_first = results[0]["rows"][1]
+    original_first.update(
+        conditions=original_first["conditions"] + " · source-first",
+        target_code="source-first-code",
+    )
+    packed_first.update(
+        feature_id=original_first["feature_id"], target_code="early-batch-code"
+    )
+    requests, seen = [], []
+    decision, edits = run(workflow, stage, results, requests, seen)
+    assert seen.index(packed_first["issue_id"]) < seen.index(original_first["issue_id"])
+    assert len(requests) == 3 and len(edits) == 256
+    selected = next(
+        edit for edit in edits if edit["issue_id"] == original_first["issue_id"]
+    )
+    assert selected["target_code"] == "source-first-code"
+    assert packed_first["issue_id"] not in {edit["issue_id"] for edit in edits}
+    assert edits[0]["issue_id"] == original_first["issue_id"]
+    assert run(workflow, stage, results, requests, seen) == (decision, edits)
+    assert len(requests) == 3
 
 
 def test_source_change_and_completed_edit_tampering_stop_before_new_request(
@@ -389,6 +492,262 @@ def raster_scenario(count=541):
     return workflow, stage, results
 
 
+@pytest.mark.parametrize("disposition", ["suggested", "keep", "review", "reject"])
+def test_heterogeneous_raster_members_keep_exact_evidence_and_only_visible_scope_expands(
+    retry_model, disposition
+):
+    workflow, stage, results = raster_scenario(140)
+    for index, row in enumerate(results[0]["rows"]):
+        measured = json.loads(row["measurements_json"])
+        measured.update(
+            mineral=["chlorite", "calcite"][index % 2],
+            rock_group=["carbonate", "granite", "clastic"][index % 3],
+            boundary=bool(index % 2),
+        )
+        row["measurements_json"] = json.dumps(measured)
+    original = copy.deepcopy(results)
+    assert len(model_issue_groups(results[0]["rows"])) == 1
+    requests, seen = [], []
+    _, edits = run(workflow, stage, results, requests, seen, disposition=disposition)
+    assert len(requests) == 2 and len(seen) == len(set(seen)) == 140
+    assert len(edits) == (140 if disposition in {"suggested", "keep"} else 0)
+    scope = review_issues(workflow, results)[:128]
+    payload = batch_payload(
+        {
+            "knowledge": [],
+            "availableEvidence": [],
+            "actualResults": results,
+            "inputRoles": [],
+        },
+        results,
+        scope,
+        1,
+    )
+    group = payload["actualResults"][0]["groups"][0]
+    assert len(group["samples"]) == group["count"] == 128
+    assert group["modelGroupKind"] == "complete_raster_units"
+    for member in group["samples"]:
+        restored = restore_member(group, member)
+        source = original[0]["rows"][restored["sourceRowIndex"]]
+        assert restored["measurements_json"] == json.loads(source["measurements_json"])
+    scoped = [{**results[0], "rows": results[0]["rows"][:128]}]
+    scoped_edits, _ = assess_edits(
+        [
+            {
+                "group_id": group["group_id"],
+                "disposition": disposition,
+                "excluded_issue_ids": [],
+                "reason": "逐成员核对原始矿物、岩性背景与边界",
+            }
+        ],
+        scoped,
+        model_payload=payload,
+    )
+    assert not {f"issue-{i}" for i in range(128, 140)}.intersection(
+        row["issue_id"] for row in scoped_edits
+    )
+    assert results == original
+
+
+def raster_geometry_scenario():
+    workflow, stage, results = raster_scenario(2)
+    for index, row in enumerate(results[0]["rows"]):
+        measured = json.loads(row["measurements_json"])
+        measured.update(
+            bbox=[90 + index, 30, 91 + index, 31],
+            representatives=[
+                {"area_m2": 50, "bbox": [90, 30, 91, 31], "detail": {"value": index}},
+                {"area_m2": 25, "bbox": [91, 30, 92, 31]},
+            ],
+            additional_measurements={"values": [index, 1, 2]},
+        )
+        row["measurements_json"] = json.dumps(measured)
+    return workflow, stage, results
+
+
+def geometry_payload(workflow, results):
+    return batch_payload(
+        {
+            "knowledge": workflow.evidence,
+            "availableEvidence": [
+                {
+                    "kind": "knowledge",
+                    "id": str(entry["id"]),
+                    "revision": entry["revision"],
+                }
+                for entry in workflow.evidence
+            ],
+            "actualResults": results,
+            "inputRoles": [],
+        },
+        results,
+        review_issues(workflow, results),
+        1,
+    )
+
+
+def test_raster_geometry_projection_only_omits_named_coordinate_paths_and_preserves_source():
+    workflow, _, results = raster_geometry_scenario()
+    original = copy.deepcopy(results)
+    payload = geometry_payload(workflow, results)
+    group = payload["actualResults"][0]["groups"][0]
+    for sample in group["samples"]:
+        restored = restore_member(group, sample)
+        source = original[0]["rows"][restored["sourceRowIndex"]]
+        expected = json.loads(source["measurements_json"])
+        expected.pop("bbox")
+        for representative in expected["representatives"]:
+            representative.pop("bbox")
+        assert restored["measurements_json"] == expected
+        assert restored["geometryStoredInOriginal"] is True
+        assert restored["omittedGeometryPaths"] == [
+            "measurements_json.bbox",
+            "measurements_json.representatives[].bbox",
+        ]
+        assert restored["snapshot_hash"] == source["snapshot_hash"]
+    assert group["memberSource"]["checksum"] == original[0]["checksum"]
+    assert "不能声称已做原始几何或空间复核" in payload["modelBatch"]["instruction"]
+    assert results == original
+
+
+@pytest.mark.parametrize("field", ["conditions", "exceptions", "ruleConfig"])
+def test_bound_coordinate_predicates_require_full_original_measurements(field):
+    workflow, _, results = raster_geometry_scenario()
+    workflow.evidence[0][field] = (
+        {"field": "representatives[0].bbox", "operator": "intersects"}
+        if field == "ruleConfig"
+        else ["须核查原始bbox坐标后判断"]
+    )
+    payload = geometry_payload(workflow, results)
+    group = payload["actualResults"][0]["groups"][0]
+    for sample in group["samples"]:
+        restored = restore_member(group, sample)
+        source = results[0]["rows"][restored["sourceRowIndex"]]
+        assert restored["measurements_json"] == json.loads(source["measurements_json"])
+        assert "omittedGeometryPaths" not in restored
+
+
+@pytest.mark.parametrize("protocol", ["alteration-vector-v1", ""])
+def test_geometry_projection_does_not_change_other_measurement_protocols(protocol):
+    workflow, _, results = raster_geometry_scenario()
+    for row in results[0]["rows"]:
+        measured = json.loads(row["measurements_json"])
+        measured["raster_protocol"] = protocol
+        row["measurements_json"] = json.dumps(measured)
+    payload = geometry_payload(workflow, results)
+    group = payload["actualResults"][0]["groups"][0]
+    for sample in group["samples"]:
+        restored = restore_member(group, sample)
+        assert restored["measurements_json"] == json.loads(
+            results[0]["rows"][restored["sourceRowIndex"]]["measurements_json"]
+        )
+
+
+def test_batch_defers_unbound_background_without_citing_unread_text_or_mutating_source():
+    workflow, _, results = raster_geometry_scenario()
+    background = {
+        "id": 201,
+        "revision": 4,
+        "title": "背景资料",
+        "conditions": ["需坐标核查的背景"],
+        "explanation": "原始背景正文",
+    }
+    workflow.evidence.append(background)
+    original = copy.deepcopy(workflow.evidence)
+    payload = geometry_payload(workflow, results)
+    assert payload["knowledge"] == [original[0]]
+    assert payload["batchKnowledgeScope"]["deferredBackground"] == [
+        {"id": 201, "revision": 4, "title": "背景资料"}
+    ]
+    assert [ref["id"] for ref in payload["availableEvidence"]] == ["200"]
+    group = payload["actualResults"][0]["groups"][0]
+    assert group["memberCommon"]["omittedGeometryPaths"]
+    assert workflow.evidence == original
+
+
+def test_batch_without_bound_knowledge_retains_complete_original_knowledge():
+    workflow, _, results = raster_geometry_scenario()
+    workflow.evidence[0].pop("trialBinding")
+    original = copy.deepcopy(workflow.evidence)
+    payload = geometry_payload(workflow, results)
+    assert payload["knowledge"] == original
+    assert "batchKnowledgeScope" not in payload
+
+
+def test_batch_rule_table_counts_describe_selected_rows_and_preserve_original_reading():
+    workflow, _, results = raster_scenario(2)
+    role = {
+        "role": "rules",
+        "rows": [{"rule_id": "A-05"}, {"rule_id": "A-01"}],
+        "rowCount": 2,
+        "scope": "all",
+        "readingScope": {"truncated": False, "rowCount": 2},
+    }
+    original = copy.deepcopy(role)
+    payload = batch_payload(
+        {
+            "knowledge": workflow.evidence,
+            "availableEvidence": [],
+            "actualResults": results,
+            "inputRoles": [role],
+        },
+        results,
+        review_issues(workflow, results),
+        1,
+    )
+    selected = payload["inputRoles"][0]
+    assert selected["rows"] == [{"rule_id": "A-05"}]
+    assert selected["rowCount"] == 1 and selected["scope"] == "batch_rule_bindings"
+    assert selected["sourceRowCount"] == 2 and selected["sourceScope"] == "all"
+    assert selected["readingScope"]["originalReading"] == original["readingScope"]
+    assert selected["readingScope"]["sourceRowsSha256"] and role == original
+
+
+def test_measurement_columns_roundtrip_every_nested_value_missing_null_and_source_alias():
+    workflow, _, results = raster_scenario(236)
+    for index, row in enumerate(results[0]["rows"]):
+        measured = json.loads(row["measurements_json"])
+        measured.update(
+            group_id=row["feature_id"],
+            nested={"flags": [True, None, False], "values": [index, 1.23456789]},
+            typed_scalar=[True, 1, 1.0][index % 3],
+            typed_nested={"value": [[True, 1, 1.0][index % 3]]},
+            optional=None,
+        )
+        if index % 2:
+            measured.pop("optional")
+        row["measurements_json"] = json.dumps(measured)
+    original = copy.deepcopy(results)
+    rows = review_issues(workflow, results)
+    covered = []
+    for start in range(0, len(rows), MAX_BATCH_ROWS):
+        payload = batch_payload(
+            {
+                "knowledge": workflow.evidence,
+                "availableEvidence": [],
+                "actualResults": results,
+                "inputRoles": [],
+            },
+            results,
+            rows[start : start + MAX_BATCH_ROWS],
+            start // MAX_BATCH_ROWS + 1,
+        )
+        for group in payload["actualResults"][0]["groups"]:
+            assert group["measurementAliases"] == {"group_id": "feature_id"}
+            for sample in group["samples"]:
+                restored = restore_member(group, sample)
+                index = restored["sourceRowIndex"]
+                assert json.dumps(
+                    restored["measurements_json"], sort_keys=True
+                ) == json.dumps(
+                    json.loads(original[0]["rows"][index]["measurements_json"]),
+                    sort_keys=True,
+                )
+                assert len(sample["measurements"]) == len(group["measurementColumns"])
+                covered.append(index)
+    assert sorted(covered) == list(range(236)) and results == original
+
+
 @pytest.mark.parametrize("count,expected_batches", [(1, 1), (541, 5)])
 def test_every_raster_unit_is_explicitly_reviewed_and_only_scoped_edits_expand(
     retry_model, count, expected_batches
@@ -469,6 +828,7 @@ def test_preflight_packs_with_production_token_gate_without_generation_and_execu
     expected_batches,
 ):
     workflow, stage, results = raster_scenario(257)
+    stage.update(status="needs_review", outputs=[{"outputId": 92}])
     policy = default_policy()
 
     def tokenizer(model, messages, *args):
@@ -509,19 +869,84 @@ def test_preflight_packs_with_production_token_gate_without_generation_and_execu
     with (
         patch("apps.agent.demo_decisions.resource_context", return_value=[]),
         patch("apps.agent.demo_decisions.provider.model_window", return_value=65536),
-        patch("apps.agent.context.count_tokens", side_effect=tokenizer),
+        patch("apps.agent.context.count_tokens", side_effect=tokenizer) as counted,
         patch(
             "apps.agent.demo_decisions.provider.stream",
             side_effect=provider_fixture(requests, seen),
         ),
     ):
         _, edits = decide(workflow, None, policy, stage, results, lambda: None, record)
+    assert counted.call_count == expected_batches
+    assert stage["status"] == "needs_review" and stage["outputs"] == [{"outputId": 92}]
+    assert all(
+        "status" not in batch["stage"] and "outputs" not in batch["stage"]
+        for batch in stage["modelBatches"]["batches"]
+    )
     assert len(requests) == workflow.plan["actualModelCallCount"] == expected_batches
     assert len(edits) == len(seen) == len(set(seen)) == 257
     assert [
         batch["stage"]["modelAttempts"][0]["requestSha256"]
         for batch in stage["modelBatches"]["batches"]
     ] == [item["requestSha256"] for item in plan["batches"]]
+
+
+def test_feedback_drift_after_preflight_blocks_generation_before_call_accounting(
+    retry_model,
+):
+    workflow, stage, results = raster_scenario(2)
+    policy = default_policy()
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=65536),
+        patch("apps.agent.context.count_tokens", return_value=800),
+        patch("apps.agent.demo_decisions._human_feedback", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.stream") as planning_stream,
+    ):
+        plan = plan_batches(
+            workflow, None, policy, stage, results, lambda: None, context=[]
+        )
+    planning_stream.assert_not_called()
+    stage["modelBatches"] = {
+        "sourceSha256": plan["sourceSha256"],
+        "memberCount": plan["memberCount"],
+        "cursor": 0,
+        "batches": [],
+        "preflight": plan,
+        "status": "planned",
+    }
+    feedback = [
+        {
+            "stepSequence": 8,
+            "decision": "approve",
+            "feedback": "增加一项尚未纳入冻结请求的现场核查意见",
+            "stage": "check",
+            "reviewedOutputs": [],
+        }
+    ]
+    record = Mock()
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=65536),
+        patch("apps.agent.context.count_tokens", return_value=800) as counted,
+        patch("apps.agent.demo_decisions._human_feedback", return_value=feedback),
+        patch("apps.agent.demo_decisions.provider.stream") as stream,
+        pytest.raises(BudgetReviewRequired, match="冻结的分批预算计划不同"),
+    ):
+        decide(workflow, None, policy, stage, results, lambda: None, record)
+    stream.assert_not_called()
+    record.assert_not_called()
+    assert counted.call_count == 1
+    assert workflow.plan["actualModelCallCount"] == 0
+    state = stage["modelBatches"]
+    assert state["status"] == "paused" and state["cursor"] == 0
+    child = state["batches"][0]["stage"]
+    assert not child.get("modelAttempts")
+    for review in (stage["contextBudgetReview"], child["contextBudgetReview"]):
+        assert review["kind"] == "preflight_request_changed"
+        assert review["requested"] is False
+        assert review["expectedRequestSha256"] == plan["batches"][0]["requestSha256"]
+        assert review["actualRequestSha256"] != review["expectedRequestSha256"]
+    assert child["modelRequestPayload"]["humanReviewFeedback"] == feedback
 
 
 def test_irreducible_preflight_preserves_parent_input_review_audit_without_generation(

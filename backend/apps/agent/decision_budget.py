@@ -64,7 +64,7 @@ def _deduplicate(payload):
     def count(value):
         if isinstance(value, (dict, list, str)):
             signature = dumps(value)
-            if len(signature) >= 160:
+            if len(signature) >= 64:
                 counts[signature] += 1
         if isinstance(value, dict):
             for item in value.values():
@@ -93,7 +93,11 @@ def _deduplicate(payload):
 
     projected = project(payload, definition=True)
     projected["contextDefinitions"] = definitions
-    projected["contextProjectionNote"] = REFERENCE_NOTE
+    projected["contextProjectionNote"] = (
+        "contextDefinitions中的$ref按原值展开。仅审阅完整本批成员；省略材料未审阅，不能据此补造结论。"
+        if payload.get("modelBatch", {}).get("completeMembers")
+        else REFERENCE_NOTE
+    )
     return projected
 
 
@@ -137,6 +141,139 @@ def _number(value):
     except (ValueError, TypeError, OverflowError):
         return None
     return number if math.isfinite(number) else None
+
+
+def _execution_batch_evidence(payload, level):
+    """A review batch needs its members, totals and quality, not map render headers."""
+    if (
+        level < 2
+        or payload.get("allowedAction") != "geology-multi-apply"
+        or not payload.get("modelBatch", {}).get("completeMembers")
+    ):
+        return payload
+    results = payload.get("actualResults", [])
+    source_sha = hashlib.sha256(dumps(results).encode()).hexdigest()
+    reference_only, references, details, rules = [], [], [], set()
+    detail_keys = {"issues", "statistics", "alteration_quality"}
+    for result in results:
+        for group in result.get("groups", []):
+            rules.add(group.get("rule_id"))
+        metadata = result.get("metadata", {})
+        # Keep real quality failures/warnings; schema, map dimensions and
+        # duplicate quality references are available in the original artifact.
+        quality = {
+            key: value
+            for key, value in metadata.items()
+            if key
+            in {
+                "qualityCheck",
+                "qualityCheckRef",
+                "quality",
+                "validation",
+                "warning",
+                "warnings",
+                "error",
+                "errors",
+                "status",
+            }
+        }
+        result["metadata"] = quality
+        result.pop("samplingNote", None)
+        if result.get("key") in detail_keys:
+            result.pop("countsByRule", None)
+            if result["key"] == "issues":
+                result.pop("columns", None)
+            columns, rows = result.get("columns", []), result.get("rows", [])
+            if (
+                columns
+                and rows
+                and all(
+                    isinstance(row, dict) and set(row) == set(columns) for row in rows
+                )
+            ):
+                result["rows"] = [[row[name] for name in columns] for row in rows]
+                result["rowFormat"] = "columns"
+            details.append(result)
+            continue
+        reference_only.append(result["outputId"])
+        independent_quality = {
+            key: value for key, value in quality.items() if key != "qualityCheckRef"
+        }
+        if independent_quality:
+            references.append(
+                {"outputId": result["outputId"], "quality": independent_quality}
+            )
+    payload["actualResults"] = details
+    task = payload.get("editTask")
+    if isinstance(task, dict) and "issueRuleKnowledge" in task:
+        task["issueRuleKnowledge"] = [
+            entry
+            for entry in task["issueRuleKnowledge"]
+            if entry.get("ruleId") in rules
+        ]
+    omitted_ids = {str(identity) for identity in reference_only}
+    payload["availableEvidence"] = [
+        {key: value for key, value in ref.items() if key != "title"}
+        for ref in payload.get("availableEvidence", [])
+        if ref["kind"] != "output" or str(ref["id"]) not in omitted_ids
+    ]
+    payload["batchEvidenceProjection"] = {
+        "sourceSha256": source_sha,
+        "referenceOnlyOutputIds": reference_only,
+        "referenceArtifactQuality": references,
+        "referenceScope": "identity_and_quality_only",
+        "note": (
+            "本批issues保留全部本批成员及原始测量，statistics和alteration_quality保留全部已读取行。"
+            "其余图层、栅格头与重复蚀变汇总仅列身份，完整清单由sourceSha256绑定，不能作为内容证据；"
+            "完整文件和元数据保存在原始审计。蚀变逐单元判断依据本批issues测量，"
+            "其他批次尚未审阅。issueRuleKnowledge仅列本批规则，不改变原始规则绑定。"
+        ),
+    }
+    for role in payload.get("inputRoles", []):
+        metadata = role.get("metadata")
+        if isinstance(metadata, dict):
+            role["metadata"] = {
+                key: value
+                for key, value in metadata.items()
+                if key in {"fields", "crs", "geometryTypes", "warnings", "qualityCheck"}
+            }
+    role_versions = {
+        role["role"]: {
+            "resourceId": role.get("resourceId"),
+            "revision": role.get("revision"),
+        }
+        for role in payload.get("inputRoles", [])
+        if role.get("role")
+    }
+    versions = payload.get("upstreamVersions", {})
+    if isinstance(versions, dict):
+        payload["upstreamVersions"] = {
+            role: value
+            for role, value in versions.items()
+            if value != role_versions.get(role)
+        }
+        if len(payload["upstreamVersions"]) != len(versions):
+            payload["batchEvidenceProjection"]["upstreamVersionScope"] = (
+                "与inputRoles逐项相同的resourceId/revision不重复，差异版本仍列于upstreamVersions。"
+            )
+    algorithm = payload.get("allowedAlgorithm", {})
+    manifest = algorithm.get("manifest")
+    if isinstance(manifest, dict):
+        # The action, ports and parameters are already frozen by the workflow.
+        # The reviewer proposes member dispositions; it cannot rewire this graph.
+        payload["batchEvidenceProjection"]["algorithmContractSha256"] = hashlib.sha256(
+            dumps(manifest).encode()
+        ).hexdigest()
+        algorithm["manifest"] = {
+            key: value
+            for key, value in manifest.items()
+            if key in {"identifier", "name", "version", "parameters"}
+        }
+        payload["batchEvidenceProjection"]["algorithmScope"] = (
+            "已冻结的动作、算法版本、校验和及参数约束；完整端口契约保留在原审计，"
+            "本批只能提出成员处置，不能替换算法、端口绑定或计算参数。"
+        )
+    return payload
 
 
 def _execution_knowledge(payload, level, original):
@@ -235,6 +372,92 @@ def _execution_knowledge(payload, level, original):
     return payload
 
 
+def _focus_batch(payload, level):
+    """Do not spend the reviewer's window on repeated execution/audit headers."""
+    if (
+        level < 3
+        or payload.get("allowedAction") != "geology-multi-apply"
+        or not payload.get("modelBatch", {}).get("completeMembers")
+    ):
+        return payload
+    for role in payload.get("inputRoles", []):
+        role.pop("revision", None)
+        metadata = role.get("metadata", {})
+        role["metadata"] = {
+            key: value
+            for key, value in metadata.items()
+            if key in {"fields", "warnings", "qualityCheck"}
+        }
+        if role.get("role") == "rules":
+            for key in ("description", "readingScope", "sourceRowCount", "sourceScope"):
+                role.pop(key, None)
+        elif role.get("description", "").startswith("MH-workflow任务资料，原文件："):
+            role.pop("description", None)
+    previous = payload.get("previousDecisions", [])
+    payload["previousDecisions"] = [
+        {
+            key: value
+            for key, value in item.items()
+            if key in {"judgement", "nextAction"}
+        }
+        for item in previous[-1:]
+    ]
+    state = payload.get("executionState", {})
+    payload["executionState"] = {
+        "currentStage": state.get("currentStage"),
+        "latestStatisticsOutputIds": state.get("currentRun", {}).get(
+            "latestStatisticsOutputIds", []
+        ),
+    }
+    # Cryptographic proofs belong to the complete source/request audit. The
+    # model needs object identities, versions and measured values to judge them.
+    audit_keys = {
+        "checksum",
+        "snapshot_hash",
+        "scopeSha256",
+        "sourceSha256",
+        "algorithmContractSha256",
+    }
+
+    def audit_headers(value):
+        if isinstance(value, dict):
+            for key in list(value):
+                if key in audit_keys:
+                    value.pop(key)
+                elif key not in {
+                    "conditions",
+                    "exceptions",
+                    "ruleConfig",
+                    "measurements_json",
+                    "measurements",
+                    "measurementCommon",
+                }:
+                    audit_headers(value[key])
+        elif isinstance(value, list):
+            for item in value:
+                audit_headers(item)
+
+    for key in (
+        "actualResults",
+        "allowedAlgorithm",
+        "modelBatch",
+        "batchEvidenceProjection",
+        "knowledgeProjection",
+        "batchKnowledgeScope",
+    ):
+        audit_headers(payload.get(key))
+    payload["batchEvidenceProjection"]["auditScope"] = (
+        "完整来源指纹、契约、版本与请求保留在原始阶段审计；平台按原值校验。"
+        "本视图省略纯审计指纹及重复执行头，不能据此改变绑定或扩大建议范围。"
+    )
+    if "upstreamVersionScope" in payload["batchEvidenceProjection"]:
+        payload["batchEvidenceProjection"]["upstreamVersionScope"] = (
+            "相同输入版本由平台冻结校验并保存在原始阶段审计；差异版本仍在upstreamVersions展开。"
+        )
+    payload["modelBatch"].pop("instruction", None)
+    return payload
+
+
 def _bounded_evidence(payload, level):
     """Project tables before sending; complete inputs remain in the stage audit."""
     projections = []
@@ -304,10 +527,17 @@ def _bounded_evidence(payload, level):
                     and child.startswith("actualResults[")
                     and name == "groups"
                 )
+                batch_totals = (
+                    complete_batch
+                    and child.startswith("actualResults[")
+                    and value.get("key") in {"statistics", "alteration_quality"}
+                    and name == "rows"
+                )
                 if (
                     name in BOUNDED_LISTS
                     and isinstance(item, list)
                     and not batch_groups
+                    and not batch_totals
                 ):
                     limit = (
                         GROUP_LIMITS[level] if name == "groups" else ROW_LIMITS[level]
@@ -351,6 +581,7 @@ def project_payload(original, level):
             candidates = []
         payload["colorCandidates"] = candidates
         return _deduplicate(_bounded_evidence(payload, level))
+    payload = _execution_batch_evidence(payload, level)
     payload = _execution_knowledge(payload, level, original)
     bindings = {}
     for role in payload.get("inputRoles", []):
@@ -427,6 +658,7 @@ def project_payload(original, level):
                 payload["previousAnalysis"]["oldDecision"] = _history(
                     previous["oldDecision"]
                 )
+    payload = _focus_batch(payload, level)
     return _deduplicate(_bounded_evidence(payload, level))
 
 

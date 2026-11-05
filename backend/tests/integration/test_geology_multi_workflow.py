@@ -834,6 +834,18 @@ def test_complete_batch_retry_cites_once_and_preserves_valid_groups(
     # The original large-group validator remains covered above; the model
     # reviews all members of one bounded batch instead of three samples.
     results[0]["rows"] = results[0]["rows"][:128]
+    from apps.agent.demo_decision_batches import model_group_summaries
+
+    for response in (answer, corrected):
+        response["edits"] = [
+            {
+                "group_id": group["group_id"],
+                "disposition": "suggested",
+                "excluded_issue_ids": [],
+                "reason": "按实测分布核对条件，例外保留",
+            }
+            for group in model_group_summaries(results[0]["rows"])
+        ]
     if repair:
         corrected["decision"]["evidenceRefs"].append(
             {"kind": "knowledge", "id": str(multi["entries"][1].id)}

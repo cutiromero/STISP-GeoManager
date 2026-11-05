@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from apps.agent.decision_budget import MAX_LEVEL, project_payload
+from apps.agent.decision_budget import MAX_LEVEL, project_payload, visible_payload
 from apps.agent.demo_decisions import decide, decision_payload
 from apps.agent.geology_issue_groups import group_summaries
 from apps.agent.policy import default_policy
@@ -33,6 +33,71 @@ def expand(value, definitions):
     if isinstance(value, list):
         return [expand(item, definitions) for item in value]
     return value
+
+
+@pytest.mark.parametrize("level", [2, 3, 4])
+def test_complete_batch_keeps_members_totals_and_quality_without_map_headers(level):
+    members = [{"issue_id": f"i-{index}", "area": index / 10} for index in range(70)]
+    statistics = [{"rule_id": f"L-{index}", "count": index} for index in range(20)]
+    payload = {
+        "allowedAction": "geology-multi-apply",
+        "modelBatch": {"completeMembers": True, "memberCount": len(members)},
+        "knowledge": [],
+        "actualResults": [
+            {
+                "key": "issues",
+                "outputId": 1,
+                "rows": [],
+                "groups": [{"group_id": "g", "rule_id": "L-1", "samples": members}],
+                "metadata": {"qualityCheck": {"status": "passed"}, "fields": ["area"]},
+            },
+            {"key": "statistics", "outputId": 2, "rows": statistics, "scope": "all"},
+            {"key": "alteration_quality", "outputId": 3, "rows": [{"bad_pixels": 7}]},
+            {
+                "key": "mineral_hits",
+                "kind": "raster",
+                "outputId": 4,
+                "checksum": "a" * 64,
+                "metadata": {"width": 10000, "warnings": ["no CRS"]},
+                "rows": [],
+            },
+            {"key": "alteration_summary", "outputId": 5, "rows": [{"unit": "unseen"}]},
+        ],
+        "editTask": {"issueRuleKnowledge": [{"ruleId": "L-1"}, {"ruleId": "L-2"}]},
+        "availableEvidence": [
+            {"kind": "output", "id": str(index)} for index in range(1, 6)
+        ],
+    }
+    original = copy.deepcopy(payload)
+    result = visible_payload(payload, level)
+    assert result["actualResults"][0]["groups"][0]["samples"] == members
+    assert result["actualResults"][0]["metadata"] == {
+        "qualityCheck": {"status": "passed"}
+    }
+    assert result["actualResults"][1]["rows"] == statistics
+    assert result["actualResults"][1]["scope"] == "all"
+    assert result["actualResults"][2]["rows"] == [{"bad_pixels": 7}]
+    assert len(result["actualResults"]) == 3
+    assert result["batchEvidenceProjection"]["referenceOnlyOutputIds"] == [4, 5]
+    assert result["batchEvidenceProjection"]["referenceArtifactQuality"][0] == {
+        "outputId": 4,
+        "quality": {"warnings": ["no CRS"]},
+    }
+    assert result["availableEvidence"] == payload["availableEvidence"][:3]
+    assert result["editTask"]["issueRuleKnowledge"] == [{"ruleId": "L-1"}]
+    if level == 2:
+        assert (
+            result["batchEvidenceProjection"]["sourceSha256"]
+            == hashlib.sha256(
+                json.dumps(
+                    original["actualResults"], ensure_ascii=False, separators=(",", ":")
+                ).encode()
+            ).hexdigest()
+        )
+    else:
+        assert "sourceSha256" not in result["batchEvidenceProjection"]
+        assert "原始阶段审计" in result["batchEvidenceProjection"]["auditScope"]
+    assert payload == original
 
 
 @pytest.mark.parametrize(
