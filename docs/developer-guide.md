@@ -2,6 +2,12 @@
 
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 
+## 模型分析校验与审计响应
+
+工作流的发现、待核实项接受字符串或对象，转换为中文文本并去空去重；每项最多2000字，超过12项保留前11项并将其余合并到第12项。问题、判断、依据、结果摘要及修改理由超长时带标记截断，不截断动作名称、对象标识、修改值或证据身份。普通场景的可执行修改数量上限仍严格执行，避免静默丢弃操作；引用全部校验真实性及修订后去重，展示最多30条，必要结果和知识引用要求不变。
+
+每次模型尝试在 `analysis_model_attempt` 步骤的 `outputRefs.modelResponse` 保存脱敏原始正文，包含规整前的完整发现和待核实项；审计正文的UTF-8上限为2 MiB，超出附中文截断说明，`sizeBytes` 为脱敏后截断前大小。流式异常保留已收到的部分，无正文时保存空内容。只保存模型输出，不保存请求消息或系统提示词；已知凭据格式脱敏。审计产物随工作流步骤持久化，不另建目录；沿用工作流所有者、项目及资料访问检查。`view=inspection&part=steps` 保留该产物，失败步骤可展开查看具体校验原因和对应响应。精简阶段信息仅返回 `responseSaved` 与 `validationError`，不重复传输正文。历史未保存的响应无法追补。
+
 ## 工作流卡片与逻辑推理成果
 
 工作流详情支持 `view=compare`（摘要默认 `limit=0`）和 `view=inspection`（默认50项），`offset` 从0开始，`limit` 为0–50。inspection 的 `part=suggestions|steps` 分别读取审批对象与执行步骤；compare 仅支持 `part=changes`，按要素、规则、动作排序，只返回已批准且实际执行成功的对象。`plan.pagination` 包含 total、offset、limit 和分组索引（key、element、ruleId、action、offset、count）；`plan.compareFeatures` 是当前页显示几何，不能用于计算。inspection 的 `plan.reviewIndex` 提供 suggestedIds、candidateIds，前者默认勾选，后者只有用户明确选择才可提交。完整原因随对象页返回，完整执行输出仍保存在计算成果中。所有投影沿用本人、当前项目和资源授权，不扩大数据可见范围。

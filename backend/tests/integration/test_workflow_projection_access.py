@@ -77,3 +77,49 @@ def test_card_and_inspection_preserve_reused_configuration_and_mapping_card(
         assert response.status_code == 200, response.content
         assert response.json()["plan"]["fieldMappingReview"] == review
         assert response.json()["plan"]["reusedConfiguration"] is True
+
+
+def test_attempt_response_pagination_preserves_full_audit_and_owner_scope(setup_agent):
+    from apps.agent.decision_audit import response_artifact
+
+    env = setup_agent
+    artifact = response_artifact("完整原始发现" * 2000)
+    with project_scope(env["scope"]):
+        workflow = AgentWorkflow.objects.create(
+            owner=env["user"],
+            workflow_type="geology_generic",
+            model="mock",
+            idempotency_key="attempt-response-owned",
+            plan={"phase": "failed"},
+        )
+        hidden = AgentWorkflow.objects.create(
+            owner=env["other"],
+            workflow_type="geology_generic",
+            model="mock",
+            idempotency_key="attempt-response-hidden",
+        )
+    for item in (workflow, hidden):
+        item.steps.create(
+            sequence=1,
+            kind="analysis_model_attempt",
+            status="failed",
+            message="decision.findings 第2项应为字符串或对象，实际类型为 int",
+            output_refs={"modelResponse": artifact},
+        )
+    query = "?view=inspection&part=steps&offset=0&limit=1"
+    response = env["client"].get(
+        f"/api/agent/workflows/{workflow.id}/{query}", **env["header"]
+    )
+    assert response.status_code == 200, response.content
+    audit = response.json()["steps"][0]
+    assert audit["outputRefs"]["modelResponse"] == artifact
+    assert "findings 第2项" in audit["message"]
+    assert (
+        env["client"]
+        .get(f"/api/agent/workflows/{hidden.id}/{query}", **env["header"])
+        .status_code
+        == 404
+    )
+    assert env["client"].get(
+        f"/api/agent/workflows/{workflow.id}/{query}", HTTP_X_PROJECT_ID="1"
+    ).status_code in (403, 404)

@@ -75,6 +75,7 @@ export default function WorkflowDecisionTimeline({
         className="agent-decision-steps"
         items={steps.map((step) => {
           const decision = step.decision;
+          const modelResponse = record(step.outputRefs.modelResponse);
           const fresh = Boolean(decision && !restoredDecisions.has(step.id));
           return {
             key: String(step.id),
@@ -176,6 +177,23 @@ export default function WorkflowDecisionTimeline({
                     本步骤失败：
                     {step.message || "请查看任务状态中的原因与下一步操作。"}
                   </p>
+                )}
+                {typeof modelResponse.content === "string" && (
+                  <details>
+                    <summary>查看本次模型响应（审计记录）</summary>
+                    {modelResponse.truncated === true && (
+                      <p>响应超过审计体积上限，仅保留截断内容。</p>
+                    )}
+                    <pre
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {modelResponse.content ||
+                        "模型未返回正文；请查看本步失败原因。"}
+                    </pre>
+                  </details>
                 )}
               </article>
             ),

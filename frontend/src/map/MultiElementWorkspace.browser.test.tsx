@@ -143,6 +143,9 @@ it("讲解页双图同类采用成果原色并支持线点面、Unicode代号与
     screen.queryByText("地图渲染失败，请刷新或核对图件后重试。"),
   ).not.toBeInTheDocument();
   expect(screen.getByText("八宝山组 / T₃b²")).not.toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "在地理工作台对比" }),
+  ).not.toBeInTheDocument();
   fireEvent.click(screen.getByText("查看岩性配色"));
   expect(screen.getByText("八宝山组 / T₃b²")).toBeVisible();
   expect(screen.getAllByRole("group", { name: "本地矢量图层" })).toHaveLength(
@@ -461,12 +464,18 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
         </style>
         <MultiElementWorkspace
           workflow={workflow}
-          suggestionId={null}
+          suggestionId="change-1"
           onReload={() => {}}
         />
       </MemoryRouter>
     </App>,
   );
+  expect(await screen.findByText("第2处，共3处")).toBeVisible();
+  expect(document.querySelector(".multi-tour-map-stage")).toHaveAttribute(
+    "data-current-change",
+    "change-1",
+  );
+  fireEvent.click(screen.getByLabelText("上一处修改"));
   expect(await screen.findByText("第1处，共3处")).toBeVisible();
   await waitFor(
     () =>

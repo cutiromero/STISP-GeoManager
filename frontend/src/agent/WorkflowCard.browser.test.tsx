@@ -146,11 +146,12 @@ it.each(["geology_generic", "geology_multi_element_reasoning"])(
         <WorkflowCard workflow={workflow} />
       </MemoryRouter>,
     );
-    const link = screen.getByRole("link", { name: "在地理工作台对比成果图层" });
+    const link = screen.getByRole("link", { name: "打开独立对比页" });
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener");
     const url = new URL(link.getAttribute("href")!, location.origin);
-    expect(url.searchParams.get("geologyCompare")).toBe(workflow.id);
+    expect(url.searchParams.get("geologyReview")).toBe(workflow.id);
+    expect(url.searchParams.has("geologyCompare")).toBe(false);
     expect(url.searchParams.get("projectTagId")).toBe(
       String(workflow.projectId),
     );

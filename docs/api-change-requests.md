@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261105-013 - 模型尝试审计响应与精确校验反馈
+
+- Status: BackendReady
+- Owner: 本任务显式贯通模型校验、工作流审计及前端失败记录展示。
+- Endpoints: GET /api/agent/workflows/{workflow_id}/（含 view=inspection&part=steps）
+- Change type: 在已有 outputRefs 开放对象中增加可选 modelResponse 审计产物。
+- OpenAPI change: AgentWorkflowStep.outputRefs.modelResponse 定义 content、truncated、sizeBytes；沿用工作流历史访问鉴权。
+- Mock examples: 无新增端点；相关后端集成测试覆盖实际响应，浏览器用例更新但不执行。
+- Frontend reason: 失败卡片须查看对应模型响应，避免将精简接口未携带正文误报为未保存。
+- Backend implementation notes: 每次尝试使用持久步骤保存脱敏原始正文，UTF-8 上限2 MiB；流异常保留部分正文；发现和待核实项规整，引用真实性和动作权限严格校验。
+- Verification: 相关后端测试；generate:api、check:api、api:changes:check、api:docs、api:lint。
+- Result: 本地实现，未发布；历史未保存的响应不可补回。
+
 ## API-20261105-012 - 全类别成果配色与逐类来源审计
 
 - Status: BackendReady
@@ -346,6 +359,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261105-013 | BackendReady | /api/agent/workflows/{workflow_id}/ | Model attempt audit response | Updated | Backend fixtures | Implemented | Focused backend tests; browser cases prepared | Existing workflow authorization |
 | API-20261105-011 | BackendReady | /api/catalog/resources/{id}/query/ | Shared-boundary grid quantization without simplification | Updated | 30-catalog-vector.json; backend geometry fixtures | Implemented | Focused unit tests; browser cases prepared | Storage, permissions and precise queries unchanged |
 | API-20261105-012 | BackendReady | /api/catalog/resources/{id}/profile/ | All-category model color advice and class provenance | Updated | 30-catalog-vector.json | Implemented | Focused color and shared-style tests | No permission or data-path change |
 | API-20261104-008 | BackendReady | /api/agent/workflows/{workflowId}/; /api/catalog/resources/{id}/query/ | groupId and displayGeometry | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Focused regression | Per-object approval, immutable source geometry, original permissions |

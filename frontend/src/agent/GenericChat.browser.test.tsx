@@ -690,11 +690,11 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
   vi.mocked(agentApi.poll).mockClear();
   show();
   const link = await screen.findByRole("link", {
-    name: "在地理工作台对比成果图层",
+    name: "打开独立对比页",
   });
   expect(link).toHaveAttribute(
     "href",
-    `/map?geologyCompare=${workflow.id}&projectTagId=1`,
+    `/map?geologyReview=${workflow.id}&projectTagId=1`,
   );
   expect(link).toHaveAttribute("target", "_blank");
   expect(link).toHaveAttribute("rel", "noopener");

@@ -1093,27 +1093,63 @@ def advance_demo(workflow_id) -> None:
                             else:
                                 workflow.plan["actualModelCallCount"] = calls + 1
                                 attempt["requested"] = True
-                        _save(workflow)
-                        if attempt["status"] != "requesting":
-                            step(
+                        audit_status = (
+                            "running"
+                            if attempt["status"] in {"requesting", "response_received"}
+                            else "succeeded"
+                            if attempt.get("accepted")
+                            else "failed"
+                        )
+                        audit_values = dict(
+                            status=audit_status,
+                            action={
+                                "stage": stage["name"],
+                                "attempt": attempt["attempt"],
+                                "requestSha256": attempt["requestSha256"],
+                                **(
+                                    {"accepted": attempt["accepted"]}
+                                    if "accepted" in attempt
+                                    else {}
+                                ),
+                            },
+                            message=attempt.get(
+                                "validationError",
+                                "模型响应通过实际证据校验"
+                                if audit_status == "succeeded"
+                                else "正在读取模型响应",
+                            )[:500],
+                            output_refs={"modelResponse": attempt["responseArtifact"]}
+                            if "responseArtifact" in attempt
+                            else {},
+                            metrics={
+                                "inputTokens": attempt["inputTokens"],
+                                "contentBytes": attempt["contentBytes"],
+                                "usage": attempt["usage"],
+                            },
+                        )
+                        if attempt.get("auditStepId"):
+                            workflow.steps.filter(pk=attempt["auditStepId"]).update(
+                                **audit_values,
+                                finished_at=timezone.now()
+                                if audit_status != "running"
+                                else None,
+                            )
+                        else:
+                            audit_step = step(
                                 workflow,
                                 "analysis_model_attempt",
-                                status="succeeded" if attempt["accepted"] else "failed",
-                                message=attempt.get(
-                                    "validationError", "模型响应通过实际证据校验"
-                                ),
-                                action={
-                                    "stage": stage["name"],
-                                    "attempt": attempt["attempt"],
-                                    "accepted": attempt["accepted"],
-                                    "requestSha256": attempt["requestSha256"],
-                                },
-                                metrics={
-                                    "inputTokens": attempt["inputTokens"],
-                                    "contentBytes": attempt["contentBytes"],
-                                    "usage": attempt["usage"],
-                                },
+                                action=audit_values["action"],
+                                status=audit_values["status"],
+                                message=audit_values["message"],
+                                output_refs=audit_values["output_refs"],
+                                metrics=audit_values["metrics"],
                             )
+                            attempt["auditStepId"] = audit_step.id
+                            if audit_status == "running":
+                                workflow.steps.filter(pk=audit_step.id).update(
+                                    finished_at=None
+                                )
+                        _save(workflow)
                     if blocked:
                         raise ComputeError("已达到场景真实模型请求次数上限")
 
@@ -1128,7 +1164,7 @@ def advance_demo(workflow_id) -> None:
                         results,
                         guard,
                         record_attempt,
-                        on_response=lambda: _save(workflow),
+                        on_response=lambda: record_attempt(stage["modelAttempts"][-1]),
                     )
                 except BudgetReviewRequired as exc:
                     guard.poll()

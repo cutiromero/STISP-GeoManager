@@ -155,6 +155,7 @@ export function workflowExecutionNote(workflow: AgentWorkflow): string {
     workflow.status === "failed" &&
     !stage.taskId &&
     attempt.requested === true &&
+    attempt.responseSaved !== true &&
     !attempt.response
   )
     return "本步模型分析没有保存完整响应，尚未提交本步算法计算。";

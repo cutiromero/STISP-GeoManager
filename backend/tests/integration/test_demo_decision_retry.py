@@ -183,7 +183,7 @@ def test_bad_json_retries_and_preserves_body_without_internal_thinking(retry_mod
     )
     assert stage["modelAttempts"][0]["response"] == "not-json"
     assert requests[1][2]["content"] == "not-json"
-    assert "内部内容" not in json.dumps(stage["modelAttempts"], ensure_ascii=False)
+    assert "内部内容" in stage["modelAttempts"][0]["responseArtifact"]["content"]
 
 
 @pytest.mark.parametrize("kind", [[], {}])
@@ -197,7 +197,10 @@ def test_malformed_reference_kind_is_a_validation_error_the_model_can_repair(
         [bad, model_response("ecology-priority", [])], workflow, stage, results
     )
     assert decision["evidenceRefs"][0]["kind"] == "output"
-    assert stage["modelAttempts"][0]["validationError"] == "判断引用格式无效"
+    assert (
+        "decision.evidenceRefs 第1项格式无效"
+        in stage["modelAttempts"][0]["validationError"]
+    )
 
 
 def test_fabricated_edits_can_be_replaced_by_genuine_model_review(retry_model):
@@ -233,7 +236,8 @@ def test_network_and_permission_errors_are_never_retried(error, retry_model):
     with pytest.raises(type(error), match=str(error)):
         run([error], workflow, stage, results)
     assert len(stage["modelAttempts"]) == 1
-    assert "response" not in stage["modelAttempts"][0]
+    assert stage["modelAttempts"][0]["responseArtifact"]["content"] == ""
+    assert stage["modelAttempts"][0]["validationError"] == str(error)
 
 
 @pytest.mark.parametrize("repair_level", [1, 2, 3, 4, 6])
@@ -273,6 +277,7 @@ def test_retry_byte_budget_drops_oversized_previous_response(retry_model):
     workflow, stage, results = ordinary_stage()
     wrong = model_response("ecology-priority", [])
     wrong["decision"]["judgement"] = "重复内容" * 100000
+    wrong["decision"]["findings"] = [123]
     correct = model_response("ecology-priority", [])
     (_, edits), requests = run(
         [wrong, correct], workflow, stage, results, tokens=[800, 800, 800]
@@ -372,6 +377,9 @@ def test_workflow_attempts_are_durable_and_retries_consume_real_call_budget(
         assert persisted.plan["actualModelCallCount"] == len(requests) + 1
         assert attempts[-1]["status"] == "requesting"
         assert attempts[-1]["requested"]
+        audit = persisted.steps.get(pk=attempts[-1]["auditStepId"])
+        assert audit.status == "running"
+        assert audit.finished_at is None
         if requests:
             assert attempts[0]["status"] == "rejected"
             assert attempts[0]["response"] == "invalid-json"
@@ -399,6 +407,20 @@ def test_workflow_attempts_are_durable_and_retries_consume_real_call_budget(
     assert workflow.plan["actualModelCallCount"] == (1 if mode == "quota" else 2)
     attempts = workflow.plan["stages"][0]["modelAttempts"]
     assert len(attempts) == 2 and not attempts[0]["accepted"]
+    first_audit = workflow.steps.get(pk=attempts[0]["auditStepId"])
+    assert first_audit.status == "failed"
+    assert first_audit.output_refs["modelResponse"]["content"] == "invalid-json"
+    from apps.agent.views import workflow_json
+    from apps.agent.workflow_projection import project_workflow
+
+    page = project_workflow(
+        workflow, workflow_json(workflow), "inspection", "steps", 0, 50
+    )
+    audit = next(item for item in page["steps"] if item["id"] == first_audit.id)
+    assert audit["outputRefs"] == first_audit.output_refs
+    assert page["plan"]["stages"][0]["modelAttempts"][-1]["responseSaved"] == (
+        mode != "quota"
+    )
     if mode == "recover":
         assert workflow.status == "waiting_compute" and attempts[1]["accepted"]
         assert ComputeTask.objects.count() == 1
@@ -410,4 +432,4 @@ def test_workflow_attempts_are_durable_and_retries_consume_real_call_budget(
             assert len(requests) == 1 and not attempts[1]["requested"]
             assert attempts[1]["status"] == "budget_blocked"
         else:
-            assert len(requests) == 2 and attempts[1]["status"] == "requesting"
+            assert len(requests) == 2 and attempts[1]["status"] == "failed"

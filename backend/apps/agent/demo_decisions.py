@@ -14,6 +14,8 @@ from .demo_results import EDIT_FIELDS, resource_context, validate_edits
 from .model_guard import ModelStreamGuard
 from .geology_generic import MULTI_FAMILY
 from .decision_budget import MAX_LEVEL, budget_review, projected_messages
+from .decision_text import clipped, normalize_items
+from .decision_audit import response_artifact
 
 FIELDS = {
     "problem",
@@ -68,39 +70,45 @@ def validate_decision(
     value, refs, allowed_action, *, require_output=False, require_knowledge=False
 ) -> dict:
     querying = allowed_action == "search_expert_knowledge"
-    if not isinstance(value, dict) or set(value) - (
-        FIELDS | ({"knowledgeQuery"} if querying else set())
-    ):
-        raise ComputeError("模型分析说明包含未声明字段")
+    if not isinstance(value, dict):
+        raise ComputeError(f"decision 应为对象，实际类型为 {type(value).__name__}")
+    unexpected = set(value) - (FIELDS | ({"knowledgeQuery"} if querying else set()))
+    if unexpected:
+        raise ComputeError(f"decision 包含未声明字段：{', '.join(sorted(unexpected))}")
+    value = dict(value)
     for key in ("problem", "judgement", "nextAction", "algorithmReason"):
-        if (
-            not isinstance(value.get(key), str)
-            or not value[key].strip()
-            or len(value[key]) > 2000
-        ):
-            raise ComputeError("模型分析说明缺少问题、判断或行动依据")
+        if not isinstance(value.get(key), str) or not value[key].strip():
+            raise ComputeError(
+                f"decision.{key} 应为非空字符串，实际类型为 {type(value.get(key)).__name__}"
+            )
+        if key != "nextAction":
+            value[key] = clipped(value[key].strip(), 2000)
     for key in ("findings", "uncertainties"):
-        items = value.get(key)
-        if (
-            not isinstance(items, list)
-            or len(items) > 12
-            or any(not isinstance(item, str) or len(item) > 2000 for item in items)
-        ):
-            raise ComputeError("模型发现与待核实事项格式无效")
+        value[key] = normalize_items(value.get(key), key)
     if value["nextAction"] not in {allowed_action, "request_review"}:
-        raise ComputeError("模型选择了未授权的下一算法或跳过必要复核")
+        raise ComputeError(
+            f"decision.nextAction={value['nextAction']!r} 未授权，仅允许 {allowed_action} 或 request_review"
+        )
     if querying and value["nextAction"] == allowed_action:
         query = value.get("knowledgeQuery")
-        if not isinstance(query, str) or not query.strip() or len(query) > 300:
-            raise ComputeError("请根据当前资料提出300字以内的实际专家知识检索词")
+        if not isinstance(query, str) or not query.strip():
+            raise ComputeError(
+                f"decision.knowledgeQuery 应为非空检索词，实际类型为 {type(query).__name__}"
+            )
+        value["knowledgeQuery"] = clipped(query.strip(), 300)
     chosen = value.get("evidenceRefs")
-    if not isinstance(chosen, list) or not 1 <= len(chosen) <= 30:
-        raise ComputeError("模型判断必须引用本次实际读取的资料或结果")
+    if not isinstance(chosen, list) or not chosen:
+        raise ComputeError(
+            f"decision.evidenceRefs 必须为非空引用列表，实际类型为 {type(chosen).__name__}，数量为 {len(chosen) if isinstance(chosen, list) else '不适用'}"
+        )
     available = {(ref["kind"], ref["id"]): ref for ref in refs}
     canonical = []
-    for ref in chosen:
+    seen = set()
+    for index, ref in enumerate(chosen, 1):
         if not isinstance(ref, dict) or not isinstance(ref.get("kind"), str):
-            raise ComputeError("判断引用格式无效")
+            raise ComputeError(
+                f"decision.evidenceRefs 第{index}项格式无效：应为含字符串kind的引用对象，实际类型为 {type(ref).__name__}"
+            )
         actual = available.get((ref.get("kind"), str(ref.get("id"))))
         # Only knowledge carries a revision; one the model adds to a resource or
         # output names nothing and is dropped by the canonical reference below.
@@ -109,16 +117,24 @@ def validate_decision(
             and "revision" in actual
             and str(ref["revision"]) != str(actual["revision"])
         ):
-            raise ComputeError("模型引用并非本次授权数据、知识修订或结果")
-        canonical.append(actual)
+            raise ComputeError(
+                f"decision.evidenceRefs 第{index}项并非本次授权数据、知识修订或结果（kind={ref.get('kind')!r}，id={ref.get('id')!r}，revision={ref.get('revision')!r}）"
+            )
+        identity = (actual["kind"], actual["id"])
+        if identity not in seen:
+            seen.add(identity)
+            canonical.append(actual)
+    canonical = canonical[:30]
     if require_output and not any(ref["kind"] == "output" for ref in canonical):
-        raise ComputeError("下一步判断尚未引用实际计算结果")
+        raise ComputeError("decision.evidenceRefs 尚未引用实际计算结果")
     if require_knowledge and not any(ref["kind"] == "knowledge" for ref in canonical):
-        raise ComputeError("模型尚未引用本次已检索知识及其适用条件")
+        raise ComputeError("decision.evidenceRefs 尚未引用本次已检索知识及其适用条件")
     summary = value.get("resultSummary", "")
-    if not isinstance(summary, str) or len(summary) > 4000:
-        raise ComputeError("模型结果摘要格式无效")
-    return {**value, "evidenceRefs": canonical, "resultSummary": summary}
+    if not isinstance(summary, str):
+        raise ComputeError(
+            f"decision.resultSummary 应为字符串，实际类型为 {type(summary).__name__}"
+        )
+    return {**value, "evidenceRefs": canonical, "resultSummary": clipped(summary, 4000)}
 
 
 def _previous_decision(value) -> dict:
@@ -631,9 +647,11 @@ def _validate_response(
     try:
         value = json.loads(cleaned)
     except (ValueError, TypeError) as exc:
-        raise ComputeError("模型未返回有效的结构化分析说明，已保留此前结果") from exc
+        raise ComputeError(f"模型分析响应不是有效JSON：{exc}；已保留此前结果") from exc
     if not isinstance(value, dict) or set(value) != {"decision", "edits"}:
-        raise ComputeError("模型分析响应必须包含decision与edits")
+        raise ComputeError(
+            f"模型分析响应必须仅包含decision与edits，实际类型为 {type(value).__name__}，字段为 {list(value) if isinstance(value, dict) else '不适用'}"
+        )
     multi_edit_response = (
         getattr(workflow, "workflow_type", None) in MULTI_FAMILY
         and stage["identifier"] == "geology-multi-apply"
@@ -669,7 +687,15 @@ def _validate_response(
         getattr(workflow, "workflow_type", None) not in MULTI_FAMILY
         and len(value["edits"]) > 30
     ):
-        raise ComputeError("模型提出的修改计划超出允许范围")
+        raise ComputeError(
+            f"edits 必须为修改列表，普通场景最多30项；实际类型为 {type(value['edits']).__name__}，数量为 {len(value['edits']) if isinstance(value['edits'], list) else '不适用'}"
+        )
+    value["edits"] = [
+        {**edit, "reason": clipped(edit["reason"], 1000)}
+        if isinstance(edit, dict) and isinstance(edit.get("reason"), str)
+        else edit
+        for edit in value["edits"]
+    ]
     if (
         not allow_partial
         and _awaiting_multi_proposal(workflow, stage)
@@ -920,7 +946,7 @@ def decide(
     current = messages[-1]
     guard()
     if stage.get("modelAttempts") and not stage.get("decision"):
-        return _recover_decision(
+        recovered = _recover_decision(
             workflow,
             model,
             policy,
@@ -931,6 +957,10 @@ def decide(
             messages,
             instruction,
         )
+        if on_attempt:
+            stage["modelAttempts"][-1].update(status="accepted", accepted=True)
+            on_attempt(stage["modelAttempts"][-1])
+        return recovered
     window = provider.model_window(model)
     output_limit = policy["maxOutputTokens"]
     parameters = {**policy, "maxOutputTokens": output_limit}
@@ -998,31 +1028,55 @@ def decide(
             on_attempt(record)
         else:
             record["requested"] = True
-        raw = _response_text(
-            "".join(
-                provider.stream(
-                    model,
-                    messages,
-                    output_limit,
-                    guard,
-                    structured=True,
-                    temperature=policy["temperature"],
-                    top_p=policy["topP"],
-                    reasoning_effort=policy["reasoningEffort"],
-                    on_usage=record["usage"].update,
-                    **(
-                        {"monitor_guard": guard.poll}
-                        if isinstance(guard, ModelStreamGuard)
-                        else {}
-                    ),
-                )
+        chunks = []
+        try:
+            for chunk in provider.stream(
+                model,
+                messages,
+                output_limit,
+                guard,
+                structured=True,
+                temperature=policy["temperature"],
+                top_p=policy["topP"],
+                reasoning_effort=policy["reasoningEffort"],
+                on_usage=record["usage"].update,
+                **(
+                    {"monitor_guard": guard.poll}
+                    if isinstance(guard, ModelStreamGuard)
+                    else {}
+                ),
+            ):
+                chunks.append(chunk)
+        except Exception as exc:
+            artifact = response_artifact("".join(chunks))
+            record.update(
+                responseArtifact=artifact,
+                response=_response_text(artifact["content"]),
+                status="failed",
+                accepted=False,
+                validationError=response_artifact(str(exc))["content"],
             )
-        )
-        record["response"] = raw
+            if on_attempt:
+                on_attempt(record)
+            raise
+        original_response = "".join(chunks)
+        raw = _response_text(original_response)
+        record["responseArtifact"] = response_artifact(original_response)
+        record["response"] = _response_text(record["responseArtifact"]["content"])
         record["status"] = "response_received"
         if on_response:
             on_response()
-        guard()
+        try:
+            guard()
+        except Exception as exc:
+            record.update(
+                status="failed",
+                accepted=False,
+                validationError=response_artifact(str(exc))["content"],
+            )
+            if on_attempt:
+                on_attempt(record)
+            raise
         try:
             decision, edits = _validate_response(
                 raw,
@@ -1034,7 +1088,11 @@ def decide(
                 allow_partial=bool(attempt),
             )
         except ComputeError as exc:
-            record.update(status="rejected", accepted=False, validationError=str(exc))
+            record.update(
+                status="rejected",
+                accepted=False,
+                validationError=response_artifact(str(exc))["content"],
+            )
             if on_attempt:
                 on_attempt(record)
             if attempt:
@@ -1211,6 +1269,7 @@ def _recover_decision(
             and isinstance(attempt.get("response"), str)
             and bool(attempt["response"].strip())
             and attempt.get("truncated") is False
+            and not attempt.get("responseArtifact", {}).get("truncated", False)
         )
         if not valid:
             reject()

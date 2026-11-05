@@ -801,15 +801,6 @@ export default function MultiElementWorkspace({
         </div>
         <div className="geology-review-workspace-actions">
           <Button
-            onClick={() =>
-              navigate(
-                `/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}${currentTour ? `&suggestion=${encodeURIComponent(currentTour.key)}` : ""}`,
-              )
-            }
-          >
-            在地理工作台对比
-          </Button>
-          <Button
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate("/agent/workbench")}
           >

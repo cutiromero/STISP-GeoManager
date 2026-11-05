@@ -102,7 +102,7 @@ it("does not advertise an unavailable geology before-and-after pair", () => {
     screen.queryByRole("link", { name: "查看待检查地质图与修正后地质图" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("link", { name: "在地理工作台对比成果图层" }),
+    screen.queryByRole("link", { name: "打开独立对比页" }),
   ).not.toBeInTheDocument();
 });
 

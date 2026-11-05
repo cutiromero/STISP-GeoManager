@@ -2418,9 +2418,26 @@ export type AgentWorkflowStep = {
         [key: string]: unknown;
     };
     /**
-     * 输出引用
+     * 输出引用。analysis_model_attempt 节点包含 modelResponse 审计产物；仅当前工作流授权用户可读，不含请求提示词。inspection 的 steps 分页保留此产物，不使用普通摘要裁剪。
      */
     outputRefs: {
+        /**
+         * 本次尝试的持久化审计响应，成功、校验失败及流式异常均保留。
+         */
+        modelResponse?: {
+            /**
+             * 凭据脱敏后的原始模型正文，含原始发现与待核实项；UTF-8 最多2 MiB，超出附中文截断标记；未返回正文时为空字符串。
+             */
+            content: string;
+            /**
+             * 是否因审计体积上限截断。
+             */
+            truncated: boolean;
+            /**
+             * 脱敏后、截断前的 UTF-8 字节数。
+             */
+            sizeBytes: number;
+        };
         [key: string]: unknown;
     };
     /**

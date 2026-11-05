@@ -7,6 +7,8 @@ import { computeApi } from "../api/compute";
 import type { AgentWorkflow } from "../api/generated/types.gen";
 import { liveComputeTask } from "./computeFlow.testFixtures";
 import WorkflowResults from "./WorkflowResults";
+import WorkflowDecisionTimeline from "./WorkflowDecisionTimeline";
+import { workflowExecutionNote } from "./workflowFeedback";
 import "./agent.css";
 
 function workflow(status: AgentWorkflow["status"] = "failed"): AgentWorkflow {
@@ -96,6 +98,55 @@ it("shows a failed model stage, actual reason and next action without a working 
   await page.screenshot({
     path: "../../test-results/workflow-failure-feedback.png",
   });
+});
+
+it("shows the failed attempt response and does not misreport projected audit content as missing", () => {
+  const saved = workflow();
+  saved.plan = {
+    stageIndex: 0,
+    stages: [
+      {
+        name: "apply",
+        modelAttempts: [{ requested: true, responseSaved: true }],
+      },
+    ],
+  };
+  expect(workflowExecutionNote(saved)).not.toContain("没有保存完整响应");
+  render(
+    <App>
+      <WorkflowDecisionTimeline
+        steps={[
+          {
+            id: 30,
+            sequence: 3,
+            kind: "analysis_model_attempt",
+            status: "failed",
+            message:
+              "decision.findings 第2项应为字符串或对象，实际类型为 int（共2项）",
+            action: {},
+            inputRefs: {},
+            metrics: {},
+            computeTaskId: "",
+            errorCode: "",
+            startedAt: "",
+            finishedAt: "",
+            outputRefs: {
+              modelResponse: {
+                content: '{"findings":["有效",123]}',
+                truncated: false,
+                sizeBytes: 34,
+              },
+            },
+          },
+        ]}
+      />
+    </App>,
+  );
+  fireEvent.click(screen.getByText("查看本次模型响应（审计记录）"));
+  expect(screen.getByText('{"findings":["有效",123]}')).toBeVisible();
+  expect(screen.getAllByText(/decision.findings 第2项/).length).toBeGreaterThan(
+    0,
+  );
 });
 
 it("shows why a task is paused and offers resume at the original approval gate", () => {

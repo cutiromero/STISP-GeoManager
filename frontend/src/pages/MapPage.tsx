@@ -1,5 +1,5 @@
 import { selectedMapBasemap, restoreMapBasemap } from "../map/basemapSnapshot";
-import { getActiveProject, projectSignal } from "../projects/session";
+import { getActiveProject } from "../projects/session";
 import { useProjectContext } from "../projects/ProjectContext";
 import {
   AimOutlined,
@@ -30,7 +30,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import DataPanel, {
@@ -59,12 +59,6 @@ import MapPanelChrome from "../map/MapPanelChrome";
 import WorkbenchLegend from "../map/WorkbenchLegend";
 import { useMapPanelLayout } from "../map/useMapPanelLayout";
 import "../map/map-workbench-panels.css";
-import {
-  displayComparisonLayers,
-  upsertComparisonLayer,
-} from "../map/comparisonLayerGroups";
-import type { ComparisonLayerPlacement } from "../map/geologyWorkbenchCompareData";
-import { reviewBounds } from "../map/geologyReviewData";
 import ComputeOutputMapPreview from "../map/ComputeOutputMapPreview";
 import { clearFeatureState, getMapState } from "../map/mapState";
 import {
@@ -234,9 +228,6 @@ const emptyPermissions = {
 const MapCanvas = lazy(() => import("../components/MapCanvas"));
 const GeologyReviewWorkspace = lazy(
   () => import("../map/GeologyReviewWorkspace"),
-);
-const GeologyWorkbenchCompare = lazy(
-  () => import("../map/GeologyWorkbenchCompare"),
 );
 const MapCompositionEditor = lazy(
   () => import("../components/map-composition/MapCompositionEditor"),
@@ -637,6 +628,23 @@ export function mapUrlResourceBounds(
 
 export default function MapPage() {
   const [params] = useSearchParams();
+  const location = useLocation();
+  const legacyWorkflowId = params.get("geologyCompare")?.trim();
+  if (legacyWorkflowId) {
+    const next = new URLSearchParams(params);
+    next.delete("geologyCompare");
+    next.set("geologyReview", legacyWorkflowId);
+    return (
+      <Navigate
+        replace
+        to={{
+          pathname: location.pathname,
+          search: `?${next}`,
+          hash: location.hash,
+        }}
+      />
+    );
+  }
   const workflowId = params.get("geologyReview");
   if (workflowId)
     return (
@@ -665,10 +673,6 @@ function MapWorkspace() {
   const english =
     i18n.resolvedLanguage?.toLowerCase().startsWith("en") ?? false;
   const [searchParams, setSearchParams] = useSearchParams();
-  const comparisonWorkflowId = searchParams.get("geologyCompare")?.trim() ?? "";
-  const [cleanComparison, setCleanComparison] = useState(false);
-  const comparisonVisible =
-    Boolean(comparisonWorkflowId) && searchParams.get("mapMode") !== "single";
   const initialGeoInsightCache = lastGeoInsightCache;
 
   const [resources, setResources] = useState<ResourceListItem[]>([]);
@@ -873,94 +877,6 @@ function MapWorkspace() {
     () => layerGroups.groups.flatMap((group) => group.children),
     [layerGroups.groups],
   );
-  const comparisonSources = useRef(new Map<number, GeoJsonFeatureCollection>());
-  const comparisonFocus = useRef<{
-    workflowId: string;
-    bounds: [number, number, number, number];
-  } | null>(null);
-  const registerComparisonLayer = async (
-    profile: DataResourceProfile,
-    result: ResourceQueryResult,
-    placement?: ComparisonLayerPlacement,
-  ) => {
-    if (!permissions.canQueryData || !permissions.canLoadVectorLayer)
-      throw new Error(permissionDeniedMessage);
-    const signal = projectSignal();
-    const projectId = getActiveProject();
-    const resource = profile.resource;
-    if (placement) {
-      if (signal.aborted || getActiveProject() !== projectId)
-        throw new DOMException("项目已切换", "AbortError");
-      comparisonSources.current.set(
-        resource.id,
-        placement.displayData ?? result.geojson,
-      );
-      layerGroups.setGroups((current) =>
-        upsertComparisonLayer(current, profile, result, placement),
-      );
-      setActiveLeftPanel("layers");
-      return;
-    }
-    await uniqueLayerLoad.load(
-      resourceLayerKey({ sourceResource: resource, layerType: "vector" }),
-      async () => {
-        if (signal.aborted || getActiveProject() !== projectId)
-          throw new DOMException("项目已切换", "AbortError");
-        const group = createVectorLayerGroup(resource, profile, result, {
-          attributeFilters: [],
-          spatialFilter: null,
-        });
-        layerGroups.addGroup(group);
-        setSelectedLayerId(group.children[0]?.id ?? null);
-        setActiveLeftPanel("layers");
-        return true;
-      },
-    );
-    if (signal.aborted || getActiveProject() !== projectId)
-      throw new DOMException("项目已切换", "AbortError");
-    // Reuse the registered layer while replacing any earlier partial query
-    // with this complete, validated comparison response.
-    const existing = layerGroups.groups.find((group) =>
-      group.children.some(
-        (layer) =>
-          layer.layerType === "vector" &&
-          resourceLayerKey(layer) === `resource:${resource.id}`,
-      ),
-    );
-    const layer = existing?.children.find(
-      (item) => resourceLayerKey(item) === `resource:${resource.id}`,
-    );
-    if (existing && layer?.layerType === "vector")
-      layerGroups.updateLayer(existing.id, layer.id, (current) =>
-        current.layerType === "vector"
-          ? {
-              ...current,
-              geojson: result.geojson,
-              fields: result.fields,
-              summary: `${result.returnedCount}/${result.totalCount} 条，${profile.geometryType || "空间数据"}`,
-              metadata: {
-                ...current.metadata,
-                返回条数: result.returnedCount,
-                命中条数: result.totalCount,
-              },
-            }
-          : current,
-      );
-  };
-  useEffect(() => {
-    if (comparisonVisible || !mapObject) return;
-    const frame = requestAnimationFrame(() => {
-      mapObject.resize();
-      if (comparisonFocus.current?.workflowId === comparisonWorkflowId) {
-        mapObject.fitBounds(comparisonFocus.current.bounds, {
-          padding: 75,
-          maxZoom: 16,
-          duration: 0,
-        });
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [comparisonVisible, comparisonWorkflowId, mapObject]);
   const spatialQueryResources = useMemo(
     () => loadedQueryResources(allLayers),
     [allLayers],
@@ -2900,110 +2816,33 @@ function MapWorkspace() {
               />
             </div>
           )}
-          <div
-            className={`geology-workbench-single-map ${comparisonVisible ? "is-covered" : ""}`}
-            style={{ width: "100%", height: "100%" }}
-            aria-hidden={comparisonVisible}
-          >
-            {!comparisonVisible && (
-              <Suspense
-                fallback={
-                  <div className="map-canvas-loading">
-                    <Spin size="large" />
-                  </div>
-                }
-              >
-                <MapCanvas
-                  bootstrap={bootstrap}
-                  basemapPreferenceScope={`user:${user?.id ?? "anonymous"}`}
-                  basemapSwitchDisabled={mapExporting}
-                  initialViewState={currentMapView}
-                  loadedLayers={mapLayers}
-                  drawMode={activeDraw?.mode ?? null}
-                  spatialFilter={spatialFilter}
-                  layerExtentOverlays={layerExtentOverlays}
-                  onDrawComplete={handleDrawComplete}
-                  onFeatureSelect={setSelectedFeature}
-                  onMapReady={handleMapReady}
-                  onMapDestroy={handleMapDestroy}
-                  onMapError={handleMapError}
-                  onViewStateChange={setCurrentMapView}
-                  onBasemapSwitchingChange={setBasemapSwitching}
-                />
-              </Suspense>
-            )}
-          </div>
-          {comparisonWorkflowId && (
+          <div style={{ width: "100%", height: "100%" }}>
             <Suspense
               fallback={
                 <div className="map-canvas-loading">
-                  <Spin />
+                  <Spin size="large" />
                 </div>
               }
             >
-              <GeologyWorkbenchCompare
-                key={`${getActiveProject()}:${comparisonWorkflowId}`}
-                workflowId={comparisonWorkflowId}
-                projectId={getActiveProject()}
-                projectTagId={searchParams.get("projectTagId")}
-                suggestionId={searchParams.get("suggestion")}
-                canLoad={
-                  permissions.canQueryData && permissions.canLoadVectorLayer
-                }
-                comparisonVisible={comparisonVisible}
-                onFamilyChange={setCleanComparison}
-                registerLayer={registerComparisonLayer}
-                selectedObject={selectedFeature?.properties ?? null}
-                onLayerDisplay={(side, changes, current) => {
-                  layerGroups.setGroups((groups) =>
-                    displayComparisonLayers(
-                      groups,
-                      comparisonWorkflowId,
-                      side,
-                      changes,
-                      comparisonSources.current,
-                    ),
-                  );
-                  const bounds = reviewBounds(current ?? changes);
-                  comparisonFocus.current = bounds
-                    ? { workflowId: comparisonWorkflowId, bounds }
-                    : null;
-                  if (bounds && mapInstanceRef.current && !comparisonVisible)
-                    mapInstanceRef.current.fitBounds(
-                      [
-                        [bounds[0], bounds[1]],
-                        [bounds[2], bounds[3]],
-                      ],
-                      { padding: 75, maxZoom: 16, duration: 350 },
-                    );
-                }}
-                onVisibilityChange={(visible) => {
-                  const next = new URLSearchParams(searchParams);
-                  if (visible) next.delete("mapMode");
-                  else next.set("mapMode", "single");
-                  setSearchParams(next, { replace: true });
-                }}
-                onSuggestionChange={(id) => {
-                  const next = new URLSearchParams(searchParams);
-                  if (id) next.set("suggestion", id);
-                  else next.delete("suggestion");
-                  setSearchParams(next, { replace: true });
-                }}
-                onSwitchProject={
-                  searchParams.get("projectTagId") !== getActiveProject() &&
-                  projectContext?.projects.some(
-                    (item) =>
-                      String(item.id) === searchParams.get("projectTagId"),
-                  )
-                    ? () =>
-                        projectContext?.choose(
-                          searchParams.get("projectTagId")!,
-                        )
-                    : undefined
-                }
+              <MapCanvas
+                bootstrap={bootstrap}
+                basemapPreferenceScope={`user:${user?.id ?? "anonymous"}`}
+                basemapSwitchDisabled={mapExporting}
+                initialViewState={currentMapView}
+                loadedLayers={mapLayers}
+                drawMode={activeDraw?.mode ?? null}
+                spatialFilter={spatialFilter}
+                layerExtentOverlays={layerExtentOverlays}
+                onDrawComplete={handleDrawComplete}
+                onFeatureSelect={setSelectedFeature}
+                onMapReady={handleMapReady}
+                onMapDestroy={handleMapDestroy}
+                onMapError={handleMapError}
+                onViewStateChange={setCurrentMapView}
+                onBasemapSwitchingChange={setBasemapSwitching}
               />
             </Suspense>
-          )}
+          </div>
           {/^[1-9]\d*$/.test(searchParams.get("computeOutputId") ?? "") && (
             <ComputeOutputMapPreview
               key={searchParams.get("computeOutputId")}
@@ -3017,20 +2856,13 @@ function MapWorkspace() {
               }}
             />
           )}
-          {!comparisonVisible && (
-            <WorkbenchLegend
-              layers={mapLayers}
-              english={english}
-              mobileHidden={mobileMapPanel !== "map"}
-            />
-          )}
+          <WorkbenchLegend
+            layers={mapLayers}
+            english={english}
+            mobileHidden={mobileMapPanel !== "map"}
+          />
         </main>
         <aside
-          style={
-            comparisonVisible && cleanComparison
-              ? { display: "none" }
-              : undefined
-          }
           className={`floating-panel floating-panel-left ${panelLayout.layout.leftCollapsed ? "map-panel-is-collapsed" : ""} ${
             mobileMapPanel === "left"
               ? "mobile-map-panel-visible"
@@ -3140,11 +2972,6 @@ function MapWorkspace() {
           </div>
         </aside>
         <aside
-          style={
-            comparisonVisible && cleanComparison
-              ? { display: "none" }
-              : undefined
-          }
           className={`floating-panel floating-panel-right ${panelLayout.layout.rightCollapsed ? "map-panel-is-collapsed" : ""} ${
             mobileMapPanel === "right"
               ? "mobile-map-panel-visible"
@@ -3184,11 +3011,6 @@ function MapWorkspace() {
         </aside>
         <aside
           id="spatial-query-workbench-panel"
-          style={
-            comparisonVisible && cleanComparison
-              ? { display: "none" }
-              : undefined
-          }
           className={`floating-panel-bottom spatial-workbench-panel ${
             spatialWorkbenchOpen
               ? "spatial-workbench-panel-open"

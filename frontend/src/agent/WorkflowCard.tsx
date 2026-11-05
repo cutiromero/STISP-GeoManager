@@ -164,11 +164,11 @@ export default function WorkflowCard(
               rel="noopener"
               to={
                 comparison
-                  ? `/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
+                  ? `/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
                   : `/map?resources=${mapIds.join(",")}&projectTagId=${workflow.projectId}`
               }
             >
-              在地理工作台对比成果图层
+              {comparison ? "打开独立对比页" : "在地理工作台对比成果图层"}
             </Link>
           )}
         </p>

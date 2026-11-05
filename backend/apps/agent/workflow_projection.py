@@ -277,17 +277,23 @@ def project_workflow(workflow, data, view, part, offset, limit, suggestion_id=""
                     stage[key] = bounded(original[key])
             stage["modelAttempts"] = [
                 {
-                    key: attempt[key]
-                    for key in (
-                        "status",
-                        "requested",
-                        "inputTokens",
-                        "window",
-                        "contentBytes",
-                        "budgetLevel",
-                        "repairLevel",
-                    )
-                    if key in attempt
+                    **{
+                        key: attempt[key]
+                        for key in (
+                            "status",
+                            "requested",
+                            "inputTokens",
+                            "window",
+                            "contentBytes",
+                            "budgetLevel",
+                            "repairLevel",
+                            "validationError",
+                        )
+                        if key in attempt
+                    },
+                    "responseSaved": bool(
+                        attempt.get("responseArtifact") or attempt.get("response")
+                    ),
                 }
                 for attempt in original.get("modelAttempts", [])[-1:]
             ]
@@ -472,7 +478,11 @@ def project_workflow(workflow, data, view, part, offset, limit, suggestion_id=""
                 "action": bounded(item.action),
                 "decision": bounded(item.action.get("decision")),
                 "inputRefs": bounded(item.input_refs),
-                "outputRefs": bounded(item.output_refs),
+                "outputRefs": (
+                    item.output_refs
+                    if item.kind == "analysis_model_attempt"
+                    else bounded(item.output_refs)
+                ),
                 "metrics": bounded(item.metrics),
                 "computeTaskId": str(item.compute_task_id or ""),
                 "errorCode": item.error_code,

@@ -222,17 +222,6 @@ export default function GeologyReviewWorkspace({
           </p>
         </div>
         <div className="geology-review-workspace-actions">
-          {workflow && (
-            <Button
-              onClick={() =>
-                navigate(
-                  `/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}${suggestionId ? `&suggestion=${encodeURIComponent(suggestionId)}` : ""}`,
-                )
-              }
-            >
-              在地理工作台对比
-            </Button>
-          )}
           <Button
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate("/agent/workbench")}

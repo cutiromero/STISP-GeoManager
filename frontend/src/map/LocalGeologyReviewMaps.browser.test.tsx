@@ -8,7 +8,6 @@ import {
   reviewDifferences,
 } from "./geologyReview.testFixtures";
 import reviewStyles from "./geology-review-workspace.css?inline";
-import compareStyles from "./geology-workbench-compare.css?inline";
 
 const props = {
   before: beforeReviewMap,
@@ -24,7 +23,7 @@ it("routes standalone comparison and explanation maps to the same service-free r
 function show(onSelect = vi.fn(), onInspect = vi.fn()) {
   return render(
     <>
-      <style>{reviewStyles + compareStyles}</style>
+      <style>{reviewStyles}</style>
       <LocalGeologyReviewMaps
         {...props}
         onSelect={onSelect}

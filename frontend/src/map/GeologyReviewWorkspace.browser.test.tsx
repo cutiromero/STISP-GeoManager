@@ -87,6 +87,9 @@ it("批准前只查询待检查图，右图显示相同本地矢量和真实建�
   const worker = vi.spyOn(window, "Worker");
   show();
   await mapsReady();
+  expect(
+    screen.queryByRole("button", { name: "在地理工作台对比" }),
+  ).not.toBeInTheDocument();
   expect(screen.getByText("建议修改，尚未执行")).toBeVisible();
   expect(screen.queryByText("修正后地质图")).not.toBeInTheDocument();
   const units = document.querySelectorAll('[data-layer="geological-units"]');

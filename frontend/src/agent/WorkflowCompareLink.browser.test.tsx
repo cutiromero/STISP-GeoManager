@@ -23,11 +23,17 @@ it("keeps exactly one comparison link through expand, collapse and reopen withou
     );
     const check = () => {
       expect(
-        screen.getAllByRole("link", { name: "在地理工作台对比成果图层" }),
+        screen.getByRole("link", { name: "打开独立对比页" }),
+      ).toHaveAttribute(
+        "href",
+        `/map?geologyReview=${detail.id}&projectTagId=${detail.projectId}`,
+      );
+      expect(
+        screen.getAllByRole("link", { name: "打开独立对比页" }),
       ).toHaveLength(1);
       expect(
         Array.from(container.querySelectorAll("a")).filter(
-          (link) => link.textContent === "在地理工作台对比成果图层",
+          (link) => link.textContent === "打开独立对比页",
         ),
       ).toHaveLength(1);
     };

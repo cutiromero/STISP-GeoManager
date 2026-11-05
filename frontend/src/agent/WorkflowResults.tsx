@@ -644,7 +644,7 @@ export default function WorkflowResults({
               rel="noopener"
               to={
                 isGeologyReview && !inspectionOnly
-                  ? `/map?geologyCompare=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
+                  ? `/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}`
                   : isGeologyReview
                     ? `/map?resourceId=${originalMapId}&projectTagId=${workflow.projectId}`
                     : `/map?resources=${mapResourceIds.join(",")}&projectTagId=${workflow.projectId}`
@@ -653,8 +653,12 @@ export default function WorkflowResults({
               {inspectionOnly
                 ? "在地理工作台查看待检查图"
                 : ui(
-                    "在地理工作台对比成果图层",
-                    "Compare result layers in the map workspace",
+                    isGeologyReview
+                      ? "打开独立对比页"
+                      : "在地理工作台对比成果图层",
+                    isGeologyReview
+                      ? "Open comparison page"
+                      : "Compare result layers in the map workspace",
                   )}
             </Link>
           ) : (
