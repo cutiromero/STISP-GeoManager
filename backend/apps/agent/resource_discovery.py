@@ -7,7 +7,11 @@ from contextvars import ContextVar
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import BooleanField, Case, F, Q, Value, When
 
-from apps.catalog.models import DataResource
+from apps.catalog.models import (
+    DataResource,
+    INTERNAL_SOURCE_PREFIXES,
+    RESERVED_RULE_CODES,
+)
 from apps.catalog.permissions import filter_accessible
 from apps.compute.access import project_id
 from apps.compute.models import ComputeImport
@@ -16,27 +20,6 @@ from apps.projects.access import can_access_project
 from .models import AgentWorkflow, AgentWorkflowStep, WorkflowUpload
 
 
-INTERNAL_SOURCE_PREFIXES = (
-    "workflow-upload:",
-    "workflow-working:",
-    "geology-multi-frozen-rules:",
-    "geology-multi-approved:",
-    "demo-changes:",
-    "geology-reference:",
-    "geology-case-reference-20261012:",
-    "geology-multi-reference:",
-    "geology-multi-evaluation:",
-    "geology-review-reference:",
-    "geology-review-acceptance:",
-)
-RESERVED_RULE_CODES = (
-    "demo-geology-rules",
-    "real-geology-age-rules",
-    "geology-review-rules",
-    "geology-review-expanded-20261025-rules",
-    "geology-multi-rules",
-    "geology-multi-rules-complete-20261025",
-)
 MULTI_FINAL_OUTPUT_KEYS = {
     "apply": {"lithology", "final_faults", "final_alterations"}
     | {

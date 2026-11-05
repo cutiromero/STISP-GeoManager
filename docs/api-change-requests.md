@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261106-004 - 普通目录共享明确内部材料标识
+
+- Status: BackendReady
+- Owner: Frontend / Backend。
+- Endpoints: GET /api/catalog/resources/；GET /api/search/；GET /api/layers/；未指定resourceId的GET /api/compute/inputs/；后台资源列表/导出及共用资源、图层统计。
+- Change type: 普通目录可见集合收窄；响应结构、字段和按编号绑定读取不变。
+- OpenAPI change: 说明普通目录依据source/code隐藏明确内部任务材料及注册规则；普通智能体继续执行更严格的成果溯源边界。
+- Mock examples: 沿用现有目录与图层示例；集成夹具覆盖同名业务/内部资料、各内部source、注册规则code和命名空间、匿名列表及保留默认图层。
+- Frontend reason: 全站普通数据目录与智能体候选对明确内部材料保持一致，避免将冻结规则、修改表和评价材料显示成普通业务资料。
+- Backend implementation notes: catalog.models集中定义INTERNAL_SOURCE_PREFIXES与RESERVED_RULE_CODES；agent发现导入同一常量。task_resource_q同时处理资源字段及关联图层前缀，现有列表、导出和统计调用共用过滤。保留业务上传、计算成果、工作流报告和原有按ID/真实任务绑定读取，不做数据删除、迁移、名称过滤或全局ComputeImport溯源重构。
+- Verification: resources/search/layers/admin列表逐类标识正反例；任务绑定读取、任务上传隔离、计算输入目录及匿名/默认图层回归；API生成、一致性、变更记录、文档与lint检查。
+- Result: 后端78项专项通过，含26项新增目录边界测试；API生成、一致性、变更记录、文档与lint检查通过。普通业务和真实任务绑定读取保留；候选服务器的新目录边界尚待部署后复验。
+
 ## API-20261106-003 - 智能体普通发现与任务内部材料隔离
 
 - Status: BackendReady
@@ -411,6 +424,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261106-004 | BackendReady | /api/catalog/resources/; /search/; /layers/; /compute/inputs/; shared admin catalog and counts | Hide explicitly marked internal packets from ordinary catalogs | Updated | Existing catalog examples; scoped source/code fixtures | Shared constants and catalog filters implemented | 78 focused cases including 26 new boundary cases; API checks passed | Bound ID access retained; agent provenance remains stricter |
 | API-20261106-003 | BackendReady | /api/agent/resources/; /bootstrap/; /workflow-uploads/references/; existing tools and workflow material access | Ordinary discovery separated from real task-bound materials | Updated | Existing agent examples; scoped data-boundary fixtures | Backend focused and frontend 6 browser cases passed | TypeScript and API checks passed; real-model/server acceptance separate | Current project ACL, provenance, owner and real task bindings |
 | API-20261106-002 | BackendReady | /api/agent/runs/{runId}/; /conversations/{conversationId}/; /workflows/{workflowId}/ | Real final-answer preview and persisted lightweight model activity | Updated | 105-agent-workflow-card; 106-agent-generic-chat | Implemented | Scoped browser, typechecks and API checks | Existing owner, project and workflow authorization |
 | API-20261106-001 | BackendReady | /api/agent/bootstrap/; /conversations/{conversationId}/runs/; /workflows/; /workflow-uploads/recognize/ | Explicit deep default and verified run policy inheritance | Updated | Existing agent fixtures; scoped HTTP model captures | Implemented | Focused frontend and backend regression; API checks | Existing project, owner, model and budget authorization |

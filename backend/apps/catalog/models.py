@@ -91,14 +91,41 @@ class DataResourceGroup(ProjectScopedModel):
 
 # MH-workflow task uploads and their working copies belong to one task only.
 TASK_RESOURCE_SOURCES = ("workflow-upload:", "workflow-working:")
+INTERNAL_SOURCE_PREFIXES = (
+    *TASK_RESOURCE_SOURCES,
+    "geology-multi-frozen-rules:",
+    "geology-multi-approved:",
+    "demo-changes:",
+    "geology-reference:",
+    "geology-case-reference-20261012:",
+    "geology-multi-reference:",
+    "geology-multi-evaluation:",
+    "geology-review-reference:",
+    "geology-review-acceptance:",
+)
+RESERVED_RULE_CODES = (
+    "demo-geology-rules",
+    "real-geology-age-rules",
+    "geology-review-rules",
+    "geology-review-expanded-20261025-rules",
+    "geology-multi-rules",
+    "geology-multi-rules-complete-20261025",
+)
 
 
 def task_resource_q(relation: str = ""):
-    """Task resources, optionally through a relation such as ``data_resource``."""
-    field = f"{relation}__source__startswith" if relation else "source__startswith"
-    query = models.Q(pk__in=[])
-    for prefix in TASK_RESOURCE_SOURCES:
-        query |= models.Q(**{field: prefix})
+    """Explicit internal packets hidden from catalogs, preserving bound ID reads."""
+    related = f"{relation}__" if relation else ""
+    query = models.Q(**{f"{related}code__in": RESERVED_RULE_CODES})
+    query |= models.Q(**{f"{related}code__startswith": "geology-multi-rules"})
+    query |= models.Q(
+        **{
+            f"{related}code__startswith": "geology-review-",
+            f"{related}code__endswith": "-rules",
+        }
+    )
+    for prefix in INTERNAL_SOURCE_PREFIXES:
+        query |= models.Q(**{f"{related}source__startswith": prefix})
     return query
 
 

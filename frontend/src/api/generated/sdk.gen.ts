@@ -1006,7 +1006,7 @@ export const bulkDeleteResources = <ThrowOnError extends boolean = false>(option
 /**
  * 获取数据资源列表
  *
- * 支持按目录分类、资源形态、空间属性和兼容业务标签筛选。categoryCode=compute_results 返回计算中心或智能体计算后已入库的结果，父节点默认包含全部后代；dataType/spatialClass 继续描述存储和展示能力，domainType 为兼容标签。需要 `core.browse_data`。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。
+ * 支持按目录分类、资源形态、空间属性和兼容业务标签筛选。categoryCode=compute_results 返回计算中心或智能体计算后已入库的结果，父节点默认包含全部后代；dataType/spatialClass 继续描述存储和展示能力，domainType 为兼容标签。按明确source/code标识排除任务上传、工作副本、内部规则、修改表及评价材料；保留普通业务上传和计算成果，不按test/demo等名称过滤。普通智能体候选另执行更严格的成果溯源。需要 `core.browse_data`。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。
  */
 export const getResources = <ThrowOnError extends boolean = false>(options?: Options<GetResourcesData, ThrowOnError>): RequestResult<GetResourcesResponses, GetResourcesErrors, ThrowOnError> => (options?.client ?? client).get<GetResourcesResponses, GetResourcesErrors, ThrowOnError>({ url: '/api/catalog/resources/', ...options });
 
@@ -1523,14 +1523,14 @@ export const downloadExport = <ThrowOnError extends boolean = false>(options: Op
 /**
  * 获取图层列表
  *
- * 返回当前用户可见且可浏览的启用地图图层；若图层关联的数据资源对当前用户不可见，该图层也不会返回，避免用户看到无法加载的数据。 公开项目允许匿名读取；私有项目须登录且获配标签。自定义符号化、导出与管理仍要求相应功能权限。
+ * 返回当前用户可见且可浏览的启用地图图层；若图层关联的数据资源对当前用户不可见，或其source/code明确标记为任务上传、工作副本、内部规则、修改表及评价材料，该图层不会返回。保留普通业务上传、计算成果及未绑定资源的默认图层，不按名称过滤。公开项目允许匿名读取；私有项目须登录且获配标签。自定义符号化、导出与管理仍要求相应功能权限。
  */
 export const getLayers = <ThrowOnError extends boolean = false>(options?: Options<GetLayersData, ThrowOnError>): RequestResult<GetLayersResponses, GetLayersErrors, ThrowOnError> => (options?.client ?? client).get<GetLayersResponses, GetLayersErrors, ThrowOnError>({ url: '/api/layers/', ...options });
 
 /**
  * 全局搜索
  *
- * 搜索数据资源。`q` 为空时返回空结果。 公开项目允许匿名读取；私有项目须登录且获配标签。自定义符号化、导出与管理仍要求相应功能权限。
+ * 搜索数据资源，与普通资源目录共用明确source/code内部材料排除规则；任务上传、工作副本、内部规则、修改表及评价材料不进入搜索结果，普通业务上传和计算成果保留，不按名称过滤。`q` 为空时返回空结果。公开项目允许匿名读取；私有项目须登录且获配标签。自定义符号化、导出与管理仍要求相应功能权限。
  */
 export const search = <ThrowOnError extends boolean = false>(options?: Options<SearchData, ThrowOnError>): RequestResult<SearchResponses, SearchErrors, ThrowOnError> => (options?.client ?? client).get<SearchResponses, SearchErrors, ThrowOnError>({ url: '/api/search/', ...options });
 
@@ -2002,7 +2002,7 @@ export const downloadComputeTemplate = <ThrowOnError extends boolean = false>(op
 /**
  * listComputeInputs
  *
- * 计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。
+ * 计算输入目录。未指定resourceId时按明确source/code标识排除任务上传、工作副本、内部规则、修改表及评价材料，保留普通业务上传和计算成果，不按名称过滤。指定resourceId时仍按当前项目及资源ACL重新授权，不从目录隐藏推导绑定读取权限。任务文件仅本人和有权管理员访问。写入必须显式传当前项目。
  */
 export const listComputeInputs = <ThrowOnError extends boolean = false>(options?: Options<ListComputeInputsData, ThrowOnError>): RequestResult<ListComputeInputsResponses, ListComputeInputsErrors, ThrowOnError> => (options?.client ?? client).get<ListComputeInputsResponses, ListComputeInputsErrors, ThrowOnError>({
     security: [{
