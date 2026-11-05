@@ -285,6 +285,16 @@ class Command(BaseCommand):
                     for prefix, count in [("L", 5), ("S", 5), ("A", 5), ("P", 3)]
                     for index in range(1, count + 1)
                 },
+                {
+                    f"{prefix}-{index:02}"
+                    for prefix, count in [("L", 6), ("S", 5), ("A", 5), ("P", 3)]
+                    for index in range(1, count + 1)
+                },
+                {
+                    f"{prefix}-{index:02}"
+                    for prefix, count in [("L", 7), ("S", 5), ("A", 5), ("P", 3)]
+                    for index in range(1, count + 1)
+                },
             )
             or len(bundle["rules"]) != len({rule["id"] for rule in bundle["rules"]})
             or bundle.get("scenario") != SCENARIO

@@ -17,7 +17,17 @@ vi.mock("../api/agent", () => ({
   agentApi: { workflow: vi.fn(), poll: vi.fn() },
 }));
 vi.mock("./WorkflowResults", () => ({
-  default: () => <div>完整步骤与模型交互</div>,
+  default: () => (
+    <div>
+      <span>完整步骤与模型交互</span>
+      <details>
+        <summary>测试证据</summary>证据内容
+      </details>
+      <details>
+        <summary>默认收起证据</summary>其他证据内容
+      </details>
+    </div>
+  ),
   workflowMapResourceIds: (workflow: { resultResourceIds: number[] }) =>
     workflow.resultResourceIds,
 }));
@@ -106,7 +116,7 @@ it("完成卡片不预取过程、计算或报告，展开才请求完整详情"
     signal: expect.any(AbortSignal),
   });
   fireEvent.click(screen.getByRole("button", { name: "收起明细" }));
-  expect(screen.queryByText("完整步骤与模型交互")).toBeNull();
+  expect(screen.getByText("完整步骤与模型交互")).not.toBeVisible();
 });
 
 it.each(["geology_generic", "geology_multi_element_reasoning"])(
@@ -146,3 +156,89 @@ it.each(["geology_generic", "geology_multi_element_reasoning"])(
     expect(screen.getByRole("region", { name: "工作流进度卡片" })).toBeTruthy();
   },
 );
+
+it("多次轮询、阶段推进和card/full切换保留详情节点、折叠状态及滚动", async () => {
+  const detail = reviewWorkflow();
+  const card = { ...detail, view: "card" as const, updatedAt: "poll-0" };
+  vi.mocked(agentApi.workflow).mockResolvedValue(detail);
+  const view = render(
+    <MemoryRouter>
+      <div data-testid="scroll" style={{ height: 90, overflow: "auto" }}>
+        <WorkflowCard workflow={card} />
+        <div style={{ height: 800 }} />
+      </div>
+    </MemoryRouter>,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /查看过程、证据与模型交互/ }),
+  );
+  const summary = await screen.findByText("测试证据");
+  const evidence = summary.closest("details")!;
+  const collapsed = screen.getByText("默认收起证据").closest("details")!;
+  fireEvent.click(summary);
+  const scroll = screen.getByTestId("scroll");
+  const settleLayout = () =>
+    act(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+  await settleLayout();
+  scroll.scrollTop = 30;
+  expect(scroll.scrollTop).toBe(30);
+  for (let index = 1; index <= 3; index += 1) {
+    let resolve: (value: typeof detail) => void = () => {};
+    vi.mocked(agentApi.workflow).mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    view.rerender(
+      <MemoryRouter>
+        <div data-testid="scroll" style={{ height: 90, overflow: "auto" }}>
+          <WorkflowCard workflow={{ ...card, updatedAt: `poll-${index}` }} />
+          <div style={{ height: 800 }} />
+        </div>
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(agentApi.workflow).toHaveBeenCalledTimes(index + 1),
+    );
+    await settleLayout();
+    expect(screen.getByText("测试证据").closest("details")).toBe(evidence);
+    expect(evidence.open).toBe(true);
+    expect(collapsed.open).toBe(false);
+    expect(scroll.scrollTop).toBe(30);
+    await act(async () => resolve({ ...detail, planHash: `stage-${index}` }));
+    await settleLayout();
+    expect(evidence.open).toBe(true);
+    expect(collapsed.open).toBe(false);
+    expect(scroll.scrollTop).toBe(30);
+  }
+  view.rerender(
+    <MemoryRouter>
+      <div data-testid="scroll" style={{ height: 90, overflow: "auto" }}>
+        <WorkflowCard
+          workflow={{ ...detail, status: "succeeded", planHash: "finished" }}
+        />
+        <div style={{ height: 800 }} />
+      </div>
+    </MemoryRouter>,
+  );
+  await settleLayout();
+  expect(screen.getByText("测试证据").closest("details")).toBe(evidence);
+  expect(evidence.open).toBe(true);
+  expect(collapsed.open).toBe(false);
+  expect(scroll.scrollTop).toBe(30);
+  fireEvent.click(screen.getByRole("button", { name: "收起明细" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: /查看过程、证据与模型交互/ }),
+  );
+  expect(screen.getByText("测试证据").closest("details")).toBe(evidence);
+  expect(evidence.open).toBe(true);
+  fireEvent.click(summary);
+  await settleLayout();
+  expect(evidence.open).toBe(false);
+});

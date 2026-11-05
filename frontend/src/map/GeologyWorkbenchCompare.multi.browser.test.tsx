@@ -6,7 +6,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import mapboxgl from "mapbox-gl";
 import { useRef, useState } from "react";
 import { MemoryRouter, useSearchParams } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -47,7 +46,6 @@ const collection = (features: Feature[]): GeoJsonFeatureCollection => ({
 });
 const workflowId = "haide-workflow";
 let observedGroups: LoadedLayerGroup[] = [];
-const maps = new Set<mapboxgl.Map>();
 
 function fixture() {
   const workflow = reviewWorkflow(true);
@@ -305,7 +303,7 @@ function Harness() {
       </style>
       <div
         className="workspace-body workspace-body-spatial-collapsed"
-        style={{ width: "100%", height: 760 }}
+        style={{ width: "100%", height: "100dvh" }}
       >
         <aside
           className="floating-panel floating-panel-left mobile-map-panel-hidden"
@@ -330,7 +328,6 @@ function Harness() {
             projectId="3"
             projectTagId="3"
             suggestionId={params.get("suggestion")}
-            accessToken=""
             canLoad
             comparisonVisible={params.get("mapMode") !== "single"}
             registerLayer={async (resource, result, placement) => {
@@ -412,7 +409,9 @@ function visibleChanges() {
     );
 }
 function liveMaps() {
-  return [...maps].filter((map) => map.getCanvas()?.isConnected);
+  return Array.from(
+    document.querySelectorAll<SVGSVGElement>(".geology-review-local-map > svg"),
+  );
 }
 async function mapsReady() {
   const before = await screen.findByLabelText("待检查地质图地图");
@@ -428,7 +427,19 @@ async function mapsReady() {
 }
 async function changesReady(position = 1) {
   await screen.findByText(`第 ${position} 处，共 3 处`);
+  const auxiliary = screen.getByRole("checkbox", {
+    name: /构造 \/ 蚀变等辅助图层/,
+  });
+  if (!(auxiliary as HTMLInputElement).checked) fireEvent.click(auxiliary);
   await waitFor(() => expect(layers()).toHaveLength(13));
+}
+async function chooseGroup(label: RegExp) {
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "修改分组" }));
+  fireEvent.click(
+    await screen.findByText(label, {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
 }
 function choose(control: string, label: string) {
   fireEvent.click(
@@ -440,18 +451,6 @@ function choose(control: string, label: string) {
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.spyOn(mapboxgl.Map.prototype, "_authenticate").mockImplementation(
-    () => {},
-  );
-  const original = mapboxgl.Map.prototype.addSource;
-  vi.spyOn(mapboxgl.Map.prototype, "addSource").mockImplementation(function (
-    this: mapboxgl.Map,
-    ...args: Parameters<mapboxgl.Map["addSource"]>
-  ) {
-    maps.add(this);
-    return original.apply(this, args);
-  });
-  maps.clear();
   observedGroups = [];
   current = fixture();
   request.mockReset();
@@ -469,7 +468,7 @@ beforeEach(() => {
   });
 });
 
-it("registers every real resource in one deduplicated task group and renders polygon, line and point overlays in both WebGL maps", async () => {
+it("registers every real resource in one deduplicated task group and renders polygon, line and point overlays in both local maps", async () => {
   show();
   await changesReady();
   await mapsReady();
@@ -504,24 +503,15 @@ it("registers every real resource in one deduplicated task group and renders pol
     "地质代号由 Q 更新为 T₃b",
   );
   for (const map of liveMaps()) {
-    expect(map.getCanvas().getContext("webgl2")).toBeTruthy();
-    expect(map.getLayer("units")?.type).toBe("fill");
-    expect(map.getLayer("review-faults-line")?.type).toBe("line");
-    expect(map.getLayer("review-intersections-point")?.type).toBe("circle");
-    await waitFor(() => {
-      expect(
-        map.queryRenderedFeatures({ layers: ["units"] }).length,
-      ).toBeGreaterThan(0);
-      expect(
-        map.queryRenderedFeatures({ layers: ["review-intersections-point"] })
-          .length,
-      ).toBeGreaterThan(0);
-      expect(
-        map.queryRenderedFeatures({
-          layers: ["review-faults-line", "review-faults-excluded"],
-        }).length,
-      ).toBeGreaterThan(0);
-    });
+    expect(
+      map.querySelector('[data-layer="geological-units"] path'),
+    ).toBeVisible();
+    expect(
+      map.querySelector('[data-layer="review-faults"] path'),
+    ).toBeVisible();
+    expect(
+      map.querySelector('[data-layer="review-intersections"] circle'),
+    ).toBeVisible();
   }
   await page.screenshot({
     path: "../../test-results/geology-workbench-multi-desktop.png",
@@ -534,14 +524,14 @@ it("navigates actual attribute and weight changes and changes normal-map control
   await changesReady();
   await mapsReady();
   const reads = request.mock.calls.length;
-  fireEvent.click(screen.getByRole("button", { name: /下一处/ }));
+  await chooseGroup(/构造 \/ S-01/);
   await screen.findByRole("heading", { name: "构造处置" });
   expect(visibleChanges()).toHaveLength(0);
   fireEvent.click(screen.getByLabelText("修正记录 / 实际修改范围"));
   await waitFor(() =>
     expect(visibleChanges()[0]!.properties.issue_id).toBe("change-fault"),
   );
-  fireEvent.click(screen.getByRole("button", { name: /下一处/ }));
+  await chooseGroup(/蚀变 \/ A-01/);
   await screen.findByRole("heading", { name: "矿物证据降权" });
   expect(screen.getByLabelText("当前修改故事")).toHaveTextContent(
     "证据权重 0.8 → 0.4",
@@ -569,10 +559,43 @@ it("navigates actual attribute and weight changes and changes normal-map control
   await waitFor(() => expect(visibleChanges()).toHaveLength(1));
   choose("地图显示方式", "前后对比");
   await mapsReady();
-  fireEvent.click(screen.getByRole("button", { name: /上一处/ }));
+  await chooseGroup(/构造 \/ S-01/);
   await screen.findByRole("heading", { name: "构造处置" });
   expect(request).toHaveBeenCalledTimes(reads);
   expect(layers()).toHaveLength(13);
+});
+
+it("默认关闭修改范围时仍自动定位第一处，按组切换同时定位双图并更新空心临时轮廓", async () => {
+  show();
+  await screen.findByText("第 1 处，共 3 处");
+  await mapsReady();
+  const initialMaps = liveMaps();
+  expect(
+    request.mock.calls.some(([url]) => String(url).includes("/600/")),
+  ).toBe(false);
+  for (const map of initialMaps) {
+    expect(
+      map.querySelector(
+        '[data-layer="story-focus"] [data-feature-id="unit-a"] path',
+      ),
+    ).toHaveAttribute("fill", "none");
+  }
+  const initialViews = initialMaps.map((map) => map.getAttribute("viewBox"));
+  await chooseGroup(/构造 \/ S-01/);
+  await screen.findByRole("heading", { name: "构造处置" });
+  await waitFor(() => {
+    for (const [index, map] of initialMaps.entries()) {
+      expect(map.getAttribute("viewBox")).not.toBe(initialViews[index]);
+      expect(
+        map.querySelector(
+          '[data-layer="story-focus"] [data-feature-id="fault-a"] path',
+        ),
+      ).toHaveAttribute("fill", "none");
+    }
+  });
+  expect(liveMaps()).toEqual(initialMaps);
+  expect(screen.getByLabelText("修正记录 / 实际修改范围")).not.toBeChecked();
+  expect(visibleChanges()).toHaveLength(0);
 });
 
 it("restores URL side, scope and selected change, then refreshes without duplicating resource layers", async () => {
@@ -619,8 +642,14 @@ it.each([1461, 360])(
         .getBoundingClientRect();
       expect(comparison.left).toBeGreaterThanOrEqual(0);
       expect(comparison.right).toBeLessThanOrEqual(width);
+      expect(comparison.bottom).toBeGreaterThan(790);
+      const toolbar = screen
+        .getByRole("button", { name: /刷新成果/ })
+        .getBoundingClientRect();
+      expect(toolbar.top).toBeGreaterThanOrEqual(0);
+      expect(toolbar.bottom).toBeLessThan(250);
       for (const map of liveMaps()) {
-        const bounds = map.getCanvas().getBoundingClientRect();
+        const bounds = map.getBoundingClientRect();
         expect(bounds.width).toBeGreaterThan(100);
         expect(bounds.height).toBeGreaterThan(80);
         expect(bounds.left).toBeGreaterThanOrEqual(0);
@@ -645,11 +674,13 @@ it.each([1461, 360])(
         expect(bounds.top).toBeGreaterThanOrEqual(0);
         expect(bounds.bottom).toBeLessThanOrEqual(812);
       }
-      fireEvent.click(previous);
+      expect(previous).toBeDisabled();
+      expect(next).toBeDisabled();
+      await chooseGroup(/构造 \/ S-01/);
       await waitFor(() =>
         expect(screen.getByText("第 2 处，共 3 处")).toBeVisible(),
       );
-      fireEvent.click(next);
+      await chooseGroup(/蚀变 \/ A-01/);
       await waitFor(() =>
         expect(screen.getByText("第 3 处，共 3 处")).toBeVisible(),
       );
@@ -659,7 +690,7 @@ it.each([1461, 360])(
   },
 );
 
-it("keeps the full comparison, navigation and real WebGL canvases within 390 pixels", async () => {
+it("keeps the full comparison, navigation and local vector maps within 390 pixels", async () => {
   await page.viewport(390, 844);
   try {
     show(
@@ -673,7 +704,7 @@ it("keeps the full comparison, navigation and real WebGL canvases within 390 pix
     expect(comparison.left).toBeGreaterThanOrEqual(0);
     expect(comparison.right).toBeLessThanOrEqual(390);
     for (const map of liveMaps()) {
-      const bounds = map.getCanvas().getBoundingClientRect();
+      const bounds = map.getBoundingClientRect();
       expect(bounds.width).toBeGreaterThan(100);
       expect(bounds.height).toBeGreaterThan(80);
       expect(bounds.right).toBeLessThanOrEqual(390);

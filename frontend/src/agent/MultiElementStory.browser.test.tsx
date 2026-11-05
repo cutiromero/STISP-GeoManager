@@ -70,6 +70,12 @@ it("建议默认收起，展开可核对实测、具体规则和例外，待裁�
       </MemoryRouter>
     </App>,
   );
+  fireEvent.click(
+    screen.getByText(/个对象/, {
+      selector: ".multi-element-suggestion-list > div > details > summary",
+    }),
+  );
+  await screen.findByText("岩性 / 名称与地质代号不一致");
   expect(screen.getByText("岩性 / 名称与地质代号不一致")).toBeVisible();
   const details = screen
     .getByText("岩性 / 名称与地质代号不一致")

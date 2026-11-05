@@ -874,6 +874,10 @@ function MapWorkspace() {
     [layerGroups.groups],
   );
   const comparisonSources = useRef(new Map<number, GeoJsonFeatureCollection>());
+  const comparisonFocus = useRef<{
+    workflowId: string;
+    bounds: [number, number, number, number];
+  } | null>(null);
   const registerComparisonLayer = async (
     profile: DataResourceProfile,
     result: ResourceQueryResult,
@@ -944,9 +948,19 @@ function MapWorkspace() {
       );
   };
   useEffect(() => {
-    if (!comparisonVisible && mapObject)
-      requestAnimationFrame(() => mapObject.resize());
-  }, [comparisonVisible, mapObject]);
+    if (comparisonVisible || !mapObject) return;
+    const frame = requestAnimationFrame(() => {
+      mapObject.resize();
+      if (comparisonFocus.current?.workflowId === comparisonWorkflowId) {
+        mapObject.fitBounds(comparisonFocus.current.bounds, {
+          padding: 75,
+          maxZoom: 16,
+          duration: 0,
+        });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [comparisonVisible, comparisonWorkflowId, mapObject]);
   const spatialQueryResources = useMemo(
     () => loadedQueryResources(allLayers),
     [allLayers],
@@ -2891,30 +2905,33 @@ function MapWorkspace() {
             style={{ width: "100%", height: "100%" }}
             aria-hidden={comparisonVisible}
           >
-            <Suspense
-              fallback={
-                <div className="map-canvas-loading">
-                  <Spin size="large" />
-                </div>
-              }
-            >
-              <MapCanvas
-                bootstrap={bootstrap}
-                basemapPreferenceScope={`user:${user?.id ?? "anonymous"}`}
-                basemapSwitchDisabled={mapExporting}
-                loadedLayers={mapLayers}
-                drawMode={activeDraw?.mode ?? null}
-                spatialFilter={spatialFilter}
-                layerExtentOverlays={layerExtentOverlays}
-                onDrawComplete={handleDrawComplete}
-                onFeatureSelect={setSelectedFeature}
-                onMapReady={handleMapReady}
-                onMapDestroy={handleMapDestroy}
-                onMapError={handleMapError}
-                onViewStateChange={setCurrentMapView}
-                onBasemapSwitchingChange={setBasemapSwitching}
-              />
-            </Suspense>
+            {!comparisonVisible && (
+              <Suspense
+                fallback={
+                  <div className="map-canvas-loading">
+                    <Spin size="large" />
+                  </div>
+                }
+              >
+                <MapCanvas
+                  bootstrap={bootstrap}
+                  basemapPreferenceScope={`user:${user?.id ?? "anonymous"}`}
+                  basemapSwitchDisabled={mapExporting}
+                  initialViewState={currentMapView}
+                  loadedLayers={mapLayers}
+                  drawMode={activeDraw?.mode ?? null}
+                  spatialFilter={spatialFilter}
+                  layerExtentOverlays={layerExtentOverlays}
+                  onDrawComplete={handleDrawComplete}
+                  onFeatureSelect={setSelectedFeature}
+                  onMapReady={handleMapReady}
+                  onMapDestroy={handleMapDestroy}
+                  onMapError={handleMapError}
+                  onViewStateChange={setCurrentMapView}
+                  onBasemapSwitchingChange={setBasemapSwitching}
+                />
+              </Suspense>
+            )}
           </div>
           {comparisonWorkflowId && (
             <Suspense
@@ -2930,7 +2947,6 @@ function MapWorkspace() {
                 projectId={getActiveProject()}
                 projectTagId={searchParams.get("projectTagId")}
                 suggestionId={searchParams.get("suggestion")}
-                accessToken={bootstrap.map.mapboxAccessToken}
                 canLoad={
                   permissions.canQueryData && permissions.canLoadVectorLayer
                 }
@@ -2949,6 +2965,9 @@ function MapWorkspace() {
                     ),
                   );
                   const bounds = reviewBounds(current ?? changes);
+                  comparisonFocus.current = bounds
+                    ? { workflowId: comparisonWorkflowId, bounds }
+                    : null;
                   if (bounds && mapInstanceRef.current && !comparisonVisible)
                     mapInstanceRef.current.fitBounds(
                       [

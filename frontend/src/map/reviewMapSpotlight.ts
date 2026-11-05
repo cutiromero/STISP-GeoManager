@@ -8,6 +8,8 @@ export type ReviewMapSpotlight = {
   after: GeoJsonFeatureCollection;
   beforeLabel?: string;
   afterLabel?: string;
+  outlineOnly?: boolean;
+  dimBackground?: boolean;
 };
 
 /** Update only the current object; navigating a story never resends the full map. */
@@ -20,8 +22,9 @@ export function applyReviewSpotlight(
 ): (() => void) | undefined {
   if (!map.getSource("geological-units")) return;
   const active = Boolean(spotlight);
-  map.setPaintProperty("units", "fill-opacity", active ? 0.12 : 0.95);
-  map.setPaintProperty("unit-boundaries", "line-opacity", active ? 0.18 : 1);
+  const dim = active && spotlight?.dimBackground !== false;
+  map.setPaintProperty("units", "fill-opacity", dim ? 0.12 : 0.95);
+  map.setPaintProperty("unit-boundaries", "line-opacity", dim ? 0.18 : 1);
   for (const key of overlayKeys) {
     const id = `review-${key}`;
     if (map.getLayer(`${id}-fill`)) {
@@ -63,11 +66,21 @@ export function applyReviewSpotlight(
       "case",
       ["boolean", ["get", "_review_outlineOnly"], false],
       0,
-      0.6,
+      spotlight.outlineOnly ? 0 : 0.6,
     ]);
     map.setPaintProperty(`${id}-line`, "line-width", 3.5);
     map.setPaintProperty(`${id}-excluded`, "line-width", 3.5);
     map.setPaintProperty(`${id}-point`, "circle-radius", 8);
+  }
+  if (spotlight.outlineOnly) {
+    const color = side ? "#006cd1" : "#ce287a";
+    map.setPaintProperty(`${id}-fill`, "fill-opacity", 0);
+    map.setPaintProperty(`${id}-line`, "line-color", color);
+    map.setPaintProperty(`${id}-excluded`, "line-color", color);
+    map.setPaintProperty(`${id}-line`, "line-opacity", 1);
+    map.setPaintProperty(`${id}-point`, "circle-opacity", 0);
+    map.setPaintProperty(`${id}-point`, "circle-stroke-color", color);
+    map.setPaintProperty(`${id}-point`, "circle-stroke-width", 3);
   }
   for (const layer of layers)
     map.setLayoutProperty(layer, "visibility", "visible");

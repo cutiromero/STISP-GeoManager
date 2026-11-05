@@ -6,6 +6,9 @@ import type {
   AgentWorkflow,
 } from "../api/generated/types.gen";
 import ActiveWorkflowNotice from "./ActiveWorkflowNotice";
+vi.mock("../projects/ProjectContext", () => ({
+  useProjectContext: () => ({ projects: [{ id: 2, name: "研究区项目" }] }),
+}));
 
 const item: AgentActiveWorkflow = {
   id: "old-task",
@@ -133,7 +136,8 @@ it("distinguishes computing from multiple parked tasks and identifies the source
   });
   render(<ActiveWorkflowNotice projectId="1" refreshKey="" />);
   expect(await screen.findByText("正在计算或排队：核对旧地质图")).toBeVisible();
-  expect(screen.getByText(/对话：研究区复查（42）/)).toBeVisible();
+  expect(screen.getByText(/项目：研究区项目；对话：研究区复查/)).toBeVisible();
+  expect(screen.queryByText(/研究区复查（42）/)).not.toBeInTheDocument();
   expect(screen.getAllByText(/已停放，不阻挡新任务：/)).toHaveLength(2);
   expect(screen.getAllByRole("button", { name: "查看" })).toHaveLength(3);
   expect(screen.getAllByRole("button", { name: "取消该任务" })).toHaveLength(3);

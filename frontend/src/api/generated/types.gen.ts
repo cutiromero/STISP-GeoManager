@@ -6145,7 +6145,7 @@ export type AgentWorkflowConfirmation = {
      */
     feedback?: string;
     /**
-     * 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。reject省略，其他阶段不得扩大操作范围。
+     * 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。待裁定/例外仅在用户明确选择候选编号后执行，不属于普通建议全选；模型不得裁定。只接受快照的候选动作和目标，不接受额外目标参数。reject省略，其他阶段不得扩大操作范围。
      */
     selectedSuggestionIds?: Array<string>;
     /**
@@ -6372,9 +6372,17 @@ export type AgentModificationSuggestion = {
      */
     lengthM?: number;
     /**
-     * 建议、待裁定、例外、保留、降权或剔除的实际处置状态
+     * 检查规则的建议、待裁定、例外、保留、降权或剔除状态；用户选候选不会改变规则判断
      */
     status?: string;
+    /**
+     * 本次冻结检查快照的候选动作；仅待裁定或例外对象提供，默认保留且不得被模型或建议全选纳入，须用户明确选择其建议编号
+     */
+    candidateAction?: 'reclassify' | 'exclude' | 'downweight';
+    /**
+     * 候选重分类的实测相邻目标代号；非类别动作为空，不接受用户或模型另填目标
+     */
+    candidateTargetCode?: string;
     /**
      * 当前检索实际返回的知识与修订，权限继续按原项目检查。
      */

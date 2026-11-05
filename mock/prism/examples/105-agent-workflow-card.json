@@ -16,6 +16,17 @@
           "knowledgeRefs": [{"id": 601, "revision": 1, "title": "碎斑检查"}],
           "preview": {"type": "Polygon", "coordinates": [[[98.4,35.6],[98.401,35.6],[98.401,35.601],[98.4,35.6]]]},
           "bounds": [98.4,35.6,98.401,35.601]
+        }, {
+          "id": "held-lithology-1", "groupId": "lithology-L06-review",
+          "kind": "multi_element", "element": "lithology", "featureId": "F00001",
+          "title": "全新世冲积物形态异常", "currentState": "Qhᵃˡ",
+          "suggestedState": "reclassify Qp₃ᵖᵃˡ", "reason": "近等轴孤立团块，置信度较高，须核对冲积扇等例外",
+          "action": "reclassify", "status": "review",
+          "candidateAction": "reclassify", "candidateTargetCode": "Qp₃ᵖᵃˡ",
+          "areaM2": 500000, "ruleId": "L-06", "observations": {"compactness": 0.8, "aspect_ratio": 1.2},
+          "knowledgeRefs": [{"id": 601, "revision": 1, "title": "本案例形态试用规则"}],
+          "preview": {"type": "Polygon", "coordinates": [[[98.4,35.6],[98.401,35.6],[98.401,35.601],[98.4,35.6]]]},
+          "bounds": [98.4,35.6,98.401,35.601]
         }]
       },
       "goal": "检查上传地质资料",

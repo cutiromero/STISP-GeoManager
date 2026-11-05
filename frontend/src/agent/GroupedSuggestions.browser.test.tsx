@@ -37,6 +37,82 @@ const { api } = vi.hoisted(() => ({
 }));
 vi.mock("../api/agent", () => ({ agentApi: api }));
 
+it("待裁定候选默认保留，普通全选不纳入，用户按组选择后才批准", async () => {
+  const workflow = reviewWorkflow();
+  workflow.workflowType = "geology_generic";
+  const first = workflow.modificationReview!.suggestions[0]!;
+  workflow.modificationReview!.suggestions = [
+    {
+      ...first,
+      id: "ordinary",
+      kind: "multi_element",
+      element: "lithology",
+      status: "suggested",
+      action: "set_code",
+    },
+    {
+      ...first,
+      id: "held",
+      featureId: "H1",
+      kind: "multi_element",
+      element: "lithology",
+      status: "exception",
+      ruleId: "L-02",
+      action: "reclassify",
+      suggestedState: "reclassify D₁γ",
+      candidateAction: "reclassify",
+      candidateTargetCode: "D₁γ",
+    },
+  ];
+  const review = vi.fn();
+  const view = render(
+    <App>
+      <MemoryRouter>
+        <MultiElementStory workflow={workflow} onReview={review} />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(screen.getByText(/已选择 0/)).toBeVisible();
+  fireEvent.click(screen.getByRole("checkbox", { name: /选择全部可执行建议/ }));
+  expect(screen.getByText(/已选择 1/)).toBeVisible();
+  fireEvent.click(
+    screen.getByText(/待裁定与例外（共/, { selector: "summary" }),
+  );
+  fireEvent.click(
+    screen.getByText(/岩性 \/ L-02 · 1 个对象/, { selector: "summary" }),
+  );
+  fireEvent.click(
+    await screen.findByText(/H1 \/ 规则例外候选/, { selector: "summary" }),
+  );
+  const retained = screen.getByText(/H1 \/ 规则例外候选/).closest("details")!;
+  fireEvent.mouseDown(
+    screen.getByRole("combobox", { name: "L-02组待裁定处置" }),
+  );
+  fireEvent.click(await screen.findByText("按本组候选处置：重分类为 D₁γ"));
+  expect(screen.getByText(/已选择 2/)).toBeVisible();
+  view.rerender(
+    <App>
+      <MemoryRouter>
+        <MultiElementStory
+          workflow={{
+            ...workflow,
+            updatedAt: "next-poll",
+            planHash: "next-stage",
+          }}
+          onReview={review}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(retained.open).toBe(true);
+  expect(screen.getByText(/已选择 2/)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
+  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
+  await waitFor(() =>
+    expect(review).toHaveBeenCalledWith("approve", "", ["ordinary", "held"]),
+  );
+});
+
 it("按组批准超过30对象，展开后可取消个别对象，例外不被纳入", async () => {
   const workflow = reviewWorkflow();
   workflow.workflowType = "geology_generic";
@@ -72,14 +148,30 @@ it("按组批准超过30对象，展开后可取消个别对象，例外不被�
   );
   expect(
     screen.getByText(/70 个对象/, { selector: "summary" }).closest("details"),
-  ).toHaveAttribute("open");
+  ).not.toHaveAttribute("open");
   fireEvent.click(await screen.findByLabelText("整组批准（70 个对象）"));
+  fireEvent.click(screen.getByText(/70 个对象/, { selector: "summary" }));
+  await waitFor(() =>
+    expect(document.querySelectorAll(".multi-element-suggestion")).toHaveLength(
+      50,
+    ),
+  );
+  document
+    .querySelectorAll<HTMLDetailsElement>(".multi-element-suggestion")
+    .forEach((item) => {
+      item.open = true;
+    });
   const individual = await screen.findAllByRole("checkbox", {
     name: /批准此对象/,
   });
   expect(individual).toHaveLength(50);
   fireEvent.click(individual[0]!);
   fireEvent.click(screen.getByRole("button", { name: /查看更多对象/ }));
+  document
+    .querySelectorAll<HTMLDetailsElement>(".multi-element-suggestion")
+    .forEach((item) => {
+      item.open = true;
+    });
   expect(screen.getAllByRole("checkbox", { name: /批准此对象/ })).toHaveLength(
     70,
   );
@@ -193,8 +285,12 @@ it.each([1461, 360])(
         executable.compareDocumentPosition(held) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      expect(executable.closest("details")).toHaveAttribute("open");
+      expect(executable.closest("details")).not.toHaveAttribute("open");
       expect(held.closest("details")).not.toHaveAttribute("open");
+      fireEvent.click(executable);
+      await waitFor(() =>
+        expect(executable.closest("details")).toHaveAttribute("open"),
+      );
       expect(
         screen.getByText("重分类为 O：30 个对象；重分类为 C：30 个对象"),
       ).toBeVisible();
@@ -244,4 +340,62 @@ it("系统数据连续快速鼠标点选不会覆盖之前选项", async () => {
       [1, 2, 3],
     ),
   );
+});
+
+it("5552对象默认零对象行，展开每次50条，可搜索编号并取消后提交完整集合", async () => {
+  const workflow = reviewWorkflow();
+  workflow.workflowType = "geology_generic";
+  const first = workflow.modificationReview!.suggestions[0]!;
+  workflow.modificationReview!.suggestions = Array.from(
+    { length: 5552 },
+    (_, index) => ({
+      ...first,
+      id: `object-${index}`,
+      featureId: `F${index}`,
+      element: "lithology",
+      ruleId: "L-01",
+      action: "reclassify",
+      status: "suggested",
+    }),
+  );
+  const review = vi.fn();
+  const mounted = render(
+    <App>
+      <MemoryRouter>
+        <MultiElementStory workflow={workflow} onReview={review} />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(
+    mounted.container.querySelectorAll(".multi-element-suggestion"),
+  ).toHaveLength(0);
+  fireEvent.click(screen.getByLabelText("整组批准（5552 个对象）"));
+  const summary = screen.getByText(/5552 个对象/, { selector: "summary" });
+  fireEvent.click(summary);
+  await waitFor(() =>
+    expect(
+      mounted.container.querySelectorAll(".multi-element-suggestion"),
+    ).toHaveLength(50),
+  );
+  fireEvent.change(screen.getByLabelText("搜索对象编号 L-01"), {
+    target: { value: "F5551" },
+  });
+  await waitFor(() =>
+    expect(
+      mounted.container.querySelectorAll(".multi-element-suggestion"),
+    ).toHaveLength(1),
+  );
+  fireEvent.click(screen.getByText("对象：F5551").closest("summary")!);
+  fireEvent.click(screen.getByRole("checkbox", { name: /批准此对象/ }));
+  fireEvent.click(summary);
+  await waitFor(() =>
+    expect(
+      mounted.container.querySelectorAll(".multi-element-suggestion"),
+    ).toHaveLength(0),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
+  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
+  await waitFor(() => expect(review).toHaveBeenCalled());
+  expect(review.mock.calls[0]![2]).toHaveLength(5551);
+  expect(review.mock.calls[0]![2]).not.toContain("object-5551");
 });

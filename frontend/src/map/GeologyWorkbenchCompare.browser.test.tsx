@@ -1,6 +1,5 @@
 import { App } from "antd";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import mapboxgl from "mapbox-gl";
 import { useState } from "react";
 import { MemoryRouter, useSearchParams } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -65,7 +64,6 @@ function Harness({ canLoad = true }: { canLoad?: boolean }) {
             projectId="3"
             projectTagId="3"
             suggestionId={params.get("suggestion")}
-            accessToken=""
             canLoad={canLoad}
             comparisonVisible={params.get("mapMode") !== "single"}
             registerLayer={async (resourceProfile, result) => {
@@ -118,9 +116,6 @@ async function mapsReady() {
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.spyOn(mapboxgl.Map.prototype, "_authenticate").mockImplementation(
-    () => {},
-  );
   request.mockReset();
   registered.mockClear();
   resetProjectSession();
@@ -141,7 +136,6 @@ beforeEach(() => {
 });
 
 it("embeds synchronized real maps while registering the same catalog layers, and switches to ordinary map tools without rereading", async () => {
-  const sources = vi.spyOn(mapboxgl.Map.prototype, "addSource");
   show();
   await mapsReady();
   expect(registered).toHaveBeenCalledTimes(3);
@@ -158,7 +152,7 @@ it("embeds synchronized real maps while registering the same catalog layers, and
     "suggestion=suggest-age",
   );
   expect(
-    sources.mock.calls.filter(([id]) => id === "geological-units"),
+    document.querySelectorAll('svg [data-layer="geological-units"]'),
   ).toHaveLength(2);
   const calls = request.mock.calls.length;
   fireEvent.click(
@@ -188,10 +182,14 @@ it("embeds synchronized real maps while registering the same catalog layers, and
 it("restores the selected actual change from the URL, refreshes the saved workflow, and keeps the same resource names", async () => {
   show("/map?geologyCompare=review-workflow&suggestion=suggest-age");
   await mapsReady();
-  expect(screen.getByText("第 2 处，共 2 处")).toBeVisible();
+  expect(
+    await screen.findByText("第 2 处，共 2 处", {}, { timeout: 10000 }),
+  ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: /刷新成果/ }));
   await mapsReady();
-  expect(screen.getByText("第 2 处，共 2 处")).toBeVisible();
+  expect(
+    await screen.findByText("第 2 处，共 2 处", {}, { timeout: 10000 }),
+  ).toBeVisible();
   expect(screen.getByLabelText("正常图层栏")).toHaveTextContent(
     "待检查地质图、修正后地质图、修改范围",
   );

@@ -23921,6 +23921,63 @@
                           98.401,
                           35.601
                         ]
+                      },
+                      {
+                        "id": "held-lithology-1",
+                        "groupId": "lithology-L06-review",
+                        "kind": "multi_element",
+                        "element": "lithology",
+                        "featureId": "F00001",
+                        "title": "全新世冲积物形态异常",
+                        "currentState": "Qhᵃˡ",
+                        "suggestedState": "reclassify Qp₃ᵖᵃˡ",
+                        "reason": "近等轴孤立团块，置信度较高，须核对冲积扇等例外",
+                        "action": "reclassify",
+                        "status": "review",
+                        "candidateAction": "reclassify",
+                        "candidateTargetCode": "Qp₃ᵖᵃˡ",
+                        "areaM2": 500000,
+                        "ruleId": "L-06",
+                        "observations": {
+                          "compactness": 0.8,
+                          "aspect_ratio": 1.2
+                        },
+                        "knowledgeRefs": [
+                          {
+                            "id": 601,
+                            "revision": 1,
+                            "title": "本案例形态试用规则"
+                          }
+                        ],
+                        "preview": {
+                          "type": "Polygon",
+                          "coordinates": [
+                            [
+                              [
+                                98.4,
+                                35.6
+                              ],
+                              [
+                                98.401,
+                                35.6
+                              ],
+                              [
+                                98.401,
+                                35.601
+                              ],
+                              [
+                                98.4,
+                                35.6
+                              ]
+                            ]
+                          ]
+                        },
+                        "bounds": [
+                          98.4,
+                          35.6,
+                          98.401,
+                          35.601
+                        ]
                       }
                     ]
                   },
@@ -35644,14 +35701,14 @@
           },
           "selectedSuggestionIds": {
             "type": "array",
-            "description": "地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。reject省略，其他阶段不得扩大操作范围。",
+            "description": "地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。待裁定/例外仅在用户明确选择候选编号后执行，不属于普通建议全选；模型不得裁定。只接受快照的候选动作和目标，不接受额外目标参数。reject省略，其他阶段不得扩大操作范围。",
             "minItems": 0,
             "uniqueItems": true,
             "items": {
               "type": "string",
               "minLength": 1,
               "maxLength": 64,
-              "description": "当前实际问题和模型建议绑定的稳定标识"
+              "description": "当前实际问题与模型建议或用户候选绑定的稳定标识"
             }
           },
           "fieldMapping": {
@@ -35987,7 +36044,20 @@
           },
           "status": {
             "type": "string",
-            "description": "建议、待裁定、例外、保留、降权或剔除的实际处置状态"
+            "description": "检查规则的建议、待裁定、例外、保留、降权或剔除状态；用户选候选不会改变规则判断"
+          },
+          "candidateAction": {
+            "type": "string",
+            "enum": [
+              "reclassify",
+              "exclude",
+              "downweight"
+            ],
+            "description": "本次冻结检查快照的候选动作；仅待裁定或例外对象提供，默认保留且不得被模型或建议全选纳入，须用户明确选择其建议编号"
+          },
+          "candidateTargetCode": {
+            "type": "string",
+            "description": "候选重分类的实测相邻目标代号；非类别动作为空，不接受用户或模型另填目标"
           },
           "knowledgeRefs": {
             "type": "array",

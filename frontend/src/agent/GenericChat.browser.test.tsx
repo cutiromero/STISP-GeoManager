@@ -522,7 +522,7 @@ it("逻辑推理入口显示计算任务所属对话与查看入口，停放任�
     expect(
       await screen.findByText("正在计算或排队：核对另一区地质图"),
     ).toBeVisible();
-    expect(screen.getByText(/对话：另一区复查（42）/)).toBeVisible();
+    expect(screen.getByText(/对话：另一区复查/)).toBeVisible();
     expect(
       screen.getByText("已停放，不阻挡新任务：等待旧结果确认"),
     ).toBeVisible();
@@ -624,9 +624,14 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
     { name: "多要素检查建议" },
     { timeout: 5000 },
   );
-  const first = screen.getByText("岩性 / 填补内部漏填").closest("details")!;
-  fireEvent.click(first.querySelector("summary")!);
-  fireEvent.click(within(first).getByRole("checkbox"));
+  const group = screen
+    .getByText(/岩性 \/ .* \/ 改代号/, { selector: "summary" })
+    .closest("details")!;
+  fireEvent.click(group.querySelector("summary")!);
+  const first = await screen.findByText("岩性 / 填补内部漏填");
+  const object = first.closest("details")!;
+  fireEvent.click(object.querySelector("summary")!);
+  fireEvent.click(within(object).getByRole("checkbox"));
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
   fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() =>

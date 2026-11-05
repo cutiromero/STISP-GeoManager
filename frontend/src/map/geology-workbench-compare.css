@@ -26,7 +26,8 @@
 .geology-workbench-compare.is-comparing.is-clean {
   left: var(--workspace-edge);
   right: var(--workspace-edge);
-  top: var(--workspace-edge);
+  top: calc(var(--workspace-edge) + 58px);
+  bottom: var(--workspace-edge);
 }
 .geology-workbench-compare.is-comparing {
   bottom: calc(
@@ -36,6 +37,7 @@
   flex-direction: column;
 }
 .geology-workbench-compare-toolbar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -98,6 +100,7 @@
   flex-shrink: 0;
 }
 .geology-workbench-compare-detail {
+  flex-shrink: 0;
   max-height: 180px;
   padding: 10px 14px;
   border-top: 1px solid #d3e1ee;
@@ -107,6 +110,7 @@
   background: #fff;
 }
 .geology-workbench-compare-options {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -147,6 +151,23 @@
   justify-content: center;
   gap: 12px;
 }
+.geology-workbench-group-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.geology-workbench-group-navigation .ant-select {
+  flex: 1 1 240px;
+  min-width: 0;
+  max-width: 100%;
+}
+.geology-workbench-group-navigation .ant-input-number {
+  width: 80px;
+}
+.geology-workbench-group-navigation p {
+  width: 100%;
+}
 .geology-workbench-compare-detail p {
   margin: 8px 0 0;
 }
@@ -158,6 +179,23 @@
   }
 }
 @media (max-width: 760px) {
+  .geology-workbench-compare.is-comparing.is-clean {
+    top: calc(var(--workspace-edge) + 58px);
+  }
+  .geology-workbench-compare.is-comparing .geology-workbench-compare-detail {
+    max-height: 230px;
+  }
+  .geology-workbench-compare-toolbar {
+    gap: 5px;
+    padding: 6px 8px;
+  }
+  .geology-workbench-compare-toolbar > div:first-child {
+    flex-basis: 100%;
+  }
+  .geology-workbench-compare-detail nav {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
   .geology-workbench-compare {
     top: 106px;
   }
@@ -168,4 +206,38 @@
     padding: 8px;
     font-size: 11px;
   }
+}
+.geology-review-local-map {
+  position: relative;
+  background: #f4f7fb;
+  touch-action: none;
+}
+
+.geology-review-local-map svg {
+  display: block;
+}
+
+.geology-review-local-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: grid;
+  border: 1px solid #dce6f1;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.geology-review-local-controls button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: white;
+  color: #1d3753;
+  cursor: pointer;
+}
+
+.geology-review-local-controls button:hover {
+  background: #e8eef6;
 }

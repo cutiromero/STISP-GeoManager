@@ -134,6 +134,16 @@ def approved(context, findings, snapshot):
             if change[key] != str(row[key]) or change["snapshot_hash"] != snapshot:
                 raise ValueError("批准记录与当前输入、知识版本或修改范围不一致：" + key)
         action = change["action"]
+        if row["status"] in {"review", "exception"} and action not in {
+            "keep",
+            "review",
+        }:
+            if (
+                action != row.get("candidate_action")
+                or change["target_code"] != row.get("candidate_target_code", "")
+                or not change["reason"].startswith("用户裁定（规则为待裁定/例外）")
+            ):
+                raise ValueError("待裁定/例外仅接受用户明确批准的冻结候选动作与目标")
         if action not in json.loads(row["allowed_actions_json"]):
             raise ValueError("动作不在本项允许范围内")
         if not change["reason"].strip():

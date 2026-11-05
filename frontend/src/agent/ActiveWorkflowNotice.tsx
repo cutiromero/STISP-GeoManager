@@ -1,6 +1,7 @@
 import { Alert, Button, Modal, Popconfirm, Space, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { agentApi } from "../api/agent";
+import { useProjectContext } from "../projects/ProjectContext";
 import type {
   AgentActiveWorkflow,
   AgentWorkflow,
@@ -32,6 +33,7 @@ export default function ActiveWorkflowNotice({
   currentId?: string;
   refreshKey: string;
 }) {
+  const projects = useProjectContext()?.projects ?? [];
   const [item, setItem] = useState<AgentActiveWorkflow | null>(null);
   const [parked, setParked] = useState<AgentActiveWorkflow[]>([]);
   const [error, setError] = useState("");
@@ -126,10 +128,14 @@ export default function ActiveWorkflowNotice({
                   {sceneLabels[selected.workflowType] ?? selected.workflowType}
                   ；状态：{statusLabels[selected.status]}；更新时间：
                   {new Date(selected.updatedAt).toLocaleString()}；项目：
-                  {selected.projectId}；对话：
+                  {projects.find(
+                    (project) =>
+                      String(project.id) === String(selected.projectId),
+                  )?.name ?? "所属项目（名称暂不可用）"}
+                  ；对话：
                   {selected.conversationId == null
                     ? "独立任务（未关联对话）"
-                    : `${selected.conversationTitle || "未命名"}（${selected.conversationId}）`}
+                    : selected.conversationTitle || "未命名对话"}
                 </span>
                 <Space>
                   <Button

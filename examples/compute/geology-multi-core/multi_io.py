@@ -33,6 +33,8 @@ ISSUE_FIELDS = [
     "knowledge_revision",
     "status",
     "suggested_action",
+    "candidate_action",
+    "candidate_target_code",
     "allowed_actions_json",
     "target_code",
     "measurements_json",
@@ -186,7 +188,7 @@ def rules(path):
         identifier = row["rule_id"]
         if identifier in result or identifier not in {
             f"{p}-{i:02}"
-            for p, count in [("L", 5), ("S", 5), ("A", 5), ("P", 3)]
+            for p, count in [("L", 7), ("S", 5), ("A", 5), ("P", 3)]
             for i in range(1, count + 1)
         }:
             raise ValueError("规则编号未知或重复")

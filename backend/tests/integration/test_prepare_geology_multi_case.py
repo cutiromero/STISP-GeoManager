@@ -49,17 +49,25 @@ def material_manifest(tmp_path):
 
 
 @pytest.mark.parametrize("code", ["02", "demo-geology-reasoning"])
+@pytest.mark.parametrize("lithology_rules", [4, 7])
 def test_preflight_accepts_explicit_existing_geology_project_without_writes(
-    tmp_path, code
+    tmp_path, code, lithology_rules
 ):
     project = Project.objects.create(name="现有地质项目", code=code)
     user = get_user_model().objects.create_superuser("import-admin", password="test")
     record = tmp_path / "import.json"
     resources, knowledge = DataResource.objects.count(), KnowledgeEntry.objects.count()
     output = io.StringIO()
+    manifest = material_manifest(tmp_path)
+    knowledge_path = tmp_path / "trial_knowledge.json"
+    bundle = json.loads(knowledge_path.read_text())
+    bundle["rules"].extend(
+        {"id": f"L-{index:02}"} for index in range(5, lithology_rules + 1)
+    )
+    knowledge_path.write_text(json.dumps(bundle))
     call_command(
         "prepare_geology_multi_case",
-        manifest=material_manifest(tmp_path),
+        manifest=manifest,
         project_id=project.id,
         user_id=user.id,
         record=record,

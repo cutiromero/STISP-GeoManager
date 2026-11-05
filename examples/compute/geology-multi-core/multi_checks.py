@@ -9,6 +9,7 @@ from shapely.ops import unary_union
 
 from multi_io import ISSUE_FIELDS, digest, dump, geojson_geometry, scalar
 from multi_lithology_merge import candidates as merge_candidates
+from multi_lithology_shape import shape_candidates, continuity_candidates
 
 
 def issue(
@@ -26,6 +27,13 @@ def issue(
     actions=None,
 ):
     allowed = actions or ["keep", "review", "downweight", "exclude"]
+    candidate = ""
+    if status in {"review", "exception"}:
+        candidate = (
+            "reclassify"
+            if element == "lithology" and target
+            else ("exclude" if element in {"structure", "alteration"} else "")
+        )
     return {
         "issue_id": "I-"
         + digest([element, str(feature_id), rule["id"], rule["version"]])[:24],
@@ -37,6 +45,8 @@ def issue(
         "knowledge_revision": rule["knowledge_revision"],
         "status": status,
         "suggested_action": action,
+        "candidate_action": candidate,
+        "candidate_target_code": target if candidate == "reclassify" else "",
         "allowed_actions_json": dump(allowed),
         "target_code": target,
         "measurements_json": dump(measurements),
@@ -54,6 +64,33 @@ def lithology_findings(
 ):
     result = []
     fault_union = unary_union(faults.geometry)
+    if "L-06" in rules:
+        rule = rules["L-06"]
+        for index, host, measurements in shape_candidates(lithology, units, rule):
+            row = lithology.loc[index]
+            confidence = scalar(row.get("conf"))
+            status = (
+                "review"
+                if confidence is None
+                or float(confidence) >= rule["params"].get("conf_review_min", 0.88)
+                else "suggested"
+            )
+            result.append(
+                issue(
+                    "lithology",
+                    row.feature_id,
+                    row.geometry,
+                    rule,
+                    snapshot,
+                    config,
+                    {**measurements, "simulation_confidence": confidence},
+                    f"本演示案例试用：全新世冲积物图斑紧凑度{measurements['compactness']:.2f}、外接矩形长宽比{measurements['aspect_ratio']:.2f}，呈团块状；候选为共享边界最长的较老堆积单元{host}。冲积扇、交汇处宽阔冲积平原等需结合影像复核；不作为规范。",
+                    "review" if status == "review" else "reclassify",
+                    host,
+                    status,
+                    ["reclassify", "keep", "review"],
+                )
+            )
     if "L-05" in rules:
         for index, host_index, measured in merge_candidates(
             lithology, faults, aliases, rules["L-05"]
@@ -207,6 +244,33 @@ def lithology_findings(
                     host,
                     status,
                     ["keep", "review", "reclassify", "merge"],
+                )
+            )
+    if "L-07" in rules:
+        represented = {row["feature_id"] for row in result}
+        for index, host, measured in continuity_candidates(
+            lithology, units, rules["L-07"]
+        ):
+            row = lithology.loc[index]
+            if row.feature_id in represented:
+                continue
+            distance = (
+                row.geometry.distance(fault_union) if not fault_union.is_empty else None
+            )
+            result.append(
+                issue(
+                    "lithology",
+                    row.feature_id,
+                    row.geometry,
+                    rules["L-07"],
+                    snapshot,
+                    config,
+                    {**measured, "fault_distance_m": distance},
+                    f"本演示案例试用：较早单元{row.geo_sym}为不与同类相接的低置信度近等轴斑块，{measured['shared_boundary_ratio']:.1%}外边界邻接较年轻同类单元{host}。需核查分布连续性、接触产状及构造窗/捕虏体；构造线不作为自动排除依据，始终待用户裁定，不据形状直接判错。",
+                    "review",
+                    host,
+                    "review",
+                    ["keep", "review", "reclassify"],
                 )
             )
     return result

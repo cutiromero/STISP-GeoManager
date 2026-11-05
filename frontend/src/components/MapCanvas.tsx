@@ -134,6 +134,7 @@ interface Props {
   bootstrap: Bootstrap;
   basemapPreferenceScope: string;
   basemapSwitchDisabled?: boolean;
+  initialViewState?: MapViewState | null;
   loadedLayers: LoadedLayer[];
   drawMode: DrawMode | null;
   spatialFilter: SpatialFilter | null;
@@ -176,6 +177,7 @@ export default function MapCanvas({
   bootstrap,
   basemapPreferenceScope,
   basemapSwitchDisabled = false,
+  initialViewState,
   loadedLayers,
   drawMode,
   spatialFilter,
@@ -193,6 +195,7 @@ export default function MapCanvas({
   const english =
     i18n.resolvedLanguage?.toLowerCase().startsWith("en") ?? false;
   const mapRef = useRef<MapboxMap | null>(null);
+  const initialViewRef = useRef(initialViewState);
   const [mapObject, setMapObject] = useState<MapboxMap | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const coordinatePanelRef = useRef<HTMLDivElement | null>(null);
@@ -509,10 +512,10 @@ export default function MapCanvas({
       transformRequest: projectTransformRequest,
       container: containerRef.current,
       style: activeBasemapRef.current.style,
-      center: mapConfig.defaultCenter,
-      zoom: mapConfig.defaultZoom,
-      pitch: 0,
-      bearing: 0,
+      center: initialViewRef.current?.center ?? mapConfig.defaultCenter,
+      zoom: initialViewRef.current?.zoom ?? mapConfig.defaultZoom,
+      pitch: initialViewRef.current?.pitch ?? 0,
+      bearing: initialViewRef.current?.bearing ?? 0,
       projection: "globe",
       language: mapLabelLanguage(),
       localIdeographFontFamily: '"Microsoft YaHei", "PingFang SC", sans-serif',

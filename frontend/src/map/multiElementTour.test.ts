@@ -99,6 +99,46 @@ it("导览仅显示实际执行、已批准并与冻结操作一致的变化，�
   expect(actualTourChanges(workflow, differences)).toHaveLength(0);
 });
 
+it("完整核验5552处执行记录并保留原始行号，不以抽样替代实际批准", () => {
+  const { workflow, differences } = fixture();
+  const stage = workflow.plan.stages![0] as Record<string, unknown>;
+  const result = (stage.results as Array<Record<string, unknown>>)[0]!;
+  const first = workflow.modificationReview!.suggestions[0]!;
+  const edit = (stage.approvedEdits as Array<Record<string, unknown>>)[0]!;
+  const row = (result.rows as Array<Record<string, unknown>>)[0]!;
+  const changes = Array.from({ length: 5552 }, (_, index) => ({
+    ...first,
+    id: `suggestion-${index}`,
+    featureId: `object-${index}`,
+  }));
+  workflow.modificationReview!.suggestions = changes;
+  workflow.modificationReview!.approvedSuggestionIds = changes.map(
+    (item) => item.id,
+  );
+  stage.approvedEdits = changes.map((item) => ({
+    ...edit,
+    feature_id: item.featureId,
+  }));
+  result.rows = changes.map((item) => ({ ...row, feature_id: item.featureId }));
+  result.rowCount = changes.length;
+  differences.features = changes.map((item) => ({
+    ...differences.features[0]!,
+    properties: {
+      ...differences.features[0]!.properties,
+      feature_id: item.featureId,
+    },
+  }));
+  const tour = actualTourChanges(workflow, differences);
+  expect(tour).toHaveLength(5552);
+  expect(tour[5551]!.resultRef.rowIndex).toBe(5552);
+  expect(tour[5551]!.suggestion.id).toBe("suggestion-5551");
+  (result.rows as Array<Record<string, unknown>>)[5551]!.snapshot_hash =
+    "tampered";
+  (stage.approvedEdits as Array<Record<string, unknown>>)[5551]!.snapshot_hash =
+    "frozen";
+  expect(actualTourChanges(workflow, differences)).toHaveLength(5551);
+});
+
 it("修正记录优先采用实际批准动作，而不是原始建议动作", () => {
   const { workflow, differences } = fixture();
   differences.features[2]!.properties.action = "downweight";

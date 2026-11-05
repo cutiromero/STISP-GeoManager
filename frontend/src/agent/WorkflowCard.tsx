@@ -12,18 +12,17 @@ export default function WorkflowCard(
   props: ComponentProps<typeof WorkflowResults>,
 ) {
   const { workflow } = props;
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(workflow.view !== "card");
   const [detail, setDetail] = useState<AgentWorkflow>();
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    setExpanded(false);
+    setExpanded(workflow.view !== "card");
     setDetail(undefined);
   }, [workflow.id]);
   useEffect(() => {
     if (!expanded || workflow.view !== "card") return;
     const controller = new AbortController();
-    setDetail(undefined);
     setError("");
     void agentApi.workflow(workflow.id, { signal: controller.signal }).then(
       (value) => {
@@ -38,7 +37,10 @@ export default function WorkflowCard(
     );
     return () => controller.abort();
   }, [expanded, workflow.id, workflow.updatedAt, workflow.view, attempt]);
-  if (workflow.view !== "card") return <WorkflowResults {...props} />;
+  useEffect(() => {
+    if (workflow.view !== "card") setDetail(workflow);
+  }, [workflow]);
+  const displayed = workflow.view === "card" ? detail : workflow;
   const deleted = new Set(
     deletedWorkflowResources(workflow).map((item) => item.id),
   );
@@ -84,12 +86,23 @@ export default function WorkflowCard(
         )}
       </Space>
       {error && <Alert type="error" title={error} />}
-      {expanded && !detail && !error && (
+      {workflow.view === "card" && expanded && !detail && !error && (
         <p role="status">正在读取工作流明细…</p>
       )}
-      {expanded && detail && detail.id === workflow.id && (
-        <WorkflowResults {...props} workflow={detail} />
-      )}
+      <div
+        hidden={!expanded}
+        inert={!expanded}
+        style={!expanded ? { display: "none" } : undefined}
+      >
+        {displayed && displayed.id === workflow.id && (
+          <WorkflowResults
+            key={workflow.id}
+            {...props}
+            workflow={displayed}
+            showMapLink={false}
+          />
+        )}
+      </div>
     </section>
   );
 }

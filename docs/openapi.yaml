@@ -15142,10 +15142,10 @@ components:
           default: ''
         selectedSuggestionIds:
           type: array
-          description: 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。reject省略，其他阶段不得扩大操作范围。
+          description: 地质成果review_modifications阶段approve必填，只执行当前planHash下所选建议。传统地质修正场景至少一项且最多30项；综合推理同族不设对象数量上限，允许空数组明确选择不修改并继续复核，分组须展开为实际对象建议ID。待裁定/例外仅在用户明确选择候选编号后执行，不属于普通建议全选；模型不得裁定。只接受快照的候选动作和目标，不接受额外目标参数。reject省略，其他阶段不得扩大操作范围。
           minItems: 0
           uniqueItems: true
-          items: {type: string, minLength: 1, maxLength: 64, description: 当前实际问题和模型建议绑定的稳定标识}
+          items: {type: string, minLength: 1, maxLength: 64, description: 当前实际问题与模型建议或用户候选绑定的稳定标识}
         fieldMapping:
           type: object
           description: 通用地质推理字段确认环节approve必填。键为资料角色，值为规范字段到原始字段的对应；null表示不对应。必需字段必须对应真实字段，其他阶段不得提交。
@@ -15263,7 +15263,9 @@ components:
               revision: {type: integer, minimum: 1, description: 知识修订}
               source: {type: string, description: 原来源及核实程度}
         lengthM: {type: number, minimum: 0, description: 构造对象实测米制长度；不以面积代替线长度}
-        status: {type: string, description: 建议、待裁定、例外、保留、降权或剔除的实际处置状态}
+        status: {type: string, description: 检查规则的建议、待裁定、例外、保留、降权或剔除状态；用户选候选不会改变规则判断}
+        candidateAction: {type: string, enum: [reclassify, exclude, downweight], description: 本次冻结检查快照的候选动作；仅待裁定或例外对象提供，默认保留且不得被模型或建议全选纳入，须用户明确选择其建议编号}
+        candidateTargetCode: {type: string, description: 候选重分类的实测相邻目标代号；非类别动作为空，不接受用户或模型另填目标}
         knowledgeRefs:
           type: array
           minItems: 1

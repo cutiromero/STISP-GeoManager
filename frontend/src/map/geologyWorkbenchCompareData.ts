@@ -65,6 +65,7 @@ export interface WorkbenchReviewComparison {
   afterName: string;
   overlays?: ReviewOverlay[];
   tour?: TourChange[];
+  loadOverlays?: (key?: string) => Promise<ReviewOverlay[]>;
 }
 
 export type RegisterReviewLayer = (
@@ -80,6 +81,7 @@ export async function loadWorkbenchReviewComparison(options: {
   registerLayer: RegisterReviewLayer;
   isCurrent?: () => boolean;
   onPrimary?: (value: WorkbenchReviewComparison) => void;
+  deferOverlays?: boolean;
 }): Promise<WorkbenchReviewComparison> {
   const signal = projectSignal();
   const assertCurrent = () => {
@@ -130,7 +132,10 @@ export async function loadWorkbenchReviewComparison(options: {
             throw new Error("检查成果元信息不一致或不支持地图查询");
           colorReviewMap(result.geojson, profile.defaultVisualization ?? {});
           return { profile, result };
-        })(),
+        })().catch((error: unknown) => {
+          reads.delete(id);
+          throw error;
+        }),
       );
     return reads.get(id)!;
   };
@@ -159,6 +164,7 @@ export async function loadWorkbenchReviewComparison(options: {
     const map = workflow.plan.multiElementMap;
     if (!map?.before?.lithology || !map.before.faults)
       throw new Error("综合推理记录缺少本次岩性和构造输入");
+    const beforeInputs = map.before;
     if (map.after && !workflow.modificationReview?.approvedSuggestionIds.length)
       throw new Error("修正成果缺少已保存的批准记录，请先核对任务状态");
     const check = (
@@ -215,7 +221,12 @@ export async function loadWorkbenchReviewComparison(options: {
       beforeName: primaryBefore.profile.resource.name,
       afterName: primaryAfter?.profile.resource.name ?? "检查方案，尚未执行",
     });
-    await Promise.all([...roles.keys()].map((id) => read(id, true, true)));
+    await Promise.all([
+      register(map.before.lithology, ["before"], "岩性"),
+      ...(map.after?.lithology
+        ? [register(map.after.lithology, ["after"], "岩性")]
+        : []),
+    ]);
     const collection = async (id?: number) =>
       id ? (await read(id, true, true)).result.geojson : featureCollection([]);
     const mergedChanges = map.changes?.length
@@ -235,16 +246,17 @@ export async function loadWorkbenchReviewComparison(options: {
         ? featureCollection(tour.map((item) => item.feature))
         : previewSuggestions(workflow);
     for (const [id, placement] of roles) {
+      if (!placement.roles.includes("changes")) continue;
       const result = (await read(id, true, true)).result;
+      const keys = new Set(
+        result.geojson.features
+          .map(comparisonFeatureKey)
+          .filter((key) => key !== null),
+      );
       const displayData = placement.roles.includes("changes")
         ? featureCollection(
             differences.features.filter((feature) =>
-              result.geojson.features.some(
-                (original) =>
-                  comparisonFeatureKey(original) !== null &&
-                  comparisonFeatureKey(original) ===
-                    comparisonFeatureKey(feature),
-              ),
+              keys.has(comparisonFeatureKey(feature) ?? ""),
             ),
           )
         : undefined;
@@ -254,47 +266,95 @@ export async function loadWorkbenchReviewComparison(options: {
       after = map.after?.lithology
         ? await read(map.after.lithology, true)
         : null;
-    const overlays: ReviewOverlay[] = [
-      {
-        key: "faults",
-        label: "构造",
-        before: await collection(map.before.faults),
-        after: await collection(
-          map.after?.faults ??
-            (usesCleanGeologyResults(workflow) && map.after
-              ? undefined
-              : map.before.faults),
-        ),
-        color: "#76566d",
-      },
-      {
-        key: "alterations",
-        label: "有效蚀变",
-        before: beforeAlterations
-          ? await collection(beforeAlterations)
-          : await queryWorkflowVectors(workflow, "check", ["alterations"]),
-        after: await collection(map.alterations),
-        color: "#648e91",
-      },
-      {
-        key: "intersections",
-        label: "构造交汇",
-        before: map.beforeIntersections
-          ? await collection(map.beforeIntersections)
-          : await queryWorkflowVectors(workflow, "relations", [
-              "before_intersections",
-            ]),
-        after: await collection(map.intersections),
-        color: "#b4526e",
-      },
-      {
-        key: "prospects",
-        label: "调查建议",
-        before: await collection(map.beforeProspects),
-        after: await collection(map.afterProspects),
-        color: "#537fc0",
-      },
-    ];
+    const loadOverlays = async (key?: string): Promise<ReviewOverlay[]> => {
+      const elements: Record<string, string> = {
+        faults: "构造",
+        alterations: "矿物",
+        intersections: "构造交汇",
+        prospects: "调查建议",
+      };
+      const needed = [...roles].filter(
+        ([, placement]) =>
+          !placement.roles.includes("changes") &&
+          placement.element !== "岩性" &&
+          (!key || placement.element === elements[key]),
+      );
+      await Promise.all(needed.map(([id]) => read(id, true, true)));
+      for (const [id, placement] of needed) {
+        await register(id, placement.roles, placement.element);
+      }
+      const loaders: Array<() => Promise<ReviewOverlay>> = [
+        async () => ({
+          key: "faults",
+          label: "构造",
+          before: await collection(beforeInputs.faults),
+          after: await collection(
+            map.after?.faults ??
+              (usesCleanGeologyResults(workflow) && map.after
+                ? undefined
+                : beforeInputs.faults),
+          ),
+          color: "#76566d",
+        }),
+        async () => ({
+          key: "alterations",
+          label: "有效蚀变",
+          before: beforeAlterations
+            ? await collection(beforeAlterations)
+            : await queryWorkflowVectors(workflow, "check", ["alterations"]),
+          after: await collection(map.alterations),
+          color: "#648e91",
+        }),
+        async () => ({
+          key: "intersections",
+          label: "构造交汇",
+          before: map.beforeIntersections
+            ? await collection(map.beforeIntersections)
+            : await queryWorkflowVectors(workflow, "relations", [
+                "before_intersections",
+              ]),
+          after: await collection(map.intersections),
+          color: "#b4526e",
+        }),
+        async () => ({
+          key: "prospects",
+          label: "调查建议",
+          before: await collection(map.beforeProspects),
+          after: await collection(map.afterProspects),
+          color: "#537fc0",
+        }),
+      ];
+      return Promise.all(
+        loaders
+          .filter(
+            (_, index) =>
+              !key ||
+              ["faults", "alterations", "intersections", "prospects"][index] ===
+                key,
+          )
+          .map((loader) => loader()),
+      );
+    };
+    const overlayPromises = new Map<string, Promise<ReviewOverlay[]>>();
+    const cachedOverlays = (key?: string): Promise<ReviewOverlay[]> => {
+      const identity = key ?? "all";
+      if (!overlayPromises.has(identity))
+        overlayPromises.set(
+          identity,
+          (key
+            ? loadOverlays(key)
+            : Promise.all(
+                ["faults", "alterations", "intersections", "prospects"].map(
+                  (item) => cachedOverlays(item),
+                ),
+              ).then((items) => items.flat())
+          ).catch((error: unknown) => {
+            overlayPromises.delete(identity);
+            throw error;
+          }),
+        );
+      return overlayPromises.get(identity)!;
+    };
     return {
       workflow,
       before: before.result.geojson,
@@ -302,7 +362,8 @@ export async function loadWorkbenchReviewComparison(options: {
       differences,
       beforeName: before.profile.resource.name,
       afterName: after?.profile.resource.name ?? "检查方案，尚未执行",
-      overlays,
+      overlays: options.deferOverlays ? undefined : await cachedOverlays(),
+      loadOverlays: cachedOverlays,
       tour,
     };
   }

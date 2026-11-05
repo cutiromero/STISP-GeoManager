@@ -10,6 +10,23 @@ import {
   type ReviewMapSpotlight,
 } from "./reviewMapSpotlight";
 const emptyOverlays: ReviewOverlay[] = [];
+function unitColors(
+  before: GeoJsonFeatureCollection,
+  after: GeoJsonFeatureCollection | null,
+): mapboxgl.ExpressionSpecification {
+  const color: mapboxgl.ExpressionSpecification = [
+    "match",
+    ["to-string", ["get", "class"]],
+  ];
+  const classes = new Set(
+    [...before.features, ...(after?.features ?? [])].map((feature) =>
+      String(feature.properties.class),
+    ),
+  );
+  classes.forEach((value) => color.push(value, geologicalColor(value)));
+  color.push("#d4dce5");
+  return ["coalesce", ["get", "fill_color"], color];
+}
 function focusPadding(map: MapboxMap) {
   const canvas = map.getCanvas();
   return Math.max(
@@ -165,26 +182,13 @@ export default function GeologyReviewMaps({
             type: "geojson",
             data: data as mapboxgl.GeoJSONSourceSpecification["data"],
           });
-          const classes = [
-            ...new Set(
-              [...state.before.features, ...(state.after?.features ?? [])].map(
-                (feature) => String(feature.properties.class),
-              ),
-            ),
-          ];
-          const color: mapboxgl.ExpressionSpecification = [
-            "match",
-            ["to-string", ["get", "class"]],
-          ];
-          classes.forEach((value) => color.push(value, geologicalColor(value)));
-          color.push("#d4dce5");
           map.addLayer({
             id: "units",
             type: "fill",
             source: "geological-units",
             filter: ["==", ["geometry-type"], "Polygon"],
             paint: {
-              "fill-color": ["coalesce", ["get", "fill_color"], color],
+              "fill-color": unitColors(state.before, state.after),
               "fill-opacity": 0.95,
             },
           });
@@ -284,7 +288,7 @@ export default function GeologyReviewMaps({
             (feature) => latest.current.onInspect?.(feature),
           );
           if (removeLabel) removeLabels.current.push(removeLabel);
-          if (state.bounds && !view.current)
+          if (state.bounds)
             map.fitBounds(state.bounds, {
               padding: focusPadding(map),
               duration: 0,
@@ -314,7 +318,67 @@ export default function GeologyReviewMaps({
       maps.current.forEach((map) => map.remove());
       maps.current = [];
     };
-  }, [before, after, differences, accessToken, overlays]);
+  }, [accessToken]);
+  useEffect(() => {
+    maps.current.forEach((map, index) => {
+      const source = map.getSource("geological-units") as
+        | mapboxgl.GeoJSONSource
+        | undefined;
+      if (!source) return;
+      source.setData(
+        (index
+          ? (after ?? before)
+          : before) as mapboxgl.GeoJSONSourceSpecification["data"],
+      );
+      map.setPaintProperty("units", "fill-color", unitColors(before, after));
+    });
+  }, [before, after]);
+  useEffect(() => {
+    maps.current.forEach((map) => {
+      const changes = map.getSource("actual-differences") as
+        | mapboxgl.GeoJSONSource
+        | undefined;
+      if (!changes) return;
+      changes.setData({
+        ...differences,
+        features: differences.features.map((feature, position) => ({
+          ...feature,
+          properties: { ...feature.properties, review_index: position },
+        })),
+      } as mapboxgl.GeoJSONSourceSpecification["data"]);
+    });
+  }, [differences]);
+  useEffect(() => {
+    maps.current.forEach((map, index) => {
+      if (!map.getSource("geological-units")) return;
+      for (const overlay of overlays) {
+        const data = index ? (overlay.after ?? overlay.before) : overlay.before;
+        if (!data) continue;
+        const id = `review-${overlay.key}`;
+        const existing = map.getSource(id) as
+          | mapboxgl.GeoJSONSource
+          | undefined;
+        if (existing)
+          existing.setData(data as mapboxgl.GeoJSONSourceSpecification["data"]);
+        else
+          addReviewOverlay(map, id, data, overlay.color, (feature) =>
+            latest.current.onInspect?.(feature),
+          );
+      }
+      for (const layer of map.getStyle().layers ?? []) {
+        if (!layer.id.startsWith("review-")) continue;
+        map.setLayoutProperty(
+          layer.id,
+          "visibility",
+          overlays.some((overlay) =>
+            layer.id.startsWith(`review-${overlay.key}-`),
+          )
+            ? "visible"
+            : "none",
+        );
+      }
+    });
+  }, [overlays]);
   useEffect(() => {
     removeLabels.current.forEach((remove) => remove());
     removeLabels.current = [];
@@ -333,11 +397,13 @@ export default function GeologyReviewMaps({
     const primary = maps.current[0];
     if (bounds && primary) {
       maps.current.forEach((map) => map.resize());
-      primary.fitBounds(bounds, {
-        padding: focusPadding(primary),
-        maxZoom: 18,
-        duration: 350,
-      });
+      maps.current.forEach((map) =>
+        map.fitBounds(bounds, {
+          padding: focusPadding(map),
+          maxZoom: 18,
+          duration: 0,
+        }),
+      );
     }
   }, [bounds]);
   return (

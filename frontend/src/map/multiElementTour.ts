@@ -62,29 +62,56 @@ export function actualTourChanges(
     value === 1 ||
     (typeof value === "string" && /^(?:true|1(?:\.0+)?)$/i.test(value.trim()));
   const seen = new Set<string>();
+  const key = (featureId: unknown, ruleId: unknown, action: unknown) =>
+    JSON.stringify([String(featureId), String(ruleId), action]);
+  const rowIndex = new Map<
+    string,
+    Array<{ row: Record<string, unknown>; index: number }>
+  >();
+  rows.forEach((row, index) => {
+    if (!changed(row.actual_changed)) return;
+    const identity = key(row.feature_id, row.rule_id, row.action);
+    const bucket = rowIndex.get(identity) ?? [];
+    bucket.push({ row, index });
+    rowIndex.set(identity, bucket);
+  });
+  const suggestionIndex = new Map<
+    string,
+    NonNullable<typeof review>["suggestions"][number]
+  >();
+  for (const item of review?.suggestions ?? []) {
+    const identity = key(item.featureId, item.ruleId, item.action);
+    if (approved.has(item.id) && !suggestionIndex.has(identity))
+      suggestionIndex.set(identity, item);
+  }
+  const editIndex = new Map<string, typeof edits>();
+  for (const edit of edits) {
+    const identity = key(edit.feature_id, edit.rule_id, edit.action);
+    const bucket = editIndex.get(identity) ?? [];
+    bucket.push(edit);
+    editIndex.set(identity, bucket);
+  }
   return differences.features.flatMap((feature) => {
     const p = feature.properties;
-    const matches = rows.flatMap((row, index) =>
-      sameId(row.feature_id, p.feature_id) &&
-      sameId(row.rule_id, p.rule_id) &&
-      row.action === (p.action ?? p.suggested_action) &&
-      changed(row.actual_changed) &&
-      (!p.issue_id || sameId(row.issue_id, p.issue_id))
-        ? [{ row, index }]
-        : [],
+    const identity = key(
+      p.feature_id,
+      p.rule_id,
+      p.action ?? p.suggested_action,
+    );
+    const matches = (rowIndex.get(identity) ?? []).filter(
+      ({ row }) =>
+        sameId(row.feature_id, p.feature_id) &&
+        sameId(row.rule_id, p.rule_id) &&
+        row.action === (p.action ?? p.suggested_action) &&
+        changed(row.actual_changed) &&
+        (!p.issue_id || sameId(row.issue_id, p.issue_id)),
     );
     if (matches.length !== 1) return [];
     const { row, index } = matches[0]!;
-    const suggestion = review?.suggestions.find(
-      (item) =>
-        approved.has(item.id) &&
-        sameId(item.featureId, row.feature_id) &&
-        sameId(item.ruleId, row.rule_id) &&
-        item.action === row.action,
-    );
+    const suggestion = suggestionIndex.get(identity);
     if (
       !suggestion ||
-      !edits.some(
+      !(editIndex.get(identity) ?? []).some(
         (edit) =>
           sameId(edit.feature_id, row.feature_id) &&
           sameId(edit.rule_id, row.rule_id) &&

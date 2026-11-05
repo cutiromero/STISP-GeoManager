@@ -194,15 +194,18 @@ export default function MultiElementStory({
     ids: review?.approvedSuggestionIds ?? [],
   });
   const [filter, setFilter] = useState("all");
-  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const [groupPages, setGroupPages] = useState<Record<string, number>>({});
+  const [groupSearch, setGroupSearch] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState("");
   const suggestions = review?.suggestions ?? [];
   const suggestionIds = new Set(suggestions.map((item) => item.id));
   const ids =
     selection.hash === review?.proposalHash
       ? selection.ids.filter((id) => suggestionIds.has(id))
-      : [];
+      : (review?.approvedSuggestionIds ?? []).filter((id) =>
+          suggestionIds.has(id),
+        );
   const selectedIds = new Set(ids);
   const approved = review?.approvedSuggestionIds ?? [];
   const editable =
@@ -214,6 +217,7 @@ export default function MultiElementStory({
     (item) => filter === "all" || item.element === filter,
   );
   const selectableIds = new Set(selectable.map((item) => item.id));
+  const held = suggestions.filter((item) => item.candidateAction);
   const update = (values: string[]) =>
     setSelection({ hash: review?.proposalHash ?? "", ids: values });
   const groups = presentationGroups(visible);
@@ -344,12 +348,25 @@ export default function MultiElementStory({
           </div>
           {editable && (
             <Checkbox
-              checked={ids.length > 0 && ids.length === selectable.length}
-              indeterminate={ids.length > 0 && ids.length < selectable.length}
+              checked={
+                selectable.length > 0 &&
+                selectable.every((item) => selectedIds.has(item.id))
+              }
+              indeterminate={
+                selectable.some((item) => selectedIds.has(item.id)) &&
+                !selectable.every((item) => selectedIds.has(item.id))
+              }
               disabled={busy}
               onChange={(event) =>
                 update(
-                  event.target.checked ? selectable.map((item) => item.id) : [],
+                  event.target.checked
+                    ? [
+                        ...new Set([
+                          ...ids,
+                          ...selectable.map((item) => item.id),
+                        ]),
+                      ]
+                    : ids.filter((id) => !selectableIds.has(id)),
                 )
               }
             >
@@ -366,41 +383,14 @@ export default function MultiElementStory({
                 selectedIds.has(item.id),
               );
               const eligibleIds = new Set(eligible.map((item) => item.id));
+              const matches = members.filter((item) =>
+                item.featureId
+                  .toLowerCase()
+                  .includes((groupSearch[groupId] ?? "").trim().toLowerCase()),
+              );
               return (
-                <details
-                  key={groupId}
-                  open={!collapsedGroups.includes(groupId)}
-                  onToggle={(event) => {
-                    const open = event.currentTarget.open;
-                    setCollapsedGroups((current) =>
-                      open
-                        ? current.filter((key) => key !== groupId)
-                        : [...new Set([...current, groupId])],
-                    );
-                  }}
-                >
-                  <summary>
-                    {elements[first.element ?? ""]} / {first.ruleId} /{" "}
-                    {members.length === 1
-                      ? modificationAction(first)
-                      : modificationAction({
-                          ...first,
-                          suggestedState: first.action ?? "",
-                        })}{" "}
-                    · {members.length} 个对象
-                  </summary>
+                <div key={groupId}>
                   <p>{first.reason}</p>
-                  <p>
-                    {[
-                      ...members.reduce((counts, item) => {
-                        const label = modificationAction(item);
-                        counts.set(label, (counts.get(label) ?? 0) + 1);
-                        return counts;
-                      }, new Map<string, number>()),
-                    ]
-                      .map(([label, count]) => `${label}：${count} 个对象`)
-                      .join("；")}
-                  </p>
                   {editable && eligible.length > 0 && (
                     <Checkbox
                       disabled={busy}
@@ -424,94 +414,153 @@ export default function MultiElementStory({
                       整组批准（{eligible.length} 个对象）
                     </Checkbox>
                   )}
-                  {!collapsedGroups.includes(groupId) &&
-                    members.slice(0, groupPages[groupId] ?? 50).map((item) => (
-                      <details
-                        className="multi-element-suggestion"
-                        key={item.id}
-                      >
-                        <summary>
-                          <span>
-                            {elements[item.element ?? ""] ?? "检查"} /{" "}
-                            {item.title}
-                          </span>
-                          <Tag
-                            color={
-                              approved.includes(item.id) ? "blue" : undefined
-                            }
+                  <details
+                    open={expandedGroups.includes(groupId)}
+                    onToggle={(event) => {
+                      const open = event.currentTarget.open;
+                      setExpandedGroups((current) =>
+                        open
+                          ? [...new Set([...current, groupId])]
+                          : current.filter((key) => key !== groupId),
+                      );
+                    }}
+                  >
+                    <summary>
+                      {elements[first.element ?? ""]} / {first.ruleId} /{" "}
+                      {members.length === 1
+                        ? modificationAction(first)
+                        : modificationAction({
+                            ...first,
+                            suggestedState: first.action ?? "",
+                          })}{" "}
+                      · {members.length} 个对象
+                    </summary>
+                    <p>{first.reason}</p>
+                    <p>
+                      {[
+                        ...members.reduce((counts, item) => {
+                          const label = modificationAction(item);
+                          counts.set(label, (counts.get(label) ?? 0) + 1);
+                          return counts;
+                        }, new Map<string, number>()),
+                      ]
+                        .map(([label, count]) => `${label}：${count} 个对象`)
+                        .join("；")}
+                    </p>
+                    {expandedGroups.includes(groupId) && (
+                      <Input
+                        aria-label={`搜索对象编号 ${first.ruleId}`}
+                        placeholder="搜索组内对象编号"
+                        value={groupSearch[groupId] ?? ""}
+                        onChange={(event) => {
+                          setGroupSearch((current) => ({
+                            ...current,
+                            [groupId]: event.target.value,
+                          }));
+                          setGroupPages((current) => ({
+                            ...current,
+                            [groupId]: 50,
+                          }));
+                        }}
+                      />
+                    )}
+                    {expandedGroups.includes(groupId) &&
+                      matches
+                        .slice(0, groupPages[groupId] ?? 50)
+                        .map((item) => (
+                          <details
+                            className="multi-element-suggestion"
+                            key={item.id}
                           >
-                            {approved.includes(item.id)
-                              ? "已批准"
-                              : item.status === "review"
-                                ? "待裁定"
-                                : item.status === "exception"
-                                  ? "例外候选"
-                                  : modificationAction(item)}
-                          </Tag>
-                        </summary>
-                        <div className="multi-element-suggestion-body">
-                          <p className="multi-element-suggestion-tier">
-                            处置分级：{suggestionTier(item)}
-                          </p>
-                          {editable && selectableIds.has(item.id) && (
-                            <Checkbox
-                              disabled={busy}
-                              checked={ids.includes(item.id)}
-                              onChange={(event) =>
-                                update(
-                                  event.target.checked
-                                    ? [...ids, item.id]
-                                    : ids.filter((id) => id !== item.id),
-                                )
-                              }
-                            >
-                              批准此对象的「
-                              {modificationAction(item)}
-                              」操作
-                            </Checkbox>
-                          )}
-                          <dl className="geology-suggestion-states">
-                            <div>
-                              <dt>当前状态</dt>
-                              <dd>{item.currentState}</dd>
+                            <summary>
+                              <span>
+                                {elements[item.element ?? ""] ?? "检查"} /{" "}
+                                {item.title}
+                              </span>
+                              <small>对象：{item.featureId}</small>
+                              <Tag
+                                color={
+                                  approved.includes(item.id)
+                                    ? "blue"
+                                    : undefined
+                                }
+                              >
+                                {approved.includes(item.id)
+                                  ? "已批准"
+                                  : item.status === "review"
+                                    ? "待裁定"
+                                    : item.status === "exception"
+                                      ? "例外候选"
+                                      : modificationAction(item)}
+                              </Tag>
+                            </summary>
+                            <div className="multi-element-suggestion-body">
+                              <p className="multi-element-suggestion-tier">
+                                处置分级：{suggestionTier(item)}
+                              </p>
+                              {editable && selectableIds.has(item.id) && (
+                                <Checkbox
+                                  disabled={busy}
+                                  checked={selectedIds.has(item.id)}
+                                  onChange={(event) =>
+                                    update(
+                                      event.target.checked
+                                        ? [...ids, item.id]
+                                        : ids.filter((id) => id !== item.id),
+                                    )
+                                  }
+                                >
+                                  批准此对象的「
+                                  {modificationAction(item)}
+                                  」操作
+                                </Checkbox>
+                              )}
+                              <dl className="geology-suggestion-states">
+                                <div>
+                                  <dt>当前状态</dt>
+                                  <dd>{item.currentState}</dd>
+                                </div>
+                                <div>
+                                  <dt>建议状态</dt>
+                                  <dd>{modificationAction(item)}</dd>
+                                </div>
+                              </dl>
+                              <p>
+                                {item.element === "structure" &&
+                                item.lengthM !== undefined
+                                  ? `涉及长度 ${item.lengthM.toLocaleString("zh-CN")} 米`
+                                  : `涉及面积 ${formatArea(item.areaM2)}`}
+                              </p>
+                              <MultiElementEvidence suggestion={item} />
+                              <Link
+                                target="_blank"
+                                rel="noopener"
+                                to={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}&suggestion=${encodeURIComponent(item.id)}`}
+                              >
+                                在地图上定位此对象
+                              </Link>
                             </div>
-                            <div>
-                              <dt>建议状态</dt>
-                              <dd>{modificationAction(item)}</dd>
-                            </div>
-                          </dl>
-                          <p>
-                            {item.element === "structure" &&
-                            item.lengthM !== undefined
-                              ? `涉及长度 ${item.lengthM.toLocaleString("zh-CN")} 米`
-                              : `涉及面积 ${formatArea(item.areaM2)}`}
-                          </p>
-                          <MultiElementEvidence suggestion={item} />
-                          <Link
-                            target="_blank"
-                            rel="noopener"
-                            to={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}&suggestion=${encodeURIComponent(item.id)}`}
-                          >
-                            在地图上定位此对象
-                          </Link>
-                        </div>
-                      </details>
-                    ))}
-                  {members.length > (groupPages[groupId] ?? 50) && (
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        setGroupPages((current) => ({
-                          ...current,
-                          [groupId]: (current[groupId] ?? 50) + 50,
-                        }))
-                      }
-                    >
-                      查看更多对象（已显示 {groupPages[groupId] ?? 50} /{" "}
-                      {members.length}）
-                    </Button>
-                  )}
-                </details>
+                          </details>
+                        ))}
+                    {expandedGroups.includes(groupId) &&
+                      matches.length === 0 && <p>没有匹配的对象编号</p>}
+                    {expandedGroups.includes(groupId) &&
+                      matches.length > (groupPages[groupId] ?? 50) && (
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            setGroupPages((current) => ({
+                              ...current,
+                              [groupId]: (current[groupId] ?? 50) + 50,
+                            }))
+                          }
+                        >
+                          查看更多对象（已显示 {groupPages[groupId] ?? 50} /{" "}
+                          {matches.length}）
+                        </Button>
+                      )}
+                  </details>
+                </div>
               );
             })}
             {retainedGroups.length > 0 && (
@@ -524,16 +573,138 @@ export default function MultiElementStory({
                   )}{" "}
                   个对象）
                 </summary>
-                {retainedGroups.map((group) => (
-                  <details key={JSON.stringify([group.element, group.ruleId])}>
-                    <summary>
-                      {elements[group.element] ?? "检查"} / {group.ruleId} ·{" "}
-                      {group.count} 个对象
-                    </summary>
-                    <p>{[...group.reasons].join("；")}</p>
-                    <p>原始对象保持不变，不纳入整组批准。</p>
-                  </details>
-                ))}
+                {retainedGroups.map((group) => {
+                  const members = held.filter(
+                    (item) =>
+                      item.element === group.element &&
+                      item.ruleId === group.ruleId,
+                  );
+                  const candidateIds = new Set(members.map((item) => item.id));
+                  const groupKey = JSON.stringify([
+                    group.element,
+                    group.ruleId,
+                  ]);
+                  const candidateLabel = [
+                    ...new Set(members.map(modificationAction)),
+                  ].join(" / ");
+                  return (
+                    <details
+                      key={groupKey}
+                      open={expandedGroups.includes(groupKey)}
+                      onToggle={(event) => {
+                        const open = event.currentTarget.open;
+                        setExpandedGroups((current) =>
+                          open
+                            ? [...new Set([...current, groupKey])]
+                            : current.filter((key) => key !== groupKey),
+                        );
+                      }}
+                    >
+                      <summary>
+                        {elements[group.element] ?? "检查"} / {group.ruleId} ·{" "}
+                        {group.count} 个对象
+                      </summary>
+                      <p>{[...group.reasons].join("；")}</p>
+                      <p>
+                        默认保留，不纳入可执行建议全选。候选仅供用户裁定，规则状态及例外原因不变。
+                      </p>
+                      {members.length > 0 &&
+                        expandedGroups.includes(groupKey) && (
+                          <>
+                            <Select
+                              style={{ width: "100%" }}
+                              aria-label={`${group.ruleId}组待裁定处置`}
+                              value={
+                                members.every((item) =>
+                                  selectedIds.has(item.id),
+                                )
+                                  ? "candidate"
+                                  : members.some((item) =>
+                                        selectedIds.has(item.id),
+                                      )
+                                    ? "mixed"
+                                    : "keep"
+                              }
+                              disabled={!editable || busy}
+                              options={[
+                                { value: "keep", label: "保留本组" },
+                                {
+                                  value: "candidate",
+                                  label: `按本组候选处置：${candidateLabel}`,
+                                },
+                                {
+                                  value: "mixed",
+                                  label: "逐对象选择",
+                                  disabled: true,
+                                },
+                              ]}
+                              onChange={(value) =>
+                                update(
+                                  value === "candidate"
+                                    ? [...new Set([...ids, ...candidateIds])]
+                                    : ids.filter((id) => !candidateIds.has(id)),
+                                )
+                              }
+                            />
+                            {members
+                              .slice(0, groupPages[groupKey] ?? 50)
+                              .map((item) => (
+                                <details key={item.id}>
+                                  <summary>
+                                    {item.featureId} / {suggestionTier(item)} /{" "}
+                                    {modificationAction(item)}
+                                  </summary>
+                                  <Select
+                                    style={{ width: "100%" }}
+                                    aria-label={`${item.featureId}待裁定处置`}
+                                    value={
+                                      selectedIds.has(item.id)
+                                        ? "candidate"
+                                        : "keep"
+                                    }
+                                    disabled={!editable || busy}
+                                    options={[
+                                      { value: "keep", label: "保留" },
+                                      {
+                                        value: "candidate",
+                                        label: `按候选处置：${modificationAction(item)}`,
+                                      },
+                                    ]}
+                                    onChange={(value) =>
+                                      update(
+                                        value === "candidate"
+                                          ? [...new Set([...ids, item.id])]
+                                          : ids.filter((id) => id !== item.id),
+                                      )
+                                    }
+                                  />
+                                  <MultiElementEvidence suggestion={item} />
+                                  <Link
+                                    target="_blank"
+                                    rel="noopener"
+                                    to={`/map?geologyReview=${encodeURIComponent(workflow.id)}&projectTagId=${workflow.projectId}&suggestion=${encodeURIComponent(item.id)}`}
+                                  >
+                                    在地图上定位此对象
+                                  </Link>
+                                </details>
+                              ))}
+                            {members.length > (groupPages[groupKey] ?? 50) && (
+                              <Button
+                                onClick={() =>
+                                  setGroupPages((current) => ({
+                                    ...current,
+                                    [groupKey]: (current[groupKey] ?? 50) + 50,
+                                  }))
+                                }
+                              >
+                                查看更多待裁定对象
+                              </Button>
+                            )}
+                          </>
+                        )}
+                    </details>
+                  );
+                })}
               </details>
             )}
           </div>

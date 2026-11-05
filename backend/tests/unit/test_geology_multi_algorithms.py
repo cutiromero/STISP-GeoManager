@@ -16,6 +16,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_origin
 from shapely.geometry import LineString, box
+from shapely.ops import unary_union
 import yaml
 
 from apps.compute.packages import validate_manifest
@@ -26,6 +27,92 @@ ROOT = Path(__file__).resolve().parents[3]
 CORE = ROOT / "examples/compute/geology-multi-core"
 X, Y = 300000, 4000000
 KEYS = ["hematite", "chlorite", "hydromica", "calcite", "dolomite"]
+
+
+@pytest.mark.parametrize("confidence,status", [(0.5, "suggested"), (0.9, "review")])
+def test_alluvium_shape_candidate_approval_fuses_measured_host(
+    tmp_path, confidence, status
+):
+    initial, original = fixture(tmp_path)
+    original.loc[original.feature_id == "G3", "conf"] = confidence
+    store(original, initial.inputs["lithology"])
+    rows = read(initial.inputs["rules"])
+    units = json.loads(rows[0]["units_json"])
+    units["O"].update(category="cover", age_ma=0.005)
+    units["C"].update(category="cover", age_ma=1.3)
+    for row in rows:
+        row["units_json"] = json.dumps(units)
+    rows.append(
+        {
+            **rows[0],
+            "rule_id": "L-06",
+            "rule_version": "trial-shape-v1",
+            "params_json": json.dumps(
+                {
+                    "source_codes": ["O"],
+                    "compactness_min": 0.6,
+                    "aspect_ratio_max": 1.5,
+                    "conf_review_min": 0.88,
+                }
+            ),
+            "rule_json": '{"id":"L-06"}',
+        }
+    )
+    write(initial.inputs["rules"], rows)
+    findings, _ = check(initial)
+    item = next(
+        row
+        for row in findings
+        if row["rule_id"] == "L-06" and row["feature_id"] == "G3"
+    )
+    assert item["status"] == status and item["target_code"] == "C"
+    assert json.loads(item["measurements_json"])["compactness"] > 0.6
+    if status == "review":
+        assert (
+            item["candidate_action"] == "reclassify"
+            and item["candidate_target_code"] == "C"
+        )
+    edited = approval_context(
+        tmp_path, initial, [item], {item["issue_id"]: "reclassify"}
+    )
+    load("apply")(edited)
+    result = gpd.read_file(edited.output_path("lithology.gpkg"))
+    assert "G3" not in set(result.feature_id)
+    assert unary_union(result.geometry).equals(unary_union(original.geometry))
+    changes = read(edited.output_path("changes.csv"))
+    assert changes[0]["target_code"] == "C"
+    if status == "review":
+        assert changes[0]["reason"].startswith("用户裁定（规则为待裁定/例外）")
+    approved = read(edited.inputs["approved_changes"])
+    approved[0]["target_code"] = "forged"
+    write(edited.inputs["approved_changes"], approved)
+    with pytest.raises(ValueError, match="候选动作与目标|获批目标"):
+        load("apply")(edited)
+
+
+def test_continuity_trial_only_adds_review_for_isolated_older_unit(tmp_path):
+    initial, original = fixture(tmp_path)
+    rows = read(initial.inputs["rules"])
+    template = rows[0]
+    rows = [row for row in rows if row["rule_id"] != "L-01"]
+    rows.append(
+        {
+            **template,
+            "rule_id": "L-07",
+            "rule_version": "trial-continuity-v1",
+            "params_json": "{}",
+            "rule_json": '{"id":"L-07"}',
+        }
+    )
+    write(initial.inputs["rules"], rows)
+    findings, _ = check(initial)
+    item = next(row for row in findings if row["rule_id"] == "L-07")
+    assert item["status"] == "review"
+    assert (
+        item["candidate_action"] == "reclassify"
+        and item["candidate_target_code"] == "C"
+    )
+    assert json.loads(item["measurements_json"])["same_unit_neighbour_count"] == 0
 
 
 class Context:
@@ -241,7 +328,13 @@ def approval_context(tmp_path, initial, findings, actions=None):
                 else "0"
                 if action == "exclude"
                 else "1",
-                "reason": "审核当前测量与规则后批准本项操作",
+                "reason": (
+                    "用户裁定（规则为待裁定/例外）："
+                    if item["status"] in {"review", "exception"}
+                    and action not in {"keep", "review"}
+                    else ""
+                )
+                + "审核当前测量与规则后批准本项操作",
             }
         )
     path = tmp_path / "approved.csv"
@@ -428,7 +521,7 @@ def test_operator_packages_are_deterministic_and_declare_clean_outputs():
         assert package == builder(identifier)
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
             manifest = validate_manifest(yaml.safe_load(archive.read("operator.yaml")))
-            assert manifest["version"] == "1.0.7" and manifest["deterministic"]
+            assert manifest["version"] == "1.0.8" and manifest["deterministic"]
             assert {"main.py", "multi_apply.py", "multi_io.py", "operator.yaml"} <= set(
                 archive.namelist()
             )

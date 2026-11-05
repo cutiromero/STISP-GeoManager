@@ -303,6 +303,13 @@ def _validate_edit_rows(edits, results, *, issues=None):
         except (ValueError, TypeError, KeyError) as exc:
             raise ComputeError("检查动作或处置权重格式无效") from exc
         action = edit["action"]
+        if row["status"] in {"review", "exception"} and action not in {
+            "keep",
+            "review",
+        }:
+            raise ComputeError(
+                "模型不得替用户处置待裁定或例外对象；请保留，候选由用户独立选择"
+            )
         if action not in actions or not math.isfinite(weight) or not 0 <= weight <= 1:
             raise ComputeError("建议超出此对象允许的处置动作或权重范围")
         if (
@@ -342,6 +349,32 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
     if issues is None:
         issues = {row["issue_id"]: row for row in issue_rows(results)}
     rows = _validate_edit_rows(stage.get("edits", []), results, issues=issues)
+    rows = [
+        row
+        for row in rows
+        if issues[row["issue_id"]]["status"] not in {"review", "exception"}
+    ]
+    for issue in issues.values():
+        action = issue.get("candidate_action")
+        if issue["status"] not in {"review", "exception"} or not action:
+            continue
+        if action not in json.loads(issue["allowed_actions_json"]) or (
+            action == "reclassify" and not issue.get("candidate_target_code")
+        ):
+            raise ComputeError("检查快照中的候选动作或目标无效")
+        rows.append(
+            {
+                **{key: str(issue[key]) for key in CHANGE_FIELDS[:5]},
+                "action": action,
+                "target_code": issue.get("candidate_target_code", ""),
+                "weight": 0
+                if action == "exclude"
+                else 0.5
+                if action == "downweight"
+                else 1,
+                "reason": issue["reason"],
+            }
+        )
     suggestions = []
     group_ids = {
         row["issue_id"]: identity
@@ -350,9 +383,23 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
     }
     for edit in rows:
         row = issues[edit["issue_id"]]
-        entry = knowledge_entry or _required_knowledge(
-            workflow, stage["decision"], edit
-        )
+        held = row["status"] in {"review", "exception"}
+        if held:
+            entry = next(
+                (
+                    entry
+                    for entry in workflow.evidence
+                    if entry.get("trialBinding", {}).get("ruleId") == row["rule_id"]
+                    and entry["trialBinding"]["ruleVersion"] == row["rule_version"]
+                ),
+                None,
+            )
+            if entry is None:
+                raise ComputeError("候选处置缺少本次规则对应的知识修订")
+        else:
+            entry = knowledge_entry or _required_knowledge(
+                workflow, stage["decision"], edit
+            )
         try:
             preview = json.loads(row["geometry_json"])
             geometry = shape(preview)
@@ -386,9 +433,19 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
                 + (" " + edit["target_code"] if edit["target_code"] else ""),
                 "reason": edit["reason"],
                 "action": edit["action"],
-                "status": "review"
+                "status": row["status"]
+                if held
+                else "review"
                 if edit["action"] in {"keep", "review"}
                 else "suggested",
+                **(
+                    {
+                        "candidateAction": edit["action"],
+                        "candidateTargetCode": edit["target_code"],
+                    }
+                    if held
+                    else {}
+                ),
                 "areaM2": float(
                     measurements.get("involved_area_m2")
                     or row.get("area_m2")
@@ -496,10 +553,15 @@ def approve_modifications(workflow, user, policy, selected, plan_hash):
         "selectedSuggestionIds": selected,
         "executionHash": execution_hash(workflow, stage),
     }
-    stage["modificationsApproval"] = approval
-    stage["approvedEdits"] = [
-        row for row, identity in zip(rows, ids) if identity in selected
+    targets = [
+        (row["element"], row["featureId"])
+        for row in review["suggestions"]
+        if row["id"] in selected
     ]
+    if len(set(targets)) != len(targets):
+        raise ComputeError("同一对象只能选择一个候选或建议处置")
+    stage["modificationsApproval"] = approval
+    stage["approvedEdits"] = selected_edits(rows, review, selected)
     workflow.plan["modificationReview"]["approvedSuggestionIds"] = selected
     workflow.plan["modificationReview"]["unapprovedSuggestionIds"] = [
         i for i in ids if i not in selected
@@ -514,6 +576,16 @@ def approve_modifications(workflow, user, policy, selected, plan_hash):
     stage["status"] = "pending"
 
 
+def selected_edits(rows, review, selected):
+    return [
+        {**row, "reason": "用户裁定（规则为待裁定/例外）：" + row["reason"]}
+        if suggestion.get("candidateAction")
+        else row
+        for row, suggestion in zip(rows, review["suggestions"])
+        if suggestion["id"] in selected
+    ]
+
+
 def create_approved_changes(workflow, user, policy, stage):
     from .workflow import step
 
@@ -521,8 +593,7 @@ def create_approved_changes(workflow, user, policy, stage):
     review, rows = _fresh(workflow, user, policy, stage)
     approval = stage.get("modificationsApproval", {})
     selected = approval.get("selectedSuggestionIds", [])
-    ids = [item["id"] for item in review["suggestions"]]
-    expected = [row for row, identity in zip(rows, ids) if identity in selected]
+    expected = selected_edits(rows, review, selected)
     if (
         approval.get("executionHash") != execution_hash(workflow, stage)
         or approval.get("proposalHash") != review["proposalHash"]

@@ -227,6 +227,7 @@ def fixture_review(multi):
                 "snapshot_hash": "b" * 64,
                 "allowed_actions_json": json.dumps([action, "review", "keep"]),
                 "suggested_action": action,
+                "status": "suggested",
                 "target_code": "T3" if index == 0 else "",
                 "measurements_json": '{"area_m2":100}',
                 "reason": "实际属性与试用规则存在差异",
@@ -293,6 +294,68 @@ def test_approval_only_writes_selected_object_action(multi, monkeypatch):
     assert float(records[0]["weight"]) == 0.5
     stage["parameters"]["segment"] = "lithology"
     with pytest.raises(ComputeError, match="有效批准"):
+        create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+
+
+@pytest.mark.parametrize("status", ["review", "exception"])
+def test_held_candidates_are_independent_of_model_and_explicitly_approved(
+    multi, monkeypatch, status
+):
+    wf, stage, results = fixture_review(multi)
+    held = results[0]["rows"][1]
+    held.update(
+        status=status,
+        suggested_action="review",
+        candidate_action="exclude",
+        candidate_target_code="",
+        allowed_actions_json='["keep","review","exclude"]',
+    )
+    stage["edits"] = stage["edits"][:1]
+    freeze_proposal(wf, stage)
+    review = wf.plan["modificationReview"]
+    assert review["approvedSuggestionIds"] == []
+    candidate = next(row for row in review["suggestions"] if row.get("candidateAction"))
+    assert candidate["status"] == status
+    assert candidate["action"] == "exclude"
+    assert candidate["candidateTargetCode"] == ""
+    malicious = {
+        **stage["edits"][0],
+        "issue_id": held["issue_id"],
+        "action": "exclude",
+        "target_code": "",
+        "weight": 0,
+    }
+    with pytest.raises(ComputeError, match="模型不得"):
+        validate_edits([malicious], results)
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.read_results", lambda *args: results
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.authorized_task",
+        lambda *args: SimpleNamespace(),
+    )
+    approve_modifications(wf, multi["owner"], multi["policy"], [], "hash")
+    assert stage["approvedEdits"] == []
+    assert stage["status"] == "pending"
+    approve_modifications(
+        wf, multi["owner"], multi["policy"], [candidate["id"]], "hash"
+    )
+    assert stage["approvedEdits"][0]["reason"].startswith(
+        "用户裁定（规则为待裁定/例外）"
+    )
+    resource = create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+    rows = list(
+        csv.DictReader(
+            io.StringIO(
+                table_data_path(
+                    resource.storage_path.removeprefix("table/")
+                ).read_text()
+            )
+        )
+    )
+    assert len(rows) == 1 and rows[0]["action"] == "exclude"
+    wf.plan["modificationReview"]["suggestions"][-1]["candidateTargetCode"] = "forged"
+    with pytest.raises(ComputeError, match="须重新确认"):
         create_approved_changes(wf, multi["owner"], multi["policy"], stage)
 
 

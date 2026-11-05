@@ -98,6 +98,53 @@ it("先显示两张岩性图，不等待后续构造和蚀变请求完成", asyn
   await pending;
 });
 
+it("按需加载模式不读取辅助图层，先返回主图及记录；展开时复用主图并去重辅助请求", async () => {
+  const workflow = reviewWorkflow(true);
+  workflow.workflowType = "geology_generic";
+  workflow.plan.multiElementMap = {
+    before: { lithology: 101, faults: 102 },
+    after: { lithology: 201, faults: 302 },
+    beforeAlterations: 600,
+    alterations: 601,
+    changes: [202],
+    checks: [],
+  };
+  request.mockImplementation(async (url: string) => {
+    if (url.includes("/workflows/")) return workflow;
+    const id = Number(url.match(/resources\/(\d+)\//)?.[1]);
+    return url.endsWith("/profile/")
+      ? comparisonProfile(id)
+      : reviewQuery(
+          id,
+          id === 101
+            ? beforeReviewMap
+            : id === 201
+              ? afterReviewMap
+              : id === 202
+                ? reviewDifferences
+                : { type: "FeatureCollection", features: [] },
+        );
+  });
+  const result = await load({ deferOverlays: true });
+  expect(result.overlays).toBeUndefined();
+  const queryIds = () =>
+    request.mock.calls
+      .filter(([url]) => String(url).endsWith("/query/"))
+      .map(([url]) => Number(String(url).match(/resources\/(\d+)\//)?.[1]));
+  expect(queryIds()).toEqual([101, 201, 202]);
+  expect(
+    registerLayer.mock.calls.map(([profile]) => profile.resource.id),
+  ).toEqual([101, 201, 202]);
+  await result.loadOverlays!("faults");
+  expect(queryIds().sort()).toEqual([101, 102, 201, 202, 302]);
+  const [first, second] = await Promise.all([
+    result.loadOverlays!(),
+    result.loadOverlays!(),
+  ]);
+  expect(first).toBe(second);
+  expect(queryIds().sort()).toEqual([101, 102, 201, 202, 302, 600, 601]);
+});
+
 it.each(["geology_generic", "geology_multi_element_reasoning"])(
   "%s在仅保留正式成果时仍从任务文件生成真实讲解与前后对比",
   async (workflowType) => {

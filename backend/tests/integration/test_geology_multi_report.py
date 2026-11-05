@@ -105,6 +105,13 @@ def test_compact_report_groups_unapproved_and_links_complete_evidence(monkeypatc
     assert "真实编辑算法 1.0.1" in text and "真实模型判断尚未验证" in text
 
 
+def test_user_adjudication_marker_comes_from_actual_change_record(monkeypatch):
+    workflow, task, rows = report_fixture(monkeypatch)
+    rows[0]["reason"] = "用户裁定（规则为待裁定/例外）：人工复核冻结候选后批准"
+    text = render_report(workflow, [task]).decode()
+    assert rows[0]["reason"] in text
+
+
 def test_clean_report_links_deliverable_layers_not_calculation_states(monkeypatch):
     workflow, task, _ = report_fixture(monkeypatch)
     task.version.manifest = {

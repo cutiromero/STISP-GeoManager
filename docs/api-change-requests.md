@@ -26,6 +26,19 @@
 - Verification: 停放并存、新建、计算冲突身份、批准/恢复冲突保持状态、结束后继续、迁移保留旧记录、跨项目与本人隔离。
 - Result: 计算状态约束、摘要、交互与回归已实现；服务器尚未部署。
 
+## API-20261105-010 - 待裁定与例外的用户候选处置
+
+- Status: BackendReady
+- Owner: Frontend / Backend（本任务显式跨栈交接，依次完成契约、后端和前端）。
+- Endpoints: GET /api/agent/workflows/{workflowId}/；POST /api/agent/workflows/{workflowId}/confirm/。
+- Change type: 建议增加可选候选字段；人工确认语义扩展，不新增目标输入。
+- OpenAPI change: AgentModificationSuggestion.candidateAction、candidateTargetCode；status保留检查规则判断。selectedSuggestionIds可含用户明确选择的冻结候选编号；全选普通建议不包含候选。
+- Mock examples: mock/prism/examples/105-agent-workflow-card.json。
+- Frontend reason: 待裁定与例外区按组或按对象选择候选处置/保留，默认保留；轮询更新不重建审批和证据区域。
+- Backend implementation notes: 候选直接来自本次真实检查快照，不依赖模型提议。模型对待裁定/例外只能保留；确认和执行重新校验原输入、规则、知识修订、候选动作和目标，用户裁定记录写入批准理由及实际修改记录。算子1.0.8；原1.0.7快照不补造候选。
+- Verification: 候选生成、默认保留、模型越权拒绝、用户选择执行与融合、目标及快照篡改拒绝、权限和项目隔离、修正记录标注、卡片状态及滚动位置保持。
+- Result: 本地实现和定向验证；未修改正式站规则、数据或服务，旧工作流须重新检查才有新候选。
+
 ## API-20261104-007 - 逻辑推理分页选择与已确认配置复用
 
 - Status: BackendReady
@@ -42,6 +55,7 @@
 ## API-20261104-006 - 逻辑推理选择系统数据
 
 - Status: BackendReady
+- Owner: Frontend / Backend。
 - Change type: 新增接口，批次资料新增可选字段。
 - Endpoints: GET/POST /api/agent/workflow-uploads/references/。
 - OpenAPI change: 新增目录资源搜索与引用加入批次；批次资料新增可选 source（upload 或 catalog）。
@@ -308,7 +322,11 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | API-20261104-008 | BackendReady | /api/agent/workflows/{workflowId}/; /api/catalog/resources/{id}/query/ | groupId and displayGeometry | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Focused regression | Per-object approval, immutable source geometry, original permissions |
 | API-20261105-009 | BackendReady | /api/agent/workflows/active/; confirm/; resume/ | Compute slots and parked summaries | Updated | 104-agent-upload-bundle.json | Implemented | Focused regression | Parked tasks coexist; explicit conflict retains checkpoint |
+| API-20261105-010 | BackendReady | /api/agent/workflows/{workflowId}/; confirm/ | Frozen candidates for explicit user adjudication | Updated | 105-agent-workflow-card.json | Implemented | Focused regression | Rule status preserved; model cannot adjudicate |
 | API-20261104-007 | BackendReady | /api/agent/workflow-uploads/references/; /api/agent/logic-configuration/; /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | Paginated catalog and user/project-owned confirmed configuration | Updated | 104-agent-upload-bundle.json; 107-agent-logic-configuration.json | Implemented | Backend 104 and unit 554 passed; browser sandbox-blocked | Reauthorize references; never reuse plan or disposition approval |
+| API-20261104-006 | BackendReady | /api/agent/workflow-uploads/references/ | Catalog references in upload batches | Updated | 104-agent-upload-bundle.json | Implemented | Historical focused regression | Resource privacy unchanged |
+| API-20261104-005 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | Generic geology in current chat | Updated | 106-agent-generic-chat.json | Implemented | Historical focused regression | Explicit confirmation required |
+| API-20261104-004 | BackendReady | /api/agent/workflows/{workflowId}/; /api/compute/outputs/{outputId}/preview/ | Card projection and map preview | Updated | 105-agent-workflow-card.json | Implemented | Historical focused regression | Owner and project isolation unchanged |
 | API-20261104-003 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | uploadBatchId and explicit generic answers | Updated | 106-agent-generic-chat.json | Implemented | Backend confirmation and isolation passed, unit 550; browser sandbox-blocked | Existing workflow approval and project/owner checks preserved |
 | API-20261104-002 | BackendReady | /api/agent/workflows/{workflowId}/; /api/compute/outputs/{outputId}/preview/; /api/catalog/resources/{id}/profile/ | card view, vector map view, defaultVisualization | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Backend 122, unit 550; browser sandbox-blocked | Full view unchanged; project and owner checks preserved |
 | API-20261104-001 | BackendReady | /api/agent/workflow-uploads/batch/; /recognize/; /api/agent/workflows/active/ | batch uploads, role suggestions, active task summary | Updated | 104-agent-upload-bundle.json | Implemented | Backend 81, unit 542, types and contract passed; browser sandbox-blocked | Existing responses unchanged; target-project authorization preserved |

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-multi-prospect",
   "name": "优先核查远景区分析",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "优先核查远景区分析。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",

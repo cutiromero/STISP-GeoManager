@@ -106,6 +106,7 @@ export default function WorkflowResults({
   onRestart,
   onEvidenceUpdate,
   compact = false,
+  showMapLink = true,
 }: {
   workflow: AgentWorkflow;
   busy?: boolean;
@@ -121,6 +122,7 @@ export default function WorkflowResults({
   onRestart?: () => void;
   onEvidenceUpdate?: () => void;
   compact?: boolean;
+  showMapLink?: boolean;
 }) {
   const ui = useComputeText();
   const isActive = active.includes(workflow.status);
@@ -157,7 +159,7 @@ export default function WorkflowResults({
   );
   useEffect(
     () => setProcessExpanded(isActive && !isGeologyReview),
-    [workflow.id, isActive, isGeologyReview],
+    [workflow.id],
   );
   const finalDecision = [...workflow.steps]
     .reverse()
@@ -382,7 +384,7 @@ export default function WorkflowResults({
         )}
       {isMultiElement && (
         <MultiElementStory
-          key={`${workflow.id}:${workflow.modificationReview?.proposalHash ?? "pending"}`}
+          key={workflow.id}
           workflow={workflow}
           busy={busy}
           onReview={onReview}
@@ -390,7 +392,7 @@ export default function WorkflowResults({
       )}
       {isGeologyReview && !isMultiElement && (
         <GeologyReviewStory
-          key={`${workflow.id}:${workflow.modificationReview?.proposalHash ?? "pending"}`}
+          key={workflow.id}
           workflow={workflow}
           busy={busy}
           onReview={onReview}
@@ -621,7 +623,8 @@ export default function WorkflowResults({
               "Results saved in this project's data resources",
             )}
           </span>
-          {mapResourceIds.length &&
+          {showMapLink &&
+          mapResourceIds.length &&
           (!inspectionOnly || originalMapId) &&
           !(isGeologyReview && deletedResources.length) ? (
             <Link

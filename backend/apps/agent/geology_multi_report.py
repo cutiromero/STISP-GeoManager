@@ -125,7 +125,7 @@ def render_report(workflow, tasks):
                 "",
                 f"{_text(item['currentState'])} → {_text(target)}。用户已批准，实际结果：{result}。",
                 "",
-                "理由：" + _text(item["reason"], 500),
+                "理由：" + _text(row.get("reason") or item["reason"], 500),
                 "",
                 "实际观测：" + _observations(item.get("observations", {}), _text),
                 "",

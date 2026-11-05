@@ -10,6 +10,69 @@ import geopandas as gpd
 from prepare_geology_multi import SCENARIO, dump, sha
 
 
+def alluvium_shape_rule():
+    return {
+        "id": "L-06",
+        "version": "2026-11-05-project-trial",
+        "name": "全新世冲积物形态异常",
+        "element": "岩性",
+        "applies_to": "海德乌拉演示案例；需区域地质专家复核后另行推广",
+        "relation": "沉积地貌与图斑空间形态一致性",
+        "condition": "全新世冲积物紧凑度不低于0.6且最小外接矩形长宽比小于1.5，呈团块状，邻接较老堆积单元。以形状为主，包围比例及同类连通关系为辅；候选为共享边界最长的较老堆积单元，批准后与宿主融合。分类置信度不低于0.88或缺失时待裁定，其余给出建议。",
+        "action": "建议重分类；待裁定默认保留，由用户选择冻结候选",
+        "params": {
+            "source_codes": ["Qhᵃˡ"],
+            "host_categories": ["cover"],
+            "compactness_min": 0.6,
+            "aspect_ratio_max": 1.5,
+            "conf_review_min": 0.88,
+        },
+        "basis": {
+            "type": "本演示案例地貌形态试用判据",
+            "statement": "按本案例用户提出的现代河道冲积物条带分布假设测量异常；参数由本案例验证，不是地质规范，不宣称适用于全部冲积物。",
+            "gap": "冲积扇、河道交汇处宽阔冲积平原可能较圆润，应结合影像、河网及接触关系复核。边界裁切、制图概化与天然孤立露头也可能造成形态异常。未提供真实河网，不能据形状证明地质类别错误。",
+            "refs": [
+                {
+                    "citation": "STISP海德乌拉演示案例用户确认的地貌形态假设及输入图斑实测",
+                    "verification": "L-06，2026-11-05，本案例试用，非规范；独立参照仅用于事后评价，不输入算子",
+                }
+            ],
+        },
+    }
+
+
+def enclave_continuity_rule():
+    return {
+        "id": "L-07",
+        "version": "2026-11-05-project-trial",
+        "name": "孤立早期单元连续性疑点",
+        "element": "岩性",
+        "applies_to": "海德乌拉演示案例地层与侵入岩；非规范",
+        "relation": "同类分布连续性及局部接触形态",
+        "condition": "面积不超过3平方公里、紧凑度不低于0.3、最小外接矩形长宽比小于1.5、分类置信度小于0.6，且不与同单元相接的较早地层或侵入岩。至少60%外边界邻接同类别的较年轻单元；记录同类最近距离及构造距离。只补充其他规则尚未发现的对象，始终待裁定。",
+        "action": "提供共享边界最长单元为重分类候选，默认保留；用户明确选择才融合",
+        "params": {
+            "categories": ["stratum", "intrusive"],
+            "max_area_km2": 3,
+            "compactness_min": 0.3,
+            "aspect_ratio_max": 1.5,
+            "conf_max": 0.6,
+            "dominant_boundary_min": 0.6,
+        },
+        "basis": {
+            "type": "本演示案例空间连续性试用假设",
+            "statement": "低置信度孤立近等轴斑块与周围同类别单元的连续性不协调，只构成复核线索；本案例测量验证不替代地质解释。",
+            "gap": "早期岩体可为捕虏体、残留顶盖；地层可为构造窗、背斜核或剥蚀露头。真实产状、接触性质、区域构造和影像未齐全，构造附近也只报待裁定，不提升为可执行建议。",
+            "refs": [
+                {
+                    "citation": "STISP海德乌拉演示案例用户确认的空间连续性核查需求与图斑实测",
+                    "verification": "L-07，2026-11-05，本案例试用，非规范；独立标准答案仅用于事后评价",
+                }
+            ],
+        },
+    }
+
+
 def prepare(prepared: Path, lithology: Path, output: Path):
     prepared, lithology, output = (
         prepared.resolve(),
@@ -71,8 +134,12 @@ def prepare(prepared: Path, lithology: Path, output: Path):
             },
         }
     )
-    manifest.update(artifacts=[], rulesCode="geology-multi-rules-complete-20261025")
-    manifest["counts"].update(lithology=len(gpd.read_file(lithology)), rules=18)
+    bundle["rules"].append(alluvium_shape_rule())
+    bundle["rules"].append(enclave_continuity_rule())
+    manifest.update(artifacts=[], rulesCode="geology-multi-rules-complete-20261105")
+    manifest["counts"].update(
+        lithology=len(gpd.read_file(lithology)), rules=len(bundle["rules"])
+    )
     shutil.copyfile(prepared / "legend_colors.json", output / "legend_colors.json")
     dump(output / "trial_knowledge.json", bundle)
     dump(output / "manifest.json", manifest)
