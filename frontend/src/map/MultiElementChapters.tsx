@@ -161,7 +161,7 @@ export default function MultiElementChapters({
             {before && after
               ? `交汇由当次前后构造分别计算：几何交汇 ${before.geometric} → ${after.geometric} 处，推测交汇 ${before.inferred} → ${after.inferred} 处。`
               : "此历史任务未保存完整的改前交汇图层，可查看已保存结果。"}
-            实心点为实际相交，空心点为允许间距内的推测；不参与分析的线仍保留为灰色虚线。
+            实心点为实际相交，空心点为允许间距内的推测；获批剔除的线从修正后成果删除。
           </p>
         )}
         {active === "lithology" && (

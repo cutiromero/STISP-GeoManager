@@ -13,6 +13,19 @@
 - Verification: 7362对象分组展开、快照和动作校验、保护待裁定/例外、超过30对象批准执行、显示精度与存储隔离、双图首屏不等待后续图层、分组及快速多选浏览器回归。
 - Result: 分组与显示几何已实现；验证结果见任务报告，未部署服务器。
 
+## API-20261105-009 - 工作流计算名额与停放任务
+
+- Status: BackendReady
+- Owner: Frontend / Backend
+- Change type: 活动任务摘要扩展与409行为说明。
+- Endpoints: GET /api/agent/workflows/active/；POST /api/agent/workflows/、confirm/、resume/。
+- OpenAPI change: item仅为queued/running/waiting_compute；新增parked数组返回waiting_approval/paused；摘要可含conversationId和conversationTitle。计算名额冲突的409 detail标明任务、项目及来源对话，原确认和暂停点保留。
+- Frontend reason: 计算任务与待处理任务分开提示，提供查看与结束入口，停放任务不阻挡新任务。
+- Mock examples: mock/prism/examples/104-agent-upload-bundle.json。
+- Backend implementation notes: agent.0022_parked_workflow_slots收窄唯一约束；创建、批准、恢复通过同一账号事务锁校验名额；取消与暂停仍适用于所有未结束状态。拒绝批准和恢复至等待确认不占计算名额。
+- Verification: 停放并存、新建、计算冲突身份、批准/恢复冲突保持状态、结束后继续、迁移保留旧记录、跨项目与本人隔离。
+- Result: 计算状态约束、摘要、交互与回归已实现；服务器尚未部署。
+
 ## API-20261104-007 - 逻辑推理分页选择与已确认配置复用
 
 - Status: BackendReady
@@ -294,6 +307,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | API-20261104-008 | BackendReady | /api/agent/workflows/{workflowId}/; /api/catalog/resources/{id}/query/ | groupId and displayGeometry | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Focused regression | Per-object approval, immutable source geometry, original permissions |
+| API-20261105-009 | BackendReady | /api/agent/workflows/active/; confirm/; resume/ | Compute slots and parked summaries | Updated | 104-agent-upload-bundle.json | Implemented | Focused regression | Parked tasks coexist; explicit conflict retains checkpoint |
 | API-20261104-007 | BackendReady | /api/agent/workflow-uploads/references/; /api/agent/logic-configuration/; /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | Paginated catalog and user/project-owned confirmed configuration | Updated | 104-agent-upload-bundle.json; 107-agent-logic-configuration.json | Implemented | Backend 104 and unit 554 passed; browser sandbox-blocked | Reauthorize references; never reuse plan or disposition approval |
 | API-20261104-003 | BackendReady | /api/agent/conversations/{conversationId}/runs/; /api/agent/runs/{runId}/research-intent/ | uploadBatchId and explicit generic answers | Updated | 106-agent-generic-chat.json | Implemented | Backend confirmation and isolation passed, unit 550; browser sandbox-blocked | Existing workflow approval and project/owner checks preserved |
 | API-20261104-002 | BackendReady | /api/agent/workflows/{workflowId}/; /api/compute/outputs/{outputId}/preview/; /api/catalog/resources/{id}/profile/ | card view, vector map view, defaultVisualization | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Backend 122, unit 550; browser sandbox-blocked | Full view unchanged; project and owner checks preserved |

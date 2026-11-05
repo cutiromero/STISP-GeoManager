@@ -418,6 +418,7 @@ export default function GeologyWorkbenchCompare({
               <>
                 <nav aria-label="切换修改位置">
                   <Button
+                    aria-label="上一处修改"
                     size="small"
                     icon={<LeftOutlined />}
                     disabled={selected === 0}
@@ -429,6 +430,7 @@ export default function GeologyWorkbenchCompare({
                     第 {selected + 1} 处，共 {features.length} 处
                   </strong>
                   <Button
+                    aria-label="下一处修改"
                     size="small"
                     icon={<RightOutlined />}
                     disabled={selected >= features.length - 1}

@@ -13,25 +13,17 @@ import {
 } from "./multiElementScenario";
 import "./geology-review-story.css";
 import { formatArea } from "../utils/area";
+import {
+  heldModificationGroups,
+  modificationAction,
+  presentationGroups,
+  selectableModification,
+} from "./modificationPresentation";
 
 const elements: Record<string, string> = {
   lithology: "岩性",
   structure: "构造",
   alteration: "蚀变",
-};
-const actions: Record<string, string> = {
-  fix_symbol: "校正名称代号",
-  set_symbol: "校正名称代号",
-  set_code: "校正地质代号",
-  reclassify: "重分类",
-  merge: "融合图斑",
-  remove: "剔除",
-  exclude: "本次暂不参与",
-  delete: "剔除",
-  downweight: "降权",
-  retain: "保留",
-  keep: "保留",
-  review: "待裁定",
 };
 // Rules whose finding is a fact check: these could run without review once the
 // rule is published; while rules are trial drafts every action still needs approval.
@@ -202,7 +194,7 @@ export default function MultiElementStory({
     ids: review?.approvedSuggestionIds ?? [],
   });
   const [filter, setFilter] = useState("all");
-  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const [groupPages, setGroupPages] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState("");
   const suggestions = review?.suggestions ?? [];
@@ -217,27 +209,14 @@ export default function MultiElementStory({
     workflow.status === "waiting_approval" &&
     workflow.plan.phase === "review_modifications" &&
     Boolean(onReview);
-  const selectable = suggestions.filter(
-    (item) =>
-      !["exception", "review", "retained", "pending"].includes(
-        item.status ?? "",
-      ),
-  );
-  const visible = suggestions.filter(
+  const selectable = suggestions.filter(selectableModification);
+  const visible = selectable.filter(
     (item) => filter === "all" || item.element === filter,
   );
   const selectableIds = new Set(selectable.map((item) => item.id));
   const update = (values: string[]) =>
     setSelection({ hash: review?.proposalHash ?? "", ids: values });
-  const groups = new Map<string, AgentModificationSuggestion[]>();
-  for (const item of visible) {
-    const key =
-      item.groupId ??
-      `${item.element}/${item.ruleId}/${item.action}/${item.suggestedState}/${item.status}`;
-    const members = groups.get(key) ?? [];
-    members.push(item);
-    groups.set(key, members);
-  }
+  const groups = presentationGroups(visible);
   const decisions = workflow.steps.flatMap((step) =>
     step.decision ? [step.decision] : [],
   );
@@ -246,19 +225,7 @@ export default function MultiElementStory({
     Array.isArray(workflow.plan.stages) ? workflow.plan.stages : []
   ).map(record);
   const algorithms = record(workflow.plan.algorithms);
-  const checkGroups = stages.flatMap((stage) =>
-    (Array.isArray(stage.results) ? stage.results : []).flatMap((result) => {
-      const groups = record(result).groups;
-      return Array.isArray(groups) ? groups.map(record) : [];
-    }),
-  );
-  const retainedGroups = stages
-    .flatMap((stage) =>
-      (Array.isArray(stage.groupDecisions) ? stage.groupDecisions : []).map(
-        record,
-      ),
-    )
-    .filter((item) => item.disposition === "review");
+  const retainedGroups = heldModificationGroups(suggestions, stages, filter);
   const editValidation = record(
     stages.find((stage) => stage.name === "apply")?.editValidation,
   );
@@ -390,22 +357,6 @@ export default function MultiElementStory({
             </Checkbox>
           )}
           <div className="multi-element-suggestion-list">
-            {retainedGroups.map((item) => {
-              const group = checkGroups.find(
-                (group) => group.group_id === item.group_id,
-              );
-              return (
-                <details key={String(item.group_id)}>
-                  <summary>
-                    {elements[String(group?.element)] ?? "检查"} /{" "}
-                    {String(group?.rule_id ?? "")} · {Number(group?.count ?? 0)}{" "}
-                    个对象 · 整组待裁定
-                  </summary>
-                  <p>{String(item.reason)}</p>
-                  <p>原始对象保持不变，不纳入整组批准。</p>
-                </details>
-              );
-            })}
             {[...groups].map(([groupId, members]) => {
               const first = members[0]!;
               const eligible = members.filter((item) =>
@@ -414,27 +365,42 @@ export default function MultiElementStory({
               const chosen = eligible.filter((item) =>
                 selectedIds.has(item.id),
               );
+              const eligibleIds = new Set(eligible.map((item) => item.id));
               return (
                 <details
                   key={groupId}
-                  open={
-                    members.length <= 10 || expandedGroups.includes(groupId)
-                  }
+                  open={!collapsedGroups.includes(groupId)}
                   onToggle={(event) => {
                     const open = event.currentTarget.open;
-                    setExpandedGroups((current) =>
+                    setCollapsedGroups((current) =>
                       open
-                        ? [...new Set([...current, groupId])]
-                        : current.filter((key) => key !== groupId),
+                        ? current.filter((key) => key !== groupId)
+                        : [...new Set([...current, groupId])],
                     );
                   }}
                 >
                   <summary>
                     {elements[first.element ?? ""]} / {first.ruleId} /{" "}
-                    {actions[first.action ?? ""] ?? first.suggestedState} ·{" "}
-                    {members.length} 个对象
+                    {members.length === 1
+                      ? modificationAction(first)
+                      : modificationAction({
+                          ...first,
+                          suggestedState: first.action ?? "",
+                        })}{" "}
+                    · {members.length} 个对象
                   </summary>
                   <p>{first.reason}</p>
+                  <p>
+                    {[
+                      ...members.reduce((counts, item) => {
+                        const label = modificationAction(item);
+                        counts.set(label, (counts.get(label) ?? 0) + 1);
+                        return counts;
+                      }, new Map<string, number>()),
+                    ]
+                      .map(([label, count]) => `${label}：${count} 个对象`)
+                      .join("；")}
+                  </p>
                   {editable && eligible.length > 0 && (
                     <Checkbox
                       disabled={busy}
@@ -451,17 +417,14 @@ export default function MultiElementStory({
                                   ...eligible.map((item) => item.id),
                                 ]),
                               ]
-                            : ids.filter(
-                                (id) =>
-                                  !eligible.some((item) => item.id === id),
-                              ),
+                            : ids.filter((id) => !eligibleIds.has(id)),
                         )
                       }
                     >
                       整组批准（{eligible.length} 个对象）
                     </Checkbox>
                   )}
-                  {(members.length <= 10 || expandedGroups.includes(groupId)) &&
+                  {!collapsedGroups.includes(groupId) &&
                     members.slice(0, groupPages[groupId] ?? 50).map((item) => (
                       <details
                         className="multi-element-suggestion"
@@ -483,8 +446,7 @@ export default function MultiElementStory({
                                 ? "待裁定"
                                 : item.status === "exception"
                                   ? "例外候选"
-                                  : (actions[item.action ?? ""] ??
-                                    item.suggestedState)}
+                                  : modificationAction(item)}
                           </Tag>
                         </summary>
                         <div className="multi-element-suggestion-body">
@@ -504,8 +466,7 @@ export default function MultiElementStory({
                               }
                             >
                               批准此对象的「
-                              {actions[item.action ?? ""] ??
-                                item.suggestedState}
+                              {modificationAction(item)}
                               」操作
                             </Checkbox>
                           )}
@@ -516,10 +477,7 @@ export default function MultiElementStory({
                             </div>
                             <div>
                               <dt>建议状态</dt>
-                              <dd>
-                                {actions[item.action ?? ""] ??
-                                  item.suggestedState}
-                              </dd>
+                              <dd>{modificationAction(item)}</dd>
                             </div>
                           </dl>
                           <p>
@@ -556,6 +514,28 @@ export default function MultiElementStory({
                 </details>
               );
             })}
+            {retainedGroups.length > 0 && (
+              <details className="multi-element-held-groups">
+                <summary>
+                  待裁定与例外（共 {retainedGroups.length} 组 /{" "}
+                  {retainedGroups.reduce(
+                    (count, group) => count + group.count,
+                    0,
+                  )}{" "}
+                  个对象）
+                </summary>
+                {retainedGroups.map((group) => (
+                  <details key={JSON.stringify([group.element, group.ruleId])}>
+                    <summary>
+                      {elements[group.element] ?? "检查"} / {group.ruleId} ·{" "}
+                      {group.count} 个对象
+                    </summary>
+                    <p>{[...group.reasons].join("；")}</p>
+                    <p>原始对象保持不变，不纳入整组批准。</p>
+                  </details>
+                ))}
+              </details>
+            )}
           </div>
           {editable && (
             <div className="geology-review-controls">

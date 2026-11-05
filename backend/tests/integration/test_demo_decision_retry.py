@@ -90,9 +90,7 @@ def test_configured_output_limit_reaches_model_and_reserves_context(
             return_value=iter([json.dumps(answer)]),
         ) as stream,
     ):
-        decision, edits = decide(
-            workflow, None, policy, stage, results, lambda: None
-        )
+        decision, edits = decide(workflow, None, policy, stage, results, lambda: None)
     assert decision["nextAction"] == "ecology-priority" and edits == []
     assert stream.call_args.args[2] == output_limit
     attempt = stage["modelAttempts"][0]
@@ -234,24 +232,54 @@ def test_network_and_permission_errors_are_never_retried(error, retry_model):
     assert "response" not in stage["modelAttempts"][0]
 
 
-def test_retry_budget_keeps_complete_payload_and_stops_before_second_stream(
+@pytest.mark.parametrize("repair_level", [1, 2, 3, 4, 6])
+def test_retry_budget_keeps_complete_payload_and_compresses_redundant_context(
     retry_model,
+    repair_level,
 ):
     workflow, stage, results = geology()
-    persisted = []
     wrong = model_response("geology-edit", [])
-    with pytest.raises(ModelError, match="本轮输入需要"):
-        run(
-            [wrong],
-            workflow,
-            stage,
-            results,
-            tokens=[800, 100000],
-            callback=lambda record: persisted.append(copy.deepcopy(record)),
-        )
-    assert len(stage["modelAttempts"]) == 1
-    assert [item["status"] for item in persisted] == ["requesting", "rejected"]
+    correct = model_response("geology-edit", [])
+    correct["decision"]["nextAction"] = "request_review"
+    (_, edits), requests = run(
+        [wrong, correct],
+        workflow,
+        stage,
+        results,
+        tokens=[800, *([100000] * repair_level), 1200],
+    )
+    assert not edits and len(requests) == 2
+    assert requests[1][1] == requests[0][1]
+    if repair_level < 3:
+        assert requests[1][0] == requests[0][0]
+    assert len(requests[1]) == 3 and requests[1][-1]["role"] == "user"
+    assert stage["modelAttempts"][-1]["repairLevel"] == repair_level
+    assert stage["modelAttempts"][-1]["inputTokens"] == 1200
     assert len(stage["modelRequestPayload"]["actualResults"]) == len(results)
+    workflow.max_iterations = workflow.iteration = 2
+    workflow.plan["actualModelCallCount"] = 2
+    with patch("apps.agent.demo_decisions.resource_context", return_value=[]):
+        assert (
+            decide(workflow, None, default_policy(), stage, results, lambda: None)[1]
+            == edits
+        )
+
+
+def test_retry_byte_budget_drops_oversized_previous_response(retry_model):
+    workflow, stage, results = ordinary_stage()
+    wrong = model_response("ecology-priority", [])
+    wrong["decision"]["judgement"] = "重复内容" * 100000
+    correct = model_response("ecology-priority", [])
+    (_, edits), requests = run(
+        [wrong, correct], workflow, stage, results, tokens=[800, 800, 800]
+    )
+    assert not edits and len(requests[1]) == 3
+    assert requests[1][:2] == requests[0]
+    assert stage["modelAttempts"][-1]["repairLevel"] == 1
+    assert (
+        stage["modelAttempts"][-1]["contentBytes"]
+        <= default_policy()["maxContextBytes"]
+    )
 
 
 def test_cancel_after_persisted_rejection_stops_before_retry(retry_model):

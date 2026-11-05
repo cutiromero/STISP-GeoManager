@@ -2403,7 +2403,7 @@ export const getAgentComputeTasks = <ThrowOnError extends boolean = false>(optio
 /**
  * 提交计划或结果人工审核意见
  *
- * 确认计划并执行，或在 waiting_approval 时拒绝并停止后续操作。重新核对当前项目、本人记录、实际计算权限及计划哈希。审核意见持久保存，仅作为审核依据；不是算法编辑指令。拒绝保留已有计算和候选输出。暂停、状态冲突或过期计划返回 409。
+ * 确认计划并执行，或在 waiting_approval 时拒绝并停止后续操作。重新核对当前项目、本人记录、实际计算权限及计划哈希。审核意见持久保存，仅作为审核依据；不是算法编辑指令。拒绝保留已有计算和候选输出。暂停、状态冲突或过期计划返回409。批准时若本人另一工作流在queued、running、waiting_compute，返回409 detail明确任务、项目与来源对话，保留本次审批状态和选择，可通过活动任务摘要查看或结束计算任务后重试；拒绝不受计算名额限制。
  */
 export const confirmAgentWorkflow = <ThrowOnError extends boolean = false>(options: Options<ConfirmAgentWorkflowData, ThrowOnError>): RequestResult<ConfirmAgentWorkflowResponses, ConfirmAgentWorkflowErrors, ThrowOnError> => (options.client ?? client).post<ConfirmAgentWorkflowResponses, ConfirmAgentWorkflowErrors, ThrowOnError>({
     security: [{
@@ -2527,9 +2527,9 @@ export const recognizeAgentWorkflowRoles = <ThrowOnError extends boolean = false
 });
 
 /**
- * 读取本人挡路的活动工作流
+ * 读取本人计算中与停放的工作流
  *
- * 需要当前项目智能体和MH-workflow权限。按账号查询唯一活动工作流（包括暂停），跨项目仅返回本人任务摘要及项目ID，不返回资料或计划。查看详情与取消仍使用原接口及目标项目权限，不扩大数据访问范围。
+ * 需要当前项目智能体和MH-workflow权限。item仅返回queued、running、waiting_compute中的唯一计算任务；parked返回waiting_approval、paused的待处理任务，不阻挡新建。跨项目仅返回本人任务摘要、来源对话及项目ID，不返回资料或计划。新建、批准或恢复若遇另一计算任务返回409 detail，包含任务、对话及项目标识，用户可在本摘要查看或结束该任务后重试；原确认与暂停点保持不变。查看详情与取消仍校验目标项目权限。
  */
 export const getActiveAgentWorkflow = <ThrowOnError extends boolean = false>(options: Options<GetActiveAgentWorkflowData, ThrowOnError>): RequestResult<GetActiveAgentWorkflowResponses, GetActiveAgentWorkflowErrors, ThrowOnError> => (options.client ?? client).get<GetActiveAgentWorkflowResponses, GetActiveAgentWorkflowErrors, ThrowOnError>({
     security: [{
@@ -2867,7 +2867,7 @@ export const pauseAgentWorkflow = <ThrowOnError extends boolean = false>(options
 /**
  * 继续科研工作流
  *
- * 空请求体。重新核验本人、项目、输入和固定算法版本后恢复暂停位置；复用已提交计算任务，等待审核的阶段仍需原确认。重复请求幂等，结束的工作流返回409。
+ * 空请求体。重新核验本人、项目、输入和固定算法版本后恢复暂停位置；复用已提交计算任务，等待审核的阶段仍需原确认。恢复到waiting_approval不占计算名额；恢复计算时若本人另有queued、running、waiting_compute任务，返回409 detail明确任务、项目与来源对话，原暂停点保持不变，可查看或结束计算任务后重试。重复请求幂等，结束的工作流返回409。
  */
 export const resumeAgentWorkflow = <ThrowOnError extends boolean = false>(options: Options<ResumeAgentWorkflowData, ThrowOnError>): RequestResult<ResumeAgentWorkflowResponses, ResumeAgentWorkflowErrors, ThrowOnError> => (options.client ?? client).post<ResumeAgentWorkflowResponses, ResumeAgentWorkflowErrors, ThrowOnError>({
     security: [{

@@ -33,6 +33,62 @@ CHANGE_FIELDS = (
     "reason",
 )
 
+MAX_VALIDATION_ERRORS = 30
+MAX_VALIDATION_CHARS = 12000
+
+
+def bounded_errors(errors):
+    kept, size, omitted = [], 0, 0
+    for error in errors:
+        item = {**error, "reason": str(error["reason"])[:800]}
+        if "issue_id" in item:
+            item["issue_id"] = str(item["issue_id"])[:160]
+        length = len(json.dumps(item, ensure_ascii=False))
+        if (
+            len(kept) < MAX_VALIDATION_ERRORS - 1
+            and size + length < MAX_VALIDATION_CHARS - 300
+        ):
+            kept.append(item)
+            size += length
+        else:
+            omitted += error.get("count", 1)
+    if omitted:
+        kept.append(
+            {
+                "index": 0,
+                "issue_id": "",
+                "count": omitted,
+                "reason": f"其余 {omitted} 项无效建议已省略，请按同类原因核对",
+            }
+        )
+    return kept
+
+
+def _required_knowledge(workflow, decision, issue):
+    entry = next(
+        (
+            entry
+            for entry in workflow.evidence
+            if entry.get("trialBinding", {}).get("ruleId") == issue["rule_id"]
+            and entry["trialBinding"]["ruleVersion"] == issue["rule_version"]
+        ),
+        None,
+    )
+    refs = [{"id": entry["id"], "revision": entry["revision"]}] if entry else []
+    cited = {
+        str(ref["id"]) for ref in decision["evidenceRefs"] if ref["kind"] == "knowledge"
+    }
+    if entry is None or str(entry["id"]) not in cited:
+        required = (
+            f"{entry['id']}@{entry['revision']}" if entry else "未检索到对应试用知识"
+        )
+        error = ComputeError(
+            f"缺少该规则 {issue['rule_id']}@{issue['rule_version']} 对应的实际试用知识及修订引用：{required}；不能只引用其他规则"
+        )
+        error.required_knowledge_refs = refs
+        raise error
+    return entry
+
 
 def check_stage(workflow):
     return next(item for item in workflow.plan["stages"] if item["name"] == "check")
@@ -49,11 +105,13 @@ def issue_rows(results):
 
 class EditValidationError(ComputeError):
     def __init__(self, errors):
-        self.errors = errors
+        self.errors = bounded_errors(errors)
         super().__init__(
             "；".join(
-                f"第{item['index']}项（issue_id={item['issue_id']}）：{item['reason']}"
-                for item in errors
+                item["reason"]
+                if "group_id" in item or item["index"] == 0
+                else f"第{item['index']}项（issue_id={item['issue_id']}）：{item['reason']}"
+                for item in self.errors
             )
         )
 
@@ -64,10 +122,46 @@ def assess_edits(edits, results, *, workflow=None, decision=None):
     from .geology_issue_groups import expand_groups
 
     issues = {row["issue_id"]: row for row in issue_rows(results)}
-    edits = expand_groups(edits, list(issues.values()))
+    groups = dict(issue_groups(list(issues.values())))
     accepted, errors, duplicates = [], [], []
+    discarded = 0
     normalized, seen, targets = set(), set(), set()
-    for index, original in enumerate(edits, 1):
+
+    def record_error(index, original, exc, count=1):
+        nonlocal discarded, errors
+        discarded += count
+        grouped = isinstance(original, dict) and "group_id" in original
+        reason = str(exc)
+        if grouped:
+            members = (
+                groups.get(original["group_id"], [])
+                if isinstance(original["group_id"], str)
+                else []
+            )
+            rule = members[0]["rule_id"] if members else str(original["group_id"])[:100]
+            action = (
+                members[0]["suggested_action"]
+                if members
+                else str(original.get("disposition", ""))
+            )
+            reason = f"组 {rule}/{action}（{count} 个对象）：{reason}"
+        item = {
+            "index": index,
+            "issue_id": original.get("issue_id", "")
+            if isinstance(original, dict)
+            else "",
+            "reason": reason,
+            **(
+                {"group_id": str(original["group_id"])[:100], "count": count}
+                if grouped
+                else {}
+            ),
+        }
+        if hasattr(exc, "required_knowledge_refs"):
+            item["requiredKnowledgeRefs"] = exc.required_knowledge_refs
+        errors = bounded_errors([*errors, item])
+
+    def validate_one(index, original, entry):
         edit = original.copy() if isinstance(original, dict) else original
         if (
             isinstance(edit, dict)
@@ -78,39 +172,92 @@ def assess_edits(edits, results, *, workflow=None, decision=None):
         signature = json.dumps(edit, sort_keys=True, ensure_ascii=False)
         if signature in normalized:
             duplicates.append(index)
-            continue
-        try:
-            row = _validate_edit_rows([edit], results, issues=issues)[0]
-            if row["issue_id"] in seen:
-                raise ComputeError("建议必须唯一对应本次实际检查的问题")
-            issue = issues[row["issue_id"]]
-            target = (issue["element"], issue["feature_id"])
-            if target in targets:
-                raise ComputeError("同一对象本轮只允许一个处置动作，保留首个合格建议")
-            if workflow is not None:
-                proposal(
-                    workflow,
-                    {"edits": [edit], "decision": decision},
-                    results,
-                    issues={issue["issue_id"]: issue},
-                )
-        except ComputeError as exc:
-            errors.append(
-                {
-                    "index": index,
-                    "issue_id": original.get("issue_id", "")
-                    if isinstance(original, dict)
-                    else "",
-                    "reason": str(exc),
-                }
+            return
+        row = _validate_edit_rows([edit], results, issues=issues)[0]
+        if row["issue_id"] in seen:
+            raise ComputeError("建议必须唯一对应本次实际检查的问题")
+        issue = issues[row["issue_id"]]
+        target = (issue["element"], issue["feature_id"])
+        if target in targets:
+            raise ComputeError("同一对象本轮只允许一个处置动作，保留首个合格建议")
+        if workflow is not None:
+            proposal(
+                workflow,
+                {"edits": [edit], "decision": decision},
+                results,
+                issues={issue["issue_id"]: issue},
+                knowledge_entry=entry,
             )
-            continue
         normalized.add(signature)
         seen.add(row["issue_id"])
         targets.add(target)
         accepted.append(row)
+
+    seen_groups, pending = set(), []
+    for index, original in enumerate(edits, 1):
+        grouped = isinstance(original, dict) and "group_id" in original
+        entry = None
+        try:
+            if grouped and isinstance(original["group_id"], str):
+                if original["group_id"] in seen_groups:
+                    raise ComputeError("同一分组只能给出一次处置")
+                seen_groups.add(original["group_id"])
+            expanded = (
+                expand_groups(
+                    [original],
+                    groups.get(original["group_id"], [])
+                    if isinstance(original["group_id"], str)
+                    else [],
+                )
+                if grouped
+                else [original]
+            )
+            if grouped and expanded and workflow is not None:
+                entry = _required_knowledge(
+                    workflow, decision, issues[expanded[0]["issue_id"]]
+                )
+        except ComputeError as exc:
+            members = (
+                groups.get(original.get("group_id"), [])
+                if grouped and isinstance(original.get("group_id"), str)
+                else []
+            )
+            excluded = original.get("excluded_issue_ids", []) if grouped else []
+            count = (
+                sum(row["issue_id"] not in excluded for row in members)
+                if isinstance(excluded, list)
+                else len(members)
+            )
+            record_error(index, original, exc, max(1, count))
+            continue
+        if grouped:
+            pending.extend((index, original, edit, entry) for edit in expanded)
+            continue
+        for expanded_edit in expanded:
+            try:
+                validate_one(index, expanded_edit, entry)
+            except ComputeError as exc:
+                record_error(index, original, exc)
+    issue_order = {identity: index for index, identity in enumerate(issues)}
+    group_errors, group_targets = {}, set()
+    for index, original, edit, entry in sorted(
+        pending, key=lambda item: issue_order[item[2]["issue_id"]]
+    ):
+        issue = issues[edit["issue_id"]]
+        target = (issue["element"], issue["feature_id"])
+        if target in group_targets:
+            continue
+        group_targets.add(target)
+        try:
+            validate_one(index, edit, entry)
+        except ComputeError as exc:
+            key = (index, str(exc))
+            previous = group_errors.get(key, (original, exc, 0))
+            group_errors[key] = (original, exc, previous[2] + 1)
+    for (index, _), (original, exc, count) in group_errors.items():
+        record_error(index, original, exc, count)
     return accepted, {
-        "discardedCount": len(errors),
+        "discardedCount": discarded,
         "errors": errors,
         "duplicateCount": len(duplicates),
         "duplicateIndices": duplicates,
@@ -191,20 +338,10 @@ def _validate_edit_rows(edits, results, *, issues=None):
     return accepted
 
 
-def proposal(workflow, stage, results, *, issues=None):
+def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
     if issues is None:
         issues = {row["issue_id"]: row for row in issue_rows(results)}
     rows = _validate_edit_rows(stage.get("edits", []), results, issues=issues)
-    knowledge = {
-        (entry["trialBinding"]["ruleId"], entry["trialBinding"]["ruleVersion"]): entry
-        for entry in workflow.evidence
-        if entry.get("trialBinding")
-    }
-    cited = {
-        ref["id"]
-        for ref in stage["decision"]["evidenceRefs"]
-        if ref["kind"] == "knowledge"
-    }
     suggestions = []
     group_ids = {
         row["issue_id"]: identity
@@ -213,11 +350,9 @@ def proposal(workflow, stage, results, *, issues=None):
     }
     for edit in rows:
         row = issues[edit["issue_id"]]
-        entry = knowledge.get((edit["rule_id"], edit["rule_version"]))
-        if entry is None or str(entry["id"]) not in cited:
-            raise ComputeError(
-                "每项建议须引用对应的实际试用知识及修订，不能只引用其他规则"
-            )
+        entry = knowledge_entry or _required_knowledge(
+            workflow, stage["decision"], edit
+        )
         try:
             preview = json.loads(row["geometry_json"])
             geometry = shape(preview)

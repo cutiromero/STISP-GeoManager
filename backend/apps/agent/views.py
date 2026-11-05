@@ -1143,29 +1143,28 @@ def workflow_recognize_roles(request):
 
 @endpoint(["GET"])
 def workflow_active(request):
+    from .models import WORKFLOW_COMPUTING, WORKFLOW_PARKED
+    from .workflow_slots import workflow_summary
+
     policy = require_access(request.user, "agent")
     if not policy.get("workflowEnabled", True):
         raise ApiProblem("MH-workflow功能已关闭", 403)
     workflow = (
         AgentWorkflow._base_manager.filter(
-            owner=request.user, status__in=WORKFLOW_ACTIVE
+            owner=request.user, status__in=WORKFLOW_COMPUTING
         )
         .order_by("-updated_at")
         .first()
     )
-    item = (
-        None
-        if workflow is None
-        else {
-            "id": str(workflow.id),
-            "goal": workflow.goal,
-            "workflowType": workflow.workflow_type,
-            "status": workflow.status,
-            "updatedAt": workflow.updated_at.isoformat(),
-            "projectId": workflow.project_tag_id,
+    parked = AgentWorkflow._base_manager.filter(
+        owner=request.user, status__in=WORKFLOW_PARKED
+    ).order_by("-updated_at")
+    return JsonResponse(
+        {
+            "item": workflow_summary(workflow) if workflow else None,
+            "parked": [workflow_summary(item) for item in parked],
         }
     )
-    return JsonResponse({"item": item})
 
 
 @endpoint(["DELETE"])
@@ -1302,6 +1301,9 @@ def workflow_confirm(request, workflow_id):
         if workflow.status != "waiting_approval" or workflow.cancel_requested:
             raise ApiProblem("此计划当前不能确认执行", 409)
         validate_confirmed_plan(workflow, request.user, p)
+        from .workflow_slots import require_compute_slot
+
+        require_compute_slot(request.user, workflow.id)
         workflow.execute_operators = True
         workflow.status, workflow.detail = "queued", "已确认，等待计算中心执行"
         workflow.save(
@@ -1428,6 +1430,10 @@ def workflow_resume(request, workflow_id):
         }:
             raise ApiProblem("暂停点无效，请重新创建任务", 409)
         workflow.status = "queued" if continuation == "running" else continuation
+        if workflow.status != "waiting_approval":
+            from .workflow_slots import require_compute_slot
+
+            require_compute_slot(user, workflow.id)
         workflow.pause_requested = False
         workflow.detail = (
             "已继续，等待用户确认原审核计划"

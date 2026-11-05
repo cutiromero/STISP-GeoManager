@@ -21438,7 +21438,7 @@
         ],
         "operationId": "confirmAgentWorkflow",
         "summary": "提交计划或结果人工审核意见",
-        "description": "确认计划并执行，或在 waiting_approval 时拒绝并停止后续操作。重新核对当前项目、本人记录、实际计算权限及计划哈希。审核意见持久保存，仅作为审核依据；不是算法编辑指令。拒绝保留已有计算和候选输出。暂停、状态冲突或过期计划返回 409。",
+        "description": "确认计划并执行，或在 waiting_approval 时拒绝并停止后续操作。重新核对当前项目、本人记录、实际计算权限及计划哈希。审核意见持久保存，仅作为审核依据；不是算法编辑指令。拒绝保留已有计算和候选输出。暂停、状态冲突或过期计划返回409。批准时若本人另一工作流在queued、running、waiting_compute，返回409 detail明确任务、项目与来源对话，保留本次审批状态和选择，可通过活动任务摘要查看或结束计算任务后重试；拒绝不受计算名额限制。",
         "security": [
           {
             "sessionAuth": []
@@ -22189,8 +22189,8 @@
           "智能体"
         ],
         "operationId": "getActiveAgentWorkflow",
-        "summary": "读取本人挡路的活动工作流",
-        "description": "需要当前项目智能体和MH-workflow权限。按账号查询唯一活动工作流（包括暂停），跨项目仅返回本人任务摘要及项目ID，不返回资料或计划。查看详情与取消仍使用原接口及目标项目权限，不扩大数据访问范围。",
+        "summary": "读取本人计算中与停放的工作流",
+        "description": "需要当前项目智能体和MH-workflow权限。item仅返回queued、running、waiting_compute中的唯一计算任务；parked返回waiting_approval、paused的待处理任务，不阻挡新建。跨项目仅返回本人任务摘要、来源对话及项目ID，不返回资料或计划。新建、批准或恢复若遇另一计算任务返回409 detail，包含任务、对话及项目标识，用户可在本摘要查看或结束该任务后重试；原确认与暂停点保持不变。查看详情与取消仍校验目标项目权限。",
         "security": [
           {
             "sessionAuth": []
@@ -22217,7 +22217,8 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": [
-                    "item"
+                    "item",
+                    "parked"
                   ],
                   "properties": {
                     "item": {
@@ -22230,6 +22231,13 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "parked": {
+                      "type": "array",
+                      "description": "按更新时间倒序的本人停放任务，可查看或结束，不占计算名额",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentActiveWorkflow"
+                      }
                     }
                   }
                 },
@@ -22238,10 +22246,24 @@
                     "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
                     "goal": "检查研究区地质图。核对字段后执行。",
                     "workflowType": "geology_map_review",
-                    "status": "waiting_approval",
+                    "status": "running",
                     "updatedAt": "2026-11-04T08:00:00Z",
-                    "projectId": 1
-                  }
+                    "projectId": 1,
+                    "conversationId": 42,
+                    "conversationTitle": "地质图核查"
+                  },
+                  "parked": [
+                    {
+                      "id": "69ac90d1-999f-44b7-9b68-1da1f726a143",
+                      "goal": "等待复查确认",
+                      "workflowType": "geology_generic",
+                      "status": "waiting_approval",
+                      "updatedAt": "2026-11-05T08:00:00Z",
+                      "projectId": 1,
+                      "conversationId": 41,
+                      "conversationTitle": "上次核查"
+                    }
+                  ]
                 }
               }
             }
@@ -24158,7 +24180,7 @@
         ],
         "operationId": "resumeAgentWorkflow",
         "summary": "继续科研工作流",
-        "description": "空请求体。重新核验本人、项目、输入和固定算法版本后恢复暂停位置；复用已提交计算任务，等待审核的阶段仍需原确认。重复请求幂等，结束的工作流返回409。",
+        "description": "空请求体。重新核验本人、项目、输入和固定算法版本后恢复暂停位置；复用已提交计算任务，等待审核的阶段仍需原确认。恢复到waiting_approval不占计算名额；恢复计算时若本人另有queued、running、waiting_compute任务，返回409 detail明确任务、项目与来源对话，原暂停点保持不变，可查看或结束计算任务后重试。重复请求幂等，结束的工作流返回409。",
         "security": [
           {
             "sessionAuth": []
@@ -35097,6 +35119,20 @@
           "projectId": {
             "type": "integer",
             "description": "所属项目ID，后续操作需该项目权限"
+          },
+          "conversationId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "来源对话ID；独立工作流为null"
+          },
+          "conversationTitle": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "来源对话名称；独立工作流为null"
           }
         }
       },

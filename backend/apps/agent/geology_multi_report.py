@@ -5,11 +5,11 @@ from collections import Counter
 from apps.compute.packages import ComputeError
 
 ACTIONS = {
-    "set_code": "修正代号",
-    "reclassify": "更新类别",
+    "set_code": "改代号",
+    "reclassify": "重分类",
     "merge": "融合相邻图斑",
-    "exclude": "暂不参与分析",
-    "downweight": "降低证据权重",
+    "exclude": "剔除（从修正后成果删除）",
+    "downweight": "降权",
     "keep": "保留",
     "review": "保留待核查",
 }
@@ -94,7 +94,7 @@ def render_report(workflow, tasks):
         )
     lines.extend(
         [
-            f"本轮展示{len(suggestions)}项代表建议，用户批准{len(approved)}项，其余{len(suggestions) - len(approved)}项保持原样。完整问题数量见实际检查清单。",
+            f"本轮形成{len(suggestions)}项处置建议，用户批准{len(approved)}项，其余{len(suggestions) - len(approved)}项保持原样。完整问题数量见实际检查清单。",
             "",
             "模型验证："
             + (
@@ -115,7 +115,7 @@ def render_report(workflow, tasks):
             if row.get("actual_changed", "").casefold() == "true"
             else "保留原状"
         )
-        target = action + (" " + row["new_code"] if row.get("target_code") else "")
+        target = action + ("为 " + row["new_code"] if row.get("target_code") else "")
         scope = "本对象"
         if row.get("host_feature_id") and item["action"] == "merge":
             scope += "及相邻承接图斑 " + str(row["host_feature_id"])

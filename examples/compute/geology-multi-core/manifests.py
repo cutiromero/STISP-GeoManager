@@ -180,7 +180,7 @@ def create():
             "schemaVersion": 1,
             "identifier": directory.name,
             "name": name,
-            "version": "1.0.6",
+            "version": "1.0.7",
             "description": name
             + "。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
             "author": "STISP",

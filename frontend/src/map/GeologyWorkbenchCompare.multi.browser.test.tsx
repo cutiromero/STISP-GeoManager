@@ -604,6 +604,61 @@ it("restores URL side, scope and selected change, then refreshes without duplica
   );
 });
 
+it.each([1461, 360])(
+  "keeps clean comparison and navigation within %ipx by 812px",
+  async (width) => {
+    await page.viewport(width, 812);
+    try {
+      show(
+        `/map?geologyCompare=${workflowId}&projectTagId=3&suggestion=change-mineral`,
+      );
+      await changesReady(3);
+      await mapsReady();
+      const comparison = screen
+        .getByLabelText("地理工作台地质成果对比")
+        .getBoundingClientRect();
+      expect(comparison.left).toBeGreaterThanOrEqual(0);
+      expect(comparison.right).toBeLessThanOrEqual(width);
+      for (const map of liveMaps()) {
+        const bounds = map.getCanvas().getBoundingClientRect();
+        expect(bounds.width).toBeGreaterThan(100);
+        expect(bounds.height).toBeGreaterThan(80);
+        expect(bounds.left).toBeGreaterThanOrEqual(0);
+        expect(bounds.right).toBeLessThanOrEqual(width);
+        expect(bounds.bottom).toBeLessThanOrEqual(812);
+      }
+      expect(visibleChanges()).toHaveLength(0);
+      const navigation = screen
+        .getByRole("navigation", { name: "切换修改位置" })
+        .getBoundingClientRect();
+      expect(navigation.left).toBeGreaterThanOrEqual(0);
+      expect(navigation.right).toBeLessThanOrEqual(width);
+      expect(navigation.bottom).toBeLessThanOrEqual(812);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      const previous = screen.getByRole("button", { name: "上一处修改" });
+      const next = screen.getByRole("button", { name: "下一处修改" });
+      for (const button of [previous, next]) {
+        expect(button).toBeVisible();
+        const bounds = button.getBoundingClientRect();
+        expect(bounds.left).toBeGreaterThanOrEqual(0);
+        expect(bounds.right).toBeLessThanOrEqual(width);
+        expect(bounds.top).toBeGreaterThanOrEqual(0);
+        expect(bounds.bottom).toBeLessThanOrEqual(812);
+      }
+      fireEvent.click(previous);
+      await waitFor(() =>
+        expect(screen.getByText("第 2 处，共 3 处")).toBeVisible(),
+      );
+      fireEvent.click(next);
+      await waitFor(() =>
+        expect(screen.getByText("第 3 处，共 3 处")).toBeVisible(),
+      );
+    } finally {
+      await page.viewport(1600, 900);
+    }
+  },
+);
+
 it("keeps the full comparison, navigation and real WebGL canvases within 390 pixels", async () => {
   await page.viewport(390, 844);
   try {

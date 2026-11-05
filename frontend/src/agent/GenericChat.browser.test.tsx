@@ -227,6 +227,10 @@ beforeEach(() => {
   vi.spyOn(agentApi, "resources").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "researchDemoSummaries").mockResolvedValue({ items: [] });
   vi.spyOn(agentApi, "workflowUploads").mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "activeWorkflow").mockResolvedValue({
+    item: null,
+    parked: [],
+  });
   vi.spyOn(agentApi, "restoreLogicConfiguration").mockResolvedValue({
     configuration: null,
     items: [],
@@ -444,6 +448,87 @@ it("360px 输入区恢复服务端配置，收起保留选择且发送显式复�
   } finally {
     mounted.unmount();
     await page.viewport(1600, 900);
+  }
+});
+
+it("收起资料不删除引用，清空作为独立操作解除系统数据引用", async () => {
+  vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
+    configuration: {
+      resourceIds: [812],
+      roles: { lithology: 812 },
+      fieldMapping: { lithology: { name: "DCMC" } },
+      prompt: "核对系统资料",
+      reasoningEffort: "low",
+    },
+    items: [{ ...upload, source: "catalog" }],
+    unavailableResourceIds: [],
+  });
+  vi.spyOn(agentApi, "deleteWorkflowUpload").mockResolvedValue(undefined);
+  const mounted = show();
+  try {
+    fireEvent.click(
+      await screen.findByRole("button", { name: /(^|\s)逻辑推理$/ }),
+    );
+    await screen.findByText(upload.fileName);
+    fireEvent.click(screen.getByRole("button", { name: "收起" }));
+    expect(agentApi.deleteWorkflowUpload).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "已选 1 份资料 · 展开" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /清\s*空/ }));
+    await waitFor(() =>
+      expect(agentApi.deleteWorkflowUpload).toHaveBeenCalledWith(upload.id),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText(upload.fileName)).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText("沿用上次已确认的角色和字段"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "选择系统数据" })).toBeVisible();
+  } finally {
+    mounted.unmount();
+  }
+});
+
+it("逻辑推理入口显示计算任务所属对话与查看入口，停放任务不提示阻塞", async () => {
+  vi.mocked(agentApi.activeWorkflow).mockResolvedValue({
+    item: {
+      id: "computing-workflow",
+      goal: "核对另一区地质图",
+      workflowType: "geology_generic",
+      status: "running",
+      updatedAt: "2026-11-05T08:00:00Z",
+      projectId: 3,
+      conversationId: 42,
+      conversationTitle: "另一区复查",
+    },
+    parked: [
+      {
+        id: "parked-workflow",
+        goal: "等待旧结果确认",
+        workflowType: "geology_generic",
+        status: "waiting_approval",
+        updatedAt: "2026-11-04T08:00:00Z",
+        projectId: 3,
+      },
+    ],
+  });
+  const mounted = show();
+  try {
+    fireEvent.click(
+      await screen.findByRole("button", { name: /(^|\s)逻辑推理$/ }),
+    );
+    expect(
+      await screen.findByText("正在计算或排队：核对另一区地质图"),
+    ).toBeVisible();
+    expect(screen.getByText(/对话：另一区复查（42）/)).toBeVisible();
+    expect(
+      screen.getByText("已停放，不阻挡新任务：等待旧结果确认"),
+    ).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "查看" })).toHaveLength(2);
+  } finally {
+    mounted.unmount();
   }
 });
 

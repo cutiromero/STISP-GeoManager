@@ -122,7 +122,10 @@ const queued: AgentWorkflow = {
 beforeEach(() => {
   vi.restoreAllMocks();
   sessionStorage.clear();
-  vi.spyOn(agentApi, "activeWorkflow").mockResolvedValue({ item: null });
+  vi.spyOn(agentApi, "activeWorkflow").mockResolvedValue({
+    item: null,
+    parked: [],
+  });
   sessionStorage.setItem("workflow-session:77:1", "geology_generic");
   const item = {
     scenario: "geology_generic" as const,

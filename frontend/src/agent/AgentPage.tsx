@@ -63,6 +63,7 @@ import ComputeIntentCard from "./ComputeIntentCard";
 import InteractionCard from "./InteractionCard";
 import WorkflowPanel from "./WorkflowPanel";
 import GenericWorkflowUploads from "./GenericWorkflowUploads";
+import ActiveWorkflowNotice from "./ActiveWorkflowNotice";
 import ResearchIntentCard from "./ResearchIntentCard";
 import LiveActivity, { ActivityMark } from "./LiveActivity";
 import ThinkingStream from "./ThinkingStream";
@@ -1793,6 +1794,11 @@ function AgentWorkspace({
                       className="agent-logic-panel"
                       hidden={!logicUploadsOpen}
                     >
+                      <ActiveWorkflowNotice
+                        projectId={String(project?.current ?? "1")}
+                        currentId={currentResearchWorkflow?.id}
+                        refreshKey={`${error}:${composerWorkflowStatus ?? ""}`}
+                      />
                       <GenericWorkflowUploads
                         batchId={uploadBatchId}
                         model={model}

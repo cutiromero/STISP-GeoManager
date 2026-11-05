@@ -4,7 +4,7 @@ from django.db import connection, transaction
 from django.db.models import F
 
 from apps.compute.packages import ComputeError
-from .models import AgentPolicy, AgentWorkflow, WORKFLOW_ACTIVE
+from .models import AgentPolicy, AgentWorkflow
 from .policy import require_access
 
 
@@ -109,10 +109,9 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
             ):
                 raise ComputeError("幂等键已用于不同MH-workflow", 409)
             return existing
-        if AgentWorkflow._base_manager.filter(
-            owner=user, status__in=WORKFLOW_ACTIVE
-        ).exists():
-            raise ComputeError("您已有活动MH-workflow，请等待完成", 409)
+        from .workflow_slots import require_compute_slot
+
+        require_compute_slot(user)
         workflow = AgentWorkflow.objects.create(
             owner=user,
             workflow_type=workflow_type,

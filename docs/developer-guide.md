@@ -2619,6 +2619,12 @@ API 以 `docs/openapi.yaml` 为准，生成代码实际位于 `frontend/src/api/
 
 `GET /api/agent/workflows/{workflowId}/` 返回当前状态、步骤、checkpoint 引用和结果 ID；`POST /api/agent/workflows/{workflowId}/cancel/` 在排队时立即结束任务，在运行或等待计算时设置取消标记，由 worker 在安全边界收尾。工作流 worker 重启不会重新提交处于 `waiting_compute` 的算子任务；每次恢复仍重新检查项目成员、账号和数据资源权限。当前工作流实现为 LangGraph 可选编排适配器，未安装 LangGraph 时使用同一节点契约的兼容运行路径。
 
+每账号仅一个计算或排队中的工作流（`queued/running/waiting_compute`）。`waiting_approval/paused`为停放状态，可并存且不阻挡新建；取消、暂停及恢复仍适用于未结束的停放任务。迁移`agent.0022_parked_workflow_slots`仅调整唯一约束，不删除或改写历史数据；回退旧约束前必须先结束同账号多余的未结束任务。
+
+`GET /api/agent/workflows/active/`返回`{item,parked}`：item为本人唯一计算任务或null，parked按更新时间倒序返回本人停放任务。摘要包含任务目标、场景、状态、项目、更新时间，以及可空的conversationId/conversationTitle；独立任务不关联对话。跨项目不返回资料和计划，详情与结束仍校验目标项目权限。入口提示区分别显示“正在计算或排队”和“已停放，不阻挡新任务”，均支持查看及确认结束。
+
+新建、批准计划/处置、恢复计算使用相同账号事务锁申请计算名额。若本人另一任务正在计算，返回409标准ErrorResponse，detail给出任务名称、ID、项目和来源对话，提示通过活动任务区查看或结束后重试，不自动取消旧任务；原计划、选择和暂停点不变。拒绝处置及恢复至waiting_approval不申请名额，计划和处置批准仍须每次人工完成。
+
 ## 2026-09-22 智能体生成控制与算法
 
 maxOutputTokens为每次调用的思考与正文合计上限；maxContextTokens限制输入。reasoningEffort通过Qwen模板传递low/medium/xhigh。worker开始时读取生成策略，新保存的参数作用于之后开始的运行，权限和取消仍实时核验。
@@ -2784,6 +2790,8 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 `GET /api/agent/workflow-uploads/references/?q=&page=1&pageSize=20&directoryId=` 仅在逻辑推理项目使用，要求明确 `X-Project-Id`，按 `resource_access_filter`、当前项目、活动状态及策略允许的数据类型搜索目录矢量/栅格/表格。排除任务上传和工作副本，按更新时间、登记时间、ID倒序；名称及说明支持搜索。返回 `{items,total,page,pageSize,directories}`，每项含类型、`directoryId/directoryName`、`createdAt/updatedAt`。`page`从1开始，`pageSize`默认20、上限50；参数非法返回400，不静默截断。目录利用现有 `inventory_group`（存量数据组别），0表示未分组，目录选项只包含当前有权访问资源所在的目录。需与上传一致的智能体、MH-workflow、算子及数据登记权限；401/403/404沿用平台规范。
 
 ### 逻辑推理配置与输入区
+
+审批展示按“要素+规则+动作”合并可执行建议，组内列出目标单元与数量；整组批准选择全部成员，也可逐对象取消，后端继续按目标代号及快照校验。可执行组置前；待裁定、例外按“要素+规则”汇总于默认折叠的“待裁定与例外（共N组/M个对象）”，不纳入自动批准。剔除统一表示“剔除（从修正后成果删除）”，降权保留对象，重分类与改代号明确目标单元。修正记录的action、target_code/new_code及actual_changed分别表示获批动作、目标代号和实际变化；剔除不删除原始资料。
 
 “逻辑推理”打开紧凑资料面板；“选择系统数据”和“上传文件/ZIP”并列，列表显示来源、类型、角色。收起保留资料，输入区显示已选数量；“清空”仅解除本批引用或移除临时上传，不删除系统原数据。要求文案可直接编辑。上次失败状态独立展示、可关闭并定位任务，不拼接到入口按钮。
 

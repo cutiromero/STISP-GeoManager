@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { reviewWorkflow } from "../map/geologyReview.testFixtures";
 import MultiElementStory from "./MultiElementStory";
 import GenericWorkflowUploads from "./GenericWorkflowUploads";
@@ -69,7 +70,9 @@ it("按组批准超过30对象，展开后可取消个别对象，例外不被�
       </MemoryRouter>
     </App>,
   );
-  fireEvent.click(screen.getByText(/70 个对象/, { selector: "summary" }));
+  expect(
+    screen.getByText(/70 个对象/, { selector: "summary" }).closest("details"),
+  ).toHaveAttribute("open");
   fireEvent.click(await screen.findByLabelText("整组批准（70 个对象）"));
   const individual = await screen.findAllByRole("checkbox", {
     name: /批准此对象/,
@@ -123,9 +126,94 @@ it("全部分组待裁定时仍显示组卡片，不提供自动批准", async (
       </MemoryRouter>
     </App>,
   );
-  expect(await screen.findByText(/12 个对象 · 整组待裁定/)).toBeVisible();
+  const held = await screen.findByText("待裁定与例外（共 1 组 / 12 个对象）");
+  expect(held.closest("details")).not.toHaveAttribute("open");
+  fireEvent.click(held);
+  expect(screen.getByText(/岩性 \/ L-01 · 12 个对象/)).toBeVisible();
   expect(screen.queryByLabelText(/整组批准/)).not.toBeInTheDocument();
 });
+
+it.each([1461, 360])(
+  "%ipx 审批先显示合并的可执行组，待裁定与例外默认折叠",
+  async (width) => {
+    await page.viewport(width, 812);
+    const workflow = reviewWorkflow();
+    workflow.workflowType = "geology_generic";
+    const first = workflow.modificationReview!.suggestions[0]!;
+    workflow.modificationReview!.suggestions = Array.from(
+      { length: 60 },
+      (_, index) => ({
+        ...first,
+        id: `target-${index}`,
+        groupId: `backend-group-${index}`,
+        kind: "multi_element",
+        element: "lithology",
+        ruleId: "L-01",
+        action: "reclassify",
+        status: "suggested",
+        suggestedState: `reclassify ${index % 2 ? "C" : "O"}`,
+      }),
+    );
+    workflow.plan.stages = [
+      {
+        name: "apply",
+        results: [
+          {
+            groups: Array.from({ length: 20 }, (_, index) => ({
+              group_id: `held-${index}`,
+              element: "lithology",
+              rule_id: "L-02",
+              count: 2,
+            })),
+          },
+        ],
+        groupDecisions: Array.from({ length: 20 }, (_, index) => ({
+          group_id: `held-${index}`,
+          disposition: "review",
+          reason: "证据不足",
+        })),
+      },
+    ];
+    const mounted = render(
+      <App>
+        <MemoryRouter>
+          <MultiElementStory workflow={workflow} onReview={vi.fn()} />
+        </MemoryRouter>
+      </App>,
+    );
+    try {
+      const executable = await screen.findByText(
+        "岩性 / L-01 / 重分类 · 60 个对象",
+        { selector: "summary" },
+      );
+      const held = screen.getByText("待裁定与例外（共 1 组 / 40 个对象）", {
+        selector: "summary",
+      });
+      expect(
+        executable.compareDocumentPosition(held) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(executable.closest("details")).toHaveAttribute("open");
+      expect(held.closest("details")).not.toHaveAttribute("open");
+      expect(
+        screen.getByText("重分类为 O：30 个对象；重分类为 C：30 个对象"),
+      ).toBeVisible();
+      expect(screen.getByText("整组批准（60 个对象）")).toBeVisible();
+      fireEvent.click(executable);
+      await waitFor(() =>
+        expect(executable.closest("details")).not.toHaveAttribute("open"),
+      );
+      fireEvent.click(executable);
+      await waitFor(() =>
+        expect(screen.getByText("整组批准（60 个对象）")).toBeVisible(),
+      );
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+    } finally {
+      mounted.unmount();
+      await page.viewport(1600, 900);
+    }
+  },
+);
 
 it("系统数据连续快速鼠标点选不会覆盖之前选项", async () => {
   render(

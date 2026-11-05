@@ -387,7 +387,7 @@ def alteration_findings(alterations, lithology, rules, units, snapshot, config):
                 (
                     "A-05",
                     "exclude",
-                    "矿物识别范围小于本案例碎斑阈值，建议核查识别噪声；用户批准后才暂不参与组合。",
+                    "矿物识别范围小于本案例碎斑阈值，建议核查识别噪声；用户批准后从修正后成果删除，原始识别资料保留。",
                 )
             )
         for identifier, group, minerals, action, reason in [
@@ -396,7 +396,7 @@ def alteration_findings(alterations, lithology, rules, units, snapshot, config):
                 "carbonate",
                 {"方解石化", "白云石化"},
                 "exclude",
-                "碳酸盐岩背景上的碳酸盐矿物首先反映原岩，建议改判为岩性信息，不参与蚀变推理；仍不能排除热液叠加，识别范围保留。",
+                "碳酸盐岩背景上的碳酸盐矿物首先反映原岩，建议从修正后蚀变成果删除；仍不能排除热液叠加，原始识别资料保留。",
             ),
             (
                 "A-02",
@@ -417,7 +417,7 @@ def alteration_findings(alterations, lithology, rules, units, snapshot, config):
                 "loose",
                 set(),
                 "exclude",
-                "矿物识别主要落在松散覆盖层上，可能为搬运物或结壳，建议剔除，不参与蚀变推理；识别范围保留，可补充基岩资料后复核。",
+                "矿物识别主要落在松散覆盖层上，可能为搬运物或结壳，建议剔除（从修正后成果删除）；原始识别资料保留，可补充基岩资料后复核。",
             ),
         ]:
             if (

@@ -346,7 +346,8 @@ def test_active_workflow_summary_is_owner_only_cross_project_and_cancelable(gene
     headers = {"HTTP_X_PROJECT_ID": str(generic["project"].id)}
     response = generic["client"].get("/api/agent/workflows/active/", **headers)
     assert response.status_code == 200, response.content
-    item = response.json()["item"]
+    assert response.json()["item"] is None
+    item = response.json()["parked"][0]
     assert item["id"] == str(workflow.id) and item["status"] == "paused"
     assert set(item) == {
         "id",
@@ -355,6 +356,8 @@ def test_active_workflow_summary_is_owner_only_cross_project_and_cancelable(gene
         "status",
         "updatedAt",
         "projectId",
+        "conversationId",
+        "conversationTitle",
     }
     response = generic["client"].post(
         f"/api/agent/workflows/{workflow.id}/cancel/",

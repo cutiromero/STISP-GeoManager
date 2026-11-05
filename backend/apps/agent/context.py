@@ -3,6 +3,10 @@
 from .provider import ModelError, count_tokens
 
 
+class InputBudgetError(ModelError):
+    pass
+
+
 def prepare_context(messages, current, model, policy, window, thinking):
     output = policy["maxOutputTokens"]
     limit = min(policy["maxContextTokens"], window - output - 256)
@@ -38,7 +42,7 @@ def prepare_context(messages, current, model, policy, window, thinking):
             text = part.get("text", "") if part else ""
             marker = "\n\n【附件："
             if marker not in text:
-                raise ModelError(
+                raise InputBudgetError(
                     f"本轮输入需要 {tokens} token，可用 {limit}；请缩小附件、图片或工具结果范围"
                 )
             prompt, attachment = text.split(marker, 1)

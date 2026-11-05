@@ -575,9 +575,13 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
             authorize_update(workflow, user, p)
 
 
+@transaction.atomic
 def confirm_demo(
     workflow, user, p, plan_hash, selected_suggestion_ids=None, field_mapping=None
 ) -> None:
+    from .workflow_slots import require_compute_slot
+
+    require_compute_slot(user, workflow.id)
     if workflow.plan.get("phase") == "review_mapping":
         from .geology_generic import confirm_mapping
 

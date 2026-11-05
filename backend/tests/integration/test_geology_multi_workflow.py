@@ -568,6 +568,195 @@ def test_model_cannot_change_target_or_turn_downweight_into_delete(multi):
         validate_edits(changed, results)
 
 
+@pytest.mark.parametrize("repair", [True, False])
+@pytest.mark.parametrize("compact", [True, False])
+def test_large_group_retry_cites_once_and_preserves_valid_groups(
+    multi, settings, repair, compact
+):
+    from apps.agent.demo_decisions import decide
+    from apps.agent.geology_issue_groups import group_summaries
+    from apps.agent.policy import default_policy
+    from tests.integration.test_demo_decision_retry import run
+    from tests.integration.test_demo_edit_context import model_response
+
+    settings.AGENT_MODELS = [
+        {
+            "alias": "mock",
+            "name": "实际接口测试",
+            "model_id": "qwen-fixture",
+            "base_url": "http://127.0.0.1:19100/v1",
+            "agent": True,
+        }
+    ]
+    wf, stage, results = fixture_review(multi)
+    valid, template = results[0]["rows"]
+    results[0]["rows"] = [
+        {**valid, "status": "suggested"},
+        *[
+            {
+                **template,
+                "status": "suggested",
+                "issue_id": f"A-{index}",
+                "feature_id": f"A-{index}",
+            }
+            for index in range(1295)
+        ],
+    ]
+    stage.pop("decision")
+    stage.pop("edits")
+    answer = model_response("geology-multi-apply", [])
+    answer["decision"]["evidenceRefs"] = [
+        {"kind": "output", "id": "2"},
+        {"kind": "knowledge", "id": str(multi["entries"][0].id)},
+    ]
+    answer["edits"] = [
+        {
+            "group_id": group["group_id"],
+            "disposition": "suggested",
+            "excluded_issue_ids": [],
+            "reason": "按实测分布核对条件，例外保留",
+        }
+        for group in group_summaries(results[0]["rows"])
+    ]
+    corrected = copy.deepcopy(answer)
+    from apps.agent.geology_multi_review import _required_knowledge
+
+    invalid_group = next(
+        edit
+        for edit in answer["edits"]
+        if edit["group_id"]
+        == next(
+            group["group_id"]
+            for group in group_summaries(results[0]["rows"])
+            if group["rule_id"] == "A-01"
+        )
+    )
+    with patch(
+        "apps.agent.geology_multi_review._required_knowledge", wraps=_required_knowledge
+    ) as citation:
+        accepted, report = assess_edits(
+            [invalid_group], results, workflow=wf, decision=answer["decision"]
+        )
+    assert citation.call_count == 1 and not accepted
+    assert report["discardedCount"] == 1295 and len(report["errors"]) == 1
+    if repair:
+        corrected["decision"]["evidenceRefs"].append(
+            {"kind": "knowledge", "id": str(multi["entries"][1].id)}
+        )
+    tokens = [17390, 75152, 18000] if compact else [17390, 18000]
+    (decision, edits), requests = run(
+        [answer, corrected], wf, stage, results, tokens=tokens
+    )
+    feedback = json.loads(requests[1][-1]["content"])
+    assert len(requests[1][-1]["content"]) <= 16000
+    assert len(feedback["invalidEdits"]) == 1
+    error = feedback["invalidEdits"][0]
+    assert "A-01" in error["reason"] and "1295 个对象" in error["reason"]
+    assert error["count"] == 1295
+    assert error["requiredKnowledgeRefs"] == [
+        {"id": multi["entries"][1].id, "revision": multi["entries"][1].revision}
+    ]
+    assert len(edits) == (1296 if repair else 1)
+    assert stage["editValidation"]["discardedCount"] == (0 if repair else 1295)
+    assert requests[1][:2] == requests[0]
+    assert stage["modelAttempts"][-1]["repairLevel"] == int(compact)
+    wf.max_iterations = wf.iteration = 2
+    wf.plan["actualModelCallCount"] = 2
+    with patch("apps.agent.demo_decisions.resource_context", return_value=[]):
+        assert (
+            decide(wf, None, default_policy(), stage, results, lambda: None)[1] == edits
+        )
+    stage.update(decision=decision, edits=edits)
+    freeze_proposal(wf, stage)
+    assert wf.status == "waiting_approval"
+    assert len(wf.plan["modificationReview"]["suggestions"]) == len(edits)
+    assert wf.plan["modificationReview"]["approvedSuggestionIds"] == []
+    if not repair:
+        assert error["reason"] == stage["editValidation"]["errors"][0]["reason"]
+
+
+def test_invalid_group_structure_does_not_discard_valid_group(multi):
+    from apps.agent.geology_issue_groups import group_summaries
+
+    wf, stage, results = fixture_review(multi)
+    for row in results[0]["rows"]:
+        row["status"] = "suggested"
+    groups = group_summaries(results[0]["rows"])
+    edits = [
+        {
+            "group_id": group["group_id"],
+            "disposition": "suggested",
+            "excluded_issue_ids": [],
+            "reason": "实测支持，例外保留",
+        }
+        for group in groups
+    ]
+    edits[0]["excluded_issue_ids"] = ["not-in-snapshot"]
+    accepted, assessment = assess_edits(
+        edits, results, workflow=wf, decision=stage["decision"]
+    )
+    assert len(accepted) == 1 and assessment["discardedCount"] == 1
+    assert "快照" in assessment["errors"][0]["reason"]
+
+
+def test_group_without_any_knowledge_citation_reports_required_reference(multi):
+    from apps.agent.demo_decisions import _validate_response, _repair_feedback
+    from apps.agent.geology_issue_groups import group_summaries
+    from apps.agent.geology_multi_review import EditValidationError
+    from tests.integration.test_demo_edit_context import model_response
+
+    wf, stage, results = fixture_review(multi)
+    template = results[0]["rows"][1]
+    results[0]["rows"] = [
+        {
+            **template,
+            "status": "suggested",
+            "issue_id": f"A-{index}",
+            "feature_id": f"A-{index}",
+        }
+        for index in range(1295)
+    ]
+    answer = model_response("geology-multi-apply", [])
+    answer["decision"]["evidenceRefs"] = [{"kind": "output", "id": "2"}]
+    answer["edits"] = [
+        {
+            "group_id": group_summaries(results[0]["rows"])[0]["group_id"],
+            "disposition": "suggested",
+            "excluded_issue_ids": [],
+            "reason": "实测支持，例外保留",
+        }
+    ]
+    refs = [
+        {"kind": "output", "id": "2"},
+        {
+            "kind": "knowledge",
+            "id": str(multi["entries"][1].id),
+            "revision": multi["entries"][1].revision,
+        },
+    ]
+    with pytest.raises(EditValidationError) as error:
+        _validate_response(json.dumps(answer), wf, stage, results, refs)
+    assert len(error.value.errors) == 1
+    assert (
+        error.value.errors[0]["requiredKnowledgeRefs"][0]["id"]
+        == multi["entries"][1].id
+    )
+    feedback = _repair_feedback(
+        stage,
+        {
+            "editTask": {},
+            "executionState": {"currentRun": {"latestStatisticsOutputIds": []}},
+        },
+        error.value,
+    )
+    assert len(feedback) <= 16000
+    answer["decision"]["evidenceRefs"].append(refs[1])
+    _, accepted = _validate_response(
+        json.dumps(answer), wf, stage, results, refs, allow_partial=True
+    )
+    assert len(accepted) == 1295
+
+
 def test_each_segment_shares_inputs_and_explicit_upstream_bindings():
     assert len(graph("lithology")) == 3
     assert len(graph("structure")) == 4

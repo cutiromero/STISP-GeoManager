@@ -152,7 +152,9 @@ class RunEvent(models.Model):
         ordering = ("id",)
 
 
-WORKFLOW_ACTIVE = ("queued", "running", "waiting_compute", "waiting_approval", "paused")
+WORKFLOW_COMPUTING = ("queued", "running", "waiting_compute")
+WORKFLOW_PARKED = ("waiting_approval", "paused")
+WORKFLOW_ACTIVE = (*WORKFLOW_COMPUTING, *WORKFLOW_PARKED)
 
 
 class AgentWorkflow(ProjectScopedModel):
@@ -199,7 +201,7 @@ class AgentWorkflow(ProjectScopedModel):
             ),
             models.UniqueConstraint(
                 fields=("owner",),
-                condition=models.Q(status__in=WORKFLOW_ACTIVE),
+                condition=models.Q(status__in=WORKFLOW_COMPUTING),
                 name="agent_one_active_workflow_user",
             ),
         ]

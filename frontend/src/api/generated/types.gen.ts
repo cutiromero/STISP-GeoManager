@@ -5853,6 +5853,14 @@ export type AgentActiveWorkflow = {
      * 所属项目ID，后续操作需该项目权限
      */
     projectId: number;
+    /**
+     * 来源对话ID；独立工作流为null
+     */
+    conversationId?: number | null;
+    /**
+     * 来源对话名称；独立工作流为null
+     */
+    conversationTitle?: string | null;
 };
 
 /**
@@ -19152,6 +19160,10 @@ export type GetActiveAgentWorkflowResponses = {
          * 挡路任务摘要或null
          */
         item: AgentActiveWorkflow | null;
+        /**
+         * 按更新时间倒序的本人停放任务，可查看或结束，不占计算名额
+         */
+        parked: Array<AgentActiveWorkflow>;
     };
 };
 

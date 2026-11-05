@@ -97,6 +97,8 @@ def test_compact_report_groups_unapproved_and_links_complete_evidence(monkeypatc
     assert "未批准细节" not in text
     assert "A-01 | 保留待核查 | 25 | 保留原数据" in text
     assert "实际结果：已执行" in text
+    assert "改代号为 " in text
+    assert "暂不参与" not in text and "不参与分析" not in text
     assert "修订 2" in text and "冻结的名称代号表 L-03条目" in text
     assert "/api/compute/outputs/30/file/?projectTagId=4" in text
     assert "/api/catalog/resources/22/profile/?projectTagId=4" in text

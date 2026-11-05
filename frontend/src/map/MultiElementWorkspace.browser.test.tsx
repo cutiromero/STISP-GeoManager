@@ -547,7 +547,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   expect(screen.getByText("第2处，共3处")).toBeVisible();
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
-      "本轮不参与分析",
+      "已从最终成果删除",
     ),
   );
   await expectFocusInBothMaps();
@@ -564,7 +564,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   completeMineralRead();
   await expectFocusInBothMaps();
   expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
-    "本轮不参与分析",
+    "已从最终成果删除",
   );
   fireEvent.click(screen.getByLabelText("下一处修改"));
   await waitFor(() =>
@@ -665,7 +665,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   expect(screen.getByText("第1处，共1处")).toBeVisible();
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
-      "本轮不参与分析",
+      "已从最终成果删除",
     ),
   );
   fireEvent.click(screen.getByRole("button", { name: "查看矿物章节" }));

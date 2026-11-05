@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.62] - 2026-11-05
+
+### Changed
+- 每个账号同时只限制一个正在排队或计算的工作流；等待确认和已暂停的任务不再阻挡新建逻辑推理。确有任务在计算时，提示说明是哪个任务、在哪个对话，并可查看或结束。
+- 审批卡片可执行的组排在前面并默认展开，按要素、规则和动作合并显示，组内列出各目标单元与数量；待裁定与例外合并收进默认折叠的区域。
+- 处置动作统一显示为“剔除（从修正后成果删除）”“降权”“重分类为 X / 改代号为 X”。
+- 综合推理算子升级至1.0.7。
+
+### Fixed
+- 分组处置校验按组汇总错误，每组只需引用一次对应知识；重试提示限长并按模型输入预算压缩，不再因错误清单过长导致任务失败。
+- 对比页“上一处修改 / 下一处修改”在宽屏和窄屏下都可见可用。
+
 ## [0.1.61] - 2026-11-05
 
 ### Changed

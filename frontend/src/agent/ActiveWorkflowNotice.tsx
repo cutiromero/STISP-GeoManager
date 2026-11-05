@@ -33,6 +33,7 @@ export default function ActiveWorkflowNotice({
   refreshKey: string;
 }) {
   const [item, setItem] = useState<AgentActiveWorkflow | null>(null);
+  const [parked, setParked] = useState<AgentActiveWorkflow[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<AgentWorkflow>();
@@ -42,6 +43,7 @@ export default function ActiveWorkflowNotice({
   useEffect(() => {
     const controller = new AbortController();
     setItem(null);
+    setParked([]);
     setError("");
     setDetail(undefined);
     setBusy(false);
@@ -51,6 +53,7 @@ export default function ActiveWorkflowNotice({
         .then((result) => {
           if (!controller.signal.aborted) {
             setItem(result.item);
+            setParked(Array.isArray(result.parked) ? result.parked : []);
             setError("");
           }
         })
@@ -67,20 +70,19 @@ export default function ActiveWorkflowNotice({
       window.clearInterval(timer);
     };
   }, [projectId, currentId, refreshKey, attempt]);
-  const operate = async (cancel: boolean) => {
-    if (!item) return;
+  const operate = async (selected: AgentActiveWorkflow, cancel: boolean) => {
     const requestedProject = projectId;
     setBusy(true);
     setError("");
     try {
       const result = cancel
         ? await agentApi.cancelWorkflow(
-            item.id,
+            selected.id,
             undefined,
-            String(item.projectId),
+            String(selected.projectId),
           )
-        : await agentApi.workflow(item.id, {
-            projectTagId: String(item.projectId),
+        : await agentApi.workflow(selected.id, {
+            projectTagId: String(selected.projectId),
           });
       if (currentProject.current !== requestedProject) return;
       if (cancel) setAttempt((old) => old + 1);
@@ -109,44 +111,51 @@ export default function ActiveWorkflowNotice({
           }
         />
       )}
-      {item && item.id !== currentId && (
-        <Alert
-          type="warning"
-          showIcon
-          title={`已有活动任务：${item.goal.split(/[。！？\n]/)[0]}`}
-          description={
-            <Space orientation="vertical">
-              <span>
-                场景：{sceneLabels[item.workflowType] ?? item.workflowType}
-                ；状态：{statusLabels[item.status]}；更新时间：
-                {new Date(item.updatedAt).toLocaleString()}；项目：
-                {item.projectId}
-              </span>
-              <Space>
-                <Button
-                  size="small"
-                  autoInsertSpace={false}
-                  loading={busy}
-                  onClick={() => void operate(false)}
-                >
-                  查看
-                </Button>
-                <Popconfirm
-                  title="确定取消该任务？"
-                  description="已完成的计算结果会保留，运行中的任务将在安全边界停止。"
-                  okText="确认取消"
-                  cancelText="保留任务"
-                  onConfirm={() => operate(true)}
-                >
-                  <Button size="small" danger disabled={busy}>
-                    取消该任务
+      {[...(item ? [item] : []), ...parked]
+        .filter((selected) => selected.id !== currentId)
+        .map((selected) => (
+          <Alert
+            key={selected.id}
+            type={selected === item ? "warning" : "info"}
+            showIcon
+            title={`${selected === item ? "正在计算或排队" : "已停放，不阻挡新任务"}：${selected.goal.split(/[。！？\n]/)[0]}`}
+            description={
+              <Space orientation="vertical">
+                <span>
+                  场景：
+                  {sceneLabels[selected.workflowType] ?? selected.workflowType}
+                  ；状态：{statusLabels[selected.status]}；更新时间：
+                  {new Date(selected.updatedAt).toLocaleString()}；项目：
+                  {selected.projectId}；对话：
+                  {selected.conversationId == null
+                    ? "独立任务（未关联对话）"
+                    : `${selected.conversationTitle || "未命名"}（${selected.conversationId}）`}
+                </span>
+                <Space>
+                  <Button
+                    size="small"
+                    autoInsertSpace={false}
+                    loading={busy}
+                    onClick={() => void operate(selected, false)}
+                  >
+                    查看
                   </Button>
-                </Popconfirm>
+                  <Popconfirm
+                    title="确定取消该任务？"
+                    description="已完成的计算结果会保留，运行中的任务将在安全边界停止。"
+                    okText="确认取消"
+                    cancelText="保留任务"
+                    onConfirm={() => operate(selected, true)}
+                  >
+                    <Button size="small" danger disabled={busy}>
+                      取消该任务
+                    </Button>
+                  </Popconfirm>
+                </Space>
               </Space>
-            </Space>
-          }
-        />
-      )}
+            }
+          />
+        ))}
       <Modal
         title="活动工作流"
         open={Boolean(detail)}

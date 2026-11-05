@@ -90,6 +90,12 @@ def test_overlapping_rules_expand_to_one_actual_operation_in_check_order():
     rows.append({**rows[0], "issue_id": "secondary", "rule_id": "A-01"})
     expanded = expand_groups([decision(group) for group in group_summaries(rows)], rows)
     assert [item["issue_id"] for item in expanded] == ["i-0"]
+    accepted, report = assess_edits(
+        [decision(group) for group in group_summaries(rows)],
+        [{"key": "issues", "rows": rows}],
+    )
+    assert [item["issue_id"] for item in accepted] == ["i-0"]
+    assert not report["errors"]
 
 
 def test_group_cannot_receive_conflicting_duplicate_decisions():
@@ -97,3 +103,48 @@ def test_group_cannot_receive_conflicting_duplicate_decisions():
     group = group_summaries(rows)[0]
     with pytest.raises(ComputeError, match="只能给出一次"):
         expand_groups([decision(group), decision(group, disposition="review")], rows)
+
+
+def test_repeated_group_errors_are_aggregated_by_reason():
+    rows = issues(1500)
+    for row in rows:
+        row["allowed_actions_json"] = '["review"]'
+    accepted, report = assess_edits(
+        [decision(group_summaries(rows)[0])], [{"key": "issues", "rows": rows}]
+    )
+    assert accepted == [] and report["discardedCount"] == 1500
+    assert len(report["errors"]) == 1
+    assert report["errors"][0]["count"] == 1500
+    assert "1500 个对象" in report["errors"][0]["reason"]
+
+
+def test_many_individual_errors_have_bounded_count_and_length():
+    from apps.agent.demo_decisions import _repair_feedback
+    from apps.agent.geology_multi_review import EditValidationError
+
+    edits = [
+        {
+            "issue_id": f"missing-{index}" + "x" * 2000,
+            "action": "exclude",
+            "target_code": "",
+            "weight": 0,
+            "reason": "实测依据",
+        }
+        for index in range(2000)
+    ]
+    accepted, report = assess_edits(edits, [{"key": "issues", "rows": issues(1)}])
+    assert not accepted and report["discardedCount"] == 2000
+    assert len(report["errors"]) <= 30
+    assert sum(error.get("count", 1) for error in report["errors"]) == 2000
+    assert "省略" in report["errors"][-1]["reason"]
+    assert len(json.dumps(report["errors"], ensure_ascii=False)) <= 12000
+    feedback = _repair_feedback(
+        {"identifier": "geology-multi-apply"},
+        {
+            "editTask": {"repeatedContext": "重复" * 50000},
+            "executionState": {"currentRun": {"latestStatisticsOutputIds": [2]}},
+        },
+        EditValidationError(report["errors"]),
+    )
+    assert len(feedback) <= 16000
+    assert len(json.loads(feedback)["invalidEdits"]) <= 30

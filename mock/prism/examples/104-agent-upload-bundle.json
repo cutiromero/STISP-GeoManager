@@ -59,10 +59,22 @@
         "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
         "goal": "检查研究区地质图。核对字段后执行。",
         "workflowType": "geology_map_review",
-        "status": "waiting_approval",
+        "status": "running",
         "updatedAt": "2026-11-04T08:00:00Z",
-        "projectId": 1
-      }
+        "projectId": 1,
+        "conversationId": 42,
+        "conversationTitle": "地质图核查"
+      },
+      "parked": [{
+        "id": "69ac90d1-999f-44b7-9b68-1da1f726a143",
+        "goal": "等待复查确认",
+        "workflowType": "geology_generic",
+        "status": "waiting_approval",
+        "updatedAt": "2026-11-05T08:00:00Z",
+        "projectId": 1,
+        "conversationId": 41,
+        "conversationTitle": "上次核查"
+      }]
     }
   }
 }

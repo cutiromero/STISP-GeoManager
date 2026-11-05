@@ -45,7 +45,10 @@ const saved: AgentWorkflow = {
 };
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.spyOn(agentApi, "activeWorkflow").mockResolvedValue({ item });
+  vi.spyOn(agentApi, "activeWorkflow").mockResolvedValue({
+    item: null,
+    parked: [item],
+  });
   vi.spyOn(agentApi, "workflow").mockResolvedValue(saved);
   vi.spyOn(agentApi, "cancelWorkflow").mockResolvedValue({
     ...saved,
@@ -55,7 +58,7 @@ beforeEach(() => {
 
 it("shows blocking task identity and uses the target project for viewing and confirmed cancellation", async () => {
   render(<ActiveWorkflowNotice projectId="1" refreshKey="" />);
-  await screen.findByText("已有活动任务：核对旧地质图");
+  await screen.findByText("已停放，不阻挡新任务：核对旧地质图");
   expect(
     screen.getByText(/场景：通用科研计算；状态：已暂停；更新时间：/),
   ).toBeVisible();
@@ -79,7 +82,10 @@ it("shows blocking task identity and uses the target project for viewing and con
   fireEvent.click(screen.getByRole("button", { name: "保留任务" }));
   expect(agentApi.cancelWorkflow).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "取消该任务" }));
-  vi.mocked(agentApi.activeWorkflow).mockResolvedValue({ item: null });
+  vi.mocked(agentApi.activeWorkflow).mockResolvedValue({
+    item: null,
+    parked: [],
+  });
   fireEvent.click(await screen.findByRole("button", { name: "确认取消" }));
   await waitFor(() =>
     expect(agentApi.cancelWorkflow).toHaveBeenCalledWith(
@@ -90,7 +96,7 @@ it("shows blocking task identity and uses the target project for viewing and con
   );
   await waitFor(() =>
     expect(
-      screen.queryByText("已有活动任务：核对旧地质图"),
+      screen.queryByText("已停放，不阻挡新任务：核对旧地质图"),
     ).not.toBeInTheDocument(),
   );
 });
@@ -103,5 +109,32 @@ it("reports failed cancellation without losing the blocking task", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "取消该任务" }));
   fireEvent.click(await screen.findByRole("button", { name: "确认取消" }));
   await screen.findByText("无权访问目标项目");
-  expect(screen.getByText("已有活动任务：核对旧地质图")).toBeVisible();
+  expect(screen.getByText("已停放，不阻挡新任务：核对旧地质图")).toBeVisible();
+});
+
+it("distinguishes computing from multiple parked tasks and identifies the source conversation", async () => {
+  vi.mocked(agentApi.activeWorkflow).mockResolvedValue({
+    item: {
+      ...item,
+      id: "computing",
+      status: "running",
+      conversationId: 42,
+      conversationTitle: "研究区复查",
+    },
+    parked: [
+      item,
+      {
+        ...item,
+        id: "another-parked",
+        goal: "等待结果核对",
+        status: "waiting_approval",
+      },
+    ],
+  });
+  render(<ActiveWorkflowNotice projectId="1" refreshKey="" />);
+  expect(await screen.findByText("正在计算或排队：核对旧地质图")).toBeVisible();
+  expect(screen.getByText(/对话：研究区复查（42）/)).toBeVisible();
+  expect(screen.getAllByText(/已停放，不阻挡新任务：/)).toHaveLength(2);
+  expect(screen.getAllByRole("button", { name: "查看" })).toHaveLength(3);
+  expect(screen.getAllByRole("button", { name: "取消该任务" })).toHaveLength(3);
 });

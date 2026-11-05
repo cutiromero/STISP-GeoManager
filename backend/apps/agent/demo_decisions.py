@@ -9,7 +9,7 @@ import re
 from apps.compute.packages import ComputeError
 from . import provider
 from .config import registry
-from .context import prepare_context
+from .context import InputBudgetError, prepare_context
 from .demo_results import EDIT_FIELDS, resource_context, validate_edits
 from .model_guard import ModelStreamGuard
 from .geology_generic import MULTI_FAMILY
@@ -633,12 +633,19 @@ def _validate_response(
         raise ComputeError("模型未返回有效的结构化分析说明，已保留此前结果") from exc
     if not isinstance(value, dict) or set(value) != {"decision", "edits"}:
         raise ComputeError("模型分析响应必须包含decision与edits")
+    multi_edit_response = (
+        getattr(workflow, "workflow_type", None) in MULTI_FAMILY
+        and stage["identifier"] == "geology-multi-apply"
+        and isinstance(value["decision"], dict)
+        and value["decision"].get("nextAction") == stage["identifier"]
+    )
     decision = validate_decision(
         value["decision"],
         refs,
         stage["identifier"],
         require_output=bool(results),
-        require_knowledge=bool(workflow.evidence),
+        require_knowledge=bool(workflow.evidence)
+        and not (multi_edit_response and value["edits"]),
     )
     latest = next(
         (item for item in reversed(workflow.plan["stages"]) if item.get("taskId")), None
@@ -676,11 +683,7 @@ def _validate_response(
     group_decisions = [
         item for item in value["edits"] if isinstance(item, dict) and "group_id" in item
     ]
-    if (
-        getattr(workflow, "workflow_type", None) in MULTI_FAMILY
-        and stage["identifier"] == "geology-multi-apply"
-        and decision["nextAction"] == stage["identifier"]
-    ):
+    if multi_edit_response:
         from .geology_multi_review import assess_edits, EditValidationError
 
         check = next(
@@ -873,7 +876,7 @@ def decide(
             "问题来自editTask.issuesOutputIds对应actualResults；issue_id及target_code须与该真实行一致。"
             "action只从allowed_actions_json选，set_code/reclassify/merge目标必须是实测支持的target_code；其他动作target_code为空。"
             "降权downweight保留原对象且0<weight<1，exclude权重为0，其他动作weight=1。"
-            "对每个建议在decision.evidenceRefs引用该问题rule_id/rule_version对应的具体knowledge编号。"
+            "逐条建议须引用对应知识；分组建议在decision.evidenceRefs引用一次该组rule_id/rule_version对应的具体knowledge编号即可，无须为展开对象重复引用。"
             "疑点与建议不设数量上限；覆盖全部分组，不能逐条输出几千项；整组建议由后端展开并逐对象校验及人工批准。"
             "岩石孤岛不能单凭老新关系认定错误，构造短线不能单凭短就认定假线，碳酸盐背景不能排除热液叠加。"
             "apply阶段提出edits时尚无用户批准属正常状态，不能以尚无批准为由不提建议。"
@@ -931,13 +934,26 @@ def decide(
     output_limit = policy["maxOutputTokens"]
     parameters = {**policy, "maxOutputTokens": output_limit}
     feedback_text = ""
+    raw = ""
+    base_messages = [dict(message) for message in messages]
+    repair_level = 0
     for attempt in range(2):
         guard()
-        # Keep current anchored to the original payload: excess retry context fails
-        # the budget check rather than removing the complete original evidence.
-        tokens, truncated = prepare_context(
-            messages, current, model, parameters, window, False
-        )
+        while True:
+            guard()
+            try:
+                tokens, truncated = prepare_context(
+                    messages, current, model, parameters, window, False
+                )
+                break
+            except InputBudgetError:
+                if not attempt or repair_level >= 6:
+                    raise
+                repair_level += 1
+                messages = _retry_messages(
+                    base_messages, raw, feedback_text, repair_level
+                )
+                current = messages[1]
         if truncated:
             raise provider.ModelError(
                 "模型修正请求必须保留完整原始资料，请缩小输入范围"
@@ -952,6 +968,7 @@ def decide(
             "requested": False,
             "requestSha256": hashlib.sha256(request.encode("utf-8")).hexdigest(),
             "feedback": feedback_text,
+            "repairLevel": repair_level,
             "inputTokens": tokens,
             "contentBytes": sum(
                 len(item["content"].encode("utf-8")) for item in messages
@@ -1010,12 +1027,8 @@ def decide(
             if attempt:
                 raise
             feedback_text = _repair_feedback(stage, payload, exc)
-            messages.extend(
-                [
-                    {"role": "assistant", "content": raw},
-                    {"role": "user", "content": feedback_text},
-                ]
-            )
+            messages = _retry_messages(base_messages, raw, feedback_text, 0)
+            current = messages[1]
             continue
         record.update(status="accepted", accepted=True)
         if on_attempt:
@@ -1037,7 +1050,16 @@ def _repair_feedback(stage, payload, error):
         "平台不会代补引用或修改计划。",
     }
     if hasattr(error, "errors"):
-        feedback["invalidEdits"] = error.errors
+        from .geology_multi_review import bounded_errors
+
+        feedback["invalidEdits"] = bounded_errors(error.errors)
+        feedback["validationError"] = str(error)[:2000]
+    if stage["identifier"] == "geology-multi-apply":
+        feedback["knowledgeCitationInstruction"] = (
+            "按invalidEdits中的group_id及requiredKnowledgeRefs补充该规则的实际知识引用；"
+            "在decision.evidenceRefs中每组引用一次即可，不需要逐对象重复引用。"
+            "证据不足的组改为review，其余有效组可继续提交人工审批。"
+        )
     if stage["identifier"] == "geology-map-correct":
         feedback["knowledgeCitationInstruction"] = (
             "逐项对照editTask.issueKnowledgeRequirements；每项采纳的修改在decision.evidenceRefs"
@@ -1054,7 +1076,67 @@ def _repair_feedback(stage, payload, error):
             "其他字段不能仍声称对应候选等待用户审核。历史审核前说明不是当前状态。"
             "批准不扩展到全部结果或归档；低置信证据、后续专业复核和原无效面积限制继续如实说明。",
         )
-    return json.dumps(feedback, ensure_ascii=False)
+    text = json.dumps(feedback, ensure_ascii=False)
+    if len(text) > 16000:
+        feedback["editTask"] = "见原始输入editTask，不重复附带"
+        feedback["validationError"] = str(error)[:2000]
+        if "approvedResultScope" in feedback:
+            feedback["approvedResultScope"] = (
+                "见原始输入executionState中的真实用户批准范围"
+            )
+        while len(json.dumps(feedback, ensure_ascii=False)) > 16000 and feedback.get(
+            "invalidEdits"
+        ):
+            removed = feedback["invalidEdits"].pop()
+            feedback["omittedInvalidEdits"] = feedback.get(
+                "omittedInvalidEdits", 0
+            ) + removed.get("count", 1)
+        text = json.dumps(feedback, ensure_ascii=False)
+    if len(text) > 16000:
+        feedback = {
+            "validationError": str(error)[:2000],
+            "allowedAction": str(stage["identifier"])[:200],
+            "instruction": "对照原始完整资料及最新统计修正decision/edits；错误清单过长已省略，无据的建议保留待核查。",
+        }
+        text = json.dumps(feedback, ensure_ascii=False)
+    return text
+
+
+def _retry_messages(base, raw, feedback, level):
+    messages = [dict(message) for message in base]
+    if level == 0:
+        return [
+            *messages,
+            {"role": "assistant", "content": raw},
+            {"role": "user", "content": feedback},
+        ]
+    if level >= 2:
+        value = json.loads(feedback)
+        value.pop("editTask", None)
+        value.pop("approvedResultScope", None)
+        value["validationError"] = value["validationError"][:500]
+        if "invalidEdits" in value:
+            value["invalidEdits"] = value["invalidEdits"][: max(1, 8 // level)]
+        feedback = json.dumps(value, ensure_ascii=False)
+    if level >= 3:
+        messages[0]["content"] = (
+            "依据原始完整资料修正响应，只输出JSON对象decision和edits。decision须含字段："
+            + ",".join(sorted(FIELDS))
+            + "。遵守allowedAction、editTask及批准范围；引用实际最新统计和匹配规则的知识，"
+            "不补造引用。edits为数组，字段须符合原始editTask及实际问题；"
+            "分组时每组引用一次对应知识即可。证据不足保留待核查；实际修改仍须用户批准。"
+        )
+    if level >= 4:
+        value = json.loads(feedback)
+        feedback = json.dumps(
+            {
+                "validationError": value["validationError"][: max(40, 400 // level)],
+                "instruction": "重新输出完整decision/edits；无据建议保留待核查，引用原始资料中的对应知识及最新统计。",
+            },
+            ensure_ascii=False,
+        )
+    messages.append({"role": "user", "content": feedback})
+    return messages
 
 
 def _recover_decision(
@@ -1135,12 +1217,10 @@ def _recover_decision(
                 reject()
             if attempt.get("feedback") != feedback:
                 reject()
-            messages.extend(
-                [
-                    {"role": "assistant", "content": previous["response"]},
-                    {"role": "user", "content": feedback},
-                ]
-            )
+            level = attempt.get("repairLevel", 0)
+            if type(level) is not int or not 0 <= level <= 6:
+                reject()
+            messages = _retry_messages(messages, previous["response"], feedback, level)
         elif attempt.get("feedback") != "":
             reject()
         content_bytes = sum(len(item["content"].encode("utf-8")) for item in messages)

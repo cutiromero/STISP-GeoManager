@@ -6,7 +6,7 @@ import json
 from unittest.mock import patch
 
 import pytest
-from django.db import IntegrityError, OperationalError, transaction
+from django.db import OperationalError
 from django.utils import timezone
 
 from apps.agent.demo_workflow import _save, advance_demo, confirm_demo, prepare_demo
@@ -44,7 +44,7 @@ def prepared(env, *, execute=True):
     return workflow
 
 
-def test_pause_queued_is_durable_idempotent_and_reserved(demo):
+def test_pause_queued_is_durable_idempotent_and_releases_slot(demo):
     workflow = prepared(demo)
     response = control(demo, workflow, "pause")
     assert response.status_code == 200, response.content
@@ -55,10 +55,11 @@ def test_pause_queued_is_durable_idempotent_and_reserved(demo):
     assert claim() is None
     advance_demo(workflow.id)
     assert not ComputeTask.objects.exists()
-    with transaction.atomic(), pytest.raises(IntegrityError):
-        AgentWorkflow.objects.create(
-            owner=demo["owner"], model="mock", goal="another", idempotency_key="another"
-        )
+    another = AgentWorkflow.objects.create(
+        owner=demo["owner"], model="mock", goal="another", idempotency_key="another"
+    )
+    assert control(demo, workflow, "resume").status_code == 409
+    assert control(demo, another, "cancel").json()["status"] == "cancelled"
     assert control(demo, workflow, "resume").json()["status"] == "queued"
     assert control(demo, workflow, "resume").json()["status"] == "queued"
 
