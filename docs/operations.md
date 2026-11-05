@@ -302,6 +302,8 @@ Windows 必须完成 WSL2 组件启用及其要求的重启，才可在项目根
 
 Linux 原生部署可直接构建同一 Dockerfile，用 `configure_compute_runtime` 配置 Docker 命令；受限 AutoDL 实例也可显式使用 `configure_compute_runtime --native` 配置本机 Python 子进程执行，并将 `manage.py compute_worker --config <实际配置>` 交由进程管理器运行。native 模式不提供容器的文件系统、网络和 capability 隔离，只有在管理员接受该运行边界时启用。无可用执行环境或无 worker 时，应用应拒绝提交。新增版本须完成试运行和人工核对输出后发布；Docker 模式保留仍被任务/版本引用的旧镜像摘要，native 模式保留 Python 依赖摘要。
 
+计算运行器失败时，内部状态文件在既有`status`之外携带受限的`error_type`和`error_detail`。异常类型限制为64个ASCII标识符字符，说明只允许固定错误分类及内存分配量，不传出原始异常文本、路径、口令或令牌；例如任务失败信息显示“内存不足：无法分配25.9 MiB”。宿主进程再次校验字段白名单，不接受算子自行注入的任意说明。native与Docker共用该协议，状态文件超过4096字节仍拒绝。需同时更新平台的`deploy/compute/runner.py`及`backend/apps/compute/runtime.py`并重启本项目compute worker；只上传算子ZIP不会启用失败原因展示。进程在写状态前被系统杀死时仍显示原有提前退出提示，不能保证取得异常类型。
+
 计算包/持久结果位于 TOML 应用数据根 `projects/<project>/compute/`，工作暂存位于 `cache/compute/`；正式数据沿用原科研根目录。完整平台备份会包含计算模型及持久文件，缓存不纳入备份。结果 7 天过期清理只影响临时文件；任务元信息首版持续保留。默认一个重任务名额与栅格任务共享，不支持 GPU 或任意在线安装依赖。
 
 Windows 中文数据路径下，GDAL CLI 需要由 `apps/core/cli.py` 统一封装传入 Unicode 数据目录及临时目录。不要绕过封装直接调用栅格导入 CLI，否则可能再次出现找不到 `proj.db` 或临时文件路径乱码。

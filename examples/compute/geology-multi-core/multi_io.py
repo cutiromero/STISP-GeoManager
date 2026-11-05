@@ -246,6 +246,8 @@ def frame_identity(frame):
 
 
 def inputs(context, config, include_rasters=True):
+    from multi_windows import GDAL_CACHE_MB, ordered_windows
+
     epsg = config["working_epsg"]
     lithology = vector(
         context.input_path("lithology"),
@@ -282,24 +284,33 @@ def inputs(context, config, include_rasters=True):
             with rasterio.open(context.input_path(key)) as src:
                 if src.crs is None or src.count != 1:
                     raise ValueError("蚀变影像需要单波段和真实坐标系")
-                values = src.read(1, masked=True)
+                pixels = hashlib.sha256()
+                with rasterio.Env(GDAL_CACHEMAX=GDAL_CACHE_MB * 1024 * 1024):
+                    for window in ordered_windows(src):
+                        pixels.update(
+                            src.read(1, window=window, masked=True).filled(0).tobytes()
+                        )
+                    for window in ordered_windows(src):
+                        pixels.update(
+                            np.ma.getmaskarray(
+                                src.read(1, window=window, masked=True)
+                            ).tobytes()
+                        )
                 raster_identity[key] = {
                     "crs": src.crs.to_wkt(),
                     "transform": list(src.transform),
-                    "shape": values.shape,
-                    "pixels": hashlib.sha256(
-                        values.filled(0).tobytes()
-                        + np.ma.getmaskarray(values).tobytes()
-                    ).hexdigest(),
+                    "shape": src.shape,
+                    "pixels": pixels.hexdigest(),
                 }
             try:
                 weight_path = context.input_path(key + "_weight")
             except KeyError:
                 weight_path = None
             if weight_path:
-                raster_identity[key + "_weight"] = hashlib.sha256(
-                    Path(weight_path).read_bytes()
-                ).hexdigest()
+                with Path(weight_path).open("rb") as stream:
+                    raster_identity[key + "_weight"] = hashlib.file_digest(
+                        stream, "sha256"
+                    ).hexdigest()
     payload = {
         "lithology": frame_identity(lithology),
         "faults": frame_identity(faults),
