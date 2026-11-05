@@ -295,7 +295,9 @@ it("real answer preview survives cancellation and a transient polling disconnect
     status: "cancelled",
   });
   showAgent();
-  await screen.findByText("预览连接暂时中断");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "预览连接暂时中断",
+  );
   expect(
     screen.getByRole("region", { name: "答复增量预览" }),
   ).toHaveTextContent("中断前的真实片段");
@@ -2498,7 +2500,7 @@ it("retains streamed history after a connection failure and resumes polling", as
       cursor: 1,
     });
   showAgent();
-  await screen.findByText("连接暂时中断");
+  expect(await screen.findByRole("alert")).toHaveTextContent("连接暂时中断");
   expect(screen.getByText("正在处理的问题")).toBeInTheDocument();
   expect(screen.getByText("已有的部分回答")).toBeInTheDocument();
   expect(screen.queryByText(/当前账号未获准/)).not.toBeInTheDocument();

@@ -724,9 +724,7 @@ describe("application critical flows", () => {
         { timeout: 5000 },
       );
       expect(canvas).toBeInTheDocument();
-      const wrapper = canvas.closest<HTMLElement>(
-        ".geology-workbench-single-map",
-      );
+      const wrapper = canvas.closest<HTMLElement>("main.map-stage");
       expect(wrapper).not.toBeNull();
       expect(wrapper!.getBoundingClientRect().height).toBeGreaterThan(300);
       expect(canvas.getBoundingClientRect().height).toBeGreaterThan(300);

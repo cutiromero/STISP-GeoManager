@@ -26,7 +26,8 @@ vi.mock("../api/platform", () => ({
   },
 }));
 
-vi.mock("../api/client", () => ({
+vi.mock("../api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/client")>()),
   api: mockApi,
   requestJson: vi.fn().mockResolvedValue({ canChat: false, canAgent: false }),
   requestForm: vi.fn(),
