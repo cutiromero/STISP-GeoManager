@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import TestCase, override_settings
 
 from apps.core.storage import (
     raster_processed_path,
@@ -153,7 +153,7 @@ class LuccStaticRendererRegressionTests(TestCase):
         return dataset, processed_path
 
 
-class LuccRenderJobRegressionTests(SimpleTestCase):
+class LuccRenderJobRegressionTests(TestCase):
     def setUp(self):
         with jobs_service._LOCK:
             jobs_service._JOBS.clear()
@@ -213,8 +213,8 @@ class LuccRenderJobRegressionTests(SimpleTestCase):
         self.assertEqual(
             observed_states,
             [
-                ("running", "tile-pyramid", None),
-                ("running", "tile-pyramid", None),
+                ("running", "tile-pyramid", {"inputRefs": [{"datasetId": 7}]}),
+                ("running", "tile-pyramid", {"inputRefs": [{"datasetId": 7}]}),
             ],
         )
         build_static_pyramid.assert_called_once()

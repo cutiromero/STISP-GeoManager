@@ -14,7 +14,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from apps.agent.management.commands import prepare_real_geology_case as command
-from apps.catalog.models import DataResource, ResultArtifact
+from apps.catalog.models import DataResource, DictionaryItem, ResultArtifact
 from apps.compute.models import AlgorithmResource, AlgorithmVersion
 from apps.core.storage import app_path
 from apps.projects.context import ProjectScope, project_scope
@@ -60,6 +60,13 @@ def test_checked_file_rejects_missing_or_changed_content(tmp_path, failure):
 
 @pytest.fixture
 def material_context(settings, tmp_path, monkeypatch):
+    # Transactional tests may flush dictionary rows seeded only by migrations.
+    for code, name in (("spatial", "地理数据"), ("non_spatial", "非地理数据")):
+        DictionaryItem.objects.update_or_create(
+            dict_type=DictionaryItem.DictType.DATA_CATEGORY,
+            code=code,
+            defaults={"name": name, "is_active": True},
+        )
     settings.PROJECT_CONFIG = replace(
         settings.PROJECT_CONFIG,
         app_data=tmp_path / "app",

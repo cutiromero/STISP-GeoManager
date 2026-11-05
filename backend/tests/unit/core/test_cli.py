@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from django.test import SimpleTestCase
@@ -49,8 +50,10 @@ class CliCommandTests(SimpleTestCase):
             proj_data = prefix / "Library" / "share" / "proj"
             proj_data.mkdir(parents=True)
 
-            environment = cli.cli_environment({"CONDA_PREFIX": str(prefix)})
-            command = cli.build_cli_command(["gdalinfo", "-json"], env=environment)
+            windows_os = SimpleNamespace(name="nt", pathsep=";", environ={})
+            with mock.patch.object(cli, "os", windows_os):
+                environment = cli.cli_environment({"CONDA_PREFIX": str(prefix)})
+                command = cli.build_cli_command(["gdalinfo", "-json"], env=environment)
 
         self.assertEqual(command[0], str(executable))
         self.assertEqual(command[1:], ["-json"])
@@ -89,16 +92,18 @@ class CliCommandTests(SimpleTestCase):
 
             with (
                 mock.patch.object(cli.sys, "prefix", str(runtime_prefix)),
-                mock.patch.dict(
-                    cli.os.environ,
-                    {"CONDA_PREFIX": str(stale_prefix), "PATH": ""},
-                    clear=True,
+                mock.patch.object(
+                    cli,
+                    "os",
+                    SimpleNamespace(
+                        name="nt",
+                        pathsep=";",
+                        environ={"CONDA_PREFIX": str(stale_prefix), "PATH": ""},
+                    ),
                 ),
             ):
                 environment = cli.cli_environment()
-                command = cli.build_cli_command(
-                    ["gdalinfo", "-json"], env=environment
-                )
+                command = cli.build_cli_command(["gdalinfo", "-json"], env=environment)
 
         self.assertEqual(environment["CONDA_PREFIX"], str(runtime_prefix))
         self.assertEqual(command[0], str(executable))

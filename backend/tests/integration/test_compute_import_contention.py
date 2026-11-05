@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from django.db import OperationalError
 
-from apps.catalog.models import DataResource, VectorDataset
+from apps.catalog.models import DataResource, DictionaryItem, VectorDataset
 from apps.compute.data import inspect_output
 from apps.compute.models import ComputeImport, ComputeOutput, ComputeTask
 from apps.compute.packages import ComputeError, checksum
@@ -60,6 +60,12 @@ def make_import(env, kind="table"):
 @pytest.mark.django_db(transaction=True)
 def test_busy_after_vector_commit_reuses_resource_and_physical_layer(setup_compute):  # noqa: F811
     env = setup_compute
+    # Do not depend on migration seed data surviving prior transactional tests.
+    DictionaryItem.objects.update_or_create(
+        dict_type=DictionaryItem.DictType.DATA_CATEGORY,
+        code="compute_results",
+        defaults={"name": "计算结果", "is_active": True, "is_selectable": False},
+    )
     task, record = make_import(env, "vector")
     table_name = f"compute_{record.storage_key.hex}"
     saved = DataResource.save
