@@ -18,7 +18,7 @@ from apps.compute.packages import ComputeError
 from apps.core.storage import vector_geopackage_path
 
 from .geology_generic import MINERALS, utm_epsg
-from .tools import resolve_resource
+from .workflow_resources import resolve_workflow_resource
 from .workflow_uploads import register_vector
 
 PLACEHOLDER_NAME = "未提供的蚀变识别结果（全零）"
@@ -292,7 +292,7 @@ def build_inputs(workflow, user, policy) -> None:
     uploads = workflow.plan["uploadInputs"]
     mapping = workflow.plan["confirmedMapping"]
     source = {
-        role: resolve_resource(user, policy, identity)
+        role: resolve_workflow_resource(user, policy, identity, workflow)
         for role, identity in uploads.items()
     }
     original = _read(source["lithology"])

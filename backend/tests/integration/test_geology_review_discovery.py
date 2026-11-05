@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils import timezone
 
 from apps.agent.demo_workflow import prepare_demo
@@ -16,7 +16,6 @@ from apps.agent.research_parser import plausible, validate
 from apps.agent.research_presets import REVIEW_MARKERS, discover, list_demos, PROMPTS
 from apps.catalog.models import DataResource
 from apps.compute.models import ComputeTask
-from apps.compute.packages import ComputeError
 from tests.integration.test_chat_research_intent import run
 from tests.integration.test_compute import setup_compute  # noqa: F401
 from tests.integration.test_demo_workflow import demo  # noqa: F401
@@ -188,8 +187,15 @@ def test_internal_reference_never_enters_manual_catalog_or_runtime(review_case, 
     assert resource.id not in {
         item["id"] for rows in scene(env, manual)["inputs"].values() for item in rows
     }
-    with pytest.raises(ComputeError, match="独立验收"):
+    before_tasks = ComputeTask.objects.count()
+    before_checkpoints = env["workflow"].checkpoints.count()
+    original_plan = copy.deepcopy(env["workflow"].plan)
+    with pytest.raises(PermissionDenied, match="不在当前业务数据范围"):
         prepare_demo(env["workflow"], env["owner"], env["policy"])
+    env["workflow"].refresh_from_db()
+    assert env["workflow"].plan == original_plan
+    assert env["workflow"].checkpoints.count() == before_checkpoints
+    assert ComputeTask.objects.count() == before_tasks
 
 
 def test_manual_resource_and_algorithm_selections_remain_ceilings(review_case):

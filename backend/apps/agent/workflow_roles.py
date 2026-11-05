@@ -107,6 +107,12 @@ def recognize_roles(
         raise ComputeError("请先上传本次资料")
     if any(upload.workflow_id for upload in uploads):
         raise ComputeError("该批次资料已用于任务", 409)
+    if source_run is not None:
+        from .workflow_resources import resolve_run_resource
+
+        for upload in uploads:
+            if upload.source == "catalog":
+                resolve_run_resource(user, policy, upload.resource_id, source_run)
     model = registry().get(model_id)
     if model is None:
         raise ComputeError("模型不可用", 403)
@@ -144,6 +150,12 @@ def recognize_roles(
             != snapshots
         ):
             raise PermissionDenied("本批资料已移除、变化或用于任务，请重新核对")
+        if source_run is not None:
+            for upload in current_uploads:
+                if upload.source == "catalog":
+                    resolve_run_resource(
+                        actor, fresh_policy, upload.resource_id, current
+                    )
         if (
             bool(
                 fresh_policy.get(

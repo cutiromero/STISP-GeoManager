@@ -1,5 +1,6 @@
 """Run-scoped, server-enforced tool selectors; independent of model wording."""
 
+import re
 from uuid import UUID
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -11,6 +12,12 @@ KNOWLEDGE_TOOLS = {
     "read_knowledge_document",
     "check_knowledge_constraints",
 }
+
+# Configuration: only explicit continuation wording inherits an earlier topic.
+CONTINUATION_TOPIC = re.compile(
+    r"继续|接着|上轮|上次|刚才|上述|前面|这个|这张|这幅|这份|该资料|该数据|同一|它"
+    r"|跑完|算完|完成了吗|进度|结果如何|结果怎么样"
+)
 
 
 def knowledge_selection(run):
@@ -40,12 +47,17 @@ def knowledge_domains(run, query=""):
             v.algorithm.name for v in available_versions() if v.id in version_ids
         )
     current = query_domains(topic)
-    if not current:
+    if not current and CONTINUATION_TOPIC.search(run.prompt):
         prior = run.conversation.runs.all()
         if run.id is not None:
             prior = prior.filter(id__lt=run.id)
         for previous in prior.order_by("-id")[:1]:
-            current = query_domains(previous.prompt)
+            saved = (previous.knowledge_selection or {}).get("_resolvedDomains")
+            current = (
+                validate_domains(saved)
+                if saved is not None
+                else query_domains(previous.prompt)
+            )
     return current or query_domains(query) or list(DOMAINS)
 
 
@@ -236,6 +248,195 @@ def check_history_evidence(run, user, policy):
         authorize_run(source, user, policy, history=True)
 
 
+def source_resource_ids(source):
+    """Read only documented resource positions, never arbitrary integers in results."""
+    identities = list(source.resource_ids or [])
+    for intent in (source.compute_intent or {}, source.research_intent or {}):
+        identities.extend(intent.get("inputs", {}).values())
+    for evidence in source.evidence:
+        if evidence.get("resourceId") is not None:
+            identities.append(evidence["resourceId"])
+        result = evidence.get("result", {})
+        if not isinstance(result, dict):
+            continue
+        rows = [result]
+        if evidence.get("tool") == "search_resources":
+            identities.extend(
+                item.get("id")
+                for item in result.get("items", [])
+                if isinstance(item, dict)
+            )
+        if evidence.get("tool") == "list_compute_tasks":
+            rows = result.get("items", [])
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            identities.append(row.get("resourceId"))
+            outputs = row.get("outputs", [])
+            if isinstance(row.get("output"), dict):
+                outputs = [row["output"]]
+            identities.extend(
+                item.get("resourceId") for item in outputs if isinstance(item, dict)
+            )
+    return {
+        identity for identity in identities if type(identity) is int and identity > 0
+    }
+
+
+def _require_bound_resource(identity, current, user, policy):
+    from apps.compute.models import ComputeImport
+    from .compute_tools import authorized_task
+
+    # A run may continue its own actual calculation, but cannot borrow another
+    # turn's or another workflow's private intermediate resources.
+    if current.pk:
+        for link in current.compute_followups.select_related("task"):
+            task = link.task
+            if not (
+                task.input_records.filter(resource_id=identity).exists()
+                or ComputeImport.objects.filter(
+                    output__task=task, status="ready", resource_id=identity
+                ).exists()
+            ):
+                continue
+            require_task_selection(
+                current, authorized_task(user, link.task_id, policy, run=current)
+            )
+            return
+    if current.research_workflow_id or (current.research_intent or {}).get(
+        "_uploadBatchId"
+    ):
+        from .workflow_resources import resolve_run_resource
+
+        resolve_run_resource(user, policy, identity, current)
+        return
+    raise PermissionDenied("历史资料不在当前任务可复用范围内")
+
+
+def check_context_evidence(source, current, user, policy):
+    """Model reuse is stricter than the ACL-only, read-only history view."""
+    from .compute_tools import authorized_task
+    from .research_intents import authorize_run
+    from .resource_discovery import discover_resources
+    from .tools import check_evidence
+
+    same_run = source.pk is not None and source.pk == current.pk
+    check_evidence(source, user, policy, history=not same_run)
+    authorize_run(source, user, policy, history=not same_run)
+    if not same_run and any(
+        item.get("tool") == "summarize_resource_catalog" for item in source.evidence
+    ):
+        # Old totals lack per-resource provenance and must be queried afresh.
+        raise PermissionDenied("历史目录统计需要按当前范围重新查询")
+    identities = source_resource_ids(source)
+    if identities:
+        visible = (
+            set()
+            if current.data_selection_mode == "manual" and not current.resource_ids
+            else set(
+                discover_resources(user, policy, current.resource_ids)
+                .filter(pk__in=identities)
+                .values_list("id", flat=True)
+            )
+        )
+        for identity in identities - visible:
+            _require_bound_resource(identity, current, user, policy)
+    for evidence in source.evidence:
+        if evidence.get("tool") not in {
+            "execute_operator",
+            "get_compute_task",
+            "list_compute_tasks",
+            "import_compute_result",
+            "read_compute_output",
+        }:
+            continue
+        result = evidence.get("result", {})
+        rows = (
+            result.get("items", [])
+            if evidence["tool"] == "list_compute_tasks"
+            else [result]
+        )
+        for row in rows:
+            if isinstance(row, dict) and row.get("taskId"):
+                context = (
+                    {} if evidence["tool"] == "list_compute_tasks" else {"run": current}
+                )
+                require_task_selection(
+                    current, authorized_task(user, row["taskId"], policy, **context)
+                )
+
+
+def context_reusable(previous, current, user, policy):
+    try:
+        if not history_compatible(previous, current):
+            return False
+        for source in history_sources(previous):
+            check_context_evidence(source, current, user, policy)
+    except (PermissionDenied, ValidationError, ValueError):
+        return False
+    return True
+
+
+def check_context_sources(run, user, policy):
+    """Recheck only sources actually sent to this model, not unrelated old turns."""
+    from .models import AgentRun
+
+    check_context_evidence(run, run, user, policy)
+    marker = (run.knowledge_selection or {}).get("_contextRunIds", [])
+    identities = {identity for identity in marker if type(identity) is int}
+    sources = AgentRun.objects.filter(
+        pk__in=identities,
+        conversation_id=run.conversation_id,
+        owner_id=run.owner_id,
+        project_tag_id=run.project_tag_id,
+        id__lt=run.id,
+    )
+    if sources.count() != len(identities):
+        raise PermissionDenied("已发送的历史来源发生变化，请重新发起分析")
+    for source in sources:
+        if not history_compatible(source, run):
+            raise PermissionDenied("已发送的历史来源超出当前选择，请重新发起分析")
+        check_context_evidence(source, run, user, policy)
+
+
+def sanitize_context_state(run, user, policy, state=None):
+    """Drop an unverifiable history prefix while retaining this run's real tools."""
+    from .models import AgentRun
+
+    state = dict(run.execution_state if state is None else state)
+    if not state or run.conversation.mode != "agent":
+        return state
+    check_context_evidence(run, run, user, policy)
+    messages, index = list(state.get("messages", [])), state.get("currentIndex")
+    if type(index) is not int or not 0 <= index < len(messages):
+        raise ValidationError("任务续接上下文无效，请重新发起分析")
+    marker = (run.knowledge_selection or {}).get("_contextRunIds")
+    identities = (
+        {identity for identity in marker if type(identity) is int}
+        if isinstance(marker, list)
+        else set()
+    )
+    sources = AgentRun.objects.filter(
+        pk__in=identities,
+        conversation_id=run.conversation_id,
+        owner_id=run.owner_id,
+        project_tag_id=run.project_tag_id,
+        id__lt=run.id,
+    )
+    verified = (
+        bool(identities)
+        and sources.count() == len(identities)
+        and all(context_reusable(source, run, user, policy) for source in sources)
+    )
+    if not index or not verified:
+        state.update(messages=messages[index:], currentIndex=0)
+        run.knowledge_selection = {
+            **(run.knowledge_selection or {}),
+            "_contextRunIds": [],
+        }
+    return state
+
+
 def source_knowledge_domains(run):
     from apps.knowledge.models import KnowledgeEntry, KnowledgeDocument
 
@@ -280,6 +481,24 @@ def history_compatible(previous, current):
         if not source_knowledge_domains(source) <= allowed_knowledge:
             return False
     versions = algorithm_ids(current)
+    if versions is not None:
+        from .citations import source_locators
+
+        listed_versions = {
+            location["versionId"]
+            for source in sources
+            for item in source.evidence
+            if item.get("tool") == "list_compute_algorithms"
+            for location in source_locators(item)
+            if "versionId" in location
+        }
+        listed_versions.update(
+            source.compute_intent["versionId"]
+            for source in sources
+            if source.compute_intent.get("versionId")
+        )
+        if not listed_versions <= set(versions):
+            return False
     if versions is not None or current.resource_ids:
         tasks = set()
         for ev in [e for source in sources for e in source.evidence]:

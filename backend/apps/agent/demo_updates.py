@@ -13,7 +13,7 @@ from apps.compute.packages import ComputeError
 from .compute_tools import authorized_task
 from .demo_results import read_output, read_results, resource_context
 from .models import AgentWorkflow
-from .tools import resolve_resource
+from .workflow_resources import resolve_workflow_resource
 from .workflow import _state_hash
 
 FIXED_ROLES = ("early_image", "late_image", "valid_mask", "zones")
@@ -133,7 +133,7 @@ def _change(chain, user, policy) -> dict:
     output = ComputeOutput.objects.filter(
         pk=saved["outputId"], task_id=stage["taskId"], key="change", kind="raster"
     ).first()
-    resource = resolve_resource(user, policy, saved["resourceId"])
+    resource = resolve_workflow_resource(user, policy, saved["resourceId"], origin)
     if (
         output is None
         or not ComputeImport.objects.filter(
@@ -160,7 +160,10 @@ def previous_results(workflow, user, policy, chain=None) -> list[dict]:
                 seen.add(identity)
                 results.extend(
                     read_results(
-                        previous, user, policy, authorized_task(user, identity, policy)
+                        previous,
+                        user,
+                        policy,
+                        authorized_task(user, identity, policy, workflow=previous),
                     )
                 )
     return results

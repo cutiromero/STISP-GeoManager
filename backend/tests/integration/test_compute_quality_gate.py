@@ -1,3 +1,5 @@
+# ruff: noqa: F811
+
 import json
 from unittest.mock import patch
 
@@ -42,9 +44,12 @@ def test_direct_agent_import_stops_on_quality_review(env):  # noqa: F811
     assert not ComputeImport.objects.exists()
 
 
-def test_chat_import_feedback_omits_quality_summary_but_result_card_retains_it(env):  # noqa: F811
+def test_chat_import_feedback_omits_quality_summary_but_result_card_retains_it(
+    env, monkeypatch
+):  # noqa: F811
     from apps.agent.worker import run_task
     from apps.compute.serializers import output_data
+    from tests.integration.test_agent_interactions import mock_model
 
     t = task(env)
     result = checked_output(t)
@@ -52,17 +57,30 @@ def test_chat_import_feedback_omits_quality_summary_but_result_card_retains_it(e
     result.metadata["qualityCheck"]["summary"] = summary
     result.save(update_fields=["metadata"])
     item = env["run"]
-    AgentComputeFollowup.objects.create(task=t, run=item)
+    assert AgentComputeFollowup.objects.get(task=t).run_id == item.id
     item.prompt, item.status = "入库", "running"
     item.save(update_fields=["prompt", "status"])
+    feedback = (
+        "结果需要审核，已保留原始输出并暂停自动入库；请查看结果卡中的质量核查说明"
+    )
+    captured = []
+    mock_model(
+        monkeypatch,
+        [
+            {"action": "import_compute_result", "arguments": {"taskId": str(t.id)}},
+            {"action": "final", "answer": feedback},
+        ],
+        captured,
+    )
     with patch("apps.agent.worker.guard"):
         run_task(item.id)
     item.refresh_from_db()
-    assert item.status == "failed"
-    assert item.detail == (
-        "结果需要审核，已保留原始输出并暂停自动入库；请查看结果卡中的质量核查说明"
-    )
-    assert summary not in item.detail
+    assert item.status == "succeeded", item.detail
+    assert feedback in item.answer
+    assert len(captured) == 2
+    assert feedback in json.dumps(captured[1], ensure_ascii=False)
+    assert summary not in json.dumps(captured, ensure_ascii=False)
+    assert summary not in item.detail + item.answer
     assert not item.events.filter(text__contains=summary).exists()
     result.refresh_from_db()
     assert output_data(result)["metadata"]["qualityCheck"]["summary"] == summary

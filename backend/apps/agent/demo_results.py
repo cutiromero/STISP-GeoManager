@@ -14,7 +14,8 @@ from apps.compute.packages import ComputeError, checksum
 from apps.compute.access import require_actor
 from apps.core.storage import app_path, table_data_path
 from .compute_tools import authorized_task
-from .tools import resolve_resource, frame
+from .tools import frame
+from .workflow_resources import resolve_workflow_resource, resolve_generated_resource
 from .geology_generic import MULTI_FAMILY
 
 EDIT_FIELDS = (
@@ -28,7 +29,7 @@ EDIT_FIELDS = (
 
 
 def read_output(workflow, user, policy, output) -> dict:
-    task = authorized_task(user, output.task_id, policy)
+    task = authorized_task(user, output.task_id, policy, workflow=workflow)
     if (
         task.owner_id != workflow.owner_id
         or not workflow.steps.filter(compute_task_id=task.id).exists()
@@ -158,7 +159,9 @@ def create_changes(workflow, user, policy, edits, results) -> DataResource:
         )
         existing = DataResource.objects.filter(source=source).first()
         if existing:
-            resolve_resource(user, policy, existing.id)
+            resolve_generated_resource(
+                user, policy, existing.id, workflow, "model_changes"
+            )
             if path.read_bytes() != raw:
                 raise ComputeError("已固定的修改表与当前计划不一致")
             return existing
@@ -185,7 +188,7 @@ def resource_context(workflow, user, policy) -> list[dict]:
     """Expose actual evidence tables and role metadata; never reference truth files."""
     items = []
     for role, identity in workflow.plan["inputs"].items():
-        resource = resolve_resource(user, policy, identity, workflow.resource_ids)
+        resource = resolve_workflow_resource(user, policy, identity, workflow)
         item = {
             "role": role,
             "resourceId": identity,

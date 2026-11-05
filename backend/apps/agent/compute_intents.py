@@ -61,6 +61,10 @@ def _history(run):
 
 
 def previous_plan(run):
+    from .policy import fresh_user, require_access
+
+    user = fresh_user(run.owner_id)
+    policy = require_access(user, "agent", run.model)
     for previous in _history(run)[:30]:
         if previous.compute_intent and previous.compute_intent.get("status") in OPEN:
             selected = algorithm_ids(run)
@@ -73,6 +77,10 @@ def previous_plan(run):
                 previous.compute_intent["inputs"].values()
             ) <= set(run.resource_ids):
                 continue
+            if not _usable_input_ids(
+                previous.compute_intent["inputs"].values(), run, user, policy
+            ):
+                return None
             return previous
     return None
 
@@ -86,9 +94,17 @@ def _selected(run):
         r"这个|这张|这幅|这份|该影像|该数据|同一|继续|对啊|就是|它", run.prompt
     ):
         return []
+    from .policy import fresh_user, require_access
+
+    user = fresh_user(run.owner_id)
+    policy = require_access(user, "agent", run.model)
     for previous in _history(run)[:30]:
         if previous.resource_ids:
-            return list(previous.resource_ids)
+            return (
+                list(previous.resource_ids)
+                if _usable_input_ids(previous.resource_ids, run, user, policy)
+                else []
+            )
         described = {
             ev["resourceId"]
             for ev in previous.evidence
@@ -96,8 +112,25 @@ def _selected(run):
             and type(ev.get("resourceId")) is int
         }
         if len(described) == 1:
-            return list(described)
+            return (
+                list(described)
+                if _usable_input_ids(described, run, user, policy)
+                else []
+            )
     return []
+
+
+def _usable_input_ids(identities, run, user, policy):
+    """Inherit actual input references without importing an old answer or knowledge."""
+    selected = set(identities)
+    if run.data_selection_mode == "manual" and not run.resource_ids:
+        return not selected
+    available = set(
+        resources(user, policy, run.resource_ids)
+        .filter(pk__in=selected)
+        .values_list("id", flat=True)
+    )
+    return selected <= available
 
 
 def match_version(run):
@@ -416,6 +449,7 @@ def explicit_run_parameters(run, manifest):
 
 def serialize(run, user, p, *, history=False):
     from .deleted_resources import TERMINAL, historical_deletion
+    from .resource_discovery import resolve_acl_resource
 
     intent = run.compute_intent
     if not intent:
@@ -424,6 +458,8 @@ def serialize(run, user, p, *, history=False):
     for resource_id in intent["inputs"].values():
         if history and historical_deletion(run, user, p, resource_id):
             deleted = True
+        elif history:
+            resolve_acl_resource(user, p, resource_id, run.resource_ids, active=False)
         else:
             resolve_resource(user, p, resource_id, run.resource_ids)
     if deleted:
@@ -478,7 +514,7 @@ def submit_plan(run, user, p):
     if run.compute_intent.get("taskId"):
         from .compute_tools import authorized_task
 
-        authorized_task(user, run.compute_intent["taskId"], p)
+        authorized_task(user, run.compute_intent["taskId"], p, run=run)
         return report(run, user, p)
     _refresh(run, user, p, validate_snapshot=True)
     intent = run.compute_intent

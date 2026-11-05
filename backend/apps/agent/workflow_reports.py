@@ -21,7 +21,7 @@ from apps.compute.packages import ComputeError, checksum
 from apps.core.storage import app_path, table_data_path
 from .compute_tools import authorized_task
 from .models import AgentWorkflow
-from .tools import resolve_resource
+from .workflow_resources import resolve_workflow_resource
 from .geology_generic import MULTI_FAMILY
 
 CONTENT_TYPE = "text/markdown"
@@ -122,7 +122,9 @@ def authorize_context(
     )
     tasks = []
     for identity in ids:
-        task = authorized_task(user, identity, policy)
+        task = authorized_task(
+            user, identity, policy, workflow=workflow, history=history
+        )
         if task.owner_id != workflow.owner_id or task.status != "succeeded":
             raise PermissionDenied("报告计算记录不属于本次已完成流程")
         tasks.append(task)
@@ -224,7 +226,7 @@ def render_report(workflow: AgentWorkflow, user, policy: dict, tasks: list) -> b
     if isinstance(inputs, dict):
         for role, identity in inputs.items():
             if type(identity) is int:
-                resource = resolve_resource(user, policy, identity)
+                resource = resolve_workflow_resource(user, policy, identity, workflow)
                 lines.append(
                     f"- {_text(ROLE_LABELS.get(role, role))}：{_text(resource.name)}"
                 )

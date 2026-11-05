@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261106-003 - 智能体普通发现与任务内部材料隔离
+
+- Status: BackendReady
+- Owner: Frontend / Backend。
+- Endpoints: GET /api/agent/resources/；GET /api/agent/bootstrap/；GET/POST /api/agent/workflow-uploads/references/；现有运行提交、工具读取与工作流材料接口。
+- Change type: 既有候选、直接读取及上下文权限语义收窄；响应字段与结构不变。
+- OpenAPI change: 资源发现、目录页及引用、算法候选与知识选择说明统一普通业务边界和真实任务绑定；详见 docs/agent-data-boundary.md。
+- Mock examples: 沿用 mock/prism/examples/96-agent.json、104-agent-upload-bundle.json；专项夹具覆盖真实空目录、业务演示名称及通用计算目录含内部材料时的候选交集。
+- Frontend reason: 普通候选仅来自agent授权接口；通用计算详情不扩大资源或算法白名单。空集合不回退目录；任务上传及历史明细不合并到新任务普通候选。
+- Backend implementation notes: 普通搜索、统计、目录、元信息、直接编号和手选统一当前项目ACL、active、ready的业务上传及明确成果集合；排除trial、工作副本、冻结规则、修改表、过程结果与评价真值，不按演示或测试名称过滤。内部材料限真实owner及workflow/batch/task绑定；旧历史保留原授权读取，新context重新验证。算法仅enabled/published/允许agent，知识独立published及领域ACL，草稿仅显式场景绑定。
+- Verification: 正反来源、直传编号、手选、空目录及目录总数、业务演示名称、项目与owner隔离、任务绑定及历史恢复；专项浏览器、TypeScript与契约检查，不运行全量测试。
+- Result: 后端来源与绑定专项、前端6项浏览器边界专项、两项TypeScript及API生成/一致性/变更记录/文档/lint/Prism构建通过；统一数据来源与授权语义，不改变原有批准流程或通用计算中心权限。真实模型与服务器验收另行进行。
+
 ## API-20261106-002 - 真实答复增量预览与轻量模型活动
 
 - Status: BackendReady
@@ -398,6 +411,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261106-003 | BackendReady | /api/agent/resources/; /bootstrap/; /workflow-uploads/references/; existing tools and workflow material access | Ordinary discovery separated from real task-bound materials | Updated | Existing agent examples; scoped data-boundary fixtures | Backend focused and frontend 6 browser cases passed | TypeScript and API checks passed; real-model/server acceptance separate | Current project ACL, provenance, owner and real task bindings |
 | API-20261106-002 | BackendReady | /api/agent/runs/{runId}/; /conversations/{conversationId}/; /workflows/{workflowId}/ | Real final-answer preview and persisted lightweight model activity | Updated | 105-agent-workflow-card; 106-agent-generic-chat | Implemented | Scoped browser, typechecks and API checks | Existing owner, project and workflow authorization |
 | API-20261106-001 | BackendReady | /api/agent/bootstrap/; /conversations/{conversationId}/runs/; /workflows/; /workflow-uploads/recognize/ | Explicit deep default and verified run policy inheritance | Updated | Existing agent fixtures; scoped HTTP model captures | Implemented | Focused frontend and backend regression; API checks | Existing project, owner, model and budget authorization |
 | API-20261105-014 | BackendReady | /api/agent/workflows/{workflowId}/; /confirm/ | Raster groups, compact approval and element pages | Updated | 105-agent-workflow-card.json | Implemented | Focused regression; browser cases prepared | Existing owner/project/resource authorization |

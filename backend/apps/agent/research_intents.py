@@ -12,7 +12,12 @@ from django.utils import timezone
 from .models import AgentRun, AgentWorkflow
 from .policy import require_access
 from .research_parser import interpret, plausible, validate
-from .tools import resolve_resource
+from .resource_discovery import resolve_acl_resource
+from .workflow_resources import (
+    resolve_run_resource,
+    resolve_scenario_resource,
+    resolve_workflow_resource,
+)
 from .workflow import _authorize, _state_hash
 
 PUBLIC_KEYS = (
@@ -128,7 +133,14 @@ def authorize_run(run, user, policy, *, history=False) -> None:
     for role, identity in intent.get("inputs", {}).items():
         if history and historical_deletion(run, user, policy, identity):
             continue
-        resource = resolve_resource(user, policy, identity)
+        if history:
+            resource = resolve_acl_resource(user, policy, identity, active=False)
+        elif run.research_workflow_id or intent.get("_uploadBatchId"):
+            resource = resolve_run_resource(user, policy, identity, run)
+        else:
+            resource = resolve_scenario_resource(
+                user, policy, identity, intent.get("scenario"), role, run.resource_ids
+            )
         revision = intent.get("_inputRevisions", {}).get(role)
         if resource.status != "active" or (
             not history and revision and resource.updated_at.isoformat() != revision
@@ -365,7 +377,13 @@ def process(run, user, policy, guard, event):
         )
     input_summary, revisions = [], {}
     for role, identity in value["inputs"].items():
-        resource = resolve_resource(user, policy, identity, run.resource_ids)
+        resource = (
+            resolve_workflow_resource(user, policy, identity, workflow)
+            if value["action"] == "status"
+            else resolve_scenario_resource(
+                user, policy, identity, value["scenario"], role, run.resource_ids
+            )
+        )
         if resource.status != "active":
             raise PermissionDenied("所选科研资料已停用")
         revisions[role] = resource.updated_at.isoformat()

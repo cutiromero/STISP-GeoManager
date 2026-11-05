@@ -62,7 +62,9 @@ def env(setup_compute, settings):  # noqa: F811 - pytest fixture dependency
 
 
 def task(e):
-    return submit(e["owner"], e["body"])
+    result = submit(e["owner"], e["body"])
+    AgentComputeFollowup.objects.create(task=result, run=e["run"])
+    return result
 
 
 def output(t, key="summary"):

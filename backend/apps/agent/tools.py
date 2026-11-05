@@ -29,10 +29,13 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from apps.catalog.models import DataResource
-from apps.catalog.permissions import filter_accessible
 from apps.core.storage import table_data_path, vector_geopackage_path
 from .policy import require_access, fresh_user, CAPABILITIES
+from .resource_discovery import (
+    discover_resources as resources,
+    resolve_discoverable_resource as resolve_resource,
+    resolve_acl_resource,
+)
 
 ROW_LIMIT = 10000
 MAX_RESULT_BYTES = 24000
@@ -183,29 +186,14 @@ TOOLS = {
 }
 
 
-def resources(user, p, selected=()):
-    qs = filter_accessible(DataResource.objects.all(), user).filter(
-        data_type__in=p["dataTypes"]
-    )
-    return qs.filter(pk__in=selected) if selected else qs
-
-
-def resolve_resource(user, p, resource_id, selected=()):
-    if type(resource_id) is not int or resource_id < 1:
-        raise ValidationError("resourceId 必须是有效资源 ID")
-    r = resources(user, p, selected).filter(pk=resource_id).first()
-    if not r:
-        raise PermissionDenied("资源不存在、已失效或无权访问")
-    return r
-
-
 def brief(r):
+    computed = getattr(r, "_agent_compute_result", r.is_compute_result)
     return {
         "id": r.id,
         "name": r.name,
         "dataType": r.data_type,
-        "isComputeResult": r.is_compute_result,
-        "origin": "compute_results" if r.is_compute_result else "uploaded_data",
+        "isComputeResult": computed,
+        "origin": "compute_results" if computed else "uploaded_data",
         "description": r.description[:800],
     }
 
@@ -213,6 +201,7 @@ def brief(r):
 def check_evidence(run, user, p, *, history=False):
     from .selections import knowledge_domains, require_task_selection
     from .deleted_resources import historical_deletion
+    from .workflow_resources import resolve_run_resource
 
     domains = knowledge_domains(run) if run.knowledge_selection else None
     # Reauthorize ALL accumulated evidence before revealing history or reusing it.
@@ -224,7 +213,12 @@ def check_evidence(run, user, p, *, history=False):
         if ev.get("resourceId") is not None and not (
             history and historical_deletion(run, user, p, ev["resourceId"])
         ):
-            resolve_resource(user, p, ev["resourceId"], run.resource_ids)
+            if history:
+                resolve_acl_resource(
+                    user, p, ev["resourceId"], run.resource_ids, active=False
+                )
+            else:
+                resolve_run_resource(user, p, ev["resourceId"], run)
         if ev.get("tool") == "search_web" and not _policy_switch(
             p, "internetEnabled", "allowInternet"
         ):
@@ -263,7 +257,14 @@ def check_evidence(run, user, p, *, history=False):
             for item in entries:
                 if isinstance(item, dict) and item.get("taskId"):
                     require_task_selection(
-                        run, authorized_task(user, item["taskId"], p)
+                        run,
+                        authorized_task(
+                            user,
+                            item["taskId"],
+                            p,
+                            run=None if ev["tool"] == "list_compute_tasks" else run,
+                            history=history,
+                        ),
                     )
         if ev.get("tool") in {"search_knowledge", "check_knowledge_constraints"}:
             entries = (
@@ -564,11 +565,17 @@ def _system_info(user, policy_value):
 def _algorithm_list(user, search="", version_ids=None):
     from apps.compute.services import allowed_algorithms, agent_algorithm_allowed
     from apps.compute.access import project_id, permission
+    from apps.compute.models import AlgorithmVersion
 
     project = project_id()
+    eligible_versions = AlgorithmVersion.objects.filter(status="published").filter(
+        Q(manifest__agent__enabled=True) | Q(manifest__agent__enabled__isnull=True)
+    )
+    if version_ids is not None:
+        eligible_versions = eligible_versions.filter(pk__in=version_ids)
     query = (
         allowed_algorithms()
-        .filter(enabled=True, versions__status="published")
+        .filter(enabled=True, versions__in=eligible_versions)
         .prefetch_related("versions")
         .distinct()
         .order_by("name", "id")
@@ -591,8 +598,10 @@ def _algorithm_list(user, search="", version_ids=None):
     for algorithm in found[:50]:
         versions = []
         for version in algorithm.versions.all():
-            if version.status != "published" or (
-                version_ids is not None and version.id not in version_ids
+            if (
+                not agent_algorithm_allowed(version)
+                or version.status != "published"
+                or (version_ids is not None and version.id not in version_ids)
             ):
                 continue
             manifest = version.manifest or {}
@@ -638,6 +647,8 @@ def _algorithm_list(user, search="", version_ids=None):
                     "agentEnabled": agent_algorithm_allowed(version),
                 }
             )
+        if not versions:
+            continue
         items.append(
             {
                 "id": algorithm.id,
@@ -899,7 +910,7 @@ def _operator_submit(run, user, p, args):
         ):
             from .compute_tools import authorized_task
 
-            task = authorized_task(user, run.compute_intent["taskId"], p)
+            task = authorized_task(user, run.compute_intent["taskId"], p, run=run)
             result = {**compact_task(task), "autoImport": auto_import}
             return result, [(None, result)]
         archive_submitted_plan(run)

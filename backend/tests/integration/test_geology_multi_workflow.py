@@ -26,6 +26,7 @@ from apps.agent.geology_multi_review import (
 from apps.agent.geology_multi_results import table_rows
 from apps.agent.models import AgentWorkflow
 from apps.catalog.models import DataResource
+from apps.raster.models import RasterDataset
 from apps.compute.packages import ComputeError
 from apps.compute.models import AlgorithmResource, AlgorithmVersion
 from apps.compute.packages import validate_manifest
@@ -118,6 +119,14 @@ def multi(demo, monkeypatch):
             maintainer=user,
         )
         inputs[role] = resource.id
+        if kind == "raster":
+            RasterDataset.objects.create(
+                name=role,
+                code=resource.code,
+                data_resource=resource,
+                source_relative_path=f"fixture/{role}.tif",
+                status="ready",
+            )
     monkeypatch.setattr(
         "apps.agent.geology_multi.candidate",
         lambda resource: {
@@ -281,7 +290,7 @@ def test_approval_only_writes_selected_object_action(multi, monkeypatch):
     )
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.authorized_task",
-        lambda *args: SimpleNamespace(),
+        lambda *args, **kwargs: SimpleNamespace(),
     )
     selected = [wf.plan["modificationReview"]["suggestions"][1]["id"]]
     approve_modifications(wf, multi["owner"], multi["policy"], selected, "hash")
@@ -332,7 +341,7 @@ def test_held_candidates_are_independent_of_model_and_explicitly_approved(
     )
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.authorized_task",
-        lambda *args: SimpleNamespace(),
+        lambda *args, **kwargs: SimpleNamespace(),
     )
     approve_modifications(wf, multi["owner"], multi["policy"], [], "hash")
     assert stage["approvedEdits"] == []
@@ -399,7 +408,7 @@ def test_large_group_approval_fixes_all_selected_rows_not_thirty(multi, monkeypa
     )
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.authorized_task",
-        lambda *args: SimpleNamespace(),
+        lambda *args, **kwargs: SimpleNamespace(),
     )
     selected = [item["id"] for item in wf.plan["modificationReview"]["suggestions"]][
         :-1
@@ -538,7 +547,7 @@ def test_raster_group_default_and_user_weight_override_are_frozen(multi, monkeyp
     )
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.authorized_task",
-        lambda *args: SimpleNamespace(),
+        lambda *args, **kwargs: SimpleNamespace(),
     )
     selected = [review["suggestions"][0]["id"]]
     approve_modifications(
@@ -590,7 +599,7 @@ def test_no_approval_cannot_execute_and_empty_selection_retains_all(multi, monke
     )
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.authorized_task",
-        lambda *args: SimpleNamespace(),
+        lambda *args, **kwargs: SimpleNamespace(),
     )
     with pytest.raises(ComputeError, match="有效批准"):
         create_approved_changes(wf, multi["owner"], multi["policy"], stage)
@@ -1010,6 +1019,19 @@ def test_native_published_manifests_prepare_the_actual_stage_protocol(
         )
     wf = multi["workflow"]
     if missing_faults:
+        # The real generic workflow creates an owned, task-marked placeholder;
+        # an arbitrary business input cannot be relabelled as a working copy.
+        placeholder = DataResource.objects.create(
+            name="未提供的构造工作副本",
+            code="generic-empty-faults",
+            data_type="vector",
+            source=f"workflow-working:{wf.pk}:faults",
+            owner_only=True,
+            maintainer=multi["owner"],
+        )
+        multi["inputs"]["faults"] = placeholder.pk
+        wf.plan["inputs"]["faults"] = placeholder.pk
+        wf.resource_ids.append(placeholder.pk)
         wf.workflow_type = "geology_generic"
         wf.plan.update(
             phase="inputs_ready",
@@ -1153,6 +1175,12 @@ def test_collect_hides_calculation_states_but_retains_downstream_inputs(
     workflow.plan["algorithms"]["geology-multi-apply"]["manifest"] = manifest
     workflow.status = "waiting_compute"
     workflow.save()
+    workflow.steps.create(
+        sequence=workflow.steps.count() + 1,
+        kind="submit_operator",
+        status="succeeded",
+        compute_task_id=task.id,
+    )
     resources = {}
     for key in ["faults", "alterations", "final_faults", "final_alterations"]:
         output = ComputeOutput.objects.create(

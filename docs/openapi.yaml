@@ -6522,7 +6522,7 @@ paths:
       operationId: listAgentResearchDemos
       tags: [Agent]
       summary: 获取可体验的科研案例
-      description: 默认保留跨本人授权项目的完整案例入口。view=summary仅返回当前项目轻量入口，执行存在性查询，不调用模型健康检查或扫描算法。scenario只读取当前项目指定场景的完整预设，返回原完整列表结构。所有模式均核对项目和智能体权限。
+      description: 默认保留跨本人授权项目的完整案例入口。view=summary仅返回当前项目轻量入口，执行存在性查询，不调用模型健康检查或扫描算法。scenario只读取当前项目指定场景的完整预设；普通角色使用严格业务资源发现集合，rules角色可在服务端确定场景内读取已注册规则，创建任务时再次核对场景及知识绑定，不扩大普通数据手选。返回原完整列表结构，所有模式均核对项目和智能体权限。
       security: [{sessionAuth: []}]
       parameters:
       - name: view
@@ -6630,7 +6630,7 @@ paths:
       - 智能体
       operationId: getAgentBootstrap
       summary: 获取智能体可见能力
-      description: 获取智能体可见能力。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。数据工具不授予额外项目权限。
+      description: 获取智能体可见能力。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。算法候选只含enabled算法的published且允许智能体调用版本；知识分区只统计已发布并通过领域ACL的知识，草稿仅用于服务端明确绑定场景。数据工具不授予额外项目权限。
       security:
       - sessionAuth: []
       responses:
@@ -7462,7 +7462,7 @@ paths:
       - 智能体
       operationId: listAgentResources
       summary: 查找当前项目内有权分析的数据
-      description: 查找当前项目内有权分析的数据。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。数据工具不授予额外项目权限。
+      description: 当前单项目与资源ACL内active且准备ready的普通业务上传和明确入库成果；与普通搜索、统计、元信息和直接编号读取使用同一集合。排除trial、临时任务资料、工作副本、冻结规则、修改表、过程结果和评价真值；不按演示或测试名称过滤。手选仅缩小范围，空集合返回items为空且不回退通用目录。每次重新授权，不授予额外项目或任务内部材料权限。
       security:
       - sessionAuth: []
       responses:
@@ -7625,7 +7625,7 @@ paths:
       tags: [Agent]
       operationId: listAgentWorkflowCatalogResources
       summary: 搜索可供逻辑推理引用的系统数据
-      description: 当前单项目内按资源访问权限筛选活动矢量、栅格、表格，排除任务资料；按更新时间、登记时间、ID倒序分页，返回总数和可见数据目录。需要智能体、工作流、算子和数据登记权限。
+      description: 当前单项目与资源ACL内active且准备ready的业务矢量、栅格、表格和明确入库成果，与普通智能体发现共用边界。排除trial、临时任务资料、工作副本、冻结规则、修改表、过程结果及评价真值，不按演示或测试名称过滤。按更新时间、登记时间、ID倒序分页；目录选项来自可发现基础集合，总数反映关键词与目录筛选后的匹配数。基础集合为空时items/directories为空及total为0，筛选无匹配时items为空及total为0，不回退通用目录。需要智能体、工作流、算子和数据登记权限。
       security: [{sessionAuth: []}]
       parameters:
       - in: query
@@ -7649,7 +7649,7 @@ paths:
       tags: [Agent]
       operationId: addAgentWorkflowCatalogReferences
       summary: 将系统数据引用加入任务批次
-      description: 仅逻辑推理项目使用，权限与上传一致。原子加入有权访问的当前项目活动资源，不复制或改变目录资源；同一资源可被多个批次引用。重复加入同批次返回原条目，已发送或绑定批次返回409。移除仅解除引用。资料画像读取真实计算输入（栅格原始数据而非可能增加alpha波段的显示COG）。
+      description: 仅逻辑推理项目使用，权限与上传一致。原子加入当前普通智能体可发现集合中的资源，逐个重新验证项目、ACL、active/ready及来源；直接提交编号不能引用trial、内部过程或评价材料。不复制或改变原资源，同一资源可被多个批次引用。重复加入同批次返回原条目，已发送或绑定批次返回409。移除仅解除引用。资料画像读取真实计算输入（栅格原始数据而非可能增加alpha波段的显示COG）。
       security: [{sessionAuth: []}]
       requestBody:
         required: true
@@ -9519,7 +9519,7 @@ components:
       additionalProperties: false
     AgentKnowledgeSelection:
       type: object
-      description: 本轮知识调用方式；auto按本轮主题及已授权科研会话上下文筛选，manual限定选定领域，all使用所有可见知识，none禁用知识工具
+      description: 本轮知识调用方式；普通知识仅含已发布且通过领域ACL的条目，草稿只用于服务端明确绑定的场景及冻结修订。auto按本轮主题与当前已授权上下文筛选，manual限定选定领域，all使用该授权集合，none禁用知识工具；历史可读不扩大新任务知识权限
       properties:
         mode:
           type: string
@@ -9536,7 +9536,7 @@ components:
       additionalProperties: false
     AgentAlgorithmOption:
       type: object
-      description: 已发布且允许智能体调用的算法版本
+      description: 算法enabled、版本published且明确允许智能体调用的授权版本；手选或历史版本ID不扩大候选
       properties:
         versionId:
           type: integer
@@ -9566,7 +9566,7 @@ components:
             $ref: '#/components/schemas/KnowledgeDomainOption'
         algorithmOptions:
           type: array
-          description: 当前项目与公开可用的已发布安全算法版本
+          description: 当前项目与公开可用的enabled算法中published且允许智能体调用的版本；空列表不回退普通计算中心算法
           items:
             $ref: '#/components/schemas/AgentAlgorithmOption'
         defaultReasoningEffort:
@@ -10270,7 +10270,7 @@ components:
               available: {type: boolean, description: 资料、已发布算法与模型等必要服务是否就绪}
               preset:
                 type: object
-                description: 仅当前请求项目返回的活动预设；按稳定资源编码定位，不包含其他项目的输入标识。缺项表示该角色预设不可用。
+                description: 仅当前请求项目返回的活动预设；普通角色使用严格业务候选，rules仅使用当前明确场景的受控注册规则；按稳定资源编码定位，不包含其他项目的输入标识，不能据此扩大普通发现。缺项表示该角色预设不可用。
                 properties:
                   inputs:
                     type: object
@@ -10341,7 +10341,7 @@ components:
         updatedAt: {type: string, format: date-time, description: 更新时间}
     AgentWorkflowCatalogPage:
       type: object
-      description: 按最近更新时间排序的系统数据页；目录列表只包含当前可见资源所在组别
+      description: 普通智能体发现边界内按最近更新时间排序的系统数据页；目录来自可发现基础集合，total为关键词与目录筛选后的匹配数。基础集合为空时items/directories为空且total为0，筛选无匹配时items为空且total为0，不补入历史或内部材料
       required: [items, total, page, pageSize, directories]
       properties:
         items: {type: array, description: 本页资源, items: {$ref: '#/components/schemas/AgentWorkflowCatalogItem'}}
@@ -10386,7 +10386,7 @@ components:
         items: {type: array, description: POST恢复到批次中的有效引用，GET为空, items: {$ref: '#/components/schemas/AgentWorkflowUpload'}}
     AgentResource:
       type: object
-      description: 当前项目中可分析的数据资源
+      description: 当前项目ACL内active且准备ready的普通业务资料或明确成果；不含trial、任务内部过程和评价材料，名称不作为排除依据
       properties:
         id:
           type: integer

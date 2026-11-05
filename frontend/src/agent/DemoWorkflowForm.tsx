@@ -143,9 +143,11 @@ function matchingCandidates(
   type: DemoWorkflowType,
   role: Role,
   candidates: ComputeCandidate[],
+  boundRulesId?: number,
 ) {
   return candidates.filter(
     (candidate) =>
+      (role.key === "rules" || candidate.id !== boundRulesId) &&
       candidate.kind === role.kind &&
       (type !== "geology_multi_element_reasoning" ||
         !multiElementInputIssues(role.key, candidate).length) &&
@@ -186,6 +188,7 @@ export default function DemoWorkflowForm({
   disabled,
   evidenceOnly = false,
   preset,
+  boundRulesId,
   onPresetRestore,
   onInputsChange,
   onParametersChange,
@@ -197,6 +200,7 @@ export default function DemoWorkflowForm({
   parameters: Record<string, unknown>;
   disabled: boolean;
   evidenceOnly?: boolean;
+  boundRulesId?: number;
   preset?: {
     inputs: Record<string, number>;
     parameters: Record<string, unknown>;
@@ -236,7 +240,12 @@ export default function DemoWorkflowForm({
     const matched: string[] = [];
     const unresolved: string[] = [];
     for (const role of roles) {
-      const found = matchingCandidates(type, role, candidates).filter((entry) =>
+      const found = matchingCandidates(
+        type,
+        role,
+        candidates,
+        boundRulesId,
+      ).filter((entry) =>
         role.match.test(
           resources.find((item) => item.id === entry.id)?.name ?? entry.name,
         ),
@@ -256,6 +265,7 @@ export default function DemoWorkflowForm({
           type,
           role,
           candidates,
+          boundRulesId,
         ).some((item) => item.id === next[role.key]);
         const previousSelection = next[role.key];
         if (previousSelection && !selectedCompatible) delete next[role.key];
@@ -388,14 +398,17 @@ export default function DemoWorkflowForm({
                   ? "error"
                   : undefined
               }
-              options={matchingCandidates(type, role, candidates).map(
-                (entry) => ({
-                  value: entry.id,
-                  label:
-                    resources.find((item) => item.id === entry.id)?.name ??
-                    entry.name,
-                }),
-              )}
+              options={matchingCandidates(
+                type,
+                role,
+                candidates,
+                boundRulesId,
+              ).map((entry) => ({
+                value: entry.id,
+                label:
+                  resources.find((item) => item.id === entry.id)?.name ??
+                  entry.name,
+              }))}
               onChange={(id) => {
                 const next = { ...inputs };
                 if (id === undefined) delete next[role.key];

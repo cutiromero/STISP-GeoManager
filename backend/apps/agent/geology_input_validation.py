@@ -11,7 +11,7 @@ from apps.compute.packages import ComputeError
 from apps.compute.services import agent_algorithm_allowed, allowed_algorithms
 
 from .geology_reference import is_reference_resource
-from .tools import resolve_resource
+from .workflow_resources import resolve_scenario_resource
 
 # These are the runtime input protocol in geology-map-check/review_logic.py.
 MAP_FIELDS = {
@@ -167,7 +167,9 @@ def validate_geology_inputs(
     _validate_parameters(parameters, versions)
     metadata = {}
     for role, (label, kind, required) in ROLES.items():
-        resource = resolve_resource(user, policy, inputs[role], selected)
+        resource = resolve_scenario_resource(
+            user, policy, inputs[role], "geology_map_review", role, selected
+        )
         if is_reference_resource(resource) or (resource.source or "").startswith(
             ("geology-review-reference:", "geology-review-acceptance:")
         ):

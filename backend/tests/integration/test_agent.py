@@ -302,15 +302,51 @@ def test_search_resources_table_keyword_matches_data_type(setup_agent):
 
 
 def test_catalog_exact_counts_and_pages_are_not_first_twenty(setup_agent):
+    from apps.compute.models import (
+        AlgorithmResource,
+        AlgorithmVersion,
+        ComputeImport,
+        ComputeOutput,
+        ComputeTask,
+    )
+
     s = setup_agent
     with project_scope(s["scope"]):
+        algorithm = AlgorithmResource.objects.create(
+            identifier="catalog-results", name="真实目录成果", created_by=s["user"]
+        )
+        version = AlgorithmVersion.objects.create(algorithm=algorithm, version="1")
+        task = ComputeTask.objects.create(
+            owner=s["user"],
+            version=version,
+            status="succeeded",
+            idempotency_key="catalog-results",
+        )
         for index in range(66):
-            DataResource.objects.create(
+            resource = DataResource.objects.create(
                 name=f"目录资源 {index}",
                 code=f"catalog-{index}",
                 data_type="table" if index % 2 else "vector",
                 is_compute_result=index < 41,
             )
+            if index < 41:
+                output = ComputeOutput.objects.create(
+                    task=task,
+                    key=f"result_{index}",
+                    label="实际成果",
+                    kind="table",
+                    file_name="result.csv",
+                    path="unused.csv",
+                    size_bytes=1,
+                    checksum="a" * 64,
+                )
+                ComputeImport.objects.create(
+                    output=output,
+                    requested_by=s["user"],
+                    name=resource.name,
+                    status="ready",
+                    resource=resource,
+                )
         # A private resource is excluded from both the count and listing.
         DataResource.objects.create(
             name="不可见",

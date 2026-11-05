@@ -12,7 +12,7 @@ from django.db import close_old_connections, connections
 from django.test import Client, RequestFactory
 
 from apps.agent.interactions import resume_compute, wait_for_answer
-from apps.agent.models import ACTIVE, AgentRun, Conversation
+from apps.agent.models import ACTIVE, AgentComputeFollowup, AgentRun, Conversation
 from apps.agent.views import ApiProblem, submit_value
 from apps.compute.models import AlgorithmResource, AlgorithmVersion, ComputeTask
 from apps.compute.packages import ComputeError
@@ -237,8 +237,10 @@ def test_finished_compute_waits_for_a_slot_then_resumes_once_without_losing_resu
             idempotency_key="finished-result",
             request_hash="a" * 64,
         )
+        AgentComputeFollowup.objects.create(run=run, task=task)
         run.execution_state = {
             "messages": [{"role": "user", "content": run.prompt}],
+            "currentIndex": 0,
             "taskIds": [str(task.id)],
         }
         run.save(update_fields=["execution_state"])

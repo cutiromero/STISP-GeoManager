@@ -2,7 +2,7 @@ import io
 import json
 import stat
 import zipfile
-from types import SimpleNamespace
+from dataclasses import replace
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -275,11 +275,14 @@ def test_model_role_validation_and_fallback(generic, monkeypatch):
         {"uploadId": str(upload.id), "role": role, "reason": "依据字段与几何"}
         for upload, role in zip(uploads, ["lithology", "units"], strict=True)
     ]
+    model = replace(workflow_roles.registry()["mock"], model_id="real-test")
     monkeypatch.setattr(
         workflow_roles,
         "registry",
-        lambda: {"mock": SimpleNamespace(model_id="real-test")},
+        lambda: {"mock": model},
     )
+    monkeypatch.setattr(workflow_roles.provider, "model_window", lambda model: 32768)
+    monkeypatch.setattr("apps.agent.context.count_tokens", lambda *args: 128)
     monkeypatch.setattr(
         workflow_roles.provider,
         "stream",

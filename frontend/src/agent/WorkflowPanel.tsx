@@ -37,7 +37,11 @@ import DemoWorkflowForm, {
 } from "./DemoWorkflowForm";
 import WorkflowCard from "./WorkflowCard";
 import WorkflowResults from "./WorkflowResults";
-import { allWorkflowPages, workflowGeologyVersions } from "./workflowCatalog";
+import {
+  agentWorkflowCatalog,
+  allWorkflowPages,
+  workflowGeologyVersions,
+} from "./workflowCatalog";
 import {
   genericGeologyGoal,
   genericGeologyType,
@@ -181,6 +185,9 @@ export default function WorkflowPanel({
   const [goal, setGoal] = useState(fixedGeneric ? genericGeologyGoal : "");
   const [workflowType, setWorkflowType] = useState(fixedScenario ?? "");
   const [resources, setResources] = useState<AgentResource[]>([]);
+  const [algorithmOptions, setAlgorithmOptions] = useState<
+    NonNullable<AgentBootstrap["algorithmOptions"]>
+  >([]);
   const [knowledgeDomains, setKnowledgeDomains] = useState<
     KnowledgeDomainOption[]
   >([]);
@@ -188,6 +195,12 @@ export default function WorkflowPanel({
     useState<AgentKnowledgeSelection>({ mode: "auto", domains: [] });
   const [algorithms, setAlgorithms] = useState<ComputeAlgorithm[]>([]);
   const [candidates, setCandidates] = useState<ComputeCandidate[]>([]);
+  const ordinaryCatalog = agentWorkflowCatalog(
+    algorithms,
+    candidates,
+    resources,
+    algorithmOptions,
+  );
   const [versionId, setVersionId] = useState<number>();
   const [inputs, setInputs] = useState<Record<string, number>>({});
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
@@ -282,7 +295,7 @@ export default function WorkflowPanel({
   const planOutdated = Boolean(
     reviewingPlan && previewDraft && previewDraft !== planDraftSignature(draft),
   );
-  const version = algorithms
+  const version = ordinaryCatalog.algorithms
     .flatMap((algorithm) => algorithm.versions)
     .find((v) => v.id === versionId);
   const geologyParameterSpecs = Array.from(
@@ -398,6 +411,7 @@ export default function WorkflowPanel({
     setHistoryHasMore(false);
     setCandidates([]);
     setResources([]);
+    setAlgorithmOptions([]);
     setDemos([]);
     setScenes([]);
     setAlgorithms([]);
@@ -466,6 +480,7 @@ export default function WorkflowPanel({
         if (disposed) return;
         setKnowledgeDomains(configuration.knowledgeDomains ?? []);
         setResources(data.items ?? []);
+        setAlgorithmOptions(configuration.algorithmOptions ?? []);
         setDemos(presets.items);
         if (
           !currentSelection.current.workflow &&
@@ -840,6 +855,11 @@ export default function WorkflowPanel({
       item.scenario === workflowType &&
       String(item.projectId) === (project?.current ?? getActiveProject()),
   )?.preset;
+  const scenarioCandidates = candidates.filter(
+    (candidate) =>
+      ordinaryCatalog.candidates.some((item) => item.id === candidate.id) ||
+      candidate.id === currentPreset?.inputs.rules,
+  );
   if (
     workflow &&
     !scenarioOptions.some((item) => item.value === workflow.workflowType)
@@ -970,7 +990,14 @@ export default function WorkflowPanel({
           {isDemo ? (
             <DemoWorkflowForm
               type={workflowType as DemoWorkflowType}
-              candidates={candidates}
+              candidates={scenarioCandidates}
+              boundRulesId={
+                ordinaryCatalog.candidates.some(
+                  (candidate) => candidate.id === currentPreset?.inputs.rules,
+                )
+                  ? undefined
+                  : currentPreset?.inputs.rules
+              }
               resources={resources}
               inputs={inputs}
               parameters={parameters}
@@ -1010,7 +1037,7 @@ export default function WorkflowPanel({
                   "自动按目标匹配，或指定算法与参数",
                   "Match the goal automatically or choose an algorithm",
                 )}
-                options={algorithms.flatMap((a) =>
+                options={ordinaryCatalog.algorithms.flatMap((a) =>
                   a.versions
                     .filter((v) => v.status === "published")
                     .map((v) => ({
@@ -1032,7 +1059,7 @@ export default function WorkflowPanel({
                     style={{ width: "100%", minWidth: 0 }}
                     value={inputs[spec.key]}
                     allowClear
-                    options={candidates
+                    options={ordinaryCatalog.candidates
                       .filter((c) => c.kind === spec.kind)
                       .map((c) => ({
                         value: c.id,
@@ -1068,7 +1095,7 @@ export default function WorkflowPanel({
                       value={parameters[spec.key] ?? spec.default}
                       candidate={
                         spec.input
-                          ? candidates.find(
+                          ? ordinaryCatalog.candidates.find(
                               (c) => c.id === inputs[spec.input ?? ""],
                             )
                           : undefined
@@ -1166,7 +1193,7 @@ export default function WorkflowPanel({
                 !demoInputsReady(
                   workflowType as DemoWorkflowType,
                   inputs,
-                  candidates,
+                  scenarioCandidates,
                 )) ||
               Boolean(
                 previousWorkflowId &&

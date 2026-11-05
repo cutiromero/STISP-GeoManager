@@ -78,7 +78,7 @@ def scope_for(run):
     return ProjectScope((run.project_tag_id,), run.project_tag_id, run.owner_id)
 
 
-def guard(run_id, deadline):
+def guard(run_id, deadline, *, include_context=True):
     if time.monotonic() > deadline:
         raise ModelError("本次运行已达到时间上限")
     run = AgentRun._base_manager.select_related("conversation").get(pk=run_id)
@@ -89,11 +89,12 @@ def guard(run_id, deadline):
         p = require_access(user, run.conversation.mode, run.model)
         check_budget_access(user, p, run.budget_snapshot)
         if run.conversation.mode == "agent":
-            from .selections import check_history_evidence, history_compatible
+            from .selections import check_context_evidence, check_context_sources
 
-            for previous in run.conversation.runs.all():
-                if previous.pk == run.pk or history_compatible(previous, run):
-                    check_history_evidence(previous, user, p)
+            if include_context:
+                check_context_sources(run, user, p)
+            else:
+                check_context_evidence(run, run, user, p)
 
 
 def event(run, kind, text):
@@ -120,17 +121,13 @@ def context_messages(run, policy_value, model):
     ).order_by("-id"):
         if run.conversation.mode == "agent":
             from .selections import (
-                check_history_evidence,
-                history_compatible,
+                context_reusable,
                 history_sources,
             )
 
-            if not history_compatible(previous, run):
-                continue
-            try:
-                check_history_evidence(previous, fresh_user(run.owner_id), policy_value)
-            except (PermissionDenied, ValidationError, ValueError):
-                # Revoked evidence is omitted from subsequent model context.
+            if not context_reusable(
+                previous, run, fresh_user(run.owner_id), policy_value
+            ):
                 continue
         content = (
             historical_answer(previous)
@@ -170,7 +167,7 @@ def input_prompt(run):
     selection = (
         "本轮明确选择的资源ID：" + json.dumps(run.resource_ids)
         if run.resource_ids
-        else "本轮未指定资源。问题涉及平台数据时先发现当前可见数据；纯知识问题直接查知识。对象不明确时询问用户。"
+        else "本轮未指定资源。问题涉及平台数据时先发现当前允许作为任务输入的数据；后台过程材料与其他任务的中间产物不是默认候选。纯知识问题直接查知识。对象不明确时询问用户。"
     )
     from .selections import serialize
 
@@ -185,7 +182,7 @@ def input_prompt(run):
 
 
 SYSTEM_CHAT = "使用用户的语言回答。普通聊天不能访问平台数据，不要声称已读取数据、运行代码或执行操作。没有平台证据编号，不能引用[证据 N]或把历史平台依据作为已核实来源。"
-SYSTEM_AGENT = """你是当前项目的数据分析智能体。按问题选择必要工具：纯知识问题直接查知识；数据分析先发现数据、读取字段，再计算和检查。需要更多信息时使用ask_user，在原任务中等待回答并继续。
+SYSTEM_AGENT = """你是当前项目的数据分析智能体。按问题选择必要工具：纯知识问题直接查知识；数据分析先发现当前允许作为任务输入的数据、读取字段，再计算和检查。后台过程材料与其他任务的中间产物不是普通数据候选；只有平台当前任务真实绑定并返回的输入或输出才能用于继续该任务，历史ID与名称不代表可调用权限。需要更多信息时使用ask_user，在原任务中等待回答并继续。
 用户只询问资源数量或分类数量时，调用summarize_resource_catalog；它的total/counts是当前授权范围的全量统计，不是样例。分类使用isComputeResult/origin等真实来源字段，不能根据名称猜测。分析过程中查找资源时用search_resources的query/category/offset/limit筛选与分页；按nextOffset继续，不得把第一页返回数量当成全部数量，也不能仅以“已截断”结束全量统计请求。
 用户问有哪些资源、哪些计算成果/上传数据、或要求完整名称清单时，优先present_resource_catalog，它由平台直接生成真实的分组清单和总数并结束本轮，避免重复抄写名称。只有需要在清单基础上继续分析时才分页search_resources；只问总数时用summarize_resource_catalog。
 计算状态必须通过get_compute_task实时查询；历史queued证据只代表提交时状态。taskId为UUID，outputId为outputs中的正整数，二者绝不能互换或猜测。
@@ -391,9 +388,10 @@ def run_task(run_id):
     preview_pending = 0
     preview_saved_at = 0.0
     preview_active = bool(stored_answer_preview(run))
+    context_ready = False
 
     def check():
-        guard(run.id, deadline)
+        guard(run.id, deadline, include_context=context_ready)
 
     def record_thinking(text, force=False):
         nonlocal thinking_buffer, thinking_saved_at
@@ -486,12 +484,22 @@ def run_task(run_id):
             from .interactions import QUESTION_INSTRUCTIONS, snapshot, wait_for_answer
 
             if run.execution_state:
+                from .selections import sanitize_context_state
+
+                run.execution_state = sanitize_context_state(
+                    run, fresh_user(run.owner_id), p
+                )
+                AgentRun.objects.filter(pk=run.id).update(
+                    execution_state=run.execution_state,
+                    knowledge_selection=run.knowledge_selection,
+                )
                 messages = list(run.execution_state["messages"])
                 current = messages[run.execution_state["currentIndex"]]
             else:
                 messages = context_messages(run, p, model)
                 messages = attach_inputs(messages, run, model, p)
                 current = messages[-1]
+            context_ready = True
 
             def prepare():
                 tokens, trimmed = prepare_context(

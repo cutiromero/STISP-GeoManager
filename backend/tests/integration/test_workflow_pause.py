@@ -134,9 +134,12 @@ def test_real_model_pause_boundaries_preserve_response_and_never_resend(
         assert workflow.status == "paused"
         attempt = workflow.plan["stages"][0]["modelAttempts"][0]
         assert attempt["status"] == (
-            "response_received" if response_saved else "requesting"
+            "response_received" if response_saved else "failed"
         )
         assert bool(attempt.get("response")) is response_saved
+        assert attempt["requested"] is True
+        if not response_saved:
+            assert attempt["accepted"] is False
         assert not ComputeTask.objects.exists()
         assert control(demo, workflow, "resume").status_code == 200
         advance_demo(workflow.id)

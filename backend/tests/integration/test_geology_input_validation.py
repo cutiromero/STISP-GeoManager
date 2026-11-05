@@ -105,13 +105,13 @@ def post(env, body=None):
     )
 
 
-def assert_rejected(env, expected, body=None):
+def assert_rejected(env, expected, body=None, *, status=400):
     with (
         patch("apps.agent.demo_decisions.decide") as model,
         patch("apps.agent.demo_workflow.submit") as compute,
     ):
         response = post(env, body)
-    assert response.status_code == 400, response.content
+    assert response.status_code == status, response.content
     assert expected in response.json()["detail"]
     assert not AgentWorkflow.objects.exists()
     assert not ComputeTask.objects.exists()
@@ -295,4 +295,4 @@ def test_reference_materials_are_not_accepted(geological_inputs):
     resource = DataResource.objects.get(pk=env["validationInputs"]["initial_map"])
     resource.source = "geology-review-reference:independent-only"
     resource.save(update_fields=["source"])
-    assert_rejected(env, "仅用于独立验收")
+    assert_rejected(env, "不在当前业务数据范围", status=403)

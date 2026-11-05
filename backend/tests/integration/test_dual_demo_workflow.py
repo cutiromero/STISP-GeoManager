@@ -222,6 +222,26 @@ def test_update_runs_only_priority_with_verified_previous_change(completed_ecolo
     assert ComputeTask.objects.count() == 5
 
 
+def test_previous_analysis_pointer_cannot_grant_other_process_data(completed_ecology):
+    from django.core.exceptions import PermissionDenied
+    from apps.agent.workflow_resources import resolve_workflow_resource
+
+    env = completed_ecology
+    workflow = update_workflow(env)
+    prepare_demo(workflow, env["owner"], env["policy"])
+    unrelated = DataResource.objects.create(
+        name="另一份过程材料",
+        code="unrelated-process",
+        data_type="table",
+        source=f"workflow-working:{env['previous'].pk}:private",
+        owner_only=True,
+        maintainer=env["owner"],
+    )
+    workflow.plan["previous_change"] = unrelated.pk
+    with pytest.raises(PermissionDenied):
+        resolve_workflow_resource(env["owner"], env["policy"], unrelated.pk, workflow)
+
+
 @pytest.mark.parametrize("changed", ["bands", "no_added", "same_context"])
 def test_update_rejects_changed_semantics_or_no_new_evidence(
     completed_ecology, changed
@@ -448,7 +468,9 @@ def test_cancel_during_result_read_stops_import_and_closes_workflow(demo):
 
 
 def test_cancel_when_import_becomes_ready_never_leaves_cancelled_queue(demo):
-    from apps.agent.tools import resolve_resource as actual_resolve
+    from apps.agent.workflow_resources import (
+        resolve_workflow_resource as actual_resolve,
+    )
 
     workflow = scenario(demo)
     prepare_demo(workflow, demo["owner"], demo["policy"])
@@ -459,14 +481,15 @@ def test_cancel_when_import_becomes_ready_never_leaves_cancelled_queue(demo):
     mark_imports_ready(demo)
     identity = ComputeImport.objects.get(output=output).resource_id
 
-    def resolve_then_cancel(user, policy, resource_id, *args):
-        result = actual_resolve(user, policy, resource_id, *args)
+    def resolve_then_cancel(user, policy, resource_id, *args, **kwargs):
+        result = actual_resolve(user, policy, resource_id, *args, **kwargs)
         if resource_id == identity:
             AgentWorkflow.objects.filter(pk=workflow.id).update(cancel_requested=True)
         return result
 
     with patch(
-        "apps.agent.demo_workflow.resolve_resource", side_effect=resolve_then_cancel
+        "apps.agent.demo_workflow.resolve_workflow_resource",
+        side_effect=resolve_then_cancel,
     ):
         resume_waiting()
     workflow.refresh_from_db()

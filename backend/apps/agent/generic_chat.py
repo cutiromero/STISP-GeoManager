@@ -28,7 +28,7 @@ def validate_batch(user, conversation, batch_id, *, run=None):
         ).exists()
     ):
         raise ComputeError("请在逻辑推理项目的智能体对话上传资料")
-    require_upload_access(user, conversation.project_tag_id)
+    policy = require_upload_access(user, conversation.project_tag_id)
     uploads = list(batch_uploads(user, batch_id).order_by("created_at", "id"))
     if not uploads or any(
         item.project_tag_id != conversation.project_tag_id
@@ -46,6 +46,12 @@ def validate_batch(user, conversation, batch_id, *, run=None):
         claimed = claimed.exclude(pk=run.pk)
     if claimed.exists():
         raise ComputeError("该上传批次已关联其他对话研究任务", 409)
+    if run is not None:
+        from .workflow_resources import resolve_run_resource
+
+        for upload in uploads:
+            if upload.source == "catalog":
+                resolve_run_resource(user, policy, upload.resource_id, run)
     return uploads
 
 

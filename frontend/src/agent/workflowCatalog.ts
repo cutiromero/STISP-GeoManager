@@ -1,8 +1,36 @@
 import type {
   ComputeAlgorithm,
+  ComputeCandidate,
   ComputeVersion,
+  AgentAlgorithmOption,
+  AgentResource,
 } from "../api/generated/types.gen";
 import { getActiveProject } from "../projects/session";
+
+export function agentWorkflowCatalog(
+  algorithms: ComputeAlgorithm[],
+  candidates: ComputeCandidate[],
+  resources: AgentResource[],
+  algorithmOptions: AgentAlgorithmOption[],
+) {
+  const resourceIds = new Set(resources.map((item) => item.id));
+  const versionIds = new Set(algorithmOptions.map((item) => item.versionId));
+  return {
+    candidates: candidates.filter((item) => resourceIds.has(item.id)),
+    algorithms: algorithms
+      .filter((item) => item.enabled)
+      .map((item) => ({
+        ...item,
+        versions: item.versions.filter(
+          (version) =>
+            versionIds.has(version.id) &&
+            version.status === "published" &&
+            version.manifest.agent?.enabled !== false,
+        ),
+      }))
+      .filter((item) => item.versions.length > 0),
+  };
+}
 
 export async function allWorkflowPages<T extends { id: number }>(
   load: (

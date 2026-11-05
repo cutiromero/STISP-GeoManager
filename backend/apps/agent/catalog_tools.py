@@ -21,20 +21,20 @@ def catalog_query(queryset, args):
     if category not in {"all", "compute_results", "uploaded_data"}:
         raise ValidationError("category 必须为 all / compute_results / uploaded_data")
     if category != "all":
-        queryset = queryset.filter(is_compute_result=category == "compute_results")
+        queryset = queryset.filter(_agent_compute_result=category == "compute_results")
     return queryset
 
 
 def catalog_summary(queryset):
     groups = list(
-        queryset.values("is_compute_result", "data_type")
+        queryset.values("_agent_compute_result", "data_type")
         .annotate(count=Count("id"), sizeBytes=Sum("size_bytes"))
-        .order_by("is_compute_result", "data_type")
+        .order_by("_agent_compute_result", "data_type")
     )
     counts = {"compute_results": 0, "uploaded_data": 0}
     for group in groups:
         group["category"] = (
-            "compute_results" if group.pop("is_compute_result") else "uploaded_data"
+            "compute_results" if group.pop("_agent_compute_result") else "uploaded_data"
         )
         group["dataType"] = group.pop("data_type")
         counts[group["category"]] += group["count"]
@@ -44,7 +44,7 @@ def catalog_summary(queryset):
         "counts": counts,
         "groups": groups,
         "complete": True,
-        "classificationBasis": "平台 isComputeResult 登记标记；uploaded_data 为上传/登记的非计算数据，不证明每项均由用户手动上传。",
+        "classificationBasis": "计算成果须有真实成功任务入库或已完成工作流的终端成果绑定；上传/登记数据包括历史业务登记资料。",
     }
 
 
@@ -118,7 +118,7 @@ def catalog_presentation(queryset, brief):
             raise ValidationError(
                 "目录超过单次对话展示容量，请按query或category分组查看；总数可用全量统计工具查询"
             )
-        groups[resource.is_compute_result].append(row)
+        groups[resource._agent_compute_result].append(row)
         metadata = brief(resource)
         metadata.pop("description", None)
         pairs.append((resource, {"metadata": metadata}))
@@ -137,7 +137,7 @@ def catalog_presentation(queryset, brief):
             )
         )
     sections.append(
-        "分类依据平台的计算成果登记标记；上传/登记数据包括历史登记资料。以上清单由当前授权目录直接生成。"
+        "计算成果已核对真实入库或终端成果绑定；上传/登记数据包括历史业务登记资料。以上清单由当前授权业务目录直接生成。"
     )
     return {"summary": summary, "answer": "\n\n".join(sections)}, [
         (None, summary),

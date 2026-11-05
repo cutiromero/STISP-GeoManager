@@ -19,7 +19,7 @@ def finish_without_edits(workflow, user, policy):
     check = next((item for item in stages if item["name"] == "check"), None)
     if not check or check.get("status") != "completed" or not check.get("taskId"):
         return
-    task = authorized_task(user, check["taskId"], policy)
+    task = authorized_task(user, check["taskId"], policy, workflow=workflow)
     results = read_results(workflow, user, policy, task)
     issues = [item for item in results if item["key"] == "issues"]
     if len(issues) != 1 or issues[0].get("scope") != "all":

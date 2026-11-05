@@ -305,6 +305,12 @@ def answer(run, user, value):
         ]
         state = dict(run.execution_state)
         if action == "answer" and not rejected:
+            from .policy import require_access
+            from .selections import sanitize_context_state
+
+            state = sanitize_context_state(
+                run, user, require_access(user, run.conversation.mode, run.model), state
+            )
             state["messages"] = [
                 *state["messages"],
                 {
@@ -329,6 +335,7 @@ def answer(run, user, value):
             interaction=updated,
             interaction_history=history,
             execution_state=state,
+            knowledge_selection=run.knowledge_selection,
             status=status,
             detail=detail,
             cancel_requested=action == "cancel" or rejected,
@@ -373,6 +380,13 @@ def continue_parameter_card(run):
             "actions": 0,
             "corrections": 0,
         }
+    from .policy import fresh_user, require_access
+    from .selections import sanitize_context_state
+
+    user = fresh_user(run.owner_id)
+    state = sanitize_context_state(
+        run, user, require_access(user, "agent", run.model), state
+    )
     card = run.interaction
     history = list(run.interaction_history)
     if card.get("status") == "pending":
@@ -406,6 +420,7 @@ def continue_parameter_card(run):
     state.update(phase="compute", taskIds=[intent["taskId"]])
     AgentRun.objects.filter(pk=run.pk, cancel_requested=False).update(
         execution_state=state,
+        knowledge_selection=run.knowledge_selection,
         interaction=card,
         interaction_history=history,
         status="waiting_compute",
@@ -423,7 +438,8 @@ def resume_compute():
     from apps.projects.context import ProjectScope, project_scope
     from .compute_tools import authorized_task, compact_task
     from .policy import fresh_user, require_access
-    from .tools import check_evidence, evidence_items
+    from .tools import evidence_items
+    from .selections import sanitize_context_state
 
     pending = AgentRun._base_manager.filter(status="waiting_compute").select_related(
         "conversation"
@@ -442,11 +458,13 @@ def resume_compute():
                     continue
                 user = fresh_user(run.owner_id)
                 policy = require_access(user, "agent", run.model)
-                check_evidence(run, user, policy)
+                state = sanitize_context_state(run, user, policy)
                 ids = run.execution_state.get("taskIds", [])
                 if not ids:
                     raise ValidationError("计算续接记录缺失，请查看真实任务卡")
-                tasks = [authorized_task(user, task_id, policy) for task_id in ids]
+                tasks = [
+                    authorized_task(user, task_id, policy, run=run) for task_id in ids
+                ]
                 if any(task.status in COMPUTE_ACTIVE for task in tasks):
                     continue
                 with transaction.atomic():
@@ -469,7 +487,7 @@ def resume_compute():
                             updated_at=timezone.now(),
                         )
                         continue
-                    state, evidence = dict(run.execution_state), list(run.evidence)
+                    evidence = list(run.evidence)
                     for task in tasks:
                         result = compact_task(task)
                         additions = evidence_items(
@@ -510,6 +528,7 @@ def resume_compute():
                         status="queued",
                         detail="计算已返回，正在准备读取结果并继续分析",
                         execution_state=state,
+                        knowledge_selection=run.knowledge_selection,
                         evidence=evidence,
                         updated_at=timezone.now(),
                     )

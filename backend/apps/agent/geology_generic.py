@@ -15,7 +15,11 @@ from django.db import transaction
 from apps.compute.packages import ComputeError
 
 from .geology_multi import SCENARIO as MULTI_TYPE
-from .tools import resolve_resource, resources
+from .workflow_resources import (
+    scenario_rule_resources,
+    resolve_upload_resource,
+    resolve_workflow_resource,
+)
 
 GENERIC = "geology_generic"
 MULTI_FAMILY = {MULTI_TYPE, GENERIC}
@@ -79,7 +83,7 @@ PARAMETERS = {"grid_resolution_m": (10, 1000), "min_zone_area_m2": (0, 100_000_0
 
 def project_rules(user, policy):
     rules = (
-        resources(user, policy)
+        scenario_rule_resources(user, policy, GENERIC)
         .filter(
             status="active", data_type="table", code__startswith="geology-multi-rules"
         )
@@ -169,10 +173,20 @@ def validate_creation(user, policy, inputs, parameters, batch_id, key):
     ):
         raise ComputeError("上传批次不存在或已用于其他任务", 409)
     for role, identity in inputs.items():
-        resolve_resource(user, policy, identity)
         upload = uploads.get(identity)
         if upload is None:
             raise ComputeError("资料角色只能选择本次任务上传的资料")
+        resolve_upload_resource(
+            user,
+            policy,
+            identity,
+            batch_id,
+            workflow=AgentWorkflow.objects.filter(
+                pk=uploads[identity].workflow_id, owner=user, idempotency_key=key
+            ).first()
+            if identity in uploads and uploads[identity].workflow_id
+            else None,
+        )
         profile = upload.profile
         if upload.resource.data_type != ROLES[role]:
             raise ComputeError(LABELS[role] + "的资料类型不适用")
@@ -327,7 +341,7 @@ def confirm_mapping(workflow, user, policy, plan_hash, mapping):
     if plan_hash != workflow.plan_hash or _state_hash(workflow.plan) != plan_hash:
         raise ComputeError("字段建议已变化，请刷新后确认", 409)
     for identity in workflow.resource_ids:
-        resolve_resource(user, policy, identity)
+        resolve_workflow_resource(user, policy, identity, workflow)
     review = workflow.plan["fieldMappingReview"]
     confirmed = validate_mapping(review, mapping)
     review["confirmed"] = True

@@ -17,7 +17,12 @@ from apps.compute.packages import ComputeError, checksum
 from apps.core.storage import table_data_path
 from apps.knowledge.services import search_entries
 from apps.knowledge.trial_rules import SCENARIO, digest, read_bound_rules
-from .tools import frame, resolve_resource
+from .tools import frame
+from .workflow_resources import (
+    resolve_scenario_resource,
+    resolve_workflow_resource,
+    resolve_generated_resource,
+)
 
 ROLES = {
     "lithology": "vector",
@@ -153,7 +158,7 @@ def graph(segment="all", raster=False):
     return stages
 
 
-def validate_inputs(user, policy, inputs, parameters, selected=()):
+def validate_inputs(user, policy, inputs, parameters, selected=(), *, workflow=None):
     if not isinstance(inputs, dict) or set(inputs) != set(ROLES):
         raise ComputeError("请完整选择岩性、构造、研究区、五类矿物和本案例试用规则")
     if parameters.get("segment", "all") not in SEGMENTS:
@@ -179,7 +184,13 @@ def validate_inputs(user, policy, inputs, parameters, selected=()):
         ):
             raise ComputeError("综合推理参数超出有效类型或范围：" + key)
     for role, kind in ROLES.items():
-        resource = resolve_resource(user, policy, inputs[role], selected)
+        resource = (
+            resolve_workflow_resource(user, policy, inputs[role], workflow)
+            if workflow is not None
+            else resolve_scenario_resource(
+                user, policy, inputs[role], SCENARIO, role, selected
+            )
+        )
         if resource.data_type != kind or resource.status != "active":
             raise ComputeError(LABELS[role] + "的数据类型或状态不适用")
         if (resource.source or "").startswith(
@@ -212,11 +223,17 @@ def validate_inputs(user, policy, inputs, parameters, selected=()):
                 raise ComputeError("请使用去标签的中性编号运行输入")
         if kind in {"raster", "vector"} and not metadata.get("crs"):
             raise ComputeError(LABELS[role] + "缺少坐标系，无法核对空间关系")
-    return read_rules(user, policy, inputs["rules"], selected)
+    return read_rules(user, policy, inputs["rules"], selected, workflow=workflow)
 
 
-def read_rules(user, policy, identity, selected=()):
-    resource = resolve_resource(user, policy, identity, selected)
+def read_rules(user, policy, identity, selected=(), *, workflow=None):
+    resource = (
+        resolve_workflow_resource(user, policy, identity, workflow)
+        if workflow is not None
+        else resolve_scenario_resource(
+            user, policy, identity, SCENARIO, "rules", selected
+        )
+    )
     data, info = frame(resource)
     if (
         info.get("scope") == "prefix_sample"
@@ -282,6 +299,7 @@ def prepare(workflow, user, policy):
         workflow.plan["inputs"],
         workflow.parameters,
         workflow.resource_ids,
+        workflow=workflow,
     )
     units, aliases = effective_units(workflow, units, aliases)
     stream = io.StringIO(newline="")
@@ -323,7 +341,9 @@ def prepare(workflow, user, policy):
         if existing:
             if not path.is_file() or path.read_bytes() != raw:
                 raise ComputeError("已冻结的试用规则与当前知识版本不一致", 409)
-            frozen = resolve_resource(user, policy, existing.id)
+            frozen = resolve_generated_resource(
+                user, policy, existing.id, workflow, "frozen_rules"
+            )
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
@@ -364,8 +384,8 @@ def prepare(workflow, user, policy):
         upstreamVersions={
             key: {
                 "resourceId": identity,
-                "revision": resolve_resource(
-                    user, policy, identity
+                "revision": resolve_workflow_resource(
+                    user, policy, identity, workflow
                 ).updated_at.isoformat(),
             }
             for key, identity in workflow.plan["inputs"].items()
@@ -381,12 +401,12 @@ def prepare(workflow, user, policy):
 
 def authorize_frozen(workflow, user, policy):
     source, entries, units, aliases = read_rules(
-        user, policy, workflow.plan["inputs"]["rules"]
+        user, policy, workflow.plan["inputs"]["rules"], workflow=workflow
     )
     units, aliases = effective_units(workflow, units, aliases)
     stored = workflow.plan["trialRulesSnapshot"]
     path = table_data_path(f"demo/workflows/{workflow.id}/trial-rules.csv")
-    resolve_resource(user, policy, workflow.plan["frozen_rules"])
+    resolve_workflow_resource(user, policy, workflow.plan["frozen_rules"], workflow)
     if (
         stored["revision"] != source.updated_at.isoformat()
         or stored["contentDigest"] != digest([entries, units, aliases])

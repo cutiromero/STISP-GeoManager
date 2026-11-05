@@ -11,13 +11,15 @@ from apps.compute.services import ACTIVE, ComputeError, request_output_import
 from apps.compute.serializers import output_data, task_data
 from apps.compute.quality import require_automatic_quality
 from apps.projects.context import ProjectScope, project_scope
-from .models import AgentComputeFollowup
+from .models import AgentComputeFollowup, AgentRun, AgentWorkflow, AgentWorkflowStep
 from .policy import fresh_user, require_access
 from .selections import require_task_selection
 
 
-def authorized_task(user, task_id, policy_value):
-    from .tools import resolve_resource
+def authorized_task(
+    user, task_id, policy_value, *, run=None, workflow=None, history=False
+):
+    from .resource_discovery import resolve_acl_resource, resolve_discoverable_resource
     from .deleted_resources import TERMINAL, readable_receipt
 
     try:
@@ -32,6 +34,45 @@ def authorized_task(user, task_id, policy_value):
     if task is None:
         raise PermissionDenied("任务不存在或无权访问")
     task_access(task, user)
+    if not history:
+        if task.trial:
+            raise PermissionDenied("算法试运行不属于当前业务计算范围")
+        if run is not None:
+            saved_run = AgentRun.objects.filter(
+                pk=run.pk, owner=user, project_tag_id=task.project_tag_id
+            ).first()
+            if saved_run is None:
+                raise PermissionDenied("计算任务与当前运行归属不一致")
+            if workflow is None and saved_run.research_workflow_id:
+                linked = saved_run.research_workflow
+                if linked.steps.filter(compute_task_id=task.id).exists():
+                    workflow = linked
+            if (
+                workflow is None
+                and not AgentComputeFollowup.objects.filter(
+                    task=task,
+                    run__conversation_id=saved_run.conversation_id,
+                    run__owner=user,
+                    run__project_tag_id=task.project_tag_id,
+                ).exists()
+            ):
+                raise PermissionDenied("计算任务未绑定到当前会话")
+        if workflow is not None:
+            workflow = AgentWorkflow.objects.filter(
+                pk=workflow.pk, owner=user, project_tag_id=task.project_tag_id
+            ).first()
+            if (
+                workflow is None
+                or not workflow.steps.filter(compute_task_id=task.id).exists()
+                or task.owner_id != workflow.owner_id
+            ):
+                raise PermissionDenied("计算任务未绑定到当前工作流")
+        elif AgentWorkflowStep.objects.filter(compute_task_id=task.id).exists() or (
+            task.outputs.filter(
+                import_record__request_source__startswith="workflow:"
+            ).exists()
+        ):
+            raise PermissionDenied("工作流过程计算仅允许在真实绑定任务内读取")
     for item in task.input_records.all():
         if item.resource_id is None:
             removed = item.snapshot.get("deletedResource", {})
@@ -44,7 +85,14 @@ def authorized_task(user, task_id, policy_value):
             ):
                 continue
             raise PermissionDenied("计算输入已删除，请重新选择数据后发起计算")
-        resolve_resource(user, policy_value, item.resource_id)
+        if history:
+            resolve_acl_resource(user, policy_value, item.resource_id, active=False)
+        elif workflow is not None:
+            from .workflow_resources import resolve_workflow_resource
+
+            resolve_workflow_resource(user, policy_value, item.resource_id, workflow)
+        else:
+            resolve_discoverable_resource(user, policy_value, item.resource_id)
     return task
 
 
@@ -64,7 +112,7 @@ def compact_task(task):
 
 
 def query_task(run, user, p, args):
-    task = authorized_task(user, args.get("taskId"), p)
+    task = authorized_task(user, args.get("taskId"), p, run=run)
     require_task_selection(run, task)
     result = compact_task(task)
     followup = AgentComputeFollowup.objects.filter(task=task).first()
@@ -82,9 +130,17 @@ def list_tasks(run, user, p, args):
     query = args.get("query", "")
     if not isinstance(query, str) or len(query) > 160:
         raise ValidationError("query 必须为不超过160字的文字")
-    tasks = ComputeTask.objects.filter(owner=user, name__icontains=query).order_by(
-        "-created_at"
-    )[:10]
+    from .resource_discovery import workflow_task_ids
+
+    workflow_imports = ComputeImport.objects.filter(
+        request_source__startswith="workflow:"
+    ).values("output__task_id")
+    tasks = (
+        ComputeTask.objects.filter(owner=user, trial=False, name__icontains=query)
+        .exclude(pk__in=workflow_task_ids())
+        .exclude(pk__in=workflow_imports)
+        .order_by("-created_at")[:10]
+    )
     result = {"items": []}
     for task in tasks:
         try:
@@ -135,7 +191,7 @@ def import_result(run, user, p, args):
         if output is None:
             raise PermissionDenied("结果不存在或无权访问")
         task_id, keys = output.task_id, [output.key]
-    task = authorized_task(user, task_id, p)
+    task = authorized_task(user, task_id, p, run=run)
     require_task_selection(run, task)
     require_actor(user, task.project_tag_id, "catalog.add_dataresource")
     name = args.get("name", "")
@@ -269,7 +325,13 @@ def validate_import_intent(record):
             raise PermissionDenied("无法识别自动入库来源")
         if not p.get("operatorEnabled", False):
             raise PermissionDenied("智能体自动入库权限已关闭")
-        authorized_task(user, record.output.task_id, p)
+        authorized_task(
+            user,
+            record.output.task_id,
+            p,
+            run=run if kind == "agent_run" else None,
+            workflow=workflow if kind == "workflow" else None,
+        )
     except (PermissionDenied, ValidationError, ValueError) as exc:
         raise ComputeError(str(exc), 403) from exc
 
@@ -287,7 +349,7 @@ def resume_followups():
                 p = require_access(user, "agent", run.model)
                 if run.cancel_requested:
                     raise PermissionDenied("本轮已取消，自动后续处理已停止")
-                task = authorized_task(user, item.task_id, p)
+                task = authorized_task(user, item.task_id, p, run=run)
                 advance(item, user, p, task)
             except (PermissionDenied, ValidationError, ComputeError) as exc:
                 item.status, item.detail = "blocked", str(exc)[:300]
@@ -304,7 +366,7 @@ def run_tasks(run, user, p):
     items = []
     for task_id in sorted(ids)[:30]:
         try:
-            task = authorized_task(user, task_id, p)
+            task = authorized_task(user, task_id, p, run=run, history=True)
             require_task_selection(run, task)
         except (PermissionDenied, ValidationError, ComputeError):
             continue

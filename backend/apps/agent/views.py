@@ -504,20 +504,8 @@ def submit_value(request, c, value, *, available_models=None):
             and not model_config.vision
         ):
             raise ApiProblem("当前模型未验收图片分析能力", 400)
-        from .selections import check_history_evidence, history_compatible
-
-        current_selection = AgentRun(
-            conversation=c,
-            owner=request.user,
-            project_tag_id=c.project_tag_id,
-            prompt=prompt.strip(),
-            resource_ids=selected,
-            **selections,
-        )
-        for previous in c.runs.all():
-            if c.mode == "agent":
-                if history_compatible(previous, current_selection):
-                    check_history_evidence(previous, request.user, p)
+        # Unrelated or revoked history is omitted when constructing model context.
+        # It must not prevent a new, independently authorized user request.
         if not worker_online():
             raise ApiProblem("模型工作进程未就绪，请联系管理员", 503)
         available = available_models or []

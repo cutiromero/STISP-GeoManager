@@ -2153,7 +2153,7 @@ export const importComputeOutput = <ThrowOnError extends boolean = false>(option
 /**
  * 获取可体验的科研案例
  *
- * 默认保留跨本人授权项目的完整案例入口。view=summary仅返回当前项目轻量入口，执行存在性查询，不调用模型健康检查或扫描算法。scenario只读取当前项目指定场景的完整预设，返回原完整列表结构。所有模式均核对项目和智能体权限。
+ * 默认保留跨本人授权项目的完整案例入口。view=summary仅返回当前项目轻量入口，执行存在性查询，不调用模型健康检查或扫描算法。scenario只读取当前项目指定场景的完整预设；普通角色使用严格业务资源发现集合，rules角色可在服务端确定场景内读取已注册规则，创建任务时再次核对场景及知识绑定，不扩大普通数据手选。返回原完整列表结构，所有模式均核对项目和智能体权限。
  */
 export const listAgentResearchDemos = <ThrowOnError extends boolean = false>(options?: Options<ListAgentResearchDemosData, ThrowOnError>): RequestResult<ListAgentResearchDemosResponses, ListAgentResearchDemosErrors, ThrowOnError> => (options?.client ?? client).get<ListAgentResearchDemosResponses, ListAgentResearchDemosErrors, ThrowOnError>({
     security: [{
@@ -2187,7 +2187,7 @@ export const updateAgentResearchIntent = <ThrowOnError extends boolean = false>(
 /**
  * 获取智能体可见能力
  *
- * 获取智能体可见能力。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。数据工具不授予额外项目权限。
+ * 获取智能体可见能力。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。算法候选只含enabled算法的published且允许智能体调用版本；知识分区只统计已发布并通过领域ACL的知识，草稿仅用于服务端明确绑定场景。数据工具不授予额外项目权限。
  */
 export const getAgentBootstrap = <ThrowOnError extends boolean = false>(options: Options<GetAgentBootstrapData, ThrowOnError>): RequestResult<GetAgentBootstrapResponses, GetAgentBootstrapErrors, ThrowOnError> => (options.client ?? client).get<GetAgentBootstrapResponses, GetAgentBootstrapErrors, ThrowOnError>({
     security: [{
@@ -2373,7 +2373,7 @@ export const cancelAgentRun = <ThrowOnError extends boolean = false>(options: Op
 /**
  * 查找当前项目内有权分析的数据
  *
- * 查找当前项目内有权分析的数据。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。数据工具不授予额外项目权限。
+ * 当前单项目与资源ACL内active且准备ready的普通业务上传和明确入库成果；与普通搜索、统计、元信息和直接编号读取使用同一集合。排除trial、临时任务资料、工作副本、冻结规则、修改表、过程结果和评价真值；不按演示或测试名称过滤。手选仅缩小范围，空集合返回items为空且不回退通用目录。每次重新授权，不授予额外项目或任务内部材料权限。
  */
 export const listAgentResources = <ThrowOnError extends boolean = false>(options: Options<ListAgentResourcesData, ThrowOnError>): RequestResult<ListAgentResourcesResponses, ListAgentResourcesErrors, ThrowOnError> => (options.client ?? client).get<ListAgentResourcesResponses, ListAgentResourcesErrors, ThrowOnError>({
     security: [{
@@ -2422,7 +2422,7 @@ export const confirmAgentWorkflow = <ThrowOnError extends boolean = false>(optio
 /**
  * 搜索可供逻辑推理引用的系统数据
  *
- * 当前单项目内按资源访问权限筛选活动矢量、栅格、表格，排除任务资料；按更新时间、登记时间、ID倒序分页，返回总数和可见数据目录。需要智能体、工作流、算子和数据登记权限。
+ * 当前单项目与资源ACL内active且准备ready的业务矢量、栅格、表格和明确入库成果，与普通智能体发现共用边界。排除trial、临时任务资料、工作副本、冻结规则、修改表、过程结果及评价真值，不按演示或测试名称过滤。按更新时间、登记时间、ID倒序分页；目录选项来自可发现基础集合，总数反映关键词与目录筛选后的匹配数。基础集合为空时items/directories为空及total为0，筛选无匹配时items为空及total为0，不回退通用目录。需要智能体、工作流、算子和数据登记权限。
  */
 export const listAgentWorkflowCatalogResources = <ThrowOnError extends boolean = false>(options: Options<ListAgentWorkflowCatalogResourcesData, ThrowOnError>): RequestResult<ListAgentWorkflowCatalogResourcesResponses, ListAgentWorkflowCatalogResourcesErrors, ThrowOnError> => (options.client ?? client).get<ListAgentWorkflowCatalogResourcesResponses, ListAgentWorkflowCatalogResourcesErrors, ThrowOnError>({
     security: [{
@@ -2437,7 +2437,7 @@ export const listAgentWorkflowCatalogResources = <ThrowOnError extends boolean =
 /**
  * 将系统数据引用加入任务批次
  *
- * 仅逻辑推理项目使用，权限与上传一致。原子加入有权访问的当前项目活动资源，不复制或改变目录资源；同一资源可被多个批次引用。重复加入同批次返回原条目，已发送或绑定批次返回409。移除仅解除引用。资料画像读取真实计算输入（栅格原始数据而非可能增加alpha波段的显示COG）。
+ * 仅逻辑推理项目使用，权限与上传一致。原子加入当前普通智能体可发现集合中的资源，逐个重新验证项目、ACL、active/ready及来源；直接提交编号不能引用trial、内部过程或评价材料。不复制或改变原资源，同一资源可被多个批次引用。重复加入同批次返回原条目，已发送或绑定批次返回409。移除仅解除引用。资料画像读取真实计算输入（栅格原始数据而非可能增加alpha波段的显示COG）。
  */
 export const addAgentWorkflowCatalogReferences = <ThrowOnError extends boolean = false>(options: Options<AddAgentWorkflowCatalogReferencesData, ThrowOnError>): RequestResult<AddAgentWorkflowCatalogReferencesResponses, AddAgentWorkflowCatalogReferencesErrors, ThrowOnError> => (options.client ?? client).post<AddAgentWorkflowCatalogReferencesResponses, AddAgentWorkflowCatalogReferencesErrors, ThrowOnError>({
     security: [{

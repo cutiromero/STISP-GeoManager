@@ -18,7 +18,7 @@ from apps.core.storage import table_data_path
 from apps.knowledge.trial_rules import digest
 from .compute_tools import authorized_task
 from .demo_results import read_results
-from .tools import resolve_resource
+from .workflow_resources import resolve_generated_resource
 from .geology_issue_groups import issue_groups
 
 CHANGE_FIELDS = (
@@ -528,7 +528,10 @@ def freeze_proposal(workflow, stage):
 def _fresh(workflow, user, policy, stage):
     check = check_stage(workflow)
     actual = read_results(
-        workflow, user, policy, authorized_task(user, check["taskId"], policy)
+        workflow,
+        user,
+        policy,
+        authorized_task(user, check["taskId"], policy, workflow=workflow),
     )
     if actual != check["results"]:
         raise ComputeError("实际检查结果已变化，请重新检查并确认", 409)
@@ -679,7 +682,9 @@ def create_approved_changes(workflow, user, policy, stage):
         if existing:
             if not path.is_file() or path.read_bytes() != raw:
                 raise ComputeError("已固定的获批操作与当前范围不一致", 409)
-            return resolve_resource(user, policy, existing.id)
+            return resolve_generated_resource(
+                user, policy, existing.id, workflow, "approved_changes"
+            )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(raw)
         resource = DataResource.objects.create(

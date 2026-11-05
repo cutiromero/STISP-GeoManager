@@ -563,7 +563,7 @@ export type KnowledgeDomainOption = {
 };
 
 /**
- * 本轮知识调用方式；auto按本轮主题及已授权科研会话上下文筛选，manual限定选定领域，all使用所有可见知识，none禁用知识工具
+ * 本轮知识调用方式；普通知识仅含已发布且通过领域ACL的条目，草稿只用于服务端明确绑定的场景及冻结修订。auto按本轮主题与当前已授权上下文筛选，manual限定选定领域，all使用该授权集合，none禁用知识工具；历史可读不扩大新任务知识权限
  */
 export type AgentKnowledgeSelection = {
     /**
@@ -577,7 +577,7 @@ export type AgentKnowledgeSelection = {
 };
 
 /**
- * 已发布且允许智能体调用的算法版本
+ * 算法enabled、版本published且明确允许智能体调用的授权版本；手选或历史版本ID不扩大候选
  */
 export type AgentAlgorithmOption = {
     /**
@@ -611,7 +611,7 @@ export type AgentBootstrap = {
      */
     knowledgeDomains?: Array<KnowledgeDomainOption>;
     /**
-     * 当前项目与公开可用的已发布安全算法版本
+     * 当前项目与公开可用的enabled算法中published且允许智能体调用的版本；空列表不回退普通计算中心算法
      */
     algorithmOptions?: Array<AgentAlgorithmOption>;
     /**
@@ -1532,7 +1532,7 @@ export type AgentResearchDemoList = {
          */
         available: boolean;
         /**
-         * 仅当前请求项目返回的活动预设；按稳定资源编码定位，不包含其他项目的输入标识。缺项表示该角色预设不可用。
+         * 仅当前请求项目返回的活动预设；普通角色使用严格业务候选，rules仅使用当前明确场景的受控注册规则；按稳定资源编码定位，不包含其他项目的输入标识，不能据此扩大普通发现。缺项表示该角色预设不可用。
          */
         preset?: {
             /**
@@ -1628,7 +1628,7 @@ export type AgentWorkflowCatalogItem = {
 };
 
 /**
- * 按最近更新时间排序的系统数据页；目录列表只包含当前可见资源所在组别
+ * 普通智能体发现边界内按最近更新时间排序的系统数据页；目录来自可发现基础集合，total为关键词与目录筛选后的匹配数。基础集合为空时items/directories为空且total为0，筛选无匹配时items为空且total为0，不补入历史或内部材料
  */
 export type AgentWorkflowCatalogPage = {
     /**
@@ -1713,7 +1713,7 @@ export type AgentLogicConfigurationResult = {
 };
 
 /**
- * 当前项目中可分析的数据资源
+ * 当前项目ACL内active且准备ready的普通业务资料或明确成果；不含trial、任务内部过程和评价材料，名称不作为排除依据
  */
 export type AgentResource = {
     /**

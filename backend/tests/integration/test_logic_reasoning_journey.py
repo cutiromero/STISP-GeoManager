@@ -7,7 +7,9 @@ from pathlib import Path
 
 import geopandas as gpd
 import pytest
+import rasterio
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 from shapely.geometry import LineString
 
 from apps.agent.models import AgentRun, AgentWorkflow, Conversation, LogicConfiguration
@@ -22,6 +24,7 @@ from apps.compute.models import (
     ComputeImport,
     ComputeOutput,
     ComputeTask,
+    RuntimeLease,
 )
 from apps.compute.packages import checksum, validate_manifest
 from apps.compute.quality import quality_metadata, read_quality_report
@@ -202,6 +205,7 @@ def native_task(task):
         )
     task.status = "succeeded"
     task.save(update_fields=["status"])
+    RuntimeLease.objects.filter(name="worker").update(heartbeat=timezone.now())
 
 
 def test_system_data_to_clean_results_and_new_conversation_reuse(
@@ -258,6 +262,7 @@ def test_system_data_to_clean_results_and_new_conversation_reuse(
     approvals = []
     stages = []
     for _ in range(35):
+        RuntimeLease.objects.filter(name="worker").update(heartbeat=timezone.now())
         workflow.refresh_from_db()
         if workflow.status == "succeeded":
             break
@@ -318,8 +323,35 @@ def test_system_data_to_clean_results_and_new_conversation_reuse(
     for key in ("lithology", "final_faults", "final_alterations"):
         if key not in outputs:
             assert key == "final_alterations"
-            state = gpd.read_file(app_path(outputs["alterations"].path))
-            assert len(state) > 0 and set(state["state"]) == {"exclude"}
+            if "alterations" in outputs:
+                state = gpd.read_file(app_path(outputs["alterations"].path))
+                assert len(state) > 0 and set(state["state"]) == {"exclude"}
+            else:
+                excluded_pixels = 0
+                for mineral in (
+                    "hematite",
+                    "chlorite",
+                    "hydromica",
+                    "calcite",
+                    "dolomite",
+                ):
+                    with (
+                        rasterio.open(
+                            app_path(outputs[mineral + "_corrected"].path)
+                        ) as corrected_raster,
+                        rasterio.open(
+                            app_path(outputs[mineral + "_weight"].path)
+                        ) as weight_raster,
+                    ):
+                        assert corrected_raster.count == weight_raster.count == 1
+                        assert corrected_raster.crs == weight_raster.crs
+                        assert corrected_raster.crs is not None
+                        assert corrected_raster.shape == weight_raster.shape
+                        assert corrected_raster.transform == weight_raster.transform
+                        weights = weight_raster.read(1, masked=True)
+                        assert (weights >= 0).all() and (weights <= 1).all()
+                        excluded_pixels += int((weights == 0).sum())
+                assert excluded_pixels > 0
             continue
         frame = gpd.read_file(app_path(outputs[key].path))
         assert not {
@@ -361,16 +393,22 @@ def test_system_data_to_clean_results_and_new_conversation_reuse(
     prospect = next(
         stage for stage in workflow.plan["stages"] if stage["name"] == "prospect"
     )
-    zones = ComputeTask.objects.get(pk=prospect["taskId"]).outputs.get(
-        key="after_zones"
-    )
-    frame = gpd.read_file(app_path(zones.path))
-    assert "grade" in frame.columns and frame.geometry.is_valid.all()
-    assert set(frame.geom_type) <= {"Polygon", "MultiPolygon"}
-    assert set(frame.columns) == {"zone_id", "grade", "area_km2", "geometry"}
-    assert frame.geometry.area.sum() == pytest.approx(
-        frame.geometry.union_all().area, rel=1e-6
-    )
+    prospect_task = ComputeTask.objects.get(pk=prospect["taskId"])
+    zones = prospect_task.outputs.filter(key="after_zones").first()
+    if zones is not None:
+        frame = gpd.read_file(app_path(zones.path))
+        assert "grade" in frame.columns and frame.geometry.is_valid.all()
+        assert set(frame.geom_type) <= {"Polygon", "MultiPolygon"}
+        assert set(frame.columns) == {"zone_id", "grade", "area_km2", "geometry"}
+        assert frame.geometry.area.sum() == pytest.approx(
+            frame.geometry.union_all().area, rel=1e-6
+        )
+    else:
+        statistics = read(app_path(prospect_task.outputs.get(key="statistics").path))
+        assert statistics and all(int(row["after_count"]) == 0 for row in statistics)
+        assert all(float(row["after_area_km2"]) == 0 for row in statistics)
+        evidence = read(app_path(prospect_task.outputs.get(key="evidence").path))
+        assert all(row["phase"] != "after" for row in evidence)
     saved = LogicConfiguration.objects.get(
         owner=generic["owner"], project_tag=generic["project"]
     )

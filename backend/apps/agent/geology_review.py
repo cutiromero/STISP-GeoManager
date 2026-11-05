@@ -277,7 +277,10 @@ def _fresh_proposal(workflow, user, policy, stage):
         if item["identifier"] == "geology-map-check" and item.get("taskId")
     )
     actual = read_results(
-        workflow, user, policy, authorized_task(user, check["taskId"], policy)
+        workflow,
+        user,
+        policy,
+        authorized_task(user, check["taskId"], policy, workflow=workflow),
     )
     if actual != check["results"]:
         raise ComputeError("检查结果已变化，请重新检查并确认建议", 409)

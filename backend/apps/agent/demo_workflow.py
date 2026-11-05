@@ -32,7 +32,7 @@ from .model_activity import WorkflowModelActivity
 from .config import registry
 from .geology_reference import is_reference_resource
 from .provider import ModelError
-from .tools import resolve_resource
+from .workflow_resources import resolve_workflow_resource
 from .compute_tools import authorized_task
 from .demo_decisions import decide
 from .demo_results import create_changes, read_results
@@ -321,7 +321,7 @@ def prepare_demo(workflow, user, p) -> None:
         )
     snapshots, names = {}, {}
     for role, kind in roles.items():
-        resource = resolve_resource(user, p, inputs[role], workflow.resource_ids)
+        resource = resolve_workflow_resource(user, p, inputs[role], workflow)
         if workflow.workflow_type in {
             "geology_age_correction",
             "geology_map_review",
@@ -513,7 +513,9 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
     for role, identity in workflow.plan["inputs"].items():
         if history and historical_deletion(workflow, user, p, identity):
             continue
-        resource = resolve_resource(user, p, identity, workflow.resource_ids)
+        resource = resolve_workflow_resource(
+            user, p, identity, workflow, history=history
+        )
         if resource.status != "active" or (
             not history
             and resource.updated_at.isoformat() != workflow.plan["inputSnapshots"][role]
@@ -551,7 +553,9 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
         for output in stage.get("outputs", []):
             if history and historical_deletion(workflow, user, p, output["resourceId"]):
                 continue
-            resource = resolve_resource(user, p, output["resourceId"])
+            resource = resolve_workflow_resource(
+                user, p, output["resourceId"], workflow, history=history
+            )
             record = ComputeImport.objects.filter(
                 output_id=output["outputId"],
                 resource=resource,
@@ -756,7 +760,7 @@ def _submit_stage_locked(workflow, user, p, stage) -> None:
         workflow.plan["model_changes"] = resource.id
     inputs = _inputs(workflow, stage)
     for identity in inputs.values():
-        resolve_resource(user, p, identity)
+        resolve_workflow_resource(user, p, identity, workflow)
     body = {
         "name": (
             f"地质成果智能检查与修正 {stage_title(workflow, stage)}"
@@ -897,7 +901,7 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
     stage["outputs"] = []
     internal_resource_ids = set()
     for output, record in records:
-        resource = resolve_resource(user, p, record.resource_id)
+        resource = resolve_workflow_resource(user, p, record.resource_id, workflow)
         if (
             workflow.workflow_type in MULTI_FAMILY
             and stage["name"] == "apply"
@@ -1014,7 +1018,9 @@ def advance_demo(workflow_id) -> None:
             user, p = _authorize(workflow)
             if workflow.cancel_requested:
                 for submitted in workflow.steps.filter(kind="submit_operator"):
-                    task = authorized_task(user, submitted.compute_task_id, p)
+                    task = authorized_task(
+                        user, submitted.compute_task_id, p, workflow=workflow
+                    )
                     if task.status in {"queued", "validating", "running"}:
                         task_action(task, user, "cancel")
                 workflow.status, workflow.detail = "cancelled", "已停止场景后续处理"
@@ -1039,7 +1045,7 @@ def advance_demo(workflow_id) -> None:
             )
             workflow.current_step = stage["name"]
             if stage.get("taskId"):
-                task = authorized_task(user, stage["taskId"], p)
+                task = authorized_task(user, stage["taskId"], p, workflow=workflow)
                 if task.status in ACTIVE:
                     workflow.detail = "计算中心：" + task.stage
                     workflow.heartbeat = timezone.now()
@@ -1101,7 +1107,9 @@ def advance_demo(workflow_id) -> None:
                 for previous in stages[:index]:
                     if not previous.get("taskId"):
                         continue
-                    task = authorized_task(user, previous["taskId"], p)
+                    task = authorized_task(
+                        user, previous["taskId"], p, workflow=workflow
+                    )
                     results.extend(read_results(workflow, user, p, task))
 
                 def record_attempt(attempt):

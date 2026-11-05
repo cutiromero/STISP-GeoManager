@@ -11,6 +11,7 @@ from django.utils import timezone
 from apps.agent.models import AgentRuntime
 from apps.agent.research_presets import MARKERS, discover, list_demos
 from apps.catalog.models import DataResource
+from apps.raster.models import RasterDataset
 from apps.projects.context import ProjectScope, project_scope
 from apps.projects.models import ProjectMembership
 from tests.integration.test_demo_workflow import demo  # noqa: F401
@@ -41,6 +42,14 @@ def mark(env):
             maintainer=env["owner"],
         )
         env["inputs"][role] = resource.id
+        if resource.data_type == "raster":
+            RasterDataset.objects.create(
+                name=role,
+                code=resource.code,
+                data_resource=resource,
+                source_relative_path=f"fixture/preset/{resource.id}.tif",
+                status="ready",
+            )
     DataResource.objects.create(
         code="demo-ecology-context-updated",
         name="模拟 · 新增观测",
@@ -315,6 +324,13 @@ def test_preset_tracks_activity_and_visibility_instead_of_old_names(demo):  # no
             source=MARKERS["early_image"][1],
             data_type="raster",
             maintainer=env["owner"],
+        )
+        RasterDataset.objects.create(
+            name=current.name,
+            code=current.code,
+            data_resource=current,
+            source_relative_path=f"fixture/preset/{current.id}.tif",
+            status="ready",
         )
 
         def preset():

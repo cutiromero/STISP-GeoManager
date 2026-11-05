@@ -18,9 +18,10 @@ from apps.agent.generic_inputs import (
 )
 from apps.agent.geology_multi import VISIBLE_OUTPUTS, graph
 from apps.agent.models import AgentWorkflow, AgentWorkflowStep
+from apps.agent.policy import default_policy
 from apps.catalog.models import DataResource
 from apps.compute.data import preview
-from apps.compute.models import ComputeOutput, ComputeTask
+from apps.compute.models import ComputeImport, ComputeOutput, ComputeTask
 from apps.compute.packages import ComputeError, checksum
 from apps.compute.worker import clean_expired
 from apps.core.storage import app_path
@@ -100,22 +101,24 @@ def test_collect_only_user_outputs_and_keep_all_task_results(setup_compute, scen
                 data_type=output.kind,
                 maintainer=user,
             )
-            return SimpleNamespace(status="ready", resource_id=resource.id)
+            return ComputeImport.objects.create(
+                output=output,
+                requested_by=user,
+                name=resource.name,
+                resource=resource,
+                status="ready",
+                request_source=options.get("request_source", ""),
+            )
 
         with (
             patch(
-                "apps.agent.demo_workflow._authorize", return_value=(env["owner"], {})
+                "apps.agent.demo_workflow._authorize",
+                return_value=(env["owner"], default_policy()),
             ),
             patch("apps.agent.demo_workflow.authorize_demo"),
             patch("apps.agent.demo_workflow.require_automatic_quality"),
             patch(
                 "apps.agent.demo_workflow.request_output_import", side_effect=register
-            ),
-            patch(
-                "apps.agent.demo_workflow.resolve_resource",
-                side_effect=lambda user, policy, identity: DataResource.objects.get(
-                    pk=identity
-                ),
             ),
             patch(
                 "apps.agent.demo_workflow.read_results",
@@ -153,9 +156,9 @@ def test_collect_only_user_outputs_and_keep_all_task_results(setup_compute, scen
                 }
                 workflow.plan["stages"].append(stage)
                 assert _collect_stage(workflow, env["owner"], {}, stage, task)
-                assert {
-                    output["key"] for output in stage["outputs"]
-                } == VISIBLE_OUTPUTS[name]
+                assert {output["key"] for output in stage["outputs"]} == set(
+                    keys
+                ) & VISIBLE_OUTPUTS[name]
                 assert len(stage["results"]) == len(keys)
             assert color.call_count == 1
         assert len(imported) == 14

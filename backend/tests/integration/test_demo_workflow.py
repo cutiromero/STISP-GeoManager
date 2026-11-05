@@ -19,6 +19,7 @@ from apps.agent.models import AgentPolicy, AgentWorkflow
 from apps.agent.policy import default_policy, validate_policy
 from apps.agent.workflow import resume_waiting, run_workflow
 from apps.catalog.models import DataResource
+from apps.raster.models import RasterDataset
 from apps.compute.models import (
     AlgorithmResource,
     AlgorithmVersion,
@@ -80,6 +81,16 @@ def demo(setup_compute, settings, monkeypatch):  # noqa: F811
                     data_type=kind,
                     maintainer=env["owner"],
                 ).id
+                if kind == "raster":
+                    # Candidate metadata is simulated below; the registry must
+                    # still represent an input whose preprocessing completed.
+                    RasterDataset.objects.create(
+                        name=role,
+                        code=role,
+                        source_relative_path=f"fixture/{role}.tif",
+                        data_resource_id=inputs[role],
+                        status="ready",
+                    )
         env["inputs"] = inputs
         versions = {}
         kinds = {

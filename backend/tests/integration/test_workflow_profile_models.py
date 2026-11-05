@@ -77,17 +77,34 @@ def profiles(setup_compute, settings, monkeypatch):  # noqa: F811
                 "fields": [{"name": "DCMC", "type": "text", "samples": ["八宝山组"]}],
             },
         )
+        mapping_batch = uuid.uuid4().hex
+        mapping_resource = DataResource.objects.create(
+            name="待确认字段的地质资料",
+            code="profile-mapping-upload",
+            data_type="vector",
+            maintainer=env["owner"],
+            owner_only=True,
+            source="workflow-upload:" + mapping_batch,
+        )
         workflow = AgentWorkflow.objects.create(
             owner=env["owner"],
             workflow_type="geology_generic",
             model="qwen",
             goal="检查地质资料",
-            resource_ids=[resource.id],
+            resource_ids=[mapping_resource.id],
             idempotency_key="profiles",
             plan={
-                "uploadInputs": {"lithology": resource.id},
-                "uploadBatchId": upload.batch_id,
+                "uploadInputs": {"lithology": mapping_resource.id},
+                "uploadBatchId": mapping_batch,
             },
+        )
+        WorkflowUpload.objects.create(
+            owner=env["owner"],
+            batch_id=mapping_batch,
+            resource=mapping_resource,
+            workflow=workflow,
+            file_name="地质字段图.gpkg",
+            profile=upload.profile,
         )
         roles = [
             {

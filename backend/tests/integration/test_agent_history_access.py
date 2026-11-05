@@ -23,10 +23,42 @@ from tests.integration.test_agent_deleted_history import (
 )
 
 
+def bind_input_provenance(env):
+    """The historical input is an actual imported result from an earlier task."""
+    resource = env["resource"]
+    downstream = ComputeTask.objects.get(input_records__resource=resource)
+    upstream = ComputeTask.objects.create(
+        name="历史输入原计算",
+        owner=env["user"],
+        version=downstream.version,
+        status="succeeded",
+        idempotency_key="history-input-origin",
+        request_hash="origin",
+    )
+    output = ComputeOutput.objects.create(
+        task=upstream,
+        key="samples",
+        label=resource.name,
+        kind=resource.data_type,
+        file_name="samples.sqlite",
+        path="history/samples.sqlite",
+        size_bytes=100,
+        checksum="b" * 64,
+    )
+    ComputeImport.objects.create(
+        output=output,
+        requested_by=env["user"],
+        name=resource.name,
+        status="ready",
+        resource=resource,
+    )
+
+
 def history(env):
     AgentPolicy.objects.create(value={**default_policy(), "operatorEnabled": True})
     with project_scope(env["scope"]):
         item = prepare_history(env, research=True)
+        bind_input_provenance(env)
         item.compute_intent = {}
         item.research_intent["_inputRevisions"] = {
             "map": env["resource"].updated_at.isoformat()
@@ -105,7 +137,7 @@ def stage_output(env, item):
             data_type="vector",
             is_compute_result=True,
         )
-        task = ComputeTask.objects.get(owner=env["user"])
+        task = ComputeTask.objects.get(input_records__resource=env["resource"])
         output = ComputeOutput.objects.create(
             task=task,
             key="corrected",
@@ -124,6 +156,12 @@ def stage_output(env, item):
             resource=resource,
         )
         workflow = item.research_workflow
+        workflow.steps.create(
+            sequence=1,
+            kind="submit_operator",
+            status="succeeded",
+            compute_task_id=task.id,
+        )
         workflow.plan["stages"] = [
             {
                 "taskId": str(task.id),
@@ -271,7 +309,10 @@ def test_compute_history_does_not_reopen_live_candidate_forms(setup_agent):
             data = serialize(item, env["user"], default_policy(), history=True)
         assert data["inputCandidates"] == []
         candidate.assert_not_called()
+        with pytest.raises(PermissionDenied, match="不在当前业务数据范围"):
+            serialize(item, env["user"], default_policy())
         # Pending parameter cards still need current choices during normal polling.
+        bind_input_provenance(env)
         version.manifest = {"inputs": [{"key": "image", "kind": "table"}]}
         version.save(update_fields=["manifest"])
         for status, intent_status in [

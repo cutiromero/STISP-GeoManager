@@ -26,6 +26,7 @@ from .geology_reference import REFERENCE_SOURCE_PREFIX
 from .models import AgentRuntime
 from .policy import allowed, visible_models, worker_online
 from .tools import resources
+from .workflow_resources import scenario_rule_resources
 from .geology_multi import SCENARIO as MULTI_TYPE, LABELS as MULTI_LABELS
 from .geology_generic import GENERIC, generic_ready
 
@@ -242,12 +243,27 @@ def discover(user, p: dict, run=None, *, scenario_filter: str | None = None) -> 
             # remain available through manual selection and saved workflows.
             for role in ("lithology", "rules"):
                 versioned = f"geology-multi-{role}-complete-20261025"
-                if query.filter(code=versioned).exists():
+                if (
+                    (
+                        scenario_rule_resources(user, p, scenario)
+                        if role == "rules"
+                        else query
+                    )
+                    .filter(code=versioned)
+                    .exists()
+                ):
                     markers[role] = ("code", versioned)
         inputs, preferred = {}, {}
         for role, kind in roles.items():
             field, marker = markers[role]
             candidates = query.filter(data_type=kind)
+            if role == "rules":
+                registered = scenario_rule_resources(user, p, scenario)
+                if selected:
+                    registered = registered.filter(pk__in=selected)
+                elif manual:
+                    registered = registered.none()
+                candidates = candidates | registered
             if multi:
                 candidates = candidates.exclude(
                     source__startswith="geology-multi-reference:"

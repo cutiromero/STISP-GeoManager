@@ -7,7 +7,7 @@ from django.test.utils import override_settings
 from apps.agent.geology_generic import MULTI_FAMILY
 from apps.agent.models import AgentWorkflow
 from apps.agent.result_colors import style_result
-from apps.agent.tools import resolve_resource
+from apps.agent.workflow_resources import resolve_workflow_resource
 from apps.agent.workflow import authorize_workflow_history
 from apps.projects.context import ProjectScope, project_scope
 
@@ -45,7 +45,12 @@ class Command(BaseCommand):
         with project_scope(scope), model_settings:
             user, policy = authorize_workflow_history(workflow)
             resources = [
-                (resolve_resource(user, policy, identifier), key)
+                (
+                    resolve_workflow_resource(
+                        user, policy, identifier, workflow, history=True
+                    ),
+                    key,
+                )
                 for identifier, key in outputs.items()
             ]
             for resource, key in resources:

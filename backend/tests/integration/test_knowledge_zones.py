@@ -9,7 +9,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from apps.agent.compute_intents import process, serialize as intent_json, update
-from apps.agent.models import AgentRun
+from apps.agent.models import AgentComputeFollowup, AgentRun
 from apps.agent.policy import default_policy
 from apps.agent.selections import knowledge_domains, normalize
 from apps.agent.tools import TOOLS, execute
@@ -350,6 +350,7 @@ def test_task_queries_and_import_obey_algorithm_and_data_selection(compute_env):
     env = compute_env
     task = submit(env["owner"], env["body"])
     item = run(env, "查询进度", selected=False)
+    AgentComputeFollowup.objects.create(run=item, task=task)
     item.algorithm_selection_mode = "manual"
     item.algorithm_version_ids = [env["ndvi"].id]
     for tool in ("get_compute_task", "import_compute_result"):
@@ -518,6 +519,7 @@ def test_followup_counts_only_tasks_in_current_selection(compute_env):
     )
     for task in (table, ndvi):
         old = run(env, "已提交", selected=False)
+        AgentComputeFollowup.objects.create(run=old, task=task)
         old.evidence = [
             {
                 "id": 1,

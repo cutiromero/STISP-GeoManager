@@ -417,7 +417,9 @@ def test_management_command_previews_and_reapplies_current_flow(monkeypatch, app
         command, "authorize_workflow_history", lambda workflow: ("owner", {})
     )
     resource = SimpleNamespace(id=123)
-    monkeypatch.setattr(command, "resolve_resource", lambda *args: resource)
+    monkeypatch.setattr(
+        command, "resolve_workflow_resource", lambda *args, **kwargs: resource
+    )
     style = Mock(return_value={"symbolization": {}, "colorAdvice": {"classes": []}})
     monkeypatch.setattr(command, "style_result", style)
     output = StringIO()
@@ -463,7 +465,9 @@ def test_management_preview_has_38_original_lithology_library_colors(monkeypatch
     monkeypatch.setattr(
         command, "authorize_workflow_history", lambda workflow: (workflow.owner, {})
     )
-    monkeypatch.setattr(command, "resolve_resource", lambda *args: resource)
+    monkeypatch.setattr(
+        command, "resolve_workflow_resource", lambda *args, **kwargs: resource
+    )
     output = StringIO()
     command.Command(stdout=output).handle(
         workflow=workflow.id, apply=False, no_model=True

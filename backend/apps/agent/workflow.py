@@ -23,7 +23,8 @@ from apps.compute.access import require_actor
 from apps.projects.context import ProjectScope, project_scope
 from .models import AgentCheckpoint, AgentWorkflow, AgentWorkflowStep
 from .policy import fresh_user, require_access
-from .tools import resources, resolve_resource
+from .tools import resources
+from .workflow_resources import resolve_workflow_resource
 from .workflow_controls import (
     WorkflowPaused,
     check_pause,
@@ -100,7 +101,7 @@ def _authorize(workflow, *, history=False):
     for rid in workflow.resource_ids:
         if history and historical_deletion(workflow, user, p, rid):
             continue
-        resolve_resource(user, p, rid)
+        resolve_workflow_resource(user, p, rid, workflow, history=history)
     validate_knowledge(workflow, user, history=history)
     if not history:
         from .workflow_model_policy import workflow_model_policy
@@ -195,7 +196,7 @@ def _prepare(workflow, user, p):
     inputs = dict(workflow.plan.get("inputs", {}))
     for spec in version.manifest.get("inputs", []):
         if spec["key"] in inputs:
-            resolve_resource(user, p, inputs[spec["key"]], workflow.resource_ids)
+            resolve_workflow_resource(user, p, inputs[spec["key"]], workflow)
             continue
         candidates = [r for r in selected if r.data_type == spec["kind"]]
         named = [r for r in candidates if r.name.casefold() in workflow.goal.casefold()]
@@ -456,7 +457,9 @@ def resume_waiting():
                 )
                 if not current or not current.compute_task_id:
                     raise ComputeError("缺少计算任务引用")
-                task = authorized_task(user, current.compute_task_id, p)
+                task = authorized_task(
+                    user, current.compute_task_id, p, workflow=workflow
+                )
                 if workflow.cancel_requested:
                     if task.status in {"queued", "validating", "running"}:
                         task_action(task, user, "cancel")

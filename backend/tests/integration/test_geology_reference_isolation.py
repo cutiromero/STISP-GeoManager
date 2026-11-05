@@ -4,6 +4,7 @@ import hashlib
 from types import SimpleNamespace
 
 import pytest
+from django.core.exceptions import PermissionDenied
 from django.core.management.base import CommandError
 
 from apps.agent.demo_workflow import prepare_demo
@@ -12,7 +13,6 @@ from apps.agent.management.commands.prepare_real_geology_case import import_reso
 from apps.agent.research_presets import AGE_MARKERS, discover
 from apps.catalog.models import DataResource
 from apps.compute.models import ComputeTask
-from apps.compute.packages import ComputeError
 from apps.projects.context import ProjectScope, project_scope
 from tests.integration.test_compute import setup_compute  # noqa: F401
 from tests.integration.test_demo_workflow import demo, scenario  # noqa: F401
@@ -149,7 +149,7 @@ def test_prepare_rejects_direct_reference_binding_before_checkpoint_or_task(
         workflow = scenario(env, "geology_age_correction")
         original_plan = workflow.plan.copy()
         before = ComputeTask.objects.count()
-        with pytest.raises(ComputeError, match="独立对照"):
+        with pytest.raises(PermissionDenied, match="未绑定到当前科研任务"):
             prepare_demo(workflow, env["owner"], env["policy"])
         workflow.refresh_from_db()
         assert workflow.plan == original_plan
