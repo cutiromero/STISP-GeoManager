@@ -1,13 +1,8 @@
-import {
-  memo,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-} from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
-import type GeologyReviewMaps from "./GeologyReviewMaps";
+import type { ReviewOverlay } from "./reviewVectorLayers";
+import type { ReviewMapSpotlight } from "./reviewMapSpotlight";
+import "./geology-review-workspace.css";
 import {
   geologicalColor,
   reviewBounds,
@@ -22,7 +17,21 @@ import {
 } from "./localReviewGeometry";
 
 type Feature = GeoJsonFeatureCollection["features"][number];
-type Props = Omit<ComponentProps<typeof GeologyReviewMaps>, "accessToken">;
+type Props = {
+  before: GeoJsonFeatureCollection;
+  after: GeoJsonFeatureCollection | null;
+  differences: GeoJsonFeatureCollection;
+  bounds: [number, number, number, number] | null;
+  onSelect: (index: number) => void;
+  previewLabel?: string;
+  inspectionOnly?: boolean;
+  overlays?: ReviewOverlay[];
+  onInspect?: (feature: Feature) => void;
+  beforeLabel?: string;
+  afterLabel?: string;
+  compactLegend?: boolean;
+  spotlight?: ReviewMapSpotlight | null;
+};
 const emptyOverlays: NonNullable<Props["overlays"]> = [];
 
 function featureColor(feature: Feature, fallback: string) {
@@ -131,8 +140,16 @@ const VectorFeatures = memo(function VectorFeatures({
                 d={shape.path}
                 fill={shape.polygon && !outline ? fill : "none"}
                 fillRule="evenodd"
-                fillOpacity={color && !outline ? 0.22 : 0.95}
-                stroke={color ? fill : "#66768c"}
+                fillOpacity={
+                  color && !outline
+                    ? 0.22
+                    : Number(feature.properties.fill_opacity ?? 0.95)
+                }
+                stroke={
+                  color || !shape.polygon
+                    ? fill
+                    : String(feature.properties.stroke_color ?? "#66768c")
+                }
                 strokeWidth={outline ? 3.5 : color ? 2.1 : 0.8}
                 strokeDasharray={
                   excluded || layer === "actual-differences" ? "3 2" : undefined

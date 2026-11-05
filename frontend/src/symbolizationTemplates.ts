@@ -130,9 +130,21 @@ function applyResourceDefaultTemplate(
   });
   const fallback = object(renderer.defaultClass);
   const line = object(style.line);
+  const fill = object(style.fill);
   return {
     ...base,
     opacity: typeof style.opacity === "number" ? style.opacity : base.opacity,
+    fill: {
+      ...base.fill,
+      fillOpacity:
+        typeof fill.fillOpacity === "number"
+          ? fill.fillOpacity
+          : base.fill.fillOpacity,
+      fillOutlineColor:
+        typeof fill.fillOutlineColor === "string"
+          ? fill.fillOutlineColor
+          : base.fill.fillOutlineColor,
+    },
     line: {
       ...base.line,
       lineColor:

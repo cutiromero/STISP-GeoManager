@@ -12,7 +12,6 @@ import type {
   AgentWorkflow,
   GeoJsonFeatureCollection,
 } from "../api/generated/types.gen";
-import { useAppContext } from "../contexts/AppContext";
 import {
   MultiElementEvidence,
   formatMultiElementObservation,
@@ -148,7 +147,6 @@ export default function MultiElementWorkspace({
   onPage?: (offset: number) => Promise<void>;
 }) {
   const navigate = useNavigate();
-  const { bootstrap } = useAppContext();
   const [chapter, setChapter] = useState<StoryChapter>(() => {
     const value = savedStory(workflow.id).chapter;
     return [
@@ -1034,7 +1032,6 @@ export default function MultiElementWorkspace({
                     if (feature) inspect(feature);
                   }}
                   onInspect={inspect}
-                  accessToken={bootstrap.map.mapboxAccessToken}
                   beforeLabel={
                     viewMode === "tour"
                       ? "改前"
@@ -1051,11 +1048,7 @@ export default function MultiElementWorkspace({
                   }
                   previewLabel="当前输入与检查范围，尚无修正版本"
                   compactLegend
-                  spotlight={
-                    visible.includes("changes") || viewMode === "outcome"
-                      ? spotlight
-                      : null
-                  }
+                  spotlight={spotlight}
                 />
               </div>
               {viewMode === "tour" && currentTour && (

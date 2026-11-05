@@ -116,6 +116,21 @@ def project_payload(original, level):
     if not level:
         return copy.deepcopy(original)
     payload = _expand_knowledge(original)
+    if "colorCandidates" in payload:
+        candidates = payload["colorCandidates"]
+        if level >= 2:
+            candidates = [item for item in candidates if item["relevance"] == 0]
+        if level >= 3:
+            seen, selected = set(), []
+            for item in candidates:
+                if item["value"] not in seen:
+                    selected.append(item)
+                    seen.add(item["value"])
+            candidates = selected
+        if level >= 4:
+            candidates = []
+        payload["colorCandidates"] = candidates
+        return _deduplicate(payload)
     bindings = {}
     for role in payload.get("inputRoles", []):
         if role.get("role") == "rules":

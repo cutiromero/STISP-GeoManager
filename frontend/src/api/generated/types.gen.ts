@@ -8737,11 +8737,75 @@ export type ValidationIssue = {
     targetName?: string;
 };
 
+/**
+ * 成果中一个实际类别最终采用的颜色、来源及替换原因；只有新配色流程生成逐类记录。
+ */
+export type ResultColorClassAdvice = {
+    /**
+     * 实际分类字段取值，字符串化后保存。
+     */
+    value: string;
+    /**
+     * 最终符号化使用的颜色。
+     */
+    color: string;
+    /**
+     * 分别为选用色表库颜色、模型自行建议、确定性调色板补色；离线命中色表也记为library_selected。
+     */
+    source: 'library_selected' | 'model_suggestion' | 'system_palette';
+    /**
+     * 选用的色表条目编号，未选用时为null。
+     */
+    libraryId?: string | null;
+    /**
+     * 色表条目注明的来源，未选用时为null。
+     */
+    referenceSource?: string | null;
+    /**
+     * 条目保留的原始参考色，可能不同于经可读性校正的展示色。
+     */
+    referenceColor?: string | null;
+    /**
+     * 色表展示色相对原始参考色的预先校正原因。
+     */
+    libraryAdjustmentReasons?: Array<string>;
+    /**
+     * 本次模型建议的校验问题、补色原因或model_unavailable；修正成功仍保留初次问题。
+     */
+    replacementReasons: Array<string>;
+    /**
+     * 最终颜色仍未满足的约束；类别过多导致确定性调色板色差不足时显式记录，不阻塞登记。
+     */
+    remainingIssues: Array<string>;
+};
+
+/**
+ * 逻辑成果配色审计；仅资源详情返回，旧资源可能只有整体来源而没有逐类记录。权限与资源详情一致。
+ */
+export type ResultColorAdvice = {
+    /**
+     * 配色流程版本，当前为2，不是平台版本。
+     */
+    version?: number;
+    /**
+     * 实际类别的最终配色审计，与同一资源symbolization.renderer.classes对应。
+     */
+    classes?: Array<ResultColorClassAdvice>;
+    /**
+     * 最多两次模型建议与校验问题，建议内requestBudget记录实际输入tokens、字节数、窗口及压缩级别。
+     */
+    attempts?: Array<{
+        [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+};
+
 export type ResourceProfileResponse = {
     /**
      * 资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。
      */
     defaultVisualization?: {
+        colorAdvice?: ResultColorAdvice;
         [key: string]: unknown;
     };
     resource: DataResource;
@@ -9433,7 +9497,7 @@ export type VisualizationMonitorItem = {
 
 export type QueryRequest = {
     /**
-     * 仅地图显示使用的轻量几何（WGS84下按响应压缩预算自适应保拓扑简化、5位坐标、移除连续重复点；最大简化容差0.001度）；不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
+     * 仅地图显示使用的量化几何；WGS84统一1e-5度网格，全体图斑边界共同节点化并量化，保持共享边界一致；不做任何形状简化，仅移除连续重复点和零面积退化环。超过280 KiB gzip目标仍保留量化精度并返回警告。不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
      */
     displayGeometry?: boolean;
     /**

@@ -151,7 +151,8 @@ export function colorReviewMap(
   data: GeoJsonFeatureCollection,
   visualization: Record<string, unknown>,
 ) {
-  const renderer = record(record(visualization.symbolization).renderer);
+  const symbolization = record(visualization.symbolization);
+  const renderer = record(symbolization.renderer);
   if (renderer.type !== "uniqueValue" || typeof renderer.field !== "string")
     return;
   const classes = (Array.isArray(renderer.classes) ? renderer.classes : []).map(
@@ -160,6 +161,21 @@ export function colorReviewMap(
   const colors = new Map(
     classes.map((item) => [String(item.value), String(item.color)]),
   );
+  const labels = new Map(
+    classes.map((item) => [
+      String(item.value),
+      String(item.label ?? item.value),
+    ]),
+  );
+  const fill = record(symbolization.fill);
+  const line = record(symbolization.line);
+  const opacity =
+    typeof fill.fillOpacity === "number"
+      ? fill.fillOpacity *
+        (typeof symbolization.opacity === "number"
+          ? symbolization.opacity / 100
+          : 1)
+      : 0.95;
   const fallback = record(renderer.defaultClass).color;
   data.features = data.features.map((feature) => ({
     ...feature,
@@ -169,8 +185,15 @@ export function colorReviewMap(
         colors.get(String(feature.properties[renderer.field as string])) ??
         fallback,
       legend_label: String(
+        labels.get(String(feature.properties[renderer.field as string])) ??
+          feature.properties[renderer.field as string] ??
+          "其他",
+      ),
+      legend_value: String(
         feature.properties[renderer.field as string] ?? "其他",
       ),
+      fill_opacity: opacity,
+      stroke_color: fill.fillOutlineColor ?? line.lineColor ?? "#66768c",
       unit_color_by_name: true,
     },
   }));
@@ -290,13 +313,13 @@ export function reviewLegend(...data: GeoJsonFeatureCollection[]) {
     .forEach(({ properties: p }) => {
       const key = String(
         p.unit_color_by_name
-          ? p.name
+          ? (p.legend_value ?? p.name)
           : (p.class ?? p.geo_sym ?? p.code ?? p.name),
       );
       values.set(key, {
         key,
         name: p.unit_color_by_name
-          ? String(p.name)
+          ? String(p.legend_label ?? p.name)
           : `${String(p.name ?? "地质单元")} / ${String(p.geo_sym ?? p.code ?? key)}`,
         color:
           typeof p.fill_color === "string" &&

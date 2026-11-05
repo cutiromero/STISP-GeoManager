@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import LocalGeologyReviewMaps from "./LocalGeologyReviewMaps";
+import GeologyReviewMaps from "./GeologyReviewMaps";
 import {
   beforeReviewMap,
   afterReviewMap,
@@ -15,6 +16,10 @@ const props = {
   differences: reviewDifferences,
   bounds: [98.4, 35.6, 98.45, 35.62] as [number, number, number, number],
 };
+
+it("routes standalone comparison and explanation maps to the same service-free renderer", () => {
+  expect(GeologyReviewMaps).toBe(LocalGeologyReviewMaps);
+});
 
 function show(onSelect = vi.fn(), onInspect = vi.fn()) {
   return render(

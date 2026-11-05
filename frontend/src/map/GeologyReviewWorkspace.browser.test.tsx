@@ -1,5 +1,4 @@
 import { App } from "antd";
-import mapboxgl, { type Map as MapboxMap } from "mapbox-gl";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -77,26 +76,22 @@ async function mapsReady(after = false) {
 }
 beforeEach(() => {
   vi.restoreAllMocks();
-  // Local GeoJSON rendering uses real WebGL; external Mapbox authentication
-  // is covered by the deployed-page smoke test with the configured token.
-  vi.spyOn(mapboxgl.Map.prototype, "_authenticate").mockImplementation(
-    () => {},
-  );
   request.mockReset();
   resetProjectSession();
   setActiveProject("3");
   respond();
 });
 
-it("批准前只查询待检查图，右图显示相同底图和真实建议范围", async () => {
-  const sources = vi.spyOn(mapboxgl.Map.prototype, "addSource");
+it("批准前只查询待检查图，右图显示相同本地矢量和真实建议范围，无底图请求", async () => {
+  const worker = vi.spyOn(window, "Worker");
   show();
   await mapsReady();
   expect(screen.getByText("建议修改，尚未执行")).toBeVisible();
   expect(screen.queryByText("修正后地质图")).not.toBeInTheDocument();
-  const units = sources.mock.calls.filter(([id]) => id === "geological-units");
+  const units = document.querySelectorAll('[data-layer="geological-units"]');
   expect(units).toHaveLength(2);
-  expect(units[0]![1]).toEqual(units[1]![1]);
+  expect(units[0]!.innerHTML).toBe(units[1]!.innerHTML);
+  expect(document.querySelector('[class*="mapbox"], canvas')).toBeNull();
   const queries = request.mock.calls.filter(([url]) =>
     String(url).includes("/query/"),
   );
@@ -104,7 +99,9 @@ it("批准前只查询待检查图，右图显示相同底图和真实建议范�
   expect(queries[0]![0]).toBe("/api/catalog/resources/101/query/");
   expect(
     request.mock.calls.every(
-      ([url, options]) => !options || String(url).endsWith("/query/"),
+      ([url, options]) =>
+        !(options as { method?: string } | undefined)?.method ||
+        String(url).endsWith("/query/"),
     ),
   ).toBe(true);
   const remoteTiles = performance
@@ -113,6 +110,7 @@ it("批准前只查询待检查图，右图显示相同底图和真实建议范�
       /api\.mapbox\.com\/(styles|v4)|tianditu|tiles\.mapbox/.test(entry.name),
     );
   expect(remoteTiles).toHaveLength(0);
+  expect(worker).not.toHaveBeenCalled();
   await page.screenshot({
     path: "../../test-results/geology-map-preview-desktop.png",
     animations: "disabled",
@@ -122,7 +120,6 @@ it("批准前只查询待检查图，右图显示相同底图和真实建议范�
 it.each(["no_changes", "requires_evidence"])(
   "检查完成%s只读取并展示未修改原图，不伪造修正成果",
   async (kind) => {
-    const sources = vi.spyOn(mapboxgl.Map.prototype, "addSource");
     vi.spyOn(agentApi, "prepareWorkflowReport").mockResolvedValue(
       workflowReport({ label: "检查报告" }),
     );
@@ -163,19 +160,14 @@ it.each(["no_changes", "requires_evidence"])(
     expect(
       request.mock.calls.filter(([url]) => String(url).endsWith("/query/")),
     ).toHaveLength(1);
-    const units = sources.mock.calls.filter(
-      ([id]) => id === "geological-units",
-    );
+    const units = document.querySelectorAll('[data-layer="geological-units"]');
     expect(units).toHaveLength(2);
-    expect(units[0]![1]).toEqual(units[1]![1]);
+    expect(units[0]!.innerHTML).toBe(units[1]!.innerHTML);
   },
 );
 
 it("真实三份图件使用统一配色，点击同一对象的不同修改可区分并同步定位缩放", async () => {
   respond(true);
-  const layers = vi.spyOn(mapboxgl.Map.prototype, "addLayer");
-  const jump = vi.spyOn(mapboxgl.Map.prototype, "jumpTo");
-  const fit = vi.spyOn(mapboxgl.Map.prototype, "fitBounds");
   show();
   const canvases = await mapsReady(true);
   expect(screen.getByText("真实修正结果")).toBeVisible();
@@ -189,44 +181,28 @@ it("真实三份图件使用统一配色，点击同一对象的不同修改可�
     "/api/catalog/resources/201/query/",
     "/api/catalog/resources/202/query/",
   ]);
-  const units = layers.mock.calls.filter(([layer]) => layer.id === "units");
-  expect(units).toHaveLength(2);
-  expect(units[0]![0].paint).toEqual(units[1]![0].paint);
-  const cameras = [...new Set(jump.mock.contexts)] as MapboxMap[];
-  expect(cameras).toHaveLength(2);
-  for (const camera of cameras)
-    expect(
-      camera.queryRenderedFeatures({ layers: ["units"] }).length,
-    ).toBeGreaterThan(0);
-  const oldZoom = cameras[0]!.getZoom();
-  fireEvent.click(screen.getAllByRole("button", { name: "Zoom in" })[0]!);
-  await waitFor(() => {
-    expect(cameras[0]!.getZoom()).toBeGreaterThan(oldZoom + 0.5);
-    expect(cameras[0]!.getZoom()).toBeCloseTo(cameras[1]!.getZoom(), 3);
-  });
+  const vectors = screen.getAllByRole("group", { name: "本地矢量图层" });
+  const oldView = vectors[0]!.getAttribute("viewBox");
+  fireEvent.click(screen.getAllByRole("button", { name: "放大地图" })[0]!);
+  expect(vectors[0]!.getAttribute("viewBox")).not.toBe(oldView);
+  expect(vectors[0]!.getAttribute("viewBox")).toBe(
+    vectors[1]!.getAttribute("viewBox"),
+  );
   const ageButton = screen.getByRole("button", { name: /更新地层时代/ });
   fireEvent.click(ageButton);
   expect(ageButton).toHaveClass("is-selected");
   expect(screen.getByText("早白垩世")).toBeVisible();
   expect(screen.getByText("晚三叠世")).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: /定位修改处/ }));
-  expect(
-    fit.mock.calls.some(
-      ([bounds]) =>
-        JSON.stringify(bounds) === JSON.stringify([98.4, 35.6, 98.43, 35.62]),
-    ),
-  ).toBe(true);
-  const map = cameras.find(
-    (camera) => camera.getContainer() === canvases.before,
-  )!;
-  await waitFor(() => expect(map.isMoving()).toBe(false));
-  const point = map.project([98.4165, 35.6085]);
-  const canvas = map.getCanvas();
-  const rect = canvas.getBoundingClientRect();
-  fireEvent.click(canvas, {
-    clientX: rect.left + point.x,
-    clientY: rect.top + point.y,
-  });
+  const vector = canvases.before.querySelector("svg")!;
+  expect(vector).toHaveAttribute(
+    "viewBox",
+    vectors[1]!.getAttribute("viewBox"),
+  );
+  const difference = vector.querySelectorAll(
+    '[data-layer="actual-differences"] g',
+  )[0]!;
+  fireEvent.click(difference);
   await waitFor(() =>
     expect(screen.getByRole("button", { name: /填补内部漏填/ })).toHaveClass(
       "is-selected",

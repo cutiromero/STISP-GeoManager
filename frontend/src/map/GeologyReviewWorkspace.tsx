@@ -18,7 +18,6 @@ import {
   geologyReviewOutcomeDescription,
   geologyReviewOutcomeLabel,
 } from "../agent/geologyReviewOutcome";
-import { useAppContext } from "../contexts/AppContext";
 import { getActiveProject } from "../projects/session";
 import { useProjectContext } from "../projects/ProjectContext";
 import GeologyReviewMaps from "./GeologyReviewMaps";
@@ -50,7 +49,6 @@ export default function GeologyReviewWorkspace({
   suggestionId: string | null;
 }) {
   const navigate = useNavigate();
-  const { bootstrap } = useAppContext();
   const project = useProjectContext();
   const currentProject = project?.current ?? getActiveProject();
   const [workflow, setWorkflow] = useState<AgentWorkflow | null>(null);
@@ -270,7 +268,6 @@ export default function GeologyReviewWorkspace({
             <section className="geology-review-map-area">
               <GeologyReviewMaps
                 {...data}
-                accessToken={bootstrap.map.mapboxAccessToken}
                 bounds={focus}
                 onSelect={locate}
                 inspectionOnly={Boolean(outcome)}

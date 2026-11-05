@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+import json
 
 from django.core.management.base import BaseCommand, CommandError
 from django.test.utils import override_settings
@@ -12,7 +13,9 @@ from apps.projects.context import ProjectScope, project_scope
 
 
 class Command(BaseCommand):
-    help = "为指定逻辑推理工作流已有矢量成果补齐配色建议；默认仅统计，--apply 才写入。"
+    help = (
+        "按当前智能体配色流程重算指定工作流矢量成果；默认预览完整方案，--apply 才写入。"
+    )
 
     def add_arguments(self, parser):
         parser.add_argument("--workflow", required=True)
@@ -45,9 +48,20 @@ class Command(BaseCommand):
                 (resolve_resource(user, policy, identifier), key)
                 for identifier, key in outputs.items()
             ]
-            if options["apply"]:
-                for resource, key in resources:
-                    style_result(workflow, resource, key)
+            for resource, key in resources:
+                visualization = style_result(
+                    workflow, resource, key, force=True, persist=options["apply"]
+                )
+                self.stdout.write(
+                    json.dumps(
+                        {
+                            "resourceId": str(resource.id),
+                            "key": key,
+                            "visualization": visualization,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
         self.stdout.write(
             f"{'已处理' if options['apply'] else '待处理'} {len(outputs)} 项矢量成果；科研数据与计算几何不变。"
         )

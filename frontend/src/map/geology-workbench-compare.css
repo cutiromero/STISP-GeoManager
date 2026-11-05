@@ -208,37 +208,3 @@
     font-size: 11px;
   }
 }
-.geology-review-local-map {
-  position: relative;
-  background: #f4f7fb;
-  touch-action: none;
-}
-
-.geology-review-local-map svg {
-  display: block;
-}
-
-.geology-review-local-controls {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
-  display: grid;
-  border: 1px solid #dce6f1;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.geology-review-local-controls button {
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0;
-  background: white;
-  color: #1d3753;
-  cursor: pointer;
-}
-
-.geology-review-local-controls button:hover {
-  background: #e8eef6;
-}

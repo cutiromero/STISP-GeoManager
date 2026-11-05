@@ -1,5 +1,31 @@
 # API Change Requests
 
+## API-20261105-012 - 全类别成果配色与逐类来源审计
+
+- Status: BackendReady
+- Owner: 本任务显式贯通契约、后端及前端符号化读取。
+- Endpoints: GET /api/catalog/resources/{id}/profile/。
+- Change type: defaultVisualization 增加可选类型化 colorAdvice，原有空方案和旧审计保持有效；无端点或权限变化。
+- OpenAPI change: ResultColorAdvice、ResultColorClassAdvice 定义逐类来源、色表引用、替换原因、最终约束问题及模型尝试。
+- Mock examples: mock/prism/examples/30-catalog-vector.json，资源默认方案提供逐类配色审计示例。
+- Frontend reason: 普通工作台与对比/讲解使用同一资源符号化、模型图例名称及边框/透明度，不自行决定成果颜色。
+- Backend implementation notes: 全部类别提交本次所选模型，参考色表按相关性检索；预算投影、校验反馈修正一次及离线回退；管理命令预览不保存、应用强制重算。
+- Verification: 38类岩性色表选择、未知模型建议、低对比/重复/非法色修正及补色、离线无请求、预算压缩、逐类来源、管理命令、前端共享符号化与API生成检查。
+- Result: 后端实现及定向用例就绪；真实模型审美、服务器部署与业务数据重配色不在本次本机验证范围。
+
+## API-20261105-011 - 显示几何统一网格与共享边界
+
+- Status: BackendReady
+- Owner: Frontend / Backend
+- Endpoints: POST /api/catalog/resources/{id}/query/。
+- Change type: displayGeometry 行为修正，字段及权限不变。
+- OpenAPI change: 取消所有形状简化，统一1e-5度网格，共享边界共同节点化并量化；超出280 KiB gzip目标只警告，不再增加容差。
+- Mock examples: 沿用 mock/prism/examples/30-catalog-vector.json，GeoJSON 响应结构不变；共享边界与退化环由后端单元测试覆盖。
+- Frontend reason: 所有逻辑推理双图复用本地SVG，避免简化错边及外部底图服务依赖。
+- Backend implementation notes: 保留要素与属性，仅清理重复点、零面积退化环；共同节点化可补入共享顶点，缓存算法版本2使旧简化结果失效；不改存储或计算输入。
+- Verification: 后端共享边界、顶点、退化环、超预算及缓存测试；前端类型及API流程；独立对比与讲解浏览器用例。
+- Result: 实现及回归用例已同步；浏览器与服务器验收独立进行。
+
 ## API-20261104-008 - 综合推理分组审批与显示几何
 
 - Status: BackendReady
@@ -320,6 +346,8 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261105-011 | BackendReady | /api/catalog/resources/{id}/query/ | Shared-boundary grid quantization without simplification | Updated | 30-catalog-vector.json; backend geometry fixtures | Implemented | Focused unit tests; browser cases prepared | Storage, permissions and precise queries unchanged |
+| API-20261105-012 | BackendReady | /api/catalog/resources/{id}/profile/ | All-category model color advice and class provenance | Updated | 30-catalog-vector.json | Implemented | Focused color and shared-style tests | No permission or data-path change |
 | API-20261104-008 | BackendReady | /api/agent/workflows/{workflowId}/; /api/catalog/resources/{id}/query/ | groupId and displayGeometry | Updated | 105-agent-workflow-card.json; 30-catalog-vector.json | Implemented | Focused regression | Per-object approval, immutable source geometry, original permissions |
 | API-20261105-009 | BackendReady | /api/agent/workflows/active/; confirm/; resume/ | Compute slots and parked summaries | Updated | 104-agent-upload-bundle.json | Implemented | Focused regression | Parked tasks coexist; explicit conflict retains checkpoint |
 | API-20261105-010 | BackendReady | /api/agent/workflows/{workflowId}/; confirm/ | Frozen candidates for explicit user adjudication | Updated | 105-agent-workflow-card.json | Implemented | Focused regression | Rule status preserved; model cannot adjudicate |

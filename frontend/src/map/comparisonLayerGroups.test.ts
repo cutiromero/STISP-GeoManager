@@ -16,7 +16,7 @@ import {
   displayComparisonLayers,
   upsertComparisonLayer,
 } from "./comparisonLayerGroups";
-import { colorReviewMap } from "./geologyReviewData";
+import { colorReviewMap, reviewLegend } from "./geologyReviewData";
 import type {
   ComparisonLayerPlacement,
   ComparisonRole,
@@ -47,11 +47,19 @@ it("蚀变分类在对比页和普通工作台沿用同一资源符号化与图�
   const resource = profile(601, "有效蚀变", data);
   resource.defaultVisualization = {
     symbolization: {
+      opacity: 100,
+      fill: { fillOpacity: 1, fillOutlineColor: "#202938" },
+      line: { lineColor: "#202938", lineWidth: 0.7 },
       renderer: {
         type: "uniqueValue",
         field: "alt",
         classes: [
-          { id: "red", value: "赤铁矿化", label: "赤铁矿化", color: "#c84545" },
+          {
+            id: "red",
+            value: "赤铁矿化",
+            label: "赤铁矿蚀变",
+            color: "#c84545",
+          },
           {
             id: "green",
             value: "绿泥石化",
@@ -78,14 +86,26 @@ it("蚀变分类在对比页和普通工作台沿用同一资源符号化与图�
   expect(compared.symbolization.renderer).toEqual(
     normal.symbolization.renderer,
   );
+  expect(compared.symbolization.fill).toEqual(normal.symbolization.fill);
   colorReviewMap(data, resource.defaultVisualization);
   expect(data.features.map((item) => item.properties.fill_color)).toEqual([
     "#c84545",
     "#35824b",
   ]);
   expect(data.features.map((item) => item.properties.legend_label)).toEqual([
-    "赤铁矿化",
+    "赤铁矿蚀变",
     "绿泥石化",
+  ]);
+  expect(reviewLegend(data).map((item) => item.name)).toEqual([
+    "赤铁矿蚀变",
+    "绿泥石化",
+  ]);
+  expect(data.features.map((item) => item.properties.stroke_color)).toEqual([
+    normal.symbolization.fill.fillOutlineColor,
+    normal.symbolization.fill.fillOutlineColor,
+  ]);
+  expect(data.features.map((item) => item.properties.fill_opacity)).toEqual([
+    1, 1,
   ]);
 });
 function profile(

@@ -1,6 +1,5 @@
 import { App } from "antd";
 import { StrictMode } from "react";
-import mapboxgl from "mapbox-gl";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -12,6 +11,7 @@ import {
 } from "./geologyReview.testFixtures";
 import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
 import MultiElementWorkspace from "./MultiElementWorkspace";
+import { projectReviewPosition } from "./localReviewGeometry";
 import { reviewBounds } from "./geologyReviewData";
 import workspaceStyles from "./geology-review-workspace.css?inline";
 import tourStyles from "./multi-element-tour.css?inline";
@@ -62,13 +62,12 @@ const points: GeoJsonFeatureCollection = {
 beforeEach(() => {
   sessionStorage.removeItem("geology-story:review-workflow");
   vi.restoreAllMocks();
-  vi.spyOn(mapboxgl.Map.prototype, "_authenticate").mockImplementation(
-    () => {},
-  );
   request.mockReset();
 });
 
-it("真实WebGL双图支持线点面，沿用岩性配色和Unicode代号，推测交汇用空心点", async () => {
+it("本地SVG双图支持线点面，沿用岩性配色和Unicode代号，推测交汇用空心点", async () => {
+  const worker = vi.spyOn(window, "Worker");
+  const started = performance.now();
   const workflow = reviewWorkflow();
   workflow.workflowType = "geology_multi_element_reasoning";
   workflow.plan.inputs = { lithology: 101, faults: 102 };
@@ -114,9 +113,6 @@ it("真实WebGL双图支持线点面，沿用岩性配色和Unicode代号，推�
             : base,
     );
   });
-  const sources = vi.spyOn(mapboxgl.Map.prototype, "addSource");
-  const layers = vi.spyOn(mapboxgl.Map.prototype, "addLayer");
-  const fitBounds = vi.spyOn(mapboxgl.Map.prototype, "fitBounds");
   render(
     <StrictMode>
       <App>
@@ -145,22 +141,29 @@ it("真实WebGL双图支持线点面，沿用岩性配色和Unicode代号，推�
   expect(screen.getByText("八宝山组 / T₃b²")).not.toBeVisible();
   fireEvent.click(screen.getByText("查看岩性配色"));
   expect(screen.getByText("八宝山组 / T₃b²")).toBeVisible();
-  expect(
-    fitBounds.mock.calls.some(
-      ([, options]) =>
-        options?.padding === 50 && options?.maxZoom === undefined,
-    ),
-  ).toBe(true);
-  expect(screen.getByText("● 几何交汇 / ○ 推测交汇")).toBeVisible();
-  expect(sources.mock.calls.some(([id]) => id === "review-faults")).toBe(true);
-  expect(sources.mock.calls.some(([id]) => id === "review-intersections")).toBe(
-    true,
+  expect(screen.getAllByRole("group", { name: "本地矢量图层" })).toHaveLength(
+    2,
   );
-  const pointLayer = layers.mock.calls
-    .map(([layer]) => layer)
-    .find((layer) => layer.id === "review-intersections-point");
-  expect(JSON.stringify(pointLayer)).toContain("inferred");
-  expect(JSON.stringify(pointLayer)).toContain("#ffffff");
+  expect(document.querySelector('[class*="mapbox"], canvas')).toBeNull();
+  expect(worker).not.toHaveBeenCalled();
+  expect(
+    performance
+      .getEntriesByType("resource")
+      .filter(
+        (entry) =>
+          entry.startTime >= started &&
+          /mapbox|tianditu|\/tiles\b|\/styles\b|\.pbf\b/.test(entry.name),
+      ),
+  ).toHaveLength(0);
+  expect(screen.getByText("● 几何交汇 / ○ 推测交汇")).toBeVisible();
+  expect(
+    document.querySelector('[data-layer="review-faults"] path'),
+  ).not.toBeNull();
+  expect(
+    document.querySelector(
+      '[data-layer="review-intersections"] circle[fill="#fff"]',
+    ),
+  ).not.toBeNull();
   expect(
     request.mock.calls.some(([url]) => String(url).includes("/301/query/")),
   ).toBe(false);
@@ -175,14 +178,16 @@ it("真实WebGL双图支持线点面，沿用岩性配色和Unicode代号，推�
   expect(screen.getByText("沿界比例较高，建议核对影像")).toBeVisible();
   fireEvent.click(screen.getByLabelText("有效蚀变"));
   await waitFor(() => {
-    const mineralSources = sources.mock.calls
-      .filter(([id]) => id === "review-alterations")
-      .map(([, source]) => JSON.stringify((source as { data: unknown }).data));
+    const minerals = document.querySelectorAll(
+      '[data-layer="review-alterations"] g',
+    );
     expect(
-      mineralSources.some((value) => value.includes('"state":"keep"')),
+      [...minerals].some((element) => element.getAttribute("opacity") === "1"),
     ).toBe(true);
     expect(
-      mineralSources.some((value) => value.includes('"state":"downweight"')),
+      [...minerals].some(
+        (element) => element.getAttribute("opacity") === "0.5",
+      ),
     ).toBe(true);
   });
   await page.screenshot({
@@ -247,15 +252,6 @@ it("keeps the base maps usable when an optional dense layer fails and retries on
 
 it("用真实获批变化逐处讲解，并以实际几何和面积展示调查建议变化", async () => {
   await page.viewport(1280, 800);
-  const liveMaps = new Set<mapboxgl.Map>();
-  const fitBounds = mapboxgl.Map.prototype.fitBounds;
-  vi.spyOn(mapboxgl.Map.prototype, "fitBounds").mockImplementation(function (
-    this: mapboxgl.Map,
-    ...args: Parameters<mapboxgl.Map["fitBounds"]>
-  ) {
-    liveMaps.add(this);
-    return fitBounds.apply(this, args);
-  });
   const workflow = reviewWorkflow(true);
   workflow.workflowType = "geology_multi_element_reasoning";
   workflow.plan.inputs = { lithology: 101, faults: 102 };
@@ -474,10 +470,10 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   const labels = screen.getByLabelText("当前对象前后状态");
   const beforeCanvas = screen
     .getByLabelText("待检查地质图地图")
-    .querySelector("canvas");
+    .querySelector("svg");
   const afterCanvas = screen
     .getByLabelText("修正后地质图地图")
-    .querySelector("canvas");
+    .querySelector("svg");
   expect(beforeCanvas).not.toBeNull();
   expect(afterCanvas).not.toBeNull();
   const expectFocusInBothMaps = async () => {
@@ -494,27 +490,36 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
           type: "FeatureCollection",
           features: [changes.features[selected]!],
         })!;
-        expect(liveMaps.size).toBe(2);
-        for (const map of liveMaps) {
-          expect(map.isMoving()).toBe(false);
-          expect(map.isSourceLoaded("story-focus")).toBe(true);
-          const canvas = map.getCanvas().getBoundingClientRect();
-          for (const x of [target[0], target[2]])
-            for (const y of [target[1], target[3]]) {
-              const point = map.project([x, y]);
-              expect(point.x).toBeGreaterThanOrEqual(0);
-              expect(point.x).toBeLessThanOrEqual(canvas.width);
-              expect(point.y).toBeGreaterThanOrEqual(0);
-              expect(point.y).toBeLessThanOrEqual(canvas.height);
-            }
+        const expected = [
+          projectReviewPosition([target[0], target[1]]),
+          projectReviewPosition([target[2], target[3]]),
+        ];
+        const vectors = screen.getAllByRole("group", { name: "本地矢量图层" });
+        expect(vectors).toHaveLength(2);
+        expect(vectors[0]).toHaveAttribute(
+          "viewBox",
+          vectors[1]!.getAttribute("viewBox"),
+        );
+        for (const vector of vectors) {
+          expect(
+            vector.querySelector('[data-layer="story-focus"] path'),
+          ).not.toBeNull();
+          const [left, top, width, height] = vector
+            .getAttribute("viewBox")!
+            .split(" ")
+            .map(Number);
+          for (const point of expected) {
+            expect(point[0]).toBeGreaterThanOrEqual(left!);
+            expect(point[0]).toBeLessThanOrEqual(left! + width!);
+            expect(point[1]).toBeGreaterThanOrEqual(top!);
+            expect(point[1]).toBeLessThanOrEqual(top! + height!);
+          }
         }
         const maps = document.querySelectorAll(".geology-review-map-canvas");
         expect(maps).toHaveLength(2);
         for (const map of maps) {
-          const canvas = map.querySelector("canvas")!.getBoundingClientRect();
-          const marker = map
-            .querySelector(".geology-review-focus-label")!
-            .getBoundingClientRect();
+          const canvas = map.querySelector("svg")!.getBoundingClientRect();
+          const marker = map.querySelector("text")!.getBoundingClientRect();
           expect(marker.left).toBeGreaterThanOrEqual(canvas.left);
           expect(marker.right).toBeLessThanOrEqual(canvas.right);
           expect(marker.top).toBeGreaterThanOrEqual(canvas.top);
@@ -588,13 +593,13 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   expect(
     request.mock.calls.filter(([url]) => String(url).includes("/301/query/")),
   ).toHaveLength(0);
-  expect(
-    screen.getByLabelText("待检查地质图地图").querySelector("canvas"),
-  ).toBe(beforeCanvas);
-  expect(
-    screen.getByLabelText("修正后地质图地图").querySelector("canvas"),
-  ).toBe(afterCanvas);
-  expect(document.querySelectorAll(".mapboxgl-canvas")).toHaveLength(2);
+  expect(screen.getByLabelText("待检查地质图地图").querySelector("svg")).toBe(
+    beforeCanvas,
+  );
+  expect(screen.getByLabelText("修正后地质图地图").querySelector("svg")).toBe(
+    afterCanvas,
+  );
+  expect(document.querySelectorAll(".mapboxgl-canvas")).toHaveLength(0);
   expect(
     request.mock.calls.filter(([url]) => String(url).includes("/101/query/")),
   ).toHaveLength(1);
@@ -624,32 +629,27 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     await page.getByRole("button", { name: "逐处看修改", exact: true }).click();
     await expectFocusInBothMaps();
   }
-  const primary = [...liveMaps][0]!;
-  primary.panBy([30, 20], { duration: 0 });
-  const pannedCenter = primary.getCenter().toArray();
-  const pannedZoom = primary.getZoom();
+  fireEvent.keyDown(beforeCanvas!, { key: "ArrowRight" });
+  const pannedView = beforeCanvas!.getAttribute("viewBox");
+  expect(pannedView).toBe(afterCanvas!.getAttribute("viewBox"));
   await page.viewport(1600, 900);
   await waitFor(() => {
     expect(beforeCanvas!.clientHeight).toBeGreaterThanOrEqual(220);
     expect(beforeCanvas!.clientHeight).toBeLessThanOrEqual(300);
   });
-  primary
-    .getCenter()
-    .toArray()
-    .forEach((value, index) =>
-      expect(value).toBeCloseTo(pannedCenter[index]!, 7),
-    );
-  expect(primary.getZoom()).toBeCloseTo(pannedZoom, 7);
+  expect(beforeCanvas).toHaveAttribute("viewBox", pannedView);
   fireEvent.click(screen.getByLabelText("上一处修改"));
   fireEvent.click(screen.getByLabelText("下一处修改"));
   await expectFocusInBothMaps();
-  expect(liveMaps.size).toBe(2);
-  expect(
-    screen.getByLabelText("待检查地质图地图").querySelector("canvas"),
-  ).toBe(beforeCanvas);
-  expect(
-    screen.getByLabelText("修正后地质图地图").querySelector("canvas"),
-  ).toBe(afterCanvas);
+  expect(screen.getAllByRole("group", { name: "本地矢量图层" })).toHaveLength(
+    2,
+  );
+  expect(screen.getByLabelText("待检查地质图地图").querySelector("svg")).toBe(
+    beforeCanvas,
+  );
+  expect(screen.getByLabelText("修正后地质图地图").querySelector("svg")).toBe(
+    afterCanvas,
+  );
   for (const id of [101, 201, 301])
     expect(
       request.mock.calls.filter(([url]) =>

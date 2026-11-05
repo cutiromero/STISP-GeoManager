@@ -14,7 +14,11 @@
 
 逻辑推理项目的默认对话标题由主资料名、任务、运行时间及运行编号构成，自定义标题保持不变。正式环境使用应用现有 Conda 和正式配置运行 `python manage.py backfill_logic_titles --config <正式配置路径>` 预览待回填数量，追加 `--apply` 写入；重复执行不会改写已回填标题。其他项目不适用该规则。
 
-逻辑成果的分类字段与实际类别决定资源默认符号化。岩性约定色见 `backend/apps/agent/data/lithology_colors.json`，蚀变约定色见 `backend/apps/agent/data/alteration_colors.json`；未知类别的模型建议须通过颜色格式、白底对比度及类别色差检查，遗漏或非法建议由确定性调色板补齐。模型关闭、失败或超过8秒预算时采用确定性配色，不影响成果登记。资源 `default_visualization.colorAdvice` 与 `result_color_advice` 审计记录保留来源、模型建议、替换类别及最终符号化。已有成果可运行 `python manage.py style_logic_results --workflow <完整工作流UUID> --config <正式配置路径>` 预览，追加 `--apply` 写入；`--no-model` 使用纯确定性配色。此命令只处理指定任务的矢量输出，不改原始上传与计算数据。
+逻辑成果配色由本次工作流选定的模型决定全部实际类别，不先固定已知类别。模型收到分类字段、完整取值及按名称/代号/别名检索的相关色表候选（每类最多4条），优先选择合适色表色，无对应条目再建议新色。参考库为 `backend/apps/agent/data/result_color_library.json`：38个海德乌拉岩性单元、8组蚀变矿物、A/B/C三级远景区及6种常见岩类；每条含名称、别名、颜色和来源。原岩性色见 `lithology_colors.json`，来自 ExportedFiles.lyrx 的 CIMUniqueValueRenderer；因原色存在浅色和重复，库中 `referenceColor` 原样保留，`color` 为满足对比与区分要求的展示色，`adjustmentReasons` 记录校正原因。蚀变、等级及常见岩类是项目参考约定，不宣称国家或行业强制标准。
+
+全部建议必须类别全覆盖、无重复取值、颜色为合法六位十六进制且不重复；CIELAB D65 的 ΔE76 不低于12、对白背景对比不低于3、对深色边框 `#202938` 对比不低于1.25，图例名称非空且最多80字。对所有类别两两校验，涵盖相邻和相近类别。首次不合格时反馈具体问题及上次方案，最多修正一次；两次请求共用8秒截止时间，模型不可用、调用失败或预算不足不阻塞登记。Mock、关闭策略及未授权或未在线模型不发探测、分词或生成请求，整套采用色表加确定性调色板；仍不合格的模型类别也优先由有效色表色补齐，无可用条目才系统补色。极多类别导致调色板无法维持色差下限时保留唯一颜色并在 `remainingIssues` 明示，不伪称全部通过。请求复用阶段输入预算投影，先去重，再删弱相关候选、每类保留一个精确候选，最后仅保留完整类别；每档均受字节、实际分词与模型窗口/生成预留限制，按任务预算启用时同时服从本次预算。
+
+资源 `default_visualization.colorAdvice.classes` 逐类记录 `source=library_selected|model_suggestion|system_palette`、色表编号/来源、原始参考色与校正原因、模型替换原因及最终未满足约束；离线命中色表同样是 `library_selected`。`attempts` 保留模型方案、逐类问题和请求预算，`result_color_advice` 审计保存最终方案。普通工作台与对比/讲解共用资源分类颜色、图例名称、填充透明度与边框；不新增界面控件。已有成果可运行 `python manage.py style_logic_results --workflow <完整工作流UUID> --config <正式配置路径>` 预览完整新方案，预览不写资源或业务审计，追加 `--apply` 强制重新配色并保存；`--no-model` 使用色表与确定性调色板。预览和应用分别运行模型，不保证两次模型建议相同。命令只处理指定任务的矢量输出，不改原始上传与计算数据。
 
 `GET /api/agent/workflows/{workflowId}/?view=card` 复用完整详情的本人、项目与资源鉴权，只返回卡片需要的状态、阶段名称/状态/任务及已入库成果引用、`stepCount`；`steps`、`evidence` 为空，`parameters` 为空，不返回模型交互、完整阶段结果、`finalStage` 或 `modificationReview`。省略 `view` 或 `view=full` 返回原有完整详情。无效 `view` 返回标准 400 错误。对话历史先读 card，展开过程、证据、模型交互或审核时再读 full；已完成任务不轮询，也不再次读取原始对话任务。
 
@@ -26,7 +30,7 @@
 
 智能体成果地图入口使用新标签页和 `noopener`，链接携带 `projectTagId` 与工作流标识，不传令牌。新页面沿用页面登录生命周期，通过同源 `BroadcastChannel` 向仍在线的原页面取得令牌，再登记独立页面租约；智能体原页面保持在线。
 
-岩性工作副本与修正后成果通过 `default_visualization.symbolization` 的 `uniqueValue` renderer 按 `name` 分类。配色表为仓库内 `backend/apps/agent/data/lithology_colors.json`，来自海德乌拉 ArcGIS 图层的 38 类 CIMSolidFill RGB；未命中名称沿用现有调色板，图例使用单元名称。`GET /api/catalog/resources/{id}/profile/` 的 `defaultVisualization` 返回默认方案（未配置为 `{}`），资源列表不附带方案。常规工作台、对比/讲解页均读取这一矢量符号化；用户已经手动修改的图层样式不覆盖。不涉及栅格前端处理。
+岩性工作副本与修正后成果通过 `default_visualization.symbolization` 的 `uniqueValue` renderer 按实际分类字段分类（优先 `name`）。工作副本初始参考色来自海德乌拉 ArcGIS 图层的38类 CIMSolidFill RGB；逻辑推理成果登记后使用上述全类别智能体建议流程的最终符号化。`GET /api/catalog/resources/{id}/profile/` 的 `defaultVisualization` 返回默认方案及可选 `colorAdvice`（未配置为 `{}`），资源列表不附带方案。常规工作台、对比/讲解页均读取这一矢量符号化；用户已经手动修改的图层样式不覆盖。不涉及栅格前端处理。
 > 版本：v0.1.0
 
 ## 通用地质推理与任务资料上传（2026-11-03）
@@ -2797,7 +2801,7 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 
 `geology_generic` 与 `geology_multi_element_reasoning` 的疑点建议和批准对象不设30项上限。完整检查清单按要素、规则、建议动作、目标代号、状态及快照分组，模型接收数量、实测范围、代表样本、条件和例外，输出 `{group_id,disposition,excluded_issue_ids,reason}`。`disposition=suggested` 采用整组实测建议，`review` 保留整组待裁定；review/exception 组不得整组执行。后端展开后逐对象校验规则、动作、目标代号、快照和知识引用，同对象多组按原检查清单顺序采用首条已选择建议。少量对象仍可逐项建议。返回的 `modificationReview.suggestions[].groupId` 对应稳定分组；审批卡片支持整组选择、展开对象、单独取消，提交仍为原有 `selectedSuggestionIds`。修改记录、复查、报告及远景区读取实际逐对象获批操作。模型后续读取完整分组批准数量及代表ID，不以样本数代替总量。公开工作流 plan 不包含内部全量检查行、重复建议和模型请求，但保留 approvedEdits 与完整 changes 行，供实际修改范围逐对象核验；完整审批对象在 modificationReview 中返回。综合推理工作流详情支持gzip，其他场景响应保持原行为。
 
-`POST /api/catalog/resources/{id}/query/` 可显式传 `displayGeometry=true`：在WGS84中从1e-5度开始自适应保拓扑简化，坐标保留5位，压缩目标为280 KiB，最大容差0.001度；量化后为空的对象保留简化几何及8位坐标。资源属性、对象数、存储几何、编辑及计算输入不变。未传或false返回原精度；非布尔值返回400标准错误。显示几何不用于精确量测、编辑或精确导出。无过滤显示结果按资源修订持久缓存，显示查询最多两路并发，原查询单路限流与gzip保持。综合推理算子成果 mapUrl 带 displayGeometry=1，工作台只对链接指定资源启用显示几何。对比页并行读取两张岩性图及其元信息，主图就绪即可操作，再独立补载首个实际修改页并定位；补载期间显示“正在加载修改记录…”，完整读取后才判定空态。构造、蚀变、交汇及调查建议默认不请求，勾选辅助图层时加载；浏览构造或蚀变修改时只按需补载对应要素，核对修改前后属性。相同资源及辅助要素请求复用，失败请求允许重试；辅助图层失败不清空主图。综合推理工作流公开计划使用完整分组摘要，避免重复传输内部全量清单。对比时隐藏两侧面板与空间查询底栏，退出恢复原状态。修正后使用岩性、final_faults、final_alterations，获批剔除对象不再出现；修改记录和实际修改范围默认关闭，可勾选。
+`POST /api/catalog/resources/{id}/query/` 可显式传 `displayGeometry=true`：在WGS84统一1e-5度网格上量化，全体图斑边界共同节点化后按同一网格处理并重建各图斑，保证不同分段的共享边界仍一致；不做Douglas–Peucker或自适应形状简化，只清理连续重复点和零面积退化环。塌缩对象保留要素记录并返回空几何，不回退到旧精度。gzip目标为280 KiB，超过目标仅返回警告，不提高量化网格、不删减形状顶点；共同节点化可能补入共享顶点。缓存算法版本为2，旧简化缓存自动失效。资源属性、对象数、存储几何、编辑及计算输入不变。未传或false返回原精度；非布尔值返回400标准错误。显示几何不用于精确量测、编辑或精确导出。无过滤显示结果按资源修订持久缓存，显示查询最多两路并发，原查询单路限流与gzip保持。综合推理算子成果 mapUrl 带 displayGeometry=1，工作台只对链接指定资源启用显示几何。对比页并行读取两张岩性图及其元信息，主图就绪即可操作，再独立补载首个实际修改页并定位；补载期间显示“正在加载修改记录…”，完整读取后才判定空态。构造、蚀变、交汇及调查建议默认不请求，勾选辅助图层时加载；浏览构造或蚀变修改时只按需补载对应要素，核对修改前后属性。相同资源及辅助要素请求复用，失败请求允许重试；辅助图层失败不清空主图。综合推理工作流公开计划使用完整分组摘要，避免重复传输内部全量清单。对比时隐藏两侧面板与空间查询底栏，退出恢复原状态。修正后使用岩性、final_faults、final_alterations，获批剔除对象不再出现；修改记录和实际修改范围默认关闭，可勾选。
 
 对比讲解按“要素+规则+动作”选择分组，显示数量与说明，支持跳到组内第N处及组内上一处/下一处。首次进入及切换修改时双图自动定位到当前对象范围。临时轮廓独立于修改范围开关，保留底图单元配色且不添加面填充；修正后定位到结果对象或融合宿主，剔除对象以修改前范围提示删除位置。切换讲解只更新当前对象及修改范围源，不重建Mapbox实例，也不重复发送整张岩性图。对比标题栏位于工作台全局导航下方，讲解区可滚动，地图区域填满剩余高度。
 

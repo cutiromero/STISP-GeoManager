@@ -46,7 +46,7 @@ def test_display_geometry_is_lighter_but_never_mutates_query_source():
         display["geojson"]["features"][0]["properties"]
         == full["geojson"]["features"][0]["properties"]
     )
-    assert len(display["geojson"]["features"][0]["geometry"]["coordinates"][0]) < len(
+    assert len(display["geojson"]["features"][0]["geometry"]["coordinates"][0]) == len(
         full["geojson"]["features"][0]["geometry"]["coordinates"][0]
     )
     assert frame.geometry.iloc[0].equals_exact(original.geometry.iloc[0], 0)

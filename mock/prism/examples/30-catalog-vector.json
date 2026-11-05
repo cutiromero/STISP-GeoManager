@@ -500,7 +500,25 @@
   },
   "GET /api/catalog/resources/{id}/profile/": {
     "200": {
-      "defaultVisualization": {},
+      "defaultVisualization": {
+        "symbolization": {
+          "opacity": 100,
+          "fill": {"fillOpacity": 1, "fillOutlineColor": "#202938"},
+          "line": {"lineColor": "#202938", "lineWidth": 0.7},
+          "renderer": {
+            "type": "uniqueValue",
+            "field": "status",
+            "classes": [{"id": "category-0", "value": "正常", "label": "正常", "color": "#35824b"}],
+            "defaultClass": {"label": "其他", "color": "#64748b"}
+          }
+        },
+        "colorAdvice": {
+          "version": 2,
+          "field": "status",
+          "classes": [{"value": "正常", "color": "#35824b", "source": "model_suggestion", "libraryId": null, "referenceSource": null, "referenceColor": null, "libraryAdjustmentReasons": [], "replacementReasons": [], "remainingIssues": []}],
+          "attempts": []
+        }
+      },
       "resource": {
         "id": 3,
         "name": "塔里木河胡杨样地监测点",
