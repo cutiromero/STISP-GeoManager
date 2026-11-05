@@ -461,6 +461,7 @@ it.each([
     ).not.toBeInTheDocument();
     fireEvent.click(control);
     const slider = await screen.findByRole("slider", { name: "思考强度" });
+    fireEvent.keyDown(slider, { key: "Home", keyCode: 36 });
     for (let step = 0; step < index; step++)
       fireEvent.keyDown(slider, { key: "ArrowRight", keyCode: 39 });
     fireEvent.click(control);
@@ -2797,3 +2798,202 @@ it.each(["later turn", "other project", "failed first turn"])(
     }
   },
 );
+
+async function submitEffortQuestion() {
+  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+    target: { value: "核对本次思考强度" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() => expect(agentApi.submit).toHaveBeenCalledOnce());
+}
+
+function rerenderAgent(mounted: ReturnType<typeof showAgent>) {
+  mounted.rerender(
+    <AntApp>
+      <MemoryRouter initialEntries={["/agent/workbench"]}>
+        <AgentPage />
+      </MemoryRouter>
+    </AntApp>,
+  );
+}
+
+it("logic effort defaults to explicit deep xhigh without touching the slider", async () => {
+  projectCode.value = "02";
+  localStorage.setItem("agent-thinking:99:agent", "fast");
+  showAgent("workbench");
+  await screen.findByText("旧问题");
+  expect(
+    screen.getByRole("button", { name: "调整思考强度" }),
+  ).toHaveTextContent("深入");
+  await submitEffortQuestion();
+  expect(agentApi.submit).toHaveBeenCalledWith(
+    1,
+    expect.objectContaining({
+      thinkingMode: "deep",
+      reasoningEffort: "xhigh",
+    }),
+  );
+});
+
+it("logic effort restores deep xhigh when the user chooses the default strength", async () => {
+  projectCode.value = "02";
+  showAgent("workbench");
+  await screen.findByText("旧问题");
+  const control = screen.getByRole("button", { name: "调整思考强度" });
+  fireEvent.click(control);
+  fireEvent.keyDown(await screen.findByRole("slider", { name: "思考强度" }), {
+    key: "Home",
+    keyCode: 36,
+  });
+  expect(control).toHaveTextContent("轻量");
+  fireEvent.click(screen.getByRole("button", { name: "使用默认强度" }));
+  expect(control).toHaveTextContent("深入");
+  fireEvent.click(control);
+  await submitEffortQuestion();
+  expect(agentApi.submit).toHaveBeenCalledWith(
+    1,
+    expect.objectContaining({
+      thinkingMode: "deep",
+      reasoningEffort: "xhigh",
+    }),
+  );
+});
+
+it.each(["low", "medium", "xhigh"] as const)(
+  "logic effort preserves restored %s configuration through asynchronous bootstrap recovery",
+  async (effort) => {
+    projectCode.value = "02";
+    vi.spyOn(agentApi, "restoreLogicConfiguration").mockResolvedValue({
+      configuration: {
+        resourceIds: [],
+        roles: {},
+        fieldMapping: {},
+        prompt: "沿用已确认的分析设置",
+        reasoningEffort: effort,
+      },
+      unavailableResourceIds: [],
+      items: [],
+    });
+    vi.spyOn(agentApi, "activeWorkflow").mockResolvedValue({ item: null });
+    const mounted = showAgent("workbench");
+    await screen.findByText("旧问题");
+    fireEvent.click(screen.getByText("逻辑推理", { exact: true }));
+    const label = { low: "轻量", medium: "标准", xhigh: "深入" }[effort];
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: "输入消息" })).toHaveValue(
+        "沿用已确认的分析设置",
+      ),
+    );
+    expect(
+      screen.getByRole("button", { name: "调整思考强度" }),
+    ).toHaveTextContent(label);
+    accessState.value = "unknown";
+    accessState.status = "error";
+    rerenderAgent(mounted);
+    accessState.value = "confirmed";
+    accessState.status = "ready";
+    rerenderAgent(mounted);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "调整思考强度" }),
+      ).toHaveTextContent(label),
+    );
+    await submitEffortQuestion();
+    expect(agentApi.submit).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        thinkingMode: effort === "low" ? "fast" : "deep",
+        reasoningEffort: effort === "low" ? undefined : effort,
+      }),
+    );
+  },
+);
+
+it.each(["policy", "model"])(
+  "logic effort uses fast mode without an effort when disabled by the %s",
+  async (disabledBy) => {
+    projectCode.value = "02";
+    const priorModels = bootstrap.models;
+    const priorThinking = bootstrap.thinkingEnabled;
+    try {
+      if (disabledBy === "policy") bootstrap.thinkingEnabled = false;
+      else
+        bootstrap.models = priorModels.map((model) => ({
+          ...model,
+          supportsThinking: false,
+        }));
+      showAgent("workbench");
+      await screen.findByText("旧问题");
+      expect(
+        screen.queryByRole("button", { name: "调整思考强度" }),
+      ).not.toBeInTheDocument();
+      await submitEffortQuestion();
+      expect(agentApi.submit).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          thinkingMode: "fast",
+          reasoningEffort: undefined,
+        }),
+      );
+    } finally {
+      bootstrap.models = priorModels;
+      bootstrap.thinkingEnabled = priorThinking;
+    }
+  },
+);
+
+it("logic effort resets for a different project while retaining ordinary project preferences", async () => {
+  projectCode.value = "02";
+  const scopedConversation = () => ({
+    ...conversation,
+    mode: "agent" as const,
+    projectId: Number(projectCode.current),
+  });
+  vi.mocked(agentApi.conversations).mockImplementation(async () => ({
+    items: [scopedConversation()],
+  }));
+  vi.mocked(agentApi.detail).mockImplementation(async () => ({
+    conversation: scopedConversation(),
+    runs: [run(1, "旧问题")],
+  }));
+  const mounted = showAgent("workbench");
+  await screen.findByText("旧问题");
+  let control = screen.getByRole("button", { name: "调整思考强度" });
+  fireEvent.click(control);
+  fireEvent.keyDown(await screen.findByRole("slider", { name: "思考强度" }), {
+    key: "Home",
+    keyCode: 36,
+  });
+  expect(control).toHaveTextContent("轻量");
+  fireEvent.click(control);
+  projectCode.current = "2";
+  rerenderAgent(mounted);
+  await screen.findByText("旧问题");
+  control = screen.getByRole("button", { name: "调整思考强度" });
+  expect(control).toHaveTextContent("深入");
+  await submitEffortQuestion();
+  expect(agentApi.submit).toHaveBeenCalledWith(
+    1,
+    expect.objectContaining({
+      thinkingMode: "deep",
+      reasoningEffort: "xhigh",
+    }),
+  );
+  vi.mocked(agentApi.submit).mockClear();
+  projectCode.current = "3";
+  projectCode.value = "default";
+  localStorage.setItem("agent-thinking:99:agent", "fast");
+  rerenderAgent(mounted);
+  await screen.findByText("旧问题");
+  expect(
+    screen.getByText("逻辑推理", { exact: true }).closest("button"),
+  ).toHaveAttribute("aria-pressed", "false");
+  await submitEffortQuestion();
+  expect(agentApi.submit).toHaveBeenCalledWith(
+    1,
+    expect.objectContaining({
+      thinkingMode: "fast",
+      reasoningEffort: undefined,
+    }),
+  );
+});

@@ -141,6 +141,31 @@ def test_chat_roles_bind_then_fields_confirm_and_restore(generic, catalog):
     assert detail.json()["runs"][0]["researchIntent"]["workflowId"] == str(workflow.id)
 
 
+def test_workflow_and_source_binding_rollback_together(generic, monkeypatch):
+    from django.core.exceptions import ValidationError
+    from apps.agent import generic_chat, research_intents
+
+    run, upload = intake(generic)
+
+    def reject_binding(*args, **kwargs):
+        raise ValidationError("模拟来源绑定写入失败")
+
+    monkeypatch.setattr(research_intents, "_save", reject_binding)
+    with pytest.raises(ValidationError, match="来源绑定"):
+        generic_chat.answer(
+            run,
+            generic["owner"],
+            generic["policy"],
+            run.research_intent["parameters"]["roleAnswers"],
+            "",
+        )
+    assert not AgentWorkflow.objects.exists()
+    upload.refresh_from_db()
+    assert upload.workflow_id is None
+    run.refresh_from_db()
+    assert run.research_workflow_id is None
+
+
 def test_role_text_is_bounded_and_never_silently_confirms(generic):
     run, upload = intake(generic)
     response = answer(generic, run, answer="把第1份资料改为构造线")

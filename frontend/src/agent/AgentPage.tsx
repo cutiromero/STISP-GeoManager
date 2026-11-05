@@ -211,7 +211,10 @@ function AgentWorkspace({
           (item) => item.budgetProfile === budgetProfile,
         )?.reasoningEffort
       : bootstrap?.defaultReasoningEffort) ?? "medium";
-  const requestedEffort = thinkingMode === "deep" ? effortOverride : undefined;
+  const requestedEffort =
+    thinkingMode === "deep"
+      ? (effortOverride ?? (logicProject ? "xhigh" : undefined))
+      : undefined;
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
   const [error, setError] = useState("");
@@ -544,7 +547,7 @@ function AgentWorkspace({
   useEffect(() => {
     if (logicProject)
       setThinkingMode(
-        deepThinkingAvailable && effortOverride && effortOverride !== "low"
+        deepThinkingAvailable && (effortOverride ?? "xhigh") !== "low"
           ? "deep"
           : "fast",
       );
@@ -2078,7 +2081,7 @@ function AgentWorkspace({
                       <ReasoningEffortControl
                         value={
                           logicProject
-                            ? (effortOverride ?? "low")
+                            ? (effortOverride ?? "xhigh")
                             : (effortOverride ?? defaultEffort)
                         }
                         overridden={effortOverride !== undefined}
@@ -2086,7 +2089,7 @@ function AgentWorkspace({
                         disabled={taskLocked || busy}
                         onChange={(value) => {
                           if (logicProject) {
-                            const effort = value ?? "low";
+                            const effort = value ?? "xhigh";
                             setEffortOverride(value);
                             setThinkingMode(effort === "low" ? "fast" : "deep");
                             return;

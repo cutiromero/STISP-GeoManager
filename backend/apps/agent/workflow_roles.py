@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import json
+import time
+
+from django.core.exceptions import PermissionDenied
 
 from apps.compute.packages import ComputeError
 
 from . import provider
 from .config import registry
+from .context import prepare_context
 from .demo_decisions import _response_text
 from .geology_generic import GEOMETRY, LABELS, ROLES
-from .policy import require_access
+from .model_guard import ModelStreamGuard
+from .policy import fresh_user, require_access
 from .workflow_uploads import batch_uploads, require_upload_access, role_hint
 
 INSTRUCTION = (
@@ -86,9 +91,17 @@ def validate_roles(raw, uploads):
     return result
 
 
-def recognize_roles(user, project, batch_id, model_id):
+def recognize_roles(
+    user, project, batch_id, model_id, *, source_run=None, on_thinking=None
+):
     require_upload_access(user, project)
     policy = require_access(user, "agent", model_id)
+    if source_run is not None:
+        from .workflow_model_policy import run_model_policy
+
+        if source_run.model != model_id or source_run.project_tag_id != project:
+            raise PermissionDenied("资料角色识别模型或项目与来源任务不一致")
+        policy = run_model_policy(source_run, user, policy)
     uploads = list(batch_uploads(user, batch_id).order_by("created_at", "id"))
     if not uploads:
         raise ComputeError("请先上传本次资料")
@@ -97,6 +110,62 @@ def recognize_roles(user, project, batch_id, model_id):
     model = registry().get(model_id)
     if model is None:
         raise ComputeError("模型不可用", 403)
+    thinking = bool(policy.get("_thinking", policy["thinkingEnabled"] and model.qwen))
+    deadline = time.monotonic() + policy["maxRunSeconds"]
+    snapshots = {
+        str(upload.id): (upload.resource_id, upload.resource.updated_at)
+        for upload in uploads
+    }
+
+    def authorize():
+        actor = fresh_user(user.pk)
+        require_upload_access(actor, project)
+        fresh_policy = require_access(actor, "agent", model_id)
+        if source_run is not None:
+            from .models import AgentRun
+
+            current = (
+                AgentRun.objects.select_related("conversation")
+                .filter(pk=source_run.pk)
+                .first()
+            )
+            if current is None:
+                raise PermissionDenied("资料角色识别任务已删除")
+            if current.model != model_id or current.project_tag_id != project:
+                raise PermissionDenied("资料角色识别模型或项目与来源任务不一致")
+            fresh_policy = run_model_policy(current, actor, fresh_policy)
+        current_uploads = list(batch_uploads(actor, batch_id))
+        if (
+            any(upload.workflow_id for upload in current_uploads)
+            or {
+                str(upload.id): (upload.resource_id, upload.resource.updated_at)
+                for upload in current_uploads
+            }
+            != snapshots
+        ):
+            raise PermissionDenied("本批资料已移除、变化或用于任务，请重新核对")
+        if (
+            bool(
+                fresh_policy.get(
+                    "_thinking", fresh_policy["thinkingEnabled"] and model.qwen
+                )
+            )
+            != thinking
+            or fresh_policy["reasoningEffort"] != policy["reasoningEffort"]
+            or any(
+                fresh_policy[key] < policy[key]
+                for key in (
+                    "maxOutputTokens",
+                    "maxContextTokens",
+                    "maxContextBytes",
+                    "maxRunSeconds",
+                )
+            )
+        ):
+            raise PermissionDenied("模型思考设置或预算已变化，请重新识别资料角色")
+
+    guard = ModelStreamGuard(authorize, deadline)
+
     source, result = "rules", None
     if not model.model_id.casefold().startswith("mock"):
         payload = {
@@ -111,30 +180,44 @@ def recognize_roles(user, project, batch_id, model_id):
                 for upload in uploads
             ],
         }
+        messages = [
+            {"role": "system", "content": INSTRUCTION},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        ]
         try:
+            guard.poll()
+            window = provider.model_window(model)
+            guard.poll()
+            _, truncated = prepare_context(
+                messages, messages[1], model, policy, window, thinking
+            )
+            if truncated:
+                raise provider.ModelError(
+                    "角色识别须保留完整资料，请缩小资料范围后重试"
+                )
+            guard.poll()
             raw = _response_text(
                 "".join(
                     provider.stream(
                         model,
-                        [
-                            {"role": "system", "content": INSTRUCTION},
-                            {
-                                "role": "user",
-                                "content": json.dumps(payload, ensure_ascii=False),
-                            },
-                        ],
+                        messages,
                         policy["maxOutputTokens"],
-                        lambda: None,
+                        guard,
                         structured=True,
+                        thinking=thinking,
                         temperature=policy["temperature"],
                         top_p=policy["topP"],
                         reasoning_effort=policy["reasoningEffort"],
+                        on_thinking=on_thinking,
+                        monitor_guard=guard.poll,
                     )
                 )
             )
+            guard.poll()
             result = validate_roles(raw, uploads)
             source = "model"
         except (provider.ModelError, ComputeError):
+            guard.poll()
             result = None
     if result is None:
         result, used = [], set()

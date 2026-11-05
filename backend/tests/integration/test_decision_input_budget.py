@@ -35,7 +35,12 @@ def expand(value, definitions):
     return value
 
 
-def test_raster_protocol_caps_first_request_and_generation(retry_model):
+@pytest.mark.parametrize(
+    "thinking,effort", [(False, "low"), (True, "medium"), (True, "xhigh")]
+)
+def test_raster_protocol_caps_first_request_and_generation(
+    retry_model, thinking, effort
+):
     workflow, stage, payload, _ = large_payload()
     workflow.workflow_type = "geology_multi_element_reasoning"
     workflow.plan["algorithms"] = {
@@ -45,9 +50,17 @@ def test_raster_protocol_caps_first_request_and_generation(retry_model):
     }
     requests = []
     answer = model_response(stage["identifier"], [])
-    policy = {**default_policy(), "maxContextTokens": 49152, "maxOutputTokens": 8000}
+    policy = {
+        **default_policy(),
+        "maxContextTokens": 49152,
+        "maxOutputTokens": 8000,
+        "_thinking": thinking,
+        "reasoningEffort": effort,
+    }
+    counted = []
 
-    def tokenizer(model, messages, thinking, effort):
+    def tokenizer(model, messages, enabled, selected):
+        counted.append((enabled, selected))
         return sum(len(item["content"].encode("utf-8")) for item in messages) // 4 + 64
 
     with (
@@ -58,7 +71,7 @@ def test_raster_protocol_caps_first_request_and_generation(retry_model):
         patch(
             "apps.agent.demo_decisions.provider.stream",
             side_effect=responses([answer], requests),
-        ),
+        ) as generation,
         patch(
             "apps.agent.demo_decisions._validate_response",
             return_value=(answer["decision"], []),
@@ -69,6 +82,11 @@ def test_raster_protocol_caps_first_request_and_generation(retry_model):
     attempt = stage["modelAttempts"][0]
     assert attempt["inputTokens"] <= attempt["inputLimit"] == 15000
     assert attempt["outputLimit"] == 2000
+    assert set(counted) == {(thinking, effort)}
+    assert generation.call_args.kwargs["thinking"] is thinking
+    assert generation.call_args.kwargs["reasoning_effort"] == effort
+    assert attempt["thinkingEnabled"] is thinking
+    assert attempt["reasoningEffort"] == effort
 
 
 def large_payload():

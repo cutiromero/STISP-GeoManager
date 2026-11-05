@@ -55,7 +55,7 @@ def default_policy():
         "maxContextBytes": 384000,
         "maxOutputTokens": 8192,
         "maxContextTokens": 49152,
-        "reasoningEffort": "medium",
+        "reasoningEffort": "xhigh",
         "temperature": 0.2,
         "topP": 0.9,
         "maxSteps": 32,

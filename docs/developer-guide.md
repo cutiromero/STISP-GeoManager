@@ -78,7 +78,7 @@
 
 `GET /api/agent/workflows/active/` 在当前项目智能体与MH-workflow授权后，读取本账号唯一活动任务（含暂停），返回 `{item:null}` 或含 `id/goal/workflowType/status/updatedAt/projectId` 的本人摘要。账号并发限制跨项目生效，摘要不含数据或计划。查看与取消使用既有详情、取消接口，并以目标项目ID重新授权；不绕过项目成员、模型或资料权限。前端提供任务名称、场景、状态、更新时间、查看及二次确认取消，取消中的任务在安全边界停止。
 
-逻辑推理项目使用 `ReasoningEffortControl` 的“轻量 / 标准 / 深入”滑杆，不显示“深度思考”开关。默认轻量对应 `thinkingMode=fast` 且不发送 `reasoningEffort`，保留关闭深度思考时的后端语义；标准和深入分别为 `deep+medium`、`deep+xhigh`。模型或策略不支持深度思考时隐藏控件。固定通用场景不请求算法目录、算子候选、项目资料、场景目录与预设；上传和目标输入不等待历史任务或bootstrap。其他项目保持原控件和加载行为。
+逻辑推理项目使用 `ReasoningEffortControl` 的“轻量 / 标准 / 深入”滑杆，不显示“深度思考”开关。默认深入明确发送 `thinkingMode=deep` 与 `reasoningEffort=xhigh`；轻量为 `fast` 且不发送强度，标准为 `deep+medium`。“使用默认强度”恢复深入，用户明确恢复的历史配置优先。模型或策略不支持深度思考时隐藏控件并采用快速模式。固定通用场景不请求算法目录、算子候选、项目资料、场景目录与预设；上传和目标输入不等待历史任务或bootstrap。其他项目保持原控件和加载行为。
 
 `POST /api/agent/workflow-uploads/` 以 multipart 上传一个文件和客户端生成的 `batchId`（32位小写十六进制）。矢量支持 Shapefile ZIP、GeoPackage、GeoJSON，栅格支持 GeoTIFF，表格支持 CSV、XLSX，校验和大小限制沿用既有导入服务。栅格大小上限为平台 `uploadMaxMb`。资料登记为 `owner_only` 数据资源（栅格在导入写入时即为 `owner_only`），来源标记 `workflow-upload:<batchId>`，不出现在数据目录、搜索、算子输入候选、地图图层列表、后台数据管理列表与导出、首页和看板统计中；返回识别结果（类型、坐标系、几何、要素数、字段与示例取值）和推荐角色 `roleHint`。每个批次最多12个文件。`GET ...?batchId=` 列出本人当前项目该批次的上传；`DELETE .../{uploadId}/` 只能删除尚未绑定任务的上传，否则返回409。上传需要智能体访问、MH-workflow、智能体调用算子及当前项目 `catalog.add_dataresource` 权限。
 
@@ -143,6 +143,8 @@ AgentWorkflowStep.decision 为可空公开判断摘要，包含问题、发现�
 ## 用户思考强度（2026-09-24）
 
 智能体 bootstrap 返回 `defaultReasoningEffort`。提交接口在 `thinkingMode=deep` 时接受可选 `reasoningEffort`（`low/medium/xhigh`）。显式选择优先于预算方案强度和后台默认强度；省略时沿用原默认策略。快速模式传入强度返回 400。强度持久化到本轮任务并参与幂等校验，worker 在预算解析后、上下文计数及模型请求前应用。后台深度思考开关与模型能力检查继续生效。
+
+新建后台策略默认强度为 `xhigh`。聊天发起的工作流从绑定的 `requestRunId`（无则 `originRunId`）继承模式、显式强度和任务预算；核对本人、项目、会话、所选模型及工作流绑定，不接受任意运行编号。后续授权重新核查策略与额度，来源停止、归档或授权收窄即停止执行，历史查看不重新执行该检查。独立工作流和独立角色识别采用当前后台思考策略。分词与生成使用一致的思考模式和强度；栅格协议仍限制输入15000 token、思考与正文合计2000 token，不因选择深入而扩大额度。
 
 > 本文保留历史业务接入说明。历史 `accessGroupIds`、`audienceGroupIds`、`availableAccessGroups` 只用于兼容元数据，不授予或限制项目内对象访问。项目、内容、工程规则以本文最新章节及上述当前规则为准；不要沿用早期按角色共享、四大类或 all 聚合的示例。
 

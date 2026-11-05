@@ -6,6 +6,8 @@ import re
 from types import SimpleNamespace
 
 from django.core.exceptions import PermissionDenied
+from django.db import connection, transaction
+from django.db.models import F
 
 from apps.compute.packages import ComputeError
 from apps.compute.project_tools import GEOLOGY_PROJECT_CODES
@@ -77,7 +79,9 @@ def prepare(run, user, policy, guard):
             ]
         }
         if reusable
-        else recognize_roles(user, run.project_tag_id, batch_id, run.model)
+        else recognize_roles(
+            user, run.project_tag_id, batch_id, run.model, source_run=run
+        )
     )
     suggestions = {item["resourceId"]: item for item in suggested["items"]}
     questions, answers = [], {}
@@ -305,38 +309,43 @@ def answer(source, user, policy, answers, text):
         },
     )
 
-    workflow = create_workflow(
-        user,
-        source.project_tag_id,
-        {
-            "workflowType": "geology_generic",
-            "goal": intent["goal"],
-            "model": source.model,
-            "uploadBatchId": intent["_uploadBatchId"],
-            "inputs": inputs,
-            "resourceIds": [],
-            "parameters": {},
-            "knowledgeSelection": {
-                "mode": source.knowledge_selection.get("mode", "auto"),
-                "domains": source.knowledge_selection.get("domains", []),
+    with transaction.atomic():
+        if connection.vendor == "sqlite":
+            AgentRun._base_manager.filter(pk=source.pk).update(
+                idempotency_key=F("idempotency_key")
+            )
+        workflow = create_workflow(
+            user,
+            source.project_tag_id,
+            {
+                "workflowType": "geology_generic",
+                "goal": intent["goal"],
+                "model": source.model,
+                "uploadBatchId": intent["_uploadBatchId"],
+                "inputs": inputs,
+                "resourceIds": [],
+                "parameters": {},
+                "knowledgeSelection": {
+                    "mode": source.knowledge_selection.get("mode", "auto"),
+                    "domains": source.knowledge_selection.get("domains", []),
+                },
+                "idempotencyKey": f"chat-research-{source.id}",
+                "executeOperators": False,
+                "importResults": True,
             },
-            "idempotencyKey": f"chat-research-{source.id}",
-            "executeOperators": False,
-            "importResults": True,
-        },
-        chat_execution={
-            "originRunId": source.id,
-            "requestRunId": source.id,
-            "initialPlanAuthorized": False,
-            **selection,
-        },
-    )
-    intent.update(
-        status="planning", inputs=inputs, questions=[], workflowId=str(workflow.id)
-    )
-    intent["parameters"] = {}
-    intent["message"] = "资料角色已确认，正在判断字段含义；请等待字段确认卡片。"
-    _save(source, intent, workflow)
+            chat_execution={
+                "originRunId": source.id,
+                "requestRunId": source.id,
+                "initialPlanAuthorized": False,
+                **selection,
+            },
+        )
+        intent.update(
+            status="planning", inputs=inputs, questions=[], workflowId=str(workflow.id)
+        )
+        intent["parameters"] = {}
+        intent["message"] = "资料角色已确认，正在判断字段含义；请等待字段确认卡片。"
+        _save(source, intent, workflow)
     if intent.get("_reuseConfirmedConfiguration"):
         from .logic_configuration import matching_configuration
 

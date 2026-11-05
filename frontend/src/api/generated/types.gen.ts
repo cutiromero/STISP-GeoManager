@@ -615,7 +615,7 @@ export type AgentBootstrap = {
      */
     algorithmOptions?: Array<AgentAlgorithmOption>;
     /**
-     * 后台默认思考强度；开启任务预算时以当前方案默认值为准
+     * 后台默认思考强度，新策略为xhigh；开启任务预算时以当前方案默认值为准。逻辑项目界面默认显式选择deep+xhigh
      */
     defaultReasoningEffort?: 'low' | 'medium' | 'xhigh';
     budgets?: AgentBudgetOptions;
@@ -1136,7 +1136,7 @@ export type AgentRun = {
      */
     model: string;
     /**
-     * 思考模式
+     * 思考模式；逻辑项目界面默认deep，转入科研工作流后继承本人本项目已绑定运行的选择
      */
     thinkingMode?: 'fast' | 'deep';
     /**
@@ -1313,7 +1313,7 @@ export type AgentRunInput = {
      */
     idempotencyKey: string;
     /**
-     * 思考模式
+     * 思考模式；逻辑项目界面默认显式发送deep与reasoningEffort=xhigh；选择fast时不得传reasoningEffort。关联科研工作流继承本人当前项目绑定运行的选择，服务端仍复核模型能力与策略
      */
     thinkingMode?: 'fast' | 'deep';
     /**

@@ -970,6 +970,7 @@ def decide(
             on_attempt(stage["modelAttempts"][-1])
         return recovered
     window = provider.model_window(model)
+    thinking = policy.get("_thinking", False)
     output_limit = policy["maxOutputTokens"]
     parameters = {**policy, "maxOutputTokens": output_limit}
     raster_protocol = any(
@@ -997,7 +998,7 @@ def decide(
             guard()
             try:
                 tokens, truncated = prepare_context(
-                    messages, current, model, parameters, window, False
+                    messages, current, model, parameters, window, thinking
                 )
                 break
             except InputBudgetError as exc:
@@ -1044,6 +1045,8 @@ def decide(
                 parameters["maxContextTokens"], window - output_limit - 256
             ),
             "modelId": model.model_id,
+            "thinkingEnabled": thinking,
+            "reasoningEffort": policy["reasoningEffort"],
             "usage": {},
         }
         stage.setdefault("modelAttempts", []).append(record)
@@ -1059,6 +1062,7 @@ def decide(
                 output_limit,
                 guard,
                 structured=True,
+                thinking=thinking,
                 temperature=policy["temperature"],
                 top_p=policy["topP"],
                 reasoning_effort=policy["reasoningEffort"],

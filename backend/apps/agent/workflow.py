@@ -102,6 +102,10 @@ def _authorize(workflow, *, history=False):
             continue
         resolve_resource(user, p, rid)
     validate_knowledge(workflow, user, history=history)
+    if not history:
+        from .workflow_model_policy import workflow_model_policy
+
+        p = workflow_model_policy(workflow, user, p)
     return user, p
 
 
@@ -208,6 +212,11 @@ def _prepare(workflow, user, p):
         "inputs": inputs,
         "parameters": workflow.parameters,
         "goal": workflow.goal,
+        **(
+            {"chatExecution": workflow.plan["chatExecution"]}
+            if "chatExecution" in workflow.plan
+            else {}
+        ),
     }
     validated = validate_submission(user, _body(workflow, plan))
     plan["parameters"] = validated["parameters"]

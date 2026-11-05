@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261106-001 - 逻辑推理默认深入与科研任务思考选择继承
+
+- Status: BackendReady
+- Owner: Frontend / Backend。
+- Endpoints: GET /api/agent/bootstrap/；POST /api/agent/conversations/{conversationId}/runs/；POST /api/agent/workflows/；POST /api/agent/workflow-uploads/recognize/。
+- Change type: 既有模式、强度与预算的默认值和继承语义；请求、响应字段及权限不扩展。
+- OpenAPI change: 补充 AgentBootstrap.defaultReasoningEffort、AgentRun.thinkingMode、AgentRunInput.thinkingMode 的默认选择与工作流继承说明。
+- Mock examples: 沿用 mock/prism/examples/96-agent.json、106-agent-generic-chat.json、107-agent-logic-configuration.json；返回结构不变，模式传递由 HTTP 模型请求捕获与专项夹具验证。
+- Frontend reason: 逻辑项目默认显示深入并明确发送 deep+xhigh；轻量发送 fast 且省略强度，标准发送 deep+medium。使用默认强度恢复深入，沿用已确认配置的显式选择，其他项目保留既有偏好。
+- Backend implementation notes: 新建策略默认 xhigh；聊天工作流优先继承已绑定 requestRunId，无则 originRunId。核对本人、项目、会话、模型和工作流绑定，重新授权时复核当前策略与任务预算；来源停止、归档、模型不支持或策略禁用时拒绝继续。独立工作流及角色识别遵循当前后台策略，分词和生成使用同一模式与强度；栅格输入和输出上限保持不变。
+- Verification: 默认与三档提交、配置及 bootstrap 恢复、模型与策略禁用、项目切换；工作流绑定隔离、策略与额度收窄、分词与生成参数一致；generate:api、check:api、api:changes:check、api:docs、api:lint。
+- Result: 用户选定的思考模式、强度和预算贯通科研任务；原有审核、权限和生成额度约束继续生效。
+
 ## API-20261105-014 - 蚀变归类组审批与按要素对比分页
 
 - Status: BackendReady
@@ -372,6 +385,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261106-001 | BackendReady | /api/agent/bootstrap/; /conversations/{conversationId}/runs/; /workflows/; /workflow-uploads/recognize/ | Explicit deep default and verified run policy inheritance | Updated | Existing agent fixtures; scoped HTTP model captures | Implemented | Focused frontend and backend regression; API checks | Existing project, owner, model and budget authorization |
 | API-20261105-014 | BackendReady | /api/agent/workflows/{workflowId}/; /confirm/ | Raster groups, compact approval and element pages | Updated | 105-agent-workflow-card.json | Implemented | Focused regression; browser cases prepared | Existing owner/project/resource authorization |
 | API-20261105-013 | BackendReady | /api/agent/workflows/{workflow_id}/ | Model attempt audit response | Updated | Backend fixtures | Implemented | Focused backend tests; browser cases prepared | Existing workflow authorization |
 | API-20261105-011 | BackendReady | /api/catalog/resources/{id}/query/ | Shared-boundary grid quantization without simplification | Updated | 30-catalog-vector.json; backend geometry fixtures | Implemented | Focused unit tests; browser cases prepared | Storage, permissions and precise queries unchanged |
