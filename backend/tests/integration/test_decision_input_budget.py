@@ -162,8 +162,19 @@ def test_every_group_preserves_rule_count_ranges_and_required_knowledge(level):
     compressed = project_payload(payload, level)
     restored = expand(compressed, compressed["contextDefinitions"])
     groups = restored["actualResults"][0]["groups"]
-    assert len(rows) == 5400 and len(groups) == 45
-    assert sum(group["count"] for group in groups) == 5400
+    assert len(rows) == 5400 and len(groups) == (24 if level == 4 else 45)
+    if level == 4:
+        summary = next(
+            item
+            for item in restored["evidenceProjection"]
+            if item["path"].endswith(".groups")
+        )
+        assert (
+            summary["inputCount"] == 45 and summary["completeInputObjectCount"] == 5400
+        )
+        assert summary["coverage"] == "shown_items_only"
+    else:
+        assert sum(group["count"] for group in groups) == 5400
     originals = {
         group["group_id"]: group for group in payload["actualResults"][0]["groups"]
     }
@@ -260,6 +271,7 @@ def test_actual_apply_assembly_and_response_validation_fit_first_request(
     gate, retry_model
 ):
     workflow, stage, source, rows = large_payload()
+    rows = rows[:90]
     workflow.workflow_type = "geology_multi_element_reasoning"
     stage.update(name="apply", identifier="geology-multi-apply")
     workflow.plan["stages"] = [
@@ -276,7 +288,7 @@ def test_actual_apply_assembly_and_response_validation_fit_first_request(
             "key": "statistics",
             "outputId": 18,
             "taskId": "check-task",
-            "rows": [{"objects": 5400, "groups": 45}],
+            "rows": [{"objects": 90, "groups": 45}],
         },
     ]
     answer = model_response(stage["identifier"], [])
@@ -294,6 +306,19 @@ def test_actual_apply_assembly_and_response_validation_fit_first_request(
             return 800
         return sum(len(item["content"].encode("utf-8")) for item in messages) + 64
 
+    def stream(model, messages, output, guard, **options):
+        requests.append(copy.deepcopy(messages))
+        sent = json.loads(messages[1]["content"])
+        visible = expand(sent, sent.get("contextDefinitions", {}))
+        value = copy.deepcopy(answer)
+        entry = visible["knowledge"][0]
+        value["decision"]["evidenceRefs"][1] = {
+            "kind": "knowledge",
+            "id": str(entry["id"]),
+            "revision": entry["revision"],
+        }
+        return iter([json.dumps(value, ensure_ascii=False)])
+
     with (
         patch(
             "apps.agent.demo_decisions.resource_context",
@@ -303,26 +328,24 @@ def test_actual_apply_assembly_and_response_validation_fit_first_request(
         patch("apps.agent.context.count_tokens", side_effect=tokenizer),
         patch(
             "apps.agent.demo_decisions.provider.stream",
-            side_effect=responses([answer], requests),
+            side_effect=stream,
         ),
     ):
         decision, edits = decide(workflow, None, policy, stage, results, lambda: None)
     assert decision["nextAction"] == stage["identifier"] and edits == []
-    assert len(requests) == 1
-    attempt = stage["modelAttempts"][0]
-    assert attempt["inputTokens"] <= attempt["inputLimit"] == 49152
-    assert attempt["contentBytes"] <= policy["maxContextBytes"]
-    sent = json.loads(requests[0][1]["content"])
-    restored = expand(sent, sent["contextDefinitions"])
-    groups = restored["actualResults"][0]["groups"]
-    assert len(groups) == 45 and sum(group["count"] for group in groups) == 5400
-    assert all(
-        group["requiredKnowledgeRefs"] and group["measurementRanges"]
-        for group in groups
-    )
-    print(
-        f"actual apply assembly: first request fixture-byte-tokenizer={attempt['inputTokens']}, budget={attempt['inputLimit']}, level={attempt['budgetLevel']}"
-    )
+    assert len(requests) > 1
+    assert stage["modelBatches"]["coveredMemberCount"] == 90
+    for batch in stage["modelBatches"]["batches"]:
+        attempt = batch["stage"]["modelAttempts"][0]
+        assert attempt["inputTokens"] <= attempt["inputLimit"] == 15000
+        assert attempt["outputLimit"] == 2000
+        assert attempt["contentBytes"] <= policy["maxContextBytes"]
+        request = requests[attempt["batchIndex"] - 1]
+        sent = json.loads(request[1]["content"])
+        restored = expand(sent, sent.get("contextDefinitions", {}))
+        groups = restored["actualResults"][0]["groups"]
+        assert all(len(group["samples"]) == group["count"] for group in groups)
+        assert all(group["measurementRanges"] for group in groups)
 
 
 def test_exact_references_expand_before_summarizing_knowledge():

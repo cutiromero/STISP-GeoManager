@@ -52,7 +52,17 @@ def bounded(value, depth=0):
         return {
             key: bounded(item, depth + 1)
             for key, item in list(value.items())[:40]
-            if key not in {"modelRequestPayload", "modelRequestInstruction", "preview"}
+            if key
+            not in {
+                "modelRequestPayload",
+                "modelRequestInstruction",
+                "modelAttempts",
+                "modelBudgetHistory",
+                "modelBatches",
+                "edits",
+                "proposedEdits",
+                "preview",
+            }
         }
     return value
 

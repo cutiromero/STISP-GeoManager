@@ -56,7 +56,11 @@ def catalog(env):
                     },
                 ],
                 "algorithms": [
-                    {"versionId": v.id}
+                    {
+                        "identifier": k,
+                        "versionId": v.id,
+                        "checksum": v.checksum,
+                    }
                     for k, v in env["versions"].items()
                     if k in {"raster-ndvi", "ndvi-change", "ecology-priority"}
                 ],

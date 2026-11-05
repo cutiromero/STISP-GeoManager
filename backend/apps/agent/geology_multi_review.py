@@ -116,21 +116,101 @@ class EditValidationError(ComputeError):
         )
 
 
-def assess_edits(edits, results, *, workflow=None, decision=None):
-    if not isinstance(edits, list):
-        raise ComputeError("处置建议须为数组")
+def _expand_review_group(original, members):
+    """Validate a model group, then expand only its complete real member scope."""
     from .geology_issue_groups import expand_groups
 
+    actual = issue_groups(members)
+    if not actual:
+        return expand_groups([original], members)
+    # Reuse the established field/reason validation without weakening it for
+    # model aggregation IDs, which may cover several real raster unit IDs.
+    probe = {
+        **original,
+        "group_id": actual[0][0],
+        "disposition": "review",
+        "excluded_issue_ids": [],
+    }
+    expand_groups([probe], actual[0][1])
+    excluded = original.get("excluded_issue_ids")
+    disposition = original.get("disposition")
+    if (
+        not isinstance(excluded, list)
+        or any(not isinstance(item, str) for item in excluded)
+        or set(excluded) - {row["issue_id"] for row in members}
+    ):
+        raise ComputeError("分组或排除对象不属于本次检查快照")
+    if disposition not in ("suggested", "keep", "review", "reject"):
+        raise ComputeError("整组处置只能采用建议、保留、待裁定或拒绝")
+    if disposition in {"review", "reject"}:
+        return []
+    if disposition == "keep":
+        return [
+            {
+                "issue_id": row["issue_id"],
+                "action": "keep",
+                "target_code": "",
+                "weight": 1,
+                "reason": original["reason"],
+            }
+            for row in members
+            if row["issue_id"] not in excluded
+        ]
+    expanded = []
+    for identity, rows in actual:
+        ids = {row["issue_id"] for row in rows}
+        expanded.extend(
+            expand_groups(
+                [
+                    {
+                        **original,
+                        "group_id": identity,
+                        "excluded_issue_ids": [
+                            item for item in excluded if item in ids
+                        ],
+                    }
+                ],
+                rows,
+            )
+        )
+    return expanded
+
+
+def assess_edits(edits, results, *, workflow=None, decision=None, model_payload=None):
+    if not isinstance(edits, list):
+        raise ComputeError("处置建议须为数组")
     issues = {row["issue_id"]: row for row in issue_rows(results)}
     groups = dict(issue_groups(list(issues.values())))
+    if model_payload is not None:
+        from .demo_decision_batches import model_issue_groups
+
+        groups.update(model_issue_groups(list(issues.values())))
     accepted, errors, duplicates = [], [], []
-    discarded = 0
+    discarded, raster_errors = 0, 0
+    raster_issue_ids = {
+        identity
+        for identity, row in issues.items()
+        if row.get("element") == "alteration"
+        and str(row.get("feature_id", "")).startswith("AG-")
+    }
+    raster_group_ids = {
+        identity
+        for identity, members in groups.items()
+        if any(row["issue_id"] in raster_issue_ids for row in members)
+    }
     normalized, seen, targets = set(), set(), set()
 
     def record_error(index, original, exc, count=1):
-        nonlocal discarded, errors
+        nonlocal discarded, errors, raster_errors
         discarded += count
         grouped = isinstance(original, dict) and "group_id" in original
+        if isinstance(original, dict) and (
+            isinstance(original.get("group_id"), str)
+            and original["group_id"] in raster_group_ids
+            or isinstance(original.get("issue_id"), str)
+            and original["issue_id"] in raster_issue_ids
+        ):
+            raster_errors += count
         reason = str(exc)
         if grouped:
             members = (
@@ -198,13 +278,20 @@ def assess_edits(edits, results, *, workflow=None, decision=None):
         grouped = isinstance(original, dict) and "group_id" in original
         entry = None
         try:
+            if model_payload is not None:
+                from .decision_budget import assert_visible_edits
+
+                try:
+                    assert_visible_edits([original], model_payload)
+                except ValueError as exc:
+                    raise ComputeError(str(exc)) from exc
             if grouped and isinstance(original["group_id"], str):
                 if original["group_id"] in seen_groups:
                     raise ComputeError("同一分组只能给出一次处置")
                 seen_groups.add(original["group_id"])
             expanded = (
-                expand_groups(
-                    [original],
+                _expand_review_group(
+                    original,
                     groups.get(original["group_id"], [])
                     if isinstance(original["group_id"], str)
                     else [],
@@ -261,6 +348,7 @@ def assess_edits(edits, results, *, workflow=None, decision=None):
         "errors": errors,
         "duplicateCount": len(duplicates),
         "duplicateIndices": duplicates,
+        **({"unreviewedRasterCount": raster_errors} if raster_errors else {}),
     }
 
 
@@ -354,27 +442,6 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
         for row in rows
         if issues[row["issue_id"]]["status"] not in {"review", "exception"}
     ]
-    raster_ids = {
-        row["issue_id"]
-        for row in issues.values()
-        if row["element"] == "alteration" and row["feature_id"].startswith("AG-")
-    }
-    rows = [row for row in rows if row["issue_id"] not in raster_ids]
-    rows.extend(
-        {
-            **{key: str(issue[key]) for key in CHANGE_FIELDS[:5]},
-            "action": issue["suggested_action"],
-            "target_code": "",
-            "weight": 0
-            if issue["suggested_action"] == "exclude"
-            else 0.5
-            if issue["suggested_action"] == "downweight"
-            else 1,
-            "reason": issue["reason"],
-        }
-        for issue in issues.values()
-        if issue["issue_id"] in raster_ids and issue["status"] == "suggested"
-    )
     for issue in issues.values():
         action = issue.get("candidate_action")
         if issue["status"] not in {"review", "exception"} or not action:
@@ -405,7 +472,7 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
     for edit in rows:
         row = issues[edit["issue_id"]]
         held = row["status"] in {"review", "exception"}
-        if held or row["issue_id"] in raster_ids:
+        if held:
             entry = next(
                 (
                     entry
@@ -459,6 +526,8 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
                 else "review"
                 if edit["action"] in {"keep", "review"}
                 else "suggested",
+                "origin": "operator_held_candidate" if held else "model_reviewed",
+                "allowedActions": json.loads(row["allowed_actions_json"]),
                 **(
                     {
                         "candidateAction": edit["action"],
@@ -611,14 +680,16 @@ def validate_alteration_actions(review, selected, actions):
     if not isinstance(actions, dict):
         raise ComputeError("蚀变组动作须为分组到动作的映射")
     allowed = {
-        item["featureId"]
+        item["featureId"]: set(item.get("allowedActions", []))
+        & {"keep", "downweight", "exclude"}
         for item in review["suggestions"]
         if item["id"] in selected
         and item.get("element") == "alteration"
         and item.get("featureId", "").startswith("AG-")
     }
-    if set(actions) - allowed or any(
-        action not in {"keep", "downweight", "exclude"} for action in actions.values()
+    if set(actions) - set(allowed) or any(
+        not isinstance(action, str) or action not in allowed.get(identity, set())
+        for identity, action in actions.items()
     ):
         raise ComputeError("蚀变组动作超出本次已选择的冻结组或允许动作", 409)
     return actions
@@ -640,7 +711,8 @@ def selected_edits(rows, review, selected, actions=None):
             "weight": {"keep": 1, "downweight": 0.5, "exclude": 0}[
                 actions[row["feature_id"]]
             ],
-            "reason": "用户裁定（规则为待裁定/例外）/蚀变组动作：" + row["reason"],
+            "reason": f"用户显式裁定蚀变组动作（原{row['action']}，现{actions[row['feature_id']]}）；原理由："
+            + row["reason"],
         }
         if actions and row["feature_id"] in actions
         else row

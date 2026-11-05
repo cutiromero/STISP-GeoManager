@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+from itertools import islice
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -17,6 +18,11 @@ from .compute_tools import authorized_task
 from .tools import frame
 from .workflow_resources import resolve_workflow_resource, resolve_generated_resource
 from .geology_generic import MULTI_FAMILY
+
+MAX_RESULT_BYTES = 8 * 1024 * 1024
+MAX_RESULT_ROWS = 10000
+MAX_RESULT_CELL_CHARS = 2000
+MAX_GEOMETRY_CELL_CHARS = 32768
 
 EDIT_FIELDS = (
     "feature_id",
@@ -55,20 +61,28 @@ def read_output(workflow, user, policy, output) -> dict:
 
             return {**result, **table_rows(path, output.key)}
         map_review = workflow.workflow_type == "geology_map_review"
-        if path.stat().st_size > (256 if map_review else 64) * 1024:
-            limit = 256 if map_review else 64
-            raise ComputeError(f"检查统计表超过{limit} KiB，请先整理所需统计")
+        if path.stat().st_size > MAX_RESULT_BYTES:
+            raise ComputeError(
+                "检查统计表超过8 MiB读取上限；原始结果保留，请缩小本次分析范围"
+            )
         with path.open(encoding="utf-8-sig", newline="") as stream:
             reader = csv.DictReader(stream)
             if not reader.fieldnames or len(reader.fieldnames) > 64:
                 raise ComputeError("Demo统计表列数无效")
-            rows = list(reader)
-        if len(rows) > 100 or any(
-            len(str(value)) > (32768 if map_review and key == "geometry_json" else 2000)
+            rows = list(islice(reader, MAX_RESULT_ROWS + 1))
+        if len(rows) > MAX_RESULT_ROWS or any(
+            key is None
+            or value is None
+            or len(str(value))
+            > (
+                MAX_GEOMETRY_CELL_CHARS
+                if map_review and key == "geometry_json"
+                else MAX_RESULT_CELL_CHARS
+            )
             for row in rows
             for key, value in row.items()
         ):
-            raise ComputeError("Demo统计表超过100行或单元格读取上限")
+            raise ComputeError("检查统计表超过10000行或单元格读取上限；原始结果保留")
         result.update(
             columns=reader.fieldnames, rows=rows, rowCount=len(rows), scope="all"
         )
@@ -205,8 +219,6 @@ def resource_context(workflow, user, policy) -> list[dict]:
             item["metadata"] = candidate(resource)
         if resource.data_type == "table":
             data, info = frame(resource)
-            if len(data) > 100 or info.get("scope") == "prefix_sample":
-                raise ComputeError("Demo依据表超过完整读取范围，请整理成100行以内")
             from .tools import clean
 
             rows = clean(data.to_dict(orient="records"))
@@ -225,6 +237,11 @@ def resource_context(workflow, user, policy) -> list[dict]:
                     }
                     for row in rows
                 ]
-            item.update(rows=rows, scope="all")
+            item.update(
+                rows=rows,
+                rowCount=None if info.get("truncated") else len(rows),
+                scope="prefix_sample" if info.get("truncated") else "all",
+                readingScope=info,
+            )
         items.append(item)
     return items

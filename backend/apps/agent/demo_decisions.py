@@ -13,7 +13,13 @@ from .context import InputBudgetError, prepare_context
 from .demo_results import EDIT_FIELDS, resource_context, validate_edits
 from .model_guard import ModelStreamGuard
 from .geology_generic import MULTI_FAMILY
-from .decision_budget import MAX_LEVEL, budget_review, projected_messages
+from .decision_budget import (
+    MAX_LEVEL,
+    assert_visible_edits,
+    budget_review,
+    projected_messages,
+    visible_payload,
+)
 from .decision_text import clipped, normalize_items
 from .decision_audit import response_artifact
 
@@ -641,7 +647,15 @@ def _awaiting_multi_proposal(workflow, stage) -> bool:
 
 
 def _validate_response(
-    raw, workflow, stage, results, refs, *, execution_state=None, allow_partial=False
+    raw,
+    workflow,
+    stage,
+    results,
+    refs,
+    *,
+    execution_state=None,
+    allow_partial=False,
+    model_payload=None,
 ) -> tuple[dict, list]:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
     try:
@@ -658,6 +672,20 @@ def _validate_response(
         and isinstance(value["decision"], dict)
         and value["decision"].get("nextAction") == stage["identifier"]
     )
+    if model_payload is not None:
+
+        def reference_key(ref):
+            return (
+                ref.get("kind"),
+                str(ref.get("id")),
+                str(ref.get("revision")) if ref.get("kind") == "knowledge" else None,
+            )
+
+        visible = model_payload.get("availableEvidence", [])
+        if not isinstance(visible, list):
+            raise ComputeError("本次模型可见证据引用集合无效")
+        shown = {reference_key(ref) for ref in visible if isinstance(ref, dict)}
+        refs = [ref for ref in refs if reference_key(ref) in shown]
     decision = validate_decision(
         value["decision"],
         refs,
@@ -697,7 +725,17 @@ def _validate_response(
         for edit in value["edits"]
     ]
     if (
+        model_payload is not None
+        and stage["identifier"] in EDIT_CHECKS
+        and decision["nextAction"] == stage["identifier"]
+    ):
+        try:
+            assert_visible_edits(value["edits"], model_payload)
+        except ValueError as exc:
+            raise ComputeError(str(exc)) from exc
+    if (
         not allow_partial
+        and not (model_payload or {}).get("modelBatch")
         and _awaiting_multi_proposal(workflow, stage)
         and decision["nextAction"] == "request_review"
         and not value["edits"]
@@ -713,6 +751,13 @@ def _validate_response(
     if multi_edit_response:
         from .geology_multi_review import assess_edits, EditValidationError
 
+        raster_groups, raster_issues = set(), set()
+        if model_payload and model_payload.get("modelBatch"):
+            from .demo_decision_batches import raster_disposition_scope
+
+            raster_groups, raster_issues = raster_disposition_scope(
+                model_payload, value["edits"]
+            )
         check = next(
             item for item in workflow.plan["stages"] if item["name"] == "check"
         )
@@ -721,8 +766,14 @@ def _validate_response(
             [item for item in results if item.get("taskId") == check.get("taskId")],
             workflow=workflow,
             decision=decision,
+            model_payload=model_payload,
         )
-        if assessment["errors"] and (not allow_partial or not rows):
+        raster_error = assessment.get("unreviewedRasterCount", 0) > 0 or any(
+            error.get("group_id") in raster_groups
+            or error.get("issue_id") in raster_issues
+            for error in assessment["errors"]
+        )
+        if assessment["errors"] and (not allow_partial or not rows or raster_error):
             raise EditValidationError(assessment["errors"])
         value["edits"] = [
             {
@@ -787,8 +838,61 @@ def decide(
     on_thinking=None,
     on_progress=None,
 ) -> tuple[dict, list]:
+    from .demo_decision_batches import needs_batches, run_batches
+
     model = registry()[workflow.model]
-    context = resource_context(workflow, user, policy)
+    if (
+        getattr(workflow, "workflow_type", None) in MULTI_FAMILY
+        and not model.model_id.casefold().startswith("mock")
+        and needs_batches(workflow, stage, results)
+    ):
+        context = resource_context(workflow, user, policy)
+        return run_batches(
+            _decide_once,
+            workflow,
+            user,
+            policy,
+            stage,
+            results,
+            context,
+            guard,
+            on_attempt,
+            on_response,
+            on_thinking=on_thinking,
+            on_progress=on_progress,
+        )
+    return _decide_once(
+        workflow,
+        user,
+        policy,
+        stage,
+        results,
+        guard,
+        on_attempt,
+        on_response,
+        on_thinking=on_thinking,
+        on_progress=on_progress,
+    )
+
+
+def _decide_once(
+    workflow,
+    user,
+    policy,
+    stage,
+    results,
+    guard,
+    on_attempt=None,
+    on_response=None,
+    *,
+    on_thinking=None,
+    on_progress=None,
+    _context=None,
+    _batch=None,
+    _preflight=False,
+) -> tuple[dict, list]:
+    model = registry()[workflow.model]
+    context = resource_context(workflow, user, policy) if _context is None else _context
     refs = evidence_refs(workflow, context, results)
     if model.model_id.casefold().startswith("mock") and not stage.get("modelAttempts"):
         return _mock_decision(model, stage, refs, results, workflow)
@@ -908,7 +1012,8 @@ def decide(
             "sameAs按knowledge中的字段路径读取原值；rowFormat=columns的rows按columns列顺序逐项对应，保留全部记录。"
             "只有allowedAction和decision.nextAction均为geology-multi-apply时才提出edits，"
             "按actualResults.groups逐组提出建议，每项包含group_id,disposition,excluded_issue_ids,reason。"
-            "disposition=suggested表示整组采用实测建议，review表示整组待裁定；excluded_issue_ids列出不纳入的个别问题。"
+            "disposition=suggested表示本批组成员采用实测建议，keep表示明确保留，review表示待裁定，reject表示拒绝该候选。"
+            "keep/review/reject均不得被算子候选自动替换成修改；excluded_issue_ids列出不纳入的个别问题。"
             "每组须解释实测分布、条件及例外；status为review或exception只能整组review，不能整组自动处置。"
             "少量对象也可沿用issue_id,action,target_code,weight,reason逐项建议。"
             "此时edits仍只是建议，后端须等待用户逐项批准后才执行实际修改；"
@@ -919,7 +1024,8 @@ def decide(
             "action只从allowed_actions_json选，set_code/reclassify/merge目标必须是实测支持的target_code；其他动作target_code为空。"
             "降权downweight保留原对象且0<weight<1，exclude权重为0，其他动作weight=1。"
             "逐条建议须引用对应知识；分组建议在decision.evidenceRefs引用一次该组rule_id/rule_version对应的具体knowledge编号即可，无须为展开对象重复引用。"
-            "疑点与建议不设数量上限；覆盖全部分组，不能逐条输出几千项；整组建议由后端展开并逐对象校验及人工批准。"
+            "核对本次展示范围的全部成员；大任务由平台分批覆盖，不要求单次枚举几千项。"
+            "整组建议须具备全部本批成员证据，代表样本不能支持未展示成员；后端逐对象校验并等待人工批准。"
             "岩石孤岛不能单凭老新关系认定错误，构造短线不能单凭短就认定假线，碳酸盐背景不能排除热液叠加。"
             "apply阶段提出edits时尚无用户批准属正常状态，不能以尚无批准为由不提建议。"
             "执行修正后，未获批准不可声称已修正；modificationReview.approvedSuggestionIds才是用户批准的建议范围。其余项保留。"
@@ -936,6 +1042,31 @@ def decide(
             "不能解释为研究区没有该类地质现象，应在不确定性中说明。"
         )
     payload = decision_payload(workflow, stage, context, results)
+    if getattr(workflow, "workflow_type", None) in MULTI_FAMILY and payload.get(
+        "editTask"
+    ):
+        payload["editTask"]["groupDisposition"] = [
+            "suggested",
+            "keep",
+            "review",
+            "reject",
+        ]
+    validation_results = results
+    if _batch:
+        from .demo_decision_batches import batch_payload, scoped_results
+
+        scope, batch_index = _batch
+        payload = batch_payload(payload, results, scope, batch_index)
+        validation_results = scoped_results(results, scope)
+        refs = payload["availableEvidence"]
+        instruction += (
+            "本请求是完整任务中的一个有界批次，只检视modelBatch范围。"
+            "groups.samples包含该批每个成员的全部必要测量和来源定位，并非代表样本。"
+            "每个成员由该组memberCommon与sample字段合并还原；"
+            "memberSource给出原输出及checksum，sourceRowIndex定位原行。"
+            "逐成员核对知识适用条件和例外，分组建议仅展开到本批成员；"
+            "不能声称其他批次已审阅或已批准。每批只输出简短判断与该批处置，不超过2000 token。"
+        )
     if any(
         item.get("key") == "alteration_summary"
         for item in workflow.plan.get("algorithms", {})
@@ -943,7 +1074,14 @@ def decide(
         .get("manifest", {})
         .get("outputs", [])
     ):
-        instruction += "蚀变使用alteration-pixels-v1逐像元确定性规则，actualResults.alteration_summary是完整归类汇总。系统自动形成蚀变组建议，模型不得在edits重新列举蚀变组或像元；edits只提出岩性和构造的分组建议。获批后系统直接执行冻结动作，不由模型重写清单。只写简短说明，输出不超过2000 token。A-05默认降权，不默认删除；非碳酸盐基岩上的碳酸盐化为可能热液叠加证据。"
+        instruction += (
+            "蚀变使用alteration-pixels-v1逐像元确定性测量，actualResults.alteration_summary是算子候选汇总。"
+            "AG表示完整像元聚合单元，不要求逐像元输出。当前批AGB组展示每个AG单元的完整聚合测量，"
+            "须逐单元核对矿物、岩性背景、边界、条件及例外，并在edits对本批组明确采用suggested、保留keep、待裁定review或拒绝reject。"
+            "只有模型明确采纳的处置可形成模型建议；遗漏、保留、拒绝不能由算子候选自动补成修改。"
+            "算子待裁定候选单独标记operator_held_candidate，不能称为模型建议。获批后按冻结动作执行。"
+            "只写简短说明，输出不超过2000 token。A-05默认降权，不默认删除；非碳酸盐基岩上的碳酸盐化为可能热液叠加证据。"
+        )
     if payload.get("humanReviewFeedback"):
         instruction += (
             "humanReviewFeedback为本任务已保存的用户审核结论和意见，绑定其原阶段及候选输出。"
@@ -975,7 +1113,7 @@ def decide(
             model,
             policy,
             stage,
-            results,
+            validation_results,
             refs,
             payload,
             messages,
@@ -997,7 +1135,7 @@ def decide(
         .get("manifest", {})
         .get("outputs", [])
     )
-    if raster_protocol:
+    if raster_protocol or _batch:
         output_limit = min(output_limit, 2000)
         parameters.update(
             maxOutputTokens=output_limit,
@@ -1007,6 +1145,9 @@ def decide(
     raw = ""
     base_messages = [dict(message) for message in messages]
     original_messages = [dict(message) for message in messages]
+    base_messages = projected_messages(original_messages, payload, 0)
+    messages = [dict(message) for message in base_messages]
+    current = messages[1]
     budget_level = 0
     repair_level = 0
     for attempt in range(2):
@@ -1039,6 +1180,21 @@ def decide(
             raise provider.ModelError(
                 "模型修正请求必须保留完整原始资料，请缩小输入范围"
             )
+        if _preflight:
+            return {
+                "inputTokens": tokens,
+                "inputLimit": min(
+                    parameters["maxContextTokens"], window - output_limit - 256
+                ),
+                "outputLimit": output_limit,
+                "budgetLevel": budget_level,
+                "contentBytes": sum(
+                    len(item["content"].encode("utf-8")) for item in messages
+                ),
+                "requestSha256": hashlib.sha256(
+                    json.dumps(messages, ensure_ascii=False).encode("utf-8")
+                ).hexdigest(),
+            }
         if not attempt:
             stage["modelRequestPayload"] = payload
             stage["modelRequestInstruction"] = instruction
@@ -1132,10 +1288,11 @@ def decide(
                 raw,
                 workflow,
                 stage,
-                results,
+                validation_results,
                 refs,
                 execution_state=payload["executionState"],
                 allow_partial=bool(attempt),
+                model_payload=visible_payload(payload, budget_level),
             )
         except ComputeError as exc:
             record.update(
@@ -1168,7 +1325,7 @@ def _repair_feedback(stage, payload, error):
             "latestStatisticsOutputIds"
         ],
         "editTask": payload["editTask"],
-        "instruction": "依据完整原资料修正响应，重新输出同一decision/edits结构；"
+        "instruction": "依据本次已展示资料修正响应，重新输出同一decision/edits结构；"
         "引用实际最新统计；编辑逐项对应真实问题，证据不足可request_review。"
         "平台不会代补引用或修改计划。",
     }
@@ -1248,6 +1405,7 @@ def _retry_messages(base, raw, feedback, level):
             + "。遵守allowedAction、editTask及批准范围；引用实际最新统计和匹配规则的知识，"
             "不补造引用。edits为数组，字段须符合原始editTask及实际问题；"
             "分组时每组引用一次对应知识即可。证据不足保留待核查；实际修改仍须用户批准。"
+            "modelBatch存在时只覆盖本批；各成员由memberCommon与samples原字段合并理解，不能扩大到其他成员。"
         )
     if level >= 4:
         value = json.loads(feedback)
@@ -1278,7 +1436,23 @@ def _recover_decision(
                 "本步已有模型请求记录，但完整分析响应未保存；本步尚未提交计算。"
                 "请重新发起分析，已完成的前序计算与审计记录保留。"
             )
-    limit = policy["maxOutputTokens"]
+    bounded_protocol = bool(payload.get("modelBatch")) or any(
+        item.get("key") == "alteration_summary"
+        for item in workflow.plan.get("algorithms", {})
+        .get("geology-multi-check", {})
+        .get("manifest", {})
+        .get("outputs", [])
+    )
+    limit = (
+        min(policy["maxOutputTokens"], 2000)
+        if bounded_protocol
+        else policy["maxOutputTokens"]
+    )
+    input_ceiling = (
+        min(policy["maxContextTokens"], 15000)
+        if bounded_protocol
+        else policy["maxContextTokens"]
+    )
     calls = workflow.plan.get("actualModelCallCount", 0)
     ceiling = getattr(workflow, "max_iterations", 0)
     iteration = getattr(workflow, "iteration", 0)
@@ -1313,9 +1487,7 @@ def _recover_decision(
             and type(window) is int
             and window > output + 256
             and type(input_limit) is int
-            and 256
-            <= input_limit
-            <= min(policy["maxContextTokens"], window - output - 256)
+            and 256 <= input_limit <= min(input_ceiling, window - output - 256)
             and type(tokens) is int
             and 0 <= tokens <= input_limit
             and isinstance(attempt.get("response"), str)
@@ -1339,6 +1511,9 @@ def _recover_decision(
                     results,
                     refs,
                     execution_state=payload["executionState"],
+                    model_payload=visible_payload(
+                        payload, previous.get("budgetLevel", 0)
+                    ),
                 )
             except ComputeError as exc:
                 feedback = _repair_feedback(stage, payload, exc)
@@ -1383,6 +1558,7 @@ def _recover_decision(
         refs,
         execution_state=payload["executionState"],
         allow_partial=len(attempts) == 2,
+        model_payload=visible_payload(payload, last.get("budgetLevel", 0)),
     )
     decision.update(modelMode="real", modelName=model.name)
     stage["recoveredModelAttempt"] = last["attempt"]

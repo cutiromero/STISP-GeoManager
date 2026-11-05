@@ -7,6 +7,7 @@ import threading
 from datetime import timedelta
 
 from django.db import OperationalError, close_old_connections, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import AgentRuntime, AgentWorkflow
@@ -36,11 +37,38 @@ def claim():
 
 def recover():
     stale = timezone.now() - timedelta(seconds=90)
+    # Cancelled queue entries cannot be claimed. A worker may also have died
+    # after the API requested cancellation, so finish the existing cancellation
+    # path before requeueing stale work or releasing its compute slot.
+    cancelled = AgentWorkflow.objects.filter(cancel_requested=True).filter(
+        Q(status="queued") | Q(status="running", heartbeat__lt=stale)
+    )
+    for workflow in cancelled:
+        from .demo_workflow import DEMO_TYPES
+
+        workflow.pause_requested = False
+        workflow.heartbeat = timezone.now()
+        if (
+            workflow.workflow_type not in DEMO_TYPES
+            and workflow.steps.filter(
+                kind="submit_operator", compute_task_id__isnull=False
+            ).exists()
+        ):
+            # resume_waiting owns ordinary-workflow compute cancellation.
+            workflow.status = "waiting_compute"
+        workflow.save(
+            update_fields=["status", "pause_requested", "heartbeat", "updated_at"]
+        )
+        if workflow.status != "waiting_compute":
+            run_workflow(workflow.id)
     # A waiting compute task is durable: the next worker tick can observe its
     # terminal state and resume the workflow.  Marking it interrupted here
     # would restart the graph and could submit the same operator twice.
     AgentWorkflow.objects.filter(
-        status="running", heartbeat__lt=stale, pause_requested=True
+        status="running",
+        heartbeat__lt=stale,
+        pause_requested=True,
+        cancel_requested=False,
     ).update(
         status="paused",
         paused_from="running",
@@ -48,7 +76,10 @@ def recover():
         updated_at=timezone.now(),
     )
     AgentWorkflow.objects.filter(
-        status="running", heartbeat__lt=stale, pause_requested=False
+        status="running",
+        heartbeat__lt=stale,
+        pause_requested=False,
+        cancel_requested=False,
     ).update(status="queued", detail="正在从已保存计划恢复", updated_at=timezone.now())
 
 

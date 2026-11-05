@@ -6,6 +6,7 @@ import io
 from pathlib import Path
 
 import pytest
+from django.core.exceptions import PermissionDenied
 
 from apps.agent.demo_workflow import prepare_demo
 from apps.agent.models import AgentRun, AgentWorkflow, Conversation
@@ -342,6 +343,15 @@ def test_plan_and_scoped_approval_use_original_checks(
     prepare_demo(workflow, generic["owner"], generic["policy"])
     workflow.refresh_from_db()
     assert workflow.plan["phase"] == "review_plan"
+    assert [stage["name"] for stage in workflow.plan["stages"]] == [
+        "check",
+        "apply",
+        "recheck",
+    ]
+    assert set(workflow.plan["algorithms"]) == {
+        "geology-multi-check",
+        "geology-multi-apply",
+    }
     assert not workflow.execute_operators
     assert answer(generic, run, answer="都听你的").status_code == 400
     response = answer(generic, run, answer="确认计划")
@@ -356,7 +366,8 @@ def test_plan_and_scoped_approval_use_original_checks(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
     )
     monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task", lambda *args: object()
+        "apps.agent.geology_multi_review.authorized_task",
+        lambda *args, **kwargs: object(),
     )
     response = answer(generic, run, answer="只批准岩性类建议")
     assert response.status_code == 200, response.content
@@ -565,7 +576,7 @@ def test_configuration_restore_reuses_roles_fields_but_never_plan_or_approval(
     def prepare_trial(workflow, user, policy):
         from apps.agent.geology_multi import graph
 
-        workflow.plan["multiGraph"] = graph("lithology")
+        workflow.plan["multiGraph"] = graph("lithology", raster=True)
         return []
 
     monkeypatch.setattr("apps.agent.geology_multi.prepare", prepare_trial)
@@ -589,6 +600,73 @@ def test_configuration_restore_reuses_roles_fields_but_never_plan_or_approval(
     assert run.research_intent["status"] == "clarifying"
     workflow.refresh_from_db()
     assert workflow.status == "cancelled"
+
+
+@pytest.mark.parametrize(
+    "changed", ["missing_snapshot", "changed_snapshot", "expanded_graph", "binding"]
+)
+def test_lithology_chat_rejects_unmatched_snapshot_stages_and_bindings(
+    generic, monkeypatch, changed
+):
+    from apps.agent.geology_multi import graph
+    from apps.compute.models import ComputeTask
+
+    run, _ = confirmed_catalog_configuration(generic)
+    workflow = run.research_workflow
+    workflow.refresh_from_db()
+    snapshots = workflow.plan["chatExecution"]["algorithmSnapshots"]
+    if changed == "missing_snapshot":
+        snapshots.pop("geology-multi-check")
+    elif changed == "changed_snapshot":
+        snapshots["geology-multi-check"]["checksum"] = "e" * 64
+
+    def prepare_trial(workflow, user, policy):
+        stages = graph(
+            "all" if changed == "expanded_graph" else "lithology", raster=True
+        )
+        if changed == "binding":
+            stages[0][2]["lithology"] = "coverage"
+        workflow.plan["multiGraph"] = stages
+        return []
+
+    monkeypatch.setattr("apps.agent.geology_multi.prepare", prepare_trial)
+    with pytest.raises(PermissionDenied, match="算法.*变化|阶段或输入绑定"):
+        prepare_demo(workflow, generic["owner"], generic["policy"])
+    workflow.refresh_from_db()
+    assert not workflow.execute_operators
+    assert "stages" not in workflow.plan
+    assert not workflow.steps.filter(kind="demo_plan").exists()
+    assert not ComputeTask.objects.exists()
+
+
+@pytest.mark.parametrize("changed", ["missing_snapshot", "changed_snapshot"])
+def test_prepared_chat_rechecks_its_matched_algorithm_snapshot(
+    generic, monkeypatch, changed
+):
+    from apps.agent.demo_workflow import authorize_demo
+    from apps.agent.geology_multi import graph
+    from apps.compute.models import ComputeTask
+
+    run, _ = confirmed_catalog_configuration(generic)
+    workflow = run.research_workflow
+    workflow.refresh_from_db()
+
+    def prepare_trial(workflow, user, policy):
+        workflow.plan["multiGraph"] = graph("lithology", raster=True)
+        return []
+
+    monkeypatch.setattr("apps.agent.geology_multi.prepare", prepare_trial)
+    monkeypatch.setattr("apps.agent.geology_multi.authorize_frozen", lambda *args: None)
+    prepare_demo(workflow, generic["owner"], generic["policy"])
+    workflow.refresh_from_db()
+    snapshots = workflow.plan["chatExecution"]["algorithmSnapshots"]
+    if changed == "missing_snapshot":
+        snapshots.pop("geology-multi-apply")
+    else:
+        snapshots["geology-multi-apply"]["checksum"] = "e" * 64
+    with pytest.raises(PermissionDenied, match="算法已超出"):
+        authorize_demo(workflow, generic["owner"], generic["policy"])
+    assert not ComputeTask.objects.exists()
 
 
 def test_configuration_invalid_resources_and_user_project_isolation(generic):

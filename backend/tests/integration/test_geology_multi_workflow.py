@@ -535,7 +535,15 @@ def test_raster_group_default_and_user_weight_override_are_frozen(multi, monkeyp
         suggested_action="exclude",
         measurements_json='{"raster_protocol":"alteration-pixels-v1","pixel_count":50000,"area_m2":5000000}',
     )
-    stage["edits"] = []
+    stage["edits"] = [
+        {
+            "issue_id": "AG-stable",
+            "action": "exclude",
+            "target_code": "",
+            "weight": 0,
+            "reason": "模型核对完整聚合测量和对应知识后明确提出此组建议",
+        }
+    ]
     freeze_proposal(wf, stage)
     review = wf.plan["modificationReview"]
     assert (
@@ -754,7 +762,7 @@ def test_model_cannot_change_target_or_turn_downweight_into_delete(multi):
 
 @pytest.mark.parametrize("repair", [True, False])
 @pytest.mark.parametrize("compact", [True, False])
-def test_large_group_retry_cites_once_and_preserves_valid_groups(
+def test_complete_batch_retry_cites_once_and_preserves_valid_groups(
     multi, settings, repair, compact
 ):
     from apps.agent.demo_decisions import decide
@@ -823,11 +831,14 @@ def test_large_group_retry_cites_once_and_preserves_valid_groups(
         )
     assert citation.call_count == 1 and not accepted
     assert report["discardedCount"] == 1295 and len(report["errors"]) == 1
+    # The original large-group validator remains covered above; the model
+    # reviews all members of one bounded batch instead of three samples.
+    results[0]["rows"] = results[0]["rows"][:128]
     if repair:
         corrected["decision"]["evidenceRefs"].append(
             {"kind": "knowledge", "id": str(multi["entries"][1].id)}
         )
-    tokens = [17390, 75152, 18000] if compact else [17390, 18000]
+    tokens = [8000, 17000, 9000] if compact else [8000, 9000]
     (decision, edits), requests = run(
         [answer, corrected], wf, stage, results, tokens=tokens
     )
@@ -835,15 +846,16 @@ def test_large_group_retry_cites_once_and_preserves_valid_groups(
     assert len(requests[1][-1]["content"]) <= 16000
     assert len(feedback["invalidEdits"]) == 1
     error = feedback["invalidEdits"][0]
-    assert "A-01" in error["reason"] and "1295 个对象" in error["reason"]
-    assert error["count"] == 1295
+    assert "A-01" in error["reason"] and "127 个对象" in error["reason"]
+    assert error["count"] == 127
     assert error["requiredKnowledgeRefs"] == [
         {"id": multi["entries"][1].id, "revision": multi["entries"][1].revision}
     ]
-    assert len(edits) == (1296 if repair else 1)
-    assert stage["editValidation"]["discardedCount"] == (0 if repair else 1295)
+    assert len(edits) == (128 if repair else 1)
+    model_stage = stage["modelBatches"]["batches"][0]["stage"]
+    assert model_stage["editValidation"]["discardedCount"] == (0 if repair else 127)
     assert requests[1][:2] == requests[0]
-    assert stage["modelAttempts"][-1]["repairLevel"] == int(compact)
+    assert model_stage["modelAttempts"][-1]["repairLevel"] == int(compact)
     wf.max_iterations = wf.iteration = 2
     wf.plan["actualModelCallCount"] = 2
     with patch("apps.agent.demo_decisions.resource_context", return_value=[]):
@@ -856,7 +868,7 @@ def test_large_group_retry_cites_once_and_preserves_valid_groups(
     assert len(wf.plan["modificationReview"]["suggestions"]) == len(edits)
     assert wf.plan["modificationReview"]["approvedSuggestionIds"] == []
     if not repair:
-        assert error["reason"] == stage["editValidation"]["errors"][0]["reason"]
+        assert error["reason"] == model_stage["editValidation"]["errors"][0]["reason"]
 
 
 def test_invalid_group_structure_does_not_discard_valid_group(multi):

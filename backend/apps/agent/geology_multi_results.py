@@ -297,8 +297,8 @@ def model_results(results, *, stage_name):
 
 def public_plan(plan):
     """Keep display facts, not internal full-resolution checks or model requests."""
-    stages = []
-    for stage in plan.get("stages", []):
+
+    def public_stage(stage):
         value = {
             key: item
             for key, item in stage.items()
@@ -310,6 +310,7 @@ def public_plan(plan):
                 "modelRequestInstruction",
                 "modelAttempts",
                 "modelBudgetHistory",
+                "modelBatches",
             }
         }
         if "results" in value:
@@ -319,8 +320,9 @@ def public_plan(plan):
                 else item
                 for item in value["results"]
             ]
-        stages.append(value)
-    return {
+        return value
+
+    public = {
         **{
             key: value
             for key, value in plan.items()
@@ -330,8 +332,11 @@ def public_plan(plan):
                 "previousAnalysis",
             }
         },
-        "stages": stages,
+        "stages": [public_stage(stage) for stage in plan.get("stages", [])],
     }
+    if isinstance(public.get("finalStage"), dict):
+        public["finalStage"] = public_stage(public["finalStage"])
+    return public
 
 
 def _column_rows(rows, columns=None):

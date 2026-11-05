@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from apps.agent.demo_decisions import decide, decision_payload
-from apps.agent.decision_budget import BudgetReviewRequired
+from apps.agent.decision_budget import BudgetReviewRequired, project_payload
 from apps.compute.packages import ComputeError
 from tests.integration.test_compute import setup_compute  # noqa: F401
 from tests.integration.test_demo_workflow import demo, scenario  # noqa: F401
@@ -63,7 +63,7 @@ def previous_analysis(old):
     }
 
 
-def test_real_request_dedupes_history_without_changing_complete_rows_or_plan(
+def test_real_request_bounds_rows_without_changing_complete_audit_or_plan(
     demo, settings
 ):
     settings.AGENT_MODELS = [
@@ -110,8 +110,15 @@ def test_real_request_dedupes_history_without_changing_complete_rows_or_plan(
             lambda: None,
         )
     payload = json.loads(stream.call_args.args[1][-1]["content"])
-    assert payload["actualResults"] == original_results
-    assert [len(item["rows"]) for item in payload["actualResults"]] == [100, 100]
+    assert (
+        payload["actualResults"]
+        == project_payload({"actualResults": original_results}, 0)["actualResults"]
+    )
+    assert [len(item["rows"]) for item in payload["actualResults"]] == [40, 40]
+    assert all(item["rowCount"] == 100 for item in payload["actualResults"])
+    assert all(
+        item["scope"] == "bounded_model_sample" for item in payload["actualResults"]
+    )
     assert "actualResults" not in payload["previousAnalysis"]
     assert payload["previousAnalysis"]["actualResultOutputIds"] == [1]
     execution = payload["executionState"]
@@ -313,7 +320,10 @@ def test_real_update_context_retains_execution_action_and_genuine_review(
     assert "本轮最新实际统计" in instruction
     payload = json.loads(stream.call_args.args[1][-1]["content"])
     assert payload["executionState"]["currentStage"]["state"] == "not_submitted"
-    assert payload["actualResults"] == [old]
+    assert (
+        payload["actualResults"]
+        == project_payload({"actualResults": [old]}, 0)["actualResults"]
+    )
 
 
 def test_update_budget_checks_complete_evidence_without_sampling(demo, settings):

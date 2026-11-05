@@ -33,6 +33,7 @@ from .config import registry
 from .geology_reference import is_reference_resource
 from .provider import ModelError
 from .workflow_resources import resolve_workflow_resource
+from .resource_discovery import discovery_scope
 from .compute_tools import authorized_task
 from .demo_decisions import decide
 from .demo_results import create_changes, read_results
@@ -58,6 +59,16 @@ DEMO_TYPES = {
     "geology_multi_element_reasoning",
     GENERIC,
 }
+
+
+class ModelBudgetExhausted(ComputeError):
+    """The task's frozen model-request allowance cannot finish the remaining work."""
+
+    def __init__(self, minimum_remaining=1):
+        super().__init__("已达到场景真实模型请求次数上限")
+        self.minimum_remaining = minimum_remaining
+
+
 STAGE_TITLES = {
     "early_ndvi": "前期植被指数",
     "late_ndvi": "后期植被指数",
@@ -272,8 +283,8 @@ def _versions(workflow, graph) -> dict:
         version = next((v for v in options if agent_algorithm_allowed(v)), None)
         if version is None:
             raise ComputeError("场景所需算法尚未发布或不可调用：" + identifier)
-        snapshot = chat.get("algorithmSnapshots", {}).get(identifier)
-        if snapshot is not None and snapshot != {
+        snapshots = chat.get("algorithmSnapshots")
+        if snapshots is not None and snapshots.get(identifier) != {
             "versionId": version.id,
             "checksum": version.checksum,
         }:
@@ -304,9 +315,21 @@ def prepare_demo(workflow, user, p) -> None:
     if workflow.workflow_type in MULTI_FAMILY:
         from .geology_multi import prepare
 
-        validated_versions = _versions(workflow, GRAPHS[workflow.workflow_type])
+        segment = workflow.parameters.get("segment", "all")
+        validated_versions = _versions(workflow, multi_graph(segment))
         workflow.plan["algorithms"] = validated_versions
         multi_knowledge = prepare(workflow, user, p)
+        expected_graph = multi_graph(
+            segment,
+            raster=any(
+                item.get("key") == "alteration_summary"
+                for item in validated_versions["geology-multi-check"]["manifest"].get(
+                    "outputs", []
+                )
+            ),
+        )
+        if _state_hash(workflow.plan.get("multiGraph")) != _state_hash(expected_graph):
+            raise PermissionDenied("场景阶段或输入绑定已超出本次匹配范围，请重新确认")
     if workflow.workflow_type == "geology_map_review":
         from .geology_input_validation import validate_geology_inputs
 
@@ -432,6 +455,11 @@ def prepare_demo(workflow, user, p) -> None:
         "stageIndex": 0,
         "phase": "review_plan",
         "reviewOutputs": [],
+        "modelCallBudget": {
+            "limit": workflow.max_iterations,
+            "minimumStageRequests": decisions_required,
+            "batchPlanning": "after_check",
+        },
     }
     workflow.resource_ids = sorted(
         set(inputs.values())
@@ -443,7 +471,11 @@ def prepare_demo(workflow, user, p) -> None:
     )
     workflow.evidence = knowledge
     workflow.status, workflow.current_step = "waiting_approval", "review_plan"
-    workflow.detail = "输入角色与算法已匹配，请确认场景计划后执行"
+    workflow.detail = (
+        "输入角色与算法已匹配，请确认场景计划后执行。"
+        f"本任务模型请求上限{workflow.max_iterations}次，固定阶段至少{decisions_required}次；"
+        "检查结果返回后确定完整证据批次数，校验重问另占请求。"
+    )
     # A failed automatic confirmation must leave the worker's running state
     # recoverable, rather than publishing a partially prepared waiting plan.
     with transaction.atomic():
@@ -489,6 +521,7 @@ def prepare_demo(workflow, user, p) -> None:
             workflow.refresh_from_db()
 
 
+@discovery_scope()
 def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -> None:
     from .deleted_resources import historical_deletion
 
@@ -525,6 +558,11 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
         chat = workflow.plan.get("chatExecution", {})
         if chat and (
             fixed["versionId"] not in chat.get("algorithmVersionIds", [])
+            or (
+                "algorithmSnapshots" in chat
+                and chat["algorithmSnapshots"].get(identifier)
+                != {"versionId": fixed["versionId"], "checksum": fixed["checksum"]}
+            )
             or (
                 chat.get("algorithmSelectionMode") == "manual"
                 and fixed["versionId"]
@@ -720,6 +758,79 @@ def _pause(workflow, stage, reason, outputs=None) -> None:
     stage["status"] = "needs_review"
     _save(workflow)
     checkpoint(workflow, "review_results", {"stage": stage["name"], "reason": reason})
+
+
+def _has_model_progress(stage) -> bool:
+    batches = stage.get("modelBatches") or {}
+
+    def contacted(attempts):
+        # Missing flags in older audits remain conservative; a persisted,
+        # explicitly unsent budget rejection does not consume a decision.
+        if not isinstance(attempts, list):
+            return bool(attempts)
+        return any(
+            not isinstance(attempt, dict) or attempt.get("requested") is not False
+            for attempt in attempts
+        )
+
+    return bool(
+        contacted(stage.get("modelAttempts", []))
+        or batches.get("cursor")
+        or any(
+            contacted(batch.get("stage", {}).get("modelAttempts", []))
+            for batch in batches.get("batches", [])
+        )
+    )
+
+
+def _future_model_requests(workflow, stage):
+    stages = workflow.plan["stages"][workflow.plan["stageIndex"] + 1 :]
+    return sum(not item.get("decision") for item in stages) + int(
+        stage["identifier"] != "finish"
+        and not any(item["identifier"] == "finish" for item in stages)
+        and not workflow.plan.get("finalStage", {}).get("decision")
+    )
+
+
+def _minimum_model_requests(workflow, stage):
+    batches = stage.get("modelBatches") or {}
+    planned = batches.get("preflight", {}).get("batches", [])
+    current = max(1, len(planned) - batches.get("cursor", 0))
+    return current + _future_model_requests(workflow, stage)
+
+
+def _exhaust_model_budget(workflow, stage, minimum_remaining):
+    calls = workflow.plan.get("actualModelCallCount", 0)
+    batches = stage.get("modelBatches") or {}
+    if batches:
+        batches["status"] = "budget_exhausted"
+    stage["status"] = "budget_exhausted"
+    summary = {
+        "usedRequests": calls,
+        "usedDecisions": workflow.iteration,
+        "limit": workflow.max_iterations,
+        "minimumRemainingRequests": minimum_remaining,
+        "stage": stage["name"],
+        "completedBatches": batches.get("cursor", 0),
+        "coveredMembers": batches.get("coveredMemberCount", 0),
+        "memberCount": batches.get("memberCount", 0),
+        "completedStages": [
+            item["name"]
+            for item in workflow.plan["stages"]
+            if item.get("status") == "completed"
+        ],
+    }
+    workflow.plan.update(phase="budget_exhausted", budgetExhausted=summary)
+    workflow.status = "failed"
+    workflow.detail = (
+        f"模型预算不足：请求已用{calls}/{workflow.max_iterations}次，"
+        f"阶段判断{workflow.iteration}/{workflow.max_iterations}次，"
+        f"至少还需{minimum_remaining}次；已完成{len(summary['completedStages'])}个阶段、"
+        f"{summary['completedBatches']}个批次，结果与审计已保留。"
+        "请缩小资料范围，或由管理员提高允许上限后，调整并重新发起任务。"
+    )[:300]
+    _save(workflow)
+    checkpoint(workflow, "budget_exhausted", summary)
 
 
 def _submit_stage(workflow, user, p, stage) -> None:
@@ -1061,12 +1172,15 @@ def advance_demo(workflow_id) -> None:
             ):
                 raise ComputeError("已达到场景算子步骤上限")
             if not stage.get("decision"):
-                recovering_response = bool(stage.get("modelAttempts"))
+                recovering_response = _has_model_progress(stage)
                 if (
                     not recovering_response
                     and workflow.iteration >= workflow.max_iterations
                 ):
-                    raise ComputeError("已达到场景模型决策次数上限")
+                    _exhaust_model_budget(
+                        workflow, stage, _minimum_model_requests(workflow, stage)
+                    )
+                    return
                 deadline, heartbeat_at = time.monotonic() + p["maxRunSeconds"], [0.0]
 
                 def check_stream_authorization():
@@ -1123,6 +1237,7 @@ def advance_demo(workflow_id) -> None:
                                 blocked = True
                                 attempt.update(
                                     status="budget_blocked",
+                                    requested=False,
                                     accepted=False,
                                     validationError="已达到场景真实模型请求次数上限",
                                 )
@@ -1142,6 +1257,11 @@ def advance_demo(workflow_id) -> None:
                                 "stage": stage["name"],
                                 "attempt": attempt["attempt"],
                                 "requestSha256": attempt["requestSha256"],
+                                **(
+                                    {"batchIndex": attempt["batchIndex"]}
+                                    if "batchIndex" in attempt
+                                    else {}
+                                ),
                                 **(
                                     {"accepted": attempt["accepted"]}
                                     if "accepted" in attempt
@@ -1187,11 +1307,48 @@ def advance_demo(workflow_id) -> None:
                                 )
                         _save(workflow)
                     if blocked:
-                        raise ComputeError("已达到场景真实模型请求次数上限")
+                        raise ModelBudgetExhausted(
+                            _minimum_model_requests(workflow, stage)
+                        )
 
                 from .decision_budget import BudgetReviewRequired
 
                 try:
+                    if (
+                        workflow.workflow_type in MULTI_FAMILY
+                        and stage["identifier"] == "geology-multi-apply"
+                        and not registry()[workflow.model]
+                        .model_id.casefold()
+                        .startswith("mock")
+                        and not recovering_response
+                    ):
+                        from .demo_decision_batches import needs_batches, plan_batches
+
+                        guard.poll()
+                        if needs_batches(workflow, stage, results):
+                            batches = stage.get("modelBatches") or {}
+                            planned = batches.get("preflight")
+                            if planned is None:
+                                planned = plan_batches(
+                                    workflow, user, p, stage, results, guard
+                                )
+                                if planned["batches"]:
+                                    stage["modelBatches"] = {
+                                        "sourceSha256": planned["sourceSha256"],
+                                        "cursor": 0,
+                                        "batches": [],
+                                        "memberCount": planned["memberCount"],
+                                        "status": "planned",
+                                        "preflight": planned,
+                                    }
+                                    _save(workflow)
+                        guard.poll()
+                        remaining = _minimum_model_requests(workflow, stage)
+                        if (
+                            workflow.plan.get("actualModelCallCount", 0) + remaining
+                            > workflow.max_iterations
+                        ):
+                            raise ModelBudgetExhausted(remaining)
                     decision, edits = decide(
                         workflow,
                         user,
@@ -1200,7 +1357,9 @@ def advance_demo(workflow_id) -> None:
                         results,
                         guard,
                         record_attempt,
-                        on_response=lambda: record_attempt(stage["modelAttempts"][-1]),
+                        on_response=lambda attempt=None: record_attempt(
+                            stage["modelAttempts"][-1] if attempt is None else attempt
+                        ),
                         on_thinking=activity.thinking,
                         on_progress=activity.progress,
                     )
@@ -1208,14 +1367,34 @@ def advance_demo(workflow_id) -> None:
                 except BudgetReviewRequired as exc:
                     activity.fail()
                     guard.poll()
-                    if not stage.get("modelAttempts") and not recovering_response:
+                    if not _has_model_progress(stage) and not recovering_response:
                         workflow.iteration -= 1
+                    if stage.get("contextBudgetReview", {}).get("kind") == (
+                        "model_call_limit"
+                    ):
+                        _exhaust_model_budget(
+                            workflow, stage, _minimum_model_requests(workflow, stage)
+                        )
+                        return
+                    stage.setdefault(
+                        "contextBudgetReview",
+                        {"reason": str(exc), "requested": False},
+                    )
                     if index >= len(stages):
                         workflow.plan["stages"].append(stage)
                     _pause(workflow, stage, str(exc))
                     return
+                except ModelBudgetExhausted as exc:
+                    activity.fail()
+                    guard.poll()
+                    if not _has_model_progress(stage) and not recovering_response:
+                        workflow.iteration -= 1
+                    _exhaust_model_budget(workflow, stage, exc.minimum_remaining)
+                    return
                 except Exception:
                     activity.fail()
+                    if not _has_model_progress(stage) and not recovering_response:
+                        workflow.iteration -= 1
                     raise
                 stage.update(decision=decision, edits=edits)
                 with transaction.atomic():

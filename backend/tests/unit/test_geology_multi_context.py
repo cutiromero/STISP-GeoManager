@@ -371,6 +371,50 @@ def test_public_plan_groups_legacy_issues_without_grouping_fields():
     assert plan == saved
 
 
+@pytest.mark.parametrize("location", ["stages", "finalStage"])
+def test_public_plan_removes_private_batches_without_changing_public_facts(location):
+    from apps.agent.geology_multi_results import public_plan
+
+    stage = {
+        "name": "apply" if location == "stages" else "final_analysis",
+        "status": "completed",
+        "decision": {"summary": "保留可见的决策说明"},
+        "approvedEdits": [{"feature_id": "F00001", "action": "merge"}],
+        "modificationsApproval": {"selectedIssueIds": ["chosen"]},
+        "results": [{"key": "changes", "rows": [{"actual_changed": "True"}]}],
+    }
+    plan = {location: [stage] if location == "stages" else stage}
+    baseline = public_plan(plan)
+    for size in (1, 100000):
+        secret = "private-model-audit" + "x" * size
+        stage.update(
+            edits=[secret],
+            proposedEdits=[secret],
+            modelRequestPayload={"members": secret},
+            modelRequestInstruction=secret,
+            modelAttempts=[{"response": secret}],
+            modelBudgetHistory=[{"modelRequestPayload": secret}],
+            modelBatches={
+                "cursor": size,
+                "memberCount": size,
+                "batches": [
+                    {
+                        "scopeSha256": secret,
+                        "stage": {
+                            "modelRequestPayload": {"members": secret},
+                            "modelAttempts": [{"response": secret}],
+                            "unrequestedBudgetAttempts": [{"response": secret}],
+                        },
+                    }
+                ],
+            },
+        )
+        saved = copy.deepcopy(plan)
+        assert public_plan(plan) == baseline
+        assert "private-model-audit" not in json.dumps(public_plan(plan))
+        assert plan == saved
+
+
 def test_model_approval_retains_semantics_and_hashes_without_touching_map_or_saved_plan():
     workflow = SimpleNamespace(
         plan={
