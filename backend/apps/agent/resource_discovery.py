@@ -1,6 +1,8 @@
 """Business discovery is narrower than ACL access to bound research materials."""
 
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import BooleanField, Case, F, Q, Value, When
@@ -63,6 +65,20 @@ FINAL_STAGE_OUTPUTS = {
         {"corrected", "changes_map"},
     ),
 }
+_INTERNAL_SCOPE = ContextVar("agent_discovery_internal_scope", default=None)
+
+
+@contextmanager
+def discovery_scope():
+    """Reuse provenance indexing within one authorization check, never across it."""
+    if _INTERNAL_SCOPE.get() is not None:
+        yield
+        return
+    token = _INTERNAL_SCOPE.set({})
+    try:
+        yield
+    finally:
+        _INTERNAL_SCOPE.reset(token)
 
 
 def acl_resources(user, policy, selected=(), *, active=True):
@@ -159,9 +175,13 @@ def resolve_discoverable_resource(user, policy, resource_id, selected=()):
 
 
 def _internal_resource_ids():
+    scope = _INTERNAL_SCOPE.get()
+    project = project_id()
+    if scope is not None and project in scope:
+        return scope[project]
     values = set()
     keys = ("workingCopies", "frozen_rules", "approved_changes", "model_changes")
-    rows = AgentWorkflow.objects.filter(project_tag_id=project_id()).values_list(
+    rows = AgentWorkflow.objects.filter(project_tag_id=project).values_list(
         *("plan__" + key for key in keys)
     )
     for row in rows.iterator():
@@ -170,6 +190,8 @@ def _internal_resource_ids():
                 values.add(item)
             elif isinstance(item, dict):
                 values.update(value for value in item.values() if type(value) is int)
+    if scope is not None:
+        scope[project] = values
     return values
 
 

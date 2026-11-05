@@ -150,17 +150,9 @@ def resolve_workflow_resource(user, policy, identity, workflow, *, history=False
         # Saved input metadata remains readable under the current ACL even if
         # its discovery status changed. This branch never authorizes execution.
         return resource
+    if bound_output.exists():
+        return resource
     if identity in inputs:
-        try:
-            business_resource = resolve_discoverable_resource(user, policy, identity)
-        except PermissionDenied:
-            business_resource = None
-        if business_resource is not None:
-            if workflow.resource_ids and identity not in workflow.resource_ids:
-                if bound_output.exists():
-                    return resource
-                raise PermissionDenied("业务资料不在本次科研任务已选择的数据范围")
-            return business_resource
         batch = (workflow.plan or {}).get("uploadBatchId")
         if (
             batch
@@ -200,8 +192,14 @@ def resolve_workflow_resource(user, policy, identity, workflow, *, history=False
             .exists()
         ):
             return resource
-    if bound_output.exists():
-        return resource
+        try:
+            business_resource = resolve_discoverable_resource(user, policy, identity)
+        except PermissionDenied:
+            pass
+        else:
+            if workflow.resource_ids and identity not in workflow.resource_ids:
+                raise PermissionDenied("业务资料不在本次科研任务已选择的数据范围")
+            return business_resource
     if (
         workflow.workflow_type == "ecology_investigation"
         and identity == (workflow.plan or {}).get("previous_change")

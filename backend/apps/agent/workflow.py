@@ -25,6 +25,7 @@ from .models import AgentCheckpoint, AgentWorkflow, AgentWorkflowStep
 from .policy import fresh_user, require_access
 from .tools import resources
 from .workflow_resources import resolve_workflow_resource
+from .resource_discovery import discovery_scope
 from .workflow_controls import (
     WorkflowPaused,
     check_pause,
@@ -89,6 +90,7 @@ def step(
     )
 
 
+@discovery_scope()
 def _authorize(workflow, *, history=False):
     from .deleted_resources import historical_deletion
 

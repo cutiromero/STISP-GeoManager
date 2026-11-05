@@ -9,6 +9,7 @@ from django.core.exceptions import PermissionDenied
 
 from apps.agent.models import Conversation, AgentRun, AgentWorkflow, WorkflowUpload
 from apps.agent.resource_discovery import (
+    discovery_scope,
     discover_resources,
     resolve_discoverable_resource,
 )
@@ -90,6 +91,80 @@ def test_unbound_attachment_requires_actual_batch_and_owner(demo):
         resolve_discoverable_resource(
             demo["owner"], demo["policy"], resource.pk, [resource.pk]
         )
+
+
+@pytest.mark.parametrize("kind", ["upload", "frozen_rules"])
+def test_bound_internal_reads_do_not_scan_the_business_catalog(demo, monkeypatch, kind):
+    own = workflow(demo)
+    if kind == "upload":
+        resource, item = upload(demo, own)
+        own.plan = {
+            "uploadBatchId": item.batch_id,
+            "uploadInputs": {"table": resource.pk},
+        }
+    else:
+        resource = packet(demo, "geology-multi-frozen-rules:" + str(own.pk))
+        own.plan = {"frozen_rules": resource.pk}
+    own.save()
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            "apps.agent.resource_discovery.resolve_discoverable_resource",
+            lambda *args, **kwargs: pytest.fail(
+                "bound internal data must use its real task proof"
+            ),
+        )
+        assert (
+            resolve_workflow_resource(demo["owner"], demo["policy"], resource.pk, own)
+            == resource
+        )
+    other = workflow(demo, plan=own.plan)
+    with pytest.raises(PermissionDenied):
+        resolve_workflow_resource(demo["owner"], demo["policy"], resource.pk, other)
+
+
+def test_discovery_index_is_shared_only_within_one_authorization_check(demo):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    business = DataResource.objects.create(
+        name="业务图", code="scope-index", data_type="table"
+    )
+    with CaptureQueriesContext(connection) as queries, discovery_scope():
+        assert (
+            resolve_discoverable_resource(demo["owner"], demo["policy"], business.pk)
+            == business
+        )
+        with discovery_scope():
+            assert (
+                resolve_discoverable_resource(
+                    demo["owner"], demo["policy"], business.pk
+                )
+                == business
+            )
+    indexes = [
+        q
+        for q in queries
+        if "JSON_EXTRACT" in q["sql"] and '"agent_agentworkflow"' in q["sql"]
+    ]
+    assert len(indexes) == 1
+    workflow(demo, plan={"workingCopies": {"table": business.pk}})
+    with discovery_scope(), pytest.raises(PermissionDenied):
+        resolve_discoverable_resource(demo["owner"], demo["policy"], business.pk)
+
+
+def test_discovery_scope_never_caches_resource_acl(demo):
+    business = DataResource.objects.create(
+        name="可撤权资料", code="scope-live-acl", data_type="table"
+    )
+    with discovery_scope():
+        assert (
+            resolve_discoverable_resource(demo["owner"], demo["policy"], business.pk)
+            == business
+        )
+        business.owner_only, business.maintainer = True, demo["admin"]
+        business.save(update_fields=["owner_only", "maintainer"])
+        with pytest.raises(PermissionDenied):
+            resolve_discoverable_resource(demo["owner"], demo["policy"], business.pk)
 
 
 def test_foreign_workflow_input_ids_cannot_grant_attachment_access(demo):

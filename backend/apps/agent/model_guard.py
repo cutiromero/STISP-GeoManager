@@ -51,7 +51,10 @@ class ModelStreamGuard:
             if not force and current < self._next_check:
                 return
             try:
-                self._check()
+                from .resource_discovery import discovery_scope
+
+                with discovery_scope():
+                    self._check()
             except Exception as error:
                 # Both threads must observe the same pause, cancellation or
                 # revocation instead of one thread continuing on an old poll.
