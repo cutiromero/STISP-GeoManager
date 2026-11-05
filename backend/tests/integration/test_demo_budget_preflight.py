@@ -122,6 +122,8 @@ def test_full_preflight_stops_before_first_batch_and_rejects_old_confirmation(pl
 def test_exact_allowance_executes_the_frozen_ranges(planning, segment, used, reserved):
     workflow, results = workflow_case(planning, used=used, segment=segment)
     requests, seen = [], []
+    initial_iteration = workflow.iteration
+    frozen_preflight, previous_batches = None, []
 
     def freeze(workflow, stage):
         workflow.status = "waiting_approval"
@@ -135,8 +137,48 @@ def test_exact_allowance_executes_the_frozen_ranges(planning, segment, used, res
             side_effect=provider_fixture(requests, seen),
         ),
     ):
-        advance_demo(workflow.id)
-    workflow.refresh_from_db()
+        for tick in range(1, 6):
+            advance_demo(workflow.id)
+            workflow.refresh_from_db()
+            stage = workflow.plan["stages"][1]
+            state = stage["modelBatches"]
+            if frozen_preflight is None:
+                frozen_preflight = copy.deepcopy(state["preflight"])
+                assert len(frozen_preflight["batches"]) == 5
+            assert state["preflight"] == frozen_preflight
+            planned = frozen_preflight["batches"]
+            assert state["cursor"] == len(state["batches"]) == len(requests) == tick
+            assert state["batches"][: tick - 1] == previous_batches
+            assert [(item["start"], item["end"]) for item in state["batches"]] == [
+                (item["start"], item["end"]) for item in planned[:tick]
+            ]
+            assert state["coveredMemberCount"] == planned[tick - 1]["end"]
+            assert seen == [
+                row["issue_id"]
+                for row in results[0]["rows"][: state["coveredMemberCount"]]
+            ]
+            assert len(seen) == len(set(seen))
+            assert workflow.plan["actualModelCallCount"] == used + tick
+            remaining_requests = len(planned) - tick + reserved
+            assert (
+                workflow.plan["actualModelCallCount"] + remaining_requests
+                == workflow.max_iterations
+                == 10
+            )
+            assert workflow.iteration == initial_iteration + 1
+            assert workflow.steps.filter(kind="analysis_model_attempt").count() == tick
+            assert all(
+                len(item["stage"]["modelAttempts"]) == 1
+                and item["stage"]["modelAttempts"][0]["requested"] is True
+                and item["stage"]["modelAttempts"][0]["accepted"] is True
+                and item["stage"]["modelAttempts"][0]["requestSha256"]
+                == planned[index]["requestSha256"]
+                for index, item in enumerate(state["batches"])
+            )
+            assert workflow.status == (
+                "queued" if tick < len(planned) else "waiting_approval"
+            ), workflow.detail
+            previous_batches = copy.deepcopy(state["batches"])
     assert workflow.status == "waiting_approval", workflow.detail
     stage = workflow.plan["stages"][1]
     state = stage["modelBatches"]
