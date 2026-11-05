@@ -113,6 +113,7 @@ def test_redundant_fields_do_not_replace_any_required_group_key(key):
         {"weight": float("nan")},
         {"weight": float("inf")},
         {"weight": -float("inf")},
+        {"weight": 10**1000},
     ],
 )
 def test_conflicting_unknown_or_ill_typed_fields_cannot_be_silently_dropped(extra):

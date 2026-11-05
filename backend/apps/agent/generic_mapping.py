@@ -17,6 +17,7 @@ from . import provider
 from .config import registry
 from .context import prepare_context
 from .demo_decisions import _response_text
+from .generic_mapping_context import MappingRuleContext, shown_samples
 from .model_activity import WorkflowModelActivity
 from .model_guard import ModelStreamGuard
 
@@ -27,12 +28,15 @@ INSTRUCTION = (
     "地层或填图单元名称通常是取值为组、群、段、岩体或岩性描述的文本字段；"
     "代号通常是较短的字母数字组合，常带地质时代符号；置信度是0到1之间的数值。"
     "同一字段不能对应多个规范字段。reason用一句中文说明判断依据，并引用示例取值。"
+    "如提供ruleContext和ruleSampleMatches，可将名称或代号的精确匹配作为辅助依据，"
+    "结合资料内容判断；统计只覆盖已显示且可能截断的样本，未命中不表示没有规则。"
+    "用户units表确认后可覆盖默认词表。保留合理的不确定性，最终字段对应由用户确认。"
     '只输出一个JSON对象：{"roles":{"角色":{"规范字段":{"field":"原始字段或null","reason":"…"}}}}。'
 )
 
 
-def _payload(roles):
-    return {
+def _payload(roles, rule_context=None):
+    result = {
         "roles": {
             item["role"]: {
                 "label": item["label"],
@@ -45,6 +49,18 @@ def _payload(roles):
             for item in roles
         }
     }
+    if rule_context is not None:
+        result["ruleContext"] = rule_context["summary"]
+        for role, item in result["roles"].items():
+            item["fields"] = [
+                {
+                    **field,
+                    "samples": shown_samples(field),
+                    "ruleSampleMatches": rule_context["fields"][role][field["name"]],
+                }
+                for field in item["fields"]
+            ]
+    return result
 
 
 def _validate(raw, roles):
@@ -103,6 +119,7 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
     }
     thinking = bool(policy.get("_thinking", policy["thinkingEnabled"] and model.qwen))
     deadline = time.monotonic() + policy["maxRunSeconds"]
+    rule_context = MappingRuleContext(workflow, roles)
 
     def authorize():
         current = AgentWorkflow.objects.filter(pk=workflow.pk).first()
@@ -140,6 +157,7 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
             )
         ):
             raise PermissionDenied("模型思考设置或预算已变化，请重新发起字段判断")
+        rule_context.authorize(current, user, fresh_policy)
 
     guard = ModelStreamGuard(authorize, deadline)
     activity = WorkflowModelActivity(
@@ -157,13 +175,18 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
         if on_thinking:
             on_thinking(text)
 
-    messages = [
-        {"role": "system", "content": INSTRUCTION},
-        {"role": "user", "content": json.dumps(_payload(roles), ensure_ascii=False)},
-    ]
     try:
         error = None
         guard.poll()
+        messages = [
+            {"role": "system", "content": INSTRUCTION},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    _payload(roles, rule_context.payload), ensure_ascii=False
+                ),
+            },
+        ]
         try:
             window = provider.model_window(model)
         except provider.ModelError as exc:

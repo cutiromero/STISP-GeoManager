@@ -152,7 +152,8 @@ def _canonical_review_group(original, members):
         raise ComputeError("分组冗余动作和目标须为文本")
     if "weight" in extras and (
         type(original["weight"]) not in {int, float}
-        or not math.isfinite(original["weight"])
+        or type(original["weight"]) is float
+        and not math.isfinite(original["weight"])
     ):
         raise ComputeError("分组冗余权重须为有限数值，不接受布尔值或文本")
     for row in included:
