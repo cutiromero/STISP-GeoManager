@@ -116,10 +116,68 @@ class EditValidationError(ComputeError):
         )
 
 
+def _canonical_review_group(original, members):
+    required = {"group_id", "disposition", "excluded_issue_ids", "reason"}
+    redundant = {"action", "target_code", "weight"}
+    if not required <= set(original):
+        raise ComputeError(
+            "分组建议须含group_id、disposition、excluded_issue_ids及reason"
+        )
+    extras = set(original) - required
+    if extras - redundant:
+        raise ComputeError("分组建议包含未知字段，只允许四个必需字段及等价的动作字段")
+    canonical = {key: original[key] for key in required}
+    if not extras:
+        return canonical
+    excluded = original["excluded_issue_ids"]
+    if (
+        not isinstance(excluded, list)
+        or any(not isinstance(item, str) for item in excluded)
+        or set(excluded) - {row["issue_id"] for row in members}
+    ):
+        raise ComputeError("分组或排除对象不属于本次检查快照")
+    disposition = original["disposition"]
+    if not isinstance(disposition, str) or disposition not in {
+        "suggested",
+        "keep",
+        "review",
+    }:
+        raise ComputeError("拒绝候选不产生动作，或分组处置无效；不得附加动作字段")
+    included = [row for row in members if row["issue_id"] not in excluded]
+    if not included:
+        raise ComputeError("空处置范围不能证明冗余动作字段与成员处置等价")
+    if ("action" in extras and not isinstance(original["action"], str)) or (
+        "target_code" in extras and not isinstance(original["target_code"], str)
+    ):
+        raise ComputeError("分组冗余动作和目标须为文本")
+    if "weight" in extras and (
+        type(original["weight"]) not in {int, float}
+        or not math.isfinite(original["weight"])
+    ):
+        raise ComputeError("分组冗余权重须为有限数值，不接受布尔值或文本")
+    for row in included:
+        action = row["suggested_action"] if disposition == "suggested" else disposition
+        expected = {
+            "action": action,
+            "target_code": row.get("target_code", "")
+            if action in {"set_code", "merge", "reclassify"}
+            else "",
+            "weight": 0.5
+            if action == "downweight"
+            else 0
+            if action == "exclude"
+            else 1,
+        }
+        if any(original[key] != expected[key] for key in extras):
+            raise ComputeError("分组冗余动作字段与纳入成员的确定性处置不一致")
+    return canonical
+
+
 def _expand_review_group(original, members):
     """Validate a model group, then expand only its complete real member scope."""
     from .geology_issue_groups import expand_groups
 
+    original = _canonical_review_group(original, members)
     actual = issue_groups(members)
     if not actual:
         return expand_groups([original], members)

@@ -838,6 +838,7 @@ def decide(
     *,
     on_thinking=None,
     on_progress=None,
+    batch_limit=None,
 ) -> tuple[dict, list]:
     from .demo_decision_batches import needs_batches, run_batches
 
@@ -861,6 +862,7 @@ def decide(
             on_response,
             on_thinking=on_thinking,
             on_progress=on_progress,
+            batch_limit=batch_limit,
         )
     return _decide_once(
         workflow,
@@ -1079,9 +1081,15 @@ def _decide_once(
             "不能用一个成员支持其他成员。分组仅展示打包，targetCodeMode=per_member时"
             "目标逐成员取其target_code。不能将组建议扩大到其他批次或声称它们已审阅。"
             "edits按组输出group_id,disposition,excluded_issue_ids,reason；"
+            'group项只允许这四键，例如{"group_id":"本批实际ID","disposition":"suggested",'
+            '"excluded_issue_ids":[],"reason":"共同证据、适用条件及例外"}；'
             "suggested采纳各成员自己的建议动作，keep明确保留，review待裁定，reject拒绝候选。"
             "逐组简述依据和例外，不纳入的成员写excluded_issue_ids。status为review或exception"
-            "只能整组review。少量例外可用issue_id,action,target_code,weight,reason逐项建议。"
+            "只能整组review。少量例外可逐项建议，例如"
+            '{"issue_id":"本批实际ID","action":"keep","target_code":"","weight":1,'
+            '"reason":"本对象的具体例外"}；group与issue两种项字段互斥，不能混写。'
+            "同一条件只写一次共同核查结论，集中说明具体例外；仍须核对每个成员，"
+            "不要逐成员重复抄写测量，不能以共同结论替代对不同条件或例外的核对。"
             "action只选原allowed_actions_json；set_code/reclassify/merge须用原实测target_code，"
             "其他动作target_code为空；downweight权重在0与1之间，exclude为0，其余为1。"
             "request_review仅用于证据不足或冲突，此时edits=[]；尚待用户批准不妨碍提出有据建议。"

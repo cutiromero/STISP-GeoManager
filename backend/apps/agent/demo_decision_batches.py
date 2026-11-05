@@ -37,6 +37,10 @@ SOURCE_POLICY_KEYS = (
 )
 
 
+class BatchProgressPending(Exception):
+    """A complete batch is durable; remaining batches belong to the next tick."""
+
+
 def signature(value):
     return hashlib.sha256(
         json.dumps(
@@ -521,8 +525,13 @@ def run_batches(
     guard,
     on_attempt=None,
     on_response=None,
+    *,
+    batch_limit=None,
     **callbacks,
 ):
+    if batch_limit is not None and (type(batch_limit) is not int or batch_limit < 1):
+        raise ValueError("每次分批推进上限必须是正整数")
+    completed_this_tick = 0
     rows = review_issues(workflow, results)
     source = batch_source(workflow, policy, stage, results, context)
     state = stage.setdefault(
@@ -611,6 +620,18 @@ def run_batches(
             "decision"
         ):
             raise ComputeError("分批证据或已保存判断发生变化，已停止恢复")
+        from .demo_decisions import _response_text
+
+        for attempt in batch["stage"].get("modelAttempts", []):
+            artifact = attempt.get("responseArtifact")
+            if (
+                not isinstance(artifact, dict)
+                or not isinstance(artifact.get("content"), str)
+                or artifact.get("truncated") is not False
+                or artifact.get("sizeBytes") != len(artifact["content"].encode("utf-8"))
+                or _response_text(artifact["content"]) != attempt.get("response")
+            ):
+                raise ComputeError("已完成批次的原始响应审计发生变化，已停止恢复")
         recovered_stage = copy.deepcopy(batch["stage"])
         recovered_stage.pop("decision")
         recovered = single(
@@ -753,5 +774,13 @@ def run_batches(
         state.update(cursor=index + 1, coveredMemberCount=offset)
         if child.get("modelAttempts") and on_attempt:
             record(child["modelAttempts"][-1])
+        completed_this_tick += 1
+        if (
+            offset < len(rows)
+            and batch_limit is not None
+            and completed_this_tick >= batch_limit
+        ):
+            state["status"] = "pending"
+            raise BatchProgressPending()
     state["status"] = "complete"
     return _merged_decision(state["batches"], edits, len(rows)), edits

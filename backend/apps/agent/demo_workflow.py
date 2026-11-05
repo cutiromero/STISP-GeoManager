@@ -36,6 +36,7 @@ from .workflow_resources import resolve_workflow_resource
 from .resource_discovery import discovery_scope
 from .compute_tools import authorized_task
 from .demo_decisions import decide
+from .demo_decision_batches import BatchProgressPending
 from .demo_results import create_changes, read_results
 from .geology_multi import (
     ROLES as MULTI_ROLES,
@@ -1233,13 +1234,22 @@ def advance_demo(workflow_id) -> None:
                     with transaction.atomic():
                         if attempt["status"] == "requesting":
                             calls = workflow.plan.get("actualModelCallCount", 0)
-                            if calls >= workflow.max_iterations:
+                            # A repair still needs this unfinished batch plus all
+                            # frozen later batches and graph stages to succeed.
+                            reserve = (
+                                _minimum_model_requests(workflow, stage)
+                                if stage.get("modelBatches", {}).get("preflight")
+                                else 1
+                            )
+                            if calls + reserve > workflow.max_iterations:
                                 blocked = True
                                 attempt.update(
                                     status="budget_blocked",
                                     requested=False,
                                     accepted=False,
-                                    validationError="已达到场景真实模型请求次数上限",
+                                    validationError=(
+                                        "剩余场景真实模型请求额度不足以完成已规划批次和后续阶段"
+                                    ),
                                 )
                             else:
                                 workflow.plan["actualModelCallCount"] = calls + 1
@@ -1362,8 +1372,30 @@ def advance_demo(workflow_id) -> None:
                         ),
                         on_thinking=activity.thinking,
                         on_progress=activity.progress,
+                        batch_limit=1,
                     )
                     guard.poll()
+                except BatchProgressPending:
+                    # The completed child response and cursor were saved by the
+                    # attempt callback. Requeue only under current live controls.
+                    guard.poll()
+                    with transaction.atomic():
+                        current = locked_workflow(workflow.id)
+                        check_pause(workflow)
+                        if current.cancel_requested or current.status not in {
+                            "queued",
+                            "running",
+                        }:
+                            raise ModelError("场景分析已停止，未继续后续批次")
+                        batches = stage["modelBatches"]
+                        workflow.status = "queued"
+                        workflow.detail = (
+                            f"已核验并保存{batches['cursor']}个批次，"
+                            f"覆盖{batches['coveredMemberCount']}/{batches['memberCount']}个对象；"
+                            "下一步继续处理剩余批次"
+                        )
+                        _save(workflow)
+                    return
                 except BudgetReviewRequired as exc:
                     activity.fail()
                     guard.poll()
