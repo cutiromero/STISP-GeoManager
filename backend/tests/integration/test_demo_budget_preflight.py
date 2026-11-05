@@ -147,7 +147,10 @@ def test_exact_allowance_executes_the_frozen_ranges(planning, segment, used, res
         (item["start"], item["end"]) for item in state["preflight"]["batches"]
     ]
     assert all(item["inputTokens"] <= 15000 for item in state["preflight"]["batches"])
-    assert all(item["outputLimit"] == 2000 for item in state["preflight"]["batches"])
+    assert all(
+        item["outputLimit"] == planning["policy"]["maxOutputTokens"]
+        for item in state["preflight"]["batches"]
+    )
 
 
 @pytest.mark.parametrize("action", ["pause", "cancel", "revoke"])

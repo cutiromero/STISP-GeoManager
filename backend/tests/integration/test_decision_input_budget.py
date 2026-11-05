@@ -103,8 +103,9 @@ def test_complete_batch_keeps_members_totals_and_quality_without_map_headers(lev
 @pytest.mark.parametrize(
     "thinking,effort", [(False, "low"), (True, "medium"), (True, "xhigh")]
 )
-def test_raster_protocol_caps_first_request_and_generation(
-    retry_model, thinking, effort
+@pytest.mark.parametrize("output_limit", [512, 8000, 32768])
+def test_raster_protocol_caps_input_and_preserves_configured_total_generation(
+    retry_model, thinking, effort, output_limit
 ):
     workflow, stage, payload, _ = large_payload()
     workflow.workflow_type = "geology_multi_element_reasoning"
@@ -118,7 +119,7 @@ def test_raster_protocol_caps_first_request_and_generation(
     policy = {
         **default_policy(),
         "maxContextTokens": 49152,
-        "maxOutputTokens": 8000,
+        "maxOutputTokens": output_limit,
         "_thinking": thinking,
         "reasoningEffort": effort,
     }
@@ -146,7 +147,7 @@ def test_raster_protocol_caps_first_request_and_generation(
     assert len(requests) == 1
     attempt = stage["modelAttempts"][0]
     assert attempt["inputTokens"] <= attempt["inputLimit"] == 15000
-    assert attempt["outputLimit"] == 2000
+    assert attempt["outputLimit"] == generation.call_args.args[2] == output_limit
     assert set(counted) == {(thinking, effort)}
     assert generation.call_args.kwargs["thinking"] is thinking
     assert generation.call_args.kwargs["reasoning_effort"] == effort
@@ -403,7 +404,7 @@ def test_actual_apply_assembly_and_response_validation_fit_first_request(
     for batch in stage["modelBatches"]["batches"]:
         attempt = batch["stage"]["modelAttempts"][0]
         assert attempt["inputTokens"] <= attempt["inputLimit"] == 15000
-        assert attempt["outputLimit"] == 2000
+        assert attempt["outputLimit"] == policy["maxOutputTokens"]
         assert attempt["contentBytes"] <= policy["maxContextBytes"]
         request = requests[attempt["batchIndex"] - 1]
         sent = json.loads(request[1]["content"])

@@ -31,6 +31,7 @@ from apps.agent.geology_multi_review import (
     validate_alteration_actions,
 )
 from apps.agent.policy import default_policy
+from apps.agent.provider import ModelError
 from apps.compute.packages import ComputeError
 from tests.integration.test_decision_input_budget import expand
 from tests.integration.test_demo_decision_retry import retry_model  # noqa: F401
@@ -127,14 +128,20 @@ def restore_member(group, sample):
     return member
 
 
-def provider_fixture(requests, seen, fail_at=None, disposition=None):
+def provider_fixture(
+    requests, seen, fail_at=None, disposition=None, *, expected_output=None
+):
     def stream(model, messages, output, guard, **options):
         requests.append(copy.deepcopy(messages))
         if fail_at == len(requests):
             raise ComputeError("流式连接中断")
         payload = json.loads(messages[1]["content"])
         payload = expand(payload, payload.get("contextDefinitions", {}))
-        assert output == 2000
+        assert output == (
+            default_policy()["maxOutputTokens"]
+            if expected_output is None
+            else expected_output
+        )
         assert payload["modelBatch"]["completeMembers"] is True
         groups = payload["actualResults"][0]["groups"]
         for group in groups:
@@ -231,7 +238,8 @@ def test_all_members_are_reviewed_once_and_same_group_expands_only_current_scope
         for attempt in batch["stage"]["modelAttempts"]:
             assert attempt["batchIndex"] == index
             assert attempt["inputTokens"] <= attempt["inputLimit"] == 15000
-            assert attempt["outputLimit"] == 2000 and attempt["truncated"] is False
+            assert attempt["outputLimit"] == default_policy()["maxOutputTokens"]
+            assert attempt["truncated"] is False
     assert decision["nextAction"] == "geology-multi-apply" and results == original
     recovered = run(workflow, stage, results, requests, seen)
     assert recovered == (decision, edits)
@@ -248,6 +256,51 @@ def test_requested_interrupted_batch_is_not_sent_again(retry_model):
     with pytest.raises(ComputeError, match="完整分析响应未保存"):
         run(workflow, stage, results, requests, seen)
     assert len(requests) == workflow.plan["actualModelCallCount"] == 2
+
+
+@pytest.mark.parametrize("output_limit", [512, 32768])
+def test_length_limited_batch_keeps_failed_call_without_completing_or_proposing_edits(
+    retry_model, output_limit
+):
+    workflow, stage, results = raster_scenario(2)
+    policy = {
+        **default_policy(),
+        "maxOutputTokens": output_limit,
+        "_thinking": True,
+        "reasoningEffort": "xhigh",
+    }
+
+    def record(attempt):
+        if attempt["status"] == "requesting":
+            workflow.plan["actualModelCallCount"] += 1
+            attempt["requested"] = True
+
+    def length_limited(model, messages, total_limit, guard, **options):
+        assert total_limit == output_limit and options["thinking"] is True
+        assert options["reasoning_effort"] == "xhigh"
+        options["on_usage"]({"prompt_tokens": 800, "completion_tokens": total_limit})
+        raise ModelError("思考与正文已达到本次生成 token 上限；已生成内容已保留")
+
+    with (
+        patch("apps.agent.demo_decisions.resource_context", return_value=[]),
+        patch("apps.agent.demo_decisions.provider.model_window", return_value=65536),
+        patch("apps.agent.context.count_tokens", return_value=800),
+        patch(
+            "apps.agent.demo_decisions.provider.stream", side_effect=length_limited
+        ) as stream,
+        pytest.raises(ModelError, match="生成 token 上限"),
+    ):
+        decide(workflow, None, policy, stage, results, lambda: None, record)
+    assert stream.call_count == workflow.plan["actualModelCallCount"] == 1
+    state = stage["modelBatches"]
+    assert state["status"] == "interrupted" and state["cursor"] == 0
+    child = state["batches"][0]["stage"]
+    attempt = child["modelAttempts"][0]
+    assert attempt["status"] == "failed" and attempt["accepted"] is False
+    assert attempt["requested"] is True and attempt["response"] == ""
+    assert attempt["outputLimit"] == output_limit
+    assert attempt["usage"]["completion_tokens"] == output_limit
+    assert "decision" not in child and "edits" not in child
 
 
 def test_interleaved_groups_are_packed_with_original_row_locators_and_full_coverage(
@@ -822,14 +875,21 @@ def test_raster_user_override_obeys_snapshot_actions_and_preserves_model_choice(
 
 
 @pytest.mark.parametrize("tokens_per_member,expected_batches", [(20, 3), (200, 5)])
+@pytest.mark.parametrize("output_limit", [512, 32768])
 def test_preflight_packs_with_production_token_gate_without_generation_and_execution_matches_plan(
     retry_model,
     tokens_per_member,
     expected_batches,
+    output_limit,
 ):
     workflow, stage, results = raster_scenario(257)
     stage.update(status="needs_review", outputs=[{"outputId": 92}])
-    policy = default_policy()
+    policy = {
+        **default_policy(),
+        "maxOutputTokens": output_limit,
+        "_thinking": True,
+        "reasoningEffort": "xhigh",
+    }
 
     def tokenizer(model, messages, *args):
         payload = json.loads(messages[1]["content"])
@@ -851,6 +911,7 @@ def test_preflight_packs_with_production_token_gate_without_generation_and_execu
     assert all(
         item["inputTokens"] <= item["inputLimit"] == 15000 for item in plan["batches"]
     )
+    assert all(item["outputLimit"] == output_limit for item in plan["batches"])
     stage["modelBatches"] = {
         "sourceSha256": plan["sourceSha256"],
         "memberCount": plan["memberCount"],
@@ -872,10 +933,16 @@ def test_preflight_packs_with_production_token_gate_without_generation_and_execu
         patch("apps.agent.context.count_tokens", side_effect=tokenizer) as counted,
         patch(
             "apps.agent.demo_decisions.provider.stream",
-            side_effect=provider_fixture(requests, seen),
+            side_effect=provider_fixture(requests, seen, expected_output=output_limit),
         ),
     ):
-        _, edits = decide(workflow, None, policy, stage, results, lambda: None, record)
+        decision, edits = decide(
+            workflow, None, policy, stage, results, lambda: None, record
+        )
+        assert decide(workflow, None, policy, stage, results, lambda: None, record) == (
+            decision,
+            edits,
+        )
     assert counted.call_count == expected_batches
     assert stage["status"] == "needs_review" and stage["outputs"] == [{"outputId": 92}]
     assert all(

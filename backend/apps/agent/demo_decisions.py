@@ -1091,7 +1091,7 @@ def _decide_once(
             "missingRoles为未提供资料，不代表没有该地质现象；字段按confirmedFieldMapping理解。"
             "地层老新、构造短线或碳酸盐背景都不足以单独认定错误或排除热液叠加。"
             "完整算法与输入已冻结，本批只能审阅处置，不能改算法、端口、参数或批准范围。"
-            "只输出本批简短判断与处置，总生成预算含思考不超过2000 token。"
+            "只输出本批简短判断与处置，正文仅保留核查结论和必要依据。"
         )
     if any(
         item.get("key") == "alteration_summary"
@@ -1106,7 +1106,7 @@ def _decide_once(
             "须逐单元核对矿物、岩性背景、边界、条件及例外，并在edits对本批组明确采用suggested、保留keep、待裁定review或拒绝reject。"
             "只有模型明确采纳的处置可形成模型建议；遗漏、保留、拒绝不能由算子候选自动补成修改。"
             "算子待裁定候选单独标记operator_held_candidate，不能称为模型建议。获批后按冻结动作执行。"
-            "只写简短说明，输出不超过2000 token。A-05默认降权，不默认删除；非碳酸盐基岩上的碳酸盐化为可能热液叠加证据。"
+            "只写简短说明。A-05默认降权，不默认删除；非碳酸盐基岩上的碳酸盐化为可能热液叠加证据。"
         )
     if payload.get("humanReviewFeedback"):
         instruction += (
@@ -1162,9 +1162,7 @@ def _decide_once(
         .get("outputs", [])
     )
     if raster_protocol or _batch:
-        output_limit = min(output_limit, 2000)
         parameters.update(
-            maxOutputTokens=output_limit,
             maxContextTokens=min(policy["maxContextTokens"], 15000),
         )
     feedback_text = ""
@@ -1484,11 +1482,7 @@ def _recover_decision(
         .get("manifest", {})
         .get("outputs", [])
     )
-    limit = (
-        min(policy["maxOutputTokens"], 2000)
-        if bounded_protocol
-        else policy["maxOutputTokens"]
-    )
+    limit = policy["maxOutputTokens"]
     input_ceiling = (
         min(policy["maxContextTokens"], 15000)
         if bounded_protocol

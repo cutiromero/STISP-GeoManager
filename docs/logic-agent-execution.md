@@ -67,7 +67,9 @@ flowchart LR
 
 工作流创建时从策略冻结 `maxIterations` 到 `AgentWorkflow.max_iterations`。当前同一数值同时限制阶段判断次数和 `plan.actualModelCallCount`。后者只累计工作流阶段、批次及校验重问的真实生成请求；角色识别、字段映射、需求解析和配色等辅助模型请求采用各自路径，不计入这一计数。
 
-`demo_decisions` 的分批路径或 raster protocol 路径把输入预算收窄至最多 15000 token、生成预算收窄至最多 2000 token，并继续服从更小的管理员策略、字节保护和模型真实窗口。2000 是单次总生成预算，思考与正文共同使用。`workflow_roles` 和 `generic_mapping` 当前直接使用策略提供的输入及生成额度，不受这两个固定值约束。
+`demo_decisions` 的分批路径或 raster protocol 路径把输入预算收窄至最多 15000 token，并继续服从更小的管理员策略、字节保护和模型真实窗口。单次总生成上限沿用有效策略的 `policy.maxOutputTokens`，思考与正文共同使用这份额度；正文要求简短，额度须同时容纳任务所选深度模式的思考过程。任务绑定的 `deep` 设置与 `reasoningEffort` 直接传给模型；预算投影不改变思考模式、强度或真实请求次数上限。`workflow_roles` 和 `generic_mapping` 直接使用策略提供的输入及生成额度。
+
+模型返回 `finish_reason=length` 时按生成未完成处理，保存已接收内容与失败审计，该次真实请求仍计入 `actualModelCallCount`。生成片段不能当作完整响应通过校验，也不能据此形成可执行修改。
 
 完整消息使用模型服务 tokenizer 计数，包含系统指令、结构化证据、知识和必要历史。模型窗口还需容纳生成预留及 256 token 安全余量。输入计量依次尝试有明确语义的预算投影，保留规则谓词、例外及本批完整成员；单个必要证据范围仍无法容纳时，保存输入预算审计，进入 `review_results`，不提交本阶段计算。
 
