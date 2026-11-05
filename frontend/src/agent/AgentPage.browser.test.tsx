@@ -41,11 +41,17 @@ vi.mock("../contexts/AppContext", () => ({
 }));
 vi.mock("../projects/ProjectContext", () => ({
   useProjectContext: () => ({
-    current: "1",
-    projects: [{ id: 1, name: "公开", code: projectCode.value }],
+    current: projectCode.current,
+    projects: [
+      {
+        id: Number(projectCode.current),
+        name: "公开",
+        code: projectCode.value,
+      },
+    ],
   }),
 }));
-const projectCode = { value: "default" };
+const projectCode = { value: "default", current: "1" };
 vi.mock("./useAgentBootstrap", () => ({
   useAgentBootstrapState: () => ({
     bootstrap: accessState.value === "confirmed" ? bootstrap : null,
@@ -315,6 +321,7 @@ it("uses the live report instead of the initial queued answer and retains later 
 });
 beforeEach(() => {
   projectCode.value = "default";
+  projectCode.current = "1";
   localStorage.clear();
   sessionStorage.clear();
   vi.restoreAllMocks();
@@ -2546,3 +2553,247 @@ it("does not repopulate conversation titles from a list request started before a
     vi.useRealTimers();
   }
 });
+
+function prepareFirstTurnTitleRefresh() {
+  projectCode.value = "02";
+  const first = { ...conversation, mode: "agent" as const, title: "你好" };
+  const responding = { ...run(31, "你好"), status: "running" as const };
+  vi.mocked(agentApi.conversations).mockResolvedValue({ items: [first] });
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation: first,
+    runs: [responding],
+  });
+  vi.spyOn(agentApi, "poll").mockResolvedValue({
+    run: {
+      ...responding,
+      status: "succeeded",
+      answer: "你好，有什么可以帮您？",
+    },
+    events: [],
+    cursor: 0,
+  });
+  vi.spyOn(agentApi, "activeWorkflow").mockResolvedValue({ item: null });
+  return first;
+}
+
+it("conversation title refresh shows a delayed greeting summary without a geology template and stops after four metadata reads", async () => {
+  vi.useFakeTimers();
+  try {
+    const first = prepareFirstTurnTitleRefresh();
+    let title = first.title;
+    vi.mocked(agentApi.conversations).mockImplementation(async () => ({
+      items: [{ ...first, title }],
+    }));
+    const mounted = showAgent("workbench");
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    expect(screen.getByText("你好，有什么可以帮您？")).toBeVisible();
+    expect(screen.queryByText(/岩性·构造·蚀变检查/)).not.toBeInTheDocument();
+    const initialReads = vi.mocked(agentApi.conversations).mock.calls.length;
+    await act(async () => vi.advanceTimersByTimeAsync(7000));
+    expect(
+      document.querySelector(".agent-conversation-heading strong"),
+    ).toHaveTextContent("你好");
+    title = "问候与交流";
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(screen.getByRole("button", { name: /^问候与交流/ })).toBeVisible();
+    expect(
+      document.querySelector(".agent-conversation-heading strong"),
+    ).toHaveTextContent("问候与交流");
+    expect(agentApi.conversations).toHaveBeenCalledTimes(initialReads + 4);
+    expect(agentApi.detail).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(20000));
+    expect(agentApi.conversations).toHaveBeenCalledTimes(initialReads + 4);
+    mounted.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("conversation title refresh ignores an in-flight greeting title after switching conversations", async () => {
+  vi.useFakeTimers();
+  try {
+    const first = prepareFirstTurnTitleRefresh();
+    const second = { ...first, id: 2, title: "另一会话" };
+    let completeTitle:
+      | ((value: Awaited<ReturnType<typeof agentApi.conversations>>) => void)
+      | undefined;
+    vi.mocked(agentApi.conversations)
+      .mockResolvedValueOnce({ items: [first, second] })
+      .mockResolvedValueOnce({ items: [first, second] })
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            completeTitle = resolve;
+          }),
+      );
+    vi.mocked(agentApi.detail).mockImplementation(async (id) => ({
+      conversation: id === 1 ? first : second,
+      runs:
+        id === 1
+          ? [{ ...run(31, "你好"), status: "running" }]
+          : [{ ...run(32, "其他研究", "另一会话的回答"), conversationId: 2 }],
+    }));
+    const mounted = showAgent("workbench");
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    await act(async () => vi.advanceTimersByTimeAsync(1500));
+    expect(completeTitle).toBeTypeOf("function");
+    fireEvent.click(screen.getByRole("button", { name: /^另一会话/ }));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("另一会话的回答")).toBeVisible();
+    await act(async () =>
+      completeTitle?.({
+        items: [{ ...first, title: "迟到的旧会话标题" }, second],
+      }),
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(20000));
+    expect(screen.queryByText("迟到的旧会话标题")).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".agent-conversation-heading strong"),
+    ).toHaveTextContent("另一会话");
+    expect(agentApi.conversations).toHaveBeenCalledTimes(3);
+    mounted.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("conversation title refresh stops immediately after the server title changes", async () => {
+  vi.useFakeTimers();
+  try {
+    const first = prepareFirstTurnTitleRefresh();
+    let title = first.title;
+    vi.mocked(agentApi.conversations).mockImplementation(async () => ({
+      items: [{ ...first, title }],
+    }));
+    const mounted = showAgent("workbench");
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    const initialReads = vi.mocked(agentApi.conversations).mock.calls.length;
+    await act(async () => vi.advanceTimersByTimeAsync(1500));
+    title = "问候与交流";
+    await act(async () => vi.advanceTimersByTimeAsync(2500));
+    expect(screen.getByRole("button", { name: /^问候与交流/ })).toBeVisible();
+    expect(
+      document.querySelector(".agent-conversation-heading strong"),
+    ).toHaveTextContent("问候与交流");
+    await act(async () => vi.advanceTimersByTimeAsync(20000));
+    expect(agentApi.conversations).toHaveBeenCalledTimes(initialReads + 2);
+    mounted.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("conversation title refresh preserves a manual rename against an in-flight automatic title", async () => {
+  vi.useFakeTimers();
+  try {
+    const first = prepareFirstTurnTitleRefresh();
+    let completeTitle:
+      | ((value: Awaited<ReturnType<typeof agentApi.conversations>>) => void)
+      | undefined;
+    vi.mocked(agentApi.conversations)
+      .mockResolvedValueOnce({ items: [first] })
+      .mockResolvedValueOnce({ items: [first] })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            completeTitle = resolve;
+          }),
+      )
+      .mockResolvedValue({ items: [{ ...first, title: "我的研究记录" }] });
+    vi.spyOn(agentApi, "update").mockResolvedValue({
+      ...first,
+      title: "我的研究记录",
+    });
+    const mounted = showAgent("workbench");
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    await act(async () => vi.advanceTimersByTimeAsync(1500));
+    fireEvent.click(screen.getByRole("button", { name: "重命名" }));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    const dialog = screen.getByRole("dialog", { name: "重命名会话" });
+    fireEvent.change(within(dialog).getByRole("textbox"), {
+      target: { value: "我的研究记录" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    await act(async () =>
+      completeTitle?.({
+        items: [{ ...first, title: "问候与交流" }],
+      }),
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(20000));
+    expect(
+      document.querySelector(".agent-conversation-heading strong"),
+    ).toHaveTextContent("我的研究记录");
+    expect(
+      screen.queryByRole("button", { name: /^问候与交流/ }),
+    ).not.toBeInTheDocument();
+    expect(agentApi.update).toHaveBeenCalledExactlyOnceWith(1, {
+      title: "我的研究记录",
+    });
+    expect(agentApi.conversations).toHaveBeenCalledTimes(4);
+    mounted.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("conversation title refresh cancels pending metadata reads after switching projects", async () => {
+  vi.useFakeTimers();
+  try {
+    prepareFirstTurnTitleRefresh();
+    const mounted = showAgent("workbench");
+    await act(async () => vi.advanceTimersByTimeAsync(200));
+    const initialReads = vi.mocked(agentApi.conversations).mock.calls.length;
+    projectCode.current = "2";
+    vi.mocked(agentApi.conversations).mockResolvedValue({ items: [] });
+    mounted.rerender(
+      <AntApp>
+        <MemoryRouter initialEntries={["/agent/workbench"]}>
+          <AgentPage />
+        </MemoryRouter>
+      </AntApp>,
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(20000));
+    expect(agentApi.conversations).toHaveBeenCalledTimes(initialReads + 1);
+    expect(
+      screen.queryByText("你好，有什么可以帮您？"),
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".agent-conversation-heading strong"),
+    ).toHaveTextContent("智能体");
+    mounted.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each(["later turn", "other project", "failed first turn"])(
+  "conversation title refresh adds no requests for a %s",
+  async (scenario) => {
+    vi.useFakeTimers();
+    try {
+      const first = prepareFirstTurnTitleRefresh();
+      const responding = { ...run(31, "你好"), status: "running" as const };
+      if (scenario === "other project") projectCode.value = "default";
+      if (scenario === "later turn")
+        vi.mocked(agentApi.detail).mockResolvedValue({
+          conversation: first,
+          runs: [run(30, "上一轮"), responding],
+        });
+      if (scenario === "failed first turn")
+        vi.mocked(agentApi.poll).mockResolvedValue({
+          run: { ...responding, status: "failed" },
+          events: [],
+          cursor: 0,
+        });
+      const mounted = showAgent("workbench");
+      await act(async () => vi.advanceTimersByTimeAsync(200));
+      const initialReads = vi.mocked(agentApi.conversations).mock.calls.length;
+      await act(async () => vi.advanceTimersByTimeAsync(20000));
+      expect(agentApi.conversations).toHaveBeenCalledTimes(initialReads);
+      mounted.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);

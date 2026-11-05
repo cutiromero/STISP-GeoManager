@@ -95,6 +95,7 @@ const active = (r: AgentRun) =>
   ["queued", "running", "waiting_compute"].includes(r.status);
 const waiting = (r: AgentRun) =>
   ["waiting_input", "waiting_review"].includes(r.status);
+const titleRefreshDelays = [1500, 2500, 3000, 3000];
 
 function mergeRun(old: AgentRun[], next: AgentRun): AgentRun[] {
   const updated = old.map((run) => {
@@ -222,6 +223,11 @@ function AgentWorkspace({
   } | null>(null);
   const [pollFailure, setPollFailure] = useState("");
   const [pollAttempt, setPollAttempt] = useState(0);
+  const [titleRefresh, setTitleRefresh] = useState<{
+    conversationId: number;
+    sequence: number;
+    title: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [resources, setResources] = useState<AgentResource[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
@@ -486,8 +492,10 @@ function AgentWorkspace({
     try {
       const data = await agentApi.conversations(mode, query, archived);
       assertConversationList(data);
-      if (alive.current && seq === listSequence.current)
+      if (alive.current && seq === listSequence.current) {
         setConversations(data.items);
+        return data.items;
+      }
     } catch (e) {
       if (alive.current && seq === listSequence.current) report(e);
     }
@@ -559,6 +567,7 @@ function AgentWorkspace({
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     let cursor = 0;
+    const pollSequence = sequence.current;
     const poll = async () => {
       try {
         const data = await agentApi.poll(running.id, cursor);
@@ -583,7 +592,27 @@ function AgentWorkspace({
             poll,
             document.hidden ? 3000 : data.run.status === "queued" ? 1500 : 800,
           );
-        else void refreshList();
+        else {
+          void refreshList().then((items) => {
+            const conversation = items?.find(
+              (item) => item.id === data.run.conversationId,
+            );
+            if (
+              logicProject &&
+              data.run.status === "succeeded" &&
+              runs.length === 1 &&
+              runs[0]?.id === data.run.id &&
+              conversation &&
+              alive.current &&
+              sequence.current === pollSequence
+            )
+              setTitleRefresh({
+                conversationId: conversation.id,
+                sequence: pollSequence,
+                title: conversation.title,
+              });
+          });
+        }
       } catch (e) {
         if (disposed) return;
         if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
@@ -605,6 +634,54 @@ function AgentWorkspace({
       clearTimeout(timer);
     };
   }, [running?.id, historyLoading, pollAttempt]);
+  useEffect(() => {
+    if (
+      !titleRefresh ||
+      !logicProject ||
+      accessRejected ||
+      current?.id !== titleRefresh.conversationId
+    )
+      return;
+    let disposed = false;
+    let attempt = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const valid = () =>
+      !disposed && alive.current && sequence.current === titleRefresh.sequence;
+    const refreshTitle = async () => {
+      if (!valid()) return;
+      try {
+        // Titles arrive after the answer; fetch metadata, not full run history.
+        const data = await agentApi.conversations(mode, "", false);
+        if (!valid()) return;
+        assertConversationList(data);
+        const next = data.items.find(
+          (item) => item.id === titleRefresh.conversationId,
+        );
+        if (!next) return;
+        setConversations((old) =>
+          old.map((item) => (item.id === next.id ? next : item)),
+        );
+        setCurrent((old) => (old?.id === next.id ? next : old));
+        if (next.title !== titleRefresh.title) return;
+      } catch (error) {
+        if (!valid()) return;
+        if (
+          error instanceof ApiError &&
+          [401, 403, 404].includes(error.status)
+        ) {
+          if (error.status !== 404) report(error);
+          return;
+        }
+      }
+      if (valid() && attempt < titleRefreshDelays.length)
+        timer = setTimeout(refreshTitle, titleRefreshDelays[attempt++]);
+    };
+    timer = setTimeout(refreshTitle, titleRefreshDelays[attempt++]);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+    };
+  }, [titleRefresh, current?.id, logicProject, accessRejected]);
   useLayoutEffect(() => {
     const box = viewport.current;
     if (box && pendingScroll.current !== null) {
@@ -1164,6 +1241,7 @@ function AgentWorkspace({
                     aria-label={ui("重命名", "Rename")}
                     icon={<EditOutlined />}
                     onClick={() => {
+                      setTitleRefresh(null);
                       setRename(c);
                       setRenameText(c.title);
                     }}

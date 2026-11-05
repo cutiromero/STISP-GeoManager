@@ -766,6 +766,11 @@ def run_task(run_id):
             )
         close_old_connections()
 
+        if status == "succeeded":
+            from .conversation_titles import enqueue_conversation_title
+
+            enqueue_conversation_title(run.id)
+
 
 def claim():
     with transaction.atomic():
