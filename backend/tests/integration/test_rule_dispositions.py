@@ -300,3 +300,56 @@ def test_report_collapses_review_samples_without_changing_approved_counts():
     assert (
         "suggestions" not in review and review["scope"] == "complete_rule_action_counts"
     )
+
+
+def test_report_facts_distinguish_dispositions_from_remaining_issues():
+    from apps.agent.rule_dispositions import report_payload
+
+    workflow, stage, _ = measured(241)
+    stage["taskId"] = "apply-task"
+    workflow.plan["stages"].append({"name": "recheck", "taskId": "recheck-task"})
+    payload = {
+        "knowledge": [],
+        "availableEvidence": [],
+        "actualResults": [
+            {
+                "kind": "table",
+                "key": "issues",
+                "taskId": "task",
+                "rowCount": 241,
+                "rows": [],
+                "outputId": 1,
+            },
+            {
+                "kind": "table",
+                "key": "issues",
+                "taskId": "recheck-task",
+                "rowCount": 142,
+                "rows": [],
+                "outputId": 2,
+            },
+            {
+                "kind": "table",
+                "key": "changes",
+                "taskId": "apply-task",
+                "rowCount": 196,
+                "rows": [
+                    {"action": "downweight", "count": 104},
+                    {"action": "exclude", "count": 49},
+                    {"action": "reclassify", "count": 38},
+                    {"action": "set_code", "count": 5},
+                ],
+                "outputId": 3,
+            },
+        ],
+    }
+    facts = report_payload(payload, workflow)["verifiedReportFacts"]
+    assert (
+        facts["initialIssueCount"],
+        facts["executedDispositionCount"],
+        facts["recheckRemainingIssueCount"],
+    ) == (241, 196, 142)
+    assert (
+        facts["executedActions"]["reclassify"] == 38
+        and facts["executedActions"]["set_code"] == 5
+    )

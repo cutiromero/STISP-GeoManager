@@ -1167,6 +1167,8 @@ def _decide_once(
             "试用规则不能称为国家标准；A/B表示优先核查证据等级，不是矿化概率。"
             "依据最新完整统计报告数量，reference_only没有明细不表示没有问题；"
             "历史问题数不等于复查剩余问题数。missingRoles表示缺资料。"
+            "verifiedReportFacts是平台已核验数字；resultSummary须明确初检数、执行处置数、复查剩余数。"
+            "降权后仍可存在问题记录，不得声称全部清零；set_code是代号修正，不能与reclassify统称岩性重分类。"
             "不得编造野外观测、修改、矿化证据或找矿成果；远景为零时如实说明。"
         )
     messages = [

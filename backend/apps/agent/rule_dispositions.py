@@ -24,7 +24,7 @@ def report_payload(payload, workflow):
                 "sources",
                 "trialBinding",
             )
-            if key in entry
+            if key in entry and (key != "statement" or not entry.get("trialBinding"))
         }
         for entry in workflow.evidence
     ]
@@ -48,6 +48,38 @@ def report_payload(payload, workflow):
             value.update(scope="reference_only", rows=[])
         projected.append(value)
     payload["actualResults"] = projected
+    stage_tasks = {
+        stage["name"]: stage.get("taskId") for stage in workflow.plan["stages"]
+    }
+    issue_counts = {
+        item.get("taskId"): item.get("rowCount")
+        for item in projected
+        if item["key"] == "issues"
+    }
+    changes = [
+        item
+        for item in projected
+        if item["key"] == "changes" and item.get("taskId") == stage_tasks.get("apply")
+    ]
+    payload["verifiedReportFacts"] = {
+        "initialIssueCount": issue_counts.get(stage_tasks.get("check")),
+        "recheckRemainingIssueCount": issue_counts.get(stage_tasks.get("recheck")),
+        "executedDispositionCount": changes[0].get("rowCount") if changes else None,
+        "executedActions": dict(
+            Counter(
+                {
+                    action: sum(
+                        int(row.get("count", 0))
+                        for item in changes
+                        for row in item.get("rows", [])
+                        if row.get("action") == action
+                    )
+                    for action in sorted(ACTIONS)
+                }
+            )
+        ),
+        "note": "问题记录、执行处置、复查剩余和保留项是不同口径；降权不表示该问题记录消失。",
+    }
     review = payload.get("modificationReview")
     if review:
         groups = {}
