@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.67] - 2026-11-06
+
+### Fixed
+- 聊天流的思考和答复预览复用流式鉴权，保存间隔从写入完成计时，避免耗时鉴权令每个模型片段反复等待并逐字缓慢出现；最终刷新、取消和撤权仍检查实时状态。
+
 ## [0.1.66] - 2026-11-06
 
 ### Fixed

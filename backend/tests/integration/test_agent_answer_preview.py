@@ -242,6 +242,81 @@ def test_many_tiny_provider_chunks_are_batched_for_preview_persistence(
     assert len(snapshots) <= 3
 
 
+@pytest.mark.parametrize("content", ["thinking", "preview"])
+def test_slow_authorization_and_persistence_do_not_throttle_tiny_chunks(
+    env, monkeypatch, content
+):
+    run = make_run(env, thinking_mode="deep")
+    clock, checks, observed = [100.0], [], {}
+    monkeypatch.setattr(worker.time, "monotonic", lambda: clock[0])
+    original_guard, original_event = worker.guard, worker.event
+
+    def slow_guard(*args, **kwargs):
+        checks.append(clock[0])
+        clock[0] += 0.75
+        return original_guard(*args, **kwargs)
+
+    def slow_event(run, kind, text):
+        original_event(run, kind, text)
+        if kind in {"thinking", PREVIEW_EVENT_KIND}:
+            clock[0] += 0.25
+
+    def generate(model, messages, maximum, guard, **options):
+        started, baseline = clock[0], len(checks)
+        if content == "preview":
+            yield '{"action":"final","answer":"'
+        for _ in range(1000):
+            clock[0] += 0.001
+            guard()
+            if content == "thinking":
+                options["on_thinking"]("字")
+            else:
+                yield "字"
+        observed.update(checks=len(checks) - baseline, seconds=clock[0] - started)
+        yield (
+            '{"action":"final","answer":"已完成"}' if content == "thinking" else '"}'
+        )
+
+    monkeypatch.setattr(worker, "guard", slow_guard)
+    monkeypatch.setattr(worker, "event", slow_event)
+    monkeypatch.setattr(worker, "stream", generate)
+    worker.run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == "succeeded"
+    assert observed["checks"] < 20 and observed["seconds"] < 20
+    if content == "thinking":
+        assert (
+            "".join(run.events.filter(kind="thinking").values_list("text", flat=True))
+            == "字" * 1000
+        )
+        assert run.events.filter(kind="thinking").count() < 20
+    else:
+        assert run.answer == "字" * 1000
+        assert run.events.filter(kind=PREVIEW_EVENT_KIND).count() < 20
+
+
+def test_thinking_final_flush_rechecks_cancellation_without_publishing_tail(
+    env, monkeypatch
+):
+    run = make_run(env, thinking_mode="deep")
+    monkeypatch.setattr(worker.time, "monotonic", lambda: 100.0)
+
+    def generate(model, messages, maximum, guard, **options):
+        guard()
+        options["on_thinking"]("已保存")
+        options["on_thinking"]("尚未保存的尾部")
+        AgentRun.objects.filter(pk=run.pk).update(cancel_requested=True)
+        yield '{"action":"final","answer":"不能发布"}'
+
+    monkeypatch.setattr(worker, "stream", generate)
+    worker.run_task(run.id)
+    run.refresh_from_db()
+    assert run.status == "cancelled" and run.answer == ""
+    assert list(run.events.filter(kind="thinking").values_list("text", flat=True)) == [
+        "已保存"
+    ]
+
+
 def test_only_final_answers_enter_future_model_context(env):
     previous = make_run(env, answer="已经核验的正式回答")
     previous.status = "succeeded"

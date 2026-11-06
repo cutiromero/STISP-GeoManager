@@ -35,7 +35,9 @@ from .model_guard import ModelStreamGuard
 
 logger = logging.getLogger(__name__)
 
-# Configuration: durable previews follow provider chunks, with bounded writes.
+# Configuration: durable progress follows provider chunks, with bounded writes.
+THINKING_FLUSH_SECONDS = 0.6
+THINKING_FLUSH_CHARACTERS = 500
 PREVIEW_FLUSH_SECONDS = 0.3
 PREVIEW_FLUSH_CHARACTERS = 256
 
@@ -389,9 +391,18 @@ def run_task(run_id):
     preview_saved_at = 0.0
     preview_active = bool(stored_answer_preview(run))
     context_ready = False
+    progress_guard = None
 
     def check():
         guard(run.id, deadline, include_context=context_ready)
+
+    def check_progress(*, force=False):
+        if progress_guard is None:
+            check()
+        elif force:
+            progress_guard.poll()
+        else:
+            progress_guard()
 
     def record_thinking(text, force=False):
         nonlocal thinking_buffer, thinking_saved_at
@@ -400,12 +411,16 @@ def run_task(run_id):
         thinking_buffer += text or ""
         now = time.monotonic()
         if thinking_buffer and (
-            force or now - thinking_saved_at >= 0.6 or len(thinking_buffer) >= 500
+            force
+            or now - thinking_saved_at >= THINKING_FLUSH_SECONDS
+            or len(thinking_buffer) >= THINKING_FLUSH_CHARACTERS
         ):
-            check()
+            check_progress(
+                force=force or len(thinking_buffer) >= THINKING_FLUSH_CHARACTERS
+            )
             event(run, "thinking", thinking_buffer)
             thinking_buffer = ""
-            thinking_saved_at = now
+            thinking_saved_at = time.monotonic()
 
     def flush_preview(*, force=False):
         nonlocal preview_pending, preview_saved_at, preview_active
@@ -418,9 +433,9 @@ def run_task(run_id):
             and preview_pending < PREVIEW_FLUSH_CHARACTERS
         ):
             return
-        check()
+        check_progress(force=force or preview_pending >= PREVIEW_FLUSH_CHARACTERS)
         event(run, PREVIEW_EVENT_KIND, "".join(preview_parts))
-        preview_pending, preview_saved_at, preview_active = 0, now, True
+        preview_pending, preview_saved_at, preview_active = 0, time.monotonic(), True
 
     def reset_preview():
         nonlocal preview_pending, preview_saved_at, preview_active
@@ -455,6 +470,7 @@ def run_task(run_id):
             deadline = time.monotonic() + run.budget_snapshot.get(
                 "maxRunSeconds", p["maxRunSeconds"]
             )
+            progress_guard = ModelStreamGuard(check, deadline)
             if run.conversation.mode == "agent" and not run.execution_state:
                 from .research_intents import process as research_process
 
@@ -462,7 +478,7 @@ def run_task(run_id):
                     run,
                     fresh_user(run.owner_id),
                     p,
-                    check,
+                    progress_guard,
                     research_event,
                 )
                 deterministic_answer = research_answer
@@ -579,12 +595,12 @@ def run_task(run_id):
                 prepare()
                 parser = AnswerPreviewParser(allow_plain=not is_agent)
                 chunks = []
-                stream_guard = ModelStreamGuard(check, deadline)
+                progress_guard = ModelStreamGuard(check, deadline)
                 for chunk in stream(
                     model,
                     messages,
                     p["maxOutputTokens"],
-                    stream_guard,
+                    progress_guard,
                     structured=is_agent,
                     thinking=run.thinking_mode == "deep",
                     temperature=p["temperature"],
@@ -592,7 +608,7 @@ def run_task(run_id):
                     on_thinking=record_thinking,
                     reasoning_effort=p["reasoningEffort"],
                     on_usage=usage,
-                    monitor_guard=stream_guard.poll,
+                    monitor_guard=progress_guard.poll,
                 ):
                     if not chunks:
                         record_thinking("", force=True)

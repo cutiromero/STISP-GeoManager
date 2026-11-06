@@ -192,6 +192,7 @@ def interpret(
                     top_p=p["topP"],
                     reasoning_effort=p["reasoningEffort"],
                     on_usage=record["usage"].update,
+                    monitor_guard=getattr(guard, "poll", guard),
                 )
             )
             guard()
