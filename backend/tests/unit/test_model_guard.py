@@ -29,6 +29,65 @@ def test_many_stream_fragments_share_one_poll_and_refresh_at_next_interval():
     assert authorize.call_count == 2
 
 
+def test_slow_checks_keep_a_frequency_bound_while_stream_time_advances():
+    now = [0.0]
+    checks = []
+
+    def authorize():
+        checks.append(now[0])
+        now[0] += 0.75
+
+    guard = ModelStreamGuard(authorize, 10000, clock=lambda: now[0])
+    guard()
+    for _ in range(1024):
+        now[0] += 1 / 1024
+        guard()
+    # One second of incoming fragments permits at most two refreshes, even
+    # when each authorization itself takes longer than the polling interval.
+    assert len(checks) == 3
+    assert now[0] == 3 * 0.75 + 1
+
+
+def test_slow_check_does_not_delay_forced_revocation_or_retry_its_failure():
+    now, revoked = [0.0], [False]
+    authorize = Mock()
+    failure = PermissionDenied("权限已撤回")
+
+    def check():
+        authorize()
+        now[0] += 0.75
+        if revoked[0]:
+            raise failure
+
+    guard = ModelStreamGuard(check, 10, clock=lambda: now[0])
+    guard()
+    revoked[0] = True
+    guard()
+    assert authorize.call_count == 1
+    with pytest.raises(PermissionDenied) as caught:
+        guard.poll()
+    assert caught.value is failure
+    with pytest.raises(PermissionDenied) as caught:
+        guard()
+    assert caught.value is failure and authorize.call_count == 2
+
+
+def test_deadline_remains_immediate_during_cache_after_a_slow_check():
+    now = [0.0]
+    authorize = Mock()
+
+    def check():
+        authorize()
+        now[0] += 0.75
+
+    guard = ModelStreamGuard(check, 1, clock=lambda: now[0])
+    guard()
+    now[0] = 1.125
+    with pytest.raises(ModelError, match="时限"):
+        guard()
+    assert authorize.call_count == 1
+
+
 def test_monitor_and_stream_threads_do_not_duplicate_a_full_poll():
     entered, release = Event(), Event()
     calls = []

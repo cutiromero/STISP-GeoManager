@@ -125,7 +125,7 @@ class WorkflowModelActivity:
             AgentWorkflowStep.objects.filter(
                 pk=self.step_id, workflow=self.workflow
             ).update(**values)
-        self.saved_at, self.saved_status = now, status
+        self.saved_at, self.saved_status = time.monotonic(), status
 
     def fail(self):
         """Mark the existing activity stopped without saving unauthorized new text."""

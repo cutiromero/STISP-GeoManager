@@ -1,7 +1,7 @@
 """Real model progress stays bounded, authorized and separate from large plans."""
 
 import json
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from django.core.exceptions import PermissionDenied
@@ -63,6 +63,52 @@ def test_progress_throttles_small_records_without_rewriting_plan(profiles, monke
     assert saved["thinkingChars"] == 400 and saved["outputChars"] == 100
     assert saved["status"] == "complete"
     assert len(json.dumps(saved, ensure_ascii=False)) < 2000
+
+
+def test_slow_authorization_and_writes_bound_stream_saves_and_flush_completion(
+    profiles, monkeypatch
+):
+    clock, writes = [0.0], []
+    monkeypatch.setattr(model_activity.time, "monotonic", lambda: clock[0])
+
+    def authorize():
+        clock[0] += 0.75
+
+    guard = Mock()
+    guard.poll = Mock(side_effect=authorize)
+    activity = activity_for(profiles, guard)
+
+    def slow_write(execute, sql, params, many, context):
+        result = execute(sql, params, many, context)
+        if sql.startswith(("INSERT", "UPDATE")) and (
+            AgentWorkflowStep._meta.db_table in sql
+        ):
+            writes.append(sql)
+            clock[0] += 0.25
+        return result
+
+    with connection.execute_wrapper(slow_write):
+        activity.progress({"status": "requesting", "attempt": 1})
+        activity.thinking("开")
+        for _ in range(1024):
+            clock[0] += 1 / 1024
+            activity.thinking("段")
+        # Requesting, the first thinking fragment, and one periodic refresh.
+        assert len(writes) == guard.poll.call_count == 3
+        activity.progress({"status": "responding", "outputChars": 1})
+        for index in range(512):
+            clock[0] += 1 / 1024
+            activity.progress({"status": "responding", "outputChars": index + 2})
+        assert len(writes) == guard.poll.call_count == 4
+        activity.progress({"status": "validating"})
+        activity.progress({"status": "complete"})
+    assert len(writes) == guard.poll.call_count == 6
+    saved = latest_model_activity(profiles["workflow"])
+    assert saved["thinkingText"] == "开" + "段" * 1024
+    assert saved["thinkingChars"] == 1025 and saved["outputChars"] == 513
+    assert saved["status"] == "complete"
+    record = AgentWorkflowStep.objects.get(pk=activity.step_id)
+    assert record.status == "succeeded" and record.finished_at is not None
 
 
 def test_thinking_tail_survives_refresh_and_validation_recovery(profiles):

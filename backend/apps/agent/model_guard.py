@@ -60,5 +60,5 @@ class ModelStreamGuard:
                 # revocation instead of one thread continuing on an old poll.
                 self._failure = error
                 raise
-            self._next_check = current + self._interval
+            self._next_check = self._clock() + self._interval
             self._check_deadline()
