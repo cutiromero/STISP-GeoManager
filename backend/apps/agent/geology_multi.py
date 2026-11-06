@@ -39,7 +39,7 @@ LABELS = {
     "lithology": "模拟识别岩性图",
     "faults": "模拟构造图",
     "coverage": "研究区范围",
-    "rules": "本案例试用规则",
+    "rules": "项目地质规则",
     "hematite": "赤铁矿识别结果",
     "chlorite": "绿泥石识别结果",
     "hydromica": "水云母识别结果",
@@ -160,7 +160,7 @@ def graph(segment="all", raster=False):
 
 def validate_inputs(user, policy, inputs, parameters, selected=(), *, workflow=None):
     if not isinstance(inputs, dict) or set(inputs) != set(ROLES):
-        raise ComputeError("请完整选择岩性、构造、研究区、五类矿物和本案例试用规则")
+        raise ComputeError("请完整选择岩性、构造、研究区、五类矿物和项目地质规则")
     if parameters.get("segment", "all") not in SEGMENTS:
         raise ComputeError("分段入口请选择综合、岩性、构造或蚀变")
     if set(parameters) - {
@@ -340,7 +340,7 @@ def prepare(workflow, user, policy):
         existing = DataResource.objects.filter(source=source).first()
         if existing:
             if not path.is_file() or path.read_bytes() != raw:
-                raise ComputeError("已冻结的试用规则与当前知识版本不一致", 409)
+                raise ComputeError("已冻结的项目规则与当前知识版本不一致", 409)
             frozen = resolve_generated_resource(
                 user, policy, existing.id, workflow, "frozen_rules"
             )
@@ -349,7 +349,7 @@ def prepare(workflow, user, policy):
             path.write_bytes(raw)
             frozen = DataResource.objects.create(
                 project_tag_id=workflow.project_tag_id,
-                name="本案例试用规则运行版本",
+                name="项目地质规则运行版本",
                 code=f"multi-rules-{workflow.id.hex}",
                 data_type="table",
                 file_format="CSV",

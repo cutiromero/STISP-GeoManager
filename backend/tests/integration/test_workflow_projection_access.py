@@ -174,3 +174,55 @@ def test_review_steps_do_not_expose_string_decisions_as_analysis(setup_agent):
         "analysis_decision",
         "review_feedback",
     }
+
+
+def test_retained_review_endpoint_keeps_owner_and_project_boundary(setup_agent):
+    from unittest.mock import patch
+
+    env = setup_agent
+    with project_scope(env["scope"]):
+        own = AgentWorkflow.objects.create(
+            owner=env["user"],
+            workflow_type="geology_generic",
+            model="mock",
+            idempotency_key="held-own",
+            status="succeeded",
+            plan={"phase": "completed"},
+            plan_hash="a" * 64,
+        )
+        other = AgentWorkflow.objects.create(
+            owner=env["other"],
+            workflow_type="geology_generic",
+            model="mock",
+            idempotency_key="held-other",
+            status="succeeded",
+            plan={"phase": "completed"},
+            plan_hash="a" * 64,
+        )
+    with patch("apps.agent.retained_review.reopen") as reopen:
+        assert (
+            env["client"]
+            .post(
+                f"/api/agent/workflows/{other.id}/retained-review/",
+                data={"planHash": "a" * 64},
+                content_type="application/json",
+                **env["header"],
+            )
+            .status_code
+            == 404
+        )
+        assert env["client"].post(
+            f"/api/agent/workflows/{own.id}/retained-review/",
+            data={"planHash": "a" * 64},
+            content_type="application/json",
+            HTTP_X_PROJECT_ID="1",
+        ).status_code in (403, 404)
+        assert not reopen.called
+        response = env["client"].post(
+            f"/api/agent/workflows/{own.id}/retained-review/",
+            data={"planHash": "a" * 64},
+            content_type="application/json",
+            **env["header"],
+        )
+        assert response.status_code == 200, response.content
+        assert reopen.call_args.args[0].id == own.id

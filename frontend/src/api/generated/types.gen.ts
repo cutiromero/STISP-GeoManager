@@ -2970,7 +2970,7 @@ export type AgentWorkflowPage = {
     /**
      * 当前页内容类型
      */
-    part: 'suggestions' | 'steps' | 'changes';
+    part: 'suggestions' | 'retained' | 'steps' | 'changes';
     /**
      * 当前页起点
      */
@@ -6572,6 +6572,10 @@ export type AgentMultiElementMap = {
  * 一项有实际图斑、规则、知识与空间预览支持的修改建议。
  */
 export type AgentModificationSuggestion = {
+    /**
+     * 当前冻结对象允许的处置动作，前端选择仍由后端逐项核验
+     */
+    allowedActions?: Array<string>;
     /**
      * 综合推理按要素、规则、动作、目标代号及检查状态形成的稳定分组；审批仍提交展开后的对象建议ID，待裁定与例外不纳入整组批准
      */
@@ -20457,9 +20461,9 @@ export type GetAgentWorkflowData = {
          */
         view?: 'full' | 'card' | 'compare' | 'inspection';
         /**
-         * inspection分页内容；compare仅支持changes。省略时inspection取suggestions，compare取changes。
+         * inspection分页内容，retained仅返回尚未实际处置的待裁定/例外及定位几何；compare仅支持changes。省略时inspection取suggestions，compare取changes。
          */
-        part?: 'suggestions' | 'steps' | 'changes';
+        part?: 'suggestions' | 'retained' | 'steps' | 'changes';
         /**
          * compare或inspection定位指定审批对象，返回其所在页；compare摘要同时提供focusOffset用于深链接按需读取。不匹配时保持offset。
          */
@@ -20569,6 +20573,62 @@ export type CancelAgentWorkflowResponses = {
 };
 
 export type CancelAgentWorkflowResponse = CancelAgentWorkflowResponses[keyof CancelAgentWorkflowResponses];
+
+export type ReviewRetainedAgentWorkflowData = {
+    /**
+     * 最后读取的计划摘要，防止过期操作
+     */
+    body: {
+        /**
+         * 当前计划SHA-256
+         */
+        planHash: string;
+    };
+    headers: {
+        /**
+         * 当前唯一项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人已完成的工作流
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/retained-review/';
+};
+
+export type ReviewRetainedAgentWorkflowErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type ReviewRetainedAgentWorkflowError = ReviewRetainedAgentWorkflowErrors[keyof ReviewRetainedAgentWorkflowErrors];
+
+export type ReviewRetainedAgentWorkflowResponses = {
+    /**
+     * 待核查的最新持久工作流，尚未提交计算
+     */
+    200: AgentWorkflow;
+};
+
+export type ReviewRetainedAgentWorkflowResponse = ReviewRetainedAgentWorkflowResponses[keyof ReviewRetainedAgentWorkflowResponses];
 
 export type PauseAgentWorkflowData = {
     body?: never;

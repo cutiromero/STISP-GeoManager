@@ -8319,10 +8319,10 @@ paths:
           default: full
       - name: part
         in: query
-        description: inspection分页内容；compare仅支持changes。省略时inspection取suggestions，compare取changes。
+        description: inspection分页内容，retained仅返回尚未实际处置的待裁定/例外及定位几何；compare仅支持changes。省略时inspection取suggestions，compare取changes。
         schema:
           type: string
-          enum: [suggestions, steps, changes]
+          enum: [suggestions, retained, steps, changes]
       - name: suggestionId
         in: query
         description: compare或inspection定位指定审批对象，返回其所在页；compare摘要同时提供focusOffset用于深链接按需读取。不匹配时保持offset。
@@ -8417,6 +8417,46 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '409':
           $ref: '#/components/responses/Conflict'
+  /api/agent/workflows/{workflowId}/retained-review/:
+    post:
+      tags: [智能体]
+      operationId: reviewRetainedAgentWorkflow
+      summary: 核查已完成工作流的保留对象
+      description: 仅本人当前项目已完成的综合地质任务。重新校验输入、算法、知识及完整实际检查，保留上一轮成果和报告，打开待裁定/例外选择；提交本操作不执行算子。后续confirm只接收保留项ID，已实际执行的处置由服务端固定合入，重新生成处置、复查和对比成果。要求智能体、算子及所有源资料权限；并发、变化或无候选返回409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 当前唯一项目
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 本人已完成的工作流
+        schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        description: 最后读取的计划摘要，防止过期操作
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [planHash]
+              properties:
+                planHash: {type: string, description: 当前计划SHA-256, pattern: '^[a-f0-9]{64}$'}
+      responses:
+        '200':
+          description: 待核查的最新持久工作流，尚未提交计算
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentWorkflow'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/agent/workflows/{workflowId}/pause/:
     post:
       tags: [智能体]
@@ -11415,7 +11455,7 @@ components:
         revision: {type: string, maxLength: 64, description: 冻结批准与真实执行输出的内容哈希，分页与无关阶段状态不改变此值}
         part:
           type: string
-          enum: [suggestions, steps, changes]
+          enum: [suggestions, retained, steps, changes]
           description: 当前页内容类型
         offset:
           type: integer
@@ -15521,6 +15561,10 @@ components:
       additionalProperties: false
       required: [id, kind, featureId, title, currentState, suggestedState, reason, areaM2, ruleId, knowledgeRefs, preview, bounds]
       properties:
+        allowedActions:
+          type: array
+          description: 当前冻结对象允许的处置动作，前端选择仍由后端逐项核验
+          items: {type: string}
         groupId: {type: string, description: 综合推理按要素、规则、动作、目标代号及检查状态形成的稳定分组；审批仍提交展开后的对象建议ID，待裁定与例外不纳入整组批准}
         id: {type: string, description: 当前问题与建议内容绑定的标识，不由客户端编造}
         kind: {type: string, enum: [fill_gap, set_age, multi_element], description: 内部漏填、时代属性或多要素建议；综合场景具体操作由action标识}

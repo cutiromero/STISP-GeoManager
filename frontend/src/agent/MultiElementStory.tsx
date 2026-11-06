@@ -149,7 +149,7 @@ export function MultiElementEvidence({
       <strong>命中的知识与规则</strong>
       {(suggestion.ruleRefs ?? []).map((ref) => (
         <div className="multi-element-rule" key={`${ref.id}:${ref.version}`}>
-          <Tag color="blue">本案例试用</Tag>
+          <Tag color="blue">项目规则</Tag>
           <b>
             {ref.id} / {ref.title}
           </b>
@@ -341,7 +341,7 @@ export default function MultiElementStory({
         <>
           <div className="geology-story-heading">
             <strong>{title}</strong>
-            <Tag color="blue">{generic ? "本次资料" : "演示案例"}</Tag>
+            <Tag color="blue">{generic ? "本次资料" : "研究区资料"}</Tag>
             <Tag>
               {
                 multiElementSegments.find((item) => item.value === segment)
@@ -356,7 +356,7 @@ export default function MultiElementStory({
                     ? `未提供：${missing.join("、")}，按计划中的说明处理。`
                     : ""
                 }A/B表示优先核查证据组合等级。`
-              : "岩性与构造为模拟识别输入（演示）；矿物为遥感矿物识别结果（演示案例）。模拟置信度用于演示证据分级。A/B表示优先核查证据组合等级。"}
+              : "岩性与构造为模拟识别输入；矿物为遥感矿物识别结果。模拟置信度用于演示证据分级。A/B表示优先核查证据组合等级。"}
           </p>
           <div className="geology-story-current">
             <strong>{workflow.detail}</strong>
@@ -376,7 +376,7 @@ export default function MultiElementStory({
                   </li>
                 ))}
               </ul>
-              <strong>{generic ? "试用知识" : "本案例试用知识"}</strong>
+              <strong>{generic ? "试用知识" : "项目地质规则"}</strong>
               <ul>
                 {workflow.plan.trialRuleBindings?.map((rule) => (
                   <li key={`${rule.id}:${rule.revision}`}>

@@ -31,7 +31,9 @@ from apps.projects.context import selected_project_id
 logger = logging.getLogger(__name__)
 
 
-def delete_resource(request, resource_id: int, *, confirmed_snapshot=None) -> dict:
+def delete_resource(
+    request, resource_id: int, *, confirmed_snapshot=None, duplicate_resource_id=None
+) -> dict:
     """One guarded deletion shared by the catalog and existing admin controls."""
     result = {
         "resourceId": resource_id,
@@ -55,8 +57,23 @@ def delete_resource(request, resource_id: int, *, confirmed_snapshot=None) -> di
             if resource is None or not user_can_access(resource, request.user):
                 return result
             result["name"] = resource.name
+            duplicate_proof = None
+            if duplicate_resource_id is not None:
+                from .resource_duplicates import verify_duplicate
+
+                if confirmed_snapshot is None:
+                    return {
+                        **result,
+                        "status": "blocked",
+                        "detail": "原始重复资料需要完整历史预检查凭据",
+                    }
+                duplicate_proof = verify_duplicate(
+                    resource, duplicate_resource_id, request.user
+                )
             reasons = resource_reference_reasons(
-                resource, allow_history=confirmed_snapshot is not None
+                resource,
+                allow_history=confirmed_snapshot is not None,
+                include_original=duplicate_proof is not None,
             )
             if reasons:
                 result.update(
@@ -66,15 +83,19 @@ def delete_resource(request, resource_id: int, *, confirmed_snapshot=None) -> di
                 return result
             receipt = None
             if confirmed_snapshot is not None:
-                digest, history = history_snapshot(resource)
+                digest, history = history_snapshot(
+                    resource, include_original=duplicate_proof is not None
+                )
                 if digest != confirmed_snapshot:
                     result.update(
                         status="blocked",
                         detail="资源或历史引用已变化，请重新检查删除范围并确认。",
                     )
                     return result
-                if resource.is_compute_result:
-                    receipt = detach_history(resource, request.user, history)
+                if resource.is_compute_result or duplicate_proof is not None:
+                    receipt = detach_history(
+                        resource, request.user, history, duplicate_proof=duplicate_proof
+                    )
             storage = ResourceStorageDeletion(resource)
             with storage:
                 # Remove only resource-owned derived records; saved references

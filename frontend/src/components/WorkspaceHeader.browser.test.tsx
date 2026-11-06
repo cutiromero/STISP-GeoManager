@@ -218,7 +218,7 @@ const topicComposition: MapComposition = {
 
 function renderHeader(
   props: Partial<React.ComponentProps<typeof WorkspaceHeader>> = {},
-  contextUser: User = user,
+  contextUser: User | null = user,
   setUser: (user: User | null) => void = vi.fn(),
   initialPath = "/",
   withStyles = false,
@@ -487,7 +487,7 @@ describe("WorkspaceHeader", () => {
     expect(await screen.findByText("塔里木河监测工程")).toBeInTheDocument();
   });
 
-  it("opens the data import page from the highlighted shortcut", () => {
+  it("keeps import under data resources without a standalone shortcut", async () => {
     const uploadUser: User = {
       ...user,
       permissions: {
@@ -497,7 +497,11 @@ describe("WorkspaceHeader", () => {
     };
     renderHeader({}, uploadUser);
 
-    fireEvent.click(screen.getByRole("button", { name: "数据导入" }));
+    expect(screen.queryByRole("button", { name: "数据导入" })).toBeNull();
+    await userEvent.hover(screen.getByRole("button", { name: "数据资源" }));
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "数据与成果导入" }),
+    );
 
     expect(screen.getByTestId("location-path")).toHaveTextContent(
       "/resources/data/import",
@@ -525,12 +529,10 @@ describe("WorkspaceHeader", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("hides the agent entry when neither agent capability is granted", () => {
+  it("keeps the agent entry visible but disabled without capability", () => {
     renderHeader();
 
-    expect(
-      screen.queryByRole("button", { name: "智能体" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "智能体" })).toBeDisabled();
   });
 
   it("keeps first-entry map navigation available and opens guidance on demand", async () => {
@@ -692,6 +694,7 @@ describe("WorkspaceHeader", () => {
         const agentEntry = await screen.findByRole("button", {
           name: "智能体",
         });
+        await waitFor(() => expect(agentEntry).toBeEnabled());
         expect(agentEntry.querySelector(".anticon-robot")).not.toBeNull();
         // Subsequent page mounts keep the confirmed entry while access is checked.
         agentBootstrapMock.mockReturnValue(new Promise(() => {}));
@@ -755,7 +758,7 @@ describe("WorkspaceHeader", () => {
             (sample) => sample.path === targetPath,
           );
           expect(arrived.length).toBeGreaterThan(5);
-          expect(arrived.every((sample) => sample.boxes.length === 12)).toBe(
+          expect(arrived.every((sample) => sample.boxes.length === 11)).toBe(
             true,
           );
           let drift = 0;
@@ -788,7 +791,6 @@ describe("WorkspaceHeader", () => {
   it.each([
     ["地理工作台", "/map"],
     ["数据资源", "/resources/catalog"],
-    ["数据分析", "/nongeo"],
     ["后台管理", "/admin/dashboard"],
     ["关于我们", "/about/system"],
   ])(
@@ -880,7 +882,7 @@ describe("WorkspaceHeader", () => {
       await waitFor(() =>
         expect(header).toHaveClass("workspace-header-nav-measured"),
       );
-      expect(screen.queryByRole("button", { name: "智能体" })).toBeNull();
+      expect(screen.getByRole("button", { name: "智能体" })).toBeDisabled();
       expect(
         screen.getByRole("button", { name: "打开全局搜索" }),
       ).toBeVisible();
@@ -903,4 +905,36 @@ describe("WorkspaceHeader", () => {
       await page.viewport(1600, 900);
     }
   });
+});
+
+it("orders the main five modules and nests analytics in data resources", async () => {
+  const { container } = renderHeader();
+  const titles = [
+    ...container.querySelectorAll<HTMLButtonElement>(
+      ".header-primary-actions button",
+    ),
+  ]
+    .slice(0, 5)
+    .map((button) => button.getAttribute("aria-label") ?? button.title);
+  expect(titles).toEqual([
+    "地理工作台",
+    "智能体",
+    "计算中心",
+    "知识库",
+    "成果展示",
+  ]);
+  expect(container.querySelector('[data-nav-key="agent"]')).toHaveClass(
+    "workspace-agent-highlight",
+  );
+  expect(
+    container.querySelector('.header-primary-actions button[title="数据分析"]'),
+  ).toBeNull();
+  await userEvent.hover(screen.getByRole("button", { name: "数据资源" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "数据分析" }));
+  expect(screen.getByTestId("location-path")).toHaveTextContent("/nongeo");
+});
+
+it("keeps the agent visible and disabled for an unauthenticated visitor", () => {
+  renderHeader({}, null);
+  expect(screen.getByRole("button", { name: "智能体" })).toBeDisabled();
 });

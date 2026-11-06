@@ -92,6 +92,7 @@ class DataResourceGroup(ProjectScopedModel):
 # MH-workflow task uploads and their working copies belong to one task only.
 TASK_RESOURCE_SOURCES = ("workflow-upload:", "workflow-working:")
 INTERNAL_SOURCE_PREFIXES = (
+    "geology-archived:",
     *TASK_RESOURCE_SOURCES,
     "geology-multi-frozen-rules:",
     "geology-multi-approved:",

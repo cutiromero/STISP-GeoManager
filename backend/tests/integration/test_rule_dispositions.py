@@ -216,6 +216,14 @@ def test_automatic_execution_writes_only_authorized_rule_rows_and_requires_its_p
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *a, **k: results
     )
+    assert workflow.status == "waiting_approval"
+    from apps.agent.geology_multi_review import approve_modifications
+
+    approve_modifications(
+        workflow, generic["owner"], generic["policy"], [], workflow.plan_hash
+    )
+    workflow.status = "queued"
+    _save(workflow)
     resource = create_approved_changes(
         workflow, generic["owner"], generic["policy"], stage
     )
@@ -226,7 +234,7 @@ def test_automatic_execution_writes_only_authorized_rule_rows_and_requires_its_p
     )
     assert len(records) == 1 and records[0]["issue_id"] == "issue-0"
     assert records[0]["action"] == "set_code"
-    workflow.steps.filter(kind="automatic_dispositions").delete()
+    workflow.steps.filter(kind="modifications_approved").delete()
     with pytest.raises(ComputeError, match="有效批准"):
         create_approved_changes(workflow, generic["owner"], generic["policy"], stage)
 

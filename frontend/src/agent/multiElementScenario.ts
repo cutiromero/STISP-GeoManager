@@ -117,7 +117,7 @@ export function multiElementInputIssues(role: string, input: ComputeCandidate) {
       input.fields.includes(field),
     )
   )
-    return ["请使用去标签的演示运行输入"];
+    return ["请使用已登记的分析输入"];
   return [];
 }
 
@@ -125,5 +125,5 @@ export function multiElementPrompt(segment: string) {
   const label =
     multiElementSegments.find((item) => item.value === segment)?.label ??
     "综合推理全流程";
-  return `请启动海德乌拉地质综合推理演示案例，执行${label}（segment=${segment}）。使用当前项目预设的模拟识别岩性、构造输入与遥感矿物识别结果。请实际检索本案例试用知识，调用算法测量并解释疑点；逐项建议经我批准后再修改，保留未批准和待裁定项。明确上游成果版本，输出真实地图、前后统计和报告，A/B仅表示优先核查的证据组合等级。`;
+  return `请启动五龙沟-海德乌拉地质综合推理，执行${label}（segment=${segment}）。使用当前项目预设的模拟识别岩性、构造输入与遥感矿物识别结果。请实际检索项目地质规则，调用算法测量并解释疑点；逐项建议经我批准后再修改，保留未批准和待裁定项。明确上游成果版本，输出真实地图、前后统计和报告，A/B仅表示优先核查的证据组合等级。`;
 }

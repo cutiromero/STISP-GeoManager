@@ -286,5 +286,293 @@
         "features": []
       }
     }
+  },
+  "POST /api/agent/workflows/{workflowId}/retained-review/": {
+    "200": {
+      "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
+      "projectId": 3,
+      "workflowType": "geology_generic",
+      "modificationReview": {
+        "proposalHash": "grouped-example-snapshot",
+        "approvedSuggestionIds": [
+          "object-1"
+        ],
+        "suggestions": [
+          {
+            "id": "object-1",
+            "groupId": "AG-example-calcite-C-A05",
+            "kind": "multi_element",
+            "element": "alteration",
+            "featureId": "AG-example-calcite-C-A05",
+            "title": "同矿物同岩性单元小斑",
+            "currentState": "原识别像元",
+            "suggestedState": "downweight",
+            "reason": "同单元内8邻域连通分量小于面积阈值，默认降权而非删除",
+            "action": "downweight",
+            "status": "suggested",
+            "areaM2": 1000,
+            "ruleId": "A-05",
+            "observations": {
+              "raster_protocol": "alteration-pixels-v1",
+              "group_id": "AG-example-calcite-C-A05",
+              "pixel_count": 10,
+              "area_m2": 1000,
+              "component_count": 2,
+              "mineral": "calcite",
+              "unit_code": "C",
+              "rock_group": "carbonate",
+              "boundary": false
+            },
+            "knowledgeRefs": [
+              {
+                "id": 601,
+                "revision": 1,
+                "title": "碎斑检查"
+              }
+            ],
+            "preview": {
+              "type": "Polygon",
+              "coordinates": []
+            },
+            "bounds": [
+              98.4,
+              35.6,
+              98.401,
+              35.601
+            ]
+          },
+          {
+            "id": "held-lithology-1",
+            "groupId": "lithology-L06-review",
+            "kind": "multi_element",
+            "element": "lithology",
+            "featureId": "F00001",
+            "title": "全新世冲积物形态异常",
+            "currentState": "Qhᵃˡ",
+            "suggestedState": "reclassify Qp₃ᵖᵃˡ",
+            "reason": "近等轴孤立团块，置信度较高，须核对冲积扇等例外",
+            "action": "reclassify",
+            "status": "review",
+            "candidateAction": "reclassify",
+            "candidateTargetCode": "Qp₃ᵖᵃˡ",
+            "areaM2": 500000,
+            "ruleId": "L-06",
+            "observations": {
+              "compactness": 0.8,
+              "aspect_ratio": 1.2
+            },
+            "knowledgeRefs": [
+              {
+                "id": 601,
+                "revision": 1,
+                "title": "本案例形态试用规则"
+              }
+            ],
+            "preview": {
+              "type": "Polygon",
+              "coordinates": []
+            },
+            "bounds": [
+              98.4,
+              35.6,
+              98.401,
+              35.601
+            ]
+          }
+        ]
+      },
+      "goal": "检查上传地质资料",
+      "model": "configured",
+      "modelActivity": {
+        "stage": "整理研究报告",
+        "status": "complete",
+        "thinkingText": "已核对本轮成果与证据，整理报告。",
+        "truncated": false,
+        "reasoningEffort": "xhigh",
+        "thinkingEnabled": true,
+        "attempt": 1,
+        "outputChars": 830,
+        "thinkingChars": 19,
+        "modelName": "configured",
+        "updatedAt": "2026-11-04T08:10:00Z"
+      },
+      "status": "waiting_approval",
+      "detail": "请核查保留对象，未选对象保持原样",
+      "currentStep": "finalize",
+      "iteration": 5,
+      "operatorSteps": 5,
+      "maxIterations": 12,
+      "maxOperatorSteps": 16,
+      "executeOperators": true,
+      "resourceIds": [
+        812
+      ],
+      "algorithmVersionId": null,
+      "parameters": {},
+      "resultIds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027
+      ],
+      "resultResourceIds": [
+        820,
+        821,
+        822,
+        823,
+        824,
+        825,
+        826,
+        827,
+        828
+      ],
+      "importResults": true,
+      "evidence": [],
+      "steps": [],
+      "stepCount": 22,
+      "view": "inspection",
+      "runtime": "durable_state_machine",
+      "createdAt": "2026-11-04T08:00:00Z",
+      "updatedAt": "2026-11-04T08:10:00Z",
+      "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "plan": {
+        "phase": "review_modifications",
+        "reusedConfiguration": true,
+        "fieldMappingReview": {
+          "roles": [],
+          "questions": [],
+          "modelMode": "mock",
+          "confirmed": true
+        },
+        "pagination": {
+          "part": "suggestions",
+          "offset": 0,
+          "limit": 50,
+          "total": 2,
+          "groups": [],
+          "element": "all",
+          "counts": {
+            "all": 1,
+            "lithology": 0,
+            "structure": 0,
+            "alteration": 1
+          },
+          "alterationPixels": 10,
+          "alterationAreaM2": 1000,
+          "revision": "frozen-raster-comparison"
+        },
+        "multiElementMap": {
+          "alterationRasters": [
+            {
+              "mineral": "calcite",
+              "beforeOutputId": 1025,
+              "afterOutputId": 1026,
+              "changesOutputId": 1027
+            }
+          ]
+        },
+        "reviewIndex": {
+          "total": 2,
+          "suggestedIds": [
+            "object-1"
+          ],
+          "candidateIds": [
+            "held-lithology-1"
+          ],
+          "groups": [
+            {
+              "element": "alteration",
+              "ruleId": "A-05",
+              "action": "downweight",
+              "held": false,
+              "count": 1,
+              "ids": [
+                "object-1"
+              ],
+              "reasons": {}
+            },
+            {
+              "element": "lithology",
+              "ruleId": "L-06",
+              "action": null,
+              "held": true,
+              "count": 1,
+              "ids": [
+                "held-lithology-1"
+              ],
+              "reasons": {
+                "规则判定，需专家裁定": 1
+              }
+            }
+          ]
+        },
+        "deletedResources": [],
+        "stages": [
+          {
+            "name": "apply",
+            "status": "completed",
+            "taskId": "67ac90d1-999f-44b7-9b68-1da1f726a142",
+            "outputs": [
+              {
+                "outputId": 1007,
+                "key": "lithology",
+                "kind": "vector",
+                "resourceId": 821,
+                "label": "修正后岩性图"
+              }
+            ]
+          }
+        ],
+        "retainedReview": {
+          "active": true,
+          "kind": "followup",
+          "automaticSuggestionIds": [
+            "object-1"
+          ],
+          "candidateIds": [
+            "held-lithology-1"
+          ],
+          "retainedSuggestionIds": [
+            "held-lithology-1"
+          ],
+          "sourcePlanHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "taskSummary": {
+        "sourceCount": 1,
+        "initialIssueCount": 2,
+        "remainingIssueCount": 1,
+        "executedDispositionCount": 1,
+        "retainedIssueCount": 1,
+        "reviewIssueCount": 1,
+        "exceptionIssueCount": 0,
+        "prospectZoneCount": null,
+        "completedCalculations": 3,
+        "totalCalculations": 5
+      }
+    }
   }
 }

@@ -7,4 +7,5 @@ export type LogicTaskProps = ComponentProps<typeof WorkflowResults> & {
   inputSummary?: AgentResearchIntent["inputSummary"];
   initialThinking?: string;
   onAdjustInputs?: () => void;
+  onReviewRetained?: () => void;
 };

@@ -18,8 +18,10 @@ TOKEN_SALT = "catalog.historical-result-deletion.v1"
 TOKEN_MAX_AGE = 600
 
 
-def history_snapshot(resource):
-    inputs, imports, workflows = historical_references(resource)
+def history_snapshot(resource, *, include_original=False):
+    inputs, imports, workflows = historical_references(
+        resource, include_original=include_original
+    )
     value = {
         "resource": {
             "id": resource.id,
@@ -65,9 +67,10 @@ def read_confirmation(request, ids, token):
     return data["snapshots"]
 
 
-def detach_history(resource, actor, state):
+def detach_history(resource, actor, state, *, duplicate_proof=None):
     """Keep named evidence, original plans, output files and audit identities."""
     receipt = {
+        **(duplicate_proof or {}),
         "formerResourceId": resource.id,
         "name": resource.name,
         "code": resource.code,

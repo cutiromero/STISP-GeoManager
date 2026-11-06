@@ -134,6 +134,7 @@ export const zhCN = {
       noMatchingResults: "暂无匹配成果",
       globalSearchResults: "全局搜索结果",
       globalSearchLoadFailed: "部分全局搜索内容加载失败",
+      agentPermissionRequired: "登录并获得智能体使用权限后可用",
       noResourceBrowsePermission: "当前账号暂无数据资源浏览权限",
       allBusinessCategories: "全部数据分类",
       noSubcategories: "暂无下级分类",
@@ -1127,6 +1128,7 @@ export const enUS = {
       noMatchingResults: "No matching results",
       globalSearchResults: "Global search results",
       globalSearchLoadFailed: "Some global-search content could not be loaded",
+      agentPermissionRequired: "Sign in with an account that has agent access",
       noResourceBrowsePermission:
         "This account does not have permission to browse data resources",
       allBusinessCategories: "All business categories",

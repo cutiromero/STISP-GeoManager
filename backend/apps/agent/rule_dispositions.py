@@ -278,6 +278,10 @@ def authorize_rule_execution(workflow, user, policy, stage):
         for s in review["suggestions"]
         if s["status"] == "suggested" and not s.get("candidateAction")
     ]
+    from .retained_review import open_initial_review
+
+    if open_initial_review(workflow, stage, selected):
+        return True
     proof = {
         "mode": "rule_authorized",
         "proposalHash": review["proposalHash"],

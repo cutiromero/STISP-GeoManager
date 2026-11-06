@@ -330,6 +330,7 @@ def public_plan(plan):
             not in {
                 "modificationReview",
                 "previousAnalysis",
+                "retainedReviewHistory",
             }
         },
         "stages": [public_stage(stage) for stage in plan.get("stages", [])],

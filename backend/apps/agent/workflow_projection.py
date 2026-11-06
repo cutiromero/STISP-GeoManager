@@ -21,6 +21,7 @@ SUMMARY_KEYS = (
     "outcome",
     "fieldMappingReview",
     "reusedConfiguration",
+    "retainedReview",
 )
 STAGE_KEYS = ("name", "identifier", "status", "taskId", "outputs", "outcome")
 
@@ -29,7 +30,9 @@ def page_options(query, view):
     from .views import ApiProblem
 
     part = query.get("part", "changes" if view == "compare" else "suggestions")
-    if part not in ({"changes"} if view == "compare" else {"suggestions", "steps"}):
+    if part not in (
+        {"changes"} if view == "compare" else {"suggestions", "retained", "steps"}
+    ):
         raise ApiProblem("工作流分页内容无效")
     try:
         offset = int(query.get("offset", 0))
@@ -291,6 +294,9 @@ def project_workflow(
         for key in SUMMARY_KEYS
         if key in source and (view != "compare" or key != "fieldMappingReview")
     }
+    if data.get("plan", {}).get("inputNames"):
+        plan["inputNames"] = data["plan"]["inputNames"]
+    plan["previousRounds"] = data.get("plan", {}).get("previousRounds", [])
     plan["algorithms"] = {
         key: {
             "name": value.get("name"),
@@ -551,6 +557,10 @@ def project_workflow(
         return data
     if review:
         suggestions = review.get("suggestions", [])
+        if part == "retained":
+            from .retained_review import held_suggestions
+
+            suggestions = held_suggestions(source)
         position = next(
             (
                 position
@@ -559,20 +569,25 @@ def project_workflow(
             ),
             None,
         )
-        if part == "suggestions" and position is not None and limit:
+        if part in {"suggestions", "retained"} and position is not None and limit:
             offset = position // limit * limit
             page["offset"] = offset
         plan["reviewIndex"] = review_index(suggestions)
         data["modificationReview"] = {
             **{key: value for key, value in review.items() if key != "suggestions"},
             "suggestions": [
-                {**item, "preview": {"type": "Polygon", "coordinates": []}}
+                {
+                    **item,
+                    "preview": display_preview(item.get("preview"))
+                    if part == "retained"
+                    else {"type": "Polygon", "coordinates": []},
+                }
                 for item in suggestions[offset : offset + limit]
             ]
-            if part == "suggestions"
+            if part in {"suggestions", "retained"}
             else [],
         }
-        if part == "suggestions":
+        if part in {"suggestions", "retained"}:
             page["total"] = len(suggestions)
     if part == "steps":
         page["total"] = workflow.steps.count()

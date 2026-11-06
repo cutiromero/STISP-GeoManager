@@ -113,15 +113,19 @@ function AgentNavigationButton({
   title: string;
 }) {
   const access = useAgentBootstrap();
-  if (!access?.canChat && !access?.canAgent) return null;
+  const { t } = useTranslation();
+  const allowed = Boolean(access?.canChat || access?.canAgent);
   return (
     <NavigationButton
       type="text"
-      className={className}
+      className={`${className} workspace-agent-highlight`}
+      data-nav-key="agent"
+      aria-label={title}
+      disabled={!allowed}
       onClick={() =>
-        onNavigate(access.canChat ? "/agent/chat" : "/agent/workbench")
+        onNavigate(access?.canChat ? "/agent/chat" : "/agent/workbench")
       }
-      title={title}
+      title={allowed ? title : t("navigation.agentPermissionRequired")}
     >
       <RobotOutlined aria-hidden="true" style={{ fontSize: 16 }} />
       <span className="tab-text">{title}</span>
@@ -193,7 +197,6 @@ export default function WorkspaceHeader({
   const searchContainerRef = useRef<HTMLElement | null>(null);
   const primaryNavRef = useRef<HTMLElement | null>(null);
   const mapTabRef = useRef<HTMLButtonElement | null>(null);
-  const nonGeoTabRef = useRef<HTMLButtonElement | null>(null);
   const resourcesTabRef = useRef<HTMLButtonElement | null>(null);
   const adminTabRef = useRef<HTMLButtonElement | null>(null);
   const aboutTabRef = useRef<HTMLButtonElement | null>(null);
@@ -238,12 +241,6 @@ export default function WorkspaceHeader({
     Boolean(user?.permissions.canAccessAdmin) && !isGuestUser;
   const showProjectManagement = canManageProjects(user);
   const showResourceCenter = true;
-  const showDataImportShortcut = Boolean(
-    user?.permissions.canUploadData ||
-    (user?.permissions.canViewResultArtifacts &&
-      user.permissions.canImportResultArtifacts &&
-      user.permissions.canPublishResultArtifacts),
-  );
 
   useEffect(() => {
     setSearchText(searchKeyword);
@@ -666,23 +663,17 @@ export default function WorkspaceHeader({
       ),
     [effectiveDataSchema, navigateFromHeader, t],
   );
-  const analysisCategoryMenuItems = useMemo<MenuProps["items"]>(
-    () =>
-      workspaceCategoryMenuItems(
-        taxonomyTree(effectiveDataSchema),
-        "/nongeo",
-        navigateFromHeader,
-        t,
-      ),
-    [effectiveDataSchema, navigateFromHeader, t],
-  );
-
   const dataManagementMenuItems = useMemo<MenuProps["items"]>(() => {
     const items: NonNullable<MenuProps["items"]> = [
       {
         key: "resources-dashboard",
         label: t("navigation.resourceOverview"),
         onClick: () => navigateFromHeader("/resources/catalog"),
+      },
+      {
+        key: "resources-analysis",
+        label: t("navigation.analytics"),
+        onClick: () => navigateFromHeader("/nongeo"),
       },
     ];
     if (
@@ -891,7 +882,7 @@ export default function WorkspaceHeader({
       {
         title: t("navigation.analytics"),
         description: t("navigation.tourAnalyticsDescription"),
-        target: () => nonGeoTabRef.current ?? document.body,
+        target: () => resourcesTabRef.current ?? document.body,
         placement: "bottom",
       },
     ];
@@ -953,7 +944,7 @@ export default function WorkspaceHeader({
         ref={resourcesTabRef}
         menuTrigger
         type="text"
-        className={`${tabClass(activeTab === "resources")} workspace-switch-card-data-management`}
+        className={`${tabClass(activeTab === "resources" || activeTab === "nongeo")} workspace-switch-card-data-management`}
         onClick={handleResourceCenter}
         title={t("navigation.dataResources")}
       >
@@ -1188,7 +1179,11 @@ export default function WorkspaceHeader({
               <span className="tab-text">{t("navigation.mapWorkspace")}</span>
             </NavigationButton>
           </Dropdown>
-          {dataButton}
+          <AgentNavigationButton
+            className={tabClass(activeTab === "warning")}
+            onNavigate={navigateFromHeader}
+            title={t("navigation.warning")}
+          />
           <NavigationButton
             type="text"
             data-nav-key="compute"
@@ -1203,29 +1198,16 @@ export default function WorkspaceHeader({
             />
             <span className="tab-text">{t("navigation.compute")}</span>
           </NavigationButton>
-          <Dropdown
-            menu={{ items: analysisCategoryMenuItems }}
-            trigger={["hover"]}
-            mouseEnterDelay={0.35}
-            placement="bottom"
-            classNames={{ root: "workspace-management-dropdown" }}
+          <NavigationButton
+            type="text"
+            data-nav-key="knowledgeBase"
+            className={tabClass(activeTab === "knowledgeBase")}
+            onClick={() => navigateFromHeader("/knowledge-base")}
+            title={t("navigation.knowledgeBase")}
           >
-            <NavigationButton
-              ref={nonGeoTabRef}
-              menuTrigger
-              type="text"
-              className={tabClass(activeTab === "nongeo")}
-              onClick={() => navigateFromHeader("/nongeo")}
-              title={t("navigation.analytics")}
-            >
-              <ColumnIcon
-                name="analysis"
-                aria-hidden="true"
-                style={{ fontSize: 16 }}
-              />
-              <span className="tab-text">{t("navigation.analytics")}</span>
-            </NavigationButton>
-          </Dropdown>
+            <ApartmentOutlined style={{ fontSize: 16 }} />
+            <span className="tab-text">{t("navigation.knowledgeBase")}</span>
+          </NavigationButton>
           <NavigationButton
             type="text"
             data-nav-key="results"
@@ -1240,21 +1222,7 @@ export default function WorkspaceHeader({
             />
             <span className="tab-text">{t("navigation.results")}</span>
           </NavigationButton>
-          <AgentNavigationButton
-            className={tabClass(activeTab === "warning")}
-            onNavigate={navigateFromHeader}
-            title={t("navigation.warning")}
-          />
-          <NavigationButton
-            type="text"
-            data-nav-key="knowledgeBase"
-            className={tabClass(activeTab === "knowledgeBase")}
-            onClick={() => navigateFromHeader("/knowledge-base")}
-            title={t("navigation.knowledgeBase")}
-          >
-            <ApartmentOutlined style={{ fontSize: 16 }} />
-            <span className="tab-text">{t("navigation.knowledgeBase")}</span>
-          </NavigationButton>
+          {dataButton}
           {showAdminTab && (
             <Dropdown
               menu={{ items: adminMenuItems }}
@@ -1333,20 +1301,6 @@ export default function WorkspaceHeader({
 
       <div className="header-account-actions">
         <ProjectSelector />
-        {showDataImportShortcut && (
-          <Button
-            type="text"
-            aria-label={t("navigation.dataImport")}
-            className="data-import-shortcut"
-            icon={<ColumnIcon name="upload" />}
-            onClick={() => navigateFromHeader("/resources/data/import")}
-            title={t("navigation.dataImport")}
-          >
-            <span className="data-import-shortcut-text">
-              {t("navigation.dataImport")}
-            </span>
-          </Button>
-        )}
         <LanguageSwitcher compact className="header-language-switcher" />
         <InvitationCenter />
         <Popover

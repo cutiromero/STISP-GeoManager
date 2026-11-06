@@ -964,12 +964,19 @@ def _prepare_and_submit_stage(workflow, user, p, stage) -> None:
         "name": (
             f"地质成果智能检查与修正 {stage_title(workflow, stage)}"
             if workflow.workflow_type == "geology_map_review"
+            else f"地质综合分析 {stage_title(workflow, stage)}"
+            if workflow.workflow_type in MULTI_FAMILY
             else f"{workflow.goal[:90]} {stage_title(workflow, stage)}"
         ),
         "versionId": workflow.plan["algorithms"][stage["identifier"]]["versionId"],
         "inputs": inputs,
         "parameters": stage["parameters"],
-        "idempotencyKey": f"demo-{workflow.id}-{stage['name']}",
+        "idempotencyKey": f"demo-{workflow.id}-{stage['name']}"
+        + (
+            f"-review-{len(workflow.plan['retainedReviewHistory'])}"
+            if workflow.plan.get("retainedReviewHistory")
+            else ""
+        ),
         "trial": False,
     }
     with transaction.atomic():

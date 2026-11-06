@@ -5136,9 +5136,7 @@ body:has(.workspace),
   font-weight: 700;
 }
 
-.header-account-actions .data-import-shortcut {
-  min-width: max-content;
-  padding-inline: 12px 14px;
+.header-primary-actions .workspace-agent-highlight.ant-btn {
   color: #2d1700;
   border-color: rgba(255, 184, 77, 0.86);
   background:
@@ -5147,12 +5145,12 @@ body:has(.workspace),
     0 0 0 1px rgba(255, 255, 255, 0.22) inset,
     0 8px 22px rgba(255, 132, 35, 0.36),
     0 0 18px rgba(255, 184, 77, 0.32);
-  font-weight: 800;
+  font-weight: 700;
   gap: 6px;
 }
 
-.header-account-actions .data-import-shortcut:hover,
-.header-account-actions .data-import-shortcut:focus-visible {
+.header-primary-actions .workspace-agent-highlight.ant-btn:hover,
+.header-primary-actions .workspace-agent-highlight.ant-btn:focus-visible {
   color: #1f1000;
   border-color: #ffe2a3;
   background:
@@ -5161,7 +5159,6 @@ body:has(.workspace),
     0 0 0 1px rgba(255, 255, 255, 0.3) inset,
     0 10px 26px rgba(255, 132, 35, 0.45),
     0 0 22px rgba(255, 202, 103, 0.42);
-  transform: translateY(-1px);
 }
 
 .data-import-shortcut-text {
@@ -22242,4 +22239,39 @@ html[lang="en-US"] .knowledge-v2-title > div {
 }
 .feature-click-popup small {
   color: #8a9ba7;
+}
+
+.header-primary-actions .workspace-agent-highlight.ant-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.workspace-header
+  .header-primary-actions
+  .ant-btn.workspace-agent-highlight:not(:disabled):hover,
+.workspace-header
+  .header-primary-actions
+  .ant-btn.workspace-agent-highlight:not(:disabled):focus-visible {
+  color: #1f1000;
+  border-color: #ffe2a3;
+  background: linear-gradient(135deg, #ffe18b 0%, #ffad42 50%, #ff7a24 100%);
+}
+
+@media (min-width: 761px) {
+  .workspace-header
+    nav.header-primary-actions.header-primary-actions-measuring
+    .workspace-switch-card-secondary.workspace-switch-card-active {
+    width: max-content;
+    min-width: 1.95rem;
+    max-width: 10rem;
+    padding-inline: 7px;
+    gap: 5px;
+  }
+  .workspace-header
+    nav.header-primary-actions.header-primary-actions-measuring
+    .workspace-switch-card-secondary.workspace-switch-card-active
+    .tab-text {
+    max-width: 8em;
+    opacity: 1;
+  }
 }

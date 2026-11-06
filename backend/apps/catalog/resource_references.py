@@ -49,9 +49,9 @@ COMPUTE_TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
 WORKFLOW_TERMINAL = {"succeeded", "failed", "cancelled"}
 
 
-def historical_references(resource):
+def historical_references(resource, *, include_original=False):
     """Only completed provenance of a registered computation result is removable."""
-    if not resource.is_compute_result:
+    if not resource.is_compute_result and not include_original:
         return [], [], []
     inputs = list(
         ComputeInput.objects.filter(
@@ -117,13 +117,15 @@ def historical_references(resource):
     return inputs, imports, workflows
 
 
-def resource_reference_reasons(resource, *, allow_history=False) -> list[str]:
+def resource_reference_reasons(
+    resource, *, allow_history=False, include_original=False
+) -> list[str]:
     """Return generic categories without revealing another user's object names."""
     from apps.agent.resource_dependencies import active_run_reasons
 
     reasons = []
     reasons.extend(active_run_reasons(resource.id))
-    removable = bool(allow_history and resource.is_compute_result)
+    removable = bool(allow_history and (resource.is_compute_result or include_original))
     inputs = ComputeInput.objects.filter(resource_id=resource.id)
     imports = ComputeImport.objects.filter(resource_id=resource.id)
     if removable:

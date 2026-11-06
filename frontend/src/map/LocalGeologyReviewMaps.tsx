@@ -29,6 +29,7 @@ type Props = {
   onSelect: (index: number) => void;
   previewLabel?: string;
   inspectionOnly?: boolean;
+  single?: boolean;
   overlays?: ReviewOverlay[];
   onInspect?: (feature: Feature) => void;
   beforeLabel?: string;
@@ -193,6 +194,7 @@ export default function LocalGeologyReviewMaps({
   onSelect,
   previewLabel = "建议修改范围，尚未执行",
   inspectionOnly = false,
+  single = false,
   overlays: originalOverlays = emptyOverlays,
   onInspect,
   beforeLabel = "待检查地质图",
@@ -255,8 +257,8 @@ export default function LocalGeologyReviewMaps({
   );
   return (
     <>
-      <div className="geology-review-map-pair">
-        {[0, 1].map((side) => {
+      <div className={`geology-review-map-pair${single ? " is-single" : ""}`}>
+        {(single ? [0] : [0, 1]).map((side) => {
           const units = side ? (after ?? before) : before;
           const focus =
             spotlight && (side ? spotlight.after : spotlight.before);

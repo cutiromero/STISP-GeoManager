@@ -34,6 +34,8 @@ import WorkflowModelActivity from "./WorkflowModelActivity";
 import WorkflowDecisionTimeline from "./WorkflowDecisionTimeline";
 import ThinkingStream from "./ThinkingStream";
 import MultiElementStory from "./MultiElementStory";
+import RetainedIssueReview from "./RetainedIssueReview";
+import PreviousLogicResults from "./PreviousLogicResults";
 import RunComputeTasks from "./RunComputeTasks";
 import WorkflowReportFile from "./WorkflowReportFile";
 import SafeMarkdown from "./SafeMarkdown";
@@ -57,19 +59,29 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
     inputSummary = [],
     initialThinking,
     onAdjustInputs,
+    onReviewRetained,
     reviewError,
   } = props;
   const [view, setView] = useState("overview");
   const [drawer, setDrawer] = useState<DrawerKind>();
   const [stopOpen, setStopOpen] = useState(false);
-  const { stepsDetail, suggestionsDetail, loading, error, part, load } =
-    useLogicTaskDetail(workflow);
+  const {
+    stepsDetail,
+    suggestionsDetail,
+    retainedDetail,
+    loading,
+    error,
+    part,
+    load,
+  } = useLogicTaskDetail(workflow);
   const loadRef = useRef(load);
   loadRef.current = load;
   const key = `${workflow.projectId}:${workflow.id}`;
   const needsApproval =
     workflow.status === "waiting_approval" &&
     workflow.plan.phase === "review_modifications";
+  const retainedOnly = Boolean(record(workflow.plan.retainedReview).active);
+  const approvalPart = retainedOnly ? "retained" : "suggestions";
   useEffect(() => {
     setView("overview");
     setDrawer(undefined);
@@ -78,24 +90,34 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
   useEffect(() => {
     let disposed = false;
     const read = async () => {
-      if (needsApproval) await loadRef.current("suggestions");
-      if (disposed || workflow.view !== "card") return;
+      if (needsApproval) await loadRef.current(approvalPart);
+      if (disposed || (workflow.view !== "card" && drawer !== "retained"))
+        return;
       if (drawer && drawer !== "thinking")
-        await loadRef.current(drawer === "retained" ? "suggestions" : "steps");
+        await loadRef.current(drawer === "retained" ? "retained" : "steps");
     };
     void read();
     return () => {
       disposed = true;
     };
-  }, [key, workflow.view, needsApproval, workflow.planHash, drawer]);
+  }, [
+    key,
+    workflow.view,
+    needsApproval,
+    workflow.planHash,
+    drawer,
+    approvalPart,
+  ]);
   const detail =
-    (drawer === "retained" ? suggestionsDetail : stepsDetail) ?? workflow;
-  const approvalDetail = suggestionsDetail ?? workflow;
+    (drawer === "retained" ? retainedDetail : stepsDetail) ?? workflow;
+  const loadedApproval = retainedOnly ? retainedDetail : suggestionsDetail;
+  const approvalDetail = loadedApproval ?? workflow;
   const snapshotReady =
-    Boolean(drawer === "retained" ? suggestionsDetail : stepsDetail) ||
-    workflow.view !== "card";
+    drawer === "retained"
+      ? Boolean(retainedDetail)
+      : Boolean(stepsDetail) || workflow.view !== "card";
   const approvalReady =
-    Boolean(suggestionsDetail || workflow.view !== "card") &&
+    Boolean(loadedApproval || (!retainedOnly && workflow.view !== "card")) &&
     approvalDetail.planHash === workflow.planHash;
   const summary = workflow.taskSummary;
   const phase = logicPhase(workflow);
@@ -195,6 +217,26 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
               <Spin size="small" />
               正在读取建议…
             </div>
+          ) : approvalReady && retainedOnly ? (
+            <>
+              <RetainedIssueReview
+                key={workflow.planHash}
+                workflow={displayed}
+                busy={busy}
+                onReview={onReview}
+                reviewError={reviewError}
+              />
+              {displayed.modificationReview &&
+                displayed.modificationReview.suggestions.length <
+                  Number(record(displayed.plan.reviewIndex).total ?? 0) && (
+                  <Button
+                    loading={loading}
+                    onClick={() => void load("retained", true)}
+                  >
+                    读取更多待核查对象
+                  </Button>
+                )}
+            </>
           ) : approvalReady ? (
             <MultiElementStory
               workflow={displayed}
@@ -206,7 +248,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           ) : (
             <Button
               loading={loading}
-              onClick={() => void load("suggestions", false, true)}
+              onClick={() => void load(approvalPart, false, true)}
             >
               读取最新处置建议
             </Button>
@@ -291,6 +333,15 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
                 <Button type="link" onClick={() => setDrawer("retained")}>
                   查看对象 <RightOutlined />
                 </Button>
+                {onReviewRetained && (
+                  <Button
+                    type="primary"
+                    loading={busy}
+                    onClick={onReviewRetained}
+                  >
+                    核查并选择处置
+                  </Button>
+                )}
               </div>
             )}
           {workflow.detail && (
@@ -385,6 +436,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           reviewing={workflow.status === "waiting_approval"}
         />
       )}
+      <PreviousLogicResults workflow={workflow} />
     </div>
   );
   return (
@@ -542,7 +594,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
               loading={loading}
               onClick={() =>
                 void load(
-                  drawer === "retained" ? "suggestions" : "steps",
+                  drawer === "retained" ? "retained" : "steps",
                   false,
                   true,
                 )
@@ -601,18 +653,19 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
             )}
             {snapshotReady ? (
               <>
-                <p className="logic-muted">
-                  以下保留初检分组与原始判定依据。已经批准的对象请结合实际计算记录核对执行结果。
-                </p>
-                <MultiElementStory workflow={detail} focus="retained" />
+                <RetainedIssueReview
+                  key={detail.planHash}
+                  workflow={detail}
+                  readonly
+                />
                 {detail.modificationReview &&
                   detail.modificationReview.suggestions.length <
                     Number(record(detail.plan.reviewIndex).total ?? 0) && (
                     <Button
                       loading={loading}
-                      onClick={() => void load("suggestions", true)}
+                      onClick={() => void load("retained", true)}
                     >
-                      读取更多对象依据
+                      读取更多保留对象
                     </Button>
                   )}
               </>

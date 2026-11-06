@@ -1302,6 +1302,22 @@ export default function WorkflowPanel({
                   }
                 : {})}
               workflow={workflow}
+              onReviewRetained={() => {
+                if (busy) return;
+                setBusy(true);
+                setError("");
+                void agentApi
+                  .reviewRetainedWorkflow(workflow.id, workflow.planHash)
+                  .then(setWorkflow)
+                  .catch((reason) =>
+                    setError(
+                      reason instanceof Error
+                        ? reason.message
+                        : "暂时无法打开核查",
+                    ),
+                  )
+                  .finally(() => setBusy(false));
+              }}
               busy={busy}
               onConfirm={
                 planOutdated || fieldMappingReview

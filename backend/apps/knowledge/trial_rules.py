@@ -58,12 +58,19 @@ def read_bound_rules(
             project_tag_id=project_id,
             domain="geology",
         )
-        if not history:
-            query = query.filter(revision=revision, status="draft")
         entry = query.first()
         if entry is None:
             raise PermissionDenied("绑定的本案例试用知识已变化、停用或不属于当前项目")
         value = serialize(entry)
+        if not history:
+            if value.get("revision") != revision:
+                from .formal_rules import published_predecessor
+
+                value = published_predecessor(entry, value, revision)
+                if value is None:
+                    raise PermissionDenied("绑定的项目知识已变化，请重新生成计划")
+            if value.get("status") not in {"draft", "published"}:
+                raise PermissionDenied("绑定的项目知识已停用")
         if history:
             prior = KnowledgeRevision._base_manager.filter(
                 entry_id=identity, project_tag_id=project_id, revision=revision
@@ -75,7 +82,7 @@ def read_bound_rules(
                 or value.get("revision") != revision
                 or value.get("projectTagId") != project_id
                 or value.get("domain") != "geology"
-                or value.get("status") != "draft"
+                or value.get("status") not in {"draft", "published"}
             ):
                 raise PermissionDenied("已保存的本案例知识修订不属于当前历史记录")
         config = value.get("ruleConfig")
@@ -93,7 +100,12 @@ def read_bound_rules(
         rule = config.get("rule")
         if not isinstance(parameters, dict) or not isinstance(rule, dict):
             raise ComputeError("试用知识缺少可执行参数或规则条件")
-        value["trialBinding"] = {**binding, "scope": "本案例试用"}
+        value["trialBinding"] = {
+            **binding,
+            "scope": "项目正式规则"
+            if value.get("status") == "published"
+            else "本案例试用",
+        }
         entries.append(value)
     if expected is not None and digest(entries) != expected:
         raise PermissionDenied("试用知识正文、适用条件或参数已变化，请重新生成计划")

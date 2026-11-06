@@ -77,6 +77,8 @@ def _paths(workflow: AgentWorkflow) -> tuple[Path, Path, str]:
     directory = f"workflow-reports/{workflow.id}"
     if workflow.workflow_type in MULTI_FAMILY:
         directory += "/" + _multi_report_version(workflow)
+        if workflow.plan.get("retainedReviewHistory"):
+            directory += "/review-" + str(len(workflow.plan["retainedReviewHistory"]))
     relative = f"{directory}/report.md"
     return (
         table_data_path(relative),
@@ -89,6 +91,8 @@ def _source(workflow: AgentWorkflow) -> str:
     value = f"workflow-report:{workflow.id}"
     if workflow.workflow_type in MULTI_FAMILY:
         value += ":" + _multi_report_version(workflow)
+        if workflow.plan.get("retainedReviewHistory"):
+            value += ":review-" + str(len(workflow.plan["retainedReviewHistory"]))
     return value
 
 

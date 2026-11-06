@@ -241,7 +241,7 @@ export const agentApi = {
       signal?: AbortSignal;
       projectTagId?: string;
       view?: "card" | "full" | "compare" | "inspection";
-      part?: "suggestions" | "steps" | "changes";
+      part?: "suggestions" | "retained" | "steps" | "changes";
       offset?: number;
       limit?: number;
       suggestionId?: string;
@@ -304,6 +304,12 @@ export const agentApi = {
     requestJson<AgentWorkflowList>("/api/agent/workflows/", {
       ...options,
       validate: assertWorkflowList,
+    }),
+  reviewRetainedWorkflow: (id: string, planHash: string) =>
+    requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/retained-review/`, {
+      method: "POST",
+      body: { planHash },
+      validate: assertWorkflow,
     }),
   confirmWorkflow: (
     id: string,

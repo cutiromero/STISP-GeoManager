@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { agentApi } from "../api/agent";
 import type { AgentWorkflow } from "../api/generated/types.gen";
 
-type Part = "steps" | "suggestions";
+type Part = "steps" | "suggestions" | "retained";
 type Snapshot = {
   scope: string;
   part: Part;
@@ -44,7 +44,9 @@ export function useLogicTaskDetail(workflow: AgentWorkflow) {
         previous &&
         !append &&
         !refresh &&
-        (!reviewing || previous.planHash === task.planHash)
+        ((!reviewing &&
+          !(part === "retained" && task.status === "succeeded")) ||
+          previous.planHash === task.planHash)
       ) {
         setSnapshot({
           scope: expected,
@@ -137,6 +139,10 @@ export function useLogicTaskDetail(workflow: AgentWorkflow) {
     detail: valid && snapshot.value ? snapshot.value : workflow,
     stepsDetail:
       cache.current.scope === identity ? cache.current.values.steps : undefined,
+    retainedDetail:
+      cache.current.scope === identity
+        ? cache.current.values.retained
+        : undefined,
     suggestionsDetail:
       cache.current.scope === identity
         ? cache.current.values.suggestions

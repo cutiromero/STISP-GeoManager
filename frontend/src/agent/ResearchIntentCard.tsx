@@ -23,6 +23,7 @@ import { runActivity } from "./agentActivity";
 import { workflowStatusLabels } from "./workflowFeedback";
 import { briefTitle } from "./researchText";
 import FieldMappingReview from "./FieldMappingReview";
+import { record } from "../map/geologyReviewData";
 
 const active = ["queued", "running", "waiting_compute", "waiting_approval"];
 const labels: Record<AgentResearchIntent["status"], [string, string]> = {
@@ -312,6 +313,32 @@ export default function ResearchIntentCard({
       if (alive.current) setBusy(false);
     }
   };
+  const reviewRetained = async () => {
+    if (!workflow || inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const next = await agentApi.reviewRetainedWorkflow(
+        workflow.id,
+        workflow.planHash,
+      );
+      if (alive.current) {
+        setWorkflow(next);
+        setWorkflowRevision((value) => value + 1);
+      }
+    } catch (reason) {
+      if (alive.current)
+        setError(reason instanceof Error ? reason.message : "暂时无法打开核查");
+    } finally {
+      inFlight.current = false;
+      if (alive.current) setBusy(false);
+    }
+  };
+  const inputSummary = intent.inputSummary.map((input) => ({
+    ...input,
+    name: String(record(workflow?.plan.inputNames)[input.role] ?? input.name),
+  }));
   const status = labels[intent.status];
   if (workflow && intent.scenario === "geology_generic")
     return (
@@ -320,9 +347,10 @@ export default function ResearchIntentCard({
         compact
         busy={busy}
         reviewError={reviewError || error}
-        inputSummary={intent.inputSummary}
+        inputSummary={inputSummary}
         initialThinking={run.thinkingText}
         onAdjustInputs={() => void update("answer", "修改角色和字段")}
+        onReviewRetained={() => void reviewRetained()}
         inputReview={
           workflow.plan.phase === "review_mapping" &&
           workflow.plan.fieldMappingReview ? (
@@ -332,7 +360,7 @@ export default function ResearchIntentCard({
               compact
               key={`${workflow.id}:${workflow.planHash}`}
               review={workflow.plan.fieldMappingReview}
-              inputs={intent.inputSummary}
+              inputs={inputSummary}
               busy={busy}
               onAdjustRoles={() => void update("answer", "修改角色和字段")}
               onConfirm={(mapping, automatic) =>

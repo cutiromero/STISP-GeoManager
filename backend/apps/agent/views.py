@@ -874,7 +874,11 @@ def workflow_json(workflow, include_steps=True, view="full"):
             "deletedResources": workflow.plan.get("deletedResources", []),
             **{
                 key: workflow.plan[key]
-                for key in ("fieldMappingReview", "reusedConfiguration")
+                for key in (
+                    "fieldMappingReview",
+                    "reusedConfiguration",
+                    "retainedReview",
+                )
                 if key in workflow.plan
             },
             "stages": [
@@ -899,6 +903,45 @@ def workflow_json(workflow, include_steps=True, view="full"):
         from .workflow_task_summary import task_summary
 
         data["taskSummary"] = task_summary(workflow)
+        from apps.catalog.models import DataResource
+
+        sources = workflow.plan.get("uploadInputs") or workflow.plan.get("inputs") or {}
+        names = dict(
+            DataResource.objects.filter(
+                project_tag_id=workflow.project_tag_id, pk__in=list(sources.values())
+            ).values_list("id", "name")
+        )
+        data["plan"] = {
+            **data["plan"],
+            "previousRounds": [
+                {
+                    "planHash": snapshot["planHash"],
+                    "stages": [
+                        {
+                            key: stage[key]
+                            for key in (
+                                "name",
+                                "identifier",
+                                "status",
+                                "taskId",
+                                "outputs",
+                            )
+                            if key in stage
+                        }
+                        for stage in snapshot.get("stages", [])
+                    ],
+                }
+                for snapshot in workflow.plan.get("retainedReviewHistory", [])
+            ],
+            "inputNames": {
+                **workflow.plan.get("inputNames", {}),
+                **{
+                    role: names[identity]
+                    for role, identity in sources.items()
+                    if identity in names
+                },
+            },
+        }
     from .model_activity import latest_model_activity
 
     activity = latest_model_activity(workflow)
@@ -1662,3 +1705,20 @@ def admin(request):
             request,
         )
     return JsonResponse(admin_json(request.user))
+
+
+@endpoint(["POST"])
+def workflow_retained_review(request, workflow_id):
+    from .retained_review import reopen
+    from .workflow_controls import locked_workflow
+    from apps.core.client_build import current_browser
+
+    if not current_browser(request):
+        raise ApiProblem("平台已更新，请刷新后继续核查", 409)
+    value = body(request, ["planHash"])
+    with transaction.atomic():
+        get_object_or_404(AgentWorkflow.objects, pk=workflow_id, owner=request.user)
+        workflow = locked_workflow(workflow_id)
+        policy = require_access(request.user, "agent", workflow.model)
+        reopen(workflow, request.user, policy, value.get("planHash"))
+    return JsonResponse(workflow_json(workflow, view="card"))

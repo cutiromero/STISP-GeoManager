@@ -53,7 +53,9 @@ export default function FieldMappingReview({
   const roleFields = (role: AgentFieldMappingReview["roles"][number]) => (
     <div key={role.role} className="agent-demo-mapping">
       <Typography.Text strong>
-        {role.label} · {role.fileName}
+        {role.label} ·{" "}
+        {inputs.find((input) => input.role === role.role)?.name ??
+          role.fileName}
       </Typography.Text>
       {role.targets.map((target) => (
         <label key={target.key} className="agent-workflow-parameter">

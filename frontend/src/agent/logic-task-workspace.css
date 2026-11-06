@@ -462,3 +462,32 @@
     display: none;
   }
 }
+
+.logic-retained-review > .ant-alert {
+  margin-bottom: 18px;
+}
+.logic-retained-review > .ant-checkbox-wrapper {
+  margin: 16px 0;
+}
+.logic-retained-review .geology-review-maps {
+  margin-block: 16px;
+}
+.logic-retained-review .ant-table-cell p {
+  margin: 6px 0;
+  line-height: 1.7;
+}
+.logic-retained-evidence {
+  padding: 18px 0;
+  border-top: 1px solid #e4ebf1;
+}
+.logic-retained-review .geology-review-controls {
+  display: grid;
+  gap: 12px;
+}
+.logic-retained-summary {
+  flex-wrap: wrap;
+}
+
+.logic-retained-review .geology-review-map-pair.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}

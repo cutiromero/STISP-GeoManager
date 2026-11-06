@@ -73,11 +73,21 @@ def render_report(workflow, tasks):
         stage.get("modificationsApproval", {}).get("mode") == "rule_authorized"
         for stage in workflow.plan["stages"]
     )
-    approval_label = "按本次资料启动授权执行" if automatic else "用户批准"
+    mixed = any(
+        stage.get("modificationsApproval", {}).get("mode") == "reviewed_rules"
+        for stage in workflow.plan["stages"]
+    )
+    approval_label = (
+        "按原授权及本次人工裁定执行"
+        if mixed
+        else "按本次资料启动授权执行"
+        if automatic
+        else "用户批准"
+    )
     lines = [
         "# 海德乌拉综合检查报告",
         "",
-        "演示案例",
+        "研究区资料",
         "",
         f"项目：{_text(workflow.project_tag.name)}",
         "",
@@ -139,13 +149,13 @@ def render_report(workflow, tasks):
             [
                 f"### {index}. {_text(action)}，对象 {_text(item['featureId'])}",
                 "",
-                f"{_text(item['currentState'])} → {_text(target)}。{'按本次启动授权执行' if automatic else '用户已批准'}，实际结果：{result}。",
+                f"{_text(item['currentState'])} → {_text(target)}。{'按本次启动授权执行' if automatic or mixed and item['id'] in set(next((s.get('modificationsApproval', {}).get('automaticSuggestionIds', []) for s in workflow.plan['stages'] if s.get('name') == 'apply'), [])) else '用户已批准'}，实际结果：{result}。",
                 "",
                 "理由：" + _text(row.get("reason") or item["reason"], 500),
                 "",
                 "实际观测：" + _observations(item.get("observations", {}), _text),
                 "",
-                f"依据：[{_text(item['ruleId'])} 本案例试用](#规则来源)。实际处置范围为{_text(scope)}。",
+                f"依据：[{_text(item['ruleId'])} 项目规则](#规则来源)。实际处置范围为{_text(scope)}。",
                 "",
             ]
         )
@@ -321,7 +331,7 @@ def render_report(workflow, tasks):
             "",
             "## 后续核查",
             "",
-            "A/B表示本案例规则的证据组合等级；区域数量或面积变化反映获批处置影响，找矿效果需要矿点资料验证。碳酸盐背景仍可能叠加热液作用，模拟置信度仅用于演示；待核查项结合接触关系、基岩资料和实地证据继续判断。",
+            "A/B表示本案例规则的证据组合等级；区域数量或面积变化反映获批处置影响，找矿效果需要矿点资料验证。碳酸盐背景仍可能叠加热液作用，模拟置信度来自识别输入而非野外实测；待核查项结合接触关系、基岩资料和实地证据继续判断。",
             "",
         ]
     )

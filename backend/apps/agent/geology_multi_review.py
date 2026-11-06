@@ -715,6 +715,9 @@ def approve_modifications(
         or len(set(selected)) != len(selected)
     ):
         raise ComputeError("请选择要批准的对象处置建议，可不选择任何修改")
+    from .retained_review import merge_selection
+
+    selected, review_scope = merge_selection(workflow, user, policy, selected)
     stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
     review, rows = _fresh(workflow, user, policy, stage)
     ids = [item["id"] for item in review["suggestions"]]
@@ -722,10 +725,25 @@ def approve_modifications(
         raise ComputeError("所选处置不属于本次方案", 409)
     selected_set = set(selected)
     selected = [identity for identity in ids if identity in selected_set]
-    actions = validate_alteration_actions(
-        review, selected_set, {} if alteration_actions is None else alteration_actions
-    )
+    requested_actions = {} if alteration_actions is None else alteration_actions
+    if review_scope:
+        manual_features = {
+            item["featureId"]
+            for item in review["suggestions"]
+            if item["id"] in review_scope["manualSuggestionIds"]
+        }
+        if (
+            not isinstance(requested_actions, dict)
+            or set(requested_actions) - manual_features
+        ):
+            raise ComputeError("只能裁定本次选中保留对象的动作", 409)
+        requested_actions = {
+            **review_scope.get("automaticAlterationActions", {}),
+            **requested_actions,
+        }
+    actions = validate_alteration_actions(review, selected_set, requested_actions)
     approval = {
+        **review_scope,
         "proposalHash": review["proposalHash"],
         "planHash": plan_hash,
         "selectedSuggestionIds": selected,
@@ -753,6 +771,8 @@ def approve_modifications(
     )
     checkpoint(workflow, "modifications_approved", approval)
     stage["status"] = "pending"
+    if review_scope:
+        workflow.plan["retainedReview"]["active"] = False
 
 
 def validate_alteration_actions(review, selected, actions):
@@ -849,9 +869,13 @@ def create_approved_changes(workflow, user, policy, stage):
     writer.writeheader()
     writer.writerows(expected)
     raw = stream.getvalue().encode("utf-8")
-    relative = f"demo/workflows/{workflow.id}/approved-changes.csv"
+    round_number = len(workflow.plan.get("retainedReviewHistory", []))
+    suffix = f"/review-{round_number}" if round_number else ""
+    relative = f"demo/workflows/{workflow.id}{suffix}/approved-changes.csv"
     path = table_data_path(relative)
-    source = f"geology-multi-approved:{workflow.id}"
+    source = f"geology-multi-approved:{workflow.id}" + (
+        f":review-{round_number}" if round_number else ""
+    )
     with transaction.atomic():
         from .workflow_controls import check_pause, locked_workflow
 
@@ -871,7 +895,8 @@ def create_approved_changes(workflow, user, policy, stage):
         resource = DataResource.objects.create(
             project_tag_id=workflow.project_tag_id,
             name="获批对象处置记录",
-            code=f"multi-approved-{workflow.id.hex}",
+            code=f"multi-approved-{workflow.id.hex}"
+            + (f"-r{round_number}" if round_number else ""),
             data_type="table",
             file_format="CSV",
             storage_path="table/" + relative,

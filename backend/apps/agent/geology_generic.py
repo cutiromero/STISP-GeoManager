@@ -91,7 +91,7 @@ def project_rules(user, policy):
         .first()
     )
     if rules is None:
-        raise ComputeError("当前项目没有已绑定的地质试用规则，请联系管理员登记")
+        raise ComputeError("当前项目没有已绑定的地质规则，请联系管理员登记")
     return rules
 
 
