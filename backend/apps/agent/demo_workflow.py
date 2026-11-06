@@ -19,7 +19,6 @@ from apps.compute.services import (
     submit,
     request_output_import,
     task_action,
-    validate_submission,
 )
 from apps.compute.access import require_actor
 from apps.compute.packages import ComputeError
