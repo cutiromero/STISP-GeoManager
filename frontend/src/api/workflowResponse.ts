@@ -117,7 +117,9 @@ export function assertWorkflow(
     }
     if (
       Number(page.limit) > 50 ||
-      !["suggestions", "steps", "changes"].includes(String(page.part))
+      !["suggestions", "retained", "steps", "changes"].includes(
+        String(page.part),
+      )
     )
       throw new ResponseFormatError(`${pagePath}: invalid page`);
     responseArray(page.groups, `${pagePath}.groups`);

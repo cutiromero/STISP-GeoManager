@@ -182,3 +182,22 @@ describe("durable workflow response boundaries", () => {
     );
   });
 });
+
+it("accepts the explicit retained-object page without weakening pagination limits", () => {
+  const saved = {
+    ...workflow(),
+    view: "inspection",
+    plan: {
+      pagination: {
+        part: "retained",
+        offset: 0,
+        limit: 50,
+        total: 45,
+        groups: [],
+      },
+    },
+  };
+  expect(() => assertWorkflow(saved)).not.toThrow();
+  saved.plan.pagination.limit = 51;
+  expect(() => assertWorkflow(saved)).toThrow(ResponseFormatError);
+});
