@@ -903,14 +903,8 @@ def workflow_json(workflow, include_steps=True, view="full"):
         from .workflow_task_summary import task_summary
 
         data["taskSummary"] = task_summary(workflow)
-        from apps.catalog.models import DataResource
+        from .workflow_resources import display_input_names
 
-        sources = workflow.plan.get("uploadInputs") or workflow.plan.get("inputs") or {}
-        names = dict(
-            DataResource.objects.filter(
-                project_tag_id=workflow.project_tag_id, pk__in=list(sources.values())
-            ).values_list("id", "name")
-        )
         data["plan"] = {
             **data["plan"],
             "previousRounds": [
@@ -933,14 +927,7 @@ def workflow_json(workflow, include_steps=True, view="full"):
                 }
                 for snapshot in workflow.plan.get("retainedReviewHistory", [])
             ],
-            "inputNames": {
-                **workflow.plan.get("inputNames", {}),
-                **{
-                    role: names[identity]
-                    for role, identity in sources.items()
-                    if identity in names
-                },
-            },
+            "inputNames": display_input_names(workflow),
         }
     from .model_activity import latest_model_activity
 

@@ -257,3 +257,29 @@ def resolve_run_resource(user, policy, identity, run, *, history=False):
     if batch_id:
         return resolve_upload_resource(user, policy, identity, batch_id)
     raise PermissionDenied("资料未绑定到当前对话任务")
+
+
+def display_input_names(workflow):
+    """Current permitted registration labels without altering frozen provenance."""
+    from apps.catalog.models import DataResource
+    from apps.catalog.permissions import filter_accessible
+
+    sources = {
+        **workflow.plan.get("inputs", {}),
+        **workflow.plan.get("uploadInputs", {}),
+    }
+    resources = filter_accessible(
+        DataResource.objects.filter(project_tag_id=workflow.project_tag_id),
+        workflow.owner,
+    )
+    names = dict(
+        resources.filter(pk__in=list(sources.values())).values_list("id", "name")
+    )
+    return {
+        **workflow.plan.get("inputNames", {}),
+        **{
+            role: names[identity]
+            for role, identity in sources.items()
+            if identity in names
+        },
+    }

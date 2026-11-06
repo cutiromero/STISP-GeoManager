@@ -226,3 +226,37 @@ def test_retained_review_endpoint_keeps_owner_and_project_boundary(setup_agent):
         )
         assert response.status_code == 200, response.content
         assert reopen.call_args.args[0].id == own.id
+
+
+def test_current_input_labels_do_not_change_frozen_plan_or_content_revision(
+    setup_agent,
+):
+    from apps.agent.views import workflow_json
+    from apps.catalog.models import DataResource
+    from apps.agent.workflow import _state_hash
+
+    env = setup_agent
+    with project_scope(env["scope"]):
+        resource = env["resource"]
+        stamp = resource.updated_at
+        plan = {
+            "phase": "completed",
+            "inputs": {"lithology": resource.id},
+            "inputNames": {"lithology": "旧登记名称"},
+        }
+        saved = AgentWorkflow.objects.create(
+            owner=env["user"],
+            workflow_type="geology_generic",
+            model="mock",
+            idempotency_key="display-current-label",
+            plan=plan,
+            plan_hash=_state_hash(plan),
+        )
+        DataResource.objects.filter(pk=resource.id).update(name="正式地质资料")
+        card = workflow_json(saved, view="card")
+        assert card["plan"]["inputNames"]["lithology"] == "正式地质资料"
+        saved.refresh_from_db()
+        resource.refresh_from_db()
+        assert saved.plan["inputNames"]["lithology"] == "旧登记名称"
+        assert saved.plan_hash == _state_hash(plan)
+        assert resource.updated_at == stamp

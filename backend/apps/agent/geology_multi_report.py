@@ -19,6 +19,9 @@ def render_report(workflow, tasks):
     from .workflow_reports import _cell, _text, _decision
     from .geology_review_report import actual_table
 
+    from .workflow_resources import display_input_names
+
+    names = display_input_names(workflow)
     by_id = {str(task.id): task for task in tasks}
     stages = {
         stage["name"]: by_id[stage["taskId"]]
@@ -289,7 +292,7 @@ def render_report(workflow, tasks):
     )
     for role, version in workflow.plan.get("upstreamVersions", {}).items():
         lines.append(
-            f"| {_cell(workflow.plan['inputNames'].get(role, role))} | {_cell(version['revision'])} |"
+            f"| {_cell(names.get(role, role))} | {_cell(version['revision'])} |"
         )
     lines.extend(
         [

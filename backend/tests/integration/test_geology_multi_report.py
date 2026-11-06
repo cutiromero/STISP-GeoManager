@@ -9,6 +9,10 @@ from apps.compute.packages import ComputeError
 
 
 def report_fixture(monkeypatch):
+    monkeypatch.setattr(
+        "apps.agent.workflow_resources.display_input_names",
+        lambda workflow: workflow.plan.get("inputNames", {}),
+    )
     suggestions = [
         {
             "id": f"s-{index}",

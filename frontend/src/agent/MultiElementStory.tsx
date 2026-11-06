@@ -151,7 +151,7 @@ export function MultiElementEvidence({
         <div className="multi-element-rule" key={`${ref.id}:${ref.version}`}>
           <Tag color="blue">项目规则</Tag>
           <b>
-            {ref.id} / {ref.title}
+            {ref.id} / {ref.title.replace("（本案例试用）", "")}
           </b>
           <small>
             规则版本 {ref.version} / 知识修订 {ref.revision}
