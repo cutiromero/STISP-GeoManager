@@ -256,6 +256,47 @@ def test_report_projection_preserves_real_totals_and_knowledge_conditions():
     assert projected["actualResults"][0]["rows"] == [{"issues": 241, "remaining": 45}]
     assert projected["knowledge"][0]["conditions"] == knowledge["conditions"]
     assert projected["knowledge"][0]["exceptions"] == knowledge["exceptions"]
-    assert projected["actualResults"][1]["scope"] == "reference_only"
+    assert len(projected["actualResults"]) == 1
     assert not any("metadata" in item for item in projected["actualResults"])
     assert len(json.dumps(projected)) < 5000
+
+
+def test_report_collapses_review_samples_without_changing_approved_counts():
+    from apps.agent.rule_dispositions import report_payload
+
+    workflow, _, _ = measured(241)
+    payload = {
+        "knowledge": [],
+        "actualResults": [],
+        "availableEvidence": [],
+        "modificationReview": {
+            "approvedCount": 196,
+            "suggestionCount": 241,
+            "approvalScopeDigest": "scope",
+            "suggestions": {"rows": ["unneeded sampled object details"] * 241},
+            "groups": [
+                {
+                    "element": "lithology",
+                    "ruleId": "L-03",
+                    "action": "set_code",
+                    "count": 1,
+                    "approvedCount": int(i < 196),
+                }
+                for i in range(241)
+            ],
+        },
+    }
+    review = report_payload(payload, workflow)["modificationReview"]
+    assert review["approvedCount"] == 196 and review["suggestionCount"] == 241
+    assert review["groups"] == [
+        {
+            "element": "lithology",
+            "ruleId": "L-03",
+            "action": "set_code",
+            "count": 241,
+            "approvedCount": 196,
+        }
+    ]
+    assert (
+        "suggestions" not in review and review["scope"] == "complete_rule_action_counts"
+    )

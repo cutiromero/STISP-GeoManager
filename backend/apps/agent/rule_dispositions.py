@@ -30,6 +30,14 @@ def report_payload(payload, workflow):
     ]
     projected = []
     for result in payload["actualResults"]:
+        if result["key"] not in {
+            "issues",
+            "statistics",
+            "changes",
+            "evidence",
+            "alteration_quality",
+        }:
+            continue
         value = {key: item for key, item in result.items() if key != "metadata"}
         if result["kind"] not in {"table", "archive"}:
             value = {
@@ -40,6 +48,38 @@ def report_payload(payload, workflow):
             value.update(scope="reference_only", rows=[])
         projected.append(value)
     payload["actualResults"] = projected
+    review = payload.get("modificationReview")
+    if review:
+        groups = {}
+        for item in review.get("groups", []):
+            key = (item.get("element"), item.get("ruleId"), item.get("action"))
+            group = groups.setdefault(
+                key,
+                {
+                    "element": key[0],
+                    "ruleId": key[1],
+                    "action": key[2],
+                    "count": 0,
+                    "approvedCount": 0,
+                },
+            )
+            group["count"] += item["count"]
+            group["approvedCount"] += item["approvedCount"]
+        payload["modificationReview"] = {
+            **{
+                key: review[key]
+                for key in (
+                    "proposalHash",
+                    "approvedCount",
+                    "suggestionCount",
+                    "approvalScopeDigest",
+                    "sourceOutputs",
+                )
+                if key in review
+            },
+            "scope": "complete_rule_action_counts",
+            "groups": list(groups.values()),
+        }
     report_outputs = {
         str(item["outputId"])
         for item in projected
