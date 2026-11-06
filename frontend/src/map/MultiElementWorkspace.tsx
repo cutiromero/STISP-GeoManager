@@ -174,12 +174,33 @@ export default function MultiElementWorkspace({
   const [rasterError, setRasterError] = useState("");
   const rasterRefs = workflow.plan.multiElementMap?.alterationRasters;
   const rasterKey = JSON.stringify(rasterRefs ?? []);
+  const rasterApplyCompleted = (
+    Array.isArray(workflow.plan.stages) ? workflow.plan.stages : []
+  )
+    .map(record)
+    .some((stage) => stage.name === "apply" && stage.status === "completed");
   useEffect(() => {
     let disposed = false;
     const refs = JSON.parse(rasterKey) as NonNullable<typeof rasterRefs>;
     setRasterError("");
     if (!refs.length) {
       setRasterLayers([]);
+      return;
+    }
+    setRasterLayers([]);
+    if (
+      refs.some(
+        (item) =>
+          !Number.isSafeInteger(item.beforeOutputId) ||
+          item.beforeOutputId <= 0 ||
+          (rasterApplyCompleted &&
+            (!Number.isSafeInteger(item.afterOutputId) ||
+              Number(item.afterOutputId) <= 0 ||
+              !Number.isSafeInteger(item.changesOutputId) ||
+              Number(item.changesOutputId) <= 0)),
+      )
+    ) {
+      setRasterError("当前蚀变栅格协议缺少完整的前后地图输出引用");
       return;
     }
     void Promise.all(
@@ -194,7 +215,7 @@ export default function MultiElementWorkspace({
             : Promise.resolve(undefined),
         ]);
         return [
-          { key: `alteration:${item.mineral}`, before, after: after ?? before },
+          { key: `alteration:${item.mineral}`, before, after },
           { key: `alteration-changes:${item.mineral}`, after: changes },
         ];
       }),
@@ -213,7 +234,7 @@ export default function MultiElementWorkspace({
     return () => {
       disposed = true;
     };
-  }, [rasterKey]);
+  }, [rasterKey, rasterApplyCompleted]);
   const changePage = async (offset: number, element = chapter) => {
     if (!onPage || pageLoading) return;
     setPageLoading(true);
@@ -517,23 +538,51 @@ export default function MultiElementWorkspace({
   const currentTour = tour[tourIndex];
   const storyNeedsAlterations =
     viewMode === "tour" && currentTour?.suggestion.element === "alteration";
+  const mineralKeys = [
+    "hematite",
+    "chlorite",
+    "hydromica",
+    "calcite",
+    "dolomite",
+  ];
+  const declaresRasterAnalysis =
+    !["lithology", "structure"].includes(String(workflow.parameters.segment)) &&
+    (mineralKeys.some((key) => Number(record(workflow.plan.inputs)[key]) > 0) ||
+      Object.values(record(workflow.plan.algorithms)).some((algorithm) => {
+        const outputs = record(record(algorithm).manifest).outputs;
+        return (
+          Array.isArray(outputs) &&
+          outputs.some((output) =>
+            mineralKeys.some((key) =>
+              [key + "_before", key + "_corrected"].includes(
+                String(record(output).key),
+              ),
+            ),
+          )
+        );
+      }) ||
+      workflow.modificationReview?.suggestions.some(
+        (item) =>
+          item.featureId.startsWith("AG-") ||
+          item.observations?.raster_protocol === "alteration-pixels-v1",
+      ));
+  const missingRasterRefs =
+    (!rasterRefs?.length ||
+      (storyNeedsAlterations &&
+        Boolean(currentTour?.suggestion.observations?.mineral) &&
+        !rasterRefs.some(
+          (item) =>
+            item.mineral === currentTour.suggestion.observations?.mineral,
+        ))) &&
+    declaresRasterAnalysis &&
+    (visible.includes("alterations") || storyNeedsAlterations) &&
+    (Array.isArray(workflow.plan.stages) ? workflow.plan.stages : [])
+      .map(record)
+      .some((stage) => stage.name === "check" && stage.status === "completed");
   useEffect(() => {
     if (!data) return;
     let disposed = false;
     const map = workflow.plan.multiElementMap ?? {};
-    const initialCheck = (
-      Array.isArray(workflow.plan.stages) ? workflow.plan.stages : []
-    )
-      .map(record)
-      .find((stage) => stage.name === "check");
-    const checkOutputs = Array.isArray(initialCheck?.outputs)
-      ? initialCheck.outputs.map(record)
-      : [];
-    const beforeAlterations =
-      map.beforeAlterations ??
-      Number(
-        checkOutputs.find((output) => output.key === "alterations")?.resourceId,
-      );
     const groups = [
       {
         key: "checks",
@@ -542,28 +591,9 @@ export default function MultiElementWorkspace({
         stage: "check",
         outputs: ["lithology_issues", "fault_issues", "alteration_issues"],
       },
-      {
-        key: "alterations-before",
-        visibleKey: "alterations",
-        ids: beforeAlterations > 0 ? [beforeAlterations] : [],
-        stage: "check",
-        outputs: ["alterations"],
-      },
-      {
-        key: "alterations-after",
-        visibleKey: "alterations",
-        ids: map.alterations ? [map.alterations] : [],
-        stage: "apply",
-        outputs: [
-          usesCleanGeologyResults(workflow)
-            ? "final_alterations"
-            : "alterations",
-        ],
-      },
     ].filter(
       (group) =>
-        (visible.includes(group.visibleKey) ||
-          (group.visibleKey === "alterations" && storyNeedsAlterations)) &&
+        visible.includes(group.visibleKey) &&
         (group.ids.length > 0 ||
           (Array.isArray(workflow.plan.stages) &&
             workflow.plan.stages
@@ -635,55 +665,32 @@ export default function MultiElementWorkspace({
     return () => {
       disposed = true;
     };
-  }, [data, visible, workflow.id, workflow.plan, storyNeedsAlterations]);
+  }, [data, visible, workflow.id, workflow.plan]);
   const issues = optionalData.checks ?? data?.issues ?? empty;
   const overlayKey = visible
     .filter(
       (key) =>
-        !["checks", "alterations"].includes(key) ||
-        Boolean(
-          key === "alterations"
-            ? optionalData["alterations-before"] ||
-                optionalData["alterations-after"]
-            : optionalData[key],
-        ),
+        key !== "alterations" &&
+        (key !== "checks" || Boolean(optionalData[key])),
     )
     .join("|");
   const shownChecks = visible.includes("checks")
     ? optionalData.checks
-    : undefined;
-  const shownAlterationsBefore = visible.includes("alterations")
-    ? optionalData["alterations-before"]
-    : undefined;
-  const shownAlterationsAfter = visible.includes("alterations")
-    ? optionalData["alterations-after"]
     : undefined;
   const overlays = useMemo(
     () =>
       data?.overlays
         .filter((item) => overlayKey.split("|").includes(item.key))
         .map((item) =>
-          item.key === "alterations"
+          item.key === "checks" && shownChecks
             ? {
                 ...item,
-                before: shownAlterationsBefore,
-                after: shownAlterationsAfter,
+                before: shownChecks,
+                after: shownChecks,
               }
-            : item.key === "checks" && shownChecks
-              ? {
-                  ...item,
-                  before: shownChecks,
-                  after: shownChecks,
-                }
-              : item,
+            : item,
         ) ?? [],
-    [
-      data,
-      overlayKey,
-      shownChecks,
-      shownAlterationsBefore,
-      shownAlterationsAfter,
-    ],
+    [data, overlayKey, shownChecks],
   );
   const inspect = (feature: Feature) => {
     setSelected(feature);
@@ -784,26 +791,24 @@ export default function MultiElementWorkspace({
             : ["faults", "intersections", "prospects"],
     );
   };
-  const tourBefore = currentTour
-    ? tourFeature(
-        currentTour.suggestion.element === "structure"
-          ? data?.overlays.find((overlay) => overlay.key === "faults")?.before
-          : currentTour.suggestion.element === "alteration"
-            ? optionalData["alterations-before"]
+  const tourBefore =
+    currentTour && currentTour.suggestion.element !== "alteration"
+      ? tourFeature(
+          currentTour.suggestion.element === "structure"
+            ? data?.overlays.find((overlay) => overlay.key === "faults")?.before
             : data?.before,
-        currentTour,
-      )
-    : undefined;
-  const tourAfter = currentTour
-    ? tourFeature(
-        currentTour.suggestion.element === "structure"
-          ? data?.overlays.find((overlay) => overlay.key === "faults")?.after
-          : currentTour.suggestion.element === "alteration"
-            ? optionalData["alterations-after"]
+          currentTour,
+        )
+      : undefined;
+  const tourAfter =
+    currentTour && currentTour.suggestion.element !== "alteration"
+      ? tourFeature(
+          currentTour.suggestion.element === "structure"
+            ? data?.overlays.find((overlay) => overlay.key === "faults")?.after
             : data?.after,
-        currentTour,
-      )
-    : undefined;
+          currentTour,
+        )
+      : undefined;
   const spotlight = useMemo(() => {
     if (viewMode === "outcome" && focusedOutcome) return focusedOutcome;
     if (viewMode !== "tour" || !currentTour) return null;
@@ -900,14 +905,17 @@ export default function MultiElementWorkspace({
           }
         />
       )}
-      {rasterError && (
+      {(rasterError || missingRasterRefs) && (
         <Alert
           type="error"
-          title={`蚀变栅格：${rasterError}`}
+          title={`蚀变栅格：${rasterError || "当前蚀变栅格协议缺少地图输出引用"}`}
           action={<Button onClick={onReload}>刷新</Button>}
         />
       )}
-      {rasterRefs?.length ? (
+      {rasterRefs?.length &&
+      (visible.includes("alterations") ||
+        visible.includes("changes") ||
+        storyNeedsAlterations) ? (
         <p aria-label="蚀变栅格图例">
           矿物前后：青绿色；规则变更：A-01 红色、A-02 紫色、A-03 橙色、A-04
           棕色、A-05 蓝色；透明为无识别或无变更。降权保留识别像元，权重另存。
@@ -1048,26 +1056,14 @@ export default function MultiElementWorkspace({
               )}
             </div>
           )}
-          {storyNeedsAlterations && optionalLoading.length > 0 && (
-            <div className="multi-tour-loading" role="status">
-              <Spin size="small" />
-              正在读取当前矿物的实际前后权重…
-            </div>
-          )}
           {Object.entries(optionalErrors)
-            .filter(
-              ([key]) =>
-                visible.includes(
-                  key.startsWith("alterations-") ? "alterations" : key,
-                ) ||
-                (storyNeedsAlterations && key.startsWith("alterations-")),
-            )
+            .filter(([key]) => visible.includes(key))
             .map(([key, reason]) => (
               <Alert
                 key={key}
                 type="warning"
                 showIcon
-                title={`${key === "checks" ? "待核查项" : "矿物与处理状态"}未能加载`}
+                title="待核查项未能加载"
                 description={`${reason}。基础双图仍可查看；取消勾选后重新勾选可重试。`}
               />
             ))}
@@ -1094,7 +1090,8 @@ export default function MultiElementWorkspace({
                     (layer) =>
                       (layer.key.startsWith("alteration-changes:")
                         ? visible.includes("changes")
-                        : visible.includes("alterations")) &&
+                        : visible.includes("alterations") ||
+                          storyNeedsAlterations) &&
                       (viewMode !== "tour" ||
                         !currentTour?.suggestion.observations?.mineral ||
                         layer.key.endsWith(
@@ -1138,10 +1135,6 @@ export default function MultiElementWorkspace({
                   after={tourAfter}
                   algorithm={tourAlgorithm(workflow)}
                   cleanResults={usesCleanGeologyResults(workflow)}
-                  loading={
-                    currentTour.suggestion.element === "alteration" &&
-                    optionalLoading.some((key) => key.startsWith("alterations"))
-                  }
                 />
               )}
               {viewMode === "outcome" && (

@@ -9,7 +9,10 @@ import {
   reviewQuery,
   reviewWorkflow,
 } from "./geologyReview.testFixtures";
-import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
+import type {
+  ComputeMapPreview,
+  GeoJsonFeatureCollection,
+} from "../api/generated/types.gen";
 import MultiElementWorkspace from "./MultiElementWorkspace";
 import { projectReviewPosition } from "./localReviewGeometry";
 import { reviewBounds } from "./geologyReviewData";
@@ -63,6 +66,387 @@ beforeEach(() => {
   sessionStorage.removeItem("geology-story:review-workflow");
   vi.restoreAllMocks();
   request.mockReset();
+});
+
+function rasterWorkflow() {
+  const workflow = reviewWorkflow(true);
+  workflow.workflowType = "geology_multi_element_reasoning";
+  workflow.plan.inputs = { lithology: 101, faults: 102 };
+  workflow.plan.algorithms = {
+    "geology-multi-check": {
+      manifest: { version: "1.1.1", outputs: [{ key: "calcite_before" }] },
+    },
+    "geology-multi-apply": {
+      name: "获批操作执行",
+      manifest: { version: "1.1.1", outputs: [{ key: "final_faults" }] },
+    },
+  };
+  const suggestion = {
+    ...workflow.modificationReview!.suggestions[0]!,
+    id: "raster-change",
+    kind: "multi_element" as const,
+    element: "alteration" as const,
+    featureId: "AG-calcite-carbonate",
+    ruleId: "A-01",
+    action: "downweight",
+    title: "碳酸盐岩背景矿物降权",
+    observations: {
+      mineral: "calcite",
+      raster_protocol: "alteration-pixels-v1",
+      pixel_count: 100,
+    },
+  };
+  workflow.modificationReview = {
+    proposalHash: "raster-proposal",
+    approvedSuggestionIds: [suggestion.id],
+    suggestions: [suggestion],
+  };
+  workflow.plan.stages = [
+    { name: "check", status: "completed", outputs: [], results: [] },
+    {
+      name: "apply",
+      identifier: "geology-multi-apply",
+      status: "completed",
+      taskId: "raster-task",
+      outputs: [],
+      approvedEdits: [
+        {
+          feature_id: suggestion.featureId,
+          rule_id: suggestion.ruleId,
+          action: suggestion.action,
+          weight: 0.4,
+        },
+      ],
+      results: [
+        {
+          key: "changes",
+          taskId: "raster-task",
+          outputId: 903,
+          checksum: "a".repeat(64),
+          scope: "all",
+          rowCount: 1,
+          rows: [
+            {
+              feature_id: suggestion.featureId,
+              rule_id: suggestion.ruleId,
+              action: suggestion.action,
+              weight: "0.4",
+              actual_changed: "True",
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  workflow.plan.multiElementMap = {
+    before: { lithology: 101, faults: 102 },
+    after: { lithology: 201, faults: 202 },
+    checks: [301],
+    changes: [],
+    alterationRasters: [
+      {
+        mineral: "calcite",
+        beforeOutputId: 900,
+        afterOutputId: 901,
+        changesOutputId: 902,
+      },
+    ],
+  };
+  workflow.plan.compareFeatures = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        geometry: suggestion.preview,
+        properties: {
+          feature_id: suggestion.featureId,
+          element: suggestion.element,
+          rule_id: suggestion.ruleId,
+          suggested_action: suggestion.action,
+        },
+      },
+    ],
+  };
+  return workflow;
+}
+
+function rasterPreview(id: number): ComputeMapPreview {
+  return {
+    name: "方解石",
+    kind: "raster",
+    metadata: {},
+    temporary: true,
+    imageUrl: `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4m0AAAAASUVORK5CYII=#${id}`,
+    imageCoordinates: [
+      [98.4, 35.62],
+      [98.45, 35.62],
+      [98.45, 35.6],
+      [98.4, 35.6],
+    ],
+  };
+}
+
+function mockRasterReads(failRaster = false) {
+  request.mockImplementation(async (url: string) => {
+    const outputId = Number(url.match(/outputs\/(\d+)\/map-preview\//)?.[1]);
+    if (outputId) {
+      if (failRaster) throw new Error("栅格预览读取失败");
+      return rasterPreview(outputId);
+    }
+    if (url.includes("/api/compute/outputs/"))
+      throw new Error("栅格任务不应读取旧蚀变矢量");
+    const id = Number(url.match(/resources\/(\d+)\/query/)?.[1]);
+    return reviewQuery(id, id === 102 || id === 202 ? lines : beforeReviewMap);
+  });
+}
+
+it("栅格矿物章节与保存位置直接显示实际PNG，不再读取旧蚀变矢量", async () => {
+  const workflow = rasterWorkflow();
+  mockRasterReads();
+  const show = () =>
+    render(
+      <App>
+        <MemoryRouter>
+          <MultiElementWorkspace
+            workflow={workflow}
+            suggestionId={null}
+            onReload={() => {}}
+          />
+        </MemoryRouter>
+      </App>,
+    );
+  const expectRasters = async () => {
+    for (const [label, outputId] of [
+      ["待检查地质图地图", 900],
+      ["修正后地质图地图", 901],
+    ] as const) {
+      await waitFor(() =>
+        expect(
+          screen
+            .getByLabelText(label)
+            .querySelector('image[data-layer="alteration:calcite"]'),
+        ).toHaveAttribute("href", rasterPreview(outputId).imageUrl),
+      );
+    }
+    expect(screen.queryByText("矿物与处理状态未能加载")).toBeNull();
+  };
+  const view = show();
+  expect(await screen.findByText("本页第1处，共1处")).toBeVisible();
+  // The default tour can reach a mineral while the overview layer is unchecked.
+  await expectRasters();
+  fireEvent.click(screen.getByRole("button", { name: "查看矿物章节" }));
+  await expectRasters();
+  fireEvent.click(screen.getByRole("button", { name: "查看全区" }));
+  fireEvent.click(screen.getByLabelText("修正记录"));
+  fireEvent.click(screen.getByLabelText("待核查项"));
+  await waitFor(() =>
+    expect(
+      screen
+        .getByLabelText("修正后地质图地图")
+        .querySelector('image[data-layer="alteration-changes:calcite"]'),
+    ).toHaveAttribute("href", rasterPreview(902).imageUrl),
+  );
+  await waitFor(() =>
+    expect(
+      request.mock.calls.some(([url]) => String(url).includes("/301/query/")),
+    ).toBe(true),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "逐处看修改" }));
+  await waitFor(() =>
+    expect(sessionStorage.getItem("geology-story:review-workflow")).toContain(
+      '"chapter":"alteration"',
+    ),
+  );
+  view.unmount();
+  show();
+  expect(await screen.findByText("本页第1处，共1组")).toBeVisible();
+  await expectRasters();
+  expect(
+    request.mock.calls.filter(([url]) =>
+      /\/outputs\/\d+\/preview\//.test(String(url)),
+    ),
+  ).toHaveLength(0);
+});
+
+it("真实栅格预览失败时保留错误和基础双图，不回退旧矢量", async () => {
+  mockRasterReads(true);
+  render(
+    <App>
+      <MemoryRouter>
+        <MultiElementWorkspace
+          workflow={rasterWorkflow()}
+          suggestionId={null}
+          onReload={() => {}}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(await screen.findByText("蚀变栅格：栅格预览读取失败")).toBeVisible();
+  fireEvent.click(await screen.findByRole("button", { name: "查看矿物章节" }));
+  expect(screen.queryByText("矿物与处理状态未能加载")).toBeNull();
+  await waitFor(() =>
+    expect(screen.getByLabelText("待检查地质图地图")).toHaveAttribute(
+      "aria-busy",
+      "false",
+    ),
+  );
+  expect(
+    request.mock.calls.filter(([url]) =>
+      /\/outputs\/\d+\/preview\//.test(String(url)),
+    ),
+  ).toHaveLength(0);
+});
+
+it("当前矿物分析缺少栅格引用时明确报错，不尝试蚀变矢量", async () => {
+  const workflow = rasterWorkflow();
+  delete workflow.plan.multiElementMap!.alterationRasters;
+  mockRasterReads();
+  render(
+    <App>
+      <MemoryRouter>
+        <MultiElementWorkspace
+          workflow={workflow}
+          suggestionId={null}
+          onReload={() => {}}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(
+    await screen.findByText("蚀变栅格：当前蚀变栅格协议缺少地图输出引用"),
+  ).toBeVisible();
+  expect(
+    request.mock.calls.some(([url]) =>
+      String(url).includes("/api/compute/outputs/"),
+    ),
+  ).toBe(false);
+});
+
+it.each(["lithology", "structure"])(
+  "合法%s分段没有矿物成果时不误报栅格缺失",
+  async (segment) => {
+    const workflow = reviewWorkflow();
+    workflow.workflowType = "geology_multi_element_reasoning";
+    workflow.parameters = { segment };
+    workflow.plan.inputs = { lithology: 101, faults: 102 };
+    workflow.plan.algorithms = {
+      "geology-multi-check": {
+        manifest: { version: "1.1.1", outputs: [{ key: "calcite_before" }] },
+      },
+    };
+    workflow.plan.stages = [
+      { name: "check", status: "completed", results: [] },
+    ];
+    workflow.plan.multiElementMap = { before: { lithology: 101, faults: 102 } };
+    mockRasterReads();
+    render(
+      <App>
+        <MemoryRouter>
+          <MultiElementWorkspace
+            workflow={workflow}
+            suggestionId={null}
+            onReload={() => {}}
+          />
+        </MemoryRouter>
+      </App>,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "查看岩性章节" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "查看矿物章节" }));
+    expect(screen.queryByText(/当前蚀变栅格协议缺少地图输出引用/)).toBeNull();
+    expect(
+      request.mock.calls.some(([url]) =>
+        String(url).includes("/api/compute/outputs/"),
+      ),
+    ).toBe(false);
+  },
+);
+
+it("非空栅格引用缺少当前故事矿物时仍明确报错", async () => {
+  const workflow = rasterWorkflow();
+  workflow.plan.multiElementMap!.alterationRasters![0]!.mineral = "chlorite";
+  mockRasterReads();
+  render(
+    <App>
+      <MemoryRouter>
+        <MultiElementWorkspace
+          workflow={workflow}
+          suggestionId={null}
+          onReload={() => {}}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(
+    await screen.findByText("蚀变栅格：当前蚀变栅格协议缺少地图输出引用"),
+  ).toBeVisible();
+});
+
+it.each(["afterOutputId", "changesOutputId"] as const)(
+  "已完成执行缺少%s时不使用改前图替代",
+  async (key) => {
+    const workflow = rasterWorkflow();
+    delete workflow.plan.multiElementMap!.alterationRasters![0]![key];
+    mockRasterReads();
+    render(
+      <App>
+        <MemoryRouter>
+          <MultiElementWorkspace
+            workflow={workflow}
+            suggestionId={null}
+            onReload={() => {}}
+          />
+        </MemoryRouter>
+      </App>,
+    );
+    expect(
+      await screen.findByText(
+        "蚀变栅格：当前蚀变栅格协议缺少完整的前后地图输出引用",
+      ),
+    ).toBeVisible();
+    expect(
+      screen
+        .getByLabelText("修正后地质图地图")
+        .querySelector('image[data-layer="alteration:calcite"]'),
+    ).toBeNull();
+    expect(
+      request.mock.calls.some(([url]) =>
+        String(url).includes("/api/compute/outputs/"),
+      ),
+    ).toBe(false);
+  },
+);
+
+it.each(["hidden", "running"])("矿物%s时不提前报栅格引用缺失", async (mode) => {
+  const workflow = rasterWorkflow();
+  delete workflow.plan.multiElementMap!.alterationRasters;
+  if (mode === "running") workflow.plan.stages![0]!.status = "running";
+  else
+    sessionStorage.setItem(
+      "geology-story:review-workflow",
+      JSON.stringify({ chapter: "all", viewMode: "overview", visible: [] }),
+    );
+  mockRasterReads();
+  render(
+    <App>
+      <MemoryRouter>
+        <MultiElementWorkspace
+          workflow={workflow}
+          suggestionId={null}
+          onReload={() => {}}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  await screen.findByRole("button", { name: "查看矿物章节" });
+  expect(screen.queryByText(/当前蚀变栅格协议缺少地图输出引用/)).toBeNull();
+  if (mode === "hidden") {
+    fireEvent.click(screen.getByRole("button", { name: "查看矿物章节" }));
+    expect(
+      await screen.findByText("蚀变栅格：当前蚀变栅格协议缺少地图输出引用"),
+    ).toBeVisible();
+  }
 });
 
 it("页签使用全局计数并按要素分页，成果更新可一键刷新", async () => {
@@ -121,9 +505,7 @@ it("讲解页双图同类采用成果原色并支持线点面、Unicode代号与
   const workflow = reviewWorkflow();
   workflow.workflowType = "geology_multi_element_reasoning";
   workflow.plan.inputs = { lithology: 101, faults: 102 };
-  workflow.plan.stages = [
-    { name: "check", outputs: [{ key: "alterations", resourceId: 600 }] },
-  ];
+  workflow.plan.stages = [{ name: "check", status: "completed", outputs: [] }];
   workflow.plan.multiElementMap = {
     before: { lithology: 101, faults: 102 },
     after: { lithology: 201, faults: 202 },
@@ -132,7 +514,14 @@ it("讲解页双图同类采用成果原色并支持线点面、Unicode代号与
     intersections: 401,
     beforeProspects: 501,
     afterProspects: 502,
-    alterations: 601,
+    alterationRasters: [
+      {
+        mineral: "calcite",
+        beforeOutputId: 900,
+        afterOutputId: 901,
+        changesOutputId: 902,
+      },
+    ],
   };
   const base = structuredClone(beforeReviewMap);
   base.features[0]!.properties.fill_color = "#4abb83";
@@ -147,13 +536,9 @@ it("讲解页双图同类采用成果原色并支持线点面、Unicode代号与
     evidence_json: "构造条件：满足；蚀变类型：绿泥石、水云母",
   };
   request.mockImplementation(async (url: string) => {
+    const outputId = Number(url.match(/outputs\/(\d+)\/map-preview\//)?.[1]);
+    if (outputId) return rasterPreview(outputId);
     const id = Number(url.match(/resources\/(\d+)\/query/)?.[1]);
-    if ([600, 601].includes(id)) {
-      const minerals = structuredClone(base);
-      minerals.features[0]!.properties.state =
-        id === 600 ? "keep" : "downweight";
-      return reviewQuery(id, minerals);
-    }
     return reviewQuery(
       id,
       [102, 202, 301].includes(id)
@@ -239,19 +624,17 @@ it("讲解页双图同类采用成果原色并支持线点面、Unicode代号与
   fireEvent.click(await screen.findByText("S-02 / 实际疑点"));
   expect(screen.getByText("沿界比例较高，建议核对影像")).toBeVisible();
   fireEvent.click(screen.getByLabelText("有效蚀变"));
-  await waitFor(() => {
-    const minerals = document.querySelectorAll(
-      '[data-layer="review-alterations"] g',
+  for (const [label, outputId] of [
+    ["待检查地质图地图", 900],
+    ["修正后地质图地图", 901],
+  ] as const)
+    await waitFor(() =>
+      expect(
+        screen
+          .getByLabelText(label)
+          .querySelector('image[data-layer="alteration:calcite"]'),
+      ).toHaveAttribute("href", rasterPreview(outputId).imageUrl),
     );
-    expect(
-      [...minerals].some((element) => element.getAttribute("opacity") === "1"),
-    ).toBe(true);
-    expect(
-      [...minerals].some(
-        (element) => element.getAttribute("opacity") === "0.5",
-      ),
-    ).toBe(true);
-  });
   await page.screenshot({
     path: "../../test-results/multi-element-map-line-point-polygon.png",
     animations: "disabled",
@@ -265,7 +648,6 @@ it("keeps the base maps usable when an optional dense layer fails and retries on
   workflow.plan.multiElementMap = {
     before: { lithology: 101, faults: 102 },
     checks: [301],
-    alterations: 401,
   };
   let failChecks = true;
   request.mockImplementation(async (url: string) => {
@@ -318,7 +700,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   workflow.workflowType = "geology_multi_element_reasoning";
   workflow.plan.inputs = { lithology: 101, faults: 102 };
   workflow.plan.algorithms = {
-    "actual-edit": { name: "多要素获批修改", manifest: { version: "1.0.1" } },
+    "actual-edit": { name: "多要素获批修改", manifest: { version: "1.1.1" } },
   };
   const before = structuredClone(beforeReviewMap);
   before.features[0]!.properties.geo_sym = "Q";
@@ -336,17 +718,6 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
         [98.6, 35.7],
       ],
     ],
-  };
-  minerals.features[0]!.properties = {
-    feature_id: "mineral-1",
-    weight: 0.8,
-    state: "keep",
-  };
-  const afterMinerals = structuredClone(minerals);
-  afterMinerals.features[0]!.properties = {
-    feature_id: "mineral-1",
-    weight: 0.4,
-    state: "downweight",
   };
   const faults = structuredClone(lines);
   faults.features[0]!.properties = {
@@ -379,11 +750,15 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     },
     {
       element: "alteration" as const,
-      featureId: "mineral-1",
+      featureId: "AG-mineral-1",
       action: "downweight",
       title: "矿物信号可能受到岩石背景影响",
       ruleId: "A-01",
       geometry: minerals.features[0]!.geometry,
+      observations: {
+        mineral: "calcite",
+        raster_protocol: "alteration-pixels-v1",
+      },
     },
   ].map((item, index) => ({
     ...workflow.modificationReview!.suggestions[0]!,
@@ -408,7 +783,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     suggestions,
   };
   workflow.plan.stages = [
-    { name: "check", outputs: [{ key: "alterations", resourceId: 600 }] },
+    { name: "check", status: "completed", outputs: [] },
     {
       name: "apply",
       status: "completed",
@@ -449,7 +824,14 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     changes: [301],
     beforeProspects: 501,
     afterProspects: 502,
-    alterations: 601,
+    alterationRasters: [
+      {
+        mineral: "calcite",
+        beforeOutputId: 900,
+        afterOutputId: 901,
+        changesOutputId: 902,
+      },
+    ],
   };
   const changes: GeoJsonFeatureCollection = {
     type: "FeatureCollection",
@@ -490,16 +872,18 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     301: changes,
     501: zones,
     502: afterZones,
-    600: minerals,
-    601: afterMinerals,
   };
   let completeMineralRead = () => {};
   const mineralRead = new Promise<void>((resolve) => {
     completeMineralRead = resolve;
   });
   request.mockImplementation(async (url: string) => {
+    const outputId = Number(url.match(/outputs\/(\d+)\/map-preview\//)?.[1]);
+    if (outputId) {
+      await mineralRead;
+      return rasterPreview(outputId);
+    }
     const id = Number(url.match(/resources\/(\d+)\/query/)?.[1]);
-    if ([600, 601].includes(id)) await mineralRead;
     return reviewQuery(
       id,
       collections[id] ?? { type: "FeatureCollection", features: [] },
@@ -629,7 +1013,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   await waitFor(() =>
     expect(
       request.mock.calls.filter(([url]) =>
-        /\/(600|601)\/query\//.test(String(url)),
+        /\/outputs\/(900|901)\/map-preview\//.test(String(url)),
       ),
     ).not.toHaveLength(0),
   );
@@ -643,7 +1027,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   fireEvent.click(screen.getByLabelText("下一处修改"));
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
-      "证据权重 0.8",
+      "证据权重 原记录未提供",
     ),
   );
   await waitFor(() =>
@@ -738,7 +1122,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
     ),
   );
   fireEvent.click(screen.getByRole("button", { name: "查看矿物章节" }));
-  expect(screen.getByText("本页第1处，共1处")).toBeVisible();
+  expect(screen.getByText("本页第1处，共1组")).toBeVisible();
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
       "证据权重 0.4",
@@ -766,7 +1150,7 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
       </MemoryRouter>
     </App>,
   );
-  expect(await screen.findByText("本页第1处，共1处")).toBeVisible();
+  expect(await screen.findByText("本页第1处，共1组")).toBeVisible();
   await waitFor(() =>
     expect(screen.getByLabelText("当前对象前后状态")).toHaveTextContent(
       "证据权重 0.4",
