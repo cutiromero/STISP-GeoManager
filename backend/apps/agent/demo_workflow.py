@@ -72,8 +72,37 @@ def _automatic_stage(workflow, stage):
     return (
         workflow.workflow_type in MULTI_FAMILY
         and workflow.plan.get("executionPolicy") == "measured_geology_v1"
-        and stage.get("name") in AUTOMATIC_GEOLOGY_STAGES
-        and AUTOMATIC_GEOLOGY_STAGES.get(stage.get("name")) == stage.get("identifier")
+        and (
+            (
+                stage.get("name") in AUTOMATIC_GEOLOGY_STAGES
+                and AUTOMATIC_GEOLOGY_STAGES.get(stage.get("name"))
+                == stage.get("identifier")
+            )
+            or (
+                stage.get("name") == "apply"
+                and stage.get("identifier") == "geology-multi-apply"
+                and stage.get("modificationsApproval", {}).get("mode") == "unchanged"
+            )
+        )
+    )
+
+
+def _verified_empty_check(workflow):
+    check = next(
+        (
+            item
+            for item in workflow.plan.get("stages", [])
+            if item.get("name") == "check"
+        ),
+        {},
+    )
+    return bool(check.get("taskId")) and any(
+        item.get("key") == "issues"
+        and item.get("taskId") == check["taskId"]
+        and item.get("scope") == "all"
+        and item.get("rowCount") == 0
+        and item.get("rows") == []
+        for item in check.get("results", [])
     )
 
 
@@ -232,6 +261,11 @@ GRAPHS[GENERIC] = multi_graph()
 
 
 def stage_title(workflow, stage: dict) -> str:
+    if (
+        stage.get("name") == "apply"
+        and stage.get("modificationsApproval", {}).get("mode") == "unchanged"
+    ):
+        return "保留原始资料"
     if workflow.workflow_type in MULTI_FAMILY:
         from .geology_multi import TITLES
 
@@ -1244,6 +1278,21 @@ def advance_demo(workflow_id) -> None:
                 and stage["identifier"] != "finish"
             ):
                 raise ComputeError("已达到场景算子步骤上限")
+            if (
+                workflow.workflow_type in MULTI_FAMILY
+                and workflow.plan.get("executionPolicy") == "measured_geology_v1"
+                and stage["name"] == "apply"
+                and not stage.get("modificationsApproval")
+                and not stage.get("decision")
+                and not _has_model_progress(stage)
+                and _verified_empty_check(workflow)
+            ):
+                from .geology_multi_review import freeze_proposal
+
+                stage["edits"] = []
+                freeze_proposal(workflow, stage)
+                _save(workflow)
+                return
             if (
                 _automatic_stage(workflow, stage)
                 and not stage.get("decision")

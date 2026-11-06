@@ -161,6 +161,9 @@ def needs_batches(workflow, stage, results):
     groups = model_issue_groups(rows)
     return (
         bool(stage.get("modelBatches"))
+        or (
+            bool(rows) and workflow.plan.get("executionPolicy") == "measured_geology_v1"
+        )
         or any(str(row.get("feature_id", "")).startswith("AG-") for row in rows)
         or len(groups) > MAX_BATCH_GROUPS
         or any(len(members) > 3 for _, members in groups)

@@ -137,3 +137,32 @@ def test_input_review_can_reopen_roles_without_reusing_the_cancelled_workflow(ge
     assert source.research_workflow_id != workflow.pk
     assert source.research_intent["inputSummary"][0]["resourceId"] == upload.resource_id
     assert not ComputeTask.objects.exists()
+
+
+def test_automatic_unchanged_execution_requires_a_complete_empty_check():
+    from types import SimpleNamespace
+    from apps.agent.demo_workflow import _verified_empty_check
+
+    result = {
+        "key": "issues",
+        "taskId": "actual-task",
+        "scope": "all",
+        "rowCount": 0,
+        "rows": [],
+    }
+    workflow = SimpleNamespace(
+        plan={
+            "stages": [{"name": "check", "taskId": "actual-task", "results": [result]}]
+        }
+    )
+    assert _verified_empty_check(workflow)
+    for key, value in [
+        ("scope", "representative"),
+        ("rowCount", 1),
+        ("taskId", "other-task"),
+        ("rows", [{}]),
+    ]:
+        previous = result[key]
+        result[key] = value
+        assert not _verified_empty_check(workflow)
+        result[key] = previous
