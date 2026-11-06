@@ -137,6 +137,8 @@ def prepare(run, user, policy, guard, *, on_thinking=None):
         "_uploadBatchId": batch_id,
         "_reuseConfirmedConfiguration": bool(reusable),
         "_requestedReuse": run.research_intent.get("_requestedReuse", False),
+        "_manualRoleReview": run.research_intent.get("_manualRoleReview", False),
+        "_workflowAttempt": run.research_intent.get("_workflowAttempt", 0),
     }
     intent["revision"] = _state_hash(intent)
     guard()
@@ -155,6 +157,16 @@ def prepare(run, user, policy, guard, *, on_thinking=None):
         }
         answer(run, user, policy, reused_answers, "")
         return "沿用上次已确认的角色和字段；本次计划与处置仍需确认。"
+    roles = [item["role"] for item in suggested["items"]]
+    if (
+        suggested.get("source") == "model"
+        and not intent["_manualRoleReview"]
+        and "lithology" in roles
+        and None not in roles
+        and len(roles) == len(set(roles))
+    ):
+        answer(run, user, policy, answers, "")
+        return "资料角色已识别，正在核对字段；请在资料确认卡中检查后开始分析。"
     return intent["message"]
 
 
@@ -172,9 +184,16 @@ def answer(source, user, policy, answers, text):
         _authorize(workflow)
         if text.strip() == "修改角色和字段":
             if (
-                not workflow.plan.get("reusedConfiguration")
-                or workflow.status != "waiting_approval"
-                or workflow.plan.get("phase") != "review_plan"
+                workflow.status != "waiting_approval"
+                or workflow.execute_operators
+                or workflow.steps.exclude(compute_task_id=None).exists()
+                or not (
+                    workflow.plan.get("phase") == "review_mapping"
+                    or (
+                        workflow.plan.get("reusedConfiguration")
+                        and workflow.plan.get("phase") == "review_plan"
+                    )
+                )
                 or workflow.plan.get("chatExecution", {}).get("initialPlanAuthorized")
             ):
                 raise ComputeError("仅在本次计划批准前可以重新核对角色和字段", 409)
@@ -194,6 +213,8 @@ def answer(source, user, policy, answers, text):
                 {
                     "_uploadBatchId": intent["_uploadBatchId"],
                     "_requestedReuse": intent.get("_requestedReuse", False),
+                    "_manualRoleReview": True,
+                    "_workflowAttempt": intent.get("_workflowAttempt", 0) + 1,
                 },
             )
             prepare(source, user, policy, lambda: None)
@@ -340,7 +361,12 @@ def answer(source, user, policy, answers, text):
                     "mode": source.knowledge_selection.get("mode", "auto"),
                     "domains": source.knowledge_selection.get("domains", []),
                 },
-                "idempotencyKey": f"chat-research-{source.id}",
+                "idempotencyKey": f"chat-research-{source.id}"
+                + (
+                    f"-review-{intent['_workflowAttempt']}"
+                    if intent.get("_workflowAttempt")
+                    else ""
+                ),
                 "executeOperators": False,
                 "importResults": True,
             },
@@ -354,6 +380,22 @@ def answer(source, user, policy, answers, text):
         intent.update(
             status="planning", inputs=inputs, questions=[], workflowId=str(workflow.id)
         )
+        uploads_by_id = {
+            item.resource_id: item
+            for item in batch_uploads(user, intent["_uploadBatchId"])
+        }
+        intent["inputSummary"] = [
+            {
+                "role": role,
+                "label": LABELS[role],
+                "resourceId": identity,
+                "name": uploads_by_id[identity].resource.name,
+                "sourceNote": "系统数据引用"
+                if uploads_by_id[identity].source == "catalog"
+                else "本次上传资料",
+            }
+            for role, identity in inputs.items()
+        ]
         intent["parameters"] = {}
         intent["message"] = "资料角色已确认，正在判断字段含义；请等待字段确认卡片。"
         _save(source, intent, workflow)

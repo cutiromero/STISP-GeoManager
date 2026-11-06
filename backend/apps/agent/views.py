@@ -1200,6 +1200,7 @@ def workflow_confirm(request, workflow_id):
             "suggestionSelection",
             "alterationActions",
             "fieldMapping",
+            "executeAfterMapping",
         ],
         max_bytes=1024 * 1024,
     )
@@ -1235,6 +1236,14 @@ def workflow_confirm(request, workflow_id):
             pk=workflow_id,
             owner=request.user,
         )
+        if "executeAfterMapping" in value and (
+            type(value["executeAfterMapping"]) is not bool
+            or workflow.workflow_type != "geology_generic"
+            or workflow.plan.get("phase") != "review_mapping"
+            or decision != "approve"
+            or "fieldMapping" not in value
+        ):
+            raise ApiProblem("只有通用地质资料字段确认时可以同时授权开始分析", 400)
         if "suggestionSelection" in value:
             if (
                 workflow.workflow_type
@@ -1320,6 +1329,11 @@ def workflow_confirm(request, workflow_id):
                 value["planHash"],
                 selected,
                 value.get("fieldMapping"),
+                **(
+                    {"execute_after_mapping": value["executeAfterMapping"]}
+                    if "executeAfterMapping" in value
+                    else {}
+                ),
                 **(
                     {"alteration_actions": value["alterationActions"]}
                     if "alterationActions" in value

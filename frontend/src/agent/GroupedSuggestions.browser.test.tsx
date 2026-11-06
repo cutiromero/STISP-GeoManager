@@ -96,8 +96,8 @@ it("组摘要按原因计数，全量候选仅经用户勾选纳入，确认分�
   await waitFor(() =>
     expect(screen.getByText(/模型建议 1 项、用户裁定 11 项/)).toBeVisible(),
   );
-  expect(review).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "返回核对" }));
+  expect(review).toHaveBeenCalledOnce();
+  expect(review.mock.calls[0]![2]).toHaveLength(12);
   fireEvent.click(all);
   expect(screen.getByText(/已选择 1/)).toBeVisible();
   fireEvent.click(
@@ -194,7 +194,6 @@ it("模型建议默认选择，待裁定候选仅在用户明确选择后批准"
   expect(retained.open).toBe(true);
   expect(screen.getByText(/已选择 2/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
-  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() =>
     expect(review).toHaveBeenCalledWith("approve", "", ["ordinary", "held"]),
   );
@@ -263,7 +262,6 @@ it("按组批准超过30对象，展开后可取消个别对象，例外不被�
     70,
   );
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
-  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() => expect(review).toHaveBeenCalled());
   expect(review.mock.calls[0]![2]).toHaveLength(69);
   expect(review.mock.calls[0]![2]).not.toContain("object-0");
@@ -481,7 +479,6 @@ it("5552对象默认零对象行，展开每次50条，可搜索编号并取消�
     ).toHaveLength(0),
   );
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
-  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() => expect(review).toHaveBeenCalled());
   expect(review.mock.calls[0]![2]).toHaveLength(5551);
   expect(review.mock.calls[0]![2]).not.toContain("object-5551");

@@ -1455,7 +1455,7 @@ export type AgentResearchIntent = {
  */
 export type AgentResearchIntentUpdate = {
     /**
-     * 回答、明确审核确认或取消；通用地质推理的answer按当前阶段严格解析自然语言，不明确时保留卡片确认，不自动批准
+     * 回答、明确审核确认或取消；通用地质推理的answer按当前阶段严格解析自然语言，不明确时保留卡片确认，不自动批准。资料字段核对或尚未执行的沿用计划可明确回答修改角色和字段，保留旧计划历史并回到人工角色核对，重新确认建立独立工作流。
      */
     action: 'answer' | 'confirm' | 'cancel';
     /**
@@ -6372,6 +6372,10 @@ export type AgentWorkflowConfirmation = {
             [key: string]: string | null;
         };
     };
+    /**
+     * 仅geology_generic的review_mapping阶段approve且提交fieldMapping时允许。true表示用户同时确认资料与字段并授权开始分析，服务端记录与本次字段及输入绑定的授权，工作副本及已发布算法计划通过校验后直接执行，不再重复确认初始计划；修改建议、质量异常、预算不足及专业不确定事项仍须原有批准。false或省略时只确认字段，后续计划仍需确认。其他阶段、reject或非布尔值返回400。
+     */
+    executeAfterMapping?: boolean;
 };
 
 /**

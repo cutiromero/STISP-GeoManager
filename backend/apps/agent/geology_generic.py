@@ -332,7 +332,9 @@ def validate_mapping(review, mapping):
     return confirmed
 
 
-def confirm_mapping(workflow, user, policy, plan_hash, mapping):
+def confirm_mapping(
+    workflow, user, policy, plan_hash, mapping, *, execute_after_mapping=False
+):
     from .demo_workflow import _save
     from .workflow import _state_hash, step
 
@@ -344,6 +346,16 @@ def confirm_mapping(workflow, user, policy, plan_hash, mapping):
         resolve_workflow_resource(user, policy, identity, workflow)
     review = workflow.plan["fieldMappingReview"]
     confirmed = validate_mapping(review, mapping)
+    authorization = None
+    if execute_after_mapping:
+        if not policy.get("operatorEnabled", False):
+            raise ComputeError("智能体算法调用已关闭，当前不能开始分析", 403)
+        from .input_execution import bind_input_execution
+
+        authorization = bind_input_execution(
+            workflow, user, policy, confirmed, plan_hash
+        )
+        workflow.plan["inputExecutionAuthorization"] = authorization
     review["confirmed"] = True
     workflow.plan.update(confirmedMapping=confirmed, phase="build_inputs")
     workflow.status, workflow.detail = "queued", "已确认字段含义，正在生成工作副本"
@@ -356,7 +368,12 @@ def confirm_mapping(workflow, user, policy, plan_hash, mapping):
             workflow,
             "field_mapping_confirmed",
             action=confirmed,
-            message="用户已确认字段含义",
+            message="资料与字段已确认，已授权开始分析"
+            if authorization
+            else "用户已确认字段含义",
+            output_refs={"executionAuthorization": authorization}
+            if authorization
+            else {},
         )
 
 

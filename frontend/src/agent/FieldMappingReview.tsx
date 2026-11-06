@@ -20,11 +20,15 @@ export default function FieldMappingReview({
   busy,
   onConfirm,
   compact = false,
+  startAnalysis = false,
+  onAdjustRoles,
 }: {
   review: AgentFieldMappingReview;
   busy: boolean;
   onConfirm: (mapping: Mapping) => void;
   compact?: boolean;
+  startAnalysis?: boolean;
+  onAdjustRoles?: () => void;
 }) {
   const [mapping, setMapping] = useState<Mapping>(() => initialMapping(review));
   const missing = review.roles.flatMap((role) =>
@@ -35,7 +39,7 @@ export default function FieldMappingReview({
   return (
     <section className="agent-demo-form" aria-label="确认字段含义">
       <div className="agent-demo-form-heading">
-        <strong>确认字段含义</strong>
+        <strong>{startAnalysis ? "核对资料与字段" : "确认字段含义"}</strong>
         <Tag color={review.modelMode === "real" ? "blue" : "default"}>
           {review.modelMode === "real" ? "智能体判断" : "按字段名推荐"}
         </Tag>
@@ -43,6 +47,8 @@ export default function FieldMappingReview({
       {!compact && (
         <p className="agent-demo-hint">
           平台会按您确认的对应关系生成工作副本，原始文件不变。不需要的字段可以留空；带“必需”的字段必须选择。
+          {startAnalysis &&
+            "确认后将自动开始检查与分析，修改建议仍须单独批准。"}
         </p>
       )}
       {review.questions.map((question) => (
@@ -109,8 +115,13 @@ export default function FieldMappingReview({
         disabled={missing.length > 0}
         onClick={() => onConfirm(mapping)}
       >
-        确认字段并继续
+        {startAnalysis ? "确认资料并开始分析" : "确认字段并继续"}
       </Button>
+      {onAdjustRoles && (
+        <Button disabled={busy} onClick={onAdjustRoles}>
+          调整资料角色
+        </Button>
+      )}
     </section>
   );
 }

@@ -33,6 +33,8 @@ from .services import ACTIVE, check_live_task
 logger = logging.getLogger(__name__)
 _last_cleanup = 0.0
 IMPORT_BUSY_BACKOFF = (0.2, 0.5, 1.0)
+IMPORT_BATCH_SIZE = 8
+IMPORT_BATCH_SECONDS = 5.0
 
 
 @contextmanager
@@ -368,15 +370,18 @@ def worker_tick(*, recovered=False):
             recover()
             recovered = True
         clean_expired()
-        item = (
+        items = list(
             ComputeImport.objects.filter(status="queued")
             .select_related("output__task__version__algorithm", "requested_by")
-            .order_by("id")
-            .first()
+            .order_by("id")[:IMPORT_BATCH_SIZE]
         )
-        if item:
-            with task_scope(item.output.task):
-                process_import(item)
+        if items:
+            started = time.monotonic()
+            for item in items:
+                with task_scope(item.output.task):
+                    process_import(item)
+                if time.monotonic() - started >= IMPORT_BATCH_SECONDS:
+                    break
             return recovered
         if state["ready"]:
             task = (

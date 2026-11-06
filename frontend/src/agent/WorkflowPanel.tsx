@@ -777,6 +777,7 @@ export default function WorkflowPanel({
       setWorkflow(
         await agentApi.confirmWorkflow(workflow.id, workflow.planHash, {
           fieldMapping,
+          executeAfterMapping: true,
         }),
       );
     } catch (reason) {
@@ -1270,6 +1271,7 @@ export default function WorkflowPanel({
           )}
           {fieldMappingReview && (
             <FieldMappingReview
+              startAnalysis
               key={workflow?.planHash}
               review={fieldMappingReview}
               busy={busy}

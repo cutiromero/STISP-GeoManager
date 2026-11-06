@@ -647,6 +647,22 @@ def freeze_proposal(workflow, stage):
     review, rows = proposal(workflow, stage, check_stage(workflow)["results"])
     workflow.plan["modificationReview"] = review
     stage["proposedEdits"] = rows
+    if not rows and not review["suggestions"]:
+        from .workflow import step
+
+        approval = {
+            "mode": "unchanged",
+            "proposalHash": review["proposalHash"],
+            "planHash": workflow.plan_hash,
+            "selectedSuggestionIds": [],
+            "executionHash": execution_hash(workflow, stage),
+        }
+        stage.update(modificationsApproval=approval, approvedEdits=[], status="pending")
+        workflow.plan.update(phase="decide", reviewOutputs=[])
+        workflow.status = "queued"
+        workflow.detail = "本轮没有待执行的修改，保留原始资料继续分析"
+        step(workflow, "no_modifications", action=approval, message=workflow.detail)
+        return
     stage["status"] = "needs_review"
     workflow.plan.update(phase="review_modifications", reviewOutputs=[])
     workflow.status, workflow.current_step = "waiting_approval", "review_modifications"
@@ -790,13 +806,17 @@ def create_approved_changes(workflow, user, policy, stage):
         review, set(selected), approval.get("alterationActions", {})
     )
     expected = selected_edits(rows, review, selected, actions)
+    unchanged = approval.get("mode") == "unchanged"
     if (
         approval.get("executionHash") != execution_hash(workflow, stage)
         or approval.get("proposalHash") != review["proposalHash"]
         or expected != stage.get("approvedEdits")
         or workflow.plan["modificationReview"]["approvedSuggestionIds"] != selected
+        or (unchanged and bool(rows or review["suggestions"] or selected))
         or not workflow.steps.filter(
-            kind="modifications_approved", action=approval, status="succeeded"
+            kind="no_modifications" if unchanged else "modifications_approved",
+            action=approval,
+            status="succeeded",
         ).exists()
     ):
         raise ComputeError("本次对象与动作尚未获得有效批准，已停止处理", 409)

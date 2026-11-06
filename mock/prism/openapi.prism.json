@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "时空智能服务平台 API",
-    "description": "时空智能服务平台后端接口文档。\n\n## 认证方式\n本平台使用 Django Session 认证机制：\n1. `GET /api/auth/csrf/` 获取 CSRF Token\n2. `POST /api/auth/login/` 登录建立 Session\n3. 后续请求携带 `sessionid` Cookie 和 `X-CSRFToken` 请求头\n\n## 权限体系\n- **功能权限**：30 余项细粒度功能权限，通过用户组分配，按后台权限、日志权限、概览权限、数据权限、人员权限分组管理\n- **数据访问权限**：基于 `access_groups` 的数据隔离\n\n## 错误处理\n所有错误响应包含 `detail` 字段描述错误原因。\nAPI 接口不会返回登录页 HTML：未认证请求返回 JSON `401`，CSRF 校验失败返回 JSON `403`。\n",
+    "description": "时空智能服务平台后端接口文档。\n\n## 认证方式\n本平台使用 Django Session 认证机制：\n1. `GET /api/auth/csrf/` 获取 CSRF Token\n2. `POST /api/auth/login/` 登录建立 Session\n3. 后续请求携带 `sessionid` Cookie 和 `X-CSRFToken` 请求头\n\n## 权限体系\n- **功能权限**：30 余项细粒度功能权限，通过用户组分配，按后台权限、日志权限、概览权限、数据权限、人员权限分组管理\n- **数据访问权限**：基于 `access_groups` 的数据隔离\n普通资源目录、搜索、图层列表以及复用目录集合的后台列表、导出和统计，依据明确的内部source前缀及注册规则code隐藏任务上传、工作副本、内部规则、修改表和评价材料；普通业务上传和计算成果保留，不按资料名称过滤。目录隐藏不改变已绑定任务和历史证据原有的项目、ACL及按编号读取规则。普通智能体另执行更严格的成果溯源检查。\n\n## 错误处理\n所有错误响应包含 `detail` 字段描述错误原因。\nAPI 接口不会返回登录页 HTML：未认证请求返回 JSON `401`，CSRF 校验失败返回 JSON `403`。\n",
     "version": "0.1.0",
     "contact": {
       "name": "API Support",
@@ -9053,7 +9053,7 @@
           "数据目录"
         ],
         "summary": "获取数据资源列表",
-        "description": "支持按目录分类、资源形态、空间属性和兼容业务标签筛选。categoryCode=compute_results 返回计算中心或智能体计算后已入库的结果，父节点默认包含全部后代；dataType/spatialClass 继续描述存储和展示能力，domainType 为兼容标签。需要 `core.browse_data`。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。",
+        "description": "支持按目录分类、资源形态、空间属性和兼容业务标签筛选。categoryCode=compute_results 返回计算中心或智能体计算后已入库的结果，父节点默认包含全部后代；dataType/spatialClass 继续描述存储和展示能力，domainType 为兼容标签。按明确source/code标识排除任务上传、工作副本、内部规则、修改表及评价材料；保留普通业务上传和计算成果，不按test/demo等名称过滤。普通智能体候选另执行更严格的成果溯源。需要 `core.browse_data`。 公开项目提供公开读取；私有项目仍需登录且获配对应标签。草稿与未发布附件受状态及管理权限约束。",
         "operationId": "getResources",
         "security": [],
         "parameters": [
@@ -13939,7 +13939,7 @@
           "图层"
         ],
         "summary": "获取图层列表",
-        "description": "返回当前用户可见且可浏览的启用地图图层；若图层关联的数据资源对当前用户不可见，该图层也不会返回，避免用户看到无法加载的数据。 公开项目允许匿名读取；私有项目须登录且获配标签。自定义符号化、导出与管理仍要求相应功能权限。",
+        "description": "返回当前用户可见且可浏览的启用地图图层；若图层关联的数据资源对当前用户不可见，或其source/code明确标记为任务上传、工作副本、内部规则、修改表及评价材料，该图层不会返回。保留普通业务上传、计算成果及未绑定资源的默认图层，不按名称过滤。公开项目允许匿名读取；私有项目须登录且获配标签。自定义符号化、导出与管理仍要求相应功能权限。",
         "operationId": "getLayers",
         "security": [],
         "responses": {
@@ -14348,7 +14348,7 @@
           "搜索"
         ],
         "summary": "全局搜索",
-        "description": "搜索数据资源。`q` 为空时返回空结果。 公开项目允许匿名读取；私有项目须登录且获配标签。自定义符号化、导出与管理仍要求相应功能权限。",
+        "description": "搜索数据资源，与普通资源目录共用明确source/code内部材料排除规则；任务上传、工作副本、内部规则、修改表及评价材料不进入搜索结果，普通业务上传和计算成果保留，不按名称过滤。`q` 为空时返回空结果。公开项目允许匿名读取；私有项目须登录且获配标签。自定义符号化、导出与管理仍要求相应功能权限。",
         "operationId": "search",
         "security": [],
         "parameters": [
@@ -18398,7 +18398,7 @@
           "Compute"
         ],
         "summary": "listComputeInputs",
-        "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。",
+        "description": "计算输入目录。未指定resourceId时按明确source/code标识排除任务上传、工作副本、内部规则、修改表及评价材料，保留普通业务上传和计算成果，不按名称过滤。指定resourceId时仍按当前项目及资源ACL重新授权，不从目录隐藏推导绑定读取权限。任务文件仅本人和有权管理员访问。写入必须显式传当前项目。",
         "security": [
           {
             "sessionAuth": []
@@ -21537,6 +21537,178 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentWorkflow"
+                },
+                "example": {
+                  "id": "69ac90d1-999f-44b7-9b68-1da1f726a142",
+                  "projectId": 3,
+                  "workflowType": "geology_generic",
+                  "modificationReview": {
+                    "proposalHash": "grouped-example-snapshot",
+                    "approvedSuggestionIds": [
+                      "object-1"
+                    ],
+                    "suggestions": [
+                      {
+                        "id": "object-1",
+                        "groupId": "AG-example-calcite-C-A05",
+                        "kind": "multi_element",
+                        "element": "alteration",
+                        "featureId": "AG-example-calcite-C-A05",
+                        "title": "同矿物同岩性单元小斑",
+                        "currentState": "原识别像元",
+                        "suggestedState": "downweight",
+                        "reason": "同单元内8邻域连通分量小于面积阈值，默认降权而非删除",
+                        "action": "downweight",
+                        "status": "suggested",
+                        "areaM2": 1000,
+                        "ruleId": "A-05",
+                        "observations": {
+                          "raster_protocol": "alteration-pixels-v1",
+                          "group_id": "AG-example-calcite-C-A05",
+                          "pixel_count": 10,
+                          "area_m2": 1000,
+                          "component_count": 2,
+                          "mineral": "calcite",
+                          "unit_code": "C",
+                          "rock_group": "carbonate",
+                          "boundary": false
+                        },
+                        "knowledgeRefs": [
+                          {
+                            "id": 601,
+                            "revision": 1,
+                            "title": "碎斑检查"
+                          }
+                        ],
+                        "preview": {
+                          "type": "Polygon",
+                          "coordinates": []
+                        },
+                        "bounds": [
+                          98.4,
+                          35.6,
+                          98.401,
+                          35.601
+                        ]
+                      },
+                      {
+                        "id": "held-lithology-1",
+                        "groupId": "lithology-L06-review",
+                        "kind": "multi_element",
+                        "element": "lithology",
+                        "featureId": "F00001",
+                        "title": "全新世冲积物形态异常",
+                        "currentState": "Qhᵃˡ",
+                        "suggestedState": "reclassify Qp₃ᵖᵃˡ",
+                        "reason": "近等轴孤立团块，置信度较高，须核对冲积扇等例外",
+                        "action": "reclassify",
+                        "status": "review",
+                        "candidateAction": "reclassify",
+                        "candidateTargetCode": "Qp₃ᵖᵃˡ",
+                        "areaM2": 500000,
+                        "ruleId": "L-06",
+                        "observations": {
+                          "compactness": 0.8,
+                          "aspect_ratio": 1.2
+                        },
+                        "knowledgeRefs": [
+                          {
+                            "id": 601,
+                            "revision": 1,
+                            "title": "本案例形态试用规则"
+                          }
+                        ],
+                        "preview": {
+                          "type": "Polygon",
+                          "coordinates": []
+                        },
+                        "bounds": [
+                          98.4,
+                          35.6,
+                          98.401,
+                          35.601
+                        ]
+                      }
+                    ]
+                  },
+                  "goal": "检查上传地质资料",
+                  "model": "configured",
+                  "status": "queued",
+                  "detail": "资料与字段已确认，正在准备分析",
+                  "currentStep": "review_mapping",
+                  "iteration": 5,
+                  "operatorSteps": 5,
+                  "maxIterations": 12,
+                  "maxOperatorSteps": 16,
+                  "executeOperators": false,
+                  "resourceIds": [
+                    812
+                  ],
+                  "algorithmVersionId": null,
+                  "parameters": {},
+                  "resultIds": [
+                    1001,
+                    1002,
+                    1003,
+                    1004,
+                    1005,
+                    1006,
+                    1007,
+                    1008,
+                    1009,
+                    1010,
+                    1011,
+                    1012,
+                    1013,
+                    1014,
+                    1015,
+                    1016,
+                    1017,
+                    1018,
+                    1019,
+                    1020,
+                    1021,
+                    1022,
+                    1023,
+                    1024,
+                    1025,
+                    1026,
+                    1027
+                  ],
+                  "resultResourceIds": [
+                    820,
+                    821,
+                    822,
+                    823,
+                    824,
+                    825,
+                    826,
+                    827,
+                    828
+                  ],
+                  "importResults": true,
+                  "evidence": [],
+                  "steps": [],
+                  "stepCount": 0,
+                  "view": "inspection",
+                  "runtime": "durable_state_machine",
+                  "createdAt": "2026-11-04T08:00:00Z",
+                  "updatedAt": "2026-11-04T08:10:00Z",
+                  "planHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "plan": {
+                    "phase": "build_inputs",
+                    "confirmedMapping": {
+                      "lithology": {
+                        "name": "DCMC",
+                        "geo_sym": "DH"
+                      }
+                    },
+                    "inputExecutionAuthorization": {
+                      "mappingHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "inputsHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "planHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    }
+                  }
                 }
               }
             }
@@ -28212,7 +28384,7 @@
               "confirm",
               "cancel"
             ],
-            "description": "回答、明确审核确认或取消；通用地质推理的answer按当前阶段严格解析自然语言，不明确时保留卡片确认，不自动批准"
+            "description": "回答、明确审核确认或取消；通用地质推理的answer按当前阶段严格解析自然语言，不明确时保留卡片确认，不自动批准。资料字段核对或尚未执行的沿用计划可明确回答修改角色和字段，保留旧计划历史并回到人工角色核对，重新确认建立独立工作流。"
           },
           "revision": {
             "type": "string",
@@ -36276,6 +36448,11 @@
                 "maxLength": 120
               }
             }
+          },
+          "executeAfterMapping": {
+            "type": "boolean",
+            "default": false,
+            "description": "仅geology_generic的review_mapping阶段approve且提交fieldMapping时允许。true表示用户同时确认资料与字段并授权开始分析，服务端记录与本次字段及输入绑定的授权，工作副本及已发布算法计划通过校验后直接执行，不再重复确认初始计划；修改建议、质量异常、预算不足及专业不确定事项仍须原有批准。false或省略时只确认字段，后续计划仍需确认。其他阶段、reject或非布尔值返回400。"
           }
         }
       },

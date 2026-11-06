@@ -568,10 +568,14 @@ def test_operator_packages_are_deterministic_and_declare_clean_outputs():
         assert package == builder(identifier)
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
             manifest = validate_manifest(yaml.safe_load(archive.read("operator.yaml")))
-            assert manifest["version"] == "1.1.1" and manifest["deterministic"]
-            assert {"main.py", "multi_apply.py", "multi_io.py", "operator.yaml"} <= set(
-                archive.namelist()
-            )
+            assert manifest["version"] == "1.1.2" and manifest["deterministic"]
+            assert {
+                "main.py",
+                "multi_apply.py",
+                "multi_io.py",
+                "multi_grid.py",
+                "operator.yaml",
+            } <= set(archive.namelist())
             if suffix == "apply":
                 assert {
                     "final_faults",

@@ -306,6 +306,30 @@ def test_approval_only_writes_selected_object_action(multi, monkeypatch):
         create_approved_changes(wf, multi["owner"], multi["policy"], stage)
 
 
+def test_empty_modification_set_continues_without_inventing_user_approval(
+    multi, monkeypatch
+):
+    wf, stage, results = fixture_review(multi)
+    for result in results:
+        result["rows"] = []
+        result["rowCount"] = 0
+    stage["edits"] = []
+    freeze_proposal(wf, stage)
+    assert wf.status == "queued" and wf.plan["phase"] == "decide"
+    assert not wf.steps.filter(kind="modifications_approved").exists()
+    assert wf.steps.filter(kind="no_modifications").count() == 1
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.read_results", lambda *args: results
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.authorized_task",
+        lambda *args, **kwargs: object(),
+    )
+    resource = create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+    path = table_data_path(resource.storage_path.removeprefix("table/"))
+    assert list(csv.DictReader(io.StringIO(path.read_text()))) == []
+
+
 @pytest.mark.parametrize("status", ["review", "exception"])
 def test_held_candidates_are_independent_of_model_and_explicitly_approved(
     multi, monkeypatch, status

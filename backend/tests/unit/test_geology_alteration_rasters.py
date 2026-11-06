@@ -89,6 +89,38 @@ def test_cross_unit_connected_alteration_is_only_partly_excluded(tmp_path):
         assert source.tags(ns="IMAGE_STRUCTURE")["LAYOUT"] == "COG"
 
 
+def test_shared_lithology_preparation_preserves_different_mineral_grids(tmp_path):
+    context = scene(tmp_path)
+    with rasterio.open(
+        context.inputs["dolomite"],
+        "w",
+        driver="GTiff",
+        height=10,
+        width=10,
+        count=1,
+        dtype="uint8",
+        crs=32646,
+        transform=from_origin(X, Y + 1000, 100, 100),
+    ) as target:
+        target.write(np.ones((10, 10), dtype="uint8"), 1)
+    findings, _ = check(context)
+    selected = [row for row in findings if row["rule_id"] == "A-01"]
+    sizes = {
+        json.loads(row["measurements_json"])["mineral"]: json.loads(
+            row["measurements_json"]
+        )["pixel_count"]
+        for row in selected
+    }
+    assert sorted(sizes.values()) == [50, 200]
+    edited = approval_context(tmp_path, context, selected)
+    load("apply")(edited)
+    fine = pixels(edited.output_path("calcite_corrected.tif"))
+    coarse = pixels(edited.output_path("dolomite_corrected.tif"))
+    assert fine.shape == (20, 20) and coarse.shape == (10, 10)
+    assert not fine[:, :10].any() and fine[:, 10:].all()
+    assert not coarse[:, :5].any() and coarse[:, 5:].all()
+
+
 def test_small_components_are_per_mineral_and_unit_and_default_to_downweight(tmp_path):
     context = scene(tmp_path)
     rows = read(context.inputs["rules"])

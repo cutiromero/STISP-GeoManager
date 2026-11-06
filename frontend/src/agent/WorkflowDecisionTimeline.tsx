@@ -1,6 +1,11 @@
 import { Collapse, Tag } from "antd";
 import { useEffect, useState } from "react";
 import type { AgentWorkflowStep } from "../api/generated/types.gen";
+import {
+  mainWorkflowSteps,
+  modelAttemptRetried,
+  workflowStepTitle,
+} from "./workflowTimeline";
 
 const stepNames: Record<string, string> = {
   queued: "等待执行",
@@ -43,13 +48,18 @@ const resultNames: Record<string, string> = {
 
 export default function WorkflowDecisionTimeline({
   steps,
+  taskNames = {},
+  concise = false,
 }: {
   steps: AgentWorkflowStep[];
+  taskNames?: Record<string, string>;
+  concise?: boolean;
 }) {
+  const visible = concise ? mainWorkflowSteps(steps) : steps;
   const [restoredDecisions] = useState(
     () => new Set(steps.filter((step) => step.decision).map((step) => step.id)),
   );
-  const activeSteps = steps
+  const activeSteps = visible
     .filter((step) =>
       ["running", "waiting", "waiting_approval", "failed"].includes(
         step.status,
@@ -62,144 +72,202 @@ export default function WorkflowDecisionTimeline({
     setExpanded(activeKey ? activeKey.split(",") : []);
   }, [activeKey]);
   if (!steps.length) return null;
+  const items = (entries: AgentWorkflowStep[], audit = false) =>
+    entries.map((step, index) => {
+      const decision = step.decision;
+      const modelResponse = record(step.outputRefs.modelResponse);
+      const activity = record(step.outputRefs.modelActivity);
+      const fresh = Boolean(
+        !audit && decision && !restoredDecisions.has(step.id),
+      );
+      const retried = modelAttemptRetried(step, steps);
+      return {
+        key: String(step.id),
+        label: (
+          <div className="agent-decision-step-heading">
+            <strong>
+              {audit ? step.sequence : index + 1}.{" "}
+              {workflowStepTitle(step, taskNames)}
+            </strong>
+            <Tag color={step.status === "running" ? "processing" : undefined}>
+              {retried ? "已重新分析" : (stepNames[step.status] ?? step.status)}
+            </Tag>
+          </div>
+        ),
+        forceRender: !audit,
+        children: (
+          <article
+            className={`agent-decision-step${fresh ? " is-new-decision" : ""}`}
+            data-step-id={audit ? undefined : step.id}
+          >
+            {decision ? (
+              <>
+                <span className="agent-decision-model">
+                  {decision.modelMode === "mock"
+                    ? "模拟模型"
+                    : decision.modelName}
+                </span>
+                {!!decision.findings.length && (
+                  <div className="agent-decision-findings">
+                    <span>发现</span>
+                    <ul>
+                      {decision.findings.map((finding) => (
+                        <li key={finding}>{finding}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {decision.judgement && (
+                  <p className="agent-decision-judgement">
+                    <strong>当前判断</strong>
+                    {decision.judgement}
+                  </p>
+                )}
+                {decision.algorithmReason && (
+                  <p>
+                    <strong>算法与参数依据</strong>
+                    {decision.algorithmReason}
+                  </p>
+                )}
+                {decision.resultSummary && (
+                  <p className="agent-decision-result">
+                    <strong>实际结果</strong>
+                    {decision.resultSummary}
+                  </p>
+                )}
+                {!!decision.uncertainties.length && (
+                  <div className="agent-decision-uncertainties">
+                    <strong>仍待核实</strong>
+                    <ul>
+                      {decision.uncertainties.map((entry) => (
+                        <li key={entry}>{entry}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {decision.nextAction && (
+                  <p>
+                    <strong>下一步</strong>
+                    {actionNames[decision.nextAction] ?? decision.nextAction}
+                  </p>
+                )}
+                {!!decision.evidenceRefs.length && (
+                  <div
+                    className="agent-decision-evidence"
+                    aria-label="本步依据"
+                  >
+                    {decision.evidenceRefs.map((entry) => (
+                      <span key={`${entry.kind}:${entry.id}:${entry.revision}`}>
+                        {entry.kind === "output"
+                          ? (resultNames[entry.title] ?? entry.title)
+                          : entry.title}
+                        {entry.revision !== undefined
+                          ? ` / 版本 ${entry.revision}`
+                          : ""}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : Object.keys(activity).length ? (
+              <p>
+                {activity.status === "complete"
+                  ? "模型分析已完成。"
+                  : activity.status === "failed"
+                    ? "本次模型分析已停止。"
+                    : "模型分析进行中。"}
+                {typeof activity.thinkingChars === "number" &&
+                  `已接收思考 ${activity.thinkingChars} 字符。`}
+                {typeof activity.outputChars === "number" &&
+                  `已接收响应正文 ${activity.outputChars} 字符。`}
+              </p>
+            ) : (
+              <p>{step.message.trim() || "本条为运行状态记录。"}</p>
+            )}
+            {step.errorCode && (
+              <p className="agent-decision-error">
+                本步骤失败：
+                {step.message || "请查看任务状态中的原因与下一步操作。"}
+              </p>
+            )}
+            {audit &&
+              typeof activity.thinkingText === "string" &&
+              activity.thinkingText && (
+                <details>
+                  <summary>查看本阶段模型思考</summary>
+                  {activity.truncated === true && (
+                    <p>仅显示已保存的思考尾部。</p>
+                  )}
+                  <pre
+                    style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+                  >
+                    {activity.thinkingText}
+                  </pre>
+                </details>
+              )}
+            {typeof modelResponse.content === "string" && (
+              <details>
+                <summary>查看本次模型响应（审计记录）</summary>
+                {modelResponse.truncated === true && (
+                  <p>响应超过审计体积上限，仅保留截断内容。</p>
+                )}
+                <pre
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {modelResponse.content ||
+                    "模型未返回正文；请查看本步失败原因。"}
+                </pre>
+              </details>
+            )}
+          </article>
+        ),
+      };
+    });
   return (
     <section
       className="agent-decision-timeline"
       aria-label="分析说明与决策依据"
     >
-      <Collapse
-        ghost
-        size="small"
-        activeKey={expanded}
-        onChange={(keys) => setExpanded(Array.isArray(keys) ? keys : [keys])}
-        className="agent-decision-steps"
-        items={steps.map((step) => {
-          const decision = step.decision;
-          const modelResponse = record(step.outputRefs.modelResponse);
-          const fresh = Boolean(decision && !restoredDecisions.has(step.id));
-          return {
-            key: String(step.id),
-            label: (
-              <div className="agent-decision-step-heading">
-                <strong>
-                  {step.sequence}. {decision?.problem || step.message}
-                </strong>
-                <Tag
-                  color={step.status === "running" ? "processing" : undefined}
-                >
-                  {stepNames[step.status] ?? step.status}
-                </Tag>
-              </div>
-            ),
-            forceRender: true,
-            children: (
-              <article
-                className={`agent-decision-step${fresh ? " is-new-decision" : ""}`}
-                data-step-id={step.id}
-              >
-                {decision ? (
-                  <>
-                    <span className="agent-decision-model">
-                      {decision.modelMode === "mock"
-                        ? "模拟模型"
-                        : decision.modelName}
-                    </span>
-                    {!!decision.findings.length && (
-                      <div className="agent-decision-findings">
-                        <span>发现</span>
-                        <ul>
-                          {decision.findings.map((finding) => (
-                            <li key={finding}>{finding}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {decision.judgement && (
-                      <p className="agent-decision-judgement">
-                        <strong>当前判断</strong>
-                        {decision.judgement}
-                      </p>
-                    )}
-                    {decision.algorithmReason && (
-                      <p>
-                        <strong>算法与参数依据</strong>
-                        {decision.algorithmReason}
-                      </p>
-                    )}
-                    {decision.resultSummary && (
-                      <p className="agent-decision-result">
-                        <strong>实际结果</strong>
-                        {decision.resultSummary}
-                      </p>
-                    )}
-                    {!!decision.uncertainties.length && (
-                      <div className="agent-decision-uncertainties">
-                        <strong>仍待核实</strong>
-                        <ul>
-                          {decision.uncertainties.map((entry) => (
-                            <li key={entry}>{entry}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {decision.nextAction && (
-                      <p>
-                        <strong>下一步</strong>
-                        {actionNames[decision.nextAction] ??
-                          decision.nextAction}
-                      </p>
-                    )}
-                    {!!decision.evidenceRefs.length && (
-                      <div
-                        className="agent-decision-evidence"
-                        aria-label="本步依据"
-                      >
-                        {decision.evidenceRefs.map((entry) => (
-                          <span
-                            key={`${entry.kind}:${entry.id}:${entry.revision}`}
-                          >
-                            {entry.kind === "output"
-                              ? (resultNames[entry.title] ?? entry.title)
-                              : entry.title}
-                            {entry.revision !== undefined
-                              ? ` / 版本 ${entry.revision}`
-                              : ""}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p>{step.message}</p>
-                )}
-                {step.errorCode && (
-                  <p className="agent-decision-error">
-                    本步骤失败：
-                    {step.message || "请查看任务状态中的原因与下一步操作。"}
-                  </p>
-                )}
-                {typeof modelResponse.content === "string" && (
-                  <details>
-                    <summary>查看本次模型响应（审计记录）</summary>
-                    {modelResponse.truncated === true && (
-                      <p>响应超过审计体积上限，仅保留截断内容。</p>
-                    )}
-                    <pre
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        overflowWrap: "anywhere",
-                      }}
-                    >
-                      {modelResponse.content ||
-                        "模型未返回正文；请查看本步失败原因。"}
-                    </pre>
-                  </details>
-                )}
-              </article>
-            ),
-          };
-        })}
-      />
+      {visible.length > 0 && (
+        <Collapse
+          ghost
+          size="small"
+          activeKey={expanded}
+          onChange={(keys) => setExpanded(Array.isArray(keys) ? keys : [keys])}
+          className="agent-decision-steps"
+          items={items(visible)}
+        />
+      )}
+      {concise && (
+        <Collapse
+          ghost
+          size="small"
+          items={[
+            {
+              key: "audit",
+              label: `详细运行记录 / ${steps.length} 条`,
+              children: (
+                <Collapse
+                  ghost
+                  size="small"
+                  defaultActiveKey={steps
+                    .filter(
+                      (step) =>
+                        ["failed", "running", "waiting"].includes(
+                          step.status,
+                        ) && !modelAttemptRetried(step, steps),
+                    )
+                    .map((step) => String(step.id))}
+                  items={items(steps, true)}
+                />
+              ),
+            },
+          ]}
+        />
+      )}
     </section>
   );
 }

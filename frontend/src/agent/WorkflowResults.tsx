@@ -10,6 +10,7 @@ import RunComputeTasks from "./RunComputeTasks";
 import WorkflowKnowledgeReferences from "./WorkflowKnowledgeReferences";
 import LiveActivity from "./LiveActivity";
 import WorkflowModelActivity from "./WorkflowModelActivity";
+import { mainWorkflowSteps } from "./workflowTimeline";
 import { workflowActivity } from "./agentActivity";
 import WorkflowReportFile from "./WorkflowReportFile";
 import WorkflowDeliverables from "./WorkflowDeliverables";
@@ -434,8 +435,12 @@ export default function WorkflowResults({
               {
                 key: "process",
                 label: ui(
-                  `查看分析过程 / ${workflow.steps.length} 步`,
-                  `Analysis process / ${workflow.steps.length} steps`,
+                  isMultiElement && !mainWorkflowSteps(workflow.steps).length
+                    ? "查看准备进度与运行记录"
+                    : `查看分析过程 / ${isMultiElement ? mainWorkflowSteps(workflow.steps).length : workflow.steps.length} 步`,
+                  isMultiElement && !mainWorkflowSteps(workflow.steps).length
+                    ? "Preparation and runtime records"
+                    : `Analysis process / ${isMultiElement ? mainWorkflowSteps(workflow.steps).length : workflow.steps.length} steps`,
                 ),
                 children: (
                   <>
@@ -446,6 +451,8 @@ export default function WorkflowResults({
                     <WorkflowDecisionTimeline
                       key={workflow.id}
                       steps={workflow.steps}
+                      taskNames={taskDisplayNames}
+                      concise={isMultiElement}
                     />
                   </>
                 ),

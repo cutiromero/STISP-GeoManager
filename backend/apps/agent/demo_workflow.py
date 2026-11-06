@@ -60,6 +60,22 @@ DEMO_TYPES = {
     GENERIC,
 }
 
+AUTOMATIC_GEOLOGY_STAGES = {
+    "check": "geology-multi-check",
+    "recheck": "geology-multi-check",
+    "relations": "geology-multi-relations",
+    "prospect": "geology-multi-prospect",
+}
+
+
+def _automatic_stage(workflow, stage):
+    return (
+        workflow.workflow_type in MULTI_FAMILY
+        and workflow.plan.get("executionPolicy") == "measured_geology_v1"
+        and stage.get("name") in AUTOMATIC_GEOLOGY_STAGES
+        and AUTOMATIC_GEOLOGY_STAGES.get(stage.get("name")) == stage.get("identifier")
+    )
+
 
 class ModelBudgetExhausted(ComputeError):
     """The task's frozen model-request allowance cannot finish the remaining work."""
@@ -377,9 +393,15 @@ def prepare_demo(workflow, user, p) -> None:
         graph = prepare_update(workflow, user, p)
     versions = validated_versions or _versions(workflow, graph)
     required_steps = len(graph)
-    decisions_required = required_steps + (
-        2 if workflow.workflow_type == "geology_map_review" else 1
-    )
+    if workflow.workflow_type in MULTI_FAMILY:
+        workflow.plan["executionPolicy"] = "measured_geology_v1"
+        decisions_required = 1 + sum(
+            name not in AUTOMATIC_GEOLOGY_STAGES for name, _, _ in graph
+        )
+    else:
+        decisions_required = required_steps + (
+            2 if workflow.workflow_type == "geology_map_review" else 1
+        )
     if workflow.max_iterations < decisions_required:
         raise ComputeError("请将场景模型决策上限至少设为" + str(decisions_required))
     if workflow.max_operator_steps < required_steps:
@@ -483,7 +505,20 @@ def prepare_demo(workflow, user, p) -> None:
         step(workflow, "demo_plan", action=workflow.plan, message=workflow.detail)
         checkpoint(workflow, "review_plan", {"planHash": workflow.plan_hash})
         chat = workflow.plan.get("chatExecution")
-        if chat and chat.get("initialPlanAuthorized") and workflow.status != "paused":
+        from .input_execution import input_execution_authorized
+
+        if workflow.status != "paused" and input_execution_authorized(
+            workflow, user, p
+        ):
+            current = locked_workflow(workflow.id)
+            confirm_demo(current, user, p, current.plan_hash)
+            step(
+                current,
+                "input_execution_authorized",
+                message="按已确认资料开始分析，处置建议仍须批准",
+            )
+            workflow.refresh_from_db()
+        elif chat and chat.get("initialPlanAuthorized") and workflow.status != "paused":
             from .models import AgentRun
 
             current = AgentWorkflow.objects.select_for_update().get(pk=workflow.id)
@@ -630,6 +665,7 @@ def confirm_demo(
     selected_suggestion_ids=None,
     field_mapping=None,
     alteration_actions=None,
+    execute_after_mapping=False,
 ) -> None:
     from .workflow_slots import require_compute_slot
 
@@ -637,7 +673,14 @@ def confirm_demo(
     if workflow.plan.get("phase") == "review_mapping":
         from .geology_generic import confirm_mapping
 
-        confirm_mapping(workflow, user, p, plan_hash, field_mapping)
+        confirm_mapping(
+            workflow,
+            user,
+            p,
+            plan_hash,
+            field_mapping,
+            execute_after_mapping=execute_after_mapping,
+        )
         return
     if field_mapping is not None:
         raise ComputeError("当前阶段不接受字段对应", 400)
@@ -785,7 +828,10 @@ def _has_model_progress(stage) -> bool:
 
 def _future_model_requests(workflow, stage):
     stages = workflow.plan["stages"][workflow.plan["stageIndex"] + 1 :]
-    return sum(not item.get("decision") for item in stages) + int(
+    return sum(
+        not item.get("decision") and not _automatic_stage(workflow, item)
+        for item in stages
+    ) + int(
         stage["identifier"] != "finish"
         and not any(item["identifier"] == "finish" for item in stages)
         and not workflow.plan.get("finalStage", {}).get("decision")
@@ -935,13 +981,18 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
     with transaction.atomic():
         if _collection_cancelled(workflow):
             return False
+    # Waiting for imports must not hold SQLite's writer while revalidating all
+    # inputs. The compute worker needs that writer to publish each ready item.
+    with discovery_scope():
         user, p = _authorize(workflow)
         authorize_demo(workflow, user, p)
-        workflow.steps.filter(kind="submit_operator", compute_task_id=task.id).update(
-            status="succeeded",
-            message="计算已完成",
-            finished_at=task.finished_at or timezone.now(),
-        )
+    workflow.steps.filter(kind="submit_operator", compute_task_id=task.id).exclude(
+        status="succeeded"
+    ).update(
+        status="succeeded",
+        message="计算已完成",
+        finished_at=task.finished_at or timezone.now(),
+    )
     if "results" not in stage:
         stage["results"] = read_results(workflow, user, p, task)
         with transaction.atomic():
@@ -980,37 +1031,56 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
             ],
         )
         return False
-    records = []
-    for output in outputs:
-        if workflow.workflow_type in MULTI_FAMILY:
-            from .geology_multi import VISIBLE_OUTPUTS
+    if workflow.workflow_type in MULTI_FAMILY:
+        from .geology_multi import VISIBLE_OUTPUTS
 
-            if output.key not in VISIBLE_OUTPUTS.get(stage["name"], set()):
-                continue
+        importable = [
+            output
+            for output in outputs
+            if output.key in VISIBLE_OUTPUTS.get(stage["name"], set())
+        ]
+    else:
+        importable = outputs
+    existing = {
+        item.output_id: item
+        for item in ComputeImport.objects.filter(output__in=importable)
+    }
+    missing = [output for output in importable if output.id not in existing]
+    if missing:
         with transaction.atomic():
             if _collection_cancelled(workflow):
                 return False
-            user, p = _authorize(workflow)
-            authorize_demo(workflow, user, p)
-            record = ComputeImport.objects.filter(output=output).first()
-            if record is None:
-                source = (
-                    "" if stage.get("manualApproved") else f"workflow:{workflow.id}"
-                )
-                # Readable, and still unique: the importer rejects duplicate names.
-                created = timezone.localtime(workflow.created_at)
+            with discovery_scope():
+                user, p = _authorize(workflow)
+                authorize_demo(workflow, user, p)
+            source = "" if stage.get("manualApproved") else f"workflow:{workflow.id}"
+            created = timezone.localtime(workflow.created_at)
+            for output in missing:
                 name = f"{stage_title(workflow, stage)} · {output.label} · {created:%m-%d %H:%M:%S}"
-                record = request_output_import(
+                existing[output.id] = request_output_import(
                     user, output, name=name, request_source=source
                 )
+    records = [(output, existing[output.id]) for output in importable]
+    for output, record in records:
         if record.status == "failed":
             raise ComputeError(
                 "结果入库失败，已保留任务与原结果：" + record.error[:200]
             )
-        records.append((output, record))
     if any(record.status != "ready" or not record.resource_id for _, record in records):
-        workflow.detail = "计算完成，正在等待实际结果入库"
-        _save(workflow)
+        ready = sum(
+            record.status == "ready" and bool(record.resource_id)
+            for _, record in records
+        )
+        detail = f"正在入库：已完成 {ready}/{len(records)} 项成果"
+        if workflow.detail != detail:
+            now = timezone.now()
+            AgentWorkflow.objects.filter(
+                pk=workflow.pk,
+                status="waiting_compute",
+                pause_requested=False,
+                cancel_requested=False,
+            ).update(detail=detail, heartbeat=now, updated_at=now)
+            workflow.detail = detail
         return False
     stage["outputs"] = []
     internal_resource_ids = set()
@@ -1174,6 +1244,22 @@ def advance_demo(workflow_id) -> None:
                 and stage["identifier"] != "finish"
             ):
                 raise ComputeError("已达到场景算子步骤上限")
+            if (
+                _automatic_stage(workflow, stage)
+                and not stage.get("decision")
+                and not _has_model_progress(stage)
+                and not stage.get("contextBudgetReview")
+            ):
+                stage["executionMode"] = "automatic"
+                _submit_stage(workflow, user, p, stage)
+                step(
+                    workflow,
+                    "automatic_stage",
+                    message=f"按已确认资料与规则执行{stage_title(workflow, stage)}",
+                    action={"stage": stage["name"], "identifier": stage["identifier"]},
+                    compute_task_id=stage["taskId"],
+                )
+                return
             if not stage.get("decision"):
                 recovering_response = _has_model_progress(stage)
                 if (

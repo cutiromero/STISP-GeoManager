@@ -281,12 +281,8 @@ def test_foreign_conversation_and_batch_are_hidden(generic):
     assert response.status_code == 409
 
 
-def test_plan_and_scoped_approval_use_original_checks(
-    generic, monkeypatch, record_property
-):
-    from apps.agent.demo_workflow import _save
+def seed_rules(generic):
     from apps.agent.geology_multi import FIELDS, SCENARIO
-    from tests.integration.test_geology_multi_workflow import fixture_review
 
     entries = []
     for rule_id in ("L-03", "A-01"):
@@ -333,6 +329,16 @@ def test_plan_and_scoped_approval_use_original_checks(
     generic["rules"].storage_path = "table/generic-chat/rules.csv"
     generic["rules"].file_format = "CSV"
     generic["rules"].save()
+    return entries
+
+
+def test_plan_and_scoped_approval_use_original_checks(
+    generic, monkeypatch, record_property
+):
+    from apps.agent.demo_workflow import _save
+    from tests.integration.test_geology_multi_workflow import fixture_review
+
+    entries = seed_rules(generic)
     run, _ = intake(generic)
     assert answer(generic, run, answer="确认资料角色").status_code == 200
     run.refresh_from_db()

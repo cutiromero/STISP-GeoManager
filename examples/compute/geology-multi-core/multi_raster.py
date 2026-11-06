@@ -11,7 +11,6 @@ from tempfile import TemporaryDirectory
 import geopandas as gpd
 import numpy as np
 import rasterio
-import shapely
 from pyproj import CRS
 from rasterio.features import rasterize
 from rasterio.shutil import copy as raster_copy
@@ -20,6 +19,7 @@ from shapely.geometry import box
 
 from multi_io import RASTERS, digest, dump, geojson_geometry, write_table
 from multi_windows import Components, GDAL_CACHE_MB, create, windows
+from multi_grid import LithologyGrids
 
 RULE_PRIORITY = ("A-04", "A-01", "A-02", "A-03", "A-05")
 SUMMARY_FIELDS = [
@@ -95,13 +95,17 @@ def window_profile(source, window):
     }
 
 
-def read_raw(source, window, area):
+def read_raw(source, window, area, mask=None):
     values = source.read(1, window=window, masked=True)
     valid = ~np.ma.getmaskarray(values)
     if not np.isin(values.data[valid], [0, 1]).all():
         raise ValueError("蚀变输入必须为0/1栅格")
     raw = valid & (values.data == 1)
-    raw &= burn([(area, 1)], window_profile(source, window), dtype="uint8") > 0
+    raw &= (
+        burn([(area, 1)], window_profile(source, window), dtype="uint8")
+        if mask is None
+        else mask
+    ) > 0
     return raw
 
 
@@ -160,6 +164,7 @@ class RasterAlterations:
             prefix=".raster-",
             dir=Path(self.context.output_path("alteration_summary.csv")).parent,
         )
+        self.grids = LithologyGrids(self.workspace.name, lithology, self.area)
         findings = []
         with rasterio.Env(GDAL_CACHEMAX=GDAL_CACHE_MB * 1024 * 1024):
             for mineral, name in RASTERS.items():
@@ -169,7 +174,7 @@ class RasterAlterations:
                 gc.collect()
         return findings, self
 
-    def _inspect_mineral(self, mineral, name, lithology, rules, units, persist=False):
+    def _inspect_mineral(self, mineral, name, lithology, rules, units):
         directory = Path(self.workspace.name) / mineral
         directory.mkdir()
         with ExitStack() as stack:
@@ -186,14 +191,12 @@ class RasterAlterations:
             pixel_area = abs(source.transform.determinant)
             if not math.isfinite(pixel_area) or pixel_area <= 0:
                 raise ValueError("蚀变网格像元面积无效")
-            local = lithology.to_crs(crs)
-            area = gpd.GeoSeries([self.area], crs=lithology.crs).to_crs(crs).iloc[0]
-            codes = sorted(set(local.geo_sym.astype(str)))
-            identities = {code: index + 1 for index, code in enumerate(codes)}
-            entries = [
-                (geometry, identities[str(code)])
-                for code, geometry in zip(local.geo_sym, local.geometry)
-            ]
+            grid_paths, prepared = self.grids.get(source)
+            codes, identities, _, _, _, area = prepared
+            grids = {
+                key: stack.enter_context(rasterio.open(path))
+                for key, path in grid_paths.items()
+            }
             weights = open_weights(self.context, mineral, source, stack)
             layers = {
                 key: stack.enter_context(
@@ -211,50 +214,11 @@ class RasterAlterations:
             original, boundary_count, positive = 0, 0, 0
             selected_counts = {}
             for window in windows(profile):
-                part = window_profile(source, window)
-                raw = read_raw(source, window, area)
-                unit_grid = burn(entries, part, dtype="int32")
-                touched = np.zeros(raw.shape, dtype="uint32")
-                for code in codes:
-                    touched += burn(
-                        [
-                            (geometry, 1)
-                            for geometry in local.loc[
-                                local.geo_sym.astype(str) == code
-                            ].geometry
-                        ],
-                        part,
-                        dtype="uint8",
-                        all_touched=True,
-                    )
-                boundary = touched > 1
-                rows, columns = np.where(boundary)
-                if len(rows):
-                    transform = part["transform"]
-                    if transform.b or transform.d:
-                        raise ValueError(
-                            "逐像元边界统计暂不支持旋转网格，请先转为北向网格"
-                        )
-                    left, top = (
-                        transform.c + columns * transform.a,
-                        transform.f + rows * transform.e,
-                    )
-                    pixels = shapely.box(
-                        np.minimum(left, left + transform.a),
-                        np.minimum(top, top + transform.e),
-                        np.maximum(left, left + transform.a),
-                        np.maximum(top, top + transform.e),
-                    )
-                    intersected = np.zeros(len(pixels), dtype="uint32")
-                    for code in codes:
-                        geometry = shapely.union_all(
-                            local.loc[local.geo_sym.astype(str) == code].geometry
-                        )
-                        intersected += (
-                            shapely.area(shapely.intersection(pixels, geometry))
-                            > pixel_area * 1e-10
-                        )
-                    boundary[rows, columns] = intersected > 1
+                raw = read_raw(
+                    source, window, area, grids["area"].read(1, window=window)
+                )
+                unit_grid = grids["units"].read(1, window=window)
+                boundary = grids["boundary"].read(1, window=window) > 0
                 original += int(raw.sum())
                 unit_ids, unit_counts = np.unique(unit_grid[raw], return_counts=True)
                 for identity, count in zip(unit_ids.tolist(), unit_counts.tolist()):
@@ -399,33 +363,28 @@ class RasterAlterations:
                 int(np.count_nonzero(layers["hits"].read(1, window=window)))
                 for window in windows(profile)
             )
-            self.minerals[mineral] = (
-                {key: Path(layer.name) for key, layer in layers.items()}
-                if persist
-                else None
-            )
-            if not persist:
-                self.quality.append(
-                    dict(
-                        zip(
-                            QUALITY_FIELDS,
-                            [
-                                mineral,
-                                original,
-                                hit,
-                                original,
-                                original * pixel_area,
-                                hit * pixel_area,
-                                original * pixel_area,
-                                positive,
-                                positive * pixel_area,
-                                boundary_count,
-                            ],
-                        )
+            self.minerals[mineral] = {
+                key: Path(layer.name) for key, layer in layers.items()
+            }
+            self.quality.append(
+                dict(
+                    zip(
+                        QUALITY_FIELDS,
+                        [
+                            mineral,
+                            original,
+                            hit,
+                            original,
+                            original * pixel_area,
+                            hit * pixel_area,
+                            original * pixel_area,
+                            positive,
+                            positive * pixel_area,
+                            boundary_count,
+                        ],
                     )
                 )
-        if not persist:
-            shutil.rmtree(directory)
+            )
         return findings
 
     def _finding(
@@ -537,10 +496,9 @@ class RasterAlterations:
         selected = {row["feature_id"]: row for row in operations or []}
         with rasterio.Env(GDAL_CACHEMAX=GDAL_CACHE_MB * 1024 * 1024):
             for mineral in self.minerals:
-                self._inspect_mineral(
-                    mineral, RASTERS[mineral], *self.inspection, persist=True
-                )
                 paths = self.minerals[mineral]
+                if not paths:
+                    raise ValueError("当前矿物的逐像元检查结果已释放，不能重复生成输出")
                 with ExitStack() as stack:
                     data = {
                         key: stack.enter_context(rasterio.open(path, "r+"))
@@ -669,6 +627,7 @@ class RasterAlterations:
             ["group_id", "mineral", "ordinal"],
         )
         self.workspace.cleanup()
+        self.grids = None
         return actual
 
     def aggregate(self, transform, dimensions, epsg, allowed):

@@ -172,7 +172,7 @@ export default function ResearchIntentCard({
       const next = await agentApi.confirmWorkflow(
         workflow.id,
         workflow.planHash,
-        { fieldMapping },
+        { fieldMapping, executeAfterMapping: true },
       );
       if (!alive.current) return;
       setWorkflow(next);
@@ -444,6 +444,8 @@ export default function ResearchIntentCard({
         workflow.plan.phase === "review_mapping" &&
         workflow.plan.fieldMappingReview && (
           <FieldMappingReview
+            startAnalysis
+            onAdjustRoles={() => void update("answer", "修改角色和字段")}
             compact
             key={`${workflow.id}:${workflow.planHash}`}
             review={workflow.plan.fieldMappingReview}

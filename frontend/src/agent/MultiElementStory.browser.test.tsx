@@ -92,7 +92,6 @@ it("6268项建议全选可批准，待裁定和例外不隐式加入且失败原
     screen.getByRole("checkbox", { name: "全部待裁定与例外按候选处置" }),
   ).not.toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
-  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() =>
     expect(review).toHaveBeenCalledWith(
       "approve",
@@ -153,7 +152,6 @@ it("蚀变组可明确选择降权并随审批提交稳定组标识", async () =
   fireEvent.mouseDown(control);
   fireEvent.click(await screen.findByText("降权（0.5）"));
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
-  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() =>
     expect(review).toHaveBeenCalledWith("approve", "", [template.id], {
       "AG-stable": "downweight",
@@ -208,7 +206,6 @@ it("建议默认收起，展开可核对实测、具体规则和例外，待裁�
     screen.getByRole("checkbox", { name: "全部待裁定与例外按候选处置" }),
   ).not.toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
-  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() =>
     expect(review).toHaveBeenCalledWith("approve", "", ["suggest-gap"]),
   );

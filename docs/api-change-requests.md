@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261106-005 - 资料确认与启动分析合并
+
+- Status: BackendReady
+- Owner: 同一任务依次负责契约、后端和前端。
+- Endpoints: POST /api/agent/workflows/{workflowId}/confirm/；POST /api/agent/runs/{runId}/research-intent/；既有逻辑推理对话接入和工作流执行。
+- Change type: 新增可选布尔字段executeAfterMapping，默认false，仅通用地质字段确认阶段approve允许。
+- OpenAPI change: AgentWorkflowConfirmation.executeAfterMapping。true同时授权校验后执行初始分析计划，未提供时保留原有仅确认字段行为；其他阶段、reject、缺fieldMapping或类型错误均400。
+- Mock examples: 107-agent-input-start.json展示确认后的排队状态。
+- Frontend reason: 使用“确认资料并开始分析”一次完成输入确认及启动，避免紧接着重复确认固定计划；模型已唯一识别的完整角色建议直接进入资料与字段核对。
+- Backend implementation notes: 授权绑定当前planHash、字段摘要与输入摘要，持久步骤证明并在工作副本及算法冻结后重验。固定计算阶段自动推进，专业建议生成、处置批准、质量、预算及权限边界保留。
+- Verification: 默认false、显式true、篡改授权、撤权、阶段与类型错误、恢复及重复提交；浏览器按钮、过程摘要及完整审计；全套契约检查。
+- Result: 输入授权、固定步骤直接执行、类型与防篡改边界定向测试通过；真实候选及正式浏览器验收单独记录。
+
 ## API-20261106-004 - 普通目录共享明确内部材料标识
 
 - Status: BackendReady
@@ -424,6 +437,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261106-005 | BackendReady | /api/agent/workflows/{workflowId}/confirm/ | Optional explicit start with input confirmation | Updated | 107-agent-input-start.json | Bound input authorization implemented | Targeted backend and browser regression | Modification and exceptional-case approval retained |
 | API-20261106-004 | BackendReady | /api/catalog/resources/; /search/; /layers/; /compute/inputs/; shared admin catalog and counts | Hide explicitly marked internal packets from ordinary catalogs | Updated | Existing catalog examples; scoped source/code fixtures | Shared constants and catalog filters implemented | 78 focused cases including 26 new boundary cases; API checks passed | Bound ID access retained; agent provenance remains stricter |
 | API-20261106-003 | BackendReady | /api/agent/resources/; /bootstrap/; /workflow-uploads/references/; existing tools and workflow material access | Ordinary discovery separated from real task-bound materials | Updated | Existing agent examples; scoped data-boundary fixtures | Backend focused and frontend 6 browser cases passed | TypeScript and API checks passed; real-model/server acceptance separate | Current project ACL, provenance, owner and real task bindings |
 | API-20261106-002 | BackendReady | /api/agent/runs/{runId}/; /conversations/{conversationId}/; /workflows/{workflowId}/ | Real final-answer preview and persisted lightweight model activity | Updated | 105-agent-workflow-card; 106-agent-generic-chat | Implemented | Scoped browser, typechecks and API checks | Existing owner, project and workflow authorization |

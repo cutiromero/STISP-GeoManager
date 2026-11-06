@@ -178,7 +178,9 @@ export default function WorkflowCard(
         <Button onClick={() => setExpanded((value) => !value)}>
           {expanded
             ? "收起明细"
-            : `查看过程、证据与模型交互 / ${workflow.stepCount ?? 0} 步`}
+            : isMultiElementFamily(workflow.workflowType)
+              ? "查看过程、证据与模型交互"
+              : `查看过程、证据与模型交互 / ${workflow.stepCount ?? 0} 步`}
         </Button>
         {error && (
           <Button onClick={() => setAttempt((value) => value + 1)}>

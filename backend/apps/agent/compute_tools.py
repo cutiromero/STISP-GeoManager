@@ -14,8 +14,10 @@ from apps.projects.context import ProjectScope, project_scope
 from .models import AgentComputeFollowup, AgentRun, AgentWorkflow, AgentWorkflowStep
 from .policy import fresh_user, require_access
 from .selections import require_task_selection
+from .resource_discovery import discovery_scope
 
 
+@discovery_scope()
 def authorized_task(
     user, task_id, policy_value, *, run=None, workflow=None, history=False
 ):
@@ -278,6 +280,7 @@ def advance(item, user, p, task):
     item.save(update_fields=["status", "detail", "updated_at"])
 
 
+@discovery_scope()
 def validate_import_intent(record):
     """Check automatic intent again at import start and before publication."""
     record.refresh_from_db(fields=["request_source"])

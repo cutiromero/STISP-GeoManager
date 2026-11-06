@@ -80,9 +80,11 @@
 
 ## 通用地质推理与任务资料上传（2026-11-03）
 
-逻辑推理项目（code为`02`或`demo-geology-reasoning`）在对话输入区上传资料，发送`AgentRunInput.uploadBatchId`，无需打开工作流抽屉。批次限本人当前项目且不能重复关联其他研究请求，普通项目和演示入口不变。返回的`researchIntent`使用`geology_generic`场景，角色问题键为`upload_资源ID`，答案为角色键或`skip`；`parameters.roleAnswers`为可编辑建议，完整提交表示明确确认，重复角色或缺失地质图拒绝创建。确认后关联真实`AgentWorkflow`，工作流字段映射、计划和逐项批准接口保持不变。
+逻辑推理项目（code为`02`或`demo-geology-reasoning`）在对话输入区上传资料，发送`AgentRunInput.uploadBatchId`，无需打开工作流抽屉。批次限本人当前项目且不能重复关联其他研究请求，普通项目和演示入口不变。返回的`researchIntent`使用`geology_generic`场景；模型识别的角色完整、唯一且包含地质图时直接进入资料与字段核对。存在未识别资料或缺失地质图时保留角色问题，问题键为`upload_资源ID`，答案为角色键或`skip`；`parameters.roleAnswers`为可编辑建议，完整提交表示明确确认，重复角色或缺失地质图拒绝创建。关联的真实`AgentWorkflow`继续保留本次资料、角色和字段及其确认记录。
 
-研究交互`answer`可在角色阶段修改“把第3份资料改为构造线”，只有“确认资料角色”才创建工作流；字段阶段“确认字段含义”、计划阶段“确认计划”、建议阶段“只批准岩性类建议”仅作用于当前修订，仍走原有字段、计划哈希及建议批准校验。不能精确识别的文字仅提示使用当前卡片，不由模型推断批准。通用地质明确回答返回200及已完成的后续对话运行，幂等重试返回202；新增回答沿用每日额度，超限429且不执行批准。上传需求最多12000字。会话历史保存同一研究任务与工作流关联，重开时先取轻量card；等待人工操作自动取一次full以展示确认卡，执行中只轮询card，完成后停止。
+字段确认接口可提交`executeAfterMapping=true`，仅允许`geology_generic`的`review_mapping`阶段、`decision=approve`且同时提供`fieldMapping`。用户点击“确认资料并开始分析”后，服务端保存绑定本次字段与输入的执行授权，完成工作副本及已发布算法计划校验后自动启动。省略或false仅确认字段，后续仍需确认初始计划；其他阶段、reject、缺少字段或非布尔值返回400。实际修改仍须逐项或按组批准；质量异常、预算不足和需要专业裁定的事项继续等待处理。资料核对前展示全部文件的角色与名称；未授权执行时可点击“调整资料角色”重新核对，旧计划取消但历史保留，重新确认创建新的工作流与幂等请求，不复用已取消记录。
+
+研究交互`answer`可在待核对角色阶段修改“把第3份资料改为构造线”；完整且唯一的真实模型识别可直接绑定工作流，其他情况经“确认资料角色”后创建。字段阶段“确认字段含义”只确认字段；“确认资料并开始分析”按钮同时提交executeAfterMapping授权。单独计划阶段“确认计划”、建议阶段“只批准岩性类建议”仅作用于当前修订，仍检查字段、计划哈希及建议范围。不能精确识别的文字仅提示使用当前卡片，不由模型推断批准。通用地质明确回答返回200及已完成的后续对话运行，幂等重试返回202；新增回答沿用每日额度，超限429且不执行批准。上传需求最多12000字。会话历史保存同一研究任务与工作流关联，重开时先取轻量card；审批按需读取inspection，执行中轮询card，完成后停止。
 
 批量入口 `POST /api/agent/workflow-uploads/batch/` 接收 multipart 的 `batchId` 和重复 `files` 字段，支持多个文件或一个含子目录的总ZIP。ZIP先完成安全预检，拒绝绝对路径、父目录、符号链接、特殊文件、重复路径与加密条目；累计最多512条目、解压总量不超过 `min(uploadMaxMb, 512MiB)`，不展开嵌套ZIP。系统文件、锁文件及 `.aux.xml`、`.shp.xml` 旁车文件忽略；同目录同名Shapefile组成文件合为一份。每批最多12份资料，沿用单文件导入校验。返回200 `{items, errors}`：成功资料与逐份 `{fileName, detail}` 错误可同时存在；不安全ZIP整包不登记，其他文件继续。请求格式错误或整体上传超限返回400，未登录401，权限不足403，已绑定批次409；旧单文件接口响应不变。
 
@@ -2866,7 +2868,7 @@ POST `/api/catalog/resources/delete/` 使用 Session/CSRF 与唯一 `X-Project-I
 
 `GET /api/agent/logic-configuration/`读取本人当前逻辑推理项目最近已确认配置。`POST`接受 `{batchId}`，把仍有效的系统数据引用恢复至新批次。两者返回 `{configuration,unavailableResourceIds,items}`；GET的items为空，无配置时configuration为null。配置包含resourceIds、roles、fieldMapping、prompt和reasoningEffort。权限、Session/CSRF和项目头与上传一致；不能指定他人用户ID。失效、变化或无权访问的资源只返回ID，不暴露名称；界面要求重新选择。400为非法批次或非逻辑项目，401/403/404沿用平台约定，已绑定或发送批次恢复返回409。
 
-`LogicConfiguration`按用户与项目唯一持久化，在字段确认后仅保存系统数据引用及其角色、字段、要求和强度；混合批次中的临时资料及其角色、字段不保存。没有系统数据的批次不覆盖可复用配置；若地质图为临时上传，下次要求重新选择地质图。发送时显式携带 `reuseConfirmedConfiguration=true`；服务端再次核对当前资源权限、完整系统资源集合、更新时间及真实画像，完全一致且包含系统地质图才沿用角色和字段。资料变化或新增上传会回到角色及字段核对，不自动执行。`plan.reusedConfiguration=true`显示“沿用上次已确认的角色和字段”。计划确认及逐项处置批准始终在本次对话完成；批准前可一键“修改角色和字段”，通过既有research-intent的answer明确发送同文案，停止未执行计划并重新核对，保留原任务历史。
+`LogicConfiguration`按用户与项目唯一持久化，在字段确认后仅保存系统数据引用及其角色、字段、要求和强度；混合批次中的临时资料及其角色、字段不保存。没有系统数据的批次不覆盖可复用配置；若地质图为临时上传，下次要求重新选择地质图。发送时显式携带 `reuseConfirmedConfiguration=true`；服务端再次核对当前资源权限、完整系统资源集合、更新时间及真实画像，完全一致且包含系统地质图才沿用角色和字段。资料变化或新增上传会回到角色及字段核对，不自动执行。`plan.reusedConfiguration=true`显示“沿用上次已确认的角色和字段”。初始执行在本次对话明确授权：字段确认时同时授权启动，或单独确认计划；处置批准仍在本次对话完成。尚未授权执行的沿用计划可一键“修改角色和字段”，通过既有research-intent的answer明确发送同文案，停止未执行计划并重新核对，保留原任务历史。
 
 `POST /api/agent/workflow-uploads/references/` 接受 `{batchId,resourceIds}`，原子加入1至12份不重复的目录资源；与上传项合计最多12份，返回 `{items: AgentWorkflowUpload[]}`。同批次重试返回已有条目；无权、跨项目、失效或不存在资源统一404，不部分加入；已发送/绑定批次409。资料条目增加 `source=upload|catalog`，旧客户端未返回时按upload理解。迁移 `agent.0020_workflow_catalog_references` 将resource改为ForeignKey；多个任务/批次可引用同一目录资源。`DELETE /api/agent/workflow-uploads/{uploadId}/` 对catalog只删除引用，不停用、删除或更改目录资源。现有上传删除行为不变。
 
@@ -2921,3 +2923,11 @@ L-06全新世冲积物形态异常与L-07孤立早期单元连续性疑点仅为
 `GET /api/agent/workflows/?view=summary&workflowType=...&offset=0&limit=20` 返回 AgentWorkflowSummaryList（items/total/offset/limit/hasMore）。limit范围1–100，workflowType最长40字符；仅本人当前项目。摘要只读取状态、目标和时间，不携带plan/evidence/steps；打开详情后重验原数据权限。省略view仍返回原AgentWorkflowList。
 
 `GET /api/agent/research-demos/?view=summary` 返回当前项目的 AgentResearchDemoSummaryList，条目只有scenario/projectId/projectName/title，通过存在性查询生成，不调用模型健康检测和算法扫描。`?scenario=...`按需获取当前项目该场景的完整预设，返回原AgentResearchDemoList；无参数保留跨本人授权项目的原有入口。
+
+## 逻辑推理自动执行与结果读取
+
+综合推理的新计划以measured_geology_v1标识固定执行图。三要素初检、修正后复查、构造交汇及远景计算按已确认资料、已发布算法和冻结规则自动提交；固定计算不再请求模型选择是否启动。处置建议和综合报告仍由真实模型生成，实际修改仍要求当前快照下的明确批准。没有任何建议和修改行时，记录no_modifications并生成空处置表继续，不创建用户批准记录；待裁定、例外和质量异常继续保留原有处理边界。
+
+批量输出在读取开始和返回前重新授权，仍逐文件核对SHA-256和状态；出处索引只在单次检查范围内复用。入库意图一次成批登记，等待已有记录时不为每一项重复获取长写锁；detail返回“正在入库：已完成X/Y项成果”。进度变化只更新详情、心跳和更新时间，未变化时不重写大计划。compute worker每轮最多处理8项、约5秒的入库批次，每项继续独立核验权限与意图。
+
+主分析过程保留资料确认、专业判断、处置范围及真实成果，连续编号；模型进度、完整响应和自动重试位于详细运行记录，保留原始序号及真实类型。已恢复的模型重试标为已重新分析。批准所选操作与本轮不修改均单次提交，所选数量、模型建议与用户裁定数量在按钮旁说明。

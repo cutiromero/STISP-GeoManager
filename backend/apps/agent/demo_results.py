@@ -36,8 +36,13 @@ EDIT_FIELDS = (
 
 def read_output(workflow, user, policy, output) -> dict:
     task = authorized_task(user, output.task_id, policy, workflow=workflow)
+    return _read_output(workflow, output, task)
+
+
+def _read_output(workflow, output, task) -> dict:
     if (
-        task.owner_id != workflow.owner_id
+        output.task_id != task.id
+        or task.owner_id != workflow.owner_id
         or not workflow.steps.filter(compute_task_id=task.id).exists()
     ):
         raise PermissionDenied("结果不属于当前分析流程")
@@ -90,10 +95,16 @@ def read_output(workflow, user, policy, output) -> dict:
 
 
 def read_results(workflow, user, policy, task) -> list[dict]:
+    # Validate the actual task and its inputs once at each read boundary.
+    # File checks remain per output; revocation during a long read still fails
+    # before any collected rows are returned to the caller.
+    task = authorized_task(user, task.id, policy, workflow=workflow)
     outputs = list(task.outputs.order_by("id"))
     if not outputs:
         raise ComputeError("任务没有可读取的实际输出")
-    return [read_output(workflow, user, policy, output) for output in outputs]
+    results = [_read_output(workflow, output, task) for output in outputs]
+    authorized_task(user, task.id, policy, workflow=workflow)
+    return results
 
 
 def validate_edits(edits, results) -> list[dict]:

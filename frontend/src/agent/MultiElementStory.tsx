@@ -932,16 +932,17 @@ export default function MultiElementStory({
                 autoSize={{ minRows: 2, maxRows: 4 }}
               />
               <p>
-                已选择 {ids.length}{" "}
-                项。后端将重验输入版本、建议和获批范围；降权不删除原始识别层。
+                已选择 {ids.length} 项（模型建议{" "}
+                {ids.filter((id) => modelIds.has(id)).length} 项、用户裁定{" "}
+                {ids.filter((id) => userIds.has(id)).length} 项）。
+                仅执行当前勾选的对象与动作，保存新成果版本；未选中和待裁定项保持原样。
               </p>
               <div className="geology-review-buttons">
-                <Popconfirm
-                  title={`批准选中的 ${ids.length} 项操作？`}
-                  description={`模型建议 ${ids.filter((id) => modelIds.has(id)).length} 项、用户裁定 ${ids.filter((id) => userIds.has(id)).length} 项。仅执行当前方案所选对象与冻结动作，保存新成果版本。`}
-                  okText="批准并继续"
-                  cancelText="返回核对"
-                  onConfirm={() => {
+                <Button
+                  type="primary"
+                  loading={busy}
+                  disabled={!ids.length}
+                  onClick={() => {
                     const actions = Object.fromEntries(
                       Object.entries(alterationActions).filter(([group]) =>
                         suggestions.some(
@@ -956,16 +957,11 @@ export default function MultiElementStory({
                     else onReview?.("approve", feedback.trim(), ids);
                   }}
                 >
-                  <Button type="primary" loading={busy} disabled={!ids.length}>
-                    批准所选操作并继续
-                  </Button>
-                </Popconfirm>
-                <Popconfirm
-                  title="保持全部数据不变并继续分析？"
-                  description="本轮不执行修改，仍可继续关系分析和远景圈定。"
-                  okText="保留并继续"
-                  cancelText="返回"
-                  onConfirm={() =>
+                  批准所选操作并继续
+                </Button>
+                <Button
+                  disabled={busy}
+                  onClick={() =>
                     onReview?.(
                       "approve",
                       feedback.trim() || "本轮保留全部数据",
@@ -973,8 +969,8 @@ export default function MultiElementStory({
                     )
                   }
                 >
-                  <Button disabled={busy}>本轮不修改并继续</Button>
-                </Popconfirm>
+                  本轮不修改并继续
+                </Button>
                 <Popconfirm
                   title="拒绝本轮修改？"
                   description="保留输入、检查与建议，停止后续修改。"

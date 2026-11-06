@@ -302,10 +302,12 @@ beforeEach(() => {
       if (value?.fieldMapping)
         workflow = {
           ...workflow,
+          status: value.executeAfterMapping ? "queued" : "waiting_approval",
+          executeOperators: Boolean(value.executeAfterMapping),
           planHash: "plan-v1",
           plan: {
             ...workflow.plan,
-            phase: "review_plan",
+            phase: value.executeAfterMapping ? "build_inputs" : "review_plan",
             fieldMappingReview: undefined,
           },
         };
@@ -600,14 +602,22 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
   expect(screen.queryByRole("dialog")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "继续分析" }));
   const fields = await screen.findByRole("region", { name: "确认字段含义" });
-  fireEvent.click(within(fields).getByRole("button", { name: /确认/ }));
-  fireEvent.click(await screen.findByRole("button", { name: "确认执行" }));
+  fireEvent.click(
+    within(fields).getByRole("button", { name: "确认资料并开始分析" }),
+  );
   await waitFor(() =>
-    expect(agentApi.updateResearchIntent).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({ action: "confirm" }),
+    expect(agentApi.confirmWorkflow).toHaveBeenCalledWith(
+      workflow.id,
+      expect.any(String),
+      expect.objectContaining({
+        executeAfterMapping: true,
+        fieldMapping: expect.any(Object),
+      }),
     ),
   );
+  expect(
+    screen.queryByRole("button", { name: "确认执行" }),
+  ).not.toBeInTheDocument();
   const review = reviewWorkflow().modificationReview!;
   workflow = {
     ...workflow,
@@ -649,7 +659,6 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
   // Model suggestions start selected; the user only approves.
   expect(within(object).getByRole("checkbox")).toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
-  fireEvent.click(await screen.findByRole("button", { name: "批准并继续" }));
   await waitFor(() =>
     expect(agentApi.confirmWorkflow).toHaveBeenCalledWith(
       workflow.id,
