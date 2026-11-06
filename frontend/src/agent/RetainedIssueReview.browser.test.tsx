@@ -96,3 +96,25 @@ it("未选择对象时确认只保留，不产生默认人工批准", () => {
   fireEvent.click(screen.getByRole("button", { name: "保留未选对象并继续" }));
   expect(onReview).toHaveBeenCalledExactlyOnceWith("approve", "", [], {});
 });
+
+it("can select a candidate directly from its mapped evidence", () => {
+  const onReview = vi.fn();
+  render(
+    <App>
+      <MemoryRouter>
+        <RetainedIssueReview workflow={task()} onReview={onReview} />
+      </MemoryRouter>
+    </App>,
+  );
+  fireEvent.click(screen.getAllByRole("button", { name: "F-01" })[0]!);
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "选择当前对象的候选处置" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "执行所选 1 项并继续" }));
+  expect(onReview).toHaveBeenCalledExactlyOnceWith(
+    "approve",
+    "",
+    ["held-1"],
+    {},
+  );
+});

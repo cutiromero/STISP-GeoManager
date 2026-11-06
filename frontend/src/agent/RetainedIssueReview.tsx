@@ -210,6 +210,22 @@ export default function RetainedIssueReview({
             {active.featureId} · {active.ruleId}
           </h4>
           <p>{active.reason}</p>
+          {!readonly && active.candidateAction && (
+            <Checkbox
+              aria-label="选择当前对象的候选处置"
+              checked={selected.includes(active.id)}
+              disabled={busy}
+              onChange={(event) =>
+                setSelected((previous) =>
+                  event.target.checked
+                    ? [...new Set([...previous, active.id])]
+                    : previous.filter((id) => id !== active.id),
+                )
+              }
+            >
+              选择当前对象的候选处置
+            </Checkbox>
+          )}
           <MultiElementEvidence suggestion={active} />
           {!readonly &&
             active.featureId?.startsWith("AG-") &&
