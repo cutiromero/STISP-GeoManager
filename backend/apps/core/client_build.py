@@ -30,7 +30,12 @@ def current_entry():
 def current_browser(request):
     # API clients keep their documented defaults. Browser release compatibility
     # is a UX guard, never an authentication or authorization boundary.
-    if settings.DEBUG or not request.headers.get("Sec-Fetch-Mode"):
+    browser = bool(
+        request.headers.get("Sec-Fetch-Mode")
+        or request.headers.get("Origin")
+        or "Mozilla/" in request.headers.get("User-Agent", "")
+    )
+    if settings.DEBUG or not browser:
         return True
     entry = current_entry()
     return entry is None or request.headers.get("X-App-Entry") == entry

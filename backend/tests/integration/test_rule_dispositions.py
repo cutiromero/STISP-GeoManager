@@ -151,6 +151,17 @@ def test_stale_browser_entry_is_rejected_without_affecting_api_clients(tmp_path)
             )
         )
         assert current_browser(factory.post("/"))
+        assert not current_browser(
+            factory.post("/", HTTP_ORIGIN="http://101.42.12.157:41312")
+        )
+        assert not current_browser(factory.post("/", HTTP_USER_AGENT="Mozilla/5.0"))
+        assert current_browser(
+            factory.post(
+                "/",
+                HTTP_ORIGIN="http://101.42.12.157:41312",
+                HTTP_X_APP_ENTRY="/static/index-current.js",
+            )
+        )
 
 
 @pytest.mark.django_db
