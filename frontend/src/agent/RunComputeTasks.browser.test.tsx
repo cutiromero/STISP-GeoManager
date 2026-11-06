@@ -577,3 +577,58 @@ it("keeps final deliverables first and distinguishes earlier and later index fil
   ).toBeInTheDocument();
   expect(screen.getAllByText("ndvi.tif")).toHaveLength(2);
 });
+
+it("完成工作区不为未安排入库的中间文件轮询，真实排队入库仍继续读取", async () => {
+  const task = liveComputeTask("succeeded");
+  const output = { ...task.outputs[0]!, importStatus: "not_imported" as const };
+  const poll = vi
+    .spyOn(computeApi, "task")
+    .mockResolvedValue({ ...task, outputs: [output] });
+  vi.useFakeTimers();
+  const view = render(
+    <AntApp>
+      <MemoryRouter>
+        <RunComputeTasks
+          taskIds={[task.id]}
+          autoImport
+          terminal
+          display="files"
+          refreshKey="terminal"
+        />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(poll).toHaveBeenCalledOnce();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10000);
+  });
+  expect(poll).toHaveBeenCalledOnce();
+  poll.mockResolvedValue({
+    ...task,
+    outputs: [{ ...output, importStatus: "queued" }],
+  });
+  view.rerender(
+    <AntApp>
+      <MemoryRouter>
+        <RunComputeTasks
+          taskIds={[task.id]}
+          autoImport
+          terminal
+          display="files"
+          refreshKey="importing"
+        />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(poll).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1900);
+  });
+  expect(poll).toHaveBeenCalledTimes(3);
+});

@@ -18,7 +18,7 @@ import SafeMarkdown from "./SafeMarkdown";
 // Cards that open together for the same task share one prepare request.
 const pendingReports = new Map<string, Promise<AgentWorkflowReport>>();
 
-function prepareReport(workflowId: string) {
+export function prepareReport(workflowId: string) {
   let pending = pendingReports.get(workflowId);
   if (!pending) {
     pending = agentApi

@@ -24434,6 +24434,18 @@
                         ]
                       }
                     ]
+                  },
+                  "taskSummary": {
+                    "sourceCount": 1,
+                    "initialIssueCount": 2,
+                    "remainingIssueCount": 1,
+                    "executedDispositionCount": 1,
+                    "retainedIssueCount": 1,
+                    "reviewIssueCount": 1,
+                    "exceptionIssueCount": 0,
+                    "prospectZoneCount": null,
+                    "completedCalculations": 3,
+                    "totalCalculations": 5
                   }
                 }
               }
@@ -30347,6 +30359,99 @@
           "outputChars"
         ]
       },
+      "AgentWorkflowTaskSummary": {
+        "type": "object",
+        "description": "综合地质任务首屏的轻量实测汇总；仅基于已保存且完整的实际结果，未知为null，不解析模型文字，不重新读文件。",
+        "additionalProperties": false,
+        "required": [
+          "sourceCount",
+          "initialIssueCount",
+          "remainingIssueCount",
+          "executedDispositionCount",
+          "retainedIssueCount",
+          "reviewIssueCount",
+          "exceptionIssueCount",
+          "prospectZoneCount",
+          "completedCalculations",
+          "totalCalculations"
+        ],
+        "properties": {
+          "sourceCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "本次实际选择的原始资料份数，不含生成的工作副本或缺失占位资料"
+          },
+          "initialIssueCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "初检完整问题清单的记录数"
+          },
+          "remainingIssueCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "复查完整问题清单的记录数，不等于未执行的处置数"
+          },
+          "executedDispositionCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "完整changes输出中actual_changed为真的处置记录数，不能表述为已解决问题数量"
+          },
+          "retainedIssueCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "初检待裁定或例外中尚未实际执行处置的记录数；缺少完整执行范围时为null"
+          },
+          "reviewIssueCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "尚保留的待裁定记录数"
+          },
+          "exceptionIssueCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "尚保留的规则例外记录数"
+          },
+          "prospectZoneCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "同一次完整prospect统计中修改后A/B区数量总和；尚未计算或统计不完整为null，不能当0"
+          },
+          "completedCalculations": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "实际任务已完成的算子阶段数，不含模型请求或报告阶段"
+          },
+          "totalCalculations": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "当前计划已声明的算子阶段数，不作耗时百分比估计"
+          }
+        }
+      },
       "AgentWorkflow": {
         "type": "object",
         "description": "可恢复的项目科研工作流；card视图省略完整计划和审核，steps/evidence为空",
@@ -30365,6 +30470,9 @@
             "type": "integer",
             "description": "实际步骤总数，card视图用于按需展开入口",
             "minimum": 0
+          },
+          "taskSummary": {
+            "$ref": "#/components/schemas/AgentWorkflowTaskSummary"
           },
           "modelActivity": {
             "$ref": "#/components/schemas/AgentWorkflowModelActivity"

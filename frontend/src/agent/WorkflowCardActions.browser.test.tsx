@@ -8,7 +8,10 @@ import { reviewWorkflow } from "../map/geologyReview.testFixtures";
 import WorkflowCard from "./WorkflowCard";
 import "./agent.css";
 
-vi.mock("./WorkflowReportFile", () => ({ default: () => null }));
+vi.mock("./WorkflowReportFile", () => ({
+  default: () => null,
+  prepareReport: vi.fn(),
+}));
 afterEach(() => vi.restoreAllMocks());
 
 function card(phase = "review_plan"): AgentWorkflow {
@@ -127,9 +130,7 @@ it("待批准自动读取建议，批准和继续分析不依赖展开过程", a
     view: "inspection",
     part: "suggestions",
   });
-  expect(
-    screen.getByRole("button", { name: /查看过程、证据与模型交互/ }),
-  ).toBeVisible();
+  expect(screen.getByRole("tab", { name: "过程与依据" })).toBeVisible();
   fireEvent.click(proceed);
   expect(review).toHaveBeenCalledWith(
     "approve",

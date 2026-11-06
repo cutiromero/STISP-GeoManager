@@ -895,6 +895,10 @@ def workflow_json(workflow, include_steps=True, view="full"):
         "updatedAt": workflow.updated_at.isoformat(),
         "runtime": "durable_state_machine",
     }
+    if workflow.workflow_type in {"geology_generic", "geology_multi_element_reasoning"}:
+        from .workflow_task_summary import task_summary
+
+        data["taskSummary"] = task_summary(workflow)
     from .model_activity import latest_model_activity
 
     activity = latest_model_activity(workflow)

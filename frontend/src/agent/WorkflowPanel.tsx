@@ -1271,19 +1271,36 @@ export default function WorkflowPanel({
               加载更多历史任务
             </Button>
           )}
-          {fieldMappingReview && (
-            <FieldMappingReview
-              startAnalysis
-              key={workflow?.planHash}
-              review={fieldMappingReview}
-              busy={busy}
-              onConfirm={(mapping, automatic) =>
-                void confirmFieldMapping(mapping, automatic)
-              }
-            />
-          )}
+          {fieldMappingReview &&
+            !(generic || workflowType === multiElementType) && (
+              <FieldMappingReview
+                startAnalysis
+                key={workflow?.planHash}
+                review={fieldMappingReview}
+                busy={busy}
+                onConfirm={(mapping, automatic) =>
+                  void confirmFieldMapping(mapping, automatic)
+                }
+              />
+            )}
           {workflow && (
             <WorkflowPresentation
+              {...(generic || workflowType === multiElementType
+                ? {
+                    inputReview: fieldMappingReview ? (
+                      <FieldMappingReview
+                        workspace
+                        startAnalysis
+                        key={workflow.planHash}
+                        review={fieldMappingReview}
+                        busy={busy}
+                        onConfirm={(mapping, automatic) =>
+                          void confirmFieldMapping(mapping, automatic)
+                        }
+                      />
+                    ) : undefined,
+                  }
+                : {})}
               workflow={workflow}
               busy={busy}
               onConfirm={

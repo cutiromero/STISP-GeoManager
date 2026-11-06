@@ -1486,3 +1486,10 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - 验证：默认路径、显式授权、防篡改、例外保留及实际241条问题回放。mock继续采用现有确认请求默认行为。
 
 - 同次配套：AgentRunInput增加combineInputReview默认false；浏览器创建上传任务和工作流确认增加可选X-App-Entry头，用于正式构建版本衔接，旧页面409保留进度。AgentAnalysisDecision.modelMode增加rules，准确标识代码规则核验。
+
+## 2026-11-06 单任务工作区轻量汇总
+
+- AgentWorkflow增加可选taskSummary及AgentWorkflowTaskSummary，原接口路径、权限与动作不变。
+- 原因：完成态首屏展示真实处置、复查和远景数量，避免为了概览加载完整过程。
+- 后端仅汇总保存的全量实际输出，缺失、部分统计或不一致时为null，严禁从模型说明提取数字。
+- 前端生成类型、契约与mock构建同步；105-agent-workflow-card.json提供实际汇总示例。已验证完整/缺失/部分统计、actual_changed为真才计作执行、待裁定实际处置扣除及card视图轻量读取；后端15项定向检查和相关浏览器回归通过。

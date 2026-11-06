@@ -313,6 +313,54 @@ export default function ResearchIntentCard({
     }
   };
   const status = labels[intent.status];
+  if (workflow && intent.scenario === "geology_generic")
+    return (
+      <WorkflowCard
+        workflow={workflow}
+        compact
+        busy={busy}
+        reviewError={reviewError || error}
+        inputSummary={intent.inputSummary}
+        initialThinking={run.thinkingText}
+        onAdjustInputs={() => void update("answer", "修改角色和字段")}
+        inputReview={
+          workflow.plan.phase === "review_mapping" &&
+          workflow.plan.fieldMappingReview ? (
+            <FieldMappingReview
+              workspace
+              startAnalysis
+              compact
+              key={`${workflow.id}:${workflow.planHash}`}
+              review={workflow.plan.fieldMappingReview}
+              inputs={intent.inputSummary}
+              busy={busy}
+              onAdjustRoles={() => void update("answer", "修改角色和字段")}
+              onConfirm={(mapping, automatic) =>
+                void confirmMapping(mapping, automatic)
+              }
+            />
+          ) : undefined
+        }
+        onConfirm={() => void update("confirm")}
+        onCancel={() => void update("cancel")}
+        onPause={() => void controlWorkflow("pause")}
+        onResume={() => void controlWorkflow("resume")}
+        onReview={(
+          decision,
+          feedback,
+          selectedSuggestionIds,
+          alterationActions,
+        ) =>
+          void reviewWorkflow(
+            decision,
+            feedback,
+            selectedSuggestionIds,
+            alterationActions,
+          )
+        }
+        onRestart={onRestart}
+      />
+    );
   return (
     <section
       className="agent-research-intent"

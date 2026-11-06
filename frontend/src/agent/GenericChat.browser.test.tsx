@@ -551,7 +551,7 @@ it("沿用配置的对话卡片仍要求本次计划确认，并提供一键重�
   const mounted = show();
   try {
     await screen.findByText("沿用上次已确认的角色和字段");
-    expect(screen.getByRole("button", { name: "确认执行" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "确认并继续" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "修改角色和字段" }));
     await waitFor(() =>
       expect(agentApi.updateResearchIntent).toHaveBeenCalledWith(
@@ -602,9 +602,7 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
   expect(screen.queryByRole("dialog")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "继续分析" }));
   const fields = await screen.findByRole("region", { name: "确认字段含义" });
-  fireEvent.click(
-    within(fields).getByRole("button", { name: "确认资料并开始分析" }),
-  );
+  fireEvent.click(within(fields).getByRole("button", { name: "确认并开始" }));
   await waitFor(() =>
     expect(agentApi.confirmWorkflow).toHaveBeenCalledWith(
       workflow.id,
@@ -646,9 +644,7 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
     view: "inspection",
     part: "suggestions",
   });
-  expect(
-    screen.getByRole("button", { name: /查看过程、证据与模型交互/ }),
-  ).toBeVisible();
+  expect(screen.getByRole("tab", { name: "过程与依据" })).toBeVisible();
   const group = screen
     .getByText(/岩性 \/ .* \/ 改代号/, { selector: "summary" })
     .closest("details")!;
@@ -699,7 +695,7 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
   vi.mocked(agentApi.poll).mockClear();
   show();
   const link = await screen.findByRole("link", {
-    name: "打开独立对比页",
+    name: "查看前后对比",
   });
   expect(link).toHaveAttribute(
     "href",
@@ -709,7 +705,7 @@ it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留�
   expect(link).toHaveAttribute("rel", "noopener");
   expect(
     screen.getByRole("region", { name: "工作流进度卡片" }),
-  ).toHaveTextContent("已保存 2 项成果");
+  ).toHaveTextContent("处理结果与待核查事项");
   expect(agentApi.workflow).toHaveBeenCalledExactlyOnceWith(workflow.id, {
     view: "card",
   });

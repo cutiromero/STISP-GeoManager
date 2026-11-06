@@ -77,6 +77,8 @@ def test_card_and_inspection_preserve_reused_configuration_and_mapping_card(
         assert response.status_code == 200, response.content
         assert response.json()["plan"]["fieldMappingReview"] == review
         assert response.json()["plan"]["reusedConfiguration"] is True
+        assert response.json()["taskSummary"]["initialIssueCount"] is None
+        assert response.json()["taskSummary"]["completedCalculations"] == 0
 
 
 def test_attempt_response_pagination_preserves_full_audit_and_owner_scope(setup_agent):

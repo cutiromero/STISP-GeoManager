@@ -2704,6 +2704,52 @@ export type AgentWorkflowModelActivity = {
 };
 
 /**
+ * 综合地质任务首屏的轻量实测汇总；仅基于已保存且完整的实际结果，未知为null，不解析模型文字，不重新读文件。
+ */
+export type AgentWorkflowTaskSummary = {
+    /**
+     * 本次实际选择的原始资料份数，不含生成的工作副本或缺失占位资料
+     */
+    sourceCount: number | null;
+    /**
+     * 初检完整问题清单的记录数
+     */
+    initialIssueCount: number | null;
+    /**
+     * 复查完整问题清单的记录数，不等于未执行的处置数
+     */
+    remainingIssueCount: number | null;
+    /**
+     * 完整changes输出中actual_changed为真的处置记录数，不能表述为已解决问题数量
+     */
+    executedDispositionCount: number | null;
+    /**
+     * 初检待裁定或例外中尚未实际执行处置的记录数；缺少完整执行范围时为null
+     */
+    retainedIssueCount: number | null;
+    /**
+     * 尚保留的待裁定记录数
+     */
+    reviewIssueCount: number | null;
+    /**
+     * 尚保留的规则例外记录数
+     */
+    exceptionIssueCount: number | null;
+    /**
+     * 同一次完整prospect统计中修改后A/B区数量总和；尚未计算或统计不完整为null，不能当0
+     */
+    prospectZoneCount: number | null;
+    /**
+     * 实际任务已完成的算子阶段数，不含模型请求或报告阶段
+     */
+    completedCalculations: number;
+    /**
+     * 当前计划已声明的算子阶段数，不作耗时百分比估计
+     */
+    totalCalculations: number;
+};
+
+/**
  * 可恢复的项目科研工作流；card视图省略完整计划和审核，steps/evidence为空
  */
 export type AgentWorkflow = {
@@ -2715,6 +2761,7 @@ export type AgentWorkflow = {
      * 实际步骤总数，card视图用于按需展开入口
      */
     stepCount?: number;
+    taskSummary?: AgentWorkflowTaskSummary;
     modelActivity?: AgentWorkflowModelActivity;
     /**
      * 工作流 UUID

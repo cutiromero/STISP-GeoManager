@@ -151,6 +151,8 @@ export default function RunComputeTasks({
   activityTaskId,
   onActivityChange,
   compact = false,
+  display = "default",
+  terminal = false,
   report,
   primaryTaskIds,
   visibleOutputIds,
@@ -172,6 +174,8 @@ export default function RunComputeTasks({
   activityTaskId?: string;
   onActivityChange?: (activity: LiveActivity) => void;
   compact?: boolean;
+  display?: "default" | "files" | "tasks";
+  terminal?: boolean;
   report?: ReactNode;
   primaryTaskIds?: string[];
   visibleOutputIds?: number[];
@@ -234,8 +238,17 @@ export default function RunComputeTasks({
           computeTasksActivity(result.items, activityTaskId),
         );
         if (
-          shouldPoll(result.items) ||
-          (activityTaskId &&
+          (terminal
+            ? result.items.some(
+                ({ task }) =>
+                  activeStates.includes(task.status) ||
+                  task.outputs.some((output) =>
+                    ["queued", "running"].includes(output.importStatus),
+                  ),
+              )
+            : shouldPoll(result.items)) ||
+          (!terminal &&
+            activityTaskId &&
             !result.items.some(({ task }) => task.id === activityTaskId))
         )
           timer = setTimeout(poll, document.hidden ? 6000 : 1800);
@@ -271,7 +284,15 @@ export default function RunComputeTasks({
       disposed = true;
       clearTimeout(timer);
     };
-  }, [runId, taskKey, autoImport, refreshKey, revision, activityTaskId]);
+  }, [
+    runId,
+    taskKey,
+    autoImport,
+    refreshKey,
+    revision,
+    activityTaskId,
+    terminal,
+  ]);
 
   const importOutput = async (output: ComputeOutput, task: ComputeTask) => {
     if (importing.current) return;
@@ -352,6 +373,28 @@ export default function RunComputeTasks({
     ) : report ? (
       <WorkflowDeliverables items={[]} report={report} onImport={() => {}} />
     ) : null;
+  if (display === "tasks")
+    return (
+      <div className="agent-compute-cards">
+        {error && <Alert type="warning" title={error} />} {taskCards}
+      </div>
+    );
+  if (display === "files")
+    return (
+      <div aria-label={ui("任务成果文件", "Task result files")}>
+        {error && <Alert type="warning" title={error} />}
+        <WorkflowDeliverables
+          items={items}
+          report={report}
+          taskDisplayNames={taskDisplayNames}
+          primaryTaskIds={primaryTaskIds}
+          visibleOutputIds={visibleOutputIds}
+          busy={busy}
+          reviewing={reviewing}
+          onImport={(output, task) => void importOutput(output, task)}
+        />
+      </div>
+    );
   return (
     <div
       className={`agent-compute-cards${compact ? " is-compact" : ""}`}

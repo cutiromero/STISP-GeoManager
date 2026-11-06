@@ -127,6 +127,7 @@ it.each(["geology_generic", "geology_multi_element_reasoning"])(
     const workflow = {
       ...reviewWorkflow(true),
       workflowType,
+      status: "succeeded" as const,
       view: "card" as const,
       resultResourceIds: [201],
       plan: {
@@ -146,7 +147,7 @@ it.each(["geology_generic", "geology_multi_element_reasoning"])(
         <WorkflowCard workflow={workflow} />
       </MemoryRouter>,
     );
-    const link = screen.getByRole("link", { name: "打开独立对比页" });
+    const link = screen.getByRole("link", { name: "查看前后对比" });
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener");
     const url = new URL(link.getAttribute("href")!, location.origin);

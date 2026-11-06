@@ -1,5 +1,7 @@
 import { Alert, Button, Space } from "antd";
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useRef, useState } from "react";
+import LogicTaskWorkspace from "./LogicTaskWorkspace";
+import type { LogicTaskProps } from "./logicTaskTypes";
 import { Link } from "react-router-dom";
 import { agentApi } from "../api/agent";
 import type { AgentWorkflow } from "../api/generated/types.gen";
@@ -40,9 +42,15 @@ function mergeDetail(
   };
 }
 
-export default function WorkflowCard(
-  props: ComponentProps<typeof WorkflowResults>,
-) {
+export default function WorkflowCard(props: LogicTaskProps) {
+  return isMultiElementFamily(props.workflow.workflowType) ? (
+    <LogicTaskWorkspace {...props} />
+  ) : (
+    <LegacyWorkflowCard {...props} />
+  );
+}
+
+function LegacyWorkflowCard(props: LogicTaskProps) {
   const { workflow } = props;
   const [expanded, setExpanded] = useState(workflow.view !== "card");
   const [detail, setDetail] = useState<AgentWorkflow>();
