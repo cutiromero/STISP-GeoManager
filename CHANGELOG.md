@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.65] - 2026-11-06
+
+### Fixed
+- 逻辑推理添加系统数据时，先取得批次引用事务的写锁，再读取权限与资源，避免与会话和 worker 并发写入时发生 SQLite 快照升级失败并显示“服务正忙”。
+
 ## [0.1.64] - 2026-11-06
 
 ### Changed

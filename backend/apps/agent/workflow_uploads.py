@@ -459,8 +459,8 @@ def add_catalog_references(user, project_id, batch_id, resource_ids):
         or len(set(resource_ids)) != len(resource_ids)
     ):
         raise ComputeError("请选择1至12份不重复的系统数据")
-    available = catalog_resources(user, project_id)
     get_user_model().objects.filter(pk=user.pk).update(last_login=F("last_login"))
+    available = catalog_resources(user, project_id)
     existing = WorkflowUpload.objects.filter(owner=user, batch_id=batch_id)
     if chat_claim(user, batch_id) or existing.filter(workflow__isnull=False).exists():
         raise ComputeError("该批次已用于任务，请新建批次", 409)
