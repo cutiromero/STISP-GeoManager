@@ -103,9 +103,11 @@ export default function WorkflowDecisionTimeline({
             {decision ? (
               <>
                 <span className="agent-decision-model">
-                  {decision.modelMode === "mock"
-                    ? "模拟模型"
-                    : decision.modelName}
+                  {decision.modelMode === "rules"
+                    ? "规则与实际测量"
+                    : decision.modelMode === "mock"
+                      ? "模拟模型"
+                      : decision.modelName}
                 </span>
                 {!!decision.findings.length && (
                   <div className="agent-decision-findings">

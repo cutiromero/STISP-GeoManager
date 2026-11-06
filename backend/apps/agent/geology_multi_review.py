@@ -585,7 +585,11 @@ def proposal(workflow, stage, results, *, issues=None, knowledge_entry=None):
                 else "review"
                 if edit["action"] in {"keep", "review"}
                 else "suggested",
-                "origin": "operator_held_candidate" if held else "model_reviewed",
+                "origin": "operator_held_candidate"
+                if held
+                else "rule_verified"
+                if stage.get("executionMode") == "rule_verified"
+                else "model_reviewed",
                 "allowedActions": json.loads(row["allowed_actions_json"]),
                 **(
                     {
@@ -807,6 +811,22 @@ def create_approved_changes(workflow, user, policy, stage):
     )
     expected = selected_edits(rows, review, selected, actions)
     unchanged = approval.get("mode") == "unchanged"
+    automatic = approval.get("mode") == "rule_authorized"
+    if automatic:
+        from .rule_dispositions import automatic_authorized
+
+        if (
+            not automatic_authorized(workflow, user, policy)
+            or approval.get("inputAuthorization")
+            != workflow.plan.get("inputExecutionAuthorization")
+            or selected
+            != [
+                s["id"]
+                for s in review["suggestions"]
+                if s["status"] == "suggested" and not s.get("candidateAction")
+            ]
+        ):
+            raise ComputeError("规则自动执行范围或启动授权已变化", 409)
     if (
         approval.get("executionHash") != execution_hash(workflow, stage)
         or approval.get("proposalHash") != review["proposalHash"]
@@ -814,7 +834,11 @@ def create_approved_changes(workflow, user, policy, stage):
         or workflow.plan["modificationReview"]["approvedSuggestionIds"] != selected
         or (unchanged and bool(rows or review["suggestions"] or selected))
         or not workflow.steps.filter(
-            kind="no_modifications" if unchanged else "modifications_approved",
+            kind="no_modifications"
+            if unchanged
+            else "automatic_dispositions"
+            if automatic
+            else "modifications_approved",
             action=approval,
             status="succeeded",
         ).exists()

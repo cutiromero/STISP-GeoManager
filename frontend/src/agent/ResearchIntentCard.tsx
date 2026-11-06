@@ -163,6 +163,7 @@ export default function ResearchIntentCard({
   }, [intent.workflowId, run.id, workflowRevision]);
   const confirmMapping = async (
     fieldMapping: Record<string, Record<string, string | null>>,
+    applyRuleSuggestions = false,
   ) => {
     if (!workflow || inFlight.current) return;
     inFlight.current = true;
@@ -172,7 +173,7 @@ export default function ResearchIntentCard({
       const next = await agentApi.confirmWorkflow(
         workflow.id,
         workflow.planHash,
-        { fieldMapping, executeAfterMapping: true },
+        { fieldMapping, executeAfterMapping: true, applyRuleSuggestions },
       );
       if (!alive.current) return;
       setWorkflow(next);
@@ -450,7 +451,9 @@ export default function ResearchIntentCard({
             key={`${workflow.id}:${workflow.planHash}`}
             review={workflow.plan.fieldMappingReview}
             busy={busy}
-            onConfirm={(mapping) => void confirmMapping(mapping)}
+            onConfirm={(mapping, automatic) =>
+              void confirmMapping(mapping, automatic)
+            }
           />
         )}
       {workflow && (
@@ -459,7 +462,7 @@ export default function ResearchIntentCard({
             <Alert
               type="info"
               title="沿用上次已确认的角色和字段"
-              description="本次仍需确认执行计划，并逐项批准处置。"
+              description="核对后开始本次分析；自动执行范围以本次资料确认卡为准。"
               action={
                 workflow.status === "waiting_approval" &&
                 workflow.plan.phase === "review_plan" ? (

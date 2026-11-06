@@ -69,6 +69,11 @@ def render_report(workflow, tasks):
             raise ComputeError("报告实际类别或权重与获批参数不一致", 409)
 
     modes = {s.get("decision", {}).get("modelMode") for s in workflow.plan["stages"]}
+    automatic = any(
+        stage.get("modificationsApproval", {}).get("mode") == "rule_authorized"
+        for stage in workflow.plan["stages"]
+    )
+    approval_label = "按本次资料启动授权执行" if automatic else "用户批准"
     lines = [
         "# 海德乌拉综合检查报告",
         "",
@@ -105,7 +110,7 @@ def render_report(workflow, tasks):
         )
     lines.extend(
         [
-            f"本轮形成{len(suggestions)}项处置建议，用户批准{len(approved)}项，其余{len(suggestions) - len(approved)}项保持原样。完整问题数量见实际检查清单。",
+            f"本轮形成{len(suggestions)}项处置建议，{approval_label}{len(approved)}项，其余{len(suggestions) - len(approved)}项保持原样。完整问题数量见实际检查清单。",
             "",
             "模型验证："
             + (
@@ -134,7 +139,7 @@ def render_report(workflow, tasks):
             [
                 f"### {index}. {_text(action)}，对象 {_text(item['featureId'])}",
                 "",
-                f"{_text(item['currentState'])} → {_text(target)}。用户已批准，实际结果：{result}。",
+                f"{_text(item['currentState'])} → {_text(target)}。{'按本次启动授权执行' if automatic else '用户已批准'}，实际结果：{result}。",
                 "",
                 "理由：" + _text(row.get("reason") or item["reason"], 500),
                 "",

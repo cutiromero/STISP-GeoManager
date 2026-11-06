@@ -932,7 +932,7 @@ export default function MultiElementStory({
                 autoSize={{ minRows: 2, maxRows: 4 }}
               />
               <p>
-                已选择 {ids.length} 项（模型建议{" "}
+                已选择 {ids.length} 项（有效建议{" "}
                 {ids.filter((id) => modelIds.has(id)).length} 项、用户裁定{" "}
                 {ids.filter((id) => userIds.has(id)).length} 项）。
                 仅执行当前勾选的对象与动作，保存新成果版本；未选中和待裁定项保持原样。

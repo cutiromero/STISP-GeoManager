@@ -1014,6 +1014,7 @@ function AgentWorkspace({
         ...(!demoScenario && logicProject && logicUploadCount
           ? {
               uploadBatchId,
+              combineInputReview: true,
               reuseConfirmedConfiguration: reuseLogicConfiguration,
             }
           : {}),

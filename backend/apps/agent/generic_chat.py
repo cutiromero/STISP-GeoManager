@@ -138,6 +138,7 @@ def prepare(run, user, policy, guard, *, on_thinking=None):
         "_reuseConfirmedConfiguration": bool(reusable),
         "_requestedReuse": run.research_intent.get("_requestedReuse", False),
         "_manualRoleReview": run.research_intent.get("_manualRoleReview", False),
+        "_combinedInputReview": run.research_intent.get("_combinedInputReview", False),
         "_workflowAttempt": run.research_intent.get("_workflowAttempt", 0),
     }
     intent["revision"] = _state_hash(intent)
@@ -159,11 +160,15 @@ def prepare(run, user, policy, guard, *, on_thinking=None):
         return "沿用上次已确认的角色和字段；本次计划与处置仍需确认。"
     roles = [item["role"] for item in suggested["items"]]
     if (
-        suggested.get("source") == "model"
+        (suggested.get("source") == "model" or intent["_combinedInputReview"])
         and not intent["_manualRoleReview"]
         and "lithology" in roles
         and None not in roles
         and len(roles) == len(set(roles))
+        and all(
+            compatible(upload, suggestions[upload.resource_id]["role"])
+            for upload in uploads
+        )
     ):
         answer(run, user, policy, answers, "")
         return "资料角色已识别，正在核对字段；请在资料确认卡中检查后开始分析。"
@@ -214,6 +219,7 @@ def answer(source, user, policy, answers, text):
                     "_uploadBatchId": intent["_uploadBatchId"],
                     "_requestedReuse": intent.get("_requestedReuse", False),
                     "_manualRoleReview": True,
+                    "_combinedInputReview": intent.get("_combinedInputReview", False),
                     "_workflowAttempt": intent.get("_workflowAttempt", 0) + 1,
                 },
             )
@@ -374,6 +380,7 @@ def answer(source, user, policy, answers, text):
                 "originRunId": source.id,
                 "requestRunId": source.id,
                 "initialPlanAuthorized": False,
+                "combinedInputReview": intent.get("_combinedInputReview", False),
                 **selection,
             },
         )

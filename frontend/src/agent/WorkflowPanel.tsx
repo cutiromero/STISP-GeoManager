@@ -768,6 +768,7 @@ export default function WorkflowPanel({
   };
   const confirmFieldMapping = async (
     fieldMapping: Record<string, Record<string, string | null>>,
+    applyRuleSuggestions = false,
   ) => {
     if (!workflow || mutationInFlight.current) return;
     mutationInFlight.current = true;
@@ -778,6 +779,7 @@ export default function WorkflowPanel({
         await agentApi.confirmWorkflow(workflow.id, workflow.planHash, {
           fieldMapping,
           executeAfterMapping: true,
+          applyRuleSuggestions,
         }),
       );
     } catch (reason) {
@@ -1275,7 +1277,9 @@ export default function WorkflowPanel({
               key={workflow?.planHash}
               review={fieldMappingReview}
               busy={busy}
-              onConfirm={(mapping) => void confirmFieldMapping(mapping)}
+              onConfirm={(mapping, automatic) =>
+                void confirmFieldMapping(mapping, automatic)
+              }
             />
           )}
           {workflow && (

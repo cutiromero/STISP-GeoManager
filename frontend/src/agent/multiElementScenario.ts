@@ -7,7 +7,7 @@ export const logicReasoningProjectCodes = ["02", "demo-geology-reasoning"];
 export const isLogicReasoningProject = (code: string | undefined) =>
   Boolean(code && logicReasoningProjectCodes.includes(code));
 export const genericGeologyGoal =
-  "请检查我上传的地质资料：核对岩性、构造和蚀变是否符合地质规律，给出少量可核查的处置建议，等我批准后再修正，最后比较修正前后的优先核查远景区。";
+  "请检查我上传的地质资料：核对岩性、构造和蚀变是否符合地质规律，按本次确认范围处理有据的规则建议，保留待裁定和例外，最后比较处理前后的优先核查远景区。";
 /** The generic upload workflow reuses the multi-element results and approvals. */
 export const isMultiElementFamily = (workflowType: string) =>
   workflowType === multiElementType || workflowType === genericGeologyType;

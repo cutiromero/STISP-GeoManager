@@ -1,4 +1,4 @@
-import { Alert, Button, Select, Tag, Typography } from "antd";
+import { Alert, Button, Checkbox, Select, Tag, Typography } from "antd";
 import { useState } from "react";
 import type { AgentFieldMappingReview } from "../api/generated/types.gen";
 
@@ -25,11 +25,12 @@ export default function FieldMappingReview({
 }: {
   review: AgentFieldMappingReview;
   busy: boolean;
-  onConfirm: (mapping: Mapping) => void;
+  onConfirm: (mapping: Mapping, applyRules?: boolean) => void;
   compact?: boolean;
   startAnalysis?: boolean;
   onAdjustRoles?: () => void;
 }) {
+  const [applyRules, setApplyRules] = useState(true);
   const [mapping, setMapping] = useState<Mapping>(() => initialMapping(review));
   const missing = review.roles.flatMap((role) =>
     role.targets
@@ -48,7 +49,7 @@ export default function FieldMappingReview({
         <p className="agent-demo-hint">
           平台会按您确认的对应关系生成工作副本，原始文件不变。不需要的字段可以留空；带“必需”的字段必须选择。
           {startAnalysis &&
-            "确认后将自动开始检查与分析，修改建议仍须单独批准。"}
+            "本次一次核对资料角色、字段及执行范围，随后自动检查、复查并生成成果。"}
         </p>
       )}
       {review.questions.map((question) => (
@@ -109,11 +110,27 @@ export default function FieldMappingReview({
           title={`请先选择：${missing.join("、")}`}
         />
       )}
+      {startAnalysis && (
+        <p>
+          <Checkbox
+            checked={applyRules}
+            disabled={busy}
+            onChange={(event) => setApplyRules(event.target.checked)}
+          >
+            自动执行已核验的规则建议（仅工作副本）
+          </Checkbox>
+          <span className="agent-muted">
+            待裁定、例外和冲突对象保留；取消勾选可先审阅处置建议。
+          </span>
+        </p>
+      )}
       <Button
         type="primary"
         loading={busy}
         disabled={missing.length > 0}
-        onClick={() => onConfirm(mapping)}
+        onClick={() =>
+          startAnalysis ? onConfirm(mapping, applyRules) : onConfirm(mapping)
+        }
       >
         {startAnalysis ? "确认资料并开始分析" : "确认字段并继续"}
       </Button>

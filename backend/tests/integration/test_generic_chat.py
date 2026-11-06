@@ -57,7 +57,7 @@ def online_model(monkeypatch):
     )
 
 
-def intake(env, *, catalog=False, reuse=False):
+def intake(env, *, catalog=False, reuse=False, combined=False):
     env["project"].code = "02"
     env["project"].save(update_fields=["code"])
     for suffix in ("check", "apply", "relations", "prospect"):
@@ -104,6 +104,7 @@ def intake(env, *, catalog=False, reuse=False):
                 "idempotencyKey": "chat-generic",
                 "uploadBatchId": env["batch"],
                 "reuseConfirmedConfiguration": reuse,
+                "combineInputReview": combined,
             }
         ),
         content_type="application/json",

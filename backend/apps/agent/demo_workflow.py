@@ -71,7 +71,8 @@ AUTOMATIC_GEOLOGY_STAGES = {
 def _automatic_stage(workflow, stage):
     return (
         workflow.workflow_type in MULTI_FAMILY
-        and workflow.plan.get("executionPolicy") == "measured_geology_v1"
+        and workflow.plan.get("executionPolicy")
+        in {"measured_geology_v1", "rule_geology_v2"}
         and (
             (
                 stage.get("name") in AUTOMATIC_GEOLOGY_STAGES
@@ -428,10 +429,8 @@ def prepare_demo(workflow, user, p) -> None:
     versions = validated_versions or _versions(workflow, graph)
     required_steps = len(graph)
     if workflow.workflow_type in MULTI_FAMILY:
-        workflow.plan["executionPolicy"] = "measured_geology_v1"
-        decisions_required = 1 + sum(
-            name not in AUTOMATIC_GEOLOGY_STAGES for name, _, _ in graph
-        )
+        workflow.plan["executionPolicy"] = "rule_geology_v2"
+        decisions_required = 1
     else:
         decisions_required = required_steps + (
             2 if workflow.workflow_type == "geology_map_review" else 1
@@ -528,9 +527,9 @@ def prepare_demo(workflow, user, p) -> None:
     workflow.evidence = knowledge
     workflow.status, workflow.current_step = "waiting_approval", "review_plan"
     workflow.detail = (
-        "输入角色与算法已匹配，请确认场景计划后执行。"
-        f"本任务模型请求上限{workflow.max_iterations}次，固定阶段至少{decisions_required}次；"
-        "检查结果返回后确定完整证据批次数，校验重问另占请求。"
+        "资料与算法已准备好，将检查问题、执行确认范围内的处置，并生成复查和对比成果。"
+        if workflow.workflow_type in MULTI_FAMILY
+        else "资料与算法已匹配，请核对本次执行计划。"
     )
     # A failed automatic confirmation must leave the worker's running state
     # recoverable, rather than publishing a partially prepared waiting plan.
@@ -700,6 +699,7 @@ def confirm_demo(
     field_mapping=None,
     alteration_actions=None,
     execute_after_mapping=False,
+    apply_rule_suggestions=False,
 ) -> None:
     from .workflow_slots import require_compute_slot
 
@@ -714,6 +714,7 @@ def confirm_demo(
             plan_hash,
             field_mapping,
             execute_after_mapping=execute_after_mapping,
+            apply_rule_suggestions=apply_rule_suggestions,
         )
         return
     if field_mapping is not None:
@@ -863,7 +864,12 @@ def _has_model_progress(stage) -> bool:
 def _future_model_requests(workflow, stage):
     stages = workflow.plan["stages"][workflow.plan["stageIndex"] + 1 :]
     return sum(
-        not item.get("decision") and not _automatic_stage(workflow, item)
+        not item.get("decision")
+        and not _automatic_stage(workflow, item)
+        and not (
+            workflow.plan.get("executionPolicy") == "rule_geology_v2"
+            and item.get("name") == "apply"
+        )
         for item in stages
     ) + int(
         stage["identifier"] != "finish"
@@ -1280,7 +1286,49 @@ def advance_demo(workflow_id) -> None:
                 raise ComputeError("已达到场景算子步骤上限")
             if (
                 workflow.workflow_type in MULTI_FAMILY
-                and workflow.plan.get("executionPolicy") == "measured_geology_v1"
+                and workflow.plan.get("executionPolicy") == "rule_geology_v2"
+                and stage["name"] == "apply"
+                and not stage.get("decision")
+                and not _has_model_progress(stage)
+            ):
+                from .rule_dispositions import (
+                    build_rule_proposal,
+                    authorize_rule_execution,
+                )
+                from .geology_multi_review import freeze_proposal
+
+                decision, edits, summary = build_rule_proposal(workflow)
+                with transaction.atomic():
+                    current = locked_workflow(workflow.id)
+                    check_pause(workflow)
+                    if current.cancel_requested or current.status not in {
+                        "queued",
+                        "running",
+                    }:
+                        raise ModelError("分析已停止，未生成自动处置")
+                    fresh, policy = _authorize(current)
+                    authorize_demo(current, fresh, policy)
+                    stage.update(
+                        decision=decision,
+                        edits=edits,
+                        executionMode="rule_verified",
+                        ruleDispositionSummary=summary,
+                    )
+                    step(
+                        workflow,
+                        "rule_dispositions",
+                        message=decision["judgement"],
+                        output_refs={"ruleDispositionSummary": summary},
+                    )
+                    freeze_proposal(workflow, stage)
+                    if not stage.get("modificationsApproval"):
+                        authorize_rule_execution(workflow, fresh, policy, stage)
+                    _save(workflow)
+                return
+            if (
+                workflow.workflow_type in MULTI_FAMILY
+                and workflow.plan.get("executionPolicy")
+                in {"measured_geology_v1", "rule_geology_v2"}
                 and stage["name"] == "apply"
                 and not stage.get("modificationsApproval")
                 and not stage.get("decision")

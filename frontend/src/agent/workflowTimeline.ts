@@ -5,6 +5,8 @@ const mainKinds = new Set([
   "working_copies",
   "modifications_approved",
   "no_modifications",
+  "rule_dispositions",
+  "automatic_dispositions",
   "collect_results",
   "finalize",
 ]);
@@ -22,6 +24,8 @@ const kindNames: Record<string, string> = {
   modification_suggestions: "处置建议",
   modifications_approved: "已批准处置范围",
   no_modifications: "无需修改原始资料",
+  rule_dispositions: "核验规则与实际问题",
+  automatic_dispositions: "按本次授权执行规则处置",
   approved_changes_fixed: "固定已批准的处置",
   submit_operator: "提交算法计算",
   automatic_stage: "按已确认安排自动计算",
@@ -35,7 +39,8 @@ export function mainWorkflowSteps(steps: AgentWorkflowStep[]) {
     (step) =>
       Boolean(step.decision) ||
       (mainKinds.has(step.kind) && Boolean(step.message.trim())) ||
-      (Boolean(step.errorCode) && step.kind !== "analysis_model_attempt"),
+      (Boolean(step.errorCode) &&
+        !["analysis_model_attempt", "model_activity"].includes(step.kind)),
   );
 }
 

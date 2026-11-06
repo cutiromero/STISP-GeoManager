@@ -1274,6 +1274,10 @@ export type AgentConversationUpdate = {
  */
 export type AgentRunInput = {
     /**
+     * 仅逻辑推理uploadBatchId提交可用。完整、唯一且符合真实画像的角色建议合并到资料字段确认卡；不确定或重复角色仍需澄清。此标记不授予执行或修改权限。true时已保存字段也在同一次启动卡核对。
+     */
+    combineInputReview?: boolean;
+    /**
      * 仅逻辑推理资料批次可用；资料、真实画像及资源更新时间与本人当前项目的已确认配置完全一致时沿用角色和字段，不跳过计划及逐项批准
      */
     reuseConfirmedConfiguration?: boolean;
@@ -2375,9 +2379,9 @@ export type AgentWorkflowDecision = {
      */
     resultSummary?: string;
     /**
-     * 实际调用的模型模式，模拟验证单独标识
+     * 实际模型模式；rules表示确定性规则核验而非模型调用
      */
-    modelMode: 'real' | 'mock';
+    modelMode: 'real' | 'mock' | 'rules';
     /**
      * 实际模型的公开名称
      */
@@ -6376,6 +6380,10 @@ export type AgentWorkflowConfirmation = {
      * 仅geology_generic的review_mapping阶段approve且提交fieldMapping时允许。true表示用户同时确认资料与字段并授权开始分析，服务端记录与本次字段及输入绑定的授权，工作副本及已发布算法计划通过校验后直接执行，不再重复确认初始计划；修改建议、质量异常、预算不足及专业不确定事项仍须原有批准。false或省略时只确认字段，后续计划仍需确认。其他阶段、reject或非布尔值返回400。
      */
     executeAfterMapping?: boolean;
+    /**
+     * 仅通用地质字段确认且executeAfterMapping为true时允许。明确授权在本任务工作副本上自动执行已核验且没有待裁定或例外的规则建议；保留所有争议对象。授权绑定本人、项目、输入版本和字段，生成处置表及提交算法前重验，不伪造逐项人工批准。false保留处置审阅环节。
+     */
+    applyRuleSuggestions?: boolean;
 };
 
 /**
@@ -18617,6 +18625,10 @@ export type CreateAgentRunData = {
     body: AgentRunInput;
     headers: {
         /**
+         * 浏览器当前加载的module入口路径，用于发布后版本衔接。正式浏览器提交逻辑推理资料或确认工作流时须与当前构建一致；缺失或旧值返回409并提示刷新，保留进度。开发模式及非浏览器API调用沿用默认行为；该标识不代替任何权限校验。
+         */
+        'X-App-Entry'?: string;
+        /**
          * 项目 ID
          */
         'X-Project-Id': number;
@@ -19034,6 +19046,10 @@ export type ConfirmAgentWorkflowData = {
      */
     body: AgentWorkflowConfirmation;
     headers: {
+        /**
+         * 浏览器当前加载的module入口路径，用于发布后版本衔接。正式浏览器提交逻辑推理资料或确认工作流时须与当前构建一致；缺失或旧值返回409并提示刷新，保留进度。开发模式及非浏览器API调用沿用默认行为；该标识不代替任何权限校验。
+         */
+        'X-App-Entry'?: string;
         /**
          * 唯一当前项目 ID
          */

@@ -1,3 +1,4 @@
+import { moduleEntry } from "../routing/clientBuild";
 import {
   getActiveProject,
   attachProjectHeader,
@@ -345,6 +346,8 @@ export async function requestJson<T>(
   const method = options.method ?? "GET";
   const headers = new Headers();
   headers.set("Accept-Language", currentLocale());
+  const entry = typeof document === "undefined" ? "" : moduleEntry(document);
+  if (entry) headers.set("X-App-Entry", entry);
   headers.set("X-Project-Id", options.projectTagId ?? getActiveProject());
   const cancellation = combineAbortSignals(
     options.signal ? [projectSignal(), options.signal] : [projectSignal()],
@@ -433,6 +436,8 @@ export async function requestForm<T>(
   }
   const headers = new Headers();
   headers.set("Accept-Language", currentLocale());
+  const entry = typeof document === "undefined" ? "" : moduleEntry(document);
+  if (entry) headers.set("X-App-Entry", entry);
   headers.set(
     "X-Project-Id",
     String(options.projectTagId ?? getActiveProject()),

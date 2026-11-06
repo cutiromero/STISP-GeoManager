@@ -5,7 +5,7 @@ from apps.compute.packages import ComputeError
 from .workflow_resources import resolve_workflow_resource
 
 
-def _binding(workflow, mapping, revisions):
+def _binding(workflow, mapping, revisions, automatic=False):
     from .workflow import _state_hash
 
     return _state_hash(
@@ -19,11 +19,14 @@ def _binding(workflow, mapping, revisions):
             "inputs": workflow.plan.get("uploadInputs", {}),
             "mapping": mapping,
             "sourceRevisions": revisions,
+            **({"applyRuleSuggestions": True} if automatic else {}),
         }
     )
 
 
-def bind_input_execution(workflow, user, policy, mapping, plan_hash):
+def bind_input_execution(
+    workflow, user, policy, mapping, plan_hash, *, automatic=False
+):
     from .workflow import _state_hash
 
     revisions = {
@@ -36,7 +39,8 @@ def bind_input_execution(workflow, user, policy, mapping, plan_hash):
         "planHash": plan_hash,
         "mappingHash": _state_hash(mapping),
         "sourceRevisions": revisions,
-        "bindingHash": _binding(workflow, mapping, revisions),
+        "bindingHash": _binding(workflow, mapping, revisions, automatic),
+        **({"applyRuleSuggestions": True} if automatic else {}),
     }
 
 
@@ -52,10 +56,13 @@ def input_execution_authorized(workflow, user, policy):
         raise ComputeError("资料确认时的分析启动授权无效，请重新核对", 409)
     mapping = workflow.plan.get("confirmedMapping", {})
     revisions = authorization.get("sourceRevisions", {})
+    automatic = authorization.get("applyRuleSuggestions", False)
     if (
-        workflow.workflow_type != "geology_generic"
+        type(automatic) is not bool
+        or workflow.workflow_type != "geology_generic"
         or authorization.get("mappingHash") != _state_hash(mapping)
-        or authorization.get("bindingHash") != _binding(workflow, mapping, revisions)
+        or authorization.get("bindingHash")
+        != _binding(workflow, mapping, revisions, automatic)
         or not workflow.steps.filter(
             kind="field_mapping_confirmed",
             status="succeeded",

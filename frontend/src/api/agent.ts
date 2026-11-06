@@ -317,6 +317,7 @@ export const agentApi = {
       | "alterationActions"
       | "fieldMapping"
       | "executeAfterMapping"
+      | "applyRuleSuggestions"
     >,
   ) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/confirm/`, {

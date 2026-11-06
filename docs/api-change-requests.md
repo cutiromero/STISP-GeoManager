@@ -1477,3 +1477,12 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation notes: compare 只以已保存批准、执行明细与实际变化交集构造分页，inspection 不发送完整计算输入、模型请求和预览几何；card/inspection 保留 fieldMappingReview、reusedConfiguration，前端校验分页及卡片字段；显示几何不回写存储，无过滤显示结果按资源修订持久缓存，由成果登记 worker 预热。
 - Verification: 摘要体积、实际修改分页、用户隔离、建议默认选择、对象完整原因按需、原精度查询不变。
 - Result: 本地后端定向33项、前端单元573项、类型及完整契约流程通过。后端全套2411项通过、5项跳过、31项失败，其中20项为沙箱禁止端口绑定，其余11项未在此范围处理；离线成果与新对话复用旅程通过。缓存复测确认预热后同版查询不重读原始数据、不重复简化，资源修订或查询上限改变后重算。Chromium 因监听端口 EPERM 未启动，视口尺寸及交互断言仍需沙箱外复跑；未部署正式站。海德乌拉本地原始岩性显示投影gzip为230144字节，正式运行的修正后资源体积仍需部署后核验。
+
+## 2026-11-06 规则建议自动执行授权
+
+- 确认接口AgentWorkflowConfirmation增加可选布尔applyRuleSuggestions，默认false；只允许geology_generic字段确认、executeAfterMapping=true及approve。
+- 原因：一次资料确认明确工作副本自动执行范围，省去确定性建议重复批准。
+- 后端：绑定输入和本人项目，执行前核对实际问题、知识和授权；争议项保留，不伪造人工批准。
+- 验证：默认路径、显式授权、防篡改、例外保留及实际241条问题回放。mock继续采用现有确认请求默认行为。
+
+- 同次配套：AgentRunInput增加combineInputReview默认false；浏览器创建上传任务和工作流确认增加可选X-App-Entry头，用于正式构建版本衔接，旧页面409保留进度。AgentAnalysisDecision.modelMode增加rules，准确标识代码规则核验。

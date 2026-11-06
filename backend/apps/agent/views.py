@@ -319,6 +319,7 @@ def submit(request, conversation_id):
             "demoScenario",
             "uploadBatchId",
             "reuseConfirmedConfiguration",
+            "combineInputReview",
         ],
         max_bytes=max(256000, prompt_limit * 6 + 8192),
     )
@@ -335,11 +336,20 @@ def submit_value(request, c, value, *, available_models=None):
     demo_scenario = value.get("demoScenario")
     upload_batch = value.get("uploadBatchId")
     reuse_configuration = value.get("reuseConfirmedConfiguration", False)
+    combined_review = value.get("combineInputReview", False)
+    if type(combined_review) is not bool or (combined_review and not upload_batch):
+        raise ApiProblem("合并资料核对需要逻辑推理资料批次")
     if type(reuse_configuration) is not bool or (
         reuse_configuration and not upload_batch
     ):
         raise ApiProblem("复用配置需要逻辑推理资料批次")
     if upload_batch is not None:
+        from apps.core.client_build import current_browser
+
+        if not current_browser(request):
+            raise ApiProblem(
+                "平台已更新，请刷新页面后使用新版逻辑推理；已上传资料保留", 409
+            )
         from .generic_chat import validate_batch
 
         validate_batch(
@@ -443,6 +453,7 @@ def submit_value(request, c, value, *, available_models=None):
                 existing.research_intent.get("_demoScenario"),
                 existing.research_intent.get("_uploadBatchId"),
                 existing.research_intent.get("_requestedReuse", False),
+                existing.research_intent.get("_combinedInputReview", False),
             ) != (
                 alias,
                 prompt.strip(),
@@ -460,6 +471,7 @@ def submit_value(request, c, value, *, available_models=None):
                 demo_scenario,
                 upload_batch,
                 reuse_configuration,
+                combined_review,
             ):
                 raise ApiProblem("幂等键已用于不同请求", 409)
             return JsonResponse(run_json(existing, request.user), status=202)
@@ -552,6 +564,7 @@ def submit_value(request, c, value, *, available_models=None):
                     "_uploadBatchId": upload_batch,
                     "_reuseConfirmedConfiguration": reuse_configuration,
                     "_requestedReuse": reuse_configuration,
+                    "_combinedInputReview": combined_review,
                 }
                 if upload_batch
                 else {"_demoScenario": demo_scenario}
@@ -1189,6 +1202,10 @@ def workflow_upload_detail(request, upload_id):
 @endpoint(["POST"])
 def workflow_confirm(request, workflow_id):
     from .workflow import validate_confirmed_plan
+    from apps.core.client_build import current_browser
+
+    if not current_browser(request):
+        raise ApiProblem("平台已更新，请刷新页面后继续；已上传资料和任务进度保留", 409)
 
     value = body(
         request,
@@ -1201,6 +1218,7 @@ def workflow_confirm(request, workflow_id):
             "alterationActions",
             "fieldMapping",
             "executeAfterMapping",
+            "applyRuleSuggestions",
         ],
         max_bytes=1024 * 1024,
     )
@@ -1244,6 +1262,15 @@ def workflow_confirm(request, workflow_id):
             or "fieldMapping" not in value
         ):
             raise ApiProblem("只有通用地质资料字段确认时可以同时授权开始分析", 400)
+        if "applyRuleSuggestions" in value and (
+            type(value["applyRuleSuggestions"]) is not bool
+            or workflow.workflow_type != "geology_generic"
+            or workflow.plan.get("phase") != "review_mapping"
+            or decision != "approve"
+            or value.get("executeAfterMapping") is not True
+            or "fieldMapping" not in value
+        ):
+            raise ApiProblem("自动规则处置须在本次资料确认并开始分析时明确授权", 400)
         if "suggestionSelection" in value:
             if (
                 workflow.workflow_type
@@ -1332,6 +1359,11 @@ def workflow_confirm(request, workflow_id):
                 **(
                     {"execute_after_mapping": value["executeAfterMapping"]}
                     if "executeAfterMapping" in value
+                    else {}
+                ),
+                **(
+                    {"apply_rule_suggestions": value["applyRuleSuggestions"]}
+                    if "applyRuleSuggestions" in value
                     else {}
                 ),
                 **(

@@ -720,7 +720,7 @@ beforeEach(() => {
 });
 
 it.each([
-  [0, "fast", undefined],
+  [0, "deep", "low"],
   [1, "deep", "medium"],
   [2, "deep", "xhigh"],
 ])(

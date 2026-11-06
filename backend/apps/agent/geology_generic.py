@@ -276,8 +276,19 @@ def propose_mapping(workflow, user, policy):
 
     roles = _review_roles(workflow, user)
     mode, note = "mock", []
+    known_fields = (
+        workflow.plan.get("chatExecution", {}).get("combinedInputReview")
+        and not _questions(roles)
+        and all(
+            _keyword_score({"name": target["field"]}, TARGETS[item["role"]][index][3])
+            > 0
+            for item in roles
+            for index, target in enumerate(item["targets"])
+            if target["required"]
+        )
+    )
     try:
-        proposed = model_targets(workflow, policy, roles)
+        proposed = None if known_fields else model_targets(workflow, policy, roles)
     except ComputeError as exc:
         proposed, note = (
             None,
@@ -333,7 +344,14 @@ def validate_mapping(review, mapping):
 
 
 def confirm_mapping(
-    workflow, user, policy, plan_hash, mapping, *, execute_after_mapping=False
+    workflow,
+    user,
+    policy,
+    plan_hash,
+    mapping,
+    *,
+    execute_after_mapping=False,
+    apply_rule_suggestions=False,
 ):
     from .demo_workflow import _save
     from .workflow import _state_hash, step
@@ -353,7 +371,12 @@ def confirm_mapping(
         from .input_execution import bind_input_execution
 
         authorization = bind_input_execution(
-            workflow, user, policy, confirmed, plan_hash
+            workflow,
+            user,
+            policy,
+            confirmed,
+            plan_hash,
+            automatic=apply_rule_suggestions,
         )
         workflow.plan["inputExecutionAuthorization"] = authorization
     review["confirmed"] = True
@@ -417,18 +440,25 @@ def prepare_generic(workflow, user, policy) -> bool:
                 except ComputeError:
                     pass
                 else:
-                    review["confirmed"] = True
+                    combined = origin.research_intent.get("_combinedInputReview", False)
+                    review["confirmed"] = not combined
                     workflow.plan.update(
                         fieldMappingReview=review,
-                        confirmedMapping=confirmed,
-                        phase="build_inputs",
+                        **({} if combined else {"confirmedMapping": confirmed}),
+                        phase="review_mapping" if combined else "build_inputs",
                         reusedConfiguration=True,
                     )
+                    if combined:
+                        workflow.status, workflow.current_step = (
+                            "waiting_approval",
+                            "review_mapping",
+                        )
+                        workflow.detail = "已沿用资料与字段对应，请核对后开始本次分析"
                     _save(workflow)
                     from .logic_configuration import save_configuration
 
                     save_configuration(workflow, confirmed)
-                    return prepare_generic(workflow, user, policy)
+                    return True if combined else prepare_generic(workflow, user, policy)
         review = propose_mapping(workflow, user, policy)
         workflow.plan.update(fieldMappingReview=review, phase="review_mapping")
         workflow.status, workflow.current_step = "waiting_approval", "review_mapping"

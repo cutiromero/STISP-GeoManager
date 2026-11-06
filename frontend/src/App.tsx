@@ -1,3 +1,4 @@
+import ClientUpdateNotice from "./routing/ClientUpdateNotice";
 import { ProjectProvider } from "./projects/ProjectContext";
 import { Alert, Button, Spin } from "antd";
 import type { ReactNode } from "react";
@@ -226,6 +227,7 @@ export default function App({
 
   return (
     <AppContext.Provider value={{ bootstrap, user, setBootstrap, setUser }}>
+      <ClientUpdateNotice />
       <ProjectProvider>
         <RouteRecovery>
           <Suspense fallback={<RouteLoading />}>

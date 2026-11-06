@@ -94,7 +94,7 @@ it("组摘要按原因计数，全量候选仅经用户勾选纳入，确认分�
   expect(screen.getByText(/已选择 12/)).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "批准所选操作并继续" }));
   await waitFor(() =>
-    expect(screen.getByText(/模型建议 1 项、用户裁定 11 项/)).toBeVisible(),
+    expect(screen.getByText(/有效建议 1 项、用户裁定 11 项/)).toBeVisible(),
   );
   expect(review).toHaveBeenCalledOnce();
   expect(review.mock.calls[0]![2]).toHaveLength(12);
