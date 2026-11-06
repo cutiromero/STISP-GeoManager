@@ -809,6 +809,12 @@ def create_approved_changes(workflow, user, policy, stage):
     path = table_data_path(relative)
     source = f"geology-multi-approved:{workflow.id}"
     with transaction.atomic():
+        from .workflow_controls import check_pause, locked_workflow
+
+        current = locked_workflow(workflow.id)
+        check_pause(workflow)
+        if current.cancel_requested or current.status not in {"queued", "running"}:
+            raise ComputeError("场景已停止，未固定获批操作", 409)
         existing = DataResource.objects.filter(source=source).first()
         if existing:
             if not path.is_file() or path.read_bytes() != raw:

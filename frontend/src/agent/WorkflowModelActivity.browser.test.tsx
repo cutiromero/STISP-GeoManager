@@ -64,7 +64,6 @@ it("real model activity updates from lightweight card without fetching detail wh
   expect(activity).toHaveTextContent("模型正在思考");
   expect(activity).toHaveTextContent("检查地质资料");
   expect(activity).toHaveTextContent("已接收响应正文 0 字符");
-  fireEvent.click(within(activity).getByText(/查看模型实际思考/));
   expect(
     await within(activity).findByLabelText("模型思考内容"),
   ).toHaveTextContent("真实思考第一段");
@@ -104,7 +103,6 @@ it.each([
   "real model activity stops reasoning animation in workflow %s",
   async (status) => {
     const mounted = render(<WorkflowModelActivity workflow={workflow()} />);
-    fireEvent.click(screen.getByText(/查看模型实际思考/));
     expect(await screen.findByLabelText("模型思考内容")).toHaveClass(
       "is-streaming",
     );
@@ -190,9 +188,60 @@ it("real model activity reports missing reasoning and truncation without inventi
     />,
   );
   expect(screen.queryByText("保留的真实思考尾部")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByText(/查看模型实际思考/));
   expect(await screen.findByLabelText("模型思考内容")).toHaveTextContent(
     "新任务实际思考",
+  );
+});
+
+it("automatically shows incoming thinking while respecting a manual collapse", async () => {
+  const mounted = render(
+    <WorkflowModelActivity
+      workflow={workflow({
+        modelActivity: {
+          ...modelActivity,
+          status: "requesting",
+          thinkingText: "",
+        },
+      })}
+    />,
+  );
+  expect(screen.queryByLabelText("模型思考内容")).not.toBeInTheDocument();
+  mounted.rerender(<WorkflowModelActivity workflow={workflow()} />);
+  expect(await screen.findByLabelText("模型思考内容")).toBeVisible();
+  fireEvent.click(screen.getByText(/查看模型实际思考/));
+  await waitFor(() =>
+    expect(screen.getByLabelText("模型思考内容")).not.toBeVisible(),
+  );
+  mounted.rerender(
+    <WorkflowModelActivity
+      workflow={workflow({
+        modelActivity: { ...modelActivity, thinkingText: "后续思考" },
+      })}
+    />,
+  );
+  expect(screen.getByLabelText("模型思考内容")).not.toBeVisible();
+  fireEvent.click(screen.getByText(/查看模型实际思考/));
+  expect(await screen.findByLabelText("模型思考内容")).toHaveTextContent(
+    "后续思考",
+  );
+});
+
+it("explains why an old fast-mode request has no thinking", async () => {
+  render(
+    <WorkflowModelActivity
+      workflow={workflow({
+        modelActivity: {
+          ...modelActivity,
+          status: "complete",
+          thinkingEnabled: false,
+          thinkingText: "",
+        },
+      })}
+    />,
+  );
+  fireEvent.click(screen.getByText(/查看模型实际思考/));
+  await waitFor(() =>
+    expect(screen.getByText(/本次请求未开启模型思考/)).toBeVisible(),
   );
 });
 

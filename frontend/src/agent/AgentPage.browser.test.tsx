@@ -3179,8 +3179,8 @@ it.each(["low", "medium", "xhigh"] as const)(
     expect(agentApi.submit).toHaveBeenCalledWith(
       1,
       expect.objectContaining({
-        thinkingMode: effort === "low" ? "fast" : "deep",
-        reasoningEffort: effort === "low" ? undefined : effort,
+        thinkingMode: "deep",
+        reasoningEffort: effort,
       }),
     );
   },

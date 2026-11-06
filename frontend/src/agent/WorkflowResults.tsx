@@ -318,6 +318,7 @@ export default function WorkflowResults({
           {ui(workflowStatusLabels[workflow.status])}
         </Tag>
       </Space>
+      <WorkflowModelActivity workflow={workflow} />
       {deletedResources.length > 0 && (
         <Alert
           type="info"
@@ -675,7 +676,6 @@ export default function WorkflowResults({
           )}
         </div>
       )}
-      <WorkflowModelActivity workflow={workflow} />
       {isActive &&
         workflow.status !== "waiting_approval" &&
         !workflow.pauseRequested && (

@@ -1,4 +1,5 @@
 import { Collapse } from "antd";
+import { useEffect, useState } from "react";
 import type { AgentWorkflow } from "../api/generated/types.gen";
 import ThinkingStream from "./ThinkingStream";
 import LiveActivity from "./LiveActivity";
@@ -17,6 +18,8 @@ export default function WorkflowModelActivity({
 }: {
   workflow: AgentWorkflow;
 }) {
+  const [expanded, setExpanded] = useState<string[]>();
+  useEffect(() => setExpanded(undefined), [workflow.id]);
   const activity = workflow.modelActivity;
   if (!activity) return null;
   const computing =
@@ -68,6 +71,10 @@ export default function WorkflowModelActivity({
         key={workflow.id}
         size="small"
         className="agent-thinking-panel"
+        activeKey={
+          expanded ?? (activity.thinkingText ? ["model-thinking"] : [])
+        }
+        onChange={(keys) => setExpanded(Array.isArray(keys) ? keys : [keys])}
         items={[
           {
             key: "model-thinking",
@@ -86,9 +93,11 @@ export default function WorkflowModelActivity({
                   />
                 ) : (
                   <p className="agent-muted">
-                    {working
-                      ? "尚未收到可展示的模型思考内容。"
-                      : "本次模型未返回可展示的思考内容。"}
+                    {!activity.thinkingEnabled
+                      ? "本次请求未开启模型思考；新任务可在思考强度中选择轻量、标准或深入。"
+                      : working
+                        ? "尚未收到可展示的模型思考内容。"
+                        : "本次模型未返回可展示的思考内容。"}
                   </p>
                 )}
               </>

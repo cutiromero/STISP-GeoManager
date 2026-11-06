@@ -835,17 +835,19 @@ def _exhaust_model_budget(workflow, stage, minimum_remaining):
 
 
 def _submit_stage(workflow, user, p, stage) -> None:
-    with transaction.atomic():
-        current = locked_workflow(workflow.id)
-        check_pause(workflow)
-        if current.cancel_requested or current.status not in {"queued", "running"}:
-            raise ModelError("场景已停止，未提交下一步计算")
-        fresh, policy = _authorize(current)
-        authorize_demo(current, fresh, policy)
-        _submit_stage_locked(workflow, fresh, policy, stage)
+    # Reading and verifying large result files can exceed the worker's heartbeat
+    # lease. Do that before reserving SQLite's writer so the compute worker can
+    # keep its lease fresh. The final transaction rechecks live authorization.
+    current = AgentWorkflow.objects.get(pk=workflow.id)
+    check_pause(workflow)
+    if current.cancel_requested or current.status not in {"queued", "running"}:
+        raise ModelError("场景已停止，未提交下一步计算")
+    fresh, policy = _authorize(current)
+    authorize_demo(current, fresh, policy)
+    _prepare_and_submit_stage(workflow, fresh, policy, stage)
 
 
-def _submit_stage_locked(workflow, user, p, stage) -> None:
+def _prepare_and_submit_stage(workflow, user, p, stage) -> None:
     if workflow.workflow_type in MULTI_FAMILY and stage["name"] == "apply":
         from .geology_multi_review import create_approved_changes
 
@@ -890,9 +892,10 @@ def _submit_stage_locked(workflow, user, p, stage) -> None:
         check_pause(workflow)
         if current.cancel_requested or current.status not in {"queued", "running"}:
             raise ModelError("场景已停止，未提交下一步计算")
+        if current.plan_hash != workflow.plan_hash:
+            raise ComputeError("场景方案已变化，请重新核对后再提交计算", 409)
         user, p = _authorize(current)
         authorize_demo(current, user, p)
-        validate_submission(user, body)
         AgentWorkflow.objects.filter(pk=workflow.id).update(heartbeat=timezone.now())
         task = submit(user, body)
         stage.update(taskId=str(task.id), inputs=inputs, status="waiting_compute")

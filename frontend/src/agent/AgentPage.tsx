@@ -547,12 +547,7 @@ function AgentWorkspace({
     setThinkingMode(next);
   }, [deepThinkingAvailable, mode, user?.id, logicProject]);
   useEffect(() => {
-    if (logicProject)
-      setThinkingMode(
-        deepThinkingAvailable && (effortOverride ?? "xhigh") !== "low"
-          ? "deep"
-          : "fast",
-      );
+    if (logicProject) setThinkingMode(deepThinkingAvailable ? "deep" : "fast");
   }, [deepThinkingAvailable, effortOverride, logicProject]);
   useEffect(() => {
     if (!deepThinkingAvailable && thinkingMode !== "fast")
@@ -1932,9 +1927,7 @@ function AgentWorkspace({
                           );
                           setEffortOverride(configuration.reasoningEffort);
                           setThinkingMode(
-                            configuration.reasoningEffort === "low"
-                              ? "fast"
-                              : "deep",
+                            deepThinkingAvailable ? "deep" : "fast",
                           );
                           setReuseLogicConfiguration(
                             !result.unavailableResourceIds.length &&
@@ -2114,9 +2107,8 @@ function AgentWorkspace({
                         disabled={taskLocked || busy}
                         onChange={(value) => {
                           if (logicProject) {
-                            const effort = value ?? "xhigh";
                             setEffortOverride(value);
-                            setThinkingMode(effort === "low" ? "fast" : "deep");
+                            setThinkingMode("deep");
                             return;
                           }
                           setEffortOverride(value);
