@@ -31,8 +31,10 @@ class WorkflowModelActivity:
         self.saved_at = float("-inf")
         self.saved_status = None
 
-    def _authorize(self):
-        poll = getattr(self.guard, "poll", self.guard)
+    def _authorize(self, *, force):
+        # Stream progress shares the frame guard's bounded live-state cache.
+        # Starting/validating/finishing a request still requires a fresh check.
+        poll = getattr(self.guard, "poll", self.guard) if force else self.guard
         poll()
 
     def _initialize(self, status, attempt):
@@ -96,7 +98,7 @@ class WorkflowModelActivity:
             and now - self.saved_at < SAVE_INTERVAL_SECONDS
         ):
             return
-        self._authorize()
+        self._authorize(force=force)
         checked_at = timezone.now()
         self.state["updatedAt"] = checked_at.isoformat()
         status = self.state["status"]

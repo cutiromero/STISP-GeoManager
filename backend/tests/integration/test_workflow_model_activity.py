@@ -12,6 +12,7 @@ from apps.agent import generic_mapping, model_activity, provider
 from apps.agent.config import registry
 from apps.agent.demo_decisions import decide
 from apps.agent.model_activity import WorkflowModelActivity, latest_model_activity
+from apps.agent.model_guard import ModelStreamGuard
 from apps.agent.models import AgentWorkflowStep
 from apps.agent.policy import default_policy
 from apps.agent.views import workflow_json
@@ -94,21 +95,75 @@ def test_slow_authorization_and_writes_bound_stream_saves_and_flush_completion(
             clock[0] += 1 / 1024
             activity.thinking("段")
         # Requesting, the first thinking fragment, and one periodic refresh.
-        assert len(writes) == guard.poll.call_count == 3
+        assert len(writes) == 3 and guard.poll.call_count == 1
         activity.progress({"status": "responding", "outputChars": 1})
         for index in range(512):
             clock[0] += 1 / 1024
             activity.progress({"status": "responding", "outputChars": index + 2})
-        assert len(writes) == guard.poll.call_count == 4
+        assert len(writes) == 4 and guard.poll.call_count == 1
         activity.progress({"status": "validating"})
         activity.progress({"status": "complete"})
-    assert len(writes) == guard.poll.call_count == 6
+    assert len(writes) == 6 and guard.poll.call_count == 3
     saved = latest_model_activity(profiles["workflow"])
     assert saved["thinkingText"] == "开" + "段" * 1024
     assert saved["thinkingChars"] == 1025 and saved["outputChars"] == 513
     assert saved["status"] == "complete"
     record = AgentWorkflowStep.objects.get(pk=activity.step_id)
     assert record.status == "succeeded" and record.finished_at is not None
+
+
+def test_slow_watchdog_refresh_does_not_repeat_authorization_for_progress_saves(
+    profiles, monkeypatch
+):
+    clock, checks = [0.0], []
+    monkeypatch.setattr(model_activity.time, "monotonic", lambda: clock[0])
+
+    def authorize():
+        checks.append(clock[0])
+        clock[0] += 0.75
+
+    guard = ModelStreamGuard(authorize, 1000, clock=lambda: clock[0])
+    activity = activity_for(profiles, guard)
+    activity.progress({"status": "requesting", "attempt": 1})
+    for _ in range(10):
+        clock[0] += 0.5
+        guard.poll()
+        after_watchdog = len(checks)
+        for _ in range(64):
+            activity.thinking("段")
+        # A completed watchdog check already authorized these cached frames.
+        # Rechecking at their progress save would restart the slow-check loop.
+        assert len(checks) == after_watchdog
+    activity.progress({"status": "validating"})
+    activity.progress({"status": "complete"})
+    assert len(checks) == 14
+    saved = latest_model_activity(profiles["workflow"])
+    assert saved["thinkingChars"] == 640 and saved["status"] == "complete"
+
+
+def test_progress_cache_still_forces_revocation_before_validation(
+    profiles, monkeypatch
+):
+    clock, revoked = [0.0], [False]
+    monkeypatch.setattr(model_activity.time, "monotonic", lambda: clock[0])
+
+    def authorize():
+        if revoked[0]:
+            raise PermissionDenied("权限已撤回")
+
+    guard = ModelStreamGuard(authorize, 10, clock=lambda: clock[0])
+    activity = activity_for(profiles, guard)
+    activity.progress({"status": "requesting", "attempt": 1})
+    activity.thinking("已授权片段")
+    revoked[0] = True
+    with pytest.raises(PermissionDenied, match="权限已撤回"):
+        activity.progress({"status": "validating"})
+    with pytest.raises(PermissionDenied, match="权限已撤回"):
+        activity.thinking("撤权后不能保存")
+    activity.fail()
+    saved = latest_model_activity(profiles["workflow"])
+    assert saved["status"] == "failed"
+    assert saved["thinkingText"] == "已授权片段"
 
 
 def test_thinking_tail_survives_refresh_and_validation_recovery(profiles):
