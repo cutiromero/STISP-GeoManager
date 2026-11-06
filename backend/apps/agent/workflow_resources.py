@@ -107,8 +107,11 @@ def resolve_generated_resource(user, policy, identity, workflow, purpose):
     if purpose not in sources:
         raise PermissionDenied("未登记的内部资料用途")
     result = resolve_acl_resource(user, policy, identity)
+    marker = sources[purpose] + str(workflow.pk)
+    if purpose == "approved_changes" and workflow.plan.get("retainedReviewHistory"):
+        marker += f":review-{len(workflow.plan['retainedReviewHistory'])}"
     if (
-        result.source != sources[purpose] + str(workflow.pk)
+        result.source != marker
         or not result.owner_only
         or result.maintainer_id != workflow.owner_id
         or not result.storage_path.startswith(f"table/demo/workflows/{workflow.pk}/")
@@ -121,7 +124,7 @@ def resolve_workflow_resource(user, policy, identity, workflow, *, history=False
     """Read internal data only through the real task that created or bound it."""
     from .models import AgentWorkflow, WorkflowUpload
     from .resource_discovery import resolve_acl_resource, resolve_discoverable_resource
-    from apps.compute.models import ComputeImport
+    from apps.compute.models import ComputeImport, ComputeInput
 
     _check_scope(user, workflow)
     if not AgentWorkflow.objects.filter(
@@ -141,6 +144,19 @@ def resolve_workflow_resource(user, policy, identity, workflow, *, history=False
         output__task__project_tag_id=workflow.project_tag_id,
         output__task_id__in=task_ids,
     )
+    if (
+        history
+        and ComputeInput.objects.filter(
+            resource_id=identity,
+            task_id__in=task_ids,
+            task__owner_id=workflow.owner_id,
+            task__project_tag_id=workflow.project_tag_id,
+            task__trial=False,
+        ).exists()
+    ):
+        # Previous rounds retain real task inputs. This is historical reading
+        # under the current ACL; it never authorizes a new calculation.
+        return resource
     inputs = _workflow_input_ids(workflow)
     if (
         history

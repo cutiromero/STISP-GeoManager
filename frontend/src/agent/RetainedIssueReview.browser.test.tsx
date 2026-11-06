@@ -119,3 +119,49 @@ it("can select a candidate directly from its mapped evidence", () => {
     {},
   );
 });
+
+it("蚀变对象勾选后显示实际候选动作，保留后再选不会沿用静默keep", async () => {
+  const workflow = task();
+  const item = workflow.modificationReview!.suggestions[0]!;
+  Object.assign(item, {
+    featureId: "AG-01",
+    element: "alteration",
+    candidateAction: "exclude",
+    candidateTargetCode: "",
+    allowedActions: ["keep", "exclude", "downweight"],
+  });
+  const onReview = vi.fn();
+  render(
+    <App>
+      <MemoryRouter>
+        <RetainedIssueReview workflow={workflow} onReview={onReview} />
+      </MemoryRouter>
+    </App>,
+  );
+  fireEvent.click(screen.getAllByRole("button", { name: "AG-01" })[0]!);
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "选择当前对象的候选处置" }),
+  );
+  const action = screen.getByRole("combobox", { name: "当前蚀变对象处置" });
+  expect(action.closest(".ant-select")).toHaveTextContent("剔除");
+  fireEvent.mouseDown(action);
+  fireEvent.click(
+    await screen.findByText("保留", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  expect(
+    screen.getByRole("checkbox", { name: "选择当前对象的候选处置" }),
+  ).not.toBeChecked();
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "选择当前对象的候选处置" }),
+  );
+  expect(action.closest(".ant-select")).toHaveTextContent("剔除");
+  fireEvent.click(screen.getByRole("button", { name: "执行所选 1 项并继续" }));
+  expect(onReview).toHaveBeenCalledExactlyOnceWith(
+    "approve",
+    "",
+    ["held-1"],
+    {},
+  );
+});

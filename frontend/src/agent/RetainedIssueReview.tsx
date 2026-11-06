@@ -89,7 +89,7 @@ export default function RetainedIssueReview({
       <Alert
         type="info"
         title={`共 ${total} 条保留对象，已读取 ${items.length} 条`}
-        description="地图展示已读取对象的实际位置，可缩放、平移并点击查看依据。候选动作仅在您明确选择后执行；没有有效候选的对象只能保留核查。"
+        description="地图展示已读取对象的实际位置，蚀变组以定位范围表示。可缩放、平移并点击查看依据。候选动作仅在您明确选择后执行；没有有效候选的对象只能保留核查。"
       />
       {collection.features.length > 0 && (
         <LocalGeologyReviewMaps
@@ -247,7 +247,15 @@ export default function RetainedIssueReview({
             active.candidateAction && (
               <Select
                 aria-label="当前蚀变对象处置"
-                value={actions[active.featureId] ?? "keep"}
+                value={
+                  selected.includes(active.id)
+                    ? (actions[active.featureId] ??
+                      (active.candidateAction === "exclude" ||
+                      active.candidateAction === "downweight"
+                        ? active.candidateAction
+                        : "keep"))
+                    : "keep"
+                }
                 options={[
                   { value: "keep", label: "保留" },
                   { value: "downweight", label: "降权" },
@@ -258,10 +266,12 @@ export default function RetainedIssueReview({
                     active.allowedActions?.includes(option.value),
                 )}
                 onChange={(value) => {
-                  setActions((previous) => ({
-                    ...previous,
-                    [active.featureId!]: value,
-                  }));
+                  setActions((previous) => {
+                    const next = { ...previous };
+                    if (value === "keep") delete next[active.featureId!];
+                    else next[active.featureId!] = value;
+                    return next;
+                  });
                   setSelected((previous) =>
                     value === "keep"
                       ? previous.filter((id) => id !== active.id)

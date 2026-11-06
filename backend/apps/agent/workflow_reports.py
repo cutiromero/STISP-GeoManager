@@ -124,10 +124,22 @@ def authorize_context(
             )
         )
     )
+    current_ids = {
+        str(stage.get("taskId"))
+        for stage in workflow.plan.get("stages", [])
+        if stage.get("taskId")
+    }
+    has_rounds = bool(workflow.plan.get("retainedReviewHistory"))
+    if has_rounds and current_ids - {str(identity) for identity in ids}:
+        raise PermissionDenied("本轮计算没有真实任务步骤绑定")
     tasks = []
     for identity in ids:
         task = authorized_task(
-            user, identity, policy, workflow=workflow, history=history
+            user,
+            identity,
+            policy,
+            workflow=workflow,
+            history=history or has_rounds and str(identity) not in current_ids,
         )
         if task.owner_id != workflow.owner_id or task.status != "succeeded":
             raise PermissionDenied("报告计算记录不属于本次已完成流程")
@@ -143,7 +155,9 @@ def authorize_context(
         if history and historical_deletion(workflow, user, policy, identity):
             continue
         _resource(user, identity)
-    return tasks
+    return (
+        [task for task in tasks if str(task.id) in current_ids] if has_rounds else tasks
+    )
 
 
 def _decision(lines: list[str], value: dict) -> None:

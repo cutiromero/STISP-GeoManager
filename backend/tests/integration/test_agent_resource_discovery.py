@@ -531,3 +531,46 @@ def test_terminal_name_cannot_override_algorithm_manifest_or_workflow_type(env, 
     version.save()
     bound.save()
     assert item.id not in ids(env)
+
+
+def test_previous_round_private_input_is_history_only_and_really_task_bound(env):
+    from apps.compute.models import ComputeInput
+    from apps.agent.workflow_resources import resolve_workflow_resource
+
+    with project_scope(env["scope"]):
+        saved = AgentWorkflow.objects.create(
+            owner=env["user"],
+            workflow_type="geology_generic",
+            model="mock",
+            idempotency_key=uuid.uuid4().hex,
+            plan={"inputs": {}},
+            resource_ids=[],
+        )
+        _, task, _, _ = imported(env, "prior-round")
+        packet = resource(
+            env,
+            "prior-approved",
+            source=f"geology-multi-approved:{saved.id}",
+            owner_only=True,
+            maintainer=env["user"],
+        )
+        ComputeInput.objects.create(task=task, key="approved_changes", resource=packet)
+        with pytest.raises(PermissionDenied):
+            resolve_workflow_resource(
+                env["user"], env["policy"], packet.id, saved, history=True
+            )
+        AgentWorkflowStep.objects.create(
+            workflow=saved,
+            sequence=1,
+            kind="submit_operator",
+            compute_task_id=task.id,
+            status="succeeded",
+        )
+        assert (
+            resolve_workflow_resource(
+                env["user"], env["policy"], packet.id, saved, history=True
+            ).id
+            == packet.id
+        )
+        with pytest.raises(PermissionDenied):
+            resolve_workflow_resource(env["user"], env["policy"], packet.id, saved)
