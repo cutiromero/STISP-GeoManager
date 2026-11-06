@@ -280,3 +280,19 @@ it.each([
   });
   mounted.unmount();
 });
+
+it("入库失败可重试同一成果，不要求重新分析", () => {
+  const retry = vi.fn(),
+    restart = vi.fn();
+  show(
+    task({
+      status: "failed",
+      detail: "结果入库失败，已保留任务与原结果",
+      plan: { phase: "waiting_compute", stages: [] },
+    }),
+    { onRetryImports: retry, onRestart: restart },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "重试成果入库" }));
+  expect(retry).toHaveBeenCalledOnce();
+  expect(restart).not.toHaveBeenCalled();
+});

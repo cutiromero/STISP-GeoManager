@@ -210,6 +210,21 @@ export default function RetainedIssueReview({
             {active.featureId} · {active.ruleId}
           </h4>
           <p>{active.reason}</p>
+          <p>
+            <strong>当前识别：</strong>
+            {active.currentState}
+          </p>
+          <p>
+            <strong>候选处置：</strong>
+            {labels[active.candidateAction ?? ""] ?? "保留核查"}
+            {active.candidateTargetCode
+              ? `，目标代号 ${active.candidateTargetCode}`
+              : active.candidateAction === "downweight"
+                ? "，权重 0.5，保留对象"
+                : active.candidateAction === "exclude"
+                  ? "，从修正后成果剔除"
+                  : ""}
+          </p>
           {!readonly && active.candidateAction && (
             <Checkbox
               aria-label="选择当前对象的候选处置"

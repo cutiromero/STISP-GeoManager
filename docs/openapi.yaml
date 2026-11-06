@@ -8457,6 +8457,46 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/agent/workflows/{workflowId}/retry-imports/:
+    post:
+      tags: [智能体]
+      operationId: retryAgentWorkflowImports
+      summary: 重试工作流成果入库
+      description: 仅本人当前项目failed且waiting_compute的工作流，在实际计算已成功并有失败入库记录时重新校验当前权限、知识、输入、算法和计划摘要，重试同一输出及storage_key的入库并自动继续复查；不提交新计算、不重置预算。核查轮次采用独立成果名称，旧成果保持。其他状态、过期计划或计算名额冲突返回409。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 当前唯一项目
+        schema: {type: integer, minimum: 1}
+      - name: workflowId
+        in: path
+        required: true
+        description: 本人入库失败的工作流
+        schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        description: 最后读取的计划摘要，防止过期操作
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [planHash]
+              properties:
+                planHash: {type: string, description: 当前计划SHA-256, pattern: '^[a-f0-9]{64}$'}
+      responses:
+        '200':
+          description: waiting_compute的持久状态，复用已完成计算
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentWorkflow'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/agent/workflows/{workflowId}/pause/:
     post:
       tags: [智能体]

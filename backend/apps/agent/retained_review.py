@@ -209,3 +209,68 @@ def reopen(workflow, user, policy, expected):
     )
     checkpoint(workflow, "retained_review_opened", {"sourcePlanHash": expected})
     _save(workflow)
+
+
+def retry_imports(workflow, user, policy, expected):
+    from .workflow import _authorize, _state_hash, step
+    from .demo_workflow import authorize_demo, _save, result_import_name
+    from .compute_tools import authorized_task
+    from .workflow_slots import require_compute_slot
+    from apps.compute.models import ComputeImport
+    from apps.compute.services import request_output_import
+    from apps.catalog.models import DataResource, MapLayer
+
+    if (
+        workflow.cancel_requested
+        or workflow.pause_requested
+        or workflow.status != "failed"
+        or workflow.plan.get("phase") != "waiting_compute"
+        or workflow.plan_hash != expected
+        or _state_hash(workflow.plan) != expected
+    ):
+        raise ComputeError("当前任务不是可恢复的入库失败状态，请重新读取", 409)
+    fresh, policy = _authorize(workflow)
+    authorize_demo(workflow, fresh, policy)
+    stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
+    task = authorized_task(fresh, stage.get("taskId"), policy, workflow=workflow)
+    records = list(
+        ComputeImport.objects.filter(output__task=task).select_related(
+            "output", "resource"
+        )
+    )
+    if task.status != "succeeded" or not any(
+        record.status == "failed" for record in records
+    ):
+        raise ComputeError("实际计算尚未完成或没有失败的入库记录", 409)
+    if any(
+        record.requested_by_id != user.id
+        or record.request_source != f"workflow:{workflow.id}"
+        for record in records
+    ):
+        raise PermissionDenied("入库记录不属于当前本人工作流")
+    require_compute_slot(fresh, workflow.id)
+    workflow.status = "waiting_compute"
+    workflow.detail = "正在重试成果入库，复用已完成计算"
+    _save(workflow)
+    for record in records:
+        name = result_import_name(workflow, stage, record.output)
+        if record.status == "failed":
+            request_output_import(
+                fresh, record.output, name=name, request_source=record.request_source
+            )
+        elif (
+            record.status == "ready"
+            and record.resource_id
+            and record.resource.name == record.name
+        ):
+            DataResource.objects.filter(pk=record.resource_id).update(name=name)
+            MapLayer.objects.filter(
+                data_resource_id=record.resource_id, name=record.name
+            ).update(name=name)
+            ComputeImport.objects.filter(pk=record.pk).update(name=name)
+    step(
+        workflow,
+        "result_import_retry",
+        message=workflow.detail,
+        action={"taskId": str(task.id), "planHash": expected},
+    )

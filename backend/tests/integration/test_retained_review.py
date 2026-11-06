@@ -158,3 +158,77 @@ def test_reopen_preserves_prior_round_and_only_resets_downstream():
 def test_completed_scope_cannot_be_reopened_with_stale_plan():
     with pytest.raises(ComputeError, match="变化"):
         reopen(fake(), SimpleNamespace(id=1), {}, "stale")
+
+
+def test_result_names_are_unique_per_review_round_and_keep_original_naming():
+    from datetime import datetime, timezone
+    from apps.agent.demo_workflow import result_import_name
+
+    workflow = fake()
+    workflow.created_at = datetime(2026, 11, 7, tzinfo=timezone.utc)
+    stage = {"name": "apply", "identifier": "geology-multi-apply"}
+    output = SimpleNamespace(label="修正后岩性图")
+    original = result_import_name(workflow, stage, output)
+    workflow.plan["retainedReviewHistory"] = [{"planHash": "first"}]
+    first = result_import_name(workflow, stage, output)
+    workflow.plan["retainedReviewHistory"].append({"planHash": "second"})
+    second = result_import_name(workflow, stage, output)
+    assert len({original, first, second}) == 3
+    assert first.startswith("核查第1轮") and second.startswith("核查第2轮")
+
+
+def test_retry_imports_refuses_a_stale_or_non_failed_workflow():
+    from apps.agent.retained_review import retry_imports
+
+    workflow = fake()
+    workflow.cancel_requested = False
+    workflow.pause_requested = False
+    with pytest.raises(ComputeError, match="可恢复"):
+        retry_imports(workflow, SimpleNamespace(id=1), {}, workflow.plan_hash)
+
+
+def test_retry_queues_the_same_failed_output_without_new_computation():
+    from apps.agent.retained_review import retry_imports
+
+    workflow = fake()
+    workflow.status = "failed"
+    workflow.cancel_requested = False
+    workflow.pause_requested = False
+    workflow.plan.update(phase="waiting_compute", stageIndex=1)
+    workflow.plan_hash = _state_hash(workflow.plan)
+    owner = SimpleNamespace(id=1)
+    task = SimpleNamespace(id="old-apply", status="succeeded")
+    output = SimpleNamespace(id=10, label="修正后岩性图")
+    record = SimpleNamespace(
+        status="failed",
+        requested_by_id=1,
+        request_source="workflow:workflow",
+        output=output,
+    )
+    with (
+        patch("apps.agent.workflow._authorize", return_value=(owner, {})),
+        patch("apps.agent.demo_workflow.authorize_demo"),
+        patch("apps.agent.compute_tools.authorized_task", return_value=task),
+        patch("apps.compute.models.ComputeImport") as imports,
+        patch("apps.agent.workflow_slots.require_compute_slot"),
+        patch("apps.agent.demo_workflow._save"),
+        patch(
+            "apps.agent.demo_workflow.result_import_name",
+            return_value="核查第1轮 · 修正后岩性图",
+        ),
+        patch("apps.compute.services.request_output_import") as queue,
+        patch(
+            "apps.compute.services.submit",
+            side_effect=AssertionError("no new calculation"),
+        ),
+        patch("apps.agent.workflow.step"),
+    ):
+        imports.objects.filter.return_value.select_related.return_value = [record]
+        retry_imports(workflow, owner, {}, workflow.plan_hash)
+    queue.assert_called_once_with(
+        owner,
+        output,
+        name="核查第1轮 · 修正后岩性图",
+        request_source="workflow:workflow",
+    )
+    assert workflow.status == "waiting_compute" and workflow.operator_steps == 3

@@ -60,6 +60,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
     initialThinking,
     onAdjustInputs,
     onReviewRetained,
+    onRetryImports,
     reviewError,
   } = props;
   const [view, setView] = useState("overview");
@@ -357,9 +358,22 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
             type={workflow.status === "failed" ? "error" : "info"}
             title={workflow.detail}
           />
-          <p className="logic-description">{workflowNextAction(workflow)}</p>
+          <p className="logic-description">
+            {workflow.status === "failed" &&
+            workflow.plan.phase === "waiting_compute" &&
+            workflow.detail.startsWith("结果入库失败")
+              ? "实际计算已完成，输出文件保留。可重试入库并接着复查，无需重新计算。"
+              : workflowNextAction(workflow)}
+          </p>
           <div className="logic-primary-actions">
-            {stopped && onRestart ? (
+            {workflow.status === "failed" &&
+            workflow.plan.phase === "waiting_compute" &&
+            workflow.detail.startsWith("结果入库失败") &&
+            onRetryImports ? (
+              <Button type="primary" loading={busy} onClick={onRetryImports}>
+                重试成果入库
+              </Button>
+            ) : stopped && onRestart ? (
               <Button type="primary" disabled={busy} onClick={onRestart}>
                 调整后重新分析
               </Button>

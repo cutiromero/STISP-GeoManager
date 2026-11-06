@@ -20630,6 +20630,62 @@ export type ReviewRetainedAgentWorkflowResponses = {
 
 export type ReviewRetainedAgentWorkflowResponse = ReviewRetainedAgentWorkflowResponses[keyof ReviewRetainedAgentWorkflowResponses];
 
+export type RetryAgentWorkflowImportsData = {
+    /**
+     * 最后读取的计划摘要，防止过期操作
+     */
+    body: {
+        /**
+         * 当前计划SHA-256
+         */
+        planHash: string;
+    };
+    headers: {
+        /**
+         * 当前唯一项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 本人入库失败的工作流
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/agent/workflows/{workflowId}/retry-imports/';
+};
+
+export type RetryAgentWorkflowImportsErrors = {
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+};
+
+export type RetryAgentWorkflowImportsError = RetryAgentWorkflowImportsErrors[keyof RetryAgentWorkflowImportsErrors];
+
+export type RetryAgentWorkflowImportsResponses = {
+    /**
+     * waiting_compute的持久状态，复用已完成计算
+     */
+    200: AgentWorkflow;
+};
+
+export type RetryAgentWorkflowImportsResponse = RetryAgentWorkflowImportsResponses[keyof RetryAgentWorkflowImportsResponses];
+
 export type PauseAgentWorkflowData = {
     body?: never;
     headers: {

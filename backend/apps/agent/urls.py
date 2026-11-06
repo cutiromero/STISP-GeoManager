@@ -37,6 +37,7 @@ urlpatterns = [
     path(
         "workflows/<uuid:workflow_id>/retained-review/", views.workflow_retained_review
     ),
+    path("workflows/<uuid:workflow_id>/retry-imports/", views.workflow_retry_imports),
     path("workflows/<uuid:workflow_id>/pause/", views.workflow_pause),
     path("workflows/<uuid:workflow_id>/resume/", views.workflow_resume),
     path("workflows/<uuid:workflow_id>/report/", workflow_report_views.workflow_report),

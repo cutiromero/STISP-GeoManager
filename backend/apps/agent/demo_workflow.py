@@ -1012,6 +1012,15 @@ def _prepare_and_submit_stage(workflow, user, p, stage) -> None:
         _save(workflow)
 
 
+def result_import_name(workflow, stage, output):
+    created = timezone.localtime(workflow.created_at)
+    number = len(workflow.plan.get("retainedReviewHistory", []))
+    prefix = f"核查第{number}轮 · " if number else ""
+    return (
+        f"{prefix}{stage_title(workflow, stage)} · {output.label} · {created:%m-%d %H:%M:%S}"
+    )[:160]
+
+
 def _collection_cancelled(workflow) -> bool:
     """Call inside a transaction before imports or re-queuing the next stage."""
     current = locked_workflow(workflow.id)
@@ -1101,9 +1110,8 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
                 user, p = _authorize(workflow)
                 authorize_demo(workflow, user, p)
             source = "" if stage.get("manualApproved") else f"workflow:{workflow.id}"
-            created = timezone.localtime(workflow.created_at)
             for output in missing:
-                name = f"{stage_title(workflow, stage)} · {output.label} · {created:%m-%d %H:%M:%S}"
+                name = result_import_name(workflow, stage, output)
                 existing[output.id] = request_output_import(
                     user, output, name=name, request_source=source
                 )

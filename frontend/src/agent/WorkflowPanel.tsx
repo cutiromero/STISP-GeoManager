@@ -789,7 +789,9 @@ export default function WorkflowPanel({
       setBusy(false);
     }
   };
-  const controlWorkflow = async (action: "pause" | "resume") => {
+  const controlWorkflow = async (
+    action: "pause" | "resume" | "retryImports",
+  ) => {
     if (!workflow || mutationInFlight.current) return;
     mutationInFlight.current = true;
     setBusy(true);
@@ -798,7 +800,12 @@ export default function WorkflowPanel({
       setWorkflow(
         action === "pause"
           ? await agentApi.pauseWorkflow(workflow.id)
-          : await agentApi.resumeWorkflow(workflow.id),
+          : action === "resume"
+            ? await agentApi.resumeWorkflow(workflow.id)
+            : await agentApi.retryWorkflowImports(
+                workflow.id,
+                workflow.planHash,
+              ),
       );
     } catch (reason) {
       report(reason);
@@ -1302,6 +1309,7 @@ export default function WorkflowPanel({
                   }
                 : {})}
               workflow={workflow}
+              onRetryImports={() => void controlWorkflow("retryImports")}
               onReviewRetained={() => {
                 if (busy) return;
                 setBusy(true);

@@ -1500,11 +1500,11 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 - Status: BackendReady
 - Owner: 同一任务依次负责契约、后端和前端。
-- Endpoints: POST /api/agent/workflows/{workflowId}/retained-review/；GET工作流inspection；既有confirm。
+- Endpoints: POST /api/agent/workflows/{workflowId}/retained-review/；GET工作流inspection；既有confirm；POST /api/agent/workflows/{workflowId}/retry-imports/。
 - Change type: 新增保留项核查动作及独立分页，固定已授权范围与人工候选组合。
 - OpenAPI change: inspection增加part=retained，返回未实际处置的待裁定/例外及可定位几何；AgentModificationSuggestion补充allowedActions；新增retained-review请求planHash及状态/权限错误。
 - Mock examples: 105-agent-workflow-card.json。
 - Frontend reason: 自动处置无需逐项确认，用户能够单独勾选和定位保留对象，完成任务也可保存上一轮成果后核查。
 - Backend implementation notes: 原本人、单项目、当前知识、输入、固定算法授权保留；只合入服务端固定自动范围与本次明确人工ID。未选对象保留，原报告和计算按轮次保存，不提高预算。正式知识发布仅元信息变化且实质语义与历史修订相同时可衔接旧冻结绑定。
 - Verification: 默认不选、明确选择、自动范围不可篡改、过期计划、跨项目/他人拒绝、上一轮成果保留、分页几何与地图联动。
-- Result: 后端91项及8项子检查通过，相关前端51项通过；实际候选计算与数据登记验收单独记录。
+- Result: 后端91项及8项子检查通过，相关前端51项通过；候选实际处置197项、保留44项。核查轮次成果命名与入库恢复已同步完善，后续候选验收单独记录。

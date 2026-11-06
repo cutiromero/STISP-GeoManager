@@ -305,6 +305,12 @@ export const agentApi = {
       ...options,
       validate: assertWorkflowList,
     }),
+  retryWorkflowImports: (id: string, planHash: string) =>
+    requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/retry-imports/`, {
+      method: "POST",
+      body: { planHash },
+      validate: assertWorkflow,
+    }),
   reviewRetainedWorkflow: (id: string, planHash: string) =>
     requestJson<AgentWorkflow>(`/api/agent/workflows/${id}/retained-review/`, {
       method: "POST",

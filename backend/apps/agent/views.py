@@ -1722,3 +1722,20 @@ def workflow_retained_review(request, workflow_id):
         policy = require_access(request.user, "agent", workflow.model)
         reopen(workflow, request.user, policy, value.get("planHash"))
     return JsonResponse(workflow_json(workflow, view="card"))
+
+
+@endpoint(["POST"])
+def workflow_retry_imports(request, workflow_id):
+    from .retained_review import retry_imports
+    from .workflow_controls import locked_workflow
+    from apps.core.client_build import current_browser
+
+    if not current_browser(request):
+        raise ApiProblem("平台已更新，请刷新后重试入库", 409)
+    value = body(request, ["planHash"])
+    with transaction.atomic():
+        get_object_or_404(AgentWorkflow.objects, pk=workflow_id, owner=request.user)
+        workflow = locked_workflow(workflow_id)
+        policy = require_access(request.user, "agent", workflow.model)
+        retry_imports(workflow, request.user, policy, value.get("planHash"))
+    return JsonResponse(workflow_json(workflow, view="card"))

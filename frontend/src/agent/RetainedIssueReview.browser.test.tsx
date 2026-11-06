@@ -24,6 +24,7 @@ function task() {
       ruleId: "L-06",
       status: "review",
       candidateAction: "reclassify",
+      candidateTargetCode: "Qp3pal",
       reason: "紧凑度异常，需要核对冲积扇例外",
     },
     {

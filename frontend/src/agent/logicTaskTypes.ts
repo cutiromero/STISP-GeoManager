@@ -8,4 +8,5 @@ export type LogicTaskProps = ComponentProps<typeof WorkflowResults> & {
   initialThinking?: string;
   onAdjustInputs?: () => void;
   onReviewRetained?: () => void;
+  onRetryImports?: () => void;
 };

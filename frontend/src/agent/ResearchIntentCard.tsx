@@ -193,7 +193,9 @@ export default function ResearchIntentCard({
       if (alive.current) setBusy(false);
     }
   };
-  const controlWorkflow = async (action: "pause" | "resume") => {
+  const controlWorkflow = async (
+    action: "pause" | "resume" | "retryImports",
+  ) => {
     if (!workflow || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
@@ -202,11 +204,16 @@ export default function ResearchIntentCard({
       const next =
         action === "pause"
           ? await agentApi.pauseWorkflow(workflow.id)
-          : await agentApi.resumeWorkflow(workflow.id);
+          : action === "resume"
+            ? await agentApi.resumeWorkflow(workflow.id)
+            : await agentApi.retryWorkflowImports(
+                workflow.id,
+                workflow.planHash,
+              );
       if (!alive.current) return;
       setWorkflow(next);
       onWorkflow.current?.(next);
-      if (action === "resume") setWorkflowRevision((value) => value + 1);
+      if (action !== "pause") setWorkflowRevision((value) => value + 1);
     } catch (reason) {
       if (alive.current)
         setError(
@@ -351,6 +358,7 @@ export default function ResearchIntentCard({
         initialThinking={run.thinkingText}
         onAdjustInputs={() => void update("answer", "修改角色和字段")}
         onReviewRetained={() => void reviewRetained()}
+        onRetryImports={() => void controlWorkflow("retryImports")}
         inputReview={
           workflow.plan.phase === "review_mapping" &&
           workflow.plan.fieldMappingReview ? (
