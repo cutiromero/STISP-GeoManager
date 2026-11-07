@@ -64,6 +64,11 @@ def test_rule_registration_keeps_predecessor_and_is_idempotent(multi, monkeypatc
         lambda *args: [original | {"trialBinding": {"ruleId": "P-02"}}],
     )
     command = Command()
+    monkeypatch.setattr(
+        "apps.agent.management.commands.register_prospect_rules.is_superadmin",
+        lambda actor: actor.pk == multi["owner"].pk,
+    )
+    command.handle(rules_resource=source.pk, actor=multi["owner"].pk, apply=False)
     command.register(source, multi["owner"], True)
     resource = DataResource.objects.get(code=RESOURCE_CODE)
     path = table_data_path(resource.storage_path.removeprefix("table/"))

@@ -23,7 +23,7 @@ from apps.knowledge.prospect_rules import (
 )
 from apps.knowledge.services import serialize
 from apps.knowledge.trial_rules import SCENARIO, read_bound_rules
-from apps.projects.context import ProjectScope, project_scope
+from apps.projects.context import ProjectScope, project_scope, is_superadmin
 from apps.agent.tools import frame
 from apps.agent.geology_multi import FIELDS
 
@@ -38,7 +38,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         actor = get_user_model().objects.get(pk=options["actor"], is_active=True)
-        if not actor.is_superuser:
+        if not is_superadmin(actor):
             raise CommandError("仅平台超级管理员可登记正式规则包")
         source = DataResource._base_manager.get(
             pk=options["rules_resource"], status="active"
