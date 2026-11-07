@@ -388,6 +388,16 @@ def _read_layer_from_path(
 def _read_geopackage_layer(
     gpd, path: Path, layer_name: str, *, bbox=None, where=None, rows=None
 ):
+    # Pyogrio treats max_features=0 as unlimited. Use an SQL false predicate
+    # for schema-only reads instead of accidentally scanning the whole layer.
+    if rows == 0 or (
+        isinstance(rows, slice)
+        and rows.stop is not None
+        and rows.stop <= (rows.start or 0)
+    ):
+        return gpd.read_file(
+            path, layer=layer_name, where=_combine_where_clauses("0=1", where)
+        )
     read_options = {}
     if where:
         read_options["where"] = where
@@ -401,10 +411,9 @@ def _read_geopackage_layer(
         return gpd.read_file(path, layer=layer_name, **read_options)
     candidate_ids = _rtree_candidate_feature_ids(path, layer_name, read_bbox)
     if candidate_ids == []:
-        empty_options = {
-            key: value for key, value in read_options.items() if key != "rows"
-        }
-        return gpd.read_file(path, layer=layer_name, rows=0, **empty_options)
+        return gpd.read_file(
+            path, layer=layer_name, where=_combine_where_clauses("0=1", where)
+        )
     if candidate_ids is not None and len(candidate_ids) <= MAX_RTREE_WHERE_IDS:
         where_clause = _feature_id_where_clause(path, layer_name, candidate_ids)
         if where_clause:

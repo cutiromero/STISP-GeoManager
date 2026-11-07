@@ -437,6 +437,7 @@ export interface MapViewState {
 }
 
 export interface LoadedVectorLayer {
+  viewportOnly?: boolean;
   id: string;
   name: string;
   layerType: "vector";

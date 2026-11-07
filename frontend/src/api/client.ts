@@ -1136,11 +1136,16 @@ export const api = {
       `/api/catalog/resources/${resourceId}/nongeo-query/`,
       { method: "POST", body: payload },
     ),
-  queryResource: (resource: ResourceListItem, payload: ResourceQueryPayload) =>
+  queryResource: (
+    resource: ResourceListItem,
+    payload: ResourceQueryPayload,
+    signal?: AbortSignal,
+  ) =>
     unwrap<ResourceQueryResult>(
       sdk.queryResource({
         path: { id: resource.id },
         body: payload,
+        signal,
       }),
     ),
   exportLayers: (payload: ExportLayersPayload) =>

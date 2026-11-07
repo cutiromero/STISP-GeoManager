@@ -15,6 +15,7 @@ from apps.catalog.vector_store import (
     _field_type,
     _json_value,
     _limit,
+    _read_geopackage_layer,
     _returned_bounds,
     _rtree_candidate_feature_ids,
     apply_attribute_filters,
@@ -156,6 +157,40 @@ class GeopackageSqliteMetadataTests(SimpleTestCase):
                 ),
                 [1],
             )
+
+
+class EmptyGeopackageQueryTests(SimpleTestCase):
+    def test_empty_spatial_index_and_schema_reads_return_no_features(self):
+        import geopandas as gpd
+        from shapely.geometry import Point
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "vector.gpkg"
+            gpd.GeoDataFrame(
+                {"name": ["inside"]},
+                geometry=[Point(87.6, 43.8)],
+                crs="EPSG:4326",
+            ).to_file(path, layer="points", driver="GPKG")
+            for rows in [0, slice(0, 0), slice(4, 4)]:
+                with self.subTest(rows=rows):
+                    empty = _read_geopackage_layer(gpd, path, "points", rows=rows)
+                    self.assertEqual(len(empty), 0)
+                    self.assertIn("name", empty.columns)
+                    self.assertEqual(empty.crs.to_epsg(), 4326)
+            for rows in [slice(0, 1000), slice(1000, 2000)]:
+                empty = _read_geopackage_layer(
+                    gpd,
+                    path,
+                    "points",
+                    bbox=(-140, -30, -135, -25),
+                    rows=rows,
+                    where="name = 'inside'",
+                )
+                self.assertEqual(len(empty), 0)
+            bounded = _read_geopackage_layer(
+                gpd, path, "points", bbox=(87, 43, 88, 44), rows=slice(0, 1)
+            )
+            self.assertEqual(len(bounded), 1)
 
 
 class CoerceValueTests(SimpleTestCase):

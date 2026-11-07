@@ -16,6 +16,7 @@ import {
 } from "../utils/geometry";
 import { syncVectorInteractions } from "./featureInteraction";
 import { getMapState } from "./mapState";
+import { isViewportVectorLayer } from "./viewportVectorQuery";
 import { fitBoundsOptions, rasterFitBoundsOptions } from "./mapViewport";
 import { addRasterLayer } from "./rasterLayerSync";
 import { registerPlatformSymbolImages } from "./symbolImages";
@@ -75,7 +76,7 @@ export function syncLoadedLayers(
       map.addSource(sourceId, vectorGeojsonSourceOptions(layer));
       state.vectorSourceKeys.set(sourceId, nextSourceKey);
       state.sourceDataRefs.set(sourceId, layer.geojson);
-      if (layer.visible) {
+      if (layer.visible && !isViewportVectorLayer(layer)) {
         const bounds = combinedFeatureBounds([layer.geojson]);
         if (bounds) newVectorBounds.push(bounds);
       }

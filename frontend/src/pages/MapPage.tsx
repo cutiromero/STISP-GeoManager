@@ -49,6 +49,13 @@ import MapCompositionPanel from "../components/map-composition/MapCompositionPan
 import { useAppContext } from "../contexts/AppContext";
 import { LayerContext, type LayerContextValue } from "../hooks/LayerContext";
 import { useLayerGroups } from "../hooks/useLayerGroups";
+import { useViewportVectorLayers } from "../hooks/useViewportVectorLayers";
+import {
+  applyViewportResult,
+  isLargeVectorResource,
+  isViewportVectorLayer,
+  viewportQueryPayload,
+} from "../map/viewportVectorQuery";
 import { useUniqueLayerLoad } from "../hooks/useUniqueLayerLoad";
 import { useMapCompositions } from "../hooks/useMapCompositions";
 import { useRasterRender } from "../hooks/useRasterRender";
@@ -602,6 +609,7 @@ export function mapUrlResourceBounds(
   const selected = layers.filter((layer) =>
     requested.has(layer.sourceResource.id),
   );
+  if (selected.some(isViewportVectorLayer)) return null;
   if (
     resourceIds.some(
       (id) => !selected.some((layer) => layer.sourceResource.id === id),
@@ -804,6 +812,16 @@ function MapWorkspace() {
   const layerGroups = useLayerGroups(
     `${user ? `user-${user.id}` : "anonymous"}:project-${getActiveProject()}`,
   );
+  useViewportVectorLayers({
+    map: mapObject,
+    scope: `${user?.id ?? "anonymous"}:${getActiveProject()}`,
+    enabled: permissions.canQueryData && permissions.canLoadVectorLayer,
+    groups: layerGroups.groups,
+    limit: bootstrap.limits.queryResultLimit,
+    updateLayer: layerGroups.updateLayer,
+    onError: (detail) =>
+      message.error({ key: "viewport-query-error", content: detail }),
+  });
   const uniqueLayerLoad = useUniqueLayerLoad({
     scope: `${user?.id ?? "anonymous"}:${getActiveProject()}`,
     groups: layerGroups.groups,
@@ -1669,15 +1687,39 @@ function MapWorkspace() {
     const trackQuerying = options.trackQuerying !== false;
     if (trackQuerying) setQuerying(true);
     try {
-      const result = await api.queryResource(resource, {
-        attributeFilters,
-        spatialFilter: options.spatialFilter,
-        limit: bootstrap.limits.queryResultLimit,
-        ...(searchParams.get("displayGeometry") === "1" &&
-        String(resource.id) === searchParams.get("resourceId")
-          ? { displayGeometry: true }
-          : {}),
-      });
+      const scope = getActiveProject();
+      const viewportOnly =
+        !options.spatialFilter &&
+        !attributeFilters.length &&
+        isLargeVectorResource(resource);
+      const bounds = mapInstanceRef.current?.getBounds();
+      if (viewportOnly && !bounds) {
+        message.warning(english ? "The map is not ready" : "地图尚未准备好");
+        return false;
+      }
+      const payload =
+        viewportOnly && bounds
+          ? viewportQueryPayload(
+              [
+                bounds.getWest(),
+                bounds.getSouth(),
+                bounds.getEast(),
+                bounds.getNorth(),
+              ].map((v) => +v.toFixed(5)) as [number, number, number, number],
+              bootstrap.limits.queryResultLimit,
+              profile.geometryType,
+            )
+          : {
+              attributeFilters,
+              spatialFilter: options.spatialFilter,
+              limit: bootstrap.limits.queryResultLimit,
+              ...(searchParams.get("displayGeometry") === "1" &&
+              String(resource.id) === searchParams.get("resourceId")
+                ? { displayGeometry: true }
+                : {}),
+            };
+      const result = await api.queryResource(resource, payload);
+      if (scope !== getActiveProject()) return false;
       options.reportProgress?.({
         percent: 82,
         message: english
@@ -1688,7 +1730,7 @@ function MapWorkspace() {
       const resultMessage = english
         ? `Query matched ${result.totalCount} records; ${result.returnedCount} returned`
         : `查询命中 ${result.totalCount} 条，返回 ${result.returnedCount} 条`;
-      if (result.returnedCount === 0) {
+      if (result.returnedCount === 0 && !viewportOnly) {
         message.warning(resultMessage);
         return false;
       }
@@ -1696,6 +1738,15 @@ function MapWorkspace() {
         attributeFilters,
         spatialFilter: options.spatialFilter,
       });
+      if (viewportOnly) {
+        const key = JSON.stringify([resource.id, resource.updatedAt, payload]);
+        group.children = group.children.map((layer) =>
+          layer.layerType === "vector"
+            ? applyViewportResult(layer, result, key)
+            : layer,
+        );
+        group.summary = group.children[0]?.summary ?? group.summary;
+      }
       layerGroups.addGroup(group);
       setSelectedLayerId(group.children[0]?.id ?? null);
       options.reportProgress?.({
