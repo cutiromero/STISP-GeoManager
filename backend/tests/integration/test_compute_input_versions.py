@@ -314,3 +314,47 @@ def test_signed_manifest_rejects_changed_evidence_without_rescanning_source(
     with pytest.raises(ComputeError, match="缓存已变化"):
         export_to(record, root, "rejected")
     assert not (root / "rejected/features.gpkg").exists()
+
+
+def test_sqlite_without_rowid_can_reuse_selected_table(setup_compute):
+    from apps.catalog.models import DataResource
+    from apps.compute.models import ComputeTask
+    from apps.core.storage import table_data_path
+
+    env = setup_compute
+    source = table_data_path("data.sqlite")
+    with sqlite3.connect(source) as db:
+        db.execute(
+            "CREATE TABLE no_rowid (code TEXT PRIMARY KEY,value REAL) WITHOUT ROWID"
+        )
+        db.executemany("INSERT INTO no_rowid VALUES (?,?)", [("b", 2), ("a", 1)])
+    resource = DataResource.objects.create(
+        name="显式主键资料",
+        code="without-rowid",
+        data_type="table",
+        file_format="SQLITE",
+        storage_path="no_rowid",
+        maintainer=env["owner"],
+    )
+    task = ComputeTask.objects.create(
+        name="无隐式行号输入",
+        owner=env["owner"],
+        version=env["version"],
+        idempotency_key="without-rowid",
+        request_hash="c" * 64,
+    )
+    record = ComputeInput.objects.create(
+        task=task,
+        resource=resource,
+        key="table",
+        snapshot={"updatedAt": resource.updated_at.isoformat()},
+    )
+    a = env["tmp"] / "without-first"
+    a.mkdir()
+    first = freeze_input(record, a)
+    with sqlite3.connect(source) as db:
+        db.execute("INSERT INTO samples VALUES ('unrelated',99)")
+    b = env["tmp"] / "without-second"
+    b.mkdir()
+    second = freeze_input(record, b)
+    assert first["sha256"] == second["sha256"] and second["preparation"]["reused"]

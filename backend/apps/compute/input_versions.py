@@ -73,7 +73,7 @@ def _table_digest(path, table, vector):
                 (table,),
             ).fetchall()
             digest.update(json.dumps(spatial).encode())
-        for row in db.execute(f"SELECT * FROM {quoted} ORDER BY rowid"):
+        for row in db.execute(f"SELECT * FROM {quoted}"):
             for value in row:
                 raw = (
                     value
