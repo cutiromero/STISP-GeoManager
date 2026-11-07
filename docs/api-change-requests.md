@@ -1540,6 +1540,6 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 ## 2026-11-07 输入版本复用与自动处置位置（已实施）
 
-- `GET /api/agent/workflows/{workflowId}/?view=detail&part=retained`的`plan.reviewIndex`新增可选`automaticMap`。从完整冻结授权集合提取轻量位置，包含total、locatedCount及位置点/count；不扩大人工候选、审批集合或数据权限。前端低对比标记按当前视口聚合，缩放/勾选不重新请求。mock见105-agent-workflow-card.json。
+- `GET /api/agent/workflows/{workflowId}/?view=inspection&part=retained`的`plan.reviewIndex`新增可选`automaticMap`。从完整冻结授权集合提取轻量位置，包含total、locatedCount及位置点/count；不扩大人工候选、审批集合或数据权限。前端低对比标记按当前视口聚合，缩放/勾选不重新请求。mock见105-agent-workflow-card.json。
 - 计算输出metadata增加`executionMetrics`说明输入准备、算法执行、结果检查的耗时和输入物化/复用次数。输入快照缓存仅复用受控内容版本，每次使用仍重新授权和检查源文件身份，算法收到独立副本。内部SDK增加与文件身份绑定的证据标识读取，旧算子仍按既有协议执行。
 - 验证：跨用户/项目与撤权、原地内容改动、共享数据库的其他图层变化、并发/损坏缓存、算子修改输入、冷/热准备、科学输出一致性；自动标记全量计数与分页独立、缩放聚合、人工勾选不受影响。
