@@ -351,3 +351,6 @@ def build_inputs(workflow, user, policy) -> None:
         action={"inputs": inputs, "workingEpsg": epsg, "droppedFaults": dropped},
         message=f"已生成工作副本，面积与距离按EPSG:{epsg}计算",
     )
+    from .review_map_warmup import warm_review_background
+
+    warm_review_background(workflow.id, [copies["lithology"].id, copies["faults"].id])

@@ -61,6 +61,7 @@ export default function RetainedIssueReview({
           feature_id: item.featureId,
           rule_id: item.ruleId,
           status: item.status,
+          element: item.element,
           label: item.featureId,
           name: item.featureId,
           _review_outlineOnly: item.element === "alteration",

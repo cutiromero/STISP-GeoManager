@@ -163,7 +163,11 @@ const VectorFeatures = memo(function VectorFeatures({
                 }
                 strokeWidth={outline ? 3.5 : color ? 2.1 : 0.8}
                 strokeDasharray={
-                  excluded || layer === "actual-differences" ? "3 2" : undefined
+                  excluded ||
+                  layer === "actual-differences" ||
+                  feature.properties._review_navigation === true
+                    ? "3 2"
+                    : undefined
                 }
                 vectorEffect="non-scaling-stroke"
               />

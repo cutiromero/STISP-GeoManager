@@ -122,6 +122,71 @@ export default function RetainedReviewMap({
     }),
     [objects, focused],
   );
+  const markers = useMemo<GeoJsonFeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: objects.features.flatMap((feature) => {
+        const extent = reviewBounds({
+          type: "FeatureCollection",
+          features: [feature],
+        });
+        if (!extent) return [];
+        const element = String(feature.properties.element ?? "");
+        return [
+          {
+            ...feature,
+            geometry: {
+              type: "Point" as const,
+              coordinates: [
+                (extent[0] + extent[2]) / 2,
+                (extent[1] + extent[3]) / 2,
+              ],
+            },
+            properties: {
+              ...feature.properties,
+              _review_outlineOnly: false,
+              fill_color:
+                element === "lithology"
+                  ? "#2381b5"
+                  : element === "structure"
+                    ? "#d96535"
+                    : "#9b59a1",
+              legend_label:
+                element === "lithology"
+                  ? "岩性疑点定位"
+                  : element === "structure"
+                    ? "构造疑点定位"
+                    : "蚀变组定位",
+            },
+          },
+        ];
+      }),
+    }),
+    [objects],
+  );
+  const spotlightFeatures = useMemo<GeoJsonFeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: focus.features.flatMap((feature) =>
+        feature.properties._review_outlineOnly === true
+          ? markers.features.filter((marker) => marker.id === feature.id)
+          : [feature],
+      ),
+    }),
+    [focus, markers],
+  );
+  const ranges = useMemo<GeoJsonFeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: focus.features
+        .filter((feature) => feature.properties._review_outlineOnly === true)
+        .map((feature) => ({
+          ...feature,
+          properties: { ...feature.properties, _review_navigation: true },
+        })),
+    }),
+    [focus],
+  );
   const bounds = useMemo(
     () =>
       reviewBounds(
@@ -146,13 +211,24 @@ export default function RetainedReviewMap({
         : []),
       {
         key: "held-evidence",
-        label: "待核查对象",
+        label: "疑点定位",
         before: empty,
-        after: objects,
+        after: markers,
         color: "#dc861d",
       },
+      ...(ranges.features.length
+        ? [
+            {
+              key: "navigation-range",
+              label: "蚀变组定位范围",
+              before: empty,
+              after: ranges,
+              color: "#d98524",
+            },
+          ]
+        : []),
     ],
-    [background, objects],
+    [background, markers, ranges],
   );
   const inspect = (feature: GeoJsonFeatureCollection["features"][number]) => {
     const target = objects.features.find(
@@ -222,7 +298,7 @@ export default function RetainedReviewMap({
           focused
             ? {
                 before: background ? empty : focus,
-                after: focus,
+                after: spotlightFeatures,
                 beforeLabel: background
                   ? undefined
                   : String(focus.features[0]?.properties.feature_id ?? ""),
