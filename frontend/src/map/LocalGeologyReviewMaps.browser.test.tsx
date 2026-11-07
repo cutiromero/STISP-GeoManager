@@ -89,6 +89,17 @@ function maps() {
   return screen.getAllByRole("group", { name: "本地矢量图层" });
 }
 
+it("没有修改几何时不显示实际修改范围图例", () => {
+  render(
+    <LocalGeologyReviewMaps
+      {...props}
+      differences={{ type: "FeatureCollection", features: [] }}
+      onSelect={vi.fn()}
+    />,
+  );
+  expect(screen.queryByText("实际修改范围")).toBeNull();
+});
+
 it("点击及键盘聚焦使用真实几何边界，不显示包围盒外框", () => {
   const inspect = vi.fn();
   show(vi.fn(), inspect);

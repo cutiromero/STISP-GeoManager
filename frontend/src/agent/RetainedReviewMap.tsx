@@ -187,15 +187,21 @@ export default function RetainedReviewMap({
     }),
     [focus],
   );
-  const bounds = useMemo(
-    () =>
-      reviewBounds(
-        locate && focus.features.length
-          ? focus
-          : (background?.before ?? objects),
-      ),
-    [locate, focus, background, objects],
-  );
+  const bounds = useMemo(() => {
+    if (!locate || !focus.features.length)
+      return reviewBounds(background?.before ?? objects);
+    const extent = reviewBounds(focus);
+    if (!extent || focus.features[0]?.properties.element === "alteration")
+      return extent;
+    const x = Math.max((extent[2] - extent[0]) / 2, 0.0007);
+    const y = Math.max((extent[3] - extent[1]) / 2, 0.0007);
+    return [extent[0] - x, extent[1] - y, extent[2] + x, extent[3] + y] as [
+      number,
+      number,
+      number,
+      number,
+    ];
+  }, [locate, focus, background, objects]);
   const overlays = useMemo(
     () => [
       ...(background
@@ -306,6 +312,7 @@ export default function RetainedReviewMap({
                   focus.features[0]?.properties.feature_id ?? "",
                 ),
                 outlineOnly: true,
+                dimBackground: false,
               }
             : null
         }

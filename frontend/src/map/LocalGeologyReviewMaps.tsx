@@ -583,14 +583,16 @@ export default function LocalGeologyReviewMaps({
         ) : (
           legend
         )}
-        <span>
-          <i className="geology-review-change-swatch" />
-          {after
-            ? "实际修改范围"
-            : inspectionOnly
-              ? "检查问题范围"
-              : "建议修改范围"}
-        </span>
+        {differences.features.length > 0 && (
+          <span>
+            <i className="geology-review-change-swatch" />
+            {after
+              ? "实际修改范围"
+              : inspectionOnly
+                ? "检查问题范围"
+                : "建议修改范围"}
+          </span>
+        )}
       </div>
     </>
   );
