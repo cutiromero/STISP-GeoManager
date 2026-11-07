@@ -406,13 +406,18 @@ def answer(source, user, policy, answers, text):
         intent["parameters"] = {}
         intent["message"] = "资料角色已确认，正在判断字段含义；请等待字段确认卡片。"
         _save(source, intent, workflow)
-    if intent.get("_reuseConfirmedConfiguration"):
-        from .logic_configuration import matching_configuration
+        if (
+            intent.get("_reuseConfirmedConfiguration")
+            and workflow.status == "queued"
+            and not workflow.plan.get("phase")
+        ):
+            from .logic_configuration import matching_configuration
 
-        uploads = validate_batch(
-            user, source.conversation, intent["_uploadBatchId"], run=source
-        )
-        reusable = matching_configuration(source, uploads)
-        if reusable:
-            workflow.plan["reusedFieldMapping"] = reusable["fieldMapping"]
-            workflow.save(update_fields=["plan", "updated_at"])
+            uploads = validate_batch(
+                user, source.conversation, intent["_uploadBatchId"], run=source
+            )
+            reusable = matching_configuration(source, uploads)
+            if reusable:
+                workflow.plan["reusedFieldMapping"] = reusable["fieldMapping"]
+                workflow.plan_hash = _state_hash(workflow.plan)
+                workflow.save(update_fields=["plan", "plan_hash", "updated_at"])

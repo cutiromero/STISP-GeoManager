@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.67 日常修复（2026-11-07）
+
+- 修复复用资料配置时的并发覆盖，字段确认计划与启动授权保持一致。
+- 蚀变矿物接入模型配色与正式类别色表，后台按离散颜色表渲染，前后同矿物同色并展示实际图例。
+- 对比地图点击与键盘焦点沿真实矢量边界高亮，去除包围盒焦点外框。
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

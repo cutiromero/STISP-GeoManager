@@ -89,6 +89,67 @@ function maps() {
   return screen.getAllByRole("group", { name: "本地矢量图层" });
 }
 
+it("点击及键盘聚焦使用真实几何边界，不显示包围盒外框", () => {
+  const inspect = vi.fn();
+  show(vi.fn(), inspect);
+  const unit = within(maps()[0]!).getAllByRole("button", {
+    name: "八宝山组",
+  })[0]!;
+  (unit as SVGElement).focus();
+  const path = unit.querySelector(
+    "path:not(.geology-review-feature-highlight)",
+  )!;
+  const highlight = unit.querySelector(".geology-review-feature-highlight")!;
+  expect(document.activeElement).toBe(unit);
+  expect(getComputedStyle(unit).outlineStyle).toBe("none");
+  expect(getComputedStyle(highlight).visibility).toBe("visible");
+  expect(highlight.getAttribute("d")).toBe(path.getAttribute("d"));
+  expect(highlight).toHaveAttribute("fill", "none");
+  expect(highlight).toHaveAttribute("vector-effect", "non-scaling-stroke");
+  fireEvent.keyDown(unit, { key: " " });
+  expect(inspect).toHaveBeenCalledOnce();
+});
+
+it("矿物图例显示后台颜色表，隐藏透明背景类别", () => {
+  const preview = {
+    name: "蚀变",
+    kind: "raster" as const,
+    temporary: true as const,
+    imageUrl: "/mineral.png",
+    imageCoordinates: [
+      [98.4, 35.62],
+      [98.45, 35.62],
+      [98.45, 35.6],
+      [98.4, 35.6],
+    ] as [
+      [number, number],
+      [number, number],
+      [number, number],
+      [number, number],
+    ],
+    metadata: {
+      colorTable: [
+        { value: 0, label: "透明背景", color: "#00000000" },
+        { value: 1, label: "赤铁矿化", color: "#c84545ff" },
+      ],
+    },
+  };
+  render(
+    <LocalGeologyReviewMaps
+      {...props}
+      onSelect={vi.fn()}
+      rasterOverlays={[
+        { key: "alteration:hematite", before: preview, after: preview },
+      ]}
+    />,
+  );
+  const label = screen.getByText("赤铁矿化");
+  expect(getComputedStyle(label.querySelector("i")!).backgroundColor).toBe(
+    "rgb(200, 69, 69)",
+  );
+  expect(screen.queryByText("透明背景")).toBeNull();
+});
+
 it("paints local vectors without token, network, workers or Mapbox branding and reports first-paint cost", async () => {
   const fetch = vi.spyOn(window, "fetch");
   const xhr = vi.spyOn(XMLHttpRequest.prototype, "open");

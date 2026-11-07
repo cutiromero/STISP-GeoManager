@@ -270,6 +270,18 @@
   display: block;
 }
 
+.geology-review-feature:focus {
+  outline: none;
+}
+
+.geology-review-feature-highlight {
+  visibility: hidden;
+}
+
+.geology-review-feature:focus > .geology-review-feature-highlight {
+  visibility: visible;
+}
+
 .geology-review-local-controls {
   position: absolute;
   top: 10px;

@@ -24,7 +24,7 @@ from apps.core.storage import StoragePathError, app_path
 from .packages import ComputeError, checksum
 
 
-RENDER_VERSION = 2
+RENDER_VERSION = 3
 MAX_PREVIEW_SIDE = 1024
 MAX_MEMORY_CACHE_ENTRIES = 8
 MAX_MAP_LATITUDE = 85.051129
@@ -45,13 +45,32 @@ def _rules(output) -> dict:
         "calcite",
         "dolomite",
     } and kind in {"before", "corrected", "changes", "hits"}:
-        return {
+        rules = {
             "band": 1,
             "palette": "alteration-changes"
             if kind in {"changes", "hits"}
             else "alteration",
             "range": None,
         }
+        if kind in {"before", "corrected"}:
+            table = getattr(output, "metadata", {}).get("mapColorTable")
+            if table:
+                rules["colorTable"] = table["classes"]
+            else:
+                from apps.agent.result_colors import category_style
+                from apps.agent.alteration_result_colors import MINERALS
+
+                style, _ = category_style("mineral", [mineral])
+                item = style["renderer"]["classes"][0]
+                rules["colorTable"] = [
+                    {"value": 0, "label": "无蚀变", "color": "#00000000"},
+                    {
+                        "value": 1,
+                        "label": MINERALS[mineral],
+                        "color": item["color"] + "ff",
+                    },
+                ]
+        return rules
     return {
         "band": 1,
         "palette": "blue",
@@ -235,6 +254,11 @@ def ensure_map_preview(output) -> tuple[bytes, dict]:
             _remember(fingerprint, png, metadata)
         else:
             png, metadata = cached
-        return png, {"outputId": output.id, "label": output.label, **metadata}
+        return png, {
+            "outputId": output.id,
+            "label": output.label,
+            **metadata,
+            **({"colorTable": rules["colorTable"]} if "colorTable" in rules else {}),
+        }
     except (OSError, StoragePathError) as exc:
         raise ComputeError("地图预览文件暂不可用，请稍后重试", 503) from exc

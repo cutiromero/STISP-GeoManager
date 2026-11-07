@@ -20,7 +20,7 @@
 
 `GET /api/agent/workflows/{workflowId}/?view=compare&element=alteration&offset=0&limit=25`在要素过滤后分页。`plan.pagination.total`是当前要素总数，`counts`是all/lithology/structure/alteration的全局总数，`alterationPixels/alterationAreaM2`是全部蚀变修改像元与面积。蚀变新任务按组计数，旧任务按图斑计数。`revision`绑定冻结批准和实际changes输出校验和，与页码及无关状态更新无关；只有它确实改变时要求刷新。刷新保留当前要素、分页及已保存讲解位置。
 
-`plan.multiElementMap.alterationRasters`按矿物提供beforeOutputId/afterOutputId/changesOutputId。这些是计算输出ID，沿用计算结果map-preview接口重新鉴权、生成后端PNG；不是catalog资源ID。矿物前后统一青绿色、0值透明，变更按A-01至A-05编码固定配色，分类预览用nearest。前端只叠加后端影像，不做栅格判别或符号化。
+`plan.multiElementMap.alterationRasters`按矿物提供beforeOutputId/afterOutputId/changesOutputId。这些是计算输出ID，沿用计算结果map-preview接口重新鉴权、生成后端PNG；不是catalog资源ID。矿物前后使用模型核验的正式类别颜色表，同一矿物同色、不同矿物异色、0值透明，变更按A-01至A-05编码固定配色，分类预览用nearest。前端只叠加后端影像，不做栅格判别或符号化。
 
 `POST /api/agent/workflows/{workflowId}/confirm/`仍绑定当前planHash、本人和当前项目。综合推理review_modifications支持`selectedSuggestionIds`或互斥的紧凑选择`{"suggestionSelection":{"base":"suggested","excludedIds":[],"includedIds":[]}}`。基集只含冻结方案中可执行普通建议；待裁定、例外不随基集选中，只能由includedIds明确纳入。所有编号重验，越界409并显示中文原因。传统场景的30项边界不变；该端点请求体安全上限1 MiB，超限400；紧凑全选通常小于200字节。
 
@@ -2947,3 +2947,9 @@ L-06全新世冲积物形态异常与L-07孤立早期单元连续性疑点仅为
 管理端数据整理可将明确的历史研发资料标记为geology-archived来源，使普通目录、搜索和候选隐藏，保留原输入及历史读取。原始栅格去重仅提供给管理员内部整理程序：必须指定同项目正式保留资源、重新逐像元核对像元/掩膜/网格/坐标系/范围，执行完整历史快照检查并保存替代凭据。公开删除接口不接受此内部参数，原始输入的默认保护不变；活动任务、工程及成果引用继续阻止删除。
 
 入库失败可使用POST /api/agent/workflows/{workflowId}/retry-imports/（planHash必填），仅本人当前项目failed且waiting_compute、实际计算成功、确有失败入库记录时允许；复用原输出与入库身份，不重新计算或提高预算，权限与计划重验后自动继续。核查轮次的成果名称含轮次，避免与上一轮同名冲突。
+
+### 2026-11-07 蚀变地图配色与输入复用
+
+计算输出地图预览 metadata 的可选 `colorTable` 返回后台实际渲染的类别颜色表（value、label、#RRGGBBAA color）。前端只加载 PNG 并展示非透明类别图例。逻辑推理的五类矿物由已有模型配色服务统一选色、核验正式色表并审计，前后栅格复用同一表；模型不可用时如实记录 deterministic。0 和 NoData 透明，不改源 TIFF 或计算校验和。端点原权限、项目、输入访问和 400/401/403/404/409/503 错误语义不变。
+
+复用角色/字段配置必须在创建任务的事务内保存，再交给 worker；不得在 worker 生成字段确认计划后用旧对象覆盖 plan。确认并开始仍要求当前 review_mapping、当前 planHash、实际字段与显式执行授权。

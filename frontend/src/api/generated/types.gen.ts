@@ -894,9 +894,26 @@ export type ComputeMapPreview = {
      */
     kind: 'raster';
     /**
-     * 真实输出元信息
+     * 真实输出元信息；colorTable 为后端实际渲染的类别颜色表，仅供图例展示，栅格仍由后端统一渲染
      */
     metadata: {
+        /**
+         * 本次预览实际使用的离散颜色表；0 背景透明，同一工作流同一矿物前后同色
+         */
+        colorTable?: Array<{
+            /**
+             * 离散像元值
+             */
+            value: number;
+            /**
+             * 类别名称
+             */
+            label: string;
+            /**
+             * RGBA 十六进制颜色
+             */
+            color: string;
+        }>;
         [key: string]: unknown;
     };
     /**

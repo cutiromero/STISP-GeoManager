@@ -106,6 +106,7 @@ const VectorFeatures = memo(function VectorFeatures({
         const select = () => onFeature?.(feature, index);
         return (
           <g
+            className={onFeature ? "geology-review-feature" : undefined}
             key={String(
               feature.id ??
                 feature.properties.feature_id ??
@@ -167,6 +168,32 @@ const VectorFeatures = memo(function VectorFeatures({
                 vectorEffect="non-scaling-stroke"
               />
             )}
+            {onFeature && shape.path && (
+              <path
+                className="geology-review-feature-highlight"
+                d={shape.path}
+                fill="none"
+                stroke="#006cd1"
+                strokeWidth={3}
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              />
+            )}
+            {onFeature &&
+              shape.points.map((point) => (
+                <circle
+                  key={`focus:${point.join(",")}`}
+                  className="geology-review-feature-highlight"
+                  cx={point[0]}
+                  cy={point[1]}
+                  r={radius * 1.5}
+                  fill="none"
+                  stroke="#006cd1"
+                  strokeWidth={3}
+                  vectorEffect="non-scaling-stroke"
+                  pointerEvents="none"
+                />
+              ))}
             {shape.points.map((point) => (
               <circle
                 key={point.join(",")}
@@ -499,6 +526,19 @@ export default function LocalGeologyReviewMaps({
         })}
       </div>
       <div className="geology-review-map-legend" aria-label="统一地质类别配色">
+        {rasterOverlays
+          .filter((layer) => layer.key.startsWith("alteration:"))
+          .flatMap(
+            (layer) =>
+              (layer.after ?? layer.before)?.metadata.colorTable
+                ?.filter((item) => !item.color.endsWith("00"))
+                .map((item) => (
+                  <span key={`${layer.key}:${item.value}`}>
+                    <i style={{ background: item.color }} />
+                    {item.label}
+                  </span>
+                )) ?? [],
+          )}
         {overlays.flatMap((overlay) => {
           const classes = new Map<string, string>();
           for (const feature of [

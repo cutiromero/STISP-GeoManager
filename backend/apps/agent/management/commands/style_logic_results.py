@@ -9,18 +9,18 @@ from apps.agent.models import AgentWorkflow
 from apps.agent.result_colors import style_result
 from apps.agent.workflow_resources import resolve_workflow_resource
 from apps.agent.workflow import authorize_workflow_history
+from apps.compute.models import ComputeOutput
 from apps.projects.context import ProjectScope, project_scope
 
 
 class Command(BaseCommand):
-    help = (
-        "按当前智能体配色流程重算指定工作流矢量成果；默认预览完整方案，--apply 才写入。"
-    )
+    help = "按智能体配色流程更新指定工作流的成果显示方案；默认预览，--apply 才写入。"
 
     def add_arguments(self, parser):
         parser.add_argument("--workflow", required=True)
         parser.add_argument("--apply", action="store_true")
         parser.add_argument("--no-model", action="store_true")
+        parser.add_argument("--rasters-only", action="store_true")
 
     def handle(self, *args, **options):
         workflow = AgentWorkflow.objects.filter(
@@ -28,12 +28,16 @@ class Command(BaseCommand):
         ).first()
         if not workflow:
             raise CommandError("未找到指定逻辑推理工作流")
-        outputs = {
-            output["resourceId"]: output["key"]
-            for stage in workflow.plan.get("stages", [])
-            for output in stage.get("outputs", [])
-            if output.get("kind") == "vector" and output.get("resourceId")
-        }
+        outputs = (
+            {}
+            if options.get("rasters_only", False)
+            else {
+                output["resourceId"]: output["key"]
+                for stage in workflow.plan.get("stages", [])
+                for output in stage.get("outputs", [])
+                if output.get("kind") == "vector" and output.get("resourceId")
+            }
+        )
         scope = ProjectScope(
             (workflow.project_tag_id,), workflow.project_tag_id, workflow.owner_id
         )
@@ -67,6 +71,20 @@ class Command(BaseCommand):
                         ensure_ascii=False,
                     )
                 )
+            from apps.agent.alteration_result_colors import style_alteration_outputs
+
+            rasters = style_alteration_outputs(
+                workflow,
+                list(
+                    ComputeOutput.objects.filter(
+                        pk__in=workflow.result_ids, kind="raster"
+                    )
+                ),
+                force=True,
+                persist=options["apply"],
+            )
+            for item in rasters:
+                self.stdout.write(json.dumps(item, ensure_ascii=False))
         self.stdout.write(
-            f"{'已处理' if options['apply'] else '待处理'} {len(outputs)} 项矢量成果；科研数据与计算几何不变。"
+            f"{'已处理' if options['apply'] else '待处理'} {len(outputs)} 项矢量和 {len(rasters)} 项栅格显示方案；科研数据与计算几何不变。"
         )

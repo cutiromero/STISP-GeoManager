@@ -393,7 +393,10 @@ def test_malformed_json_is_repaired_once_and_keeps_the_reason(
 def test_management_command_previews_and_reapplies_current_flow(monkeypatch, apply):
     from apps.agent.management.commands import style_logic_results as command
 
+    monkeypatch.setattr(command.ComputeOutput.objects, "filter", Mock(return_value=[]))
+
     workflow = SimpleNamespace(
+        result_ids=[],
         project_tag_id=1,
         owner_id=2,
         owner="owner",
@@ -435,7 +438,10 @@ def test_management_command_previews_and_reapplies_current_flow(monkeypatch, app
 def test_management_preview_has_38_original_lithology_library_colors(monkeypatch):
     from apps.agent.management.commands import style_logic_results as command
 
+    monkeypatch.setattr(command.ComputeOutput.objects, "filter", Mock(return_value=[]))
+
     workflow, resource, audit = registration(monkeypatch, [])
+    workflow.result_ids = []
     workflow.project_tag_id, workflow.owner_id = 1, 2
     workflow.plan = {
         "stages": [

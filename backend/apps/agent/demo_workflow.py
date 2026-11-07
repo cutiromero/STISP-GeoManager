@@ -1203,6 +1203,10 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
                 "resourceRevision": resource.updated_at.isoformat(),
             }
         )
+    if workflow.workflow_type in MULTI_FAMILY:
+        from .alteration_result_colors import style_alteration_outputs
+
+        style_alteration_outputs(workflow, outputs)
     workflow.result_ids = sorted(set(workflow.result_ids + [o.id for o in outputs]))
     workflow.result_resource_ids = sorted(
         set(

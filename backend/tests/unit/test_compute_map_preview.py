@@ -99,9 +99,43 @@ def test_alteration_preview_keeps_class_colors_and_zero_transparent(output, key)
             (25, 118, 210, 230),
         }
         if key.endswith("changes")
-        else {(0, 0, 0, 0), (38, 166, 154, 210)}
+        else {(0, 0, 0, 0), (33, 134, 156, 255)}
     )
     assert palette == expected
+
+
+def test_mineral_color_tables_render_distinct_pixels_reuse_before_after_and_invalidate_cache(
+    output,
+):
+    replace_raster(output, width=20, height=20)
+    original = source_path(output).read_bytes()
+    colors = set()
+    for mineral in ("hematite", "chlorite", "hydromica", "calcite", "dolomite"):
+        output.key = mineral + "_before"
+        before, metadata = map_preview.ensure_map_preview(output)
+        table = metadata["colorTable"]
+        colors.add(table[1]["color"])
+        output.key = mineral + "_corrected"
+        after, later = map_preview.ensure_map_preview(output)
+        assert before == after and table == later["colorTable"]
+    assert len(colors) == 5
+    output.metadata = {
+        "mapColorTable": {
+            "classes": [
+                {"value": 0, "label": "背景", "color": "#00000000"},
+                {"value": 1, "label": "白云石化", "color": "#123456ff"},
+            ]
+        }
+    }
+    changed, metadata = map_preview.ensure_map_preview(output)
+    assert changed != after
+    assert tuple(np.asarray(Image.open(io.BytesIO(changed)))[10, 10]) == (
+        18,
+        52,
+        86,
+        255,
+    )
+    assert source_path(output).read_bytes() == original
 
 
 def replace_raster(

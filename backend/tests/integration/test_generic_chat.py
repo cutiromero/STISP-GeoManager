@@ -525,6 +525,7 @@ def test_unmatched_reuse_keeps_the_original_submission_idempotent(generic):
     assert response.json()["id"] == run.id
 
 
+@pytest.mark.django_db(transaction=True)
 def test_configuration_restore_reuses_roles_fields_but_never_plan_or_approval(
     generic, monkeypatch
 ):
@@ -571,10 +572,46 @@ def test_configuration_restore_reuses_roles_fields_but_never_plan_or_approval(
         "apps.agent.workflow_roles.recognize_roles",
         lambda *args: pytest.fail("不应重复识别角色"),
     )
-    process(run, generic["owner"], generic["policy"], lambda: None, lambda *args: None)
+    # Simulate a queue worker claiming immediately after the creation commits.
+    # A later stale plan write must not erase this persisted review.
+    from django.db import transaction
+    from apps.agent import research_intents
+    from apps.agent.geology_generic import propose_mapping
+    from apps.agent.demo_workflow import _save as save_workflow
+
+    save_intent = research_intents._save
+
+    def save_and_queue(source, intent, workflow=None):
+        save_intent(source, intent, workflow)
+        if workflow:
+
+            def worker():
+                fresh = AgentWorkflow.objects.get(pk=workflow.pk)
+                fresh.plan.update(
+                    phase="review_mapping",
+                    fieldMappingReview=propose_mapping(
+                        fresh, generic["owner"], generic["policy"]
+                    ),
+                )
+                fresh.status = "waiting_approval"
+                save_workflow(fresh)
+
+            transaction.on_commit(worker)
+
+    with monkeypatch.context() as race:
+        race.setattr(research_intents, "_save", save_and_queue)
+        process(
+            run, generic["owner"], generic["policy"], lambda: None, lambda *args: None
+        )
     run.refresh_from_db()
     workflow = run.research_workflow
     assert workflow and run.research_intent["questions"] == []
+    assert workflow.plan["phase"] == "review_mapping"
+    # Continue the original reuse path from its unprepared input state.
+    workflow.plan.pop("phase")
+    workflow.plan.pop("fieldMappingReview")
+    workflow.status = "queued"
+    save_workflow(workflow)
     monkeypatch.setattr(
         "apps.agent.generic_mapping.model_targets",
         lambda *args: pytest.fail("不应重复识别字段"),

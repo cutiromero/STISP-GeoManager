@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import os
 from pathlib import Path
 import sys
@@ -113,6 +114,21 @@ def render(payload: dict) -> dict:
     fixed_range = rules.get("range")
     if fixed_range not in (None, [-1, 1]):
         raise PreviewError("地图预览渲染范围无效")
+    table = rules.get("colorTable")
+    if table is not None and (
+        not isinstance(table, list)
+        or not 1 <= len(table) <= 256
+        or any(
+            not isinstance(item, dict)
+            or type(item.get("value")) is not int
+            or not 0 <= item["value"] <= 255
+            or not isinstance(item.get("color"), str)
+            or not re.fullmatch(r"#[0-9a-fA-F]{8}", item["color"])
+            for item in table
+        )
+        or len({item["value"] for item in table}) != len(table)
+    ):
+        raise PreviewError("地图预览颜色表无效")
     with rasterio.Env(GDAL_PAM_ENABLED="NO", GDAL_CACHEMAX=64 * 1024**2):
         with rasterio.open(Path(payload["raster_path"])) as src:
             if src.driver != "GTiff" or src.count < 1:
@@ -149,7 +165,16 @@ def render(payload: dict) -> dict:
                 if ColorInterp.alpha in vrt.colorinterp:
                     alpha_band = vrt.colorinterp.index(ColorInterp.alpha) + 1
                     values = np.ma.masked_where(vrt.read(alpha_band) <= 0, values)
-            if palette == "blue":
+            if table is not None:
+                rgba = np.zeros((*values.shape, 4), dtype="uint8")
+                for item in table:
+                    color = [
+                        int(item["color"][index : index + 2], 16)
+                        for index in (1, 3, 5, 7)
+                    ]
+                    rgba[values.filled(0) == item["value"]] = color
+                rgba[np.ma.getmaskarray(values)] = 0
+            elif palette == "blue":
                 rgba = colorize(values, fixed_range)
             else:
                 colors = np.array(
