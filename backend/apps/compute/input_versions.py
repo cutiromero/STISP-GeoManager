@@ -78,7 +78,7 @@ def _table_digest(path, table, vector):
                 raw = (
                     value
                     if isinstance(value, bytes)
-                    else json.dumps(value, ensure_ascii=False, allow_nan=False).encode()
+                    else json.dumps(value, ensure_ascii=False).encode()
                 )
                 digest.update(
                     ("bytes" if isinstance(value, bytes) else "json").encode()

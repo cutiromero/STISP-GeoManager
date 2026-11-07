@@ -323,11 +323,15 @@ def test_sqlite_without_rowid_can_reuse_selected_table(setup_compute):
 
     env = setup_compute
     source = table_data_path("data.sqlite")
+    source.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(source) as db:
         db.execute(
             "CREATE TABLE no_rowid (code TEXT PRIMARY KEY,value REAL) WITHOUT ROWID"
         )
-        db.executemany("INSERT INTO no_rowid VALUES (?,?)", [("b", 2), ("a", 1)])
+        db.executemany(
+            "INSERT INTO no_rowid VALUES (?,?)",
+            [("b", 2), ("a", 1), ("nonfinite", float("inf"))],
+        )
     resource = DataResource.objects.create(
         name="显式主键资料",
         code="without-rowid",
@@ -353,7 +357,7 @@ def test_sqlite_without_rowid_can_reuse_selected_table(setup_compute):
     a.mkdir()
     first = freeze_input(record, a)
     with sqlite3.connect(source) as db:
-        db.execute("INSERT INTO samples VALUES ('unrelated',99)")
+        db.execute("CREATE TABLE unrelated_table (value REAL)")
     b = env["tmp"] / "without-second"
     b.mkdir()
     second = freeze_input(record, b)
