@@ -52,7 +52,8 @@ class Command(BaseCommand):
         user, policy = _authorize(workflow)
         policy = {
             **policy,
-            "reasoningEffort": "medium",
+            "_thinking": False,
+            "reasoningEffort": "low",
             "maxOutputTokens": min(policy["maxOutputTokens"], 6144),
         }
         original_report = _paths(workflow)[2]

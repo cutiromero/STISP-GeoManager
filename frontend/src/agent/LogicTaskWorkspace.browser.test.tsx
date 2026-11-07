@@ -95,6 +95,29 @@ it("完成首屏显示实际结果和四阶段，无预取或重复确认；成�
   );
 });
 
+it("报告直接组织结果时不把此前的角色思考冒充当前思考", () => {
+  show(
+    task({
+      status: "running",
+      plan: { phase: "decide", stages: [] },
+      modelActivity: {
+        stage: "最终报告",
+        status: "responding",
+        thinkingEnabled: false,
+        reasoningEffort: "low",
+        thinkingText: "",
+        truncated: false,
+        attempt: 1,
+        outputChars: 120,
+      },
+    }),
+    { initialThinking: "此前识别资料角色的实际思考" },
+  );
+  expect(screen.getByText("模型正在组织结果")).toBeVisible();
+  expect(screen.getByText(/已接收 120 字/)).toBeVisible();
+  expect(screen.queryByText("此前识别资料角色的实际思考")).toBeNull();
+});
+
 it("暂停直接生效，停止位于更多且必须确认；暂停态只有一个继续按钮", async () => {
   const pause = vi.fn(),
     cancel = vi.fn(),

@@ -1396,7 +1396,8 @@ def advance_demo(workflow_id) -> None:
                     if planning
                     else {
                         **p,
-                        "reasoningEffort": "medium",
+                        "_thinking": False,
+                        "reasoningEffort": "low",
                         "maxOutputTokens": min(p["maxOutputTokens"], 6144),
                         "maxRunSeconds": min(p["maxRunSeconds"], 120),
                     }

@@ -29,7 +29,8 @@ export default function LogicTaskThinking({
 }) {
   const activity = workflow.modelActivity;
   const live = liveLogicThinking(workflow);
-  const text = activity?.thinkingText || initialThinking || "";
+  const writing = live && activity?.thinkingEnabled === false;
+  const text = writing ? "" : activity?.thinkingText || initialThinking || "";
   if (!text && !live) return null;
   return (
     <section
@@ -39,13 +40,24 @@ export default function LogicTaskThinking({
       <div className="logic-thinking-heading">
         <span>
           <BulbOutlined />
-          {live ? "模型正在整理依据" : "最近一次模型思考"}
+          {writing
+            ? "模型正在组织结果"
+            : live
+              ? "模型正在整理依据"
+              : "最近一次模型思考"}
         </span>
         <Button type="link" size="small" onClick={onExpand}>
           查看实际思考 <RightOutlined />
         </Button>
       </div>
-      {live &&
+      {writing ? (
+        <p className="logic-muted">
+          正在结合实际计算成果生成报告
+          {activity?.outputChars ? `（已接收 ${activity.outputChars} 字）` : ""}
+          …
+        </p>
+      ) : (
+        live &&
         (text ? (
           <ThinkingStream
             text={text.slice(-1200)}
@@ -53,7 +65,8 @@ export default function LogicTaskThinking({
           />
         ) : (
           <p className="logic-muted">等待模型返回实际内容…</p>
-        ))}
+        ))
+      )}
       {live && text.length > 1200 && (
         <small className="logic-muted">
           预览最近片段，展开可查看已保存的完整内容。
