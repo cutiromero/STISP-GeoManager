@@ -204,7 +204,7 @@ export const register = <ThrowOnError extends boolean = false>(options: Options<
 /**
  * 维护当前平台页面的登录生命周期
  *
- * 登录、注册或游客登录后先使用start登记页面；resume恢复刷新页面或加入仍在线的同源标签。heartbeat每30秒续期120秒；suspend在页面离开时立即挂起当前页，20秒内可凭原令牌恢复正常刷新。没有可续接页面时abandon在后端注销旧会话。最后页面挂起或租约过期后，受保护接口返回401。令牌只保存在页面会话内，不用于URL、持久Cookie或本地持久存储。
+ * 登录后start登记页面；每30秒heartbeat维持120秒访问租约。已登记且未挂起的页面可在最后租约结束后12小时内凭正确令牌恢复，用于后台节流、断网及休眠；Cookie本身不能恢复失效租约。suspend立即停止当前页访问，正常刷新可在120秒内凭原令牌resume。新标签优先同源交接，交接未响应时可用有效Cookie和CSRF通过join加入仍有在线页面的会话；无在线页面时join拒绝。abandon不注销仍有在线或可恢复页面的共享会话；主动logout仍立即注销。familyId仅用于同一次登录的跨标签退出通知，不作为鉴权令牌。
  */
 export const updateBrowserSession = <ThrowOnError extends boolean = false>(options: Options<UpdateBrowserSessionData, ThrowOnError>): RequestResult<UpdateBrowserSessionResponses, UpdateBrowserSessionErrors, ThrowOnError> => (options.client ?? client).post<UpdateBrowserSessionResponses, UpdateBrowserSessionErrors, ThrowOnError>({
     security: [{

@@ -114,23 +114,25 @@ class BrowserSessionTests(TestCase):
             self.start()
         with patch("apps.core.browser_sessions.time.time", return_value=1121):
             self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
-            self.assertEqual(self.action("heartbeat", sequence=2).status_code, 401)
-            self.assertEqual(self.action("resume", sequence=3).status_code, 401)
+            self.assertEqual(self.action("heartbeat", sequence=2).status_code, 200)
+            self.assertEqual(self.client.get("/api/auth/me/").status_code, 200)
 
-    def test_refresh_window_is_20_seconds(self):
+    def test_slow_refresh_can_resume_for_120_seconds(self):
         with patch("apps.core.browser_sessions.time.time", return_value=1000):
             self.start()
             self.action("suspend", sequence=2)
         with patch("apps.core.browser_sessions.time.time", return_value=1021):
-            self.assertEqual(self.action("resume", sequence=3).status_code, 401)
+            self.assertEqual(self.action("resume", sequence=3).status_code, 200)
+            self.action("suspend", sequence=4)
+        with patch("apps.core.browser_sessions.time.time", return_value=1142):
+            self.assertEqual(self.action("resume", sequence=5).status_code, 401)
 
-    def test_new_visit_abandon_invalidates_actual_server_session(self):
+    def test_unclaimed_tab_cannot_log_out_the_live_shared_session(self):
         self.start()
         cookie = self.client.cookies["sessionid"].value
         self.assertEqual(self.action("abandon").status_code, 200)
-        self.assertFalse(Session.objects.filter(session_key=cookie).exists())
-        self.client.cookies["sessionid"] = cookie
-        self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
+        self.assertTrue(Session.objects.filter(session_key=cookie).exists())
+        self.assertEqual(self.client.get("/api/auth/me/").status_code, 200)
 
     def test_bad_token_and_restart_cannot_claim_existing_session(self):
         self.start()
@@ -186,4 +188,76 @@ class BrowserSessionTests(TestCase):
                 HTTP_X_CSRFTOKEN=secure.cookies["csrftoken"].value,
             ).status_code,
             200,
+        )
+
+    def test_noopener_can_join_without_a_channel_token_but_not_a_closed_session(self):
+        self.start()
+        first_family = self.client.session[SESSION_KEY]["familyId"]
+        response = self.action("join", page="new_page_123456789", token="b" * 64)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["familyId"], first_family)
+        self.action("suspend", sequence=2)
+        self.action("suspend", page="new_page_123456789", token="b" * 64, sequence=2)
+        self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
+        self.assertEqual(
+            self.action("join", page="third_page_1234567", token="c" * 64).status_code,
+            401,
+        )
+
+    def test_abandon_preserves_a_background_page_recovery_without_cookie_changes(self):
+        with patch("apps.core.browser_sessions.time.time", return_value=1000):
+            self.start()
+        with patch("apps.core.browser_sessions.time.time", return_value=2000):
+            response = self.action("abandon")
+            self.assertNotIn("sessionid", response.cookies)
+            self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
+            self.assertEqual(self.action("heartbeat", sequence=2).status_code, 200)
+            self.assertEqual(self.client.get("/api/auth/me/").status_code, 200)
+
+    def test_recovery_requires_the_registered_token_and_has_a_time_limit(self):
+        with patch("apps.core.browser_sessions.time.time", return_value=1000):
+            self.start()
+        with patch("apps.core.browser_sessions.time.time", return_value=2000):
+            self.assertEqual(
+                self.action("heartbeat", token="b" * 64, sequence=2).status_code, 401
+            )
+            self.assertEqual(
+                self.action(
+                    "join", page="second_page_1234567", token="b" * 64
+                ).status_code,
+                401,
+            )
+        with patch(
+            "apps.core.browser_sessions.time.time",
+            return_value=1000 + 120 + 12 * 3600 + 1,
+        ):
+            self.assertEqual(self.action("heartbeat", sequence=3).status_code, 401)
+
+    def test_explicit_suspension_cannot_be_undone_by_a_late_heartbeat(self):
+        self.start()
+        self.action("suspend", sequence=2)
+        self.assertEqual(self.action("heartbeat", sequence=3).status_code, 401)
+        self.action("abandon")
+        self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
+
+    def test_explicit_logout_revokes_joined_pages_and_recovery_tokens(self):
+        self.start()
+        self.action("join", page="second_page_1234567", token="b" * 64)
+        self.client.post("/api/auth/logout/")
+        self.assertEqual(self.action("heartbeat", sequence=2).status_code, 401)
+        self.assertEqual(
+            self.action(
+                "resume", page="second_page_1234567", token="b" * 64, sequence=2
+            ).status_code,
+            401,
+        )
+
+    def test_disabled_account_cannot_recover_or_join_a_session(self):
+        self.start()
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        self.assertEqual(self.action("heartbeat", sequence=2).status_code, 401)
+        self.assertEqual(
+            self.action("join", page="second_page_1234567", token="b" * 64).status_code,
+            401,
         )

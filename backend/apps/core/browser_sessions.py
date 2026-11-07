@@ -9,7 +9,6 @@ import re
 import secrets
 import time
 
-from django.contrib.auth import logout
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
@@ -21,7 +20,8 @@ from apps.core.localization import localized
 
 SESSION_KEY = "_stisp_browser_pages"
 LEASE_SECONDS = 120
-RESUME_SECONDS = 20
+RESUME_SECONDS = 120
+RECOVERY_SECONDS = 12 * 60 * 60
 START_SECONDS = 30
 PAGE_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,80}\Z")
 TOKEN_PATTERN = re.compile(r"[a-f0-9]{64}\Z")
@@ -38,6 +38,7 @@ EXEMPT_PATHS = {
 def prepare_browser_session(request) -> None:
     request.session.set_expiry(0)
     request.session[SESSION_KEY] = {
+        "familyId": secrets.token_hex(16),
         "startUntil": time.time() + START_SECONDS,
         "pages": {},
     }
@@ -48,6 +49,16 @@ def has_active_page(state: dict, now: float | None = None) -> bool:
     return any(
         page.get("expiresAt", 0) > now for page in state.get("pages", {}).values()
     )
+
+
+def recoverable_page(page: dict, now: float) -> bool:
+    # A missing heartbeat is different from an explicit pagehide suspension.
+    expires = page.get("expiresAt", 0)
+    return expires > 0 and expires + RECOVERY_SECONDS > now
+
+
+def retained_page(page: dict, now: float) -> bool:
+    return recoverable_page(page, now) or page.get("resumeUntil", 0) > now
 
 
 def unauthorized() -> JsonResponse:
@@ -100,6 +111,7 @@ def browser_session_view(request):
     if not isinstance(payload, dict) or payload.get("action") not in {
         "start",
         "resume",
+        "join",
         "heartbeat",
         "suspend",
         "abandon",
@@ -107,8 +119,24 @@ def browser_session_view(request):
         return JsonResponse({"detail": "页面会话请求无效"}, status=400)
     action = payload["action"]
     if action == "abandon":
-        logout(request)
-        return JsonResponse({"detail": "已退出，请重新登录", "active": False})
+        # An unclaimed tab must not flush the shared Cookie or revoke another
+        # page. Mark legacy sessions without issuing a stale Set-Cookie header.
+        row = Session.objects.filter(session_key=request.session.session_key).first()
+        data = row.get_decoded() if row else {}
+        state = data.get(SESSION_KEY)
+        if not isinstance(state, dict):
+            state = {"familyId": secrets.token_hex(16), "startUntil": 0, "pages": {}}
+            data[SESSION_KEY] = state
+            if row:
+                Session.objects.filter(pk=row.pk).update(
+                    session_data=SessionStore().encode(data)
+                )
+        return JsonResponse(
+            {
+                "detail": "当前页面未续接，其他页面会话保留",
+                "active": has_active_page(state),
+            }
+        )
     page_id, token = payload.get("pageId"), payload.get("token")
     if not isinstance(page_id, str) or not PAGE_PATTERN.fullmatch(page_id):
         return JsonResponse({"detail": "页面标识无效"}, status=400)
@@ -148,16 +176,20 @@ def browser_session_view(request):
             )
         if action == "start":
             allowed = not pages and state.get("startUntil", 0) > now
+        elif action == "join":
+            # The authenticated Cookie and CSRF token can join a live browser
+            # session even when a background peer cannot answer its channel.
+            allowed = has_active_page(state, now)
         elif action == "resume":
             allowed = any(
-                matches(entry) and entry.get("expiresAt", 0) > now
+                matches(entry) and recoverable_page(entry, now)
                 for entry in pages.values()
             )
             allowed = allowed or bool(
                 page and matches(page) and page.get("resumeUntil", 0) > now
             )
         else:
-            allowed = bool(page and matches(page) and page.get("expiresAt", 0) > now)
+            allowed = bool(page and matches(page) and recoverable_page(page, now))
             if action == "suspend":
                 allowed = allowed or bool(
                     page and matches(page) and page.get("resumeUntil", 0) > now
@@ -165,9 +197,7 @@ def browser_session_view(request):
         if not allowed:
             return unauthorized()
         pages = {
-            key: value
-            for key, value in pages.items()
-            if value.get("expiresAt", 0) > now or value.get("resumeUntil", 0) > now
+            key: value for key, value in pages.items() if retained_page(value, now)
         }
         if page_id not in pages and len(pages) >= 128:
             return JsonResponse(
@@ -179,11 +209,16 @@ def browser_session_view(request):
             "expiresAt": 0 if action == "suspend" else now + LEASE_SECONDS,
             "resumeUntil": now + RESUME_SECONDS if action == "suspend" else 0,
         }
-        state = {"startUntil": 0, "pages": pages}
+        family_id = state.get("familyId") or secrets.token_hex(16)
+        state = {"familyId": family_id, "startUntil": 0, "pages": pages}
         data[SESSION_KEY] = state
         row.session_data = SessionStore().encode(data)
         row.save(update_fields=["session_data"])
     request.session = SessionStore(session_key=request.session.session_key)
     return JsonResponse(
-        {"detail": "页面会话已更新", "active": has_active_page(state, now)}
+        {
+            "detail": "页面会话已更新",
+            "active": has_active_page(state, now),
+            "familyId": family_id,
+        }
     )

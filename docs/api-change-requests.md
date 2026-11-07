@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261108-001 - 页面会话后台恢复与多标签交接
+
+- Status: BackendReady
+- Owner: 当前个人开发分支 codex/xintao；同一任务维护契约、前后端及验收。
+- Endpoints: POST /api/auth/browser-session/，现有认证与受保护API调用。
+- Change type: BrowserSessionRequest新增join动作；BrowserSessionResponse新增可选familyId；恢复及abandon行为修正。
+- OpenAPI change: 120秒访问租约保留；未挂起的已登记页面在租约后12小时内凭正确令牌可恢复；suspend后刷新窗口120秒；join要求有效Cookie、CSRF及另一有效页面；abandon不注销仍可恢复的共享会话。
+- Frontend reason: 后台节流、休眠和新对比页交接延迟不应使正在使用的页面突然退出。请求前合并续期，401只重试一次，主动退出仍立即生效。
+- Mock examples: 使用真实Django Session与受控时钟、真实双标签浏览器验证，不生成科研计算或业务数据。
+- Backend implementation notes: Session只保存令牌摘要；挂起页面不能由heartbeat复活；familyId不参与鉴权。Cookie重放、无在线页join、错令牌、撤权及CSRF继续拒绝。
+- Verification: 后台超时恢复、刷新、多标签无BroadcastChannel交接、显式退出/旧登录竞态、权限及关闭最后标签回归。
+- Result: 后端与浏览器定向回归通过；Cookie重放、关闭页面和CSRF边界保留，服务器发布由精确冻结回执确认。
+
 ## API-20261107-003 - 管线地图按尺度简化和压缩传输
 
 - Status: BackendReady
@@ -452,6 +465,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261108-001 | BackendReady | /api/auth/browser-session/ | Recover live pages and join online sessions without global logout | Updated | Real Session and controlled clock | Implemented | Backend and browser regression | Existing Cookie, CSRF, account and project authorization |
 | API-20261107-003 | BackendReady | Pipeline display LOD and gzip |
 | API-20261107-002 | BackendReady | Workflow cancel and research inputSummary | Immediate stop and actual role reasons | Updated | Existing 105/106 optional compatible fixtures | Owner/project and bound task stop; model role audit | Targeted tests; real candidate separately | Current data and prior report versions preserved |
 | API-20261107-001 | BackendReady | /api/agent/workflows/{workflowId}/retained-review/; workflow inspection/confirm | Explicit held-object review with fixed automatic scope | Updated | 105-agent-workflow-card.json | Implemented with owner/project and frozen evidence checks | Focused backend/browser checks; candidate separate | Previous reports preserved; budgets and permissions retained |

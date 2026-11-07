@@ -511,7 +511,7 @@ paths:
       tags:
       - 认证接口
       summary: 维护当前平台页面的登录生命周期
-      description: 登录、注册或游客登录后先使用start登记页面；resume恢复刷新页面或加入仍在线的同源标签。heartbeat每30秒续期120秒；suspend在页面离开时立即挂起当前页，20秒内可凭原令牌恢复正常刷新。没有可续接页面时abandon在后端注销旧会话。最后页面挂起或租约过期后，受保护接口返回401。令牌只保存在页面会话内，不用于URL、持久Cookie或本地持久存储。
+      description: 登录后start登记页面；每30秒heartbeat维持120秒访问租约。已登记且未挂起的页面可在最后租约结束后12小时内凭正确令牌恢复，用于后台节流、断网及休眠；Cookie本身不能恢复失效租约。suspend立即停止当前页访问，正常刷新可在120秒内凭原令牌resume。新标签优先同源交接，交接未响应时可用有效Cookie和CSRF通过join加入仍有在线页面的会话；无在线页面时join拒绝。abandon不注销仍有在线或可恢复页面的共享会话；主动logout仍立即注销。familyId仅用于同一次登录的跨标签退出通知，不作为鉴权令牌。
       operationId: updateBrowserSession
       security:
       - sessionAuth: []
@@ -12558,14 +12558,14 @@ components:
           description: 兼容旧客户端的输入；当前所有角色均使用页面会话，此值不再启用持久登录。
     BrowserSessionRequest:
       type: object
-      description: 平台页面会话维护请求；正常刷新续接与新标签加入均须持有服务端验证的令牌。
+      description: 平台页面会话维护请求；resume须持有已登记令牌，join须持有有效Cookie和CSRF且会话仍有在线页面。
       required:
       - action
       properties:
         action:
           type: string
-          enum: [start, resume, heartbeat, suspend, abandon]
-          description: start用于刚登录的页面，resume用于刷新或在线标签交接，heartbeat续期，suspend挂起，abandon注销无法续接的会话。
+          enum: [start, join, resume, heartbeat, suspend, abandon]
+          description: start登记新登录页面，join凭有效Cookie及CSRF加入仍在线的会话，resume恢复有正确令牌的页面，heartbeat续期，suspend挂起，abandon结束无法续接的新访问且保留其他可恢复页面。
         pageId:
           type: string
           minLength: 16
@@ -12589,6 +12589,10 @@ components:
       - detail
       - active
       properties:
+        familyId:
+          type: string
+          description: 同次登录的随机标识，仅用于跨标签退出通知；不授予访问权限，令牌不作为此字段返回。
+          pattern: '^[a-f0-9]{32}$'
         detail:
           type: string
           description: 生命周期处理结果说明。

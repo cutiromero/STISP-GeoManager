@@ -128,6 +128,8 @@ import i18n, { currentLocale } from "../i18n";
 import {
   endBrowserSession,
   resumeBrowserSession,
+  refreshBrowserSession,
+  browserSessionEpoch,
   startBrowserSession,
 } from "../auth/browserSession";
 
@@ -366,8 +368,28 @@ export async function requestJson<T>(
     init.body = JSON.stringify(options.body);
   }
   try {
+    const authRequest =
+      isExpectedUnauthenticatedRequest(url) ||
+      url.startsWith("/api/bootstrap/");
+    const epoch = browserSessionEpoch();
+    if (!authRequest) await refreshBrowserSession();
+    if (!authRequest && epoch !== browserSessionEpoch())
+      throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
     const request = new Request(url, init);
-    const response = await fetch(request);
+    let response = await fetch(request);
+    if (!authRequest && epoch !== browserSessionEpoch())
+      throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
+    if (
+      !authRequest &&
+      response.status === 401 &&
+      (await refreshBrowserSession(true))
+    ) {
+      if (epoch !== browserSessionEpoch())
+        throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
+      response = await fetch(new Request(url, init));
+    }
+    if (!authRequest && epoch !== browserSessionEpoch())
+      throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
     if (!response.ok) notifyAuthorizationFailure(response.status, request.url);
     let data: unknown;
     try {
@@ -443,10 +465,15 @@ export async function requestForm<T>(
     String(options.projectTagId ?? getActiveProject()),
   );
   headers.set("X-CSRFToken", getCookie("csrftoken") ?? "");
+  const signal = projectSignal();
+  const epoch = browserSessionEpoch();
+  await refreshBrowserSession();
+  if (epoch !== browserSessionEpoch())
+    throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
   const response = await fetch(
     new Request(url, {
       method: "POST",
-      signal: projectSignal(),
+      signal,
       credentials: "include",
       headers,
       body: formData,
@@ -464,15 +491,21 @@ export async function requestForm<T>(
   return data as T;
 }
 
-function requestFormWithUploadProgress<T>(
+async function requestFormWithUploadProgress<T>(
   url: string,
   formData: FormData,
   options: FormRequestOptions,
 ): Promise<T> {
+  const signal = projectSignal();
+  const selectedProject = options.projectTagId ?? getActiveProject();
+  const epoch = browserSessionEpoch();
+  await refreshBrowserSession();
+  if (epoch !== browserSessionEpoch())
+    throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
+  signal.throwIfAborted();
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
-    const signal = projectSignal();
     const abort = () => xhr.abort();
     signal.addEventListener("abort", abort, { once: true });
     xhr.addEventListener(
@@ -481,10 +514,7 @@ function requestFormWithUploadProgress<T>(
       { once: true },
     );
     xhr.setRequestHeader("Accept-Language", currentLocale());
-    xhr.setRequestHeader(
-      "X-Project-Id",
-      String(options.projectTagId ?? getActiveProject()),
-    );
+    xhr.setRequestHeader("X-Project-Id", String(selectedProject));
     xhr.withCredentials = true;
     xhr.setRequestHeader("X-CSRFToken", getCookie("csrftoken") ?? "");
 

@@ -1,3 +1,7 @@
+import {
+  refreshBrowserSession,
+  browserSessionEpoch,
+} from "../auth/browserSession";
 import { combineAbortSignals } from "../utils/abortSignals";
 
 const requestCleanups = new WeakMap<Request, () => void>();
@@ -55,7 +59,29 @@ export function attachProjectHeader(request: Request) {
 export async function fetchProjectRequest(request: Request) {
   const dispose = requestCleanups.get(request);
   try {
-    const response = await fetch(request);
+    const epoch = browserSessionEpoch();
+    await refreshBrowserSession();
+    if (epoch !== browserSessionEpoch())
+      throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
+    const replayable =
+      ["GET", "HEAD"].includes(request.method) ||
+      request.headers.get("Content-Type")?.includes("application/json");
+    const retry = replayable ? request.clone() : null;
+    let response = await fetch(request);
+    if (epoch !== browserSessionEpoch())
+      throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
+    if (
+      response.status === 401 &&
+      retry &&
+      (await refreshBrowserSession(true))
+    ) {
+      await response.body?.cancel();
+      if (epoch !== browserSessionEpoch())
+        throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
+      response = await fetch(retry);
+    }
+    if (epoch !== browserSessionEpoch())
+      throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
     if (dispose) responseCleanups.set(response, dispose);
     return response;
   } catch (error) {

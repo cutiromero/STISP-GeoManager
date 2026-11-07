@@ -4,6 +4,7 @@ import {
   browserSessionStorageKey,
   endBrowserSession,
   resumeBrowserSession,
+  refreshBrowserSession,
   startBrowserSession,
 } from "./browserSession";
 
@@ -34,6 +35,7 @@ function savedPage() {
     pageId: string;
     token: string;
     sequence: number;
+    familyId?: string;
   } | null;
 }
 
@@ -205,9 +207,21 @@ describe("browser page session lifecycle", () => {
       vi.mocked(performance.getEntriesByType).mockReturnValue([
         { type } as PerformanceNavigationTiming,
       ]);
+      fetchMock.mockImplementation(async (request: Request) => {
+        const message = await request.clone().json();
+        return new Response(
+          JSON.stringify({ detail: "无在线页面", active: false }),
+          {
+            status: message.action === "join" ? 401 : 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      });
       expect(await resumeBrowserSession()).toBe(false);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(await body(0)).toEqual({ action: "abandon" });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(await body(0)).toMatchObject({ action: "join", sequence: 1 });
+      expect((await body(0)).token).not.toBe(old.token);
+      expect(await body(1)).toEqual({ action: "abandon" });
       expect(savedPage()).toBeNull();
     },
   );
@@ -263,5 +277,97 @@ describe("browser page session lifecycle", () => {
     } finally {
       window.removeEventListener(browserSessionEndedEvent, ended);
     }
+  });
+
+  it("joins a live Cookie session when a background peer cannot answer", async () => {
+    expect(await resumeBrowserSession()).toBe(true);
+    expect(await body(0)).toMatchObject({ action: "join", sequence: 1 });
+    expect(savedPage()).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("merges foreground and request renewals after background timer throttling", async () => {
+    await startBrowserSession();
+    const first = savedPage();
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 180_000);
+    let complete: (response: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+    );
+    const firstRenewal = refreshBrowserSession();
+    const secondRenewal = refreshBrowserSession(true);
+    expect(firstRenewal).toBe(secondRenewal);
+    expect(await body(1)).toMatchObject({
+      action: "heartbeat",
+      pageId: first!.pageId,
+    });
+    complete(
+      new Response(JSON.stringify({ active: true, detail: "ok" }), {
+        status: 200,
+      }),
+    );
+    expect(await firstRenewal).toBe(true);
+    expect(savedPage()?.pageId).toBe(first?.pageId);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps login on a transient renewal failure and retries next time", async () => {
+    await startBrowserSession();
+    const token = savedPage()?.token;
+    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
+    await expect(refreshBrowserSession(true)).rejects.toThrow("offline");
+    expect(savedPage()?.token).toBe(token);
+    expect(await refreshBrowserSession(true)).toBe(true);
+  });
+
+  it("recovers immediately when a background document becomes visible", async () => {
+    await startBrowserSession();
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(await body(1)).toMatchObject({ action: "heartbeat" });
+  });
+
+  it("propagates explicit logout to independently joined pages in the same family", async () => {
+    const familyId = "d".repeat(32);
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ active: true, detail: "ok", familyId }), {
+        status: 200,
+      }),
+    );
+    await startBrowserSession();
+    const peer = new TestChannel("stisp.browser-session");
+    peers.push(peer);
+    peer.postMessage({
+      kind: "signed-out",
+      token: "e".repeat(64),
+      familyId,
+      reason: "logout",
+    });
+    await vi.waitFor(() => expect(savedPage()).toBeNull());
+  });
+
+  it("ignores a late heartbeat failure after a BFCache suspension and resume", async () => {
+    await startBrowserSession();
+    let complete: (response: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+    );
+    const old = refreshBrowserSession(true);
+    window.dispatchEvent(new PageTransitionEvent("pagehide"));
+    window.dispatchEvent(
+      new PageTransitionEvent("pageshow", { persisted: true }),
+    );
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    complete(
+      new Response(JSON.stringify({ detail: "旧请求失效" }), { status: 401 }),
+    );
+    await old;
+    expect(savedPage()).not.toBeNull();
   });
 });

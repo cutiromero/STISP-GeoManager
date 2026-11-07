@@ -3845,13 +3845,13 @@ export type LoginRequest = {
 };
 
 /**
- * 平台页面会话维护请求；正常刷新续接与新标签加入均须持有服务端验证的令牌。
+ * 平台页面会话维护请求；resume须持有已登记令牌，join须持有有效Cookie和CSRF且会话仍有在线页面。
  */
 export type BrowserSessionRequest = {
     /**
-     * start用于刚登录的页面，resume用于刷新或在线标签交接，heartbeat续期，suspend挂起，abandon注销无法续接的会话。
+     * start登记新登录页面，join凭有效Cookie及CSRF加入仍在线的会话，resume恢复有正确令牌的页面，heartbeat续期，suspend挂起，abandon结束无法续接的新访问且保留其他可恢复页面。
      */
-    action: 'start' | 'resume' | 'heartbeat' | 'suspend' | 'abandon';
+    action: 'start' | 'join' | 'resume' | 'heartbeat' | 'suspend' | 'abandon';
     /**
      * 页面随机标识；除abandon外必填，各标签独立。
      */
@@ -3870,6 +3870,10 @@ export type BrowserSessionRequest = {
  * 当前页面会话维护结果。
  */
 export type BrowserSessionResponse = {
+    /**
+     * 同次登录的随机标识，仅用于跨标签退出通知；不授予访问权限，令牌不作为此字段返回。
+     */
+    familyId?: string;
     /**
      * 生命周期处理结果说明。
      */

@@ -7,12 +7,17 @@ export const browserSessionStorageKey = "stisp.browser-page-session";
 export const browserSessionEndedEvent = "stisp:browser-session-ended";
 const channelName = "stisp.browser-session";
 const endpoint = "/api/auth/browser-session/";
+const heartbeatIntervalMs = 30_000;
+const revalidateAfterMs = 25_000;
+const handoffTimeoutMs = 1_500;
+const renewalTimeoutMs = 8_000;
 type SessionEndReason = "logout" | "expired";
 
 interface PageCredentials {
   pageId: string;
   token: string;
   sequence: number;
+  familyId?: string;
 }
 
 let credentials: PageCredentials | null = null;
@@ -20,6 +25,8 @@ let active = false;
 let timer: ReturnType<typeof setInterval> | undefined;
 let channel: BroadcastChannel | null = null;
 let startup: Promise<boolean> | null = null;
+let renewal: Promise<boolean> | null = null;
+let confirmedAt = 0;
 let handlersInstalled = false;
 let lifecycle = 0;
 
@@ -68,25 +75,41 @@ async function send(
   payload: BrowserSessionRequest,
   keepalive = false,
 ): Promise<BrowserSessionResponse> {
-  const response = await fetch(
-    new Request(endpoint, {
-      method: "POST",
-      credentials: "include",
-      keepalive,
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": csrfToken(),
-      },
-      body: JSON.stringify(payload),
-    }),
-  );
-  if (!response.ok) {
-    const error = new Error(
-      response.status === 401 ? "请重新登录" : "页面登录状态更新失败",
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), renewalTimeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(
+      new Request(endpoint, {
+        method: "POST",
+        credentials: "include",
+        keepalive,
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": csrfToken(),
+        },
+        body: JSON.stringify(payload),
+      }),
     );
-    throw Object.assign(error, { status: response.status });
+  } finally {
+    clearTimeout(timeout);
   }
-  return response.json();
+  if (!response.ok) {
+    throw Object.assign(
+      new Error(
+        response.status === 401 ? "请重新登录" : "页面登录状态更新失败",
+      ),
+      { status: response.status },
+    );
+  }
+  const result: BrowserSessionResponse = await response.json();
+  if (
+    ["start", "join", "resume", "heartbeat"].includes(payload.action) &&
+    result.active === false
+  )
+    throw Object.assign(new Error("页面会话未能续期"), { status: 401 });
+  return result;
 }
 
 function payload(
@@ -95,7 +118,12 @@ function payload(
 ): BrowserSessionRequest {
   value.sequence += 1;
   storeCredentials(value);
-  return { action, ...value };
+  return {
+    action,
+    pageId: value.pageId,
+    token: value.token,
+    sequence: value.sequence,
+  };
 }
 
 function ensureChannel() {
@@ -106,6 +134,7 @@ function ensureChannel() {
       kind?: string;
       requestId?: string;
       token?: string;
+      familyId?: string;
       reason?: SessionEndReason;
     } | null;
     if (!data) return;
@@ -122,7 +151,10 @@ function ensureChannel() {
       });
     } else if (
       data.kind === "signed-out" &&
-      credentials?.token === data.token
+      credentials &&
+      (data.familyId && credentials.familyId
+        ? data.familyId === credentials.familyId
+        : credentials.token === data.token)
     ) {
       endBrowserSession(false, data.reason === "logout" ? "logout" : "expired");
     }
@@ -140,8 +172,8 @@ async function onlinePeerToken(): Promise<string | null> {
       peerChannel.removeEventListener("message", receive);
       resolve(value);
     };
-    const receive = (event: MessageEvent) => {
-      const data = event.data as {
+    const receive = (event: Event) => {
+      const data = (event as MessageEvent).data as {
         kind?: string;
         requestId?: string;
         token?: string;
@@ -154,55 +186,86 @@ async function onlinePeerToken(): Promise<string | null> {
       )
         finish(data.token);
     };
-    const timeout = setTimeout(() => finish(null), 400);
+    const timeout = setTimeout(() => finish(null), handoffTimeoutMs);
     peerChannel.addEventListener("message", receive);
     peerChannel.postMessage({ kind: "request", requestId });
   });
 }
 
-function install(value: PageCredentials) {
+function install(value: PageCredentials, result: BrowserSessionResponse) {
+  if (result.familyId) value.familyId = result.familyId;
   credentials = value;
   active = true;
+  confirmedAt = Date.now();
   storeCredentials(value);
   ensureChannel();
   if (timer) clearInterval(timer);
   timer = setInterval(() => {
-    if (!credentials || !active) return;
-    const page = credentials;
-    const generation = lifecycle;
-    void send(payload("heartbeat", page)).catch((error) => {
-      if (
-        generation === lifecycle &&
-        credentials === page &&
-        active &&
-        error instanceof Error &&
-        "status" in error &&
-        error.status === 401
-      )
-        endBrowserSession();
-    });
-  }, 30_000);
+    void refreshBrowserSession(true).catch(() => {});
+  }, heartbeatIntervalMs);
   if (handlersInstalled) return;
   handlersInstalled = true;
   window.addEventListener("pagehide", () => {
     if (!credentials || !active) return;
+    lifecycle += 1;
     active = false;
+    startup = null;
+    renewal = null;
     if (timer) clearInterval(timer);
     void send(payload("suspend", credentials), true).catch(() => {});
   });
   window.addEventListener("pageshow", (event) => {
-    if (!event.persisted || !credentials) return;
-    const saved = credentials;
-    const generation = lifecycle;
-    void send(payload("resume", saved))
-      .then(() => {
-        if (generation === lifecycle && credentials === saved) install(saved);
-      })
-      .catch(() => {
-        if (generation === lifecycle && credentials === saved)
-          endBrowserSession();
-      });
+    if (event.persisted && credentials) {
+      lifecycle += 1;
+      active = false;
+      startup = null;
+      renewal = null;
+      if (timer) clearInterval(timer);
+      void resumeBrowserSession().catch(() => {});
+    }
   });
+  const foreground = () => {
+    if (document.visibilityState === "visible" && active && credentials)
+      void refreshBrowserSession(true).catch(() => {});
+  };
+  window.addEventListener("focus", foreground);
+  document.addEventListener("visibilitychange", foreground);
+}
+
+export function browserSessionEpoch() {
+  return lifecycle;
+}
+
+/** Renew before protected API calls after timers were throttled or the device slept. */
+export function refreshBrowserSession(force = false): Promise<boolean> {
+  if (!credentials || !active) return Promise.resolve(false);
+  if (renewal) return renewal;
+  const elapsed = Date.now() - confirmedAt;
+  if (!force && elapsed >= 0 && elapsed < revalidateAfterMs)
+    return Promise.resolve(true);
+  const page = credentials;
+  const generation = lifecycle;
+  const operation = send(payload("heartbeat", page))
+    .then((result) => {
+      if (generation !== lifecycle || credentials !== page || !active)
+        return false;
+      confirmedAt = Date.now();
+      if (result.familyId) page.familyId = result.familyId;
+      storeCredentials(page);
+      return true;
+    })
+    .catch((error: unknown) => {
+      if (generation !== lifecycle || credentials !== page || !active)
+        return false;
+      if (error instanceof Error && "status" in error && error.status === 401)
+        endBrowserSession(false);
+      throw error;
+    })
+    .finally(() => {
+      if (renewal === operation) renewal = null;
+    });
+  renewal = operation;
+  return operation;
 }
 
 export function endBrowserSession(
@@ -214,11 +277,14 @@ export function endBrowserSession(
     ensureChannel()?.postMessage({
       kind: "signed-out",
       token: credentials.token,
+      familyId: credentials.familyId,
       reason,
     });
   credentials = null;
   active = false;
   startup = null;
+  renewal = null;
+  confirmedAt = 0;
   if (timer) clearInterval(timer);
   timer = undefined;
   sessionStorage.removeItem(browserSessionStorageKey);
@@ -229,47 +295,61 @@ export function endBrowserSession(
 
 export async function startBrowserSession() {
   const generation = ++lifecycle;
-  const token = randomHex(32);
-  const value = { pageId: randomHex(16), token, sequence: 0 };
-  await send(payload("start", value));
+  credentials = null;
+  active = false;
+  startup = null;
+  renewal = null;
+  confirmedAt = 0;
+  if (timer) clearInterval(timer);
+  const value = { pageId: randomHex(16), token: randomHex(32), sequence: 0 };
+  const result = await send(payload("start", value));
   if (generation !== lifecycle)
     throw new DOMException("登录操作已取消，请重新登录", "AbortError");
-  install(value);
+  install(value, result);
   startup = Promise.resolve(true);
 }
 
 export function resumeBrowserSession(): Promise<boolean> {
-  startup ??= restore();
+  if (active && credentials) return refreshBrowserSession();
+  if (!startup) {
+    const operation = restore();
+    startup = operation;
+    void operation.catch(() => {
+      if (startup === operation) startup = null;
+    });
+  }
   return startup;
 }
 
 async function restore(): Promise<boolean> {
   const generation = lifecycle;
-  if (active && credentials) return true;
   const navigation = performance.getEntriesByType("navigation")[0] as
     | PerformanceNavigationTiming
     | undefined;
-  const cached = readCredentials();
-  let value = navigation?.type === "reload" ? cached : null;
+  // Retained JS belongs to a live BFCache document; restored storage alone does not.
+  let value =
+    credentials ?? (navigation?.type === "reload" ? readCredentials() : null);
+  let action: "resume" | "join" = "resume";
   if (!value) {
     sessionStorage.removeItem(browserSessionStorageKey);
     const token = await onlinePeerToken();
     if (generation !== lifecycle) return false;
     if (token) value = { pageId: randomHex(16), token, sequence: 0 };
+    else {
+      value = { pageId: randomHex(16), token: randomHex(32), sequence: 0 };
+      action = "join";
+    }
   }
   try {
-    if (!value) {
-      await send({ action: "abandon" });
-      return false;
-    }
-    await send(payload("resume", value));
+    const result = await send(payload(action, value));
     if (generation !== lifecycle) return false;
-    install(value);
+    install(value, result);
     return true;
   } catch (error) {
     if (generation !== lifecycle) return false;
     if (!(error instanceof Error && "status" in error && error.status === 401))
       throw error;
+    if (action === "join") await send({ action: "abandon" }).catch(() => {});
     endBrowserSession(false);
     return false;
   }

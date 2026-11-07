@@ -710,4 +710,79 @@ describe("api client", () => {
     expect(result.filename).toBe("text2专题图_V2.pdf");
     expect(await result.blob.text()).toBe("%PDF-1.4");
   });
+
+  it("renews and retries an unauthorized protected JSON request once without clearing login", async () => {
+    let attempts = 0;
+    fetchMock.mockImplementation(async (request: Request) => {
+      if (new URL(request.url).pathname === "/api/auth/browser-session/")
+        return jsonResponse({ detail: "ok", active: true });
+      attempts += 1;
+      return attempts === 1
+        ? jsonResponse({ detail: "租约失效" }, { status: 401 })
+        : jsonResponse({ ok: true });
+    });
+    await startBrowserSession();
+    const forbidden = vi.fn();
+    registerForbiddenHandler(forbidden);
+    expect(
+      await requestJson("/api/session-probe/", {
+        method: "POST",
+        body: { idempotencyKey: "same-request" },
+      }),
+    ).toEqual({ ok: true });
+    expect(attempts).toBe(2);
+    expect(forbidden).not.toHaveBeenCalled();
+    const requests = fetchMock.mock.calls
+      .map((call) => call[0] as Request)
+      .filter(
+        (request) => new URL(request.url).pathname === "/api/session-probe/",
+      );
+    expect(await requests[0]!.clone().json()).toEqual(
+      await requests[1]!.clone().json(),
+    );
+  });
+
+  it("recovers an SDK read using the same authenticated request", async () => {
+    let attempts = 0;
+    fetchMock.mockImplementation(async (request: Request) => {
+      if (new URL(request.url).pathname === "/api/auth/browser-session/")
+        return jsonResponse({ active: true, detail: "ok" });
+      attempts += 1;
+      return attempts === 1
+        ? jsonResponse({ detail: "租约失效" }, { status: 401 })
+        : jsonResponse({ ok: true });
+    });
+    await startBrowserSession();
+    const forbidden = vi.fn();
+    registerForbiddenHandler(forbidden);
+    expect(await api.adminProfile()).toEqual({ ok: true });
+    expect(attempts).toBe(2);
+    expect(forbidden).not.toHaveBeenCalled();
+  });
+
+  it("never replays an old user's request after another login", async () => {
+    let finish: (response: Response) => void = () => {};
+    let protectedCalls = 0;
+    fetchMock.mockImplementation((request: Request) => {
+      if (new URL(request.url).pathname === "/api/auth/browser-session/")
+        return Promise.resolve(jsonResponse({ active: true, detail: "ok" }));
+      protectedCalls += 1;
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    });
+    await startBrowserSession();
+    const old = requestJson("/api/session-probe/", {
+      method: "POST",
+      body: { idempotencyKey: "old-user" },
+    });
+    const rejected = expect(old).rejects.toMatchObject({ name: "AbortError" });
+    await vi.waitFor(() => expect(protectedCalls).toBe(1));
+    endBrowserSession(false, "logout");
+    await startBrowserSession();
+    finish(jsonResponse({ detail: "旧会话" }, { status: 401 }));
+    await rejected;
+    expect(protectedCalls).toBe(1);
+    expect(sessionStorage.getItem(browserSessionStorageKey)).not.toBeNull();
+  });
 });
