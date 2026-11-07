@@ -286,7 +286,20 @@ def test_model_role_validation_and_fallback(generic, monkeypatch):
     monkeypatch.setattr(
         workflow_roles.provider,
         "stream",
-        lambda *args, **kwargs: [json.dumps({"items": items})],
+        lambda *args, **kwargs: [
+            json.dumps(
+                {
+                    "items": [
+                        {**item, "uploadId": reference["uploadId"]}
+                        for item, reference in zip(
+                            items,
+                            json.loads(args[1][1]["content"])["items"],
+                            strict=True,
+                        )
+                    ]
+                }
+            )
+        ],
     )
     value = recognize(generic).json()
     assert value["source"] == "model" and value["questions"] == []

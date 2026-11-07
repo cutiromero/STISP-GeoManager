@@ -8,6 +8,7 @@ import time
 from django.core.exceptions import PermissionDenied
 
 from apps.compute.packages import ComputeError
+from apps.audit.service import log_operation
 
 from . import provider
 from .config import registry
@@ -44,7 +45,7 @@ def compatible(upload, role):
     return ROLES[role] == "table" or bool(profile.get("crs"))
 
 
-def validate_roles(raw, uploads):
+def validate_roles(raw, uploads, *, references=None):
     try:
         answer = json.loads(raw.strip().removeprefix("```json").removesuffix("```"))
     except ValueError as exc:
@@ -52,7 +53,11 @@ def validate_roles(raw, uploads):
     items = answer.get("items") if isinstance(answer, dict) else None
     if not isinstance(items, list) or len(items) != len(uploads):
         raise ComputeError("角色识别须包含每份资料")
-    available = {str(upload.id): upload for upload in uploads}
+    available = (
+        references
+        if references is not None
+        else {str(upload.id): upload for upload in uploads}
+    )
     seen, roles, result = set(), set(), []
     for entry in items:
         if not isinstance(entry, dict) or "role" not in entry:
@@ -65,7 +70,7 @@ def validate_roles(raw, uploads):
         if (
             not isinstance(identity, str)
             or identity not in available
-            or identity in seen
+            or str(available[identity].id) in seen
         ):
             raise ComputeError("角色识别引用了无效或重复资料")
         if not isinstance(reason, str) or not reason.strip():
@@ -79,10 +84,10 @@ def validate_roles(raw, uploads):
             ):
                 raise ComputeError("资料角色重复或与资料类型不匹配")
             roles.add(role)
-        seen.add(identity)
+        seen.add(str(upload.id))
         result.append(
             {
-                "uploadId": identity,
+                "uploadId": str(upload.id),
                 "resourceId": upload.resource_id,
                 "role": role,
                 "reason": reason.strip()[:300],
@@ -199,18 +204,29 @@ def recognize_roles(
     guard = ModelStreamGuard(authorize, deadline)
 
     source, result = "rules", None
+    failure = ""
     if not model.model_id.casefold().startswith("mock"):
+        references = {
+            f"file_{index}": upload for index, upload in enumerate(uploads, 1)
+        }
+        by_resource = {
+            upload.resource_id: identity for identity, upload in references.items()
+        }
         payload = {
             "roles": LABELS,
-            "previousRoles": previous_roles or {},
+            "previousRoles": {
+                role: by_resource[identity]
+                for role, identity in (previous_roles or {}).items()
+                if identity in by_resource
+            },
             "items": [
                 {
-                    "uploadId": str(upload.id),
+                    "uploadId": identity,
                     "fileName": upload.file_name,
                     "dataType": upload.resource.data_type,
                     "profile": upload.profile,
                 }
-                for upload in uploads
+                for identity, upload in references.items()
             ],
         }
         messages = [
@@ -225,36 +241,67 @@ def recognize_roles(
             guard.poll()
             window = provider.model_window(model)
             guard.poll()
-            _, truncated = prepare_context(
-                messages, messages[1], model, policy, window, thinking
-            )
-            if truncated:
-                raise provider.ModelError(
-                    "角色识别须保留完整资料，请缩小资料范围后重试"
+            for attempt in range(2):
+                request_thinking = thinking and attempt == 0
+                _, truncated = prepare_context(
+                    messages, messages[1], model, policy, window, request_thinking
                 )
-            guard.poll()
-            raw = _response_text(
-                "".join(
-                    provider.stream(
-                        model,
-                        messages,
-                        policy["maxOutputTokens"],
-                        guard,
-                        structured=True,
-                        thinking=thinking,
-                        temperature=policy["temperature"],
-                        top_p=policy["topP"],
-                        reasoning_effort=policy["reasoningEffort"],
-                        on_thinking=on_thinking,
-                        monitor_guard=guard.poll,
+                if truncated:
+                    raise provider.ModelError(
+                        "角色识别须保留完整资料，请缩小资料范围后重试"
+                    )
+                guard.poll()
+                raw = _response_text(
+                    "".join(
+                        provider.stream(
+                            model,
+                            messages,
+                            policy["maxOutputTokens"],
+                            guard,
+                            structured=True,
+                            thinking=request_thinking,
+                            temperature=policy["temperature"],
+                            top_p=policy["topP"],
+                            reasoning_effort=policy["reasoningEffort"],
+                            on_thinking=on_thinking,
+                            monitor_guard=guard.poll,
+                        )
                     )
                 )
-            )
+                guard.poll()
+                try:
+                    result = validate_roles(raw, uploads, references=references)
+                except ComputeError as exc:
+                    failure = str(exc)
+                    log_operation(
+                        user,
+                        "智能体",
+                        "校验资料角色",
+                        "failed",
+                        failure,
+                        target_type="agent_run"
+                        if source_run
+                        else "workflow_upload_batch",
+                        target_id=source_run.pk if source_run else None,
+                        target_code=batch_id,
+                    )
+                    if attempt:
+                        break
+                    messages += [
+                        {"role": "assistant", "content": raw},
+                        {
+                            "role": "user",
+                            "content": "请校对一次并返回完整JSON。上次校验未通过："
+                            + failure
+                            + "。uploadId必须逐字采用items中的file_短编号，每份资料恰好一项，role仅选roles中的键或null。不要重复角色，不加新资料。",
+                        },
+                    ]
+                else:
+                    source = "model"
+                    break
+        except (provider.ModelError, ComputeError) as exc:
             guard.poll()
-            result = validate_roles(raw, uploads)
-            source = "model"
-        except (provider.ModelError, ComputeError):
-            guard.poll()
+            failure = str(exc)
             result = None
     if result is None:
         result, used = [], set()
@@ -268,7 +315,8 @@ def recognize_roles(
                     "uploadId": str(upload.id),
                     "resourceId": upload.resource_id,
                     "role": role,
-                    "reason": "按文件名、类型和几何判断"
+                    "reason": ("模型未完成角色判断，请核对；" if failure else "")
+                    + "按文件名、类型和几何判断"
                     + ("；无法唯一确定角色，请手动选择" if role is None else ""),
                 }
             )

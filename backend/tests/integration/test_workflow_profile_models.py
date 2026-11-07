@@ -141,7 +141,9 @@ def profiles(setup_compute, settings, monkeypatch):  # noqa: F811
                     {
                         "items": [
                             {
-                                "uploadId": str(upload.id),
+                                "uploadId": json.loads(messages[1]["content"])["items"][
+                                    0
+                                ]["uploadId"],
                                 "role": "lithology",
                                 "reason": "矢量面地质资料",
                             }
@@ -194,6 +196,44 @@ def test_field_mapping_keeps_the_callers_smaller_output_budget(profiles):
         profiles["roles"],
     )
     assert profiles["requests"][0][0] == 128
+
+
+def test_role_reference_repair_keeps_original_inputs_and_does_not_repeat_thinking(
+    profiles, monkeypatch
+):
+    calls = []
+    thinking = []
+
+    def stream(model, messages, maximum, guard, **options):
+        guard()
+        payload = json.loads(messages[1]["content"])
+        assert payload["items"][0]["uploadId"] == "file_1"
+        assert payload["previousRoles"] == {"lithology": "file_1"}
+        calls.append(options["thinking"])
+        if len(calls) == 1:
+            options["on_thinking"]("矢量面和地层字段符合地质图角色")
+        yield json.dumps(
+            {
+                "items": [
+                    {
+                        "uploadId": "wrong-reference" if len(calls) == 1 else "file_1",
+                        "role": "lithology",
+                        "reason": "矢量面包含地层字段",
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr(provider, "stream", stream)
+    value = infer_roles(
+        profiles,
+        previous_roles={"lithology": profiles["upload"].resource_id},
+        on_thinking=thinking.append,
+    )
+    assert value["source"] == "model" and value["items"][0]["uploadId"] == str(
+        profiles["upload"].id
+    )
+    assert calls == [True, False] and thinking
 
 
 @pytest.mark.parametrize("target", ["mapping", "roles"])

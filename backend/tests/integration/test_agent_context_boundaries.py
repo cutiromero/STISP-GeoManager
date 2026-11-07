@@ -394,7 +394,9 @@ def role_batch(setup_agent, settings, monkeypatch):
             {
                 "items": [
                     {
-                        "uploadId": str(env["role_upload"].pk),
+                        "uploadId": json.loads(messages[1]["content"])["items"][0][
+                            "uploadId"
+                        ],
                         "role": "units",
                         "reason": "填图单元表格",
                     }
