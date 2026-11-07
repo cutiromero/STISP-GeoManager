@@ -28,6 +28,7 @@ export function syncVectorInteractions(
       `${sourceId}-excluded-line`,
       `${sourceId}-point`,
       `${sourceId}-symbol`,
+      `${sourceId}-cluster`,
     ]) {
       if (map.getLayer(styleLayerId)) {
         activeLayerIds.add(styleLayerId);
@@ -67,6 +68,16 @@ function addVectorInteraction(
     const feature = event.features?.[0];
     if (!feature) return;
     event.preventDefault();
+    if (
+      (feature as FeatureWithProperties).properties?.point_count &&
+      layerId.endsWith("-cluster")
+    ) {
+      map.easeTo({
+        center: event.lngLat,
+        zoom: Math.min(20, map.getZoom() + 2),
+      });
+      return;
+    }
     const target = featureStateTarget(feature);
     const state = getMapState(map);
     const selected = state.selectedFeature;

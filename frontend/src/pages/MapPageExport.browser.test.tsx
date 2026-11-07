@@ -135,74 +135,92 @@ describe("MapPage asynchronous layer export polling", () => {
     vi.useRealTimers();
   });
 
-  it("reloads original line geometry before submitting a display preview export", async () => {
-    const group = createEmptyLayerGroup("管线");
-    const preview = { type: "FeatureCollection" as const, features: [] };
-    const original = {
-      type: "FeatureCollection" as const,
-      features: [
-        {
-          type: "Feature" as const,
-          properties: { name: "原始管线" },
-          geometry: {
-            type: "LineString" as const,
-            coordinates: [
-              [0, 0],
-              [1, 1],
-              [2, 0],
-            ],
+  it.each([false, true])(
+    "reloads original geometry before exporting preview (tiled=%s)",
+    async (tiled) => {
+      const group = createEmptyLayerGroup("管线");
+      const preview = { type: "FeatureCollection" as const, features: [] };
+      const original = {
+        type: "FeatureCollection" as const,
+        features: [
+          {
+            type: "Feature" as const,
+            properties: { name: "原始管线" },
+            geometry: {
+              type: "LineString" as const,
+              coordinates: [
+                [0, 0],
+                [1, 1],
+                [2, 0],
+              ],
+            },
           },
-        },
-      ],
-    };
-    const body = viewportQueryPayload(
-      [-180, -85, 180, 85],
-      10000,
-      "LineString",
-    );
-    const layer: LoadedVectorLayer = {
-      id: "line",
-      name: "管线",
-      layerType: "vector",
-      visible: true,
-      geometryType: "LineString",
-      summary: "",
-      viewportOnly: true,
-      metadata: { 视野查询键: JSON.stringify([7, "v1", body]) },
-      fields: [],
-      sourceResource: group.sourceResource,
-      symbolization: cloneDefaultVectorSymbolization(),
-      geojson: preview,
-    };
-    group.children = [layer];
-    mockApi.queryResource.mockResolvedValue({ geojson: original } as Awaited<
-      ReturnType<typeof api.queryResource>
-    >);
-    mockApi.exportLayersAsync.mockResolvedValue(readyJob);
-    const hook = renderHook(() =>
-      useLayerExport({
-        groups: [group],
-        canExportData: true,
-        permissionDeniedMessage: "无权限",
-        message: messageApi,
-      }),
-    );
-    await act(async () => {
-      await hook.result.current(
-        [{ ...exportItem, geojson: preview }],
-        exportOptions,
+        ],
+      };
+      const body = viewportQueryPayload(
+        [-180, -85, 180, 85],
+        10000,
+        "LineString",
       );
-    });
-    expect(mockApi.queryResource).toHaveBeenCalledOnce();
-    const exact = mockApi.queryResource.mock.calls[0]![1];
-    expect(exact.spatialFilter).toEqual(body.spatialFilter);
-    expect(exact.displayGeometry).toBeUndefined();
-    expect(exact.lineSimplifyTolerance).toBeUndefined();
-    expect(
-      mockApi.exportLayersAsync.mock.calls[0]![0].items[0]!.geojson,
-    ).toEqual(original);
-    expect(layer.geojson).toEqual(preview);
-  });
+      const layer: LoadedVectorLayer = {
+        id: "line",
+        name: "管线",
+        layerType: "vector",
+        visible: true,
+        geometryType: "LineString",
+        summary: "",
+        viewportOnly: true,
+        metadata: { 视野查询键: JSON.stringify([7, "v1", body]) },
+        fields: [],
+        sourceResource: group.sourceResource,
+        symbolization: cloneDefaultVectorSymbolization(),
+        geojson: preview,
+        ...(tiled
+          ? {
+              vectorTiles: {
+                revision: "0".repeat(24),
+                tileUrl: "/api/tile/{z}/{x}/{y}.pbf",
+                sourceLayer: "features" as const,
+                minZoom: 0 as const,
+                maxZoom: 10 as const,
+                bounds: [-180, -80, 180, 80],
+                clustered: false,
+                featureCount: 3318,
+              },
+            }
+          : {}),
+      };
+      group.children = [layer];
+      mockApi.queryResource.mockResolvedValue({ geojson: original } as Awaited<
+        ReturnType<typeof api.queryResource>
+      >);
+      mockApi.exportLayersAsync.mockResolvedValue(readyJob);
+      const hook = renderHook(() =>
+        useLayerExport({
+          groups: [group],
+          canExportData: true,
+          permissionDeniedMessage: "无权限",
+          message: messageApi,
+        }),
+      );
+      await act(async () => {
+        await hook.result.current(
+          [{ ...exportItem, geojson: preview }],
+          exportOptions,
+        );
+      });
+      expect(mockApi.queryResource).toHaveBeenCalledOnce();
+      const exact = mockApi.queryResource.mock.calls[0]![1];
+      expect(exact.spatialFilter).toEqual(body.spatialFilter);
+      expect(exact.displayGeometry).toBeUndefined();
+      expect(exact.lineSimplifyTolerance).toBeUndefined();
+      expect(exact.sourceFeatureIds).toBe(tiled ? true : undefined);
+      expect(
+        mockApi.exportLayersAsync.mock.calls[0]![0].items[0]!.geojson,
+      ).toEqual(original);
+      expect(layer.geojson).toEqual(preview);
+    },
+  );
 
   it("stops a permanently running job at the maximum wait time", async () => {
     render(<ExportHarness />);

@@ -65,6 +65,7 @@ from apps.catalog.vector_importer import (
     preview_vector_import,
     validate_vector_import,
 )
+from apps.catalog.vector_tiles import vector_tile_preview
 from apps.catalog.visualization import resource_visualization_summary
 from apps.core.api import api_login_required
 from apps.core.initialization import (
@@ -1215,6 +1216,7 @@ def resource_profile(request, pk: int):
             "bounds": profile.bounds,
             "raster": profile.raster,
             "defaultVisualization": resource.default_visualization,
+            "vectorTiles": vector_tile_preview(resource),
         }
     )
 

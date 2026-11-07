@@ -17,6 +17,7 @@ import {
 import { syncVectorInteractions } from "./featureInteraction";
 import { getMapState } from "./mapState";
 import { isViewportVectorLayer } from "./viewportVectorQuery";
+import { vectorTileSourceOptions } from "./vectorTilePreview";
 import { fitBoundsOptions, rasterFitBoundsOptions } from "./mapViewport";
 import { addRasterLayer } from "./rasterLayerSync";
 import { registerPlatformSymbolImages } from "./symbolImages";
@@ -66,21 +67,31 @@ export function syncLoadedLayers(
       continue;
     }
     const isNew = !map.getSource(sourceId);
-    const nextSourceKey = vectorSourceKey(layer);
+    const nextSourceKey = layer.vectorTiles
+      ? JSON.stringify(vectorTileSourceOptions(layer))
+      : vectorSourceKey(layer);
     if (!isNew && state.vectorSourceKeys.get(sourceId) !== nextSourceKey) {
       removeLoadedLayerGroup(map, sourceId);
       state.sourceDataRefs.delete(sourceId);
     }
     const shouldCreateSource = !map.getSource(sourceId);
     if (shouldCreateSource) {
-      map.addSource(sourceId, vectorGeojsonSourceOptions(layer));
+      map.addSource(
+        sourceId,
+        layer.vectorTiles
+          ? vectorTileSourceOptions(layer)
+          : vectorGeojsonSourceOptions(layer),
+      );
       state.vectorSourceKeys.set(sourceId, nextSourceKey);
       state.sourceDataRefs.set(sourceId, layer.geojson);
       if (layer.visible && !isViewportVectorLayer(layer)) {
         const bounds = combinedFeatureBounds([layer.geojson]);
         if (bounds) newVectorBounds.push(bounds);
       }
-    } else if (state.sourceDataRefs.get(sourceId) !== layer.geojson) {
+    } else if (
+      !layer.vectorTiles &&
+      state.sourceDataRefs.get(sourceId) !== layer.geojson
+    ) {
       (map.getSource(sourceId) as GeoJSONSource).setData(
         layer.geojson as never,
       );

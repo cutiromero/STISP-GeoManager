@@ -221,6 +221,10 @@ def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str
     started_at = perf_counter()
     display_geometry = payload.get("displayGeometry", False)
     line_tolerance = line_display_tolerance(payload)
+    source_ids = payload.get("sourceFeatureIds", False)
+    if not isinstance(source_ids, bool):
+        raise DataQueryError("sourceFeatureIds须为布尔值")
+    id_options = {"source_ids": True} if source_ids else {}
     if not isinstance(display_geometry, bool):
         raise DataQueryError("displayGeometry须为布尔值")
     if resource.data_type != DataResource.DataType.VECTOR:
@@ -239,7 +243,7 @@ def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str
     where = _attribute_filter_where(fields, attribute_filters)
     if query_geometry is None:
         total_count = _geopackage_filtered_count(path, layer_name, where)
-        gdf = read_resource(resource, where=where, rows=slice(0, limit))
+        gdf = read_resource(resource, where=where, rows=slice(0, limit), **id_options)
         valid_gdf, warnings = validate_geojson_geometries(
             gdf, estimate_uncertainty=not line_tolerance
         )
@@ -252,6 +256,7 @@ def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str
             where=where,
             limit=limit,
             estimate_uncertainty=not line_tolerance,
+            **id_options,
         )
 
     bounds = _returned_bounds(returned)
@@ -289,6 +294,7 @@ def _query_spatial_resource_in_chunks(
     where: str | None,
     limit: int,
     estimate_uncertainty: bool = True,
+    source_ids: bool = False,
 ):
     from apps.catalog.geojson_validation import GeometryValidationAccumulator
 
@@ -309,6 +315,7 @@ def _query_spatial_resource_in_chunks(
         bbox=bbox,
         where=where,
         chunk_size=SPATIAL_QUERY_CHUNK_SIZE,
+        **({"source_ids": True} if source_ids else {}),
     ):
         filtered = apply_spatial_filter(
             chunk, spatial_filter, query_geometry=query_geometry
@@ -321,7 +328,9 @@ def _query_spatial_resource_in_chunks(
             returned_chunks.append(selected)
             returned_count += len(selected)
 
-    returned = _combine_geodataframe_chunks(returned_chunks, empty)
+    returned = _combine_geodataframe_chunks(
+        returned_chunks, empty, source_ids=source_ids
+    )
     return returned, total_count, accumulator.warnings()
 
 
@@ -331,6 +340,7 @@ def _iter_resource_chunks(
     bbox: tuple[float, float, float, float] | None,
     where: str | None,
     chunk_size: int,
+    source_ids: bool = False,
 ):
     offset = 0
     while True:
@@ -339,6 +349,7 @@ def _iter_resource_chunks(
             bbox=bbox,
             where=where,
             rows=slice(offset, offset + chunk_size),
+            **({"source_ids": True} if source_ids else {}),
         )
         if len(chunk) == 0:
             return
@@ -346,7 +357,7 @@ def _iter_resource_chunks(
         offset += chunk_size
 
 
-def _combine_geodataframe_chunks(chunks: list[Any], empty):
+def _combine_geodataframe_chunks(chunks: list[Any], empty, *, source_ids=False):
     if not chunks:
         return empty
     if len(chunks) == 1:
@@ -355,7 +366,7 @@ def _combine_geodataframe_chunks(chunks: list[Any], empty):
     import geopandas as gpd
 
     first = chunks[0]
-    combined = pd.concat(chunks, ignore_index=True)
+    combined = pd.concat(chunks, ignore_index=not source_ids)
     return gpd.GeoDataFrame(
         combined,
         geometry=first.geometry.name,
@@ -369,6 +380,7 @@ def read_resource(
     *,
     where: str | None = None,
     rows: slice | int | None = None,
+    source_ids: bool = False,
 ):
     if not resource.storage_path:
         raise DataQueryError("数据资源未配置 GeoPackage 图层名")
@@ -384,7 +396,9 @@ def read_resource(
             raise DataQueryError(
                 "原始矢量图层已缺失且没有可用归档，请重新导入该数据后再加载工程"
             )
-    return _read_layer_from_path(path, layer_name, bbox=bbox, where=where, rows=rows)
+    return _read_layer_from_path(
+        path, layer_name, bbox=bbox, where=where, rows=rows, source_ids=source_ids
+    )
 
 
 def _read_layer_from_path(
@@ -394,6 +408,7 @@ def _read_layer_from_path(
     bbox: tuple[float, float, float, float] | None,
     where: str | None = None,
     rows: slice | int | None = None,
+    source_ids: bool = False,
 ):
     if not path.exists():
         raise DataQueryError(f"统一 GeoPackage 文件不存在：{path}")
@@ -402,7 +417,13 @@ def _read_layer_from_path(
         import geopandas as gpd
 
         gdf = _read_geopackage_layer(
-            gpd, path, layer_name, bbox=bbox, where=where, rows=rows
+            gpd,
+            path,
+            layer_name,
+            bbox=bbox,
+            where=where,
+            rows=rows,
+            **({"source_ids": True} if source_ids else {}),
         )
     except Exception as exc:
         raise DataQueryError(f"读取 GeoPackage 图层失败：{layer_name}，{exc}") from exc
@@ -413,7 +434,14 @@ def _read_layer_from_path(
 
 
 def _read_geopackage_layer(
-    gpd, path: Path, layer_name: str, *, bbox=None, where=None, rows=None
+    gpd,
+    path: Path,
+    layer_name: str,
+    *,
+    bbox=None,
+    where=None,
+    rows=None,
+    source_ids=False,
 ):
     # Pyogrio treats max_features=0 as unlimited. Use an SQL false predicate
     # for schema-only reads instead of accidentally scanning the whole layer.
@@ -425,7 +453,7 @@ def _read_geopackage_layer(
         return gpd.read_file(
             path, layer=layer_name, where=_combine_where_clauses("0=1", where)
         )
-    read_options = {}
+    read_options = {"fid_as_index": True} if source_ids else {}
     if where:
         read_options["where"] = where
     if rows is not None:
@@ -451,6 +479,7 @@ def _read_geopackage_layer(
                     layer=layer_name,
                     where=combined_where,
                     **({"rows": rows} if rows is not None else {}),
+                    **({"fid_as_index": True} if source_ids else {}),
                 )
             except Exception:
                 pass

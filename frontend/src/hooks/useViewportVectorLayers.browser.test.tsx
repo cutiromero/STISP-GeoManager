@@ -11,10 +11,14 @@ import type {
 } from "../types";
 import { useViewportVectorLayers } from "./useViewportVectorLayers";
 import { api } from "../api/client";
-const mocks = { queryResource: vi.spyOn(api, "queryResource") };
+const mocks = {
+  queryResource: vi.spyOn(api, "queryResource"),
+  resourceProfile: vi.spyOn(api, "resourceProfile"),
+};
 afterEach(() => {
   cleanup();
   mocks.queryResource.mockReset();
+  mocks.resourceProfile.mockReset();
 });
 
 function fixture() {
@@ -99,12 +103,17 @@ class Camera {
     this.emit("moveend");
   }
 }
-function harness(camera: Camera, initial = fixture()) {
+function harness(
+  camera: Camera,
+  initial = fixture(),
+  resolveTilePreviews = false,
+) {
   const onError = vi.fn();
   const hook = renderHook(
     ({ scope }) => {
       const [groups, setGroups] = useState<LoadedLayerGroup[]>([initial]);
       useViewportVectorLayers({
+        resolveTilePreviews,
         map: camera as unknown as MapboxMap,
         scope,
         enabled: true,
@@ -132,6 +141,56 @@ function harness(camera: Camera, initial = fixture()) {
   return { ...hook, onError };
 }
 describe("view-bound vector loading", () => {
+  it("upgrades an existing layer once and moves without querying large GeoJSON", async () => {
+    const camera = new Camera();
+    const preview = {
+      revision: "0".repeat(24),
+      tileUrl: "/api/tile/{z}/{x}/{y}.pbf",
+      sourceLayer: "features" as const,
+      minZoom: 0 as const,
+      maxZoom: 10 as const,
+      bounds: [80, 10, 110, 50],
+      clustered: true,
+      featureCount: 39953,
+    };
+    mocks.resourceProfile.mockResolvedValue({ vectorTiles: preview } as never);
+    const h = harness(camera, fixture(), true);
+    await waitFor(() =>
+      expect(
+        (h.result.current[0]!.children[0] as LoadedVectorLayer).vectorTiles
+          ?.revision,
+      ).toBe(preview.revision),
+    );
+    expect(mocks.queryResource).not.toHaveBeenCalled();
+    const initialKey = h.result.current[0]!.children[0]!.metadata.视野查询键;
+    act(() => camera.move([92, 17, 105, 30]));
+    await waitFor(() =>
+      expect(h.result.current[0]!.children[0]!.metadata.视野查询键).not.toBe(
+        initialKey,
+      ),
+    );
+    expect(mocks.resourceProfile).toHaveBeenCalledTimes(1);
+    expect(mocks.queryResource).not.toHaveBeenCalled();
+    h.unmount();
+  });
+
+  it("ignores a prepared profile that arrives after the project scope changes", async () => {
+    let resolveProfile: (profile: never) => void = () => {};
+    mocks.resourceProfile.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveProfile = resolve;
+        }),
+    );
+    const h = harness(new Camera(), fixture(), true);
+    await waitFor(() => expect(mocks.resourceProfile).toHaveBeenCalledTimes(1));
+    h.unmount();
+    await act(async () =>
+      resolveProfile({ vectorTiles: { revision: "late" } } as never),
+    );
+    expect(mocks.queryResource).not.toHaveBeenCalled();
+    expect(h.onError).not.toHaveBeenCalled();
+  });
   it("prioritizes two pipelines and caps concurrent viewport requests at two", async () => {
     const camera = new Camera();
     const group = fixture();

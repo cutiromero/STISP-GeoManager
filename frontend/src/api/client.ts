@@ -1113,9 +1113,15 @@ export const api = {
       projectTagId,
     });
   },
-  resourceProfile: (resource: ResourceListItem) =>
+  resourceProfile: (
+    resource: ResourceListItem,
+    options: RequestLifecycleOptions = {},
+  ) =>
     unwrap<DataResourceProfile>(
-      sdk.getResourceProfile({ path: { id: resource.id } }),
+      sdk.getResourceProfile({
+        path: { id: resource.id },
+        signal: options.signal,
+      }),
     ),
   resourceVisualizationSummary: (
     resource: ResourceListItem,

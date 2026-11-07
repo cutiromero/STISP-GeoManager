@@ -1554,6 +1554,17 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 远景输出增加`prospect_support`连续栅格及`prospectHeatmapOutputId`引用。后端统一脚本按`colorRamp`蓝—黄—红连续插值生成PNG，浏览器只显示图片和同色图例；透明背景不扩大目标边界。相对置信度由已圈目标内的矿物组合与岩性支持归一化，非有矿概率。
 
+## API-20261107-004 矢量预生成显示瓦片（已实现，服务器验收单独记录）
+
+- Status: BackendReady
+- QueryRequest增加可选sourceFeatureIds（默认false）；聚合点同时提供rawTileUrl和aggregate=0，保留关闭聚合及热力图显示能力。
+
+- 接口：GET资源profile新增可选vectorTiles；新增GET `/api/catalog/resources/{id}/vector-tiles/{revision}/{z}/{x}/{y}.pbf`。
+- 原因：管线按级别和区域读取二进制瓦片，灾害点用全量聚合，减少每次视野查询和大GeoJSON传输。例子：`mock/prism/requests/vector-tiles.json`。
+- 后端交接：离线管理命令只读原始GeoPackage生成0～10级缓存；revision隔离资源修订；瓦片按query_data/load_vector_layer、项目、owner_only授权后读私有缓存，空瓦片204、失效404、参数400，ETag检查在鉴权之后。
+- 前端交接：已就绪且无筛选的普通显示使用vector source；聚合点点击放大；属性表/导出按当前范围读取原始数据。显隐、符号、属性点击、工程恢复须保留。
+- 验证：聚合数量守恒、完整几何未修改、无运行时生成、缓存失效/跨项目/owner_only/撤权后304保护；真实MVT浏览器、属性表和精确导出。详情见`docs/vector-preview-tiles-20261107.md`。
+
 ## 2026-11-07 输入版本复用与自动处置位置（已实施）
 
 - `GET /api/agent/workflows/{workflowId}/?view=inspection&part=retained`的`plan.reviewIndex`新增可选`automaticMap`。从完整冻结授权集合提取轻量位置，包含total、locatedCount及位置点/count；不扩大人工候选、审批集合或数据权限。前端低对比标记按当前视口聚合，缩放/勾选不重新请求。mock见105-agent-workflow-card.json。

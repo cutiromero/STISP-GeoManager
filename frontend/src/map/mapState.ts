@@ -7,6 +7,7 @@ import type {
 
 export interface FeatureStateTarget {
   source: string;
+  sourceLayer?: string;
   id: string | number;
 }
 
@@ -77,5 +78,9 @@ export function featureStateTarget(
     source?: string;
   };
   if (targetFeature.id === undefined || !targetFeature.source) return null;
-  return { source: targetFeature.source, id: targetFeature.id };
+  return {
+    source: targetFeature.source,
+    id: targetFeature.id,
+    ...(feature.sourceLayer ? { sourceLayer: feature.sourceLayer } : {}),
+  };
 }

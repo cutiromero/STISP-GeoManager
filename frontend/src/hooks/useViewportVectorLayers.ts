@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import type { Map as MapboxMap } from "mapbox-gl";
 import { api } from "../api/client";
+import { attachVectorTilePreview } from "../map/vectorTilePreview";
+import type { DataResourceProfile } from "../types";
 import type {
   LoadedLayer,
   LoadedLayerGroup,
@@ -16,6 +18,7 @@ export function useViewportVectorLayers(options: {
   map: MapboxMap | null;
   scope: string;
   enabled: boolean;
+  resolveTilePreviews?: boolean;
   groups: LoadedLayerGroup[];
   limit: number;
   updateLayer: (
@@ -27,6 +30,9 @@ export function useViewportVectorLayers(options: {
 }) {
   const latest = useRef(options);
   latest.current = options;
+  const previews = useRef(
+    new Map<string, Promise<DataResourceProfile["vectorTiles"]>>(),
+  );
   const targets = options.groups
     .filter((g) => g.visible)
     .flatMap((g) =>
@@ -92,12 +98,70 @@ export function useViewportVectorLayers(options: {
               context.limit,
               layer.geometryType,
             );
+            let preview = layer.vectorTiles;
+            if (context.resolveTilePreviews) {
+              const profileKey = JSON.stringify([
+                scope,
+                layer.sourceResource.id,
+                layer.sourceResource.updatedAt,
+              ]);
+              let pending = previews.current.get(profileKey);
+              if (!pending) {
+                pending = api
+                  .resourceProfile(layer.sourceResource, { signal })
+                  .then((profile) => profile.vectorTiles)
+                  .catch((error) => {
+                    previews.current.delete(profileKey);
+                    throw error;
+                  });
+                previews.current.set(profileKey, pending);
+                while (previews.current.size > 64)
+                  previews.current.delete(
+                    previews.current.keys().next().value!,
+                  );
+              }
+              preview = (await pending) ?? undefined;
+            }
             const key = JSON.stringify([
               layer.sourceResource.id,
               layer.sourceResource.updatedAt,
               body,
             ]);
+            if (preview) {
+              if (
+                disposed ||
+                signal.aborted ||
+                latest.current.scope !== scope ||
+                current !== revision
+              )
+                return;
+              const prepared = preview;
+              context.updateLayer(groupId, layer.id, (l) =>
+                l.layerType === "vector"
+                  ? {
+                      ...(l.vectorTiles?.revision === prepared.revision
+                        ? l
+                        : {
+                            ...attachVectorTilePreview(l, prepared),
+                            ...(l.vectorTiles
+                              ? { symbolization: l.symbolization }
+                              : {}),
+                          }),
+                      metadata: {
+                        ...l.metadata,
+                        加载方式: "分级矢量瓦片",
+                        展示范围: "当前地图视野",
+                        显示要素总数: prepared.featureCount,
+                        视野查询键: key,
+                        视野刷新时间: Date.now(),
+                      },
+                    }
+                  : l,
+              );
+              continue;
+            }
             if (
+              !layer.vectorTiles &&
               layer.metadata.视野查询键 === key &&
               Date.now() - Number(layer.metadata.视野刷新时间) < 30000
             )
@@ -118,7 +182,11 @@ export function useViewportVectorLayers(options: {
             while (cache.size > 24) cache.delete(cache.keys().next().value!);
             context.updateLayer(groupId, layer.id, (l) =>
               l.layerType === "vector" && isViewportVectorLayer(l)
-                ? applyViewportResult(l, result, key)
+                ? applyViewportResult(
+                    { ...l, vectorTiles: undefined },
+                    result,
+                    key,
+                  )
                 : l,
             );
           }
@@ -152,5 +220,12 @@ export function useViewportVectorLayers(options: {
       map.off("movestart", cancel);
       map.off("moveend", schedule);
     };
-  }, [options.map, options.scope, options.enabled, options.limit, signature]);
+  }, [
+    options.map,
+    options.scope,
+    options.enabled,
+    options.resolveTilePreviews,
+    options.limit,
+    signature,
+  ]);
 }

@@ -106,10 +106,11 @@ export function exactViewportExportQuery(
     string,
     ResourceQueryPayload,
   ];
-  if (!body.lineSimplifyTolerance) return null;
+  if (!body.lineSimplifyTolerance && !layer.vectorTiles) return null;
   return {
     attributeFilters: body.attributeFilters,
     spatialFilter: body.spatialFilter,
     limit: body.limit,
+    ...(layer.vectorTiles ? { sourceFeatureIds: true } : {}),
   };
 }

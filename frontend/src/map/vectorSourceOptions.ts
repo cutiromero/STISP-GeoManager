@@ -34,6 +34,12 @@ export function vectorGeojsonSourceOptions(
 }
 
 export function shouldClusterVectorLayer(layer: LoadedVectorLayer) {
+  if (layer.vectorTiles)
+    return (
+      layer.vectorTiles.clustered &&
+      layer.symbolization.cluster.enabled &&
+      layer.symbolization.pointMode !== "heatmap"
+    );
   return (
     layer.geojson.features.length > 0 &&
     isPointOnlyGeometry(layer.geometryType) &&

@@ -2,6 +2,16 @@
 
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 
+## 预生成矢量显示瓦片（API-20261107-004）
+
+点资源同时提供rawTileUrl，关闭聚合或热力图使用aggregate=0读取原始点显示瓦片。原始属性查询增加可选布尔sourceFeatureIds（默认false），true保留源GeoPackage FID以关联瓦片；不改变几何和查询上限。公开项目保留原有游客只读语义，非公开项目仍须认证和项目授权。
+
+资源profile的可选vectorTiles描述已准备好的同源MVT缓存，未准备或修订后为null。无筛选普通地图可直接使用tileUrl/sourceLayer/minZoom/maxZoom/bounds，点聚合节点携带point_count及point_count_abbreviated。瓦片不是业务查询结果，属性表和导出按当前视野查询原始数据，遵循既有查询上限；聚合节点不可导出成原始点。
+
+GET `/api/catalog/resources/{id}/vector-tiles/{revision}/{z}/{x}/{y}.pbf`沿用query_data、load_vector_layer、当前单项目和owner_only授权；项目通过projectTagId或X-Project-Id传递，页面会话沿用原同源协议。HTTP不生成瓦片；空瓦片204、失效版本404、非法坐标400、正常200/gzip，ETag鉴权后可返回304。响应private,no-cache，不能共享缓存。
+
+离线命令 `python manage.py prepare_vector_tiles --project-id 2 --resource-id 148 --resource-id 149 --resource-id 150` 从一致性只读快照生成缓存，原子发布；数据源、权限和目录仍由现有TOML及项目上下文控制。预览0～10级，放大可过缩放；WebMercator范围±85.051129度。实现及测试边界见vector-preview-tiles-20261107.md。
+
 ## 普通数据目录与任务材料
 
 平台普通资源目录、全局搜索和图层列表依据统一的内部 `source` 前缀及注册规则 `code` 标识，隐藏任务上传、工作副本、冻结规则、批准或模型修改表、场景参照及评价材料。后台资源列表、导出、资源/图层统计和未指定 `resourceId` 的计算输入目录复用这一排除规则。普通业务上传、`compute-output:` 计算成果、`workflow-report:` 报告和未绑定资源的默认图层保留；不按资料名称中的“测试”“演示”“test”或“demo”过滤。资源不被删除，已绑定工作流和历史证据继续按真实项目、ACL及任务绑定通过编号读取。

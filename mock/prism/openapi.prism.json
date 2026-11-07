@@ -10656,6 +10656,132 @@
         }
       }
     },
+    "/api/catalog/resources/{id}/vector-tiles/{revision}/{z}/{x}/{y}.pbf": {
+      "get": {
+        "tags": [
+          "数据目录"
+        ],
+        "summary": "读取预生成矢量显示瓦片",
+        "description": "仅返回已准备好的地图预览，按原查询接口检查core.query_data、core.load_vector_layer、当前项目和owner_only。每次请求先鉴权再检查缓存。原始查询、计算和导出不使用瓦片。空瓦片返回204，失效或未准备好的版本返回404，接口不现场生成瓦片。",
+        "operationId": "getResourceVectorTile",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ResourceId"
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "description": "资源详情返回的显示缓存版本，资源修订后旧版本失效。",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{24}$"
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "description": "XYZ缩放级别，超出已准备范围返回400。",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "description": "XYZ横坐标，必须小于2的z次方。",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "description": "XYZ纵坐标，必须小于2的z次方。",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "projectTagId",
+            "in": "query",
+            "description": "当前项目ID，与X-Project-Id同时存在时必须一致。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "description": "当前项目ID，缺省公开项目1。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "description": "已接收瓦片的ETag；重新鉴权后相同可返回304。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "aggregate",
+            "in": "query",
+            "description": "点显示1为按级别聚合、0为原始点显示；线图层忽略。热力图和关闭聚合时使用0，均仅影响显示。",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                0,
+                1
+              ],
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "gzip编码的MVT瓦片，Cache-Control为private,no-cache，禁止共享缓存。",
+            "content": {
+              "application/vnd.mapbox-vector-tile": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "地图显示专用MVT二进制。"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "当前瓦片没有显示要素。"
+          },
+          "304": {
+            "description": "鉴权通过且瓦片未改变。"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/api/catalog/resources/{id}/nongeo-analysis/": {
       "parameters": [
         {
@@ -41521,6 +41647,17 @@
           "bounds"
         ],
         "properties": {
+          "vectorTiles": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/VectorTilePreview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "已预生成的矢量显示瓦片信息；未准备或资源修订后为null。普通无筛选地图显示可使用，精确查询和导出始终读取原始数据。"
+          },
           "defaultVisualization": {
             "type": "object",
             "description": "资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。",
@@ -41569,6 +41706,66 @@
               }
             ],
             "description": "栅格资源详情；非栅格资源可能省略或为 null"
+          }
+        }
+      },
+      "VectorTilePreview": {
+        "type": "object",
+        "description": "当前资源修订对应的地图显示缓存，点资源使用全量数据网格聚合，不是抽样。WebMercator纬度限制为正负85.051129度。",
+        "required": [
+          "revision",
+          "tileUrl",
+          "sourceLayer",
+          "minZoom",
+          "maxZoom",
+          "bounds",
+          "clustered",
+          "featureCount"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "description": "资源显示缓存版本。"
+          },
+          "tileUrl": {
+            "type": "string",
+            "description": "同源XYZ瓦片模板，客户端携带当前项目与页面会话。"
+          },
+          "rawTileUrl": {
+            "type": "string",
+            "description": "点资源非聚合显示瓦片模板，热力图及关闭聚合时使用；属性表和导出仍读取原始数据。"
+          },
+          "sourceLayer": {
+            "type": "string",
+            "const": "features",
+            "description": "MVT内固定图层名。"
+          },
+          "minZoom": {
+            "type": "integer",
+            "const": 0,
+            "description": "最小预生成缩放级别。"
+          },
+          "maxZoom": {
+            "type": "integer",
+            "const": 10,
+            "description": "最大预生成级别，继续放大使用过缩放显示。"
+          },
+          "bounds": {
+            "type": "array",
+            "description": "WGS84显示范围，限制在WebMercator有效范围。",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": {
+              "type": "number"
+            }
+          },
+          "clustered": {
+            "type": "boolean",
+            "description": "点图层是否含point_count聚合节点；聚合节点不可当作原始要素导出。"
+          },
+          "featureCount": {
+            "type": "integer",
+            "description": "原始有效显示要素数量，聚合前计数。"
           }
         }
       },
@@ -42836,6 +43033,11 @@
           "limit"
         ],
         "properties": {
+          "sourceFeatureIds": {
+            "type": "boolean",
+            "default": false,
+            "description": "可选，以GeoPackage原始FID返回GeoJSON要素ID，供瓦片与原始属性表关联；不改变几何、属性、命中或上限。默认保持既有结果索引ID。非布尔类型返回400。"
+          },
           "lineSimplifyTolerance": {
             "type": "number",
             "minimum": 0,

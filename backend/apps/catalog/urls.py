@@ -9,9 +9,14 @@ from apps.catalog import (
     sharing,
     views,
 )
-
+from apps.catalog.vector_tiles import resource_vector_tile
 
 urlpatterns = [
+    path(
+        "catalog/resources/<int:pk>/vector-tiles/<str:revision>/<int:z>/<int:x>/<int:y>.pbf",
+        resource_vector_tile,
+        name="catalog-resource-vector-tile",
+    ),
     path("sharing/check/", sharing.check, name="share-check"),
     path("sharing/invitations/", sharing.invitations, name="share-invitations"),
     path(

@@ -114,6 +114,45 @@ const notification = {
 } as unknown as AppNotification;
 
 describe("restoreWorkspaceGroups", () => {
+  it("restores a prepared pipeline without downloading full GeoJSON", async () => {
+    const preview = {
+      revision: "0".repeat(24),
+      tileUrl: "/api/tile/{z}/{x}/{y}.pbf",
+      sourceLayer: "features",
+      minZoom: 0,
+      maxZoom: 10,
+      bounds: [-180, -80, 180, 80],
+      clustered: false,
+      featureCount: 3318,
+    };
+    mockApi.resourceProfile.mockResolvedValue({
+      fields: [],
+      featureCount: 3318,
+      geometryType: "LineString",
+      bounds: preview.bounds,
+      vectorTiles: preview,
+    });
+    const result = await restoreWorkspaceGroups({
+      savedGroups: [
+        makeGroup([
+          makeSavedVectorLayer({
+            query: { attributeFilters: [], spatialFilter: null },
+          }),
+        ]),
+      ],
+      canQueryData: true,
+      canLoadVectorLayer: true,
+      canLoadRasterLayer: true,
+      queryResultLimit: 30000,
+      notification,
+    });
+    expect(result.issues).toEqual([]);
+    expect(result.groups[0]!.children[0]).toMatchObject({
+      vectorTiles: preview,
+      geojson: { features: [] },
+    });
+    expect(mockApi.queryResource).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     mockApi.resourceProfile.mockReset();
     mockApi.queryResource.mockReset();
