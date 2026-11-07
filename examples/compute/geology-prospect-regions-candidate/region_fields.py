@@ -22,7 +22,7 @@ PROFILES = {
         "context_radius_m": 600,
         "fault_scale_factor": 1.6,
         "growth_threshold": 0.55,
-        "max_zone_area_km2": 15,
+        "large_zone_notice_km2": 15,
         "max_zone_count": 8,
     },
     "balanced": {
@@ -30,7 +30,7 @@ PROFILES = {
         "context_radius_m": 800,
         "fault_scale_factor": 2.0,
         "growth_threshold": 0.49,
-        "max_zone_area_km2": 20,
+        "large_zone_notice_km2": 20,
         "max_zone_count": 10,
     },
     "regional": {
@@ -38,7 +38,7 @@ PROFILES = {
         "context_radius_m": 1000,
         "fault_scale_factor": 2.4,
         "growth_threshold": 0.43,
-        "max_zone_area_km2": 30,
+        "large_zone_notice_km2": 30,
         "max_zone_count": 12,
     },
 }
@@ -271,19 +271,26 @@ def profile_fields(base, profile, config):
     domain = (
         base["masks"]["area"] & base["masks"]["bedrock"] & base["masks"]["observed"]
     )
-    growth = (
-        domain
-        & (structure >= 0.25)
-        & (broad_count >= config["peripheral_min_weighted_types"])
-        & (density >= config["peripheral_min_density"])
-        & (score >= profile["growth_threshold"])
+    sigma = config["support_smooth_m"] / resolution
+    continuous_types = gaussian_filter(broad_count, sigma=sigma, mode="nearest")
+    constraints = [
+        score / profile["growth_threshold"] - 1,
+        structure / 0.25 - 1,
+        continuous_types / config["peripheral_min_weighted_types"] - 1,
+    ]
+    if config["peripheral_min_density"] > 0:
+        constraints.append(density / config["peripheral_min_density"] - 1)
+    margin = gaussian_filter(
+        np.minimum.reduce(constraints), sigma=sigma, mode="nearest"
     )
+    margin[~domain] = -1
     return {
         "score": score,
         "structure": structure,
         "alteration": alteration,
         "broad_count": broad_count,
         "density": density,
-        "growth": growth,
-        "core": base["masks"]["core"] & growth,
+        "margin": margin,
+        "domain": domain,
+        "core": base["masks"]["core"] & (margin >= 0),
     }

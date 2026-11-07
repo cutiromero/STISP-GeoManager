@@ -8,7 +8,6 @@ from multi_relations import FIELDS, reconstruct
 from multi_windows import create
 from region_fields import PROFILES, base_fields, profile_fields
 from region_zones import delineate
-from region_boundaries import apply_boundaries
 
 # ==================== CONFIGURATION ====================
 DEFAULTS = {
@@ -19,26 +18,20 @@ DEFAULTS = {
     "min_zone_area_km2": 1.0,
     "min_core_area_km2": 0.05,
     "core_score_min": 0.62,
-    "region_seed_spacing_m": 2500,
-    "max_geodesic_reach_m": 3500,
     "alteration_density_scale": 0.08,
     "peripheral_min_weighted_types": 1.5,
     "peripheral_min_density": 0.002,
-    "boundary_smooth_m": 100,
-    "between_zone_gap_m": 50,
+    "support_smooth_m": 100,
 }
 LIMITS = {
     "grid_resolution_m": (25, 200),
     "min_zone_area_km2": (0.01, 30),
     "min_core_area_km2": (0.001, 5),
     "core_score_min": (0, 1),
-    "region_seed_spacing_m": (250, 10000),
-    "max_geodesic_reach_m": (500, 10000),
     "alteration_density_scale": (0.001, 1),
     "peripheral_min_weighted_types": (1, 5),
     "peripheral_min_density": (0, 1),
-    "boundary_smooth_m": (0, 250),
-    "between_zone_gap_m": (0, 200),
+    "support_smooth_m": (25, 250),
 }
 # =======================================================
 
@@ -59,8 +52,6 @@ def configuration(context):
             raise ValueError("候选参数超出有效范围：" + key)
     config["min_zone_area_m2"] = config["min_zone_area_km2"] * 1e6
     settings(type("SettingsContext", (), {"parameters": config})())
-    if config["min_zone_area_km2"] > PROFILES[config["profile"]]["max_zone_area_km2"]:
-        raise ValueError("最小圈区面积大于当前尺度上限")
     return config
 
 
@@ -105,25 +96,6 @@ def run(context):
     targets, rows, heat, diagnostics, core = delineate(
         base, fields, profile, area, lithology, rules, units, config
     )
-    if not targets.empty and (
-        config["boundary_smooth_m"] or config["between_zone_gap_m"]
-    ):
-        targets, rows, heat, boundary_report = apply_boundaries(
-            targets,
-            rows,
-            base,
-            fields,
-            core,
-            area,
-            lithology,
-            units,
-            {**config, "growth_threshold": profile["growth_threshold"]},
-        )
-        diagnostics.update(boundary_report)
-        diagnostics.update(
-            area_km2=float(targets.area_km2.sum()),
-            area_fraction=float(targets.area_km2.sum() * 1e6 / area.area),
-        )
     write_vector(
         context.output_path("after_zones.gpkg"),
         targets,
@@ -156,7 +128,7 @@ def run(context):
         context.output_path("statistics.csv"),
         [
             {
-                "method": "core_context_regions_candidate_v1",
+                "method": "continuous_support_regions_candidate_v2",
                 "phase": "after",
                 "profile": config["profile"],
                 "zone_count": len(targets),

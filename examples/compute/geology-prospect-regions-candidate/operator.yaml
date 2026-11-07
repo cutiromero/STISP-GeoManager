@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-prospect-regions-candidate",
   "name": "地质综合远景区圈定（候选）",
-  "version": "0.1.1-candidate",
+  "version": "0.1.2-candidate",
   "description": "仅对修复后资料，由强证据核心向相连的构造—蚀变—岩性支持外围圈区。方案尚待选择，不替换正式算子。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -183,22 +183,6 @@
       "max": 1
     },
     {
-      "key": "region_seed_spacing_m",
-      "label": "大区域锚点间距（米）",
-      "type": "number",
-      "default": 2500,
-      "min": 250,
-      "max": 10000
-    },
-    {
-      "key": "max_geodesic_reach_m",
-      "label": "大区域路径代价上限（米）",
-      "type": "number",
-      "default": 3500,
-      "min": 500,
-      "max": 10000
-    },
-    {
       "key": "alteration_density_scale",
       "label": "蚀变覆盖尺度",
       "type": "number",
@@ -223,20 +207,12 @@
       "max": 1
     },
     {
-      "key": "boundary_smooth_m",
-      "label": "边界概化尺度（米）",
+      "key": "support_smooth_m",
+      "label": "连续支持场平滑尺度（米）",
       "type": "number",
       "default": 100,
-      "min": 0,
+      "min": 25,
       "max": 250
-    },
-    {
-      "key": "between_zone_gap_m",
-      "label": "区间最小间隔（米）",
-      "type": "number",
-      "default": 50,
-      "min": 0,
-      "max": 200
     }
   ],
   "outputs": [

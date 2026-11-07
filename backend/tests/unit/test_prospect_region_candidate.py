@@ -90,36 +90,34 @@ def test_unsupported_inputs_produce_real_empty_candidate(tmp_path, mode):
     assert before == {key: path.read_bytes() for key, path in initial.inputs.items()}
 
 
-def test_growing_regions_stay_connected_bounded_and_nonoverlapping():
+def synthetic_regions(gap=False):
     sys.path[:0] = [str(CORE), str(CANDIDATE)]
     from region_zones import delineate
 
-    shape = (40, 80)
-    score = np.full(shape, 0.75)
-    growth = np.ones(shape, dtype=bool)
-    growth[:, 39:41] = False
-    core = np.zeros(shape, dtype=bool)
+    dimensions = (40, 80)
+    score = np.full(dimensions, 0.75)
+    margin = np.full(dimensions, 0.25)
+    if gap:
+        margin[:, 39:41] = -1
+    core = np.zeros(dimensions, dtype=bool)
     core[18:22, 18:22] = True
     core[18:22, 58:62] = True
-    transform = from_origin(300000, 4000000, 50, 50)
     area = box(300000, 3998000, 304000, 4000000)
     base = {
-        "transform": transform,
-        "dimensions": shape,
-        "masks": {"favourable": np.ones(shape, dtype=bool)},
-        "evidence": {
-            "矿物A": {"presence": np.ones(shape)},
-            "矿物B": {"presence": np.ones(shape)},
-        },
+        "transform": from_origin(300000, 4000000, 50, 50),
+        "dimensions": dimensions,
+        "masks": {"favourable": np.ones(dimensions, dtype=bool)},
+        "evidence": {name: {"presence": np.ones(dimensions)} for name in ["A", "B"]},
     }
     fields = {
         "core": core,
-        "growth": growth,
+        "margin": margin,
         "score": score,
+        "domain": np.ones(dimensions, dtype=bool),
         "structure": score,
         "alteration": score,
-        "broad_count": np.full(shape, 2.5),
-        "density": np.full(shape, 0.1),
+        "broad_count": np.full(dimensions, 2.5),
+        "density": np.full(dimensions, 0.1),
     }
     lith = gpd.GeoDataFrame({"geo_sym": ["C"]}, geometry=[area], crs=32646)
     rules = {
@@ -128,40 +126,78 @@ def test_growing_regions_stay_connected_bounded_and_nonoverlapping():
     }
     config = {
         "grid_resolution_m": 50,
-        "region_seed_spacing_m": 1000,
-        "max_geodesic_reach_m": 2000,
         "core_score_min": 0.6,
         "min_core_area_km2": 0.01,
         "min_zone_area_km2": 0.1,
+        "support_smooth_m": 100,
     }
-    profile = {"growth_threshold": 0.5, "max_zone_area_km2": 3, "max_zone_count": 8}
-    frame, rows, heat, diagnostics, cores = delineate(
-        base, fields, profile, area, lith, rules, {"C": {"name": "基岩"}}, config
-    )
-    assert len(frame) >= 2 and frame.geometry.is_valid.all()
-    assert frame.area_km2.max() <= 3 and (frame.core_area_km2 > 0).all()
-    assert frame.geometry.area.sum() == pytest.approx(frame.geometry.union_all().area)
+    # An advisory area cannot split the two real cores in one connected belt.
+    profile = {"growth_threshold": 0.5, "large_zone_notice_km2": 3, "max_zone_count": 8}
+    return delineate(
+        base,
+        fields,
+        profile,
+        area,
+        lith,
+        rules,
+        {"C": {"name": "基岩", "category": "stratum"}},
+        config,
+    ), area
+
+
+def test_connected_support_belt_with_multiple_cores_is_one_region():
+    (frame, rows, heat, checks, cores), area = synthetic_regions()
+    assert len(frame) == 1
+    assert frame.area_km2.iloc[0] > 3
+    assert frame.core_area_km2.iloc[0] == pytest.approx(0.08)
+    assert checks["large_zone_count"] == 1
+    assert checks["artificial_partition"] is False and checks["artificial_gap_m"] == 0
     assert frame.geometry.difference(area).area.sum() == 0
+    assert frame.geometry.is_valid.all()
+
+
+def test_real_gap_separates_support_islands_without_artificial_spacing():
+    (frame, rows, heat, checks, cores), area = synthetic_regions(gap=True)
+    assert len(frame) == 2
+    assert frame.geometry.area.sum() == pytest.approx(frame.geometry.union_all().area)
+    assert checks["maximum_overlap_m2"] == 0
+    assert checks["artificial_gap_m"] == 0
     assert np.all(heat[:, 39:41] == -9999)
     assert frame.core_area_km2.le(frame.area_km2).all()
+    assert frame.geometry.is_valid.all()
 
 
-def test_smoothed_adjacent_regions_have_zero_overlap_and_real_spacing():
+def test_smooth_boundary_is_extracted_from_field_and_retains_missing_data_hole():
     sys.path[:0] = [str(CORE), str(CANDIDATE)]
-    from region_boundaries import smooth_nonoverlapping
-    from shapely.ops import unary_union
+    from region_boundaries import extract_regions, topology_report
 
-    polygons = [
-        box(300000, 4000000, 302000, 4002000),
-        box(301990, 4000200, 304000, 4001800),
-        box(303990, 4000000, 306000, 4002000),
-    ]
-    allowed = box(299000, 3999000, 307000, 4003000)
-    result, checks = smooth_nonoverlapping(polygons, allowed, 100, 50)
-    assert len(result) == 3 and all(geometry.is_valid for geometry in result)
-    assert checks["maximum_overlap_m2"] == 0
-    assert checks["actual_minimum_distance_m"] >= 50 - 0.01
-    assert sum(geometry.area for geometry in result) == pytest.approx(
-        unary_union(result).area
-    )
-    assert all(geometry.difference(allowed).area == 0 for geometry in result)
+    y, x = np.mgrid[-1000:1001:50, -1000:1001:50]
+    margin = 1 - (x**2 + y**2) / 600**2
+    transform = from_origin(-1025, 1025, 50, 50)
+    allowed = box(-1100, -1100, 1100, 1100).difference(box(-100, -100, 100, 100))
+    result = extract_regions(margin, transform, allowed)
+    assert len(result) == 1 and len(result[0].interiors) == 1
+    coordinates = np.asarray(result[0].exterior.coords)
+    assert np.max(np.abs(np.linalg.norm(coordinates, axis=1) - 600)) < 2
+    assert result[0].difference(allowed).area == 0
+    assert topology_report(result)["maximum_overlap_m2"] == 0
+
+
+def test_unknown_candidate_parameter_cannot_silently_restore_partitioning():
+    sys.path[:0] = [str(CORE), str(CANDIDATE)]
+    configuration = runpy.run_path(str(CANDIDATE / "main.py"))["configuration"]
+    for key in ["between_zone_gap_m", "region_seed_spacing_m", "max_geodesic_reach_m"]:
+        with pytest.raises(ValueError, match="未声明参数"):
+            configuration(type("Context", (), {"parameters": {key: 50}})())
+
+
+def test_touching_and_overlapping_boundaries_are_merged_before_region_ids():
+    sys.path[:0] = [str(CORE), str(CANDIDATE)]
+    from region_boundaries import merge_connected, topology_report
+
+    connected = [box(0, 0, 2, 2), box(1, 0, 3, 2), box(3, 2, 4, 3)]
+    separate = box(10, 0, 11, 1)
+    result = merge_connected([*connected, separate])
+    assert len(result) == 2
+    assert sorted(geometry.area for geometry in result) == [1, 7]
+    assert topology_report(result)["maximum_overlap_m2"] == 0
