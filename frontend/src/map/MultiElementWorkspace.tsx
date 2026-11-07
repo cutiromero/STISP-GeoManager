@@ -884,8 +884,8 @@ export default function MultiElementWorkspace({
         type="info"
         title={
           workflow.workflowType === "geology_generic"
-            ? "用户上传资料：字段含义经确认后生成工作副本。规则为试用规则，待裁定与未批准对象保留。"
-            : "演示案例：岩性与构造为模拟识别；矿物为遥感矿物识别结果。规则在本案例试用，待裁定与未批准对象保留。"
+            ? "按已确认资料生成工作副本，使用本次已绑定规则；待裁定与未批准对象保留。"
+            : "岩性与构造为模拟识别；矿物为遥感矿物识别结果。按本次已绑定规则处理，待裁定与未批准对象保留。"
         }
       />
       {error && (
@@ -917,8 +917,9 @@ export default function MultiElementWorkspace({
         visible.includes("changes") ||
         storyNeedsAlterations) ? (
         <p aria-label="蚀变栅格图例">
-          矿物前后：青绿色；规则变更：A-01 红色、A-02 紫色、A-03 橙色、A-04
-          棕色、A-05 蓝色；透明为无识别或无变更。降权保留识别像元，权重另存。
+          各矿物按图例颜色显示，前后保持同色；规则变更：A-01 红色、A-02
+          紫色、A-03 橙色、A-04 棕色、A-05
+          蓝色；透明为无识别或无变更。降权保留识别像元，权重另存。
         </p>
       ) : null}
       {loading && (

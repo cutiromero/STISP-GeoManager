@@ -1,4 +1,6 @@
 import io
+from types import SimpleNamespace
+import uuid
 
 import numpy as np
 from PIL import Image
@@ -75,6 +77,43 @@ def test_map_preview_is_real_png_without_registration(map_result):
     assert "no-store" in image["Cache-Control"]
     assert DataResource.objects.count() == resources
     assert ComputeImport.objects.count() == 0
+    assert path.read_bytes() == source
+
+
+def test_model_mineral_table_persists_with_uuid_audit_and_reaches_preview_api(
+    map_result, monkeypatch
+):
+    from apps.agent import alteration_result_colors as colors
+    from apps.audit.models import OperationLog
+
+    env, _, output, path = map_result
+    output.key = "calcite_before"
+    output.save(update_fields=["key"])
+    workflow = SimpleNamespace(id=uuid.uuid4(), owner=env["owner"], result_ids=[])
+    monkeypatch.setattr(
+        colors,
+        "model_colors",
+        lambda *args: {
+            "field": "mineral",
+            "classes": [
+                {"value": key, "label": label, "color": "#416fa4"}
+                for key, label in colors.MINERALS.items()
+            ],
+        },
+    )
+    source = path.read_bytes()
+    colors.style_alteration_outputs(workflow, [output])
+    output.refresh_from_db()
+    assert output.metadata["mapColorTable"]["source"] == "model_validated"
+    audit = OperationLog.objects.get(action="alteration_color_advice")
+    assert audit.target_code == str(workflow.id)
+    assert str(workflow.id) in audit.message
+    response = env["client"].get(url(env, output))
+    assert response.status_code == 200
+    assert (
+        response.json()["metadata"]["colorTable"]
+        == output.metadata["mapColorTable"]["classes"]
+    )
     assert path.read_bytes() == source
 
 

@@ -102,6 +102,6 @@ def style_alteration_outputs(workflow, outputs, *, force=False, persist=True):
                 ensure_ascii=False,
             ),
             target_type="agent_workflow",
-            target_id=str(workflow.id),
+            target_code=str(workflow.id),
         )
     return result
