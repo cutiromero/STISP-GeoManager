@@ -9088,6 +9088,10 @@ export type ResultColorAdvice = {
 
 export type ResourceProfileResponse = {
     /**
+     * 已预生成的矢量显示瓦片信息；未准备或资源修订后为null。普通无筛选地图显示可使用，精确查询和导出始终读取原始数据。
+     */
+    vectorTiles?: VectorTilePreview | null;
+    /**
      * 资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。
      */
     defaultVisualization?: {
@@ -9115,6 +9119,53 @@ export type ResourceProfileResponse = {
      * 栅格资源详情；非栅格资源可能省略或为 null
      */
     raster?: RasterDataset | null;
+};
+
+/**
+ * 当前资源修订对应的地图显示缓存，点资源使用全量数据网格聚合，不是抽样。WebMercator纬度限制为正负85.051129度。
+ */
+export type VectorTilePreview = {
+    /**
+     * 资源显示缓存版本。
+     */
+    revision: string;
+    /**
+     * 同源XYZ瓦片模板，客户端携带当前项目与页面会话。
+     */
+    tileUrl: string;
+    /**
+     * 点资源非聚合显示瓦片模板，热力图及关闭聚合时使用；属性表和导出仍读取原始数据。
+     */
+    rawTileUrl?: string;
+    /**
+     * MVT内固定图层名。
+     */
+    sourceLayer: 'features';
+    /**
+     * 最小预生成缩放级别。
+     */
+    minZoom: 0;
+    /**
+     * 最大预生成级别，继续放大使用过缩放显示。
+     */
+    maxZoom: 10;
+    /**
+     * WGS84显示范围，限制在WebMercator有效范围。
+     */
+    bounds: [
+        number,
+        number,
+        number,
+        number
+    ];
+    /**
+     * 点图层是否含point_count聚合节点；聚合节点不可当作原始要素导出。
+     */
+    clustered: boolean;
+    /**
+     * 原始有效显示要素数量，聚合前计数。
+     */
+    featureCount: number;
 };
 
 export type FieldInfo = {
@@ -9782,6 +9833,14 @@ export type VisualizationMonitorItem = {
 };
 
 export type QueryRequest = {
+    /**
+     * 可选，以GeoPackage原始FID返回GeoJSON要素ID，供瓦片与原始属性表关联；不改变几何、属性、命中或上限。默认保持既有结果索引ID。非布尔类型返回400。
+     */
+    sourceFeatureIds?: boolean;
+    /**
+     * 可选的线显示简化容差，单位为WGS84度，须同时传displayGeometry=true；0或省略不简化。仅对LineString和MultiLineString按容差保拓扑简化，再统一量化，点和面保持displayGeometry原语义。仅普通地图浏览按视野像素尺度启用；不改变命中判定、对象数、属性或存储几何；此预览只校验原坐标有效范围，跳过逐顶点小数位不确定度估算。不用于精确查询、量测、编辑、计算及导出。非法类型、非有限值、越界或未启用displayGeometry返回400。
+     */
+    lineSimplifyTolerance?: number;
     /**
      * 仅地图显示使用的量化几何；WGS84统一1e-5度网格，全体图斑边界共同节点化并量化，保持共享边界一致；不做任何形状简化，仅移除连续重复点和零面积退化环。超过280 KiB gzip目标仍保留量化精度并返回警告。不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
      */
@@ -14610,6 +14669,87 @@ export type GetResourceProfileResponses = {
 };
 
 export type GetResourceProfileResponse = GetResourceProfileResponses[keyof GetResourceProfileResponses];
+
+export type GetResourceVectorTileData = {
+    body?: never;
+    headers?: {
+        /**
+         * 当前项目ID，缺省公开项目1。
+         */
+        'X-Project-Id'?: string;
+        /**
+         * 已接收瓦片的ETag；重新鉴权后相同可返回304。
+         */
+        'If-None-Match'?: string;
+    };
+    path: {
+        /**
+         * 资源 ID
+         */
+        id: number;
+        /**
+         * 资源详情返回的显示缓存版本，资源修订后旧版本失效。
+         */
+        revision: string;
+        /**
+         * XYZ缩放级别，超出已准备范围返回400。
+         */
+        z: number;
+        /**
+         * XYZ横坐标，必须小于2的z次方。
+         */
+        x: number;
+        /**
+         * XYZ纵坐标，必须小于2的z次方。
+         */
+        y: number;
+    };
+    query?: {
+        /**
+         * 当前项目ID，与X-Project-Id同时存在时必须一致。
+         */
+        projectTagId?: string;
+        /**
+         * 点显示1为按级别聚合、0为原始点显示；线图层忽略。热力图和关闭聚合时使用0，均仅影响显示。
+         */
+        aggregate?: 0 | 1;
+    };
+    url: '/api/catalog/resources/{id}/vector-tiles/{revision}/{z}/{x}/{y}.pbf';
+};
+
+export type GetResourceVectorTileErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type GetResourceVectorTileError = GetResourceVectorTileErrors[keyof GetResourceVectorTileErrors];
+
+export type GetResourceVectorTileResponses = {
+    /**
+     * 地图显示专用MVT二进制。
+     */
+    200: Blob | File;
+    /**
+     * 当前瓦片没有显示要素。
+     */
+    204: void;
+};
+
+export type GetResourceVectorTileResponse = GetResourceVectorTileResponses[keyof GetResourceVectorTileResponses];
 
 export type GetResourceNonGeoAnalysisData = {
     body?: never;

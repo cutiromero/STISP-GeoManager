@@ -37,6 +37,7 @@ import DataPanel, {
   type DataResourceLoadReporter,
 } from "../components/DataPanel";
 import LayerDataTableModal from "../components/LayerDataTableModal";
+import { tilePreviewResult } from "../map/vectorTilePreview";
 import LayerPanel from "../components/LayerPanel";
 import RightSidePanel from "../components/RightSidePanel";
 import SpatialQueryWorkbench, {
@@ -52,6 +53,7 @@ import { useLayerGroups } from "../hooks/useLayerGroups";
 import { useViewportVectorLayers } from "../hooks/useViewportVectorLayers";
 import {
   applyViewportResult,
+  exactViewportExportQuery,
   isLargeVectorResource,
   isViewportVectorLayer,
   viewportQueryPayload,
@@ -99,6 +101,7 @@ import type {
   GeoJsonFeatureCollection,
   GeoJsonGeometry,
   LoadedLayer,
+  LoadedLayerGroup,
   LoadedRasterLayer,
   LoadedVectorLayer,
   MapViewState,
@@ -253,12 +256,14 @@ interface LayerExportMessageApi {
 }
 
 interface UseLayerExportOptions {
+  groups?: LoadedLayerGroup[];
   canExportData: boolean;
   permissionDeniedMessage: string;
   message: LayerExportMessageApi;
 }
 
 export function useLayerExport({
+  groups,
   canExportData,
   permissionDeniedMessage,
   message,
@@ -290,13 +295,38 @@ export function useLayerExport({
       const { signal } = controller;
 
       try {
+        const exactItems = [];
+        for (const item of items) {
+          const layer = groups
+            ?.flatMap((group) => group.children)
+            .find(
+              (layer) =>
+                layer.layerType === "vector" && layer.geojson === item.geojson,
+            );
+          const query =
+            layer?.layerType === "vector"
+              ? exactViewportExportQuery(layer)
+              : null;
+          if (layer?.layerType === "vector" && layer.vectorTiles && !query) {
+            throw new Error("地图范围尚未准备好，请稍后重试");
+          }
+          if (query && layer) {
+            const result = await api.queryResource(
+              layer.sourceResource,
+              query,
+              signal,
+            );
+            throwIfExportAborted(signal);
+            exactItems.push({ ...item, geojson: result.geojson });
+          } else exactItems.push(item);
+        }
         const job = await api.exportLayersAsync({
           epsg: options.epsg,
           reproject: options.reproject,
           clip: options.clip,
           clipGeometry: options.clipGeometry,
           format: options.format,
-          items,
+          items: exactItems,
         });
         throwIfExportAborted(signal);
         onProgress?.({
@@ -385,7 +415,7 @@ export function useLayerExport({
         }
       }
     },
-    [canExportData, english, message, permissionDeniedMessage],
+    [canExportData, english, groups, message, permissionDeniedMessage],
   );
 }
 
@@ -744,6 +774,7 @@ function MapWorkspace() {
     "map" | "left" | "right"
   >("map");
   const [tableLayer, setTableLayer] = useState<LoadedLayer | null>(null);
+  const tableRequestRef = useRef(0);
   const [visibleLayerExtentIds, setVisibleLayerExtentIds] = useState<
     Set<string>
   >(() => new Set());
@@ -813,6 +844,7 @@ function MapWorkspace() {
     `${user ? `user-${user.id}` : "anonymous"}:project-${getActiveProject()}`,
   );
   useViewportVectorLayers({
+    resolveTilePreviews: true,
     map: mapObject,
     scope: `${user?.id ?? "anonymous"}:${getActiveProject()}`,
     enabled: permissions.canQueryData && permissions.canLoadVectorLayer,
@@ -849,11 +881,13 @@ function MapWorkspace() {
     ? `Current role "${userRoles.length > 0 ? userRoles.join(", ") : "unassigned"}" is not authorized`
     : `当前角色"${userRoles.length > 0 ? userRoles.join("、") : "未分配角色"}"无权限`;
   const exportLayers = useLayerExport({
+    groups: layerGroups.groups,
     canExportData: permissions.canExportData,
     permissionDeniedMessage,
     message,
   });
   const handleWorkspaceLoaded = useCallback(() => {
+    tableRequestRef.current++;
     setTableLayer(null);
     setSelectedFeature(null);
   }, []);
@@ -1718,7 +1752,10 @@ function MapWorkspace() {
                 ? { displayGeometry: true }
                 : {}),
             };
-      const result = await api.queryResource(resource, payload);
+      const tiled = viewportOnly && profile.vectorTiles;
+      const result = tiled
+        ? tilePreviewResult(resource, profile)
+        : await api.queryResource(resource, payload);
       if (scope !== getActiveProject()) return false;
       options.reportProgress?.({
         percent: 82,
@@ -1727,9 +1764,13 @@ function MapWorkspace() {
           : "数据查询完成，正在创建地图图层",
       });
       showGeojsonWarnings(notification, result.warnings);
-      const resultMessage = english
-        ? `Query matched ${result.totalCount} records; ${result.returnedCount} returned`
-        : `查询命中 ${result.totalCount} 条，返回 ${result.returnedCount} 条`;
+      const resultMessage = tiled
+        ? english
+          ? "Map tiles are ready"
+          : "已启用分块地图显示"
+        : english
+          ? `Query matched ${result.totalCount} records; ${result.returnedCount} returned`
+          : `查询命中 ${result.totalCount} 条，返回 ${result.returnedCount} 条`;
       if (result.returnedCount === 0 && !viewportOnly) {
         message.warning(resultMessage);
         return false;
@@ -1742,7 +1783,9 @@ function MapWorkspace() {
         const key = JSON.stringify([resource.id, resource.updatedAt, payload]);
         group.children = group.children.map((layer) =>
           layer.layerType === "vector"
-            ? applyViewportResult(layer, result, key)
+            ? layer.vectorTiles
+              ? { ...layer, metadata: { ...layer.metadata, 视野查询键: key } }
+              : applyViewportResult(layer, result, key)
             : layer,
         );
         group.summary = group.children[0]?.summary ?? group.summary;
@@ -1852,7 +1895,27 @@ function MapWorkspace() {
       }
       fitGeojsonBounds(
         map,
-        targetLayer.geojson,
+        targetLayer.vectorTiles
+          ? {
+              type: "FeatureCollection",
+              features: [
+                {
+                  type: "Feature",
+                  properties: {},
+                  geometry: rectangleGeometry(
+                    [
+                      targetLayer.vectorTiles.bounds[0]!,
+                      targetLayer.vectorTiles.bounds[1]!,
+                    ],
+                    [
+                      targetLayer.vectorTiles.bounds[2]!,
+                      targetLayer.vectorTiles.bounds[3]!,
+                    ],
+                  ),
+                },
+              ],
+            }
+          : targetLayer.geojson,
         bootstrap.map.defaultCenter,
         bootstrap.map.defaultZoom,
         await mapFitBoundsOptions(map),
@@ -1877,7 +1940,23 @@ function MapWorkspace() {
       if (!targetGroup) return;
       const geojsons = targetGroup.children
         .filter((l): l is LoadedVectorLayer => l.layerType === "vector")
-        .map((l) => l.geojson);
+        .map((l) =>
+          l.vectorTiles
+            ? {
+                type: "FeatureCollection" as const,
+                features: [
+                  {
+                    type: "Feature" as const,
+                    properties: {},
+                    geometry: rectangleGeometry(
+                      [l.vectorTiles.bounds[0]!, l.vectorTiles.bounds[1]!],
+                      [l.vectorTiles.bounds[2]!, l.vectorTiles.bounds[3]!],
+                    ),
+                  },
+                ],
+              }
+            : l.geojson,
+        );
       const rasterBounds = targetGroup.children
         .filter((l) => l.layerType === "raster" && l.imageCoordinates?.length)
         .map((l) => {
@@ -1936,7 +2015,13 @@ function MapWorkspace() {
 
         // 设置所有选中要素的状态
         for (const featureId of featureIds) {
-          const target = { source: sourceId, id: featureId };
+          const target = {
+            source: sourceId,
+            id: tableLayer.vectorTiles ? Number(featureId) : featureId,
+            ...(tableLayer.vectorTiles
+              ? { sourceLayer: tableLayer.vectorTiles.sourceLayer }
+              : {}),
+          };
           map.setFeatureState(target, { selected: true });
         }
 
@@ -1944,7 +2029,15 @@ function MapWorkspace() {
         const selectedFeatureId = featureIds[0];
         if (selectedFeatureId === undefined) return;
         const state = getMapState(map);
-        state.selectedFeature = { source: sourceId, id: selectedFeatureId };
+        state.selectedFeature = {
+          source: sourceId,
+          id: tableLayer.vectorTiles
+            ? Number(selectedFeatureId)
+            : selectedFeatureId,
+          ...(tableLayer.vectorTiles
+            ? { sourceLayer: tableLayer.vectorTiles.sourceLayer }
+            : {}),
+        };
 
         // 查找第一个选中要素的属性信息
         const feature = tableLayer.geojson.features.find((f) => {
@@ -2566,11 +2659,51 @@ function MapWorkspace() {
       );
     },
     openLayerTable: (_groupId, layerId) => {
+      const requestId = ++tableRequestRef.current;
       const layer =
         layerGroups.groups
           .flatMap((group) => group.children)
           .find((item) => item.id === layerId) ?? null;
-      setTableLayer(layer);
+      if (layer?.layerType === "vector" && layer.vectorTiles) {
+        const scope = getActiveProject();
+        const query = exactViewportExportQuery(layer);
+        if (!query) {
+          message.warning("地图范围尚未准备好，请稍后重试");
+          return;
+        }
+        const key = `tile-table-${layer.id}`;
+        message.loading({
+          key,
+          content: english ? "Loading attributes" : "正在读取当前视野原始属性",
+          duration: 0,
+        });
+        void api
+          .queryResource(layer.sourceResource, query)
+          .then((result) => {
+            if (
+              scope !== getActiveProject() ||
+              requestId !== tableRequestRef.current
+            )
+              return;
+            setTableLayer({
+              ...layer,
+              geojson: result.geojson,
+              fields: result.fields,
+              summary: `当前视野 ${result.returnedCount}/${result.totalCount} 条`,
+            });
+          })
+          .catch((error) => {
+            if (
+              scope !== getActiveProject() ||
+              requestId !== tableRequestRef.current
+            )
+              return;
+            message.error(
+              error instanceof Error ? error.message : "属性读取失败",
+            );
+          })
+          .finally(() => message.destroy(key));
+      } else setTableLayer(layer);
     },
     addGroup: layerGroups.addGroup,
     replaceGroups: layerGroups.replaceGroups,
@@ -3015,7 +3148,10 @@ function MapWorkspace() {
                 <LayerDataTableModal
                   layer={tableLayer}
                   open={Boolean(tableLayer)}
-                  onClose={() => setTableLayer(null)}
+                  onClose={() => {
+                    tableRequestRef.current++;
+                    setTableLayer(null);
+                  }}
                   onSelectionChange={handleSelectionChange}
                 />
               </LayerContext.Provider>

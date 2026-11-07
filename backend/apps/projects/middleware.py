@@ -18,6 +18,7 @@ PUBLIC_VIEWS = frozenset(
         "resource_profile",
         "resource_visualization_summary_view",
         "resource_query",
+        "resource_vector_tile",
         "resource_nongeo_analysis",
         "resource_nongeo_query",
         "workspaces",

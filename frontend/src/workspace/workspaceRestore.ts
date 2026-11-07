@@ -1,4 +1,5 @@
 import { api } from "../api/client";
+import { tilePreviewResult } from "../map/vectorTilePreview";
 import { rasterTileRendererVersion } from "../map/rasterLayerSync";
 import { rasterSymbolizationFromRules } from "../symbolization";
 import type {
@@ -107,11 +108,17 @@ export async function restoreWorkspaceGroups({
         }
         try {
           const profile = await api.resourceProfile(savedLayer.sourceResource);
-          const result = await api.queryResource(savedLayer.sourceResource, {
-            attributeFilters: savedLayer.query.attributeFilters,
-            spatialFilter: savedLayer.query.spatialFilter,
-            limit: queryResultLimit,
-          });
+          const tiled =
+            profile.vectorTiles &&
+            !savedLayer.query.attributeFilters.length &&
+            !savedLayer.query.spatialFilter;
+          const result = tiled
+            ? tilePreviewResult(savedLayer.sourceResource, profile)
+            : await api.queryResource(savedLayer.sourceResource, {
+                attributeFilters: savedLayer.query.attributeFilters,
+                spatialFilter: savedLayer.query.spatialFilter,
+                limit: queryResultLimit,
+              });
           showGeojsonWarnings(notification, result.warnings);
           const queryGroup = createVectorLayerGroup(
             savedLayer.sourceResource,

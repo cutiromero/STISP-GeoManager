@@ -39,6 +39,15 @@ export function hasMapStyle(map: MapboxMap) {
 
 export function upsertLayer(map: MapboxMap, layer: AnyLayer) {
   if (!hasMapStyle(map)) return;
+  if (
+    "source" in layer &&
+    typeof layer.source === "string" &&
+    layer.source.startsWith("loaded-") &&
+    !("source-layer" in layer) &&
+    map.getSource?.(layer.source)?.type === "vector"
+  ) {
+    layer = { ...layer, "source-layer": "features" } as AnyLayer;
+  }
   const normalizedLayer = normalizeLayerPaintColors(layer);
   const existing = map.getLayer(normalizedLayer.id);
   if (existing && existing.type !== normalizedLayer.type) {

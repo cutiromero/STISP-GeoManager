@@ -55,11 +55,21 @@ export function viewportQueryPayload(
   }
   // Keep the map's display budget separate from explicit spatial/attribute queries.
   const point = geometryType.toLowerCase().includes("point");
+  const line = geometryType.toLowerCase().includes("line");
+  // Use stable scale levels (about half a pixel at 1024px), restoring detail
+  // as the view narrows. Explicit queries never use this display-only path.
+  const tolerance = Math.min(
+    0.05,
+    2 ** Math.floor(Math.log2(Math.min(width, north - south) / 2048)),
+  );
   return {
     attributeFilters: [],
     spatialFilter: { mode: "rectangle", geometry },
-    limit: Math.max(1, Math.min(queryLimit, point ? 1500 : 600)),
+    limit: Math.max(1, Math.min(queryLimit, point ? 1500 : line ? 10000 : 600)),
     displayGeometry: true,
+    ...(line && tolerance >= 0.00001
+      ? { lineSimplifyTolerance: tolerance }
+      : {}),
   };
 }
 
@@ -84,5 +94,23 @@ export function applyViewportResult(
       视野查询键: key,
       视野刷新时间: Date.now(),
     },
+  };
+}
+
+export function exactViewportExportQuery(
+  layer: LoadedVectorLayer,
+): ResourceQueryPayload | null {
+  if (!isViewportVectorLayer(layer) || !layer.metadata.视野查询键) return null;
+  const [, , body] = JSON.parse(String(layer.metadata.视野查询键)) as [
+    number,
+    string,
+    ResourceQueryPayload,
+  ];
+  if (!body.lineSimplifyTolerance && !layer.vectorTiles) return null;
+  return {
+    attributeFilters: body.attributeFilters,
+    spatialFilter: body.spatialFilter,
+    limit: body.limit,
+    ...(layer.vectorTiles ? { sourceFeatureIds: true } : {}),
   };
 }

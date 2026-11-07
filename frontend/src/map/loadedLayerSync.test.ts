@@ -63,8 +63,40 @@ describe("effectiveMapLayers", () => {
 });
 
 describe("syncLoadedLayers", () => {
+  it("keeps a tile source across viewport changes without setting GeoJSON data", () => {
+    const map = createMap();
+    const vector = makeVectorLayer("tiled", true);
+    vector.vectorTiles = {
+      revision: "0".repeat(24),
+      tileUrl: "/api/tiles/{z}/{x}/{y}.pbf",
+      sourceLayer: "features",
+      minZoom: 0,
+      maxZoom: 10,
+      bounds: [80, 10, 100, 50],
+      clustered: false,
+      featureCount: 3318,
+    };
+    syncLoadedLayers(map.value, [vector]);
+    expect(map.addSource.mock.calls[0]![1]).toMatchObject({
+      type: "vector",
+      maxzoom: 10,
+    });
+    expect(
+      String((map.addSource.mock.calls[0]![1] as { tiles: string[] }).tiles[0]),
+    ).toContain("{z}/{x}/{y}.pbf");
+    const source = map.value.getSource(sourceIdFor(vector.id)) as unknown as {
+      setData: ReturnType<typeof vi.fn>;
+    };
+    syncLoadedLayers(map.value, [
+      { ...vector, geojson: { type: "FeatureCollection", features: [] } },
+    ]);
+    expect(source.setData).not.toHaveBeenCalled();
+    expect(map.addSource).toHaveBeenCalledTimes(1);
+    expect(map.value.fitBounds).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("window", { location: { origin: "http://localhost" } });
     mocks.addRasterLayer.mockImplementation(
       (map: MapboxMap, sourceId: string) => {
         if (!map.getSource(sourceId)) {
@@ -217,7 +249,7 @@ describe("syncLoadedLayers", () => {
 
 function createMap() {
   const sources = new Map<string, { setData: ReturnType<typeof vi.fn> }>();
-  const addSource = vi.fn((sourceId: string) => {
+  const addSource = vi.fn((sourceId: string, _spec: unknown) => {
     sources.set(sourceId, { setData: vi.fn() });
   });
   const value = {

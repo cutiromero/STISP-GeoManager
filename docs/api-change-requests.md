@@ -1,5 +1,20 @@
 # API Change Requests
 
+## API-20261107-003 - 管线地图按尺度简化和压缩传输
+
+- Status: BackendReady
+- Owner: 同一任务先完成前端契约，再交接后端实现，最后接入前端并验收。
+- Endpoints: POST /api/catalog/resources/{id}/query/。
+- Change type: QueryRequest新增可选lineSimplifyTolerance，0至0.1度；须同时启用displayGeometry。省略保留现有量化语义。
+- OpenAPI change: 仅线几何采用显式容差保拓扑简化；点、面、原精度请求、属性与对象数量保持。响应按Accept-Encoding协商gzip。
+- Mock examples: mock/prism/requests/pipeline-display.json，包含保留属性及对象ID的线显示结果。
+- Frontend reason: 全球管线139万顶点使传输和浏览器绘制缓慢；普通视野显示按像素选择容差，线显示预算提升至10000以避免全球线网600条截断。
+- Backend implementation notes: 显示简化发生于WGS84转换后；原始命中判定不变。空间显示查询按完整参数及资源修订隔离缓存，每资源最多32条空间预览缓存；入口权限检查保持。禁止改写GeoPackage或将简化结果用于计算。
+- Verification: 非法参数、默认量化、线端点/误差/属性/ID、点面不变、原始数据未修改、缓存隔离与修订失效、gzip、全球与三区/空海洋/快速移动真实浏览器。
+
+
+- Result: 本机后端58项（另3个子测试）、前端9项和浏览器8项通过；生成契约、类型检查、lint及生产构建通过；服务器候选和正式公网待验收。
+
 ## API-20261106-005 - 资料确认与启动分析合并
 
 - Status: BackendReady
@@ -437,6 +452,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261107-003 | BackendReady | Pipeline display LOD and gzip |
 | API-20261107-002 | BackendReady | Workflow cancel and research inputSummary | Immediate stop and actual role reasons | Updated | Existing 105/106 optional compatible fixtures | Owner/project and bound task stop; model role audit | Targeted tests; real candidate separately | Current data and prior report versions preserved |
 | API-20261107-001 | BackendReady | /api/agent/workflows/{workflowId}/retained-review/; workflow inspection/confirm | Explicit held-object review with fixed automatic scope | Updated | 105-agent-workflow-card.json | Implemented with owner/project and frozen evidence checks | Focused backend/browser checks; candidate separate | Previous reports preserved; budgets and permissions retained |
 | API-20261106-005 | BackendReady | /api/agent/workflows/{workflowId}/confirm/ | Optional explicit start with input confirmation | Updated | 107-agent-input-start.json | Bound input authorization implemented | Targeted backend and browser regression | Modification and exceptional-case approval retained |
@@ -1537,6 +1553,17 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - 后端从冻结算子版本投影协议，不根据结果是否为空猜测。验证包括实际空输出、仅修正后输入、历史证据读取与前端圈区定位。
 
 远景输出增加`prospect_support`连续栅格及`prospectHeatmapOutputId`引用。后端统一脚本按`colorRamp`蓝—黄—红连续插值生成PNG，浏览器只显示图片和同色图例；透明背景不扩大目标边界。相对置信度由已圈目标内的矿物组合与岩性支持归一化，非有矿概率。
+
+## API-20261107-004 矢量预生成显示瓦片（已实现，服务器验收单独记录）
+
+- Status: BackendReady
+- QueryRequest增加可选sourceFeatureIds（默认false）；聚合点同时提供rawTileUrl和aggregate=0，保留关闭聚合及热力图显示能力。
+
+- 接口：GET资源profile新增可选vectorTiles；新增GET `/api/catalog/resources/{id}/vector-tiles/{revision}/{z}/{x}/{y}.pbf`。
+- 原因：管线按级别和区域读取二进制瓦片，灾害点用全量聚合，减少每次视野查询和大GeoJSON传输。例子：`mock/prism/requests/vector-tiles.json`。
+- 后端交接：离线管理命令只读原始GeoPackage生成0～10级缓存；revision隔离资源修订；瓦片按query_data/load_vector_layer、项目、owner_only授权后读私有缓存，空瓦片204、失效404、参数400，ETag检查在鉴权之后。
+- 前端交接：已就绪且无筛选的普通显示使用vector source；聚合点点击放大；属性表/导出按当前范围读取原始数据。显隐、符号、属性点击、工程恢复须保留。
+- 验证：聚合数量守恒、完整几何未修改、无运行时生成、缓存失效/跨项目/owner_only/撤权后304保护；真实MVT浏览器、属性表和精确导出。详情见`docs/vector-preview-tiles-20261107.md`。
 
 ## 2026-11-07 输入版本复用与自动处置位置（已实施）
 

@@ -5,6 +5,7 @@ import {
   rasterSymbolizationFromRules,
 } from "../symbolization";
 import { vectorSymbolizationWithDefaultTemplate } from "../symbolizationTemplates";
+import { attachVectorTilePreview } from "../map/vectorTilePreview";
 import type {
   AttributeFilter,
   DataResource,
@@ -89,7 +90,13 @@ export function createVectorLayerGroup(
         fields: queryResult.fields,
         query,
       } satisfies LoadedVectorLayer,
-    ],
+    ].map((layer) =>
+      profile.vectorTiles &&
+      !query?.attributeFilters.length &&
+      !query?.spatialFilter
+        ? attachVectorTilePreview(layer, profile.vectorTiles)
+        : layer,
+    ),
   };
 }
 

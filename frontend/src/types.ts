@@ -437,6 +437,7 @@ export interface MapViewState {
 }
 
 export interface LoadedVectorLayer {
+  vectorTiles?: NonNullable<DataResourceProfile["vectorTiles"]>;
   viewportOnly?: boolean;
   id: string;
   name: string;

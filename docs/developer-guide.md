@@ -2,6 +2,16 @@
 
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 
+## 预生成矢量显示瓦片（API-20261107-004）
+
+点资源同时提供rawTileUrl，关闭聚合或热力图使用aggregate=0读取原始点显示瓦片。原始属性查询增加可选布尔sourceFeatureIds（默认false），true保留源GeoPackage FID以关联瓦片；不改变几何和查询上限。公开项目保留原有游客只读语义，非公开项目仍须认证和项目授权。
+
+资源profile的可选vectorTiles描述已准备好的同源MVT缓存，未准备或修订后为null。无筛选普通地图可直接使用tileUrl/sourceLayer/minZoom/maxZoom/bounds，点聚合节点携带point_count及point_count_abbreviated。瓦片不是业务查询结果，属性表和导出按当前视野查询原始数据，遵循既有查询上限；聚合节点不可导出成原始点。
+
+GET `/api/catalog/resources/{id}/vector-tiles/{revision}/{z}/{x}/{y}.pbf`沿用query_data、load_vector_layer、当前单项目和owner_only授权；项目通过projectTagId或X-Project-Id传递，页面会话沿用原同源协议。HTTP不生成瓦片；空瓦片204、失效版本404、非法坐标400、正常200/gzip，ETag鉴权后可返回304。响应private,no-cache，不能共享缓存。
+
+离线命令 `python manage.py prepare_vector_tiles --project-id 2 --resource-id 148 --resource-id 149 --resource-id 150` 从一致性只读快照生成缓存，原子发布；数据源、权限和目录仍由现有TOML及项目上下文控制。预览0～10级，放大可过缩放；WebMercator范围±85.051129度。实现及测试边界见vector-preview-tiles-20261107.md。
+
 ## 普通数据目录与任务材料
 
 平台普通资源目录、全局搜索和图层列表依据统一的内部 `source` 前缀及注册规则 `code` 标识，隐藏任务上传、工作副本、冻结规则、批准或模型修改表、场景参照及评价材料。后台资源列表、导出、资源/图层统计和未指定 `resourceId` 的计算输入目录复用这一排除规则。普通业务上传、`compute-output:` 计算成果、`workflow-report:` 报告和未绑定资源的默认图层保留；不按资料名称中的“测试”“演示”“test”或“demo”过滤。资源不被删除，已绑定工作流和历史证据继续按真实项目、ACL及任务绑定通过编号读取。
@@ -2967,6 +2977,15 @@ inputSummary可选roleReason和roleSource展示本次角色判断依据与来源
 流程内待核查项仅显示当前成果单图，保留选中轮廓、定位和周边地质背景；需要前后比较时由独立对比页查看。地图切换和勾选复用已加载数据，不调用算子。
 
 远景输出增加`prospect_support`连续栅格及`prospectHeatmapOutputId`引用。后端统一脚本按`colorRamp`蓝—黄—红连续插值生成PNG，浏览器只显示图片和同色图例；透明背景不扩大目标边界。相对置信度由已圈目标内的矿物组合与岩性支持归一化，非有矿概率。
+
+
+### 2026-11-07 管线地图显示优化
+
+QueryRequest 可显式传 `lineSimplifyTolerance`（有限数值，0至0.1，WGS84度），须同时 `displayGeometry=true`，非法参数返回400。0或省略时仍仅按1e-5度量化，不改变既有图斑显示语义。正值仅将LineString/MultiLineString按容差保拓扑简化，再量化；保留端点、ID、属性和对象数，空间命中仍按原始几何判断。前端普通大线图层按视野尺度选择容差并保留最多10000条（受系统查询上限约束），放大后请求更细显示。点和面不启用线简化，显式属性/空间查询保持原精度。量测、编辑、计算及精确导出须读取原始数据。
+
+查询响应按Accept-Encoding协商gzip。空间显示预览按完整参数、资源修订和算法版本隔离缓存，每资源最多保留32条；属性过滤请求不缓存。权限检查仍在缓存读取之前。默认displayGeometry无过滤缓存保持，旧算法缓存失效。
+
+显式线简化预览对原始坐标做完整的向量化范围校验，跳过逐顶点小数位不确定度估算；默认查询保留原精度估算。
 
 ### 输入版本复用与核查位置概览（2026-11-07）
 
