@@ -1,5 +1,13 @@
 # GeoManager Agent Instructions
 
+## 个人开发分支（2026-11-07，用户最新规则）
+
+- 每位开发者固定使用一个自己的开发分支，连续功能、修复和优化均在该分支提交，不得按功能或任务新开分支。
+- 当前开发者使用 `codex/xintao`；其他开发者使用各自身份命名的固定分支 `codex/<developer>`。已有个人分支必须复用。
+- 从最新已核实的 `main` 同步更新到个人分支；先检查工作区和并行修改，保留其他开发者成果。
+- 历史功能分支保留追溯，不批量删除、不改写其历史；新工作遵循个人分支规则。
+- 本规则优先于本仓库历史说明中的按任务、按功能开分支要求。
+
 ## 更新粒度（2026-11-06）
 
 - 用户要求：小修复和日常优化不单独升级版本号；大改动或小更新累计到合适规模后再统一升级。
@@ -19,13 +27,13 @@
 
 ### GitHub 长期跟踪补充（2026-09-22）
 
-- 用户已要求建立自己的长期代码库：`https://github.com/cutiromero/STISP-GeoManager`（私有），作为 `origin`；师兄仓库保留为 `mentor`。日常开发从新库 `main` 或其后续任务分支出发。
+- 用户已要求建立自己的长期代码库：`https://github.com/cutiromero/STISP-GeoManager`（私有），作为 `origin`；师兄仓库保留为 `mentor`。日常开发在各开发者固定个人分支进行，并从已核实的 `main` 同步更新。
 - 新库首次提交是凭据清理后的当前代码快照；原交接历史、旧任务分支与发布标签继续保存在本机。不要向新库执行 `push --all`、`push --mirror` 或 `push --tags`，避免把旧历史中的明文口令带上去。
-- 以后完成开发任务时，做必要检查后小步提交并同步 `origin` 对应任务分支，用于开发备份；不把开发备份误称为服务器验收或生产发布。正式部署、生产版本标签及师兄仓库同步仍遵守下文服务器验收流程。
+- 以后完成开发任务时，做必要检查后小步提交并同步 `origin` 对应个人分支，用于开发备份；不把开发备份误称为服务器验收或生产发布。正式部署、生产版本标签及师兄仓库同步仍遵守下文服务器验收流程。
 - 本库 GitHub Actions 已关闭，保留历史工作流文件供参考；未经明确部署任务不启用镜像发布或自动部署。数据库、运行配置、日志、依赖、密钥和原始交接包不上传。
 - 详细来源、分支边界和推送方式见 `docs/github-code-tracking.md`。以下涉及从交接基线开始、服务器验收后才推送 GitHub 的旧条款，分别理解为历史来源和正式发布要求，不阻止当前私有库的开发备份。
 
-- 从交接基线 `v0.1.11` / `c8a1d57769ec2eb50a8cbdd283046ba941d02e91` 继续开发；新任务使用 `codex/<area>-<short-task>` 分支。先看 status、diff 和近期历史，再修改文件。
+- `v0.1.11` / `c8a1d57769ec2eb50a8cbdd283046ba941d02e91` 为历史交接基线；当前开发复用开发者固定个人分支 `codex/<developer>`。先看 status、diff、已核实的最新 main 和近期历史，再修改文件。
 - 代码与必要的文本说明纳入 Git，小步提交，明确列出待提交文件。不把数据库、科研数据、依赖、缓存、日志、密钥或整份敏感交接文档加入 Git；不因本规则批量移除历史已跟踪素材。
 - 保留原始交接包、历史文档、已有修改、发布回执及恢复点。未经明确要求，不执行 `reset --hard`、`clean -fd`、强制推送、移动已发布标签、批量删除或覆盖重要文件；确需替换时先保存可恢复副本并说明范围。
 - 开发和最小必要验证在本机完成。现网更新沿用“冻结提交和发布包 → SSH 上传新候选目录 → 候选验收 → 备份及切换 → 生产验收和回执 → 本机推送同一 SHA 到 GitHub”。下文通用发布命令必须服从此顺序，不能直接启用旧 Docker/GHCR 自动同步方案。
@@ -325,20 +333,13 @@ Cross-boundary edits require an explicit handoff note in the task or completion 
 
 ### Branch model
 
-When creating a branch, use one branch per task:
+Use one persistent development branch per developer. Reuse that branch across features, bug fixes and tasks; do not create feature or task branches.
 
 ```text
-codex/<area>-<short-task>
+codex/<developer>
 ```
 
-Branch examples:
-
-```text
-codex/catalog-query-filters
-codex/raster-unique-values
-codex/admin-user-groups
-codex/map-layer-reorder
-```
+The current developer uses `codex/xintao`. Other developers use their own stable identity. Synchronize verified main updates into the personal branch and preserve existing work. Retain historical branches for traceability.
 
 ### Conflict-prone files
 
