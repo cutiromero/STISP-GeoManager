@@ -21,7 +21,7 @@ from apps.compute.services import (
     task_action,
 )
 from apps.compute.access import require_actor
-from apps.compute.packages import ComputeError
+from apps.compute.packages import ComputeError, checksum_scope
 from apps.knowledge.domains import DOMAINS, validate_domains
 from apps.knowledge.services import search_entries, visible_entries
 from apps.projects.context import project_scope
@@ -689,6 +689,7 @@ def authorize_demo(workflow, user, p, *, include_previous=True, history=False) -
             authorize_update(workflow, user, p)
 
 
+@checksum_scope()
 @transaction.atomic
 def confirm_demo(
     workflow,
@@ -1251,6 +1252,7 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
     return True
 
 
+@checksum_scope()
 def advance_demo(workflow_id) -> None:
     workflow = AgentWorkflow.objects.get(pk=workflow_id)
     if workflow.status not in {"queued", "running", "waiting_compute", "interrupted"}:

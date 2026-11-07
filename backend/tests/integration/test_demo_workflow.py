@@ -385,6 +385,57 @@ def test_output_reader_rechecks_checksum_and_workflow_identity(demo):
         read_output(workflow, demo["owner"], demo["policy"], output)
 
 
+def test_batch_reader_binds_once_reuses_same_file_and_rechecks_access_at_end(demo):
+    from apps.agent import demo_results
+    from apps.compute.packages import checksum_scope
+
+    workflow = scenario(demo)
+    prepare_demo(workflow, demo["owner"], demo["policy"])
+    confirm_demo(workflow, demo["owner"], demo["policy"], workflow.plan_hash)
+    advance_demo(workflow.id)
+    output = finish_task(workflow)
+    ComputeOutput.objects.create(
+        task=output.task,
+        key="same-file-reference",
+        label="同文件引用",
+        kind=output.kind,
+        file_name=output.file_name,
+        path=output.path,
+        size_bytes=output.size_bytes,
+        checksum=output.checksum,
+    )
+    with (
+        patch.object(
+            demo_results, "_check_result_task", wraps=demo_results._check_result_task
+        ) as binding,
+        patch.object(
+            demo_results, "authorized_task", wraps=demo_results.authorized_task
+        ) as access,
+        checksum_scope() as hashes,
+    ):
+        results = demo_results.read_results(
+            workflow, demo["owner"], demo["policy"], output.task_id
+        )
+    assert len(results) == 2 and binding.call_count == 1 and access.call_count == 2
+    assert hashes.reads == 1 and hashes.reuses == 1
+    original = demo_results._read_task_output
+
+    def revoke_after_read(*args):
+        result = original(*args)
+        ProjectMembership.objects.filter(
+            user=demo["owner"], project=demo["project"]
+        ).delete()
+        return result
+
+    with (
+        patch.object(demo_results, "_read_task_output", side_effect=revoke_after_read),
+        pytest.raises((PermissionDenied, ComputeError)),
+    ):
+        demo_results.read_results(
+            workflow, demo["owner"], demo["policy"], output.task_id
+        )
+
+
 def test_edits_require_exact_actual_issue_and_copy_stable_signature():
     row = {
         "feature_id": "F2",

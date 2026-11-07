@@ -1,8 +1,12 @@
 """Static package validation. Uploaded Python is never imported by Django."""
 
 import hashlib
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 import json
 import math
+import os
 from pathlib import PurePosixPath
 import re
 import stat
@@ -28,9 +32,64 @@ class ComputeError(ValueError):
         self.status = status
 
 
+@dataclass
+class ChecksumVerification:
+    cache: dict = field(default_factory=dict)
+    reads: int = 0
+    reuses: int = 0
+    bytes_read: int = 0
+
+
+_CHECKSUM_VERIFICATION = ContextVar("compute_checksum_verification", default=None)
+
+
+@contextmanager
+def checksum_scope():
+    """Reuse unchanged file hashes only within one synchronous operation."""
+    current = _CHECKSUM_VERIFICATION.get()
+    if current is not None:
+        yield current
+        return
+    current = ChecksumVerification()
+    token = _CHECKSUM_VERIFICATION.set(current)
+    try:
+        yield current
+    finally:
+        _CHECKSUM_VERIFICATION.reset(token)
+
+
+def _file_identity(value):
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+        value.st_mode,
+    )
+
+
 def checksum(path):
+    verification = _CHECKSUM_VERIFICATION.get()
+    if verification is None or path.is_symlink():
+        with path.open("rb") as stream:
+            return hashlib.file_digest(stream, "sha256").hexdigest()
+    identity = _file_identity(path.stat())
+    key = (str(path.absolute()), identity)
+    if key in verification.cache:
+        verification.reuses += 1
+        return verification.cache[key]
     with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+        before = _file_identity(os.fstat(stream.fileno()))
+        value = hashlib.file_digest(stream, "sha256").hexdigest()
+        after = _file_identity(os.fstat(stream.fileno()))
+    if identity != before or before != after or after != _file_identity(path.stat()):
+        raise ComputeError("文件在内容校验过程中发生变化，请重新读取", 409)
+    verification.reads += 1
+    verification.bytes_read += identity[2]
+    if len(verification.cache) < 512:
+        verification.cache[key] = value
+    return value
 
 
 def clean_text(value, maximum, label, required=True):

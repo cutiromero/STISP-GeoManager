@@ -21,7 +21,7 @@ from apps.core.runtime_config import (
     runtime_symbolizer_timeout_seconds,
 )
 from apps.core.storage import StoragePathError, app_path
-from .packages import ComputeError, checksum
+from .packages import ComputeError, checksum, checksum_scope
 
 
 RENDER_VERSION = 3
@@ -216,6 +216,7 @@ def _render(source: Path, png: Path, side: int, rules: dict) -> dict:
         raise ComputeError("地图预览返回的空间信息无效") from exc
 
 
+@checksum_scope()
 def ensure_map_preview(output) -> tuple[bytes, dict]:
     """Caller must authorize the task and current source resources on each request."""
     source = _source(output)

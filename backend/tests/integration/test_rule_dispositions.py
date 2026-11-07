@@ -211,9 +211,6 @@ def test_automatic_execution_writes_only_authorized_rule_rows_and_requires_its_p
     assert not workflow.steps.filter(kind="modifications_approved").exists()
     _save(workflow)
     monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task", lambda *a, **k: object()
-    )
-    monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *a, **k: results
     )
     assert workflow.status == "waiting_approval"

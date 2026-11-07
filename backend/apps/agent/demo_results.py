@@ -11,7 +11,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 
 from apps.catalog.models import DataResource
-from apps.compute.packages import ComputeError, checksum
+from apps.compute.packages import ComputeError, checksum, checksum_scope
 from apps.compute.access import require_actor
 from apps.core.storage import app_path, table_data_path
 from .compute_tools import authorized_task
@@ -58,11 +58,20 @@ def read_output(workflow, user, policy, output) -> dict:
 
 
 def _read_output(workflow, output, task) -> dict:
+    _check_result_task(workflow, task)
+    return _read_task_output(output, task, workflow.workflow_type)
+
+
+def _check_result_task(workflow, task):
     if (
-        output.task_id != task.id
-        or task.owner_id != workflow.owner_id
+        task.owner_id != workflow.owner_id
         or not workflow.steps.filter(compute_task_id=task.id).exists()
     ):
+        raise PermissionDenied("结果不属于当前分析流程")
+
+
+def _read_task_output(output, task, workflow_type) -> dict:
+    if output.task_id != task.id:
         raise PermissionDenied("结果不属于当前分析流程")
     path = app_path(output.path)
     if task.status != "succeeded" or output.expired or not path.is_file():
@@ -79,11 +88,11 @@ def _read_output(workflow, output, task) -> dict:
         "rows": [],
     }
     if output.kind == "table":
-        if workflow.workflow_type in MULTI_FAMILY:
+        if workflow_type in MULTI_FAMILY:
             from .geology_multi_results import table_rows
 
             return {**result, **table_rows(path, output.key)}
-        map_review = workflow.workflow_type == "geology_map_review"
+        map_review = workflow_type == "geology_map_review"
         if path.stat().st_size > MAX_RESULT_BYTES:
             raise ComputeError(
                 "检查统计表超过8 MiB读取上限；原始结果保留，请缩小本次分析范围"
@@ -112,15 +121,19 @@ def _read_output(workflow, output, task) -> dict:
     return result
 
 
+@checksum_scope()
 def read_results(workflow, user, policy, task) -> list[dict]:
     # Validate the actual task and its inputs once at each read boundary.
     # File checks remain per output; revocation during a long read still fails
     # before any collected rows are returned to the caller.
-    task = authorized_task(user, task.id, policy, workflow=workflow)
+    task = authorized_task(user, getattr(task, "id", task), policy, workflow=workflow)
     outputs = list(task.outputs.order_by("id"))
     if not outputs:
         raise ComputeError("任务没有可读取的实际输出")
-    results = [_read_output(workflow, output, task) for output in outputs]
+    _check_result_task(workflow, task)
+    results = [
+        _read_task_output(output, task, workflow.workflow_type) for output in outputs
+    ]
     authorized_task(user, task.id, policy, workflow=workflow)
     return results
 

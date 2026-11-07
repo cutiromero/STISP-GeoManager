@@ -288,10 +288,6 @@ def test_approval_only_writes_selected_object_action(multi, monkeypatch):
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
     )
-    monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task",
-        lambda *args, **kwargs: SimpleNamespace(),
-    )
     selected = [wf.plan["modificationReview"]["suggestions"][1]["id"]]
     approve_modifications(wf, multi["owner"], multi["policy"], selected, "hash")
     resource = create_approved_changes(wf, multi["owner"], multi["policy"], stage)
@@ -340,10 +336,6 @@ def test_raster_restyling_preserves_approval_selection_and_execution(
     )
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
-    )
-    monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task",
-        lambda *args, **kwargs: object(),
     )
     selected = [wf.plan["modificationReview"]["suggestions"][1]["id"]]
     approve_modifications(wf, multi["owner"], multi["policy"], selected, "hash")
@@ -411,10 +403,6 @@ def test_approval_still_rejects_changed_scientific_evidence(
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
     )
-    monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task",
-        lambda *args, **kwargs: object(),
-    )
     selected = [wf.plan["modificationReview"]["suggestions"][1]["id"]]
     with pytest.raises(ComputeError, match="实际检查结果已变化"):
         approve_modifications(wf, multi["owner"], multi["policy"], selected, "hash")
@@ -435,10 +423,6 @@ def test_empty_modification_set_continues_without_inventing_user_approval(
     assert wf.steps.filter(kind="no_modifications").count() == 1
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
-    )
-    monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task",
-        lambda *args, **kwargs: object(),
     )
     resource = create_approved_changes(wf, multi["owner"], multi["policy"], stage)
     path = table_data_path(resource.storage_path.removeprefix("table/"))
@@ -477,10 +461,6 @@ def test_held_candidates_are_independent_of_model_and_explicitly_approved(
         validate_edits([malicious], results)
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
-    )
-    monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task",
-        lambda *args, **kwargs: SimpleNamespace(),
     )
     approve_modifications(wf, multi["owner"], multi["policy"], [], "hash")
     assert stage["approvedEdits"] == []
@@ -544,10 +524,6 @@ def test_large_group_approval_fixes_all_selected_rows_not_thirty(multi, monkeypa
     freeze_proposal(wf, stage)
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
-    )
-    monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task",
-        lambda *args, **kwargs: SimpleNamespace(),
     )
     selected = [item["id"] for item in wf.plan["modificationReview"]["suggestions"]][
         :-1
@@ -692,10 +668,6 @@ def test_raster_group_default_and_user_weight_override_are_frozen(multi, monkeyp
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
     )
-    monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task",
-        lambda *args, **kwargs: SimpleNamespace(),
-    )
     selected = [review["suggestions"][0]["id"]]
     approve_modifications(
         wf,
@@ -743,10 +715,6 @@ def test_no_approval_cannot_execute_and_empty_selection_retains_all(multi, monke
     wf, stage, results = fixture_review(multi)
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
-    )
-    monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task",
-        lambda *args, **kwargs: SimpleNamespace(),
     )
     with pytest.raises(ComputeError, match="有效批准"):
         create_approved_changes(wf, multi["owner"], multi["policy"], stage)

@@ -372,10 +372,6 @@ def test_plan_and_scoped_approval_use_original_checks(
     monkeypatch.setattr(
         "apps.agent.geology_multi_review.read_results", lambda *args: results
     )
-    monkeypatch.setattr(
-        "apps.agent.geology_multi_review.authorized_task",
-        lambda *args, **kwargs: object(),
-    )
     response = answer(generic, run, answer="只批准岩性类建议")
     assert response.status_code == 200, response.content
     workflow.refresh_from_db()
