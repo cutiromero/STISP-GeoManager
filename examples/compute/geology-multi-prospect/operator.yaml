@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "identifier": "geology-multi-prospect",
   "name": "优先核查远景区分析",
-  "version": "2.1.0",
-  "description": "优先核查远景区分析。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
+  "version": "2.2.0",
+  "description": "仅使用修正后岩性、构造、蚀变及有效权重，以连续支持场圈定平滑远景区；同一连通支持带合并，区域无重叠，输出红黄蓝渐变热力图及逐区依据。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
   "agent": {
@@ -123,8 +123,19 @@
   ],
   "parameters": [
     {
+      "key": "profile",
+      "label": "远景区范围尺度",
+      "type": "enum",
+      "default": "focused",
+      "choices": [
+        "focused",
+        "balanced",
+        "regional"
+      ]
+    },
+    {
       "key": "working_epsg",
-      "label": "米制工作投影EPSG",
+      "label": "米制投影EPSG",
       "type": "integer",
       "default": 32646,
       "min": 1,
@@ -132,7 +143,7 @@
     },
     {
       "key": "segment",
-      "label": "本次检查范围",
+      "label": "资料范围",
       "type": "enum",
       "default": "all",
       "choices": [
@@ -143,45 +154,89 @@
       ]
     },
     {
-      "key": "grid_resolution_m",
-      "label": "综合分析网格（米）",
+      "key": "prospect_grid_resolution_m",
+      "label": "远景区分析网格（米）",
+      "type": "number",
+      "default": 50,
+      "min": 25,
+      "max": 200
+    },
+    {
+      "key": "min_zone_area_km2",
+      "label": "最小目标面积（平方公里）",
+      "type": "number",
+      "default": 1.0,
+      "min": 0.01,
+      "max": 30
+    },
+    {
+      "key": "min_core_area_km2",
+      "label": "最小核心面积（平方公里）",
+      "type": "number",
+      "default": 0.05,
+      "min": 0.001,
+      "max": 5
+    },
+    {
+      "key": "core_score_min",
+      "label": "核心支持门槛",
+      "type": "number",
+      "default": 0.62,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "key": "alteration_density_scale",
+      "label": "蚀变覆盖尺度",
+      "type": "number",
+      "default": 0.08,
+      "min": 0.001,
+      "max": 1
+    },
+    {
+      "key": "peripheral_min_weighted_types",
+      "label": "外围最低加权矿物类型数",
+      "type": "number",
+      "default": 1.5,
+      "min": 1,
+      "max": 5
+    },
+    {
+      "key": "peripheral_min_density",
+      "label": "外围最低平滑加权覆盖比例",
+      "type": "number",
+      "default": 0.002,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "key": "support_smooth_m",
+      "label": "连续支持场平滑尺度（米）",
       "type": "number",
       "default": 100,
-      "min": 10,
-      "max": 1000
-    },
-    {
-      "key": "min_zone_area_m2",
-      "label": "远景区最小面积（平方米）",
-      "type": "number",
-      "default": 200000,
-      "min": 0,
-      "max": 100000000
-    },
-    {
-      "key": "max_zone_count",
-      "label": "最多保留远景目标数",
-      "type": "integer",
-      "default": 5,
-      "min": 1,
-      "max": 20
-    },
-    {
-      "key": "max_zone_area_m2",
-      "label": "单个远景区面积上限（平方米）",
-      "type": "number",
-      "default": 3000000,
-      "min": 1,
-      "max": 100000000
+      "min": 25,
+      "max": 250
     }
   ],
   "outputs": [
     {
       "key": "after_zones",
-      "label": "修改后优先核查远景区",
+      "label": "修正后优先核查远景区",
       "kind": "vector",
       "file": "after_zones.gpkg",
       "required": false
+    },
+    {
+      "key": "prospect_support",
+      "label": "远景相对置信度热力图",
+      "kind": "raster",
+      "file": "prospect_support.tif"
+    },
+    {
+      "key": "strong_core",
+      "label": "强证据核心",
+      "kind": "raster",
+      "file": "strong_core.tif"
     },
     {
       "key": "evidence",
@@ -194,12 +249,6 @@
       "label": "修正后远景区统计",
       "kind": "table",
       "file": "statistics.csv"
-    },
-    {
-      "key": "prospect_support",
-      "label": "远景相对置信度热力图",
-      "kind": "raster",
-      "file": "prospect_support.tif"
     }
   ],
   "timeoutSeconds": 900,

@@ -173,13 +173,12 @@ class Context:
 
 
 def load(suffix):
-    sys.path.insert(0, str(CORE))
+    source = CORE.parent / ("geology-multi-" + suffix)
+    sys.path[:0] = [str(CORE), str(source)]
     try:
-        return runpy.run_path(
-            str(ROOT / f"examples/compute/geology-multi-{suffix}/main.py")
-        )["run"]
+        return runpy.run_path(str(source / "main.py"))["run"]
     finally:
-        sys.path.pop(0)
+        del sys.path[:2]
 
 
 def rect(x0, y0, x1, y1):
@@ -570,7 +569,7 @@ def test_operator_packages_are_deterministic_and_declare_clean_outputs():
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
             manifest = validate_manifest(yaml.safe_load(archive.read("operator.yaml")))
             assert (
-                manifest["version"] == ("2.1.0" if suffix == "prospect" else "1.2.0")
+                manifest["version"] == ("2.2.0" if suffix == "prospect" else "1.2.0")
                 and manifest["deterministic"]
             )
             assert {
@@ -846,12 +845,17 @@ def test_relations_and_corrected_only_prospect_have_mask_and_matching_evidence(
             **raster_inputs(initial, edited),
             "intersections": relations.output_path("intersections.gpkg"),
         },
-        initial.parameters,
+        {
+            "min_zone_area_km2": 0.01,
+            "min_core_area_km2": 0.001,
+            "core_score_min": 0.5,
+            "peripheral_min_density": 0.0001,
+        },
     )
     load("prospect")(prospect)
     zones = gpd.read_file(prospect.output_path("after_zones.gpkg"))
-    assert len(zones) > 0 and zones.zone_id.str.startswith("P").all()
-    assert set(zones.columns) == {
+    assert len(zones) > 0 and zones.zone_id.str.startswith("R").all()
+    assert set(zones.columns) >= {
         "zone_id",
         "priority_rank",
         "area_km2",
@@ -863,9 +867,9 @@ def test_relations_and_corrected_only_prospect_have_mask_and_matching_evidence(
     assert zones.geometry.difference(rect(0, 0, 1000, 1000)).area.sum() < 0.001
     for row in read(prospect.output_path("evidence.csv")):
         measured = json.loads(row["conditions_json"])
-        assert measured["min_weighted_type_count"] >= measured["min_types_required"]
-        assert measured["alteration_supported_fraction"] == 1
-        assert measured["structure_supported_fraction"] == 1
+        assert measured["core_area_km2"] > 0
+        assert 0 <= measured["alteration_supported_fraction"] <= 1
+        assert 0 <= measured["structure_supported_fraction"] <= 1
         assert measured["favourable_fraction"] == 0
     validate_report(
         json.loads(prospect.output_path("quality.json").read_text(encoding="utf-8"))
@@ -894,7 +898,12 @@ def test_empty_anomalies_intersections_and_prospects_are_real_empty_layers(tmp_p
             "before_lithology": initial.inputs["lithology"],
             "before_faults": initial.inputs["faults"],
         },
-        initial.parameters,
+        {
+            "min_zone_area_km2": 0.01,
+            "min_core_area_km2": 0.001,
+            "core_score_min": 0.5,
+            "peripheral_min_density": 0.0001,
+        },
     )
     load("prospect")(prospect)
     assert not prospect.output_path("before_zones.gpkg").exists()
@@ -967,14 +976,19 @@ def test_downweight_really_affects_evidence_without_removing_geometry(tmp_path):
             **raster_inputs(initial, edited),
             "intersections": relations.output_path("intersections.gpkg"),
         },
-        initial.parameters,
+        {
+            "min_zone_area_km2": 0.01,
+            "min_core_area_km2": 0.001,
+            "core_score_min": 0.5,
+            "peripheral_min_density": 0.0001,
+        },
     )
     load("prospect")(prospect)
     assert not prospect.output_path("before_zones.gpkg").exists()
-    assert prospect.output_path("after_zones.gpkg").exists()
+    assert read(prospect.output_path("statistics.csv"))[0]["phase"] == "after"
     for row in read(prospect.output_path("evidence.csv")):
         if row["phase"] == "after":
-            assert json.loads(row["conditions_json"])["min_weighted_type_count"] >= 2
+            assert json.loads(row["conditions_json"])["core_area_km2"] > 0
 
 
 def test_recheck_keeps_user_review_and_downweight_state(tmp_path):

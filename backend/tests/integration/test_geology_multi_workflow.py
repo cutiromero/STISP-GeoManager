@@ -1191,6 +1191,8 @@ def test_native_published_manifests_prepare_the_actual_stage_protocol(
     )
     assert wf.plan["stages"][4]["bindings"]["lithology"] == "apply/lithology"
     assert wf.plan["stages"][4]["parameters"]["segment"] == "all"
+    assert wf.plan["stages"][4]["parameters"]["prospect_grid_resolution_m"] == 50
+    assert wf.plan["stages"][4]["parameters"]["profile"] == "focused"
     assert len(wf.plan["upstreamVersions"]) == 9
     confirm_demo(wf, multi["owner"], multi["policy"], wf.plan_hash)
     assert wf.status == "queued"
@@ -1455,3 +1457,29 @@ def test_multi_model_protocol_distinguishes_proposal_from_insufficient_evidence(
         assert stream.call_count == 2
         assert "不得提前提交" in stage["modelAttempts"][0]["validationError"]
         assert not stage["modelAttempts"][0]["accepted"]
+
+
+@pytest.mark.parametrize("version", ["2.0.0", "2.1.0", "2.2.0"])
+def test_after_only_heatmap_protocol_follows_outputs_across_versions(multi, version):
+    from apps.agent.geology_multi_review import update_map
+
+    workflow, stage, _ = fixture_review(multi)
+    workflow.plan["algorithms"]["geology-multi-prospect"] = {
+        "manifest": {
+            "version": version,
+            "outputs": [{"key": "after_zones"}, {"key": "prospect_support"}],
+        }
+    }
+    workflow.plan["stages"].append(
+        {
+            "name": "prospect",
+            "status": "completed",
+            "outputs": [{"key": "after_zones", "kind": "vector", "resourceId": 301}],
+            "results": [{"key": "prospect_support", "outputId": 302}],
+        }
+    )
+    update_map(workflow)
+    result = workflow.plan["multiElementMap"]
+    assert result["prospectProtocol"] == "after_only_v2"
+    assert result["afterProspects"] == 301 and result["prospectHeatmapOutputId"] == 302
+    assert "beforeProspects" not in result

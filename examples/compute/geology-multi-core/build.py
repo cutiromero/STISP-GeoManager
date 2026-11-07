@@ -22,6 +22,9 @@ def build(identifier):
     files.update(
         {path.name: path.read_bytes() for path in sorted(folder.glob("multi_*.py"))}
     )
+    files.update(
+        {path.name: path.read_bytes() for path in sorted(source.glob("prospect_*.py"))}
+    )
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in sorted(files.items()):

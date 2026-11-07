@@ -28,9 +28,9 @@ def setup_prospect(
         with rasterio.open(initial.inputs[key], "r+") as stream:
             values = np.zeros(stream.shape, dtype="uint8")
             if key == "hematite":
-                values[25, 58] = values[75, 58] = 1
+                values[15:40, 50:70] = values[65:90, 50:70] = 1
             if key == "chlorite":
-                values[25, 60] = values[75, 60] = 1
+                values[20:45, 60:80] = values[70:95, 60:80] = 1
                 if separated:
                     values[:] = 0
                     values[0, 0] = 1
@@ -60,17 +60,25 @@ def setup_prospect(
     path = relations.output_path("intersections.gpkg")
     if path.exists():
         inputs["intersections"] = path
-    return Context(tmp_path / "prospect", inputs, initial.parameters)
+    return Context(
+        tmp_path / "prospect",
+        inputs,
+        {
+            "prospect_grid_resolution_m": 50,
+            "min_zone_area_km2": 0.01,
+            "min_core_area_km2": 0.001,
+        },
+    )
 
 
-def test_sparse_separate_pixels_form_neighbourhood_evidence_without_before_inputs(
+def test_real_support_islands_keep_consistent_platform_evidence(
     tmp_path,
 ):
     context = setup_prospect(tmp_path)
     assert not any(key.startswith("before_") for key in context.inputs)
     load("prospect")(context)
     frame = gpd.read_file(context.output_path("after_zones.gpkg"))
-    assert len(frame) == 2 and set(frame.zone_id) == {"P001", "P002"}
+    assert len(frame) == 2 and set(frame.zone_id) == {"R01", "R02"}
     assert "grade" not in frame
     assert not context.output_path("before_zones.gpkg").exists()
     evidence = read(context.output_path("evidence.csv"))
@@ -80,9 +88,16 @@ def test_sparse_separate_pixels_form_neighbourhood_evidence_without_before_input
         assert (
             conditions["structure_supported_fraction"]
             == conditions["bedrock_supported_fraction"]
-            == 1
+            <= 1
         )
-        assert conditions["min_weighted_type_count"] == 2
+        assert conditions["min_weighted_type_count"] >= 1.5
+        assert conditions["core_area_km2"] > 0
+        assert (
+            json.loads(row["evidence_json"])["boundary_extraction"][
+                "artificial_partition"
+            ]
+            is False
+        )
         assert conditions["favourable_fraction"] == 0
     summary = table_rows(context.output_path("evidence.csv"), "evidence")
     assert summary["aggregate"]["byPhase"][0]["zoneCount"] == 2
@@ -113,19 +128,12 @@ def test_insufficient_or_disallowed_evidence_stays_empty(tmp_path, options):
         assert stream.read(1, masked=True).count() == 0
 
 
-def test_count_and_area_caps_do_not_create_or_cut_targets(tmp_path):
+def test_no_legacy_cap_can_silently_split_continuous_targets(tmp_path):
     context = setup_prospect(tmp_path)
-    context.parameters["max_zone_count"] = 1
-    load("prospect")(context)
-    assert read(context.output_path("statistics.csv"))[0]["zone_count"] == "1"
-    metrics = json.loads(context.output_path("quality.json").read_text())["metrics"]
-    assert (
-        metrics["eligible_component_count"] == 2
-        and metrics["not_selected_by_count_limit"] == 1
-    )
-    context.parameters["max_zone_area_m2"] = 1000
-    load("prospect")(Context(tmp_path / "limited", context.inputs, context.parameters))
-    assert not (tmp_path / "limited/after_zones.gpkg").exists()
+    for key, value in [("max_zone_count", 1), ("max_zone_area_m2", 1000)]:
+        parameters = {**context.parameters, key: value}
+        with pytest.raises(ValueError, match="未声明参数"):
+            load("prospect")(Context(tmp_path / key, context.inputs, parameters))
 
 
 def test_old_rule_semantics_are_rejected_explicitly(tmp_path):
