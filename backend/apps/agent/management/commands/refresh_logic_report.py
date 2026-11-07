@@ -154,7 +154,11 @@ class Command(BaseCommand):
                 "actualModelCallCount", 0
             ) + len(calls)
             current.plan["finalDecision"] = decision
-            current.plan["finalStage"] = {**stage, "decision": decision}
+            current.plan["finalStage"] = {
+                **stage,
+                "decision": decision,
+                "status": "completed",
+            }
             current.plan_hash = _state_hash(current.plan)
             current.save(update_fields=["plan", "plan_hash", "updated_at"])
             step(
