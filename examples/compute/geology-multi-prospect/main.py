@@ -139,6 +139,7 @@ def run(context):
         context.output_path("statistics.csv"),
         [
             {
+                "schema_version": 2,
                 "method": "continuous_support_regions_v1",
                 "phase": "after",
                 "profile": config["profile"],
@@ -146,7 +147,7 @@ def run(context):
                 "area_km2": float(targets.area_km2.sum()),
             }
         ],
-        ["method", "phase", "profile", "zone_count", "area_km2"],
+        ["schema_version", "method", "phase", "profile", "zone_count", "area_km2"],
     )
     report(
         context,

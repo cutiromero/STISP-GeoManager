@@ -66,6 +66,18 @@ beforeEach(() => {
   sessionStorage.removeItem("geology-story:review-workflow");
   vi.restoreAllMocks();
   request.mockReset();
+  // Exercise the real API adapter while keeping component tests offline.
+  vi.spyOn(window, "fetch").mockImplementation(async (input, init) => {
+    const incoming =
+      input instanceof Request ? input : new Request(input, init);
+    const value = await request(
+      new URL(incoming.url, window.location.href).pathname,
+    );
+    return new Response(JSON.stringify(value), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
 });
 
 function rasterWorkflow() {
@@ -405,10 +417,9 @@ it.each(["afterOutputId", "changesOutputId"] as const)(
         "蚀变栅格：当前蚀变栅格协议缺少完整的前后地图输出引用",
       ),
     ).toBeVisible();
+    const map = await screen.findByLabelText("修正后地质图地图");
     expect(
-      screen
-        .getByLabelText("修正后地质图地图")
-        .querySelector('image[data-layer="alteration:calcite"]'),
+      map.querySelector('image[data-layer="alteration:calcite"]'),
     ).toBeNull();
     expect(
       request.mock.calls.some(([url]) =>
@@ -620,7 +631,7 @@ it("讲解页双图同类采用成果原色并支持线点面、Unicode代号与
       request.mock.calls.some(([url]) => String(url).includes("/301/query/")),
     ).toBe(true),
   );
-  fireEvent.click(screen.getByText("定位检查记录 / 1 条规则命中"));
+  fireEvent.click(await screen.findByText("定位检查记录 / 1 条规则命中"));
   fireEvent.click(await screen.findByText("S-02 / 实际疑点"));
   expect(screen.getByText("沿界比例较高，建议核对影像")).toBeVisible();
   fireEvent.click(screen.getByLabelText("有效蚀变"));

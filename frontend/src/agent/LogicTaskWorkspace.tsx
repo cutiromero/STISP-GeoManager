@@ -129,7 +129,9 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
   const deleted = deletedWorkflowResources(workflow);
   const taskIds = logicTasks(workflow);
   const names = logicStageNames(workflow);
-  const canMap = workflow.resultResourceIds.length > 0 && !deleted.length;
+  const canMap =
+    !deleted.length &&
+    (workflow.resultResourceIds.length > 0 || taskIds.length > 0);
   const canStop = Boolean(
     onCancel &&
     [
@@ -205,6 +207,14 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           title="部分历史成果已删除"
           description="任务与分析记录保留，重新处理时请另选资料。"
         />
+      )}
+      {canMap && !done && (
+        <div className="logic-primary-actions">
+          {compare}
+          <span className="logic-description">
+            可先查看当前资料与阶段成果，后续结果生成后在对比页刷新。
+          </span>
+        </div>
       )}
       {preparing && workflow.status === "waiting_approval" ? (
         (inputReview ?? <p>正在恢复资料与字段核对内容…</p>)

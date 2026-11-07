@@ -319,3 +319,44 @@ it("入库失败可重试同一成果，不要求重新分析", () => {
   expect(retry).toHaveBeenCalledOnce();
   expect(restart).not.toHaveBeenCalled();
 });
+
+it("计算阶段已有入口，无需等最终报告；未开始计算时不提前显示", async () => {
+  const waiting = task({
+    status: "waiting_compute",
+    resultResourceIds: [],
+    plan: {
+      phase: "waiting_compute",
+      stages: [
+        {
+          name: "check",
+          identifier: "geology-multi-check",
+          status: "running",
+          taskId: "check-task",
+          outputs: [],
+        },
+      ],
+    },
+  });
+  const mounted = show(waiting);
+  const link = screen.getByRole("link", { name: "查看前后对比" });
+  expect(link).toHaveAttribute(
+    "href",
+    `/map?geologyReview=${waiting.id}&projectTagId=${waiting.projectId}`,
+  );
+  expect(screen.getByText(/后续结果生成后在对比页刷新/)).toBeVisible();
+  expect(agentApi.workflow).not.toHaveBeenCalled();
+  mounted.rerender(
+    <App>
+      <MemoryRouter>
+        <LogicTaskWorkspace
+          workflow={task({
+            status: "waiting_approval",
+            resultResourceIds: [],
+            plan: { phase: "review_mapping", stages: [] },
+          })}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(screen.queryByRole("link", { name: "查看前后对比" })).toBeNull();
+});

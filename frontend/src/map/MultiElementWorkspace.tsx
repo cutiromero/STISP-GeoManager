@@ -893,6 +893,20 @@ export default function MultiElementWorkspace({
             {workflow.workflowType === "geology_generic"
               ? "地理工作台 · 本次资料"
               : "地理工作台演示案例"}
+            {[
+              "queued",
+              "running",
+              "waiting_compute",
+              "waiting_approval",
+              "paused",
+            ].includes(workflow.status) && (
+              <Tag
+                color="processing"
+                title="任务尚未结束。后续结果生成后，点击刷新结果或刷新页面查看。"
+              >
+                阶段性结果
+              </Tag>
+            )}
           </span>
           <h1>
             {workflow.workflowType === "geology_generic"
@@ -908,7 +922,13 @@ export default function MultiElementWorkspace({
           >
             返回对话
           </Button>
-          <Button icon={<ReloadOutlined />} onClick={onReload}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => {
+              resourceRequests.current.clear();
+              onReload();
+            }}
+          >
             刷新结果
           </Button>
           <Button

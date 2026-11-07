@@ -81,6 +81,7 @@ def test_real_support_islands_keep_consistent_platform_evidence(
     assert len(frame) == 2 and set(frame.zone_id) == {"R01", "R02"}
     assert "grade" not in frame
     assert not context.output_path("before_zones.gpkg").exists()
+    assert read(context.output_path("statistics.csv"))[0]["schema_version"] == "2"
     evidence = read(context.output_path("evidence.csv"))
     for row in evidence:
         assert row["phase"] == "after" and row["schema_version"] == "2"
