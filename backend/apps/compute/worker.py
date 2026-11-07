@@ -84,8 +84,16 @@ def run_task(task):
     for folder in (inputs, package, results):
         folder.mkdir()
     last_beat = [0.0]
+    last_authorization = [0.0]
+    preparation_started = time.monotonic()
+    preparation_counts = {
+        "materializedInputs": 0,
+        "reusedInputs": 0,
+        "copyOnWriteInputs": 0,
+        "copiedInputs": 0,
+    }
 
-    def heartbeat(force=False):
+    def heartbeat(force=False, verify_inputs=False):
         if not force and time.monotonic() - last_beat[0] < 2:
             return
         last_beat[0] = time.monotonic()
@@ -93,7 +101,9 @@ def run_task(task):
         live = ComputeTask.objects.get(pk=task.pk)
         if live.attempt_token != token or live.status not in ("validating", "running"):
             raise ComputeError("计算已取消或本次执行已失效")
-        check_live_task(task)
+        if verify_inputs or time.monotonic() - last_authorization[0] >= 2:
+            check_live_task(task)
+            last_authorization[0] = time.monotonic()
         ComputeTask.objects.filter(pk=task.pk, attempt_token=token).update(
             heartbeat=timezone.now()
         )
@@ -101,7 +111,7 @@ def run_task(task):
 
     destination = None
     try:
-        heartbeat(True)
+        heartbeat(True, verify_inputs=True)
         archive = app_path(task.version.package_path)
         if checksum(archive) != task.version.checksum:
             raise ComputeError("算法包校验失败，请管理员重新上传新版本")
@@ -112,19 +122,33 @@ def run_task(task):
         total = 0
         for item in task.input_records.select_related("resource"):
             heartbeat(True)
-            context["inputs"][item.key] = freeze_input(item, inputs)
+            prepared = freeze_input(item, inputs)
+            counts = prepared.pop("preparation")
+            preparation_counts[
+                "reusedInputs" if counts["reused"] else "materializedInputs"
+            ] += 1
+            preparation_counts[
+                "copyOnWriteInputs"
+                if counts["copyMethod"] == "copy_on_write"
+                else "copiedInputs"
+            ] += 1
+            context["inputs"][item.key] = prepared
             total += item.snapshot["sizeBytes"]
             if total > config().input_mb * 1024**2:
                 raise ComputeError("全部输入快照超过任务总大小限制")
         (inputs / "context.json").write_text(
             json.dumps(context, ensure_ascii=False), encoding="utf-8"
         )
-        heartbeat(True)
+        heartbeat(True, verify_inputs=True)
+        preparation_seconds = time.monotonic() - preparation_started
         ComputeTask.objects.filter(
             pk=task.pk, attempt_token=token, status="validating"
         ).update(status="running", stage="隔离环境正在计算", progress=30)
+        algorithm_started = time.monotonic()
         execute(attempt, package, inputs, results, manifest, heartbeat)
-        heartbeat(True)
+        algorithm_seconds = time.monotonic() - algorithm_started
+        heartbeat(True, verify_inputs=True)
+        validation_started = time.monotonic()
         ComputeTask.objects.filter(
             pk=task.pk, attempt_token=token, status="running"
         ).update(stage="检查并登记结果", progress=85)
@@ -140,6 +164,14 @@ def run_task(task):
             output_rows.append((spec, path, metadata, checksum(path)))
         if not output_rows:
             raise ComputeError("算法没有产生任何可用结果")
+        execution_metrics = {
+            **preparation_counts,
+            "inputPreparationSeconds": round(preparation_seconds, 6),
+            "algorithmSeconds": round(algorithm_seconds, 6),
+            "outputValidationSeconds": round(time.monotonic() - validation_started, 6),
+        }
+        for _, _, metadata, _ in output_rows:
+            metadata["executionMetrics"] = execution_metrics
         destination = app_path(
             "projects",
             str(task.project_tag_id),
@@ -275,6 +307,13 @@ def clean_expired(*, force=False):
             ):
                 target = app_path(str(directory.relative_to(app_path())))
                 shutil.rmtree(target, ignore_errors=True)
+
+    from .input_versions import clean_versions
+
+    try:
+        clean_versions(config().input_mb * 1024**2, config().retention_days)
+    except (OSError, ComputeError):
+        logger.warning("Input version cache cleanup deferred")
 
 
 def _sqlite_contention(exc):

@@ -281,36 +281,54 @@ def inputs(context, config, include_rasters=True):
     raster_identity = {}
     if include_rasters:
         for key in RASTERS:
-            with rasterio.open(context.input_path(key)) as src:
-                if src.crs is None or src.count != 1:
-                    raise ValueError("蚀变影像需要单波段和真实坐标系")
-                pixels = hashlib.sha256()
-                with rasterio.Env(GDAL_CACHEMAX=GDAL_CACHE_MB * 1024 * 1024):
-                    for window in ordered_windows(src):
-                        pixels.update(
-                            src.read(1, window=window, masked=True).filled(0).tobytes()
-                        )
-                    for window in ordered_windows(src):
-                        pixels.update(
-                            np.ma.getmaskarray(
+            verified = (
+                context.input_evidence(key)
+                if hasattr(context, "input_evidence")
+                else None
+            )
+            if verified and verified.get("raster") is not None:
+                raster_identity[key] = verified["raster"]
+            else:
+                with rasterio.open(context.input_path(key)) as src:
+                    if src.crs is None or src.count != 1:
+                        raise ValueError("蚀变影像需要单波段和真实坐标系")
+                    pixels = hashlib.sha256()
+                    with rasterio.Env(GDAL_CACHEMAX=GDAL_CACHE_MB * 1024 * 1024):
+                        for window in ordered_windows(src):
+                            pixels.update(
                                 src.read(1, window=window, masked=True)
-                            ).tobytes()
-                        )
-                raster_identity[key] = {
-                    "crs": src.crs.to_wkt(),
-                    "transform": list(src.transform),
-                    "shape": src.shape,
-                    "pixels": pixels.hexdigest(),
-                }
+                                .filled(0)
+                                .tobytes()
+                            )
+                        for window in ordered_windows(src):
+                            pixels.update(
+                                np.ma.getmaskarray(
+                                    src.read(1, window=window, masked=True)
+                                ).tobytes()
+                            )
+                    raster_identity[key] = {
+                        "crs": src.crs.to_wkt(),
+                        "transform": list(src.transform),
+                        "shape": src.shape,
+                        "pixels": pixels.hexdigest(),
+                    }
             try:
                 weight_path = context.input_path(key + "_weight")
             except KeyError:
                 weight_path = None
             if weight_path:
-                with Path(weight_path).open("rb") as stream:
-                    raster_identity[key + "_weight"] = hashlib.file_digest(
-                        stream, "sha256"
-                    ).hexdigest()
+                verified_weight = (
+                    context.input_evidence(key + "_weight")
+                    if hasattr(context, "input_evidence")
+                    else None
+                )
+                if verified_weight:
+                    raster_identity[key + "_weight"] = verified_weight["sha256"]
+                else:
+                    with Path(weight_path).open("rb") as stream:
+                        raster_identity[key + "_weight"] = hashlib.file_digest(
+                            stream, "sha256"
+                        ).hexdigest()
     payload = {
         "lithology": frame_identity(lithology),
         "faults": frame_identity(faults),

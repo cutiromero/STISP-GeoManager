@@ -1,6 +1,8 @@
+import AutomaticReviewMarkers from "./AutomaticReviewMarkers";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ComputeMapPreview,
+  AgentAutomaticReviewMap,
   GeoJsonFeatureCollection,
 } from "../api/generated/types.gen";
 import type { ReviewOverlay } from "./reviewVectorLayers";
@@ -31,6 +33,7 @@ type Props = {
   inspectionOnly?: boolean;
   single?: boolean;
   singleSide?: "before" | "after";
+  automaticPositions?: AgentAutomaticReviewMap["points"];
   overlays?: ReviewOverlay[];
   onInspect?: (feature: Feature) => void;
   beforeLabel?: string;
@@ -235,6 +238,7 @@ export default function LocalGeologyReviewMaps({
   compactLegend = false,
   spotlight,
   rasterOverlays = [],
+  automaticPositions,
 }: Props) {
   const [before, after] = useMemo(
     () => sharedComparisonMaps(originalBefore, originalAfter),
@@ -266,6 +270,20 @@ export default function LocalGeologyReviewMaps({
   } | null>(null);
   const suppressClick = useRef(false);
   const containers = useRef<Array<HTMLDivElement | null>>([]);
+  const [mapSize, setMapSize] = useState({ width: 600, height: 400 });
+  useEffect(() => {
+    const element = containers.current[singleSide === "after" ? 1 : 0];
+    if (!element) return;
+    const update = () =>
+      setMapSize({
+        width: Math.max(1, element.clientWidth),
+        height: Math.max(1, element.clientHeight),
+      });
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    update();
+    return () => observer.disconnect();
+  }, [singleSide]);
   useEffect(() => setView(fitted), [fitted]);
   useEffect(() => {
     const preventPageScroll = (event: WheelEvent) => event.preventDefault();
@@ -452,6 +470,14 @@ export default function LocalGeologyReviewMaps({
                     radius={radius}
                     onFeature={onInspect}
                   />
+                  {side === 1 && automaticPositions && (
+                    <AutomaticReviewMarkers
+                      points={automaticPositions}
+                      view={view}
+                      width={mapSize.width}
+                      height={mapSize.height}
+                    />
+                  )}
                   {rasterOverlays.map((layer) => {
                     const image = side === 0 ? layer.before : layer.after;
                     if (!image) return null;

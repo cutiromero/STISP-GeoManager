@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 from contextlib import closing
 
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 from django.utils import timezone
@@ -243,7 +244,8 @@ def freeze_input(record, directory):
     ).first()
     if not resource or resource.project_tag_id != record.task.project_tag_id:
         raise ComputeError("输入数据已停用、删除或项目权限已变更")
-    if not user_can_access(resource, record.task.owner):
+    actor = get_user_model().objects.get(pk=record.task.owner_id)
+    if not actor.is_active or not user_can_access(resource, actor):
         raise ComputeError("输入数据已停用、删除或项目权限已变更")
     if resource.updated_at.isoformat() != record.snapshot["updatedAt"]:
         raise ComputeError("输入数据在提交后已修改，请重新选择数据提交")
@@ -258,6 +260,53 @@ def freeze_input(record, directory):
         raise ComputeError("输入文件超过平台大小限制")
     if kind in {"vector", "table"} and resource.size_bytes > 120 * 1024**2:
         raise ComputeError("矢量和表格计算首期最多支持120 MiB，请先裁剪或分组")
+    from .input_versions import stage_version
+
+    prepared = stage_version(
+        resource,
+        record.key,
+        target,
+        lambda path: _materialize_input(resource, path, limit),
+        record.checksum,
+    )
+    current = DataResource.objects.filter(
+        pk=resource.id, status="active", updated_at=resource.updated_at
+    ).first()
+    actor = get_user_model().objects.get(pk=record.task.owner_id)
+    if (
+        current is None
+        or not actor.is_active
+        or not user_can_access(current, actor)
+        or (current.data_type, current.file_format, current.storage_path)
+        != (resource.data_type, resource.file_format, resource.storage_path)
+    ):
+        target.unlink(missing_ok=True)
+        raise ComputeError("输入数据或访问权限在准备期间变化，请重新提交")
+    if target.stat().st_size > limit:
+        target.unlink(missing_ok=True)
+        raise ComputeError("输入快照超过大小限制")
+    digest = prepared["sha256"]
+    if record.checksum and record.checksum != digest:
+        raise ComputeError("输入内容已变化，不能在原任务中自动重做")
+    record.checksum = digest
+    record.snapshot = {
+        **record.snapshot,
+        "fixedAtExecution": True,
+        "sizeBytes": target.stat().st_size,
+    }
+    record.save(update_fields=["checksum", "snapshot"])
+    return {
+        "path": "/inputs/" + target.name,
+        "kind": kind,
+        "resourceId": resource.id,
+        "sha256": digest,
+        "verifiedEvidence": prepared["verifiedEvidence"],
+        "preparation": prepared["preparation"],
+    }
+
+
+def _materialize_input(resource, target, limit):
+    kind = resource.data_type
     if kind == "raster":
         dataset = RasterDataset.objects.get(data_resource=resource, status="ready")
         source = raster_source_path(dataset.source_relative_path)
@@ -271,7 +320,8 @@ def freeze_input(record, directory):
         with rasterio.open(source) as src:
             if src.width * src.height * src.count > 100_000_000:
                 raise ComputeError("输入栅格超过1亿波段像元限制")
-        copy_raster(source, target, driver="GTiff")
+        with rasterio.Env(GDAL_TIFF_INTERNAL_MASK=True, GDAL_PAM_ENABLED="NO"):
+            copy_raster(source, target, driver="GTiff")
     elif kind == "vector":
         import geopandas as gpd
         import pyogrio
@@ -320,22 +370,6 @@ def freeze_input(record, directory):
             frame.to_csv(target, index=False, encoding="utf-8")
     if target.stat().st_size > limit:
         raise ComputeError("输入快照超过大小限制")
-    digest = checksum(target)
-    if record.checksum and record.checksum != digest:
-        raise ComputeError("输入内容已变化，不能在原任务中自动重做")
-    record.checksum = digest
-    record.snapshot = {
-        **record.snapshot,
-        "fixedAtExecution": True,
-        "sizeBytes": target.stat().st_size,
-    }
-    record.save(update_fields=["checksum", "snapshot"])
-    return {
-        "path": "/inputs/" + target.name,
-        "kind": kind,
-        "resourceId": resource.id,
-        "sha256": digest,
-    }
 
 
 def inspect_output(path, kind):

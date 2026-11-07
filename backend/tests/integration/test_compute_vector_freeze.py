@@ -120,4 +120,5 @@ def test_reexport_changed_vector_still_refuses_original_task(vector_input, chang
     record.resource.refresh_from_db()
     assert record.checksum == first["sha256"]
     assert record.resource.updated_at.isoformat() == original_revision
-    assert checksum(root / "recovered-attempt/features.gpkg") != record.checksum
+    assert not (root / "recovered-attempt/features.gpkg").exists()
+    assert checksum(root / "first-attempt/features.gpkg") == record.checksum

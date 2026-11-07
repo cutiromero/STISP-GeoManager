@@ -234,7 +234,21 @@
                 "规则判定，需专家裁定": 1
               }
             }
-          ]
+          ],
+          "automaticMap": {
+            "total": 196,
+            "locatedCount": 196,
+            "points": [
+              {
+                "id": "automatic-cell-1",
+                "coordinates": [
+                  96.03,
+                  35.93
+                ],
+                "count": 196
+              }
+            ]
+          }
         },
         "deletedResources": [],
         "stages": [

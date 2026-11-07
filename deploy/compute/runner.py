@@ -49,6 +49,24 @@ class Context:
             return self.input_dir / portable.removeprefix("/inputs/")
         return path
 
+    def input_evidence(self, key):
+        value = self.inputs[key].get("verifiedEvidence")
+        if value is None:
+            return None
+        if value.get("schemaVersion") != 1:
+            raise ValueError("Unknown verified input evidence protocol")
+        current = self.input_path(key).stat()
+        identity = [
+            current.st_ino,
+            current.st_size,
+            current.st_mtime_ns,
+            current.st_ctime_ns,
+            current.st_mode,
+        ]
+        if value.get("fileIdentity") != identity:
+            raise ValueError("Input changed after platform verification")
+        return {"sha256": self.inputs[key]["sha256"], "raster": value.get("raster")}
+
     def output_path(self, filename):
         path = self.output_dir / filename
         if path.parent != self.output_dir:

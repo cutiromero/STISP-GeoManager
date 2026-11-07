@@ -570,7 +570,7 @@ def test_operator_packages_are_deterministic_and_declare_clean_outputs():
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
             manifest = validate_manifest(yaml.safe_load(archive.read("operator.yaml")))
             assert (
-                manifest["version"] == ("2.0.0" if suffix == "prospect" else "1.1.2")
+                manifest["version"] == ("2.1.0" if suffix == "prospect" else "1.2.0")
                 and manifest["deterministic"]
             )
             assert {

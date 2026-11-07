@@ -211,3 +211,40 @@ def test_invalid_compare_page(query):
 
     with pytest.raises(ApiProblem):
         page_options(query, "compare")
+
+
+def test_retained_map_contains_full_automatic_scope_across_manual_pages():
+    workflow = large_workflow(241)
+    suggestions = workflow.plan["modificationReview"]["suggestions"]
+    automatic = [item["id"] for item in suggestions[:196]]
+    for item in suggestions[196:]:
+        item.update(status="review", candidateAction="remove")
+    workflow.plan["retainedReview"] = {
+        "automaticSuggestionIds": automatic,
+        "retainedSuggestionIds": [item["id"] for item in suggestions[196:]],
+    }
+    # This is an initial review: there are no actual modifications yet.
+    workflow.plan["stages"] = []
+    a = project_workflow(workflow, {}, "inspection", "retained", 0, 25)
+    b = project_workflow(workflow, {}, "inspection", "retained", 25, 25)
+    assert len(a["modificationReview"]["suggestions"]) == 25
+    assert len(b["modificationReview"]["suggestions"]) == 20
+    positions = a["plan"]["reviewIndex"]["automaticMap"]
+    assert positions == b["plan"]["reviewIndex"]["automaticMap"]
+    assert positions["total"] == positions["locatedCount"] == 196
+    assert sum(point["count"] for point in positions["points"]) == 196
+    assert not set(a["plan"]["reviewIndex"]["candidateIds"]) & set(automatic)
+
+
+def test_large_automatic_map_is_bounded_without_losing_count():
+    from apps.agent.review_positions import automatic_positions
+
+    workflow = large_workflow()
+    items = workflow.plan["modificationReview"]["suggestions"]
+    workflow.plan["retainedReview"] = {
+        "automaticSuggestionIds": [item["id"] for item in items]
+    }
+    result = automatic_positions(workflow.plan)
+    assert result["locatedCount"] == OBJECT_COUNT
+    assert len(result["points"]) <= 256
+    assert sum(point["count"] for point in result["points"]) == OBJECT_COUNT

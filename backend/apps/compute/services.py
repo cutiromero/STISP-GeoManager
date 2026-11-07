@@ -356,8 +356,9 @@ def check_live_task(task):
             record.resource is None
             or record.resource.project_tag_id != task.project_tag_id
             or record.resource.status != "active"
+            or not user_can_access(record.resource, user)
         ):
-            raise ComputeError("输入数据已停用，计算已停止")
+            raise ComputeError("输入数据已停用或访问权限变化，计算已停止")
 
 
 def task_action(task, user, action):

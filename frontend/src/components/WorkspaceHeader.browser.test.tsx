@@ -907,18 +907,19 @@ describe("WorkspaceHeader", () => {
   });
 });
 
-it("orders the main five modules and nests analytics in data resources", async () => {
+it("places resources immediately after the agent and nests analytics in data resources", async () => {
   const { container } = renderHeader();
   const titles = [
     ...container.querySelectorAll<HTMLButtonElement>(
       ".header-primary-actions button",
     ),
   ]
-    .slice(0, 5)
+    .slice(0, 6)
     .map((button) => button.getAttribute("aria-label") ?? button.title);
   expect(titles).toEqual([
     "地理工作台",
     "智能体",
+    "数据资源",
     "计算中心",
     "知识库",
     "成果展示",

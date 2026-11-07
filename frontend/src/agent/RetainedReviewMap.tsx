@@ -176,9 +176,29 @@ export default function RetainedReviewMap({
     }),
     [focus],
   );
+  const overview = useMemo<GeoJsonFeatureCollection>(
+    () => ({
+      type: "FeatureCollection",
+      features: [
+        ...(background?.lithology.features ?? []),
+        ...objects.features,
+        ...(workflow.plan.reviewIndex?.automaticMap?.points ?? []).map(
+          (point) => ({
+            type: "Feature" as const,
+            id: point.id,
+            properties: {},
+            geometry: {
+              type: "Point" as const,
+              coordinates: point.coordinates,
+            },
+          }),
+        ),
+      ],
+    }),
+    [background, objects, workflow.plan.reviewIndex?.automaticMap],
+  );
   const bounds = useMemo(() => {
-    if (!locate || !focus.features.length)
-      return reviewBounds(background?.lithology ?? objects);
+    if (!locate || !focus.features.length) return reviewBounds(overview);
     const extent = reviewBounds(focus);
     if (!extent || focus.features[0]?.properties.element === "alteration")
       return extent;
@@ -190,7 +210,7 @@ export default function RetainedReviewMap({
       number,
       number,
     ];
-  }, [locate, focus, background, objects]);
+  }, [locate, focus, overview]);
   const overlays = useMemo(
     () => [
       ...(background
@@ -288,6 +308,7 @@ export default function RetainedReviewMap({
         afterLabel={
           after.lithology ? "当前成果与待核查对象" : "待核查对象（尚未执行）"
         }
+        automaticPositions={workflow.plan.reviewIndex?.automaticMap?.points}
         compactLegend
         spotlight={
           focused

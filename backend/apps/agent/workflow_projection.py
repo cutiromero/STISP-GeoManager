@@ -573,6 +573,10 @@ def project_workflow(
             offset = position // limit * limit
             page["offset"] = offset
         plan["reviewIndex"] = review_index(suggestions)
+        if part == "retained":
+            from .review_positions import automatic_positions
+
+            plan["reviewIndex"]["automaticMap"] = automatic_positions(source)
         data["modificationReview"] = {
             **{key: value for key, value in review.items() if key != "suggestions"},
             "suggestions": [

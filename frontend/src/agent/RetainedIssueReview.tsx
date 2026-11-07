@@ -89,7 +89,20 @@ export default function RetainedIssueReview({
         title={`共 ${total} 条保留对象，已读取 ${items.length} 条`}
         description="地图展示已读取对象的实际位置，蚀变组以定位范围表示。可缩放、平移并点击查看依据。候选动作仅在您明确选择后执行；没有有效候选的对象只能保留核查。"
       />
-      {collection.features.length > 0 && (
+      {workflow.plan.reviewIndex?.automaticMap &&
+        workflow.plan.reviewIndex.automaticMap.total > 0 && (
+          <p className="logic-automatic-map-note">
+            <i aria-hidden="true" /> 已授权处置{" "}
+            {workflow.plan.reviewIndex.automaticMap.total}{" "}
+            项，以浅灰绿圆点显示，邻近位置自动合并；待人工核查项使用醒目标记。
+            {workflow.plan.reviewIndex.automaticMap.locatedCount <
+            workflow.plan.reviewIndex.automaticMap.total
+              ? `其中 ${workflow.plan.reviewIndex.automaticMap.locatedCount} 项具备可定位范围。`
+              : ""}
+          </p>
+        )}
+      {(collection.features.length > 0 ||
+        Boolean(workflow.plan.reviewIndex?.automaticMap?.points.length)) && (
         <RetainedReviewMap
           workflow={workflow}
           objects={collection}

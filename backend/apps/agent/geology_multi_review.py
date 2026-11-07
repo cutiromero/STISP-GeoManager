@@ -973,7 +973,7 @@ def update_map(workflow):
         .get("geology-multi-prospect", {})
         .get("manifest", {})
     )
-    if prospect_manifest.get("version") == "2.0.0" and any(
+    if prospect_manifest.get("version") in {"2.0.0", "2.1.0"} and any(
         stage["name"] == "prospect" and stage.get("status") == "completed"
         for stage in workflow.plan["stages"]
     ):

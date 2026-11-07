@@ -1184,6 +1184,7 @@ export default function WorkspaceHeader({
             onNavigate={navigateFromHeader}
             title={t("navigation.warning")}
           />
+          {dataButton}
           <NavigationButton
             type="text"
             data-nav-key="compute"
@@ -1222,7 +1223,6 @@ export default function WorkspaceHeader({
             />
             <span className="tab-text">{t("navigation.results")}</span>
           </NavigationButton>
-          {dataButton}
           {showAdminTab && (
             <Dropdown
               menu={{ items: adminMenuItems }}

@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  within,
+  waitFor,
+} from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
@@ -210,4 +216,66 @@ it("蚀变对象勾选后显示实际候选动作，保留后再选不会沿用�
     ["held-1"],
     {},
   );
+});
+
+it("shows the full automatic scope as muted clusters without adding approval choices", async () => {
+  const workflow = task();
+  workflow.plan.inputs = { lithology: 501, faults: 502 };
+  workflow.plan.reviewIndex!.automaticMap = {
+    total: 196,
+    locatedCount: 196,
+    points: Array.from({ length: 196 }, (_, id) => ({
+      id: `automatic-${id}`,
+      coordinates: [98.42 + id * 0.000001, 35.61],
+      count: 1,
+    })),
+  };
+  mapQuery.mockReset();
+  mapQuery.mockImplementation(async (id: number) =>
+    id === 501 ? beforeReviewMap : { type: "FeatureCollection", features: [] },
+  );
+  const onReview = vi.fn();
+  const view = render(
+    <App>
+      <MemoryRouter>
+        <RetainedIssueReview workflow={workflow} onReview={onReview} />
+      </MemoryRouter>
+    </App>,
+  );
+  await screen.findByText("待核查对象（尚未执行）");
+  expect(screen.getByText(/已授权处置 196 项/)).toBeVisible();
+  await waitFor(() =>
+    expect(
+      [...view.container.querySelectorAll("[data-automatic-count]")].reduce(
+        (total, group) =>
+          total + Number(group.getAttribute("data-automatic-count")),
+        0,
+      ),
+    ).toBe(196),
+  );
+  const clusters = [
+    ...view.container.querySelectorAll("[data-automatic-count]"),
+  ];
+  expect(clusters.length).toBeLessThan(196);
+  expect(
+    clusters.reduce(
+      (total, group) =>
+        total + Number(group.getAttribute("data-automatic-count")),
+      0,
+    ),
+  ).toBe(196);
+  expect(
+    view.container.querySelector(
+      '[data-layer="automatic-dispositions"] circle',
+    ),
+  ).toHaveAttribute("fill", "#70867d");
+  fireEvent.click(screen.getByRole("checkbox", { name: "处置F-01" }));
+  fireEvent.click(screen.getByRole("button", { name: "执行所选 1 项并继续" }));
+  expect(onReview).toHaveBeenCalledExactlyOnceWith(
+    "approve",
+    "",
+    ["held-1"],
+    {},
+  );
+  expect(mapQuery).toHaveBeenCalledTimes(2);
 });

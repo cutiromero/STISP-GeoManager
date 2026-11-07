@@ -3039,6 +3039,7 @@ export type AgentWorkflowPage = {
  * 冻结方案的审批集合索引，完整对象原因按suggestions分页返回
  */
 export type AgentWorkflowReviewIndex = {
+    automaticMap?: AgentAutomaticReviewMap;
     /**
      * 完整方案对象数
      */
@@ -3055,6 +3056,40 @@ export type AgentWorkflowReviewIndex = {
      * 完整审批分组与分类原因计数
      */
     groups: Array<AgentWorkflowGroup>;
+};
+
+/**
+ * 已授权自动处置的位置概览，与人工候选选择独立；完整集合参与定位汇总，客户端按视口聚合，不调用模型或算子
+ */
+export type AgentAutomaticReviewMap = {
+    /**
+     * 当前冻结授权集合的完整对象数
+     */
+    total: number;
+    /**
+     * 有有效定位几何的对象数；与total不同时仅定位这些对象
+     */
+    locatedCount: number;
+    /**
+     * 位置概览；对象较多时先汇聚为最多256个地理网格点，count保留完整数量，不表示实际像元或修改边界
+     */
+    points: Array<{
+        /**
+         * 当前点或汇聚单元的稳定标识，只供显示，不用于审批
+         */
+        id: string;
+        /**
+         * WGS84定位点，经度、纬度；聚合时为所含对象定位点的平均位置
+         */
+        coordinates: [
+            number,
+            number
+        ];
+        /**
+         * 此位置代表的已授权处置对象数
+         */
+        count: number;
+    }>;
 };
 
 /**
@@ -10702,6 +10737,39 @@ export type ComputeOutput = {
      * 波段/字段/CRS/行数等结果检查信息
      */
     metadata: {
+        /**
+         * 本次实际执行计时与输入复用计数；秒数不包含排队及模型调用
+         */
+        executionMetrics?: {
+            /**
+             * 固定输入及算法包准备耗时（秒）
+             */
+            inputPreparationSeconds?: number;
+            /**
+             * 隔离算子进程执行与完成检测耗时（秒）
+             */
+            algorithmSeconds?: number;
+            /**
+             * 输出格式、完整性及哈希检查耗时（秒）
+             */
+            outputValidationSeconds?: number;
+            /**
+             * 重新导出物化的输入数
+             */
+            materializedInputs?: number;
+            /**
+             * 复用已有内容版本的输入数
+             */
+            reusedInputs?: number;
+            /**
+             * 通过写时复制生成任务副本的输入数
+             */
+            copyOnWriteInputs?: number;
+            /**
+             * 文件系统不支持写时复制时直接复制的输入数
+             */
+            copiedInputs?: number;
+        };
         [key: string]: unknown;
     };
     /**

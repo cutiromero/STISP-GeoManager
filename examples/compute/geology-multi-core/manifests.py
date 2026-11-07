@@ -221,7 +221,7 @@ def create(only=None):
             "schemaVersion": 1,
             "identifier": directory.name,
             "name": name,
-            "version": "2.0.0" if suffix == "prospect" else "1.1.2",
+            "version": "2.1.0" if suffix == "prospect" else "1.2.0",
             "description": name
             + "。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
             "author": "STISP",
