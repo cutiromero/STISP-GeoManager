@@ -23,6 +23,7 @@ MAX_RESULT_BYTES = 8 * 1024 * 1024
 MAX_RESULT_ROWS = 10000
 MAX_RESULT_CELL_CHARS = 2000
 MAX_GEOMETRY_CELL_CHARS = 32768
+RASTER_DISPLAY_METADATA = frozenset({"mapColorTable", "colorAdvice"})
 
 EDIT_FIELDS = (
     "feature_id",
@@ -32,6 +33,23 @@ EDIT_FIELDS = (
     "evidence_id",
     "rule_id",
 )
+
+
+def result_evidence(results):
+    """Compare scientific evidence without mutable raster presentation records."""
+    return [
+        {
+            **result,
+            "metadata": {
+                key: value
+                for key, value in result["metadata"].items()
+                if key not in RASTER_DISPLAY_METADATA
+            },
+        }
+        if result.get("kind") == "raster" and isinstance(result.get("metadata"), dict)
+        else result
+        for result in results
+    ]
 
 
 def read_output(workflow, user, policy, output) -> dict:

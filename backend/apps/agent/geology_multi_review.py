@@ -17,7 +17,7 @@ from apps.compute.packages import ComputeError
 from apps.core.storage import table_data_path
 from apps.knowledge.trial_rules import digest
 from .compute_tools import authorized_task
-from .demo_results import read_results
+from .demo_results import read_results, result_evidence
 from .workflow_resources import resolve_generated_resource
 from .geology_issue_groups import issue_groups
 
@@ -681,7 +681,7 @@ def _fresh(workflow, user, policy, stage):
         policy,
         authorized_task(user, check["taskId"], policy, workflow=workflow),
     )
-    if actual != check["results"]:
+    if result_evidence(actual) != result_evidence(check["results"]):
         raise ComputeError("实际检查结果已变化，请重新检查并确认", 409)
     review, rows = proposal(workflow, stage, actual)
     if any(

@@ -306,6 +306,121 @@ def test_approval_only_writes_selected_object_action(multi, monkeypatch):
         create_approved_changes(wf, multi["owner"], multi["policy"], stage)
 
 
+@pytest.mark.parametrize("stored_has_display", [False, True])
+def test_raster_restyling_preserves_approval_selection_and_execution(
+    multi, monkeypatch, stored_has_display
+):
+    wf, stage, results = fixture_review(multi)
+    results.append(
+        {
+            "key": "calcite_before",
+            "kind": "raster",
+            "outputId": 3,
+            "taskId": "task",
+            "checksum": "d" * 64,
+            "rows": [],
+            "metadata": {
+                "crs": "EPSG:32646",
+                "width": 20,
+                "qualityCheck": {"passed": True},
+            },
+        }
+    )
+    if stored_has_display:
+        results[-1]["metadata"].update(
+            mapColorTable={"old": True}, colorAdvice={"source": "deterministic"}
+        )
+    freeze_proposal(wf, stage)
+    snapshot = copy.deepcopy(results)
+    wf.plan["stages"][0]["results"] = snapshot
+    proposal_hash = wf.plan["modificationReview"]["proposalHash"]
+    results[-1]["metadata"].update(
+        mapColorTable={"version": 1, "classes": [{"value": 1, "color": "#21869cff"}]},
+        colorAdvice={"source": "model_validated"},
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.read_results", lambda *args: results
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.authorized_task",
+        lambda *args, **kwargs: object(),
+    )
+    selected = [wf.plan["modificationReview"]["suggestions"][1]["id"]]
+    approve_modifications(wf, multi["owner"], multi["policy"], selected, "hash")
+    assert stage["modificationsApproval"]["selectedSuggestionIds"] == selected
+    assert stage["modificationsApproval"]["proposalHash"] == proposal_hash
+    assert wf.plan["stages"][0]["results"] == snapshot
+    resource = create_approved_changes(wf, multi["owner"], multi["policy"], stage)
+    records = list(
+        csv.DictReader(
+            io.StringIO(
+                table_data_path(
+                    resource.storage_path.removeprefix("table/")
+                ).read_text()
+            )
+        )
+    )
+    assert len(records) == 1 and records[0]["feature_id"] == "N1"
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "checksum",
+        "taskId",
+        "outputId",
+        "rows",
+        "rowCount",
+        "metadata",
+        "kind",
+        "removed",
+    ],
+)
+def test_approval_still_rejects_changed_scientific_evidence(
+    multi, monkeypatch, changed
+):
+    wf, stage, results = fixture_review(multi)
+    results.append(
+        {
+            "key": "calcite_before",
+            "kind": "raster",
+            "outputId": 3,
+            "taskId": "task",
+            "checksum": "d" * 64,
+            "rows": [],
+            "rowCount": 0,
+            "metadata": {"crs": "EPSG:32646", "width": 20},
+        }
+    )
+    freeze_proposal(wf, stage)
+    wf.plan["stages"][0]["results"] = copy.deepcopy(results)
+    before = copy.deepcopy(stage)
+    if changed == "removed":
+        results.pop()
+    elif changed == "metadata":
+        results[-1]["metadata"]["width"] = 21
+    else:
+        results[-1][changed] = {
+            "checksum": "e" * 64,
+            "taskId": "other-task",
+            "outputId": 4,
+            "rows": [{"value": 1}],
+            "rowCount": 1,
+            "kind": "vector",
+        }[changed]
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.read_results", lambda *args: results
+    )
+    monkeypatch.setattr(
+        "apps.agent.geology_multi_review.authorized_task",
+        lambda *args, **kwargs: object(),
+    )
+    selected = [wf.plan["modificationReview"]["suggestions"][1]["id"]]
+    with pytest.raises(ComputeError, match="实际检查结果已变化"):
+        approve_modifications(wf, multi["owner"], multi["policy"], selected, "hash")
+    assert stage == before
+
+
 def test_empty_modification_set_continues_without_inventing_user_approval(
     multi, monkeypatch
 ):
