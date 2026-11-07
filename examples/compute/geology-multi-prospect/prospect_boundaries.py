@@ -2,7 +2,7 @@
 
 import contourpy
 import numpy as np
-from scipy.ndimage import map_coordinates
+from scipy.ndimage import zoom
 from shapely import make_valid
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
@@ -50,16 +50,31 @@ def extract_regions(margin, transform, allowed):
         raise ValueError("连续支持场包含非有限值")
     if not (margin > 0).any():
         return []
-    padded = np.pad(margin, 1, constant_values=-1)
+    positive_rows, positive_columns = np.nonzero(margin > 0)
+    row_start = max(0, int(positive_rows.min()) - 1)
+    row_stop = min(margin.shape[0], int(positive_rows.max()) + 2)
+    col_start = max(0, int(positive_columns.min()) - 1)
+    col_stop = min(margin.shape[1], int(positive_columns.max()) + 2)
+    padded = np.pad(
+        margin[row_start:row_stop, col_start:col_stop], 1, constant_values=-1
+    )
     # Half-cell sampling approximates a smooth level curve without changing the
     # 50 m evidence resolution; linear interpolation cannot create new extrema.
     rows = np.arange(0, padded.shape[0] - 0.5, 0.5)
     columns = np.arange(0, padded.shape[1] - 0.5, 0.5)
-    yy, xx = np.meshgrid(rows, columns, indexing="ij")
-    values = map_coordinates(padded, [yy, xx], order=1, mode="nearest")
+    values = zoom(
+        padded,
+        zoom=(
+            (2 * padded.shape[0] - 1) / padded.shape[0],
+            (2 * padded.shape[1] - 1) / padded.shape[1],
+        ),
+        order=1,
+        prefilter=False,
+        mode="nearest",
+    )
     generator = contourpy.contour_generator(
-        x=transform.c + (columns - 0.5) * transform.a,
-        y=transform.f + (rows - 0.5) * transform.e,
+        x=transform.c + (col_start + columns - 0.5) * transform.a,
+        y=transform.f + (row_start + rows - 0.5) * transform.e,
         z=values,
         fill_type="OuterOffset",
         corner_mask=False,
