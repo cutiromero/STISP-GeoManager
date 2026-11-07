@@ -52,6 +52,7 @@ import { useLayerGroups } from "../hooks/useLayerGroups";
 import { useViewportVectorLayers } from "../hooks/useViewportVectorLayers";
 import {
   applyViewportResult,
+  exactViewportExportQuery,
   isLargeVectorResource,
   isViewportVectorLayer,
   viewportQueryPayload,
@@ -99,6 +100,7 @@ import type {
   GeoJsonFeatureCollection,
   GeoJsonGeometry,
   LoadedLayer,
+  LoadedLayerGroup,
   LoadedRasterLayer,
   LoadedVectorLayer,
   MapViewState,
@@ -253,12 +255,14 @@ interface LayerExportMessageApi {
 }
 
 interface UseLayerExportOptions {
+  groups?: LoadedLayerGroup[];
   canExportData: boolean;
   permissionDeniedMessage: string;
   message: LayerExportMessageApi;
 }
 
 export function useLayerExport({
+  groups,
   canExportData,
   permissionDeniedMessage,
   message,
@@ -290,13 +294,35 @@ export function useLayerExport({
       const { signal } = controller;
 
       try {
+        const exactItems = [];
+        for (const item of items) {
+          const layer = groups
+            ?.flatMap((group) => group.children)
+            .find(
+              (layer) =>
+                layer.layerType === "vector" && layer.geojson === item.geojson,
+            );
+          const query =
+            layer?.layerType === "vector"
+              ? exactViewportExportQuery(layer)
+              : null;
+          if (query && layer) {
+            const result = await api.queryResource(
+              layer.sourceResource,
+              query,
+              signal,
+            );
+            throwIfExportAborted(signal);
+            exactItems.push({ ...item, geojson: result.geojson });
+          } else exactItems.push(item);
+        }
         const job = await api.exportLayersAsync({
           epsg: options.epsg,
           reproject: options.reproject,
           clip: options.clip,
           clipGeometry: options.clipGeometry,
           format: options.format,
-          items,
+          items: exactItems,
         });
         throwIfExportAborted(signal);
         onProgress?.({
@@ -385,7 +411,7 @@ export function useLayerExport({
         }
       }
     },
-    [canExportData, english, message, permissionDeniedMessage],
+    [canExportData, english, groups, message, permissionDeniedMessage],
   );
 }
 
@@ -849,6 +875,7 @@ function MapWorkspace() {
     ? `Current role "${userRoles.length > 0 ? userRoles.join(", ") : "unassigned"}" is not authorized`
     : `当前角色"${userRoles.length > 0 ? userRoles.join("、") : "未分配角色"}"无权限`;
   const exportLayers = useLayerExport({
+    groups: layerGroups.groups,
     canExportData: permissions.canExportData,
     permissionDeniedMessage,
     message,

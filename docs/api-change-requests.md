@@ -1,5 +1,20 @@
 # API Change Requests
 
+## API-20261107-003 - 管线地图按尺度简化和压缩传输
+
+- Status: BackendReady
+- Owner: 同一任务先完成前端契约，再交接后端实现，最后接入前端并验收。
+- Endpoints: POST /api/catalog/resources/{id}/query/。
+- Change type: QueryRequest新增可选lineSimplifyTolerance，0至0.1度；须同时启用displayGeometry。省略保留现有量化语义。
+- OpenAPI change: 仅线几何采用显式容差保拓扑简化；点、面、原精度请求、属性与对象数量保持。响应按Accept-Encoding协商gzip。
+- Mock examples: mock/prism/requests/pipeline-display.json，包含保留属性及对象ID的线显示结果。
+- Frontend reason: 全球管线139万顶点使传输和浏览器绘制缓慢；普通视野显示按像素选择容差，线显示预算提升至10000以避免全球线网600条截断。
+- Backend implementation notes: 显示简化发生于WGS84转换后；原始命中判定不变。空间显示查询按完整参数及资源修订隔离缓存，每资源最多32条空间预览缓存；入口权限检查保持。禁止改写GeoPackage或将简化结果用于计算。
+- Verification: 非法参数、默认量化、线端点/误差/属性/ID、点面不变、原始数据未修改、缓存隔离与修订失效、gzip、全球与三区/空海洋/快速移动真实浏览器。
+
+
+- Result: 本机后端58项（另3个子测试）、前端9项和浏览器8项通过；生成契约、类型检查、lint及生产构建通过；服务器候选和正式公网待验收。
+
 ## API-20261106-005 - 资料确认与启动分析合并
 
 - Status: BackendReady
@@ -437,6 +452,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261107-003 | BackendReady | Pipeline display LOD and gzip |
 | API-20261107-002 | BackendReady | Workflow cancel and research inputSummary | Immediate stop and actual role reasons | Updated | Existing 105/106 optional compatible fixtures | Owner/project and bound task stop; model role audit | Targeted tests; real candidate separately | Current data and prior report versions preserved |
 | API-20261107-001 | BackendReady | /api/agent/workflows/{workflowId}/retained-review/; workflow inspection/confirm | Explicit held-object review with fixed automatic scope | Updated | 105-agent-workflow-card.json | Implemented with owner/project and frozen evidence checks | Focused backend/browser checks; candidate separate | Previous reports preserved; budgets and permissions retained |
 | API-20261106-005 | BackendReady | /api/agent/workflows/{workflowId}/confirm/ | Optional explicit start with input confirmation | Updated | 107-agent-input-start.json | Bound input authorization implemented | Targeted backend and browser regression | Modification and exceptional-case approval retained |

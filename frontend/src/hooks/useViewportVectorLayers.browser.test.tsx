@@ -132,6 +132,41 @@ function harness(camera: Camera, initial = fixture()) {
   return { ...hook, onError };
 }
 describe("view-bound vector loading", () => {
+  it("prioritizes two pipelines and caps concurrent viewport requests at two", async () => {
+    const camera = new Camera();
+    const group = fixture();
+    const points = group.children[0] as LoadedVectorLayer;
+    group.children = [
+      points,
+      ...[8, 9].map((id) => ({
+        ...points,
+        id: `line-${id}`,
+        geometryType: "MultiLineString",
+        sourceResource: { ...points.sourceResource, id },
+      })),
+    ];
+    const pending: ((value: ResourceQueryResult) => void)[] = [];
+    mocks.queryResource.mockImplementation(
+      () => new Promise((resolve) => pending.push(resolve)),
+    );
+    const h = harness(camera, group);
+    await waitFor(() => expect(mocks.queryResource).toHaveBeenCalledTimes(2));
+    expect(
+      mocks.queryResource.mock.calls.slice(0, 2).map((call) => call[0].id),
+    ).toEqual([8, 9]);
+    await act(async () => pending[0]!(result(86)));
+    await waitFor(() => expect(mocks.queryResource).toHaveBeenCalledTimes(3));
+    expect(mocks.queryResource.mock.calls[2]![0].id).toBe(7);
+    h.unmount();
+    expect(
+      mocks.queryResource.mock.calls.every((call) => call[2]?.aborted),
+    ).toBe(true);
+    await act(async () => {
+      pending[1]!(result(87));
+      pending[2]!(result(88));
+    });
+    expect(h.onError).not.toHaveBeenCalled();
+  });
   it("debounces moving, replaces empty views, and reuses a recent region", async () => {
     const camera = new Camera();
     mocks.queryResource

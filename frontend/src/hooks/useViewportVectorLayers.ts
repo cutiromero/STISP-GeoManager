@@ -71,54 +71,66 @@ export function useViewportVectorLayers(options: {
           g.children
             .filter((l) => l.visible && isViewportVectorLayer(l))
             .map((l) => ({ groupId: g.id, layer: l })),
+        )
+        .sort(
+          (a, b) =>
+            Number(b.layer.geometryType.toLowerCase().includes("line")) -
+            Number(a.layer.geometryType.toLowerCase().includes("line")),
         );
       try {
-        // Serial requests respect the backend's display-query concurrency limit.
-        for (const { groupId, layer } of layers) {
-          if (layer.layerType !== "vector" || !isViewportVectorLayer(layer))
-            continue;
-          if (disposed || signal.aborted || latest.current.scope !== scope)
-            return;
-          const body = viewportQueryPayload(
-            box,
-            context.limit,
-            layer.geometryType,
-          );
-          const key = JSON.stringify([
-            layer.sourceResource.id,
-            layer.sourceResource.updatedAt,
-            body,
-          ]);
-          if (
-            layer.metadata.视野查询键 === key &&
-            Date.now() - Number(layer.metadata.视野刷新时间) < 30000
-          )
-            continue;
-          const cached = cache.get(key);
-          const result =
-            cached && Date.now() - cached.at < 30000
-              ? cached.result
-              : await api.queryResource(layer.sourceResource, body, signal);
-          if (
-            disposed ||
-            current !== revision ||
-            signal.aborted ||
-            latest.current.scope !== scope
-          )
-            return;
-          cache.set(key, { at: Date.now(), result });
-          while (cache.size > 24) cache.delete(cache.keys().next().value!);
-          context.updateLayer(groupId, layer.id, (l) =>
-            l.layerType === "vector" && isViewportVectorLayer(l)
-              ? applyViewportResult(l, result, key)
-              : l,
-          );
+        // Prioritize pipelines and use the backend's two display-query slots.
+        let cursor = 0;
+        async function loadNext() {
+          while (cursor < layers.length) {
+            const { groupId, layer } = layers[cursor++]!;
+            if (layer.layerType !== "vector" || !isViewportVectorLayer(layer))
+              continue;
+            if (disposed || signal.aborted || latest.current.scope !== scope)
+              return;
+            const body = viewportQueryPayload(
+              box,
+              context.limit,
+              layer.geometryType,
+            );
+            const key = JSON.stringify([
+              layer.sourceResource.id,
+              layer.sourceResource.updatedAt,
+              body,
+            ]);
+            if (
+              layer.metadata.视野查询键 === key &&
+              Date.now() - Number(layer.metadata.视野刷新时间) < 30000
+            )
+              continue;
+            const cached = cache.get(key);
+            const result =
+              cached && Date.now() - cached.at < 30000
+                ? cached.result
+                : await api.queryResource(layer.sourceResource, body, signal);
+            if (
+              disposed ||
+              current !== revision ||
+              signal.aborted ||
+              latest.current.scope !== scope
+            )
+              return;
+            cache.set(key, { at: Date.now(), result });
+            while (cache.size > 24) cache.delete(cache.keys().next().value!);
+            context.updateLayer(groupId, layer.id, (l) =>
+              l.layerType === "vector" && isViewportVectorLayer(l)
+                ? applyViewportResult(l, result, key)
+                : l,
+            );
+          }
         }
+        await Promise.all([loadNext(), loadNext()]);
       } catch (error) {
-        if (!disposed && current === revision && !signal.aborted)
+        if (!disposed && current === revision && !signal.aborted) {
+          controller?.abort();
           latest.current.onError(
             error instanceof Error ? error.message : "当前视野加载失败",
           );
+        }
       }
     }
     function cancel() {

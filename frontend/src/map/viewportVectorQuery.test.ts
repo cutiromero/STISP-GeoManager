@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyViewportResult,
+  exactViewportExportQuery,
   isLargeVectorResource,
   isViewportVectorLayer,
   viewportQueryPayload,
@@ -30,6 +31,26 @@ export function largeLayer(): LoadedVectorLayer {
   };
 }
 describe("viewport vector display", () => {
+  it("refetches original geometry for preview exports using the same extent and limit", () => {
+    const layer = largeLayer();
+    const body = viewportQueryPayload(
+      [-180, -85, 180, 85],
+      10000,
+      "MultiLineString",
+    );
+    layer.metadata.视野查询键 = JSON.stringify([7, "revision", body]);
+    const exact = exactViewportExportQuery(layer)!;
+    expect(exact.limit).toBe(body.limit);
+    expect(exact.spatialFilter).toEqual(body.spatialFilter);
+    expect(exact.displayGeometry).toBeUndefined();
+    expect(exact.lineSimplifyTolerance).toBeUndefined();
+    expect(
+      exactViewportExportQuery({
+        ...layer,
+        query: { attributeFilters: [], spatialFilter: body.spatialFilter },
+      }),
+    ).toBeNull();
+  });
   it("bounds point requests to the view and preserves explicit-query budgets", () => {
     const q = viewportQueryPayload([85, 40, 90, 45], 10000, "Point");
     expect(q.limit).toBe(1500);
@@ -45,10 +66,40 @@ describe("viewport vector display", () => {
     ]);
     expect(
       viewportQueryPayload([85, 40, 90, 45], 10000, "MultiLineString").limit,
-    ).toBe(600);
+    ).toBe(10000);
     expect(viewportQueryPayload([85, 40, 90, 45], 200, "Point").limit).toBe(
       200,
     );
+  });
+  it("restores line detail when zooming in and keeps points and polygons unsimplified", () => {
+    const world = viewportQueryPayload(
+      [-180, -85, 180, 85],
+      30000,
+      "MultiLineString",
+    );
+    const region = viewportQueryPayload([85, 40, 90, 45], 30000, "LineString");
+    const close = viewportQueryPayload(
+      [85, 40, 85.001, 40.001],
+      30000,
+      "LineString",
+    );
+    expect(world.limit).toBe(10000);
+    expect(world.lineSimplifyTolerance).toBe(0.05);
+    expect(region.lineSimplifyTolerance).toBeLessThan(
+      world.lineSimplifyTolerance!,
+    );
+    expect(close.lineSimplifyTolerance).toBeUndefined();
+    expect(
+      viewportQueryPayload([85, 40, 90, 45], 30000, "Point")
+        .lineSimplifyTolerance,
+    ).toBeUndefined();
+    expect(
+      viewportQueryPayload([85, 40, 90, 45], 30000, "Polygon")
+        .lineSimplifyTolerance,
+    ).toBeUndefined();
+    expect(
+      viewportQueryPayload([85, 40, 90, 45], 200, "LineString").limit,
+    ).toBe(200);
   });
   it("splits dateline views without broadening them to the whole world", () => {
     const g = viewportQueryPayload([170, -10, 190, 10], 10000, "Point")

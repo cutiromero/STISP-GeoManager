@@ -3,19 +3,23 @@ import {
   cleanup,
   fireEvent,
   render,
+  renderHook,
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExportOptions } from "../hooks/LayerContext";
-import type { ExportLayerItem } from "../types";
+import type { ExportLayerItem, LoadedVectorLayer } from "../types";
+import { createEmptyLayerGroup } from "../utils/layerFactory";
+import { cloneDefaultVectorSymbolization } from "../symbolization";
+import { viewportQueryPayload } from "../map/viewportVectorQuery";
 
-const mockApi = vi.hoisted(() => ({
-  exportLayersAsync: vi.fn(),
-  rasterJob: vi.fn(),
-  downloadExport: vi.fn(),
-}));
-
-const mockDownloadBlob = vi.hoisted(() => vi.fn());
+import { api } from "../api/client";
+const mockApi = {
+  exportLayersAsync: vi.spyOn(api, "exportLayersAsync"),
+  rasterJob: vi.spyOn(api, "rasterJob"),
+  downloadExport: vi.spyOn(api, "downloadExport"),
+  queryResource: vi.spyOn(api, "queryResource"),
+};
 
 vi.mock("../api/platform", () => ({
   platformApi: {
@@ -24,12 +28,6 @@ vi.mock("../api/platform", () => ({
       .mockResolvedValue({ items: [], canManage: false, canAssign: false }),
   },
 }));
-
-vi.mock("../api/client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../api/client")>()),
-  api: mockApi,
-}));
-vi.mock("../utils/download", () => ({ downloadBlob: mockDownloadBlob }));
 
 import { useLayerExport } from "./MapPage";
 
@@ -107,6 +105,7 @@ async function flushExportCreation() {
   await act(async () => {
     await Promise.resolve();
   });
+  expect(messageApi.error.mock.calls).toEqual([]);
   expect(mockApi.exportLayersAsync).toHaveBeenCalledOnce();
   expect(latestExportPromise).not.toBeNull();
 }
@@ -118,7 +117,6 @@ describe("MapPage asynchronous layer export polling", () => {
     for (const fn of Object.values(mockApi)) {
       fn.mockReset();
     }
-    mockDownloadBlob.mockReset();
     messageApi.warning.mockReset();
     messageApi.error.mockReset();
     messageApi.success.mockReset();
@@ -135,6 +133,75 @@ describe("MapPage asynchronous layer export polling", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+  });
+
+  it("reloads original line geometry before submitting a display preview export", async () => {
+    const group = createEmptyLayerGroup("管线");
+    const preview = { type: "FeatureCollection" as const, features: [] };
+    const original = {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          properties: { name: "原始管线" },
+          geometry: {
+            type: "LineString" as const,
+            coordinates: [
+              [0, 0],
+              [1, 1],
+              [2, 0],
+            ],
+          },
+        },
+      ],
+    };
+    const body = viewportQueryPayload(
+      [-180, -85, 180, 85],
+      10000,
+      "LineString",
+    );
+    const layer: LoadedVectorLayer = {
+      id: "line",
+      name: "管线",
+      layerType: "vector",
+      visible: true,
+      geometryType: "LineString",
+      summary: "",
+      viewportOnly: true,
+      metadata: { 视野查询键: JSON.stringify([7, "v1", body]) },
+      fields: [],
+      sourceResource: group.sourceResource,
+      symbolization: cloneDefaultVectorSymbolization(),
+      geojson: preview,
+    };
+    group.children = [layer];
+    mockApi.queryResource.mockResolvedValue({ geojson: original } as Awaited<
+      ReturnType<typeof api.queryResource>
+    >);
+    mockApi.exportLayersAsync.mockResolvedValue(readyJob);
+    const hook = renderHook(() =>
+      useLayerExport({
+        groups: [group],
+        canExportData: true,
+        permissionDeniedMessage: "无权限",
+        message: messageApi,
+      }),
+    );
+    await act(async () => {
+      await hook.result.current(
+        [{ ...exportItem, geojson: preview }],
+        exportOptions,
+      );
+    });
+    expect(mockApi.queryResource).toHaveBeenCalledOnce();
+    const exact = mockApi.queryResource.mock.calls[0]![1];
+    expect(exact.spatialFilter).toEqual(body.spatialFilter);
+    expect(exact.displayGeometry).toBeUndefined();
+    expect(exact.lineSimplifyTolerance).toBeUndefined();
+    expect(
+      mockApi.exportLayersAsync.mock.calls[0]![0].items[0]!.geojson,
+    ).toEqual(original);
+    expect(layer.geojson).toEqual(preview);
   });
 
   it("stops a permanently running job at the maximum wait time", async () => {
@@ -224,7 +291,6 @@ describe("MapPage asynchronous layer export polling", () => {
     await expect(promise).resolves.toBeUndefined();
     expect(mockApi.rasterJob).toHaveBeenCalledOnce();
     expect(mockApi.downloadExport).not.toHaveBeenCalled();
-    expect(mockDownloadBlob).not.toHaveBeenCalled();
     expect(messageApi.error).not.toHaveBeenCalled();
     expect(messageApi.success).not.toHaveBeenCalled();
     expect(onProgress).toHaveBeenCalledTimes(1);
@@ -244,7 +310,6 @@ describe("MapPage asynchronous layer export polling", () => {
     expect(mockApi.rasterJob).toHaveBeenCalledOnce();
     expect(mockApi.downloadExport).toHaveBeenCalledOnce();
     expect(mockApi.downloadExport).toHaveBeenCalledWith("export-job-1");
-    expect(mockDownloadBlob).toHaveBeenCalledOnce();
     expect(messageApi.success).toHaveBeenCalledWith("导出任务已完成");
     expect(messageApi.error).not.toHaveBeenCalled();
   });

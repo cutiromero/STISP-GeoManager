@@ -14,13 +14,15 @@ from django.http import FileResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from django.views.decorators.http import require_GET, require_POST, require_http_methods
+from django.views.decorators.gzip import gzip_page
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from apps.audit.service import log_operation
-from apps.core.api import api_login_required
 from apps.catalog.data_query import (
     DataQueryError,
     get_resource_profile,
+)
+from apps.catalog.data_query import (
     query_resource as query_data_resource,
 )
 from apps.catalog.export import (
@@ -34,11 +36,6 @@ from apps.catalog.importer import (
     import_uploaded_table,
     preview_uploaded_table,
     validate_uploaded_table,
-)
-from apps.catalog.vector_importer import (
-    commit_vector_import,
-    preview_vector_import,
-    validate_vector_import,
 )
 from apps.catalog.models import (
     DataCatalog,
@@ -63,7 +60,18 @@ from apps.catalog.services import (
     scan_catalog_sources,
 )
 from apps.catalog.taxonomy import TaxonomyError, category_codes_for_filter
+from apps.catalog.vector_importer import (
+    commit_vector_import,
+    preview_vector_import,
+    validate_vector_import,
+)
 from apps.catalog.visualization import resource_visualization_summary
+from apps.core.api import api_login_required
+from apps.core.initialization import (
+    GUEST_GROUP_NAME,
+    SUPERADMIN_GROUP_NAME,
+    ensure_superadmin_defaults,
+)
 from apps.core.permissions import feature_denied_response, has_feature_perm
 from apps.core.principal_visibility import (
     selectable_access_groups_for,
@@ -76,12 +84,6 @@ from apps.raster.services import (
     open_job_artifact_for_download,
     start_export_job,
 )
-from apps.core.initialization import (
-    GUEST_GROUP_NAME,
-    SUPERADMIN_GROUP_NAME,
-    ensure_superadmin_defaults,
-)
-
 from apps.standards.models import DataDomainType
 
 _CATALOG_SCAN_LOCK = threading.Lock()
@@ -1267,6 +1269,7 @@ def _bounded_int_query(request, name: str, default: int, minimum: int, maximum: 
     return value
 
 
+@gzip_page
 @require_POST
 @api_login_required
 def resource_query(request, pk: int):

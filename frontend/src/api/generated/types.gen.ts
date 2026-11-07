@@ -9783,6 +9783,10 @@ export type VisualizationMonitorItem = {
 
 export type QueryRequest = {
     /**
+     * 可选的线显示简化容差，单位为WGS84度，须同时传displayGeometry=true；0或省略不简化。仅对LineString和MultiLineString按容差保拓扑简化，再统一量化，点和面保持displayGeometry原语义。仅普通地图浏览按视野像素尺度启用；不改变命中判定、对象数、属性或存储几何；此预览只校验原坐标有效范围，跳过逐顶点小数位不确定度估算。不用于精确查询、量测、编辑、计算及导出。非法类型、非有限值、越界或未启用displayGeometry返回400。
+     */
+    lineSimplifyTolerance?: number;
+    /**
      * 仅地图显示使用的量化几何；WGS84统一1e-5度网格，全体图斑边界共同节点化并量化，保持共享边界一致；不做任何形状简化，仅移除连续重复点和零面积退化环。超过280 KiB gzip目标仍保留量化精度并返回警告。不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。
      */
     displayGeometry?: boolean;

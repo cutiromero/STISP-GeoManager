@@ -19459,6 +19459,11 @@ components:
       - spatialFilter
       - limit
       properties:
+        lineSimplifyTolerance:
+          type: number
+          minimum: 0
+          maximum: 0.1
+          description: 可选的线显示简化容差，单位为WGS84度，须同时传displayGeometry=true；0或省略不简化。仅对LineString和MultiLineString按容差保拓扑简化，再统一量化，点和面保持displayGeometry原语义。仅普通地图浏览按视野像素尺度启用；不改变命中判定、对象数、属性或存储几何；此预览只校验原坐标有效范围，跳过逐顶点小数位不确定度估算。不用于精确查询、量测、编辑、计算及导出。非法类型、非有限值、越界或未启用displayGeometry返回400。
         displayGeometry:
           type: boolean
           default: false

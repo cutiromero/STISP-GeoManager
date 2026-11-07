@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from math import isfinite
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, datetime
-from contextlib import closing
+from math import isfinite
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -187,6 +187,7 @@ def resource_profile(resource: DataResource) -> ResourceProfile:
 
 
 def query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str, Any]:
+    line_display_tolerance(payload)
     if payload.get("displayGeometry") is not True:
         return _query_resource(resource, payload)
     from .display_geometry import cached_display_query
@@ -197,11 +198,29 @@ def query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str,
     )
 
 
+def line_display_tolerance(payload: dict[str, Any]) -> float:
+    if "lineSimplifyTolerance" not in payload:
+        return 0
+    value = payload["lineSimplifyTolerance"]
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not 0 <= value <= 0.1
+        or not isfinite(value)
+        or payload.get("displayGeometry") is not True
+    ):
+        raise DataQueryError(
+            "lineSimplifyTolerance须为0至0.1的有限数值，且同时启用displayGeometry"
+        )
+    return float(value)
+
+
 def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str, Any]:
     from apps.catalog.geojson_validation import validate_geojson_geometries
 
     started_at = perf_counter()
     display_geometry = payload.get("displayGeometry", False)
+    line_tolerance = line_display_tolerance(payload)
     if not isinstance(display_geometry, bool):
         raise DataQueryError("displayGeometry须为布尔值")
     if resource.data_type != DataResource.DataType.VECTOR:
@@ -221,7 +240,9 @@ def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str
     if query_geometry is None:
         total_count = _geopackage_filtered_count(path, layer_name, where)
         gdf = read_resource(resource, where=where, rows=slice(0, limit))
-        valid_gdf, warnings = validate_geojson_geometries(gdf)
+        valid_gdf, warnings = validate_geojson_geometries(
+            gdf, estimate_uncertainty=not line_tolerance
+        )
         returned = valid_gdf.head(limit)
     else:
         returned, total_count, warnings = _query_spatial_resource_in_chunks(
@@ -230,6 +251,7 @@ def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str
             query_geometry=query_geometry,
             where=where,
             limit=limit,
+            estimate_uncertainty=not line_tolerance,
         )
 
     bounds = _returned_bounds(returned)
@@ -237,7 +259,9 @@ def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str
     if display_geometry:
         from .display_geometry import compact_display_geojson
 
-        geojson, display_warnings = compact_display_geojson(returned)
+        geojson, display_warnings = compact_display_geojson(
+            returned, line_tolerance=line_tolerance
+        )
         warnings = [*warnings, *display_warnings]
     else:
         geojson = json.loads(returned.to_json())
@@ -264,6 +288,7 @@ def _query_spatial_resource_in_chunks(
     query_geometry,
     where: str | None,
     limit: int,
+    estimate_uncertainty: bool = True,
 ):
     from apps.catalog.geojson_validation import GeometryValidationAccumulator
 
@@ -271,7 +296,9 @@ def _query_spatial_resource_in_chunks(
     if query_geometry.is_empty:
         return empty, 0, []
 
-    accumulator = GeometryValidationAccumulator()
+    accumulator = GeometryValidationAccumulator(
+        estimate_uncertainty=estimate_uncertainty
+    )
     returned_chunks = []
     returned_count = 0
     total_count = 0

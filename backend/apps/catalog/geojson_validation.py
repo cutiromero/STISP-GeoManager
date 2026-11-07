@@ -9,7 +9,8 @@ from apps.catalog.importer import coordinate_uncertainty, position_error_meters
 class GeometryValidationAccumulator:
     """Validate geometry chunks without retaining every coordinate in memory."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, estimate_uncertainty=True) -> None:
+        self.estimate_uncertainty = estimate_uncertainty
         self.missing_geometry_count = 0
         self.invalid_longitude_count = 0
         self.invalid_latitude_count = 0
@@ -17,6 +18,8 @@ class GeometryValidationAccumulator:
         self.maximum_error: float | None = None
 
     def filter(self, gdf):
+        if not self.estimate_uncertainty:
+            return self._filter_preview(gdf)
         keep_indexes = []
 
         for index, geometry in gdf.geometry.items():
@@ -75,6 +78,24 @@ class GeometryValidationAccumulator:
 
         return gdf.loc[keep_indexes]
 
+    def _filter_preview(self, gdf):
+        import numpy as np
+        from shapely import get_coordinates
+
+        # Check every original coordinate in native arrays. Preview drawing does
+        # not need the expensive per-vertex decimal-precision estimate.
+        coordinates, owners = get_coordinates(gdf.geometry.array, return_index=True)
+        present = np.bincount(owners, minlength=len(gdf)) > 0
+        valid = np.isfinite(coordinates)
+        valid[:, 0] &= np.abs(coordinates[:, 0]) <= 180
+        valid[:, 1] &= np.abs(coordinates[:, 1]) <= 90
+        bad_lon = np.bincount(owners[~valid[:, 0]], minlength=len(gdf)) > 0
+        bad_lat = np.bincount(owners[~valid[:, 1]], minlength=len(gdf)) > 0
+        self.missing_geometry_count += int((~present).sum())
+        self.invalid_longitude_count += int(bad_lon.sum())
+        self.invalid_latitude_count += int(bad_lat.sum())
+        return gdf.loc[present & ~bad_lon & ~bad_lat]
+
     def warnings(self) -> list[dict[str, Any]]:
         warnings: list[dict[str, Any]] = []
 
@@ -107,8 +128,12 @@ class GeometryValidationAccumulator:
         return warnings
 
 
-def validate_geojson_geometries(gdf) -> tuple[Any, list[dict[str, Any]]]:
-    accumulator = GeometryValidationAccumulator()
+def validate_geojson_geometries(
+    gdf, *, estimate_uncertainty=True
+) -> tuple[Any, list[dict[str, Any]]]:
+    accumulator = GeometryValidationAccumulator(
+        estimate_uncertainty=estimate_uncertainty
+    )
     filtered = accumulator.filter(gdf)
     return filtered, accumulator.warnings()
 

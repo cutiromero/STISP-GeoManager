@@ -2968,6 +2968,15 @@ inputSummary可选roleReason和roleSource展示本次角色判断依据与来源
 
 远景输出增加`prospect_support`连续栅格及`prospectHeatmapOutputId`引用。后端统一脚本按`colorRamp`蓝—黄—红连续插值生成PNG，浏览器只显示图片和同色图例；透明背景不扩大目标边界。相对置信度由已圈目标内的矿物组合与岩性支持归一化，非有矿概率。
 
+
+### 2026-11-07 管线地图显示优化
+
+QueryRequest 可显式传 `lineSimplifyTolerance`（有限数值，0至0.1，WGS84度），须同时 `displayGeometry=true`，非法参数返回400。0或省略时仍仅按1e-5度量化，不改变既有图斑显示语义。正值仅将LineString/MultiLineString按容差保拓扑简化，再量化；保留端点、ID、属性和对象数，空间命中仍按原始几何判断。前端普通大线图层按视野尺度选择容差并保留最多10000条（受系统查询上限约束），放大后请求更细显示。点和面不启用线简化，显式属性/空间查询保持原精度。量测、编辑、计算及精确导出须读取原始数据。
+
+查询响应按Accept-Encoding协商gzip。空间显示预览按完整参数、资源修订和算法版本隔离缓存，每资源最多保留32条；属性过滤请求不缓存。权限检查仍在缓存读取之前。默认displayGeometry无过滤缓存保持，旧算法缓存失效。
+
+显式线简化预览对原始坐标做完整的向量化范围校验，跳过逐顶点小数位不确定度估算；默认查询保留原精度估算。
+
 ### 输入版本复用与核查位置概览（2026-11-07）
 
 核查分页`part=retained`的`plan.reviewIndex.automaticMap`仅用于显示已授权处置的位置，取自完整冻结建议及automaticSuggestionIds，人工候选仍由原candidateIds限定。total为完整授权数，locatedCount为有合法几何的位置数。最多返回2000个点，更多对象先按16×16地理网格汇聚，count保留数量；页面继续按视口距离聚合，不增添审批动作或模型请求。
