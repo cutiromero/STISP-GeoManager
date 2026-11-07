@@ -138,7 +138,12 @@ export default function MultiElementChapters({
             data-done={Boolean(workflow.plan.multiElementMap?.afterProspects)}
           >
             <strong>调查建议</strong>
-            <span>比较前后实际核查区</span>
+            <span>
+              {workflow.plan.multiElementMap?.prospectProtocol ===
+              "after_only_v2"
+                ? "修正后圈定找矿目标"
+                : "比较前后实际核查区"}
+            </span>
           </li>
         </ol>
         <div className="multi-story-dispositions" aria-label="当前章节处置分布">

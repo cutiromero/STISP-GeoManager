@@ -32,7 +32,7 @@ const stageLabels: Record<string, string> = {
   multi_apply: "执行获批操作",
   multi_recheck: "复核修改结果",
   relations: "重建构造交汇关系",
-  prospect: "比较前后优先核查远景区",
+  prospect: "圈定修正后找矿远景区",
 };
 
 export function workflowStageLabel(workflow: AgentWorkflow): string {
@@ -51,7 +51,7 @@ export function workflowStageLabel(workflow: AgentWorkflow): string {
       apply: "执行获批操作",
       recheck: "复核修改结果",
       relations: "重建构造交汇关系",
-      prospect: "比较前后优先核查远景区",
+      prospect: "圈定修正后找矿远景区",
     };
     if (labels[stage]) return labels[stage]!;
   }

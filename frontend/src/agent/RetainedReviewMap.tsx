@@ -12,9 +12,7 @@ const empty: GeoJsonFeatureCollection = {
   features: [],
 };
 type Background = {
-  before: GeoJsonFeatureCollection;
-  after: GeoJsonFeatureCollection;
-  faults: GeoJsonFeatureCollection;
+  lithology: GeoJsonFeatureCollection;
   afterFaults: GeoJsonFeatureCollection;
 };
 
@@ -40,9 +38,7 @@ export default function RetainedReviewMap({
     Array.isArray(manifest.outputs) &&
     manifest.outputs.some((output) => record(output).key === "final_faults");
   const ids = [
-    before.lithology ?? inputs.lithology,
     after.lithology ?? before.lithology ?? inputs.lithology,
-    before.faults ?? inputs.faults,
     after.faults ??
       (after.lithology && cleanFaults
         ? undefined
@@ -86,18 +82,11 @@ export default function RetainedReviewMap({
     setLoading(true);
     setError("");
     setBackground(undefined);
-    void Promise.all([
-      read(refs[0]),
-      read(refs[1], false, true),
-      read(refs[2], true),
-      read(refs[3], true),
-    ])
-      .then(([before, after, faults, afterFaults]) => {
+    void Promise.all([read(refs[0], false, true), read(refs[1], true)])
+      .then(([lithology, afterFaults]) => {
         if (!disposed)
           setBackground({
-            before: before!,
-            after: after!,
-            faults: faults!,
+            lithology: lithology!,
             afterFaults: afterFaults!,
           });
       })
@@ -189,7 +178,7 @@ export default function RetainedReviewMap({
   );
   const bounds = useMemo(() => {
     if (!locate || !focus.features.length)
-      return reviewBounds(background?.before ?? objects);
+      return reviewBounds(background?.lithology ?? objects);
     const extent = reviewBounds(focus);
     if (!extent || focus.features[0]?.properties.element === "alteration")
       return extent;
@@ -209,7 +198,7 @@ export default function RetainedReviewMap({
             {
               key: "faults",
               label: "构造",
-              before: background.faults,
+              before: empty,
               after: background.afterFaults,
               color: "#76566d",
             },
@@ -247,7 +236,7 @@ export default function RetainedReviewMap({
   return (
     <div className="logic-retained-map" aria-label="地质底图与待核查对象">
       <div className="logic-retained-map-toolbar">
-        <span>结合地质背景核查所选对象，左右地图联动。</span>
+        <span>结合当前地质背景核查所选对象。</span>
         <Button size="small" onClick={() => setLocate(false)}>
           查看全区
         </Button>
@@ -288,14 +277,14 @@ export default function RetainedReviewMap({
         />
       )}
       <LocalGeologyReviewMaps
-        before={background?.before ?? objects}
-        after={background?.after ?? null}
+        before={background?.lithology ?? objects}
+        after={background?.lithology ?? objects}
         differences={empty}
         bounds={bounds}
-        single={!background}
+        single
+        singleSide="after"
         inspectionOnly
-        overlays={background ? overlays : []}
-        beforeLabel={background ? "本次检查采用的地质资料" : "待核查对象位置"}
+        overlays={overlays}
         afterLabel={
           after.lithology ? "当前成果与待核查对象" : "待核查对象（尚未执行）"
         }
@@ -303,7 +292,7 @@ export default function RetainedReviewMap({
         spotlight={
           focused
             ? {
-                before: background ? empty : focus,
+                before: empty,
                 after: spotlightFeatures,
                 beforeLabel: background
                   ? undefined

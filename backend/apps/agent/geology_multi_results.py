@@ -36,7 +36,9 @@ def table_rows(path, key):
                     raise ComputeError("远景区证据包含重复的同分期对象，已停止面积汇总")
                 _aggregate_evidence(row, evidence_groups, combinations)
                 seen_zones.add(zone)
-                representatives = groups.setdefault((row["phase"], row["grade"]), [])
+                representatives = groups.setdefault(
+                    (row["phase"], row.get("grade", "")), []
+                )
                 representatives.append(row)
                 representatives.sort(
                     key=lambda item: float(item["area_km2"]), reverse=True
@@ -48,6 +50,7 @@ def table_rows(path, key):
                 or len(rows) < 40
             ):
                 rows.append(row)
+    current_evidence = key == "evidence" and "schema_version" in reader.fieldnames
     if key == "evidence":
         rows = [row for representatives in groups.values() for row in representatives]
     if key == "issues":
@@ -58,7 +61,11 @@ def table_rows(path, key):
         "rowCount": count,
         "scope": "all" if count == len(rows) else "representative_sample",
         "samplingNote": (
-            "全部远景区均参与分期、等级及证据组合汇总；每个分期和等级展示面积最大的两个代表，完整对象证据可下载"
+            (
+                "全部修正后远景区参与汇总；展示面积最大的两个代表，完整对象依据可下载"
+                if current_evidence
+                else "全部远景区均参与分期、等级及证据组合汇总；每个分期和等级展示面积最大的两个代表，完整对象证据可下载"
+            )
             if key == "evidence"
             else "完整检查对象参与分组建议；模型接收分组数量、实测分布及代表样本，未获批对象保持原样"
         ),
@@ -68,11 +75,14 @@ def table_rows(path, key):
         result["aggregate"] = {
             "scope": "all_rows",
             "rowCount": count,
-            "byPhaseAndGrade": _finish_groups(evidence_groups),
+            ("byPhase" if current_evidence else "byPhaseAndGrade"): _finish_groups(
+                evidence_groups
+            ),
+            "schemaVersion": 2 if current_evidence else 1,
             "evidenceCombinations": _finish_groups(combinations),
             "countUnit": "zone",
-            "aggregationNote": "以(phase,zone_id)唯一对象计数；两张汇总表是同一完整证据表的不同分组，面积不相加，前后期分别比较",
-            "interpretation": "分期、等级分别汇总；实测比例仅给出各区取值范围。邻近矿物、断裂与交汇作为背景，分级依据实际规则表达式和实测条件",
+            "aggregationNote": "以(phase,zone_id)唯一对象计数；汇总表是同一完整证据表的不同分组，面积不相加",
+            "interpretation": "实测比例给出各区取值范围；邻近矿物、断裂与交汇作为背景，条件是否满足以实际表达式与实测为准",
         }
     return result
 
@@ -80,7 +90,19 @@ def table_rows(path, key):
 def _evidence_basis(row):
     try:
         basis = json.loads(row["evidence_json"])
-        measured, context = basis["grade_conditions"], basis["context"]
+        current = row.get("schema_version") == "2"
+        if "schema_version" in row and not current:
+            raise ValueError("unsupported evidence version")
+        if current and (
+            basis.get("schema_version") != 2
+            or row["phase"] != "after"
+            or "grade" in row
+        ):
+            raise ValueError("invalid corrected-only protocol")
+        measured, context = (
+            basis["conditions" if current else "grade_conditions"],
+            basis["context"],
+        )
         area = float(row["area_km2"])
         if (
             not isinstance(measured, dict)
@@ -88,7 +110,7 @@ def _evidence_basis(row):
             or not math.isfinite(area)
             or area < 0
             or not row["phase"]
-            or not row["grade"]
+            or (not current and not row["grade"])
             or not row["zone_id"]
             or basis["phase"] != row["phase"]
             or not isinstance(context["minerals"], list)
@@ -117,17 +139,21 @@ def _evidence_basis(row):
 
 def _aggregate_evidence(row, groups, combinations):
     basis, measured, context, area = _evidence_basis(row)
-    phase, grade = row["phase"], row["grade"]
+    phase, grade = row["phase"], row.get("grade", "")
+    dimensions = (
+        {"phase": phase}
+        if basis.get("schema_version") == 2
+        else {"phase": phase, "grade": grade}
+    )
     minerals = tuple(sorted(set(context["minerals"])))
     expression = measured["rule_expression"]
     for table, key, dimensions in (
-        (groups, (phase, grade), {"phase": phase, "grade": grade}),
+        (groups, (phase, grade), dimensions),
         (
             combinations,
             (phase, grade, expression, minerals),
             {
-                "phase": phase,
-                "grade": grade,
+                **dimensions,
                 "ruleExpression": expression,
                 "minerals": list(minerals),
             },
@@ -408,10 +434,12 @@ def _model_evidence_row(row):
     return {
         "phase": row["phase"],
         "zoneId": row["zone_id"],
-        "grade": row["grade"],
+        **({"grade": row["grade"]} if "grade" in row else {"schemaVersion": 2}),
         "areaKm2": area,
         "explanation": row.get("explanation", ""),
-        "gradeConditions": measured,
+        (
+            "conditions" if basis.get("schema_version") == 2 else "gradeConditions"
+        ): measured,
         "knowledge": basis["knowledge"],
         "minerals": context["minerals"],
         "faultAssociations": len(context["faults"]),
@@ -436,6 +464,7 @@ def _model_evidence(aggregate, rows):
                 "measurementRanges",
                 "ruleExpression",
                 "gradeConditions",
+                "conditions",
                 "minerals",
             }:
                 projected[key] = value
@@ -449,8 +478,9 @@ def _model_evidence(aggregate, rows):
         return projected
 
     result = {**aggregate}
-    for key in ("byPhaseAndGrade", "evidenceCombinations"):
-        result[key] = [project(item) for item in aggregate[key]]
+    for key in ("byPhase", "byPhaseAndGrade", "evidenceCombinations"):
+        if key in aggregate:
+            result[key] = [project(item) for item in aggregate[key]]
     result["evidenceCombinations"] = _column_rows(result["evidenceCombinations"])
     projected_rows = [project(row) for row in rows]
     result["definitions"] = definitions

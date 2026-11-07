@@ -172,6 +172,30 @@ export default function MultiElementWorkspace({
     { key: string; before?: ComputeMapPreview; after?: ComputeMapPreview }[]
   >([]);
   const [rasterError, setRasterError] = useState("");
+  const [prospectPreview, setProspectPreview] = useState<ComputeMapPreview>();
+  const [prospectError, setProspectError] = useState("");
+  const prospectOutputId =
+    workflow.plan.multiElementMap?.prospectHeatmapOutputId;
+  useEffect(() => {
+    let disposed = false;
+    setProspectPreview(undefined);
+    setProspectError("");
+    if (prospectOutputId)
+      void computeApi
+        .mapPreview(prospectOutputId)
+        .then((preview) => {
+          if (!disposed) setProspectPreview(preview);
+        })
+        .catch((reason: unknown) => {
+          if (!disposed)
+            setProspectError(
+              reason instanceof Error ? reason.message : "远景热力图读取失败",
+            );
+        });
+    return () => {
+      disposed = true;
+    };
+  }, [prospectOutputId]);
   const rasterRefs = workflow.plan.multiElementMap?.alterationRasters;
   const rasterKey = JSON.stringify(rasterRefs ?? []);
   const rasterApplyCompleted = (
@@ -377,7 +401,13 @@ export default function MultiElementWorkspace({
               ]),
         ),
         counted(query(map.intersections)),
-        counted(query(map.beforeProspects)),
+        counted(
+          query(
+            map.prospectProtocol === "after_only_v2"
+              ? undefined
+              : map.beforeProspects,
+          ),
+        ),
         counted(query(map.afterProspects)),
       ]);
       if (disposed) return;
@@ -415,9 +445,20 @@ export default function MultiElementWorkspace({
         },
         {
           key: "prospects",
-          label: "优先核查远景区 A/B",
+          label: "找矿远景区",
           before: beforeProspects,
-          after: afterProspects,
+          after:
+            map.prospectProtocol === "after_only_v2"
+              ? featureCollection(
+                  afterProspects.features.map((feature) => ({
+                    ...feature,
+                    properties: {
+                      ...feature.properties,
+                      _review_outlineOnly: true,
+                    },
+                  })),
+                )
+              : afterProspects,
           color: "#537fc0",
         },
       ];
@@ -462,8 +503,8 @@ export default function MultiElementWorkspace({
       const restoredOutcome =
         saved.viewMode === "outcome" &&
         !suggestionId &&
-        map.beforeProspects &&
-        map.afterProspects;
+        (map.prospectProtocol === "after_only_v2" ||
+          (map.beforeProspects && map.afterProspects));
       setViewMode(
         restoredOutcome
           ? "outcome"
@@ -708,7 +749,10 @@ export default function MultiElementWorkspace({
         setChapter(item.suggestion.element as StoryChapter);
       setTourKey(item.key);
       setViewMode("tour");
-    } else if (viewMode !== "outcome" || !feature.properties.grade)
+    } else if (
+      viewMode !== "outcome" ||
+      !(feature.properties.grade || feature.properties.zone_id)
+    )
       setViewMode("overview");
   };
   const showTour = (index: number) => {
@@ -721,8 +765,9 @@ export default function MultiElementWorkspace({
   const outcome = useMemo(
     () =>
       data &&
-      workflow.plan.multiElementMap?.beforeProspects &&
-      workflow.plan.multiElementMap.afterProspects
+      (workflow.plan.multiElementMap?.prospectProtocol === "after_only_v2" ||
+        (workflow.plan.multiElementMap?.beforeProspects &&
+          workflow.plan.multiElementMap.afterProspects))
         ? prospectChanges(data.beforeProspects, data.afterProspects)
         : null,
     [data, workflow.plan],
@@ -875,7 +920,7 @@ export default function MultiElementWorkspace({
                 : selected && inspect(selected)
             }
           >
-            {viewMode === "outcome" ? "定位变化区" : "定位当前对象"}
+            {viewMode === "outcome" ? "定位核查区" : "定位当前对象"}
           </Button>
         </div>
       </header>
@@ -1081,18 +1126,34 @@ export default function MultiElementWorkspace({
                   viewMode === "tour"
                     ? "当前对象前后状态"
                     : viewMode === "outcome"
-                      ? "调查建议前后对比"
+                      ? workflow.plan.multiElementMap?.prospectProtocol ===
+                        "after_only_v2"
+                        ? "修正后远景目标"
+                        : "调查建议前后对比"
                       : "全区前后对比"
                 }
               >
                 <GeologyReviewMaps
+                  single={
+                    viewMode === "outcome" &&
+                    workflow.plan.multiElementMap?.prospectProtocol ===
+                      "after_only_v2"
+                  }
+                  singleSide="after"
                   before={data.before}
-                  rasterOverlays={rasterLayers.filter(
+                  rasterOverlays={[
+                    ...rasterLayers,
+                    ...(prospectPreview
+                      ? [{ key: "prospect-confidence", after: prospectPreview }]
+                      : []),
+                  ].filter(
                     (layer) =>
-                      (layer.key.startsWith("alteration-changes:")
-                        ? visible.includes("changes")
-                        : visible.includes("alterations") ||
-                          storyNeedsAlterations) &&
+                      (layer.key === "prospect-confidence"
+                        ? visible.includes("prospects")
+                        : layer.key.startsWith("alteration-changes:")
+                          ? visible.includes("changes")
+                          : visible.includes("alterations") ||
+                            storyNeedsAlterations) &&
                       (viewMode !== "tour" ||
                         !currentTour?.suggestion.observations?.mineral ||
                         layer.key.endsWith(
@@ -1230,6 +1291,12 @@ export default function MultiElementWorkspace({
           {outcome && (
             <MultiElementOutcome
               result={outcome}
+              colorRamp={prospectPreview?.metadata.colorRamp}
+              heatmapError={prospectError}
+              currentOnly={
+                workflow.plan.multiElementMap?.prospectProtocol ===
+                "after_only_v2"
+              }
               active={viewMode === "outcome"}
               onFocus={showOutcome}
               onObjectFocus={inspect}

@@ -914,6 +914,23 @@ export type ComputeMapPreview = {
              */
             color: string;
         }>;
+        /**
+         * 后端实际使用的连续色带；仅用于图例，栅格由后端渲染
+         */
+        colorRamp?: Array<{
+            /**
+             * 归一化证据支持度
+             */
+            value: number;
+            /**
+             * 置信度说明
+             */
+            label: string;
+            /**
+             * RGBA颜色
+             */
+            color: string;
+        }>;
         [key: string]: unknown;
     };
     /**
@@ -6584,11 +6601,19 @@ export type AgentMultiElementMap = {
      */
     intersections?: number;
     /**
-     * 同参数下修正前优先核查远景区
+     * 修正后远景目标的相对置信度热力栅格计算输出ID，按既有map-preview接口鉴权及后端蓝黄红连续渐变渲染；非矿化概率
+     */
+    prospectHeatmapOutputId?: number;
+    /**
+     * 远景区算子2.0协议；仅修正后圈区且无A/B分级，beforeProspects必须缺省；无目标时afterProspects也缺省。缺少本标记的历史任务沿用其已保存的前后分级证据。
+     */
+    prospectProtocol?: 'after_only_v2';
+    /**
+     * 历史算子1.x的修正前优先核查远景区；2.0不生成、不读取
      */
     beforeProspects?: number;
     /**
-     * 同参数下修正后优先核查远景区；A/B为证据组合等级
+     * 修正后优先核查远景区；2.0统一编号P001等且无grade字段，历史1.x保留其A/B证据组合等级
      */
     afterProspects?: number;
 };

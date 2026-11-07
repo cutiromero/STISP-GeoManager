@@ -24394,14 +24394,9 @@
                       "revision": "frozen-raster-comparison"
                     },
                     "multiElementMap": {
-                      "alterationRasters": [
-                        {
-                          "mineral": "calcite",
-                          "beforeOutputId": 1025,
-                          "afterOutputId": 1026,
-                          "changesOutputId": 1027
-                        }
-                      ]
+                      "prospectProtocol": "after_only_v2",
+                      "afterProspects": 602,
+                      "prospectHeatmapOutputId": 803
                     },
                     "reviewIndex": {
                       "total": 2,
@@ -27967,6 +27962,36 @@
                     "color"
                   ],
                   "additionalProperties": false
+                }
+              },
+              "colorRamp": {
+                "type": "array",
+                "description": "后端实际使用的连续色带；仅用于图例，栅格由后端渲染",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "value",
+                    "label",
+                    "color"
+                  ],
+                  "properties": {
+                    "value": {
+                      "type": "number",
+                      "description": "归一化证据支持度",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "label": {
+                      "type": "string",
+                      "description": "置信度说明"
+                    },
+                    "color": {
+                      "type": "string",
+                      "description": "RGBA颜色",
+                      "pattern": "^#[0-9a-fA-F]{8}$"
+                    }
+                  }
                 }
               }
             },
@@ -37299,15 +37324,27 @@
             "minimum": 1,
             "description": "几何与推测交汇点，inferred字段决定实心或空心"
           },
+          "prospectHeatmapOutputId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "修正后远景目标的相对置信度热力栅格计算输出ID，按既有map-preview接口鉴权及后端蓝黄红连续渐变渲染；非矿化概率"
+          },
+          "prospectProtocol": {
+            "type": "string",
+            "enum": [
+              "after_only_v2"
+            ],
+            "description": "远景区算子2.0协议；仅修正后圈区且无A/B分级，beforeProspects必须缺省；无目标时afterProspects也缺省。缺少本标记的历史任务沿用其已保存的前后分级证据。"
+          },
           "beforeProspects": {
             "type": "integer",
             "minimum": 1,
-            "description": "同参数下修正前优先核查远景区"
+            "description": "历史算子1.x的修正前优先核查远景区；2.0不生成、不读取"
           },
           "afterProspects": {
             "type": "integer",
             "minimum": 1,
-            "description": "同参数下修正后优先核查远景区；A/B为证据组合等级"
+            "description": "修正后优先核查远景区；2.0统一编号P001等且无grade字段，历史1.x保留其A/B证据组合等级"
           }
         }
       },

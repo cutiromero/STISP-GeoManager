@@ -52,7 +52,7 @@ TITLES = {
     "apply": "执行获批修正",
     "recheck": "修正后复核",
     "relations": "构造交汇重建",
-    "prospect": "优先核查远景区比较",
+    "prospect": "修正后远景区圈定",
     "final_analysis": "综合检查报告",
 }
 VISIBLE_OUTPUTS = {
@@ -70,7 +70,7 @@ VISIBLE_OUTPUTS = {
     },
     "recheck": set(),
     "relations": {"intersections"},
-    "prospect": {"before_zones", "after_zones", "evidence"},
+    "prospect": {"before_zones", "after_zones", "evidence", "prospect_support"},
 }
 VISIBLE_OUTPUTS["apply"].update(
     mineral + "_" + suffix
@@ -134,8 +134,6 @@ def graph(segment="all", raster=False):
                             "dolomite",
                         )
                     },
-                    "before_lithology": "lithology",
-                    "before_faults": "faults",
                     "lithology": "apply/lithology",
                     "faults": "apply/faults",
                     "alterations": "apply/alterations",
@@ -153,8 +151,6 @@ def graph(segment="all", raster=False):
                 for mineral in minerals:
                     bindings[mineral] = "apply/" + mineral + "_corrected"
                     bindings[mineral + "_weight"] = "apply/" + mineral + "_weight"
-                    if name == "prospect":
-                        bindings["before_" + mineral] = mineral
     return stages
 
 
@@ -168,18 +164,22 @@ def validate_inputs(user, policy, inputs, parameters, selected=(), *, workflow=N
         "working_epsg",
         "grid_resolution_m",
         "min_zone_area_m2",
+        "max_zone_area_m2",
+        "max_zone_count",
     }:
         raise ComputeError("综合推理包含未声明参数，请根据当前算法参数表重新选择")
     for key, low, high in (
         ("working_epsg", 1, 999999),
         ("grid_resolution_m", 10, 1000),
         ("min_zone_area_m2", 0, 100000000),
+        ("max_zone_area_m2", 1, 100000000),
+        ("max_zone_count", 1, 20),
     ):
         if key in parameters and (
             type(parameters[key]) not in {int, float}
             or not math.isfinite(parameters[key])
             or not low <= parameters[key] <= high
-            or key == "working_epsg"
+            or key in {"working_epsg", "max_zone_count"}
             and type(parameters[key]) is not int
         ):
             raise ComputeError("综合推理参数超出有效类型或范围：" + key)

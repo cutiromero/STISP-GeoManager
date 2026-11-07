@@ -30,6 +30,7 @@ type Props = {
   previewLabel?: string;
   inspectionOnly?: boolean;
   single?: boolean;
+  singleSide?: "before" | "after";
   overlays?: ReviewOverlay[];
   onInspect?: (feature: Feature) => void;
   beforeLabel?: string;
@@ -226,6 +227,7 @@ export default function LocalGeologyReviewMaps({
   previewLabel = "建议修改范围，尚未执行",
   inspectionOnly = false,
   single = false,
+  singleSide = "before",
   overlays: originalOverlays = emptyOverlays,
   onInspect,
   beforeLabel = "待检查地质图",
@@ -289,7 +291,7 @@ export default function LocalGeologyReviewMaps({
   return (
     <>
       <div className={`geology-review-map-pair${single ? " is-single" : ""}`}>
-        {(single ? [0] : [0, 1]).map((side) => {
+        {(single ? [singleSide === "after" ? 1 : 0] : [0, 1]).map((side) => {
           const units = side ? (after ?? before) : before;
           const focus =
             spotlight && (side ? spotlight.after : spotlight.before);
@@ -469,7 +471,12 @@ export default function LocalGeologyReviewMaps({
                         width={east - west}
                         height={south - north}
                         preserveAspectRatio="none"
-                        style={{ imageRendering: "pixelated" }}
+                        style={{
+                          imageRendering:
+                            layer.key === "prospect-confidence"
+                              ? "auto"
+                              : "pixelated",
+                        }}
                       />
                     );
                   })}

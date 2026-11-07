@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-multi-prospect",
   "name": "优先核查远景区分析",
-  "version": "1.1.2",
+  "version": "2.0.0",
   "description": "优先核查远景区分析。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -42,7 +42,7 @@
     },
     {
       "key": "rules",
-      "label": "显式启用的试用规则及版本",
+      "label": "显式绑定的地质规则及版本",
       "kind": "table"
     },
     {
@@ -74,24 +74,6 @@
       "label": "白云石遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1
-    },
-    {
-      "key": "before_lithology",
-      "label": "修改前岩性图",
-      "kind": "vector",
-      "geometryTypes": [
-        "Polygon",
-        "MultiPolygon"
-      ]
-    },
-    {
-      "key": "before_faults",
-      "label": "修改前构造图",
-      "kind": "vector",
-      "geometryTypes": [
-        "LineString",
-        "MultiLineString"
-      ]
     },
     {
       "key": "intersections",
@@ -137,36 +119,6 @@
       "kind": "raster",
       "minBands": 1,
       "required": false
-    },
-    {
-      "key": "before_hematite",
-      "label": "修改前赤铁矿遥感矿物识别结果",
-      "kind": "raster",
-      "minBands": 1
-    },
-    {
-      "key": "before_chlorite",
-      "label": "修改前绿泥石遥感矿物识别结果",
-      "kind": "raster",
-      "minBands": 1
-    },
-    {
-      "key": "before_hydromica",
-      "label": "修改前水云母遥感矿物识别结果",
-      "kind": "raster",
-      "minBands": 1
-    },
-    {
-      "key": "before_calcite",
-      "label": "修改前方解石遥感矿物识别结果",
-      "kind": "raster",
-      "minBands": 1
-    },
-    {
-      "key": "before_dolomite",
-      "label": "修改前白云石遥感矿物识别结果",
-      "kind": "raster",
-      "minBands": 1
     }
   ],
   "parameters": [
@@ -205,16 +157,25 @@
       "default": 200000,
       "min": 0,
       "max": 100000000
+    },
+    {
+      "key": "max_zone_count",
+      "label": "最多保留远景目标数",
+      "type": "integer",
+      "default": 5,
+      "min": 1,
+      "max": 20
+    },
+    {
+      "key": "max_zone_area_m2",
+      "label": "单个远景区面积上限（平方米）",
+      "type": "number",
+      "default": 3000000,
+      "min": 1,
+      "max": 100000000
     }
   ],
   "outputs": [
-    {
-      "key": "before_zones",
-      "label": "修改前优先核查远景区",
-      "kind": "vector",
-      "file": "before_zones.gpkg",
-      "required": false
-    },
     {
       "key": "after_zones",
       "label": "修改后优先核查远景区",
@@ -230,9 +191,15 @@
     },
     {
       "key": "statistics",
-      "label": "前后远景区统计",
+      "label": "修正后远景区统计",
       "kind": "table",
       "file": "statistics.csv"
+    },
+    {
+      "key": "prospect_support",
+      "label": "远景相对置信度热力图",
+      "kind": "raster",
+      "file": "prospect_support.tif"
     }
   ],
   "timeoutSeconds": 900,

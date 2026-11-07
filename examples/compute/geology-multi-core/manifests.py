@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 
-def create():
+def create(only=None):
     def vector(key, label, geometry):
         return {"key": key, "label": label, "kind": "vector", "geometryTypes": geometry}
 
@@ -20,7 +20,7 @@ def create():
         vector("lithology", "岩性图", polygons),
         vector("faults", "构造图", lines),
         vector("coverage", "研究区制图范围", polygons),
-        {"key": "rules", "label": "显式启用的试用规则及版本", "kind": "table"},
+        {"key": "rules", "label": "显式绑定的地质规则及版本", "kind": "table"},
     ]
     rasters = [
         {
@@ -154,27 +154,27 @@ def create():
             base
             + rasters
             + [
-                vector("before_lithology", "修改前岩性图", polygons),
-                vector("before_faults", "修改前构造图", lines),
                 vector("alterations", "获批矿物处理状态", polygons),
                 vector("intersections", "当前构造交汇点", points),
             ],
             [
                 output(
-                    "before_zones",
-                    "修改前优先核查远景区",
-                    "vector",
-                    "before_zones.gpkg",
-                ),
-                output(
                     "after_zones", "修改后优先核查远景区", "vector", "after_zones.gpkg"
                 ),
                 output("evidence", "每区实测依据链", "table", "evidence.csv"),
-                output("statistics", "前后远景区统计", "table", "statistics.csv"),
+                output("statistics", "修正后远景区统计", "table", "statistics.csv"),
+                output(
+                    "prospect_support",
+                    "远景相对置信度热力图",
+                    "raster",
+                    "prospect_support.tif",
+                ),
             ],
         ),
     }
     for suffix, (name, inputs, outputs) in variants.items():
+        if only is not None and suffix not in only:
+            continue
         if suffix in {"check", "apply", "prospect"}:
             inputs = [row for row in inputs if row["key"] != "alterations"]
             inputs += [
@@ -185,11 +185,6 @@ def create():
                     "minBands": 1,
                     "required": False,
                 }
-                for row in rasters
-            ]
-        if suffix == "prospect":
-            inputs += [
-                {**row, "key": "before_" + row["key"], "label": "修改前" + row["label"]}
                 for row in rasters
             ]
         if suffix in {"check", "apply"}:
@@ -226,7 +221,7 @@ def create():
             "schemaVersion": 1,
             "identifier": directory.name,
             "name": name,
-            "version": "1.1.2",
+            "version": "2.0.0" if suffix == "prospect" else "1.1.2",
             "description": name
             + "。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
             "author": "STISP",
@@ -234,7 +229,29 @@ def create():
             "agent": {"enabled": True},
             "qualityReport": {"file": "quality.json"},
             "inputs": inputs,
-            "parameters": parameters,
+            "parameters": parameters
+            + (
+                [
+                    {
+                        "key": "max_zone_count",
+                        "label": "最多保留远景目标数",
+                        "type": "integer",
+                        "default": 5,
+                        "min": 1,
+                        "max": 20,
+                    },
+                    {
+                        "key": "max_zone_area_m2",
+                        "label": "单个远景区面积上限（平方米）",
+                        "type": "number",
+                        "default": 3000000,
+                        "min": 1,
+                        "max": 100000000,
+                    },
+                ]
+                if suffix == "prospect"
+                else []
+            ),
             "outputs": outputs,
             "timeoutSeconds": 900,
             "deterministic": True,

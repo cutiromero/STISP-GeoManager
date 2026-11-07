@@ -1,7 +1,8 @@
-"""Compare prospect evidence with identical masks, grid and knowledge parameters."""
+"""Delineate unified prospect targets exclusively from corrected observations."""
+
+import math
 
 from multi_io import (
-    digest,
     frame_identity,
     inputs,
     report,
@@ -13,26 +14,28 @@ from multi_io import (
 from multi_prospect import grid, zones
 from multi_relations import FIELDS, reconstruct
 from multi_raster import RasterAlterations
+from multi_windows import create
 
 
 def run(context):
     config = settings(context)
+    for key, default, low, high in (
+        ("max_zone_count", 5, 1, 20),
+        ("max_zone_area_m2", 3000000, 1, 100000000),
+    ):
+        value = context.parameters.get(key, default)
+        if (
+            type(value) not in (int, float)
+            or not math.isfinite(value)
+            or not low <= value <= high
+            or (key == "max_zone_count" and int(value) != value)
+        ):
+            raise ValueError("远景目标数量或面积上限无效")
+        config[key] = int(value) if key == "max_zone_count" else value
+    if config["max_zone_area_m2"] < config["min_zone_area_m2"]:
+        raise ValueError("远景区最大面积不能小于最小面积")
     lithology, faults, area, rules, units, _, snapshot = inputs(context, config)
-    final_alterations = RasterAlterations(context, config, area)
-    before_lithology = vector(
-        context.input_path("before_lithology"),
-        config["working_epsg"],
-        {"Polygon", "MultiPolygon"},
-        "feature_id",
-        {"name", "geo_sym"},
-    )
-    before_faults = vector(
-        context.input_path("before_faults"),
-        config["working_epsg"],
-        {"LineString", "MultiLineString"},
-        "line_id",
-        allow_empty=True,
-    )
+    alterations = RasterAlterations(context, config, area)
     expected = reconstruct(faults, area, rules)
     try:
         intersections_path = context.input_path("intersections")
@@ -55,64 +58,42 @@ def run(context):
         expected[FIELDS + ["geometry"]]
     ):
         raise ValueError("交汇成果与当前构造及规则不一致，请重新重建关系")
-    before_intersections = reconstruct(before_faults, area, rules)
-
-    class OriginalContext:
-        def input_path(self, key):
-            if key.endswith("_weight"):
-                raise KeyError(key)
-            return context.input_path("before_" + key)
-
-        def output_path(self, filename):
-            return context.output_path(filename)
-
-    original_alterations = RasterAlterations(OriginalContext(), config, area)
     transform, dimensions = grid(area, config)
-    before, old_evidence = zones(
-        before_lithology,
-        before_faults,
-        before_intersections,
-        original_alterations,
-        area,
-        rules,
-        units,
-        config,
-        transform,
-        dimensions,
-        "before",
-    )
-    after, new_evidence = zones(
+    targets, evidence, diagnostics, support = zones(
         lithology,
         faults,
         intersections,
-        final_alterations,
+        alterations,
         area,
         rules,
         units,
         config,
         transform,
         dimensions,
-        "after",
-    )
-    write_vector(
-        context.output_path("before_zones.gpkg"),
-        before[["zone_id", "grade", "area_km2", "geometry"]],
-        config["working_epsg"],
-        "MultiPolygon",
     )
     write_vector(
         context.output_path("after_zones.gpkg"),
-        after[["zone_id", "grade", "area_km2", "geometry"]],
+        targets[
+            [
+                "zone_id",
+                "priority_rank",
+                "area_km2",
+                "explanation",
+                "evidence_json",
+                "geometry",
+            ]
+        ],
         config["working_epsg"],
         "MultiPolygon",
     )
     write_table(
         context.output_path("evidence.csv"),
-        old_evidence + new_evidence,
+        evidence,
         [
+            "schema_version",
             "phase",
             "zone_id",
-            "grade",
+            "priority_rank",
             "area_km2",
             "explanation",
             "evidence_json",
@@ -123,41 +104,56 @@ def run(context):
             "conditions_json",
         ],
     )
-    rows = [
+    with create(
+        context.output_path("prospect_support.tif"),
         {
-            "grade": label,
-            "before_count": int((before.grade == label).sum()),
-            "after_count": int((after.grade == label).sum()),
-            "before_area_km2": float(
-                before.loc[before.grade == label, "area_km2"].sum()
-            ),
-            "after_area_km2": float(after.loc[after.grade == label, "area_km2"].sum()),
-        }
-        for label in ("A", "B")
-    ]
+            "height": dimensions[0],
+            "width": dimensions[1],
+            "transform": transform,
+            "crs": config["working_epsg"],
+        },
+        "float32",
+    ) as target:
+        target.nodata = -9999
+        target.write(support, 1)
+    area_km2 = float(targets.area_km2.sum())
     write_table(
         context.output_path("statistics.csv"),
-        rows,
-        ["grade", "before_count", "after_count", "before_area_km2", "after_area_km2"],
+        [
+            {
+                "schema_version": 2,
+                "phase": "after",
+                "zone_count": len(targets),
+                "area_km2": area_km2,
+            }
+        ],
+        ["schema_version", "phase", "zone_count", "area_km2"],
+    )
+    reason = (
+        "未达到邻域蚀变组合门槛"
+        if not diagnostics["alteration_cells"]
+        else "蚀变组合、有效构造及已知基岩岩性未形成空间交集"
+        if not diagnostics["candidate_cells"]
+        else "候选连通区均未满足圈区面积上下限"
+        if targets.empty
+        else ""
     )
     report(
         context,
         {
-            "before_zone_count": len(before),
-            "after_zone_count": len(after),
-            "before_area_km2": float(before.area_km2.sum()),
-            "after_area_km2": float(after.area_km2.sum()),
-            "snapshot_hash": digest(
-                {
-                    "after": snapshot,
-                    "before_lithology": frame_identity(before_lithology),
-                    "before_faults": frame_identity(before_faults),
-                }
-            ),
-            "comparison_parameters_identical": True,
+            **diagnostics,
+            "after_zone_count": len(targets),
+            "after_area_km2": area_km2,
+            "snapshot_hash": snapshot,
             "research_area_masked": True,
             "reference_used": False,
             "grid_resolution_m": config["grid_resolution_m"],
+            "empty_reason": reason,
         },
-        f"以同一规则和网格重算，修改前{len(before)}处、修改后{len(after)}处优先核查远景区；每区保留实际分级依据。",
+        f"仅按修正后资料圈定{len(targets)}处优先核查远景区，共{area_km2:.3f}平方公里。"
+        + (
+            reason + "。"
+            if reason
+            else "每区保留邻域蚀变、构造与岩性的实际依据及相对置信度热力图。"
+        ),
     )

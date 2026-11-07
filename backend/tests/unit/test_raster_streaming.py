@@ -116,6 +116,7 @@ def comparison_fixture(directory, case):
         if row["rule_id"] == "P-02":
             params = json.loads(row["params_json"])
             params["min_types"] = 0.3
+            params.pop("evidence_method", None)
             row["params_json"] = json.dumps(params)
     write(initial.inputs["rules"], rows)
     for index, key in enumerate(KEYS):
@@ -202,6 +203,16 @@ def run_comparison(directory, case, before_prospect=None):
         },
         initial.parameters,
     )
+    # Preserve historical inspection/application inputs; v2 applies only to the terminal stage.
+    rule_rows = read(initial.inputs["rules"])
+    for row in rule_rows:
+        if row["rule_id"] == "P-02":
+            params = json.loads(row["params_json"])
+            params["evidence_method"] = "weighted_neighborhood_presence_v2"
+            row["params_json"] = json.dumps(params)
+    new_rules = directory / "prospect-rules.csv"
+    write(new_rules, rule_rows)
+    prospect.inputs["rules"] = new_rules
     if before_prospect:
         before_prospect()
     load("prospect")(prospect)
@@ -212,7 +223,7 @@ def run_comparison(directory, case, before_prospect=None):
 
 
 @pytest.mark.parametrize("case", [0, 1])
-def test_all_outputs_equal_pre_streaming_baseline(
+def test_inspection_and_application_equal_pre_streaming_baseline(
     tmp_path, streaming, case, monkeypatch
 ):
     expected = json.loads(EXPECTED.read_text())[str(case)]
@@ -225,5 +236,10 @@ def test_all_outputs_equal_pre_streaming_baseline(
             lambda *args: pytest.fail("prospect must not inspect alteration rules"),
         )
 
-    assert run_comparison(tmp_path, case, forbid_inspect) == expected
+    actual = run_comparison(tmp_path, case, forbid_inspect)
+    assert {key: actual[key] for key in ("check", "apply")} == {
+        key: expected[key] for key in ("check", "apply")
+    }
+    assert "before_zones.gpkg" not in actual["prospect"]
+    assert actual["prospect"]["statistics.csv"][0]["schema_version"] == "2"
     assert not list(tmp_path.rglob(".raster-*"))

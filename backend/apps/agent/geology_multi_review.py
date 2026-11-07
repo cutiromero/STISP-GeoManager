@@ -968,6 +968,29 @@ def update_map(workflow):
     ):
         if value:
             values[key] = value
+    prospect_manifest = (
+        workflow.plan.get("algorithms", {})
+        .get("geology-multi-prospect", {})
+        .get("manifest", {})
+    )
+    if prospect_manifest.get("version") == "2.0.0" and any(
+        stage["name"] == "prospect" and stage.get("status") == "completed"
+        for stage in workflow.plan["stages"]
+    ):
+        values["prospectProtocol"] = "after_only_v2"
+        values.pop("beforeProspects", None)
+        heatmap = next(
+            (
+                item.get("outputId")
+                for stage in workflow.plan["stages"]
+                if stage["name"] == "prospect"
+                for item in stage.get("results", [])
+                if item["key"] == "prospect_support"
+            ),
+            None,
+        )
+        if heatmap:
+            values["prospectHeatmapOutputId"] = heatmap
     workflow.plan["multiElementMap"] = values
     check_outputs = {
         item["key"]: item["outputId"]

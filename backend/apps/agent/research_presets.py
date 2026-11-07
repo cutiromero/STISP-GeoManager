@@ -85,14 +85,14 @@ TITLES = {
 PROMPTS = {
     GENERIC: (
         "请检查我上传的地质资料：核对岩性、构造和蚀变是否符合地质规律，"
-        "给出少量可核查的处置建议，等我批准后再修正，最后比较修正前后的优先核查远景区。"
+        "给出少量可核查的处置建议，等我批准后再修正，最后仅根据修正后资料圈定少量找矿远景目标。"
     ),
     MULTI_TYPE: (
         "请使用当前项目的五龙沟-海德乌拉地质资料，按综合入口检查岩性、构造和五类遥感矿物识别结果。"
         "读取项目地质规则及实际测量，说明适用条件和例外，给出少量可核查的处置建议。"
         "若使用同单元整理资料，按同一单元粒度检查冗余内部边界，有充分测量和对应知识支持时提出融合；类别保持。"
         "等我选中批准后再修正，未批准和待裁定项保留；降权保留原对象。"
-        "重新检查，重建几何交汇及推测交汇，对比优先核查远景区，保存报告并展示地图。"
+        "重新检查，重建几何交汇及推测交汇，圈定修正后找矿远景区，保存报告并展示地图。"
     ),
     "geology_map_review": (
         "请检查这个项目的待检查地质图，使用演示案例的制图覆盖资料和样例参数。"
@@ -243,6 +243,15 @@ def discover(user, p: dict, run=None, *, scenario_filter: str | None = None) -> 
             # remain available through manual selection and saved workflows.
             for role in ("lithology", "rules"):
                 versioned = f"geology-multi-{role}-complete-20261025"
+                if role == "rules":
+                    from apps.knowledge.prospect_rules import RESOURCE_CODE
+
+                    if (
+                        scenario_rule_resources(user, p, scenario)
+                        .filter(code=RESOURCE_CODE)
+                        .exists()
+                    ):
+                        versioned = RESOURCE_CODE
                 if (
                     (
                         scenario_rule_resources(user, p, scenario)

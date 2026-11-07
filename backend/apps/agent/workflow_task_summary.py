@@ -86,7 +86,13 @@ def task_summary(workflow):
     complete = full_rows(stats) if stats else None
     if complete is not None:
         grades = {r.get("grade"): r for r in complete}
-        if len(complete) == len(grades) == 2 and set(grades) == {"A", "B"}:
+        if (
+            len(complete) == 1
+            and complete[0].get("schema_version") == "2"
+            and complete[0].get("phase") == "after"
+        ):
+            zones = count(complete[0].get("zone_count"))
+        elif len(complete) == len(grades) == 2 and set(grades) == {"A", "B"}:
             values = [count(r.get("after_count")) for r in grades.values()]
             if None not in values:
                 zones = sum(values)

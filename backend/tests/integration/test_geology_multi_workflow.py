@@ -1182,11 +1182,14 @@ def test_native_published_manifests_prepare_the_actual_stage_protocol(
     assert wf.plan["stages"][0]["bindings"]["rules"] == "frozen_rules"
     assert wf.plan["stages"][2]["bindings"]["calcite"] == "apply/calcite_corrected"
     assert wf.plan["stages"][2]["bindings"]["calcite_weight"] == "apply/calcite_weight"
-    assert wf.plan["stages"][4]["bindings"]["before_calcite"] == "calcite"
+    assert not any(
+        key.startswith("before_") for key in wf.plan["stages"][4]["bindings"]
+    )
+    assert wf.plan["stages"][4]["bindings"]["calcite"] == "apply/calcite_corrected"
     assert wf.plan["stages"][2]["bindings"]["faults"] == (
         "faults" if missing_faults else "apply/faults"
     )
-    assert wf.plan["stages"][4]["bindings"]["before_lithology"] == "lithology"
+    assert wf.plan["stages"][4]["bindings"]["lithology"] == "apply/lithology"
     assert wf.plan["stages"][4]["parameters"]["segment"] == "all"
     assert len(wf.plan["upstreamVersions"]) == 9
     confirm_demo(wf, multi["owner"], multi["policy"], wf.plan_hash)

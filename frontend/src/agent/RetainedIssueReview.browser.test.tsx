@@ -51,7 +51,7 @@ function task() {
   return workflow;
 }
 
-it("核查采用地质双图，切换对象和勾选不重新请求底图", async () => {
+it("核查仅加载当前成果单图，切换对象和勾选不重新请求底图", async () => {
   const workflow = task();
   workflow.plan.inputs = { lithology: 501, faults: 502 };
   mapQuery.mockReset();
@@ -65,7 +65,11 @@ it("核查采用地质双图，切换对象和勾选不重新请求底图", asyn
       </MemoryRouter>
     </App>,
   );
-  await screen.findByText("本次检查采用的地质资料");
+  await screen.findByText("待核查对象（尚未执行）");
+  expect(
+    view.container.querySelectorAll(".geology-review-map-pair section"),
+  ).toHaveLength(1);
+  expect(screen.queryByText("本次检查采用的地质资料")).toBeNull();
   expect(screen.getByText("待核查对象（尚未执行）")).toBeVisible();
   expect(
     view.container.querySelectorAll('[data-layer="geological-units"] path')

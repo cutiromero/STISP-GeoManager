@@ -197,14 +197,9 @@
           "revision": "frozen-raster-comparison"
         },
         "multiElementMap": {
-          "alterationRasters": [
-            {
-              "mineral": "calcite",
-              "beforeOutputId": 1025,
-              "afterOutputId": 1026,
-              "changesOutputId": 1027
-            }
-          ]
+          "prospectProtocol": "after_only_v2",
+          "afterProspects": 602,
+          "prospectHeatmapOutputId": 803
         },
         "reviewIndex": {
           "total": 2,

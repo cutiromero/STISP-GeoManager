@@ -69,7 +69,7 @@ def geographic_bounds(src) -> tuple[float, float, float, float]:
     return bounds
 
 
-def colorize(data, fixed_range=None) -> np.ndarray:
+def colorize(data, fixed_range=None, palette=BLUE_PALETTE) -> np.ndarray:
     masked = np.ma.masked_invalid(data.astype(np.float32))
     valid = ~np.ma.getmaskarray(masked)
     image = np.zeros((*masked.shape, 4), dtype=np.uint8)
@@ -89,7 +89,7 @@ def colorize(data, fixed_range=None) -> np.ndarray:
         image[..., channel] = np.interp(
             scaled,
             [0, 0.5, 1],
-            BLUE_PALETTE[:, channel],
+            palette[:, channel],
         ).astype(np.uint8)
     image[..., 3] = np.where(valid, 255, 0).astype(np.uint8)
     return image
@@ -109,10 +109,13 @@ def render(payload: dict) -> dict:
         "blue",
         "alteration",
         "alteration-changes",
+        "prospect-confidence",
     }:
         raise PreviewError("地图预览渲染规则无效")
     fixed_range = rules.get("range")
-    if fixed_range not in (None, [-1, 1]):
+    if fixed_range not in (
+        ([0, 1],) if palette == "prospect-confidence" else (None, [-1, 1])
+    ):
         raise PreviewError("地图预览渲染范围无效")
     table = rules.get("colorTable")
     if table is not None and (
@@ -154,7 +157,7 @@ def render(payload: dict) -> dict:
                 height=height,
                 add_alpha=ColorInterp.alpha not in src.colorinterp,
                 resampling=Resampling.bilinear
-                if palette == "blue"
+                if palette in {"blue", "prospect-confidence"}
                 else Resampling.nearest,
                 warp_mem_limit=64,
                 warp_extras={"NUM_THREADS": "1"},
@@ -174,8 +177,13 @@ def render(payload: dict) -> dict:
                     ]
                     rgba[values.filled(0) == item["value"]] = color
                 rgba[np.ma.getmaskarray(values)] = 0
-            elif palette == "blue":
-                rgba = colorize(values, fixed_range)
+            elif palette in {"blue", "prospect-confidence"}:
+                colors = (
+                    np.array([[33, 102, 172], [255, 255, 128], [215, 48, 39]])
+                    if palette == "prospect-confidence"
+                    else BLUE_PALETTE
+                )
+                rgba = colorize(values, fixed_range, colors)
             else:
                 colors = np.array(
                     [[0, 0, 0, 0], [38, 166, 154, 210]]

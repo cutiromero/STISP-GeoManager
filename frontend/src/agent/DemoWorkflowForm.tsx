@@ -128,7 +128,7 @@ export const demoRoles: Record<DemoWorkflowType, Role[]> = {
 
 export const demoGoals: Record<DemoWorkflowType, string> = {
   geology_multi_element_reasoning:
-    "检查海德乌拉岩性、构造及遥感矿物识别成果，检索本案例试用专家规则，解释实测疑点并形成建议；经我逐项批准后执行修正和复核，重建交汇关系，比较前后优先核查远景区并生成报告。",
+    "检查海德乌拉岩性、构造及遥感矿物识别成果，检索本案例试用专家规则，解释实测疑点并形成建议；经我逐项批准后执行修正和复核，重建交汇关系，圈定修正后找矿远景区并生成报告。",
   ecology_investigation:
     "分析两期植被变化，结合生态背景和观测证据确定调查优先区，说明依据与待补资料。",
   geology_correction:

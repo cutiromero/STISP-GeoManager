@@ -1158,3 +1158,69 @@ it("用真实获批变化逐处讲解，并以实际几何和面积展示调查�
   );
   await page.viewport(1600, 900);
 });
+
+it("2.0仅显示修正后远景目标单图、连续色带与实际依据", async () => {
+  const workflow = reviewWorkflow();
+  workflow.workflowType = "geology_multi_element_reasoning";
+  workflow.plan.inputs = { lithology: 101, faults: 102 };
+  workflow.plan.multiElementMap = {
+    before: { lithology: 101, faults: 102 },
+    after: { lithology: 201, faults: 202 },
+    prospectProtocol: "after_only_v2",
+    afterProspects: 502,
+    prospectHeatmapOutputId: 803,
+  };
+  const targets = structuredClone(beforeReviewMap);
+  targets.features = [targets.features[0]!];
+  targets.features[0]!.properties = {
+    zone_id: "P001",
+    priority_rank: 1,
+    area_km2: 0.45,
+    explanation:
+      "构造支持覆盖100%，250米邻域内组合满足2类加权矿物，基岩条件满足。",
+  };
+  request.mockImplementation(async (url: string) => {
+    if (url.includes("outputs/803/map-preview"))
+      return {
+        ...rasterPreview(803),
+        metadata: {
+          colorRamp: [
+            { value: 0, label: "低", color: "#2166acff" },
+            { value: 0.5, label: "中", color: "#ffff80ff" },
+            { value: 1, label: "高", color: "#d73027ff" },
+          ],
+        },
+      };
+    const id = Number(url.match(/resources\/(\d+)\/query/)?.[1]);
+    return reviewQuery(
+      id,
+      id === 502 ? targets : [102, 202].includes(id) ? lines : beforeReviewMap,
+    );
+  });
+  const view = render(
+    <App>
+      <MemoryRouter>
+        <MultiElementWorkspace
+          workflow={workflow}
+          suggestionId={null}
+          onReload={vi.fn()}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  await screen.findByText("优先核查的找矿目标");
+  await screen.findByLabelText("远景相对置信度色带");
+  fireEvent.click(screen.getByRole("button", { name: "查看调查建议章节" }));
+  expect(
+    view.container.querySelectorAll(".geology-review-map-pair section"),
+  ).toHaveLength(1);
+  expect(view.container.querySelector('image[href*="803"]')).not.toBeNull();
+  expect(screen.queryByText("这些处理怎样改变调查建议")).toBeNull();
+  expect(
+    request.mock.calls.some(([url]) =>
+      String(url).includes("resources/501/query"),
+    ),
+  ).toBe(false);
+  fireEvent.click(screen.getByText(/P001 ·/));
+  expect(screen.getByText(/构造支持覆盖100%/)).toBeVisible();
+});

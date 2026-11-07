@@ -78,7 +78,12 @@ TARGETS = {
         ("favorable", "是否有利赋矿岩性", False, ("favorable", "有利")),
     ),
 }
-PARAMETERS = {"grid_resolution_m": (10, 1000), "min_zone_area_m2": (0, 100_000_000)}
+PARAMETERS = {
+    "grid_resolution_m": (10, 1000),
+    "min_zone_area_m2": (0, 100_000_000),
+    "max_zone_area_m2": (1, 100_000_000),
+    "max_zone_count": (1, 20),
+}
 
 
 def project_rules(user, policy):
@@ -147,13 +152,15 @@ def validate_creation(user, policy, inputs, parameters, batch_id, key):
     if len(set(inputs.values())) != len(inputs):
         raise ComputeError("同一份资料只能对应一个角色")
     if set(parameters) - set(PARAMETERS):
-        raise ComputeError("通用地质推理只接受网格分辨率和最小远景区面积参数")
+        raise ComputeError("通用地质推理包含未声明的圈区参数")
     for name, (low, high) in PARAMETERS.items():
         value = parameters.get(name)
         if value is not None and (
             type(value) not in {int, float}
             or not math.isfinite(value)
             or not low <= value <= high
+            or name == "max_zone_count"
+            and type(value) is not int
         ):
             raise ComputeError("参数超出有效范围：" + name)
     # The run reads three vector copies, the rasters (one shared all-zero stand-in

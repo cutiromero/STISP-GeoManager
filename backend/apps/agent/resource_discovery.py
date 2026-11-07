@@ -28,7 +28,7 @@ MULTI_FINAL_OUTPUT_KEYS = {
         for suffix in ("corrected", "weight")
     },
     "relations": {"intersections"},
-    "prospect": {"before_zones", "after_zones", "evidence"},
+    "prospect": {"before_zones", "after_zones", "evidence", "prospect_support"},
 }
 FINAL_STAGE_OUTPUTS = {
     **{

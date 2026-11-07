@@ -2957,3 +2957,13 @@ L-06全新世冲积物形态异常与L-07孤立早期单元连续性疑点仅为
 ### 2026-11-07 资料角色与任务停止
 
 inputSummary可选roleReason和roleSource展示本次角色判断依据与来源。模型判断须来自真实响应，沿用既有字段不冒充本次模型识别。取消接口立即返回cancelled card，晚到的模型或工作副本保存不能重新激活任务；停止不依赖源文件仍可读取，计算子任务只按本人、项目和真实工作流步骤绑定终止。replacePlanHash沿用原400/409校验，其他错误和项目/会话权限保持。
+
+### 修正后远景区分析（2026-11-07）
+
+`geology-multi-prospect@2.0.0`仅绑定修正后岩性、构造、矿物和批准权重，当前交汇、研究范围及冻结规则。P-02需明确声明`evidence_method=weighted_neighborhood_presence_v2`；旧覆盖比例规则不能直接输入新算子。矿物在分析格网及圆形邻域内各取最大有效权重，累加达到`min_types`后与有效构造及已知基岩岩性相交，有利岩性参与排序；按四邻域圈区并过滤最小面积。距离采用格网中心近似，邻域组合不表示同像元共存或矿化概率。
+
+新证据CSV声明`schema_version=2,phase=after`，无grade字段；JSON依据为`schema_version=2,conditions,context,knowledge`。统计为单行`schema_version,phase,zone_count,area_km2`，质量报告保留逐层筛选数及空结果原因。地图返回`prospectProtocol=after_only_v2`，`beforeProspects`缺省；实际无目标时`afterProspects`亦缺省。结果页展示统一远景目标而非前后找矿比较。历史1.x证据与已完成任务保持原语义。
+
+流程内待核查项仅显示当前成果单图，保留选中轮廓、定位和周边地质背景；需要前后比较时由独立对比页查看。地图切换和勾选复用已加载数据，不调用算子。
+
+远景输出增加`prospect_support`连续栅格及`prospectHeatmapOutputId`引用。后端统一脚本按`colorRamp`蓝—黄—红连续插值生成PNG，浏览器只显示图片和同色图例；透明背景不扩大目标边界。相对置信度由已圈目标内的矿物组合与岩性支持归一化，非有矿概率。

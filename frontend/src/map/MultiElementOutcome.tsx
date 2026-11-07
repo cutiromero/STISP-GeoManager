@@ -1,21 +1,42 @@
+import ProspectTargets from "./ProspectTargets";
 import { AimOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import type { prospectChanges } from "./multiElementTour";
-import type { GeoJsonFeatureCollection } from "../api/generated/types.gen";
+import type {
+  ComputeMapPreview,
+  GeoJsonFeatureCollection,
+} from "../api/generated/types.gen";
 
 export default function MultiElementOutcome({
   result,
   active,
   onFocus,
   onObjectFocus,
+  currentOnly = false,
+  colorRamp,
+  heatmapError,
 }: {
   result: ReturnType<typeof prospectChanges>;
   active: boolean;
+  currentOnly?: boolean;
+  colorRamp?: ComputeMapPreview["metadata"]["colorRamp"];
+  heatmapError?: string;
   onFocus: (grade?: string) => void;
   onObjectFocus?: (
     feature: GeoJsonFeatureCollection["features"][number],
   ) => void;
 }) {
+  if (currentOnly)
+    return (
+      <ProspectTargets
+        colorRamp={colorRamp}
+        heatmapError={heatmapError}
+        data={result.after}
+        active={active}
+        onFocus={() => onFocus()}
+        onObjectFocus={onObjectFocus}
+      />
+    );
   const changed = result.before.features.length + result.after.features.length;
   return (
     <section

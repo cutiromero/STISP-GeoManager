@@ -1,4 +1,4 @@
-"""One evidence expression drives both the grid grades and the audience report."""
+"""Corrected-only prospect targets with explicit, measured neighbourhood evidence."""
 
 import math
 
@@ -8,8 +8,10 @@ from rasterio.features import rasterize, shapes
 from rasterio.transform import from_origin
 from shapely.geometry import shape
 from shapely.ops import unary_union
+from scipy.ndimage import gaussian_filter
 
 from multi_io import dump
+from multi_prospect_raster import METHOD, mineral_grids
 
 
 def grid(area, config):
@@ -78,27 +80,8 @@ def conditions(
     structure = (
         burn(structure_geometries, transform, dimensions, structure_weights) >= 1
     )
-    type_count = np.zeros(dimensions, dtype="float32")
-    raster = hasattr(alterations, "aggregate")
-    allowed_types = second.get(
-        "alteration_types",
-        list(alterations.alt) if raster else sorted(alterations.alt.unique()),
-    )
-    if raster:
-        type_count = alterations.aggregate(
-            transform, dimensions, config["working_epsg"], allowed_types
-        )
-    for name, group in [] if raster else alterations.groupby("alt"):
-        if name not in allowed_types:
-            continue
-        active = (
-            group.loc[group.get("state", "keep") != "exclude"]
-            if "state" in group
-            else group
-        )
-        geometries = list(active.geometry.buffer(second.get("search_m", 250)))
-        weights = active.weight.tolist() if "weight" in active else [1] * len(active)
-        type_count += burn(geometries, transform, dimensions, weights)
+    minerals = mineral_grids(alterations, transform, dimensions, config, second)
+    type_count = sum(minerals.values(), np.zeros(dimensions, dtype="float64"))
     alteration = type_count >= second.get("min_types", 2)
     favourable = (
         burn(
@@ -115,11 +98,36 @@ def conditions(
         )
         > 0
     )
+    bedrock = (
+        burn(
+            list(
+                lithology.loc[
+                    lithology.geo_sym.map(
+                        lambda code: (
+                            units.get(code, {}).get("category")
+                            in {"stratum", "intrusive"}
+                        )
+                    ),
+                    "geometry",
+                ]
+            ),
+            transform,
+            dimensions,
+        )
+        > 0
+    )
     mask = burn([area], transform, dimensions) > 0
-    grade = np.zeros(dimensions, dtype="uint8")
-    grade[mask & alteration & (structure | favourable)] = 2
-    grade[mask & alteration & structure & favourable] = 3
-    return grade, structure, alteration, favourable, type_count
+    candidates = mask & alteration & structure & bedrock
+    return (
+        candidates,
+        structure,
+        alteration,
+        favourable,
+        type_count,
+        minerals,
+        mask,
+        bedrock,
+    )
 
 
 def zones(
@@ -133,29 +141,47 @@ def zones(
     config,
     transform,
     dimensions,
-    phase,
 ):
-    grade, structure, alteration, favourable, type_count = conditions(
-        lithology,
-        faults,
-        intersections,
-        alterations,
-        area,
-        rules,
-        units,
-        config,
-        transform,
-        dimensions,
+    selected, structure, alteration, favourable, type_count, minerals, mask, bedrock = (
+        conditions(
+            lithology,
+            faults,
+            intersections,
+            alterations,
+            area,
+            rules,
+            units,
+            config,
+            transform,
+            dimensions,
+        )
     )
-    candidates = []
-    for raw, level in shapes(
-        grade, mask=grade > 0, transform=transform, connectivity=4
+    candidates, component_areas = [], []
+    for raw, _ in shapes(
+        selected.astype("uint8"), mask=selected, transform=transform, connectivity=4
     ):
         geometry = shape(raw).intersection(area)
-        if geometry.area >= config["min_zone_area_m2"] and not geometry.is_empty:
-            candidates.append((int(level), geometry))
-    candidates.sort(key=lambda item: (-item[0], -item[1].area, item[1].bounds))
-    rows, evidence, counts = [], [], {"A": 0, "B": 0}
+        component_areas.append(geometry.area)
+        if (
+            config["min_zone_area_m2"] <= geometry.area <= config["max_zone_area_m2"]
+            and not geometry.is_empty
+        ):
+            candidates.append(geometry)
+
+    def priority(geometry):
+        cells = (burn([geometry], transform, dimensions) > 0) & selected
+        return (
+            -float(type_count[cells].mean()),
+            -float(favourable[cells].mean()),
+            -geometry.area,
+            geometry.bounds,
+        )
+
+    candidates.sort(key=priority)
+    eligible_count = len(candidates)
+    candidates = candidates[: config["max_zone_count"]]
+    rows, evidence = [], []
+    target_cells = np.zeros(dimensions, dtype=bool)
     first, second = rules["P-01"]["params"], rules["P-02"]["params"]
     citations = [
         {
@@ -166,24 +192,34 @@ def zones(
         }
         for key in ("P-01", "P-02", "P-03")
     ]
-    for level, geometry in candidates:
-        label = "A" if level == 3 else "B"
-        counts[label] += 1
-        zone_id = f"{label}{counts[label]:03}"
-        cells = (burn([geometry], transform, dimensions) > 0) & (grade == level)
+    for ordinal, geometry in enumerate(candidates, 1):
+        zone_id = f"P{ordinal:03}"
+        cells = (burn([geometry], transform, dimensions) > 0) & selected
         if not cells.any():
             continue
+        target_cells |= cells
         measured = {
             "pixel_count": int(cells.sum()),
             "structure_supported_fraction": float(structure[cells].mean()),
             "alteration_supported_fraction": float(alteration[cells].mean()),
             "favourable_fraction": float(favourable[cells].mean()),
+            "bedrock_supported_fraction": float(bedrock[cells].mean()),
+            "mean_weighted_type_count": float(type_count[cells].mean()),
             "min_weighted_type_count": float(type_count[cells].min()),
             "min_types_required": second.get("min_types", 2),
-            "rule_expression": "alteration AND structure AND favourable"
-            if label == "A"
-            else "alteration AND (structure OR favourable) AND NOT all_three",
+            "rule_expression": "alteration AND structure AND mapped_bedrock",
+            "evidence_method": METHOD,
+            "search_m": second.get("search_m", 250),
+            "mineral_presence": {
+                name: {
+                    "min_weight": float(values[cells].min()),
+                    "max_weight": float(values[cells].max()),
+                }
+                for name, values in minerals.items()
+                if (values[cells] > 0).any()
+            },
             "grid_resolution_m": config["grid_resolution_m"],
+            "selection_order": "mean_weighted_type_count DESC, favourable_fraction DESC, area DESC",
         }
         related_faults = []
         for _, fault in faults.iterrows():
@@ -220,34 +256,9 @@ def zones(
                         "gap_m": float(point.gap_m),
                     }
                 )
-        if hasattr(alterations, "aggregate"):
-            from multi_io import RASTERS
-
-            mineral_types = [
-                name
-                for name in RASTERS.values()
-                if (
-                    alterations.aggregate(
-                        transform, dimensions, config["working_epsg"], [name]
-                    )[cells]
-                    > 0
-                ).any()
-            ]
-        else:
-            active = (
-                alterations.loc[alterations.state != "exclude"]
-                if "state" in alterations
-                else alterations
-            )
-            near_alt = active.iloc[
-                active.sindex.query(
-                    geometry.buffer(second.get("search_m", 250)), predicate="intersects"
-                )
-            ]
-            mineral_types = sorted(
-                set(near_alt.alt)
-                & set(second.get("alteration_types", near_alt.alt.unique()))
-            )
+        mineral_types = [
+            name for name, values in minerals.items() if (values[cells] > 0).any()
+        ]
         rock_areas = {}
         for code, group in lithology.loc[
             lithology.geometry.intersects(geometry)
@@ -256,8 +267,9 @@ def zones(
                 unary_union(group.geometry).intersection(geometry).area
             )
         basis = {
-            "phase": phase,
-            "grade_conditions": measured,
+            "schema_version": 2,
+            "phase": "after",
+            "conditions": measured,
             "knowledge": citations,
             "context": {
                 "minerals": mineral_types,
@@ -265,12 +277,12 @@ def zones(
                 "intersections": related_intersections,
                 "lithology_areas_m2": rock_areas,
             },
-            "interpretation": "本案例规则的证据组合等级，代表优先核查方向",
+            "interpretation": "修正后资料的多要素组合目标，表示优先调查线索；邻域出现不表示矿物同像元共存，也不表示矿化概率",
         }
-        text = f"{zone_id}为{label}类优先核查远景区，面积{geometry.area / 1e6:.3f}平方公里。网格内加权蚀变种类数最低{measured['min_weighted_type_count']:.2f}，要求不少于{measured['min_types_required']}；构造条件覆盖{measured['structure_supported_fraction']:.0%}，有利岩性覆盖{measured['favourable_fraction']:.0%}。交汇资料中推测{sum(item['inferred'] for item in related_intersections)}处、几何相交{sum(not item['inferred'] for item in related_intersections)}处。"
+        text = f"{zone_id}为修正后资料圈定的优先核查远景区，面积{geometry.area / 1e6:.3f}平方公里。{measured['search_m']}米邻域内加权矿物类型数最低{measured['min_weighted_type_count']:.2f}，门槛{measured['min_types_required']}；构造支持覆盖{measured['structure_supported_fraction']:.0%}，有利岩性覆盖{measured['favourable_fraction']:.0%}。邻域组合按{config['grid_resolution_m']}米分析网格近似，不代表同像元共存或已证实矿化。"
         record = {
             "zone_id": zone_id,
-            "grade": label,
+            "priority_rank": ordinal,
             "area_km2": float(geometry.area / 1e6),
             "explanation": text,
             "evidence_json": dump(basis),
@@ -279,7 +291,8 @@ def zones(
         evidence.append(
             {
                 **record,
-                "phase": phase,
+                "schema_version": 2,
+                "phase": "after",
                 "alteration": "、".join(mineral_types),
                 "faults": dump(related_faults),
                 "intersections": dump(related_intersections),
@@ -291,7 +304,7 @@ def zones(
         rows,
         columns=[
             "zone_id",
-            "grade",
+            "priority_rank",
             "area_km2",
             "explanation",
             "evidence_json",
@@ -300,4 +313,52 @@ def zones(
         geometry="geometry",
         crs=lithology.crs,
     )
-    return frame, evidence
+    raw_support = 0.7 * type_count / len(minerals) + 0.3 * favourable
+    numerator = gaussian_filter(np.where(target_cells, raw_support, 0), sigma=1)
+    denominator = gaussian_filter(target_cells.astype("float64"), sigma=1)
+    smoothed = np.divide(
+        numerator, denominator, out=np.zeros_like(numerator), where=denominator > 0
+    )
+    support = np.full(dimensions, -9999, dtype="float32")
+    limits = (
+        [float(smoothed[target_cells].min()), float(smoothed[target_cells].max())]
+        if target_cells.any()
+        else [0, 0]
+    )
+    if target_cells.any():
+        support[target_cells] = (
+            (smoothed[target_cells] - limits[0]) / (limits[1] - limits[0])
+            if limits[1] - limits[0] > 1e-9
+            else 0.5
+        )
+    diagnostics = {
+        "support_raw_range": limits,
+        "support_formula": "0.7 * weighted_mineral_types / allowed_mineral_count + 0.3 * favourable; structure and mapped bedrock required",
+        "support_normalization": "relative_min_max_within_selected_targets_after_masked_gaussian_sigma_1_cell; uniform_support=0.5",
+        "support_interpretation": "相对置信度（证据支持度），非矿化概率；仅在目标内部显示，不扩展圈区边界",
+        "protocol": "after_only_v2",
+        "research_cells": int(mask.sum()),
+        "alteration_cells": int((mask & alteration).sum()),
+        "structure_cells": int((mask & structure).sum()),
+        "favourable_cells": int((mask & favourable).sum()),
+        "candidate_cells": int(selected.sum()),
+        "weighted_type_count_max": float(type_count[mask].max()) if mask.any() else 0,
+        "candidate_component_count": len(component_areas),
+        "max_component_area_m2": max(component_areas, default=0),
+        "filtered_small_components": sum(
+            value < config["min_zone_area_m2"] for value in component_areas
+        ),
+        "filtered_large_components": sum(
+            value > config["max_zone_area_m2"] for value in component_areas
+        ),
+        "eligible_component_count": eligible_count,
+        "not_selected_by_count_limit": max(0, eligible_count - len(frame)),
+        "max_zone_area_m2": config["max_zone_area_m2"],
+        "max_zone_count": config["max_zone_count"],
+        "bedrock_cells": int((mask & bedrock).sum()),
+        "min_zone_area_m2": config["min_zone_area_m2"],
+        "search_m": second.get("search_m", 250),
+        "min_types": second.get("min_types", 2),
+        "evidence_method": METHOD,
+    }
+    return frame, evidence, diagnostics, support

@@ -1143,7 +1143,7 @@ def _decide_once(
             "执行修正后，未获批准不可声称已修正；modificationReview.approvedSuggestionIds才是用户批准的建议范围。其余项保留。"
             "modificationReview.scope=all_groups_with_representative_ids时，ID仅为代表；approvedCount及groups.approvedCount才是完整批准数量，不能以样本数代替总数。"
             "其他阶段edits=[]；执行后读取当次结果及复核统计，说明实际改变、未修改与下一步。"
-            "分段入口使用upstreamVersions，不把旧图当新成果。A/B仅表示本案例证据组合下的优先核查等级，不是矿化概率。"
+            "分段入口使用upstreamVersions，不把旧图当新成果。远景区2.0仅对修正后资料圈区，统一P001编号，不分A/B；历史任务以保存的证据版本为准，目标不是矿化概率。"
         )
     if getattr(workflow, "workflow_type", None) == "geology_generic":
         instruction = instruction.replace(
@@ -1254,14 +1254,14 @@ def _decide_once(
             "只输出JSON {decision,edits:[]}；decision含problem,findings(字符串数组),judgement,"
             "uncertainties(数组),nextAction,algorithmReason,evidenceRefs[{kind,id}],resultSummary。"
             "nextAction为finish，引用只选availableEvidence，至少引用适用知识和本轮最新statistics。"
-            "用简短中文概括实际检查、实际处置、复查与远景对比；不要逐对象重述。"
+            "用简短中文概括实际检查、实际处置、复查与远景区成果；不要逐对象重述。"
             "说明大模型与算子的实际分工：资料理解、执行方案和结果综合由大模型承担，测量、修正及复核由对应算子完成。"
             "modelDispatchRecorded=true时可写大模型组织并调度算子完成本任务；否则写智能体结合算子成果完成综合分析。"
             "直接说明本次采用的检查方法与实际成果，不在用户报告中使用确定性规则、非模型逐项审阅等内部实现措辞。"
             "dispositionAuthorization=true表示用户在资料确认时授权自动执行无争议规则建议；"
             "执行范围以实际changes和modificationReview为准，不再请求逐项批准。"
             "待裁定、例外和冲突对象保留，不能描述为已经修正。"
-            "规则登记状态以ruleRegistration为准，published是项目正式发布规则；不能因冻结修订的内部trialBinding称其为试用或草稿，也不能称为国家标准。A/B表示优先核查证据等级，不是矿化概率。"
+            "规则登记状态以ruleRegistration为准，published是项目正式发布规则；不能因冻结修订的内部trialBinding称其为试用或草稿，也不能称为国家标准。远景区schema_version=2时只报告修正后统一目标，不分A/B、不做修正前找矿对比；历史证据按原版本说明。远景线索不是矿化概率。"
             "依据最新完整统计报告数量，reference_only没有明细不表示没有问题；"
             "历史问题数不等于复查剩余问题数。missingRoles表示缺资料。"
             "verifiedReportFacts是平台已核验数字；resultSummary须明确初检数、执行处置数、复查剩余数。"
@@ -1804,6 +1804,8 @@ def _row_summary(row) -> str:
             + "平方米；平均植被指数变化"
             + _number(row, "mean_change")
         )
+    if row.get("schema_version") in {2, "2"} and "zone_count" in row:
+        return f"修正后圈定{row['zone_count']}处优先核查远景区，总面积{_number(row, 'area_km2')}平方千米"
     if "before_count" in row and "after_count" in row:
         # Before/after statistics of prospect grades or mapping units.
         name = (

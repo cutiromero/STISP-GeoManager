@@ -1,4 +1,4 @@
-"""Real spatial calculations, approval binding and independent grade expectations."""
+"""Real spatial calculations, approval binding and independent prospect evidence."""
 
 import csv
 import io
@@ -279,6 +279,7 @@ def fixture(tmp_path):
             "buffer_intersection_other_m": 100,
         },
         "P-02": {
+            "evidence_method": "weighted_neighborhood_presence_v2",
             "search_m": 100,
             "min_types": 2,
             "alteration_types": [
@@ -568,7 +569,10 @@ def test_operator_packages_are_deterministic_and_declare_clean_outputs():
         assert package == builder(identifier)
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
             manifest = validate_manifest(yaml.safe_load(archive.read("operator.yaml")))
-            assert manifest["version"] == "1.1.2" and manifest["deterministic"]
+            assert (
+                manifest["version"] == ("2.0.0" if suffix == "prospect" else "1.1.2")
+                and manifest["deterministic"]
+            )
             assert {
                 "main.py",
                 "multi_apply.py",
@@ -811,7 +815,7 @@ def test_approval_rejects_substantive_inspection_changes(tmp_path, field):
 
 
 @pytest.mark.parametrize("geographic", [False, True])
-def test_relations_and_prospect_have_real_grades_mask_and_matching_evidence(
+def test_relations_and_corrected_only_prospect_have_mask_and_matching_evidence(
     tmp_path, geographic
 ):
     initial, _ = fixture(tmp_path)
@@ -846,8 +850,16 @@ def test_relations_and_prospect_have_real_grades_mask_and_matching_evidence(
     )
     load("prospect")(prospect)
     zones = gpd.read_file(prospect.output_path("after_zones.gpkg"))
-    assert len(zones) > 0 and set(zones.grade) == {"B"}
-    assert set(zones.columns) == {"zone_id", "grade", "area_km2", "geometry"}
+    assert len(zones) > 0 and zones.zone_id.str.startswith("P").all()
+    assert set(zones.columns) == {
+        "zone_id",
+        "priority_rank",
+        "area_km2",
+        "explanation",
+        "evidence_json",
+        "geometry",
+    }
+    assert not prospect.output_path("before_zones.gpkg").exists()
     assert zones.geometry.difference(rect(0, 0, 1000, 1000)).area.sum() < 0.001
     for row in read(prospect.output_path("evidence.csv")):
         measured = json.loads(row["conditions_json"])
@@ -958,9 +970,8 @@ def test_downweight_really_affects_evidence_without_removing_geometry(tmp_path):
         initial.parameters,
     )
     load("prospect")(prospect)
-    before = gpd.read_file(prospect.output_path("before_zones.gpkg"))
-    assert not prospect.output_path("after_zones.gpkg").exists()
-    assert before.geometry.area.sum() > 0
+    assert not prospect.output_path("before_zones.gpkg").exists()
+    assert prospect.output_path("after_zones.gpkg").exists()
     for row in read(prospect.output_path("evidence.csv")):
         if row["phase"] == "after":
             assert json.loads(row["conditions_json"])["min_weighted_type_count"] >= 2

@@ -306,3 +306,19 @@
 .geology-review-local-controls button:hover {
   background: #e8eef6;
 }
+
+.prospect-confidence-legend {
+  max-width: 380px;
+  margin: 16px 0;
+}
+.prospect-confidence-legend > i {
+  display: block;
+  height: 14px;
+  border-radius: 7px;
+  margin-top: 8px;
+}
+.prospect-confidence-legend > div {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}

@@ -395,3 +395,26 @@ def test_preview_uses_running_environment_without_activation_variables(
     assert environment["CONDA_PREFIX"]
     assert environment["GDAL_PAM_ENABLED"] == "NO"
     assert environment["PYTHONUTF8"] == "1"
+
+
+def test_prospect_confidence_uses_continuous_blue_yellow_red_and_preserves_source(
+    output,
+):
+    replace_raster(output, width=101, height=20)
+    path = source_path(output)
+    with rasterio.open(path, "r+") as dst:
+        values = np.broadcast_to(
+            np.linspace(0, 1, 101, dtype="float32"), (20, 101)
+        ).copy()
+        values[0, :] = -9999
+        dst.write(values, 1)
+    output.key = "prospect_support"
+    output.checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+    original = path.read_bytes()
+    png, metadata = map_preview.ensure_map_preview(output)
+    pixels = np.asarray(Image.open(io.BytesIO(png)))
+    assert metadata["colorRamp"][0]["color"] == "#2166acff"
+    assert metadata["colorRamp"][-1]["color"] == "#d73027ff"
+    assert len(set(map(tuple, pixels.reshape(-1, 4)))) > 50
+    assert pixels[..., 3].min() == 0
+    assert path.read_bytes() == original

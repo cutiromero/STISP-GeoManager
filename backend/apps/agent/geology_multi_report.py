@@ -275,17 +275,32 @@ def render_report(workflow, tasks):
         )
     if "prospect" in stages:
         rows = actual_table(stages["prospect"], "statistics")
-        lines.extend(
-            [
-                "| 优先核查等级 | 修改前数量 | 修改后数量 | 修改前面积（km²） | 修改后面积（km²） |",
-                "| --- | ---: | ---: | ---: | ---: |",
-            ]
-        )
-        for row in rows:
-            lines.append(
-                f"| {_cell(row['grade'])} | {_cell(row['before_count'])} | {_cell(row['after_count'])} | {float(row['before_area_km2']):.4f} | {float(row['after_area_km2']):.4f} |"
+        if len(rows) == 1 and rows[0].get("schema_version") == "2":
+            row = rows[0]
+            lines.extend(
+                [
+                    "修正后优先核查远景区："
+                    + str(int(row["zone_count"]))
+                    + "处，总面积"
+                    + f"{float(row['area_km2']):.4f}"
+                    + "平方公里。",
+                    "",
+                    "依据修正后资料的邻域矿物组合、构造及有利岩性圈区；逐区条件见实测依据表，目标表示优先调查线索。",
+                    "",
+                ]
             )
-        lines.append("")
+        else:
+            lines.extend(
+                [
+                    "| 优先核查等级 | 修改前数量 | 修改后数量 | 修改前面积（km²） | 修改后面积（km²） |",
+                    "| --- | ---: | ---: | ---: | ---: |",
+                ]
+            )
+            for row in rows:
+                lines.append(
+                    f"| {_cell(row['grade'])} | {_cell(row['before_count'])} | {_cell(row['after_count'])} | {float(row['before_area_km2']):.4f} | {float(row['after_area_km2']):.4f} |"
+                )
+            lines.append("")
 
     lines.extend(
         [

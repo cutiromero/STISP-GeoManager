@@ -24,7 +24,7 @@ from apps.core.storage import StoragePathError, app_path
 from .packages import ComputeError, checksum, checksum_scope
 
 
-RENDER_VERSION = 3
+RENDER_VERSION = 4
 MAX_PREVIEW_SIDE = 1024
 MAX_MEMORY_CACHE_ENTRIES = 8
 MAX_MAP_LATITUDE = 85.051129
@@ -37,6 +37,17 @@ _CACHE_LOCK = threading.Lock()
 
 
 def _rules(output) -> dict:
+    if output.key == "prospect_support":
+        return {
+            "band": 1,
+            "palette": "prospect-confidence",
+            "range": [0, 1],
+            "colorRamp": [
+                {"value": 0, "label": "低", "color": "#2166acff"},
+                {"value": 0.5, "label": "中", "color": "#ffff80ff"},
+                {"value": 1, "label": "高", "color": "#d73027ff"},
+            ],
+        }
     mineral, _, kind = output.key.rpartition("_")
     if mineral in {
         "hematite",
@@ -260,6 +271,7 @@ def ensure_map_preview(output) -> tuple[bytes, dict]:
             "label": output.label,
             **metadata,
             **({"colorTable": rules["colorTable"]} if "colorTable" in rules else {}),
+            **({"colorRamp": rules["colorRamp"]} if "colorRamp" in rules else {}),
         }
     except (OSError, StoragePathError) as exc:
         raise ComputeError("地图预览文件暂不可用，请稍后重试", 503) from exc

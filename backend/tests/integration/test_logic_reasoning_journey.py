@@ -56,6 +56,13 @@ def register_rules(env, context):
             row["params_json"] = json.dumps({"min_area_m2": 1000})
         if row["rule_id"] == "S-01":
             row["params_json"] = json.dumps({"cover_units": ["O"], "cover_ratio": 0.8})
+        if row["rule_id"] == "S-03":
+            # This journey exercises an undisputed cover-line exclusion. Keep
+            # nearby mapped structures inside the isolation radius so S-03 does
+            # not also require a conflicting manual review for this same line.
+            row["params_json"] = json.dumps(
+                {**json.loads(row["params_json"]), "isolation_m": 500}
+            )
         if row["rule_id"] == "P-01":
             row["params_json"] = json.dumps(
                 {**json.loads(row["params_json"]), "buffer_secondary_m": 300}
@@ -367,7 +374,7 @@ def test_system_data_to_clean_results_and_new_conversation_reuse(
     assert changes and all(row["issue_id"] for row in changes)
     assert any(
         row["element"] == "structure" and row["action"] == "exclude" for row in changes
-    )
+    ), [(row["feature_id"], row["element"], row["action"]) for row in changes]
     assert any(
         row["element"] == "alteration" and row["action"] == "exclude" for row in changes
     )
@@ -397,16 +404,23 @@ def test_system_data_to_clean_results_and_new_conversation_reuse(
     zones = prospect_task.outputs.filter(key="after_zones").first()
     if zones is not None:
         frame = gpd.read_file(app_path(zones.path))
-        assert "grade" in frame.columns and frame.geometry.is_valid.all()
+        assert "grade" not in frame.columns and frame.geometry.is_valid.all()
         assert set(frame.geom_type) <= {"Polygon", "MultiPolygon"}
-        assert set(frame.columns) == {"zone_id", "grade", "area_km2", "geometry"}
+        assert set(frame.columns) == {
+            "zone_id",
+            "priority_rank",
+            "area_km2",
+            "explanation",
+            "evidence_json",
+            "geometry",
+        }
         assert frame.geometry.area.sum() == pytest.approx(
             frame.geometry.union_all().area, rel=1e-6
         )
     else:
         statistics = read(app_path(prospect_task.outputs.get(key="statistics").path))
-        assert statistics and all(int(row["after_count"]) == 0 for row in statistics)
-        assert all(float(row["after_area_km2"]) == 0 for row in statistics)
+        assert statistics and all(int(row["zone_count"]) == 0 for row in statistics)
+        assert all(float(row["area_km2"]) == 0 for row in statistics)
         evidence = read(app_path(prospect_task.outputs.get(key="evidence").path))
         assert all(row["phase"] != "after" for row in evidence)
     saved = LogicConfiguration.objects.get(
