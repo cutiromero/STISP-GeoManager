@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "identifier": "geology-prospect-regions-candidate",
+  "name": "地质综合远景区圈定（候选）",
+  "version": "0.1.0-candidate",
+  "description": "仅对修复后资料，由强证据核心向相连的构造—蚀变—岩性支持外围圈区。方案尚待选择，不替换正式算子。",
+  "author": "STISP",
+  "runtime": "python-geospatial-v1",
+  "agent": {
+    "enabled": false
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
+  "inputs": [
+    {
+      "key": "lithology",
+      "label": "岩性图",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "faults",
+      "label": "构造图",
+      "kind": "vector",
+      "geometryTypes": [
+        "LineString",
+        "MultiLineString"
+      ]
+    },
+    {
+      "key": "coverage",
+      "label": "研究区制图范围",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "rules",
+      "label": "显式绑定的地质规则及版本",
+      "kind": "table"
+    },
+    {
+      "key": "hematite",
+      "label": "赤铁矿遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "chlorite",
+      "label": "绿泥石遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "hydromica",
+      "label": "水云母遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "calcite",
+      "label": "方解石遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "dolomite",
+      "label": "白云石遥感矿物识别结果",
+      "kind": "raster",
+      "minBands": 1
+    },
+    {
+      "key": "intersections",
+      "label": "当前构造交汇点",
+      "kind": "vector",
+      "geometryTypes": [
+        "Point",
+        "MultiPoint"
+      ],
+      "required": false
+    },
+    {
+      "key": "hematite_weight",
+      "label": "赤铁矿遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "chlorite_weight",
+      "label": "绿泥石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "hydromica_weight",
+      "label": "水云母遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "calcite_weight",
+      "label": "方解石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "dolomite_weight",
+      "label": "白云石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    }
+  ],
+  "parameters": [
+    {
+      "key": "profile",
+      "label": "候选尺度",
+      "type": "enum",
+      "default": "focused",
+      "choices": [
+        "focused",
+        "balanced",
+        "regional"
+      ]
+    },
+    {
+      "key": "working_epsg",
+      "label": "米制投影EPSG",
+      "type": "integer",
+      "default": 32646,
+      "min": 1,
+      "max": 999999
+    },
+    {
+      "key": "segment",
+      "label": "资料范围",
+      "type": "enum",
+      "default": "all",
+      "choices": [
+        "all"
+      ]
+    },
+    {
+      "key": "grid_resolution_m",
+      "label": "分析网格（米）",
+      "type": "number",
+      "default": 50,
+      "min": 25,
+      "max": 200
+    },
+    {
+      "key": "min_zone_area_km2",
+      "label": "最小目标面积（平方公里）",
+      "type": "number",
+      "default": 1.0,
+      "min": 0.01,
+      "max": 30
+    },
+    {
+      "key": "min_core_area_km2",
+      "label": "最小核心面积（平方公里）",
+      "type": "number",
+      "default": 0.05,
+      "min": 0.001,
+      "max": 5
+    },
+    {
+      "key": "core_score_min",
+      "label": "核心支持门槛",
+      "type": "number",
+      "default": 0.62,
+      "min": 0,
+      "max": 1
+    },
+    {
+      "key": "region_seed_spacing_m",
+      "label": "大区域锚点间距（米）",
+      "type": "number",
+      "default": 2500,
+      "min": 250,
+      "max": 10000
+    },
+    {
+      "key": "max_geodesic_reach_m",
+      "label": "大区域路径代价上限（米）",
+      "type": "number",
+      "default": 3500,
+      "min": 500,
+      "max": 10000
+    },
+    {
+      "key": "alteration_density_scale",
+      "label": "蚀变覆盖尺度",
+      "type": "number",
+      "default": 0.08,
+      "min": 0.001,
+      "max": 1
+    },
+    {
+      "key": "peripheral_min_weighted_types",
+      "label": "外围最低加权矿物类型数",
+      "type": "number",
+      "default": 1.5,
+      "min": 1,
+      "max": 5
+    },
+    {
+      "key": "peripheral_min_density",
+      "label": "外围最低平滑加权覆盖比例",
+      "type": "number",
+      "default": 0.002,
+      "min": 0,
+      "max": 1
+    }
+  ],
+  "outputs": [
+    {
+      "key": "after_zones",
+      "label": "修复后候选远景区",
+      "kind": "vector",
+      "file": "after_zones.gpkg",
+      "required": false
+    },
+    {
+      "key": "prospect_support",
+      "label": "候选综合支持度",
+      "kind": "raster",
+      "file": "prospect_support.tif"
+    },
+    {
+      "key": "strong_core",
+      "label": "强证据核心",
+      "kind": "raster",
+      "file": "strong_core.tif"
+    },
+    {
+      "key": "evidence",
+      "label": "逐区依据",
+      "kind": "table",
+      "file": "evidence.csv"
+    },
+    {
+      "key": "statistics",
+      "label": "候选统计",
+      "kind": "table",
+      "file": "statistics.csv"
+    }
+  ],
+  "timeoutSeconds": 900,
+  "deterministic": true
+}
