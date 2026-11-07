@@ -66,6 +66,11 @@ def prepare(run, user, policy, guard, *, on_thinking=None):
     from .logic_configuration import matching_configuration
 
     reusable = matching_configuration(run, uploads)
+    from .config import registry
+
+    reuse_without_model = bool(
+        reusable and registry()[run.model].model_id.casefold().startswith("mock")
+    )
     suggested = (
         {
             "items": [
@@ -84,7 +89,7 @@ def prepare(run, user, policy, guard, *, on_thinking=None):
                 for item in uploads
             ]
         }
-        if reusable
+        if reuse_without_model
         else recognize_roles(
             user,
             run.project_tag_id,
@@ -92,8 +97,20 @@ def prepare(run, user, policy, guard, *, on_thinking=None):
             run.model,
             source_run=run,
             on_thinking=on_thinking,
+            previous_roles=reusable["roles"] if reusable else None,
         )
     )
+    if (
+        reusable
+        and not reuse_without_model
+        and {
+            item["role"]: item["resourceId"]
+            for item in suggested["items"]
+            if item["role"]
+        }
+        != reusable["roles"]
+    ):
+        reusable = None
     suggestions = {item["resourceId"]: item for item in suggested["items"]}
     questions, answers = [], {}
     for index, upload in enumerate(uploads, 1):
@@ -140,6 +157,15 @@ def prepare(run, user, policy, guard, *, on_thinking=None):
         "_manualRoleReview": run.research_intent.get("_manualRoleReview", False),
         "_combinedInputReview": run.research_intent.get("_combinedInputReview", False),
         "_workflowAttempt": run.research_intent.get("_workflowAttempt", 0),
+        "_roleSource": "saved"
+        if reuse_without_model
+        else suggested.get("source", "rules"),
+        "_roleReasons": {
+            str(item["resourceId"]): item["reason"] for item in suggested["items"]
+        },
+        "_roleSuggested": {
+            str(item["resourceId"]): item["role"] for item in suggested["items"]
+        },
     }
     intent["revision"] = _state_hash(intent)
     guard()
@@ -400,6 +426,16 @@ def answer(source, user, policy, answers, text):
                 "sourceNote": "系统数据引用"
                 if uploads_by_id[identity].source == "catalog"
                 else "本次上传资料",
+                "roleSource": "user"
+                if str(identity) in intent.get("_roleSuggested", {})
+                and intent["_roleSuggested"][str(identity)] != role
+                else intent.get("_roleSource", "rules"),
+                "roleReason": "按您本次选择确认为" + LABELS[role]
+                if str(identity) in intent.get("_roleSuggested", {})
+                and intent["_roleSuggested"][str(identity)] != role
+                else intent.get("_roleReasons", {}).get(
+                    str(identity), "按您确认的资料角色执行"
+                ),
             }
             for role, identity in inputs.items()
         ]

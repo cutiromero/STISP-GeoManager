@@ -2833,7 +2833,7 @@ export const getAgentWorkflow = <ThrowOnError extends boolean = false>(options: 
 /**
  * 取消科研工作流
  *
- * 请求在安全边界停止当前用户的科研工作流。可选replacePlanHash仅用于重新生成初始计划，后端原子核对相同计划摘要、等待初始批准、尚未授权执行且没有计算任务；过期或已开始时409且不取消任务。
+ * 普通取消原子停止活动工作流并立即返回cancelled轻量card；已经结束的任务幂等保留原状态，停止后续调度；仅对真实绑定且同属本人及项目的排队算子取消、运行算子请求终止，尚未开始的本任务自动入库终止，资源释放由计算worker收尾。已完成成果保留，晚到响应不能重启任务。可选replacePlanHash仅用于重新生成初始计划，后端原子核对相同计划摘要、等待初始批准、尚未授权执行且没有计算任务；过期或已开始时409且不取消任务。
  */
 export const cancelAgentWorkflow = <ThrowOnError extends boolean = false>(options: Options<CancelAgentWorkflowData, ThrowOnError>): RequestResult<CancelAgentWorkflowResponses, CancelAgentWorkflowErrors, ThrowOnError> => (options.client ?? client).post<CancelAgentWorkflowResponses, CancelAgentWorkflowErrors, ThrowOnError>({
     security: [{

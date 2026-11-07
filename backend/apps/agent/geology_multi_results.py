@@ -331,6 +331,7 @@ def public_plan(plan):
                 "modificationReview",
                 "previousAnalysis",
                 "retainedReviewHistory",
+                "reportInterpretationHistory",
             }
         },
         "stages": [public_stage(stage) for stage in plan.get("stages", [])],

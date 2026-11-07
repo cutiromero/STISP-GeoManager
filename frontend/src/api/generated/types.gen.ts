@@ -1464,6 +1464,14 @@ export type AgentResearchIntent = {
          * 模拟资料或真实来源说明
          */
         sourceNote: string;
+        /**
+         * 本次资料角色判断的具体依据；模型失败时如实说明来源
+         */
+        roleReason?: string;
+        /**
+         * 角色判断来源，分别为本次模型判断、沿用确认、平台建议或用户调整
+         */
+        roleSource?: 'model' | 'saved' | 'rules' | 'user';
     }>;
     /**
      * 关联真实工作流，尚未创建时为空

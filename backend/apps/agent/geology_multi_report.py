@@ -88,7 +88,9 @@ def render_report(workflow, tasks):
         else "用户批准"
     )
     lines = [
-        "# 海德乌拉综合检查报告",
+        "# 地质综合检查报告"
+        if getattr(workflow, "workflow_type", None) == "geology_generic"
+        else "# 海德乌拉综合检查报告",
         "",
         "研究区资料",
         "",
@@ -100,6 +102,28 @@ def render_report(workflow, tasks):
         "",
     ]
     final = workflow.plan.get("finalDecision", {})
+    dispatch = next(
+        (
+            stage.get("decision", {})
+            for stage in workflow.plan["stages"]
+            if stage.get("name") == "check"
+        ),
+        {},
+    )
+    if dispatch.get("modelMode") == "real":
+        lines.extend(
+            [
+                "处理方法：大模型依据资料与知识组织执行方案并调度算子，算子完成测量、修正与复核，大模型综合实际成果形成判断。",
+                "",
+            ]
+        )
+    elif final.get("modelMode") == "real":
+        lines.extend(
+            [
+                "处理方法：智能体结合各阶段算子成果，由大模型综合实际证据形成分析与建议。",
+                "",
+            ]
+        )
     _decision(
         lines,
         {

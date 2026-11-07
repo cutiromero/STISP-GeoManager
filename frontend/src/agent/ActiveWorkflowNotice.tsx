@@ -89,8 +89,12 @@ export default function ActiveWorkflowNotice({
             part: "steps",
           });
       if (currentProject.current !== requestedProject) return;
-      if (cancel) setAttempt((old) => old + 1);
-      else setDetail(result);
+      if (cancel) {
+        setItem((old) => (old?.id === selected.id ? null : old));
+        setParked((old) => old.filter((entry) => entry.id !== selected.id));
+        setDetail(undefined);
+        setAttempt((old) => old + 1);
+      } else setDetail(result);
     } catch (reason) {
       if (currentProject.current === requestedProject)
         setError(reason instanceof Error ? reason.message : "操作失败");
@@ -150,7 +154,7 @@ export default function ActiveWorkflowNotice({
                   </Button>
                   <Popconfirm
                     title="确定取消该任务？"
-                    description="已完成的计算结果会保留，运行中的任务将在安全边界停止。"
+                    description="立即停止后续处理，已提交算子同步请求终止；已有成果保留。"
                     okText="确认取消"
                     cancelText="保留任务"
                     onConfirm={() => operate(selected, true)}

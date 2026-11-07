@@ -92,7 +92,14 @@ def validate_roles(raw, uploads):
 
 
 def recognize_roles(
-    user, project, batch_id, model_id, *, source_run=None, on_thinking=None
+    user,
+    project,
+    batch_id,
+    model_id,
+    *,
+    source_run=None,
+    on_thinking=None,
+    previous_roles=None,
 ):
     require_upload_access(user, project)
     policy = require_access(user, "agent", model_id)
@@ -116,7 +123,14 @@ def recognize_roles(
     model = registry().get(model_id)
     if model is None:
         raise ComputeError("模型不可用", 403)
-    thinking = bool(policy.get("_thinking", policy["thinkingEnabled"] and model.qwen))
+    requested_settings = (policy.get("_thinking"), policy["reasoningEffort"])
+    policy = {
+        **policy,
+        "reasoningEffort": "low",
+        "maxOutputTokens": min(policy["maxOutputTokens"], 4096),
+        "maxRunSeconds": min(policy["maxRunSeconds"], 90),
+    }
+    thinking = bool(policy["thinkingEnabled"] and model.qwen)
     deadline = time.monotonic() + policy["maxRunSeconds"]
     snapshots = {
         str(upload.id): (upload.resource_id, upload.resource.updated_at)
@@ -140,6 +154,17 @@ def recognize_roles(
             if current.model != model_id or current.project_tag_id != project:
                 raise PermissionDenied("资料角色识别模型或项目与来源任务不一致")
             fresh_policy = run_model_policy(current, actor, fresh_policy)
+        if (
+            fresh_policy.get("_thinking"),
+            fresh_policy["reasoningEffort"],
+        ) != requested_settings:
+            raise PermissionDenied("模型思考设置已变化，请重新识别资料角色")
+        fresh_policy = {
+            **fresh_policy,
+            "reasoningEffort": "low",
+            "maxOutputTokens": min(fresh_policy["maxOutputTokens"], 4096),
+            "maxRunSeconds": min(fresh_policy["maxRunSeconds"], 90),
+        }
         current_uploads = list(batch_uploads(actor, batch_id))
         if (
             any(upload.workflow_id for upload in current_uploads)
@@ -157,12 +182,7 @@ def recognize_roles(
                         actor, fresh_policy, upload.resource_id, current
                     )
         if (
-            bool(
-                fresh_policy.get(
-                    "_thinking", fresh_policy["thinkingEnabled"] and model.qwen
-                )
-            )
-            != thinking
+            bool(fresh_policy["thinkingEnabled"] and model.qwen) != thinking
             or fresh_policy["reasoningEffort"] != policy["reasoningEffort"]
             or any(
                 fresh_policy[key] < policy[key]
@@ -182,6 +202,7 @@ def recognize_roles(
     if not model.model_id.casefold().startswith("mock"):
         payload = {
             "roles": LABELS,
+            "previousRoles": previous_roles or {},
             "items": [
                 {
                     "uploadId": str(upload.id),
@@ -193,7 +214,11 @@ def recognize_roles(
             ],
         }
         messages = [
-            {"role": "system", "content": INSTRUCTION},
+            {
+                "role": "system",
+                "content": INSTRUCTION
+                + "进行简短判断；previousRoles只是上次确认的参考，本次仍须结合实际资料逐份确认角色。",
+            },
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ]
         try:

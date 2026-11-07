@@ -1629,21 +1629,10 @@ def workflow_cancel(request, workflow_id):
         AgentWorkflow.objects, pk=workflow_id, owner=request.user
     )
     require_access(request.user, "agent", workflow.model)
-    AgentWorkflow.objects.filter(pk=workflow.id, status__in=WORKFLOW_ACTIVE).update(
-        cancel_requested=True, detail="正在停止工作流", updated_at=timezone.now()
-    )
-    # A queued item is not claimable after cancellation, so close it here
-    # instead of leaving an invisible forever-queued record.
-    AgentWorkflow.objects.filter(
-        pk=workflow.id, status__in=["queued", "waiting_approval", "paused"]
-    ).update(
-        status="cancelled",
-        pause_requested=False,
-        detail="已取消后续处理",
-        updated_at=timezone.now(),
-    )
-    workflow.refresh_from_db()
-    return JsonResponse(workflow_json(workflow))
+    from .workflow_cancellation import stop_workflow
+
+    workflow = stop_workflow(workflow.id, request.user.id)
+    return JsonResponse(workflow_json(workflow, view="card"))
 
 
 def admin_json(user):

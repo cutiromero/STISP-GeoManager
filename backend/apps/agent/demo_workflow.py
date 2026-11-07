@@ -73,6 +73,7 @@ def _automatic_stage(workflow, stage):
         workflow.workflow_type in MULTI_FAMILY
         and workflow.plan.get("executionPolicy")
         in {"measured_geology_v1", "rule_geology_v2"}
+        and not (workflow.plan.get("modelPlanning") and stage.get("name") == "check")
         and (
             (
                 stage.get("name") in AUTOMATIC_GEOLOGY_STAGES
@@ -430,7 +431,10 @@ def prepare_demo(workflow, user, p) -> None:
     required_steps = len(graph)
     if workflow.workflow_type in MULTI_FAMILY:
         workflow.plan["executionPolicy"] = "rule_geology_v2"
-        decisions_required = 1
+        workflow.plan["modelPlanning"] = (
+            not registry()[workflow.model].model_id.casefold().startswith("mock")
+        )
+        decisions_required = 2 if workflow.plan["modelPlanning"] else 1
     else:
         decisions_required = required_steps + (
             2 if workflow.workflow_type == "geology_map_review" else 1
@@ -1379,6 +1383,27 @@ def advance_demo(workflow_id) -> None:
                 )
                 return
             if not stage.get("decision"):
+                planning = (
+                    workflow.plan.get("modelPlanning") and stage.get("name") == "check"
+                )
+                model_policy = (
+                    {
+                        **p,
+                        "reasoningEffort": "low",
+                        "maxOutputTokens": min(p["maxOutputTokens"], 4096),
+                        "maxRunSeconds": min(p["maxRunSeconds"], 90),
+                    }
+                    if planning
+                    else {
+                        **p,
+                        "reasoningEffort": "medium",
+                        "maxOutputTokens": min(p["maxOutputTokens"], 6144),
+                        "maxRunSeconds": min(p["maxRunSeconds"], 120),
+                    }
+                    if workflow.plan.get("executionPolicy") == "rule_geology_v2"
+                    and stage["identifier"] == "finish"
+                    else p
+                )
                 recovering_response = _has_model_progress(stage)
                 if (
                     not recovering_response
@@ -1388,7 +1413,10 @@ def advance_demo(workflow_id) -> None:
                         workflow, stage, _minimum_model_requests(workflow, stage)
                     )
                     return
-                deadline, heartbeat_at = time.monotonic() + p["maxRunSeconds"], [0.0]
+                deadline, heartbeat_at = (
+                    time.monotonic() + model_policy["maxRunSeconds"],
+                    [0.0],
+                )
 
                 def check_stream_authorization():
                     check_pause(workflow)
@@ -1409,9 +1437,9 @@ def advance_demo(workflow_id) -> None:
                 guard = ModelStreamGuard(check_stream_authorization, deadline)
                 activity = WorkflowModelActivity(
                     workflow,
-                    stage_title(workflow, stage),
+                    "规划算子执行方案" if planning else stage_title(workflow, stage),
                     registry()[workflow.model],
-                    p,
+                    model_policy,
                     guard,
                 )
 
@@ -1568,7 +1596,7 @@ def advance_demo(workflow_id) -> None:
                     decision, edits = decide(
                         workflow,
                         user,
-                        p,
+                        model_policy,
                         stage,
                         results,
                         guard,

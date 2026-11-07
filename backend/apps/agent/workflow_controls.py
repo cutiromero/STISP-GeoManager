@@ -25,6 +25,21 @@ def apply_control_state(workflow, current, *, acknowledge_pause=False):
     workflow.pause_requested = current.pause_requested
     workflow.paused_from = current.paused_from
     if current.cancel_requested or current.status == "cancelled":
+        for name in (
+            "plan",
+            "plan_hash",
+            "resource_ids",
+            "evidence",
+            "current_step",
+            "execute_operators",
+            "operator_steps",
+            "iteration",
+            "result_ids",
+            "result_resource_ids",
+            "algorithm_version_id",
+            "parameters",
+        ):
+            setattr(workflow, name, getattr(current, name))
         workflow.status, workflow.detail = "cancelled", "已停止工作流后续处理"
         workflow.pause_requested = False
         return

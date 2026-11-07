@@ -139,6 +139,9 @@ def reopen(workflow, user, policy, expected):
         "resultResourceIds": list(workflow.result_resource_ids),
         "resultIds": list(workflow.result_ids),
         "finalDecision": deepcopy(workflow.plan.get("finalDecision")),
+        "reportInterpretationRevision": workflow.plan.get(
+            "reportInterpretationRevision"
+        ),
     }
     history.append(previous)
     if (
@@ -169,6 +172,7 @@ def reopen(workflow, user, policy, expected):
         }
         stages[i]["status"] = "needs_review" if i == index else "pending"
     workflow.plan.pop("finalDecision", None)
+    workflow.plan.pop("reportInterpretationRevision", None)
     workflow.plan.pop("model_changes", None)
     workflow.plan.pop("finalStage", None)
     workflow.plan.update(

@@ -438,6 +438,27 @@ def decision_payload(workflow, stage, context, results) -> dict:
         payload["dispositionAuthorization"] = workflow.plan.get(
             "inputExecutionAuthorization", {}
         ).get("applyRuleSuggestions", False)
+        if stage["name"] == "check" and workflow.plan.get("modelPlanning"):
+            payload["planningOnly"] = True
+            payload["operatorPlan"] = [
+                {
+                    "stage": item["name"],
+                    "identifier": item["identifier"],
+                    "name": workflow.plan["algorithms"]
+                    .get(item["identifier"], {})
+                    .get("name"),
+                    "bindings": item.get("bindings", {}),
+                }
+                for item in workflow.plan["stages"]
+            ]
+            payload["knowledge"] = [
+                {
+                    key: entry[key]
+                    for key in ("id", "revision", "title", "conditions", "exceptions")
+                    if key in entry
+                }
+                for entry in workflow.evidence
+            ]
     feedback = _human_feedback(workflow)
     if feedback:
         payload["humanReviewFeedback"] = feedback
@@ -448,6 +469,22 @@ def decision_payload(workflow, stage, context, results) -> dict:
         from .rule_dispositions import report_payload
 
         payload = report_payload(payload, workflow)
+        from apps.knowledge.models import KnowledgeEntry
+
+        payload["ruleRegistration"] = list(
+            KnowledgeEntry.objects.filter(
+                pk__in=[
+                    entry["id"]
+                    for entry in workflow.evidence
+                    if entry.get("trialBinding")
+                ]
+            ).values("id", "status")
+        )
+        payload["modelDispatchRecorded"] = any(
+            item.get("name") == "check"
+            and item.get("decision", {}).get("modelMode") == "real"
+            for item in workflow.plan["stages"]
+        )
     return payload
 
 
@@ -715,6 +752,49 @@ def _validate_response(
         require_knowledge=bool(workflow.evidence)
         and not (multi_edit_response and value["edits"]),
     )
+    if (
+        workflow.plan.get("executionPolicy") == "rule_geology_v2"
+        and stage["identifier"] == "finish"
+    ):
+        report_text = json.dumps(
+            {
+                key: decision.get(key)
+                for key in (
+                    "judgement",
+                    "resultSummary",
+                    "findings",
+                    "uncertainties",
+                    "algorithmReason",
+                )
+            },
+            ensure_ascii=False,
+        )
+        if any(
+            word in report_text
+            for word in ("确定性规则", "非模型逐项审阅", "非模型逐项")
+        ):
+            raise ComputeError(
+                "请直接说明大模型与算子的实际分工、方法和成果，不使用内部实现措辞"
+            )
+        if (
+            model_payload is not None
+            and not model_payload.get("modelDispatchRecorded")
+            and re.search(r"大模型[^。\n]{0,40}调度", report_text)
+        ):
+            raise ComputeError(
+                "本次没有模型执行规划记录，请说明大模型结合实际算子成果作综合分析"
+            )
+        registrations = (model_payload or {}).get("ruleRegistration", [])
+        if (
+            registrations
+            and all(entry.get("status") == "published" for entry in registrations)
+            and any(
+                word in report_text for word in ("试用规则", "草稿规则", "试用或草稿")
+            )
+        ):
+            raise ComputeError(
+                "本次规则已正式发布，请按ruleRegistration说明项目规则状态"
+            )
     latest = next(
         (item for item in reversed(workflow.plan["stages"]) if item.get("taskId")), None
     )
@@ -1075,6 +1155,14 @@ def _decide_once(
         )
     if getattr(workflow, "workflow_type", None) in MULTI_FAMILY:
         instruction += "报告使用当前正式登记的数据及算子名称，不使用测试或演示阶段称呼；模拟识别输入仍须如实标明，不能改写为野外实测。"
+    if workflow.plan.get("modelPlanning") and stage["name"] == "check":
+        instruction += (
+            "当前是开始计算前的执行规划。结合用户目标、真实资料角色、字段及operatorPlan，"
+            "简短思考后说明为何先调用当前检查算子，以及后续修正、复核和综合评价的衔接。"
+            "方案不超过四句话，不展开逐对象分析，不编造尚未计算的发现。"
+            "nextAction选择当前allowedAction；资料有实质歧义才request_review。"
+            "edits为空，只调度已授权的本次算子，不能增删阶段或扩大修改授权。"
+        )
     payload = decision_payload(workflow, stage, context, results)
     if getattr(workflow, "workflow_type", None) in MULTI_FAMILY and payload.get(
         "editTask"
@@ -1162,11 +1250,13 @@ def _decide_once(
             "uncertainties(数组),nextAction,algorithmReason,evidenceRefs[{kind,id}],resultSummary。"
             "nextAction为finish，引用只选availableEvidence，至少引用适用知识和本轮最新statistics。"
             "用简短中文概括实际检查、实际处置、复查与远景对比；不要逐对象重述。"
-            "ruleDispositions是确定性规则与完整测量核验的记录，不能称为模型逐项审阅。"
+            "说明大模型与算子的实际分工：资料理解、执行方案和结果综合由大模型承担，测量、修正及复核由对应算子完成。"
+            "modelDispatchRecorded=true时可写大模型组织并调度算子完成本任务；否则写智能体结合算子成果完成综合分析。"
+            "直接说明本次采用的检查方法与实际成果，不在用户报告中使用确定性规则、非模型逐项审阅等内部实现措辞。"
             "dispositionAuthorization=true表示用户在资料确认时授权自动执行无争议规则建议；"
             "执行范围以实际changes和modificationReview为准，不再请求逐项批准。"
             "待裁定、例外和冲突对象保留，不能描述为已经修正。"
-            "试用规则不能称为国家标准；A/B表示优先核查证据等级，不是矿化概率。"
+            "规则登记状态以ruleRegistration为准，published是项目正式发布规则；不能因冻结修订的内部trialBinding称其为试用或草稿，也不能称为国家标准。A/B表示优先核查证据等级，不是矿化概率。"
             "依据最新完整统计报告数量，reference_only没有明细不表示没有问题；"
             "历史问题数不等于复查剩余问题数。missingRoles表示缺资料。"
             "verifiedReportFacts是平台已核验数字；resultSummary须明确初检数、执行处置数、复查剩余数。"

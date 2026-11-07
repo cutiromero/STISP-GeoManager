@@ -138,6 +138,35 @@ def test_multi_compact_report_preserves_previous_immutable_report(
     assert load_report(workflow, env["owner"])[0] == imported
 
 
+def test_report_interpretation_revision_preserves_earlier_files(completed, monkeypatch):
+    env = completed
+    workflow = env["workflow"]
+    workflow.workflow_type = "geology_generic"
+    workflow.save(update_fields=["workflow_type"])
+    monkeypatch.setattr(
+        "apps.agent.workflow_reports.render_report",
+        lambda *args: b"# Original analysis\n",
+    )
+    original = generate_report(workflow, env["owner"], env["policy"])
+    original_path, metadata_path, _ = _paths(workflow)
+    before = (original_path.read_bytes(), metadata_path.read_bytes())
+    workflow.plan["reportInterpretationRevision"] = 1
+    workflow.save(update_fields=["plan"])
+    monkeypatch.setattr(
+        "apps.agent.workflow_reports.render_report",
+        lambda *args: b"# Model interpretation\n",
+    )
+    revised = generate_report(workflow, env["owner"], env["policy"])
+    revised_path, _, _ = _paths(workflow)
+    assert revised["checksum"] != original["checksum"] and revised_path != original_path
+    assert "interpretation-1" in str(revised_path)
+    assert (original_path.read_bytes(), metadata_path.read_bytes()) == before
+    imported = import_report(workflow, env["owner"], env["policy"])
+    assert DataResource.objects.get(pk=imported["resourceId"]).source.endswith(
+        ":interpretation-1"
+    )
+
+
 def test_report_real_content_persistent_idempotent_and_no_private_model_payload(
     completed,
 ):

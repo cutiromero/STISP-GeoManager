@@ -395,13 +395,11 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           </p>
         </>
       )}
-      {!preparing && (
-        <LogicTaskThinking
-          workflow={workflow}
-          initialThinking={initialThinking}
-          onExpand={() => setDrawer("thinking")}
-        />
-      )}
+      <LogicTaskThinking
+        workflow={workflow}
+        initialThinking={initialThinking}
+        onExpand={() => setDrawer("thinking")}
+      />
       {!preparing && (
         <div className="logic-input-summary">
           <FileTextOutlined />

@@ -437,6 +437,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261107-002 | BackendReady | Workflow cancel and research inputSummary | Immediate stop and actual role reasons | Updated | Existing 105/106 optional compatible fixtures | Owner/project and bound task stop; model role audit | Targeted tests; real candidate separately | Current data and prior report versions preserved |
 | API-20261107-001 | BackendReady | /api/agent/workflows/{workflowId}/retained-review/; workflow inspection/confirm | Explicit held-object review with fixed automatic scope | Updated | 105-agent-workflow-card.json | Implemented with owner/project and frozen evidence checks | Focused backend/browser checks; candidate separate | Previous reports preserved; budgets and permissions retained |
 | API-20261106-005 | BackendReady | /api/agent/workflows/{workflowId}/confirm/ | Optional explicit start with input confirmation | Updated | 107-agent-input-start.json | Bound input authorization implemented | Targeted backend and browser regression | Modification and exceptional-case approval retained |
 | API-20261106-004 | BackendReady | /api/catalog/resources/; /search/; /layers/; /compute/inputs/; shared admin catalog and counts | Hide explicitly marked internal packets from ordinary catalogs | Updated | Existing catalog examples; scoped source/code fixtures | Shared constants and catalog filters implemented | 78 focused cases including 26 new boundary cases; API checks passed | Bound ID access retained; agent provenance remains stricter |
@@ -1515,3 +1516,16 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - 权限与状态矩阵：原任务本人/管理权限或已接受的单输出邀请，当前项目与原始输入仍逐次授权；200 成功，400 参数/格式错误，401 未登录，403 撤权，404 不可见/过期，409 文件身份变化，503 渲染暂不可用，均沿用现有错误体。
 - 模型配色一次产生五类矿物色表及审计，校验后作为显示元信息保存；前后复用，0/NoData透明，科学像元和校验和不变。已有输出未登记时使用正式类别色表，不能标称模型结果。
 - Mock：沿用现有计算预览示例，无新增路由。验证：实际 TIFF 到 PNG 像元颜色/透明度、前后同色、缓存换表失效及浏览器图例。
+
+## API-20261107-002 - 停止响应与角色依据
+
+- Status: BackendReady
+- Owner: 同一任务依次负责契约、后端和前端。
+- Endpoints: POST /api/agent/workflows/{workflowId}/cancel/；角色识别及会话运行详情。
+- Change type: 取消提前结束调度并返回card；inputSummary增加可选字段。
+- OpenAPI change: 普通取消活动任务原子返回cancelled card，已终态保留状态；本人同项目真实绑定排队算子取消、运行算子cancelling。replacePlanHash原条件保留。inputSummary新增可选roleReason、roleSource（model/saved/rules/user）。
+- Mock examples: 沿用105-agent-workflow-card.json、106-agent-generic-chat.json；新增可选字段可省略，定向夹具覆盖真实来源与停止状态。
+- Frontend reason: 停止不再等待模型或工作副本收尾，角色依据面向用户可见；不将沿用或人工调整冒充模型判断。
+- Backend implementation notes: 取消不读取输入文件，只按所有者、项目和实际步骤绑定终止子任务；晚保存保留取消状态与冻结计划。模型角色实际调用及source绑定，字段复用单独核验。模型规划和最终解释沿用既有审计、预算与结果校验。
+- Verification: 200取消或已终态幂等，400格式、401未登录、403当前功能/项目拒绝、404不存在或非本人、409初始计划替换条件变化；错误体detail不变。运行/等待/排队取消、子任务隔离、晚保存、模型实际思考与角色依据、浏览器及契约检查。
+- Result: 本机停止/规划/权限/报告定向回归通过；候选真实模型、停止耗时和地图性能另记录验收回执。

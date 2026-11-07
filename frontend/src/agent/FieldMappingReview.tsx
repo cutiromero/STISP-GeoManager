@@ -105,6 +105,8 @@ export default function FieldMappingReview({
         name: role.fileName,
         fileName: role.fileName,
         resourceId: role.resourceId,
+        roleReason: undefined,
+        roleSource: undefined,
       }));
   const selected = review.roles.find((role) => role.role === editing);
   return (
@@ -150,6 +152,24 @@ export default function FieldMappingReview({
               >
                 <div>
                   <strong>{input.name}</strong>
+                  {input.roleReason && (
+                    <small className="logic-role-reason">
+                      <Tag
+                        color={
+                          input.roleSource === "model" ? "blue" : "default"
+                        }
+                      >
+                        {input.roleSource === "model"
+                          ? "模型角色判断"
+                          : input.roleSource === "saved"
+                            ? "沿用确认"
+                            : input.roleSource === "user"
+                              ? "您已调整"
+                              : "平台建议"}
+                      </Tag>
+                      {input.roleReason}
+                    </small>
+                  )}
                   <small>
                     {role
                       ? role.targets

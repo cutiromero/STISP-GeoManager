@@ -180,11 +180,11 @@ def test_profile_calls_count_and_generate_with_identical_thinking(profiles, thin
         == "DCMC"
     )
     assert infer_roles(profiles)["source"] == "model"
-    assert profiles["counted"] == [(thinking, "xhigh"), (thinking, "xhigh")]
-    for maximum, options in profiles["requests"]:
+    assert profiles["counted"] == [(thinking, "xhigh"), (thinking, "low")]
+    for index, (maximum, options) in enumerate(profiles["requests"]):
         assert maximum == 512
         assert options["thinking"] is thinking
-        assert options["reasoning_effort"] == "xhigh"
+        assert options["reasoning_effort"] == ("xhigh" if index == 0 else "low")
 
 
 def test_field_mapping_keeps_the_callers_smaller_output_budget(profiles):
@@ -261,7 +261,7 @@ def test_role_inference_stops_after_batch_is_bound(profiles, monkeypatch):
 @pytest.mark.parametrize(
     "mode,effort,thinking", [("fast", "low", False), ("deep", "medium", True)]
 )
-def test_role_inference_inherits_the_source_run_options(
+def test_role_inference_uses_bounded_thinking_with_authorized_source(
     profiles, mode, effort, thinking
 ):
     conversation = Conversation.objects.create(owner=profiles["owner"], mode="agent")
@@ -275,9 +275,9 @@ def test_role_inference_inherits_the_source_run_options(
         idempotency_key="role-source",
     )
     assert infer_roles(profiles, source_run=run)["source"] == "model"
-    assert profiles["counted"] == [(thinking, effort)]
-    assert profiles["requests"][0][1]["thinking"] is thinking
-    assert profiles["requests"][0][1]["reasoning_effort"] == effort
+    assert profiles["counted"] == [(True, "low")]
+    assert profiles["requests"][0][1]["thinking"] is True
+    assert profiles["requests"][0][1]["reasoning_effort"] == "low"
 
 
 @pytest.mark.parametrize(

@@ -4,8 +4,8 @@ import type {
   AgentWorkflow,
   GeoJsonFeatureCollection,
 } from "../api/generated/types.gen";
-import LocalGeologyReviewMaps from "../map/LocalGeologyReviewMaps";
-import { record, reviewBounds } from "../map/geologyReviewData";
+import { record } from "../map/geologyReviewData";
+import RetainedReviewMap from "./RetainedReviewMap";
 import type { LogicTaskProps } from "./logicTaskTypes";
 import { MultiElementEvidence } from "./MultiElementStory";
 
@@ -24,10 +24,6 @@ const elements: Record<string, string> = {
   lithology: "岩性",
   structure: "构造",
   alteration: "蚀变",
-};
-const empty: GeoJsonFeatureCollection = {
-  type: "FeatureCollection",
-  features: [],
 };
 
 export default function RetainedIssueReview({
@@ -66,12 +62,13 @@ export default function RetainedIssueReview({
           rule_id: item.ruleId,
           status: item.status,
           label: item.featureId,
+          name: item.featureId,
+          _review_outlineOnly: item.element === "alteration",
         },
       })),
     }),
     [items],
   );
-  const bounds = useMemo(() => reviewBounds(collection), [collection]);
   const automatic = Array.isArray(scope.automaticSuggestionIds)
     ? scope.automaticSuggestionIds.length
     : 0;
@@ -81,7 +78,7 @@ export default function RetainedIssueReview({
       {!readonly && (
         <p className="logic-description">
           {automatic > 0
-            ? `${automatic} 项确定性处置沿用原授权，无需逐项确认。`
+            ? `${automatic} 项已核验处置沿用原授权，无需逐项确认。`
             : ""}
           请查看以下待裁定与例外，勾选需要执行候选处置的对象；未选对象保持原样。
         </p>
@@ -92,33 +89,11 @@ export default function RetainedIssueReview({
         description="地图展示已读取对象的实际位置，蚀变组以定位范围表示。可缩放、平移并点击查看依据。候选动作仅在您明确选择后执行；没有有效候选的对象只能保留核查。"
       />
       {collection.features.length > 0 && (
-        <LocalGeologyReviewMaps
-          before={collection}
-          after={null}
-          differences={empty}
-          bounds={bounds}
-          inspectionOnly
-          single
-          spotlight={
-            focused
-              ? {
-                  before: {
-                    type: "FeatureCollection",
-                    features: collection.features.filter(
-                      (feature) => String(feature.id) === focused,
-                    ),
-                  },
-                  after: empty,
-                  beforeLabel: active?.featureId,
-                  outlineOnly: true,
-                  dimBackground: true,
-                }
-              : null
-          }
-          beforeLabel="待核查对象位置"
-          compactLegend
-          onSelect={() => {}}
-          onInspect={(feature) => setFocused(String(feature.id))}
+        <RetainedReviewMap
+          workflow={workflow}
+          objects={collection}
+          focused={focused}
+          onFocus={setFocused}
         />
       )}
       {!readonly && candidateIds.length > 0 && (

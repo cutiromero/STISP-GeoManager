@@ -6,8 +6,8 @@
       "model": "mock",
       "status": "succeeded",
       "prompt": "检查上传地质资料并比较远景区",
-      "answer": "资料已上传，请核对角色。",
-      "detail": "等待核对资料角色",
+      "answer": "模型已完成资料角色判断，请核对资料与字段。",
+      "detail": "等待核对资料与字段",
       "evidence": [],
       "attachments": [],
       "interaction": null,
@@ -19,20 +19,30 @@
         "originRunId": 106,
         "revision": "generic-chat-roles-v1",
         "scenario": "geology_generic",
-        "status": "clarifying",
+        "status": "planning",
         "goal": "检查上传地质资料并比较远景区",
-        "message": "核对角色后生成字段建议，尚未执行任何修改。",
-        "questions": [{
-          "key": "upload_812",
-          "label": "第1份：地质图.zip（按文件名、类型和几何判断）",
-          "kind": "choice",
-          "required": true,
-          "options": [{"value": "lithology", "label": "地质图"}, {"value": "coverage", "label": "研究区范围"}, {"value": "skip", "label": "不使用"}]
-        }],
-        "inputs": {},
-        "parameters": {"roleAnswers": {"upload_812": "lithology"}},
-        "inputSummary": [],
-        "workflowId": null
+        "message": "模型已完成资料角色判断，请核对资料与字段。",
+        "questions": [],
+        "inputs": {
+          "lithology": 812
+        },
+        "parameters": {
+          "roleAnswers": {
+            "upload_812": "lithology"
+          }
+        },
+        "inputSummary": [
+          {
+            "role": "lithology",
+            "label": "地质图",
+            "resourceId": 812,
+            "name": "地质图.zip",
+            "sourceNote": "本次上传资料",
+            "roleSource": "model",
+            "roleReason": "矢量面含地层名称与代号字段，适合作为待检查地质图"
+          }
+        ],
+        "workflowId": "69ac90d1-999f-44b7-9b68-1da1f726a142"
       }
     }
   },
@@ -50,7 +60,36 @@
         "evidence": [],
         "attachments": [],
         "createdAt": "2026-11-06T09:00:00Z",
-        "updatedAt": "2026-11-06T09:00:01Z"
+        "updatedAt": "2026-11-06T09:00:01Z",
+        "researchIntent": {
+          "originRunId": 106,
+          "revision": "generic-chat-roles-v1",
+          "scenario": "geology_generic",
+          "status": "planning",
+          "goal": "检查上传地质资料并比较远景区",
+          "message": "模型已完成资料角色判断，请核对资料与字段。",
+          "questions": [],
+          "inputs": {
+            "lithology": 812
+          },
+          "parameters": {
+            "roleAnswers": {
+              "upload_812": "lithology"
+            }
+          },
+          "inputSummary": [
+            {
+              "role": "lithology",
+              "label": "地质图",
+              "resourceId": 812,
+              "name": "地质图.zip",
+              "sourceNote": "本次上传资料",
+              "roleSource": "model",
+              "roleReason": "矢量面含地层名称与代号字段，适合作为待检查地质图"
+            }
+          ],
+          "workflowId": "69ac90d1-999f-44b7-9b68-1da1f726a142"
+        }
       },
       "events": [],
       "cursor": 0

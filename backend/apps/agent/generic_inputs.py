@@ -11,8 +11,6 @@ import json
 import tempfile
 from pathlib import Path
 
-from django.db import transaction
-
 from apps.catalog.models import DataResource
 from apps.compute.packages import ComputeError
 from apps.core.storage import vector_geopackage_path
@@ -20,6 +18,7 @@ from apps.core.storage import vector_geopackage_path
 from .geology_generic import MINERALS, utm_epsg
 from .workflow_resources import resolve_workflow_resource
 from .workflow_uploads import register_vector
+from .workflow_cancellation import check_cancelled
 
 PLACEHOLDER_NAME = "未提供的蚀变识别结果（全零）"
 MAX_PIXELS = 4000
@@ -243,32 +242,24 @@ def style_lithology(resource):
 def _register_copies(workflow, user, uploads, lithology, coverage, faults, created):
     """Create the working resources, appending each to ``created`` as it lands."""
     marker = f"workflow-working:{workflow.id}:"
-    with transaction.atomic():
-        copies = {
-            "lithology": register_vector(
-                lithology,
-                user=user,
-                name="地质图（工作副本）",
-                source=marker + "lithology",
-                compute=True,
-            ),
-            "coverage": register_vector(
-                coverage,
-                user=user,
-                name="研究区范围（工作副本）",
-                source=marker + "coverage",
-                compute=True,
-            ),
-            "faults": register_vector(
-                faults,
-                user=user,
-                name="构造线（工作副本）",
-                source=marker + "faults",
-                geometry_type="LineString",
-                compute=True,
-            ),
-        }
-    created.extend(copies.values())
+    copies = {}
+    for role, frame, name in (
+        ("lithology", lithology, "地质图（工作副本）"),
+        ("coverage", coverage, "研究区范围（工作副本）"),
+        ("faults", faults, "构造线（工作副本）"),
+    ):
+        check_cancelled(workflow)
+        resource = register_vector(
+            frame,
+            user=user,
+            name=name,
+            source=marker + role,
+            compute=True,
+            **({"geometry_type": "LineString"} if role == "faults" else {}),
+        )
+        created.append(resource)
+        copies[role] = resource
+    check_cancelled(workflow)
     visualization = dict(copies["lithology"].default_visualization or {})
     visualization["symbolization"] = name_symbolization(lithology)
     copies["lithology"].default_visualization = visualization
@@ -276,6 +267,7 @@ def _register_copies(workflow, user, uploads, lithology, coverage, faults, creat
     missing = [m for m in MINERALS if m not in uploads]
     rasters = {m: uploads[m] for m in MINERALS if m in uploads}
     if missing:
+        check_cancelled(workflow)
         resolution = workflow.parameters.get("grid_resolution_m", 100)
         placeholder = placeholder_raster(user, workflow, coverage, resolution)
         created.append(placeholder)
@@ -289,6 +281,7 @@ def build_inputs(workflow, user, policy) -> None:
 
     if workflow.plan.get("workingCopies"):
         return
+    check_cancelled(workflow)
     uploads = workflow.plan["uploadInputs"]
     mapping = workflow.plan["confirmedMapping"]
     source = {
@@ -296,17 +289,21 @@ def build_inputs(workflow, user, policy) -> None:
         for role, identity in uploads.items()
     }
     original = _read(source["lithology"])
+    check_cancelled(workflow)
     bounds = original.to_crs(4326).total_bounds
     epsg = utm_epsg(bounds)
     lithology = lithology_copy(original, mapping["lithology"], epsg)
+    check_cancelled(workflow)
     coverage = coverage_copy(
         _read(source["coverage"]) if "coverage" in source else None,
         mapping.get("coverage", {}),
         lithology,
     )
+    check_cancelled(workflow)
     faults, dropped = faults_copy(
         _read(source["faults"]) if "faults" in source else None, coverage
     )
+    check_cancelled(workflow)
     created = []
     try:
         copies, rasters = _register_copies(
@@ -317,6 +314,7 @@ def build_inputs(workflow, user, policy) -> None:
 
             frame, _, _ = _resource_dataframe(source["units"], limit=5000, offset=0)
             workflow.plan["unitOverrides"] = units_override(frame, mapping["units"])
+        check_cancelled(workflow)
     except Exception:
         # A failed build leaves no half set behind; the retry starts from scratch.
         DataResource.objects.filter(pk__in=[r.id for r in created]).update(
@@ -342,6 +340,11 @@ def build_inputs(workflow, user, policy) -> None:
     )
     workflow.resource_ids = sorted(set(inputs.values()) | set(uploads.values()))
     _save(workflow)
+    if workflow.cancel_requested:
+        DataResource.objects.filter(pk__in=[r.id for r in created]).update(
+            status="inactive"
+        )
+        raise ComputeError("任务已停止", 409)
     step(
         workflow,
         "working_copies",

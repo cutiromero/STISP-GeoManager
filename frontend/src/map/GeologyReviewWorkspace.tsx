@@ -88,7 +88,7 @@ export default function GeologyReviewWorkspace({
             isMultiElementFamily(value.workflowType)
           )
         )
-          throw new Error("此任务不属于地质成果检查案例");
+          throw new Error("此任务不属于地质成果检查");
         if (
           String(value.projectId) !== currentProject ||
           getActiveProject() !== currentProject
@@ -221,7 +221,7 @@ export default function GeologyReviewWorkspace({
     <main className="geology-review-workspace">
       <header className="geology-review-workspace-header">
         <div>
-          <span className="geology-review-eyebrow">地理工作台演示案例</span>
+          <span className="geology-review-eyebrow">地理工作台 · 成果检查</span>
           <h1>地质成果智能检查与修正</h1>
           <p>
             {outcome

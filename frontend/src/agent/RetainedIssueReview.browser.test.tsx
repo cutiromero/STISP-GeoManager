@@ -2,8 +2,16 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
-import { reviewWorkflow } from "../map/geologyReview.testFixtures";
+import {
+  reviewWorkflow,
+  beforeReviewMap,
+} from "../map/geologyReview.testFixtures";
 import RetainedIssueReview from "./RetainedIssueReview";
+const { mapQuery } = vi.hoisted(() => ({ mapQuery: vi.fn() }));
+vi.mock("../map/geologyReviewData", async (original) => ({
+  ...(await original<typeof import("../map/geologyReviewData")>()),
+  queryReviewMap: mapQuery,
+}));
 
 function task() {
   const workflow = reviewWorkflow();
@@ -42,6 +50,40 @@ function task() {
   workflow.plan.reviewIndex = { total: 2, candidateIds: ["held-1", "held-2"] };
   return workflow;
 }
+
+it("核查采用地质双图，切换对象和勾选不重新请求底图", async () => {
+  const workflow = task();
+  workflow.plan.inputs = { lithology: 501, faults: 502 };
+  mapQuery.mockReset();
+  mapQuery.mockImplementation(async (id: number) =>
+    id === 501 ? beforeReviewMap : { type: "FeatureCollection", features: [] },
+  );
+  const view = render(
+    <App>
+      <MemoryRouter>
+        <RetainedIssueReview workflow={workflow} onReview={vi.fn()} />
+      </MemoryRouter>
+    </App>,
+  );
+  await screen.findByText("本次检查采用的地质资料");
+  expect(screen.getByText("待核查对象（尚未执行）")).toBeVisible();
+  expect(
+    view.container.querySelectorAll('[data-layer="geological-units"] path')
+      .length,
+  ).toBeGreaterThan(2);
+  expect(mapQuery).toHaveBeenCalledTimes(2);
+  expect(mapQuery).toHaveBeenCalledWith(
+    501,
+    expect.objectContaining({ displayGeometry: true, loadStyle: true }),
+  );
+  fireEvent.click(screen.getByRole("checkbox", { name: "处置F-01" }));
+  fireEvent.click(screen.getAllByRole("button", { name: "F-02" })[0]!);
+  expect(mapQuery).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole("button", { name: "定位所选对象" })).toBeEnabled();
+  expect(
+    view.container.querySelector('[data-layer="story-focus"] path'),
+  ).not.toBeNull();
+});
 it("仅展示人工候选，默认全部保留，选择后只提交明确对象", () => {
   const onReview = vi.fn();
   render(
@@ -51,7 +93,7 @@ it("仅展示人工候选，默认全部保留，选择后只提交明确对象"
       </MemoryRouter>
     </App>,
   );
-  expect(screen.getByText(/196 项确定性处置沿用原授权/)).toBeVisible();
+  expect(screen.getByText(/196 项已核验处置沿用原授权/)).toBeVisible();
   expect(screen.queryByText("auto-0")).toBeNull();
   const first = screen.getByRole("checkbox", { name: "处置F-01" });
   expect(first).not.toBeChecked();

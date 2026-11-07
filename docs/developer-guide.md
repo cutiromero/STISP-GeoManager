@@ -2686,7 +2686,7 @@ API 以 `docs/openapi.yaml` 为准，生成代码实际位于 `frontend/src/api/
 
 科研工作流使用 `/api/agent/workflows/`，同样要求 Session、CSRF 和 `X-Project-Id`。提交返回 202，并保存目标、模型、资源 ID、策略快照和幂等键；独立 `workflow_worker` 负责节点执行。首期默认只生成数据发现和算法计划，`executeOperators` 必须同时满足请求开关、超级管理员 `operatorEnabled` 策略、已发布且标记为 `agent.enabled` 的算法版本以及计算中心可用，不能绕过计算中心直接运行代码。
 
-`GET /api/agent/workflows/{workflowId}/` 返回当前状态、步骤、checkpoint 引用和结果 ID；`POST /api/agent/workflows/{workflowId}/cancel/` 在排队时立即结束任务，在运行或等待计算时设置取消标记，由 worker 在安全边界收尾。工作流 worker 重启不会重新提交处于 `waiting_compute` 的算子任务；每次恢复仍重新检查项目成员、账号和数据资源权限。当前工作流实现为 LangGraph 可选编排适配器，未安装 LangGraph 时使用同一节点契约的兼容运行路径。
+`GET /api/agent/workflows/{workflowId}/` 返回当前状态、步骤、checkpoint 引用和结果 ID；`POST /api/agent/workflows/{workflowId}/cancel/` 原子结束工作流后续调度并返回轻量card，排队算子取消、运行算子进入cancelling，计算worker释放资源；只有本人同项目真实绑定算子可被影响。工作流 worker 重启不会重新提交处于 `waiting_compute` 的算子任务；每次恢复仍重新检查项目成员、账号和数据资源权限。当前工作流实现为 LangGraph 可选编排适配器，未安装 LangGraph 时使用同一节点契约的兼容运行路径。
 
 每账号仅一个计算或排队中的工作流（`queued/running/waiting_compute`）。`waiting_approval/paused`为停放状态，可并存且不阻挡新建；取消、暂停及恢复仍适用于未结束的停放任务。迁移`agent.0022_parked_workflow_slots`仅调整唯一约束，不删除或改写历史数据；回退旧约束前必须先结束同账号多余的未结束任务。
 
@@ -2953,3 +2953,7 @@ L-06全新世冲积物形态异常与L-07孤立早期单元连续性疑点仅为
 计算输出地图预览 metadata 的可选 `colorTable` 返回后台实际渲染的类别颜色表（value、label、#RRGGBBAA color）。前端只加载 PNG 并展示非透明类别图例。逻辑推理的五类矿物由已有模型配色服务统一选色、核验正式色表并审计，前后栅格复用同一表；模型不可用时如实记录 deterministic。0 和 NoData 透明，不改源 TIFF 或计算校验和。端点原权限、项目、输入访问和 400/401/403/404/409/503 错误语义不变。
 
 复用角色/字段配置必须在创建任务的事务内保存，再交给 worker；不得在 worker 生成字段确认计划后用旧对象覆盖 plan。确认并开始仍要求当前 review_mapping、当前 planHash、实际字段与显式执行授权。
+
+### 2026-11-07 资料角色与任务停止
+
+inputSummary可选roleReason和roleSource展示本次角色判断依据与来源。模型判断须来自真实响应，沿用既有字段不冒充本次模型识别。取消接口立即返回cancelled card，晚到的模型或工作副本保存不能重新激活任务；停止不依赖源文件仍可读取，计算子任务只按本人、项目和真实工作流步骤绑定终止。replacePlanHash沿用原400/409校验，其他错误和项目/会话权限保持。

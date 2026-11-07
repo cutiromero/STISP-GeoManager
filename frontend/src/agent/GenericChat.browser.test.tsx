@@ -568,6 +568,31 @@ it("沿用配置的对话卡片仍要求本次计划确认，并提供一键重�
   }
 });
 
+it("资料确认直接显示本次模型角色判断及具体依据", async () => {
+  intent.questions = [];
+  intent.inputSummary = [
+    {
+      role: "lithology",
+      label: "地质图",
+      resourceId: 812,
+      name: "本次岩性图",
+      sourceNote: "系统数据引用",
+      roleSource: "model",
+      roleReason: "矢量面包含地层名称与代号，作为岩性资料",
+    },
+  ];
+  syncIntent();
+  runs = [chatRun()];
+  const mounted = show();
+  try {
+    expect(await screen.findByText("模型角色判断")).toBeVisible();
+    expect(screen.getByText(/矢量面包含地层名称与代号/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "确认并开始" })).toBeEnabled();
+  } finally {
+    mounted.unmount();
+  }
+});
+
 it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留成果地图入口", async () => {
   workflow.updatedAt = "2026-11-05T00:00:00Z";
   const mounted = show();

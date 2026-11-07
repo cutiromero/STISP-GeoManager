@@ -491,3 +491,31 @@
 .logic-retained-review .geology-review-map-pair.is-single {
   grid-template-columns: minmax(0, 1fr);
 }
+
+.logic-retained-map-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+  color: #657b92;
+  font-size: 12px;
+}
+.logic-retained-map-toolbar > span {
+  flex: 1 1 240px;
+}
+.logic-retained-map .geology-review-map-canvas {
+  height: 380px;
+  min-height: 280px;
+}
+.logic-role-reason {
+  line-height: 1.6;
+}
+@media (max-width: 800px) {
+  .logic-retained-map .geology-review-map-pair {
+    grid-template-columns: 1fr;
+  }
+  .logic-retained-map .geology-review-map-canvas {
+    height: 300px;
+  }
+}
