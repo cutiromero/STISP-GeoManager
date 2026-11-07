@@ -144,3 +144,24 @@ def test_growing_regions_stay_connected_bounded_and_nonoverlapping():
     assert frame.geometry.difference(area).area.sum() == 0
     assert np.all(heat[:, 39:41] == -9999)
     assert frame.core_area_km2.le(frame.area_km2).all()
+
+
+def test_smoothed_adjacent_regions_have_zero_overlap_and_real_spacing():
+    sys.path[:0] = [str(CORE), str(CANDIDATE)]
+    from region_boundaries import smooth_nonoverlapping
+    from shapely.ops import unary_union
+
+    polygons = [
+        box(300000, 4000000, 302000, 4002000),
+        box(301990, 4000200, 304000, 4001800),
+        box(303990, 4000000, 306000, 4002000),
+    ]
+    allowed = box(299000, 3999000, 307000, 4003000)
+    result, checks = smooth_nonoverlapping(polygons, allowed, 100, 50)
+    assert len(result) == 3 and all(geometry.is_valid for geometry in result)
+    assert checks["maximum_overlap_m2"] == 0
+    assert checks["actual_minimum_distance_m"] >= 50 - 0.01
+    assert sum(geometry.area for geometry in result) == pytest.approx(
+        unary_union(result).area
+    )
+    assert all(geometry.difference(allowed).area == 0 for geometry in result)

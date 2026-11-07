@@ -19,6 +19,7 @@ def build():
         "main.py",
         "region_fields.py",
         "region_zones.py",
+        "region_boundaries.py",
         "operator.yaml",
         "README.md",
     ]

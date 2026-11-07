@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-prospect-regions-candidate",
   "name": "地质综合远景区圈定（候选）",
-  "version": "0.1.0-candidate",
+  "version": "0.1.1-candidate",
   "description": "仅对修复后资料，由强证据核心向相连的构造—蚀变—岩性支持外围圈区。方案尚待选择，不替换正式算子。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -221,6 +221,22 @@
       "default": 0.002,
       "min": 0,
       "max": 1
+    },
+    {
+      "key": "boundary_smooth_m",
+      "label": "边界概化尺度（米）",
+      "type": "number",
+      "default": 100,
+      "min": 0,
+      "max": 250
+    },
+    {
+      "key": "between_zone_gap_m",
+      "label": "区间最小间隔（米）",
+      "type": "number",
+      "default": 50,
+      "min": 0,
+      "max": 200
     }
   ],
   "outputs": [

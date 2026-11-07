@@ -8,6 +8,7 @@ from multi_relations import FIELDS, reconstruct
 from multi_windows import create
 from region_fields import PROFILES, base_fields, profile_fields
 from region_zones import delineate
+from region_boundaries import apply_boundaries
 
 # ==================== CONFIGURATION ====================
 DEFAULTS = {
@@ -23,6 +24,8 @@ DEFAULTS = {
     "alteration_density_scale": 0.08,
     "peripheral_min_weighted_types": 1.5,
     "peripheral_min_density": 0.002,
+    "boundary_smooth_m": 100,
+    "between_zone_gap_m": 50,
 }
 LIMITS = {
     "grid_resolution_m": (25, 200),
@@ -34,6 +37,8 @@ LIMITS = {
     "alteration_density_scale": (0.001, 1),
     "peripheral_min_weighted_types": (1, 5),
     "peripheral_min_density": (0, 1),
+    "boundary_smooth_m": (0, 250),
+    "between_zone_gap_m": (0, 200),
 }
 # =======================================================
 
@@ -100,6 +105,25 @@ def run(context):
     targets, rows, heat, diagnostics, core = delineate(
         base, fields, profile, area, lithology, rules, units, config
     )
+    if not targets.empty and (
+        config["boundary_smooth_m"] or config["between_zone_gap_m"]
+    ):
+        targets, rows, heat, boundary_report = apply_boundaries(
+            targets,
+            rows,
+            base,
+            fields,
+            core,
+            area,
+            lithology,
+            units,
+            {**config, "growth_threshold": profile["growth_threshold"]},
+        )
+        diagnostics.update(boundary_report)
+        diagnostics.update(
+            area_km2=float(targets.area_km2.sum()),
+            area_fraction=float(targets.area_km2.sum() * 1e6 / area.area),
+        )
     write_vector(
         context.output_path("after_zones.gpkg"),
         targets,
