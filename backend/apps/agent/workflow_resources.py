@@ -249,9 +249,9 @@ def authorize_run_resource_ids(user, policy, identities, run):
     if persisted is None:
         raise PermissionDenied("对话任务不存在")
     ordinary = set(
-        discover_resources(user, policy)
-        .filter(pk__in=identities)
-        .values_list("id", flat=True)
+        discover_resources(user, policy, sorted(identities)).values_list(
+            "id", flat=True
+        )
     )
     selected = persisted.resource_ids or []
     if ordinary and (

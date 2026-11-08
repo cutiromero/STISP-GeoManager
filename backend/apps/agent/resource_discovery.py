@@ -205,7 +205,26 @@ def _final_resource_ids(query, imports):
             output__task__status="succeeded",
             output__task__trial=False,
             output__task_id__in=workflow_task_ids(),
-        ).select_related("output__task__version__algorithm")
+        )
+        .select_related("output__task__version__algorithm")
+        .only(
+            "id",
+            "resource_id",
+            "output_id",
+            "output__id",
+            "output__key",
+            "output__checksum",
+            "output__task_id",
+            "output__task__id",
+            "output__task__owner_id",
+            "output__task__project_tag_id",
+            "output__task__version_id",
+            "output__task__version__id",
+            "output__task__version__manifest",
+            "output__task__version__algorithm_id",
+            "output__task__version__algorithm__id",
+            "output__task__version__algorithm__identifier",
+        )
     }
     if not records:
         return set()

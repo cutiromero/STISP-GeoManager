@@ -330,13 +330,21 @@ def check_context_evidence(source, current, user, policy):
         raise PermissionDenied("历史目录统计需要按当前范围重新查询")
     identities = source_resource_ids(source)
     if identities:
+        candidates = (
+            identities & set(current.resource_ids)
+            if current.resource_ids
+            else identities
+        )
         visible = (
             set()
-            if current.data_selection_mode == "manual" and not current.resource_ids
+            if not candidates
+            or (current.data_selection_mode == "manual" and not current.resource_ids)
             else set(
-                discover_resources(user, policy, current.resource_ids)
-                .filter(pk__in=identities)
-                .values_list("id", flat=True)
+                discover_resources(
+                    user,
+                    policy,
+                    sorted(candidates),
+                ).values_list("id", flat=True)
             )
         )
         for identity in identities - visible:
