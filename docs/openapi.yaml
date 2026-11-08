@@ -10018,7 +10018,7 @@ components:
             description: 授权业务资源编号。
     AgentRun:
       type: object
-      description: 持久运行记录；引用失权时返回 403，不返回旧内容
+      description: 持久运行记录；引用失权时返回403，不返回旧内容。轮询支持gzip；资源依据集合批量实时授权，仅单次检查复用来源查询计划，不跨轮询缓存访问结果。
       properties:
         platformActions:
           type: array

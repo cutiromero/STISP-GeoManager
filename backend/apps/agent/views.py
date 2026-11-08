@@ -10,6 +10,7 @@ from django.http import HttpResponse, JsonResponse, Http404
 from django.middleware.gzip import GZipMiddleware
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.views.decorators.gzip import gzip_page
 
 from apps.audit.service import log_operation
 from apps.core.api import api_login_required
@@ -671,6 +672,7 @@ def attachment_detail(request, conversation_id, attachment_id):
     return JsonResponse({"detail": "附件已删除"})
 
 
+@gzip_page
 @endpoint(["GET"])
 def run_detail(request, run_id):
     r = get_object_or_404(

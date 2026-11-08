@@ -34,7 +34,6 @@ from .policy import require_access, fresh_user, CAPABILITIES
 from .resource_discovery import (
     discover_resources as resources,
     resolve_discoverable_resource as resolve_resource,
-    resolve_acl_resource,
 )
 
 ROW_LIMIT = 10000
@@ -217,9 +216,37 @@ def brief(r):
 
 
 def check_evidence(run, user, p, *, history=False):
+    from .resource_discovery import discovery_scope
+
+    with discovery_scope():
+        _check_evidence(run, user, p, history=history)
+
+
+def _check_evidence(run, user, p, *, history=False):
     from .selections import knowledge_domains, require_task_selection
     from .deleted_resources import historical_deletion
-    from .workflow_resources import resolve_run_resource
+    from .workflow_resources import authorize_run_resource_ids
+    from .resource_discovery import acl_resources
+
+    references = [
+        ev["resourceId"] for ev in run.evidence if ev.get("resourceId") is not None
+    ]
+    if any(type(identity) is not int or identity <= 0 for identity in references):
+        raise ValidationError("资源依据编号无效")
+    identities = set(references)
+    if identities and history:
+        visible = set(
+            acl_resources(user, p, run.resource_ids, active=False)
+            .filter(pk__in=identities)
+            .values_list("id", flat=True)
+        )
+        if any(
+            not historical_deletion(run, user, p, identity)
+            for identity in identities - visible
+        ):
+            raise PermissionDenied("资料不存在、已失效或无权访问")
+    elif identities:
+        authorize_run_resource_ids(user, p, identities, run)
 
     domains = knowledge_domains(run) if run.knowledge_selection else None
     # Reauthorize ALL accumulated evidence before revealing history or reusing it.
@@ -228,15 +255,6 @@ def check_evidence(run, user, p, *, history=False):
         # System, algorithm, compute and web evidence intentionally have no
         # DataResource.  Their permissions are rechecked by the capability
         # gate on the next action instead of pretending they are resources.
-        if ev.get("resourceId") is not None and not (
-            history and historical_deletion(run, user, p, ev["resourceId"])
-        ):
-            if history:
-                resolve_acl_resource(
-                    user, p, ev["resourceId"], run.resource_ids, active=False
-                )
-            else:
-                resolve_run_resource(user, p, ev["resourceId"], run)
         if ev.get("tool") == "search_web" and not _policy_switch(
             p, "internetEnabled", "allowInternet"
         ):

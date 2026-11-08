@@ -4,12 +4,12 @@
 
 - Status: BackendReady
 - Owner: codex/xintao，单人依次负责契约、后端和前端。
-- Endpoints: 既有资源query/profile/vector-tiles和工程详情。
+- Endpoints: 既有资源query/profile/vector-tiles、工程详情及智能体运行轮询。
 - Change type: 修复显示说明返回为字符串的契约偏差，支持离线纯面MVT；工程恢复与重试行为优化。
 - OpenAPI change: ValidationWarning.code说明真实质量问题与display_geometry显示说明的区别，统一为code/message对象，缓存版本更新。无新增路径或权限。
 - Mock examples: 沿用既有查询及瓦片示例；定向夹具验证真实面属性、FID、原始文件不变和503恢复。
 - Frontend reason: 智能体地图链接不再先全量查询再按视口查询，显示体积说明不误报坐标问题；临时繁忙自动恢复。
-- Backend implementation notes: 显示查询保持完整坐标范围检查，跳过逐顶点精度估计；纯面仅离线准备并原子发布。恢复暂停旧视口请求，显示请求串行且只重试503，移动或换项目取消；业务查询/导出不重放。
+- Backend implementation notes: 显示查询保持完整坐标范围检查，跳过逐顶点精度估计；纯面仅离线准备并原子发布。恢复暂停旧视口请求，显示请求串行且只重试503，移动或换项目取消；业务查询/导出不重放。智能体证据集合批量实时授权，单次检查复用业务来源查询计划、不复用已评估ACL行；不跨轮询缓存，内部资料绑定和0.5秒授权监测保留。轮询支持gzip，不删思考、正文或证据。
 - Verification: 200真实地图、401/403不重试、404失效瓦片、503有界退避与Retry-After；保留筛选、真实坐标错误、源数据和原ACL，真实浏览器多页打开和缩放。
 - Result: 定向后端、前端和浏览器测试结果由本轮验收回执记录；无数据库结构或科研算子改动。
 

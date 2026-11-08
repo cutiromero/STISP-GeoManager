@@ -237,6 +237,32 @@ def resolve_workflow_resource(user, policy, identity, workflow, *, history=False
     raise PermissionDenied("内部资料未绑定到当前科研任务")
 
 
+def authorize_run_resource_ids(user, policy, identities, run):
+    """Authorize one evidence set together; private bindings keep their resolver."""
+    from .models import AgentRun
+    from .resource_discovery import discover_resources
+
+    _check_scope(user, run)
+    persisted = AgentRun.objects.filter(
+        pk=run.pk, owner=user, project_tag_id=run.project_tag_id
+    ).first()
+    if persisted is None:
+        raise PermissionDenied("对话任务不存在")
+    ordinary = set(
+        discover_resources(user, policy)
+        .filter(pk__in=identities)
+        .values_list("id", flat=True)
+    )
+    selected = persisted.resource_ids or []
+    if ordinary and (
+        (persisted.data_selection_mode == "manual" and not selected)
+        or (selected and not ordinary <= set(selected))
+    ):
+        raise PermissionDenied("业务资料不在本轮已选择的数据范围")
+    for identity in identities - ordinary:
+        resolve_run_resource(user, policy, identity, persisted)
+
+
 def resolve_run_resource(user, policy, identity, run, *, history=False):
     """A run may use only its own workflow or its actually attached upload batch."""
     from .models import AgentRun, AgentWorkflow

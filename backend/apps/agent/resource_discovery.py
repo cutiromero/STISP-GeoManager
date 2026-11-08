@@ -102,6 +102,24 @@ def workflow_task_ids():
 
 def discover_resources(user, policy, selected=()):
     """One current-project set for search, counts, selectors and direct reads."""
+    scope = _INTERNAL_SCOPE.get()
+    key = (
+        "business_query",
+        project_id(),
+        user.pk,
+        tuple(policy["dataTypes"]),
+        tuple(selected),
+    )
+    if scope is not None and key in scope:
+        # Clone the plan, never reuse evaluated rows or a previous poll's ACL.
+        return scope[key].all()
+    query = _discover_resources(user, policy, selected)
+    if scope is not None:
+        scope[key] = query
+    return query
+
+
+def _discover_resources(user, policy, selected):
     from apps.raster.models import RasterDataset
 
     ready_rasters = RasterDataset.objects.filter(
