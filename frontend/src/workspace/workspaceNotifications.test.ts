@@ -66,4 +66,12 @@ describe("map coordinate warnings", () => {
       "坐标格式无法识别。",
     );
   });
+
+  it("does not label display simplification or payload notes as coordinate errors", () => {
+    showGeojsonWarnings(service, [
+      { code: "display_geometry_simplified", message: "线预览已简化" },
+      { code: "display_geometry_budget_exceeded", message: "显示体积超过目标" },
+    ]);
+    expect(notification.warning).not.toHaveBeenCalled();
+  });
 });

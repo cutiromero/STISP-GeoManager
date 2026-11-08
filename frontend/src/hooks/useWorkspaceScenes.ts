@@ -10,6 +10,7 @@ import type {
   WorkspaceSceneSummary,
   WorkspaceAccessGroup,
   WorkspaceSceneSnapshot,
+  WorkspaceScene,
 } from "../types";
 import {
   openWorkspaceProgressNotification,
@@ -68,6 +69,8 @@ export function useWorkspaceScenes({
   const requestSequence = useRef(0);
   const inFlight = useRef<Promise<WorkspaceSceneSummary[]> | null>(null);
   const lastRefresh = useRef(0);
+  const sceneLoads = useRef(new Map<number, Promise<void>>());
+  const [isRestoringWorkspace, setIsRestoringWorkspace] = useState(false);
   const loadWorkspaceScenes = useCallback(
     async (query?: { q?: string; offset?: number }) => {
       if (query) {
@@ -237,86 +240,107 @@ export function useWorkspaceScenes({
   );
 
   const loadWorkspaceScene = useCallback(
-    async (scene: WorkspaceSceneSummary) => {
-      const label = scene.kind === "project" ? "工程" : "专题";
-      const notificationKey = `workspace-load-${scene.id}`;
-      const detail = await api.workspace(scene.id);
-      const snapshot = detail.snapshot as WorkspaceSceneSnapshot;
-      if (mapRef.current)
-        await restoreMapBasemap(mapRef.current, snapshot.basemapId);
-      if (!Array.isArray(snapshot.groups)) {
-        message.warning("该工作区快照不包含可恢复的图层");
-        return;
-      }
-      openWorkspaceProgressNotification(notification, {
-        key: notificationKey,
-        title: `正在加载${label}`,
-        percent: 8,
-        status: "active",
-        detail: scene.name,
-      });
-      const restoreResult = await restoreWorkspaceGroups({
-        savedGroups: snapshot.groups,
-        canQueryData,
-        canLoadVectorLayer,
-        canLoadRasterLayer,
-        queryResultLimit,
-        notification,
-        onProgress: (state) => {
-          openWorkspaceProgressNotification(notification, {
-            key: notificationKey,
-            title: `正在加载${label}`,
-            percent: state.percent,
-            status: "active",
-            detail: state.detail,
-          });
-        },
-      });
-      const restoredGroups = uniqueLoadedLayerGroups(restoreResult.groups);
-      if (restoredGroups.length === 0) {
-        showWorkspaceRestoreEmptyResult(notification, {
-          key: notificationKey,
-          label,
-          issues: restoreResult.issues,
-        });
-        if (restoreResult.issues.length === 0) {
-          message.warning("该工作区快照没有可恢复的图层");
+    async (scene: WorkspaceSceneSummary | number) => {
+      const sceneId = typeof scene === "number" ? scene : scene.id;
+      const existing = sceneLoads.current.get(sceneId);
+      if (existing) return existing;
+      const load = async () => {
+        const notificationKey = `workspace-load-${sceneId}`;
+        const detail =
+          typeof scene === "number"
+            ? await api.workspace(scene)
+            : "snapshot" in scene
+              ? (scene as WorkspaceScene)
+              : await api.workspace(scene.id);
+        const label = detail.kind === "project" ? "工程" : "专题";
+        const snapshot = detail.snapshot as WorkspaceSceneSnapshot;
+        if (mapRef.current)
+          await restoreMapBasemap(mapRef.current, snapshot.basemapId);
+        if (!Array.isArray(snapshot.groups)) {
+          message.warning("该工作区快照不包含可恢复的图层");
+          return;
         }
-        return;
-      }
-      openWorkspaceProgressNotification(notification, {
-        key: notificationKey,
-        title: `正在加载${label}`,
-        percent: 90,
-        status: "active",
-        detail: "正在应用图层和地图视图",
-      });
-      replaceGroups(restoredGroups);
-      const restoredLayers = restoredGroups.flatMap((group) => group.children);
-      setSelectedLayerId(
-        restoredLayers.some((layer) => layer.id === snapshot.selectedLayerId)
-          ? (snapshot.selectedLayerId ?? null)
-          : (restoredLayers[0]?.id ?? null),
-      );
-      onWorkspaceLoaded();
-      if (snapshot.mapView && mapRef.current) {
-        mapRef.current.flyTo({
-          center: snapshot.mapView.center,
-          zoom: snapshot.mapView.zoom,
-          bearing: snapshot.mapView.bearing,
-          pitch: snapshot.mapView.pitch,
-          duration: 800,
-          essential: true,
+        openWorkspaceProgressNotification(notification, {
+          key: notificationKey,
+          title: `正在加载${label}`,
+          percent: 8,
+          status: "active",
+          detail: detail.name,
         });
+        const restoreResult = await restoreWorkspaceGroups({
+          savedGroups: snapshot.groups,
+          canQueryData,
+          canLoadVectorLayer,
+          canLoadRasterLayer,
+          queryResultLimit,
+          notification,
+          onProgress: (state) => {
+            openWorkspaceProgressNotification(notification, {
+              key: notificationKey,
+              title: `正在加载${label}`,
+              percent: state.percent,
+              status: "active",
+              detail: state.detail,
+            });
+          },
+        });
+        const restoredGroups = uniqueLoadedLayerGroups(restoreResult.groups);
+        if (restoredGroups.length === 0) {
+          showWorkspaceRestoreEmptyResult(notification, {
+            key: notificationKey,
+            label,
+            issues: restoreResult.issues,
+          });
+          if (restoreResult.issues.length === 0) {
+            message.warning("该工作区快照没有可恢复的图层");
+          }
+          return;
+        }
+        openWorkspaceProgressNotification(notification, {
+          key: notificationKey,
+          title: `正在加载${label}`,
+          percent: 90,
+          status: "active",
+          detail: "正在应用图层和地图视图",
+        });
+        replaceGroups(restoredGroups);
+        const restoredLayers = restoredGroups.flatMap(
+          (group) => group.children,
+        );
+        setSelectedLayerId(
+          restoredLayers.some((layer) => layer.id === snapshot.selectedLayerId)
+            ? (snapshot.selectedLayerId ?? null)
+            : (restoredLayers[0]?.id ?? null),
+        );
+        onWorkspaceLoaded();
+        if (snapshot.mapView && mapRef.current) {
+          mapRef.current.flyTo({
+            center: snapshot.mapView.center,
+            zoom: snapshot.mapView.zoom,
+            bearing: snapshot.mapView.bearing,
+            pitch: snapshot.mapView.pitch,
+            duration: 800,
+            essential: true,
+          });
+        }
+        openWorkspaceProgressNotification(notification, {
+          key: notificationKey,
+          title: `${label}已加载`,
+          percent: 100,
+          status: "success",
+          detail: detail.name,
+        });
+        showWorkspaceRestoreIssues(notification, restoreResult.issues);
+      };
+      setIsRestoringWorkspace(true);
+      const pending = load();
+      sceneLoads.current.set(sceneId, pending);
+      try {
+        await pending;
+      } finally {
+        sceneLoads.current.delete(sceneId);
+        setIsRestoringWorkspace(sceneLoads.current.size > 0);
       }
-      openWorkspaceProgressNotification(notification, {
-        key: notificationKey,
-        title: `${label}已加载`,
-        percent: 100,
-        status: "success",
-        detail: scene.name,
-      });
-      showWorkspaceRestoreIssues(notification, restoreResult.issues);
     },
     [
       mapRef,
@@ -334,12 +358,9 @@ export function useWorkspaceScenes({
 
   const loadWorkspaceSceneById = useCallback(
     async (sceneId: number) => {
-      const scene =
-        workspaceScenes.find((item) => item.id === sceneId) ??
-        (await api.workspace(sceneId));
-      await loadWorkspaceScene(scene);
+      await loadWorkspaceScene(sceneId);
     },
-    [loadWorkspaceScene, workspaceScenes],
+    [loadWorkspaceScene],
   );
 
   const updateWorkspaceScene = useCallback((scene: WorkspaceSceneSummary) => {
@@ -355,6 +376,7 @@ export function useWorkspaceScenes({
   }, []);
 
   return {
+    isRestoringWorkspace,
     workspaceScenes,
     workspaceTotal,
     workspaceQuery,

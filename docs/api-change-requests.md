@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261108-004 - 工程地图恢复与显示查询警告
+
+- Status: BackendReady
+- Owner: codex/xintao，单人依次负责契约、后端和前端。
+- Endpoints: 既有资源query/profile/vector-tiles和工程详情。
+- Change type: 修复显示说明返回为字符串的契约偏差，支持离线纯面MVT；工程恢复与重试行为优化。
+- OpenAPI change: ValidationWarning.code说明真实质量问题与display_geometry显示说明的区别，统一为code/message对象，缓存版本更新。无新增路径或权限。
+- Mock examples: 沿用既有查询及瓦片示例；定向夹具验证真实面属性、FID、原始文件不变和503恢复。
+- Frontend reason: 智能体地图链接不再先全量查询再按视口查询，显示体积说明不误报坐标问题；临时繁忙自动恢复。
+- Backend implementation notes: 显示查询保持完整坐标范围检查，跳过逐顶点精度估计；纯面仅离线准备并原子发布。恢复暂停旧视口请求，显示请求串行且只重试503，移动或换项目取消；业务查询/导出不重放。
+- Verification: 200真实地图、401/403不重试、404失效瓦片、503有界退避与Retry-After；保留筛选、真实坐标错误、源数据和原ACL，真实浏览器多页打开和缩放。
+- Result: 定向后端、前端和浏览器测试结果由本轮验收回执记录；无数据库结构或科研算子改动。
+
 ## API-20261108-003 - 全平台共用配色规则及唯一色表
 
 - Status: BackendReady
@@ -491,6 +504,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261108-004 | BackendReady | Resource query/profile/tiles and workspace | Stable map restore and structured display warnings | Updated | Scoped fixtures | Implemented | Scoped regression and actual browser | Original data and ACL preserved |
 | API-20261108-003 | BackendReady | Resource profile / workspace / output map preview | Shared color policy and live bindings | Updated | Existing fixtures | Single source implemented | Canonical table edit regression | Read-only display projection |
 | API-20261108-002 | BackendReady | AgentRun / AgentPolicy | Personal map actions | Updated | Real GIS fixtures | Implemented | Scoped worker and browser checks | Original data read-only |
 | API-20261108-001 | BackendReady | /api/auth/browser-session/ | Recover live pages and join online sessions without global logout | Updated | Real Session and controlled clock | Implemented | Backend and browser regression | Existing Cookie, CSRF, account and project authorization |

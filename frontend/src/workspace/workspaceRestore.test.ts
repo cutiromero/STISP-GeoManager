@@ -114,6 +114,36 @@ const notification = {
 } as unknown as AppNotification;
 
 describe("restoreWorkspaceGroups", () => {
+  it("defers a large unfiltered saved layer until the final map viewport", async () => {
+    mockApi.resourceProfile.mockResolvedValue({
+      fields: [],
+      featureCount: 541,
+      geometryType: "Polygon",
+      bounds: [95, 35, 96, 36],
+    });
+    const resource = makeResource({ sizeBytes: 3706880, itemCount: 541 });
+    const result = await restoreWorkspaceGroups({
+      savedGroups: [
+        makeGroup([
+          makeSavedVectorLayer({
+            sourceResource: resource,
+            metadata: { 视野查询键: "stale", 视野刷新时间: Date.now() },
+          }),
+        ]),
+      ],
+      canQueryData: true,
+      canLoadVectorLayer: true,
+      canLoadRasterLayer: true,
+      queryResultLimit: 30000,
+      notification,
+    });
+    expect(mockApi.queryResource).not.toHaveBeenCalled();
+    expect(result.groups[0].children[0]).toMatchObject({
+      viewportOnly: true,
+      geojson: { features: [] },
+      metadata: { 视野查询键: "", 视野刷新时间: 0 },
+    });
+  });
   it("restores a prepared pipeline without downloading full GeoJSON", async () => {
     const preview = {
       revision: "0".repeat(24),

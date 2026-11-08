@@ -10,7 +10,7 @@ from unittest.mock import Mock
 import geopandas as gpd
 import pytest
 from django.test import RequestFactory
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, Point, box
 
 from apps.catalog import vector_tiles as tiles
 
@@ -79,6 +79,7 @@ def test_prepare_is_readonly_atomic_and_revision_scoped(prepared, monkeypatch):
     path, resource = prepared
     before = hashlib.sha256(path.read_bytes()).hexdigest()
     assert tiles.vector_tile_preview(resource) is None
+
     preview = tiles.prepare_vector_tiles(resource)
     assert preview["featureCount"] == 2 and not preview["clustered"]
     assert hashlib.sha256(path.read_bytes()).hexdigest() == before
@@ -88,6 +89,31 @@ def test_prepare_is_readonly_atomic_and_revision_scoped(prepared, monkeypatch):
     resource.updated_at -= timedelta(seconds=1)
     monkeypatch.setattr(tiles, "selected_project_id", lambda: 3)
     assert tiles.vector_tile_preview(resource) is None
+
+
+def test_polygon_preview_preserves_real_properties_ids_and_source_bytes(prepared):
+    path, resource = prepared
+    gpd.GeoDataFrame(
+        {"name": ["岩性甲", "岩性乙"]},
+        geometry=[box(95, 35, 95.1, 35.1), box(95.1, 35, 95.2, 35.1)],
+        crs=4326,
+    ).to_file(path, layer="lines")
+    before = path.read_bytes()
+    preview = tiles.prepare_vector_tiles(resource)
+    assert preview["featureCount"] == 2 and not preview["clustered"]
+    with closing(
+        sqlite3.connect(
+            tiles.preview_directory(resource, preview["revision"]) / "tiles.mbtiles"
+        )
+    ) as db:
+        features = json.loads(
+            gzip.decompress(
+                db.execute("SELECT tile_data FROM tiles LIMIT 1").fetchone()[0]
+            )
+        )["features"]
+    assert {item["properties"]["name"] for item in features} == {"岩性甲", "岩性乙"}
+    assert len({item["id"] for item in features}) == 2
+    assert path.read_bytes() == before
 
 
 def test_failure_does_not_publish_partial_cache(prepared, monkeypatch):
@@ -150,9 +176,10 @@ def test_tile_xyz_tms_etag_and_access_before_cache(prepared, monkeypatch):
     monkeypatch.setattr("apps.catalog.permissions.user_can_access", access)
     request = RequestFactory().get("/api/tile")
     request.user = SimpleNamespace(is_authenticated=True)
-    read = lambda z, x, y: tiles.resource_vector_tile(
-        request, 7, preview["revision"], z, x, y
-    )
+
+    def read(z, x, y):
+        return tiles.resource_vector_tile(request, 7, preview["revision"], z, x, y)
+
     response = read(1, 0, 1)  # XYZ y=1 is MBTiles TMS row=0.
     assert response.status_code == 200 and response["Content-Encoding"] == "gzip"
     assert "private" in response["Cache-Control"]

@@ -130,7 +130,8 @@ def test_exceeding_budget_never_increases_grid_or_removes_vertices(monkeypatch):
     assert geometry.equals_exact(
         set_precision(polygon, display_geometry.DISPLAY_GRID), 0
     )
-    assert warnings and "未做形状简化" in warnings[0]
+    assert warnings and "未做形状简化" in warnings[0]["message"]
+    assert warnings[0]["code"] == "display_geometry_budget_exceeded"
 
 
 def test_quantization_does_not_remove_intentional_input_overlap():

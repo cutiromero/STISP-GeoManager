@@ -1,4 +1,5 @@
 import { moduleEntry } from "../routing/clientBuild";
+import { runMapDisplayQuery } from "./mapDisplayQuery";
 import {
   getActiveProject,
   attachProjectHeader,
@@ -147,13 +148,22 @@ interface MeResponse {
 }
 
 class ApiError extends Error {
+  retryAfterMs?: number;
   status: number;
   data: unknown;
 
-  constructor(message: string, status: number, data?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    data?: unknown,
+    response?: Response,
+  ) {
     super(message);
     this.status = status;
     this.data = data;
+    const seconds = Number(response?.headers.get("Retry-After"));
+    if (Number.isFinite(seconds) && seconds > 0)
+      this.retryAfterMs = seconds * 1000;
   }
 }
 
@@ -224,7 +234,7 @@ async function unwrap<T>(request: Promise<HeyApiResponse>): Promise<T> {
     }
     const status = response?.status ?? 0;
     notifyAuthorizationFailure(status, response?.url);
-    throw new ApiError(errorMessage(error, status), status, error);
+    throw new ApiError(errorMessage(error, status), status, error, response);
   }
   return data as T;
 }
@@ -1176,14 +1186,24 @@ export const api = {
     resource: ResourceListItem,
     payload: ResourceQueryPayload,
     signal?: AbortSignal,
-  ) =>
-    unwrap<ResourceQueryResult>(
-      sdk.queryResource({
-        path: { id: resource.id },
-        body: payload,
-        signal,
-      }),
-    ),
+  ) => {
+    const cancellation = combineAbortSignals(
+      signal ? [projectSignal(), signal] : [projectSignal()],
+    );
+    const request = () =>
+      unwrap<ResourceQueryResult>(
+        sdk.queryResource({
+          path: { id: resource.id },
+          body: payload,
+          signal: cancellation.signal,
+        }),
+      );
+    return (
+      payload.displayGeometry
+        ? runMapDisplayQuery(request, cancellation.signal)
+        : request()
+    ).finally(cancellation.dispose);
+  },
   exportLayers: (payload: ExportLayersPayload) =>
     unwrapBlob(sdk.exportLayers({ body: payload, parseAs: "blob" })),
   exportLayersAsync: (payload: ExportLayersPayload) =>

@@ -245,7 +245,7 @@ def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str
         total_count = _geopackage_filtered_count(path, layer_name, where)
         gdf = read_resource(resource, where=where, rows=slice(0, limit), **id_options)
         valid_gdf, warnings = validate_geojson_geometries(
-            gdf, estimate_uncertainty=not line_tolerance
+            gdf, estimate_uncertainty=not display_geometry
         )
         returned = valid_gdf.head(limit)
     else:
@@ -255,7 +255,7 @@ def _query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str
             query_geometry=query_geometry,
             where=where,
             limit=limit,
-            estimate_uncertainty=not line_tolerance,
+            estimate_uncertainty=not display_geometry,
             **id_options,
         )
 

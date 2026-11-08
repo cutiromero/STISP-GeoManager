@@ -210,11 +210,19 @@ def prepare_vector_tiles(resource, progress=lambda text: None):
         if frame.crs is None:
             raise ValueError("原始数据缺少坐标参考系统")
         frame = frame.to_crs(4326)
+        source_count = len(frame)
         frame = GeometryValidationAccumulator(estimate_uncertainty=False).filter(frame)
         kinds = set(frame.geometry.geom_type)
+        if kinds & {"Polygon", "MultiPolygon"} and (
+            len(frame) != source_count or not frame.geometry.is_valid.all()
+        ):
+            raise ValueError("面数据存在缺失、越界或无效几何，请先按原数据查询核查")
         clustered = bool(kinds) and kinds <= {"Point"}
-        if not clustered and not kinds <= {"LineString", "MultiLineString"}:
-            raise ValueError("显示瓦片只支持纯点或纯线资源")
+        if not clustered and not (
+            kinds <= {"LineString", "MultiLineString"}
+            or kinds <= {"Polygon", "MultiPolygon"}
+        ):
+            raise ValueError("显示瓦片支持纯点、纯线或纯面资源")
         # Projection clipping affects this disposable display copy only.
         frame = frame.copy()
         frame.geometry = frame.geometry.intersection(
@@ -250,9 +258,9 @@ def prepare_vector_tiles(resource, progress=lambda text: None):
             progress(f"{resource.id}: raw point pyramid")
             _generate_mvt(data, publish / "raw.mbtiles", 0, MAX_ZOOM, True)
         else:
-            data = work / "lines.geojson"
+            data = work / "features.geojson"
             _write_features(data, collection["features"])
-            progress(f"{resource.id}: line pyramid 0-{MAX_ZOOM}")
+            progress(f"{resource.id}: vector pyramid 0-{MAX_ZOOM}")
             _generate_mvt(data, output, 0, MAX_ZOOM, False)
         with closing(sqlite3.connect(output)) as db:
             assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"

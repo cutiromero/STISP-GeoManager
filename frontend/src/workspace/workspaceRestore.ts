@@ -1,4 +1,5 @@
 import { restoreVectorStyle } from "./restoreVectorStyle";
+import { isLargeVectorResource } from "../map/viewportVectorQuery";
 import { api } from "../api/client";
 import { tilePreviewResult } from "../map/vectorTilePreview";
 import { rasterTileRendererVersion } from "../map/rasterLayerSync";
@@ -109,17 +110,21 @@ export async function restoreWorkspaceGroups({
         }
         try {
           const profile = await api.resourceProfile(savedLayer.sourceResource);
-          const tiled =
-            profile.vectorTiles &&
+          const unfiltered =
             !savedLayer.query.attributeFilters.length &&
             !savedLayer.query.spatialFilter;
-          const result = tiled
-            ? tilePreviewResult(savedLayer.sourceResource, profile)
-            : await api.queryResource(savedLayer.sourceResource, {
-                attributeFilters: savedLayer.query.attributeFilters,
-                spatialFilter: savedLayer.query.spatialFilter,
-                limit: queryResultLimit,
-              });
+          const deferred =
+            unfiltered && isLargeVectorResource(savedLayer.sourceResource);
+          const tiled = unfiltered && profile.vectorTiles;
+          const result =
+            tiled || deferred
+              ? tilePreviewResult(savedLayer.sourceResource, profile)
+              : await api.queryResource(savedLayer.sourceResource, {
+                  attributeFilters: savedLayer.query.attributeFilters,
+                  spatialFilter: savedLayer.query.spatialFilter,
+                  limit: queryResultLimit,
+                  displayGeometry: true,
+                });
           showGeojsonWarnings(notification, result.warnings);
           const queryGroup = createVectorLayerGroup(
             savedLayer.sourceResource,
@@ -135,12 +140,17 @@ export async function restoreWorkspaceGroups({
               name: savedLayer.name,
               visible: savedLayer.visible,
               summary: savedLayer.summary,
-              metadata: savedLayer.metadata,
+              metadata: deferred
+                ? { ...savedLayer.metadata, 视野查询键: "", 视野刷新时间: 0 }
+                : savedLayer.metadata,
               symbolization: restoreVectorStyle(
                 restoredVectorLayer.symbolization,
                 savedLayer.symbolization as LoadedVectorLayer["symbolization"],
               ),
               fields: savedLayer.fields,
+              ...(deferred
+                ? { viewportOnly: true, summary: "按当前地图范围加载" }
+                : {}),
             });
           }
         } catch (error) {

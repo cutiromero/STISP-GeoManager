@@ -843,17 +843,7 @@ function MapWorkspace() {
   const layerGroups = useLayerGroups(
     `${user ? `user-${user.id}` : "anonymous"}:project-${getActiveProject()}`,
   );
-  useViewportVectorLayers({
-    resolveTilePreviews: true,
-    map: mapObject,
-    scope: `${user?.id ?? "anonymous"}:${getActiveProject()}`,
-    enabled: permissions.canQueryData && permissions.canLoadVectorLayer,
-    groups: layerGroups.groups,
-    limit: bootstrap.limits.queryResultLimit,
-    updateLayer: layerGroups.updateLayer,
-    onError: (detail) =>
-      message.error({ key: "viewport-query-error", content: detail }),
-  });
+
   const uniqueLayerLoad = useUniqueLayerLoad({
     scope: `${user?.id ?? "anonymous"}:${getActiveProject()}`,
     groups: layerGroups.groups,
@@ -892,6 +882,7 @@ function MapWorkspace() {
     setSelectedFeature(null);
   }, []);
   const {
+    isRestoringWorkspace,
     workspaceScenes,
     workspaceTotal,
     workspaceQuery,
@@ -915,6 +906,20 @@ function MapWorkspace() {
     replaceGroups: layerGroups.replaceGroups,
     setSelectedLayerId,
     onWorkspaceLoaded: handleWorkspaceLoaded,
+  });
+  useViewportVectorLayers({
+    resolveTilePreviews: true,
+    map: mapObject,
+    scope: `${user?.id ?? "anonymous"}:${getActiveProject()}`,
+    enabled:
+      !isRestoringWorkspace &&
+      permissions.canQueryData &&
+      permissions.canLoadVectorLayer,
+    groups: layerGroups.groups,
+    limit: bootstrap.limits.queryResultLimit,
+    updateLayer: layerGroups.updateLayer,
+    onError: (detail) =>
+      message.error({ key: "viewport-query-error", content: detail }),
   });
   const mapCompositions = useMapCompositions(
     permissions.canViewMapCompositions,

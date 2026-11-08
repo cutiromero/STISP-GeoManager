@@ -10304,7 +10304,7 @@ export type GeoJsonGeometry = {
 
 export type ValidationWarning = {
     /**
-     * 警告代码，如 missing_geometry、invalid_longitude、coordinate_uncertainty
+     * 警告代码。missing_geometry、invalid_longitude等表示真实数据质量问题；coordinate_uncertainty仅为小数精度估计；display_geometry_simplified、display_geometry_budget_exceeded为显示说明，不作为坐标异常弹窗。
      */
     code: string;
     /**

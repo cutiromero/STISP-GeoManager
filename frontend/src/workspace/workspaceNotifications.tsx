@@ -38,7 +38,10 @@ export function showGeojsonWarnings(
   // Decimal precision estimates do not measure positional accuracy and require
   // no decision when loading a layer. Import validation handles them separately.
   const actionableWarnings = warnings?.filter(
-    (warning) => warning.code !== "coordinate_uncertainty",
+    (warning) =>
+      warning.code !== "coordinate_uncertainty" &&
+      warning.code !== "display_geometry_simplified" &&
+      warning.code !== "display_geometry_budget_exceeded",
   );
   if (!actionableWarnings?.length) {
     return;

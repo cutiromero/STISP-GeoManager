@@ -16,7 +16,7 @@ from apps.core.storage import app_path, vector_geopackage_path
 
 DISPLAY_BUDGET_BYTES = 280 * 1024
 DISPLAY_GRID = 0.00001
-DISPLAY_CACHE_VERSION = 3
+DISPLAY_CACHE_VERSION = 4
 logger = logging.getLogger(__name__)
 
 
@@ -163,14 +163,24 @@ def compact_display_geojson(frame, line_tolerance=0):
         )
     encoded = json.dumps(features).encode()
     warnings = (
-        ["线几何仅为按尺度简化的地图预览，精确查询、编辑与计算使用原始数据。"]
+        [
+            {
+                "code": "display_geometry_simplified",
+                "message": "线几何仅为按尺度简化的地图预览，精确查询、编辑与计算使用原始数据。",
+            }
+        ]
         if simplified
         else []
     )
     if len(gzip.compress(encoded, compresslevel=6, mtime=0)) > DISPLAY_BUDGET_BYTES:
         warnings.append(
-            "显示几何传输体积超过目标；保留当前线显示容差和全部对象。"
-            if simplified
-            else "显示几何仅按统一网格量化，未做形状简化；传输体积超过目标，精确编辑与计算使用原始数据。"
+            {
+                "code": "display_geometry_budget_exceeded",
+                "message": (
+                    "显示几何传输体积超过目标；保留当前线显示容差和全部对象。"
+                    if simplified
+                    else "显示几何仅按统一网格量化，未做形状简化；传输体积超过目标，精确编辑与计算使用原始数据。"
+                ),
+            }
         )
     return features, warnings
