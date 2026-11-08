@@ -52,6 +52,7 @@ from apps.catalog.permissions import (
     workspace_access_filter,
 )
 from apps.catalog.serializers import (
+    current_visualization,
     serialize_catalog,
     serialize_layer,
     serialize_resource,
@@ -752,6 +753,8 @@ def _workspace_payload(
 def _serialize_workspace(
     scene: WorkspaceScene, request_user, *, summary=False
 ) -> dict[str, object]:
+    from apps.agent.display_color_policy import refresh_snapshot
+
     is_owner = scene.owner_id == getattr(request_user, "id", None)
     can_manage_all = user_can_bypass_owner_only(request_user)
     owner = scene.owner if user_is_visible_to(request_user, scene.owner) else None
@@ -761,7 +764,7 @@ def _serialize_workspace(
         "kind": scene.kind,
         "name": scene.name,
         "description": scene.description,
-        **({} if summary else {"snapshot": scene.snapshot}),
+        **({} if summary else {"snapshot": refresh_snapshot(scene.snapshot)}),
         "owner": {
             "id": owner.id if owner else 0,
             "displayName": (
@@ -1215,7 +1218,7 @@ def resource_profile(request, pk: int):
             "geometryType": profile.geometry_type,
             "bounds": profile.bounds,
             "raster": profile.raster,
-            "defaultVisualization": resource.default_visualization,
+            "defaultVisualization": current_visualization(resource),
             "vectorTiles": vector_tile_preview(resource),
         }
     )

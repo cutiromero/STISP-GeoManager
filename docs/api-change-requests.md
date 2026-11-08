@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261108-003 - 全平台共用配色规则及唯一色表
+
+- Status: BackendReady
+- Owner: codex/xintao，同一任务维护契约、后端、前端及验收。
+- Endpoints: 既有资源profile、工程详情/专题来源工程、计算输出地图预览、科研智能体工具。
+- Change type: 配色语义统一及已有显示绑定按当前规则投影，无新端点或数据编辑权限。
+- OpenAPI change: ResourceProfileResponse.defaultVisualization及WorkspaceSceneSnapshot说明绑定平台配色时使用当前规则；ResultColorAdvice增加可选policyRevision，流程版本说明修正为3。
+- Mock examples: 沿用既有profile和工程自由格式快照；真实色表38类别及单一来源编辑回归验证，不新增模拟数据。
+- Frontend reason: 智能体配色和逻辑推理保持一致，精确岩性颜色不被宽泛岩类覆盖；允许原色表本来同色的类别。
+- Backend implementation notes: category_style及reference_entries唯一实现；岩性色值仅lithology_colors.json，蚀变仅alteration_colors.json。索引不重复保存色值，内容修订驱动缓存失效。已绑定快照/成果只投影展示，栅格规则变化后使用后台重新渲染；不写科学文件、不重跑模型和算子。普通未绑定手工样式保留。
+- Verification: 同一张色表修改后，逻辑推理、普通工具及已保存工程刷新同时生效；38类逐色一致、同色保留、未知类按共用校验、栅格后台渲染与原始文件不变。原接口200/401/403/404和当前项目、ACL、owner规则保留。
+- Result: 共用规则、唯一来源、真实工程接口和逻辑推理相关103项定向测试通过；服务器显示一致性和发布由独立回执核对。
+
 ## API-20261108-002 - 科研智能体个人地图与站内操作按钮
 
 - Status: BackendReady
@@ -478,6 +491,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261108-003 | BackendReady | Resource profile / workspace / output map preview | Shared color policy and live bindings | Updated | Existing fixtures | Single source implemented | Canonical table edit regression | Read-only display projection |
 | API-20261108-002 | BackendReady | AgentRun / AgentPolicy | Personal map actions | Updated | Real GIS fixtures | Implemented | Scoped worker and browser checks | Original data read-only |
 | API-20261108-001 | BackendReady | /api/auth/browser-session/ | Recover live pages and join online sessions without global logout | Updated | Real Session and controlled clock | Implemented | Backend and browser regression | Existing Cookie, CSRF, account and project authorization |
 | API-20261107-003 | BackendReady | Pipeline display LOD and gzip |

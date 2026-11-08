@@ -7,6 +7,7 @@ from apps.compute.models import ComputeOutput
 
 from . import provider
 from .result_colors import category_style, model_colors, proposal_items
+from .color_library import policy_revision
 
 
 MINERALS = {
@@ -42,6 +43,8 @@ def style_alteration_outputs(workflow, outputs, *, force=False, persist=True):
         for output in [*previous, *targets]
         if mineral_key(output)
         and output.metadata.get("mapColorTable", {}).get("version") == TABLE_VERSION
+        and output.metadata.get("mapColorTable", {}).get("policyRevision")
+        == policy_revision()
     }
     if force:
         tables = {}
@@ -70,6 +73,7 @@ def style_alteration_outputs(workflow, outputs, *, force=False, persist=True):
         for mineral in missing:
             tables[mineral] = {
                 "version": TABLE_VERSION,
+                "policyRevision": policy_revision(),
                 "mineral": mineral,
                 "source": advice["source"],
                 "classes": [

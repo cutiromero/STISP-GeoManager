@@ -1529,8 +1529,8 @@ function AgentWorkspace({
                         "Choose a local model to start a conversation.",
                       )
                     : ui(
-                        "查找当前项目授权数据，读取字段与统计，设计配色并生成个人地图。",
-                        "Find authorized data, inspect fields and statistics, and prepare styled personal maps.",
+                        "查找当前项目授权数据，读取字段与统计，按平台配色规则生成个人地图。",
+                        "Find authorized data, inspect fields and statistics, and prepare maps using platform color rules.",
                       )}
                 </p>
                 {mode === "agent" && !logicProject && (

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from copy import deepcopy
 
 import geopandas as gpd
 import numpy as np
@@ -359,3 +360,53 @@ def test_worker_can_finish_real_map_tools_without_looking_for_a_compute_algorith
         "get_map_data_profile",
         "prepare_map_workspace",
     ]
+
+
+def test_reference_profile_and_saved_scene_refresh_share_one_live_color_table(
+    mapped, monkeypatch, tmp_path
+):
+    from apps.agent import color_library
+
+    env = mapped
+    value = "全新世冲积物qhal"
+    path = tmp_path / "lithology_colors.json"
+    palette = json.loads(color_library.LITHOLOGY_PATH.read_bytes())
+    path.write_text(json.dumps(palette))
+    monkeypatch.setattr(color_library, "LITHOLOGY_PATH", path)
+    with project_scope(env["scope"]):
+        frame = gpd.read_file(env["file"], layer="rocks")
+        frame["name"] = value
+        frame.to_file(env["file"], layer="rocks", driver="GPKG")
+        original = hashlib.sha256(env["file"].read_bytes()).hexdigest()
+        run = new_run(env)
+        profile = call(run, "get_map_data_profile", {"resourceId": env["vector"].id})
+        assert profile["categories"][0]["suggestedColor"] == "#ffffd8"
+        assert profile["categories"][0]["colorLocked"]
+        result = call(
+            run,
+            "prepare_map_workspace",
+            {
+                "resourceIds": [env["vector"].id],
+                "styles": [
+                    {
+                        "resourceId": env["vector"].id,
+                        "mode": "reference",
+                        "field": "name",
+                    }
+                ],
+            },
+        )
+        assert result["layers"][0]["libraryClassCount"] == 1
+        scene = WorkspaceScene.objects.get(pk=result["workspaceId"])
+        stored = deepcopy(scene.snapshot)
+        palette["colors"][value] = "#123456"
+        path.write_text(json.dumps(palette))
+        response = env["client"].get(
+            f"/api/catalog/workspaces/{scene.id}/", **env["header"]
+        )
+        assert response.status_code == 200
+        style = response.json()["snapshot"]["groups"][0]["children"][0]["symbolization"]
+        assert style["renderer"]["classes"][0]["color"] == "#123456"
+        scene.refresh_from_db()
+        assert scene.snapshot == stored
+        assert hashlib.sha256(env["file"].read_bytes()).hexdigest() == original

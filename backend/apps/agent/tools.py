@@ -76,13 +76,13 @@ TOOLS = {
         ToolSpec(
             "get_map_data_profile",
             "read_data",
-            "读取可加载的真实地图概况与完整类别，resourceId；矢量field可选（默认name等实际字段），栅格band默认1。返回categoryField/categories/value/count/suggestedColor和categoriesComplete，分类配色前必须读取。分类最多96项，栅格最多400万像元；不能把不完整类别说成全部。",
+            "读取可加载的真实地图概况与完整类别，resourceId；矢量field可选（默认name等实际字段），栅格band默认1。返回categoryField/categories/value/count/suggestedColor、colorLocked、referenceId和colorPolicy，与逻辑推理共用标准及项目约定色；colorLocked不得改色、原表同色保留。分类配色前必须读取。分类最多96项，栅格最多400万像元；不能把不完整类别说成全部。",
             ("resourceId", "field", "band"),
         ),
         ToolSpec(
             "prepare_map_workspace",
             "map_display",
-            '生成真实个人地图工程，原始数据不变，不覆盖已有工程。resourceIds为当前授权资源整数数组，name可选。styles可省略沿用显示方案；分类配色格式styles:[{"resourceId":12,"mode":"unique","field":"name","classes":[{"value":"实际类别","label":"显示名称","color":"#e0c080"}]}]，必须覆盖已读取的完整类别。矢量单色mode=single,color=#RRGGBB；分类栅格mode=unique,band=1使用真实整数类别颜色表。返回workspaceId才代表已准备，用户点击按钮加载地图。无需寻找配色计算算子。',
+            '生成真实个人地图工程，原始数据不变，不覆盖已有工程。resourceIds为当前授权资源整数数组，name可选。styles可省略沿用显示方案；优先用mode=reference,field=实际分类字段按共用规则配色，无需classes。命中色表不可改色、原表同色保留，仅未命中类别可建议新色；分类配色格式styles:[{"resourceId":12,"mode":"unique","field":"name","classes":[{"value":"实际类别","label":"显示名称","color":"#e0c080"}]}]，必须覆盖已读取的完整类别。矢量单色mode=single,color=#RRGGBB；分类栅格mode=unique,band=1使用真实整数类别颜色表。返回workspaceId才代表已准备，用户点击按钮加载地图。无需寻找配色计算算子。',
             ("resourceIds", "styles", "name"),
         ),
         ToolSpec(

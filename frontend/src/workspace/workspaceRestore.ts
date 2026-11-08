@@ -255,6 +255,7 @@ export async function restoreWorkspaceGroups({
         ? {
             ...rasterSymbolizationFromRules(refreshedRender.rules),
             opacity: savedSymbolization.opacity,
+            colorPolicy: savedSymbolization.colorPolicy,
           }
         : savedSymbolization;
       restoredChildren.push({

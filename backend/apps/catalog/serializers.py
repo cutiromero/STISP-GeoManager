@@ -7,6 +7,12 @@ from apps.catalog.models import (
 from apps.catalog.taxonomy import serialize_category_path
 
 
+def current_visualization(resource):
+    from apps.agent.display_color_policy import refresh_visualization
+
+    return refresh_visualization(resource.default_visualization)
+
+
 def serialize_dictionary(item: DictionaryItem | None) -> dict | None:
     if item is None:
         return None

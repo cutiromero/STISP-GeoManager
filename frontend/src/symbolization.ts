@@ -350,6 +350,7 @@ export type VectorRenderer =
   | GraduatedRenderer;
 
 export interface VectorSymbolization {
+  colorPolicy?: { binding: "platform"; revision: string };
   opacity: number;
   pointMode: PointSymbolMode;
   renderer?: VectorRenderer;
@@ -375,6 +376,11 @@ interface RasterUniqueValue {
 }
 
 export interface RasterSymbolization {
+  colorPolicy?: {
+    binding: "platform";
+    revision: string;
+    categoryNames?: Record<string, string>;
+  };
   opacity: number;
   mode: RasterRenderMode;
   bands: number[];

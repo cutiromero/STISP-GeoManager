@@ -58,7 +58,7 @@ def require_features(user, styles):
             raise PermissionDenied("当前账号没有保存个人地图或自定义配色的权限")
 
 
-def group_for(run, resource, profile, style):
+def group_for(run, resource, profile, style, advice):
     source = serialize_resource(resource)
     for key in ["description", "qualityNote"]:
         source[key] = source[key][:1000]
@@ -72,6 +72,12 @@ def group_for(run, resource, profile, style):
         "summary": "智能体准备的展示图层",
         "metadata": {"配色作用范围": "本工程", "原始数据": "未修改"},
         "fields": profile["fields"],
+        "colorAdvice": {
+            "policyRevision": style.get("colorPolicy", {}).get("revision"),
+            "classes": advice,
+        }
+        if style and advice
+        else {},
     }
     if resource.data_type == "vector":
         layer.update(
@@ -189,17 +195,27 @@ def execute_map(run, user, policy, name, args):
     for resource in resources:
         spec = styles.get(resource.id, {"resourceId": resource.id, "mode": "default"})
         profile = cached_profile(
-            run, resource, spec, categories_required=spec.get("mode") == "unique"
+            run,
+            resource,
+            spec,
+            categories_required=spec.get("mode") in {"unique", "reference"},
         )
-        style = display_style(resource, profile, spec)
+        advice = []
+        style = display_style(resource, profile, spec, audit=advice)
         profiles.append(profile)
-        groups.append(group_for(run, resource, profile, style))
+        groups.append(group_for(run, resource, profile, style, advice))
         summaries.append(
             {
                 "resourceId": resource.id,
                 "name": resource.name,
                 "mode": spec.get("mode", "default"),
-                "classCount": len(spec.get("classes", [])),
+                "classCount": len(advice) or len(spec.get("classes", [])),
+                "libraryClassCount": sum(
+                    item["source"] == "library_selected" for item in advice
+                ),
+                "colorPolicyRevision": style.get("colorPolicy", {}).get("revision")
+                if style
+                else None,
             }
         )
     revision = [

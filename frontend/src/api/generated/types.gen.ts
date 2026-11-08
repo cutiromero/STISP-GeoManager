@@ -7536,7 +7536,7 @@ export type UserReference = {
 };
 
 /**
- * 工作台轻量快照 JSON。basemapId 保存受控底图标识，旧快照缺省时保留当前底图。前端只保存图层组、顺序、显隐、查询条件、空间范围、资源引用、符号化、栅格渲染引用元数据和视图状态；不得包含 geojson、FeatureCollection.features、属性表行或原始查询结果数据本体。后端拒绝含原始要素集合或超大请求体的快照。
+ * 工作台轻量快照 JSON。basemapId 保存受控底图标识，旧快照缺省时保留当前底图。前端只保存图层组、顺序、显隐、查询条件、空间范围、资源引用、符号化、栅格渲染引用元数据和视图状态；不得包含 geojson、FeatureCollection.features、属性表行或原始查询结果数据本体。后端拒绝含原始要素集合或超大请求体的快照。绑定平台配色规则的图层在读取时使用当前统一规则投影，symbolization.colorPolicy记录binding=platform及revision；栅格颜色变化后重新请求后台渲染，原始快照和科学数据不回写。普通手工配色不自动绑定。
  */
 export type WorkspaceSceneSnapshot = {
     [key: string]: unknown;
@@ -9112,11 +9112,15 @@ export type ResultColorClassAdvice = {
  */
 export type ResultColorAdvice = {
     /**
-     * 配色流程版本，当前为2，不是平台版本。
+     * 配色流程版本，当前为3，不是平台版本。
      */
     version?: number;
     /**
-     * 实际类别的最终配色审计，与同一资源symbolization.renderer.classes对应。
+     * 统一配色规则和唯一色表来源的内容修订标识；工作流与通用展示工具共用。
+     */
+    policyRevision?: string;
+    /**
+     * 保存时实际类别的配色审计；原审计保留，当前绑定规则下的显示颜色以symbolization.renderer.classes及其colorPolicy.revision为准。
      */
     classes?: Array<ResultColorClassAdvice>;
     /**
@@ -9134,7 +9138,7 @@ export type ResourceProfileResponse = {
      */
     vectorTiles?: VectorTilePreview | null;
     /**
-     * 资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。
+     * 资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。具有colorAdvice或平台配色绑定的方案按当前统一规则投影，和科研智能体及逻辑推理共用同一匹配、色差与补色实现；命中色表保留原色及同色类别，原存储与科学数据不改写。
      */
     defaultVisualization?: {
         colorAdvice?: ResultColorAdvice;

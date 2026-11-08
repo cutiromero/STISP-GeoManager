@@ -18,6 +18,8 @@ from .color_library import (
     candidates,
     color_issues,
     fallback_color,
+    policy_revision,
+    reference_entries,
 )
 from .config import registry
 from .decision_budget import MAX_LEVEL, dumps, project_payload
@@ -45,11 +47,8 @@ def proposal_items(field, values, proposal, *, polygon=True):
         return {}, {value: ["missing_class"] for value in values}
     if proposal.get("field") != field or not isinstance(proposal.get("classes"), list):
         return {}, {value: ["invalid_field_or_classes"] for value in values}
-    entries = candidates(field, values)
-    standards = {
-        value: next((entry for entry in entries if entry["value"] == value), None)
-        for value in values
-    }
+    selected = reference_entries(field, values)
+    standards = {value: selected.get(value) for value in values}
     proposed, issues = {}, {}
     used = [entry["color"] for entry in standards.values() if entry]
     for item in proposal["classes"]:
@@ -88,10 +87,8 @@ def category_style(
     values = sorted(set(values))
     entries = candidates(field, values)
     proposed, issues = proposal_items(field, values, proposal, polygon=polygon)
-    standard_entries = {
-        value: next((entry for entry in entries if entry["value"] == value), None)
-        for value in values
-    }
+    selected = reference_entries(field, values)
+    standard_entries = {value: selected.get(value) for value in values}
     used = [entry["color"] for entry in standard_entries.values() if entry]
     used.extend(
         proposed[value]["color"]
@@ -175,6 +172,7 @@ def category_style(
         audit.extend(records)
     return {
         "opacity": 100,
+        "colorPolicy": {"binding": "platform", "revision": policy_revision()},
         "fill": {"fillOpacity": 1, "fillOutlineColor": OUTLINE_COLOR},
         "renderer": {
             "type": "uniqueValue",
@@ -318,6 +316,7 @@ def style_result(workflow, resource, key, *, force=False, persist=True):
         and existing.get("version") == ADVICE_VERSION
         and existing.get("workflowId") == str(workflow.id)
         and existing.get("key") == key
+        and existing.get("policyRevision") == policy_revision()
     ):
         return visualization
     proposal, failure = None, ""
@@ -424,6 +423,7 @@ def style_result(workflow, resource, key, *, force=False, persist=True):
         }
     advice = {
         "version": ADVICE_VERSION,
+        "policyRevision": policy_revision(),
         "workflowId": str(workflow.id),
         "key": key,
         "field": field,

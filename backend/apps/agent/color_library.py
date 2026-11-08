@@ -10,6 +10,8 @@ import re
 
 
 LIBRARY_PATH = Path(__file__).parent / "data" / "result_color_library.json"
+LITHOLOGY_PATH = LIBRARY_PATH.with_name("lithology_colors.json")
+ALTERATION_PATH = LIBRARY_PATH.with_name("alteration_colors.json")
 MIN_DELTA_E = 12.0
 MIN_WHITE_CONTRAST = 3.0
 MIN_OUTLINE_CONTRAST = 1.25
@@ -128,9 +130,55 @@ def fallback_color(name, used, reference=None, *, polygon=True):
     )
 
 
-@lru_cache(maxsize=1)
 def library():
-    return json.loads(LIBRARY_PATH.read_text(encoding="utf-8"))["entries"]
+    return _library(
+        LIBRARY_PATH.read_bytes(),
+        LITHOLOGY_PATH.read_bytes(),
+        ALTERATION_PATH.read_bytes(),
+    )
+
+
+def lithology_colors():
+    return json.loads(LITHOLOGY_PATH.read_bytes())["colors"]
+
+
+@lru_cache(maxsize=1)
+def _library(index, lithology, alteration):
+    units = json.loads(lithology)
+    minerals = json.loads(alteration)
+    entries = json.loads(index)["entries"]
+    for entry in entries:
+        if entry["id"].startswith("lithology-"):
+            entry.update(
+                color=units["colors"][entry["name"]],
+                referenceColor=units["colors"][entry["name"]],
+                source=units["source"],
+            )
+        elif entry["domain"] == "alteration":
+            selected = next(
+                minerals[name]
+                for name in [entry["name"], *entry["aliases"]]
+                if name in minerals
+            )
+            entry.update(color=selected, referenceColor=selected)
+    return entries
+
+
+def policy_revision():
+    """One revision for data, candidate matching and shared validation rules."""
+    return hashlib.sha256(
+        b"\0".join(
+            path.read_bytes()
+            for path in (
+                LIBRARY_PATH,
+                LITHOLOGY_PATH,
+                ALTERATION_PATH,
+                Path(__file__),
+                Path(__file__).with_name("result_colors.py"),
+                Path(__file__).with_name("display_color_policy.py"),
+            )
+        )
+    ).hexdigest()[:20]
 
 
 def normalize(value):
@@ -173,3 +221,11 @@ def selected_entry(value, color, entries):
         ),
         None,
     )
+
+
+def reference_entries(field, values):
+    """Use the first ranked match: an exact unit beats a generic rock family."""
+    selected = {}
+    for entry in candidates(field, values):
+        selected.setdefault(entry["value"], entry)
+    return selected

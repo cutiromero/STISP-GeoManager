@@ -14,7 +14,7 @@ def color(value):
     return value.lower()
 
 
-def display_style(resource, profile, args):
+def display_style(resource, profile, args, *, audit=None):
     if not isinstance(args, dict) or set(args) - STYLE_KEYS:
         raise ValidationError(
             "只允许展示样式参数，不接受原始属性、几何、路径或权限修改"
@@ -47,7 +47,7 @@ def display_style(resource, profile, args):
                 "fillOutlineColor": "#475569",
             },
         }
-    if mode != "unique":
+    if mode not in {"unique", "reference"}:
         raise ValidationError(
             "第一批工具支持矢量single/unique和分类栅格unique；其他栅格沿用显示方案"
         )
@@ -64,6 +64,15 @@ def display_style(resource, profile, args):
     if "color" in args or (resource.data_type == "raster" and "field" in args):
         raise ValidationError("分类模式应使用classes，不使用单色参数或错误字段")
     classes = args.get("classes")
+    if mode == "reference":
+        if resource.data_type != "vector" or classes is not None:
+            raise ValidationError(
+                "reference使用矢量真实类别和平台规则，无需重复提交classes"
+            )
+        classes = [
+            {"value": item["value"], "color": "#64748b"}
+            for item in profile["categories"]
+        ]
     if not isinstance(classes, list) or not 1 <= len(classes) <= 96:
         raise ValidationError("classes须为1至96项实际类别及颜色")
     actual = {item["value"]: item for item in profile["categories"]}
@@ -87,40 +96,52 @@ def display_style(resource, profile, args):
         }
     if set(resolved) != set(actual):
         raise ValidationError("必须为全部实际类别赋色，不能遗漏类别或隐藏未读部分")
-    visible_colors = [
-        item["color"][:7]
-        for item in resolved.values()
-        if not item["color"].endswith("00") or len(item["color"]) == 7
-    ]
-    if len(visible_colors) != len(set(visible_colors)):
-        raise ValidationError("不同可见类别请使用可区分的颜色，不能全部同色")
     if resource.data_type == "vector":
-        return {
-            "opacity": opacity,
-            "pointMode": "circle",
-            "renderer": {
-                "type": "uniqueValue",
+        from .result_colors import category_style
+
+        proposal = (
+            None
+            if mode == "reference"
+            else {
                 "field": profile["categoryField"],
-                "updatedByUser": True,
                 "classes": [
-                    {"id": f"agent-class-{index}", "values": [value], **item}
-                    for index, (value, item) in enumerate(resolved.items())
+                    {"value": value, **item} for value, item in resolved.items()
                 ],
-                "defaultClass": {
-                    "id": "agent-other",
-                    "values": [],
-                    "label": "其他/未分类",
-                    "color": "#94a3b8",
-                    "count": max(
-                        0,
-                        int(profile.get("featureCount") or 0)
-                        - sum(item["count"] for item in resolved.values()),
-                    ),
-                },
-            },
-            "fill": {"fillOpacity": 0.8, "fillOutlineColor": "#475569"},
-            "line": {"lineWidth": 1.2},
-        }
+            }
+        )
+        style, _ = category_style(
+            profile["categoryField"],
+            list(actual),
+            proposal,
+            audit=audit,
+            polygon=profile.get("geometryType") in {"Polygon", "MultiPolygon"},
+        )
+        style.update(opacity=opacity, pointMode="circle")
+        style["renderer"]["updatedByUser"] = True
+        for item in style["renderer"]["classes"]:
+            item["values"] = [item["value"]]
+            item["count"] = actual[item["value"]]["count"]
+        style["renderer"]["defaultClass"].update(
+            id="agent-other",
+            values=[],
+            count=max(
+                0,
+                int(profile.get("featureCount") or 0)
+                - sum(item["count"] for item in actual.values()),
+            ),
+        )
+        return style
+    from .display_color_policy import raster_category_style
+
+    names = {value: str(actual[value].get("label", value)) for value in resolved}
+    table, binding = raster_category_style(
+        [
+            {"value": int(value), "label": item["label"], "color": item["color"]}
+            for value, item in resolved.items()
+        ],
+        names,
+        audit=audit,
+    )
     return {
         "opacity": opacity,
         "mode": "unique",
@@ -129,8 +150,6 @@ def display_style(resource, profile, args):
         "nodata": {"enabled": True},
         "stretch": {"enabled": False, "type": "minmax", "perBand": {}},
         "palette": "poplar",
-        "uniqueValues": [
-            {"value": int(value), "label": item["label"], "color": item["color"]}
-            for value, item in resolved.items()
-        ],
+        "uniqueValues": table,
+        "colorPolicy": binding,
     }

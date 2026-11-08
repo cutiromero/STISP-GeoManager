@@ -12,7 +12,6 @@ from django.utils import timezone
 from apps.agent.demo_workflow import _collect_stage
 from apps.agent.generic_inputs import (
     LITHOLOGY_COLORS,
-    PALETTE,
     name_symbolization,
     style_lithology,
 )
@@ -285,7 +284,9 @@ def test_lithology_colors_match_38_cim_names_and_fallback_and_profile(setup_comp
     classes = name_symbolization(data)["renderer"]["classes"]
     colors = {item["value"]: item["color"] for item in classes}
     assert colors["全新世冲积物qhal"] == "#ffffd8"
-    assert colors["未知新单元"] in PALETTE
+    from apps.agent.color_library import color_issues
+
+    assert not color_issues(colors["未知新单元"], list(LITHOLOGY_COLORS.values()))
     assert all(item["value"] == item["label"] for item in classes)
     env = setup_compute
     resource = env["resource"]

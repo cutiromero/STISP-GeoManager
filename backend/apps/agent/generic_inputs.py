@@ -7,7 +7,6 @@ stand-ins (map extent, empty fault layer, all-zero alteration raster).
 
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
 
@@ -19,14 +18,11 @@ from .geology_generic import MINERALS, utm_epsg
 from .workflow_resources import resolve_workflow_resource
 from .workflow_uploads import register_vector
 from .workflow_cancellation import check_cancelled
+from .color_library import lithology_colors
 
 PLACEHOLDER_NAME = "未提供的蚀变识别结果（全零）"
 MAX_PIXELS = 4000
-LITHOLOGY_COLORS = json.loads(
-    (Path(__file__).parent / "data" / "lithology_colors.json").read_text(
-        encoding="utf-8"
-    )
-)["colors"]
+LITHOLOGY_COLORS = lithology_colors()
 
 
 def _read(resource):
@@ -179,48 +175,18 @@ def placeholder_raster(user, workflow, coverage, resolution):
     return resource
 
 
-PALETTE = (
-    "#7fb3d5",
-    "#f5b041",
-    "#82e0aa",
-    "#f1948a",
-    "#bb8fce",
-    "#f7dc6f",
-    "#76d7c4",
-    "#e59866",
-    "#85c1e9",
-    "#c39bd3",
-    "#a9dfbf",
-    "#f8c471",
-    "#d98880",
-    "#73c6b6",
-)
 MAX_LEGEND_CLASSES = 60
 
 
 def name_symbolization(frame, field="name"):
     """Colour units by name so map legends read as unit names, not codes."""
+    from .result_colors import category_style
+
     names = sorted({str(v) for v in frame[field] if str(v).strip()})[
         :MAX_LEGEND_CLASSES
     ]
-    return {
-        "opacity": 85,
-        "renderer": {
-            "type": "uniqueValue",
-            "field": field,
-            "classes": [
-                {
-                    "id": f"unit-{index}",
-                    "value": name,
-                    "label": name,
-                    "color": LITHOLOGY_COLORS.get(name, PALETTE[index % len(PALETTE)]),
-                }
-                for index, name in enumerate(names)
-            ],
-            "defaultClass": {"color": "#cbd5e1", "label": "其他"},
-        },
-        "line": {"lineColor": "#64748b", "lineWidth": 0.5},
-    }
+    style, _ = category_style(field, names)
+    return style
 
 
 def style_lithology(resource):

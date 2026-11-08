@@ -65,7 +65,12 @@ def _rules(output) -> dict:
         }
         if kind in {"before", "corrected"}:
             table = getattr(output, "metadata", {}).get("mapColorTable")
-            if table:
+            from apps.agent.color_library import policy_revision
+
+            if table and (
+                table.get("policyRevision") == policy_revision()
+                or table.get("source") not in {"model_validated", "deterministic"}
+            ):
                 rules["colorTable"] = table["classes"]
             else:
                 from apps.agent.result_colors import category_style

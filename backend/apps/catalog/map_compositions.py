@@ -1075,6 +1075,8 @@ def _workspace_snapshot_for_user(
 
 
 def _serialize_workspace(scene: WorkspaceScene, request_user) -> dict[str, Any]:
+    from apps.agent.display_color_policy import refresh_snapshot
+
     owner = scene.owner if user_is_visible_to(request_user, scene.owner) else None
     is_owner = scene.owner_id == request_user.id
     return {
@@ -1082,7 +1084,7 @@ def _serialize_workspace(scene: WorkspaceScene, request_user) -> dict[str, Any]:
         "kind": scene.kind,
         "name": scene.name,
         "description": scene.description,
-        "snapshot": scene.snapshot,
+        "snapshot": refresh_snapshot(scene.snapshot),
         "owner": _serialize_user(owner),
         "accessGroups": [
             _serialize_group(group)

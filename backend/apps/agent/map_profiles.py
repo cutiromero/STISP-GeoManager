@@ -12,6 +12,7 @@ from apps.catalog.data_query import get_resource_profile
 from apps.core.permissions import has_feature_perm
 from apps.core.storage import raster_processed_path, vector_geopackage_path
 from apps.raster.models import RasterDataset
+from .color_library import policy_revision, reference_entries
 
 MAX_CLASSES = 96
 MAX_CLASSIFICATION_PIXELS = 4_000_000
@@ -150,29 +151,36 @@ def map_profile(resource, args):
             if not isinstance(field, str) or field not in fields:
                 raise ValidationError("分类字段必须来自该资料的真实字段")
             items, complete = vector_categories(resource, field)
-            from .color_library import candidates
-
-            colors = {
-                item["value"]: item["color"]
-                for item in candidates(field, [item["value"] for item in items])
-            }
+            entries = reference_entries(field, [item["value"] for item in items])
             result.update(
                 categoryField=field,
                 categories=[
                     {
                         **item,
                         **(
-                            {"suggestedColor": colors[item["value"]]}
-                            if item["value"] in colors
+                            {
+                                "suggestedColor": entries[item["value"]]["color"],
+                                "referenceId": entries[item["value"]]["id"],
+                                "referenceSource": entries[item["value"]]["source"],
+                                "colorLocked": True,
+                            }
+                            if item["value"] in entries
                             else {}
                         ),
                     }
                     for item in items
                 ],
                 categoriesComplete=complete,
+                colorPolicy={
+                    "revision": policy_revision(),
+                    "binding": "platform",
+                    "rules": "与逻辑推理共用配色规则；命中色表原样采用，保留原表同色类别；仅调整非色表色",
+                },
             )
         result["availableStyles"] = ["default", "single"] + (
-            ["unique"] if result["categoriesComplete"] and result["categories"] else []
+            ["reference", "unique"]
+            if result["categoriesComplete"] and result["categories"]
+            else []
         )
     else:
         if args.get("field") is not None:
@@ -182,6 +190,19 @@ def map_profile(resource, args):
         if type(band) is not int or not 1 <= band <= dataset.band_count:
             raise ValidationError("波段号超出该栅格的实际范围")
         items, complete, note = raster_categories(dataset, band)
+        mineral = reference_entries("mineral", [resource.name]).get(resource.name)
+        if (
+            mineral
+            and mineral["domain"] == "alteration"
+            and {item["value"] for item in items} <= {"0", "1"}
+        ):
+            for item in items:
+                if item["value"] == "1":
+                    item.update(
+                        label=mineral["name"],
+                        labelSource="registered_resource_name",
+                        suggestedColor=mineral["color"],
+                    )
         raster = profile.raster or {}
         result.update(
             band=band,
