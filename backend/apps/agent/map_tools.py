@@ -89,7 +89,7 @@ def group_for(run, resource, profile, style, advice):
         raster = profile["raster"]
         if not raster.get("id"):
             raise ValidationError("该栅格尚无就绪的地图数据集")
-        rules = style or raster.get("defaultRules") or {}
+        rules = {"opacity": 100, **(style or raster.get("defaultRules") or {})}
         layer.update(
             layerType="raster",
             rasterDatasetId=raster["id"],

@@ -248,6 +248,8 @@ describe("restoreWorkspaceGroups", () => {
         symbolization.uniqueValues = [
           { value: 1, color: "#cc7722", label: "矿物" },
         ];
+      } else {
+        Reflect.deleteProperty(symbolization, "opacity");
       }
       mockApi.resourceProfile.mockResolvedValue({
         raster: { id: 7, mapLayerId: 9, rasterKind: "imagery" },
@@ -288,6 +290,9 @@ describe("restoreWorkspaceGroups", () => {
         rasterRulesMode: rulesMode,
         rasterKind: rulesMode === "custom" ? "categorical" : "imagery",
       });
+      expect(
+        result.groups[0].children[0].symbolization.opacity,
+      ).toBeGreaterThan(0);
     },
   );
 

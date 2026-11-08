@@ -254,7 +254,7 @@ export async function restoreWorkspaceGroups({
       const restoredSymbolization = refreshedRender
         ? {
             ...rasterSymbolizationFromRules(refreshedRender.rules),
-            opacity: savedSymbolization.opacity,
+            opacity: savedSymbolization.opacity ?? 100,
             colorPolicy: savedSymbolization.colorPolicy,
           }
         : savedSymbolization;
