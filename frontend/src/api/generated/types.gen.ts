@@ -393,6 +393,10 @@ export type AgentPolicy = {
      */
     workflowEnabled: boolean;
     /**
+     * 允许智能体准备个人地图与展示配色；仍须当前项目数据ACL、图层加载、自定义符号化和个人工程权限，不修改原始属性、几何或文件。
+     */
+    mapDisplayEnabled?: boolean;
+    /**
      * 允许智能体实际提交已登记算子；仍受算法和计算权限约束
      */
     operatorEnabled: boolean;
@@ -1112,9 +1116,43 @@ export type AgentInteractionUpdate = {
 };
 
 /**
+ * 服务端从真实工具操作记录重建的站内入口；不是模型自报网址，点击后仍由相应接口核验当前项目和权限。
+ */
+export type AgentPlatformAction = {
+    /**
+     * 已保存的个人地图，或允许的平台页面。
+     */
+    kind: 'workspace' | 'page';
+    /**
+     * 已保存工程名称或页面名称。
+     */
+    title: string;
+    /**
+     * 本轮所属的单个项目，不能跨项目。
+     */
+    projectId: number;
+    /**
+     * workspace类型的真实工程编号；仅任务所有者的当前项目工程。
+     */
+    sceneId?: number;
+    /**
+     * page类型允许的页面；前端按枚举生成固定站内地址。
+     */
+    page?: 'map' | 'resources' | 'compute' | 'knowledge';
+    /**
+     * 地图所引用并已重新核验的业务资料编号；页面入口为空数组。
+     */
+    resourceIds: Array<number>;
+};
+
+/**
  * 持久运行记录；引用失权时返回 403，不返回旧内容
  */
 export type AgentRun = {
+    /**
+     * 本轮已完成的平台展示操作入口；从真实证据和本人私有工程重建，当前失权或工程停用时不返回可用按钮。
+     */
+    platformActions?: Array<AgentPlatformAction>;
     /**
      * 当前或最近的问题卡；未提问时为空。
      */

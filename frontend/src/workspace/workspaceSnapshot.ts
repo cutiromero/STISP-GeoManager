@@ -66,6 +66,7 @@ export function toSavedWorkspaceLayer(layer: LoadedLayer): SavedWorkspaceLayer {
     imageCoordinates: layer.imageCoordinates,
     rasterDatasetId: layer.rasterDatasetId,
     rasterLayerId: layer.rasterLayerId,
+    rasterRulesMode: layer.rasterRulesMode,
     rasterKind: layer.rasterKind,
     rasterMetadata: layer.rasterMetadata,
     renderStatus: layer.renderStatus,

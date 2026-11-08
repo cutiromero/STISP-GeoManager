@@ -107,6 +107,7 @@ def conversation_json(c):
 def run_json(r, user):
     from .selections import check_history_evidence, serialize as selection_json
     from .interactions import public_question
+    from .platform_actions import platform_actions
     from .answer_preview import stored_answer_preview
 
     p = require_access(user, r.conversation.mode)
@@ -126,6 +127,9 @@ def run_json(r, user):
         "answerPreview": stored_answer_preview(r),
         "detail": r.detail,
         "evidence": r.evidence,
+        "platformActions": platform_actions(r, user, p)
+        if r.conversation.mode == "agent"
+        else [],
         "computeIntent": _compute_intent(r, user, p),
         "researchIntent": _research_intent(r, user, p),
         "interaction": public_question(r.interaction) if r.interaction else None,

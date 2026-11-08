@@ -239,6 +239,58 @@ describe("restoreWorkspaceGroups", () => {
     ]);
   });
 
+  it.each(["default", "custom"] as const)(
+    "renders a new agent raster map without a saved tile URL (%s)",
+    async (rulesMode) => {
+      const symbolization = cloneDefaultRasterSymbolization();
+      if (rulesMode === "custom") {
+        symbolization.mode = "unique";
+        symbolization.uniqueValues = [
+          { value: 1, color: "#cc7722", label: "矿物" },
+        ];
+      }
+      mockApi.resourceProfile.mockResolvedValue({
+        raster: { id: 7, mapLayerId: 9, rasterKind: "imagery" },
+      });
+      mockApi.renderRasterAsync.mockResolvedValue({
+        status: "ready",
+        result: {
+          datasetId: 7,
+          tileUrl: "/api/raster/tiles/7/new/{z}/{x}/{y}.png?rv=4",
+          rules: symbolization,
+        },
+      });
+      const result = await restoreWorkspaceGroups({
+        savedGroups: [
+          makeGroup([
+            makeSavedRasterLayer({
+              tileUrl: undefined,
+              rasterRulesMode: rulesMode,
+              symbolization,
+            }),
+          ]),
+        ],
+        canQueryData: true,
+        canLoadVectorLayer: true,
+        canLoadRasterLayer: true,
+        queryResultLimit: 30000,
+        notification,
+      });
+      expect(result.issues).toEqual([]);
+      expect(mockApi.renderRasterAsync).toHaveBeenCalledWith({
+        datasetId: 7,
+        layerId: 9,
+        rules: symbolization,
+        rulesMode,
+      });
+      expect(result.groups[0].children[0]).toMatchObject({
+        tileUrl: "/api/raster/tiles/7/new/{z}/{x}/{y}.png?rv=4",
+        rasterRulesMode: rulesMode,
+        rasterKind: rulesMode === "custom" ? "categorical" : "imagery",
+      });
+    },
+  );
+
   it("re-renders a legacy v3 categorical snapshot before exposing v4 tiles", async () => {
     const symbolization = cloneDefaultRasterSymbolization();
     symbolization.mode = "unique";

@@ -152,6 +152,11 @@ export default function AgentAdmin() {
                   "Allow agent operators",
                 ],
                 [
+                  "mapDisplayEnabled",
+                  "允许准备个人地图与配色",
+                  "Allow personal map preparation",
+                ],
+                [
                   "systemInfoEnabled",
                   "允许读取系统参数",
                   "Allow system information",

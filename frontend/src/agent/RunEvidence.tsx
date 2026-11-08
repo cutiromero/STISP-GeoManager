@@ -7,6 +7,9 @@ import { createUuid } from "../utils/uuid";
 
 const operations: Record<string, [string, string]> = {
   search_resources: ["查找数据", "Data search"],
+  get_map_data_profile: ["地图资料与类别", "Map data and categories"],
+  prepare_map_workspace: ["个人地图已准备", "Personal map prepared"],
+  get_platform_link: ["平台页面入口", "Platform page"],
   describe_resource: ["数据概况", "Data overview"],
   read_rows: ["数据样本", "Data sample"],
   summarize_data: ["统计摘要", "Summary statistics"],

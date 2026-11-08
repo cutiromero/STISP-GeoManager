@@ -74,6 +74,24 @@ TOOLS = {
             ("query", "category"),
         ),
         ToolSpec(
+            "get_map_data_profile",
+            "read_data",
+            "读取可加载的真实地图概况与完整类别，resourceId；矢量field可选（默认name等实际字段），栅格band默认1。返回categoryField/categories/value/count/suggestedColor和categoriesComplete，分类配色前必须读取。分类最多96项，栅格最多400万像元；不能把不完整类别说成全部。",
+            ("resourceId", "field", "band"),
+        ),
+        ToolSpec(
+            "prepare_map_workspace",
+            "map_display",
+            '生成真实个人地图工程，原始数据不变，不覆盖已有工程。resourceIds为当前授权资源整数数组，name可选。styles可省略沿用显示方案；分类配色格式styles:[{"resourceId":12,"mode":"unique","field":"name","classes":[{"value":"实际类别","label":"显示名称","color":"#e0c080"}]}]，必须覆盖已读取的完整类别。矢量单色mode=single,color=#RRGGBB；分类栅格mode=unique,band=1使用真实整数类别颜色表。返回workspaceId才代表已准备，用户点击按钮加载地图。无需寻找配色计算算子。',
+            ("resourceIds", "styles", "name"),
+        ),
+        ToolSpec(
+            "get_platform_link",
+            "read_data",
+            "生成站内可用页面按钮；page只能是map/resources/compute/knowledge，不接受模型自报网址，自动携带当前项目。",
+            ("page",),
+        ),
+        ToolSpec(
             "describe_resource",
             "read_data",
             "查看资源说明、字段、记录范围；resourceId",
@@ -463,6 +481,10 @@ def _policy_switch(policy_value, *names):
 
 
 def _check_special_capability(spec, policy_value):
+    if spec.capability == "map_display" and not policy_value.get(
+        "mapDisplayEnabled", True
+    ):
+        raise PermissionDenied("管理员已关闭智能体地图展示工具")
     if spec.capability == "system_info" and not _policy_switch(
         policy_value, "systemInfoEnabled", "allowSystemInfo"
     ):
@@ -1006,6 +1028,10 @@ def execute(run, name, args):
     p = require_access(user, "agent", run.model)
     check_evidence(run, user, p)
     _check_special_capability(spec, p)
+    if name in {"get_map_data_profile", "prepare_map_workspace", "get_platform_link"}:
+        from .map_tools import execute_map
+
+        return execute_map(run, user, p, name, args)
     if name in KNOWLEDGE_TOOLS:
         require_knowledge(run)
     if name == "search_web" and not getattr(run, "internet_enabled", False):

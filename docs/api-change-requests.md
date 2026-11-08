@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261108-002 - 科研智能体个人地图与站内操作按钮
+
+- Status: BackendReady
+- Owner: codex/xintao，同一任务依次维护契约、后端、前端及验收。
+- Endpoints: 既有 GET /api/agent/runs/{runId}/、GET会话详情、GET/PUT智能体策略。
+- Change type: AgentRun新增可选platformActions数组，AgentPolicy新增可选mapDisplayEnabled（默认true）。
+- OpenAPI change: AgentPlatformAction限定workspace/page、当前projectId及真实sceneId或站内page枚举；不接受模型URL。三个注册工具沿用既有worker命令协议，无新公共工具执行端点。
+- Mock examples: 无新增mock文件；真实GeoPackage/GeoTIFF夹具、worker调度及按钮浏览器测试覆盖新字段。
+- Frontend reason: 用户可让科研智能体读取真实类别、设置配色并生成“在地理工作台查看”按钮；个人工程持久化，原始数据不变。
+- Backend implementation notes: get_map_data_profile只读限量类别；prepare_map_workspace重验当前项目、ACL、普通业务集合、手选范围、数据修订及加载/配色/新增工程权限，按run与内容幂等创建私有引用工程；get_platform_link只允许固定页面。序列化按钮从真实工程重建，撤权不返回按钮。连续栅格沿用已有显示，分类栅格由原后台渲染颜色表。
+- Verification: 200返回当前用户真实操作、401未登录、403功能/数据/项目拒绝、404他人运行；内部参数错误保留工具错误证据且不产生工程。验证原始字节和资源元信息不变、分类完整、撤权及跨用户隔离、幂等、地图恢复、真实模型调用与浏览器加载。
+- Result: 本地后端工具及worker链路、前端按钮与地图恢复定向测试通过；服务器候选和正式验收另由发布回执记录。
+
 ## API-20261108-001 - 页面会话后台恢复与多标签交接
 
 - Status: BackendReady
@@ -465,6 +478,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261108-002 | BackendReady | AgentRun / AgentPolicy | Personal map actions | Updated | Real GIS fixtures | Implemented | Scoped worker and browser checks | Original data read-only |
 | API-20261108-001 | BackendReady | /api/auth/browser-session/ | Recover live pages and join online sessions without global logout | Updated | Real Session and controlled clock | Implemented | Backend and browser regression | Existing Cookie, CSRF, account and project authorization |
 | API-20261107-003 | BackendReady | Pipeline display LOD and gzip |
 | API-20261107-002 | BackendReady | Workflow cancel and research inputSummary | Immediate stop and actual role reasons | Updated | Existing 105/106 optional compatible fixtures | Owner/project and bound task stop; model role audit | Targeted tests; real candidate separately | Current data and prior report versions preserved |

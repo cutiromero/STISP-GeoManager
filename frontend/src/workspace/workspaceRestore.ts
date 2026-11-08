@@ -1,3 +1,4 @@
+import { restoreVectorStyle } from "./restoreVectorStyle";
 import { api } from "../api/client";
 import { tilePreviewResult } from "../map/vectorTilePreview";
 import { rasterTileRendererVersion } from "../map/rasterLayerSync";
@@ -135,8 +136,10 @@ export async function restoreWorkspaceGroups({
               visible: savedLayer.visible,
               summary: savedLayer.summary,
               metadata: savedLayer.metadata,
-              symbolization:
+              symbolization: restoreVectorStyle(
+                restoredVectorLayer.symbolization,
                 savedLayer.symbolization as LoadedVectorLayer["symbolization"],
+              ),
               fields: savedLayer.fields,
             });
           }
@@ -171,7 +174,11 @@ export async function restoreWorkspaceGroups({
       try {
         const profile = await api.resourceProfile(savedLayer.sourceResource);
         currentRaster = profile.raster ?? undefined;
-        rasterKind = profile.raster?.rasterKind ?? rasterKind;
+        rasterKind =
+          (savedLayer.symbolization as LoadedRasterLayer["symbolization"])
+            .mode === "unique"
+            ? "categorical"
+            : (profile.raster?.rasterKind ?? rasterKind);
         if (!profile.raster) {
           issues.push({
             layerName: savedLayer.name,
@@ -211,8 +218,9 @@ export async function restoreWorkspaceGroups({
         });
       }
       const refreshLegacyCategoricalTiles =
-        rasterKind === "categorical" &&
-        !usesCurrentRasterRenderer(savedLayer.tileUrl);
+        !savedLayer.tileUrl ||
+        (rasterKind === "categorical" &&
+          !usesCurrentRasterRenderer(savedLayer.tileUrl));
       let refreshedRender: RasterRenderResult | undefined;
       let refreshError =
         refreshLegacyCategoricalTiles && !currentRaster
@@ -225,6 +233,7 @@ export async function restoreWorkspaceGroups({
             currentRaster.id,
             currentRaster.mapLayerId,
             savedLayer.symbolization as LoadedRasterLayer["symbolization"],
+            savedLayer.rasterRulesMode ?? "custom",
           );
           if (!usesCurrentRasterRenderer(refreshedRender.tileUrl)) {
             throw new Error("分类栅格服务返回了旧版瓦片地址");
@@ -271,6 +280,7 @@ export async function restoreWorkspaceGroups({
           ? currentRaster?.mapLayerId
           : savedLayer.rasterLayerId,
         rasterKind,
+        rasterRulesMode: savedLayer.rasterRulesMode,
         rasterMetadata: currentRaster?.metadata ?? savedLayer.rasterMetadata,
         renderStatus: refreshedRender
           ? "ready"
@@ -318,13 +328,14 @@ async function renderCategoricalSnapshot(
   datasetId: number,
   layerId: number | null,
   symbolization: LoadedRasterLayer["symbolization"],
+  rulesMode: "default" | "custom",
 ): Promise<RasterRenderResult> {
   const rules = symbolization as unknown as Record<string, unknown>;
   let job = await api.renderRasterAsync({
     datasetId,
     layerId,
     rules,
-    rulesMode: "custom",
+    rulesMode,
   });
   const deadline = Date.now() + 120_000;
   while (job.status === "queued" || job.status === "running") {

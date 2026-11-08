@@ -1,3 +1,4 @@
+import PlatformActions from "./PlatformActions";
 import {
   App,
   Alert,
@@ -1528,8 +1529,8 @@ function AgentWorkspace({
                         "Choose a local model to start a conversation.",
                       )
                     : ui(
-                        "自动发现当前项目中您有权访问的数据，读取、统计并提供依据。",
-                        "Discover authorized project data, calculate statistics and inspect the evidence.",
+                        "查找当前项目授权数据，读取字段与统计，设计配色并生成个人地图。",
+                        "Find authorized data, inspect fields and statistics, and prepare styled personal maps.",
                       )}
                 </p>
                 {mode === "agent" && !logicProject && (
@@ -1814,6 +1815,10 @@ function AgentWorkspace({
                         }}
                       />
                     )}
+                  <PlatformActions
+                    actions={r.platformActions}
+                    projectId={Number(project?.current ?? 1)}
+                  />
                   <RunEvidence
                     items={r.evidence}
                     canManage={Boolean(bootstrap?.canManage)}

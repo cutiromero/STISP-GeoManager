@@ -14,6 +14,7 @@ CAPABILITIES = {
     "chat": True,
     "read_data": True,
     "analyze_data": True,
+    "map_display": True,
     # Registered side effects remain disabled by policy until an administrator
     # explicitly enables ``operatorEnabled``.  The registry flags only state
     # that the adapter exists; execute() performs the runtime policy check.
@@ -41,6 +42,7 @@ def default_policy():
         "thinkingEnabled": True,
         "workflowEnabled": True,
         "operatorEnabled": False,
+        "mapDisplayEnabled": True,
         "systemInfoEnabled": True,
         "internetEnabled": False,
         "allowAttachments": True,
@@ -204,6 +206,8 @@ def daily_quota(user, p):
 def validate_policy(value):
     """Validate against the same explicit structure exposed in OpenAPI."""
     defaults = default_policy()
+    if isinstance(value, dict) and "mapDisplayEnabled" not in value:
+        value = {**value, "mapDisplayEnabled": defaults["mapDisplayEnabled"]}
     if not isinstance(value, dict) or set(value) != set(defaults):
         raise ValidationError("策略字段不完整或含未支持能力")
     validate_budgets(value)
@@ -214,6 +218,7 @@ def validate_policy(value):
         "thinkingEnabled",
         "workflowEnabled",
         "operatorEnabled",
+        "mapDisplayEnabled",
         "systemInfoEnabled",
         "internetEnabled",
         "allowAttachments",

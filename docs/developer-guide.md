@@ -2,6 +2,14 @@
 
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 
+## 科研智能体地图操作（2026-11-08）
+
+科研智能体使用 `get_map_data_profile` 读取授权矢量的实际字段、完整类别和数量，或分类栅格的整数类别；`prepare_map_workspace` 保存个人地图工程，`get_platform_link` 生成当前项目的固定页面入口。详见 [智能体平台展示工具](agent-platform-tools.md)。快速聊天提示用户切换科研智能体。
+
+既有运行详情与会话详情的 AgentRun 增加可选 `platformActions`。服务端从真实工具证据及当前仍可访问的本人工程重建按钮；前端只使用 `kind`、`projectId`、`sceneId` 或 `page` 枚举生成相对地址。不会执行模型提供的网址。未登录401、权限拒绝403、他人运行404沿用原接口；工具参数错误保留为本轮错误证据，不创建工程。
+
+策略新增可选 `mapDisplayEnabled`，默认 true，后台“地图展示工具”开关控制。保存还要求原有个人工程新增/查看和图层加载权限，自定义样式要求 `core.custom_symbolization`。不需要启用计算算子，也不提高数据访问权限。工程只存引用、查询、配色，不写回 DataResource 的默认显示配置，不修改原始数据。栅格渲染继续由后台统一接口执行。
+
 ## 预生成矢量显示瓦片（API-20261107-004）
 
 点资源同时提供rawTileUrl，关闭聚合或热力图使用aggregate=0读取原始点显示瓦片。原始属性查询增加可选布尔sourceFeatureIds（默认false），true保留源GeoPackage FID以关联瓦片；不改变几何和查询上限。公开项目保留原有游客只读语义，非公开项目仍须认证和项目授权。

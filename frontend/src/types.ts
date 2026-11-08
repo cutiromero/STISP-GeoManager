@@ -255,6 +255,7 @@ export type SavedWorkspaceLayer = {
   imageCoordinates?: RasterRenderResult["imageCoordinates"];
   rasterDatasetId?: number;
   rasterLayerId?: number | null;
+  rasterRulesMode?: "default" | "custom";
   rasterKind?: RasterDatasetProfile["rasterKind"];
   rasterMetadata?: RasterDatasetProfile["metadata"];
   renderStatus?: string;
@@ -468,6 +469,7 @@ export interface LoadedRasterLayer {
   imageCoordinates?: RasterRenderResult["imageCoordinates"];
   rasterDatasetId?: number;
   rasterLayerId?: number | null;
+  rasterRulesMode?: "default" | "custom";
   rasterKind?: RasterDatasetProfile["rasterKind"];
   rasterMetadata?: RasterDatasetProfile["metadata"];
   renderJobId?: string;

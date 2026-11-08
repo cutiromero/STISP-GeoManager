@@ -9448,6 +9448,10 @@ components:
         workflowEnabled:
           type: boolean
           description: 科研工作流计划与恢复开关
+        mapDisplayEnabled:
+          type: boolean
+          default: true
+          description: 允许智能体准备个人地图与展示配色；仍须当前项目数据ACL、图层加载、自定义符号化和个人工程权限，不修改原始属性、几何或文件。
         operatorEnabled:
           type: boolean
           description: 允许智能体实际提交已登记算子；仍受算法和计算权限约束
@@ -9977,10 +9981,51 @@ components:
             - type: array
               items: {type: string}
         text: {type: string, description: 补充信息，与此前证据一同恢复给模型}
+    AgentPlatformAction:
+      type: object
+      description: 服务端从真实工具操作记录重建的站内入口；不是模型自报网址，点击后仍由相应接口核验当前项目和权限。
+      additionalProperties: false
+      required: [kind, title, projectId, resourceIds]
+      properties:
+        kind:
+          type: string
+          enum: [workspace, page]
+          description: 已保存的个人地图，或允许的平台页面。
+        title:
+          type: string
+          maxLength: 160
+          description: 已保存工程名称或页面名称。
+        projectId:
+          type: integer
+          minimum: 1
+          description: 本轮所属的单个项目，不能跨项目。
+        sceneId:
+          type: integer
+          minimum: 1
+          description: workspace类型的真实工程编号；仅任务所有者的当前项目工程。
+        page:
+          type: string
+          enum: [map, resources, compute, knowledge]
+          description: page类型允许的页面；前端按枚举生成固定站内地址。
+        resourceIds:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          description: 地图所引用并已重新核验的业务资料编号；页面入口为空数组。
+          items:
+            type: integer
+            minimum: 1
+            description: 授权业务资源编号。
     AgentRun:
       type: object
       description: 持久运行记录；引用失权时返回 403，不返回旧内容
       properties:
+        platformActions:
+          type: array
+          maxItems: 10
+          description: 本轮已完成的平台展示操作入口；从真实证据和本人私有工程重建，当前失权或工程停用时不返回可用按钮。
+          items:
+            $ref: '#/components/schemas/AgentPlatformAction'
         interaction:
           description: 当前或最近的问题卡；未提问时为空。
           anyOf:

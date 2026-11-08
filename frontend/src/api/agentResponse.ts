@@ -79,6 +79,37 @@ export function assertAgentRun(
   if (!RUN_STATUSES.has(run.status as string)) {
     throw new ResponseFormatError(`${path}.status: invalid status`);
   }
+  if (run.platformActions !== undefined) {
+    const actions = array(run.platformActions, `${path}.platformActions`);
+    if (actions.length > 10)
+      throw new ResponseFormatError(`${path}.platformActions: too many`);
+    for (const value of actions) {
+      const action = object(value, `${path}.platformActions`);
+      field(action, "title", "string", path);
+      field(action, "projectId", "number", path);
+      if (
+        !Number.isSafeInteger(action.projectId) ||
+        Number(action.projectId) < 1
+      )
+        throw new ResponseFormatError("Invalid action project");
+      if (action.kind === "workspace") {
+        if (!Number.isSafeInteger(action.sceneId) || Number(action.sceneId) < 1)
+          throw new ResponseFormatError("Invalid workspace action");
+      } else if (
+        action.kind !== "page" ||
+        !["map", "resources", "compute", "knowledge"].includes(
+          String(action.page),
+        )
+      )
+        throw new ResponseFormatError("Invalid platform page");
+      const ids = array(action.resourceIds, path);
+      if (
+        ids.length > 5 ||
+        ids.some((id) => !Number.isSafeInteger(id) || Number(id) < 1)
+      )
+        throw new ResponseFormatError("Invalid action resources");
+    }
+  }
   if (run.answerPreview !== undefined) {
     field(run, "answerPreview", "string", path);
     if (Array.from(run.answerPreview as string).length > 24000)
