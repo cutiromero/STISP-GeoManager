@@ -13,11 +13,17 @@ from shapely.geometry import Polygon, mapping
 from shapely.ops import polygonize
 
 from apps.core.storage import app_path, vector_geopackage_path
+from apps.core.storage_locks import storage_lock, StorageLockTimeout
 
 DISPLAY_BUDGET_BYTES = 280 * 1024
 DISPLAY_GRID = 0.00001
 DISPLAY_CACHE_VERSION = 4
 logger = logging.getLogger(__name__)
+DISPLAY_JOIN_WAIT_SECONDS = 1.0
+
+
+class QueryBusy(Exception):
+    pass
 
 
 def cached_display_query(resource, payload, compute):
@@ -42,15 +48,40 @@ def cached_display_query(resource, payload, compute):
         if spatial
         else app_path("cache", "vector-display", f"{key}.json")
     )
+
+    def cached():
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            if saved["revision"] == revision:
+                result = saved["result"]
+                result["elapsedMs"] = max(0, round((perf_counter() - started) * 1000))
+                return result
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        return None
+
+    result = cached()
+    if result is not None:
+        return result
+    # Fixed stripes bound lock files; locks also coordinate background workers
+    # and other web processes. Cache hits never occupy an execution slot.
+    stripe = key[:2]
     try:
-        cached = json.loads(path.read_text(encoding="utf-8"))
-        if cached["revision"] == revision:
-            result = cached["result"]
-            result["elapsedMs"] = max(0, round((perf_counter() - started) * 1000))
+        with storage_lock(
+            app_path("cache", "vector-display", "locks", stripe + ".lock"),
+            timeout=DISPLAY_JOIN_WAIT_SECONDS,
+        ):
+            result = cached()
+            if result is not None:
+                return result
+            result = compute()
+            _store_display_cache(path, revision, result, spatial, resource.id)
             return result
-    except (OSError, ValueError, KeyError, TypeError):
-        pass
-    result = compute()
+    except StorageLockTimeout as error:
+        raise QueryBusy("相同显示数据正在准备，请稍后重试") from error
+
+
+def _store_display_cache(path, revision, result, spatial, resource_id):
     temporary = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,11 +104,10 @@ def cached_display_query(resource, payload, compute):
             for stale in entries[:-32]:
                 stale.unlink(missing_ok=True)
     except OSError:
-        logger.warning("无法保存矢量显示缓存 resource=%s", resource.id, exc_info=True)
+        logger.warning("无法保存矢量显示缓存 resource=%s", resource_id, exc_info=True)
     finally:
         if temporary and os.path.exists(temporary):
             os.unlink(temporary)
-    return result
 
 
 def prewarm_display_geometry(resource):

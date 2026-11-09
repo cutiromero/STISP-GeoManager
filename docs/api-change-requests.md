@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261109-001 - 并发显示缓存及资源读取复用
+
+- Status: BackendReady
+- Owner: codex/xintao，同一人依次负责契约、实现与验证。
+- Endpoints: 现有资源query/profile/visualization-summary；无新增端点。
+- Change type: 并发与缓存执行行为优化，返回字段及权限不变。
+- OpenAPI change: QueryRequest.displayGeometry补充无属性筛选的显示缓存先命中/合并再占执行槽；沿用503及Retry-After，精确和属性查询语义不变。
+- Mock examples: 沿用现有资源及查询示例；效率回归使用并发计数、真实SDK请求和科学摘要一致性夹具。
+- Frontend reason: 多组件同时读取同一资源不重复请求，已有就绪描述符不立即再查，取消不会误伤其他使用者；写入后重新读取。
+- Backend implementation notes: 固定数量进程间存储锁协调冷缓存、预热和Web请求，每个请求在共享计算前仍鉴权。相同缓存目标不同修订分别计算，旧计算不能覆盖新修订。输入准备沿用同一锁服务，掩膜阶段不重读像元，摘要不变。
+- Verification: 并发一次计算、缓存命中不占槽、版本/项目/登录隔离、写入失效、取消、异常释放、跨进程、撤权、像元摘要和原始数据一致；make check-efficiency与既有相关回归。
+- Result: 后端、前端及真实浏览器的效率契约回归通过，实际数据及发布结果另存验收回执。
+
 ## API-20261108-004 - 工程地图恢复与显示查询警告
 
 - Status: BackendReady
@@ -504,6 +517,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261109-001 | BackendReady | Existing resource reads/query | Concurrent reuse and cache admission | Updated | Existing fixtures | Shared locks and read coordinator | Efficiency contracts | ACL and scientific digests preserved |
 | API-20261108-004 | BackendReady | Resource query/profile/tiles and workspace | Stable map restore and structured display warnings | Updated | Scoped fixtures | Implemented | Scoped regression and actual browser | Original data and ACL preserved |
 | API-20261108-003 | BackendReady | Resource profile / workspace / output map preview | Shared color policy and live bindings | Updated | Existing fixtures | Single source implemented | Canonical table edit regression | Read-only display projection |
 | API-20261108-002 | BackendReady | AgentRun / AgentPolicy | Personal map actions | Updated | Real GIS fixtures | Implemented | Scoped worker and browser checks | Original data read-only |

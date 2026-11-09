@@ -11,6 +11,7 @@ import type {
 } from "../types";
 import { useViewportVectorLayers } from "./useViewportVectorLayers";
 import { api } from "../api/client";
+const realResourceProfile = api.resourceProfile;
 const mocks = {
   queryResource: vi.spyOn(api, "queryResource"),
   resourceProfile: vi.spyOn(api, "resourceProfile"),
@@ -19,6 +20,7 @@ afterEach(() => {
   cleanup();
   mocks.queryResource.mockReset();
   mocks.resourceProfile.mockReset();
+  vi.unstubAllGlobals();
 });
 
 function fixture() {
@@ -153,7 +155,20 @@ describe("view-bound vector loading", () => {
       clustered: true,
       featureCount: 39953,
     };
-    mocks.resourceProfile.mockResolvedValue({ vectorTiles: preview } as never);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ vectorTiles: preview }), {
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    );
+    // Exercise real descriptor verification instead of returning an untagged stub.
+    mocks.resourceProfile.mockImplementation((...args) =>
+      realResourceProfile(...args),
+    );
     const h = harness(camera, fixture(), true);
     await waitFor(() =>
       expect(

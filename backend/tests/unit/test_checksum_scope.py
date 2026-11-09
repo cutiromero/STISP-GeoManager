@@ -5,6 +5,8 @@ import pytest
 
 from apps.compute import packages
 
+pytestmark = pytest.mark.efficiency
+
 
 def test_unchanged_content_is_hashed_once_per_operation_and_nested_scope(tmp_path):
     path = tmp_path / "data.bin"

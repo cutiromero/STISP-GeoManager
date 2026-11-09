@@ -1,6 +1,11 @@
 import { moduleEntry } from "../routing/clientBuild";
 import { runMapDisplayQuery } from "./mapDisplayQuery";
 import {
+  canonicalReadKey,
+  isReadOnlyRequest,
+  ReadFlights,
+} from "./readFlights";
+import {
   getActiveProject,
   attachProjectHeader,
   projectSignal,
@@ -168,6 +173,72 @@ class ApiError extends Error {
 }
 
 type SdkModule = typeof sdkTypes;
+const resourceReads = new ReadFlights();
+
+async function readAwareFetch(
+  load: () => Promise<Response>,
+  method: string,
+  url: string,
+) {
+  const mutation = !isReadOnlyRequest(method, url);
+  if (mutation) resourceReads.invalidate();
+  try {
+    return await load();
+  } finally {
+    if (mutation) resourceReads.invalidate();
+  }
+}
+
+function resourceReadScope(resource: ResourceListItem) {
+  return canonicalReadKey([
+    browserSessionEpoch(),
+    getActiveProject(),
+    resource.id,
+    resource.updatedAt,
+    currentLocale(),
+  ]);
+}
+
+function shareResourceRead<T>(
+  kind: string,
+  resource: ResourceListItem,
+  params: unknown,
+  load: (signal: AbortSignal, locale: string) => Promise<T>,
+  signal?: AbortSignal,
+) {
+  const epoch = browserSessionEpoch();
+  const project = getActiveProject();
+  const locale = currentLocale();
+  const ensureScope = () => {
+    if (epoch !== browserSessionEpoch() || project !== getActiveProject())
+      throw new DOMException("读取所属的登录或项目已变化", "AbortError");
+  };
+  const group = combineAbortSignals(
+    signal ? [projectSignal(), signal] : [projectSignal()],
+  );
+  return resourceReads
+    .run(
+      canonicalReadKey([kind, resourceReadScope(resource), params]),
+      async (owned) => {
+        ensureScope();
+        const result = await load(owned, locale);
+        ensureScope();
+        return result;
+      },
+      group.signal,
+    )
+    .finally(group.dispose);
+}
+
+export function hasCurrentVectorPreview(
+  resource: ResourceListItem,
+  preview: DataResourceProfile["vectorTiles"],
+) {
+  const scope = resourceReadScope(resource);
+  return preview
+    ? resourceReads.isVerified(preview, scope)
+    : resourceReads.hasFreshAbsence(scope);
+}
 type SdkFunction = (...args: never[]) => Promise<HeyApiResponse>;
 let sdkPromise: Promise<SdkModule> | null = null;
 let sdkConfigured = false;
@@ -194,12 +265,18 @@ function getSdk() {
           baseUrl: "",
           credentials: "include",
           fetch: (request) =>
-            request instanceof Request
-              ? fetchProjectRequest(request)
-              : fetch(request),
+            readAwareFetch(
+              () =>
+                request instanceof Request
+                  ? fetchProjectRequest(request)
+                  : fetch(request),
+              request instanceof Request ? request.method : "GET",
+              request instanceof Request ? request.url : String(request),
+            ),
         });
         clientModule.client.interceptors.request.use((request) => {
-          request.headers.set("Accept-Language", currentLocale());
+          if (!request.headers.has("Accept-Language"))
+            request.headers.set("Accept-Language", currentLocale());
           if (request.method !== "GET") {
             request.headers.set("X-CSRFToken", getCookie("csrftoken") ?? "");
           }
@@ -386,7 +463,11 @@ export async function requestJson<T>(
     if (!authRequest && epoch !== browserSessionEpoch())
       throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
     const request = new Request(url, init);
-    let response = await fetch(request);
+    let response = await readAwareFetch(
+      () => fetch(request),
+      method,
+      request.url,
+    );
     if (!authRequest && epoch !== browserSessionEpoch())
       throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
     if (
@@ -396,7 +477,11 @@ export async function requestJson<T>(
     ) {
       if (epoch !== browserSessionEpoch())
         throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
-      response = await fetch(new Request(url, init));
+      response = await readAwareFetch(
+        () => fetch(new Request(url, init)),
+        method,
+        request.url,
+      );
     }
     if (!authRequest && epoch !== browserSessionEpoch())
       throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
@@ -464,6 +549,7 @@ export async function requestForm<T>(
   options: FormRequestOptions = {},
 ): Promise<T> {
   if (options.onUploadProgress) {
+    resourceReads.invalidate();
     return requestFormWithUploadProgress<T>(url, formData, options);
   }
   const headers = new Headers();
@@ -480,14 +566,19 @@ export async function requestForm<T>(
   await refreshBrowserSession();
   if (epoch !== browserSessionEpoch())
     throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
-  const response = await fetch(
-    new Request(url, {
-      method: "POST",
-      signal,
-      credentials: "include",
-      headers,
-      body: formData,
-    }),
+  const response = await readAwareFetch(
+    () =>
+      fetch(
+        new Request(url, {
+          method: "POST",
+          signal,
+          credentials: "include",
+          headers,
+          body: formData,
+        }),
+      ),
+    "POST",
+    url,
   );
   const data = await parseResponseBody(response);
   if (!response.ok) {
@@ -520,7 +611,10 @@ async function requestFormWithUploadProgress<T>(
     signal.addEventListener("abort", abort, { once: true });
     xhr.addEventListener(
       "loadend",
-      () => signal.removeEventListener("abort", abort),
+      () => {
+        resourceReads.invalidate();
+        signal.removeEventListener("abort", abort);
+      },
       { once: true },
     );
     xhr.setRequestHeader("Accept-Language", currentLocale());
@@ -1156,23 +1250,51 @@ export const api = {
   resourceProfile: (
     resource: ResourceListItem,
     options: RequestLifecycleOptions = {},
-  ) =>
-    unwrap<DataResourceProfile>(
-      sdk.getResourceProfile({
-        path: { id: resource.id },
-        signal: options.signal,
-      }),
-    ),
+  ) => {
+    const id = resource.id;
+    const generation = resourceReads.revision;
+    const scope = resourceReadScope(resource);
+    return shareResourceRead(
+      "profile",
+      resource,
+      {},
+      (signal, locale) =>
+        unwrap<DataResourceProfile>(
+          sdk.getResourceProfile({
+            path: { id },
+            signal,
+            headers: { "Accept-Language": locale },
+          }),
+        ),
+      options.signal,
+    ).then((profile) => {
+      if (profile.vectorTiles)
+        resourceReads.markVerified(profile.vectorTiles, scope, generation);
+      else resourceReads.markAbsent(scope, generation);
+      return profile;
+    });
+  },
   resourceVisualizationSummary: (
     resource: ResourceListItem,
     params: { topN?: number; histogramBins?: number } = {},
-  ) =>
-    unwrap<ResourceVisualizationSummary>(
-      sdk.getResourceVisualizationSummary({
-        path: { id: resource.id },
-        query: params,
-      }),
-    ),
+  ) => {
+    const id = resource.id;
+    const query = { ...params };
+    return shareResourceRead(
+      "visualization-summary",
+      resource,
+      query,
+      (signal, locale) =>
+        unwrap<ResourceVisualizationSummary>(
+          sdk.getResourceVisualizationSummary({
+            path: { id },
+            query,
+            signal,
+            headers: { "Accept-Language": locale },
+          }),
+        ),
+    );
+  },
   nonGeoAnalysis: (resourceId: number) =>
     requestJson<NonGeoAnalytics>(
       `/api/catalog/resources/${resourceId}/nongeo-analysis/`,
@@ -1187,20 +1309,40 @@ export const api = {
     payload: ResourceQueryPayload,
     signal?: AbortSignal,
   ) => {
+    const id = resource.id;
+    const body = payload.displayGeometry ? structuredClone(payload) : payload;
     const cancellation = combineAbortSignals(
       signal ? [projectSignal(), signal] : [projectSignal()],
     );
     const request = () =>
       unwrap<ResourceQueryResult>(
         sdk.queryResource({
-          path: { id: resource.id },
-          body: payload,
+          path: { id },
+          body,
           signal: cancellation.signal,
         }),
       );
     return (
       payload.displayGeometry
-        ? runMapDisplayQuery(request, cancellation.signal)
+        ? shareResourceRead(
+            "display-query",
+            resource,
+            body,
+            (signal, locale) =>
+              runMapDisplayQuery(
+                () =>
+                  unwrap<ResourceQueryResult>(
+                    sdk.queryResource({
+                      path: { id },
+                      body,
+                      signal,
+                      headers: { "Accept-Language": locale },
+                    }),
+                  ),
+                signal,
+              ),
+            cancellation.signal,
+          )
         : request()
     ).finally(cancellation.dispose);
   },

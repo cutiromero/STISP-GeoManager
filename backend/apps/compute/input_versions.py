@@ -22,10 +22,12 @@ from apps.core.storage import (
     vector_geopackage_path,
 )
 from apps.raster.models import RasterDataset
+from apps.core.storage_locks import storage_lock
 from .packages import ComputeError, _file_identity
 
 SCHEMA = 1
 MINERALS = {"hematite", "chlorite", "hydromica", "calcite", "dolomite"}
+MASK_SPOOL_MEMORY_BYTES = 8 * 1024 * 1024
 
 
 def _stat(path):
@@ -90,31 +92,8 @@ def _table_digest(path, table, vector):
 
 @contextmanager
 def version_lock(directory, *, wait=True):
-    directory.mkdir(parents=True, exist_ok=True)
-    with (directory / ".lock").open("a+b") as stream:
-        if os.name == "nt":
-            import msvcrt
-
-            if stream.tell() == 0:
-                stream.write(b"0")
-                stream.flush()
-            stream.seek(0)
-            msvcrt.locking(
-                stream.fileno(), msvcrt.LK_LOCK if wait else msvcrt.LK_NBLCK, 1
-            )
-            try:
-                yield
-            finally:
-                stream.seek(0)
-                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(stream, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
-            try:
-                yield
-            finally:
-                fcntl.flock(stream, fcntl.LOCK_UN)
+    with storage_lock(directory / ".lock", wait=wait):
+        yield
 
 
 def _clone(source, destination):
@@ -145,7 +124,10 @@ def _raster_evidence(path):
             return None
         pixels = hashlib.sha256()
         row_step = max(1, 262144 // src.width)
-        for mask in (False, True):
+        # The legacy digest contains all values followed by all masks. Spool
+        # masks from that same read instead of reopening/decoding source pixels
+        # for a second pass, including GDAL's derived NoData-mask case.
+        with tempfile.SpooledTemporaryFile(max_size=MASK_SPOOL_MEMORY_BYTES) as masks:
             for row in range(0, src.height, row_step):
                 for col in range(0, src.width, 262144):
                     window = rasterio.windows.Window(
@@ -155,11 +137,11 @@ def _raster_evidence(path):
                         min(row_step, src.height - row),
                     )
                     values = src.read(1, window=window, masked=True)
-                    pixels.update(
-                        np.ma.getmaskarray(values).tobytes()
-                        if mask
-                        else values.filled(0).tobytes()
-                    )
+                    pixels.update(values.filled(0).tobytes())
+                    masks.write(np.ma.getmaskarray(values).tobytes())
+            masks.seek(0)
+            for chunk in iter(lambda: masks.read(1024 * 1024), b""):
+                pixels.update(chunk)
         return {
             "crs": src.crs.to_wkt(),
             "transform": list(src.transform),

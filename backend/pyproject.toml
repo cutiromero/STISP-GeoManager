@@ -11,6 +11,7 @@ addopts = [
   "--reuse-db",
 ]
 markers = [
+  "efficiency: operation-count, concurrent reuse and invalidation contracts",
   "unit: pure unit tests that should avoid database and external services",
   "integration: Django integration tests covering models, services, and API endpoints",
 ]

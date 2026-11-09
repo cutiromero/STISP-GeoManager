@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 import pytest
 from django.core.exceptions import PermissionDenied
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 
 from apps.agent import resource_discovery
 from apps.agent.policy import default_policy
@@ -16,6 +18,8 @@ from apps.agent.tools import check_evidence
 from apps.catalog.models import DataResource
 from apps.projects.context import project_scope
 from tests.integration.test_agent import new_run, setup_agent  # noqa: F401
+
+pytestmark = pytest.mark.efficiency
 
 
 @pytest.fixture
@@ -79,3 +83,16 @@ def test_gzipped_poll_preserves_all_evidence_and_events(batch):
     assert response["Content-Encoding"] == "gzip"
     payload = json.loads(gzip.decompress(response.content))
     assert payload["run"]["id"] == run.id and len(payload["run"]["evidence"]) == 50
+
+
+def test_authorization_query_count_does_not_grow_per_resource(batch):
+    env, run, resources = batch
+    original = list(run.evidence)
+    with project_scope(env["scope"]):
+        run.evidence = original[:1]
+        with CaptureQueriesContext(connection) as small, discovery_scope():
+            check_context_sources(run, env["user"], default_policy())
+        run.evidence = original
+        with CaptureQueriesContext(connection) as many, discovery_scope():
+            check_context_sources(run, env["user"], default_policy())
+        assert len(many) <= len(small) + 3

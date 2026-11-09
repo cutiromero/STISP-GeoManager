@@ -186,16 +186,23 @@ def resource_profile(resource: DataResource) -> ResourceProfile:
     )
 
 
-def query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str, Any]:
+def query_resource(
+    resource: DataResource, payload: dict[str, Any], *, admission=None
+) -> dict[str, Any]:
+    from contextlib import nullcontext
+
     line_display_tolerance(payload)
+
+    def compute():
+        with admission() if admission else nullcontext():
+            return _query_resource(resource, payload)
+
     if payload.get("displayGeometry") is not True:
-        return _query_resource(resource, payload)
+        return compute()
     from .display_geometry import cached_display_query
 
     cache_payload = {**payload, "limit": _limit(payload.get("limit"))}
-    return cached_display_query(
-        resource, cache_payload, lambda: _query_resource(resource, payload)
-    )
+    return cached_display_query(resource, cache_payload, compute)
 
 
 def line_display_tolerance(payload: dict[str, Any]) -> float:

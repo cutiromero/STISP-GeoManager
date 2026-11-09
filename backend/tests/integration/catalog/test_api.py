@@ -480,6 +480,21 @@ class ResourceQueryApiTests(IsolatedCatalogStorageMixin, TestCase):
         query.assert_not_called()
         gate.release.assert_not_called()
 
+    def test_warm_display_query_does_not_use_busy_execution_slot(self):
+        url = f"/api/catalog/resources/{self.resource.id}/query/"
+        payload = json.dumps({"displayGeometry": True, "limit": 10})
+        first = self.client.post(url, data=payload, content_type="application/json")
+        self.assertEqual(first.status_code, 200)
+        gate = MagicMock()
+        gate.acquire.return_value = False
+        with patch("apps.catalog.views._DISPLAY_QUERY_GATE", gate):
+            cached = self.client.post(
+                url, data=payload, content_type="application/json"
+            )
+        self.assertEqual(cached.status_code, 200)
+        self.assertEqual(cached.json()["geojson"], first.json()["geojson"])
+        gate.acquire.assert_not_called()
+
     def test_default_project_query_is_public(self):
         resource = DataResource.objects.create(
             name="受限矢量资源",

@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Map as MapboxMap } from "mapbox-gl";
-import { api } from "../api/client";
+import { api, hasCurrentVectorPreview } from "../api/client";
 import { attachVectorTilePreview } from "../map/vectorTilePreview";
-import type { DataResourceProfile } from "../types";
 import type {
   LoadedLayer,
   LoadedLayerGroup,
@@ -30,9 +29,6 @@ export function useViewportVectorLayers(options: {
 }) {
   const latest = useRef(options);
   latest.current = options;
-  const previews = useRef(
-    new Map<string, Promise<DataResourceProfile["vectorTiles"]>>(),
-  );
   const targets = options.groups
     .filter((g) => g.visible)
     .flatMap((g) =>
@@ -99,28 +95,13 @@ export function useViewportVectorLayers(options: {
               layer.geometryType,
             );
             let preview = layer.vectorTiles;
-            if (context.resolveTilePreviews) {
-              const profileKey = JSON.stringify([
-                scope,
-                layer.sourceResource.id,
-                layer.sourceResource.updatedAt,
-              ]);
-              let pending = previews.current.get(profileKey);
-              if (!pending) {
-                pending = api
-                  .resourceProfile(layer.sourceResource, { signal })
-                  .then((profile) => profile.vectorTiles)
-                  .catch((error) => {
-                    previews.current.delete(profileKey);
-                    throw error;
-                  });
-                previews.current.set(profileKey, pending);
-                while (previews.current.size > 64)
-                  previews.current.delete(
-                    previews.current.keys().next().value!,
-                  );
-              }
-              preview = (await pending) ?? undefined;
+            if (
+              context.resolveTilePreviews &&
+              !hasCurrentVectorPreview(layer.sourceResource, preview)
+            ) {
+              preview =
+                (await api.resourceProfile(layer.sourceResource, { signal }))
+                  .vectorTiles ?? undefined;
             }
             const key = JSON.stringify([
               layer.sourceResource.id,

@@ -59,7 +59,11 @@ def get_resource_profile(resource: DataResource) -> ResourceProfile:
     return vector_store.resource_profile(resource)
 
 
-def query_resource(resource: DataResource, payload: dict[str, Any]) -> dict[str, Any]:
+def query_resource(
+    resource: DataResource, payload: dict[str, Any], *, admission=None
+) -> dict[str, Any]:
+    if admission is not None:
+        return vector_store.query_resource(resource, payload, admission=admission)
     return vector_store.query_resource(resource, payload)
 
 

@@ -1,10 +1,22 @@
 # Version management Makefile for huyang_system
+.DEFAULT_GOAL := help
 
 .PHONY: help version-patch version-minor version-major changelog tag
+
+# Efficiency verification configuration: use the activated project runtime.
+EFFICIENCY_PYTHON ?= python
+EFFICIENCY_PNPM ?= pnpm
+
+.PHONY: check-efficiency
+check-efficiency:
+	cd backend && $(EFFICIENCY_PYTHON) -m pytest -m efficiency -q
+	cd frontend && $(EFFICIENCY_PNPM) run check:efficiency
+	cd frontend && $(EFFICIENCY_PNPM) run check:efficiency:browser
 
 # Default target
 help:
 	@echo "Available commands:"
+	@echo "  make check-efficiency - Verify concurrent reuse, cancellation, invalidation and live authorization"
 	@echo "  make version-patch    - Bump patch version (0.1.0 -> 0.1.1)"
 	@echo "  make version-minor    - Bump minor version (0.1.0 -> 0.2.0)"
 	@echo "  make version-major    - Bump major version (0.1.0 -> 1.0.0)"

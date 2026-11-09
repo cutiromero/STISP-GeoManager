@@ -1,5 +1,6 @@
 import json
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -31,6 +32,7 @@ from apps.catalog.export import (
     validate_epsg,
     validate_vector_format,
 )
+from apps.catalog.display_geometry import QueryBusy
 from apps.catalog.importer import (
     ImportDataError,
     import_uploaded_table,
@@ -96,6 +98,16 @@ WORKSPACE_SNAPSHOT_MAX_BODY_BYTES = 1024 * 1024
 RESOURCE_QUERY_MAX_BODY_BYTES = 1024 * 1024
 EXPORT_REQUEST_MAX_BODY_BYTES = 10 * 1024 * 1024
 RESOURCE_QUERY_GATE_WAIT_SECONDS = 1.0
+
+
+@contextmanager
+def _query_slot(gate):
+    if not gate.acquire(timeout=RESOURCE_QUERY_GATE_WAIT_SECONDS):
+        raise QueryBusy("查询任务繁忙，请稍后重试")
+    try:
+        yield
+    finally:
+        gate.release()
 
 
 class _TemporaryExportFile:
@@ -1292,34 +1304,32 @@ def resource_query(request, pk: int):
     payload = _json_payload(request, max_body_bytes=RESOURCE_QUERY_MAX_BODY_BYTES)
     if isinstance(payload, JsonResponse):
         return payload
-    query_gate = (
-        _DISPLAY_QUERY_GATE
-        if payload.get("displayGeometry") is True
-        else _RESOURCE_QUERY_GATE
-    )
-    if not query_gate.acquire(timeout=RESOURCE_QUERY_GATE_WAIT_SECONDS):
+    try:
+        if payload.get("displayGeometry") is True:
+            result = query_data_resource(
+                resource, payload, admission=lambda: _query_slot(_DISPLAY_QUERY_GATE)
+            )
+        else:
+            with _query_slot(_RESOURCE_QUERY_GATE):
+                result = query_data_resource(resource, payload)
+    except QueryBusy:
         response = JsonResponse({"detail": "查询任务繁忙，请稍后重试"}, status=503)
         response["Retry-After"] = "2"
         return response
-    try:
-        try:
-            result = query_data_resource(resource, payload)
-        except DataQueryError as exc:
-            log_operation(
-                request.user,
-                "数据查询",
-                "查询数据资源",
-                "failed",
-                f"{resource.name}：{exc}",
-                request,
-                target_type="data_resource",
-                target_id=resource.id,
-                target_code=resource.code,
-                target_name=resource.name,
-            )
-            return JsonResponse({"detail": str(exc)}, status=400)
-    finally:
-        query_gate.release()
+    except DataQueryError as exc:
+        log_operation(
+            request.user,
+            "数据查询",
+            "查询数据资源",
+            "failed",
+            f"{resource.name}：{exc}",
+            request,
+            target_type="data_resource",
+            target_id=resource.id,
+            target_code=resource.code,
+            target_name=resource.name,
+        )
+        return JsonResponse({"detail": str(exc)}, status=400)
     log_operation(
         request.user,
         "数据查询",
