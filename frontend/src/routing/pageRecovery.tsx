@@ -10,6 +10,8 @@ import {
 import { Link, useLocation } from "react-router-dom";
 import { currentLocale } from "../i18n";
 import { downloadPageDiagnostics, recordPageError } from "./pageDiagnostics";
+import { observedServerBuild } from "../api/responseDiagnostics";
+import { moduleEntry } from "./clientBuild";
 import "./pageRecovery.css";
 
 const failedLoads = new Set<() => void>();
@@ -86,6 +88,8 @@ export class ApplicationErrorBoundary extends Component<
     if (!error) return this.props.children;
     const en = currentLocale() === "en-US";
     const chunk = isPageChunkError(error);
+    const server = observedServerBuild();
+    const updated = Boolean(server && server !== moduleEntry(document));
     return (
       <section className="page-recovery" role="alert">
         <header className="page-recovery-nav">
@@ -105,13 +109,17 @@ export class ApplicationErrorBoundary extends Component<
                 : "当前页面出现异常"}
           </h1>
           <p>
-            {chunk
+            {chunk && updated
               ? en
-                ? "A connection interruption or platform update may have affected loading. Reload to obtain the current page."
-                : "网络中断或平台更新可能影响了资源加载，请重新加载页面。"
-              : en
-                ? "You can retry this page or open another module. Saved conversations and tasks remain available."
-                : "可以重试当前页面或进入其他模块，已保存的对话和任务仍可重新打开。"}
+                ? "The platform has been updated. Keep any unsent text before loading the current version."
+                : "平台已更新，请保留尚未发送的文字，再刷新到当前版本。"
+              : chunk
+                ? en
+                  ? "A connection interruption or platform update may have affected loading. Reload to obtain the current page."
+                  : "网络中断或平台更新可能影响了资源加载，请重新加载页面。"
+                : en
+                  ? "You can retry this page or open another module. Saved conversations and tasks remain available."
+                  : "可以重试当前页面或进入其他模块，已保存的对话和任务仍可重新打开。"}
           </p>
           <div className="page-recovery-actions">
             {this.props.onRetry && (
@@ -127,7 +135,13 @@ export class ApplicationErrorBoundary extends Component<
               </button>
             )}
             <button type="button" onClick={() => window.location.reload()}>
-              {en ? "Reload platform" : "重新加载平台"}
+              {updated
+                ? en
+                  ? "Load current version"
+                  : "刷新到当前版本"
+                : en
+                  ? "Reload platform"
+                  : "重新加载平台"}
             </button>
             <button
               type="button"

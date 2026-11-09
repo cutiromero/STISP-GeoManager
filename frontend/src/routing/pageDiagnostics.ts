@@ -1,5 +1,9 @@
 import packageInfo from "../../package.json";
-import { RESPONSE_DIAGNOSTICS_KEY } from "../api/responseDiagnostics";
+import {
+  RESPONSE_DIAGNOSTICS_KEY,
+  observedServerBuild,
+} from "../api/responseDiagnostics";
+import { moduleEntry } from "./clientBuild";
 
 export const PAGE_ERROR_KEY = "platform:last-page-error";
 const PAGE_ERRORS_KEY = "platform:page-errors";
@@ -61,6 +65,8 @@ export function pageErrorRecord(
   return {
     time: new Date().toISOString(),
     version: packageInfo.version,
+    clientEntry: moduleEntry(document),
+    serverBuild: observedServerBuild() || null,
     path: (path ?? location.pathname).split(/[?#]/)[0],
     name: error.name,
     message: trace(error.message.slice(0, 800)),
@@ -96,6 +102,14 @@ export function collectPageDiagnostics(error?: Error) {
   return {
     version: packageInfo.version,
     exportedAt: new Date().toISOString(),
+    clientEntry: moduleEntry(document),
+    serverBuild: observedServerBuild() || null,
+    navigationType:
+      (
+        performance.getEntriesByType("navigation")[0] as
+          | PerformanceNavigationTiming
+          | undefined
+      )?.type ?? null,
     origin: location.origin,
     path: location.pathname,
     browser: navigator.userAgent,

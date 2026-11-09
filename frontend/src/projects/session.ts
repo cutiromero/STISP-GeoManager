@@ -1,11 +1,40 @@
 import {
   refreshBrowserSession,
   browserSessionEpoch,
+  browserSessionSignal,
+  browserSessionFamily,
+  observeResponseIdentity,
 } from "../auth/browserSession";
 import { combineAbortSignals } from "../utils/abortSignals";
+import { noteApiResponse } from "../api/responseDiagnostics";
 
 const requestCleanups = new WeakMap<Request, () => void>();
 const responseCleanups = new WeakMap<Response, () => void>();
+const responseScopes = new WeakMap<Response, () => void>();
+const responseUrls = new WeakMap<Response, string>();
+const responseMethods = new WeakMap<Response, string>();
+export function responseRequestMethod(response: Response) {
+  return responseMethods.get(response) ?? "GET";
+}
+export function responseRequestUrl(response: Response) {
+  return response.url || responseUrls.get(response) || window.location.href;
+}
+
+export function requestScope() {
+  const epoch = browserSessionEpoch(),
+    project = getActiveProject(),
+    auth = browserSessionSignal(),
+    scope = projectSignal();
+  return () => {
+    auth.throwIfAborted();
+    scope.throwIfAborted();
+    if (epoch !== browserSessionEpoch() || project !== getActiveProject())
+      throw new DOMException("请求所属账号或项目已变化", "AbortError");
+  };
+}
+export function assertResponseScope(response?: Response) {
+  if (response) responseScopes.get(response)?.();
+}
 let activeProject = "1";
 let controller = new AbortController();
 
@@ -48,7 +77,13 @@ export function attachProjectHeader(request: Request) {
   ) {
     if (!request.headers.has("X-Project-Id"))
       request.headers.set("X-Project-Id", activeProject);
-    const group = combineAbortSignals([request.signal, controller.signal]);
+    if (browserSessionFamily())
+      request.headers.set("X-STISP-Session", browserSessionFamily());
+    const group = combineAbortSignals([
+      request.signal,
+      controller.signal,
+      browserSessionSignal(),
+    ]);
     const scoped = new Request(request, { signal: group.signal });
     requestCleanups.set(scoped, group.dispose);
     return scoped;
@@ -58,6 +93,7 @@ export function attachProjectHeader(request: Request) {
 
 export async function fetchProjectRequest(request: Request) {
   const dispose = requestCleanups.get(request);
+  const check = requestScope();
   try {
     const epoch = browserSessionEpoch();
     await refreshBrowserSession();
@@ -67,7 +103,7 @@ export async function fetchProjectRequest(request: Request) {
       ["GET", "HEAD"].includes(request.method) ||
       request.headers.get("Content-Type")?.includes("application/json");
     const retry = replayable ? request.clone() : null;
-    let response = await fetch(request);
+    let response = await fetch(request, { cache: "no-store" });
     if (epoch !== browserSessionEpoch())
       throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
     if (
@@ -78,11 +114,17 @@ export async function fetchProjectRequest(request: Request) {
       await response.body?.cancel();
       if (epoch !== browserSessionEpoch())
         throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
-      response = await fetch(retry);
+      response = await fetch(retry, { cache: "no-store" });
     }
     if (epoch !== browserSessionEpoch())
       throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
+    check();
+    noteApiResponse(response);
+    observeResponseIdentity(response.headers.get("X-STISP-Session"));
     if (dispose) responseCleanups.set(response, dispose);
+    responseScopes.set(response, check);
+    responseUrls.set(response, request.url);
+    responseMethods.set(response, request.method);
     return response;
   } catch (error) {
     dispose?.();
@@ -95,8 +137,13 @@ export async function fetchProjectRequest(request: Request) {
 /** Run after SDK body parsing, so a project switch also cancels body reads. */
 export function releaseProjectResponse(response?: Response) {
   if (!response) return;
-  responseCleanups.get(response)?.();
-  responseCleanups.delete(response);
+  try {
+    assertResponseScope(response);
+  } finally {
+    responseCleanups.get(response)?.();
+    responseCleanups.delete(response);
+    responseScopes.delete(response);
+  }
 }
 
 export function projectTransformRequest(url: string) {

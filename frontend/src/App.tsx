@@ -28,7 +28,12 @@ import {
 } from "./router";
 import type { Bootstrap, User } from "./types";
 import i18n, { type AppLocale } from "./i18n";
-import { browserSessionEndedEvent } from "./auth/browserSession";
+import {
+  browserSessionEndedEvent,
+  invalidateBrowserRequests,
+} from "./auth/browserSession";
+import { authorizationIdentity } from "./auth/authorizationIdentity";
+import { resetProjectSession } from "./projects/session";
 import { lazyPage as lazy, RouteRecovery } from "./routing/pageRecovery";
 import { clearSessionExpired, markSessionExpired } from "./auth/sessionNotice";
 
@@ -101,7 +106,12 @@ export default function App({
   const signedIn = useRef<User | null>(null);
   signedIn.current = user;
   const authGeneration = useRef(0);
+  const accountRecovery = useRef(false);
   const setUser = useCallback((value: User | null) => {
+    if (
+      authorizationIdentity(signedIn.current) !== authorizationIdentity(value)
+    )
+      invalidateBrowserRequests();
     authGeneration.current += 1;
     signedIn.current = value;
     updateUser(value);
@@ -112,6 +122,26 @@ export default function App({
 
   useEffect(() => {
     const signedOut = (event: Event) => {
+      const reason =
+        event instanceof CustomEvent ? event.detail?.reason : undefined;
+      resetProjectSession();
+      if (reason === "account-changed") {
+        clearSessionExpired();
+        setUser(null);
+        if (accountRecovery.current) return;
+        accountRecovery.current = true;
+        const generation = authGeneration.current;
+        void api
+          .me()
+          .then((me) => {
+            if (generation === authGeneration.current) setUser(me.user);
+          })
+          .catch(() => {})
+          .finally(() => {
+            accountRecovery.current = false;
+          });
+        return;
+      }
       if (event instanceof CustomEvent && event.detail?.reason === "logout")
         clearSessionExpired();
       else if (signedIn.current) markSessionExpired(signedIn.current.id);

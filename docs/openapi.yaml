@@ -24,6 +24,11 @@ info:
     普通资源目录、搜索、图层列表以及复用目录集合的后台列表、导出和统计，依据明确的内部source前缀及注册规则code隐藏任务上传、工作副本、内部规则、修改表和评价材料；普通业务上传和计算成果保留，不按资料名称过滤。目录隐藏不改变已绑定任务和历史证据原有的项目、ACL及按编号读取规则。普通智能体另执行更严格的成果溯源检查。
 
 
+    ## 浏览器身份与响应来源
+
+    API 响应包含 X-STISP-Build（入口脚本路径）及 X-Request-Id（请求关联号）。JSON 元数据响应默认 private,no-store；已声明的文件、瓦片缓存规则优先。浏览器可发送 X-STISP-Session（页面登录 familyId，非凭据）；若与当前 Cookie 会话身份不一致，受保护操作在进入业务处理前返回 JSON 409、code=auth_context_changed。该可选围栏不授予权限，未发送时仍执行原有 Session、项目和 ACL 鉴权。bootstrap、csrf、login、register、guest-login、browser-session 不检查此围栏。
+
+
     ## 错误处理
 
     所有错误响应包含 `detail` 字段描述错误原因。
@@ -619,6 +624,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
   /api/auth/me/:
+    parameters:
+    - $ref: '#/components/parameters/BrowserSessionFamily'
     get:
       tags:
       - 认证接口
@@ -626,6 +633,8 @@ paths:
       operationId: getCurrentUser
       security: []
       responses:
+        '409':
+          $ref: '#/components/responses/BrowserIdentityChanged'
         '200':
           description: 已认证用户信息
           content:
@@ -5970,6 +5979,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
   /api/projects/:
+    parameters:
+    - $ref: '#/components/parameters/BrowserSessionFamily'
     get:
       tags:
       - 公共接口
@@ -6561,7 +6572,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  "/api/compute/runtime/": {"get": {"operationId": "getComputeRuntime", "tags": ["Compute"], "summary": "getComputeRuntime", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeRuntimeStatus"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}}
+  "/api/compute/runtime/": {"get": {"operationId": "getComputeRuntime", "tags": ["Compute"], "summary": "getComputeRuntime", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeRuntimeStatus"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"$ref": "#/components/responses/BrowserIdentityChanged"}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}, "parameters": [{"$ref": "#/components/parameters/BrowserSessionFamily"}]}
   "/api/compute/categories/": {"get": {"operationId": "listComputeCategories", "tags": ["Compute"], "summary": "listComputeCategories", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [], "parameters": [{"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeCategoryList"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}, "post": {"operationId": "createComputeCategory", "tags": ["Compute"], "summary": "createComputeCategory", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeCategory"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeCategory"}}}}}}
   "/api/compute/algorithms/": {"get": {"operationId": "listComputeAlgorithms", "tags": ["Compute"], "summary": "listComputeAlgorithms", "description": "按当前单项目返回相关共享算法及本项目登记算法。逻辑推理项目保留地质类，干旱生态项目保留生态、植被、水体指数及通用矢量工具；公开项目目录不变。发现与执行共用后端筛选，历史任务继续可读。", "security": [], "parameters": [{"name": "X-Project-Id", "in": "header", "required": false, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}, {"name": "q", "in": "query", "required": false, "description": "q 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "page", "in": "query", "required": false, "description": "page 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "pageSize", "in": "query", "required": false, "description": "pageSize 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "manage", "in": "query", "required": false, "description": "manage 筛选/分页", "schema": {"type": "string", "description": "文字"}}, {"name": "category", "in": "query", "required": false, "description": "category 筛选/分页", "schema": {"type": "string", "description": "文字"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAlgorithmList"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}}, "post": {"operationId": "createComputeAlgorithm", "tags": ["Compute"], "summary": "createComputeAlgorithm", "description": "计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。", "security": [{"sessionAuth": []}], "parameters": [{"name": "X-Project-Id", "in": "header", "required": true, "description": "当前单个业务项目；私有项目必须授权", "schema": {"type": "integer", "description": "标识"}}], "responses": {"200": {"description": "成功", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAlgorithm"}}}}, "400": {"description": "参数/包/输出校验失败", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "401": {"description": "请先登录", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "403": {"description": "功能权限不足", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "404": {"description": "对象不存在或无权访问", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "409": {"description": "版本/配额/幂等键冲突", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}, "503": {"description": "隔离环境不可用", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}}}, "requestBody": {"required": true, "description": "请求内容", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ComputeAlgorithmWrite"}}}}}}
   "/api/compute/algorithms/{algorithmId}/": {"post":{"operationId":"updateComputeAlgorithm","tags":["Compute"],"summary":"updateComputeAlgorithm","description":"计算中心。服务端重新检查项目及功能权限；任务文件仅本人和有权管理员访问。写入必须显式传当前项目。","security":[{"sessionAuth":[]}],"parameters":[{"name":"algorithmId","in":"path","required":true,"description":"对象标识","schema":{"type":"integer","description":"标识"}},{"name":"X-Project-Id","in":"header","required":true,"description":"当前单个业务项目；私有项目必须授权","schema":{"type":"integer","description":"标识"}}],"responses":{"200":{"description":"成功","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ComputeAlgorithm"}}}},"400":{"description":"参数/包/输出校验失败","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"401":{"description":"请先登录","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"403":{"description":"功能权限不足","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"404":{"description":"对象不存在或无权访问","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"409":{"description":"版本/配额/幂等键冲突","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"503":{"description":"隔离环境不可用","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}}},"requestBody":{"required":true,"description":"请求内容","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ComputeAlgorithmWrite"}}}}},"delete":{"operationId":"deleteComputeAlgorithm","tags":["Compute"],"summary":"deleteComputeAlgorithm","description":"删除当前项目内没有任务历史的算法登记及其版本包；已有任务记录的算法必须归档停用。","security":[{"sessionAuth":[]}],"parameters":[{"name":"algorithmId","in":"path","required":true,"description":"对象标识","schema":{"type":"integer","description":"标识"}},{"name":"X-Project-Id","in":"header","required":true,"description":"当前单个业务项目；私有项目必须授权","schema":{"type":"integer","description":"标识"}}],"responses":{"200":{"description":"算法已删除","content":{"application/json":{"schema":{"$ref":"#/components/schemas/DetailResponse"}}}},"400":{"description":"参数/包/输出校验失败","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"401":{"description":"请先登录","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"403":{"description":"功能权限不足","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"404":{"description":"对象不存在或无权访问","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}},"409":{"description":"算法已有任务历史，不能删除","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ErrorResponse"}}}}}}}
@@ -9054,6 +9065,14 @@ components:
       name: sessionid
       description: Django Session Cookie
   parameters:
+    BrowserSessionFamily:
+      name: X-STISP-Session
+      in: header
+      required: false
+      description: 可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。
+      schema:
+        type: string
+        pattern: '^[a-f0-9]{32}$'
     ShareInvitationId:
       name: invitationId
       in: path
@@ -9075,6 +9094,23 @@ components:
         type: string
       description: 异步任务 ID
   responses:
+    BrowserIdentityChanged:
+      description: 页面身份与 Cookie 会话不一致，业务操作未执行；重新读取当前身份及项目授权后重试。
+      headers:
+        X-STISP-Session:
+          description: 当前 Cookie 会话的 familyId，不包含登录 token。
+          schema: {type: string}
+        X-STISP-Build:
+          description: 服务端当前前端入口脚本路径。
+          schema: {type: string}
+        X-Request-Id:
+          description: 本次请求的随机关联号，用于异常诊断。
+          schema: {type: string}
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example: {detail: 账号已在其他页面切换，请重新确认当前账号, code: auth_context_changed}
     BadRequest:
       description: 请求错误
       content:

@@ -1,5 +1,6 @@
 import { moduleEntry } from "../routing/clientBuild";
 import { consumeServerEvents } from "./eventStream";
+import { jsonContentType, validateApiContract } from "./responseContract";
 import { runMapDisplayQuery } from "./mapDisplayQuery";
 import {
   canonicalReadKey,
@@ -12,11 +13,15 @@ import {
   projectSignal,
   fetchProjectRequest,
   releaseProjectResponse,
+  requestScope,
+  responseRequestUrl,
+  responseRequestMethod,
 } from "../projects/session";
 import { combineAbortSignals } from "../utils/abortSignals";
 import {
   recordResponseDiagnostic,
   ResponseFormatError,
+  noteApiResponse,
 } from "./responseDiagnostics";
 import type {
   AdminDashboard,
@@ -137,6 +142,9 @@ import {
   resumeBrowserSession,
   refreshBrowserSession,
   browserSessionEpoch,
+  browserSessionSignal,
+  browserSessionFamily,
+  observeResponseIdentity,
   startBrowserSession,
 } from "../auth/browserSession";
 
@@ -245,13 +253,30 @@ let sdkPromise: Promise<SdkModule> | null = null;
 let sdkConfigured = false;
 const sdk = new Proxy({} as SdkModule, {
   get(_target, property: keyof SdkModule) {
-    return (...args: never[]) =>
-      getSdk()
-        .then((module) => (module[property] as SdkFunction)(...args))
+    return (...args: never[]) => {
+      const check = requestScope();
+      const options = (args[0] ?? {}) as { signal?: AbortSignal };
+      const group = combineAbortSignals([
+        browserSessionSignal(),
+        projectSignal(),
+        ...(options.signal ? [options.signal] : []),
+      ]);
+      const owned = [{ ...options, signal: group.signal }] as never[];
+      return getSdk()
+        .then((module) => {
+          check();
+          return (module[property] as SdkFunction)(...owned);
+        })
         .then((result) => {
-          releaseProjectResponse(result.response);
-          return result;
-        });
+          try {
+            check();
+            return result;
+          } finally {
+            releaseProjectResponse(result.response);
+          }
+        })
+        .finally(group.dispose);
+    };
   },
 });
 
@@ -276,6 +301,9 @@ function getSdk() {
             ),
         });
         clientModule.client.interceptors.request.use((request) => {
+          const entry =
+            typeof document === "undefined" ? "" : moduleEntry(document);
+          if (entry) request.headers.set("X-App-Entry", entry);
           if (!request.headers.has("Accept-Language"))
             request.headers.set("Accept-Language", currentLocale());
           if (request.method !== "GET") {
@@ -313,6 +341,33 @@ async function unwrap<T>(request: Promise<HeyApiResponse>): Promise<T> {
     const status = response?.status ?? 0;
     notifyAuthorizationFailure(status, response?.url);
     throw new ApiError(errorMessage(error, status), status, error, response);
+  }
+  if (response) {
+    const url = responseRequestUrl(response);
+    if (
+      response.status !== 204 &&
+      !jsonContentType(response.headers.get("Content-Type"))
+    ) {
+      recordResponseDiagnostic(url, response, data, "unexpected_content_type");
+      throw new ResponseFormatError(
+        "unexpected_content_type",
+        "平台接口返回了非JSON内容，请重试。",
+      );
+    }
+    try {
+      if (response.status !== 204)
+        validateApiContract(url, data, responseRequestMethod(response));
+    } catch (error) {
+      recordResponseDiagnostic(
+        url,
+        response,
+        data,
+        error instanceof ResponseFormatError
+          ? error.issue
+          : "invalid_structure",
+      );
+      throw error;
+    }
   }
   return data as T;
 }
@@ -434,17 +489,33 @@ export async function requestJson<T>(
   } = {},
 ): Promise<T> {
   const method = options.method ?? "GET";
+  const path = new URL(url, window.location.origin).pathname;
+  const independent = [
+    "/api/bootstrap/",
+    "/api/auth/csrf/",
+    "/api/auth/login/",
+    "/api/auth/guest-login/",
+    "/api/auth/register/",
+    "/api/auth/logout/",
+  ].includes(path);
+  const check = independent
+    ? () => options.signal?.throwIfAborted()
+    : requestScope();
   const headers = new Headers();
   headers.set("Accept-Language", currentLocale());
   const entry = typeof document === "undefined" ? "" : moduleEntry(document);
   if (entry) headers.set("X-App-Entry", entry);
   headers.set("X-Project-Id", options.projectTagId ?? getActiveProject());
-  const cancellation = combineAbortSignals(
-    options.signal ? [projectSignal(), options.signal] : [projectSignal()],
-  );
+  if (!independent && browserSessionFamily())
+    headers.set("X-STISP-Session", browserSessionFamily());
+  const cancellation = combineAbortSignals([
+    ...(independent ? [] : [projectSignal(), browserSessionSignal()]),
+    ...(options.signal ? [options.signal] : []),
+  ]);
   const init: RequestInit = {
     method,
     credentials: "include",
+    cache: "no-store",
     headers,
     signal: cancellation.signal,
   };
@@ -456,9 +527,7 @@ export async function requestJson<T>(
     init.body = JSON.stringify(options.body);
   }
   try {
-    const authRequest =
-      isExpectedUnauthenticatedRequest(url) ||
-      url.startsWith("/api/bootstrap/");
+    const authRequest = independent;
     const epoch = browserSessionEpoch();
     if (!authRequest) await refreshBrowserSession();
     if (!authRequest && epoch !== browserSessionEpoch())
@@ -486,13 +555,15 @@ export async function requestJson<T>(
     }
     if (!authRequest && epoch !== browserSessionEpoch())
       throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
-    if (!response.ok) notifyAuthorizationFailure(response.status, request.url);
+    check();
+    if (!independent)
+      observeResponseIdentity(response.headers.get("X-STISP-Session"));
     let data: unknown;
     try {
       data = await parseResponseBody(response);
     } catch (error) {
+      check();
       if (isAbortError(error)) throw error;
-      if (!options.validate) throw error;
       recordResponseDiagnostic(
         request.url,
         response,
@@ -506,14 +577,15 @@ export async function requestJson<T>(
         );
       throw new ResponseFormatError("response: invalid JSON");
     }
+    check();
     if (!response.ok) {
-      if (options.validate)
-        recordResponseDiagnostic(
-          request.url,
-          response,
-          data,
-          `http:${response.status}`,
-        );
+      notifyAuthorizationFailure(response.status, request.url);
+      recordResponseDiagnostic(
+        request.url,
+        response,
+        data,
+        `http:${response.status}`,
+      );
       throw new ApiError(
         errorMessage(data, response.status),
         response.status,
@@ -521,6 +593,16 @@ export async function requestJson<T>(
       );
     }
     try {
+      if (
+        response.status !== 204 &&
+        !jsonContentType(response.headers.get("Content-Type"))
+      )
+        throw new ResponseFormatError(
+          "unexpected_content_type",
+          "平台接口返回了非JSON内容，请重试。",
+        );
+      if (response.status !== 204)
+        validateApiContract(request.url, data, method);
       options.validate?.(data);
     } catch (error) {
       recordResponseDiagnostic(
@@ -548,11 +630,15 @@ export async function requestEventStream(
   const headers = new Headers({ Accept: "text/event-stream" });
   headers.set("Accept-Language", currentLocale());
   headers.set("X-Project-Id", getActiveProject());
+  if (browserSessionFamily())
+    headers.set("X-STISP-Session", browserSessionFamily());
   const entry = typeof document === "undefined" ? "" : moduleEntry(document);
   if (entry) headers.set("X-App-Entry", entry);
-  const cancellation = combineAbortSignals(
-    signal ? [projectSignal(), signal] : [projectSignal()],
-  );
+  const cancellation = combineAbortSignals([
+    projectSignal(),
+    browserSessionSignal(),
+    ...(signal ? [signal] : []),
+  ]);
   let streamedResponse: Response | undefined;
   const check = () => {
     cancellation.signal.throwIfAborted();
@@ -573,15 +659,20 @@ export async function requestEventStream(
     let response = await readAwareFetch(send, "GET", url);
     streamedResponse = response;
     check();
+    noteApiResponse(response);
+    observeResponseIdentity(response.headers.get("X-STISP-Session"));
     if (response.status === 401 && (await refreshBrowserSession(true))) {
       check();
       response = await readAwareFetch(send, "GET", url);
       streamedResponse = response;
     }
     check();
+    noteApiResponse(response);
+    observeResponseIdentity(response.headers.get("X-STISP-Session"));
     if (!response.ok) {
-      notifyAuthorizationFailure(response.status, url);
       const data = await parseResponseBody(response);
+      check();
+      notifyAuthorizationFailure(response.status, url);
       throw new ApiError(
         errorMessage(data, response.status),
         response.status,
@@ -625,35 +716,68 @@ export async function requestForm<T>(
     String(options.projectTagId ?? getActiveProject()),
   );
   headers.set("X-CSRFToken", getCookie("csrftoken") ?? "");
-  const signal = projectSignal();
+  if (browserSessionFamily())
+    headers.set("X-STISP-Session", browserSessionFamily());
+  const cancellation = combineAbortSignals([
+    projectSignal(),
+    browserSessionSignal(),
+  ]);
+  const signal = cancellation.signal;
+  const check = requestScope();
   const epoch = browserSessionEpoch();
-  await refreshBrowserSession();
-  if (epoch !== browserSessionEpoch())
-    throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
-  const response = await readAwareFetch(
-    () =>
-      fetch(
-        new Request(url, {
-          method: "POST",
-          signal,
-          credentials: "include",
-          headers,
-          body: formData,
-        }),
-      ),
-    "POST",
-    url,
-  );
-  const data = await parseResponseBody(response);
-  if (!response.ok) {
-    notifyAuthorizationFailure(response.status, response.url || url);
-    throw new ApiError(
-      errorMessage(data, response.status),
-      response.status,
-      data,
+  try {
+    await refreshBrowserSession();
+    if (epoch !== browserSessionEpoch())
+      throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
+    const response = await readAwareFetch(
+      () =>
+        fetch(
+          new Request(url, {
+            method: "POST",
+            signal,
+            credentials: "include",
+            headers,
+            body: formData,
+          }),
+        ),
+      "POST",
+      url,
     );
+    check();
+    observeResponseIdentity(response.headers.get("X-STISP-Session"));
+    let data: unknown;
+    try {
+      data = await parseResponseBody(response);
+    } catch (error) {
+      check();
+      if (isAbortError(error)) throw error;
+      recordResponseDiagnostic(url, response, undefined, "invalid_json");
+      throw new ResponseFormatError(
+        "upload.invalid_json",
+        "上传接口返回内容异常，请重试。",
+      );
+    }
+    check();
+    if (!response.ok) {
+      notifyAuthorizationFailure(response.status, response.url || url);
+      throw new ApiError(
+        errorMessage(data, response.status),
+        response.status,
+        data,
+      );
+    }
+    if (!jsonContentType(response.headers.get("Content-Type"))) {
+      recordResponseDiagnostic(url, response, data, "unexpected_content_type");
+      throw new ResponseFormatError(
+        "upload.contentType",
+        "上传接口返回了非JSON内容，请重试。",
+      );
+    }
+    validateApiContract(url, data, "POST");
+    return data as T;
+  } finally {
+    cancellation.dispose();
   }
-  return data as T;
 }
 
 async function requestFormWithUploadProgress<T>(
@@ -661,13 +785,20 @@ async function requestFormWithUploadProgress<T>(
   formData: FormData,
   options: FormRequestOptions,
 ): Promise<T> {
-  const signal = projectSignal();
+  const group = combineAbortSignals([projectSignal(), browserSessionSignal()]);
+  const signal = group.signal;
+  const check = requestScope();
   const selectedProject = options.projectTagId ?? getActiveProject();
   const epoch = browserSessionEpoch();
-  await refreshBrowserSession();
-  if (epoch !== browserSessionEpoch())
-    throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
-  signal.throwIfAborted();
+  try {
+    await refreshBrowserSession();
+    if (epoch !== browserSessionEpoch())
+      throw new DOMException("登录状态已变化，已取消旧请求", "AbortError");
+    signal.throwIfAborted();
+  } catch (error) {
+    group.dispose();
+    throw error;
+  }
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
@@ -678,11 +809,14 @@ async function requestFormWithUploadProgress<T>(
       () => {
         resourceReads.invalidate();
         signal.removeEventListener("abort", abort);
+        group.dispose();
       },
       { once: true },
     );
     xhr.setRequestHeader("Accept-Language", currentLocale());
     xhr.setRequestHeader("X-Project-Id", String(selectedProject));
+    if (browserSessionFamily())
+      xhr.setRequestHeader("X-STISP-Session", browserSessionFamily());
     xhr.withCredentials = true;
     xhr.setRequestHeader("X-CSRFToken", getCookie("csrftoken") ?? "");
 
@@ -698,12 +832,32 @@ async function requestFormWithUploadProgress<T>(
     xhr.onerror = () => {
       reject(new ApiError("网络请求失败", xhr.status || 0));
     };
+    xhr.onabort = () =>
+      reject(signal.reason ?? new DOMException("请求已取消", "AbortError"));
 
     xhr.onload = () => {
+      try {
+        check();
+        observeResponseIdentity(xhr.getResponseHeader("X-STISP-Session"));
+      } catch (error) {
+        reject(error);
+        return;
+      }
       const data = parseXhrBody(xhr);
       if (xhr.status < 200 || xhr.status >= 300) {
         notifyAuthorizationFailure(xhr.status, url);
         reject(new ApiError(errorMessage(data, xhr.status), xhr.status, data));
+        return;
+      }
+      try {
+        if (!jsonContentType(xhr.getResponseHeader("Content-Type")))
+          throw new ResponseFormatError(
+            "upload.contentType",
+            "上传接口返回了非JSON内容，请重试。",
+          );
+        validateApiContract(url, data, "POST");
+      } catch (error) {
+        reject(error);
         return;
       }
       options.onUploadProgress?.(100);
@@ -730,6 +884,7 @@ function parseXhrBody(xhr: XMLHttpRequest) {
 }
 
 async function parseResponseBody(response: Response) {
+  noteApiResponse(response);
   if (response.status === 204) {
     return undefined;
   }

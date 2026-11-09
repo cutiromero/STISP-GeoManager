@@ -13,6 +13,8 @@ import {
 import { platformApi, type ProjectTag } from "../api/platform";
 import { useLocation } from "react-router-dom";
 import { useAppContext } from "../contexts/AppContext";
+import { authorizationIdentity } from "../auth/authorizationIdentity";
+import { browserSessionSignal } from "../auth/browserSession";
 import { downloadPageDiagnostics } from "../routing/pageDiagnostics";
 import {
   getActiveProject,
@@ -49,23 +51,29 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
   const [canManage, setCanManage] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
-  const [resolvedIdentity, setResolvedIdentity] = useState<number | null>();
+  const [resolvedIdentity, setResolvedIdentity] = useState<string>();
+  const authKey = authorizationIdentity(user);
   const [loadError, setLoadError] = useState("");
   const requestSequence = useRef(0);
   const currentRef = useRef(current);
   currentRef.current = current;
   const identity = useRef(user?.id);
   identity.current = user?.id;
+  const authorization = useRef(authKey);
+  authorization.current = authKey;
   const onLoginPage = useRef(loginPage);
   onLoginPage.current = loginPage;
   const refresh = useCallback(async () => {
     if (onLoginPage.current) return;
     const sequence = ++requestSequence.current;
     const userId = identity.current;
+    const authorized = authorization.current;
     const signal = projectSignal();
+    const authSignal = browserSessionSignal();
     const isCurrent = () =>
       sequence === requestSequence.current &&
       userId === identity.current &&
+      authorized === authorization.current &&
       !onLoginPage.current;
     let data;
     try {
@@ -74,11 +82,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (
         !isCurrent() ||
         signal.aborted ||
-        (error instanceof Error && error.name === "AbortError")
+        authSignal.aborted ||
+        ((error instanceof Error || error instanceof DOMException) &&
+          error.name === "AbortError" &&
+          signal.aborted)
       )
         return;
       setLoadError(
-        error instanceof Error ? error.message : "项目列表暂时无法更新",
+        error instanceof Error && error.name === "AbortError"
+          ? "项目列表更新超时，请重试。"
+          : error instanceof Error
+            ? error.message
+            : "项目列表暂时无法更新",
       );
       throw error;
     }
@@ -87,8 +102,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setAssignableProjects(data.assignableItems ?? data.items);
     setCanManage(data.canManage);
     setCanAssign(data.canAssign);
-    if (!data.items.some((p) => String(p.id) === currentRef.current)) {
-      const fallback = data.defaultProjectId ?? data.items[0]?.id;
+    if (
+      !data.items.some((p) => p.isActive && String(p.id) === currentRef.current)
+    ) {
+      const active = data.items.filter((p) => p.isActive);
+      const fallback =
+        active.find((p) => p.id === data.defaultProjectId)?.id ?? active[0]?.id;
       if (fallback !== undefined && fallback !== null) {
         const selected = String(fallback);
         setActiveProject(selected);
@@ -98,8 +117,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem(`project:${userId}`);
       }
     }
-    setLoadError("");
-    setResolvedIdentity(userId ?? null);
+    setLoadError(
+      data.items.some((p) => p.isActive)
+        ? ""
+        : "当前账号没有可访问的启用项目，请联系管理员。",
+    );
+    setResolvedIdentity(authorized);
   }, []);
   useEffect(() => {
     // A new tab has no stored choice; links such as the workbench comparison
@@ -129,7 +152,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       active = false;
       requestSequence.current += 1;
     };
-  }, [refresh, user?.id, message, loginPage]);
+  }, [refresh, authKey, message, loginPage]);
   useEffect(() => {
     const revalidate = () => {
       if (document.visibilityState === "visible")
@@ -139,7 +162,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("focus", revalidate);
   }, [refresh]);
   const choose: ProjectContextValue["choose"] = (id, afterChoose, options) => {
-    if (!projects.some((project) => String(project.id) === id)) {
+    if (
+      !projects.some((project) => project.isActive && String(project.id) === id)
+    ) {
       message.error(ui("请选择一个可访问的项目"));
       return;
     }
@@ -179,13 +204,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         choose,
       }}
     >
-      <div
-        key={`${user?.id ?? "public"}:${current}`}
-        style={{ height: "100%" }}
-      >
+      <div key={`${authKey}:${current}`} style={{ height: "100%" }}>
         {loginPage ? (
           children
-        ) : resolvedIdentity === (user?.id ?? null) ? (
+        ) : resolvedIdentity === authKey &&
+          projects.some((p) => p.isActive && String(p.id) === current) ? (
           <>
             {loadError && (
               <Alert
@@ -270,6 +293,7 @@ export function ProjectSelector() {
         popupMatchSelectWidth={false}
         options={value.projects.map((p) => ({
           value: String(p.id),
+          disabled: !p.isActive,
           label: projectLabel(p),
           title: projectLabel(p),
         }))}

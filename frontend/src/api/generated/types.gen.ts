@@ -11227,6 +11227,11 @@ export type ComputePreflight = {
 };
 
 /**
+ * 可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。
+ */
+export type BrowserSessionFamily = string;
+
+/**
  * 邀请标识
  */
 export type ShareInvitationId = number;
@@ -11922,6 +11927,12 @@ export type ApplyResearchRoleResponse = ApplyResearchRoleResponses[keyof ApplyRe
 
 export type GetCurrentUserData = {
     body?: never;
+    headers?: {
+        /**
+         * 可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。
+         */
+        'X-STISP-Session'?: string;
+    };
     path?: never;
     query?: never;
     url: '/api/auth/me/';
@@ -11940,6 +11951,10 @@ export type GetCurrentUserErrors = {
      * 项目或对象不存在，或当前用户无权访问。
      */
     404: ErrorResponse;
+    /**
+     * 页面身份与 Cookie 会话不一致，业务操作未执行；重新读取当前身份及项目授权后重试。
+     */
+    409: ErrorResponse;
 };
 
 export type GetCurrentUserError = GetCurrentUserErrors[keyof GetCurrentUserErrors];
@@ -16761,6 +16776,10 @@ export type ListProjectTagsData = {
     body?: never;
     headers?: {
         /**
+         * 可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。
+         */
+        'X-STISP-Session'?: string;
+        /**
          * 单个业务项目标签 ID，缺省为公开项目 1。all 汇总已取消，业务接口读写均仅接受一个具体项目，传 all 返回 400。与地图工程 projectId 不同；平台管理接口独立执行管理权限检查。
          */
         'X-Project-Id'?: string;
@@ -16802,6 +16821,10 @@ export type CreateProjectTagData = {
      */
     body: ProjectTagInput;
     headers?: {
+        /**
+         * 可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。
+         */
+        'X-STISP-Session'?: string;
         /**
          * 单个业务项目标签 ID，缺省为公开项目 1。all 汇总已取消，业务接口读写均仅接受一个具体项目，传 all 返回 400。与地图工程 projectId 不同；平台管理接口独立执行管理权限检查。
          */
@@ -17387,6 +17410,10 @@ export type GetComputeRuntimeData = {
     body?: never;
     headers?: {
         /**
+         * 可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。
+         */
+        'X-STISP-Session'?: string;
+        /**
          * 标识
          */
         'X-Project-Id'?: number;
@@ -17414,7 +17441,7 @@ export type GetComputeRuntimeErrors = {
      */
     404: ErrorResponse;
     /**
-     * 版本/配额/幂等键冲突
+     * 页面身份与 Cookie 会话不一致，业务操作未执行；重新读取当前身份及项目授权后重试。
      */
     409: ErrorResponse;
     /**

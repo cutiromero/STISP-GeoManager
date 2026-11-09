@@ -10,7 +10,10 @@ import {
 import { getActiveProject, resetProjectSession } from "./session";
 
 const mocks = vi.hoisted(() => ({
-  user: { id: 42 } as { id: number } | null,
+  user: { id: 42 } as {
+    id: number;
+    permissions?: Record<string, boolean>;
+  } | null,
   projects: vi.fn(),
 }));
 vi.mock("../contexts/AppContext", () => ({
@@ -228,5 +231,50 @@ describe("single-project navigation", () => {
     await waitFor(() =>
       expect(screen.getByLabelText("实际项目范围")).toHaveTextContent("2"),
     );
+  });
+  it("shows a retry for a required initial request timeout instead of spinning forever", async () => {
+    mocks.projects.mockRejectedValueOnce(
+      new DOMException("timed out", "AbortError"),
+    );
+    show();
+    expect(await screen.findByText("项目列表更新超时，请重试。")).toBeVisible();
+    expect(screen.queryByLabelText("实际项目范围")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+    expect(await screen.findByLabelText("实际项目范围")).toBeVisible();
+  });
+  it("does not mount business pages without an active authorized project", async () => {
+    mocks.projects.mockResolvedValueOnce({
+      items: [{ id: 1, name: "停用", isActive: false }],
+      canManage: false,
+      canAssign: false,
+    });
+    show();
+    expect(
+      await screen.findByText("当前账号没有可访问的启用项目，请联系管理员。"),
+    ).toBeVisible();
+    expect(screen.queryByLabelText("实际项目范围")).not.toBeInTheDocument();
+  });
+  it("rechecks project access after permission changes on the same user ID", async () => {
+    const view = show();
+    await screen.findByLabelText("实际项目范围");
+    mocks.projects.mockResolvedValueOnce({
+      items: [{ id: 2, name: "剩余项目", isActive: true }],
+      canManage: false,
+      canAssign: false,
+    });
+    mocks.user = { id: 42, permissions: { canManageAuth: false } };
+    view.rerender(
+      <AntApp>
+        <MemoryRouter>
+          <ProjectProvider>
+            <CurrentProject />
+          </ProjectProvider>
+        </MemoryRouter>
+      </AntApp>,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("实际项目范围")).toHaveTextContent("2"),
+    );
+    expect(mocks.projects).toHaveBeenCalledTimes(2);
   });
 });

@@ -3,9 +3,11 @@ from django.conf.urls.static import static
 from django.urls import include, path, re_path
 
 from apps.core.views import frontend_app
+from apps.core.frontend_assets import historical_asset
 
 
 urlpatterns = [
+    re_path(r"^static/assets/(?P<asset_path>.+)$", historical_asset),
     path("api/knowledge/", include("apps.knowledge.urls")),
     path("api/agent/", include("apps.agent.urls")),
     path("api/compute/", include("apps.compute.urls")),

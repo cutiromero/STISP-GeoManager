@@ -1,3 +1,4 @@
+import { authorizationIdentity } from "../auth/authorizationIdentity";
 import { selectedMapBasemap, restoreMapBasemap } from "../map/basemapSnapshot";
 import { getActiveProject } from "../projects/session";
 import { useProjectContext } from "../projects/ProjectContext";
@@ -841,7 +842,7 @@ function MapWorkspace() {
   }, [searchParams, selectedCategoryCode]);
 
   const layerGroups = useLayerGroups(
-    `${user ? `user-${user.id}` : "anonymous"}:project-${getActiveProject()}`,
+    `${authorizationIdentity(user)}:project-${getActiveProject()}`,
   );
 
   const uniqueLayerLoad = useUniqueLayerLoad({

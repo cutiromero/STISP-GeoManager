@@ -1,6 +1,5 @@
-import { requestJson } from "./client";
+import { requestForm, requestJson } from "./client";
 import { assertProjectList } from "./projectResponse";
-import { projectSignal } from "../projects/session";
 import type {
   ContentArticle,
   ContentArticleInput,
@@ -55,23 +54,10 @@ export const platformApi = {
   uploadAsset: async (id: number, file: File): Promise<ContentAsset> => {
     const body = new FormData();
     body.set("file", file);
-    const csrf =
-      document.cookie
-        .split("; ")
-        .find((x) => x.startsWith("csrftoken="))
-        ?.split("=")[1] ?? "";
-    const response = await fetch(`/api/content/articles/${id}/assets/`, {
-      method: "POST",
-      credentials: "include",
-      signal: projectSignal(),
-      headers: {
-        "X-CSRFToken": decodeURIComponent(csrf),
-        "X-Project-Id": "1",
-      },
+    return requestForm<ContentAsset>(
+      `/api/content/articles/${id}/assets/`,
       body,
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.detail ?? "上传失败");
-    return result;
+      { projectTagId: 1 },
+    );
   },
 };

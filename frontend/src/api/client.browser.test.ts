@@ -21,6 +21,17 @@ function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
+const loginUser = {
+  id: 1,
+  username: "tester",
+  roles: ["科研用户"],
+  permissions: {
+    canBrowseData: true,
+    canQueryData: true,
+    canAccessAdmin: false,
+  },
+};
+
 function setTestCookie(value: string) {
   // oxlint-disable-next-line unicorn/no-document-cookie -- tests need to seed document.cookie for CSRF coverage.
   document.cookie = value;
@@ -54,7 +65,7 @@ describe("api client", () => {
 
   it("ends the local lease immediately and signs in only after the previous logout response", async () => {
     fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ detail: "ok" })),
+      Promise.resolve(jsonResponse({ detail: "ok", user: loginUser })),
     );
     await startBrowserSession();
     let finishLogout: (response: Response) => void = () => {};
@@ -77,7 +88,7 @@ describe("api client", () => {
 
   it("keeps the local lease ended even when server logout fails", async () => {
     fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ detail: "ok" })),
+      Promise.resolve(jsonResponse({ detail: "ok", user: loginUser })),
     );
     await startBrowserSession();
     fetchMock.mockRejectedValueOnce(new TypeError("network unavailable"));
@@ -90,7 +101,7 @@ describe("api client", () => {
 
   it("bounds a hanging logout and releases the next login after the timeout", async () => {
     fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ detail: "ok" })),
+      Promise.resolve(jsonResponse({ detail: "ok", user: loginUser })),
     );
     const timeoutSpy = vi.spyOn(window, "setTimeout");
     try {
@@ -219,7 +230,7 @@ describe("api client", () => {
   it("sends JSON POST requests with CSRF token and included credentials", async () => {
     setTestCookie("csrftoken=secure%20token");
     fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ user: { id: 1 }, active: true })),
+      Promise.resolve(jsonResponse({ user: loginUser, active: true })),
     );
 
     await api.login("tester", "pass12345", true);
@@ -586,6 +597,9 @@ describe("api client", () => {
 
   it("keeps the selected project on the raster upload progress transport", async () => {
     setActiveProject("all");
+    const responseHeader = vi
+      .spyOn(XMLHttpRequest.prototype, "getResponseHeader")
+      .mockReturnValue("application/json");
     const header = vi.spyOn(XMLHttpRequest.prototype, "setRequestHeader");
     const send = vi
       .spyOn(XMLHttpRequest.prototype, "send")
@@ -610,6 +624,7 @@ describe("api client", () => {
     } finally {
       send.mockRestore();
       header.mockRestore();
+      responseHeader.mockRestore();
     }
   });
 

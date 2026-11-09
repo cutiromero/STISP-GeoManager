@@ -11,7 +11,7 @@ const heartbeatIntervalMs = 30_000;
 const revalidateAfterMs = 25_000;
 const handoffTimeoutMs = 1_500;
 const renewalTimeoutMs = 8_000;
-type SessionEndReason = "logout" | "expired";
+type SessionEndReason = "logout" | "expired" | "account-changed";
 
 interface PageCredentials {
   pageId: string;
@@ -29,6 +29,31 @@ let renewal: Promise<boolean> | null = null;
 let confirmedAt = 0;
 let handlersInstalled = false;
 let lifecycle = 0;
+let requests = new AbortController();
+export function browserSessionSignal() {
+  return requests.signal;
+}
+export function browserSessionFamily() {
+  return credentials?.familyId ?? "";
+}
+export function invalidateBrowserRequests() {
+  lifecycle += 1;
+  requests.abort(new DOMException("登录或授权范围已变化", "AbortError"));
+  requests = new AbortController();
+}
+
+export function observeResponseIdentity(family: string | null) {
+  if (
+    family &&
+    /^[a-f0-9]{32}$/.test(family) &&
+    active &&
+    credentials?.familyId &&
+    family !== credentials.familyId
+  ) {
+    endBrowserSession(false, "account-changed");
+    throw new DOMException("账号已在其他页面切换", "AbortError");
+  }
+}
 
 function randomHex(bytes: number) {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) =>
@@ -139,6 +164,15 @@ function ensureChannel() {
     } | null;
     if (!data) return;
     if (
+      data.kind === "signed-in" &&
+      typeof data.familyId === "string" &&
+      credentials &&
+      data.familyId !== credentials.familyId
+    ) {
+      endBrowserSession(false, "account-changed");
+      return;
+    }
+    if (
       data.kind === "request" &&
       typeof data.requestId === "string" &&
       active &&
@@ -207,7 +241,7 @@ function install(value: PageCredentials, result: BrowserSessionResponse) {
   handlersInstalled = true;
   window.addEventListener("pagehide", () => {
     if (!credentials || !active) return;
-    lifecycle += 1;
+    invalidateBrowserRequests();
     active = false;
     startup = null;
     renewal = null;
@@ -216,7 +250,7 @@ function install(value: PageCredentials, result: BrowserSessionResponse) {
   });
   window.addEventListener("pageshow", (event) => {
     if (event.persisted && credentials) {
-      lifecycle += 1;
+      invalidateBrowserRequests();
       active = false;
       startup = null;
       renewal = null;
@@ -272,7 +306,7 @@ export function endBrowserSession(
   broadcast = true,
   reason: SessionEndReason = "expired",
 ) {
-  lifecycle += 1;
+  invalidateBrowserRequests();
   if (broadcast && credentials)
     ensureChannel()?.postMessage({
       kind: "signed-out",
@@ -294,7 +328,8 @@ export function endBrowserSession(
 }
 
 export async function startBrowserSession() {
-  const generation = ++lifecycle;
+  invalidateBrowserRequests();
+  const generation = lifecycle;
   credentials = null;
   active = false;
   startup = null;
@@ -306,6 +341,11 @@ export async function startBrowserSession() {
   if (generation !== lifecycle)
     throw new DOMException("登录操作已取消，请重新登录", "AbortError");
   install(value, result);
+  if (result.familyId)
+    ensureChannel()?.postMessage({
+      kind: "signed-in",
+      familyId: result.familyId,
+    });
   startup = Promise.resolve(true);
 }
 

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import secrets
 
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
+
+from .client_build import current_entry
+from .browser_sessions import SESSION_KEY
 
 
 CONTENT_SECURITY_POLICY = "; ".join(
@@ -47,4 +51,50 @@ class FrontendSecurityHeadersMiddleware:
             response["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
         if "Permissions-Policy" not in response:
             response["Permissions-Policy"] = PERMISSIONS_POLICY
+        return response
+
+
+class ApiContextMiddleware:
+    """Response provenance and an optional browser identity fence, never ACLs."""
+
+    EXEMPT = {
+        "/api/bootstrap/",
+        "/api/auth/login/",
+        "/api/auth/register/",
+        "/api/auth/guest-login/",
+        "/api/auth/csrf/",
+        "/api/auth/browser-session/",
+    }
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not request.path.startswith("/api/"):
+            return self.get_response(request)
+        state = request.session.get(SESSION_KEY)
+        state = state if isinstance(state, dict) else {}
+        family = state.get("familyId", "") if request.user.is_authenticated else ""
+        expected = request.headers.get("X-STISP-Session", "")
+        if (
+            expected
+            and family
+            and expected != family
+            and request.path not in self.EXEMPT
+        ):
+            response = JsonResponse(
+                {
+                    "detail": "账号已在其他页面切换，请重新确认当前账号",
+                    "code": "auth_context_changed",
+                },
+                status=409,
+            )
+        else:
+            response = self.get_response(request)
+        response["X-STISP-Build"] = current_entry() or ""
+        response["X-Request-Id"] = secrets.token_hex(12)
+        if family:
+            response["X-STISP-Session"] = family
+        if response.get("Content-Type", "").split(";")[0].strip() == "application/json":
+            response.setdefault("Cache-Control", "private, no-store")
         return response

@@ -35,3 +35,30 @@ it("offers a safe refresh when the server has a different bundle", async () => {
   );
   expect(screen.getByText("刷新前请保留尚未发送的文字。")).toBeVisible();
 });
+
+it("coalesces simultaneous focus and visibility checks without reloading", async () => {
+  const original = document.querySelector.bind(document);
+  const script = document.createElement("script");
+  script.setAttribute("src", "/static/old.js");
+  vi.spyOn(document, "querySelector").mockImplementation((selector) =>
+    selector === 'script[type="module"][src]' ? script : original(selector),
+  );
+  let complete!: (value: Response) => void;
+  const request = vi.spyOn(window, "fetch").mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  );
+  render(<ClientUpdateNotice />);
+  window.dispatchEvent(new Event("focus"));
+  document.dispatchEvent(new Event("visibilitychange"));
+  expect(request).toHaveBeenCalledTimes(1);
+  complete(
+    new Response('<script type="module" src="/static/new.js"></script>'),
+  );
+  expect(
+    await screen.findByRole("button", { name: "刷新使用新版" }),
+  ).toBeVisible();
+  expect(request).toHaveBeenCalledTimes(1);
+});

@@ -3028,3 +3028,15 @@ bootstrap的`runStreamingEnabled`为true时，前端可通过`requestEventStream
 answer_preview是可替换检查点，answer_delta为后续追加。普通chat可直接解析自然正文，科研agent只展示确认action=final后的answer字符串，最多1048576个Unicode字符；工具名、参数和JSON协议不进入正文。64Ki字符建立检查点，其他更新仅存增量，完整快照及增量在一次事件读取中合成。前端受控Markdown以React文本渲染，不执行HTML、远程图片或代码；预览仍标明生成中，正式答案经过原有协议、引用及真实输出校验。
 
 浏览器回归通过`pnpm run test:browser`或`pnpm exec node scripts/run-browser-check.mjs <文件>`执行。Vitest在含非ASCII路径的工作区中存在模块mock与编码URL不匹配的问题；统一入口自动建立字节一致的ASCII临时源码镜像，复用现有依赖，保持全部断言，并核对运行前后源文件摘要。结束后保留测试回执和失败截图并清理临时源码，不安装依赖或修改共享node_modules。`make check-efficiency`沿用同一入口。
+
+## 浏览器身份隔离与异常响应恢复
+
+API JSON 元数据默认 `Cache-Control: private,no-store`，文件和瓦片的显式缓存规则保留。响应通过 `X-STISP-Build` 返回当前入口脚本路径，通过 `X-Request-Id` 返回随机关联号。浏览器诊断只保存路径、构建、字段结构和异常 HTML 的短前缀指纹，不保存 HTML 正文、Cookie、登录 token 或业务字段值。
+
+浏览器可在 API 请求携带 `X-STISP-Session`（页面登录的 `familyId`，非凭据）。当前 Cookie 已切换到另一会话时，受保护操作进入业务处理前返回 `409 {"detail":"账号已在其他页面切换，请重新确认当前账号","code":"auth_context_changed"}`，并回传当前 family。bootstrap、CSRF、登录、注册、游客登录和页面会话管理豁免；没有此头的既有客户端仍按原 Session、项目和 ACL 规则鉴权。不能用此头代替登录或授予权限。
+
+前端在请求发出和响应正文解析后核对登录代次、授权身份和当前项目。身份切换中止旧请求；迟到的成功正文及401/403都不能更新新身份页面。相同用户ID的角色或权限变化同样使旧页面及在途读取失效。跨标签页账号切换后清理旧上下文，重新读取实际 Cookie 用户和可访问项目。
+
+成功 JSON 接口若返回 HTML、JSON解析失败或缺少启动配置、用户权限、计算运行环境、资源列表的关键结构，显示可重试错误并保留有效页面，不构造假权限或继续读取缺字段。真正的必需请求超时显示重试；因账号、项目切换取消的请求不显示超时。
+
+发布前使用新版本命令 `python backend/manage.py archive_frontend_assets --source <上一正式版本>/frontend/dist` 归档完整公共构建依赖；也归档即将发布的构建。历史文件仅来源于生产构建的 `assets/`，通过签名清单登记，在当前 WhiteNoise 静态目录未命中时提供。保留上限为14天、64构建、512MiB，按完整构建清理并复用共享文件。历史缓存不包含科研资料，命中只核对清单与文件身份，不扫描历史发布目录或逐次计算文件摘要。旧到期页面通过明确的手动刷新提示恢复，不自动循环刷新。

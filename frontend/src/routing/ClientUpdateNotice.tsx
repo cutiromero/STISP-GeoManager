@@ -1,6 +1,7 @@
 import { Alert, Button } from "antd";
 import { useEffect, useState } from "react";
 import { moduleEntry } from "./clientBuild";
+import { combineAbortSignals } from "../utils/abortSignals";
 
 export default function ClientUpdateNotice() {
   const [updated, setUpdated] = useState(false);
@@ -8,13 +9,21 @@ export default function ClientUpdateNotice() {
     const entry = moduleEntry(document);
     if (!entry.startsWith("/static/")) return;
     const controller = new AbortController();
+    let inFlight = false;
     const check = async () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden" || inFlight) return;
+      inFlight = true;
+      const timeout = new AbortController();
+      const timer = setTimeout(() => timeout.abort(), 10000);
+      const cancellation = combineAbortSignals([
+        controller.signal,
+        timeout.signal,
+      ]);
       try {
         const response = await fetch("/", {
           cache: "no-store",
           headers: { Accept: "text/html" },
-          signal: controller.signal,
+          signal: cancellation.signal,
         });
         if (!response.ok) return;
         const next = moduleEntry(
@@ -24,6 +33,10 @@ export default function ClientUpdateNotice() {
           setUpdated(true);
       } catch {
         /* A connectivity failure is not a release change. */
+      } finally {
+        clearTimeout(timer);
+        cancellation.dispose();
+        inFlight = false;
       }
     };
     const refresh = () => {

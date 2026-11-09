@@ -1,6 +1,8 @@
 """Detect stale browser bundles at workflow mutation boundaries."""
 
 from html.parser import HTMLParser
+from functools import lru_cache
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -15,15 +17,30 @@ class EntryParser(HTMLParser):
             self.entry = urlsplit(values["src"]).path
 
 
+@lru_cache(maxsize=4)
+def _entry(path, identity):
+    parser = EntryParser()
+    parser.feed(Path(path).read_text(encoding="utf-8"))
+    return parser.entry
+
+
 def current_entry():
     for path in (
         settings.FRONTEND_DIST / "index.html",
         settings.STATIC_ROOT / "index.html",
     ):
         if path.is_file():
-            parser = EntryParser()
-            parser.feed(path.read_text(encoding="utf-8"))
-            return parser.entry
+            stat = path.stat()
+            return _entry(
+                str(path),
+                (
+                    stat.st_dev,
+                    stat.st_ino,
+                    stat.st_size,
+                    stat.st_mtime_ns,
+                    stat.st_ctime_ns,
+                ),
+            )
     return None
 
 

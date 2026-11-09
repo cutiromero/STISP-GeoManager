@@ -1,4 +1,42 @@
+import { moduleEntry } from "../routing/clientBuild";
+
 export const RESPONSE_DIAGNOSTICS_KEY = "platform:api-response-errors";
+let serverBuild = "";
+export function noteApiResponse(response: Response) {
+  const value = response.headers.get("X-STISP-Build");
+  if (value?.startsWith("/static/") && !value.includes("?"))
+    serverBuild = value.slice(0, 300);
+}
+export function observedServerBuild() {
+  return serverBuild;
+}
+function htmlFingerprint(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const prefix = value.slice(0, 4096);
+  let hash = 2166136261;
+  for (let i = 0; i < prefix.length; i++) {
+    hash ^= prefix.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const script = prefix.match(/<script[^>]+src=["']([^"']+)["']/i)?.[1];
+  let entry: string | undefined;
+  try {
+    if (script) {
+      const url = new URL(script, location.origin);
+      if (url.origin === location.origin && url.pathname.startsWith("/static/"))
+        entry = url.pathname;
+    }
+  } catch {}
+  return {
+    characters: value.length,
+    prefixFingerprint: (hash >>> 0).toString(16).padStart(8, "0"),
+    hasHtmlTag: /<html[\s>]|<!doctype html/i.test(prefix),
+    hasRoot: /id=["']root["']/i.test(prefix),
+    hasModuleScript: /type=["']module["']/i.test(prefix),
+    loginTitle: /<title[^>]*>[^<]*(?:登录|login|sign in)/i.test(prefix),
+    entry,
+  };
+}
 const MAX_RECORDS = 20;
 
 type FieldStructure = {
@@ -91,6 +129,7 @@ export function recordResponseDiagnostic(
   data: unknown,
   issue: string,
 ) {
+  noteApiResponse(response);
   const record = {
     time: new Date().toISOString(),
     page: window.location.pathname,
@@ -102,6 +141,10 @@ export function recordResponseDiagnostic(
     status: response.status,
     contentType: (response.headers.get("Content-Type") ?? "").slice(0, 200),
     issue,
+    clientEntry: moduleEntry(document),
+    serverBuild: response.headers.get("X-STISP-Build")?.slice(0, 300) ?? null,
+    requestId: response.headers.get("X-Request-Id")?.slice(0, 80) ?? null,
+    unexpectedDocument: htmlFingerprint(data),
     structure: responseFieldStructure(data),
   };
   console.warn("Platform API response anomaly", record);

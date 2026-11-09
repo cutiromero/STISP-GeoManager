@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   browserSessionEndedEvent,
+  browserSessionSignal,
+  observeResponseIdentity,
   browserSessionStorageKey,
   endBrowserSession,
   resumeBrowserSession,
@@ -369,5 +371,43 @@ describe("browser page session lifecycle", () => {
     );
     await old;
     expect(savedPage()).not.toBeNull();
+  });
+  it("invalidates old requests when another tab signs in as a different identity", async () => {
+    const familyId = "a".repeat(32);
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ active: true, familyId }))),
+    );
+    await startBrowserSession();
+    const old = browserSessionSignal();
+    const ended = vi.fn();
+    window.addEventListener(browserSessionEndedEvent, ended, { once: true });
+    const peer = new TestChannel("stisp.browser-session");
+    peers.push(peer);
+    peer.postMessage({ kind: "signed-in", familyId });
+    await Promise.resolve();
+    expect(old.aborted).toBe(false);
+    peer.postMessage({ kind: "signed-in", familyId: "b".repeat(32) });
+    await vi.waitFor(() => expect(old.aborted).toBe(true));
+    expect(savedPage()).toBeNull();
+    expect((ended.mock.calls[0][0] as CustomEvent).detail.reason).toBe(
+      "account-changed",
+    );
+  });
+  it("detects a changed response identity without trusting a stale body", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ active: true, familyId: "a".repeat(32) }),
+        ),
+      ),
+    );
+    await startBrowserSession();
+    const old = browserSessionSignal();
+    expect(() => observeResponseIdentity("a".repeat(32))).not.toThrow();
+    expect(() => observeResponseIdentity("b".repeat(32))).toThrow(
+      "账号已在其他页面切换",
+    );
+    expect(old.aborted).toBe(true);
+    expect(savedPage()).toBeNull();
   });
 });

@@ -89,6 +89,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.core.browser_sessions.BrowserPageSessionMiddleware",
+    "apps.core.middleware.ApiContextMiddleware",
     "apps.projects.middleware.ProjectScopeMiddleware",
     "apps.audit.middleware.UserActivityMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",

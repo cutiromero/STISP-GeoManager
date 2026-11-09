@@ -1654,3 +1654,10 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - `GET /api/agent/workflows/{workflowId}/?view=inspection&part=retained`的`plan.reviewIndex`新增可选`automaticMap`。从完整冻结授权集合提取轻量位置，包含total、locatedCount及位置点/count；不扩大人工候选、审批集合或数据权限。前端低对比标记按当前视口聚合，缩放/勾选不重新请求。mock见105-agent-workflow-card.json。
 - 计算输出metadata增加`executionMetrics`说明输入准备、算法执行、结果检查的耗时和输入物化/复用次数。输入快照缓存仅复用受控内容版本，每次使用仍重新授权和检查源文件身份，算法收到独立副本。内部SDK增加与文件身份绑定的证据标识读取，旧算子仍按既有协议执行。
 - 验证：跨用户/项目与撤权、原地内容改动、共享数据库的其他图层变化、并发/损坏缓存、算子修改输入、冷/热准备、科学输出一致性；自动标记全量计数与分页独立、缩放聚合、人工勾选不受影响。
+
+## 2026-11-09 浏览器稳定性和身份隔离
+
+- 全部 API 的来源响应头：`X-STISP-Build`、`X-Request-Id`；JSON 元数据缺省私有且不存储，保留文件与瓦片显式缓存。
+- 可选 `X-STISP-Session` 使用当前页面 familyId，发现 Cookie 被其他账号替换时在业务执行前返回409和`auth_context_changed`；不代替 Session、项目与ACL。OpenAPI认证章节说明公共规则，me、projects、compute/runtime入口显式引用公共参数。响应正文DTO保持兼容，无新增业务字段要求。
+- 后端增加身份围栏及来源头；前端统一 JSON/SDK/上传/流式请求在读取结束和错误通知前再次核对身份与项目，不接受异常HTML成功响应或不完整关键元数据。
+- 回归覆盖迟到正文/401、项目切换、同ID降权、跨标签页切换、HTML200、缺字段、可重试超时及完整历史静态依赖。无需修改业务 mock 示例；原有 JSON 正常示例继续有效。
