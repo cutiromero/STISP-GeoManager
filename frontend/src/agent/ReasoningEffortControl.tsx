@@ -51,8 +51,8 @@ export default function ReasoningEffortControl({
                   "Higher effort usually takes more time.",
                 )
               : ui(
-                  "选择强度将开启逻辑推理。",
-                  "Choosing an effort level enables logical reasoning.",
+                  "选择强度将开启深度思考。",
+                  "Choosing an effort level enables deep thinking.",
                 )}
           </Typography.Paragraph>
           <Button

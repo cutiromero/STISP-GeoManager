@@ -4,6 +4,7 @@ import re
 from uuid import UUID
 
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Q
 
 from apps.knowledge.domains import DOMAINS, query_domains, validate_domains
 
@@ -246,6 +247,51 @@ def check_history_evidence(run, user, policy):
         from .research_intents import authorize_run
 
         authorize_run(source, user, policy, history=True)
+
+
+def check_conversation_history(runs, user, policy):
+    """Authorize each exact history source once within this response only."""
+    from .tools import check_evidence
+    from .research_intents import authorize_run
+
+    if not runs:
+        return set()
+    conversation = runs[0].conversation
+    identities = {run.pk for run in runs}
+    legacy_ceiling = 0
+    for run in runs:
+        marker = (run.knowledge_selection or {}).get("_contextRunIds")
+        if isinstance(marker, list):
+            identities.update(i for i in marker if type(i) is int and i < run.id)
+        else:
+            legacy_ceiling = max(legacy_ceiling, run.id)
+    # Keep the original successful-ancestor and conversation boundaries.
+    ancestors = (
+        conversation.runs.filter(status="succeeded")
+        .filter(Q(pk__in=identities) | Q(pk__lt=legacy_ceiling))
+        .exclude(pk__in=[run.pk for run in runs])
+        .only(
+            "evidence",
+            "prompt",
+            "knowledge_selection",
+            "compute_intent",
+            "research_intent",
+            "research_workflow",
+            "conversation_id",
+            "owner_id",
+            "project_tag_id",
+            "resource_ids",
+            "algorithm_selection_mode",
+            "algorithm_version_ids",
+            "data_selection_mode",
+        )
+    )
+    sources = {source.pk: source for source in ancestors}
+    sources.update({run.pk: run for run in runs})
+    for source in sources.values():
+        check_evidence(source, user, policy, history=True)
+        authorize_run(source, user, policy, history=True)
+    return {run.pk for run in runs}
 
 
 def source_resource_ids(source):

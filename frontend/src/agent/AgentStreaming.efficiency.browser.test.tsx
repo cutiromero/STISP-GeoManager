@@ -1,4 +1,11 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -214,4 +221,23 @@ it("unmounting closes the byte stream and does not cancel the underlying task", 
   view.unmount();
   await waitFor(() => expect(cancelled).toHaveBeenCalledOnce());
   expect(cancelTask).not.toHaveBeenCalled();
+});
+
+it("does not fetch candidates for automatic mode and reads once when manual mode needs them", async () => {
+  vi.spyOn(agentApi, "detail").mockResolvedValue({ conversation, runs: [] });
+  show();
+  await screen.findByRole("button", { name: "选择数据" });
+  expect(agentApi.resources).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
+  expect(agentApi.resources).not.toHaveBeenCalled();
+  fireEvent.click(
+    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
+      "radio",
+      { name: "手动选择" },
+    ),
+  );
+  await waitFor(() => expect(agentApi.resources).toHaveBeenCalledOnce());
+  expect(
+    vi.mocked(agentApi.resources).mock.calls[0]?.[1]?.signal,
+  ).toBeInstanceOf(AbortSignal);
 });

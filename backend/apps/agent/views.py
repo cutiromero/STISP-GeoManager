@@ -106,13 +106,27 @@ def conversation_json(c):
     }
 
 
-def run_json(r, user, *, activity=None):
+def run_json(
+    r,
+    user,
+    *,
+    activity=None,
+    access_policy=None,
+    checked_history=None,
+    attachments=None,
+):
     from .selections import check_history_evidence, serialize as selection_json
     from .interactions import public_question
     from .platform_actions import platform_actions
 
-    p = require_access(user, r.conversation.mode)
-    if r.conversation.mode == "agent":
+    p = (
+        access_policy
+        if access_policy is not None
+        else require_access(user, r.conversation.mode)
+    )
+    if r.conversation.mode == "agent" and (
+        checked_history is None or r.pk not in checked_history
+    ):
         check_history_evidence(r, user, p)
     if activity is None:
         activity = load_run_activity([r])[r.pk]
@@ -142,6 +156,12 @@ def run_json(r, user, *, activity=None):
         "attachmentIds": list(r.attachment_ids or []),
         "internetEnabled": bool(r.internet_enabled),
         "attachments": [
+            item
+            for identity, item in attachments.items()
+            if identity in (r.attachment_ids or [])
+        ]
+        if attachments is not None
+        else [
             serialize_attachment(item)
             for item in AgentAttachment.objects.filter(
                 conversation_id=r.conversation_id, pk__in=r.attachment_ids or []
@@ -239,18 +259,35 @@ def conversations(request):
 def conversation_detail(request, conversation_id):
     c = own_conversation(request.user, conversation_id)
     if request.method == "GET":
+        from .selections import check_conversation_history
+
+        # Reuse only within this synchronous response. The next read checks again.
+        p = require_access(request.user, c.mode)
         runs = list(c.runs.select_related("conversation").order_by("-id")[:100])
+        checked = (
+            check_conversation_history(runs, request.user, p)
+            if c.mode == "agent"
+            else None
+        )
         activities = load_run_activity(runs)
+        attachments = {
+            item.pk: serialize_attachment(item) for item in c.attachments.all()
+        }
         return JsonResponse(
             {
                 "conversation": conversation_json(c),
                 "runs": [
-                    run_json(r, request.user, activity=activities[r.pk])
+                    run_json(
+                        r,
+                        request.user,
+                        activity=activities[r.pk],
+                        access_policy=p,
+                        checked_history=checked,
+                        attachments=attachments,
+                    )
                     for r in reversed(runs)
                 ],
-                "attachments": [
-                    serialize_attachment(item) for item in c.attachments.all()
-                ],
+                "attachments": list(attachments.values()),
             }
         )
     if request.method == "DELETE":

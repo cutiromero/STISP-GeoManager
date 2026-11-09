@@ -62,6 +62,9 @@ export default function AgentToolSelection({
   disabled,
   onChange,
   onResources,
+  onLoadResources,
+  resourcesLoading = false,
+  resourcesError = "",
 }: {
   bootstrap: AgentBootstrap;
   resources: AgentResource[];
@@ -70,6 +73,9 @@ export default function AgentToolSelection({
   disabled: boolean;
   onChange: (value: ToolPreferences) => void;
   onResources: (ids: number[]) => void;
+  onLoadResources?: () => void;
+  resourcesLoading?: boolean;
+  resourcesError?: string;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const algorithms = bootstrap.algorithmOptions ?? [];
@@ -156,15 +162,24 @@ export default function AgentToolSelection({
             aria-label="数据选择方式"
             value={value.dataSelectionMode}
             disabled={disabled}
-            onChange={(event) =>
-              onChange({ ...value, dataSelectionMode: event.target.value })
-            }
+            onChange={(event) => {
+              onChange({ ...value, dataSelectionMode: event.target.value });
+              if (event.target.value === "manual") onLoadResources?.();
+            }}
             options={[
               { value: "auto", label: "自动筛选" },
               { value: "manual", label: "手动选择" },
             ]}
           />
           <p>从当前项目的授权数据中筛选；手选后仅使用所选数据。</p>
+          {value.dataSelectionMode === "manual" && resourcesError && (
+            <div role="alert">
+              {resourcesError}
+              <Button size="small" onClick={onLoadResources}>
+                重试读取数据
+              </Button>
+            </div>
+          )}
           {value.dataSelectionMode === "manual" && (
             <Select
               aria-label="限定数据资源"
@@ -176,6 +191,8 @@ export default function AgentToolSelection({
               disabled={disabled}
               placeholder="选择需要分析的数据"
               notFoundContent="当前项目没有可访问的数据"
+              loading={resourcesLoading}
+              status={resourcesError ? "error" : undefined}
               options={resources.map((item) => ({
                 value: item.id,
                 label: item.name,
@@ -267,7 +284,15 @@ export default function AgentToolSelection({
           placement="top"
           title={control.label}
           open={open === control.key}
-          onOpenChange={(next) => setOpen(next ? control.key : null)}
+          onOpenChange={(next) => {
+            setOpen(next ? control.key : null);
+            if (
+              next &&
+              control.key === "data" &&
+              value.dataSelectionMode === "manual"
+            )
+              onLoadResources?.();
+          }}
           content={
             <div
               className="agent-selection-panel"

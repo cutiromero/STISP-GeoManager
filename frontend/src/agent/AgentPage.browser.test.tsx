@@ -9,7 +9,7 @@ import {
 import { App as AntApp } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { agentApi } from "../api/agent";
 import { computeApi } from "../api/compute";
 import { ApiError } from "../api/client";
@@ -1022,7 +1022,7 @@ it.each(["chat", "workbench"])(
     expect(
       screen.getByRole("button", { name: "调整思考强度" }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByText("逻辑推理", { exact: true }));
+    fireEvent.click(screen.getByText("深度思考", { exact: true }));
     const trigger = await screen.findByRole("button", { name: "调整思考强度" });
     expect(trigger).toHaveTextContent("轻量");
     fireEvent.click(trigger);
@@ -1085,7 +1085,7 @@ it.each([
     });
     showAgent(mode);
     await screen.findByText("旧问题");
-    const reasoning = screen.getByRole("button", { name: /逻辑推理/ });
+    const reasoning = screen.getByRole("button", { name: /深度思考/ });
     expect(reasoning).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
     const slider = await screen.findByRole("slider", { name: "思考强度" });
@@ -1140,7 +1140,7 @@ it("restores administrator default and keeps the effort choices visible without 
     </AntApp>,
   );
   await screen.findByText("旧问题");
-  fireEvent.click(screen.getByText("逻辑推理", { exact: true }));
+  fireEvent.click(screen.getByText("深度思考", { exact: true }));
   fireEvent.click(await screen.findByRole("button", { name: "调整思考强度" }));
   fireEvent.keyDown(await screen.findByRole("slider"), {
     key: "End",
@@ -1150,12 +1150,12 @@ it("restores administrator default and keeps the effort choices visible without 
   expect(
     screen.getByRole("button", { name: "调整思考强度" }),
   ).toHaveTextContent("轻量");
-  fireEvent.click(screen.getByText("逻辑推理", { exact: true }));
+  fireEvent.click(screen.getByText("深度思考", { exact: true }));
   fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
   await waitFor(() =>
     expect(screen.getByRole("slider", { name: "思考强度" })).toBeVisible(),
   );
-  expect(screen.getByText("选择强度将开启逻辑推理。")).toBeVisible();
+  expect(screen.getByText("选择强度将开启深度思考。")).toBeVisible();
   fireEvent.change(
     screen.getByPlaceholderText("输入问题，Enter 发送，Shift+Enter 换行"),
     { target: { value: "快速问题" } },
@@ -1422,17 +1422,26 @@ it("keeps narrow screens usable with a dismissible sidebar and bounded input", a
     fireEvent.click(history);
     const sidebar = screen.getByRole("complementary", { name: "会话侧栏" });
     expect(sidebar).toBeVisible();
-    expect(screen.getByRole("button", { name: "关闭会话列表" })).toHaveFocus();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "关闭会话列表" }),
+      ).toHaveFocus(),
+    );
     expect(main).toHaveAttribute("inert");
     expect(sidebar.getBoundingClientRect().width).toBeLessThan(
       window.innerWidth,
     );
     fireEvent.click(screen.getByRole("button", { name: "关闭会话列表" }));
-    expect(sidebar).not.toBeVisible();
+    await waitFor(() => expect(sidebar).not.toBeVisible());
     fireEvent.click(history);
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(sidebar).not.toBeVisible();
-    expect(history).toHaveFocus();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "关闭会话列表" }),
+      ).toHaveFocus(),
+    );
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(sidebar).not.toBeVisible());
+    await waitFor(() => expect(history).toHaveFocus());
     fireEvent.change(input, { target: { value: "窄屏问题" } });
     fireEvent.click(screen.getByRole("button", { name: /发送/ }));
     await waitFor(() =>
@@ -1451,10 +1460,9 @@ it("keeps both allowed conversation modes visible when the history sidebar is hi
   try {
     showAgent("workbench");
     await screen.findByText("旧问题");
-    const sidebar = screen.getByRole("complementary", {
-      hidden: true,
-    });
-    expect(sidebar).not.toBeVisible();
+    expect(
+      screen.queryByRole("complementary", { name: "会话侧栏" }),
+    ).not.toBeInTheDocument();
     const quick = screen.getByRole("button", { name: "快速对话" });
     expect(quick).toBeVisible();
     fireEvent.click(quick);
@@ -3245,7 +3253,7 @@ it("logic effort resets for a different project while retaining ordinary project
   rerenderAgent(mounted);
   await screen.findByText("旧问题");
   expect(
-    screen.getByText("逻辑推理", { exact: true }).closest("button"),
+    screen.getByText("深度思考", { exact: true }).closest("button"),
   ).toHaveAttribute("aria-pressed", "false");
   await submitEffortQuestion();
   expect(agentApi.submit).toHaveBeenCalledWith(
@@ -3254,5 +3262,153 @@ it("logic effort resets for a different project while retaining ordinary project
       thinkingMode: "fast",
       reasoningEffort: undefined,
     }),
+  );
+});
+
+it("loads data candidates only when manual selection needs them and retries failures", async () => {
+  vi.mocked(agentApi.resources)
+    .mockRejectedValueOnce(new Error("候选读取暂时失败"))
+    .mockResolvedValueOnce({
+      items: [
+        { id: 10, name: "按需加载资料", dataType: "raster", description: "" },
+      ],
+    });
+  showAgent("workbench");
+  await screen.findByText("旧问题");
+  expect(agentApi.resources).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
+  expect(agentApi.resources).not.toHaveBeenCalled();
+  fireEvent.click(
+    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
+      "radio",
+      { name: "手动选择" },
+    ),
+  );
+  await waitFor(() =>
+    expect(screen.getByText("候选读取暂时失败")).toBeVisible(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "重试读取数据" }));
+  await waitFor(() => expect(agentApi.resources).toHaveBeenCalledTimes(2));
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "限定数据资源" }));
+  await waitFor(() =>
+    expect(
+      screen.getByText("按需加载资料", {
+        selector: ".ant-select-item-option-content",
+      }),
+    ).toBeVisible(),
+  );
+});
+
+it("deduplicates a pending candidate read and cancels it on leaving the workspace", async () => {
+  vi.mocked(agentApi.resources).mockImplementation(() => new Promise(() => {}));
+  const view = showAgent("workbench");
+  await screen.findByText("旧问题");
+  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
+  fireEvent.click(
+    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
+      "radio",
+      { name: "手动选择" },
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
+  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
+  expect(agentApi.resources).toHaveBeenCalledOnce();
+  const signal = vi.mocked(agentApi.resources).mock.calls[0]?.[1]?.signal;
+  expect(signal?.aborted).toBe(false);
+  view.unmount();
+  expect(signal?.aborted).toBe(true);
+});
+
+it("offers the pending review card instead of an ineffective send button", async () => {
+  const waiting = waitingQuestion();
+  waiting.status = "waiting_review";
+  waiting.interaction = {
+    ...waiting.interaction!,
+    kind: "review",
+    title: "请审核处置建议",
+  };
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [waiting],
+  });
+  const answer = vi.spyOn(agentApi, "answerInteraction");
+  showAgent();
+  await screen.findByRole("region", { name: "等待您审核的问题" });
+  const action = screen.getByRole("button", { name: "查看审核项" });
+  expect(action).toBeEnabled();
+  expect(
+    screen.queryByRole("button", { name: "提交回答" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(action);
+  expect(screen.getByRole("textbox", { name: /红光波段/ })).toHaveFocus();
+  expect(answer).not.toHaveBeenCalled();
+  expect(agentApi.submit).not.toHaveBeenCalled();
+});
+
+it.each([
+  [1366, 768],
+  [375, 812],
+])(
+  "keeps primary controls and native conversation drawer usable at %sx%s",
+  async (width, height) => {
+    await page.viewport(width, height);
+    try {
+      showAgent("workbench");
+      await screen.findByText("旧问题");
+      const send = screen.getByRole("button", { name: "发送" });
+      const box = send.getBoundingClientRect();
+      expect(box.bottom).toBeLessThanOrEqual(height);
+      expect(box.right).toBeLessThanOrEqual(width);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      if (width < 900) {
+        fireEvent.click(screen.getByRole("button", { name: /^会\s*话$/ }));
+        const close = await screen.findByRole("button", {
+          name: "关闭会话列表",
+        });
+        await waitFor(() => expect(close).toHaveFocus());
+        for (let i = 0; i < 12; i++) await userEvent.keyboard("{Tab}");
+        expect(
+          document.activeElement?.closest(".agent-history-drawer"),
+        ).not.toBeNull();
+        await page.screenshot({
+          path: `../../test-results/agent-ui-drawer-${width}.png`,
+        });
+        await userEvent.keyboard("{Escape}");
+        await waitFor(() => expect(close).not.toBeVisible());
+      }
+      await page.screenshot({
+        path: `../../test-results/agent-ui-workspace-${width}.png`,
+      });
+    } finally {
+      await page.viewport(1600, 900);
+    }
+  },
+);
+
+it("keeps thinking controls usable when browser preference storage is blocked", async () => {
+  const read = Storage.prototype.getItem,
+    write = Storage.prototype.setItem;
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (key) {
+    if (key.startsWith("agent-thinking:"))
+      throw new DOMException("blocked", "SecurityError");
+    return read.call(this, key);
+  });
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(
+    function (key, value) {
+      if (key.startsWith("agent-thinking:"))
+        throw new DOMException("blocked", "SecurityError");
+      write.call(this, key, value);
+    },
+  );
+  showAgent();
+  await screen.findByText("旧问题");
+  const toggle = screen.getByRole("button", { name: "深度思考" });
+  expect(toggle).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await submitEffortQuestion();
+  expect(agentApi.submit).toHaveBeenCalledWith(
+    1,
+    expect.objectContaining({ thinkingMode: "deep" }),
   );
 });

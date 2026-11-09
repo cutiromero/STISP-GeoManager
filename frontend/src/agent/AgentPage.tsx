@@ -214,6 +214,13 @@ function AgentWorkspace({
           (item) => item.budgetProfile === budgetProfile,
         )?.reasoningEffort
       : bootstrap?.defaultReasoningEffort) ?? "medium";
+  const saveThinkingMode = (value: "fast" | "deep") => {
+    try {
+      localStorage.setItem(`agent-thinking:${user?.id}:${mode}`, value);
+    } catch {
+      /* The in-memory choice remains effective. */
+    }
+  };
   const requestedEffort =
     thinkingMode === "deep"
       ? (effortOverride ?? (logicProject ? "xhigh" : undefined))
@@ -239,6 +246,11 @@ function AgentWorkspace({
   const [showLatest, setShowLatest] = useState(false);
   const [resources, setResources] = useState<AgentResource[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
+  const [resourceState, setResourceState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [resourceError, setResourceError] = useState("");
+  const resourceRequest = useRef<AbortController | null>(null);
   const [toolPreferences, setToolPreferences] = useState<ToolPreferences>(
     location.state?.knowledgeSelection
       ? {
@@ -283,18 +295,6 @@ function AgentWorkspace({
   }>();
   const historyButton = useRef<HTMLButtonElement>(null);
   const historyCloseButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!showHistory || !layout.narrow) return;
-    historyCloseButton.current?.focus();
-    const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowHistory(false);
-    };
-    window.addEventListener("keydown", close);
-    return () => {
-      window.removeEventListener("keydown", close);
-      historyButton.current?.focus();
-    };
-  }, [showHistory, layout.narrow]);
   const alive = useRef(true);
   const sequence = useRef(0);
   const attachmentConversation = useRef<{
@@ -328,6 +328,9 @@ function AgentWorkspace({
   const running = runs.find(active);
   const waitingRun = [...runs].reverse().find(waiting);
   const taskLocked = Boolean(running || waitingRun);
+  const reviewPending =
+    waitingRun?.interaction?.status === "pending" &&
+    waitingRun.interaction.kind === "review";
   const textAnswerRetry = useRef<{ fingerprint: string; key: string } | null>(
     null,
   );
@@ -459,6 +462,10 @@ function AgentWorkspace({
   const clearRestrictedState = () => {
     sequence.current++;
     listSequence.current++;
+    resourceRequest.current?.abort();
+    setResources([]);
+    setResourceState("idle");
+    setResourceError("");
     setManualWorkflow(undefined);
     setResearchWorkflow(undefined);
     setWorkflowStatus(undefined);
@@ -543,9 +550,12 @@ function AgentWorkspace({
   }, [bootstrap, mode, model, user?.id]);
   useEffect(() => {
     if (logicProject) return;
-    const preferred = localStorage.getItem(
-      `agent-thinking:${user?.id}:${mode}`,
-    );
+    let preferred: string | null = null;
+    try {
+      preferred = localStorage.getItem(`agent-thinking:${user?.id}:${mode}`);
+    } catch {
+      /* Browser storage is optional; current controls remain usable. */
+    }
     const next =
       preferred === "deep" && deepThinkingAvailable ? "deep" : "fast";
     setThinkingMode(next);
@@ -557,15 +567,30 @@ function AgentWorkspace({
     if (!deepThinkingAvailable && thinkingMode !== "fast")
       setThinkingMode("fast");
   }, [deepThinkingAvailable, thinkingMode]);
-  useEffect(() => {
-    if (mode !== "agent" || !canUse || logicProject) return;
-    void agentApi
-      .resources()
-      .then((r) => {
-        if (alive.current) setResources(r.items);
-      })
-      .catch(report);
-  }, [mode, canUse, logicProject]);
+  const loadResources = async () => {
+    if (resourceRequest.current || resourceState === "ready" || !canUse) return;
+    const request = new AbortController();
+    resourceRequest.current = request;
+    setResourceState("loading");
+    setResourceError("");
+    try {
+      const result = await agentApi.resources("", { signal: request.signal });
+      if (!alive.current || request.signal.aborted) return;
+      setResources(result.items);
+      setResourceState("ready");
+    } catch (error) {
+      if (!alive.current || request.signal.aborted) return;
+      setResourceState("error");
+      setResourceError(
+        error instanceof Error ? error.message : "暂时无法读取数据，请重试",
+      );
+      if (error instanceof ApiError && [401, 403].includes(error.status))
+        report(error);
+    } finally {
+      if (resourceRequest.current === request) resourceRequest.current = null;
+    }
+  };
+  useEffect(() => () => resourceRequest.current?.abort(), []);
   useEffect(() => {
     if (!running || historyLoading) return;
     let disposed = false;
@@ -1167,6 +1192,149 @@ function AgentWorkspace({
     cancelled: ui("已停止", "Stopped"),
     interrupted: ui("已中断", "Interrupted"),
   };
+  const sidebar = (
+    <aside
+      id="agent-conversation-sidebar"
+      aria-label={ui("会话侧栏", "Conversation sidebar")}
+      className="agent-sidebar"
+      style={{ width: layout.narrow ? undefined : layout.sidebar }}
+    >
+      <div className="agent-sidebar-heading">
+        <span className="agent-sidebar-symbol">
+          <RobotOutlined />
+        </span>
+        <div>
+          <Typography.Title level={4}>{ui("智能体", "Agent")}</Typography.Title>
+          <span>{ui("项目研究助手", "Research workspace")}</span>
+        </div>
+        <Button
+          ref={historyCloseButton}
+          className="agent-sidebar-close"
+          type="text"
+          icon={<CloseOutlined />}
+          aria-label={ui("关闭会话列表", "Close conversations")}
+          onClick={() => setShowHistory(false)}
+        />
+      </div>
+      <Button
+        className="agent-new-conversation"
+        block
+        icon={<PlusOutlined />}
+        disabled={!canUse || busy}
+        onClick={reset}
+      >
+        {ui("新建会话", "New conversation")}
+      </Button>
+      <Input.Search
+        aria-label={ui("搜索会话", "Search conversations")}
+        placeholder={ui("搜索会话", "Search conversations")}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      <div className="agent-history-heading">
+        <span>{ui("会话记录", "Conversations")}</span>
+        <Space size={6}>
+          <Switch
+            size="small"
+            aria-label={ui("查看已归档会话", "Show archived conversations")}
+            checked={archived}
+            onChange={setArchived}
+          />
+          {ui("已归档", "Archived")}
+        </Space>
+      </div>
+      <div className="agent-history">
+        {conversations.map((c) => (
+          <div
+            className={`agent-history-item ${current?.id === c.id ? "selected" : ""}`}
+            key={c.id}
+          >
+            <button
+              className="agent-history-title"
+              title={c.title}
+              aria-current={current?.id === c.id ? "true" : undefined}
+              disabled={busy}
+              onClick={() => void open(c)}
+            >
+              {current?.id === c.id && sidebarActivity && (
+                <ActivityMark state={sidebarActivity.state} />
+              )}
+              {c.title}
+              <time className="agent-history-time" dateTime={c.updatedAt}>
+                {conversationTime(c.updatedAt)}
+              </time>
+            </button>
+            <Space size={0} className="agent-history-actions">
+              <Button
+                size="small"
+                type="text"
+                aria-label={ui("重命名", "Rename")}
+                icon={<EditOutlined />}
+                onClick={() => {
+                  setTitleRefresh(null);
+                  setRename(c);
+                  setRenameText(c.title);
+                }}
+              />
+              <Button
+                size="small"
+                type="text"
+                onClick={() =>
+                  void agentApi
+                    .update(c.id, { archived: !c.archived })
+                    .then(() => {
+                      if (current?.id === c.id) reset();
+                      return refreshList();
+                    })
+                    .catch(report)
+                }
+              >
+                {c.archived ? ui("恢复", "Restore") : ui("归档", "Archive")}
+              </Button>
+              <Popconfirm
+                title={ui(
+                  "删除会话及其分析记录？",
+                  "Delete this conversation and its evidence?",
+                )}
+                onConfirm={() =>
+                  agentApi
+                    .remove(c.id)
+                    .then(() => {
+                      if (current?.id === c.id) reset();
+                      return refreshList();
+                    })
+                    .catch(report)
+                }
+              >
+                <Button
+                  size="small"
+                  type="text"
+                  danger
+                  aria-label={ui("删除", "Delete")}
+                  icon={<DeleteOutlined />}
+                />
+              </Popconfirm>
+            </Space>
+          </div>
+        ))}
+      </div>
+      {canUse && sidebarActivity && !(logicProject && researchWorkflow) && (
+        <section className="agent-sidebar-task" aria-label="当前任务">
+          <span className="agent-sidebar-task-eyebrow">当前任务</span>
+          <LiveActivity
+            activity={sidebarActivity}
+            title={sidebarTitle}
+            compact
+          />
+        </section>
+      )}
+      {bootstrap?.canManage && (
+        <Button onClick={() => navigate("/admin/agent")}>
+          {ui("智能体管理", "Agent settings")}
+        </Button>
+      )}
+    </aside>
+  );
   return (
     <Layout className="agent-shell">
       <WorkspaceHeader
@@ -1174,157 +1342,29 @@ function AgentWorkspace({
         canBrowseData={Boolean(user?.permissions.canBrowseData)}
       />
       <div className="agent-workspace">
-        {showHistory && layout.narrow && (
-          <button
-            className="agent-history-backdrop"
-            tabIndex={-1}
-            aria-label={ui("收起会话侧栏", "Dismiss conversation sidebar")}
-            onClick={() => setShowHistory(false)}
-          />
-        )}
-        <aside
-          id="agent-conversation-sidebar"
-          aria-label={ui("会话侧栏", "Conversation sidebar")}
-          className={`agent-sidebar ${showHistory ? "agent-sidebar-open" : ""}`}
-          style={{ width: layout.narrow ? undefined : layout.sidebar }}
-        >
-          <div className="agent-sidebar-heading">
-            <span className="agent-sidebar-symbol">
-              <RobotOutlined />
-            </span>
-            <div>
-              <Typography.Title level={4}>
-                {ui("智能体", "Agent")}
-              </Typography.Title>
-              <span>{ui("项目研究助手", "Research workspace")}</span>
-            </div>
-            <Button
-              ref={historyCloseButton}
-              className="agent-sidebar-close"
-              type="text"
-              icon={<CloseOutlined />}
-              aria-label={ui("关闭会话列表", "Close conversations")}
-              onClick={() => setShowHistory(false)}
-            />
-          </div>
-          <Button
-            className="agent-new-conversation"
-            block
-            icon={<PlusOutlined />}
-            disabled={!canUse || busy}
-            onClick={reset}
+        {layout.narrow ? (
+          <Drawer
+            placement="left"
+            open={showHistory}
+            onClose={() => setShowHistory(false)}
+            closable={false}
+            size="default"
+            styles={{
+              wrapper: { width: "min(320px, calc(100vw - 44px))" },
+              body: { padding: 16 },
+            }}
+            classNames={{ root: "agent-history-drawer" }}
+            aria-label={ui("会话侧栏", "Conversation sidebar")}
+            afterOpenChange={(open) => {
+              if (open) historyCloseButton.current?.focus();
+              else historyButton.current?.focus();
+            }}
           >
-            {ui("新建会话", "New conversation")}
-          </Button>
-          <Input.Search
-            aria-label={ui("搜索会话", "Search conversations")}
-            placeholder={ui("搜索会话", "Search conversations")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <div className="agent-history-heading">
-            <span>{ui("会话记录", "Conversations")}</span>
-            <Space size={6}>
-              <Switch
-                size="small"
-                aria-label={ui("查看已归档会话", "Show archived conversations")}
-                checked={archived}
-                onChange={setArchived}
-              />
-              {ui("已归档", "Archived")}
-            </Space>
-          </div>
-          <div className="agent-history">
-            {conversations.map((c) => (
-              <div
-                className={`agent-history-item ${current?.id === c.id ? "selected" : ""}`}
-                key={c.id}
-              >
-                <button
-                  className="agent-history-title"
-                  title={c.title}
-                  aria-current={current?.id === c.id ? "true" : undefined}
-                  disabled={busy}
-                  onClick={() => void open(c)}
-                >
-                  {current?.id === c.id && sidebarActivity && (
-                    <ActivityMark state={sidebarActivity.state} />
-                  )}
-                  {c.title}
-                  <time className="agent-history-time" dateTime={c.updatedAt}>
-                    {conversationTime(c.updatedAt)}
-                  </time>
-                </button>
-                <Space size={0} className="agent-history-actions">
-                  <Button
-                    size="small"
-                    type="text"
-                    aria-label={ui("重命名", "Rename")}
-                    icon={<EditOutlined />}
-                    onClick={() => {
-                      setTitleRefresh(null);
-                      setRename(c);
-                      setRenameText(c.title);
-                    }}
-                  />
-                  <Button
-                    size="small"
-                    type="text"
-                    onClick={() =>
-                      void agentApi
-                        .update(c.id, { archived: !c.archived })
-                        .then(() => {
-                          if (current?.id === c.id) reset();
-                          return refreshList();
-                        })
-                        .catch(report)
-                    }
-                  >
-                    {c.archived ? ui("恢复", "Restore") : ui("归档", "Archive")}
-                  </Button>
-                  <Popconfirm
-                    title={ui(
-                      "删除会话及其分析记录？",
-                      "Delete this conversation and its evidence?",
-                    )}
-                    onConfirm={() =>
-                      agentApi
-                        .remove(c.id)
-                        .then(() => {
-                          if (current?.id === c.id) reset();
-                          return refreshList();
-                        })
-                        .catch(report)
-                    }
-                  >
-                    <Button
-                      size="small"
-                      type="text"
-                      danger
-                      aria-label={ui("删除", "Delete")}
-                      icon={<DeleteOutlined />}
-                    />
-                  </Popconfirm>
-                </Space>
-              </div>
-            ))}
-          </div>
-          {canUse && sidebarActivity && !(logicProject && researchWorkflow) && (
-            <section className="agent-sidebar-task" aria-label="当前任务">
-              <span className="agent-sidebar-task-eyebrow">当前任务</span>
-              <LiveActivity
-                activity={sidebarActivity}
-                title={sidebarTitle}
-                compact
-              />
-            </section>
-          )}
-          {bootstrap?.canManage && (
-            <Button onClick={() => navigate("/admin/agent")}>
-              {ui("智能体管理", "Agent settings")}
-            </Button>
-          )}
-        </aside>
+            {sidebar}
+          </Drawer>
+        ) : (
+          sidebar
+        )}
         {!layout.narrow && (
           <AgentResizeHandle
             orientation="vertical"
@@ -2056,12 +2096,15 @@ function AgentWorkspace({
                         }
                         onChange={setToolPreferences}
                         onResources={setSelected}
+                        onLoadResources={() => void loadResources()}
+                        resourcesLoading={resourceState === "loading"}
+                        resourcesError={resourceError}
                       />
                     )}
                     {attachmentsAvailable && (
                       <Upload
                         className="agent-upload-tool"
-                        accept=".pdf,.doc,.docx,.txt,.md,.csv,image/*"
+                        accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp"
                         multiple
                         showUploadList={false}
                         beforeUpload={(file) => {
@@ -2103,10 +2146,7 @@ function AgentWorkspace({
                           setEffortOverride(value);
                           if (value !== undefined) {
                             setThinkingMode("deep");
-                            localStorage.setItem(
-                              `agent-thinking:${user?.id}:${mode}`,
-                              "deep",
-                            );
+                            saveThinkingMode("deep");
                           }
                         }}
                       />
@@ -2119,21 +2159,17 @@ function AgentWorkspace({
                           className={
                             thinkingMode === "deep" ? "agent-tool-active" : ""
                           }
+                          aria-label={ui("深度思考", "Deep thinking")}
                           aria-pressed={thinkingMode === "deep"}
                           disabled={taskLocked || busy}
                           onClick={() => {
                             const next =
                               thinkingMode === "deep" ? "fast" : "deep";
                             setThinkingMode(next);
-                            localStorage.setItem(
-                              `agent-thinking:${user?.id}:${mode}`,
-                              next,
-                            );
+                            saveThinkingMode(next);
                           }}
                         >
-                          {logicProject
-                            ? ui("深度思考", "Deep thinking")
-                            : ui("逻辑推理", "Logical reasoning")}
+                          {ui("深度思考", "Deep thinking")}
                         </Button>
                       </>
                     )}
@@ -2149,6 +2185,21 @@ function AgentWorkspace({
                       disabled={stopping}
                       onClick={() => void stopResponse()}
                     />
+                  ) : reviewPending ? (
+                    <Button
+                      type="primary"
+                      className="agent-send-button agent-review-button"
+                      icon={<NodeIndexOutlined />}
+                      aria-label={ui("查看审核项", "Review pending items")}
+                      title={ui(
+                        "请在审核卡中选择后继续",
+                        "Choose items in the review card to continue",
+                      )}
+                      disabled={busy || Boolean(historyLoading)}
+                      onClick={() => revealWaitingQuestion(true)}
+                    >
+                      {ui("查看审核", "Review")}
+                    </Button>
                   ) : (
                     <Button
                       type="primary"
