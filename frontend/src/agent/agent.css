@@ -1,5 +1,5 @@
 .agent-shell {
-  --agent-accent: #3b667f;
+  --agent-accent: #a86437;
   --agent-border: #d8e2ea;
   --workspace-screen-edge: var(--workspace-header-screen-edge, 8px);
   position: relative;
@@ -8,7 +8,7 @@
   min-height: 0;
   padding-top: calc(var(--workspace-screen-edge) * 2 + 50px);
   overflow: hidden;
-  background: #eaf0f5;
+  background: #f4f3f0;
   color: #253944;
 }
 .agent-shell * {
@@ -557,7 +557,7 @@
   background: #f8fbff;
 }
 .agent-answer-preview-text {
-  white-space: pre-wrap;
+  white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.8;
 }
@@ -2237,4 +2237,149 @@
   margin: 0 0 6px;
   color: #315a76;
   font-size: 12px;
+}
+
+/* Conversation reading and live progress. */
+.agent-main {
+  background: #fff;
+  border-color: #e5e3de;
+}
+.agent-messages {
+  padding-inline: max(28px, calc((100% - 840px) / 2));
+  padding-block: 32px 40px;
+}
+.agent-turn {
+  margin-bottom: 40px;
+}
+.agent-user-message {
+  background: #f3f1ec;
+  border-color: #e9e4dc;
+  color: #3c3933;
+  border-radius: 18px 18px 5px 18px;
+}
+.agent-assistant-message {
+  color: #303c44;
+  line-height: 1.85;
+}
+.agent-answer-heading {
+  color: #62707a;
+}
+.agent-answer-heading > .ant-space-item:first-child {
+  background: #f7eee5;
+  border-color: #efdfce;
+}
+.agent-process-panel.ant-collapse {
+  margin: 2px 0 18px;
+  border: 1px solid #e8e9e6;
+  border-radius: 12px;
+  background: #fafbf9;
+  box-shadow: none;
+}
+.agent-process-panel.ant-collapse > .ant-collapse-item > .ant-collapse-header {
+  align-items: center;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #69756f;
+}
+.agent-process-panel .ant-collapse-content-box {
+  padding: 0 16px 14px;
+}
+.agent-process-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.agent-process-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: #89918c;
+  white-space: nowrap;
+}
+.agent-process-section-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: #8b958e;
+}
+.agent-process-thinking .agent-thinking-content {
+  max-height: 220px;
+  padding-left: 12px;
+  border-left: 2px solid #e4ded3;
+  color: #68726c;
+  font-size: 13px;
+}
+.agent-process-tools {
+  display: grid;
+  gap: 9px;
+  list-style: none;
+  padding: 12px 0 0;
+  margin: 0;
+}
+.agent-process-tools li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #66736c;
+}
+.agent-process-tools small {
+  margin-left: auto;
+  color: #929b95;
+}
+.agent-answer-preview > p:first-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #9b754d;
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+.agent-answer-preview > p:first-child::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #c4864f;
+}
+.agent-composer {
+  background: #fff;
+  border-color: #e7e4de;
+  box-shadow: 0 5px 20px #33332207;
+}
+.agent-send-button.ant-btn-primary {
+  background: #b87843;
+  border-color: #b87843;
+}
+.agent-send-button.ant-btn-primary:not(:disabled):hover {
+  background: #a66836;
+  border-color: #a66836;
+}
+.agent-latest-bar {
+  display: flex;
+  justify-content: center;
+  height: 0;
+  position: relative;
+  z-index: 2;
+}
+.agent-latest-bar .ant-btn {
+  transform: translateY(-48px);
+  border-radius: 18px;
+  box-shadow: 0 3px 15px #24392e18;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .agent-messages {
+    padding: 18px 16px 28px;
+  }
+  .agent-turn {
+    margin-bottom: 28px;
+  }
+  .agent-user-message {
+    max-width: 92%;
+    padding: 10px 14px;
+  }
+  .agent-process-panel .ant-collapse-content-box {
+    padding-inline: 12px;
+  }
 }

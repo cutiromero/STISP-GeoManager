@@ -6,8 +6,9 @@ from dataclasses import dataclass
 
 
 # Configuration: previews are bounded independently of the final answer.
-MAX_PREVIEW_CHARACTERS = 24000
+MAX_PREVIEW_CHARACTERS = 1048576
 PREVIEW_EVENT_KIND = "answer_preview"
+PREVIEW_DELTA_KIND = "answer_delta"
 JSON_WHITESPACE = " \t\r\n"
 ESCAPES = {
     '"': '"',
@@ -25,13 +26,29 @@ def stored_answer_preview(run):
     """Use the latest small snapshot without reading or rewriting model context."""
     if run.status == "succeeded":
         return ""
-    text = (
-        run.events.filter(kind=PREVIEW_EVENT_KIND)
+    snapshot = run.events.filter(kind=PREVIEW_EVENT_KIND).order_by("-id").first()
+    text = snapshot.text if snapshot else ""
+    deltas = run.events.filter(
+        kind=PREVIEW_DELTA_KIND, pk__gt=snapshot.pk if snapshot else 0
+    ).values_list("text", flat=True)
+    return (text + "".join(deltas))[:MAX_PREVIEW_CHARACTERS]
+
+
+def preview_delta_filter(identities):
+    from django.db.models import OuterRef, Q, Subquery, Value
+    from django.db.models.functions import Coalesce
+    from .models import RunEvent
+
+    latest = (
+        RunEvent.objects.filter(run_id=OuterRef("run_id"), kind=PREVIEW_EVENT_KIND)
         .order_by("-id")
-        .values_list("text", flat=True)
-        .first()
+        .values("id")[:1]
     )
-    return text[:MAX_PREVIEW_CHARACTERS] if isinstance(text, str) else ""
+    return Q(
+        run_id__in=identities,
+        kind=PREVIEW_DELTA_KIND,
+        pk__gt=Coalesce(Subquery(latest), Value(0)),
+    )
 
 
 @dataclass(frozen=True)

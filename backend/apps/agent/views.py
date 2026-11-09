@@ -188,6 +188,7 @@ def bootstrap(request):
         {
             "canChat": chat,
             "canAgent": agent,
+            "runStreamingEnabled": True,
             "knowledgeDomains": domain_options(visible_entries(request.user)),
             "algorithmOptions": algorithm_options() if agent else [],
             "canManage": is_superadmin(request.user),

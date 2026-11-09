@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261109-002 - 智能体持续事件流与增量正文
+
+- Status: BackendReady
+- Owner: codex/xintao，单人负责契约、后端、前端和验收。
+- Endpoints: GET /api/agent/runs/{runId}/stream/；现有bootstrap、运行详情和事件类型。
+- Change type: 新增可恢复SSE读取；bootstrap增加可选runStreamingEnabled；answer_delta扩展事件枚举，预览上限调整为1048576字符。
+- OpenAPI change: SSE以AgentRunPoll一致快照开始，后续AgentStreamProgress按游标追加；错误与连接结束分别使用AgentStreamError和AgentStreamEnd。旧进度查询保持兼容。
+- Mock examples: 真实流字节拆分、Unicode、断线重连、槽位忙回退、撤权、退出和跨项目/会话夹具。
+- Frontend reason: 模型思考、正文和工具事件及时更新；只渲染确认final后的answer预览，工具参数及原始JSON不进入正文。
+- Backend implementation notes: 原生WSGI采用3个进程间流槽、25秒连接期限及0.5秒实时访问核对；禁用压缩和代理缓冲，断开释放资源。正文增量落盘，64Ki字符稀疏检查点，避免按每帧保存整段正文。
+- Verification: 真实响应迭代、首段早于完成、快照/增量一致、重连不重跑任务、权限/登录/项目失效、繁忙回退、取消、长文本、Markdown与真实浏览器；效率门禁及API生成检查。
+- Result: 后端216项、前端587项单元与127项相关浏览器回归通过；正式链路验收结果另存本轮私有发布回执。
+
 ## API-20261109-001 - 并发显示缓存及资源读取复用
 
 - Status: BackendReady
@@ -518,6 +531,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | API-20261109-001 | BackendReady | Existing resource reads/query | Concurrent reuse and cache admission | Updated | Existing fixtures | Shared locks and read coordinator | Efficiency contracts | ACL and scientific digests preserved |
+| API-20261109-002 | BackendReady | Agent run SSE and bootstrap | Resumable read stream and answer deltas | Updated | Controlled byte streams | Bounded WSGI slots and live authorization | Stream and efficiency regressions | Local regressions passed; deployment receipt records live acceptance |
 | API-20261108-004 | BackendReady | Resource query/profile/tiles and workspace | Stable map restore and structured display warnings | Updated | Scoped fixtures | Implemented | Scoped regression and actual browser | Original data and ACL preserved |
 | API-20261108-003 | BackendReady | Resource profile / workspace / output map preview | Shared color policy and live bindings | Updated | Existing fixtures | Single source implemented | Canonical table edit regression | Read-only display projection |
 | API-20261108-002 | BackendReady | AgentRun / AgentPolicy | Personal map actions | Updated | Real GIS fixtures | Implemented | Scoped worker and browser checks | Original data read-only |

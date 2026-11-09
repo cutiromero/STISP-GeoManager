@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, memo, type ReactNode } from "react";
 import SafeMath from "./SafeMath";
 
 type WikiLinkRenderer = (target: string, label: string) => ReactNode;
@@ -51,7 +51,7 @@ function inline(
   return output;
 }
 
-export default function SafeMarkdown({
+function SafeMarkdown({
   text,
   wikiLink,
   math = false,
@@ -178,3 +178,4 @@ export default function SafeMarkdown({
   }
   return <div className="agent-markdown">{result}</div>;
 }
+export default memo(SafeMarkdown);

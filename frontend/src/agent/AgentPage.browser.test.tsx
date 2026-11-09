@@ -156,7 +156,7 @@ function showAgent(mode: "chat" | "workbench" = "chat") {
   );
 }
 
-it("requires confirmation before stopping a streamed response", async () => {
+it("stops a streamed response in one click and retains received content", async () => {
   const responding = {
     ...run(5, "分析影像", "已生成部分回答"),
     status: "running" as const,
@@ -175,19 +175,7 @@ it("requires confirmation before stopping a streamed response", async () => {
     .mockResolvedValue({ ...responding, status: "cancelled" });
   showAgent();
   fireEvent.click(await screen.findByRole("button", { name: "停止回答" }));
-  const dialog = await screen.findByRole("dialog", { name: "停止这次回答？" });
-  expect(cancel).not.toHaveBeenCalled();
-  fireEvent.click(within(dialog).getByRole("button", { name: "继续回答" }));
-  await waitFor(() =>
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-  );
-  expect(cancel).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "停止回答" }));
-  fireEvent.click(
-    within(await screen.findByRole("dialog")).getByRole("button", {
-      name: "停止回答",
-    }),
-  );
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   await waitFor(() => expect(cancel).toHaveBeenCalledExactlyOnceWith(5));
   await screen.findByRole("button", { name: "发送" });
   expect(screen.getByText("已生成部分回答")).toBeInTheDocument();
@@ -226,9 +214,9 @@ it("real answer preview arrives before terminal and is replaced by the verified 
     );
   showAgent();
   const preview = await screen.findByRole("region", { name: "答复增量预览" });
-  expect(preview).toHaveTextContent("正在生成答复，尚未最终校验");
+  expect(preview).toHaveTextContent("正在生成 · 内容将在完成后核验");
   expect(preview).toHaveTextContent(
-    "**真实片段** [链接](https://example.test) <img src=x>",
+    "真实片段 [链接](https://example.test) <img src=x>",
   );
   expect(within(preview).queryByRole("link")).not.toBeInTheDocument();
   expect(preview.querySelector("img")).toBeNull();
@@ -302,11 +290,6 @@ it("real answer preview survives cancellation and a transient polling disconnect
     screen.getByRole("region", { name: "答复增量预览" }),
   ).toHaveTextContent("中断前的真实片段");
   fireEvent.click(screen.getByRole("button", { name: "停止回答" }));
-  fireEvent.click(
-    within(await screen.findByRole("dialog")).getByRole("button", {
-      name: "停止回答",
-    }),
-  );
   await screen.findByText("本轮已中断或停止；以下为尚未最终校验的部分答复");
   expect(
     screen.getByRole("region", { name: "答复增量预览" }),
@@ -395,7 +378,7 @@ it("real answer preview is empty during a tool call and real reasoning remains v
     runs: [toolRun],
   });
   showAgent("workbench");
-  fireEvent.click(await screen.findByText("模型思考过程"));
+  fireEvent.click(await screen.findByText("思考与处理过程"));
   expect(await screen.findByLabelText("模型思考内容")).toHaveTextContent(
     "真实的计算前思考",
   );
@@ -612,6 +595,7 @@ beforeEach(() => {
   bootstrap.allowAttachments = false;
   bootstrap.internetEnabled = false;
   bootstrap.workerOnline = true;
+  bootstrap.runStreamingEnabled = false;
   bootstrap.algorithmOptions = [
     {
       versionId: 4,
@@ -2232,7 +2216,7 @@ it("keeps all saved reasoning when the incremental event window is shorter", asy
   });
 });
 
-it("explains a completed deep run without inventing reasoning", async () => {
+it("hides an empty completed thinking panel without inventing reasoning", async () => {
   vi.mocked(agentApi.detail).mockResolvedValue({
     conversation,
     runs: [
@@ -2245,10 +2229,8 @@ it("explains a completed deep run without inventing reasoning", async () => {
   });
   showAgent();
   await screen.findByText("已根据当前项目目录完成统计。");
-  fireEvent.click(screen.getByText("模型思考过程"));
-  await screen.findByText(
-    "已开启逻辑推理，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
-  );
+  expect(screen.queryByText("模型思考过程")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("模型思考内容")).not.toBeInTheDocument();
   expect(screen.queryByText(/未保存到思考片段/)).not.toBeInTheDocument();
 });
 

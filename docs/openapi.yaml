@@ -7380,6 +7380,55 @@ paths:
           type: integer
           description: 上次事件游标
           minimum: 0
+  /api/agent/runs/{runId}/stream/:
+    get:
+      tags: [智能体]
+      operationId: streamAgentRun
+      summary: 持续接收智能体运行事件
+      description: 仅本人当前项目运行。以一致快照开始，随后发送思考、答复增量及工具事件；断线重连重新取得快照，不重新执行模型或算子。每连接最多25秒，定期核对当前登录、页面会话、项目和全部历史依据访问权。最多3个进程间共享流槽；满额503时客户端使用原进度查询。snapshot的data为AgentRunPoll，progress为AgentStreamProgress，error为AgentStreamError，end为AgentStreamEnd。生成中的预览仍须最终证据及协议校验，不包含工具参数。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 当前单个项目ID
+        schema: {type: integer, minimum: 1, description: 项目标识}
+      - name: runId
+        in: path
+        required: true
+        description: 本人真实运行ID
+        schema: {type: integer, minimum: 1, description: 运行标识}
+      responses:
+        '200':
+          description: SSE事件流；每帧为event/data/id字段及空行，UTF-8编码，注释为心跳。Cache-Control=no-store/no-transform，禁用代理缓冲及压缩缓冲。
+          content:
+            text/event-stream:
+              schema: {type: string, description: 标准SSE帧，data为对应事件类型的JSON对象}
+              x-event-schemas:
+                snapshot: {$ref: '#/components/schemas/AgentRunPoll'}
+                progress: {$ref: '#/components/schemas/AgentStreamProgress'}
+                error: {$ref: '#/components/schemas/AgentStreamError'}
+                end: {$ref: '#/components/schemas/AgentStreamEnd'}
+        '400':
+          description: 项目或参数无效
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '401':
+          description: 请先登录
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '403':
+          description: 当前权限不足
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '404':
+          description: 对象不存在或无权访问
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '503':
+          description: 流槽满额或数据库暂忙；使用原进度查询并有界重试
+          headers:
+            Retry-After:
+              description: 建议等待秒数
+              schema: {type: integer, minimum: 1, description: 重试等待秒数}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
   /api/agent/runs/{runId}/interaction/:
     post:
       tags: [智能体]
@@ -9734,6 +9783,9 @@ components:
         canAgent:
           type: boolean
           description: 允许数据智能体
+        runStreamingEnabled:
+          type: boolean
+          description: 支持可恢复运行事件流；旧服务未返回时使用既有进度查询
         canManage:
           type: boolean
           description: 超级管理员
@@ -10130,8 +10182,8 @@ components:
           description: 已生成文字，失败时保留已生成内容
         answerPreview:
           type: string
-          maxLength: 24000
-          description: 尚未通过最终校验的真实增量预览；普通chat允许自然语言正文，agent仅允许已确认action=final的answer字符串增量解码结果。不含工具参数或原始JSON，前端仅纯文本展示。上限24000个Unicode字符，最终answer不截断；成功后清空，失败、断流或取消保留已接收片段，重试或工具调用时重置。
+          maxLength: 1048576
+          description: 尚未通过最终校验的真实增量预览；普通chat允许自然语言正文，agent仅允许确认action=final后的answer字符串。不含工具参数或原始JSON；前端可按受控Markdown渲染，不执行HTML、外部资源或代码。最多1048576个Unicode字符，最终answer不截断。成功后清空；失败、断流或取消保留已接收片段，重试或工具调用时重置。内部使用增量事件和稀疏检查点，避免重复保存完整正文。
         detail:
           type: string
           description: 可读状态说明
@@ -10185,6 +10237,7 @@ components:
           - text
           - thinking
           - answer_preview
+          - answer_delta
           - tool_started
           - tool_completed
           - context
@@ -10194,7 +10247,7 @@ components:
           - continuation
         text:
           type: string
-          description: 增量文字或简要操作说明；answer_preview为当前最多24000个Unicode字符的纯文本预览快照，普通chat允许自然正文，agent仅提取已确认action=final的answer字符串，不含工具参数或原始JSON。空串表示重置，界面仅通过run.answerPreview显示而不拼接此事件
+          description: 增量文字或简要说明；answer_preview是答复检查点（空串重置），answer_delta只追加该检查点后的真实正文。仅普通chat自然语言或agent确认final后的answer可进入预览，不含工具参数。HTTP轮询使用run.answerPreview，SSE按事件ID拼接且遇检查点替换，总上限1048576字符。
         createdAt:
           type: string
           description: 时间
@@ -10203,6 +10256,36 @@ components:
       - kind
       - text
       - createdAt
+      additionalProperties: false
+    AgentStreamProgress:
+      type: object
+      description: 当前连接一致快照后的事件增量，fromCursor必须等于客户端当前游标
+      properties:
+        runId: {type: integer, minimum: 1, description: 当前运行ID}
+        conversationId: {type: integer, minimum: 1, description: 当前会话ID}
+        fromCursor: {type: integer, minimum: 0, description: 增量之前的事件游标}
+        cursor: {type: integer, minimum: 0, description: 本批最后一个事件游标}
+        events:
+          type: array
+          maxItems: 100
+          description: 严格按ID递增的真实事件
+          items: {$ref: '#/components/schemas/AgentEvent'}
+      required: [runId, conversationId, fromCursor, cursor, events]
+      additionalProperties: false
+    AgentStreamError:
+      type: object
+      description: 响应开始后的运行访问错误；立即停止应用后续事件
+      properties:
+        detail: {type: string, description: 可读错误说明}
+        status: {type: integer, description: 等价HTTP状态码}
+      required: [detail, status]
+      additionalProperties: false
+    AgentStreamEnd:
+      type: object
+      description: 当前连接结束，任务不会因此停止
+      properties:
+        reason: {type: string, enum: [renew, settled], description: renew重新连接，settled按真实状态处理完成或等待}
+      required: [reason]
       additionalProperties: false
     AgentRunPoll:
       type: object

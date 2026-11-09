@@ -1,4 +1,5 @@
 import { moduleEntry } from "../routing/clientBuild";
+import { consumeServerEvents } from "./eventStream";
 import { runMapDisplayQuery } from "./mapDisplayQuery";
 import {
   canonicalReadKey,
@@ -534,6 +535,69 @@ export async function requestJson<T>(
     }
     return data as T;
   } finally {
+    cancellation.dispose();
+  }
+}
+
+export async function requestEventStream(
+  url: string,
+  onEvent: (kind: string, data: unknown) => void,
+  signal?: AbortSignal,
+) {
+  const epoch = browserSessionEpoch();
+  const headers = new Headers({ Accept: "text/event-stream" });
+  headers.set("Accept-Language", currentLocale());
+  headers.set("X-Project-Id", getActiveProject());
+  const entry = typeof document === "undefined" ? "" : moduleEntry(document);
+  if (entry) headers.set("X-App-Entry", entry);
+  const cancellation = combineAbortSignals(
+    signal ? [projectSignal(), signal] : [projectSignal()],
+  );
+  let streamedResponse: Response | undefined;
+  const check = () => {
+    cancellation.signal.throwIfAborted();
+    if (epoch !== browserSessionEpoch())
+      throw new DOMException("登录状态已变化", "AbortError");
+  };
+  try {
+    await refreshBrowserSession();
+    check();
+    const send = () =>
+      fetch(
+        new Request(url, {
+          headers,
+          credentials: "include",
+          signal: cancellation.signal,
+        }),
+      );
+    let response = await readAwareFetch(send, "GET", url);
+    streamedResponse = response;
+    check();
+    if (response.status === 401 && (await refreshBrowserSession(true))) {
+      check();
+      response = await readAwareFetch(send, "GET", url);
+      streamedResponse = response;
+    }
+    check();
+    if (!response.ok) {
+      notifyAuthorizationFailure(response.status, url);
+      const data = await parseResponseBody(response);
+      throw new ApiError(
+        errorMessage(data, response.status),
+        response.status,
+        data,
+      );
+    }
+    await consumeServerEvents(
+      response,
+      (kind, value) => {
+        check();
+        onEvent(kind, value);
+      },
+      cancellation.signal,
+    );
+  } finally {
+    await streamedResponse?.body?.cancel().catch(() => {});
     cancellation.dispose();
   }
 }

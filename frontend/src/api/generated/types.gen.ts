@@ -632,6 +632,10 @@ export type AgentBootstrap = {
      */
     canAgent: boolean;
     /**
+     * 支持可恢复运行事件流；旧服务未返回时使用既有进度查询
+     */
+    runStreamingEnabled?: boolean;
+    /**
      * 超级管理员
      */
     canManage: boolean;
@@ -1236,7 +1240,7 @@ export type AgentRun = {
      */
     answer: string;
     /**
-     * 尚未通过最终校验的真实增量预览；普通chat允许自然语言正文，agent仅允许已确认action=final的answer字符串增量解码结果。不含工具参数或原始JSON，前端仅纯文本展示。上限24000个Unicode字符，最终answer不截断；成功后清空，失败、断流或取消保留已接收片段，重试或工具调用时重置。
+     * 尚未通过最终校验的真实增量预览；普通chat允许自然语言正文，agent仅允许确认action=final后的answer字符串。不含工具参数或原始JSON；前端可按受控Markdown渲染，不执行HTML、外部资源或代码。最多1048576个Unicode字符，最终answer不截断。成功后清空；失败、断流或取消保留已接收片段，重试或工具调用时重置。内部使用增量事件和稀疏检查点，避免重复保存完整正文。
      */
     answerPreview?: string;
     /**
@@ -1276,15 +1280,65 @@ export type AgentEvent = {
     /**
      * 事件类别
      */
-    kind: 'status' | 'text' | 'thinking' | 'answer_preview' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage' | 'interaction' | 'continuation';
+    kind: 'status' | 'text' | 'thinking' | 'answer_preview' | 'answer_delta' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage' | 'interaction' | 'continuation';
     /**
-     * 增量文字或简要操作说明；answer_preview为当前最多24000个Unicode字符的纯文本预览快照，普通chat允许自然正文，agent仅提取已确认action=final的answer字符串，不含工具参数或原始JSON。空串表示重置，界面仅通过run.answerPreview显示而不拼接此事件
+     * 增量文字或简要说明；answer_preview是答复检查点（空串重置），answer_delta只追加该检查点后的真实正文。仅普通chat自然语言或agent确认final后的answer可进入预览，不含工具参数。HTTP轮询使用run.answerPreview，SSE按事件ID拼接且遇检查点替换，总上限1048576字符。
      */
     text: string;
     /**
      * 时间
      */
     createdAt: string;
+};
+
+/**
+ * 当前连接一致快照后的事件增量，fromCursor必须等于客户端当前游标
+ */
+export type AgentStreamProgress = {
+    /**
+     * 当前运行ID
+     */
+    runId: number;
+    /**
+     * 当前会话ID
+     */
+    conversationId: number;
+    /**
+     * 增量之前的事件游标
+     */
+    fromCursor: number;
+    /**
+     * 本批最后一个事件游标
+     */
+    cursor: number;
+    /**
+     * 严格按ID递增的真实事件
+     */
+    events: Array<AgentEvent>;
+};
+
+/**
+ * 响应开始后的运行访问错误；立即停止应用后续事件
+ */
+export type AgentStreamError = {
+    /**
+     * 可读错误说明
+     */
+    detail: string;
+    /**
+     * 等价HTTP状态码
+     */
+    status: number;
+};
+
+/**
+ * 当前连接结束，任务不会因此停止
+ */
+export type AgentStreamEnd = {
+    /**
+     * renew重新连接，settled按真实状态处理完成或等待
+     */
+    reason: 'renew' | 'settled';
 };
 
 /**
@@ -19159,6 +19213,58 @@ export type GetAgentRunResponses = {
 };
 
 export type GetAgentRunResponse = GetAgentRunResponses[keyof GetAgentRunResponses];
+
+export type StreamAgentRunData = {
+    body?: never;
+    headers: {
+        /**
+         * 项目标识
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 运行标识
+         */
+        runId: number;
+    };
+    query?: never;
+    url: '/api/agent/runs/{runId}/stream/';
+};
+
+export type StreamAgentRunErrors = {
+    /**
+     * 项目或参数无效
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 当前权限不足
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在或无权访问
+     */
+    404: ErrorResponse;
+    /**
+     * 流槽满额或数据库暂忙；使用原进度查询并有界重试
+     */
+    503: ErrorResponse;
+};
+
+export type StreamAgentRunError = StreamAgentRunErrors[keyof StreamAgentRunErrors];
+
+export type StreamAgentRunResponses = {
+    /**
+     * 标准SSE帧，data为对应事件类型的JSON对象
+     */
+    200: string;
+};
+
+export type StreamAgentRunResponse = StreamAgentRunResponses[keyof StreamAgentRunResponses];
 
 export type AnswerAgentInteractionData = {
     /**

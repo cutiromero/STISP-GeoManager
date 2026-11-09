@@ -5,7 +5,12 @@ import json
 from django.db.models import Max, Q, Subquery
 from django.utils import timezone
 
-from .answer_preview import MAX_PREVIEW_CHARACTERS, PREVIEW_EVENT_KIND
+from .answer_preview import (
+    MAX_PREVIEW_CHARACTERS,
+    PREVIEW_EVENT_KIND,
+    PREVIEW_DELTA_KIND,
+    preview_delta_filter,
+)
 from .models import ACTIVE, RunEvent
 
 
@@ -33,7 +38,11 @@ def load_run_activity(runs):
     )
     events = (
         RunEvent.objects.filter(run_id__in=identities)
-        .filter(Q(kind__in=("thinking", "usage")) | Q(pk__in=Subquery(latest)))
+        .filter(
+            Q(kind__in=("thinking", "usage"))
+            | Q(pk__in=Subquery(latest))
+            | preview_delta_filter(preview_ids)
+        )
         .order_by("id")
         .values_list("run_id", "kind", "text", "created_at")
     )
@@ -47,6 +56,7 @@ def load_run_activity(runs):
         for identity in identities
     }
     thinking = {identity: [] for identity in identities}
+    previews = {identity: [] for identity in identities}
     started, usages = {}, {}
     for identity, kind, text, created_at in events.iterator():
         activity = result[identity]
@@ -56,7 +66,9 @@ def load_run_activity(runs):
         elif kind == "parameters":
             activity["generationParameters"] = json.loads(text)
         elif kind == PREVIEW_EVENT_KIND:
-            activity["answerPreview"] = text[:MAX_PREVIEW_CHARACTERS]
+            previews[identity] = [text]
+        elif kind == PREVIEW_DELTA_KIND:
+            previews[identity].append(text)
         elif kind == "usage":
             usage = json.loads(text)
             totals = usages.setdefault(
@@ -70,6 +82,7 @@ def load_run_activity(runs):
         activity = result[run.pk]
         activity["generationParameters"].update(usages.get(run.pk, {}))
         activity["thinkingText"] = "".join(thinking[run.pk])
+        activity["answerPreview"] = "".join(previews[run.pk])[:MAX_PREVIEW_CHARACTERS]
         if run.pk in started:
             end = observed_at if run.status in ACTIVE else run.updated_at
             activity["thinkingDurationMs"] = max(

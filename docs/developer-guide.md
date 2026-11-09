@@ -3018,3 +3018,13 @@ QueryRequest 可显式传 `lineSimplifyTolerance`（有限数值，0至0.1，WGS
 ## 通用文件版本与计算结果读取
 
 所有任务、算子和数据通过公共`packages.checksum`复用受管文件的带签名完整性证明，始终核对实时文件身份。计算结果分页及近似栅格统计使用`compute.result_reads`，不得为每页重新计算全文件摘要、CSV总行数或同版本栅格统计。访问前仍执行当前权限、项目、任务绑定和状态校验；证明及索引不能代替授权。缓存不改写原始数据或科学结果，详见[效率回归契约](efficiency-contracts.md)。
+
+## 智能体持续事件流
+
+bootstrap的`runStreamingEnabled`为true时，前端可通过`requestEventStream`读取本人当前项目的`GET /api/agent/runs/{runId}/stream/`。请求携带现有Cookie和X-Project-Id；不把令牌放入URL。snapshot使用AgentRunPoll，取代已有状态并设置事件游标；progress要求fromCursor与当前游标一致，仅追加真实事件。断线或25秒到期重新连接取得新快照，不重放模型、工具调用或计算提交。旧服务、通道满额和不支持流式的代理使用原进度读取；权限错误停止读取，不以回退绕过。
+
+服务端以进程间锁限制同时3条流，保留普通WSGI请求容量。连接期间每0.5秒核对当前登录、页面会话、项目和历史依据访问权；退出或撤权发error后关闭。所有生成器恢复原项目上下文，关闭时释放连接及锁。事件流设置no-store/no-transform、identity和X-Accel-Buffering=no，避免压缩及代理缓冲。
+
+answer_preview是可替换检查点，answer_delta为后续追加。普通chat可直接解析自然正文，科研agent只展示确认action=final后的answer字符串，最多1048576个Unicode字符；工具名、参数和JSON协议不进入正文。64Ki字符建立检查点，其他更新仅存增量，完整快照及增量在一次事件读取中合成。前端受控Markdown以React文本渲染，不执行HTML、远程图片或代码；预览仍标明生成中，正式答案经过原有协议、引用及真实输出校验。
+
+浏览器回归通过`pnpm run test:browser`或`pnpm exec node scripts/run-browser-check.mjs <文件>`执行。Vitest在含非ASCII路径的工作区中存在模块mock与编码URL不匹配的问题；统一入口自动建立字节一致的ASCII临时源码镜像，复用现有依赖，保持全部断言，并核对运行前后源文件摘要。结束后保留测试回执和失败截图并清理临时源码，不安装依赖或修改共享node_modules。`make check-efficiency`沿用同一入口。

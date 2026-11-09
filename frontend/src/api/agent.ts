@@ -1,4 +1,4 @@
-import { requestForm, requestJson } from "./client";
+import { requestForm, requestJson, requestEventStream } from "./client";
 import { ResponseFormatError } from "./responseDiagnostics";
 import {
   assertAgentRun,
@@ -188,8 +188,14 @@ export const agentApi = {
         method: "DELETE",
       },
     ),
-  poll: (id: number, after = 0) =>
+  stream: (
+    id: number,
+    onEvent: (kind: string, data: unknown) => void,
+    signal?: AbortSignal,
+  ) => requestEventStream(`/api/agent/runs/${id}/stream/`, onEvent, signal),
+  poll: (id: number, after = 0, signal?: AbortSignal) =>
     requestJson<AgentRunPoll>(`/api/agent/runs/${id}/?after=${after}`, {
+      signal,
       validate: (data) => {
         assertRunPoll(data);
         if (data.run.id !== id)

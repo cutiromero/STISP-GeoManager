@@ -29,6 +29,7 @@ from .citations import historical_answer, historical_text, validate_answer_citat
 from .answer_preview import (
     AnswerPreviewParser,
     PREVIEW_EVENT_KIND,
+    PREVIEW_DELTA_KIND,
     stored_answer_preview,
 )
 from .model_guard import ModelStreamGuard
@@ -38,8 +39,9 @@ logger = logging.getLogger(__name__)
 # Configuration: durable progress follows provider chunks, with bounded writes.
 THINKING_FLUSH_SECONDS = 0.6
 THINKING_FLUSH_CHARACTERS = 500
-PREVIEW_FLUSH_SECONDS = 0.3
+PREVIEW_FLUSH_SECONDS = 0.15
 PREVIEW_FLUSH_CHARACTERS = 256
+PREVIEW_CHECKPOINT_CHARACTERS = 65536
 
 
 class Cancelled(Exception):
@@ -403,9 +405,12 @@ def run_task(run_id):
     thinking_buffer = ""
     thinking_saved_at = float("-inf")
     preview_parts = []
+    preview_delta_parts = []
     preview_pending = 0
     preview_saved_at = 0.0
     preview_active = bool(stored_answer_preview(run))
+    preview_checkpoint_length = 0
+    preview_flushed_length = 0
     context_ready = False
     progress_guard = None
 
@@ -439,7 +444,12 @@ def run_task(run_id):
             thinking_saved_at = time.monotonic()
 
     def flush_preview(*, force=False):
-        nonlocal preview_pending, preview_saved_at, preview_active
+        nonlocal \
+            preview_pending, \
+            preview_saved_at, \
+            preview_active, \
+            preview_checkpoint_length, \
+            preview_flushed_length
         if not preview_pending:
             return
         now = time.monotonic()
@@ -450,15 +460,34 @@ def run_task(run_id):
         ):
             return
         check_progress(force=force or preview_pending >= PREVIEW_FLUSH_CHARACTERS)
-        event(run, PREVIEW_EVENT_KIND, "".join(preview_parts))
+        delta = "".join(preview_delta_parts)
+        length = preview_flushed_length + len(delta)
+        if (
+            not preview_active
+            or length - preview_checkpoint_length >= PREVIEW_CHECKPOINT_CHARACTERS
+        ):
+            text = "".join(preview_parts)
+            event(run, PREVIEW_EVENT_KIND, text)
+            preview_checkpoint_length = len(text)
+        else:
+            event(run, PREVIEW_DELTA_KIND, delta)
+        preview_flushed_length = length
+        preview_delta_parts.clear()
         preview_pending, preview_saved_at, preview_active = 0, time.monotonic(), True
 
     def reset_preview():
-        nonlocal preview_pending, preview_saved_at, preview_active
+        nonlocal \
+            preview_pending, \
+            preview_saved_at, \
+            preview_active, \
+            preview_checkpoint_length, \
+            preview_flushed_length
         if preview_active:
             event(run, PREVIEW_EVENT_KIND, "")
         preview_parts.clear()
+        preview_delta_parts.clear()
         preview_pending, preview_saved_at, preview_active = 0, 0.0, False
+        preview_checkpoint_length = preview_flushed_length = 0
 
     def record_preview(change):
         nonlocal preview_pending
@@ -466,6 +495,7 @@ def run_task(run_id):
             reset_preview()
         elif change.text:
             preview_parts.append(change.text)
+            preview_delta_parts.append(change.text)
             preview_pending += len(change.text)
             flush_preview()
 

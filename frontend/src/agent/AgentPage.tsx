@@ -1,9 +1,9 @@
 import PlatformActions from "./PlatformActions";
+import { watchAgentRun } from "../api/watchAgentRun";
 import {
   App,
   Alert,
   Button,
-  Collapse,
   Drawer,
   Input,
   Layout,
@@ -21,6 +21,7 @@ import {
   PlusOutlined,
   SendOutlined,
   StopOutlined,
+  ArrowDownOutlined,
   CopyOutlined,
   EditOutlined,
   DeleteOutlined,
@@ -68,7 +69,7 @@ import ActiveWorkflowNotice from "./ActiveWorkflowNotice";
 import ResearchIntentCard from "./ResearchIntentCard";
 import LiveActivity, { ActivityMark } from "./LiveActivity";
 import AnswerPreview from "./AnswerPreview";
-import ThinkingStream from "./ThinkingStream";
+import RunProcess from "./RunProcess";
 import {
   runActivity,
   workflowActivity,
@@ -170,7 +171,7 @@ function AgentWorkspace({
   const { user } = useAppContext();
   const project = useProjectContext();
   const layout = useAgentLayout(`agent-layout:${user?.id ?? "anon"}:${mode}`);
-  const { message, modal } = App.useApp();
+  const { message } = App.useApp();
   const {
     bootstrap,
     status: bootstrapStatus,
@@ -234,6 +235,8 @@ function AgentWorkspace({
     title: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [showLatest, setShowLatest] = useState(false);
   const [resources, setResources] = useState<AgentResource[]>([]);
   const [selected, setSelected] = useState<number[]>([]);
   const [toolPreferences, setToolPreferences] = useState<ToolPreferences>(
@@ -566,20 +569,14 @@ function AgentWorkspace({
   useEffect(() => {
     if (!running || historyLoading) return;
     let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    let cursor = 0;
+    const controller = new AbortController();
     const pollSequence = sequence.current;
-    const poll = async () => {
-      try {
-        const data = await agentApi.poll(running.id, cursor);
+    void watchAgentRun(
+      running,
+      bootstrap?.runStreamingEnabled ? agentApi : { poll: agentApi.poll },
+      controller.signal,
+      (data) => {
         if (disposed) return;
-        assertRunPoll(data);
-        if (
-          data.run.id !== running.id ||
-          data.run.conversationId !== running.conversationId
-        )
-          throw new Error("返回的任务与当前对话不一致，当前聊天记录已保留。");
-        cursor = data.cursor;
         setRuns((old) => mergeRun(old, data.run));
         setPollFailure("");
         setEvents((old) =>
@@ -587,16 +584,12 @@ function AgentWorkspace({
             ...old,
             ...data.events.filter(
               (e) =>
-                e.kind !== "answer_preview" && !old.some((p) => p.id === e.id),
+                !["answer_preview", "answer_delta"].includes(e.kind) &&
+                !old.some((p) => p.id === e.id),
             ),
           ].slice(-80),
         );
-        if (active(data.run))
-          timer = setTimeout(
-            poll,
-            document.hidden ? 3000 : data.run.status === "queued" ? 1500 : 800,
-          );
-        else {
+        if (!active(data.run)) {
           void refreshList().then((items) => {
             const conversation = items?.find(
               (item) => item.id === data.run.conversationId,
@@ -617,27 +610,37 @@ function AgentWorkspace({
               });
           });
         }
-      } catch (e) {
-        if (disposed) return;
-        if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
-          clearRestrictedState();
-          report(e);
-        } else {
+      },
+      (error) => {
+        if (!disposed)
           setPollFailure(
-            e instanceof Error
-              ? e.message
-              : "暂时无法更新回答，当前聊天记录已保留。",
+            error instanceof Error ? error.message : "正在恢复连接",
           );
-          timer = setTimeout(poll, 3000);
-        }
+      },
+    ).catch((e) => {
+      if (disposed) return;
+      if (e instanceof Error && e.name === "AbortError") return;
+      if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
+        clearRestrictedState();
+        report(e);
+      } else {
+        setPollFailure(
+          e instanceof Error
+            ? e.message
+            : "暂时无法更新回答，当前聊天记录已保留。",
+        );
       }
-    };
-    void poll();
+    });
     return () => {
       disposed = true;
-      clearTimeout(timer);
+      controller.abort();
     };
-  }, [running?.id, historyLoading, pollAttempt]);
+  }, [
+    running?.id,
+    historyLoading,
+    pollAttempt,
+    bootstrap?.runStreamingEnabled,
+  ]);
   useEffect(() => {
     if (
       !titleRefresh ||
@@ -1140,6 +1143,19 @@ function AgentWorkspace({
       report(e);
     }
   };
+  const stopResponse = async () => {
+    if (!running || stopping) return;
+    const seq = sequence.current;
+    setStopping(true);
+    try {
+      const result = await agentApi.cancel(running.id);
+      if (alive.current && seq === sequence.current) updateRun(result);
+    } catch (error) {
+      report(error);
+    } finally {
+      if (alive.current) setStopping(false);
+    }
+  };
   const statusLabel: Record<string, string> = {
     queued: ui("排队中", "Queued"),
     running: ui("生成中", "Generating"),
@@ -1508,6 +1524,7 @@ function AgentWorkspace({
                 followLatest.current = false;
               if (box.scrollHeight - box.scrollTop - box.clientHeight < 96)
                 followLatest.current = true;
+              setShowLatest(!followLatest.current);
               lastScrollTop.current = box.scrollTop;
             }}
           >
@@ -1620,62 +1637,15 @@ function AgentWorkspace({
                   {!(
                     r.researchIntent?.scenario === "geology_generic" &&
                     r.researchIntent.workflowId
-                  ) &&
-                    (r.thinkingMode === "deep" || r.thinkingText) && (
-                      <Collapse
-                        size="small"
-                        className="agent-thinking-panel"
-                        defaultActiveKey={active(r) ? ["thinking"] : []}
-                        items={[
-                          {
-                            key: "thinking",
-                            label:
-                              r.status === "running" &&
-                              !r.answerPreview &&
-                              !pollFailure
-                                ? ui(
-                                    "模型思考过程（生成中）",
-                                    "Model reasoning (generating)",
-                                  )
-                                : `${ui("模型思考过程", "Model reasoning")}${r.thinkingDurationMs ? ` / ${(r.thinkingDurationMs / 1000).toFixed(1)}s` : ""}`,
-                            children: (
-                              <ThinkingStream
-                                working={
-                                  r.status === "running" &&
-                                  !r.answerPreview &&
-                                  !pollFailure &&
-                                  Boolean(
-                                    r.thinkingText ||
-                                    (r.id === running?.id &&
-                                      events.some(
-                                        (event) =>
-                                          event.kind === "thinking" &&
-                                          event.text,
-                                      )),
-                                  )
-                                }
-                                text={
-                                  r.thinkingText ||
-                                  (r.id === running?.id
-                                    ? events
-                                        .filter((e) => e.kind === "thinking")
-                                        .map((e) => e.text)
-                                        .join("") ||
-                                      ui(
-                                        "正在等待模型返回思考内容…",
-                                        "Waiting for the model reasoning stream…",
-                                      )
-                                    : ui(
-                                        "已开启逻辑推理，本次未收到可展示的思考内容。请查看下方实际答复与工具结果。",
-                                        "Deep thinking is enabled, but no displayable reasoning was received. See the answer and tool results below.",
-                                      ))
-                                }
-                              />
-                            ),
-                          },
-                        ]}
-                      />
-                    )}
+                  ) && (
+                    <RunProcess
+                      run={r}
+                      events={r.id === running?.id ? events : []}
+                      disconnected={
+                        r.id === running?.id ? pollFailure : undefined
+                      }
+                    />
+                  )}
                   {!(
                     r.researchIntent?.scenario === "geology_generic" &&
                     r.researchIntent.workflowId
@@ -1771,18 +1741,7 @@ function AgentWorkspace({
                       void refreshList();
                     }}
                   />
-                  {(active(r) || waiting(r)) &&
-                    !r.computeIntent &&
-                    !r.researchIntent && (
-                      <LiveActivity
-                        activity={runActivity(
-                          r,
-                          r.id === running?.id ? events : [],
-                          undefined,
-                          r.id === running?.id ? pollFailure : undefined,
-                        )}
-                      />
-                    )}
+
                   {mode === "agent" &&
                     (r.computeIntent?.taskId ||
                       r.evidence.some((item) =>
@@ -1859,6 +1818,21 @@ function AgentWorkspace({
               </section>
             ))}
           </div>
+          {showLatest && runs.length > 0 && (
+            <div className="agent-latest-bar">
+              <Button
+                icon={<ArrowDownOutlined />}
+                onClick={() => {
+                  followLatest.current = true;
+                  setShowLatest(false);
+                  if (viewport.current)
+                    viewport.current.scrollTop = viewport.current.scrollHeight;
+                }}
+              >
+                {ui("回到最新", "Jump to latest")}
+              </Button>
+            </div>
+          )}
           {canUse && (
             <div className="agent-composer">
               <AgentResizeHandle
@@ -2171,38 +2145,9 @@ function AgentWorkspace({
                       aria-label={ui("停止回答", "Stop response")}
                       title={ui("停止回答", "Stop response")}
                       icon={<StopOutlined />}
-                      onClick={() => {
-                        const runId = running.id;
-                        const activeSequence = sequence.current;
-                        modal.confirm({
-                          title: ui("停止这次回答？", "Stop this response?"),
-                          content:
-                            running.status === "waiting_compute"
-                              ? ui(
-                                  "停止智能体的后续处理。已提交的计算仍会运行，可在计算任务卡中单独停止。",
-                                  "Stop the agent's next actions. Submitted calculations continue and can be stopped separately in their task cards.",
-                                )
-                              : ui(
-                                  "已生成的内容会保留。停止后可以发送新消息。",
-                                  "Generated content will be retained. You can send a new message after stopping.",
-                                ),
-                          okText: ui("停止回答", "Stop response"),
-                          cancelText: ui("继续回答", "Keep responding"),
-                          onOk: async () => {
-                            try {
-                              const result = await agentApi.cancel(runId);
-                              if (
-                                alive.current &&
-                                activeSequence === sequence.current
-                              )
-                                updateRun(result);
-                            } catch (error) {
-                              report(error);
-                              throw error;
-                            }
-                          },
-                        });
-                      }}
+                      loading={stopping}
+                      disabled={stopping}
+                      onClick={() => void stopResponse()}
                     />
                   ) : (
                     <Button

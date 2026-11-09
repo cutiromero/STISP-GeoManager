@@ -112,7 +112,7 @@ export function assertAgentRun(
   }
   if (run.answerPreview !== undefined) {
     field(run, "answerPreview", "string", path);
-    if (Array.from(run.answerPreview as string).length > 24000)
+    if (Array.from(run.answerPreview as string).length > 1048576)
       throw new ResponseFormatError(`${path}.answerPreview: too long`);
   }
   for (const key of ["evidence", "attachments"]) {

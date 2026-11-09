@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views, workflow_report_views, workflow_validation_views
+from .run_stream import response as run_stream
 
 urlpatterns = [
     path("bootstrap/", views.bootstrap),
@@ -16,6 +17,7 @@ urlpatterns = [
     ),
     path("conversations/<int:conversation_id>/runs/", views.submit),
     path("runs/<int:run_id>/", views.run_detail),
+    path("runs/<int:run_id>/stream/", run_stream),
     path("runs/<int:run_id>/cancel/", views.cancel),
     path("runs/<int:run_id>/interaction/", views.interaction),
     path("runs/<int:run_id>/compute-tasks/", views.compute_tasks),

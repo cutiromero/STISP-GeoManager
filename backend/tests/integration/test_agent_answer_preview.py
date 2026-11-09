@@ -8,7 +8,11 @@ import pytest
 from django.core.exceptions import PermissionDenied
 
 from apps.agent import worker
-from apps.agent.answer_preview import PREVIEW_EVENT_KIND, stored_answer_preview
+from apps.agent.answer_preview import (
+    PREVIEW_EVENT_KIND,
+    stored_answer_preview,
+    MAX_PREVIEW_CHARACTERS,
+)
 from apps.agent.models import AgentRun, RunEvent
 from apps.agent.provider import ModelError
 from apps.projects.context import project_scope
@@ -188,7 +192,9 @@ def test_preview_does_not_bypass_unread_compute_output_validation(env, monkeypat
     assert not run.events.filter(kind="text").exists()
 
 
-def test_preview_is_bounded_without_rewriting_large_execution_context(env, monkeypatch):
+def test_answer_past_old_preview_limit_streams_without_rewriting_context(
+    env, monkeypatch
+):
     state = {
         "messages": [{"role": "user", "content": "已记录的工具背景" * 10000}],
         "currentIndex": 0,
@@ -201,7 +207,7 @@ def test_preview_is_bounded_without_rewriting_large_execution_context(env, monke
         yield '{"action":"final","answer":"'
         for offset in range(0, len(answer), 1000):
             yield answer[offset : offset + 1000]
-        assert len(read_run(env, run)["answerPreview"]) == 24000
+        assert read_run(env, run)["answerPreview"] == answer
         yield '"}'
 
     monkeypatch.setattr(worker, "stream", generate)
@@ -210,7 +216,7 @@ def test_preview_is_bounded_without_rewriting_large_execution_context(env, monke
     assert run.status == "succeeded" and run.answer == answer
     assert run.execution_state == state
     assert all(
-        len(text) <= 24000
+        len(text) <= MAX_PREVIEW_CHARACTERS
         for text in run.events.filter(kind=PREVIEW_EVENT_KIND).values_list(
             "text", flat=True
         )

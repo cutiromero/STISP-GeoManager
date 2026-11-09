@@ -23,6 +23,11 @@ export default defineConfig({
       "antd",
       "@ant-design/icons",
       "@ant-design/pro-components",
+      "antd/locale/en_US",
+      "dayjs",
+      "dayjs/locale/en",
+      "dayjs/locale/zh-cn",
+      "react-dom/client",
     ],
   },
   test: {
