@@ -291,8 +291,17 @@ def run_workflow(workflow_id):
     workflow = AgentWorkflow.objects.get(pk=workflow_id)
     from .demo_workflow import DEMO_TYPES, advance_demo
 
+    if workflow.workflow_type == "business_flow":
+        from apps.business_flows.engine import advance
+
+        advance(workflow_id)
+        return
     if workflow.workflow_type in DEMO_TYPES:
         advance_demo(workflow_id)
+        if workflow.parameters.get("_businessFlow"):
+            from apps.business_flows.legacy import synchronize
+
+            synchronize(workflow_id)
         return
     if workflow.status not in {"queued", "running", "interrupted"}:
         return
@@ -444,8 +453,18 @@ def resume_waiting():
     for workflow in AgentWorkflow.objects.filter(status="waiting_compute")[:30]:
         from .demo_workflow import DEMO_TYPES, advance_demo
 
+        if workflow.workflow_type == "business_flow":
+            from apps.business_flows.engine import advance
+
+            advance(workflow.id)
+            count += 1
+            continue
         if workflow.workflow_type in DEMO_TYPES:
             advance_demo(workflow.id)
+            if workflow.parameters.get("_businessFlow"):
+                from apps.business_flows.legacy import synchronize
+
+                synchronize(workflow.id)
             count += 1
             continue
         with project_scope(_scope(workflow)):

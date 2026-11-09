@@ -103,6 +103,36 @@ export function runActivity(
   computeActivity?: LiveActivity,
   pollFailure?: string,
 ): LiveActivity {
+  if (run.businessFlow) {
+    const flow = run.businessFlow;
+    const node = flow.nodes.find((item) => item.nodeId === flow.currentNode);
+    const title =
+      flow.definitionSnapshot.nodes.find((item) => item.id === flow.currentNode)
+        ?.title ?? flow.name;
+    if (flow.status === "succeeded")
+      return { state: "complete", label: "业务流已完成", detail: title };
+    if (["failed", "cancelled", "interrupted"].includes(flow.status))
+      return {
+        state: "stopped",
+        label: flow.status === "cancelled" ? "业务流已停止" : "业务流需要处理",
+        detail: node?.reviewer.reason || run.detail,
+      };
+    if (flow.status === "paused")
+      return { state: "waiting", label: "业务流已暂停", detail: title };
+    if (flow.status === "waiting_approval")
+      return { state: "waiting", label: "业务流等待您决定", detail: title };
+    return {
+      state: "working",
+      label:
+        node?.status === "reviewing"
+          ? "独立审核智能体正在核对"
+          : node?.status === "revising"
+            ? "执行智能体正在返修"
+            : "执行智能体正在按流程处理",
+      detail: title,
+    };
+  }
+
   if (["waiting_input", "waiting_review"].includes(run.status))
     return {
       state: "waiting",

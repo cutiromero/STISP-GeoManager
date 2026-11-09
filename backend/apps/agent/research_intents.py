@@ -125,6 +125,13 @@ def authorize_run(run, user, policy, *, history=False) -> None:
     from .deleted_resources import historical_deletion
 
     intent = run.research_intent or {}
+    linked = None
+    if getattr(run, "research_workflow_id", None):
+        linked = run.research_workflow
+        if linked.parameters.get("_businessFlow"):
+            from apps.business_flows.runtime import authorize
+
+            authorize(user, linked, history=history)
     if not intent.get("originRunId"):
         return
     if run.owner_id != user.id:
@@ -147,11 +154,12 @@ def authorize_run(run, user, policy, *, history=False) -> None:
         ):
             raise PermissionDenied("科研资料已变化或不可用，请重新解析任务")
     if run.research_workflow_id:
-        workflow = AgentWorkflow.objects.filter(
-            pk=run.research_workflow_id,
-            owner_id=run.owner_id,
-            project_tag_id=run.project_tag_id,
-        ).first()
+        workflow = linked
+        if workflow is not None and (
+            workflow.owner_id != run.owner_id
+            or workflow.project_tag_id != run.project_tag_id
+        ):
+            workflow = None
         if workflow is None:
             raise PermissionDenied("科研流程不属于当前会话项目")
         _authorize(workflow, history=history)

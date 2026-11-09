@@ -6,6 +6,7 @@ import type {
   AgentRunPoll,
 } from "./generated/types.gen";
 import { ResponseFormatError } from "./responseDiagnostics";
+import { assertBusinessFlowRun } from "./businessFlows";
 
 function object(value: unknown, path: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -79,6 +80,8 @@ export function assertAgentRun(
   if (!RUN_STATUSES.has(run.status as string)) {
     throw new ResponseFormatError(`${path}.status: invalid status`);
   }
+  if (run.businessFlow !== undefined && run.businessFlow !== null)
+    assertBusinessFlowRun(run.businessFlow);
   if (run.platformActions !== undefined) {
     const actions = array(run.platformActions, `${path}.platformActions`);
     if (actions.length > 10)
@@ -97,9 +100,13 @@ export function assertAgentRun(
           throw new ResponseFormatError("Invalid workspace action");
       } else if (
         action.kind !== "page" ||
-        !["map", "resources", "compute", "knowledge"].includes(
-          String(action.page),
-        )
+        ![
+          "map",
+          "resources",
+          "compute",
+          "knowledge",
+          "business_flows",
+        ].includes(String(action.page))
       )
         throw new ResponseFormatError("Invalid platform page");
       const ids = array(action.resourceIds, path);

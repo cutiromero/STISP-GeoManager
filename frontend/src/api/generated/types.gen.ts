@@ -1140,9 +1140,9 @@ export type AgentPlatformAction = {
      */
     sceneId?: number;
     /**
-     * page类型允许的页面；前端按枚举生成固定站内地址。
+     * page类型允许的页面；business_flows打开当前项目业务流目录（/business-flows），只提供入口，不授予执行或批准权限。前端按枚举生成固定站内地址。
      */
-    page?: 'map' | 'resources' | 'compute' | 'knowledge';
+    page?: 'map' | 'resources' | 'compute' | 'knowledge' | 'business_flows';
     /**
      * 地图所引用并已重新核验的业务资料编号；页面入口为空数组。
      */
@@ -1153,6 +1153,7 @@ export type AgentPlatformAction = {
  * 持久运行记录；引用失权时返回403，不返回旧内容。轮询支持gzip；资源依据集合批量实时授权，仅单次检查复用来源查询计划，不跨轮询缓存访问结果。
  */
 export type AgentRun = {
+    businessFlow?: BusinessFlowRun;
     /**
      * 本轮已完成的平台展示操作入口；从真实证据和本人私有工程重建，当前失权或工程停用时不返回可用按钮。
      */
@@ -1280,7 +1281,7 @@ export type AgentEvent = {
     /**
      * 事件类别
      */
-    kind: 'status' | 'text' | 'thinking' | 'answer_preview' | 'answer_delta' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage' | 'interaction' | 'continuation';
+    kind: 'status' | 'text' | 'thinking' | 'answer_preview' | 'answer_delta' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage' | 'interaction' | 'continuation' | 'business_flow_state';
     /**
      * 增量文字或简要说明；answer_preview是答复检查点（空串重置），answer_delta只追加该检查点后的真实正文。仅普通chat自然语言或agent确认final后的answer可进入预览，不含工具参数。HTTP轮询使用run.answerPreview，SSE按事件ID拼接且遇检查点替换，总上限1048576字符。
      */
@@ -11224,6 +11225,708 @@ export type ComputePreflight = {
      * 文字
      */
     detail: string;
+};
+
+/**
+ * 每节点可选审核策略；人工批准不能由执行或审核模型替代。
+ */
+export type BusinessFlowReview = {
+    /**
+     * 是否要求独立审核模型
+     */
+    ai: boolean;
+    /**
+     * 是否要求用户明确批准
+     */
+    human: boolean;
+    /**
+     * AI不通过后最多自动返修次数，超过后保留失败原因并停止自动推进
+     */
+    maxRevisions: number;
+    /**
+     * 可选审核模型别名，仍受当前模型与策略权限约束
+     */
+    model?: string;
+};
+
+/**
+ * 一个科研节点；DAG依赖无环，返修由有界审核策略表达，不接受代码或命令。
+ */
+export type BusinessFlowNode = {
+    /**
+     * 版本内稳定节点编码
+     */
+    id: string;
+    /**
+     * 节点显示名称
+     */
+    title: string;
+    /**
+     * 节点目的与适用条件
+     */
+    description: string;
+    /**
+     * 执行类型；human节点必须保留人工批准
+     */
+    kind: 'agent' | 'operator' | 'human' | 'result';
+    /**
+     * 全部前置节点通过后才执行
+     */
+    dependsOn: Array<string>;
+    /**
+     * 本节点可访问的绑定资料角色
+     */
+    dataRoles: Array<string>;
+    /**
+     * 通用算子节点固定的已发布版本；专业逻辑推理由规则注册解析
+     */
+    algorithmVersionId?: number | null;
+    /**
+     * 受平台工具与只读数据边界约束的科研任务说明
+     */
+    instruction: string;
+    /**
+     * 仅research_flow算子节点的参数默认值，最多50键、深度8；执行时仍按实际manifest校验
+     */
+    parameters?: {
+        [key: string]: unknown;
+    };
+    review: BusinessFlowReview;
+    /**
+     * 仅research_flow算子节点可用；manifest输入键到互斥来源的绑定。最多30键；发布时核对当前输入键、前序版本输出键及数据类型，运行时通过原入库服务生成真实就绪资源后提交后续算子。质量未通过不会因人工批准而视为通过。
+     */
+    inputBindings?: {
+        [key: string]: BusinessFlowInputBinding;
+    };
+};
+
+/**
+ * 一项数据角色和最低输入规范；真实内容与访问权在启动和执行边界重验。
+ */
+export type BusinessFlowInputRequirement = {
+    /**
+     * 角色稳定编码
+     */
+    key: string;
+    /**
+     * 资料角色名称
+     */
+    label: string;
+    /**
+     * 适用数据与用途说明
+     */
+    description: string;
+    /**
+     * 允许的数据类型
+     */
+    dataTypes: Array<'vector' | 'raster' | 'table' | 'gene' | 'document' | 'image'>;
+    /**
+     * 是否必须绑定该角色
+     */
+    required: boolean;
+    /**
+     * 资料必须提供的字段名；无要求时为空
+     */
+    requiredFields: Array<string>;
+};
+
+/**
+ * 不可变科研流程规范。通用research_flow逐节点自由配置审核；专业geology_generic锁定骨架、资料角色、人工门禁（仅inputs/apply）及真实AI边界（仅apply/finish）。
+ */
+export type BusinessFlowSpec = {
+    /**
+     * 定义规范版本
+     */
+    schemaVersion: 1;
+    /**
+     * 平台注册执行适配器
+     */
+    adapter: 'geology_generic' | 'research_flow';
+    /**
+     * 输入资料规范
+     */
+    inputRequirements: Array<BusinessFlowInputRequirement>;
+    /**
+     * 无环依赖节点，最多32个
+     */
+    nodes: Array<BusinessFlowNode>;
+    /**
+     * 最终成果说明
+     */
+    outputRequirements: Array<string>;
+};
+
+/**
+ * 当前项目内的业务流登记；发布版本不被元信息修改覆盖。
+ */
+export type BusinessFlowDefinition = {
+    /**
+     * 业务流登记编号
+     */
+    id: number;
+    /**
+     * 唯一所属项目
+     */
+    projectId: number;
+    /**
+     * 登记所有者
+     */
+    ownerId: number;
+    /**
+     * 当前项目唯一稳定编码
+     */
+    code: string;
+    /**
+     * 业务流名称
+     */
+    name: string;
+    /**
+     * 科研任务、适用条件与用途
+     */
+    description: string;
+    /**
+     * 是否允许新任务启动
+     */
+    isActive: boolean;
+    /**
+     * 当前发布版本编号
+     */
+    currentVersionId: number | null;
+    /**
+     * 登记时间
+     */
+    createdAt: string;
+    /**
+     * 元信息版本时间，也是保存的乐观并发凭据
+     */
+    updatedAt: string;
+};
+
+/**
+ * 已发布不可变版本；任务冻结此版本，不随后续发布改变。
+ */
+export type BusinessFlowVersion = {
+    /**
+     * 不可变版本编号
+     */
+    id: number;
+    /**
+     * 所属业务流登记编号
+     */
+    flowId: number;
+    /**
+     * 同一业务流内递增的发布序号
+     */
+    version: number;
+    /**
+     * 仅返回已发布版本
+     */
+    status: 'published';
+    definition: BusinessFlowSpec;
+    /**
+     * 版本创建时间
+     */
+    createdAt: string;
+    /**
+     * 发布时间
+     */
+    publishedAt: string;
+};
+
+/**
+ * 业务流目录的轻量摘要；完整定义按需读取。
+ */
+export type BusinessFlowSummary = {
+    /**
+     * 业务流登记编号
+     */
+    id: number;
+    /**
+     * 唯一所属项目
+     */
+    projectId: number;
+    /**
+     * 登记所有者
+     */
+    ownerId: number;
+    /**
+     * 当前项目唯一稳定编码
+     */
+    code: string;
+    /**
+     * 业务流名称
+     */
+    name: string;
+    /**
+     * 科研任务、适用条件与用途
+     */
+    description: string;
+    /**
+     * 是否允许新任务启动
+     */
+    isActive: boolean;
+    /**
+     * 当前发布版本编号
+     */
+    currentVersionId: number | null;
+    /**
+     * 登记时间
+     */
+    createdAt: string;
+    /**
+     * 元信息版本时间，也是保存的乐观并发凭据
+     */
+    updatedAt: string;
+    /**
+     * 当前发布序号
+     */
+    version: number | null;
+    /**
+     * 节点数
+     */
+    nodeCount: number;
+    /**
+     * 配置AI审核的节点数
+     */
+    aiReviewCount: number;
+    /**
+     * 必须人工决定的节点数
+     */
+    humanReviewCount: number;
+    /**
+     * 输入资料角色数
+     */
+    inputCount: number;
+};
+
+/**
+ * 登记、当前发布版本和最近发布历史。
+ */
+export type BusinessFlowDetail = {
+    flow: BusinessFlowDefinition;
+    /**
+     * 可空标识
+     */
+    version: BusinessFlowVersion | null;
+    /**
+     * 最近50个不可变版本
+     */
+    versions: Array<BusinessFlowVersion>;
+    /**
+     * 是否可登记和发布版本
+     */
+    canManage: boolean;
+};
+
+/**
+ * 当前项目业务流目录的一页；普通用户仅看启用项，不返回总条数。
+ */
+export type BusinessFlowList = {
+    /**
+     * 目录摘要，最多50项
+     */
+    items: Array<BusinessFlowSummary>;
+    /**
+     * 是否可维护目录
+     */
+    canManage: boolean;
+    /**
+     * 仅有后续页时返回下一页offset；缺省表示当前查询已加载完。请求下一页必须保持相同q。
+     */
+    nextOffset?: number;
+};
+
+/**
+ * 执行或独立审核智能体的当前公开状态，不传工具密钥或内部提示。
+ */
+export type BusinessFlowActorState = {
+    /**
+     * 当前状态，如pending、running、passed、rejected、skipped
+     */
+    status: string;
+    /**
+     * 执行使用的模型别名
+     */
+    model?: string;
+    /**
+     * 节点产出或公开结果摘要
+     */
+    answer?: string;
+    /**
+     * 状态原因或审核不通过原因
+     */
+    reason?: string;
+    /**
+     * 审核判断，不构成人工授权
+     */
+    decision?: string;
+    /**
+     * 交给执行智能体的具体返修反馈
+     */
+    feedback?: string;
+    [key: string]: unknown;
+};
+
+/**
+ * 人在回路的明确决定；审核模型不能写入approved状态。
+ */
+export type BusinessFlowHumanState = {
+    /**
+     * 当前节点是否必须人工决定
+     */
+    required: boolean;
+    /**
+     * 人工状态，如pending、approved、changes_requested、not_required
+     */
+    status: string;
+    /**
+     * 为什么需要用户决定或用户反馈
+     */
+    reason: string;
+    [key: string]: unknown;
+};
+
+/**
+ * 当前节点真实执行、审核、返修和人工状态。
+ */
+export type BusinessFlowNodeState = {
+    /**
+     * 对应冻结规范中的节点编码
+     */
+    nodeId: string;
+    /**
+     * 节点状态
+     */
+    status: string;
+    /**
+     * 本节点执行尝试序号
+     */
+    attempt: number;
+    executor: BusinessFlowActorState;
+    reviewer: BusinessFlowActorState;
+    human: BusinessFlowHumanState;
+    /**
+     * 已产生的真实节点结果与受控引用
+     */
+    outputs: {
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
+};
+
+/**
+ * 执行者、审核者、用户和系统之间可追溯的状态事件。
+ */
+export type BusinessFlowEvent = {
+    /**
+     * 当前执行内递增事件序号
+     */
+    id: number;
+    /**
+     * 相关节点；全局事件可为空
+     */
+    nodeId: string;
+    /**
+     * 事件来源角色
+     */
+    actor: 'executor' | 'reviewer' | 'human' | 'system';
+    /**
+     * 事件类型，例如started、review_rejected、revision_requested、human_approved
+     */
+    kind: string;
+    /**
+     * 发生后的真实状态
+     */
+    status: string;
+    /**
+     * 面向用户的事件说明
+     */
+    message: string;
+    /**
+     * 事件时间
+     */
+    createdAt: string;
+    [key: string]: unknown;
+};
+
+/**
+ * 绑定不可变定义的真实执行；AI审核和人工批准分别记录，不跳过原有权限与科研检查。
+ */
+export type BusinessFlowRun = {
+    /**
+     * 沿用AgentWorkflow的真实执行编号
+     */
+    id: string;
+    /**
+     * 业务流登记编号
+     */
+    flowId: number;
+    /**
+     * 本次冻结的发布版本编号
+     */
+    versionId: number;
+    /**
+     * 所属单一项目
+     */
+    projectId: number;
+    /**
+     * 父智能体会话编号
+     */
+    conversationId: number | null;
+    /**
+     * 父对话轮次编号；审核请求不冒充新用户轮次
+     */
+    runId: number | null;
+    /**
+     * 业务流名称
+     */
+    name: string;
+    /**
+     * 本次科研目标
+     */
+    goal: string;
+    /**
+     * 执行状态，沿用工作流状态并可表达审核与返修
+     */
+    status: string;
+    /**
+     * 当前节点编码；未开始时可为空
+     */
+    currentNode: string;
+    /**
+     * 状态修订号；人工决定必须绑定当前修订
+     */
+    revision: number;
+    /**
+     * 启动时间
+     */
+    createdAt: string;
+    /**
+     * 最后状态更新时间
+     */
+    updatedAt: string;
+    definitionSnapshot: BusinessFlowSpec;
+    /**
+     * 本次节点状态
+     */
+    nodes: Array<BusinessFlowNodeState>;
+    /**
+     * 有界可追溯过程事件
+     */
+    events: Array<BusinessFlowEvent>;
+    [key: string]: unknown;
+};
+
+/**
+ * 本人当前项目的轻量执行历史，不读取完整步骤或重新扫描资料。
+ */
+export type BusinessFlowRunSummary = {
+    /**
+     * 沿用AgentWorkflow的真实执行编号
+     */
+    id: string;
+    /**
+     * 业务流登记编号
+     */
+    flowId: number;
+    /**
+     * 本次冻结的发布版本编号
+     */
+    versionId: number;
+    /**
+     * 所属单一项目
+     */
+    projectId: number;
+    /**
+     * 父智能体会话编号
+     */
+    conversationId: number | null;
+    /**
+     * 父对话轮次编号；审核请求不冒充新用户轮次
+     */
+    runId: number | null;
+    /**
+     * 业务流名称
+     */
+    name: string;
+    /**
+     * 本次科研目标
+     */
+    goal: string;
+    /**
+     * 执行状态，沿用工作流状态并可表达审核与返修
+     */
+    status: string;
+    /**
+     * 当前节点编码；未开始时可为空
+     */
+    currentNode: string;
+    /**
+     * 状态修订号；人工决定必须绑定当前修订
+     */
+    revision: number;
+    /**
+     * 启动时间
+     */
+    createdAt: string;
+    /**
+     * 最后状态更新时间
+     */
+    updatedAt: string;
+    [key: string]: unknown;
+};
+
+/**
+ * 本人当前项目最近30个业务流执行。
+ */
+export type BusinessFlowRunList = {
+    /**
+     * 轻量执行摘要，最多30项
+     */
+    items: Array<BusinessFlowRunSummary>;
+};
+
+/**
+ * 登记并立即发布第一版；仅当前项目超级管理员可调用。
+ */
+export type BusinessFlowCreate = {
+    /**
+     * 当前项目唯一稳定编码
+     */
+    code: string;
+    /**
+     * 业务流名称
+     */
+    name: string;
+    /**
+     * 科研任务、适用条件与用途
+     */
+    description?: string;
+    /**
+     * 是否允许新任务启动
+     */
+    isActive?: boolean;
+    definition: BusinessFlowSpec;
+};
+
+/**
+ * 只修改登记元信息，不覆盖已发布定义。
+ */
+export type BusinessFlowUpdate = {
+    /**
+     * 业务流名称
+     */
+    name?: string;
+    /**
+     * 科研任务、适用条件与用途
+     */
+    description?: string;
+    /**
+     * 是否允许新任务启动
+     */
+    isActive?: boolean;
+    /**
+     * 元信息版本时间，也是保存的乐观并发凭据
+     */
+    updatedAt: string;
+};
+
+/**
+ * 发布新不可变版本并设为当前版本；不修改正在运行任务的快照。
+ */
+export type BusinessFlowVersionPublish = {
+    definition: BusinessFlowSpec;
+    /**
+     * 元信息版本时间，也是保存的乐观并发凭据
+     */
+    updatedAt: string;
+};
+
+/**
+ * 按固定版本启动任务；数据编号仍按当前用户、项目和隐私边界重验。
+ */
+export type BusinessFlowStart = {
+    /**
+     * 省略时使用当前发布版本
+     */
+    versionId?: number;
+    /**
+     * 本次目标
+     */
+    goal: string;
+    /**
+     * 执行模型别名
+     */
+    model: string;
+    /**
+     * 独立审核请求使用的模型别名；可与执行模型相同但上下文和职责独立
+     */
+    reviewerModel?: string;
+    /**
+     * 角色到当前项目资料编号的映射，最多30项
+     */
+    inputs: {
+        [key: string]: number;
+    };
+    /**
+     * 受控任务参数，不新增任意根级配置。research_flow仅允许nodeParameters对象（operator节点ID→该已发布算法manifest声明的参数值对象）；节点必须存在且类型为operator，未知节点/参数键不静默忽略。与冻结node.parameters默认值合并后，真实取值、类型、字段和波段仍由计算中心验证。geology_generic只允许既有专业参数及uploadBatchId；禁止_businessFlow等内部状态。
+     */
+    parameters: {
+        [key: string]: unknown;
+    };
+    /**
+     * 可选本人当前项目会话，未传则由服务器建立
+     */
+    conversationId?: number;
+    /**
+     * 同一操作重试的稳定键
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * 只有真实用户可提交人工决定，绑定当前节点和修订，拒绝陈旧或重复越权操作。
+ */
+export type BusinessFlowDecision = {
+    /**
+     * 当前等待人工决定的节点编码
+     */
+    nodeId: string;
+    /**
+     * 最后读取的状态修订号
+     */
+    revision: number;
+    /**
+     * 明确批准或要求返修
+     */
+    decision: 'approve' | 'request_changes';
+    /**
+     * 返修原因或补充要求
+     */
+    feedback: string;
+    /**
+     * 稳定决定重试键
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * 互斥的算子输入来源：资料角色或本业务流前序算子的已登记输出，不授予额外访问和入库权限。
+ */
+export type BusinessFlowInputBinding = {
+    /**
+     * inputRequirements中的资料角色编码
+     */
+    role: string;
+} | {
+    /**
+     * 前序operator节点编码，必须在当前dependsOn祖先集合中
+     */
+    nodeId: string;
+    /**
+     * 上游已发布算法manifest中的输出键；kind必须匹配当前输入
+     */
+    outputKey: string;
 };
 
 /**
@@ -21900,3 +22603,688 @@ export type RenderComputeOutputMapResponses = {
 };
 
 export type RenderComputeOutputMapResponse = RenderComputeOutputMapResponses[keyof RenderComputeOutputMapResponses];
+
+export type ListBusinessFlowsData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: {
+        /**
+         * 名称、说明或编码的模糊搜索词；去除首尾空白，最多使用120字。
+         */
+        q?: string;
+        /**
+         * 当前查询的零起始偏移；更改搜索词后从0开始。
+         */
+        offset?: number;
+        /**
+         * 单页目录条数，默认50，范围1至50。
+         */
+        limit?: number;
+    };
+    url: '/api/business-flows/';
+};
+
+export type ListBusinessFlowsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type ListBusinessFlowsError = ListBusinessFlowsErrors[keyof ListBusinessFlowsErrors];
+
+export type ListBusinessFlowsResponses = {
+    /**
+     * 成功响应
+     */
+    200: BusinessFlowList;
+};
+
+export type ListBusinessFlowsResponse = ListBusinessFlowsResponses[keyof ListBusinessFlowsResponses];
+
+export type RegisterBusinessFlowData = {
+    /**
+     * 经界面确认的有界业务参数
+     */
+    body: BusinessFlowCreate;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/business-flows/';
+};
+
+export type RegisterBusinessFlowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type RegisterBusinessFlowError = RegisterBusinessFlowErrors[keyof RegisterBusinessFlowErrors];
+
+export type RegisterBusinessFlowResponses = {
+    /**
+     * 成功响应
+     */
+    201: BusinessFlowDetail;
+};
+
+export type RegisterBusinessFlowResponse = RegisterBusinessFlowResponses[keyof RegisterBusinessFlowResponses];
+
+export type GetBusinessFlowData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前项目业务流登记编号
+         */
+        flowId: number;
+    };
+    query?: never;
+    url: '/api/business-flows/{flowId}/';
+};
+
+export type GetBusinessFlowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type GetBusinessFlowError = GetBusinessFlowErrors[keyof GetBusinessFlowErrors];
+
+export type GetBusinessFlowResponses = {
+    /**
+     * 成功响应
+     */
+    200: BusinessFlowDetail;
+};
+
+export type GetBusinessFlowResponse = GetBusinessFlowResponses[keyof GetBusinessFlowResponses];
+
+export type UpdateBusinessFlowData = {
+    /**
+     * 经界面确认的有界业务参数
+     */
+    body: BusinessFlowUpdate;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前项目业务流登记编号
+         */
+        flowId: number;
+    };
+    query?: never;
+    url: '/api/business-flows/{flowId}/';
+};
+
+export type UpdateBusinessFlowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type UpdateBusinessFlowError = UpdateBusinessFlowErrors[keyof UpdateBusinessFlowErrors];
+
+export type UpdateBusinessFlowResponses = {
+    /**
+     * 成功响应
+     */
+    200: BusinessFlowDetail;
+};
+
+export type UpdateBusinessFlowResponse = UpdateBusinessFlowResponses[keyof UpdateBusinessFlowResponses];
+
+export type PublishBusinessFlowVersionData = {
+    /**
+     * 经界面确认的有界业务参数
+     */
+    body: BusinessFlowVersionPublish;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前项目业务流登记编号
+         */
+        flowId: number;
+    };
+    query?: never;
+    url: '/api/business-flows/{flowId}/versions/';
+};
+
+export type PublishBusinessFlowVersionErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type PublishBusinessFlowVersionError = PublishBusinessFlowVersionErrors[keyof PublishBusinessFlowVersionErrors];
+
+export type PublishBusinessFlowVersionResponses = {
+    /**
+     * 成功响应
+     */
+    201: BusinessFlowDetail;
+};
+
+export type PublishBusinessFlowVersionResponse = PublishBusinessFlowVersionResponses[keyof PublishBusinessFlowVersionResponses];
+
+export type StartBusinessFlowData = {
+    /**
+     * 经界面确认的有界业务参数
+     */
+    body: BusinessFlowStart;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前项目业务流登记编号
+         */
+        flowId: number;
+    };
+    query?: never;
+    url: '/api/business-flows/{flowId}/start/';
+};
+
+export type StartBusinessFlowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type StartBusinessFlowError = StartBusinessFlowErrors[keyof StartBusinessFlowErrors];
+
+export type StartBusinessFlowResponses = {
+    /**
+     * 成功响应
+     */
+    202: BusinessFlowRun;
+};
+
+export type StartBusinessFlowResponse = StartBusinessFlowResponses[keyof StartBusinessFlowResponses];
+
+export type ListBusinessFlowRunsData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/business-flows/runs/';
+};
+
+export type ListBusinessFlowRunsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type ListBusinessFlowRunsError = ListBusinessFlowRunsErrors[keyof ListBusinessFlowRunsErrors];
+
+export type ListBusinessFlowRunsResponses = {
+    /**
+     * 成功响应
+     */
+    200: BusinessFlowRunList;
+};
+
+export type ListBusinessFlowRunsResponse = ListBusinessFlowRunsResponses[keyof ListBusinessFlowRunsResponses];
+
+export type GetBusinessFlowRunData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户和项目的真实业务流执行编号
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/business-flows/runs/{workflowId}/';
+};
+
+export type GetBusinessFlowRunErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type GetBusinessFlowRunError = GetBusinessFlowRunErrors[keyof GetBusinessFlowRunErrors];
+
+export type GetBusinessFlowRunResponses = {
+    /**
+     * 成功响应
+     */
+    200: BusinessFlowRun;
+};
+
+export type GetBusinessFlowRunResponse = GetBusinessFlowRunResponses[keyof GetBusinessFlowRunResponses];
+
+export type DecideBusinessFlowNodeData = {
+    /**
+     * 经界面确认的有界业务参数
+     */
+    body: BusinessFlowDecision;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户和项目的真实业务流执行编号
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/business-flows/runs/{workflowId}/decide/';
+};
+
+export type DecideBusinessFlowNodeErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type DecideBusinessFlowNodeError = DecideBusinessFlowNodeErrors[keyof DecideBusinessFlowNodeErrors];
+
+export type DecideBusinessFlowNodeResponses = {
+    /**
+     * 成功响应
+     */
+    200: BusinessFlowRun;
+};
+
+export type DecideBusinessFlowNodeResponse = DecideBusinessFlowNodeResponses[keyof DecideBusinessFlowNodeResponses];
+
+export type CancelBusinessFlowData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户和项目的真实业务流执行编号
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/business-flows/runs/{workflowId}/cancel/';
+};
+
+export type CancelBusinessFlowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type CancelBusinessFlowError = CancelBusinessFlowErrors[keyof CancelBusinessFlowErrors];
+
+export type CancelBusinessFlowResponses = {
+    /**
+     * 成功响应
+     */
+    200: BusinessFlowRun;
+};
+
+export type CancelBusinessFlowResponse = CancelBusinessFlowResponses[keyof CancelBusinessFlowResponses];
+
+export type PauseBusinessFlowData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户和项目的真实业务流执行编号
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/business-flows/runs/{workflowId}/pause/';
+};
+
+export type PauseBusinessFlowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type PauseBusinessFlowError = PauseBusinessFlowErrors[keyof PauseBusinessFlowErrors];
+
+export type PauseBusinessFlowResponses = {
+    /**
+     * 成功响应
+     */
+    200: BusinessFlowRun;
+};
+
+export type PauseBusinessFlowResponse = PauseBusinessFlowResponses[keyof PauseBusinessFlowResponses];
+
+export type ResumeBusinessFlowData = {
+    body?: never;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前用户和项目的真实业务流执行编号
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/business-flows/runs/{workflowId}/resume/';
+};
+
+export type ResumeBusinessFlowErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type ResumeBusinessFlowError = ResumeBusinessFlowErrors[keyof ResumeBusinessFlowErrors];
+
+export type ResumeBusinessFlowResponses = {
+    /**
+     * 成功响应
+     */
+    200: BusinessFlowRun;
+};
+
+export type ResumeBusinessFlowResponse = ResumeBusinessFlowResponses[keyof ResumeBusinessFlowResponses];

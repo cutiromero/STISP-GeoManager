@@ -47,6 +47,7 @@ vi.mock("../api/platform", () => ({
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
   return {
+    ...actual,
     ApiError: actual.ApiError,
     api: mockApi,
     requestJson: agentBootstrapMock,
@@ -262,11 +263,13 @@ function RoutedHeader(props: React.ComponentProps<typeof WorkspaceHeader>) {
   const { pathname } = useLocation();
   const activeTab = pathname.startsWith("/about")
     ? "about"
-    : pathname === "/compute"
-      ? "compute"
-      : pathname === "/knowledge"
-        ? "knowledge"
-        : "map";
+    : pathname === "/business-flows"
+      ? "businessFlows"
+      : pathname === "/compute"
+        ? "compute"
+        : pathname === "/knowledge"
+          ? "knowledge"
+          : "map";
   return <WorkspaceHeader key={pathname} {...props} activeTab={activeTab} />;
 }
 
@@ -708,6 +711,7 @@ describe("WorkspaceHeader", () => {
             return [box.x, box.y, box.width, box.height];
           });
         for (const [title, targetPath] of [
+          ["业务流", "/business-flows"],
           ["计算中心", "/compute"],
           ["时空科普", "/knowledge"],
           ["关于我们", "/about/system"],
@@ -758,7 +762,7 @@ describe("WorkspaceHeader", () => {
             (sample) => sample.path === targetPath,
           );
           expect(arrived.length).toBeGreaterThan(5);
-          expect(arrived.every((sample) => sample.boxes.length === 11)).toBe(
+          expect(arrived.every((sample) => sample.boxes.length === 12)).toBe(
             true,
           );
           let drift = 0;
@@ -907,18 +911,19 @@ describe("WorkspaceHeader", () => {
   });
 });
 
-it("places resources immediately after the agent and nests analytics in data resources", async () => {
+it("places business flows between agent and resources and transfers the persistent highlight", async () => {
   const { container } = renderHeader();
   const titles = [
     ...container.querySelectorAll<HTMLButtonElement>(
       ".header-primary-actions button",
     ),
   ]
-    .slice(0, 6)
+    .slice(0, 7)
     .map((button) => button.getAttribute("aria-label") ?? button.title);
   expect(titles).toEqual([
     "地理工作台",
     "智能体",
+    "业务流",
     "数据资源",
     "计算中心",
     "知识库",
@@ -926,6 +931,12 @@ it("places resources immediately after the agent and nests analytics in data res
   ]);
   expect(container.querySelector('[data-nav-key="agent"]')).toHaveClass(
     "workspace-agent-highlight",
+  );
+  expect(container.querySelector('[data-nav-key="businessFlows"]')).toHaveClass(
+    "workspace-switch-card-business-flows",
+  );
+  expect(screen.getByRole("button", { name: "数据资源" })).not.toHaveClass(
+    "workspace-switch-card-business-flows",
   );
   expect(
     container.querySelector('.header-primary-actions button[title="数据分析"]'),

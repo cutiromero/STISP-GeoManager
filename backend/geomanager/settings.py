@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     "apps.audit",
     "apps.compute",
     "apps.agent",
+    "apps.business_flows",
 ]
 
 MIDDLEWARE = [

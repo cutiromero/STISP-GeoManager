@@ -72,6 +72,9 @@ const ComputePage = lazy(() => import("./compute/ComputePage"));
 const NonGeoPage = lazy(() => import("./pages/NonGeoPage"));
 const ResultsPage = lazy(() => import("./pages/ResultsPage"));
 const AgentPage = lazy(() => import("./agent/AgentPage"));
+const BusinessFlowsPage = lazy(
+  () => import("./businessflows/BusinessFlowsPage"),
+);
 const AgentAdmin = lazy(() => import("./agent/AgentAdmin"));
 const ResourceLayout = lazy(() => import("./resource/ResourceLayout"));
 
@@ -317,6 +320,7 @@ export default function App({
 
               {/* 需要登录才能访问的页面 */}
               <Route element={<RequireAuth />}>
+                <Route path="/business-flows" element={<BusinessFlowsPage />} />
                 <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
                 <Route
                   path="/projects/manage"

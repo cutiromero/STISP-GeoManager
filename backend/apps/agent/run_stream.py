@@ -29,8 +29,14 @@ AUTH_SECONDS = 0.5
 HEARTBEAT_SECONDS = 2
 MAX_EVENTS = 100
 SNAPSHOT_EVENTS = 40
-STREAMING_STATUSES = {"queued", "running"}
-SNAPSHOT_KINDS = {"tool_completed", "question", "interaction", "continuation"}
+STREAMING_STATUSES = {"queued", "running", "waiting_compute"}
+SNAPSHOT_KINDS = {
+    "tool_completed",
+    "question",
+    "interaction",
+    "continuation",
+    "business_flow_state",
+}
 
 
 class StreamDenied(Exception):

@@ -4,6 +4,7 @@ import type { AgentPlatformAction } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
 
 const pages = {
+  business_flows: "/business-flows",
   map: "/map",
   resources: "/resources/catalog",
   compute: "/compute",

@@ -55,6 +55,18 @@ TOOLS = {
     t.name: t
     for t in (
         ToolSpec(
+            "list_business_flows",
+            "business_flow",
+            "查找当前项目已发布科研业务流，返回版本、资料规范、节点和审核边界；query可选。优先用于有定制流程的复杂科研任务。",
+            ("query", "offset", "limit"),
+        ),
+        ToolSpec(
+            "start_business_flow",
+            "business_flow",
+            "按目录真实versionId启动业务流；goal、inputs(角色到已授权资源ID)、parameters可选、reviewerModel可选。必须按该版本资料规范绑定；启动后由业务流处理，不再重复提交算子或伪造人工批准。",
+            ("versionId", "goal", "inputs", "parameters", "reviewerModel"),
+        ),
+        ToolSpec(
             "search_resources",
             "read_data",
             "分页查找当前项目数据，query可为空；category为all/compute_results/uploaded_data；offset从0开始，limit默认50，按nextOffset继续；total是真实总数",
@@ -87,7 +99,7 @@ TOOLS = {
         ToolSpec(
             "get_platform_link",
             "read_data",
-            "生成站内可用页面按钮；page只能是map/resources/compute/knowledge，不接受模型自报网址，自动携带当前项目。",
+            "生成站内可用页面按钮；page只能是map/resources/compute/knowledge/business_flows，不接受模型自报网址，自动携带当前项目。",
             ("page",),
         ),
         ToolSpec(
@@ -503,6 +515,10 @@ def _policy_switch(policy_value, *names):
 
 
 def _check_special_capability(spec, policy_value):
+    if spec.capability == "business_flow" and not policy_value.get(
+        "workflowEnabled", True
+    ):
+        raise PermissionDenied("业务流执行权限已关闭")
     if spec.capability == "map_display" and not policy_value.get(
         "mapDisplayEnabled", True
     ):
@@ -1050,6 +1066,10 @@ def execute(run, name, args):
     p = require_access(user, "agent", run.model)
     check_evidence(run, user, p)
     _check_special_capability(spec, p)
+    if name in {"list_business_flows", "start_business_flow"}:
+        from apps.business_flows.tools import execute_business_flow_tool
+
+        return execute_business_flow_tool(run, user, name, args)
     if name in {"get_map_data_profile", "prepare_map_workspace", "get_platform_link"}:
         from .map_tools import execute_map
 

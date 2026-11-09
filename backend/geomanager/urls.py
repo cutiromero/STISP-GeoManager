@@ -7,6 +7,7 @@ from apps.core.frontend_assets import historical_asset
 
 
 urlpatterns = [
+    path("api/business-flows/", include("apps.business_flows.urls")),
     re_path(r"^static/assets/(?P<asset_path>.+)$", historical_asset),
     path("api/knowledge/", include("apps.knowledge.urls")),
     path("api/agent/", include("apps.agent.urls")),

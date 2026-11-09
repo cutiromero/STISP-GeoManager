@@ -215,6 +215,10 @@ def _table_rows(output: ComputeOutput) -> list[str]:
 
 
 def render_report(workflow: AgentWorkflow, user, policy: dict, tasks: list) -> bytes:
+    if workflow.workflow_type == "business_flow":
+        from apps.business_flows.reports import render_report as render_business_report
+
+        return render_business_report(workflow)
     if workflow.workflow_type in MULTI_FAMILY:
         from .geology_multi_report import render_report as render_multi_report
 
@@ -391,7 +395,14 @@ def generate_report(workflow: AgentWorkflow, user, policy: dict, request=None) -
         raw = render_report(workflow, user, policy, tasks)
         if len(raw) > MAX_REPORT_BYTES:
             raise ComputeError("本次报告超过大小上限，请先减少流程输出", 409)
-        label = REPORT_NAMES.get(workflow.workflow_type, "MH-workflow报告")
+        label = (
+            (
+                workflow.parameters.get("_businessFlow", {}).get("name", "业务流")
+                + "报告"
+            )
+            if workflow.workflow_type == "business_flow"
+            else REPORT_NAMES.get(workflow.workflow_type, "MH-workflow报告")
+        )
         data = {
             "schemaVersion": 1,
             "fileName": label + ".md",

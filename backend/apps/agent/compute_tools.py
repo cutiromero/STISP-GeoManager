@@ -313,10 +313,23 @@ def validate_import_intent(record):
                 owner=record.requested_by,
                 project_tag_id=record.output.task.project_tag_id,
             ).first()
+            paused_input_preparation = bool(
+                workflow is not None
+                and workflow.workflow_type == "business_flow"
+                and workflow.status == "paused"
+                and workflow.paused_from == "waiting_compute"
+                and workflow.parameters.get("_businessFlow")
+                and workflow.plan.get("businessFlow", {})
+                .get("nodes", {})
+                .get(workflow.current_step, {})
+                .get("inputPreparation")
+                == "waiting"
+            )
             if (
                 workflow is None
                 or workflow.cancel_requested
                 or workflow.status != "waiting_compute"
+                and not paused_input_preparation
             ):
                 raise PermissionDenied("工作流已停止，自动入库已取消")
             if not workflow.steps.filter(

@@ -13,7 +13,7 @@ from .compute_tools import authorized_task
 from .selections import require_task_selection
 
 
-def read_output(run, user, policy, args):
+def read_output(run, user, policy, args, *, workflow=None):
     output_id = args.get("outputId")
     offset, limit = args.get("offset", 0), args.get("limit", 30)
     if (
@@ -32,8 +32,15 @@ def read_output(run, user, policy, args):
     )
     if not output:
         raise PermissionDenied("结果不存在或不属于当前项目")
-    task = authorized_task(user, output.task_id, policy, run=run)
-    require_task_selection(run, task)
+    if workflow is not None and (
+        run.research_workflow_id != workflow.pk
+        or run.owner_id != workflow.owner_id
+        or run.project_tag_id != workflow.project_tag_id
+    ):
+        raise PermissionDenied("结果读取的业务流与发起对话不一致")
+    task = authorized_task(user, output.task_id, policy, run=run, workflow=workflow)
+    if workflow is None:
+        require_task_selection(run, task)
     path = app_path(output.path)
     if task.status != "succeeded" or output.expired or not path.is_file():
         raise ComputeError("结果未成功、已过期或文件缺失，请查看真实任务状态")

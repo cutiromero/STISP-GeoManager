@@ -146,7 +146,9 @@ def execute_map(run, user, policy, name, args):
     if name == "get_platform_link":
         page = args.get("page")
         if page not in PAGES:
-            raise ValidationError("page仅支持map/resources/compute/knowledge")
+            raise ValidationError(
+                "page仅支持map/resources/compute/knowledge/business_flows"
+            )
         result = {
             "page": page,
             "title": PAGES[page][0],

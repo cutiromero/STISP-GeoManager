@@ -485,6 +485,11 @@ def decision_payload(workflow, stage, context, results) -> dict:
             and item.get("decision", {}).get("modelMode") == "real"
             for item in workflow.plan["stages"]
         )
+    if stage.get("businessFlowFeedback"):
+        payload["independentReviewFeedback"] = stage["businessFlowFeedback"]
+        payload["revisionBoundary"] = (
+            "请按审核意见修改本节点判断；不能扩大输入、算子或人工批准范围。"
+        )
     return payload
 
 

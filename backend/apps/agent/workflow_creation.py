@@ -18,6 +18,8 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
     key = value.get("idempotencyKey")
     resources_selected = value.get("resourceIds", [])
     parameters = value.get("parameters", {})
+    if isinstance(parameters, dict) and "_businessFlow" in parameters:
+        raise ComputeError("业务流绑定只能由已发布业务流启动入口创建")
     execute_operators = value.get("executeOperators", False)
     algorithm_id = value.get("algorithmVersionId")
     inputs = value.get("inputs", {})

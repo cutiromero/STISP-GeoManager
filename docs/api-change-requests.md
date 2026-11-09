@@ -532,6 +532,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | API-20261109-001 | BackendReady | Existing resource reads/query | Concurrent reuse and cache admission | Updated | Existing fixtures | Shared locks and read coordinator | Efficiency contracts | ACL and scientific digests preserved |
 | API-20261109-002 | BackendReady | Agent run SSE and bootstrap | Resumable read stream and answer deltas | Updated | Controlled byte streams | Bounded WSGI slots and live authorization | Stream and efficiency regressions | Local regressions passed; deployment receipt records live acceptance |
+| API-20261109-003 | BackendReady | Business flow catalog and runs | Immutable versions and configurable review | Updated | Built-in declarations and regression fixtures | Shared workflow runtime and independent review | Catalog, access and execution regressions | Catalog checks passed; unified acceptance pending |
 | API-20261108-004 | BackendReady | Resource query/profile/tiles and workspace | Stable map restore and structured display warnings | Updated | Scoped fixtures | Implemented | Scoped regression and actual browser | Original data and ACL preserved |
 | API-20261108-003 | BackendReady | Resource profile / workspace / output map preview | Shared color policy and live bindings | Updated | Existing fixtures | Single source implemented | Canonical table edit regression | Read-only display projection |
 | API-20261108-002 | BackendReady | AgentRun / AgentPolicy | Personal map actions | Updated | Real GIS fixtures | Implemented | Scoped worker and browser checks | Original data read-only |
@@ -1661,3 +1662,22 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - 可选 `X-STISP-Session` 使用当前页面 familyId，发现 Cookie 被其他账号替换时在业务执行前返回409和`auth_context_changed`；不代替 Session、项目与ACL。OpenAPI认证章节说明公共规则，me、projects、compute/runtime入口显式引用公共参数。响应正文DTO保持兼容，无新增业务字段要求。
 - 后端增加身份围栏及来源头；前端统一 JSON/SDK/上传/流式请求在读取结束和错误通知前再次核对身份与项目，不接受异常HTML成功响应或不完整关键元数据。
 - 回归覆盖迟到正文/401、项目切换、同ID降权、跨标签页切换、HTML200、缺字段、可重试超时及完整历史静态依赖。无需修改业务 mock 示例；原有 JSON 正常示例继续有效。
+
+## API-20261109-003 - 独立业务流模块和可配置双智能体审核
+
+- Status: BackendReady
+- Owner: codex/xintao；本项由主助手统一集成目录、执行、审核和界面。
+- Endpoints: `/api/business-flows/`、`/{flowId}/`、`/{flowId}/versions/`、`/{flowId}/start/`、`/runs/`、`/runs/{workflowId}/`、`/decide/`及cancel/pause/resume。
+- Change type: 项目业务流登记与不可变发布版本；AgentRun新增可选businessFlow，AgentEvent新增business_flow_state，AgentPlatformAction.page新增business_flows目录入口。执行沿用AgentWorkflow和现有worker队列。
+- OpenAPI change: 输入规范、无环节点、算子固定版本、每节点可选AI/人工审核、有界返修、角色化过程事件及当前修订的用户决定。 operator节点新增可选inputBindings，互斥声明初始角色或依赖祖先算子输出，发布时批量校验manifest输入/输出键及类型。专业逻辑推理锁定骨架和必要人工门禁，通用资料摘要展示无审核配置。
+- Permissions: 目录登录且项目有权可见；登记/发布仅超级管理员；执行和读取运行仍重验科研智能体、本人、当前项目、资料及算法权限。流程定义不授予额外能力。
+- Backend implementation notes: 新business_flows app与0001_initial迁移；显式register_business_flows命令发布内置版本，不在GET写库。目录只读元数据；运行列表不读取完整步骤与证据。独立审核与用户批准分开记录。
+- Verification: 不可变旧版本、乐观并发、项目隔离、无执行权的目录浏览、未知代码/环/无界返修拒绝、专业人工节点不可绕过、元数据读取次数、真实执行/审核/返修/用户批准与前端流程图回归。生成类型和API文档随契约更新。
+
+- Mock examples: 业务流目录与骨架使用builtin_flows的真实声明；定向回归覆盖版本冲突、专业门禁、无审核摘要、返修和真实执行事件，不伪造科研结果。
+- Frontend reason: 独立业务流入口、简洁节点主干图、执行/审核双方轨迹及明确的人在回路交互；普通智能体会话按真实运行恢复进度。
+- Result: 目录/版本后端27项与专业适配器19项回归通过，包含不可变发布、撤权安全停止、轻量历史、审核返修与重入上限；OpenAPI类型生成、一致性和文档检查通过。完整执行、浏览器和部署验收由主助手统一记录。
+
+## 2026-11-10 业务流目录完整可发现性
+
+`listBusinessFlows`增加可选`q/offset/limit`查询参数：服务端按名称、说明及编码搜索并稳定分页，默认50、最多50。`BusinessFlowList`新增可选`nextOffset`，省略表示本查询结束；维持已有必需字段，采用`limit+1`探测而不COUNT。前端搜索防抖280ms，旧请求中止，分页去重追加；搜索与节点选择不重读选中定义。验证覆盖51项目录、编码搜索、跨项目、取消与迟到响应、无COUNT及详情请求计数。

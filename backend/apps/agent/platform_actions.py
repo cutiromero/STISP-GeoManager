@@ -8,6 +8,7 @@ from apps.core.permissions import has_feature_perm
 from .resource_discovery import resolve_discoverable_resource
 
 PAGES = {
+    "business_flows": ("打开业务流", "/business-flows"),
     "map": ("打开地理工作台", "/map"),
     "resources": ("打开数据资源", "/resources/catalog"),
     "compute": ("打开计算中心", "/compute"),

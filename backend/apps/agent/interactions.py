@@ -441,8 +441,15 @@ def resume_compute():
     from .tools import evidence_items
     from .selections import sanitize_context_state
 
-    pending = AgentRun._base_manager.filter(status="waiting_compute").select_related(
-        "conversation"
+    from django.db.models import Q
+
+    pending = (
+        AgentRun._base_manager.filter(status="waiting_compute")
+        .filter(
+            Q(execution_state__phase__isnull=True)
+            | ~Q(execution_state__phase="business_flow")
+        )
+        .select_related("conversation")
     )
     for run in pending[:30]:
         with project_scope(

@@ -1,4 +1,10 @@
 import PlatformActions from "./PlatformActions";
+import BusinessFlowActivity from "../businessflows/BusinessFlowActivity";
+import BusinessFlowLaunch, {
+  type BusinessFlowLaunchIntent,
+} from "../businessflows/BusinessFlowLaunch";
+import type { BusinessFlowRun } from "../api/generated/types.gen";
+import { businessFlowsApi } from "../api/businessFlows";
 import { watchAgentRun } from "../api/watchAgentRun";
 import {
   App,
@@ -186,6 +192,26 @@ function AgentWorkspace({
   >({});
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [prompt, setPrompt] = useState("");
+  const [businessLaunch, setBusinessLaunch] =
+    useState<BusinessFlowLaunchIntent>();
+  useEffect(() => {
+    const value = location.state?.businessFlowLaunch as
+      | BusinessFlowLaunchIntent
+      | undefined;
+    if (
+      mode === "agent" &&
+      value &&
+      Number.isSafeInteger(value.definitionId) &&
+      value.definitionId > 0 &&
+      Number.isSafeInteger(value.versionId) &&
+      value.versionId > 0 &&
+      typeof value.title === "string" &&
+      typeof value.goal === "string"
+    ) {
+      setBusinessLaunch(value);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, mode, navigate, location.pathname]);
   const demoLaunch = useRef(
     mode === "agent"
       ? researchDemoLaunch(location.state?.researchDemo, project?.current)
@@ -326,8 +352,17 @@ function AgentWorkspace({
     reuseConfirmedConfiguration?: boolean;
   } | null>(null);
   const running = runs.find(active);
-  const waitingRun = [...runs].reverse().find(waiting);
-  const taskLocked = Boolean(running || waitingRun);
+  const waitingRun = [...runs]
+    .reverse()
+    .find((run) => waiting(run) && !run.businessFlow);
+  const businessBlocked = runs.find(
+    (run) =>
+      run.businessFlow &&
+      !["succeeded", "failed", "cancelled", "interrupted"].includes(
+        run.businessFlow.status,
+      ),
+  );
+  const taskLocked = Boolean(running || waitingRun || businessBlocked);
   const reviewPending =
     waitingRun?.interaction?.status === "pending" &&
     waitingRun.interaction.kind === "review";
@@ -502,6 +537,59 @@ function AgentWorkspace({
       report(reason);
       return false;
     }
+  };
+  const acceptBusinessFlow = (flow: BusinessFlowRun) => {
+    if (!alive.current || String(flow.projectId) !== project?.current) return;
+    const status: AgentRun["status"] =
+      flow.status === "waiting_approval"
+        ? "waiting_review"
+        : flow.status === "paused"
+          ? "waiting_input"
+          : ["succeeded", "failed", "cancelled", "interrupted"].includes(
+                flow.status,
+              )
+            ? (flow.status as AgentRun["status"])
+            : "waiting_compute";
+    setRuns((old) =>
+      old.map((run) =>
+        run.id === flow.runId
+          ? {
+              ...run,
+              businessFlow: flow,
+              status,
+              detail:
+                flow.nodes.find((node) => node.nodeId === flow.currentNode)
+                  ?.human.reason || run.detail,
+            }
+          : run,
+      ),
+    );
+  };
+  const startedBusinessFlow = async (flow: BusinessFlowRun) => {
+    const owned = sequence.current;
+    if (!flow.conversationId || !flow.runId)
+      throw new Error("业务流缺少真实会话绑定");
+    const detail = await agentApi.detail(flow.conversationId);
+    if (!alive.current || sequence.current !== owned) return;
+    assertConversationDetail(detail);
+    if (
+      String(detail.conversation.projectId) !== project?.current ||
+      detail.conversation.mode !== "agent"
+    )
+      throw new Error("业务流与当前项目不一致");
+    restoredConversation.current = true;
+    setCurrent(detail.conversation);
+    setRuns(detail.runs);
+    setEvents([]);
+    setBusinessLaunch(undefined);
+    setPrompt("");
+    try {
+      sessionStorage.setItem(
+        conversationStorageKey,
+        String(flow.conversationId),
+      );
+    } catch {}
+    void refreshList();
   };
   const refreshList = async () => {
     const seq = ++listSequence.current;
@@ -847,6 +935,7 @@ function AgentWorkspace({
       !canUse ||
       busy ||
       historyLoading ||
+      businessBlocked ||
       running ||
       uploadingAttachment ||
       logicUploading ||
@@ -1106,6 +1195,7 @@ function AgentWorkspace({
     setHistoryFailure(null);
     setPollFailure("");
     setPrompt("");
+    setBusinessLaunch(undefined);
     setAttachments([]);
     setInternetEnabled(false);
     setSelected([]);
@@ -1174,6 +1264,12 @@ function AgentWorkspace({
     const seq = sequence.current;
     setStopping(true);
     try {
+      if (running.businessFlow) {
+        const result = await businessFlowsApi.cancel(running.businessFlow.id);
+        if (alive.current && seq === sequence.current)
+          acceptBusinessFlow(result);
+        return;
+      }
       const result = await agentApi.cancel(running.id);
       if (alive.current && seq === sequence.current) updateRun(result);
     } catch (error) {
@@ -1437,6 +1533,17 @@ function AgentWorkspace({
                 ?.name ?? ui("当前项目", "Current project")}
             </Tag>
           </div>
+          {businessLaunch && canUse && (
+            <BusinessFlowLaunch
+              launch={businessLaunch}
+              model={model}
+              conversationId={
+                current?.archived || taskLocked ? undefined : current?.id
+              }
+              onStarted={startedBusinessFlow}
+              onCancel={() => setBusinessLaunch(undefined)}
+            />
+          )}
           {error && (
             <Alert
               title={error}
@@ -1643,6 +1750,12 @@ function AgentWorkspace({
                       </span>
                     )}
                   </Space>
+                  {r.businessFlow && (
+                    <BusinessFlowActivity
+                      flow={r.businessFlow}
+                      onChanged={acceptBusinessFlow}
+                    />
+                  )}
                   {r.attachments.length > 0 && (
                     <div className="agent-run-attachments">
                       {r.attachments.map((item) =>
@@ -1675,22 +1788,24 @@ function AgentWorkspace({
                       )}
                     </p>
                   )}
-                  {!(
-                    r.researchIntent?.scenario === "geology_generic" &&
-                    r.researchIntent.workflowId
-                  ) && (
-                    <RunProcess
-                      run={r}
-                      events={r.id === running?.id ? events : []}
-                      disconnected={
-                        r.id === running?.id ? pollFailure : undefined
-                      }
-                    />
-                  )}
-                  {!(
-                    r.researchIntent?.scenario === "geology_generic" &&
-                    r.researchIntent.workflowId
-                  ) &&
+                  {!r.businessFlow &&
+                    !(
+                      r.researchIntent?.scenario === "geology_generic" &&
+                      r.researchIntent.workflowId
+                    ) && (
+                      <RunProcess
+                        run={r}
+                        events={r.id === running?.id ? events : []}
+                        disconnected={
+                          r.id === running?.id ? pollFailure : undefined
+                        }
+                      />
+                    )}
+                  {!r.businessFlow &&
+                    !(
+                      r.researchIntent?.scenario === "geology_generic" &&
+                      r.researchIntent.workflowId
+                    ) &&
                     (!(mode === "agent" && r.computeIntent?.taskId) ||
                       r.evidence.some((item) =>
                         ["read_compute_output", "get_compute_task"].includes(
@@ -1834,7 +1949,8 @@ function AgentWorkspace({
                   {!active(r) &&
                     !waiting(r) &&
                     !r.computeIntent &&
-                    !r.researchIntent && (
+                    !r.researchIntent &&
+                    !r.businessFlow && (
                       <Space className="agent-answer-actions">
                         <Button
                           size="small"
@@ -2058,15 +2174,20 @@ function AgentWorkspace({
                     maxLength={bootstrap?.budgets?.maxPromptCharacters ?? 12000}
                     disabled={!canUse || current?.archived}
                     placeholder={
-                      waitingRun
+                      businessBlocked && !running
                         ? ui(
-                            "可直接补充回答，或在上方问题卡中选择并继续",
-                            "Answer here, or use the question card above",
+                            "请在业务流中处理当前决定，或新建会话继续其他工作",
+                            "Continue in the flow, or open a new conversation",
                           )
-                        : ui(
-                            "输入问题，Enter 发送，Shift+Enter 换行",
-                            "Ask a question. Enter to send, Shift+Enter for a new line",
-                          )
+                        : waitingRun
+                          ? ui(
+                              "可直接补充回答，或在上方问题卡中选择并继续",
+                              "Answer here, or use the question card above",
+                            )
+                          : ui(
+                              "输入问题，Enter 发送，Shift+Enter 换行",
+                              "Ask a question. Enter to send, Shift+Enter for a new line",
+                            )
                     }
                     onKeyDown={(e) => {
                       if (
@@ -2082,6 +2203,15 @@ function AgentWorkspace({
                 </div>
                 <div className="agent-composer-footer">
                   <div className="agent-composer-tools">
+                    {mode === "agent" && (
+                      <Button
+                        type="text"
+                        icon={<NodeIndexOutlined />}
+                        onClick={() => navigate("/business-flows")}
+                      >
+                        业务流
+                      </Button>
+                    )}
                     {logicProject && workflowButton}
                     {mode === "agent" && bootstrap && !logicProject && (
                       <AgentToolSelection
@@ -2219,6 +2349,7 @@ function AgentWorkspace({
                       loading={busy}
                       disabled={
                         !canUse ||
+                        Boolean(businessBlocked) ||
                         Boolean(historyLoading) ||
                         uploadingAttachment ||
                         logicUploading ||

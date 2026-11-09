@@ -128,7 +128,8 @@ export async function watchAgentRun(
     const hidden = typeof document !== "undefined" && document.hidden;
     if (
       api.stream &&
-      run.status === "running" &&
+      (run.status === "running" ||
+        (run.status === "waiting_compute" && Boolean(run.businessFlow))) &&
       !hidden &&
       Date.now() >= retryStreamAt
     ) {

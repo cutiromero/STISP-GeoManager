@@ -5224,7 +5224,7 @@ body:has(.workspace),
   border-color: var(--c-white);
 }
 
-.header-primary-actions .workspace-switch-card-data-management {
+.header-primary-actions .workspace-switch-card-business-flows {
   position: relative;
   overflow: hidden;
   color: #f8fbfd;
@@ -5243,7 +5243,7 @@ body:has(.workspace),
     0 8px 24px rgba(52, 128, 179, 0.18);
 }
 
-.header-primary-actions .workspace-switch-card-data-management::before {
+.header-primary-actions .workspace-switch-card-business-flows::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -5264,18 +5264,18 @@ body:has(.workspace),
 }
 
 .header-primary-actions
-  .workspace-switch-card-data-management
+  .workspace-switch-card-business-flows
   > :where(.anticon, .tab-text) {
   position: relative;
   z-index: 1;
 }
 
 .header-primary-actions
-  .ant-btn.workspace-switch-card-data-management:not(:disabled):not(
+  .ant-btn.workspace-switch-card-business-flows:not(:disabled):not(
     .ant-btn-disabled
   ):hover,
 .header-primary-actions
-  .ant-btn.workspace-switch-card-data-management:not(:disabled):not(
+  .ant-btn.workspace-switch-card-business-flows:not(:disabled):not(
     .ant-btn-disabled
   ):focus-visible {
   color: #ffffff;
@@ -5295,11 +5295,11 @@ body:has(.workspace),
 }
 
 .header-primary-actions
-  .ant-btn.workspace-switch-card-data-management:not(:disabled):not(
+  .ant-btn.workspace-switch-card-business-flows:not(:disabled):not(
     .ant-btn-disabled
   ):hover::before,
 .header-primary-actions
-  .ant-btn.workspace-switch-card-data-management:not(:disabled):not(
+  .ant-btn.workspace-switch-card-business-flows:not(:disabled):not(
     .ant-btn-disabled
   ):focus-visible::before {
   opacity: 1;
@@ -5307,7 +5307,7 @@ body:has(.workspace),
 }
 
 .header-primary-actions
-  .workspace-switch-card-data-management.workspace-switch-card-active {
+  .workspace-switch-card-business-flows.workspace-switch-card-active {
   color: #141e25;
   background:
     linear-gradient(135deg, #9fcdea 0%, #cce5f3 54%, #90bfdf 100%), #ffffff;
@@ -5319,17 +5319,17 @@ body:has(.workspace),
 }
 
 .header-primary-actions
-  .workspace-switch-card-data-management.workspace-switch-card-active::before {
+  .workspace-switch-card-business-flows.workspace-switch-card-active::before {
   opacity: 0.26;
   transform: translateX(0);
 }
 
 .header-primary-actions
-  .ant-btn.workspace-switch-card-data-management.workspace-switch-card-active:not(
+  .ant-btn.workspace-switch-card-business-flows.workspace-switch-card-active:not(
     :disabled
   ):not(.ant-btn-disabled):hover,
 .header-primary-actions
-  .ant-btn.workspace-switch-card-data-management.workspace-switch-card-active:not(
+  .ant-btn.workspace-switch-card-business-flows.workspace-switch-card-active:not(
     :disabled
   ):not(.ant-btn-disabled):focus-visible {
   color: #0d181f;

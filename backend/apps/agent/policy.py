@@ -13,6 +13,7 @@ from .budgets import defaults as budget_defaults, validate_budgets
 CAPABILITIES = {
     "chat": True,
     "read_data": True,
+    "business_flow": True,
     "analyze_data": True,
     "map_display": True,
     # Registered side effects remain disabled by policy until an administrator

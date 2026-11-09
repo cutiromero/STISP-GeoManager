@@ -59,7 +59,20 @@ def endpoint(methods, *, require_project=True):
                     return JsonResponse({"detail": "不支持的请求方法"}, status=405)
                 if require_project and not request.headers.get("X-Project-Id"):
                     raise ApiProblem("请显式选择当前项目")
-                return func(request, *args, **kwargs)
+                response = func(request, *args, **kwargs)
+                workflow_id = kwargs.get("workflow_id")
+                if (
+                    workflow_id
+                    and request.method in {"POST", "PATCH", "DELETE"}
+                    and response.status_code < 300
+                ):
+                    if AgentWorkflow.objects.filter(
+                        pk=workflow_id, parameters__has_key="_businessFlow"
+                    ).exists():
+                        from apps.business_flows.legacy import synchronize
+
+                        synchronize(workflow_id)
+                return response
             except ApiProblem as e:
                 return JsonResponse({"detail": e.detail}, status=e.status)
             except ComputeError as e:
@@ -155,6 +168,7 @@ def run_json(
         "contextTruncated": r.context_truncated,
         "attachmentIds": list(r.attachment_ids or []),
         "internetEnabled": bool(r.internet_enabled),
+        **(_business_flow_for_run(r, user)),
         "attachments": [
             item
             for identity, item in attachments.items()
@@ -168,6 +182,17 @@ def run_json(
             )
         ],
     }
+
+
+def _business_flow_for_run(run, user):
+    if not run.research_workflow_id:
+        return {}
+    workflow = run.research_workflow
+    if not workflow.parameters.get("_businessFlow"):
+        return {}
+    from apps.business_flows.runtime import serialize_run
+
+    return {"businessFlow": serialize_run(user, workflow)}
 
 
 def _compute_intent(run, user, p):
@@ -294,7 +319,14 @@ def conversation_detail(request, conversation_id):
         with transaction.atomic():
             # Acquire write lock before checking active work, also serializes submit.
             Conversation.objects.filter(pk=c.pk).update(updated_at=timezone.now())
-            if c.runs.filter(status__in=ACTIVE).exists():
+            if (
+                c.runs.filter(status__in=ACTIVE).exists()
+                or AgentWorkflow.objects.filter(
+                    chat_runs__conversation=c,
+                    status__in=WORKFLOW_ACTIVE,
+                    parameters__has_key="_businessFlow",
+                ).exists()
+            ):
                 raise ApiProblem("请先停止活动运行", 409)
             c.delete()
         return JsonResponse({"detail": "会话已删除"})

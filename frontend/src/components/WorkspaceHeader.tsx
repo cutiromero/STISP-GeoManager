@@ -3,6 +3,7 @@ import { resetProjectSession } from "../projects/session";
 import { ProjectSelector } from "../projects/ProjectContext";
 import {
   ApartmentOutlined,
+  BranchesOutlined,
   FolderOpenOutlined,
   LogoutOutlined,
   QuestionCircleOutlined,
@@ -74,6 +75,7 @@ export type WorkspaceTab =
   | "nongeo"
   | "results"
   | "warning"
+  | "businessFlows"
   | "resources"
   | "compute"
   | "admin"
@@ -944,7 +946,9 @@ export default function WorkspaceHeader({
         ref={resourcesTabRef}
         menuTrigger
         type="text"
-        className={`${tabClass(activeTab === "resources" || activeTab === "nongeo")} workspace-switch-card-data-management`}
+        className={tabClass(
+          activeTab === "resources" || activeTab === "nongeo",
+        )}
         onClick={handleResourceCenter}
         title={t("navigation.dataResources")}
       >
@@ -1184,6 +1188,16 @@ export default function WorkspaceHeader({
             onNavigate={navigateFromHeader}
             title={t("navigation.warning")}
           />
+          <NavigationButton
+            type="text"
+            data-nav-key="businessFlows"
+            className={`${tabClass(activeTab === "businessFlows")} workspace-switch-card-business-flows`}
+            onClick={() => navigateFromHeader("/business-flows")}
+            title={t("navigation.businessFlows")}
+          >
+            <BranchesOutlined aria-hidden="true" style={{ fontSize: 16 }} />
+            <span className="tab-text">{t("navigation.businessFlows")}</span>
+          </NavigationButton>
           {dataButton}
           <NavigationButton
             type="text"

@@ -1323,6 +1323,12 @@ def advance_demo(workflow_id) -> None:
                 from .geology_multi_review import freeze_proposal
 
                 decision, edits, summary = build_rule_proposal(workflow)
+                if workflow.parameters.get("_businessFlow"):
+                    from apps.business_flows.legacy import review_rule_proposal
+
+                    decision, edits = review_rule_proposal(
+                        workflow, user, p, stage, (decision, edits)
+                    )
                 with transaction.atomic():
                     current = locked_workflow(workflow.id)
                     check_pause(workflow)
@@ -1336,7 +1342,10 @@ def advance_demo(workflow_id) -> None:
                     stage.update(
                         decision=decision,
                         edits=edits,
-                        executionMode="rule_verified",
+                        executionMode="model_reviewed"
+                        if workflow.parameters.get("_businessFlow")
+                        and stage.get("executionMode") == "model_reviewed"
+                        else "rule_verified",
                         ruleDispositionSummary=summary,
                     )
                     step(
@@ -1346,7 +1355,10 @@ def advance_demo(workflow_id) -> None:
                         output_refs={"ruleDispositionSummary": summary},
                     )
                     freeze_proposal(workflow, stage)
-                    if not stage.get("modificationsApproval"):
+                    if not stage.get("modificationsApproval") and not (
+                        workflow.parameters.get("_businessFlow")
+                        and stage.get("executionMode") == "model_reviewed"
+                    ):
                         authorize_rule_execution(workflow, fresh, policy, stage)
                     _save(workflow)
                 return
@@ -1476,7 +1488,16 @@ def advance_demo(workflow_id) -> None:
                                 if stage.get("modelBatches", {}).get("preflight")
                                 else 1
                             )
-                            if calls + reserve > workflow.max_iterations:
+                            review_calls = 0
+                            if workflow.parameters.get("_businessFlow"):
+                                from apps.business_flows.state import (
+                                    state as business_state,
+                                )
+
+                                review_calls = len(
+                                    business_state(workflow).get("requestedIds", [])
+                                )
+                            if calls + review_calls + reserve > workflow.max_iterations:
                                 blocked = True
                                 attempt.update(
                                     status="budget_blocked",
@@ -1609,6 +1630,29 @@ def advance_demo(workflow_id) -> None:
                         on_progress=activity.progress,
                         batch_limit=1,
                     )
+                    if workflow.parameters.get("_businessFlow"):
+                        from apps.business_flows.legacy import review_decision
+
+                        decision, edits = review_decision(
+                            workflow,
+                            user,
+                            model_policy,
+                            stage,
+                            results,
+                            (decision, edits),
+                            guard,
+                            lambda: decide(
+                                workflow,
+                                user,
+                                model_policy,
+                                stage,
+                                results,
+                                guard,
+                                record_attempt,
+                                on_thinking=activity.thinking,
+                                on_progress=activity.progress,
+                            ),
+                        )
                     guard.poll()
                 except BatchProgressPending:
                     # The completed child response and cursor were saved by the
