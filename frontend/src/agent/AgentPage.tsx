@@ -1091,6 +1091,7 @@ function AgentWorkspace({
     void send(demoLaunch.current.prompt, demoLaunch.current.scenario);
   }, [canUse, modelOnline, busy]);
   const reset = () => {
+    restoredConversation.current = true;
     clearLogicUploads();
     sequence.current++;
     demoLaunch.current = null;

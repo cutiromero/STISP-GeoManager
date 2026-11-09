@@ -3412,3 +3412,24 @@ it("keeps thinking controls usable when browser preference storage is blocked", 
     expect.objectContaining({ thinkingMode: "deep" }),
   );
 });
+
+it("keeps a new draft when the initial conversation list returns late", async () => {
+  let finish!: (
+    value: Awaited<ReturnType<typeof agentApi.conversations>>,
+  ) => void;
+  vi.mocked(agentApi.conversations).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  showAgent();
+  await waitFor(() => expect(agentApi.conversations).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: /新建会话/ }));
+  await act(async () => finish({ items: [conversation] }));
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "输入消息" })).toBeEnabled(),
+  );
+  expect(agentApi.detail).not.toHaveBeenCalled();
+  expect(screen.queryByText("旧问题")).not.toBeInTheDocument();
+});
