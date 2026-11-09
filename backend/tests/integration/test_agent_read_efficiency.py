@@ -19,6 +19,7 @@ from apps.agent.selections import check_context_sources
 from apps.agent.views import run_json
 from apps.agent.run_activity import load_run_activity
 from apps.agent.worker import context_messages
+from apps.agent.tools import check_evidence
 from apps.catalog.models import DataResource
 from apps.projects.context import project_scope
 from tests.integration.test_agent import setup_agent  # noqa: F401
@@ -238,3 +239,53 @@ def test_activity_does_not_bypass_revoked_history_access(setup_agent):
         )
         with pytest.raises(PermissionDenied):
             run_json(run, env["user"], activity=activity)
+
+
+@pytest.mark.parametrize("has_resource", [False, True])
+def test_resource_only_checks_do_not_route_unused_knowledge(setup_agent, has_resource):
+    from apps.agent import selections
+
+    env = setup_agent
+    with project_scope(env["scope"]):
+        evidence = (
+            [
+                {
+                    "id": 1,
+                    "tool": "describe_resource",
+                    "resourceId": env["resource"].pk,
+                    "result": {"fields": []},
+                }
+            ]
+            if has_resource
+            else []
+        )
+        run = saved_run(env, evidence=evidence)
+        with patch.object(
+            selections, "knowledge_domains", wraps=selections.knowledge_domains
+        ) as route:
+            check_evidence(run, env["user"], default_policy())
+        assert route.call_count == 0
+
+
+def test_knowledge_evidence_still_routes_and_rejects_missing_sources(setup_agent):
+    from apps.agent import selections
+
+    env = setup_agent
+    with project_scope(env["scope"]):
+        run = saved_run(
+            env,
+            evidence=[
+                {
+                    "id": 1,
+                    "tool": "search_knowledge",
+                    "resourceId": None,
+                    "result": {"items": [{"id": 999999, "revision": 1}]},
+                }
+            ],
+        )
+        with patch.object(
+            selections, "knowledge_domains", wraps=selections.knowledge_domains
+        ) as route:
+            with pytest.raises(PermissionDenied, match="知识依据已更新"):
+                check_evidence(run, env["user"], default_policy())
+        assert route.call_count == 1

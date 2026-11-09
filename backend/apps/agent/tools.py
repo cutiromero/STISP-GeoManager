@@ -248,7 +248,6 @@ def _check_evidence(run, user, p, *, history=False):
     elif identities:
         authorize_run_resource_ids(user, p, identities, run)
 
-    domains = knowledge_domains(run) if run.knowledge_selection else None
     # Reauthorize ALL accumulated evidence before revealing history or reusing it.
     knowledge_refs, document_refs = set(), set()
     for ev in run.evidence:
@@ -317,6 +316,11 @@ def _check_evidence(run, user, p, *, history=False):
                 (item.get("documentId"), item.get("documentSha256"))
                 for item in result.get("documents", [])
             )
+    domains = (
+        knowledge_domains(run)
+        if (knowledge_refs or document_refs) and run.knowledge_selection
+        else None
+    )
     if knowledge_refs:
         from apps.knowledge.services import visible_entries
 
