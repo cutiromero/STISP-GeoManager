@@ -1257,6 +1257,43 @@ describe("application critical flows", () => {
     resolveLogin?.({ user: normalUser });
   });
 
+  it("keeps account recovery on a loading state until the new identity is authorized", async () => {
+    mockApi.me.mockResolvedValueOnce({ authenticated: true, user: normalUser });
+    renderApp("/map");
+    expect(
+      await screen.findByTestId("map-canvas", {}, { timeout: 10000 }),
+    ).toBeVisible();
+    let complete!: (value: unknown) => void;
+    mockApi.me.mockReturnValueOnce(
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+    );
+    fireEvent(
+      window,
+      new CustomEvent("stisp:browser-session-ended", {
+        detail: { reason: "account-changed" },
+      }),
+    );
+    expect(
+      await screen.findByRole("status", { name: "正在更新账号权限" }),
+    ).toBeVisible();
+    expect(screen.queryByTestId("map-canvas")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /账号登录/ }),
+    ).not.toBeInTheDocument();
+    complete({
+      authenticated: true,
+      user: { ...normalUser, id: 7, username: "next-account" },
+    });
+    expect(
+      await screen.findByTestId("map-canvas", {}, { timeout: 10000 }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("status", { name: "正在更新账号权限" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("allows authenticated users to enter the admin route", async () => {
     mockApi.me.mockResolvedValue({ authenticated: true, user: adminUser });
 

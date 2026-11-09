@@ -107,6 +107,7 @@ export default function App({
   signedIn.current = user;
   const authGeneration = useRef(0);
   const accountRecovery = useRef(false);
+  const [accountRefreshing, setAccountRefreshing] = useState(false);
   const setUser = useCallback((value: User | null) => {
     if (
       authorizationIdentity(signedIn.current) !== authorizationIdentity(value)
@@ -130,6 +131,7 @@ export default function App({
         setUser(null);
         if (accountRecovery.current) return;
         accountRecovery.current = true;
+        setAccountRefreshing(true);
         const generation = authGeneration.current;
         void api
           .me()
@@ -139,6 +141,7 @@ export default function App({
           .catch(() => {})
           .finally(() => {
             accountRecovery.current = false;
+            setAccountRefreshing(false);
           });
         return;
       }
@@ -224,9 +227,13 @@ export default function App({
     }
   }, [bootstrap, locale]);
 
-  if (loading) {
+  if (loading || accountRefreshing) {
     return (
-      <div className="boot-screen">
+      <div
+        className="boot-screen"
+        role="status"
+        aria-label={accountRefreshing ? "正在更新账号权限" : "正在载入平台"}
+      >
         <Spin size="large" />
       </div>
     );
