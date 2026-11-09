@@ -3014,3 +3014,7 @@ QueryRequest 可显式传 `lineSimplifyTolerance`（有限数值，0至0.1，WGS
 核查分页`part=retained`的`plan.reviewIndex.automaticMap`仅用于显示已授权处置的位置，取自完整冻结建议及automaticSuggestionIds，人工候选仍由原candidateIds限定。total为完整授权数，locatedCount为有合法几何的位置数。最多返回2000个点，更多对象先按16×16地理网格汇聚，count保留数量；页面继续按视口距离聚合，不增添审批动作或模型请求。
 
 计算输入按项目、资源、版本及源文件身份复用独立只读快照。共享SQLite/GeoPackage发生其他表变化时核对选定表的逻辑内容，不能按整个库地址直接授予算子访问。原资源权限和状态每次重验。任务副本使用文件系统写时复制；不支持时复制文件，禁止硬链接共享可写内容。内容或缓存身份变化不会继续信任旧标识。计算输出metadata.executionMetrics记录实际准备、执行与结果检查耗时及复用次数，便于区分计算与调度开销。
+
+## 通用文件版本与计算结果读取
+
+所有任务、算子和数据通过公共`packages.checksum`复用受管文件的带签名完整性证明，始终核对实时文件身份。计算结果分页及近似栅格统计使用`compute.result_reads`，不得为每页重新计算全文件摘要、CSV总行数或同版本栅格统计。访问前仍执行当前权限、项目、任务绑定和状态校验；证明及索引不能代替授权。缓存不改写原始数据或科学结果，详见[效率回归契约](efficiency-contracts.md)。

@@ -500,13 +500,14 @@ def preview(output, view="table"):
         result["geojson"] = json.loads(frame.to_crs(4326).to_json())
         return result
     if output.kind == "table":
-        with path.open(encoding="utf-8-sig", newline="") as stream:
-            reader = csv.reader(stream)
-            result["columns"] = next(reader)
-            import itertools
+        from .result_reads import table_page
 
+        if checksum(path) != output.checksum:
+            raise ComputeError("结果文件内容已变化，无法预览", 409)
+        with table_page(path, expected_checksum=output.checksum) as page:
+            result["columns"] = page["columns"]
             result["rows"] = [
-                [cell[:2000] for cell in row] for row in itertools.islice(reader, 100)
+                [row[field][:2000] for field in page["columns"]] for row in page["rows"]
             ]
     elif output.kind == "vector":
         import geopandas as gpd

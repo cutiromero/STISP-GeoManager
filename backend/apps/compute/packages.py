@@ -14,6 +14,8 @@ import zipfile
 
 import yaml
 
+from apps.core.file_evidence import cached_digest, file_identity as _file_identity
+
 KEY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_-]{0,79}$")
 EXTENSIONS = {
@@ -38,6 +40,7 @@ class ChecksumVerification:
     reads: int = 0
     reuses: int = 0
     bytes_read: int = 0
+    version_reuses: int = 0
 
 
 _CHECKSUM_VERIFICATION = ContextVar("compute_checksum_verification", default=None)
@@ -58,37 +61,42 @@ def checksum_scope():
         _CHECKSUM_VERIFICATION.reset(token)
 
 
-def _file_identity(value):
-    return (
-        value.st_dev,
-        value.st_ino,
-        value.st_size,
-        value.st_mtime_ns,
-        value.st_ctime_ns,
-        value.st_mode,
-    )
-
-
-def checksum(path):
+def checksum(path, *, force=False):
+    """Reuse authenticated managed-file evidence; always inspect live identity."""
     verification = _CHECKSUM_VERIFICATION.get()
-    if verification is None or path.is_symlink():
-        with path.open("rb") as stream:
-            return hashlib.file_digest(stream, "sha256").hexdigest()
     identity = _file_identity(path.stat())
     key = (str(path.absolute()), identity)
-    if key in verification.cache:
+    if (
+        not force
+        and verification is not None
+        and not path.is_symlink()
+        and key in verification.cache
+    ):
         verification.reuses += 1
         return verification.cache[key]
-    with path.open("rb") as stream:
-        before = _file_identity(os.fstat(stream.fileno()))
-        value = hashlib.file_digest(stream, "sha256").hexdigest()
-        after = _file_identity(os.fstat(stream.fileno()))
-    if identity != before or before != after or after != _file_identity(path.stat()):
+
+    def calculate():
+        with path.open("rb") as stream:
+            before = _file_identity(os.fstat(stream.fileno()))
+            value = hashlib.file_digest(stream, "sha256").hexdigest()
+            after = _file_identity(os.fstat(stream.fileno()))
+        if (
+            identity != before
+            or before != after
+            or after != _file_identity(path.stat())
+        ):
+            raise ComputeError("文件在内容校验过程中发生变化，请重新读取", 409)
+        return value
+
+    value, reused = cached_digest(path, calculate, force=force)
+    if identity != _file_identity(path.stat()):
         raise ComputeError("文件在内容校验过程中发生变化，请重新读取", 409)
-    verification.reads += 1
-    verification.bytes_read += identity[2]
-    if len(verification.cache) < 512:
-        verification.cache[key] = value
+    if verification is not None:
+        verification.version_reuses += int(reused)
+        verification.reads += int(not reused)
+        verification.bytes_read += 0 if reused else identity[2]
+        if not path.is_symlink() and len(verification.cache) < 512:
+            verification.cache[key] = value
     return value
 
 

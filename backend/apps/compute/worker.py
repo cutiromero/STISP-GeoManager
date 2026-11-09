@@ -309,9 +309,11 @@ def clean_expired(*, force=False):
                 shutil.rmtree(target, ignore_errors=True)
 
     from .input_versions import clean_versions
+    from .result_reads import clean_read_indexes
 
     try:
         clean_versions(config().input_mb * 1024**2, config().retention_days)
+        clean_read_indexes(config().input_mb * 1024**2, config().retention_days)
     except (OSError, ComputeError):
         logger.warning("Input version cache cleanup deferred")
 

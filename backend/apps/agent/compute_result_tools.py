@@ -1,6 +1,5 @@
 """Read immutable, authorized calculation outputs before model interpretation."""
 
-import csv
 import json
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -8,6 +7,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from apps.compute.models import ComputeOutput
 from apps.compute.packages import ComputeError, checksum
 from apps.compute.serializers import output_data
+from apps.compute.result_reads import table_page, raster_statistics
 from apps.core.storage import app_path
 from .compute_tools import authorized_task
 from .selections import require_task_selection
@@ -45,30 +45,26 @@ def read_output(run, user, policy, args):
         "checkedChecksum": output.checksum,
     }
     if output.kind == "table":
-        rows, total, exhausted = [], 0, False
-        with path.open(encoding="utf-8-sig", newline="") as source:
-            reader = csv.DictReader(source)
-            for index, row in enumerate(reader):
-                total = index + 1
-                if index < offset or exhausted:
-                    continue
+        rows = []
+        with table_page(path, offset, limit, expected_checksum=output.checksum) as page:
+            fields, total = page["columns"], page["total"]
+            for row in page["rows"]:
                 proposed = {
                     **result,
-                    "columns": reader.fieldnames,
+                    "columns": fields,
                     "rows": [*rows, row],
                 }
                 if (
                     len(rows) >= limit
                     or len(json.dumps(proposed, ensure_ascii=False).encode()) > 22000
                 ):
-                    exhausted = True
-                    continue
+                    break
                 rows.append(row)
         if total > offset and not rows:
             raise ValidationError("单行结果超出模型读取容量，请使用结果预览查看")
         next_offset = offset + len(rows) if offset + len(rows) < total else None
         result.update(
-            columns=reader.fieldnames or [],
+            columns=fields,
             rows=rows,
             total=total,
             offset=offset,
@@ -77,11 +73,10 @@ def read_output(run, user, policy, args):
             scope="all" if offset == 0 and next_offset is None else "page",
         )
     elif output.kind == "raster":
-        from apps.raster.services.gdal_ops import gdalinfo_json
         from apps.raster.services.exceptions import RasterImportError
 
         try:
-            info = gdalinfo_json(path, calculate_statistics=True)
+            info = raster_statistics(path, expected_checksum=output.checksum)
         except RasterImportError as exc:
             raise ComputeError("计算结果栅格统计读取失败，请查看结果预览") from exc
         result.update(
