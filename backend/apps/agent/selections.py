@@ -374,15 +374,21 @@ def check_context_evidence(source, current, user, policy):
                 )
 
 
-def context_reusable(previous, current, user, policy):
+def reusable_context_sources(previous, current, user, policy):
+    """Return the exact checked ancestry so callers need not query it twice."""
     try:
-        if not history_compatible(previous, current):
-            return False
-        for source in history_sources(previous):
+        sources = history_sources(previous)
+        if not history_compatible(previous, current, sources=sources):
+            return None
+        for source in sources:
             check_context_evidence(source, current, user, policy)
     except (PermissionDenied, ValidationError, ValueError):
-        return False
-    return True
+        return None
+    return sources
+
+
+def context_reusable(previous, current, user, policy):
+    return reusable_context_sources(previous, current, user, policy) is not None
 
 
 def check_context_sources(run, user, policy):
@@ -392,14 +398,16 @@ def check_context_sources(run, user, policy):
     check_context_evidence(run, run, user, policy)
     marker = (run.knowledge_selection or {}).get("_contextRunIds", [])
     identities = {identity for identity in marker if type(identity) is int}
-    sources = AgentRun.objects.filter(
-        pk__in=identities,
-        conversation_id=run.conversation_id,
-        owner_id=run.owner_id,
-        project_tag_id=run.project_tag_id,
-        id__lt=run.id,
+    sources = list(
+        AgentRun.objects.filter(
+            pk__in=identities,
+            conversation_id=run.conversation_id,
+            owner_id=run.owner_id,
+            project_tag_id=run.project_tag_id,
+            id__lt=run.id,
+        )
     )
-    if sources.count() != len(identities):
+    if len(sources) != len(identities):
         raise PermissionDenied("已发送的历史来源发生变化，请重新发起分析")
     for source in sources:
         if not history_compatible(source, run):
@@ -424,16 +432,18 @@ def sanitize_context_state(run, user, policy, state=None):
         if isinstance(marker, list)
         else set()
     )
-    sources = AgentRun.objects.filter(
-        pk__in=identities,
-        conversation_id=run.conversation_id,
-        owner_id=run.owner_id,
-        project_tag_id=run.project_tag_id,
-        id__lt=run.id,
+    sources = list(
+        AgentRun.objects.filter(
+            pk__in=identities,
+            conversation_id=run.conversation_id,
+            owner_id=run.owner_id,
+            project_tag_id=run.project_tag_id,
+            id__lt=run.id,
+        )
     )
     verified = (
         bool(identities)
-        and sources.count() == len(identities)
+        and len(sources) == len(identities)
         and all(context_reusable(source, run, user, policy) for source in sources)
     )
     if not index or not verified:
@@ -477,13 +487,14 @@ def source_knowledge_domains(run):
     return domains or (set(knowledge_domains(run)) if used else set())
 
 
-def history_compatible(previous, current):
+def history_compatible(previous, current, *, sources=None):
     """Exclude entire old answers if their citations fall outside this turn."""
     from .research_intents import history_compatible as research_compatible
 
     if not research_compatible(previous, current):
         return False
-    sources = history_sources(previous)
+    if sources is None:
+        sources = history_sources(previous)
     allowed_knowledge = set(knowledge_domains(current))
     for source in sources:
         if not source_knowledge_domains(source) <= allowed_knowledge:

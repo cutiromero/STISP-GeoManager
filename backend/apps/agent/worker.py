@@ -123,14 +123,12 @@ def context_messages(run, policy_value, model):
         id__lt=run.id, status="succeeded"
     ).order_by("-id"):
         if run.conversation.mode == "agent":
-            from .selections import (
-                context_reusable,
-                history_sources,
-            )
+            from .selections import reusable_context_sources
 
-            if not context_reusable(
+            sources = reusable_context_sources(
                 previous, run, fresh_user(run.owner_id), policy_value
-            ):
+            )
+            if sources is None:
                 continue
         content = (
             historical_answer(previous)
@@ -148,7 +146,7 @@ def context_messages(run, policy_value, model):
         ]
         budget -= size
         if run.conversation.mode == "agent":
-            context_ids.update(s.id for s in history_sources(previous))
+            context_ids.update(s.id for s in sources)
     if truncated:
         AgentRun.objects.filter(pk=run.id).update(context_truncated=True)
         event(run, "context", "为控制上下文长度，部分较早对话未发送给模型")

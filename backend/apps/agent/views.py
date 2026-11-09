@@ -41,6 +41,7 @@ from .tools import check_evidence, resources, resolve_resource, brief
 from .attachments import delete_attachment, serialize_attachment, store_attachment
 from .budgets import budget_options, resolve_budget
 from .run_concurrency import lock_run_queue, require_run_capacity, retry_run_admission
+from .run_activity import load_run_activity
 
 
 class ApiProblem(Exception):
@@ -105,15 +106,16 @@ def conversation_json(c):
     }
 
 
-def run_json(r, user):
+def run_json(r, user, *, activity=None):
     from .selections import check_history_evidence, serialize as selection_json
     from .interactions import public_question
     from .platform_actions import platform_actions
-    from .answer_preview import stored_answer_preview
 
     p = require_access(user, r.conversation.mode)
     if r.conversation.mode == "agent":
         check_history_evidence(r, user, p)
+    if activity is None:
+        activity = load_run_activity([r])[r.pk]
     return {
         "id": r.id,
         **selection_json(r),
@@ -121,11 +123,10 @@ def run_json(r, user):
         "model": r.model,
         "thinkingMode": r.thinking_mode,
         "budgetProfile": r.budget_snapshot.get("budgetProfile", ""),
-        "generationParameters": _run_parameters(r),
+        **activity,
         "status": r.status,
         "prompt": r.prompt,
         "answer": r.answer,
-        "answerPreview": stored_answer_preview(r),
         "detail": r.detail,
         "evidence": r.evidence,
         "platformActions": platform_actions(r, user, p)
@@ -140,10 +141,6 @@ def run_json(r, user):
         "contextTruncated": r.context_truncated,
         "attachmentIds": list(r.attachment_ids or []),
         "internetEnabled": bool(r.internet_enabled),
-        "thinkingText": "".join(
-            item.text for item in r.events.filter(kind="thinking").order_by("id")
-        ),
-        "thinkingDurationMs": _thinking_duration_ms(r),
         "attachments": [
             serialize_attachment(item)
             for item in AgentAttachment.objects.filter(
@@ -171,27 +168,6 @@ def _research_intent(run, user, p):
         if run.conversation.mode == "agent"
         else None
     )
-
-
-def _run_parameters(run):
-    parameters = run.events.filter(kind="parameters").order_by("-id").first()
-    result = json.loads(parameters.text) if parameters else {}
-    usages = [json.loads(item.text) for item in run.events.filter(kind="usage")]
-    if usages:
-        result["lastGeneratedTokens"] = usages[-1].get("completion_tokens", 0)
-        result["modelCalls"] = len(usages)
-        result["generatedTokens"] = sum(
-            item.get("completion_tokens", 0) for item in usages
-        )
-    return result
-
-
-def _thinking_duration_ms(run):
-    events = list(run.events.filter(kind="thinking").order_by("created_at"))
-    if not events:
-        return 0
-    end = run.updated_at if run.status not in ACTIVE else timezone.now()
-    return max(0, int((end - events[0].created_at).total_seconds() * 1000))
 
 
 def own_conversation(user, pk):
@@ -263,10 +239,14 @@ def conversation_detail(request, conversation_id):
     c = own_conversation(request.user, conversation_id)
     if request.method == "GET":
         runs = list(c.runs.select_related("conversation").order_by("-id")[:100])
+        activities = load_run_activity(runs)
         return JsonResponse(
             {
                 "conversation": conversation_json(c),
-                "runs": [run_json(r, request.user) for r in reversed(runs)],
+                "runs": [
+                    run_json(r, request.user, activity=activities[r.pk])
+                    for r in reversed(runs)
+                ],
                 "attachments": [
                     serialize_attachment(item) for item in c.attachments.all()
                 ],
