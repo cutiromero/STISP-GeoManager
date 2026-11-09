@@ -334,6 +334,7 @@ function AgentWorkspace({
   const followLatest = useRef(true);
   const lastScrollTop = useRef(0);
   const pendingScroll = useRef<number | null>(null);
+  const revealedBusinessGate = useRef("");
   const failedSubmission = useRef<{
     id: number;
     key: string;
@@ -824,6 +825,34 @@ function AgentWorkspace({
   useLayoutEffect(() => {
     revealWaitingQuestion();
   }, [waitingRun?.interaction?.questionId, waitingRun?.interaction?.revision]);
+  useLayoutEffect(() => {
+    const run = [...runs]
+      .reverse()
+      .find((item) => item.businessFlow?.status === "waiting_approval");
+    const flow = run?.businessFlow;
+    const node = flow?.nodes.find((item) => item.nodeId === flow.currentNode);
+    if (!run || !flow || !node?.human.required) {
+      revealedBusinessGate.current = "";
+      return;
+    }
+    const key = `${current?.id}:${run.id}:${flow.currentNode}:${node.attempt}`;
+    if (revealedBusinessGate.current === key) return;
+    const box = viewport.current;
+    const turn = box?.querySelector<HTMLElement>(`[data-run-id="${run.id}"]`);
+    const decision = turn?.querySelector<HTMLElement>(
+      ".business-flow-human-review, .business-flow-human-decision",
+    );
+    if (!box || !decision) return;
+    followLatest.current = false;
+    pendingScroll.current = null;
+    box.scrollTop +=
+      decision.getBoundingClientRect().top -
+      box.getBoundingClientRect().top -
+      24;
+    lastScrollTop.current = box.scrollTop;
+    revealedBusinessGate.current = key;
+    setShowLatest(box.scrollHeight - box.scrollTop - box.clientHeight >= 96);
+  }, [current?.id, runs]);
   useEffect(() => {
     const container = viewport.current;
     if (!container) return;
@@ -858,6 +887,7 @@ function AgentWorkspace({
             "返回的历史记录与所选会话不一致，当前聊天记录已保留。",
           );
         setResearchWorkflow(undefined);
+        revealedBusinessGate.current = "";
         followLatest.current = true;
         setComputeActivities({});
         setEvents([]);
@@ -1938,7 +1968,7 @@ function AgentWorkspace({
                     items={r.evidence}
                     canManage={Boolean(bootstrap?.canManage)}
                   />
-                  {r.detail && r.status !== "succeeded" && (
+                  {!r.businessFlow && r.detail && r.status !== "succeeded" && (
                     <Alert
                       className="agent-run-notice"
                       type={r.status === "failed" ? "error" : "info"}

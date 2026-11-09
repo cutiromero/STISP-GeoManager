@@ -139,6 +139,43 @@ it("renders the flow as one real task and does not invent a generic answer confi
   expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
   expect(agentApi.stream).not.toHaveBeenCalled();
   expect(agentApi.resources).not.toHaveBeenCalled();
+  expect(screen.queryByText("流程当前状态")).not.toBeInTheDocument();
+});
+
+it("reveals a human decision in a narrow scroller and preserves subsequent manual reading", async () => {
+  render(
+    <>
+      <style>{`
+        .agent-messages { position: fixed; top: 0; left: 0; height: 340px;
+          width: 360px; flex: none; padding: 8px; overflow-y: auto; }
+        .business-flow-actors { min-height: 600px; }
+        .business-flow-activity-events { min-height: 600px; }
+      `}</style>
+      <App>
+        <MemoryRouter initialEntries={["/agent/workbench"]}>
+          <AgentPage />
+        </MemoryRouter>
+      </App>
+    </>,
+  );
+  const button = await screen.findByRole("button", { name: "批准当前节点" });
+  const box = document.querySelector<HTMLElement>(".agent-messages")!;
+  await waitFor(() => {
+    const frame = box.getBoundingClientRect();
+    const bounds = button.getBoundingClientRect();
+    expect(bounds.top).toBeGreaterThanOrEqual(frame.top);
+    expect(bounds.bottom).toBeLessThanOrEqual(frame.bottom);
+    expect(box.scrollTop).toBeGreaterThan(0);
+  });
+  await act(async () => {
+    box.scrollTop = 0;
+    fireEvent.scroll(box);
+    box.style.width = "375px";
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+  });
+  expect(box.scrollTop).toBe(0);
 });
 it("a human decision resumes the existing parent through SSE without submitting again", async () => {
   const next = flow({ status: "queued", revision: 5 });
