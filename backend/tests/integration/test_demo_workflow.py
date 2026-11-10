@@ -19,6 +19,7 @@ from apps.agent.models import AgentPolicy, AgentWorkflow
 from apps.agent.policy import default_policy, validate_policy
 from apps.agent.workflow import resume_waiting, run_workflow
 from apps.catalog.models import DataResource
+from apps.compute.data import candidate
 from apps.raster.models import RasterDataset
 from apps.compute.models import (
     AlgorithmResource,
@@ -146,18 +147,23 @@ def demo(setup_compute, settings, monkeypatch):  # noqa: F811
             )
             versions[identifier] = version
         env["versions"] = versions
-        monkeypatch.setattr(
-            "apps.compute.services.candidate",
-            lambda r: {
-                "id": r.id,
-                "name": r.name,
-                "kind": r.data_type,
+
+        def metadata(resource, *, raster_metadata=False, semantic_metadata=False):
+            if semantic_metadata:
+                return candidate(
+                    resource, raster_metadata=raster_metadata, semantic_metadata=True
+                )
+            return {
+                "id": resource.id,
+                "name": resource.name,
+                "kind": resource.data_type,
                 "bands": 2,
                 "fields": ["region", "value"],
                 "sizeBytes": 0,
                 "geometryTypes": [],
-            },
-        )
+            }
+
+        monkeypatch.setattr("apps.compute.services.candidate", metadata)
         yield env
 
 
@@ -417,7 +423,7 @@ def test_batch_reader_binds_once_reuses_same_file_and_rechecks_access_at_end(dem
             workflow, demo["owner"], demo["policy"], output.task_id
         )
     assert len(results) == 2 and binding.call_count == 1 and access.call_count == 2
-    assert hashes.reads == 1 and hashes.reuses == 1
+    assert hashes.reads + hashes.version_reuses == 1 and hashes.reuses == 1
     original = demo_results._read_task_output
 
     def revoke_after_read(*args):

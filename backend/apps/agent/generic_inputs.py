@@ -92,9 +92,12 @@ def _area(coverage):
 
 def faults_copy(frame, coverage):
     import geopandas as gpd
+    import pandas as pd
 
     if frame is None:
-        return gpd.GeoDataFrame({"line_id": []}, geometry=[], crs=coverage.crs), 0
+        return gpd.GeoDataFrame(
+            {"line_id": pd.Series(dtype="str")}, geometry=[], crs=coverage.crs
+        ), 0
     frame = frame.to_crs(coverage.crs)
     clipped = frame.geometry.intersection(_area(coverage))
     keep = ~clipped.is_empty & clipped.geom_type.str.contains("Line")

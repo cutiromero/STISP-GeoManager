@@ -334,12 +334,18 @@ def test_second_attempt_rechecks_budget_without_truncating_catalog(demo):  # noq
     with (
         patch("apps.agent.research_presets.discover", return_value=catalog(demo)),
         patch("apps.agent.provider.model_window", return_value=32768),
-        patch("apps.agent.context.count_tokens", side_effect=[256, 100000]),
+        patch(
+            "apps.agent.context.count_tokens",
+            side_effect=lambda model, messages, *args: (
+                100000 if any(row["role"] == "assistant" for row in messages) else 256
+            ),
+        ),
         patch("apps.agent.provider.stream", side_effect=stream),
-        pytest.raises(ModelError, match="输入需要"),
     ):
         process(item, demo["owner"], demo["policy"], lambda: None, lambda *args: None)
     item.refresh_from_db()
     assert len(responses) == 1
+    assert item.research_intent["status"] == "clarifying"
+    assert item.research_intent["_parserAudit"]["status"] == "waiting_context"
     assert item.research_intent["_parserAudit"]["attempts"][0]["status"] == "rejected"
     assert not AgentWorkflow.objects.exists() and not ComputeTask.objects.exists()

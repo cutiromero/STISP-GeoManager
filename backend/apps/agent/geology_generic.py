@@ -334,6 +334,7 @@ def _questions(roles):
 
 def propose_mapping(workflow, user, policy):
     from .generic_mapping import model_targets
+    from .business_flow_context import ContextReviewRequired
 
     roles = _review_roles(workflow, user, policy)
     if any(
@@ -359,11 +360,14 @@ def propose_mapping(workflow, user, policy):
     )
     try:
         proposed = None if known_fields else model_targets(workflow, policy, roles)
-    except ComputeError as exc:
+    except (ComputeError, ContextReviewRequired) as exc:
+        if isinstance(exc, ContextReviewRequired):
+            workflow.plan["mappingContextManagement"] = exc.details
         proposed, note = (
             None,
             [
-                "智能体未能完成字段判断（"
+                ("[预算] " if isinstance(exc, ContextReviewRequired) else "")
+                + "智能体未能完成字段判断（"
                 + str(exc)[:80]
                 + "），以下为平台按字段名给出的建议，请逐项核对"
             ],

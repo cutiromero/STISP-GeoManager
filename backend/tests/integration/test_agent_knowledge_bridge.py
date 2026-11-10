@@ -310,7 +310,10 @@ def test_final_status_uses_current_task_not_model_snapshot(
     monkeypatch.setattr(
         "apps.agent.compute_tools.run_tasks", lambda *a: {"items": [card]}
     )
-    answer = append_compute_status("任务已提交。", None, None, {})
+    from types import SimpleNamespace
+
+    run = SimpleNamespace(evidence=[], compute_intent={})
+    answer = append_compute_status("任务已提交。", run, None, {})
     assert expected in answer and forbidden not in answer
 
 

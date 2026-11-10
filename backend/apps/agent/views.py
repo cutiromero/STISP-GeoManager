@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, OperationalError, transaction, connection
-from django.db.models import Q, F
+from django.db.models import F
 from django.http import HttpResponse, JsonResponse, Http404
 from django.middleware.gzip import GZipMiddleware
 from django.shortcuts import get_object_or_404
@@ -37,7 +37,7 @@ from .policy import (
     validate_policy,
     daily_quota,
 )
-from .tools import check_evidence, resources, resolve_resource, brief
+from .tools import check_evidence, resources, resolve_resource
 from .attachments import delete_attachment, serialize_attachment, store_attachment
 from .budgets import budget_options, resolve_budget
 from .run_concurrency import lock_run_queue, require_run_capacity, retry_run_admission
@@ -857,14 +857,14 @@ def compute_intent(request, run_id):
 
 @endpoint(["GET"])
 def resource_list(request):
+    from .resource_search import search_brief, search_resources
+
     p = require_access(request.user, "agent")
     query = request.GET.get("q", "")[:200]
-    found = (
-        resources(request.user, p)
-        .filter(Q(name__icontains=query) | Q(description__icontains=query))
-        .order_by("name")[:50]
+    found = search_resources(resources(request.user, p), query)[:50]
+    return JsonResponse(
+        {"items": [search_brief(resource, query) for resource in found]}
     )
-    return JsonResponse({"items": [brief(r) for r in found]})
 
 
 @endpoint(["POST"])
@@ -1123,6 +1123,7 @@ def workflow_upload_batch(request):
 
 @endpoint(["GET", "POST"])
 def workflow_catalog_references(request):
+    from .resource_search import search_brief, search_resources
     from .workflow_uploads import add_catalog_references, catalog_resources, upload_json
 
     project = request.headers.get("X-Project-Id")
@@ -1147,19 +1148,18 @@ def workflow_catalog_references(request):
             .values_list("inventory_group_id", "inventory_group__name")
             .distinct()
         )
-        found = (
-            available.select_related("inventory_group")
-            .filter(Q(name__icontains=query) | Q(description__icontains=query))
-            .order_by("-updated_at", "-created_at", "-id")
-        )
+        found = search_resources(available.select_related("inventory_group"), query)
         if directory is not None:
             found = found.filter(inventory_group_id=directory or None)
         total = found.count()
+        page_items = (
+            found[(page - 1) * size : page * size] if (page - 1) * size < total else []
+        )
         return JsonResponse(
             {
                 "items": [
                     {
-                        **brief(item),
+                        **search_brief(item, query),
                         "directoryId": item.inventory_group_id,
                         "directoryName": item.inventory_group.name
                         if item.inventory_group
@@ -1167,7 +1167,7 @@ def workflow_catalog_references(request):
                         "createdAt": item.created_at.isoformat(),
                         "updatedAt": item.updated_at.isoformat(),
                     }
-                    for item in found[(page - 1) * size : page * size]
+                    for item in page_items
                 ],
                 "total": total,
                 "page": page,

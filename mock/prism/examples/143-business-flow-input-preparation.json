@@ -1,11 +1,43 @@
 {
-  "ready": true,
-  "items": [{
-    "role": "observations", "sourceId": 81, "sourceName": "区域观测栅格",
-    "sourceType": "raster", "sourceRevision": "2026-11-10T00:00:00Z",
-    "targetTypes": ["table"], "targetSemantics": "raster_band_statistics_v1",
-    "status": "convert", "versionId": 9, "inputKey": "source", "outputKey": "prepared",
-    "targetType": "table", "parameters": {"band": 0}, "fields": [],
-    "candidates": [{"versionId": 9, "name": "栅格波段统计转表", "description": "根据实际有效像元统计各波段，不修改原始数据", "targetType": "table", "parameters": [{"key": "band", "label": "统计波段", "type": "integer", "default": 0, "min": 0, "max": 1024}]}]
-  }]
+  "POST /api/business-flows/{flowId}/prepare-inputs/": {
+    "200": {
+      "ready": true,
+      "items": [
+        {
+          "role": "observations",
+          "sourceId": 81,
+          "sourceName": "区域观测栅格",
+          "sourceType": "raster",
+          "sourceRevision": "2026-11-10T00:00:00Z",
+          "targetTypes": ["table"],
+          "targetSemantics": "raster_band_statistics_v1",
+          "status": "convert",
+          "versionId": 9,
+          "inputKey": "source",
+          "outputKey": "prepared",
+          "targetType": "table",
+          "parameters": { "band": 0 },
+          "fields": [],
+          "candidates": [
+            {
+              "versionId": 9,
+              "name": "栅格波段统计转表",
+              "description": "根据实际有效像元统计各波段，不修改原始数据",
+              "targetType": "table",
+              "parameters": [
+                {
+                  "key": "band",
+                  "label": "统计波段",
+                  "type": "integer",
+                  "default": 0,
+                  "min": 0,
+                  "max": 1024
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

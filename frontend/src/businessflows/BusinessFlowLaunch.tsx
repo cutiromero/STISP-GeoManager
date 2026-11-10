@@ -34,11 +34,13 @@ import { useComputeText } from "../compute/ui";
 import { createUuid } from "../utils/uuid";
 import { canonicalReadKey } from "../api/readFlights";
 import InputAdaptationReview, { preparationKey } from "./InputAdaptationReview";
+import { ResourceSearchLabel } from "../agent/ResourceSearchLabel";
+import { RESOURCE_SEARCH_DELAY_MS } from "../agent/resourceSearch";
 import "./business-flows.css";
 import "./business-flow-launch.css";
 
 // Candidate reads are bounded metadata. Search is remote and shared by all roles.
-const CANDIDATE_SEARCH_DELAY_MS = 280;
+const CANDIDATE_SEARCH_DELAY_MS = RESOURCE_SEARCH_DELAY_MS;
 const MAX_CANDIDATE_LABELS = 256;
 const GenericWorkflowUploads = lazy(
   () => import("../agent/GenericWorkflowUploads"),
@@ -93,6 +95,7 @@ export default function BusinessFlowLaunch({
   >("idle");
   const [resourceError, setResourceError] = useState("");
   const [resourceSearch, setResourceSearch] = useState("");
+  const candidateComposing = useRef(false);
   const [openRole, setOpenRole] = useState<string | null>(null);
   const roleOpen = useRef<string | null>(null);
   const lastRole = useRef<string | null>(null);
@@ -140,6 +143,7 @@ export default function BusinessFlowLaunch({
       setResourceState("idle");
       setResourceError("");
       setResourceSearch("");
+      candidateComposing.current = false;
       setOpenRole(null);
       setInputs({});
     };
@@ -249,8 +253,9 @@ export default function BusinessFlowLaunch({
         ),
     ) ?? [];
   const loadCandidates = async (query = wantedQuery.current, force = false) => {
-    if (!roleOpen.current || !alive.current) return;
-    query = query.trim().slice(0, 120);
+    if (!roleOpen.current || !alive.current || candidateComposing.current)
+      return;
+    query = query.trim().slice(0, 200);
     wantedQuery.current = query;
     if (
       candidateRequest.current &&
@@ -324,8 +329,9 @@ export default function BusinessFlowLaunch({
   };
   const searchCandidates = (query: string) => {
     if (!roleOpen.current) return;
-    const next = query.trim().slice(0, 120);
+    const next = query.trim().slice(0, 200);
     setResourceSearch(query);
+    if (candidateComposing.current) return;
     if (
       wantedQuery.current === next &&
       (searchTimer.current !== undefined ||
@@ -352,11 +358,14 @@ export default function BusinessFlowLaunch({
       roleOpen.current = role;
       lastRole.current = role;
       setOpenRole(role);
-      setResourceSearch("");
       clearTimeout(searchTimer.current);
       searchTimer.current = undefined;
-      void loadCandidates("");
+      if (!candidateComposing.current) {
+        setResourceSearch("");
+        void loadCandidates("");
+      }
     } else if (roleOpen.current === role) {
+      candidateComposing.current = false;
       if (searchTimer.current !== undefined && !candidateRequest.current)
         setResourceState("idle");
       roleOpen.current = null;
@@ -609,6 +618,21 @@ export default function BusinessFlowLaunch({
                       <label
                         className="business-flow-launch-field"
                         key={input.key}
+                        onCompositionStartCapture={() => {
+                          candidateComposing.current = true;
+                          clearTimeout(searchTimer.current);
+                          searchTimer.current = undefined;
+                          candidateRequest.current?.abort();
+                          candidateRequest.current = null;
+                          requestQuery.current = null;
+                          readyQuery.current = null;
+                        }}
+                        onCompositionEndCapture={(event) => {
+                          candidateComposing.current = false;
+                          searchCandidates(
+                            (event.target as HTMLInputElement).value,
+                          );
+                        }}
                       >
                         <span>
                           <DatabaseOutlined />
@@ -650,19 +674,30 @@ export default function BusinessFlowLaunch({
                             openCandidates(input.key, open)
                           }
                           placeholder={ui(
-                            "输入名称搜索当前项目的授权资料",
-                            "Search authorized project data by name",
+                            "搜索资料名称或说明，空格分隔多个关键词",
+                            "Search names or descriptions; separate required terms with spaces",
                           )}
                           options={resources.map((resource) => ({
                             value: resource.id,
                             label: resource.name,
+                            description: resource.description,
                           }))}
+                          optionRender={(option) => (
+                            <ResourceSearchLabel
+                              name={option.data.label}
+                              description={option.data.description}
+                              query={readyQuery.current ?? ""}
+                            />
+                          )}
                           notFoundContent={
                             resourceState === "loading" ? (
                               <Spin size="small" />
                             ) : (
                               resourceError ||
-                              ui("暂无匹配资料", "No matching data")
+                              ui(
+                                "没有匹配的资料，请调整关键词",
+                                "No matching data; adjust your search",
+                              )
                             )
                           }
                           onChange={(value: number | number[] | undefined) =>

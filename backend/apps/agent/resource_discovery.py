@@ -139,7 +139,7 @@ def _discover_resources(user, policy, selected):
         .exclude(pk__in=uploads)
         .exclude(pk__in=_internal_resource_ids())
     )
-    imports = ComputeImport.objects.filter(resource__in=query)
+    imports = ComputeImport.objects.filter(resource_id__isnull=False)
     ordinary = (
         imports.filter(
             status="ready",
@@ -150,7 +150,9 @@ def _discover_resources(user, policy, selected):
         .exclude(output__task_id__in=workflow_task_ids())
         .exclude(request_source__startswith="workflow:")
     )
-    finals = _final_resource_ids(query, imports) | _report_resource_ids(query, user)
+    finals = _final_resource_ids(
+        query, imports.filter(resource__in=query)
+    ) | _report_resource_ids(query, user)
     # Bare legacy flags and unverified system markers are not provenance.
     originals = Q(is_compute_result=False) & ~Q(pk__in=imports.values("resource_id"))
     originals &= ~Q(source__startswith="compute-output:")
@@ -199,36 +201,27 @@ def _internal_resource_ids():
 def _final_resource_ids(query, imports):
     """Completed stages, actual outputs and ready imports must agree."""
     records = {
-        item.output_id: item
+        item["output_id"]: item
         for item in imports.filter(
             status="ready",
             output__task__status="succeeded",
             output__task__trial=False,
             output__task_id__in=workflow_task_ids(),
-        )
-        .select_related("output__task__version__algorithm")
-        .only(
-            "id",
+        ).values(
             "resource_id",
             "output_id",
-            "output__id",
             "output__key",
             "output__checksum",
             "output__task_id",
-            "output__task__id",
             "output__task__owner_id",
             "output__task__project_tag_id",
-            "output__task__version_id",
-            "output__task__version__id",
             "output__task__version__manifest",
-            "output__task__version__algorithm_id",
-            "output__task__version__algorithm__id",
             "output__task__version__algorithm__identifier",
         )
     }
     if not records:
         return set()
-    task_ids = {item.output.task_id for item in records.values()}
+    task_ids = {item["output__task_id"] for item in records.values()}
     workflows = list(
         AgentWorkflow.objects.filter(
             status="succeeded",
@@ -275,32 +268,31 @@ def _final_resource_ids(query, imports):
                     continue
                 record = records.get(output.get("outputId"))
                 if record is None or not _terminal_output(
-                    workflow["workflow_type"], stage, record.output
+                    workflow["workflow_type"], stage, record
                 ):
                     continue
-                task = record.output.task
                 if (
-                    str(task.id) == task_id
-                    and task.owner_id == workflow["owner_id"]
-                    and task.project_tag_id == workflow["project_tag_id"]
-                    and record.resource_id == output.get("resourceId")
-                    and record.resource_id in workflow["result_resource_ids"]
-                    and record.output.key == output.get("key")
-                    and record.output.checksum == output.get("checksum")
+                    str(record["output__task_id"]) == task_id
+                    and record["output__task__owner_id"] == workflow["owner_id"]
+                    and record["output__task__project_tag_id"]
+                    == workflow["project_tag_id"]
+                    and record["resource_id"] == output.get("resourceId")
+                    and record["resource_id"] in workflow["result_resource_ids"]
+                    and record["output__key"] == output.get("key")
+                    and record["output__checksum"] == output.get("checksum")
                 ):
-                    results.add(record.resource_id)
+                    results.add(record["resource_id"])
     return results
 
 
-def _terminal_output(workflow_type, stage, output):
+def _terminal_output(workflow_type, stage, record):
     definition = FINAL_STAGE_OUTPUTS.get((workflow_type, stage.get("name")))
     if definition is None:
         return False
     identifier, keys = definition
-    version = output.task.version
-    manifest = version.manifest or {}
+    manifest = record["output__task__version__manifest"] or {}
     if (
-        version.algorithm.identifier != identifier
+        record["output__task__version__algorithm__identifier"] != identifier
         or manifest.get("identifier") != identifier
         or stage.get("identifier", identifier) != identifier
     ):
@@ -310,17 +302,20 @@ def _terminal_output(workflow_type, stage, output):
         for item in manifest.get("outputs", [])
         if isinstance(item, dict) and item.get("kind") != "archive"
     }
-    if output.key not in declared:
+    if record["output__key"] not in declared:
         return False
-    if output.key in keys:
+    if record["output__key"] in keys:
         return True
     if stage.get("name") == "apply" and workflow_type in {
         "geology_generic",
         "geology_multi_element_reasoning",
     }:
-        if output.key == "faults" and "final_faults" not in declared:
+        if record["output__key"] == "faults" and "final_faults" not in declared:
             return True
-        if output.key == "alterations" and "final_alterations" not in declared:
+        if (
+            record["output__key"] == "alterations"
+            and "final_alterations" not in declared
+        ):
             return not any(
                 key.endswith("_corrected") for key in declared if isinstance(key, str)
             )

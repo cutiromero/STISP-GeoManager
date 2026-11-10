@@ -169,5 +169,5 @@ def test_ordinary_cancellation_still_accepts_no_body(initial_plan, status):
     workflow.refresh_from_db()
     assert workflow.status == "cancelled"
     assert workflow.cancel_requested is True
-    assert workflow.detail == "已取消后续处理"
+    assert workflow.detail == "任务已停止，已有成果保留"
     assert not ComputeTask.objects.exists()

@@ -8,6 +8,7 @@ from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied
 
 from apps.agent import context, generic_mapping, provider, workflow_roles
+from apps.agent.business_flow_context import ContextReviewRequired
 from apps.agent.models import (
     AgentPolicy,
     AgentRun,
@@ -17,7 +18,6 @@ from apps.agent.models import (
 )
 from apps.agent.policy import default_policy
 from apps.catalog.models import DataResource
-from apps.compute.packages import ComputeError
 from apps.projects.context import ProjectScope, project_scope
 from apps.projects.models import ProjectMembership
 from tests.integration.test_compute import setup_compute  # noqa: F401
@@ -241,10 +241,14 @@ def test_role_reference_repair_keeps_original_inputs_and_does_not_repeat_thinkin
 def test_over_budget_profiles_never_reach_generation(profiles, monkeypatch, target):
     monkeypatch.setattr(context, "count_tokens", lambda *args: 8000)
     if target == "mapping":
-        with pytest.raises(ComputeError, match="token"):
+        with pytest.raises(ContextReviewRequired) as waiting:
             generic_mapping.model_targets(
                 profiles["workflow"], profiles["policy"], profiles["roles"]
             )
+        assert (
+            waiting.value.details["afterTokens"]
+            > waiting.value.details["inputBudgetTokens"]
+        )
     else:
         assert infer_roles(profiles)["source"] == "rules"
     assert not profiles["requests"]

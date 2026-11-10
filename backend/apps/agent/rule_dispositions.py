@@ -82,36 +82,9 @@ def report_payload(payload, workflow):
     }
     review = payload.get("modificationReview")
     if review:
-        groups = {}
-        for item in review.get("groups", []):
-            key = (item.get("element"), item.get("ruleId"), item.get("action"))
-            group = groups.setdefault(
-                key,
-                {
-                    "element": key[0],
-                    "ruleId": key[1],
-                    "action": key[2],
-                    "count": 0,
-                    "approvedCount": 0,
-                },
-            )
-            group["count"] += item["count"]
-            group["approvedCount"] += item["approvedCount"]
-        payload["modificationReview"] = {
-            **{
-                key: review[key]
-                for key in (
-                    "proposalHash",
-                    "approvedCount",
-                    "suggestionCount",
-                    "approvalScopeDigest",
-                    "sourceOutputs",
-                )
-                if key in review
-            },
-            "scope": "complete_rule_action_counts",
-            "groups": list(groups.values()),
-        }
+        from .geology_multi_results import approval_statistics
+
+        payload["modificationReview"] = approval_statistics(review)
     report_outputs = {
         str(item["outputId"])
         for item in projected

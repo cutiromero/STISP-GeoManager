@@ -142,9 +142,17 @@ it("搜索系统数据、加入与上传并列，并仅移除目录引用", asyn
   fireEvent.mouseDown(
     within(dialog).getByRole("combobox", { name: "选择系统数据资源" }),
   );
-  fireEvent.click(
-    await screen.findByText(/系统岩性图（矢量 · 演示资料 · 登记 2026-11-04）/),
+  const option = await screen.findByRole("group", { name: "系统岩性图" });
+  expect(option.textContent).toBe(
+    "系统岩性图（矢量 · 演示资料 · 登记 2026-11-04）",
   );
+  await waitFor(() => {
+    expect(option).toBeVisible();
+    expect(
+      within(option).getByText("系统", { selector: "mark" }),
+    ).toBeVisible();
+  });
+  fireEvent.click(option);
   fireEvent.click(within(dialog).getByRole("button", { name: "加入本次任务" }));
   await waitFor(() =>
     expect(

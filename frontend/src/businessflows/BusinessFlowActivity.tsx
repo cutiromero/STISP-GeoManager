@@ -20,6 +20,7 @@ import type {
   BusinessFlowEvent,
   BusinessFlowRun,
   AgentWorkflowModelActivity,
+  BusinessFlowDecision,
 } from "../api/generated/types.gen";
 import { businessFlowsApi } from "../api/businessFlows";
 import { ApiError } from "../api/client";
@@ -33,6 +34,7 @@ import SafeMarkdown from "../agent/SafeMarkdown";
 import FieldMappingReview from "../agent/FieldMappingReview";
 import BusinessFlowNodeOutputs from "./BusinessFlowNodeOutputs";
 import BusinessFlowInputPreparation from "./BusinessFlowInputPreparation";
+import BusinessFlowContextRecovery from "./BusinessFlowContextRecovery";
 import BusinessFlowGraph from "./BusinessFlowGraph";
 import {
   businessFlowProgress,
@@ -55,6 +57,7 @@ const nodeActive = new Set([
   "waiting_human",
   "waiting_approval",
   "waiting_compute",
+  "waiting_context",
 ]);
 const statusLabels: Record<string, string> = {
   pending: "尚未开始",
@@ -72,6 +75,8 @@ const statusLabels: Record<string, string> = {
   waiting_human: "等待您决定",
   waiting_approval: "等待您决定",
   waiting_compute: "算子计算中",
+  waiting_context: "等待整理输入",
+  context_waiting: "等待整理输入",
   succeeded: "已完成",
   completed: "已完成",
   passed: "审核通过",
@@ -562,6 +567,61 @@ export default function BusinessFlowActivity({
               )}
         </p>
       )}
+      {!unavailable &&
+        current?.contextManagement &&
+        current.contextManagement.level > 0 && (
+          <section aria-label="本节点输入整理说明">
+            <Alert
+              type="info"
+              title={`本节点输入已整理 · 第${current.contextManagement.level}档`}
+            />
+            {Boolean(current.contextManagement.noticeSummary?.length) && (
+              <details>
+                <summary>查看输入省略范围</summary>
+                <ul>
+                  {current.contextManagement.noticeSummary?.map((notice) => (
+                    <li key={notice}>{notice}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </section>
+        )}
+      {!unavailable &&
+        !isTerminal &&
+        flow.status === "waiting_approval" &&
+        current?.contextRecovery && (
+          <BusinessFlowContextRecovery
+            key={`${flow.id}:${current.nodeId}:${flow.revision}`}
+            node={current}
+            busy={Boolean(busy)}
+            onRetry={(
+              options: Pick<
+                BusinessFlowDecision,
+                "skipEvidenceIds" | "contextScope" | "feedback"
+              >,
+            ) => {
+              const value = {
+                nodeId: current.nodeId,
+                revision: flow.revision,
+                decision: "retry_context" as const,
+                ...options,
+              };
+              const fingerprint = JSON.stringify([flow.id, value]);
+              if (decisionKey.current?.fingerprint !== fingerprint)
+                decisionKey.current = { fingerprint, key: createUuid() };
+              void perform("retry_context", () =>
+                businessFlowsApi.decide(flow.id, {
+                  ...value,
+                  idempotencyKey: decisionKey.current!.key,
+                }),
+              );
+            }}
+            onStop={() =>
+              void perform("cancel", () => businessFlowsApi.cancel(flow.id))
+            }
+          />
+        )}
       {!unavailable &&
         needsHuman &&
         (isLegacy ? (

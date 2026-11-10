@@ -91,11 +91,26 @@ def test_budgeted_first_request_recovers_exact_projection_without_network(
     retry, budget_level, retry_model
 ):
     workflow, stage, results = ordinary_stage()
+    results[0]["rows"] = [
+        {**results[0]["rows"][0], "feature_id": f"object-{index}"}
+        for index in range(120)
+    ]
     answer = model_response(stage["identifier"], [])
     raws = ["invalid-json", answer] if retry else [answer]
-    outcome, requests = run(
-        raws, workflow, stage, results, tokens=[49904] * budget_level + [800, 1200]
-    )
+
+    def measure(model, messages, *options):
+        from apps.agent.decision_budget import ROW_LIMITS
+
+        if len(messages) > 2:
+            return 1200
+        payload = json.loads(messages[1]["content"])
+        return (
+            800
+            if len(payload["actualResults"][0]["rows"]) <= ROW_LIMITS[budget_level]
+            else 49904
+        )
+
+    outcome, requests = run(raws, workflow, stage, results, tokens=measure)
     workflow.max_iterations = workflow.iteration = len(raws)
     workflow.plan["actualModelCallCount"] = len(raws)
     assert stage["modelAttempts"][0]["budgetLevel"] == budget_level

@@ -625,6 +625,35 @@ def model_review(workflow):
     }
 
 
+def approval_statistics(review):
+    if not review:
+        return review
+    additive = {"count", "approvedCount", "areaM2", "pixelCount"}
+    grouped = {}
+    for row in review.get("groups", []):
+        dimensions = {key: value for key, value in row.items() if key not in additive}
+        signature = json.dumps(dimensions, sort_keys=True, ensure_ascii=False)
+        group = grouped.setdefault(signature, dict(dimensions))
+        for key in additive & row.keys():
+            group[key] = group.get(key, 0) + row[key]
+    return {
+        **{
+            key: value
+            for key, value in review.items()
+            if key
+            not in {
+                "suggestions",
+                "approvedSuggestionIds",
+                "unapprovedSuggestionIds",
+                "groups",
+            }
+        },
+        "groups": list(grouped.values()),
+        "scope": "complete_rule_action_counts",
+        "detailScope": "完整批准数量、分组面积与像元数；逐对象决定由原方案和approvalScopeDigest绑定，本次不重新审阅或扩大批准",
+    }
+
+
 def edit_task(workflow, results):
     if not results:
         return None

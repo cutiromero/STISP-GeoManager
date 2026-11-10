@@ -247,14 +247,32 @@ def test_retry_budget_keeps_complete_payload_and_compresses_redundant_context(
 ):
     workflow, stage, results = geology()
     wrong = model_response("geology-edit", [])
+    wrong["decision"]["nextAction"] = "未授权动作" * 200
     correct = model_response("geology-edit", [])
     correct["decision"]["nextAction"] = "request_review"
+
+    def measure(model, messages, *options):
+        if len(messages) == 2:
+            return 800
+        if len(messages) == 4:
+            return 100000
+        feedback = json.loads(messages[-1]["content"])
+        if "editTask" in feedback:
+            actual = 1
+        elif not messages[0]["content"].startswith("依据原始完整资料修正响应"):
+            actual = 2
+        elif len(feedback) > 2:
+            actual = 3
+        else:
+            actual = {100: 4, 80: 5, 66: 6}[len(feedback["validationError"])]
+        return 1200 if actual >= repair_level else 100000
+
     (_, edits), requests = run(
         [wrong, correct],
         workflow,
         stage,
         results,
-        tokens=[800, *([100000] * repair_level), 1200],
+        tokens=measure,
     )
     assert not edits and len(requests) == 2
     assert requests[1][1] == requests[0][1]
@@ -436,7 +454,8 @@ def test_workflow_attempts_are_durable_and_retries_consume_real_call_budget(
         assert ComputeTask.objects.count() == 1
         assert workflow.steps.filter(kind="analysis_decision").count() == 1
     else:
-        assert workflow.status == "failed" and not ComputeTask.objects.exists()
+        assert workflow.status == ("waiting_approval" if mode == "quota" else "failed")
+        assert not ComputeTask.objects.exists()
         assert not workflow.steps.filter(kind="analysis_decision").exists()
         if mode == "quota":
             assert len(requests) == 1 and not attempts[1]["requested"]

@@ -39,6 +39,80 @@ ROOT = Path(__file__).resolve().parents[3]
 CODE = 'import pandas as pd\ndef run(context):\n    data = pd.read_csv(context.input_path("source_table_1"))\n    data.rename(columns={"value":"converted_value"}).to_csv(context.output_path("prepared.csv"),index=False)\n'
 
 
+@pytest.mark.parametrize("phase", ["generate", "review"])
+def test_context_wait_resumes_preparation_without_consuming_repair_attempt(
+    scripts, monkeypatch, phase
+):
+    from apps.agent.business_flow_context import ContextReviewRequired
+    from apps.business_flows import engine
+
+    env = scripts
+    workflow = env["workflow"]
+    original_generate = input_script_model.generate
+    reviews = []
+
+    def waiting(workflow, node, attempt, evidence, *args, **kwargs):
+        raise ContextReviewRequired(
+            {
+                "nodeId": node["id"],
+                "level": 3,
+                "beforeTokens": 100000,
+                "afterTokens": 90000,
+                "inputBudgetTokens": 24000,
+                "evidence": [
+                    {
+                        "id": row["id"],
+                        "title": row["title"],
+                        "bytes": 100000,
+                        "required": True,
+                    }
+                    for row in evidence
+                ],
+            }
+        )
+
+    def accepted(workflow, node, attempt, evidence, *args, **kwargs):
+        reviews.append(attempt)
+        return {
+            "decision": "accept",
+            "reason": "已核对脚本",
+            "issues": [],
+            "repairInstructions": "",
+            "evidenceIds": [row["id"] for row in evidence],
+        }
+
+    with project_scope(env["scope"]):
+        workflow.plan["inputPreparationPolicy"]["reviewScripts"] = phase == "review"
+        workflow.save(update_fields=["plan"])
+    monkeypatch.setattr(input_script_model, phase, waiting)
+    engine.advance(workflow.pk)
+    workflow.refresh_from_db()
+    with project_scope(env["scope"]):
+        public = runtime.serialize_run(env["owner"], workflow)
+        assert public["status"] == "waiting_approval"
+        assert public["nodes"][0]["status"] == "waiting_context"
+        workflow = runtime.decide_flow(
+            env["owner"],
+            workflow,
+            {
+                "nodeId": workflow.current_step,
+                "revision": public["revision"],
+                "decision": "retry_context",
+                "feedback": "",
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+    monkeypatch.setattr(input_script_model, "generate", original_generate)
+    monkeypatch.setattr(input_script_model, "review", accepted)
+    engine.advance(workflow.pk)
+    workflow.refresh_from_db()
+    assert workflow.status == "waiting_compute", workflow.detail
+    assert len(env["calls"]) == 1 and env["calls"][0]["attempt"] == 1
+    assert workflow.plan["inputAdaptations"][0]["scriptAttempt"] == 1
+    assert state(workflow)["nodes"]["summarize"]["human"]["status"] != "approved"
+    assert reviews == ([1] if phase == "review" else [])
+
+
 @pytest.fixture
 def scripts(operators, monkeypatch):
     env = operators

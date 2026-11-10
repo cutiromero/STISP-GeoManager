@@ -190,7 +190,7 @@ def test_report_real_content_persistent_idempotent_and_no_private_model_payload(
         "第 2 页",
         "输入质量通过",
         "statistics.csv",
-        "1.0.0",
+        env["version"].version,
     ):
         assert expected in content
     assert "SECRET_" not in content

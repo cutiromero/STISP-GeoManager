@@ -78,6 +78,10 @@ def projected_state(workflow):
                 reason="计算中心执行实际登记算子",
                 taskId=stage["taskId"],
             )
+        if stage.get("contextBudgetReview") and workflow.status == "waiting_approval":
+            item["status"] = "waiting_context"
+            item["contextRecovery"] = deepcopy(stage["contextBudgetReview"])
+            item["contextManagement"] = deepcopy(stage.get("contextManagement", {}))
         if identity == "apply":
             approved = bool(stage.get("modificationsApproval"))
             item["human"].update(
@@ -134,8 +138,14 @@ def synchronize(workflow_id):
         persist(workflow)
 
 
-def compact_review_packet(decision, edits, results):
+def compact_review_packet(
+    decision, edits, results, *, workflow=None, node_id=None, candidate_digest=None
+):
     """Keep actual checksums, complete counts and grouped rules; omit bulky geometry."""
+    if node_id == "finish":
+        from .report_review import report_review_packet
+
+        return report_review_packet(workflow, decision, results, candidate_digest)
     from collections import Counter
     from apps.agent.geology_multi_results import _model_metadata
 
@@ -285,7 +295,14 @@ def review_decision(
             "kind": "analysis",
             "title": node["title"],
             "result": {
-                **compact_review_packet(decision, edits, actual_results),
+                **compact_review_packet(
+                    decision,
+                    edits,
+                    actual_results,
+                    workflow=workflow,
+                    node_id=node_id,
+                    candidate_digest=item["candidateDigest"],
+                ),
                 "humanDecisionBoundary": "人工处置仅由原审核接口保存；本次审核不构成批准。",
             },
         }
@@ -337,6 +354,97 @@ def review_decision(
         )
         current = producer()
     raise ComputeError("独立审核未形成可接受结论")
+
+
+def retry_context(user, workflow, value):
+    from django.core.exceptions import ValidationError
+    from .runtime import authorize, canonical_current_node
+    from apps.agent.workflow import _state_hash
+    from apps.agent.workflow_slots import require_compute_slot
+
+    key = value.get("idempotencyKey")
+    if not isinstance(key, str) or not 8 <= len(key) <= 80:
+        raise ValidationError("上下文重试幂等键无效")
+    if value.get("skipEvidenceIds") or value.get("contextScope"):
+        raise ComputeError(
+            "专业节点的完整科学统计与批准范围不能跳过；请调整实际资料范围或生成预留后重试",
+            409,
+        )
+    with transaction.atomic():
+        current = locked_workflow(workflow.pk)
+        authorize(user, current)
+        values = state(current)
+        receipts = values.setdefault("decisions", {})
+        fingerprint = digest(value)
+        if key in receipts:
+            if receipts[key] != fingerprint:
+                raise ComputeError("上下文重试幂等键冲突", 409)
+            return current
+        node_id = canonical_current_node(current)
+        item = projected_state(current)["nodes"].get(node_id, {})
+        if (
+            current.status != "waiting_approval"
+            or not item.get("contextRecovery")
+            or value.get("nodeId") != node_id
+            or str(value.get("revision")) != str(values["revision"])
+        ):
+            raise ComputeError("上下文等待对象或版本已变化，请刷新", 409)
+        if (
+            current.plan.get("phase") == "budget_exhausted"
+            or item["contextRecovery"].get("kind") == "model_call_limit"
+        ):
+            raise ComputeError(
+                "模型请求额度已用完，请缩小任务范围后重新发起；不能通过重试重置计数",
+                409,
+            )
+        require_compute_slot(user, current.pk)
+        stage = next(
+            row
+            for row in current.plan["stages"]
+            if row["name"]
+            in {node_id, "final_analysis" if node_id == "finish" else node_id}
+        )
+        history = {"contextBudgetReview": stage.pop("contextBudgetReview")}
+        candidates = [stage]
+        batches = stage.get("modelBatches", {})
+        candidates.extend(
+            row["stage"]
+            for row in batches.get("batches", [])
+            if row.get("stage") and row.get("status") != "complete"
+        )
+        for candidate in candidates:
+            attempts = candidate.get("modelAttempts", [])
+            if attempts and not attempts[-1].get("accepted"):
+                candidate.setdefault("modelBudgetHistory", []).append(
+                    {"modelAttempts": candidate.pop("modelAttempts")}
+                )
+        stage.setdefault("modelBudgetHistory", []).append(history)
+        stage["status"] = "pending"
+        values["nodes"][node_id].pop("contextRecovery", None)
+        values["nodes"][node_id]["status"] = "executing"
+        receipts[key] = fingerprint
+        current.plan["phase"] = "decide"
+        current.plan_hash = _state_hash(current.plan)
+        current.status, current.detail = (
+            "queued",
+            "将重新核对本节点输入预算；未批准科研结果、未重置模型计数",
+        )
+        current.policy_snapshot["businessFlowControlEpoch"] = (
+            current.policy_snapshot.get("businessFlowControlEpoch", 0) + 1
+        )
+        current.save(
+            update_fields=[
+                "plan",
+                "plan_hash",
+                "parameters",
+                "status",
+                "detail",
+                "policy_snapshot",
+                "updated_at",
+            ]
+        )
+        emit(current, "human", node_id, "context_retry", current.detail)
+    return current
 
 
 def legacy_control(user, workflow, action):
@@ -428,7 +536,18 @@ def review_rule_proposal(workflow, user, policy, stage, initial):
             calls = workflow.plan.get("actualModelCallCount", 0)
             reviews = len(state(workflow).get("requestedIds", []))
             if calls + reviews >= workflow.max_iterations:
-                raise ComputeError("业务流实际模型请求已达到额度，已保留结果")
+                from apps.agent.business_flow_context import ContextReviewRequired
+
+                raise ContextReviewRequired(
+                    {
+                        "nodeId": stage["name"],
+                        "level": 0,
+                        "evidence": [],
+                        "kind": "model_call_limit",
+                        "requested": False,
+                        "reason": "业务流实际模型请求已达到额度，已保留结果",
+                    }
+                )
             workflow.plan["actualModelCallCount"] = calls + 1
         save_workflow_state(workflow)
 

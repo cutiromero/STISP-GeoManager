@@ -362,10 +362,19 @@ def test_update_budget_checks_complete_evidence_without_sampling(demo, settings)
             "contextBudgetReview",
             "modelRequestPayload",
             "modelRequestInstruction",
+            "contextManagement",
         ):
             item.pop(key, None)
     assert preserved == original_plan
-    assert tokens.call_count == 5
+    measured = [
+        json.dumps(call.args[1], ensure_ascii=False) for call in tokens.call_args_list
+    ]
+    assert (
+        len(measured)
+        == len(set(measured))
+        == stage["contextManagement"]["measurementCount"]
+    )
+    assert 1 < len(measured) <= 5
 
 
 @pytest.mark.parametrize("changed", ["missing", "row", "checksum", "metadata"])

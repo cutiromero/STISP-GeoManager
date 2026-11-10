@@ -139,6 +139,9 @@ def serialize_run(user, workflow, *, control_only=False):
     projected = []
     for node in bind["definitionSnapshot"]["nodes"]:
         item = deepcopy(value["nodes"][node["id"]])
+        item.pop("executionContextId", None)
+        item.pop("contextPreviousExecutor", None)
+        item.pop("reviewContextBudget", None)
         # The legacy executor keeps its full structured decision privately.
         # Public actor.decision is reserved for the review decision string.
         if isinstance(item.get("executor", {}).get("decision"), dict):
@@ -146,6 +149,7 @@ def serialize_run(user, workflow, *, control_only=False):
         if (
             workflow.workflow_type == "geology_generic"
             and workflow.status == "waiting_approval"
+            and not item.get("contextRecovery")
             and node["id"] == canonical_current_node(workflow)
         ):
             item["human"].update(
@@ -611,25 +615,43 @@ def start_flow(user, version, value, *, source_run=None):
 def decide_flow(user, workflow, value):
     authorize(user, workflow)
     if workflow.workflow_type != "business_flow":
+        if value.get("decision") == "retry_context":
+            from .legacy import retry_context
+
+            return retry_context(user, workflow, value)
         raise ComputeError("专业流程的重要决定请在原审核卡中确认", 409)
     node_id, decision = value.get("nodeId"), value.get("decision")
     feedback = value.get("feedback", "")
     key = value.get("idempotencyKey")
     if (
-        decision not in {"approve", "request_changes"}
+        decision not in {"approve", "request_changes", "retry_context"}
         or not isinstance(feedback, str)
         or len(feedback) > 4000
         or not isinstance(key, str)
         or not 8 <= len(key) <= 80
     ):
         raise ValidationError("人工决定、反馈或幂等键无效")
+    if decision != "retry_context" and any(
+        key in value for key in ("skipEvidenceIds", "contextScope")
+    ):
+        raise ValidationError("证据范围只允许用于上下文重试，不能改变科研人工批准")
     with transaction.atomic():
         current = locked_workflow(workflow.pk)
         authorize(user, current)
         value_state = state(current)
         receipts = value_state.setdefault("decisions", {})
         fingerprint = digest(
-            {k: value.get(k) for k in ("nodeId", "decision", "feedback", "revision")}
+            {
+                k: value.get(k)
+                for k in (
+                    "nodeId",
+                    "decision",
+                    "feedback",
+                    "revision",
+                    "skipEvidenceIds",
+                    "contextScope",
+                )
+            }
         )
         if key in receipts:
             if receipts[key] != fingerprint:
@@ -642,6 +664,38 @@ def decide_flow(user, workflow, value):
         ):
             raise ComputeError("审核对象或版本已变化，请刷新后查看当前节点", 409)
         item = value_state["nodes"].get(node_id)
+        if item and item.get("contextRecovery"):
+            if decision != "retry_context":
+                raise ComputeError(
+                    "上下文等待不能批准科研节点，请选择缩小范围、跳过非必需证据后重试，或停止任务",
+                    409,
+                )
+            from .context_recovery import retry_node
+
+            retry_node(current, item, value)
+            require_compute_slot(user, current.pk)
+            receipts[key] = fingerprint
+            current.status, current.detail = (
+                "queued",
+                "上下文范围已更新，将重试当前节点；未批准科研结果",
+            )
+            current.policy_snapshot["businessFlowControlEpoch"] = (
+                current.policy_snapshot.get("businessFlowControlEpoch", 0) + 1
+            )
+            current.save(
+                update_fields=[
+                    "plan",
+                    "parameters",
+                    "status",
+                    "detail",
+                    "policy_snapshot",
+                    "updated_at",
+                ]
+            )
+            emit(current, "human", node_id, "context_retry", current.detail)
+            return current
+        if decision == "retry_context":
+            raise ComputeError("该节点没有等待处理的上下文", 409)
         if (
             not item
             or not item["human"]["required"]
@@ -682,6 +736,9 @@ def decide_flow(user, workflow, value):
                 approvedOutputDigest=digest(item["executor"]),
             )
             item["status"] = "succeeded"
+            from .ledger import complete_node
+
+            complete_node(current, node)
         require_compute_slot(user, current.pk)
         receipts[key] = fingerprint
         current.status, current.detail = "queued", "人工决定已保存，继续业务流"

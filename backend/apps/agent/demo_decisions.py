@@ -10,6 +10,7 @@ from apps.compute.packages import ComputeError
 from . import provider
 from .config import registry
 from .context import InputBudgetError, prepare_context
+from .business_flow_context import TokenMeasurements, input_budget
 from .demo_results import EDIT_FIELDS, resource_context, validate_edits
 from .model_guard import ModelStreamGuard
 from .geology_generic import MULTI_FAMILY
@@ -423,6 +424,12 @@ def decision_payload(workflow, stage, context, results) -> dict:
         )
         payload["modificationReview"] = model_review(workflow)
         payload["upstreamVersions"] = workflow.plan.get("upstreamVersions")
+        if execution_evidence_scope(payload):
+            from .geology_multi_results import approval_statistics
+
+            payload["modificationReview"] = approval_statistics(
+                payload["modificationReview"]
+            )
         if workflow.workflow_type == "geology_generic":
             payload["missingRoles"] = workflow.plan.get("missingRoles", [])
             payload["confirmedFieldMapping"] = workflow.plan.get("confirmedMapping", {})
@@ -1311,6 +1318,14 @@ def _decide_once(
         return recovered
     window = provider.model_window(model)
     thinking = policy.get("_thinking", False)
+    from . import context as context_budget
+
+    measurements = TokenMeasurements(
+        model,
+        thinking=thinking,
+        effort=policy["reasoningEffort"],
+        counter=context_budget.count_tokens,
+    )
     output_limit = policy["maxOutputTokens"]
     parameters = {**policy, "maxOutputTokens": output_limit}
     raster_protocol = any(
@@ -1343,10 +1358,26 @@ def _decide_once(
             guard()
             try:
                 tokens, truncated = prepare_context(
-                    messages, current, model, parameters, window, thinking
+                    messages,
+                    current,
+                    model,
+                    parameters,
+                    window,
+                    thinking,
+                    measurements=measurements,
                 )
                 break
             except InputBudgetError as exc:
+                stage["contextManagement"] = {
+                    "nodeId": stage["name"],
+                    "level": min(budget_level, 3),
+                    "projectionRecipe": budget_level,
+                    "inputBudgetTokens": input_budget(parameters, window),
+                    "measurementCount": len(measurements.cache),
+                    "reason": str(exc),
+                    "beforeTokens": next(iter(measurements.cache.values()), None),
+                    "afterTokens": next(reversed(measurements.cache.values()), None),
+                }
                 if attempt and repair_level < 6:
                     repair_level += 1
                 elif budget_level < MAX_LEVEL:
@@ -1367,12 +1398,25 @@ def _decide_once(
             raise provider.ModelError(
                 "模型修正请求必须保留完整原始资料，请缩小输入范围"
             )
+        management = {
+            "nodeId": stage["name"],
+            "level": min(budget_level, 3),
+            "projectionRecipe": budget_level,
+            "beforeTokens": next(iter(measurements.cache.values())),
+            "afterTokens": tokens,
+            "inputBudgetTokens": input_budget(parameters, window),
+            "measurementCount": len(measurements.cache),
+            "noticeSummary": [
+                "保留完整统计、条件与例外；对象仅限本批实际展示成员，省略范围见evidenceProjection。"
+            ]
+            if budget_level
+            else [],
+        }
+        stage["contextManagement"] = management
         if _preflight:
             return {
                 "inputTokens": tokens,
-                "inputLimit": min(
-                    parameters["maxContextTokens"], window - output_limit - 256
-                ),
+                "inputLimit": input_budget(parameters, window),
                 "outputLimit": output_limit,
                 "budgetLevel": budget_level,
                 "contentBytes": sum(
@@ -1394,6 +1438,7 @@ def _decide_once(
             "feedback": feedback_text,
             "repairLevel": repair_level,
             "budgetLevel": budget_level,
+            "contextManagement": management,
             "inputTokens": tokens,
             "contentBytes": sum(
                 len(item["content"].encode("utf-8")) for item in messages
@@ -1401,9 +1446,7 @@ def _decide_once(
             "truncated": truncated,
             "outputLimit": output_limit,
             "window": window,
-            "inputLimit": min(
-                parameters["maxContextTokens"], window - output_limit - 256
-            ),
+            "inputLimit": input_budget(parameters, window),
             "modelId": model.model_id,
             "thinkingEnabled": thinking,
             "reasoningEffort": policy["reasoningEffort"],
@@ -1688,7 +1731,11 @@ def _recover_decision(
             and type(window) is int
             and window > output + 256
             and type(input_limit) is int
-            and 256 <= input_limit <= min(input_ceiling, window - output - 256)
+            and 256
+            <= input_limit
+            <= input_budget(
+                {"maxContextTokens": input_ceiling, "maxOutputTokens": output}, window
+            )
             and type(tokens) is int
             and 0 <= tokens <= input_limit
             and isinstance(attempt.get("response"), str)

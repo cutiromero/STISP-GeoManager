@@ -335,13 +335,18 @@ def test_system_data_to_clean_results_and_new_conversation_reuse(
                 assert len(state) > 0 and set(state["state"]) == {"exclude"}
             else:
                 excluded_pixels = 0
-                for mineral in (
-                    "hematite",
-                    "chlorite",
-                    "hydromica",
-                    "calcite",
-                    "dolomite",
-                ):
+                minerals = (
+                    ("alteration_stack",)
+                    if "alteration_stack_corrected" in outputs
+                    else (
+                        "hematite",
+                        "chlorite",
+                        "hydromica",
+                        "calcite",
+                        "dolomite",
+                    )
+                )
+                for mineral in minerals:
                     with (
                         rasterio.open(
                             app_path(outputs[mineral + "_corrected"].path)
@@ -350,12 +355,12 @@ def test_system_data_to_clean_results_and_new_conversation_reuse(
                             app_path(outputs[mineral + "_weight"].path)
                         ) as weight_raster,
                     ):
-                        assert corrected_raster.count == weight_raster.count == 1
+                        assert corrected_raster.count == weight_raster.count >= 1
                         assert corrected_raster.crs == weight_raster.crs
                         assert corrected_raster.crs is not None
                         assert corrected_raster.shape == weight_raster.shape
                         assert corrected_raster.transform == weight_raster.transform
-                        weights = weight_raster.read(1, masked=True)
+                        weights = weight_raster.read(masked=True)
                         assert (weights >= 0).all() and (weights <= 1).all()
                         excluded_pixels += int((weights == 0).sum())
                 assert excluded_pixels > 0

@@ -141,7 +141,7 @@ def _generate_conversation_title(run_id):
             return False
         old_title, old_updated_at = conversation.title, conversation.updated_at
         user = fresh_user(run.owner_id)
-        require_access(user, conversation.mode, run.model)
+        limits = require_access(user, conversation.mode, run.model)
         model = registry()[run.model]
         if model.model_id.casefold().startswith("mock"):
             return False
@@ -178,6 +178,17 @@ def _generate_conversation_title(run_id):
         }
         if model.qwen:
             body["chat_template_kwargs"] = {"enable_thinking": False}
+        from . import provider
+        from .business_flow_context import prepare_auxiliary_request
+
+        body["messages"], _ = prepare_auxiliary_request(
+            body["messages"],
+            model,
+            {**limits, "maxOutputTokens": TITLE_OUTPUT_TOKENS},
+            provider.model_window(model),
+            node_id="conversation_title",
+            checked=lambda: None,
+        )
         response = model_request(
             model, "/v1/chat/completions", body, timeout=TITLE_TIMEOUT_SECONDS
         )

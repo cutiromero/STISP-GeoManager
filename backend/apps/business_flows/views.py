@@ -342,7 +342,16 @@ def decide(request, workflow_id):
     from .runtime import decide_flow, serialize_run
 
     value = body(
-        request, {"nodeId", "revision", "decision", "feedback", "idempotencyKey"}
+        request,
+        {
+            "nodeId",
+            "revision",
+            "decision",
+            "feedback",
+            "idempotencyKey",
+            "skipEvidenceIds",
+            "contextScope",
+        },
     )
     if (
         not isinstance(value.get("nodeId"), str)
@@ -350,7 +359,7 @@ def decide(request, workflow_id):
         or type(value.get("revision")) is not int
         or value["revision"] < 0
         or not isinstance(value.get("decision"), str)
-        or value["decision"] not in {"approve", "request_changes"}
+        or value["decision"] not in {"approve", "request_changes", "retry_context"}
         or not isinstance(value.get("feedback", ""), str)
         or len(value.get("feedback", "")) > 4000
         or not isinstance(value.get("idempotencyKey"), str)

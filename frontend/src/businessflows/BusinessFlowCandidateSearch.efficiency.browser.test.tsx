@@ -81,14 +81,14 @@ function show() {
 const input = (role = "主资料") =>
   screen.getByRole("combobox", { name: `${role}：选择资料` });
 async function choose(name: string) {
-  await waitFor(() =>
-    expect(
-      screen.getByText(name, { selector: ".ant-select-item-option-content" }),
-    ).toBeVisible(),
-  );
-  fireEvent.click(
-    screen.getByText(name, { selector: ".ant-select-item-option-content" }),
-  );
+  const option = () =>
+    screen.getByText(
+      (_text, element) =>
+        element?.classList.contains("ant-select-item-option-content") ===
+          true && element.textContent === name,
+    );
+  await waitFor(() => expect(option()).toBeVisible());
+  fireEvent.click(option());
 }
 beforeEach(() => {
   vi.spyOn(businessFlowsApi, "prepareInputs").mockImplementation(
@@ -127,6 +127,42 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   resetProjectSession();
+});
+
+it("waits for IME completion and explains description-only matches", async () => {
+  vi.mocked(agentApi.resources).mockImplementation(async (query = "") => ({
+    items: query
+      ? [{ ...resource(99, "区域观测"), description: "该资料记录地质构造" }]
+      : firstPage,
+  }));
+  show();
+  await screen.findByRole("textbox", { name: "本次任务目标" });
+  fireEvent.mouseDown(input());
+  await waitFor(() => expect(agentApi.resources).toHaveBeenCalledOnce());
+  fireEvent.compositionStart(input());
+  fireEvent.change(input(), { target: { value: "di" } });
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 400)));
+  expect(agentApi.resources).toHaveBeenCalledOnce();
+  fireEvent.change(input(), { target: { value: "地质" } });
+  fireEvent.compositionEnd(input(), { data: "地质" });
+  await waitFor(() => expect(agentApi.resources).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(agentApi.resources).mock.calls[1]?.[0]).toBe("地质");
+  expect(await screen.findByText("地质", { selector: "mark" })).toBeVisible();
+  expect(screen.getByText(/说明：/)).toHaveTextContent("该资料记录地质构造");
+});
+
+it("does not load an empty catalog when composition opens a closed selector", async () => {
+  show();
+  await screen.findByRole("textbox", { name: "本次任务目标" });
+  fireEvent.compositionStart(input());
+  fireEvent.change(input(), { target: { value: "di" } });
+  fireEvent.mouseDown(input());
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 400)));
+  expect(agentApi.resources).not.toHaveBeenCalled();
+  fireEvent.change(input(), { target: { value: "地质" } });
+  fireEvent.compositionEnd(input(), { data: "地质" });
+  await waitFor(() => expect(agentApi.resources).toHaveBeenCalledOnce());
+  expect(vi.mocked(agentApi.resources).mock.calls[0]?.[0]).toBe("地质");
 });
 
 it("finds the 51st registered item through debounced remote search and keeps the other selected label", async () => {
@@ -196,17 +232,15 @@ it("aborts superseded searches, ignores late bodies and cancels pending work on 
   fireEvent.change(input(), { target: { value: "新查询" } });
   expect(staleSignal?.aborted).toBe(true);
   await waitFor(() => expect(agentApi.resources).toHaveBeenCalledTimes(3));
-  await waitFor(() =>
-    expect(
-      screen.getByText("当前查询结果", {
-        selector: ".ant-select-item-option-content",
-      }),
-    ).toBeVisible(),
-  );
+  const latestOption = await screen.findByRole("group", {
+    name: "当前查询结果",
+  });
+  await waitFor(() => expect(latestOption).toBeVisible());
   await act(async () =>
     old.resolve({ items: [resource(88, "不应回写的旧结果")] }),
   );
   expect(screen.queryByText("不应回写的旧结果")).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "当前查询结果" })).toBeVisible();
   fireEvent.change(input(), { target: { value: "卸载中" } });
   await waitFor(() => expect(agentApi.resources).toHaveBeenCalledTimes(4));
   const pending = vi.mocked(agentApi.resources).mock.calls[3]?.[1]?.signal;

@@ -215,7 +215,13 @@ def propose_parameters(
 
     def record(value):
         if on_record:
-            on_record({**value, "purpose": PURPOSE})
+            on_record(
+                {
+                    **value,
+                    "purpose": value.get("purpose", PURPOSE),
+                    "actorPurpose": PURPOSE,
+                }
+            )
 
     def progress(value):
         if on_progress:

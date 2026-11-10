@@ -13,6 +13,7 @@ from apps.agent import business_flow_review as review
 from apps.agent.models import AgentPolicy, AgentWorkflow
 from apps.agent.policy import default_policy
 from apps.agent.provider import ModelError
+from apps.agent.business_flow_context import ContextReviewRequired
 from apps.agent.workflow_controls import WorkflowPaused
 from apps.compute.packages import ComputeError
 from apps.projects.context import project_scope
@@ -21,6 +22,7 @@ from tests.integration.test_agent import setup_agent  # noqa: F401
 # ruff: noqa: F811
 
 REAL_MODEL_WINDOW = review.provider.model_window
+REAL_COUNT_TOKENS = review.provider.count_tokens
 
 NODE = {
     "id": "analyse",
@@ -69,6 +71,7 @@ def env(setup_agent, monkeypatch):
         )
     monkeypatch.setattr(review.provider, "model_window", lambda model: 32768)
     monkeypatch.setattr("apps.agent.context.count_tokens", lambda *args: 123)
+    monkeypatch.setattr(review.provider, "count_tokens", lambda *args: 123)
     return {**data, "workflow": workflow}
 
 
@@ -277,8 +280,8 @@ def test_disabled_exhausted_and_missing_evidence_do_not_call_model(
 
 def test_input_budget_does_not_silently_drop_evidence(env, monkeypatch):
     calls = install_stream(monkeypatch)
-    monkeypatch.setattr("apps.agent.context.count_tokens", lambda *args: 1000000)
-    with pytest.raises(ModelError):
+    monkeypatch.setattr(review.provider, "count_tokens", lambda *args: 1000000)
+    with pytest.raises(ContextReviewRequired):
         run(env)
     assert calls == []
 
@@ -348,6 +351,7 @@ def test_real_http_review_request_has_no_execution_tools_or_history(env, setting
 
             patcher.setattr(review.provider, "model_window", REAL_MODEL_WINDOW)
             patcher.setattr("apps.agent.context.count_tokens", count_tokens)
+            patcher.setattr(review.provider, "count_tokens", REAL_COUNT_TOKENS)
             result = run(env)
         sent = [body for path, body in requests if path == "/v1/chat/completions"]
         assert len(sent) == 1 and result["decision"] == "accept"
@@ -388,7 +392,7 @@ def test_review_preflight_and_completion_execute_once(env, monkeypatch):
             yield character
 
     monkeypatch.setattr(review.provider, "model_window", window)
-    monkeypatch.setattr("apps.agent.context.count_tokens", tokens)
+    monkeypatch.setattr(review.provider, "count_tokens", tokens)
     monkeypatch.setattr(review.provider, "stream", streamed)
     assert run(env)["decision"] == "accept"
     assert counts == {"window": 1, "tokens": 1, "completion": 1}

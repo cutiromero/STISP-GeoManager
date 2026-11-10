@@ -20,6 +20,7 @@ export const flowStateLabels: Record<string, string> = {
   reviewing: "独立审核中",
   waiting_review: "独立审核中",
   waiting_human: "等待您决定",
+  waiting_context: "等待整理输入",
   waiting_approval: "等待您决定",
   waiting_compute: "算子计算中",
   repairing: "返工中",
@@ -57,6 +58,7 @@ export function nodeStageProgress(
             "executed",
             "reviewing",
             "waiting_human",
+            "waiting_context",
             "waiting_approval",
           ].includes(value.status))),
     );

@@ -12,6 +12,16 @@ from apps.compute.packages import ComputeError
 from . import provider
 from .config import registry
 from .context import prepare_context
+from .business_flow_context import (
+    CONTEXT_INSTRUCTION,
+    SUMMARY_CHARACTERS,
+    ContextReviewRequired,
+    evidence_sizes,
+    prepare_packet,
+    prepare_projected_request,
+    input_budget,
+    TokenMeasurements,
+)
 from .model_guard import ModelStreamGuard
 from .models import AgentWorkflow
 from .policy import fresh_user, require_access
@@ -19,7 +29,6 @@ from .workflow_controls import check_pause
 from .workflow_model_policy import workflow_model_policy
 
 # Configuration: limits constrain all actors without retaining cross-request state.
-MAX_EVIDENCE_ITEMS = 100
 MAX_RESPONSE_BYTES = 64 * 1024
 ACTIVE_STATUSES = {"queued", "running", "waiting_compute"}
 LIMITS = ("maxOutputTokens", "maxContextTokens", "maxContextBytes", "maxRunSeconds")
@@ -40,7 +49,7 @@ def _text(value, field, maximum):
 
 
 def _evidence(items):
-    if not isinstance(items, list) or not 1 <= len(items) <= MAX_EVIDENCE_ITEMS:
+    if not isinstance(items, list) or not items:
         raise ComputeError("业务流节点模型必须提供有界的实际证据")
     result, identities = [], set()
     for item in items:
@@ -50,6 +59,9 @@ def _evidence(items):
             "title",
             "summary",
             "result",
+            "required",
+            "sourceNodeId",
+            "contextReduction",
         }:
             raise ComputeError("业务流节点模型证据结构无效")
         identity = _text(item.get("id"), "evidence.id", 160)
@@ -67,6 +79,26 @@ def _evidence(items):
         if not item.get("summary") and ("result" not in item or item["result"] is None):
             raise ComputeError("业务流节点模型证据缺少实际结果或摘要")
     return result, identities
+
+
+def context_state(workflow):
+    if workflow.parameters.get("_businessFlow"):
+        from apps.business_flows.state import state
+
+        return state(workflow)
+    return {}
+
+
+def actual_context(workflow, node_id, *, preparation=False):
+    values = context_state(workflow)
+    identity = values.get("nodes", {}).get(node_id, {}).get("executionContextId")
+    snapshot = values.get("contextSnapshots", {}).get(identity, {})
+    expected = "data_preparation" if preparation else "node_execution"
+    return (
+        deepcopy(snapshot)
+        if snapshot.get("purpose", "node_execution") == expected
+        else {}
+    )
 
 
 def _citations(value, available):
@@ -179,7 +211,62 @@ def request_node_result(
         payload = _json(packet)
     except (ValueError, TypeError) as error:
         raise ComputeError("业务流节点模型证据不是有效JSON") from error
-    if len(payload.encode("utf-8")) > effective["maxContextBytes"]:
+    managed = workflow.workflow_type == "business_flow"
+    professional = bool(workflow.parameters.get("_businessFlow")) and not managed
+    values = context_state(workflow)
+    entry = values.get("nodes", {}).get(node_id, {})
+    if role == "executor" and entry.get("reviewContextBudget"):
+        for key in ("maxContextTokens", "maxContextBytes"):
+            effective[key] = min(effective[key], entry["reviewContextBudget"][key])
+    snapshot = (
+        actual_context(
+            workflow,
+            node_id,
+            preparation=any(row["id"] == "preparation-script" for row in items),
+        )
+        if role == "reviewer"
+        else {}
+    )
+    if managed:
+        from apps.business_flows.ledger import current_ledger
+
+        packet["ledger"] = (
+            snapshot.get("ledger", current_ledger(workflow))
+            if values
+            else {"goal": workflow.goal, "entries": [], "unresolved": []}
+        )
+        packet["contextNotice"] = deepcopy(snapshot.get("contextNotice", []))
+        if snapshot:
+            supplied = {row["id"] for row in snapshot["evidence"]}
+            packet["evidence"] = [
+                *snapshot["evidence"],
+                *[row for row in items if row["id"] not in supplied],
+            ]
+        options = entry.get("contextOptions", {})
+        skipped = set(options.get("skipEvidenceIds", []))
+        if not snapshot:
+            packet["evidence"] = [
+                row for row in packet["evidence"] if row["id"] not in skipped
+            ]
+        for row in items:
+            if row["id"] in skipped and not snapshot:
+                packet["contextNotice"].append(
+                    {
+                        "evidenceId": row["id"],
+                        "action": "user_skip",
+                        "originalBytes": len(_json(row).encode()),
+                        "retainedBytes": 0,
+                    }
+                )
+        if options.get("scope"):
+            packet["scopeLimit"] = options["scope"]
+        if options.get("contextScope"):
+            packet["contextScope"] = options["contextScope"]
+        instruction += CONTEXT_INSTRUCTION
+        payload = _json(packet)
+    elif (
+        not professional and len(payload.encode("utf-8")) > effective["maxContextBytes"]
+    ):
         raise ComputeError("业务流节点模型证据超过预算，未发送请求；请缩小节点结果范围")
     messages = [
         {"role": "system", "content": instruction},
@@ -213,6 +300,10 @@ def request_node_result(
     }
 
     def publish(status, **values):
+        if status == "requesting" and managed:
+            from apps.business_flows.model_requests import admit
+
+            admit(workflow, record["requestId"])
         record.update(
             status=status,
             durationMs=round((time.monotonic() - started) * 1000),
@@ -255,12 +346,257 @@ def request_node_result(
         checked.poll()
         window = provider.model_window(model)
         checked.poll()
-        tokens, truncated = prepare_context(
-            messages, messages[1], model, effective, window, False
+        if professional:
+            from .decision_budget import _deduplicate, dumps, REFERENCE_NOTE
+            from apps.business_flows.ledger import professional_ledger
+            from . import context as context_budget
+
+            packet["ledger"] = professional_ledger(workflow)
+            packet["contextNotice"] = [
+                "科学统计覆盖完整已读取数据；逐对象样本仅限明确展示范围，原件按输出引用保留。"
+            ]
+
+            def project(level):
+                value = (
+                    deepcopy(packet) if not level else _deduplicate(deepcopy(packet))
+                )
+                return [
+                    {
+                        "role": "system",
+                        "content": instruction + CONTEXT_INSTRUCTION + REFERENCE_NOTE,
+                    },
+                    {"role": "user", "content": dumps(value)},
+                ]
+
+            messages, management = prepare_projected_request(
+                project,
+                model,
+                effective,
+                window,
+                node_id=node_id,
+                checked=checked.poll,
+                levels=range(2),
+                notices=packet["contextNotice"],
+                measurements=TokenMeasurements(
+                    model, counter=context_budget.count_tokens
+                ),
+            )
+            record.update(
+                contextManagement=management, requestSha256=_digest(_json(messages))
+            )
+            tokens = management["afterTokens"]
+            entry["contextManagement"] = deepcopy(management)
+        elif managed:
+
+            def summarize(batch_messages, rows, batch_tokens, management):
+                nonlocal record
+                management = {
+                    **management,
+                    "evidenceIds": [row["id"] for row in rows],
+                    "noticeSummary": [
+                        "本批归纳证据：" + "、".join(row["id"] for row in rows)
+                    ],
+                }
+                parent = record
+                record = deepcopy(parent)
+                record.update(
+                    requestId=uuid4().hex,
+                    parentRequestId=parent["requestId"],
+                    purpose="context_summary",
+                    requested=False,
+                    usage={},
+                    inputTokens=batch_tokens,
+                    contextWindowTokens=window,
+                    contextManagement=management,
+                    requestSha256=_digest(_json(batch_messages)),
+                    outputLimit=min(effective["maxOutputTokens"], 1024),
+                )
+                cache_key = _digest(
+                    _json(
+                        {
+                            "messages": batch_messages,
+                            "model": model.model_id,
+                            "alias": alias,
+                            "baseUrl": model.base_url,
+                            "budget": management["inputBudgetTokens"],
+                            "outputLimit": record["outputLimit"],
+                        }
+                    )
+                )
+                try:
+                    checked.poll()
+                    cached = values.get("contextSummaryCache", {}).get(cache_key)
+                    if cached is not None:
+                        publish(
+                            "completed",
+                            purpose="context_summary_cache",
+                            cacheReused=True,
+                        )
+                        return deepcopy(cached)
+                    publish("requesting", requested=True)
+                    chunks, response_size = [], 0
+                    with closing(
+                        provider.stream(
+                            model,
+                            batch_messages,
+                            record["outputLimit"],
+                            checked,
+                            structured=True,
+                            thinking=False,
+                            temperature=0,
+                            top_p=live["topP"],
+                            reasoning_effort="low",
+                            on_usage=usage_received,
+                            on_thinking=thinking_received,
+                            monitor_guard=checked.poll,
+                        )
+                    ) as response:
+                        for chunk in response:
+                            response_size += len(chunk.encode())
+                            if response_size > MAX_RESPONSE_BYTES:
+                                raise ComputeError("上下文归纳响应超过安全上限")
+                            chunks.append(chunk)
+                            checked()
+                    answer = "".join(chunks)
+                    try:
+                        response_value = json.loads(answer)
+                        summaries = response_value["evidence"]
+                        if set(response_value) != {"evidence"} or not isinstance(
+                            summaries, list
+                        ):
+                            raise ValueError
+                        result = {
+                            row["id"]: _text(
+                                row["summary"], "summary", SUMMARY_CHARACTERS
+                            )
+                            for row in summaries
+                            if set(row) == {"id", "summary"}
+                        }
+                        if len(result) != len(summaries) or set(result) != {
+                            row["id"] for row in rows
+                        }:
+                            raise ValueError
+                    except (ValueError, TypeError, KeyError, ComputeError) as error:
+                        raise ContextReviewRequired(
+                            {
+                                **management,
+                                "evidence": evidence_sizes(items, node, direct_ids),
+                                "reason": "分批归纳未提供有效的完整编号与受限摘要",
+                            }
+                        ) from error
+                    checked.poll()
+                    if values:
+                        values.setdefault("contextSummaryCache", {})[cache_key] = (
+                            deepcopy(result)
+                        )
+                    publish(
+                        "completed",
+                        responseSha256=_digest(answer),
+                        responseBytes=response_size,
+                    )
+                    return result
+                except Exception as error:
+                    if isinstance(error, ComputeError) or (
+                        isinstance(error, provider.ModelError)
+                        and "达到本步时限" in str(error)
+                    ):
+                        waiting = ContextReviewRequired(
+                            {
+                                **management,
+                                "evidence": evidence_sizes(items, node, direct_ids),
+                                "reason": str(error),
+                            }
+                        )
+                        publish("context_waiting", error=str(waiting))
+                        raise waiting from error
+                    publish(
+                        "context_waiting"
+                        if isinstance(error, ContextReviewRequired)
+                        else "failed",
+                        error=str(error)[:500],
+                    )
+                    raise
+                finally:
+                    record = parent
+
+            direct_ids = (
+                {
+                    row["id"]
+                    for dependency in node.get("dependsOn", [])
+                    for row in values.get("nodes", {})
+                    .get(dependency, {})
+                    .get("outputs", {})
+                    .get("evidence", [])
+                }
+                | {"node-" + identity for identity in node.get("dependsOn", [])}
+                | set(snapshot.get("requiredEvidenceIds", []))
+            )
+            packet, messages, management = prepare_packet(
+                packet,
+                instruction,
+                model,
+                effective,
+                window,
+                direct_ids=direct_ids,
+                summarize=summarize,
+                checked=checked.poll,
+                locked=bool(snapshot),
+            )
+            if snapshot:
+                management["level"] = snapshot.get("contextManagement", {}).get(
+                    "level", management["level"]
+                )
+            available = {row["id"] for row in packet["evidence"]}
+            record.update(
+                contextManagement=management, requestSha256=_digest(_json(messages))
+            )
+            tokens = management["afterTokens"]
+            if (
+                entry
+                and role == "executor"
+                and (not context or context.get("purpose") == "data_preparation")
+            ):
+                values.setdefault("contextSnapshots", {})[record["requestId"]] = {
+                    key: deepcopy(packet[key])
+                    for key in ("evidence", "contextNotice", "ledger")
+                }
+                values["contextSnapshots"][record["requestId"]]["contextManagement"] = (
+                    deepcopy(management)
+                )
+                values["contextSnapshots"][record["requestId"]]["purpose"] = (
+                    context or {}
+                ).get("purpose", "node_execution")
+                values["contextSnapshots"][record["requestId"]][
+                    "requiredEvidenceIds"
+                ] = [
+                    row["id"]
+                    for row in evidence_sizes(items, node, direct_ids)
+                    if row["required"]
+                ]
+                entry["executionContextId"] = record["requestId"]
+            if entry:
+                entry["contextManagement"] = deepcopy(management)
+                if management["level"]:
+                    from apps.business_flows.state import emit
+
+                    emit(
+                        workflow,
+                        role,
+                        node_id,
+                        "context_compacted",
+                        f"本节点输入已整理 · 第{management['level']}档（{management['beforeTokens']} → {tokens} token）",
+                    )
+        else:
+            tokens, truncated = prepare_context(
+                messages, messages[1], model, effective, window, False
+            )
+            if truncated:
+                raise ComputeError("业务流节点模型不能丢弃实际证据，未发送请求")
+        record.update(
+            inputTokens=tokens,
+            contextWindowTokens=window,
+            inputLimit=input_budget(effective, window),
         )
-        if truncated:
-            raise ComputeError("业务流节点模型不能丢弃实际证据，未发送请求")
-        record.update(inputTokens=tokens, contextWindowTokens=window)
         checked.poll()
         publish("requesting", requested=True)
         chunks, size = [], 0
@@ -292,6 +628,13 @@ def request_node_result(
         checked.poll()
         publish("validating", responseSha256=_digest(raw), responseBytes=size)
         result = validate(raw, available)
+        if managed and packet.get("contextNotice") and "limitations" in result:
+            result["limitations"] = [
+                *result["limitations"],
+                "本节点仅使用实际发送的资料；输入整理和用户跳过范围见contextNotice（"
+                + "、".join(sorted({row["action"] for row in packet["contextNotice"]}))
+                + "），未读取被省略内容。",
+            ]
         checked.poll()
         publish(
             ("accepted" if result["decision"] == "accept" else "changes_requested")
@@ -302,7 +645,44 @@ def request_node_result(
             **result,
             "audit": deepcopy(record),
         }
+    except ContextReviewRequired as error:
+        if snapshot and managed:
+            sent_tokens = snapshot.get("contextManagement", {}).get("afterTokens", 0)
+            overhead = max(0, error.details["afterTokens"] - sent_tokens)
+            supplied_ids = {row["id"] for row in snapshot["evidence"]}
+            result_bytes = len(
+                _json([row for row in items if row["id"] not in supplied_ids]).encode()
+            )
+            error.details.update(
+                requiresExecutionRepack=True,
+                reviewContextBudget={
+                    "maxContextTokens": max(
+                        1, error.details["inputBudgetTokens"] - overhead - 256
+                    ),
+                    "maxContextBytes": max(
+                        1, effective["maxContextBytes"] - result_bytes - 1024
+                    ),
+                },
+            )
+        record["contextManagement"] = {
+            key: value for key, value in error.details.items() if key != "evidence"
+        }
+        publish("context_waiting", error=str(error))
+        raise
     except Exception as error:
+        from apps.business_flows.model_requests import ModelCallBudgetExceeded
+
+        if (managed or professional) and isinstance(error, ModelCallBudgetExceeded):
+            details = record.get("contextManagement", {"nodeId": node_id, "level": 0})
+            details = {
+                **details,
+                "reason": str(error),
+                "kind": "model_call_limit",
+                "requested": False,
+                "evidence": evidence_sizes(items, node, set()),
+            }
+            publish("context_waiting", error=str(error), requested=False)
+            raise ContextReviewRequired(details) from error
         # No raw prompt, partial private text or model-issued human approval leaks.
         publish(
             "failed", responseSha256=_digest(raw) if raw else "", error=str(error)[:500]

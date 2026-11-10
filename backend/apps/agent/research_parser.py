@@ -14,7 +14,7 @@ from django.core.exceptions import ValidationError
 from . import provider
 from .budgets import apply_budget
 from .config import registry
-from .context import prepare_context
+from .business_flow_context import ContextReviewRequired, prepare_auxiliary_request
 from .compute_intent_text import explicit_parameters
 
 SCENARIOS = {
@@ -145,13 +145,58 @@ def interpret(
     }
     feedback = ""
     for attempt in range(2):
-        tokens, truncated = prepare_context(
-            messages, current, model, p, budget_window, run.thinking_mode == "deep"
-        )
-        if truncated:
-            raise provider.ModelError(
-                "科研解析必须保留完整候选与用户问题，请缩小手选资料范围"
+        try:
+            messages, management = prepare_auxiliary_request(
+                messages,
+                model,
+                p,
+                budget_window,
+                node_id="research_intent",
+                checked=guard,
+                thinking=run.thinking_mode == "deep",
             )
+        except ContextReviewRequired as error:
+            hint = run.research_intent.get("_demoScenario") or (previous or {}).get(
+                "scenario"
+            )
+            scene = next(
+                (row for row in catalog["scenarios"] if row["scenario"] == hint),
+                catalog["scenarios"][0],
+            )
+            value = {
+                "action": "clarify",
+                "scenario": scene["scenario"],
+                "goal": run.prompt,
+                "message": "[预算] 必要资料整理后仍无法发送；请缩小资料选择或任务描述后重试，尚未启动任何计算。",
+                "inputs": {},
+                "parameters": {},
+                "questions": [
+                    {
+                        "key": "context_budget",
+                        "label": "请收紧本次资料或重新描述任务范围",
+                        "kind": "text",
+                        "required": True,
+                        "options": [],
+                    }
+                ],
+            }
+            audit["contextManagement"] = error.details
+            audit["status"] = "waiting_context"
+            on_request(audit)
+            event(
+                "research_parse",
+                json.dumps(
+                    {
+                        "status": "waiting_context",
+                        "category": "budget",
+                        "nextAction": value["message"],
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            return value, audit
+        tokens = management["afterTokens"]
+        audit["contextManagement"] = management
         guard()
         record = {
             "attempt": attempt + 1,
@@ -261,7 +306,7 @@ def interpret(
         return result, audit
 
 
-def validate(value, catalog, run) -> dict:
+def validate(value, catalog, run, *, context_wait=False) -> dict:
     if (
         not isinstance(value, dict)
         or not isinstance(value.get("action"), str)
@@ -388,7 +433,12 @@ def validate(value, catalog, run) -> dict:
                 raise ValidationError("资料选项不属于当前授权角色候选")
     if len({q["key"] for q in questions}) != len(questions):
         raise ValidationError("待澄清问题键重复")
-    required_roles = selected["inputs"] if value["action"] != "status" else {}
+    budget_clarification = context_wait and value["action"] == "clarify"
+    required_roles = (
+        selected["inputs"]
+        if value["action"] != "status" and not budget_clarification
+        else {}
+    )
     for role in required_roles:
         if role not in inputs and not any(q["key"] == role for q in questions):
             questions.append(
@@ -406,6 +456,7 @@ def validate(value, catalog, run) -> dict:
     for key, spec in specs.items():
         if (
             value["action"] != "status"
+            and not budget_clarification
             and spec.get("required")
             and key not in parameters
             and not any(q["key"] == key for q in questions)

@@ -14,7 +14,12 @@ from tests.integration.test_agent import setup_agent as setup_agent
 
 
 @pytest.fixture
-def logic(setup_agent):
+def logic(setup_agent, monkeypatch):
+    monkeypatch.setattr(provider, "model_window", lambda model: 32768)
+    monkeypatch.setattr(
+        "apps.agent.context.count_tokens",
+        lambda model, messages, *args: sum(len(row["content"]) for row in messages),
+    )
     env = setup_agent
     env["project"].code = "02"
     env["project"].save(update_fields=["code"])
@@ -38,6 +43,22 @@ def make_run(env, prompt="你好", **values):
 
 def selected_model(settings):
     settings.AGENT_MODELS[0].update(model_id="selected-live-model", qwen=True)
+
+
+def test_title_budget_overflow_preserves_existing_title_without_generating(
+    logic, settings, monkeypatch
+):
+    selected_model(settings)
+    run = make_run(logic)
+    monkeypatch.setattr("apps.agent.context.count_tokens", lambda *args: 100000)
+    monkeypatch.setattr(
+        provider,
+        "model_request",
+        lambda *args, **kwargs: pytest.fail("超限标题不能发送生成请求"),
+    )
+    assert not titles.generate_conversation_title(run.pk)
+    run.conversation.refresh_from_db()
+    assert run.conversation.title == "新会话"
 
 
 def response(title):

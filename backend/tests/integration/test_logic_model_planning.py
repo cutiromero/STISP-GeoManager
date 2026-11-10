@@ -84,6 +84,13 @@ def test_initial_dispatch_uses_one_model_decision_before_any_compute(generic):
     workflow.refresh_from_db()
     prepare_demo(workflow, generic["owner"], generic["policy"])
     workflow.refresh_from_db()
+    from apps.catalog.models import DataResource
+    from apps.compute.data import candidate
+
+    empty_faults = DataResource.objects.get(pk=workflow.plan["inputs"]["faults"])
+    fault_metadata = candidate(empty_faults, semantic_metadata=True)
+    assert fault_metadata["bounds"] == []
+    assert fault_metadata["fieldTypes"]["line_id"] == "string"
     workflow.plan["modelPlanning"] = True
     _save(workflow)
     from apps.agent.demo_workflow import decide

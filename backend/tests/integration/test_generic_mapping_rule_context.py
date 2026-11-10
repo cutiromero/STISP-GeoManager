@@ -19,9 +19,9 @@ from apps.agent import (
     provider,
 )
 from apps.agent.generic_mapping_context import MappingRuleContextError
+from apps.agent.business_flow_context import ContextReviewRequired
 from apps.agent.models import AgentWorkflow, WorkflowUpload
 from apps.catalog.models import DataResource
-from apps.compute.packages import ComputeError
 from apps.core.storage import table_data_path
 from apps.knowledge.models import KnowledgeEntry
 from apps.knowledge.trial_rules import SCENARIO
@@ -379,8 +379,12 @@ def test_initial_rule_read_runs_with_guard_discovery_scope(bound, monkeypatch):
 
 def test_rule_context_stays_subject_to_token_budget(bound, monkeypatch):
     monkeypatch.setattr(context, "count_tokens", lambda *args: 8000)
-    with pytest.raises(ComputeError, match="token"):
+    with pytest.raises(ContextReviewRequired) as waiting:
         infer(bound)
+    assert (
+        waiting.value.details["afterTokens"]
+        > waiting.value.details["inputBudgetTokens"]
+    )
     assert not bound["requests"]
 
 

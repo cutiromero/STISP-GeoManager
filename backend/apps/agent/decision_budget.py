@@ -13,6 +13,7 @@ from .demo_execution_evidence import (
     execution_fact_paths,
     project_execution_evidence,
 )
+from .business_flow_context import ContextReviewRequired
 
 
 MAX_LEVEL = 4
@@ -39,8 +40,10 @@ REFERENCE_NOTE = (
 )
 
 
-class BudgetReviewRequired(Exception):
-    pass
+class BudgetReviewRequired(ContextReviewRequired):
+    def __init__(self, message, details=None):
+        self.details = details or {}
+        Exception.__init__(self, message)
 
 
 def dumps(value):
@@ -755,8 +758,14 @@ def assert_visible_edits(edits, payload):
 
 def budget_review(stage, payload, error):
     stage["modelRequestPayload"] = copy.deepcopy(payload)
-    stage["contextBudgetReview"] = {"reason": str(error), "maxLevel": MAX_LEVEL}
+    stage["contextBudgetReview"] = {
+        **stage.get("contextManagement", {}),
+        "reason": str(error),
+        "maxLevel": 3,
+        "requested": False,
+    }
     raise BudgetReviewRequired(
         "必要证据在分级压缩后仍超出模型输入预算，未提交本阶段计算。"
-        "请调整模型窗口后继续分析，或缩小资料范围重新发起；完整证据和请求审计已保留。"
+        "请收紧资料范围或调整本次生成预留后重新分析；完整证据和请求审计已保留。",
+        stage["contextBudgetReview"],
     )

@@ -1,7 +1,6 @@
 """Execute declared nodes, independently review, then honor human gates."""
 
 from copy import deepcopy
-import json
 import time
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -18,11 +17,13 @@ from apps.projects.context import project_scope
 from .state import binding, emit, parent_run, persist, state
 from .runtime import authorize
 from .state import WorkflowControlChanged
+from apps.agent.business_flow_context import ContextReviewRequired
+from apps.agent.business_flow_model import actual_context
 
 # Configuration: no token-by-token full state writes or scientific file rereads.
 PROGRESS_SECONDS = 0.6
-MAX_EVIDENCE_BYTES = 96 * 1024
 MAX_MODEL_CALLS = 256
+MAX_REVIEW_REPACKS = 3
 
 
 def cancel_tasks(user, workflow):
@@ -240,12 +241,24 @@ def input_evidence(workflow, user, policy, node):
                 specs[logical_role(role, specs)]["label"]
                 + "缺少业务流要求的字段，不能因复用资料跳过角色规范"
             )
-        result.append(deepcopy(cached[cache_key]))
+        row = deepcopy(cached[cache_key])
+        row["required"] = specs[logical_role(role, specs)].get(
+            "required", False
+        ) or any(item["id"] == row["id"] and item.get("required") for item in result)
+        result.append(row)
     for dependency in node["dependsOn"]:
         previous = values["nodes"][dependency]
-        result.extend(
-            resolve_evidence(workflow, previous.get("outputs", {}).get("evidence", []))
+        dependency_node = next(
+            row
+            for row in binding(workflow)["definitionSnapshot"]["nodes"]
+            if row["id"] == dependency
         )
+        if dependency_node["kind"] == "operator":
+            result.extend(
+                resolve_evidence(
+                    workflow, previous.get("outputs", {}).get("evidence", [])
+                )
+            )
         if previous.get("executor", {}).get("summary"):
             result.append(
                 {
@@ -259,13 +272,12 @@ def input_evidence(workflow, user, policy, node):
                 }
             )
     result = list({item["id"]: item for item in result}.values())
-    if len(json.dumps(result, ensure_ascii=False).encode()) > MAX_EVIDENCE_BYTES:
-        raise ComputeError("节点实际证据超过上下文边界，请将流程拆分为更小节点")
     if not result:
         result = [
             {
                 "id": "frozen-plan",
                 "kind": "plan",
+                "required": True,
                 "title": "已发布的流程与执行请求",
                 "result": {
                     "definitionHash": binding(workflow)["definitionHash"],
@@ -573,6 +585,7 @@ def advance(workflow_id):
                         return
                 elif (
                     node["kind"] == "agent"
+                    or item.get("contextReexecute")
                     or item.get("feedback")
                     and node["kind"] in {"human", "result"}
                 ):
@@ -612,7 +625,40 @@ def advance(workflow_id):
                     result, status="succeeded", answer=result["summary"]
                 )
                 if not item["outputs"].get("evidence"):
-                    item["outputs"] = {"evidence": stash_evidence(workflow, evidence)}
+                    item["outputs"] = {
+                        "evidence": stash_evidence(
+                            workflow,
+                            [
+                                {
+                                    "id": "node-" + node["id"],
+                                    "kind": "analysis",
+                                    "title": node["title"],
+                                    "result": {
+                                        key: result.get(key)
+                                        for key in (
+                                            "summary",
+                                            "findings",
+                                            "limitations",
+                                            "evidenceIds",
+                                        )
+                                    },
+                                }
+                            ],
+                        )
+                    }
+                if not actual_context(workflow, node["id"]):
+                    snapshot_id = (
+                        result.get("audit", {}).get("requestId")
+                        or f"local-{node['id']}-{item['attempt']}"
+                    )
+                    value.setdefault("contextSnapshots", {})[snapshot_id] = {
+                        "evidence": deepcopy(evidence),
+                        "contextNotice": [],
+                        "purpose": "operator"
+                        if node["kind"] == "operator"
+                        else "node_execution",
+                    }
+                    item["executionContextId"] = snapshot_id
                 item["status"] = "reviewing" if node["review"]["ai"] else "executed"
                 emit(
                     workflow, "executor", node["id"], "node_executed", result["summary"]
@@ -621,7 +667,10 @@ def advance(workflow_id):
                 from apps.agent.business_flow_review import review_node
 
                 review_evidence = [
-                    *resolve_evidence(workflow, item["outputs"]["evidence"]),
+                    *actual_context(workflow, node["id"]).get(
+                        "evidence",
+                        resolve_evidence(workflow, item["outputs"]["evidence"]),
+                    ),
                     {
                         "id": "execution-result",
                         "kind": "analysis",
@@ -718,11 +767,75 @@ def advance(workflow_id):
                 )
                 return
             item["status"] = "succeeded"
+            from .ledger import complete_node
+
+            complete_node(workflow, node)
             workflow.status, workflow.detail = (
                 "queued",
                 node["title"] + "已完成，继续下一节点",
             )
             emit(workflow, "system", node["id"], "node_completed", workflow.detail)
+        except ContextReviewRequired as error:
+            workflow.current_step = error.details["nodeId"]
+            current_item = state(workflow)["nodes"][workflow.current_step]
+            if (
+                error.details.get("requiresExecutionRepack")
+                and current_item.get("reviewRepacks", 0) < MAX_REVIEW_REPACKS
+            ):
+                current_item["reviewRepacks"] = current_item.get("reviewRepacks", 0) + 1
+                current_item["reviewContextBudget"] = error.details[
+                    "reviewContextBudget"
+                ]
+                current_item["contextPreviousExecutor"] = deepcopy(
+                    current_item["executor"]
+                )
+                current_item["executor"] = {"status": "pending"}
+                current_item["outputs"] = {}
+                current_item["status"] = "executing"
+                current_item["contextReexecute"] = True
+                current_item.pop("executionContextId", None)
+                if error.details.get("preparationRole"):
+                    preparation = next(
+                        row
+                        for row in workflow.plan["inputAdaptations"]
+                        if row["role"] == error.details["preparationRole"]
+                    )
+                    if preparation.pop("contextDraft", None):
+                        preparation["scriptAttempt"] -= 1
+                workflow.status, workflow.detail = (
+                    "queued",
+                    "审核窗口较小，将整理后重新执行当前节点，再核对同一实际输入",
+                )
+                try:
+                    emit(
+                        workflow,
+                        "system",
+                        workflow.current_step,
+                        "review_context_repack",
+                        workflow.detail,
+                    )
+                except WorkflowControlChanged:
+                    pass
+                return
+            current_item["contextRecovery"] = deepcopy(error.details)
+            current_item["contextManagement"] = {
+                key: value
+                for key, value in error.details.items()
+                if key not in {"evidence", "reviewContextBudget"}
+            }
+            current_item["status"] = "waiting_context"
+            workflow.status, workflow.detail = "waiting_approval", str(error)
+            try:
+                emit(
+                    workflow,
+                    "system",
+                    workflow.current_step,
+                    "context_required",
+                    workflow.detail,
+                    data=error.details,
+                )
+            except WorkflowControlChanged:
+                return
         except WorkflowControlChanged:
             return
         except WorkflowPaused:

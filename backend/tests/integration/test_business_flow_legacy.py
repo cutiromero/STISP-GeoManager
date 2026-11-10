@@ -140,7 +140,19 @@ def review_stage(env, workflow, stage, initial, producer):
             env["user"],
             default_policy(),
             stage,
-            [{"counts": {"actualIssues": 8}, "source": "真实检查结果"}],
+            [
+                {
+                    "outputId": 17,
+                    "taskId": "fixture-check",
+                    "key": "statistics",
+                    "kind": "table",
+                    "checksum": "fixture-source",
+                    "rows": [{"actualIssues": 8}],
+                    "rowCount": 1,
+                    "counts": {"actualIssues": 8},
+                    "source": "真实检查结果",
+                }
+            ],
             initial,
             lambda: None,
             producer,
@@ -468,3 +480,198 @@ def test_recovered_legacy_rejection_only_uses_remaining_revision_budget(
     assert state(workflow)["nodes"]["apply"]["attempt"] == 2
     assert state(workflow)["nodes"]["apply"]["reviewer"]["status"] == "rejected"
     assert_no_human_approval(workflow)
+
+
+@pytest.mark.efficiency
+def test_final_review_uses_complete_report_facts_quality_and_frozen_approval_scope(
+    legacy_flow,
+):
+    env = legacy_flow
+    workflow = env["create"]()
+    quality = {
+        "status": "needs_review",
+        "issues": ["待专家复核"],
+        "metrics": {"count": 20},
+    }
+
+    def output(identity, task, key, rows):
+        return {
+            "outputId": identity,
+            "taskId": task,
+            "key": key,
+            "kind": "table",
+            "checksum": f"sha-{identity}",
+            "rows": rows,
+            "rowCount": len(rows),
+            "scope": "all",
+            "metadata": {"qualityCheck": deepcopy(quality)},
+        }
+
+    initial = output(
+        1,
+        "check-task",
+        "issues",
+        [
+            {"rule_id": "R1", "status": "suggested", "feature_id": str(i)}
+            for i in range(20)
+        ],
+    )
+    changes = output(
+        2,
+        "apply-task",
+        "changes",
+        [
+            {
+                "element": "lithology",
+                "rule_id": "R1",
+                "action": "downweight",
+                "actual_changed": "1",
+            }
+            for _ in range(11)
+        ],
+    )
+    recheck = output(
+        3,
+        "recheck-task",
+        "issues",
+        [
+            {"rule_id": "R1", "status": "retained", "feature_id": str(i)}
+            for i in range(9)
+        ],
+    )
+    workflow.plan["stages"] = [
+        {"name": "check", "taskId": "check-task", "results": [initial]},
+        {"name": "apply", "taskId": "apply-task", "results": [changes]},
+        {"name": "recheck", "taskId": "recheck-task", "results": [recheck]},
+    ]
+    workflow.plan["modificationReview"] = {
+        "proposalHash": "frozen-proposal",
+        "approvedSuggestionIds": ["selected"],
+        "suggestions": [
+            {
+                "id": "selected",
+                "element": "lithology",
+                "ruleId": "R1",
+                "action": "downweight",
+                "featureId": "object-1",
+                "status": "suggested",
+                "ruleRefs": [],
+                "observations": {},
+            }
+        ],
+    }
+    results = [initial, changes, recheck]
+    originals = deepcopy((workflow.plan, workflow.evidence, results))
+    signature = digest(
+        {"decision": {"judgement": "保留待复核项"}, "edits": [], "evidence": results}
+    )
+    packet = legacy.compact_review_packet(
+        {"judgement": "保留待复核项"},
+        [],
+        results,
+        workflow=workflow,
+        node_id="finish",
+        candidate_digest=signature,
+    )
+    facts = packet["verifiedReportFacts"]
+    assert facts["initialIssueCount"] == 20
+    assert facts["recheckRemainingIssueCount"] == 9
+    assert facts["executedDispositionCount"] == 11
+    assert facts["executedActions"]["downweight"] == 11
+    assert packet["modificationReview"]["approvedCount"] == 1
+    assert packet["modificationReview"]["proposalHash"] == "frozen-proposal"
+    assert all(
+        item["qualityCheck"]["status"] == "needs_review"
+        for item in packet["qualityEvidence"]
+    )
+    assert packet["candidateDigest"] == signature
+    assert (workflow.plan, workflow.evidence, results) == originals
+    assert len(json.dumps(packet).encode()) < 20000
+
+
+def test_professional_review_budget_wait_retries_without_approving_science(
+    legacy_flow, monkeypatch
+):
+    from apps.agent.business_flow_context import ContextReviewRequired
+    from apps.agent.demo_workflow import _pause
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = env["create"]()
+    stage = workflow.plan["stages"][0]
+    calls = provider_sequence(monkeypatch, [verdict()])
+    monkeypatch.setattr("apps.agent.context.count_tokens", lambda *args: 50000)
+    with project_scope(env["scope"]):
+        with pytest.raises(ContextReviewRequired) as waiting:
+            review_stage(env, workflow, stage, (stage["decision"], []), Mock())
+        assert not calls
+        stage["contextBudgetReview"] = waiting.value.details
+        _pause(workflow, stage, str(waiting.value))
+        legacy.synchronize(workflow.pk)
+        workflow.refresh_from_db()
+        public = runtime.serialize_run(env["user"], workflow)
+        item = next(row for row in public["nodes"] if row["nodeId"] == "apply")
+        assert item["status"] == "waiting_context"
+        assert (
+            item["contextRecovery"]["afterTokens"]
+            > item["contextRecovery"]["inputBudgetTokens"]
+        )
+        assert workflow.steps.filter(
+            kind="workflow_diagnostic", error_code="budget"
+        ).exists()
+        value = {
+            "nodeId": "apply",
+            "decision": "retry_context",
+            "revision": state(workflow)["revision"],
+            "idempotencyKey": uuid4().hex,
+        }
+        with pytest.raises(ComputeError, match="不能跳过"):
+            runtime.decide_flow(
+                env["user"], workflow, {**value, "skipEvidenceIds": ["node-result"]}
+            )
+        current = runtime.decide_flow(env["user"], workflow, value)
+        assert current.status == "queued"
+        assert not stage.get("modificationsApproval")
+        assert state(current)["nodes"]["apply"]["human"]["status"] == "pending"
+        assert runtime.decide_flow(env["user"], current, value).pk == current.pk
+
+
+def test_approval_statistics_preserves_all_dimensions_areas_pixels_and_approval_binding():
+    from apps.agent.geology_multi_results import approval_statistics
+
+    original = {
+        "proposalHash": "original",
+        "approvalScopeDigest": "approved-members",
+        "approvedCount": 9,
+        "suggestionCount": 12,
+        "sourceOutputs": [{"outputId": 3}],
+        "groups": [
+            {
+                "element": "alteration",
+                "ruleId": "A-1",
+                "action": "exclude",
+                "mineral": mineral,
+                "rockGroup": "碳酸盐岩",
+                "boundary": "inside",
+                "count": 2,
+                "approvedCount": approved,
+                "areaM2": 10,
+                "pixelCount": 4,
+            }
+            for mineral, approved in [("方解石", 2), ("方解石", 1), ("绿泥石", 0)]
+        ],
+        "suggestions": [{"id": "not_reaudited"}],
+    }
+    saved = deepcopy(original)
+    value = approval_statistics(original)
+    assert original == saved
+    assert (
+        value["proposalHash"] == "original"
+        and value["approvalScopeDigest"] == "approved-members"
+    )
+    assert value["sourceOutputs"] == original["sourceOutputs"]
+    assert len(value["groups"]) == 2
+    assert value["groups"][0]["count"] == 4 and value["groups"][0]["approvedCount"] == 3
+    assert value["groups"][0]["areaM2"] == 20 and value["groups"][0]["pixelCount"] == 8
+    assert sum(row["pixelCount"] for row in value["groups"]) == 12
+    assert "suggestions" not in value

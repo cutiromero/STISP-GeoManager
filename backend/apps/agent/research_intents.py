@@ -359,7 +359,9 @@ def process(run, user, policy, guard, event):
         validator=checked_value,
     )
     on_request(audit)
-    if not audit.get("attempts") or audit["attempts"][-1].get("status") != "accepted":
+    if audit.get("status") == "waiting_context":
+        value = validate(value, catalog, run, context_wait=True)
+    elif not audit.get("attempts") or audit["attempts"][-1].get("status") != "accepted":
         value = checked_value(value)
     if value["action"] == "ordinary":
         if run.knowledge_selection != selection_before:

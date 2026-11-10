@@ -1,0 +1,43 @@
+{
+  "GET /api/business-flows/runs/{workflowId}/": {
+    "200": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "flowId": 2,
+      "versionId": 21,
+      "projectId": 3,
+      "conversationId": 31,
+      "runId": 41,
+      "name": "资料摘要",
+      "goal": "按实际可见资料形成摘要",
+      "status": "waiting_approval",
+      "currentNode": "analyse",
+      "revision": 7,
+      "definitionSnapshot": {
+        "schemaVersion": 1,
+        "adapter": "research_flow",
+        "inputRequirements": [],
+        "nodes": [{
+          "id": "analyse", "title": "分析资料", "description": "保留引用和局限",
+          "kind": "agent", "dependsOn": [], "dataRoles": [],
+          "instruction": "基于实际证据形成结论",
+          "review": {"ai": false, "human": false, "maxRevisions": 0}
+        }],
+        "outputRequirements": ["资料摘要"]
+      },
+      "nodes": [{
+        "nodeId": "analyse", "status": "waiting_context", "attempt": 1,
+        "executor": {"status": "context_waiting"},
+        "reviewer": {"status": "not_required"},
+        "human": {"required": false, "status": "not_required", "reason": ""},
+        "outputs": {},
+        "contextManagement": {"nodeId": "analyse", "level": 3, "beforeTokens": 40000, "afterTokens": 33000, "inputBudgetTokens": 24000, "measurementCount": 7, "evidenceIds": ["optional"]},
+        "contextRecovery": {"nodeId": "analyse", "level": 3, "beforeTokens": 40000, "afterTokens": 33000, "evidence": [{"id": "optional", "title": "补充资料", "bytes": 18000, "required": false}]}
+      }],
+      "events": [{"id": 7, "nodeId": "analyse", "actor": "system", "kind": "context_required", "status": "waiting_approval", "message": "本节点输入整理至第3档仍无法发送，可缩小范围、跳过非必需证据或停止", "createdAt": "2026-11-10T00:00:00Z"}],
+      "resultResourceIds": [],
+      "resultOutputIds": [],
+      "createdAt": "2026-11-10T00:00:00Z",
+      "updatedAt": "2026-11-10T00:01:00Z"
+    }
+  }
+}

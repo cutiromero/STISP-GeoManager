@@ -1,20 +1,24 @@
 """Budget the complete model request with the serving model's tokenizer."""
 
 from .provider import ModelError, count_tokens
+from .business_flow_context import input_budget
 
 
 class InputBudgetError(ModelError):
     pass
 
 
-def prepare_context(messages, current, model, policy, window, thinking):
-    output = policy["maxOutputTokens"]
-    limit = min(policy["maxContextTokens"], window - output - 256)
+def prepare_context(
+    messages, current, model, policy, window, thinking, *, measurements=None
+):
+    limit = input_budget(policy, window)
     if limit < 256:
-        raise ModelError("生成上限占满模型窗口，请降低生成上限或提高模型服务窗口")
+        raise InputBudgetError("生成预留后没有足够输入空间，请调整本次生成额度后重试")
     truncated = False
 
     def measure():
+        if measurements is not None:
+            return measurements.measure(messages)
         return count_tokens(model, messages, thinking, policy["reasoningEffort"])
 
     def text_bytes():

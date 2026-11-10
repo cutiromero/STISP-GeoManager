@@ -15,7 +15,7 @@ from apps.compute.packages import ComputeError
 
 from . import provider
 from .config import registry
-from .context import prepare_context
+from .business_flow_context import prepare_auxiliary_request
 from .demo_decisions import _response_text
 from .generic_mapping_context import MappingRuleContext, shown_samples
 from .model_activity import WorkflowModelActivity
@@ -195,13 +195,16 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
         for attempt in range(1, 3):
             try:
                 guard.poll()
-                _, truncated = prepare_context(
-                    messages, messages[1], model, policy, window, thinking
+                messages, management = prepare_auxiliary_request(
+                    messages,
+                    model,
+                    policy,
+                    window,
+                    node_id="inputs",
+                    checked=guard.poll,
+                    thinking=thinking,
                 )
-                if truncated:
-                    raise provider.ModelError(
-                        "字段判断须保留完整资料，请缩小资料范围后重试"
-                    )
+                workflow.plan["mappingContextManagement"] = management
                 guard.poll()
                 chunks, output_chars = [], 0
                 progress("requesting", attempt=attempt, outputChars=0)

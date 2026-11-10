@@ -260,6 +260,7 @@ def test_real_http_execution_then_review_then_repair_has_fresh_context(
         ]
         monkeypatch.setattr(execution.provider, "model_window", REAL_MODEL_WINDOW)
         monkeypatch.setattr("apps.agent.context.count_tokens", count_tokens)
+        monkeypatch.setattr(execution.provider, "count_tokens", count_tokens)
         initial = run(env)
         with project_scope(env["scope"]):
             verdict = review.review_node(

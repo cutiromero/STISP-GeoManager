@@ -27,6 +27,7 @@ from apps.knowledge.services import search_entries, visible_entries
 from apps.projects.context import project_scope
 from .models import AgentWorkflow
 from .model_guard import ModelStreamGuard
+from .business_flow_context import ContextReviewRequired
 from .model_activity import WorkflowModelActivity
 from .config import registry
 from .geology_reference import is_reference_resource
@@ -745,6 +746,10 @@ def confirm_demo(
         raise ComputeError("当前阶段不接受字段对应", 400)
     if workflow.status != "waiting_approval" or workflow.cancel_requested:
         raise ComputeError("此场景当前不能确认执行", 409)
+    if workflow.plan.get("phase") == "budget_exhausted":
+        raise ComputeError(
+            "当前不能确认科研结果：模型请求额度不足，请调整任务范围后重新发起", 409
+        )
     if plan_hash != workflow.plan_hash or _state_hash(workflow.plan) != plan_hash:
         raise ComputeError("场景计划已变化，请刷新后确认", 409)
     authorize_demo(workflow, user, p)
@@ -773,6 +778,11 @@ def confirm_demo(
     elif workflow.plan["phase"] == "review_results":
         stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
         budget_retry = bool(stage.get("contextBudgetReview"))
+        if stage.get("contextBudgetReview", {}).get("kind") == "model_call_limit":
+            raise ComputeError(
+                "模型请求额度已用完，请调整任务范围后重新发起；不能通过确认重置计数",
+                409,
+            )
         if budget_retry:
             stage.setdefault("modelBudgetHistory", []).append(
                 {
@@ -858,6 +868,15 @@ def _pause(workflow, stage, reason, outputs=None) -> None:
     )
     workflow.status, workflow.detail = "waiting_approval", reason[:300]
     stage["status"] = "needs_review"
+    if stage.get("contextBudgetReview"):
+        from .workflow_diagnostics import record_issue
+
+        stage["contextBudgetReview"].setdefault(
+            "nodeId", "finish" if stage["identifier"] == "finish" else stage["name"]
+        )
+        stage["contextBudgetReview"].setdefault("level", 0)
+        stage["contextBudgetReview"].setdefault("evidence", [])
+        record_issue(workflow, "budget", reason, waiting=True)
     _save(workflow)
     checkpoint(workflow, "review_results", {"stage": stage["name"], "reason": reason})
 
@@ -931,7 +950,16 @@ def _exhaust_model_budget(workflow, stage, minimum_remaining):
         ],
     }
     workflow.plan.update(phase="budget_exhausted", budgetExhausted=summary)
-    workflow.status = "failed"
+    stage["contextBudgetReview"] = {
+        "nodeId": "finish" if stage["identifier"] == "finish" else stage["name"],
+        "level": 0,
+        "evidence": [],
+        "kind": "model_call_limit",
+        "reason": "模型请求额度不足",
+        "requested": False,
+        **summary,
+    }
+    workflow.status = "waiting_approval"
     workflow.detail = (
         f"模型预算不足：请求已用{calls}/{workflow.max_iterations}次，"
         f"阶段判断{workflow.iteration}/{workflow.max_iterations}次，"
@@ -939,6 +967,9 @@ def _exhaust_model_budget(workflow, stage, minimum_remaining):
         f"{summary['completedBatches']}个批次，结果与审计已保留。"
         "请缩小资料范围，或由管理员提高允许上限后，调整并重新发起任务。"
     )[:300]
+    from .workflow_diagnostics import record_issue
+
+    record_issue(workflow, "budget", workflow.detail, waiting=True)
     _save(workflow)
     checkpoint(workflow, "budget_exhausted", summary)
 
@@ -1114,10 +1145,16 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
     if workflow.workflow_type in MULTI_FAMILY:
         from .geology_multi import VISIBLE_OUTPUTS
 
+        downstream_keys = {
+            reference.split("/", 1)[1]
+            for downstream in workflow.plan["stages"]
+            for reference in downstream.get("bindings", {}).values()
+            if reference.startswith(stage["name"] + "/")
+        }
         importable = [
             output
             for output in outputs
-            if output.key in VISIBLE_OUTPUTS.get(stage["name"], set())
+            if output.key in VISIBLE_OUTPUTS.get(stage["name"], set()) | downstream_keys
         ]
     else:
         importable = outputs
@@ -1165,6 +1202,17 @@ def _collect_stage(workflow, user, p, stage, task) -> bool:
     internal_resource_ids = set()
     for output, record in records:
         resource = resolve_workflow_resource(user, p, record.resource_id, workflow)
+        if (
+            workflow.workflow_type in MULTI_FAMILY
+            and output.key not in VISIBLE_OUTPUTS.get(stage["name"], set())
+        ):
+            internal_resource_ids.add(resource.id)
+            resource.source = f"workflow-working:{workflow.id}:calculation"
+            resource.owner_only = True
+            resource.maintainer = user
+            resource.save(
+                update_fields=["source", "owner_only", "maintainer", "updated_at"]
+            )
         if (
             workflow.workflow_type in MULTI_FAMILY
             and stage["name"] == "apply"
@@ -1475,9 +1523,7 @@ def advance_demo(workflow_id) -> None:
                     guard,
                 )
 
-                # Reserve the decision count before contacting the configured model.
-                if not recovering_response:
-                    workflow.iteration += 1
+                decision_reserved = False
                 workflow.status = "running"
                 _save(workflow)
                 results = []
@@ -1634,6 +1680,9 @@ def advance_demo(workflow_id) -> None:
                             > workflow.max_iterations
                         ):
                             raise ModelBudgetExhausted(remaining)
+                    if not recovering_response:
+                        workflow.iteration += 1
+                        decision_reserved = True
                     decision, edits = decide(
                         workflow,
                         user,
@@ -1697,7 +1746,11 @@ def advance_demo(workflow_id) -> None:
                 except BudgetReviewRequired as exc:
                     activity.fail()
                     guard.poll()
-                    if not _has_model_progress(stage) and not recovering_response:
+                    if (
+                        decision_reserved
+                        and not _has_model_progress(stage)
+                        and not recovering_response
+                    ):
                         workflow.iteration -= 1
                     if stage.get("contextBudgetReview", {}).get("kind") == (
                         "model_call_limit"
@@ -1717,13 +1770,21 @@ def advance_demo(workflow_id) -> None:
                 except ModelBudgetExhausted as exc:
                     activity.fail()
                     guard.poll()
-                    if not _has_model_progress(stage) and not recovering_response:
+                    if (
+                        decision_reserved
+                        and not _has_model_progress(stage)
+                        and not recovering_response
+                    ):
                         workflow.iteration -= 1
                     _exhaust_model_budget(workflow, stage, exc.minimum_remaining)
                     return
                 except Exception:
                     activity.fail()
-                    if not _has_model_progress(stage) and not recovering_response:
+                    if (
+                        decision_reserved
+                        and not _has_model_progress(stage)
+                        and not recovering_response
+                    ):
                         workflow.iteration -= 1
                     raise
                 stage.update(decision=decision, edits=edits)
@@ -1896,8 +1957,39 @@ def advance_demo(workflow_id) -> None:
         except WorkflowPaused:
             _save(workflow, acknowledge_pause=True)
             return
+        except ContextReviewRequired as exc:
+            from .workflow_diagnostics import record_issue
+
+            stage = (
+                workflow.plan.get("finalStage")
+                if workflow.current_step == "final_analysis"
+                else next(
+                    (
+                        row
+                        for row in workflow.plan.get("stages", [])
+                        if row["name"] == workflow.current_step
+                    ),
+                    None,
+                )
+            )
+            if stage is not None:
+                stage["contextBudgetReview"] = {
+                    **exc.details,
+                    "reason": str(exc),
+                    "requested": False,
+                }
+                if stage not in workflow.plan["stages"]:
+                    workflow.plan["stages"].append(stage)
+                _pause(workflow, stage, str(exc))
+            else:
+                workflow.status = "waiting_approval"
+                record_issue(workflow, "budget", str(exc), waiting=True)
+                _save(workflow)
         except PermissionDenied as exc:
             workflow.status, workflow.detail = "interrupted", str(exc)[:300]
+            from .workflow_diagnostics import record_issue
+
+            record_issue(workflow, "permission", str(exc))
             _save(workflow, acknowledge_pause=True)
         except (ComputeError, ValidationError, ModelError, NonGeoAnalysisError) as exc:
             cancelled = AgentWorkflow.objects.filter(
@@ -1905,4 +1997,8 @@ def advance_demo(workflow_id) -> None:
             ).exists()
             workflow.status = "cancelled" if cancelled else "failed"
             workflow.detail = "已停止场景后续处理" if cancelled else str(exc)[:300]
+            if not cancelled:
+                from .workflow_diagnostics import category, record_issue
+
+                record_issue(workflow, category(exc), str(exc))
             _save(workflow, acknowledge_pause=True)

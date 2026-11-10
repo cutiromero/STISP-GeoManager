@@ -5,6 +5,10 @@ from apps.compute.packages import ComputeError
 MAX_MODEL_CALLS = 256
 
 
+class ModelCallBudgetExceeded(ComputeError):
+    pass
+
+
 def admit(workflow, request_id, *, maximum=MAX_MODEL_CALLS):
     if not isinstance(request_id, str) or not request_id:
         raise ComputeError("模型请求缺少实际编号")
@@ -20,7 +24,9 @@ def admit(workflow, request_id, *, maximum=MAX_MODEL_CALLS):
         if request_id in calls:
             return
         if len(calls) + spent >= min(maximum, workflow.max_iterations):
-            raise ComputeError("业务流已达到本次模型请求额度，已保留当前结果")
+            raise ModelCallBudgetExceeded(
+                "业务流已达到本次模型请求额度，已保留当前结果"
+            )
         calls.append(request_id)
     else:
         calls = workflow.plan.setdefault("inputScriptRequestIds", [])
@@ -28,6 +34,6 @@ def admit(workflow, request_id, *, maximum=MAX_MODEL_CALLS):
             return
         spent = workflow.plan.get("actualModelCallCount", 0)
         if spent >= min(maximum, workflow.max_iterations):
-            raise ComputeError("任务已达到本次模型请求额度，已保留当前结果")
+            raise ModelCallBudgetExceeded("任务已达到本次模型请求额度，已保留当前结果")
         calls.append(request_id)
         workflow.plan["actualModelCallCount"] = spent + 1

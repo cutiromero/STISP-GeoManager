@@ -268,7 +268,10 @@ def test_repair_reserves_remaining_planned_batches_and_future_stages_without_sen
     monkeypatch.setattr("apps.agent.demo_decisions.provider.stream", invalid_first)
     advance_demo(workflow.id)
     workflow.refresh_from_db()
-    assert workflow.status == "failed" and workflow.plan["phase"] == "budget_exhausted"
+    assert (
+        workflow.status == "waiting_approval"
+        and workflow.plan["phase"] == "budget_exhausted"
+    )
     assert len(requests) == 1 and workflow.plan["actualModelCallCount"] == 2
     summary = workflow.plan["budgetExhausted"]
     assert summary["minimumRemainingRequests"] == 9 and summary["limit"] == 10

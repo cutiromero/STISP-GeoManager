@@ -12,7 +12,7 @@ from apps.audit.service import log_operation
 
 from . import provider
 from .config import registry
-from .context import prepare_context
+from .business_flow_context import ContextReviewRequired, prepare_auxiliary_request
 from .demo_decisions import _response_text
 from .geology_generic import GEOMETRY, LABELS, ROLES
 from .model_guard import ModelStreamGuard
@@ -252,13 +252,15 @@ def recognize_roles(
             guard.poll()
             for attempt in range(2):
                 request_thinking = thinking and attempt == 0
-                _, truncated = prepare_context(
-                    messages, messages[1], model, policy, window, request_thinking
+                messages, management = prepare_auxiliary_request(
+                    messages,
+                    model,
+                    policy,
+                    window,
+                    node_id="roles",
+                    checked=guard.poll,
+                    thinking=request_thinking,
                 )
-                if truncated:
-                    raise provider.ModelError(
-                        "角色识别须保留完整资料，请缩小资料范围后重试"
-                    )
                 guard.poll()
                 raw = _response_text(
                     "".join(
@@ -308,7 +310,7 @@ def recognize_roles(
                 else:
                     source = "model"
                     break
-        except (provider.ModelError, ComputeError) as exc:
+        except (provider.ModelError, ComputeError, ContextReviewRequired) as exc:
             guard.poll()
             failure = str(exc)
             result = None
@@ -329,7 +331,11 @@ def recognize_roles(
                     "uploadId": str(upload.id),
                     "resourceId": upload.resource_id,
                     "role": role,
-                    "reason": ("模型未完成角色判断，请核对；" if failure else "")
+                    "reason": (
+                        "模型未完成角色判断（" + failure[:120] + "），请手动核对；"
+                        if failure
+                        else ""
+                    )
                     + "按文件名、类型和几何判断"
                     + ("；无法唯一确定角色，请手动选择" if role is None else ""),
                 }

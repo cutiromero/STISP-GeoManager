@@ -96,7 +96,7 @@ def test_full_preflight_stops_before_first_batch_and_rejects_old_confirmation(pl
     ):
         advance_demo(workflow.id)
     workflow.refresh_from_db()
-    assert workflow.status == "failed", workflow.detail
+    assert workflow.status == "waiting_approval", workflow.detail
     assert workflow.plan["phase"] == "budget_exhausted"
     summary = workflow.plan["budgetExhausted"]
     stage = workflow.plan["stages"][1]
@@ -257,7 +257,10 @@ def test_request_cap_failure_preserves_unsent_attempt_without_confirmation_loop(
     ):
         advance_demo(workflow.id)
     workflow.refresh_from_db()
-    assert workflow.status == "failed" and workflow.plan["phase"] == "budget_exhausted"
+    assert (
+        workflow.status == "waiting_approval"
+        and workflow.plan["phase"] == "budget_exhausted"
+    )
     assert workflow.iteration == 0
     assert workflow.plan["actualModelCallCount"] == workflow.max_iterations
     attempt = workflow.plan["stages"][0]["modelAttempts"][-1]

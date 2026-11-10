@@ -9,6 +9,7 @@ from django.core.exceptions import PermissionDenied
 
 from apps.agent.policy import fresh_user, require_access
 from apps.agent.provider import ModelError
+from apps.agent.business_flow_context import ContextReviewRequired
 from apps.agent.resource_discovery import acl_resources
 from apps.agent.workflow_resources import resolve_workflow_resource
 from apps.compute.models import AlgorithmVersion
@@ -373,8 +374,9 @@ def prepare(workflow, user, current_policy, entry):
         if current.get("code") != entry["parameters"].get(cap["codeParameter"]):
             raise PermissionDenied("已准备的脚本内容与实际计算参数不一致")
         return True
+    resumed_draft = entry.pop("contextDraft", None)
     previous = entry.pop("scriptCurrent", {})
-    entry["scriptAttempt"] = entry.get("scriptAttempt", 0) + 1
+    entry["scriptAttempt"] = entry.get("scriptAttempt", 0) + (0 if resumed_draft else 1)
     attempt = entry["scriptAttempt"]
     if attempt > settings["maxRepairs"] + 1:
         raise ComputeError("资料衔接脚本已达到本次返修上限")
@@ -389,7 +391,7 @@ def prepare(workflow, user, current_policy, entry):
         "previousAdapter": entry.get("previousAdapter", {}),
     }
     try:
-        drafted = input_script_model.generate(
+        drafted = resumed_draft or input_script_model.generate(
             workflow,
             node,
             attempt,
@@ -491,6 +493,16 @@ def prepare(workflow, user, current_policy, entry):
             kind="script_generated",
         )
         return True
+    except ContextReviewRequired as error:
+        error.details["preparationRole"] = entry["role"]
+        if "drafted" in locals():
+            entry["contextDraft"] = drafted
+        else:
+            entry["scriptAttempt"] -= 1
+            if previous:
+                entry["scriptCurrent"] = previous
+        entry.update(status="needs_script", scriptStatus="context_waiting")
+        raise
     except (ComputeError, ModelError) as error:
         guard()
         fallback(workflow, user, current_policy, entry, error)

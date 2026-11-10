@@ -23,7 +23,9 @@ MAX_RESULT_BYTES = 8 * 1024 * 1024
 MAX_RESULT_ROWS = 10000
 MAX_RESULT_CELL_CHARS = 2000
 MAX_GEOMETRY_CELL_CHARS = 32768
-RASTER_DISPLAY_METADATA = frozenset({"mapColorTable", "colorAdvice"})
+RASTER_DISPLAY_METADATA = frozenset(
+    {"mapColorTable", "mapBandColorTables", "colorAdvice"}
+)
 
 EDIT_FIELDS = (
     "feature_id",

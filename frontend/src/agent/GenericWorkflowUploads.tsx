@@ -26,6 +26,8 @@ import {
   type SetStateAction,
 } from "react";
 import { agentApi } from "../api/agent";
+import { ResourceSearchLabel } from "./ResourceSearchLabel";
+import { scheduleResourceSearch } from "./resourceSearch";
 import type {
   AgentWorkflowUpload,
   AgentWorkflowRoleResult,
@@ -113,6 +115,8 @@ export default function GenericWorkflowUploads({
   const [error, setError] = useState("");
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState("");
+  const [catalogComposing, setCatalogComposing] = useState(false);
+  const [catalogResultQuery, setCatalogResultQuery] = useState("");
   const [catalogItems, setCatalogItems] = useState<AgentWorkflowCatalogItem[]>(
     [],
   );
@@ -138,42 +142,42 @@ export default function GenericWorkflowUploads({
   const inFlight = useRef(false);
   const changed = useRef(false);
   useEffect(() => {
-    if (!catalogOpen) return;
-    const controller = new AbortController();
+    if (!catalogOpen || catalogComposing) return;
     setCatalogLoading(true);
     setCatalogError("");
-    const timer = setTimeout(() => {
-      void agentApi
-        .workflowCatalogResources(
+    return scheduleResourceSearch(
+      (signal) =>
+        agentApi.workflowCatalogResources(
           catalogQuery,
-          { signal: controller.signal },
+          { signal },
           catalogPage,
           directoryId,
-        )
-        .then((result) => {
-          if (!controller.signal.aborted) {
-            setCatalogItems(result.items);
-            for (const item of result.items)
-              catalogNames.current.set(item.id, item.name);
-            setCatalogTotal(result.total);
-            setDirectories(result.directories);
-          }
-        })
-        .catch((reason) => {
-          if (!controller.signal.aborted)
-            setCatalogError(
-              reason instanceof Error ? reason.message : "系统数据读取失败",
-            );
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setCatalogLoading(false);
-        });
-    }, 250);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [catalogOpen, catalogQuery, batchId, catalogPage, directoryId]);
+        ),
+      {
+        success: (result) => {
+          setCatalogItems(result.items);
+          setCatalogResultQuery(catalogQuery);
+          for (const item of result.items)
+            catalogNames.current.set(item.id, item.name);
+          setCatalogTotal(result.total);
+          setDirectories(result.directories);
+        },
+        error: (reason) => {
+          setCatalogError(
+            reason instanceof Error ? reason.message : "系统数据读取失败",
+          );
+        },
+        settled: () => setCatalogLoading(false),
+      },
+    );
+  }, [
+    catalogOpen,
+    catalogQuery,
+    batchId,
+    catalogPage,
+    directoryId,
+    catalogComposing,
+  ]);
   useEffect(() => {
     onActivityChange?.(Boolean(uploading) || recognizing);
     return () => onActivityChange?.(false);
@@ -189,6 +193,7 @@ export default function GenericWorkflowUploads({
     changed.current = false;
     manual.current.clear();
     setCatalogOpen(false);
+    setCatalogComposing(false);
     setCatalogSelected([]);
     setCatalogQuery("");
     const controller = new AbortController();
@@ -455,7 +460,10 @@ export default function GenericWorkflowUploads({
         open={catalogOpen}
         width={polished ? 720 : undefined}
         className={polished ? "flow-materials-picker" : undefined}
-        onCancel={() => setCatalogOpen(false)}
+        onCancel={() => {
+          setCatalogOpen(false);
+          setCatalogComposing(false);
+        }}
         onOk={() => void addCatalog()}
         okText="加入本次任务"
         confirmLoading={Boolean(uploading)}
@@ -466,7 +474,7 @@ export default function GenericWorkflowUploads({
         <p>
           {polished
             ? `从当前项目选择资料，已选 ${catalogSelected.length} 份`
-            : `最近更新优先，共 ${catalogTotal} 份。可搜索名称或说明，跨页选择。`}
+            : `名称命中优先，同级最近更新优先，共 ${catalogTotal} 份。可搜索资料名称或说明；多个关键词以空格分隔且都要包含，可跨页选择。`}
         </p>
         {catalogError && <Alert type="error" title={catalogError} />}
         <Select
@@ -485,11 +493,15 @@ export default function GenericWorkflowUploads({
           }}
         />
         {polished ? (
-          <>
+          <div
+            onCompositionStartCapture={() => setCatalogComposing(true)}
+            onCompositionEndCapture={() => setCatalogComposing(false)}
+          >
             <Input.Search
               aria-label="搜索任务资料"
-              placeholder="搜索资料名称或说明"
+              placeholder="搜索资料名称或说明，空格分隔多个关键词"
               allowClear
+              loading={catalogLoading}
               value={catalogQuery}
               onChange={(event) => {
                 setCatalogQuery(event.target.value);
@@ -520,7 +532,11 @@ export default function GenericWorkflowUploads({
                   }
                 >
                   <span>
-                    <strong>{item.name}</strong>
+                    <ResourceSearchLabel
+                      name={item.name}
+                      description={item.description}
+                      query={catalogResultQuery}
+                    />
                     <small>
                       {kindLabels[item.dataType as keyof typeof kindLabels] ??
                         item.dataType}{" "}
@@ -529,50 +545,68 @@ export default function GenericWorkflowUploads({
                   </span>
                 </Checkbox>
               ))}
-              {!catalogLoading && !catalogItems.length && <p>没有匹配的资料</p>}
+              {!catalogLoading && !catalogItems.length && (
+                <p>没有匹配的资料，请调整关键词或数据目录</p>
+              )}
             </div>
-          </>
+          </div>
         ) : (
-          <Select
-            mode="multiple"
-            style={{ width: "100%" }}
-            aria-label="选择系统数据资源"
-            placeholder="搜索名称并勾选资料"
-            loading={catalogLoading}
-            filterOption={false}
-            showSearch={{
-              onSearch: (value) => {
-                setCatalogQuery(value);
-                setCatalogPage(1);
-              },
-            }}
-            value={catalogSelected}
-            labelRender={(option) =>
-              catalogNames.current.get(Number(option.value)) ?? option.label
-            }
-            optionRender={(option) => (
-              <div style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
-                {option.data.label}
-              </div>
-            )}
-            onSelect={(value) =>
-              setCatalogSelected((current) =>
-                current.includes(value) ? current : [...current, value],
-              )
-            }
-            onDeselect={(value) =>
-              setCatalogSelected((current) =>
-                current.filter((item) => item !== value),
-              )
-            }
-            onClear={() => setCatalogSelected([])}
-            disabled={disabled || Boolean(uploading)}
-            options={catalogItems.map((item) => ({
-              value: item.id,
-              label: `${item.name}（${kindLabels[item.dataType as keyof typeof kindLabels] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}）`,
-              disabled: items.some((entry) => entry.resourceId === item.id),
-            }))}
-          />
+          <div
+            onCompositionStartCapture={() => setCatalogComposing(true)}
+            onCompositionEndCapture={() => setCatalogComposing(false)}
+          >
+            <Select
+              mode="multiple"
+              style={{ width: "100%" }}
+              aria-label="选择系统数据资源"
+              placeholder="搜索资料名称或说明，空格分隔多个关键词"
+              loading={catalogLoading}
+              showSearch={{
+                filterOption: false,
+                onSearch: (value) => {
+                  setCatalogQuery(value);
+                  setCatalogPage(1);
+                },
+              }}
+              value={catalogSelected}
+              labelRender={(option) =>
+                catalogNames.current.get(Number(option.value)) ?? option.label
+              }
+              optionRender={(option) => (
+                <ResourceSearchLabel
+                  name={option.data.name}
+                  description={option.data.description}
+                  query={catalogResultQuery}
+                  details={`（${option.data.details}）`}
+                />
+              )}
+              notFoundContent={
+                catalogLoading
+                  ? "正在搜索资料…"
+                  : "没有匹配的资料，请调整关键词或数据目录"
+              }
+              onSelect={(value) =>
+                setCatalogSelected((current) =>
+                  current.includes(value) ? current : [...current, value],
+                )
+              }
+              onDeselect={(value) =>
+                setCatalogSelected((current) =>
+                  current.filter((item) => item !== value),
+                )
+              }
+              onClear={() => setCatalogSelected([])}
+              disabled={disabled || Boolean(uploading)}
+              options={catalogItems.map((item) => ({
+                value: item.id,
+                label: `${item.name}（${kindLabels[item.dataType as keyof typeof kindLabels] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}）`,
+                name: item.name,
+                description: item.description,
+                details: `${kindLabels[item.dataType as keyof typeof kindLabels] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}`,
+                disabled: items.some((entry) => entry.resourceId === item.id),
+              }))}
+            />
+          </div>
         )}
         <Pagination
           size="small"
