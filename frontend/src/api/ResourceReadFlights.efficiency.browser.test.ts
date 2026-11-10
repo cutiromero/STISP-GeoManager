@@ -47,7 +47,9 @@ function profile() {
 beforeEach(async () => {
   await setLocale("zh-CN");
   vi.stubGlobal("fetch", fetchMock);
-  fetchMock.mockImplementation(() => Promise.resolve(json({})));
+  fetchMock.mockImplementation(() =>
+    Promise.resolve(json({ active: true, detail: "页面会话已更新" })),
+  );
   setActiveProject("3");
   await startBrowserSession();
   fetchMock.mockClear();
