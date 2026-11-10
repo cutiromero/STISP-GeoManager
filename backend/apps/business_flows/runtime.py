@@ -137,6 +137,10 @@ def serialize_run(user, workflow, *, control_only=False):
     projected = []
     for node in bind["definitionSnapshot"]["nodes"]:
         item = deepcopy(value["nodes"][node["id"]])
+        # The legacy executor keeps its full structured decision privately.
+        # Public actor.decision is reserved for the review decision string.
+        if isinstance(item.get("executor", {}).get("decision"), dict):
+            item["executor"].pop("decision")
         if (
             workflow.workflow_type == "geology_generic"
             and workflow.status == "waiting_approval"

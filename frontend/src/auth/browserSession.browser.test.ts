@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   browserSessionEndedEvent,
+  browserSessionRecoveredEvent,
   browserSessionSignal,
   observeResponseIdentity,
   browserSessionStorageKey,
@@ -323,6 +324,37 @@ describe("browser page session lifecycle", () => {
     await expect(refreshBrowserSession(true)).rejects.toThrow("offline");
     expect(savedPage()?.token).toBe(token);
     expect(await refreshBrowserSession(true)).toBe(true);
+  });
+
+  it("retries one gateway failure with the same lease sequence and preserves true failures", async () => {
+    await startBrowserSession();
+    fetchMock.mockResolvedValueOnce(new Response("busy", { status: 503 }));
+    expect(await refreshBrowserSession(true)).toBe(true);
+    expect(await body(1)).toEqual(await body(2));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    fetchMock
+      .mockResolvedValueOnce(new Response("busy", { status: 503 }))
+      .mockResolvedValueOnce(new Response("busy", { status: 503 }));
+    await expect(refreshBrowserSession(true)).rejects.toThrow("HTTP 503");
+    const recovered = vi.fn();
+    window.addEventListener(browserSessionRecoveredEvent, recovered, {
+      once: true,
+    });
+    expect(await refreshBrowserSession(true)).toBe(true);
+    expect(recovered).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry forbidden sessions or replay a gateway renewal after logout", async () => {
+    await startBrowserSession();
+    fetchMock.mockResolvedValueOnce(new Response("forbidden", { status: 403 }));
+    await expect(refreshBrowserSession(true)).rejects.toThrow("HTTP 403");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockResolvedValueOnce(new Response("busy", { status: 503 }));
+    const pending = refreshBrowserSession(true);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    endBrowserSession(false);
+    expect(await pending).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("recovers immediately when a background document becomes visible", async () => {

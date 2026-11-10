@@ -14,7 +14,10 @@ import { platformApi, type ProjectTag } from "../api/platform";
 import { useLocation } from "react-router-dom";
 import { useAppContext } from "../contexts/AppContext";
 import { authorizationIdentity } from "../auth/authorizationIdentity";
-import { browserSessionSignal } from "../auth/browserSession";
+import {
+  browserSessionSignal,
+  browserSessionRecoveredEvent,
+} from "../auth/browserSession";
 import { downloadPageDiagnostics } from "../routing/pageDiagnostics";
 import {
   getActiveProject,
@@ -159,7 +162,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         void refresh().catch(() => {});
     };
     window.addEventListener("focus", revalidate);
-    return () => window.removeEventListener("focus", revalidate);
+    window.addEventListener(browserSessionRecoveredEvent, revalidate);
+    return () => {
+      window.removeEventListener("focus", revalidate);
+      window.removeEventListener(browserSessionRecoveredEvent, revalidate);
+    };
   }, [refresh]);
   const choose: ProjectContextValue["choose"] = (id, afterChoose, options) => {
     if (

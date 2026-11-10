@@ -1,0 +1,37 @@
+{
+  "GET /api/agent/runs/{runId}/": {
+    "200": {
+      "run": {
+        "id": 41,
+        "conversationId": 31,
+        "model": "mock",
+        "prompt": "开发演示任务",
+        "answer": "",
+        "status": "running",
+        "detail": "正在接收模型活动",
+        "resourceIds": [],
+        "evidence": [],
+        "attachments": [],
+        "contextTruncated": false,
+        "createdAt": "2026-11-10T00:00:00Z",
+        "updatedAt": "2026-11-10T00:00:01Z",
+        "generationParameters": {
+          "workflowModelActivity": {
+            "stage": "执行分析示例",
+            "status": "thinking",
+            "thinkingText": "仅用于开发演示的增量片段。",
+            "thinkingChars": 14,
+            "outputChars": 0,
+            "attempt": 1,
+            "reasoningEffort": "medium",
+            "thinkingEnabled": true,
+            "truncated": false
+          },
+          "workflowModelActivitySequence": 7
+        }
+      },
+      "events": [],
+      "cursor": 7
+    }
+  }
+}

@@ -88,4 +88,40 @@ def load_run_activity(runs):
             activity["thinkingDurationMs"] = max(
                 0, int((end - started[run.pk]).total_seconds() * 1000)
             )
+    workflow_ids = {
+        run.research_workflow_id for run in runs if run.research_workflow_id
+    }
+    if workflow_ids:
+        from .models import AgentWorkflowStep
+        from .model_activity import ACTIVITY_KIND
+        from .workflow_model_events import PARAMETER_KEY, SEQUENCE_KEY
+
+        latest_steps = (
+            AgentWorkflowStep.objects.filter(
+                workflow_id__in=workflow_ids, kind=ACTIVITY_KIND
+            )
+            .order_by()
+            .values("workflow_id")
+            .annotate(latest_id=Max("id"))
+            .values("latest_id")
+        )
+        snapshots = {
+            step.workflow_id: step
+            for step in AgentWorkflowStep.objects.filter(
+                pk__in=Subquery(latest_steps)
+            ).only("id", "workflow_id", "status", "output_refs")
+        }
+        for run in runs:
+            step = snapshots.get(run.research_workflow_id)
+            if not step:
+                continue
+            snapshot = step.output_refs.get("modelActivity")
+            if not isinstance(snapshot, dict):
+                continue
+            snapshot = dict(snapshot)
+            if step.status == "failed":
+                snapshot["status"] = "failed"
+            result[run.pk]["generationParameters"].update(
+                {PARAMETER_KEY: snapshot, SEQUENCE_KEY: step.pk}
+            )
     return result

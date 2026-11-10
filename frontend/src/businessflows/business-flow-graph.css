@@ -34,17 +34,41 @@
   border-radius: 14px;
   background: linear-gradient(180deg, #fafcfb, #f7faf9);
   border: 1px solid #e8eeec;
+  padding: 12px;
+  max-height: 520px;
+}
+.business-flow-graph-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 8px;
+  color: #77938b;
+}
+.business-flow-graph-controls .ant-btn {
+  color: #77938b;
+  font-size: 11px;
+}
+.business-flow-graph-controls output {
+  display: inline-block;
+  min-width: 38px;
+  text-align: center;
+  font-size: 11px;
+}
+.business-flow-graph-canvas {
+  position: relative;
+  margin: 0 auto;
 }
 .business-flow-graph-scroller:focus-visible {
   outline: 2px solid #8baeb0;
   outline-offset: 2px;
 }
 .business-flow-graph-board {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
   display: flex;
   align-items: center;
   width: max-content;
-  min-width: 100%;
   padding: 112px 12px;
 }
 .business-flow-graph-board:not(:has(.gate-ai)) {
@@ -60,9 +84,32 @@
 }
 .flow-node-station {
   position: relative;
-  width: 178px;
+  width: 150px;
   height: 144px;
   flex-shrink: 0;
+}
+.flow-terminal-station {
+  width: 88px;
+}
+.flow-terminal-station .flow-terminal {
+  width: 88px;
+  cursor: default;
+}
+.flow-terminal .business-flow-node-icon {
+  width: 44px;
+  height: 44px;
+  margin-top: 3px;
+  box-shadow: none;
+}
+.terminal-start .business-flow-node-icon {
+  background: #eff6f2;
+  color: #648c7a;
+  border-color: #c7ddd1;
+}
+.terminal-end .business-flow-node-icon {
+  background: #f2f1f8;
+  color: #87829d;
+  border-color: #d5d1e3;
 }
 .business-flow-graph-links {
   position: absolute;
@@ -134,7 +181,7 @@
   max-width: 100%;
 }
 .business-flow-node-body > strong {
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
   font-weight: 600;
   overflow-wrap: anywhere;

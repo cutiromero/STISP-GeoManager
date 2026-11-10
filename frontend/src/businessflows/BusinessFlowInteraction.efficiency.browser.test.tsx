@@ -63,6 +63,9 @@ vi.mock("../agent/WorkflowCard", () => ({
   }: ComponentProps<typeof import("../agent/WorkflowCard").default>) => (
     <section aria-label="原专业审核卡">
       <p>专业方案 {workflow.planHash}</p>
+      <output aria-label="专业卡实时模型思考">
+        {workflow.modelActivity?.thinkingText}
+      </output>
       <button onClick={onConfirm}>按专业方案确认</button>
       <button
         onClick={() => onReview?.("approve", "仅批准选中对象", ["candidate-1"])}
@@ -616,4 +619,59 @@ it("counts completed execution and independent review before the required human 
   expect(
     businessFlowProgress({ ...finished, status: "succeeded" }).percent,
   ).toBe(100);
+});
+
+it("keeps an open professional thinking view live from parent stream props without detail rereads", async () => {
+  const flow = businessFlowRun({
+    definitionSnapshot: geologySpec,
+    currentNode: "apply",
+    status: "running",
+  });
+  const response = {
+    ...reviewWorkflow(true),
+    id: flow.id,
+    workflowType: "geology_generic" as const,
+  };
+  vi.mocked(agentApi.workflow).mockResolvedValue(response);
+  const props = { flow, onChanged: vi.fn() };
+  const activity = {
+    stage: "分析",
+    status: "thinking" as const,
+    thinkingText: "先到的一段",
+    thinkingChars: 5,
+    outputChars: 0,
+    attempt: 1,
+    reasoningEffort: "medium" as const,
+    thinkingEnabled: true,
+    truncated: false,
+  };
+  const view = render(
+    <App>
+      <MemoryRouter>
+        <BusinessFlowActivity {...props} modelActivity={activity} />
+      </MemoryRouter>
+    </App>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "打开专业审核" }));
+  expect(await screen.findByLabelText("专业卡实时模型思考")).toHaveTextContent(
+    "先到的一段",
+  );
+  view.rerender(
+    <App>
+      <MemoryRouter>
+        <BusinessFlowActivity
+          {...props}
+          modelActivity={{
+            ...activity,
+            thinkingText: "先到的一段，接着到达",
+            thinkingChars: 10,
+          }}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  expect(screen.getByLabelText("专业卡实时模型思考")).toHaveTextContent(
+    "先到的一段，接着到达",
+  );
+  expect(agentApi.workflow).toHaveBeenCalledOnce();
 });

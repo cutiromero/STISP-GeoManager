@@ -1,6 +1,11 @@
-import { Alert } from "antd";
+import { Alert, Button, Space } from "antd";
 import {
   AuditOutlined,
+  MinusOutlined,
+  PlusOutlined,
+  CompressOutlined,
+  PlayCircleOutlined,
+  ExportOutlined,
   CheckOutlined,
   DeploymentUnitOutlined,
   ExperimentOutlined,
@@ -85,6 +90,8 @@ export default function BusinessFlowGraph({
   const ui = useComputeText();
   const board = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const [zoom, setZoom] = useState(1);
   const marker = `flow-arrow-${useId().replace(/:/g, "")}`;
   const [geometry, setGeometry] = useState({
     width: 1,
@@ -92,16 +99,78 @@ export default function BusinessFlowGraph({
     edges: [] as EdgePosition[],
     hubs: {} as Partial<Record<"ai" | "human", number>>,
   });
+  const startId = `presentation:start:${marker}`,
+    endId = `presentation:end:${marker}`;
+  const startLabel = ui("开始", "Start"),
+    endLabel = ui("输出", "Output");
+  const displayNodes = useMemo(() => {
+    if (!nodes.length) return [];
+    const terminal = (
+      id: string,
+      title: string,
+      dependsOn: string[],
+    ): BusinessFlowNode => ({
+      id,
+      title,
+      dependsOn,
+      kind: "result",
+      description: "",
+      instruction: "",
+      dataRoles: [],
+      review: { ai: false, human: false, maxRevisions: 0 },
+    });
+    const parents = new Set(nodes.flatMap((node) => node.dependsOn));
+    return [
+      terminal(startId, startLabel, []),
+      ...nodes.map((node) => ({
+        ...node,
+        dependsOn: node.dependsOn.length ? node.dependsOn : [startId],
+      })),
+      terminal(
+        endId,
+        endLabel,
+        nodes.filter((node) => !parents.has(node.id)).map((node) => node.id),
+      ),
+    ];
+  }, [nodes, startId, endId, startLabel, endLabel]);
   const layout = useMemo(() => {
     try {
-      return { levels: businessFlowLevels(nodes), error: "" };
+      const levels = businessFlowLevels(nodes);
+      const displayed = new Map(displayNodes.map((node) => [node.id, node]));
+      return {
+        levels: nodes.length
+          ? [
+              [displayed.get(startId)!],
+              ...levels.map((level) =>
+                level.map((node) => displayed.get(node.id)!),
+              ),
+              [displayed.get(endId)!],
+            ]
+          : [],
+        error: "",
+      };
     } catch (error) {
       return {
         levels: [],
         error: error instanceof Error ? error.message : "流程无法展示",
       };
     }
-  }, [nodes]);
+  }, [nodes, displayNodes, startId, endId]);
+  useLayoutEffect(() => {
+    const box = scroller.current;
+    if (!box) return;
+    const resize = () => setAvailableWidth(Math.max(1, box.clientWidth - 24));
+    const observer = new ResizeObserver(resize);
+    observer.observe(box);
+    resize();
+    return () => observer.disconnect();
+  }, []);
+  const fit = Math.min(
+    1,
+    availableWidth ? availableWidth / geometry.width : 1,
+    (compact ? 360 : 480) / geometry.height,
+  );
+  const scale = Math.min(2, fit * zoom);
   const stateMap = new Map(states.map((state) => [state.nodeId, state]));
   const identity = nodes
     .map(
@@ -134,17 +203,32 @@ export default function BusinessFlowGraph({
     if (!root || layout.error) return;
     let frame = 0;
     const draw = () => {
-      const box = root.getBoundingClientRect();
+      const bounds = root.getBoundingClientRect();
+      const factor = bounds.width / root.offsetWidth || 1;
+      const box = {
+        left: 0,
+        top: 0,
+        width: root.offsetWidth,
+        height: root.offsetHeight,
+      };
+      const rect = (element: HTMLElement) => {
+        const value = element.getBoundingClientRect();
+        return {
+          left: (value.left - bounds.left) / factor,
+          right: (value.right - bounds.left) / factor,
+          top: (value.top - bounds.top) / factor,
+          bottom: (value.bottom - bounds.top) / factor,
+          width: value.width / factor,
+          height: value.height / factor,
+        };
+      };
       const positions = new Map(
         Array.from(
           root.querySelectorAll<HTMLElement>("[data-flow-anchor]"),
-        ).map((element) => [
-          element.dataset.flowAnchor!,
-          element.getBoundingClientRect(),
-        ]),
+        ).map((element) => [element.dataset.flowAnchor!, rect(element)]),
       );
       const edges: EdgePosition[] = [];
-      for (const node of nodes) {
+      for (const node of displayNodes) {
         const anchor = positions.get(node.id);
         if (!anchor) continue;
         const y = anchor.top + anchor.height / 2 - box.top;
@@ -159,7 +243,11 @@ export default function BusinessFlowGraph({
             key: `${parent}:${node.id}`,
             path: `M${x1},${y1} C${middle},${y1} ${middle},${y} ${x2},${y}`,
             kind: "main",
-            tone: completedFlowNodes.has(stateMap.get(parent)?.status ?? "")
+            tone: (
+              parent === startId
+                ? states.length > 0
+                : completedFlowNodes.has(stateMap.get(parent)?.status ?? "")
+            )
               ? "is-complete"
               : "",
           });
@@ -178,11 +266,17 @@ export default function BusinessFlowGraph({
           `[data-flow-gate="${role}"]`,
         );
         if (!gate || !members.length) continue;
-        const gateBox = gate.getBoundingClientRect();
+        const gateBox = rect(gate);
         const junctions = members.flatMap((node) => {
           const anchor = positions.get(node.id);
           return anchor
-            ? [{ node, anchor, x: anchor.right - box.left + 37 }]
+            ? [
+                {
+                  node,
+                  anchor,
+                  x: anchor.right - box.left + (role === "ai" ? 18 : 50),
+                },
+              ]
             : [];
         });
         if (!junctions.length) continue;
@@ -214,16 +308,6 @@ export default function BusinessFlowGraph({
             kind: "gate",
             tone: presentation.done ? "is-complete" : "",
           });
-          if (!nodes.some((next) => next.dependsOn.includes(node.id))) {
-            edges.push({
-              key: `${node.id}:${role}:end`,
-              path: `M${anchor.right - box.left + 4},${y} L${x},${y}`,
-              kind: "gate",
-              tone: completedFlowNodes.has(state?.status ?? "")
-                ? "is-complete"
-                : "",
-            });
-          }
           const returned = businessFlowReturn(events, state);
           if (
             returned?.event.actor === (role === "ai" ? "reviewer" : "human")
@@ -263,6 +347,8 @@ export default function BusinessFlowGraph({
   }, [
     identity,
     statusIdentity,
+    displayNodes,
+    startId,
     returnIdentity,
     compact,
     layout.error,
@@ -274,12 +360,12 @@ export default function BusinessFlowGraph({
       board.current?.querySelectorAll<HTMLElement>("[data-flow-node]") ?? [],
     ).find((element) => element.dataset.flowNode === currentNode);
     const box = scroller.current;
-    if (target && box)
+    if (target && box && zoom > 1)
       box.scrollLeft +=
         target.getBoundingClientRect().left -
         box.getBoundingClientRect().left -
         box.clientWidth / 3;
-  }, [currentNode, identity]);
+  }, [currentNode, identity, zoom]);
 
   if (layout.error)
     return (
@@ -328,154 +414,219 @@ export default function BusinessFlowGraph({
           </span>
         )}
       </div>
+      <div className="business-flow-graph-controls">
+        <Space size={4}>
+          <Button
+            size="small"
+            type="text"
+            icon={<MinusOutlined />}
+            aria-label={ui("缩小流程图", "Zoom out")}
+            onClick={() => setZoom((value) => Math.max(0.25, value / 1.25))}
+          />
+          <output aria-label={ui("流程图缩放比例", "Diagram zoom")}>
+            {Math.round(scale * 100)}%
+          </output>
+          <Button
+            size="small"
+            type="text"
+            icon={<PlusOutlined />}
+            aria-label={ui("放大流程图", "Zoom in")}
+            onClick={() => setZoom((value) => Math.min(8, value * 1.25))}
+          />
+          <Button
+            size="small"
+            type="text"
+            icon={<CompressOutlined />}
+            onClick={() => {
+              setZoom(1);
+              if (scroller.current) {
+                scroller.current.scrollLeft = 0;
+                scroller.current.scrollTop = 0;
+              }
+            }}
+          >
+            {ui("适应窗口", "Fit to view")}
+          </Button>
+        </Space>
+      </div>
       <div
         className="business-flow-graph-scroller"
         ref={scroller}
         tabIndex={0}
         role="region"
-        aria-label={ui(
-          "业务流程图，可横向滚动",
-          "Workflow diagram, scroll horizontally",
-        )}
+        aria-label={ui("业务流程图，可缩放", "Workflow diagram, zoomable")}
       >
-        <div className="business-flow-graph-board" ref={board}>
-          <svg
-            className="business-flow-graph-links"
-            width="100%"
-            height="100%"
-            viewBox={`0 0 ${geometry.width} ${geometry.height}`}
-            preserveAspectRatio="none"
-            aria-hidden="true"
+        <div
+          className="business-flow-graph-canvas"
+          style={{
+            width: geometry.width * scale,
+            height: geometry.height * scale,
+          }}
+        >
+          <div
+            className="business-flow-graph-board"
+            ref={board}
+            style={{ transform: `scale(${scale})` }}
           >
-            <defs>
-              <marker
-                id={marker}
-                markerWidth="7"
-                markerHeight="7"
-                refX="6"
-                refY="3.5"
-                orient="auto"
-                markerUnits="userSpaceOnUse"
-              >
-                <path d="M0,0 L7,3.5 L0,7" fill="context-stroke" />
-              </marker>
-            </defs>
-            {geometry.edges
-              .filter((edge) => edge.kind === "main")
-              .map((edge) => (
-                <path
-                  key={edge.key}
-                  d={edge.path}
-                  className={edge.tone}
-                  markerEnd={`url(#${marker})`}
-                />
-              ))}
-            <g className="flow-gate-links">
-              {geometry.edges
-                .filter((edge) => edge.kind === "gate")
-                .map((edge) => (
-                  <path
-                    key={edge.key}
-                    data-flow-review={edge.key}
-                    d={edge.path}
-                    className={edge.tone}
-                    markerEnd={`url(#${marker})`}
-                  />
-                ))}
-            </g>
-            <g className="flow-return-links">
-              {geometry.edges
-                .filter((edge) => edge.kind === "return")
-                .map((edge) => (
-                  <path
-                    key={edge.key}
-                    d={edge.path}
-                    className={edge.tone}
-                    markerEnd={`url(#${marker})`}
-                  />
-                ))}
-            </g>
-          </svg>
-          {(["ai", "human"] as const).map((role) => (
-            <BusinessFlowReviewHub
-              key={role}
-              role={role}
-              nodes={nodes.filter((node) =>
-                role === "ai"
-                  ? node.review.ai
-                  : node.review.human ||
-                    node.kind === "human" ||
-                    stateMap.get(node.id)?.human.required,
-              )}
-              states={stateMap}
-              events={events}
-              flowStatus={flowStatus}
-              left={geometry.hubs[role]}
-              onSelect={onSelectNode}
-            />
-          ))}
-          {layout.levels.map((level) => (
-            <div
-              className="business-flow-graph-level"
-              key={level.map((node) => node.id).join("|")}
+            <svg
+              className="business-flow-graph-links"
+              width="100%"
+              height="100%"
+              viewBox={`0 0 ${geometry.width} ${geometry.height}`}
+              preserveAspectRatio="none"
+              aria-hidden="true"
             >
-              {level.map((node) => {
-                const state = stateMap.get(node.id);
-                const kind = kinds[node.kind] ?? {
-                  label: "流程节点",
-                  icon: <DeploymentUnitOutlined />,
-                };
-                const returned = businessFlowReturn(events, state);
-                const status = state
-                  ? (flowStateLabels[state.status] ?? state.status)
-                  : kind.label;
-                const activeReturn = returned && !returned.resolved;
-                return (
-                  <div className="flow-node-station" key={node.id}>
-                    <button
-                      type="button"
-                      data-flow-node={node.id}
-                      className={`business-flow-node node-${node.kind}${selectedNode === node.id ? " is-selected" : ""}${currentNode === node.id ? " is-current" : ""}${state ? ` state-${state.status}` : ""}${activeReturn ? " is-returned" : ""}`}
-                      aria-pressed={selectedNode === node.id}
-                      aria-current={
-                        currentNode === node.id ? "step" : undefined
-                      }
-                      aria-label={`${node.title}，${status}`}
-                      onClick={() => onSelectNode?.(node)}
+              <defs>
+                <marker
+                  id={marker}
+                  markerWidth="7"
+                  markerHeight="7"
+                  refX="6"
+                  refY="3.5"
+                  orient="auto"
+                  markerUnits="userSpaceOnUse"
+                >
+                  <path d="M0,0 L7,3.5 L0,7" fill="context-stroke" />
+                </marker>
+              </defs>
+              {geometry.edges
+                .filter((edge) => edge.kind === "main")
+                .map((edge) => (
+                  <path
+                    key={edge.key}
+                    data-flow-edge={edge.key}
+                    d={edge.path}
+                    className={edge.tone}
+                    markerEnd={`url(#${marker})`}
+                  />
+                ))}
+              <g className="flow-gate-links">
+                {geometry.edges
+                  .filter((edge) => edge.kind === "gate")
+                  .map((edge) => (
+                    <path
+                      key={edge.key}
+                      data-flow-review={edge.key}
+                      d={edge.path}
+                      className={edge.tone}
+                      markerEnd={`url(#${marker})`}
+                    />
+                  ))}
+              </g>
+              <g className="flow-return-links">
+                {geometry.edges
+                  .filter((edge) => edge.kind === "return")
+                  .map((edge) => (
+                    <path
+                      key={edge.key}
+                      d={edge.path}
+                      className={edge.tone}
+                      markerEnd={`url(#${marker})`}
+                    />
+                  ))}
+              </g>
+            </svg>
+            {(["ai", "human"] as const).map((role) => (
+              <BusinessFlowReviewHub
+                key={role}
+                role={role}
+                nodes={nodes.filter((node) =>
+                  role === "ai"
+                    ? node.review.ai
+                    : node.review.human ||
+                      node.kind === "human" ||
+                      stateMap.get(node.id)?.human.required,
+                )}
+                states={stateMap}
+                events={events}
+                flowStatus={flowStatus}
+                left={geometry.hubs[role]}
+                onSelect={onSelectNode}
+              />
+            ))}
+            {layout.levels.map((level) => (
+              <div
+                className="business-flow-graph-level"
+                key={level.map((node) => node.id).join("|")}
+              >
+                {level.map((node) => {
+                  const terminal =
+                    node.id === startId
+                      ? "start"
+                      : node.id === endId
+                        ? "end"
+                        : "";
+                  const state = stateMap.get(node.id);
+                  const kind = kinds[node.kind] ?? {
+                    label: "流程节点",
+                    icon: <DeploymentUnitOutlined />,
+                  };
+                  const returned = businessFlowReturn(events, state);
+                  const status = state
+                    ? (flowStateLabels[state.status] ?? state.status)
+                    : kind.label;
+                  const activeReturn = returned && !returned.resolved;
+                  return (
+                    <div
+                      className={`flow-node-station${terminal ? " flow-terminal-station" : ""}`}
+                      key={node.id}
                     >
-                      <span
-                        className="business-flow-node-icon"
-                        data-flow-anchor={node.id}
+                      <button
+                        type="button"
+                        data-flow-node={node.id}
+                        className={`business-flow-node node-${node.kind}${terminal ? ` flow-terminal terminal-${terminal}` : ""}${selectedNode === node.id ? " is-selected" : ""}${currentNode === node.id ? " is-current" : ""}${state ? ` state-${state.status}` : ""}${activeReturn ? " is-returned" : ""}`}
+                        aria-pressed={selectedNode === node.id}
+                        aria-current={
+                          currentNode === node.id ? "step" : undefined
+                        }
+                        aria-label={
+                          terminal ? node.title : `${node.title}，${status}`
+                        }
+                        aria-disabled={terminal ? true : undefined}
+                        onClick={() => !terminal && onSelectNode?.(node)}
                       >
-                        {state && completedFlowNodes.has(state.status) ? (
-                          <CheckOutlined />
-                        ) : (
-                          kind.icon
-                        )}
-                      </span>
-                      <span className="business-flow-node-body">
-                        <strong>{node.title}</strong>
-                        <span className="business-flow-node-eyebrow">
-                          {status}
-                          {state && state.attempt > 1
-                            ? ` · 第 ${state.attempt} 次处理`
-                            : ""}
+                        <span
+                          className="business-flow-node-icon"
+                          data-flow-anchor={node.id}
+                        >
+                          {terminal === "start" ? (
+                            <PlayCircleOutlined />
+                          ) : terminal === "end" ? (
+                            <ExportOutlined />
+                          ) : state && completedFlowNodes.has(state.status) ? (
+                            <CheckOutlined />
+                          ) : (
+                            kind.icon
+                          )}
                         </span>
-                        {returned && (
-                          <span
-                            className={`flow-return-badge${returned.resolved ? " is-resolved" : ""}`}
-                          >
-                            <ReloadOutlined />
-                            {ui(...returned.label)}
+                        <span className="business-flow-node-body">
+                          <strong>{node.title}</strong>
+                          <span className="business-flow-node-eyebrow">
+                            {terminal
+                              ? terminal === "end"
+                                ? ui("成果交付", "Delivery")
+                                : ui("流程入口", "Entry")
+                              : status}
+                            {state && state.attempt > 1
+                              ? ` · 第 ${state.attempt} 次处理`
+                              : ""}
                           </span>
-                        )}
-                      </span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+                          {returned && (
+                            <span
+                              className={`flow-return-badge${returned.resolved ? " is-resolved" : ""}`}
+                            >
+                              <ReloadOutlined />
+                              {ui(...returned.label)}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       {!nodes.length && (

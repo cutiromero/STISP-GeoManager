@@ -30,6 +30,8 @@ class WorkflowModelActivity:
         self.step_id = None
         self.saved_at = float("-inf")
         self.saved_status = None
+        self.published_step = None
+        self.published_chars = 0
 
     def _authorize(self, *, force):
         # Stream progress shares the frame guard's bounded live-state cache.
@@ -127,6 +129,25 @@ class WorkflowModelActivity:
             AgentWorkflowStep.objects.filter(
                 pk=self.step_id, workflow=self.workflow
             ).update(**values)
+        if self.workflow.parameters.get("_businessFlow"):
+            from .workflow_model_events import publish_activity
+
+            reset = self.published_step != self.step_id
+            pending = self.state["thinkingChars"] - (
+                0 if reset else self.published_chars
+            )
+            delta = self.state["thinkingText"][-pending:] if pending > 0 else ""
+            publish_activity(
+                self.workflow,
+                self.step_id,
+                self.state,
+                delta,
+                reset=reset or pending > THINKING_TEXT_LIMIT,
+            )
+            self.published_step, self.published_chars = (
+                self.step_id,
+                self.state["thinkingChars"],
+            )
         self.saved_at, self.saved_status = time.monotonic(), status
 
     def fail(self):

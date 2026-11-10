@@ -338,7 +338,7 @@ it.each([
         );
         expect(
           within(dialog).getByRole("region", {
-            name: "业务流程图，可横向滚动",
+            name: "业务流程图，可缩放",
           }),
         ).toBeVisible();
         await waitFor(() =>

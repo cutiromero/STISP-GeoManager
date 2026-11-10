@@ -3070,3 +3070,12 @@ API JSON 元数据默认 `Cache-Control: private,no-store`，文件和瓦片的�
 `GET /api/business-flows/?q=...&offset=0&limit=50`按名称、说明和编码执行当前项目范围内的搜索，按名称、编号稳定排序。`limit`为1至50，`offset`为0至1000000。响应保持`items/canManage`；只有后续页存在时增加`nextOffset`。服务端只读取`limit+1`条判定是否有后续页，不另查总数。前端对搜索词防抖并取消旧请求，加载更多按编号去重；查询及翻页不重新读取当前已选流程详情，切换项目清除旧目录与选择。
 
 前端共享`requestJson`对GET的成功HTTP/异常媒体或损坏JSON响应最多执行一次传输恢复，附加仅用于绕过异常中间缓存的`_stisp_read`地址标记，服务器不将该标记解释为业务参数。恢复前后及正文解析后仍核对账号、项目与取消状态，诊断保留实际响应来源。结构缺字段、HTTP权限拒绝及POST等写请求不通过此机制重放；任务启动和人工批准继续依赖原幂等键和实时权限。接口响应契约、模型预算及资料版本机制保持原有语义。
+
+
+## 工作流模型活动的实时传递
+
+父运行的generationParameters可含workflowModelActivity与workflowModelActivitySequence。前者沿用AgentWorkflowModelActivity的有界活动快照，后者标识实际活动记录。SSE的workflow_model_activity事件以text中的JSON传递workflowId、sequence、reset、activity和thinkingDelta；activity不重复携带thinkingText，浏览器在对应工作流和请求内拼接真实增量，最多保留最近12000个思考字符。新请求或reset会替换旧片段，complete只表示该次模型请求结束。
+
+刷新或断线后从最新持久活动快照继续，不重发用户任务或模型请求。旧通道失败仍可使用既有进度读取；每次读取及流存续期继续核对登录、项目和实际权限。公开业务流执行者的decision保持审核字符串语义，专业执行者内部的结构化判断仅保存在原审计记录中。
+
+页面会话的heartbeat在HTTP502、503或504时至多用同一序号重试一次。401、403及真实超时保留失败语义；诊断记录实际状态码和请求关联信息。续期成功后重新读取曾失败的项目范围，只有真实读取成功才清除提示。
