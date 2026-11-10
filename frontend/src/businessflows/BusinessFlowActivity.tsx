@@ -19,6 +19,7 @@ import type {
   BusinessFlowActorState,
   BusinessFlowEvent,
   BusinessFlowRun,
+  AgentWorkflowModelActivity,
 } from "../api/generated/types.gen";
 import { businessFlowsApi } from "../api/businessFlows";
 import { ApiError } from "../api/client";
@@ -140,11 +141,13 @@ export default function BusinessFlowActivity({
   onChanged,
   inspectNode,
   onAccessBlocked,
+  modelActivity,
 }: {
   flow: BusinessFlowRun;
   onChanged: (flow: BusinessFlowRun) => void;
   inspectNode?: { nodeId: string; request: number };
   onAccessBlocked?: () => void;
+  modelActivity?: AgentWorkflowModelActivity;
 }) {
   const ui = useComputeText();
   const latest = useRef(flow);
@@ -802,7 +805,7 @@ export default function BusinessFlowActivity({
           <Suspense fallback={<Spin />}>
             {legacy ? (
               <WorkflowCard
-                workflow={legacy}
+                workflow={modelActivity ? { ...legacy, modelActivity } : legacy}
                 compact
                 busy={Boolean(busy)}
                 reviewError={legacyError}

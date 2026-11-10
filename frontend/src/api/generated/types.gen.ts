@@ -744,6 +744,14 @@ export type AgentEvidence = {
  */
 export type AgentGenerationParameters = {
     /**
+     * 关联工作流最近一次真实模型活动的有界快照，经父运行SSE增量更新；不同请求不拼接思考
+     */
+    workflowModelActivity?: AgentWorkflowModelActivity;
+    /**
+     * 最近模型活动记录编号，用于隔离阶段和重试请求的思考增量
+     */
+    workflowModelActivitySequence?: number;
+    /**
      * 模型服务报告的真实总窗口
      */
     serviceContextWindowTokens?: number;
@@ -1281,7 +1289,7 @@ export type AgentEvent = {
     /**
      * 事件类别
      */
-    kind: 'status' | 'text' | 'thinking' | 'answer_preview' | 'answer_delta' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage' | 'interaction' | 'continuation' | 'business_flow_state';
+    kind: 'status' | 'text' | 'thinking' | 'answer_preview' | 'answer_delta' | 'tool_started' | 'tool_completed' | 'context' | 'parameters' | 'usage' | 'interaction' | 'continuation' | 'business_flow_state' | 'workflow_model_activity';
     /**
      * 增量文字或简要说明；answer_preview是答复检查点（空串重置），answer_delta只追加该检查点后的真实正文。仅普通chat自然语言或agent确认final后的answer可进入预览，不含工具参数。HTTP轮询使用run.answerPreview，SSE按事件ID拼接且遇检查点替换，总上限1048576字符。
      */

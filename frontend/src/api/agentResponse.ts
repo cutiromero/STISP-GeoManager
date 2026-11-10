@@ -7,6 +7,7 @@ import type {
 } from "./generated/types.gen";
 import { ResponseFormatError } from "./responseDiagnostics";
 import { assertBusinessFlowRun } from "./businessFlows";
+import { assertWorkflowActivity } from "./workflowModelStream";
 
 function object(value: unknown, path: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -163,6 +164,11 @@ export function assertAgentRun(
   ]) {
     if (run[key] != null) object(run[key], `${path}.${key}`);
   }
+  const parameters = run.generationParameters as
+    | Record<string, unknown>
+    | undefined;
+  if (parameters?.workflowModelActivity !== undefined)
+    assertWorkflowActivity(parameters.workflowModelActivity);
 }
 
 function interaction(value: unknown, path: string) {

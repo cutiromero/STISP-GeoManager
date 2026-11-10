@@ -1,6 +1,7 @@
 import PlatformActions from "./PlatformActions";
 import BusinessFlowActivity from "../businessflows/BusinessFlowActivity";
 import BusinessFlowMonitor from "../businessflows/BusinessFlowMonitor";
+import { workflowModelActivity } from "../api/workflowModelStream";
 import BusinessFlowLaunch, {
   type BusinessFlowLaunchIntent,
 } from "../businessflows/BusinessFlowLaunch";
@@ -1800,6 +1801,7 @@ function AgentWorkspace({
                   {r.businessFlow && (
                     <BusinessFlowActivity
                       flow={r.businessFlow}
+                      modelActivity={workflowModelActivity(r)}
                       onChanged={acceptBusinessFlow}
                       inspectNode={
                         inspectedFlowNode?.flowId === r.businessFlow.id

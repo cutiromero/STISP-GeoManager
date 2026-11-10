@@ -137,6 +137,7 @@ def synchronize(workflow_id):
 def compact_review_packet(decision, edits, results):
     """Keep actual checksums, complete counts and grouped rules; omit bulky geometry."""
     from collections import Counter
+    from apps.agent.geology_multi_results import _model_metadata
 
     def row_summary(rows):
         groups = Counter(
@@ -153,7 +154,15 @@ def compact_review_packet(decision, edits, results):
                 key: value
                 for key, value in row.items()
                 if key.lower()
-                not in {"geometry", "geometry_wkt", "wkt", "coordinates", "geom"}
+                not in {
+                    "geometry",
+                    "geometry_json",
+                    "geometry_wkt",
+                    "geometry_wkb",
+                    "wkt",
+                    "coordinates",
+                    "geom",
+                }
             }
             for row in rows[:12]
             if isinstance(row, dict)
@@ -167,9 +176,26 @@ def compact_review_packet(decision, edits, results):
             ],
             "sampleRows": samples,
             "sampleComplete": len(rows) <= 12,
+            "geometryStoredInOriginal": any(
+                any(
+                    key.lower()
+                    in {
+                        "geometry",
+                        "geometry_json",
+                        "geometry_wkt",
+                        "geometry_wkb",
+                        "wkt",
+                        "coordinates",
+                        "geom",
+                    }
+                    for key in row
+                )
+                for row in rows[:12]
+                if isinstance(row, dict)
+            ),
         }
 
-    actual = []
+    actual, shared_metadata = [], {}
     for result in results:
         item = {
             key: value
@@ -178,6 +204,10 @@ def compact_review_packet(decision, edits, results):
         }
         if isinstance(result.get("rows"), list):
             item["rows"] = row_summary(result["rows"])
+        if isinstance(result.get("metadata"), dict):
+            item["metadata"] = _model_metadata(
+                result, shared_metadata, columns=result.get("columns")
+            )
         actual.append(item)
     return {
         "decision": decision,

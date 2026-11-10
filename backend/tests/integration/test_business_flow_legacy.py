@@ -312,6 +312,61 @@ def test_emit_and_projection_keep_legacy_approval_plan_and_hash_unchanged(legacy
     )
 
 
+def test_public_actor_omits_private_structured_decision_without_changing_saved_evidence(
+    legacy_flow,
+):
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = env["create"]()
+    private = {"judgement": "完整判断", "resultSummary": "实际结果"}
+    state(workflow)["nodes"]["apply"]["executor"]["decision"] = deepcopy(private)
+    with project_scope(env["scope"]):
+        output = runtime.serialize_run(env["user"], workflow)
+    actor = next(node for node in output["nodes"] if node["nodeId"] == "apply")[
+        "executor"
+    ]
+    assert "decision" not in actor
+    assert state(workflow)["nodes"]["apply"]["executor"]["decision"] == private
+
+
+def test_independent_review_keeps_counts_and_source_digest_without_coordinate_transport():
+    rows = [
+        {
+            "feature_id": str(i),
+            "rule_id": "R1",
+            "status": "repairable",
+            "value": i,
+            "geometry_json": json.dumps(
+                {"type": "Polygon", "coordinates": [[[j, j] for j in range(5000)]]}
+            ),
+        }
+        for i in range(20)
+    ]
+    original = deepcopy(rows)
+    packet = legacy.compact_review_packet(
+        {"judgement": "需按实际对象核对"},
+        rows,
+        [
+            {
+                "outputId": 7,
+                "taskId": "owned",
+                "key": "issues",
+                "checksum": "source-sha",
+                "rows": rows,
+            }
+        ],
+    )
+    assert len(json.dumps(packet).encode()) < 20000
+    assert packet["proposal"]["rowCount"] == 20
+    assert packet["proposal"]["rowsDigest"] == digest(rows)
+    assert packet["proposal"]["geometryStoredInOriginal"] is True
+    assert sum(group["count"] for group in packet["proposal"]["groups"]) == 20
+    assert packet["actualResults"][0]["checksum"] == "source-sha"
+    assert packet["actualResults"][0]["rows"]["sampleRows"][3]["value"] == 3
+    assert rows == original
+
+
 @pytest.mark.parametrize(
     "actual,expected",
     [

@@ -2,9 +2,14 @@ import type {
   BrowserSessionRequest,
   BrowserSessionResponse,
 } from "../api/generated/types.gen";
+import {
+  recordResponseDiagnostic,
+  ResponseFormatError,
+} from "../api/responseDiagnostics";
 
 export const browserSessionStorageKey = "stisp.browser-page-session";
 export const browserSessionEndedEvent = "stisp:browser-session-ended";
+export const browserSessionRecoveredEvent = "stisp:browser-session-recovered";
 const channelName = "stisp.browser-session";
 const endpoint = "/api/auth/browser-session/";
 const heartbeatIntervalMs = 30_000;
@@ -28,6 +33,7 @@ let startup: Promise<boolean> | null = null;
 let renewal: Promise<boolean> | null = null;
 let confirmedAt = 0;
 let handlersInstalled = false;
+let renewalFailed = false;
 let lifecycle = 0;
 let requests = new AbortController();
 export function browserSessionSignal() {
@@ -99,7 +105,9 @@ function csrfToken() {
 async function send(
   payload: BrowserSessionRequest,
   keepalive = false,
+  retryTransient = true,
 ): Promise<BrowserSessionResponse> {
+  const generation = lifecycle;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), renewalTimeoutMs);
   let response: Response;
@@ -111,6 +119,7 @@ async function send(
         keepalive,
         signal: controller.signal,
         headers: {
+          Accept: "application/json",
           "Content-Type": "application/json",
           "X-CSRFToken": csrfToken(),
         },
@@ -121,14 +130,52 @@ async function send(
     clearTimeout(timeout);
   }
   if (!response.ok) {
+    recordResponseDiagnostic(
+      endpoint,
+      response,
+      null,
+      `browser_session_http:${response.status}`,
+    );
+    if (
+      payload.action === "heartbeat" &&
+      retryTransient &&
+      [502, 503, 504].includes(response.status)
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (
+        generation !== lifecycle ||
+        !active ||
+        credentials?.pageId !== payload.pageId
+      )
+        throw new DOMException("页面会话已变化", "AbortError");
+      return send(payload, keepalive, false);
+    }
     throw Object.assign(
       new Error(
-        response.status === 401 ? "请重新登录" : "页面登录状态更新失败",
+        response.status === 401
+          ? "请重新登录"
+          : `页面登录状态更新失败（HTTP ${response.status}）`,
       ),
       { status: response.status },
     );
   }
-  const result: BrowserSessionResponse = await response.json();
+  let result: BrowserSessionResponse;
+  try {
+    result = await response.json();
+    if (!result || typeof result.active !== "boolean")
+      throw new Error("invalid active state");
+  } catch {
+    recordResponseDiagnostic(
+      endpoint,
+      response,
+      null,
+      "browser_session_invalid_response",
+    );
+    throw new ResponseFormatError(
+      "browserSession",
+      "页面会话返回内容异常，请重试",
+    );
+  }
   if (
     ["start", "join", "resume", "heartbeat"].includes(payload.action) &&
     result.active === false
@@ -286,11 +333,16 @@ export function refreshBrowserSession(force = false): Promise<boolean> {
       confirmedAt = Date.now();
       if (result.familyId) page.familyId = result.familyId;
       storeCredentials(page);
+      if (renewalFailed) {
+        renewalFailed = false;
+        window.dispatchEvent(new Event(browserSessionRecoveredEvent));
+      }
       return true;
     })
     .catch((error: unknown) => {
       if (generation !== lifecycle || credentials !== page || !active)
         return false;
+      renewalFailed = true;
       if (error instanceof Error && "status" in error && error.status === 401)
         endBrowserSession(false);
       throw error;
@@ -319,6 +371,7 @@ export function endBrowserSession(
   startup = null;
   renewal = null;
   confirmedAt = 0;
+  renewalFailed = false;
   if (timer) clearInterval(timer);
   timer = undefined;
   sessionStorage.removeItem(browserSessionStorageKey);

@@ -54,6 +54,50 @@ function graph(flow: BusinessFlowRun) {
   );
 }
 
+it("fits all nodes and unique terminals on entry, offsets review junctions and supports zoom then fit", async () => {
+  render(
+    <App>
+      <div style={{ width: 860 }}>
+        <BusinessFlowGraph nodes={geologySpec.nodes} />
+      </div>
+    </App>,
+  );
+  const scroller = screen.getByRole("region", { name: "业务流程图，可缩放" });
+  await waitFor(() =>
+    expect(scroller.scrollWidth).toBeLessThanOrEqual(scroller.clientWidth + 1),
+  );
+  expect(
+    screen.getAllByRole("button", { name: "开始", exact: true }),
+  ).toHaveLength(1);
+  expect(
+    screen.getAllByRole("button", { name: "输出", exact: true }),
+  ).toHaveLength(1);
+  await waitFor(() =>
+    expect(
+      document.querySelector('[data-flow-review="apply:ai"]'),
+    ).toBeTruthy(),
+  );
+  const x = (role: string) =>
+    Number(
+      document
+        .querySelector(`[data-flow-review="apply:${role}"]`)!
+        .getAttribute("d")!
+        .match(/L([\d.]+),[\d.]+$/)![1],
+    );
+  expect(Math.abs(x("ai") - x("human"))).toBeGreaterThanOrEqual(30);
+  const plus = screen.getByRole("button", { name: "放大流程图" });
+  fireEvent.click(plus);
+  fireEvent.click(plus);
+  fireEvent.click(plus);
+  await waitFor(() =>
+    expect(scroller.scrollWidth).toBeGreaterThan(scroller.clientWidth),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /适应窗口/ }));
+  await waitFor(() =>
+    expect(scroller.scrollWidth).toBeLessThanOrEqual(scroller.clientWidth + 1),
+  );
+});
+
 it("places distinct review gates off the task line and draws the real human return", async () => {
   const flow = returnedFlow();
   render(graph(flow));
@@ -85,9 +129,11 @@ it("places distinct review gates off the task line and draws the real human retu
   );
   expect(
     document.querySelectorAll(".business-flow-graph-links > path"),
-  ).toHaveLength(1);
+  ).toHaveLength(3);
   expect(
-    document.querySelector(".business-flow-graph-links > path.is-complete"),
+    document.querySelector(
+      '.business-flow-graph-links > path[data-flow-edge="analyse:finish"].is-complete',
+    ),
   ).toBeNull();
   expect(
     document.querySelector(".flow-return-links path.is-returned"),
@@ -161,7 +207,9 @@ it("keeps the return while executing again and requires a new human approval aft
     screen.getByRole("button", { name: "人工审批：分析项目资料，待您确认" }),
   ).toBeVisible();
   expect(
-    document.querySelector(".business-flow-graph-links > path.is-complete"),
+    document.querySelector(
+      '.business-flow-graph-links > path[data-flow-edge="analyse:finish"].is-complete',
+    ),
   ).toBeNull();
   expect(businessFlowProgress(revised).completedNodes).toBe(0);
   revised.nodes[0]!.status = "succeeded";
@@ -295,7 +343,13 @@ it("contains a long diagram on small screens and exposes the progress toggle to 
       ".business-flow-graph-scroller",
     )!;
     expect(scroller.clientWidth).toBeLessThan(390);
-    expect(scroller.scrollWidth).toBeGreaterThan(scroller.clientWidth);
+    expect(scroller.scrollWidth).toBeLessThanOrEqual(scroller.clientWidth + 1);
+    expect(
+      within(dialog).getAllByRole("button", { name: "开始", exact: true }),
+    ).toHaveLength(1);
+    expect(
+      within(dialog).getAllByRole("button", { name: "输出", exact: true }),
+    ).toHaveLength(1);
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
   } finally {
     await page.viewport(1600, 900);

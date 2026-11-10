@@ -8,6 +8,7 @@ import {
   useProjectContext,
 } from "./ProjectContext";
 import { getActiveProject, resetProjectSession } from "./session";
+import { browserSessionRecoveredEvent } from "../auth/browserSession";
 
 const mocks = vi.hoisted(() => ({
   user: { id: 42 } as {
@@ -70,6 +71,27 @@ beforeEach(() => {
 });
 
 describe("single-project navigation", () => {
+  it("refreshes a failed project read after real session recovery without remounting the page", async () => {
+    sessionStorage.setItem("project:42", "2");
+    show();
+    await screen.findByText("项目甲");
+    const content = screen.getByLabelText("实际项目范围");
+    const reads = mocks.projects.mock.calls.length;
+    mocks.projects.mockRejectedValueOnce(
+      new Error("页面登录状态更新失败（HTTP 503）"),
+    );
+    fireEvent(window, new Event("focus"));
+    await screen.findByText("项目列表暂时无法更新，当前页面已保留");
+    fireEvent(window, new Event(browserSessionRecoveredEvent));
+    await waitFor(() =>
+      expect(
+        screen.queryByText("项目列表暂时无法更新，当前页面已保留"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText("实际项目范围")).toBe(content);
+    expect(getActiveProject()).toBe("2");
+    expect(mocks.projects).toHaveBeenCalledTimes(reads + 2);
+  });
   it("shows login immediately without loading project authorization", () => {
     mocks.user = null;
     mocks.projects.mockRejectedValue(new Error("项目不可用"));

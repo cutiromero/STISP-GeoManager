@@ -7,6 +7,7 @@ import type {
 import { assertRunPoll } from "./agentResponse";
 import { ApiError } from "./client";
 import { ResponseFormatError } from "./responseDiagnostics";
+import { applyWorkflowModelEvent } from "./workflowModelStream";
 
 export const MAX_ANSWER_PREVIEW = 1048576;
 const active = (run: AgentRun) =>
@@ -48,7 +49,9 @@ export function applyAgentEvents(
 ): AgentRun {
   let next = { ...run };
   for (const event of events) {
-    if (event.kind === "thinking")
+    if (event.kind === "workflow_model_activity")
+      next = applyWorkflowModelEvent(next, event.text);
+    else if (event.kind === "thinking")
       next.thinkingText = (next.thinkingText ?? "") + event.text;
     else if (event.kind === "answer_preview") next.answerPreview = event.text;
     else if (event.kind === "answer_delta")

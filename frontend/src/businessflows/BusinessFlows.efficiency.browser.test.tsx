@@ -250,7 +250,7 @@ it("preserves dependency branches and renders execution/review/human states from
   await waitFor(() =>
     expect(
       document.querySelectorAll(".business-flow-graph-links > path"),
-    ).toHaveLength(2),
+    ).toHaveLength(5),
   );
   expect(() =>
     businessFlowLevels([{ ...nodes[0]!, dependsOn: ["finish"] }, nodes[2]!]),
