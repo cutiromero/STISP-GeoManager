@@ -4162,7 +4162,12 @@ paths:
           - preview
           - thumbnail
           default: artifact
-        description: artifact 下载原文件，preview 在浏览器内预览；thumbnail 返回长边不超过640像素的WebP缩略图，仅PNG、JPG/JPEG成果提供，其余格式返回400
+        description: artifact 下载原文件，preview 在浏览器内预览；thumbnail 只读取预生成的 WebP，长边不超过640像素、最多48KiB，PDF使用首页，非可视类型返回统一占位。缺图返回不缓存的小占位并后台补生成，绝不读取或渲染原图。
+      - name: v
+        in: query
+        description: 缩略图内容版本；旧版本请求返回404。
+        schema:
+          type: string
       - name: X-Project-Id
         in: header
         required: false
@@ -4177,7 +4182,7 @@ paths:
           type: string
       responses:
         '200':
-          description: 文件内容
+          description: 文件内容；thumbnail为预生成WebP或极小占位，长缓存必须重验证，登录/私有响应no-store。
           headers:
             Content-Disposition:
               schema:
@@ -4203,6 +4208,13 @@ paths:
               schema:
                 type: string
                 format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+                description: 预生成卡片小图或缺失占位。
+        '304':
+          description: 当前仍有访问权限且缩略图ETag未改变。
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -4729,7 +4741,12 @@ paths:
           - preview
           - thumbnail
           default: artifact
-        description: artifact 返回正式成果并触发下载；preview 返回 PNG 预览；thumbnail 返回由预览生成的长边不超过640像素的WebP缩略图
+        description: artifact 返回正式成果并触发下载；preview 返回 PNG 预览；thumbnail 只读取保存成果时生成的 WebP（最长边640像素、最多48KiB），缺图返回占位并后台补生成，不触发地图渲染。
+      - name: v
+        in: query
+        description: 缩略图内容版本；旧版本请求返回404。
+        schema:
+          type: string
       - name: X-Project-Id
         in: header
         required: false
@@ -4755,6 +4772,13 @@ paths:
               schema:
                 type: string
                 format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+                description: 保存版本时准备的卡片小图或缺失占位。
+        '304':
+          description: 当前仍有访问权限且缩略图ETag未改变。
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -6053,6 +6077,98 @@ paths:
         description: 单个业务项目标签 ID，缺省为公开项目 1。all 汇总已取消，业务接口读写均仅接受一个具体项目，传 all 返回 400。与地图工程 projectId 不同；平台管理接口独立执行管理权限检查。
         schema:
           type: string
+  /api/projects/features/{featureKey}/:
+    post:
+      tags: [管理后台]
+      summary: 超管设置项目功能全局开关
+      description: 仅超级管理员可设置并写入审计。全局开启覆盖单项目开关，但不授予项目访问权限，也不复制内容配置；全局关闭恢复各项目原设置。
+      operationId: setGlobalProjectFeature
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: featureKey
+        in: path
+        required: true
+        description: 已注册的功能标识。
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+                  description: 是否对所有项目开启。
+      responses:
+        '200':
+          description: 全局开关已保存并审计。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectFeature'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 功能未注册。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/projects/{projectTagId}/features/{featureKey}/:
+    post:
+      tags: [管理后台]
+      summary: 超管设置单项目功能与内容配置
+      description: 仅超级管理员可设置并写入审计。enabled 和 config 至少提供一项，省略保留原值，config 为 null 时清除配置。项目功能不能替代账号权限或项目授权。
+      operationId: setProjectFeature
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: projectTagId
+        in: path
+        required: true
+        description: 目标项目标签 ID，与当前项目请求头无关。
+        schema:
+          type: integer
+          minimum: 1
+      - name: featureKey
+        in: path
+        required: true
+        description: 已注册的功能标识。
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectFeatureInput'
+      responses:
+        '200':
+          description: 项目功能已保存并审计，返回最新有效功能清单。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectTag'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: 项目或功能不存在。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/projects/{projectTagId}/:
     post:
       tags:
@@ -6485,18 +6601,25 @@ paths:
         - 公共接口
       summary: 读取已授权内容媒体
       description: 科普和团队动态为平台公共内容，与业务项目无关。已发布正文与附件允许匿名阅读；草稿、下架内容及附件仅内容管理员可访问，写入仍需内容管理权限。所有内容及附件固定存储归属公开项目
-        1，请求中的项目头和查询参数不参与内容范围选择。 暂存附件仅上传者可见，即使正文已发布也不公开；24 小时后过期。
+        1，请求中的项目头和查询参数不参与内容范围选择。 暂存附件仅上传者可见，即使正文已发布也不公开；24 小时后过期。variant=thumbnail只读写入时生成的WebP，缺失返回64字节占位并后台补生成；版本失效返回404，缓存必须重验证，登录响应沿用no-store。
       operationId: downloadContentAsset
       security: []
       responses:
         "200":
-          description: 按条目状态鉴权后的媒体文件。
+          description: 按条目状态鉴权后的媒体文件；thumbnail 为预生成 WebP 或极小占位。
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
                 description: 媒体二进制。
+            image/webp:
+              schema:
+                type: string
+                format: binary
+                description: 预生成的卡片封面或占位图。
+        "304":
+          description: 当前仍有媒体访问权限且缩略图ETag未改变。
         "400":
           $ref: "#/components/responses/BadRequest"
         "403":
@@ -6515,6 +6638,18 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - name: variant
+          in: query
+          description: artifact读取原文件；thumbnail只读预生成卡片小图。
+          schema:
+            type: string
+            enum: [artifact, thumbnail]
+            default: artifact
+        - name: v
+          in: query
+          description: 返回地址携带的内容版本标识；旧版本不可读取新内容。
+          schema:
+            type: string
         - name: X-Project-Id
           in: header
           required: false
@@ -11986,6 +12121,63 @@ components:
       required:
       - items
       additionalProperties: false
+    ProjectFeature:
+      type: object
+      description: 数据驱动的项目功能注册项，不代替用户权限。
+      required: [key, globallyEnabled]
+      properties:
+        key:
+          type: string
+          description: 稳定功能标识，例如 ecology_monitor。
+        globallyEnabled:
+          type: boolean
+          description: 对所有启用项目生效；关闭后恢复单项目设置。
+    ProjectMonitorConfig:
+      type: object
+      description: 当前项目的监测内容配置；不回退其他项目数据。
+      required: [title, source, initialView]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: 大屏标题。
+        source:
+          type: string
+          enum: [tarim_poplar_mock]
+          description: 显式选择的模拟数据源；目前仅注册塔里木胡杨演示源。
+        initialView:
+          type: object
+          description: 研究区初始视角。
+          required: [center, zoom, regionZoom]
+          properties:
+            center:
+              type: array
+              minItems: 2
+              maxItems: 2
+              description: 经度、纬度；分别限制在正负180、90度。
+              items:
+                type: number
+            zoom:
+              type: number
+              minimum: 0
+              maximum: 22
+              description: 初始地球视角缩放级别。
+            regionZoom:
+              type: number
+              minimum: 0
+              maximum: 22
+              description: 研究区按钮缩放级别。
+    ProjectFeatureInput:
+      type: object
+      description: enabled/config 至少提供一项，省略保留原值；ecology_monitor 的非空配置必须符合 ProjectMonitorConfig。
+      properties:
+        enabled:
+          type: boolean
+          description: 单项目开关；全局开启时仍保存，但有效开关为开启。
+        config:
+          type: [object, 'null']
+          additionalProperties: true
+          description: 功能专属内容配置，null 清除；监测配置包含 title、source、initialView。
     ProjectTag:
       type: object
       description: 平台升级数据结构。
@@ -12019,6 +12211,21 @@ components:
         sortOrder:
           type: integer
           description: 排序。
+        enabledFeatures:
+          type: array
+          description: 后端计算的有效功能清单；停用项目为空。前端入口与路由仅依据此清单，不判断项目代码。
+          items:
+            type: string
+        configuredFeatures:
+          type: array
+          description: 单项目显式开启的功能，不包含全局覆盖，用于后台设置。
+          items:
+            type: string
+        monitorConfig:
+          description: 已开启大屏的项目专属内容配置；未开启或未配置为 null。
+          oneOf:
+          - $ref: '#/components/schemas/ProjectMonitorConfig'
+          - type: 'null'
     ProjectTagList:
       type: object
       description: 平台升级数据结构。
@@ -12047,6 +12254,11 @@ components:
           description: 具备标签分配权限时可分配的项目集合，不代表内容访问权限。
           items:
             $ref: '#/components/schemas/ProjectTag'
+        featureCatalog:
+          type: array
+          description: 超级管理员可见的功能注册表与全局开关；其他账号为空。
+          items:
+            $ref: '#/components/schemas/ProjectFeature'
     ProjectTagInput:
       type: object
       description: 平台升级数据结构。
@@ -12142,6 +12354,9 @@ components:
         coverUrl:
           type: string
           description: 受控封面地址。
+        thumbnailUrl:
+          type: string
+          description: 带内容版本的受控卡片小图地址。无封面时为空字符串，客户端显示占位，不回退coverUrl；详情仍使用coverUrl。
         eventDate:
           type: string
           description: 事件日期 YYYY-MM-DD，允许空字符串。
@@ -12327,6 +12542,11 @@ components:
         detail:
           type: string
           description: 错误描述信息
+        gaps:
+          type: array
+          description: 第2版算子输入预检的机器可读差距，权限错误不返回资料信息
+          items:
+            $ref: '#/components/schemas/ComputeInputGap'
     DetailResponse:
       type: object
       required:
@@ -15470,7 +15690,7 @@ components:
           description: 成果预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
         thumbnailUrl:
           type: [string, 'null']
-          description: 卡片用缩略图地址，包含所属项目的 projectTagId；仅PNG、JPG/JPEG成果提供，其余格式为null。首次请求时生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。
+          description: 带内容版本与projectTagId的预生成WebP卡片地址，PDF使用首页，非可视类型使用统一占位。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问；不得回退previewUrl。
         downloadUrl:
           type: string
           description: 成果下载地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
@@ -16984,7 +17204,7 @@ components:
           description: PNG 预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
         thumbnailUrl:
           type: string
-          description: 卡片用缩略图地址，包含所属项目的 projectTagId；由PNG预览生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。
+          description: 带内容版本与projectTagId的预生成WebP卡片地址，保存版本时由PNG母图生成；读取绝不渲染地图。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问。
         downloadUrl:
           type: string
           description: 正式成果下载地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
@@ -20433,18 +20653,18 @@ components:
             projectId 不同；平台管理接口独立执行管理权限检查。
       description: 工程摘要；不传输图层快照，加载工程时调用详情接口。
 
-    ComputeInputSpec: {"type": "object", "description": "命名输入及数据条件", "properties": {"key": {"type": "string", "description": "稳定名称"}, "label": {"type": "string", "description": "显示名称"}, "kind": {"type": "string", "description": "输入类型", "enum": ["vector", "raster", "table", "gene", "document", "image"]}, "required": {"type": "boolean", "description": "必填"}, "minBands": {"type": "integer", "description": "最少波段数"}, "geometryTypes": {"type": "array", "description": "允许的几何类型，空表示不限", "items": {"type": "string", "description": "文字"}}}, "required": ["key", "label", "kind", "required"]}
-    ComputeParameterSpec: {"type": "object", "description": "受控参数描述；动态Python代码仅由专用受限运行环境执行", "properties": {"key": {"type": "string", "description": "参数名"}, "label": {"type": "string", "description": "名称"}, "type": {"type": "string", "description": "控件类型", "enum": ["number", "integer", "string", "boolean", "enum", "field", "band"]}, "required": {"type": "boolean", "description": "必填"}, "default": {"description": "默认值"}, "min": {"type": "number", "description": "最小值"}, "max": {"type": "number", "description": "最大值"}, "choices": {"type": "array", "description": "枚举值", "items": {"type": "string", "description": "文字"}}, "input": {"type": "string", "description": "字段或波段所属输入"}, "help": {"type": "string", "description": "说明"}, "when": {"type": "object", "description": "条件显示：key 和 equals；只支持前置参数等值", "additionalProperties": true}, "maxLength": {"type": "integer", "description": "字符串长度上限，缺省2000；受限脚本最多16000", "minimum": 1, "maximum": 16000}}, "required": ["key", "label", "type", "required"]}
-    ComputeOutputSpec: {"type": "object", "description": "算法输出声明", "properties": {"key": {"type": "string", "description": "名称"}, "label": {"type": "string", "description": "显示名称"}, "kind": {"type": "string", "description": "类型", "enum": ["raster", "vector", "table", "image", "report", "archive", "gene", "document"]}, "file": {"type": "string", "description": "输出目录内文件名"}, "required": {"type": "boolean", "description": "是否必须输出"}}, "required": ["key", "label", "kind", "file", "required"]}
-    ComputeManifest: {"type": "object", "description": "operator.yaml 规范化清单 v1；入口固定 main.py:run(context)", "properties": {"schemaVersion": {"type": "integer", "description": "清单版本", "const": 1}, "identifier": {"type": "string", "description": "算法稳定标识"}, "name": {"type": "string", "description": "名称"}, "version": {"type": "string", "description": "不可变版本"}, "description": {"type": "string", "description": "用途与限制"}, "author": {"type": "string", "description": "作者和来源"}, "runtime": {"type": "string", "description": "经管理员配置的运行环境 ID"}, "inputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeInputSpec"}}, "parameters": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeParameterSpec"}}, "outputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeOutputSpec"}}, "timeoutSeconds": {"type": "integer", "description": "算法时限，受平台上限约束"}, "deterministic": {"type": "boolean", "description": "中断后是否可安全重做一次"}, "agent": {"type": "object", "description": "可选智能体调用策略；旧清单省略时保持原权限行为，显式false禁止智能体调用", "properties": {"enabled": {"type": "boolean", "description": "是否允许受平台策略与用户权限控制的智能体调用"}}, "required": ["enabled"], "additionalProperties": false}, "qualityReport": {"type": "object", "description": "可选质量报告声明；worker验证并传播到输出。声明但缺失/无效或needs_review时阻止自动入库，报告最大64KiB", "properties": {"file": {"type": "string", "description": "单层ASCII JSON文件名，与普通输出不重名", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,145}\\.json$"}}, "required": ["file"], "additionalProperties": false}, "inputScriptBridge": {"$ref": "#/components/schemas/ComputeInputScriptBridge"}}, "required": ["schemaVersion", "identifier", "name", "version", "description", "author", "runtime", "inputs", "parameters", "outputs", "timeoutSeconds", "deterministic"]}
-    "ComputeVersion": {"type": "object", "description": "不可变算法版本及验证状态", "properties": {"id": {"type": "integer", "description": "标识"}, "version": {"type": "string", "description": "文字"}, "status": {"type": "string", "description": "版本状态", "enum": ["draft", "published", "archived"]}, "checksum": {"type": "string", "description": "ZIP SHA256"}, "manifest": {"$ref": "#/components/schemas/ComputeManifest"}, "runtimeDigest": {"type": "string", "description": "镜像不可变摘要"}, "validated": {"type": "boolean", "description": "有成功的隔离试运行"}, "createdAt": {"type": "string", "description": "上传时间", "format": "date-time"}}, "required": ["id", "version", "status", "checksum", "manifest", "runtimeDigest", "validated", "createdAt"]}
+    ComputeInputSpec: {"type": "object", "description": "命名输入及数据条件", "properties": {"key": {"type": "string", "description": "稳定名称"}, "label": {"type": "string", "description": "显示名称"}, "kind": {"type": "string", "description": "输入类型", "enum": ["vector", "raster", "table", "gene", "document", "image"]}, "required": {"type": "boolean", "description": "必填"}, "minBands": {"type": "integer", "description": "最少波段数"}, "geometryTypes": {"type": "array", "description": "允许的几何类型，空表示不限", "items": {"type": "string", "description": "文字"}}, "description": {"type": "string", "description": "输入语义与限制"}, "fields": {"type": "array", "description": "语义字段要求", "items": {"$ref": "#/components/schemas/ComputeSemanticField"}, "maxItems": 100}, "crs": {"type": "object", "description": "坐标系要求", "properties": {"mode": {"type": "string", "description": "要求", "enum": ["any", "projected", "same_as"]}, "input": {"type": "string", "description": "参照的其他单输入键"}}, "additionalProperties": false, "required": ["mode"]}, "spatial": {"type": "object", "description": "包围范围关系", "properties": {"relation": {"type": "string", "description": "关系", "enum": ["intersects", "within"]}, "input": {"type": "string", "description": "参照单输入键"}}, "additionalProperties": false, "required": ["relation", "input"]}, "repeat": {"type": "object", "description": "同类输入集合", "properties": {"min": {"type": "integer", "description": "最少数量", "minimum": 0, "maximum": 64}, "max": {"type": "integer", "description": "最多数量", "minimum": 0, "maximum": 64}, "labelRequired": {"type": "boolean", "description": "是否必须具名"}}, "additionalProperties": false, "required": ["min", "max", "labelRequired"]}}, "required": ["key", "label", "kind", "required"]}
+    ComputeParameterSpec: {"type": "object", "description": "受控参数描述；动态Python代码仅由专用受限运行环境执行", "properties": {"key": {"type": "string", "description": "参数名"}, "label": {"type": "string", "description": "名称"}, "type": {"type": "string", "description": "控件类型", "enum": ["number", "integer", "string", "boolean", "enum", "field", "band"]}, "required": {"type": "boolean", "description": "必填"}, "default": {"description": "默认值"}, "min": {"type": "number", "description": "最小值"}, "max": {"type": "number", "description": "最大值"}, "choices": {"type": "array", "description": "枚举值", "items": {"type": "string", "description": "文字"}}, "input": {"type": "string", "description": "字段或波段所属输入"}, "help": {"type": "string", "description": "说明"}, "when": {"type": "object", "description": "条件显示：key 和 equals；只支持前置参数等值", "additionalProperties": true}, "maxLength": {"type": "integer", "description": "字符串长度上限，缺省2000；受限脚本最多16000", "minimum": 1, "maximum": 16000}, "agent": {"$ref": "#/components/schemas/ComputeAgentParameter"}}, "required": ["key", "label", "type", "required"]}
+    ComputeOutputSpec: {"type": "object", "description": "算法输出声明", "properties": {"key": {"type": "string", "description": "名称"}, "label": {"type": "string", "description": "显示名称"}, "kind": {"type": "string", "description": "类型", "enum": ["raster", "vector", "table", "image", "report", "archive", "gene", "document"]}, "file": {"type": "string", "description": "输出目录内文件名"}, "required": {"type": "boolean", "description": "是否必须输出"}, "description": {"type": "string", "description": "输出语义与适用条件"}, "fields": {"type": "array", "description": "输出字段语义", "items": {"$ref": "#/components/schemas/ComputeSemanticField"}}, "final": {"type": "boolean", "description": "是否最终成果"}}, "required": ["key", "label", "kind", "file", "required"]}
+    ComputeManifest: {"type": "object", "description": "规范化清单v1/v2；入口main.py:run(context)。v2上传强制校验完整语义及样例；旧登记记录不重新验证", "properties": {"schemaVersion": {"type": "integer", "description": "清单版本", "enum": [1, 2]}, "identifier": {"type": "string", "description": "算法稳定标识"}, "name": {"type": "string", "description": "名称"}, "version": {"type": "string", "description": "不可变版本"}, "description": {"type": "string", "description": "用途与限制"}, "author": {"type": "string", "description": "作者和来源"}, "runtime": {"type": "string", "description": "经管理员配置的运行环境 ID"}, "inputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeInputSpec"}}, "parameters": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeParameterSpec"}}, "outputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeOutputSpec"}}, "timeoutSeconds": {"type": "integer", "description": "算法时限，受平台上限约束"}, "deterministic": {"type": "boolean", "description": "中断后是否可安全重做一次"}, "agent": {"type": "object", "description": "可选智能体调用策略；旧清单省略时保持原权限行为，显式false禁止智能体调用", "properties": {"enabled": {"type": "boolean", "description": "是否允许受平台策略与用户权限控制的智能体调用"}}, "required": ["enabled"], "additionalProperties": false}, "qualityReport": {"type": "object", "description": "可选质量报告声明；worker验证并传播到输出。声明但缺失/无效或needs_review时阻止自动入库，报告最大64KiB", "properties": {"file": {"type": "string", "description": "单层ASCII JSON文件名，与普通输出不重名", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,145}\\.json$"}}, "required": ["file"], "additionalProperties": false}, "inputScriptBridge": {"$ref": "#/components/schemas/ComputeInputScriptBridge"}, "capabilities": {"$ref": "#/components/schemas/ComputeCapabilities"}, "errors": {"type": "array", "description": "错误码表", "items": {"$ref": "#/components/schemas/ComputeOperatorErrorSpec"}, "maxItems": 64}, "resources": {"type": "object", "description": "仅供调度参考，不保证配额", "properties": {"duration": {"type": "string", "description": "耗时量级", "enum": ["seconds", "minutes", "hours"]}, "memory": {"type": "string", "description": "峰值内存量级", "enum": ["small", "medium", "large"]}, "scaling": {"type": "string", "description": "资源与规模关系"}}, "additionalProperties": false, "required": ["duration", "memory", "scaling"]}, "selfTests": {"type": "array", "description": "包内自检组", "items": {"$ref": "#/components/schemas/ComputeSelfTest"}, "maxItems": 10}, "inputAdapter": {"type": "object", "description": "已有输入适配能力声明，沿用适配器校验和发现服务", "additionalProperties": true}}, "required": ["schemaVersion", "identifier", "name", "version", "description", "author", "inputs", "parameters", "outputs", "timeoutSeconds", "deterministic"]}
+    ComputeVersion: {"type": "object", "description": "不可变算法版本及验证状态", "properties": {"id": {"type": "integer", "description": "标识"}, "version": {"type": "string", "description": "文字"}, "status": {"type": "string", "description": "版本状态", "enum": ["draft", "published", "archived"]}, "checksum": {"type": "string", "description": "ZIP SHA256"}, "manifest": {"$ref": "#/components/schemas/ComputeManifest"}, "runtimeDigest": {"type": "string", "description": "镜像不可变摘要"}, "validated": {"type": "boolean", "description": "有成功的隔离试运行"}, "createdAt": {"type": "string", "description": "上传时间", "format": "date-time"}, "warnings": {"type": "array", "description": "兼容提示，v1建议升级但不拒绝", "items": {"type": "string", "description": "提示"}}}, "required": ["id", "version", "status", "checksum", "manifest", "runtimeDigest", "validated", "createdAt"]}
     "ComputeAlgorithm": {"type": "object", "description": "项目算法资源；公共算法可供私有项目调用", "properties": {"id": {"type": "integer", "description": "标识"}, "projectTagId": {"type": "integer", "description": "所属项目"}, "identifier": {"type": "string", "description": "文字"}, "name": {"type": "string", "description": "文字"}, "description": {"type": "string", "description": "文字"}, "category": {"type": "string", "description": "文字"}, "author": {"type": "string", "description": "文字"}, "enabled": {"type": "boolean", "description": "是否"}, "versions": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeVersion"}}, "canManage": {"type": "boolean", "description": "当前用户在当前项目可维护"}}, "required": ["id", "projectTagId", "identifier", "name", "description", "category", "author", "enabled", "versions", "canManage"]}
     "ComputeAlgorithmWrite": {"type": "object", "description": "登记/更新算法；项目取显式 X-Project-Id，不接受跨项目更新", "properties": {"identifier": {"type": "string", "description": "文字"}, "name": {"type": "string", "description": "文字"}, "description": {"type": "string", "description": "文字"}, "category": {"type": "string", "description": "文字"}, "author": {"type": "string", "description": "文字"}, "enabled": {"type": "boolean", "description": "是否"}}, "required": ["name", "identifier"]}
     "ComputeCategory": {"type": "object", "description": "算法用途分类", "properties": {"id": {"type": "integer", "description": "标识"}, "name": {"type": "string", "description": "文字"}, "sortOrder": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "sortOrder"]}
     "ComputeCandidate": {"type": "object", "description": "当前项目可计算数据；元数据不代表已固定输入", "properties": {"id": {"type": "integer", "description": "标识"}, "name": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "fields": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "bands": {"type": "integer", "description": "标识"}, "crs": {"type": "string", "description": "文字"}, "geometryTypes": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "sizeBytes": {"type": "integer", "description": "标识"}, "fileFormat": {"type": "string", "description": "资源登记格式；候选字段和几何类型从实际入库文件读取，后缀不能替代角色校验"}}, "required": ["id", "name", "kind", "projectTagId", "fields", "bands", "crs", "geometryTypes", "sizeBytes"]}
-    "ComputeTaskCreate": {"type": "object", "description": "创建任务；相同幂等键只能用于同一请求", "properties": {"name": {"type": "string", "description": "任务名称"}, "versionId": {"type": "integer", "description": "固定算法版本"}, "inputs": {"type": "object", "description": "输入名到资源 ID", "additionalProperties": {"type": "integer", "description": "标识"}}, "parameters": {"type": "object", "description": "按版本声明校验的参数", "additionalProperties": true}, "idempotencyKey": {"type": "string", "description": "客户端生成唯一键，最长80字符"}, "trial": {"type": "boolean", "description": "管理员试运行草稿版本"}}, "required": ["name", "versionId", "inputs", "parameters", "idempotencyKey"]}
+    ComputeTaskCreate: {"type": "object", "description": "创建任务；相同幂等键只能用于同一请求", "properties": {"name": {"type": "string", "description": "任务名称"}, "versionId": {"type": "integer", "description": "固定算法版本"}, "inputs": {"type": "object", "description": "输入键到资源ID；repeat端口使用具名数组", "additionalProperties": {"oneOf": [{"type": "integer", "description": "单资源ID", "minimum": 1}, {"type": "array", "description": "同类输入", "items": {"type": "object", "description": "集合成员", "properties": {"resourceId": {"type": "integer", "description": "资源ID", "minimum": 1}, "label": {"type": "string", "description": "真实名称"}}, "additionalProperties": false, "required": ["resourceId"]}, "maxItems": 64}]}}, "parameters": {"type": "object", "description": "按版本声明校验的参数", "additionalProperties": true}, "idempotencyKey": {"type": "string", "description": "客户端生成唯一键，最长80字符"}, "trial": {"type": "boolean", "description": "管理员试运行草稿版本"}, "fieldMappings": {"$ref": "#/components/schemas/ComputeFieldMappings"}}, "required": ["name", "versionId", "inputs", "parameters", "idempotencyKey"]}
     "ComputeOutput": {"type": "object", "description": "验证后的实际结果及独立入库状态", "properties": {"id": {"type": "integer", "description": "标识"}, "key": {"type": "string", "description": "文字"}, "label": {"type": "string", "description": "文字"}, "kind": {"type": "string", "description": "文字"}, "fileName": {"type": "string", "description": "文字"}, "sizeBytes": {"type": "integer", "description": "标识"}, "checksum": {"type": "string", "description": "文字"}, "metadata": {"type": "object", "description": "波段/字段/CRS/行数等结果检查信息", "additionalProperties": true, "properties": {"executionMetrics": {"type": "object", "description": "本次实际执行计时与输入复用计数；秒数不包含排队及模型调用", "additionalProperties": false, "properties": {"inputPreparationSeconds": {"type": "number", "minimum": 0, "description": "固定输入及算法包准备耗时（秒）"}, "algorithmSeconds": {"type": "number", "minimum": 0, "description": "隔离算子进程执行与完成检测耗时（秒）"}, "outputValidationSeconds": {"type": "number", "minimum": 0, "description": "输出格式、完整性及哈希检查耗时（秒）"}, "materializedInputs": {"type": "integer", "minimum": 0, "description": "重新导出物化的输入数"}, "reusedInputs": {"type": "integer", "minimum": 0, "description": "复用已有内容版本的输入数"}, "copyOnWriteInputs": {"type": "integer", "minimum": 0, "description": "通过写时复制生成任务副本的输入数"}, "copiedInputs": {"type": "integer", "minimum": 0, "description": "文件系统不支持写时复制时直接复制的输入数"}}}}}, "expired": {"type": "boolean", "description": "是否"}, "importStatus": {"type": "string", "description": "入库状态；deleted表示用户确认清理了目录数据，历史来源仍保留", "enum": ["none", "queued", "running", "ready", "failed", "deleted"]}, "resourceId": {"type": ["integer", "null"], "description": "已入库资源"}, "importError": {"type": "string", "description": "文字"}, "downloadUrl": {"type": "string", "description": "文字"}, "previewUrl": {"type": "string", "description": "文字"}, "resourceName": {"type": "string", "description": "Authorized registered resource name"}, "resourceLocation": {"type": "string", "description": "项目下数据资源 / 计算结果 / 资源名称"}, "mapUrl": {"type": "string", "description": "Direct geographic workspace link when registered"}}, "required": ["id", "key", "label", "kind", "fileName", "sizeBytes", "checksum", "metadata", "expired", "importStatus", "resourceId", "importError", "downloadUrl", "previewUrl"]}
-    "ComputeTask": {"type": "object", "description": "一个项目内的任务记录；日志/未入库成果仅本人和有权管理员可见", "properties": {"id": {"type": "string", "description": "UUID"}, "name": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "ownerName": {"type": "string", "description": "文字"}, "algorithmName": {"type": "string", "description": "文字"}, "version": {"$ref": "#/components/schemas/ComputeVersion"}, "status": {"type": "string", "description": "任务状态", "enum": ["queued", "validating", "running", "cancelling", "succeeded", "failed", "cancelled", "interrupted"]}, "stage": {"type": "string", "description": "平台阶段说明"}, "progress": {"type": "integer", "description": "0至100"}, "error": {"type": "string", "description": "可行动错误信息，不包含主机路径"}, "parameters": {"type": "object", "description": "任务参数快照", "additionalProperties": true}, "inputs": {"type": "array", "description": "列表", "items": {"type": "object", "description": "输入资源ID（历史清理后可为空）/名称/固定SHA256/元数据；deletedResource保留原编号、名称、来源、所属项目、删除时间及操作者，不可再作为执行输入", "additionalProperties": true}}, "outputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeOutput"}}, "createdAt": {"type": "string", "description": "文字"}, "startedAt": {"type": ["string", "null"], "description": "开始时间"}, "finishedAt": {"type": ["string", "null"], "description": "结束时间"}, "trial": {"type": "boolean", "description": "是否"}, "unread": {"type": "boolean", "description": "是否"}, "retryOf": {"type": ["string", "null"], "description": "前序任务"}, "attemptCount": {"type": "integer", "description": "标识"}}, "required": ["id", "name", "projectTagId", "ownerName", "algorithmName", "version", "status", "stage", "progress", "error", "parameters", "inputs", "outputs", "createdAt", "startedAt", "finishedAt", "trial", "unread", "retryOf", "attemptCount"]}
+    ComputeTask: {"type": "object", "description": "一个项目内的任务记录；日志/未入库成果仅本人和有权管理员可见", "properties": {"id": {"type": "string", "description": "UUID"}, "name": {"type": "string", "description": "文字"}, "projectTagId": {"type": "integer", "description": "标识"}, "ownerName": {"type": "string", "description": "文字"}, "algorithmName": {"type": "string", "description": "文字"}, "version": {"$ref": "#/components/schemas/ComputeVersion"}, "status": {"type": "string", "description": "任务状态", "enum": ["queued", "validating", "running", "cancelling", "succeeded", "failed", "cancelled", "interrupted"]}, "stage": {"type": "string", "description": "平台阶段说明"}, "progress": {"type": "integer", "description": "0至100"}, "error": {"type": "string", "description": "可行动错误信息，不包含主机路径"}, "parameters": {"type": "object", "description": "任务参数快照", "additionalProperties": true}, "inputs": {"type": "array", "description": "列表", "items": {"type": "object", "description": "输入资源ID（历史清理后可为空）/名称/固定SHA256/元数据；deletedResource保留原编号、名称、来源、所属项目、删除时间及操作者，不可再作为执行输入", "additionalProperties": true}}, "outputs": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeOutput"}}, "createdAt": {"type": "string", "description": "文字"}, "startedAt": {"type": ["string", "null"], "description": "开始时间"}, "finishedAt": {"type": ["string", "null"], "description": "结束时间"}, "trial": {"type": "boolean", "description": "是否"}, "unread": {"type": "boolean", "description": "是否"}, "retryOf": {"type": ["string", "null"], "description": "前序任务"}, "attemptCount": {"type": "integer", "description": "标识"}, "failure": {"description": "失败分类，旧任务和成功任务为null", "anyOf": [{"$ref": "#/components/schemas/ComputeFailure"}, {"type": "null"}]}, "fieldMappings": {"$ref": "#/components/schemas/ComputeFieldMappings"}, "inputCollections": {"$ref": "#/components/schemas/ComputeInputCollections"}}, "required": ["id", "name", "projectTagId", "ownerName", "algorithmName", "version", "status", "stage", "progress", "error", "parameters", "inputs", "outputs", "createdAt", "startedAt", "finishedAt", "trial", "unread", "retryOf", "attemptCount"]}
     "ComputeRuntimeStatus": {"type": "object", "description": "运行环境和当前用户的能力，不包含主机命令/路径", "properties": {"available": {"type": "boolean", "description": "隔离执行环境和worker均可用"}, "detail": {"type": "string", "description": "状态说明"}, "workerOnline": {"type": "boolean", "description": "是否"}, "runtimes": {"type": "array", "description": "列表", "items": {"type": "object", "description": "ID、名称、imageDigest、ready", "additionalProperties": true}}, "limits": {"type": "object", "description": "配额", "additionalProperties": true}, "permissions": {"type": "object", "description": "计算功能权限", "additionalProperties": {"type": "boolean", "description": "是否"}}}, "required": ["available", "detail", "workerOnline", "runtimes", "limits", "permissions"]}
     "ComputePreview": {"type": "object", "description": "最多100行的表格/矢量属性或栅格元数据预览", "properties": {"kind": {"type": "string", "description": "文字"}, "metadata": {"type": "object", "description": "元数据", "additionalProperties": true}, "columns": {"type": "array", "description": "列表", "items": {"type": "string", "description": "文字"}}, "rows": {"type": "array", "description": "列表", "items": {"type": "array", "description": "列表", "items": {"description": "单元格值"}}}, "geojson": {"$ref": "#/components/schemas/GeoJSONFeatureCollection", "description": "仅view=map返回的完整矢量几何；直接读取任务输出，不登记资源"}}, "required": ["kind", "metadata", "columns", "rows"]}
     "ComputeAlgorithmList": {"type": "object", "description": "分页结果", "properties": {"items": {"type": "array", "description": "列表", "items": {"$ref": "#/components/schemas/ComputeAlgorithm"}}, "total": {"type": "integer", "description": "总数"}}, "required": ["items", "total"]}
@@ -20454,12 +20674,21 @@ components:
     "ComputeAction": {"type": "object", "description": "任务操作", "properties": {"action": {"type": "string", "description": "操作", "enum": ["cancel", "retry", "read"]}}, "required": ["action"]}
     "ComputeVersionAction": {"type": "object", "description": "版本操作；发布必须先成功试运行", "properties": {"action": {"type": "string", "description": "操作", "enum": ["publish", "archive"]}}, "required": ["action"]}
     "ComputeImportRequest": {"type": "object", "description": "异步幂等入库；仅原项目，重试复用记录", "properties": {"name": {"type": "string", "description": "入库名称，留空采用输出名称"}}, "required": ["name"]}
-    "ComputePreflight": {"type": "object", "description": "轻量预检结果", "properties": {"valid": {"type": "boolean", "description": "是否"}, "parameters": {"type": "object", "description": "规范化参数", "additionalProperties": true}, "detail": {"type": "string", "description": "文字"}}, "required": ["valid", "parameters", "detail"]}
+    ComputePreflight: {"type": "object", "description": "轻量预检结果", "properties": {"valid": {"type": "boolean", "description": "是否"}, "parameters": {"type": "object", "description": "规范化参数", "additionalProperties": true}, "detail": {"type": "string", "description": "文字"}, "fieldMappings": {"$ref": "#/components/schemas/ComputeFieldMappings"}, "inputCollections": {"$ref": "#/components/schemas/ComputeInputCollections"}}, "required": ["valid", "parameters", "detail"]}
 
     BusinessFlowReview: {"type": "object", "description": "每节点可选审核策略；人工批准不能由执行或审核模型替代。", "properties": {"ai": {"type": "boolean", "description": "是否要求独立审核模型"}, "human": {"type": "boolean", "description": "是否要求用户明确批准"}, "maxRevisions": {"type": "integer", "description": "AI不通过后最多自动返修次数，超过后保留失败原因并停止自动推进", "minimum": 0, "maximum": 3}, "model": {"type": "string", "description": "可选审核模型别名，仍受当前模型与策略权限约束", "maxLength": 80}}, "required": ["ai", "human", "maxRevisions"], "additionalProperties": false}
     BusinessFlowNode: {"type": "object", "description": "一个科研节点；DAG依赖无环，返修由有界审核策略表达，不接受代码或命令。", "properties": {"id": {"type": "string", "description": "版本内稳定节点编码", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}, "title": {"type": "string", "description": "节点显示名称", "maxLength": 120}, "description": {"type": "string", "description": "节点目的与适用条件", "maxLength": 2000}, "kind": {"type": "string", "description": "执行类型；human节点必须保留人工批准", "enum": ["agent", "operator", "human", "result"]}, "dependsOn": {"type": "array", "description": "全部前置节点通过后才执行", "items": {"type": "string", "description": "前置节点编码"}, "maxItems": 32, "uniqueItems": true}, "dataRoles": {"type": "array", "description": "本节点可访问的绑定资料角色", "items": {"type": "string", "description": "输入规范中的角色编码"}, "maxItems": 30, "uniqueItems": true}, "algorithmVersionId": {"anyOf": [{"type": "integer", "description": "通用算子节点固定的已发布版本；专业逻辑推理由规则注册解析", "minimum": 1}, {"type": "null"}], "description": "通用算子节点固定的已发布版本；专业逻辑推理由规则注册解析"}, "instruction": {"type": "string", "description": "受平台工具与只读数据边界约束的科研任务说明", "maxLength": 12000}, "parameters": {"type": "object", "description": "仅research_flow算子节点的参数默认值，最多50键、深度8；执行时仍按实际manifest校验", "additionalProperties": true}, "review": {"$ref": "#/components/schemas/BusinessFlowReview"}, "inputBindings": {"type": "object", "description": "仅research_flow算子节点可用；manifest输入键到互斥来源的绑定。最多30键；发布时核对当前输入键、前序版本输出键及数据类型，运行时通过原入库服务生成真实就绪资源后提交后续算子。质量未通过不会因人工批准而视为通过。", "maxProperties": 30, "additionalProperties": {"$ref": "#/components/schemas/BusinessFlowInputBinding"}}}, "required": ["id", "title", "description", "kind", "dependsOn", "dataRoles", "instruction", "review"], "additionalProperties": false}
     BusinessFlowInputRequirement: {"type": "object", "description": "一项数据角色和最低输入规范；真实内容与访问权在启动和执行边界重验。", "properties": {"key": {"type": "string", "description": "角色稳定编码", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}, "label": {"type": "string", "description": "资料角色名称", "maxLength": 120}, "description": {"type": "string", "description": "适用数据与用途说明", "maxLength": 1500}, "dataTypes": {"type": "array", "description": "流程期望的目标类型；实际来源可通过已发布转换工具或Agent编写的受限脚本衔接", "items": {"type": "string", "description": "平台数据类型", "enum": ["vector", "raster", "table", "gene", "document", "image"]}, "minItems": 1, "maxItems": 6, "uniqueItems": true}, "required": {"type": "boolean", "description": "是否必须绑定该角色"}, "requiredFields": {"type": "array", "description": "资料必须提供的字段名；无要求时为空", "items": {"type": "string", "description": "条目文字"}, "maxItems": 80, "uniqueItems": true}, "multiple": {"type": "boolean", "description": "同一角色允许多份来源，绑定键使用角色:来源编号；默认false"}, "semanticType": {"type": "string", "description": "可选目标语义标识，与已发布适配能力匹配", "maxLength": 100}}, "required": ["key", "label", "description", "dataTypes", "required", "requiredFields"], "additionalProperties": false}
     ComputeInputScriptBridge: {"type": "object", "description": "受限脚本执行器的真实端口与代码参数；不授予其他数据、网络或系统操作权限", "properties": {"inputPorts": {"type": "object", "description": "实际资料类型到本运行器已声明输入端口的映射", "additionalProperties": {"type": "array", "description": "同类型可接收的输入端口", "items": {"type": "string", "description": "输入端口键"}, "minItems": 1, "maxItems": 5}}, "outputPorts": {"type": "object", "description": "目标资料类型到已声明输出端口的映射", "additionalProperties": {"type": "string", "description": "输出端口键"}}, "codeParameter": {"type": "string", "description": "代码参数名"}, "targetParameter": {"type": "string", "description": "目标类型参数名"}, "contractParameter": {"type": "string", "description": "目标规范JSON参数名"}, "policyVersion": {"type": "integer", "description": "内核隔离协议版本", "enum": [1]}}, "required": ["inputPorts", "outputPorts", "codeParameter", "targetParameter", "contractParameter", "policyVersion"], "additionalProperties": false}
+    ComputeSemanticField: {"type": "object", "description": "语义字段；输入按role绑定；legacyName仅供旧入口别名迁移", "properties": {"role": {"type": "string", "description": "语义角色标识"}, "description": {"type": "string", "description": "字段语义"}, "types": {"type": "array", "description": "接受的逻辑类型", "items": {"type": "string", "description": "类型", "enum": ["string", "integer", "number", "boolean", "datetime"]}, "minItems": 1, "maxItems": 5}, "required": {"type": "boolean", "description": "是否必需"}, "unit": {"type": "string", "description": "精确单位，不推断未知单位"}, "min": {"type": "number", "description": "下界"}, "max": {"type": "number", "description": "上界"}, "parameter": {"type": "string", "description": "关联已有field/band参数"}, "legacyName": {"type": "string", "description": "旧入口内部字段名，外部仍可映射其他字段"}, "name": {"type": "string", "description": "输出实际字段名"}}, "additionalProperties": false, "required": ["role", "description", "types", "required"]}
+    ComputeCapabilities: {"type": "object", "description": "受控类别及适用限制", "properties": {"operations": {"type": "array", "description": "操作类别", "items": {"type": "string", "description": "类别", "enum": ["check", "correct", "convert", "statistics", "infer", "map"]}, "minItems": 1}, "dataTypes": {"type": "array", "description": "作用对象", "items": {"type": "string", "description": "资料类型", "enum": ["raster", "vector", "table", "image", "report", "archive", "document", "gene"]}, "minItems": 1}, "summary": {"type": "string", "description": "能力摘要"}, "useWhen": {"type": "string", "description": "适用情形"}, "avoidWhen": {"type": "string", "description": "不适用情形"}}, "additionalProperties": false, "required": ["operations", "dataTypes", "summary", "useWhen", "avoidWhen"]}
+    ComputeAgentParameter: {"type": "object", "description": "参数调整提示，不授予额外权限", "properties": {"adjustable": {"type": "boolean", "description": "是否允许智能体调整"}, "advice": {"type": "string", "description": "选择和调整建议"}}, "additionalProperties": false, "required": ["adjustable", "advice"]}
+    ComputeOperatorErrorSpec: {"type": "object", "description": "错误码与前置条件", "properties": {"code": {"type": "string", "description": "唯一大写错误码，PLATFORM_保留"}, "meaning": {"type": "string", "description": "含义"}, "precondition": {"type": "string", "description": "前置条件"}, "remedy": {"type": "string", "description": "补救类别", "enum": ["adjust_parameters", "convert_input", "complete_mapping", "replace_data", "human_review", "unrecoverable"]}}, "additionalProperties": false, "required": ["code", "meaning", "precondition", "remedy"]}
+    ComputeFailure: {"type": "object", "description": "结构化运行失败，不包含Python traceback", "properties": {"code": {"type": "string", "description": "算子错误码或平台通用错误码"}, "message": {"type": "string", "description": "调度说明"}, "inputs": {"type": "array", "description": "涉及输入", "items": {"type": "string", "description": "清单输入键"}}, "parameters": {"type": "array", "description": "涉及参数", "items": {"type": "string", "description": "参数键"}}, "remedy": {"type": "string", "description": "补救类别", "enum": ["adjust_parameters", "convert_input", "complete_mapping", "replace_data", "human_review", "unrecoverable"]}, "details": {"type": "object", "description": "有界补充诊断，不包含秘密或主机路径", "additionalProperties": true}}, "additionalProperties": false, "required": ["code", "message", "inputs", "parameters", "remedy", "details"]}
+    ComputeInputGap: {"type": "object", "description": "预检差距，不自动执行转换", "properties": {"code": {"type": "string", "description": "差距码"}, "input": {"type": "string", "description": "实际输入键"}, "role": {"type": "string", "description": "字段语义角色，非字段差距为空"}, "field": {"type": "string", "description": "字段名或波段号文字，未知为空"}, "expected": {"description": "期望规范或类型"}, "actual": {"description": "实际元信息，未知为null"}, "remedy": {"type": "string", "description": "建议补救类别", "enum": ["adjust_parameters", "convert_input", "complete_mapping", "replace_data", "human_review", "unrecoverable"]}}, "additionalProperties": false, "required": ["code", "input", "role", "field", "expected", "actual", "remedy"]}
+    ComputeFieldMappings: {"type": "object", "description": "实际输入键到角色映射，集合使用key__序号", "additionalProperties": {"type": "object", "description": "语义角色绑定", "additionalProperties": {"oneOf": [{"type": "string", "description": "实际字段名"}, {"type": "integer", "description": "1起始波段号", "minimum": 1}]}}}
+    ComputeInputCollections: {"type": "object", "description": "冻结集合成员和标签，查询与重试保持一致", "additionalProperties": {"type": "array", "description": "成员", "items": {"type": "object", "description": "固定成员", "properties": {"key": {"type": "string", "description": "展开输入键"}, "label": {"type": "string", "description": "真实名称"}}, "additionalProperties": false, "required": ["key", "label"]}}}
+    ComputeSelfTest: {"type": "object", "description": "包内小样例", "properties": {"name": {"type": "string", "description": "样例名称"}, "fixture": {"type": "string", "description": "包内JSON相对路径"}, "expect": {"type": "object", "description": "成功files或失败errorCode二选一", "properties": {"errorCode": {"type": "string", "description": "已声明错误码"}, "files": {"type": "object", "description": "已声明输出文件摘要", "additionalProperties": {"type": "object", "description": "可验证输出摘要", "properties": {"rows": {"type": "integer", "description": "行数", "minimum": 0}, "columns": {"type": "array", "description": "必需字段", "items": {"type": "string", "description": "字段名"}}, "bands": {"type": "integer", "description": "波段数", "minimum": 0}, "sha256": {"type": "string", "description": "SHA256"}, "contains": {"type": "string", "description": "文本包含短语"}}, "additionalProperties": false}}}, "additionalProperties": false}}, "additionalProperties": false, "required": ["name", "fixture", "expect"]}
     BusinessFlowInputPreparationPolicy: {"type": "object", "description": "新任务输入与节点衔接策略；不允许更改固定科研步骤或替代人工批准", "properties": {"allowScripts": {"type": "boolean", "description": "允许Agent按实际资料编写受限衔接脚本，缺省true"}, "reviewScripts": {"type": "boolean", "description": "额外独立AI审核适配脚本；缺省false，节点自身的审核保持原配置"}, "maxRepairs": {"type": "integer", "description": "脚本失败后最多返修次数，缺省2", "minimum": 0, "maximum": 2}}, "required": [], "additionalProperties": false}
     BusinessFlowInputScriptSummary: {"type": "object", "description": "适配脚本进度摘要；代码按需读取，不随状态帧反复传送", "properties": {"attempt": {"type": "integer", "description": "当前真实脚本尝试序号", "minimum": 0, "maximum": 3}, "status": {"type": "string", "description": "真实编写、审核或执行状态"}, "sha256": {"type": "string", "description": "实际代码SHA256，尚未生成时为空"}, "summary": {"type": "string", "description": "本次衔接目的和处理说明"}, "question": {"type": "string", "description": "确实缺少必要含义时需要用户补充的资料说明"}, "lastError": {"type": "string", "description": "真实失败原因的有界摘要"}, "available": {"type": "boolean", "description": "是否已有可按需查看的实际代码"}}, "required": ["attempt", "status", "sha256", "summary", "available"], "additionalProperties": false}
     BusinessFlowInputScriptDetail: {"type": "object", "description": "本人当前项目任务的实际适配脚本和审计；原始资料不被改写", "properties": {"role": {"type": "string", "description": "输入衔接绑定键"}, "attempt": {"type": "integer", "description": "代码尝试序号", "minimum": 1, "maximum": 3}, "language": {"type": "string", "description": "语言", "enum": ["python"]}, "code": {"type": "string", "description": "模型实际编写的代码", "maxLength": 16000}, "sha256": {"type": "string", "description": "代码SHA256", "pattern": "^[0-9a-f]{64}$"}, "status": {"type": "string", "description": "当前真实状态"}, "summary": {"type": "string", "description": "转换目的和假设"}, "diagnostics": {"type": "array", "description": "实际执行或审核反馈，最多8条", "items": {"type": "string", "description": "有界诊断"}, "maxItems": 8}, "sourceIds": {"type": "array", "description": "本次实际授权来源", "items": {"type": "integer", "description": "资料编号", "minimum": 1}, "maxItems": 30}, "targetType": {"type": "string", "description": "声明的目标资料类型", "enum": ["vector", "raster", "table", "gene", "document", "image"]}}, "required": ["role", "attempt", "language", "code", "sha256", "status", "summary", "diagnostics", "sourceIds", "targetType"], "additionalProperties": false}
@@ -20472,7 +20701,47 @@ components:
     BusinessFlowList: {"type": "object", "description": "当前项目业务流目录的一页；普通用户仅看启用项，不返回总条数。", "properties": {"items": {"type": "array", "description": "目录摘要，最多50项", "items": {"$ref": "#/components/schemas/BusinessFlowSummary"}}, "canManage": {"type": "boolean", "description": "是否可维护目录"}, "nextOffset": {"type": "integer", "minimum": 1, "description": "仅有后续页时返回下一页offset；缺省表示当前查询已加载完。请求下一页必须保持相同q。"}}, "required": ["items", "canManage"], "additionalProperties": false}
     BusinessFlowActorState: {"type": "object", "description": "执行或独立审核智能体的当前公开状态，不传工具密钥或内部提示。", "properties": {"status": {"type": "string", "description": "当前状态，如pending、running、passed、rejected、skipped"}, "model": {"type": "string", "description": "执行使用的模型别名"}, "answer": {"type": "string", "description": "节点产出或公开结果摘要"}, "reason": {"type": "string", "description": "状态原因或审核不通过原因"}, "decision": {"type": "string", "description": "审核判断，不构成人工授权"}, "feedback": {"type": "string", "description": "交给执行智能体的具体返修反馈"}}, "required": ["status"], "additionalProperties": true}
     BusinessFlowHumanState: {"type": "object", "description": "人在回路的明确决定；审核模型不能写入approved状态。", "properties": {"required": {"type": "boolean", "description": "当前节点是否必须人工决定"}, "status": {"type": "string", "description": "人工状态，如pending、approved、changes_requested、not_required"}, "reason": {"type": "string", "description": "为什么需要用户决定或用户反馈"}}, "required": ["required", "status", "reason"], "additionalProperties": true}
-    BusinessFlowNodeState: {"type": "object", "description": "当前节点真实执行、审核、返修和人工状态。", "properties": {"nodeId": {"type": "string", "description": "对应冻结规范中的节点编码"}, "status": {"type": "string", "description": "节点状态"}, "attempt": {"type": "integer", "description": "本节点执行尝试序号", "minimum": 0}, "executor": {"$ref": "#/components/schemas/BusinessFlowActorState"}, "reviewer": {"$ref": "#/components/schemas/BusinessFlowActorState"}, "human": {"$ref": "#/components/schemas/BusinessFlowHumanState"}, "outputs": {"type": "object", "description": "已产生的真实节点结果与受控引用", "additionalProperties": true}}, "required": ["nodeId", "status", "attempt", "executor", "reviewer", "human", "outputs"], "additionalProperties": true}
+    BusinessFlowContextManagement:
+      type: object
+      description: 本节点实际输入整理的有界审计摘要，不含证据正文或台账。
+      properties:
+        nodeId: {type: string, description: 当前节点编码}
+        level: {type: integer, minimum: 0, maximum: 3, description: 原样、内部截短、索引摘要或分批归纳档位}
+        beforeTokens: {type: integer, minimum: 0, description: 整理前实测token数}
+        afterTokens: {type: integer, minimum: 0, description: 整理后实测token数}
+        inputBudgetTokens: {type: integer, description: 实际模型窗口扣除输出与安全余量后的策略预算}
+        measurementCount: {type: integer, minimum: 0, maximum: 19, description: 本次整理分词请求数上界19}
+        noticeSummary: {type: array, items: {type: string}, description: 逐项省略说明，含证据编号、处理方式、原始与保留规模及前几处字段计数，不含正文}
+        evidenceIds: {type: array, items: {type: string}, description: 本次被整理的证据编号}
+      required: [nodeId, level]
+      additionalProperties: true
+    BusinessFlowContextRecovery:
+      allOf:
+        - $ref: "#/components/schemas/BusinessFlowContextManagement"
+        - type: object
+          description: 通过现有节点决定通道恢复的上下文等待，不构成人工科研批准。
+          properties:
+            evidence:
+              type: array
+              description: 当前证据规模和是否禁止跳过，不含正文。
+              items:
+                type: object
+                properties:
+                  id: {type: string, description: 实际证据编号}
+                  title: {type: string, description: 证据标题}
+                  bytes: {type: integer, minimum: 0, description: 原始证据字节数}
+                  required: {type: boolean, description: 必需角色、直接依赖或指令点名证据不可跳过}
+                required: [id, title, bytes, required]
+                additionalProperties: false
+          required: [evidence]
+    BusinessFlowContextScope:
+      type: object
+      description: 用户明确收紧样本与文本范围，仅影响资料投影，不修改原始数据或科研规范。
+      properties:
+        maxItems: {type: integer, minimum: 1, maximum: 10, description: 每个样本或分组数组最多保留项数}
+        maxTextCharacters: {type: integer, minimum: 80, maximum: 1000, description: 每个长文本最多保留字符数}
+      additionalProperties: false
+    BusinessFlowNodeState: {"type": "object", "description": "当前节点真实执行、审核、返修和人工状态。", "properties": {"nodeId": {"type": "string", "description": "对应冻结规范中的节点编码"}, "status": {"type": "string", "description": "节点状态；waiting_context表示上下文等待，不是科研审批"}, "attempt": {"type": "integer", "description": "本节点执行尝试序号", "minimum": 0}, "executor": {"$ref": "#/components/schemas/BusinessFlowActorState"}, "reviewer": {"$ref": "#/components/schemas/BusinessFlowActorState"}, "human": {"$ref": "#/components/schemas/BusinessFlowHumanState"}, "outputs": {"type": "object", "description": "仅包含本节点产出的结论或真实算子结果引用", "additionalProperties": true}, "contextManagement": {"$ref": "#/components/schemas/BusinessFlowContextManagement"}, "contextRecovery": {"$ref": "#/components/schemas/BusinessFlowContextRecovery"}}, "required": ["nodeId", "status", "attempt", "executor", "reviewer", "human", "outputs"], "additionalProperties": true}
     BusinessFlowEvent: {"type": "object", "description": "执行者、审核者、用户和系统之间可追溯的状态事件。", "properties": {"id": {"type": "integer", "description": "当前执行内递增事件序号", "minimum": 0}, "nodeId": {"type": "string", "description": "相关节点；全局事件可为空"}, "actor": {"type": "string", "description": "事件来源角色", "enum": ["executor", "reviewer", "human", "system"]}, "kind": {"type": "string", "description": "事件类型，例如started、review_rejected、revision_requested、human_approved"}, "status": {"type": "string", "description": "发生后的真实状态"}, "message": {"type": "string", "description": "面向用户的事件说明"}, "createdAt": {"type": "string", "description": "事件时间", "format": "date-time"}}, "required": ["id", "nodeId", "actor", "kind", "status", "message", "createdAt"], "additionalProperties": true}
     BusinessFlowRun: {"type": "object", "description": "绑定不可变定义的真实执行；AI审核和人工批准分别记录，不跳过原有权限与科研检查。", "properties": {"id": {"type": "string", "description": "沿用AgentWorkflow的真实执行编号", "format": "uuid"}, "flowId": {"type": "integer", "description": "业务流登记编号", "minimum": 1}, "versionId": {"type": "integer", "description": "本次冻结的发布版本编号", "minimum": 1}, "projectId": {"type": "integer", "description": "所属单一项目", "minimum": 1}, "conversationId": {"anyOf": [{"type": "integer", "description": "父智能体会话编号", "minimum": 1}, {"type": "null"}], "description": "父智能体会话编号"}, "runId": {"anyOf": [{"type": "integer", "description": "父对话轮次编号；审核请求不冒充新用户轮次", "minimum": 1}, {"type": "null"}], "description": "父对话轮次编号；审核请求不冒充新用户轮次"}, "name": {"type": "string", "description": "业务流名称"}, "goal": {"type": "string", "description": "本次科研目标"}, "status": {"type": "string", "description": "执行状态，沿用工作流状态并可表达审核与返修"}, "currentNode": {"type": "string", "description": "当前节点编码；未开始时可为空"}, "revision": {"type": "integer", "description": "状态修订号；人工决定必须绑定当前修订", "minimum": 0}, "createdAt": {"type": "string", "description": "启动时间", "format": "date-time"}, "updatedAt": {"type": "string", "description": "最后状态更新时间", "format": "date-time"}, "definitionSnapshot": {"$ref": "#/components/schemas/BusinessFlowSpec"}, "nodes": {"type": "array", "description": "本次节点状态", "items": {"$ref": "#/components/schemas/BusinessFlowNodeState"}, "maxItems": 32}, "events": {"type": "array", "description": "有界可追溯过程事件", "items": {"$ref": "#/components/schemas/BusinessFlowEvent"}}, "inputPreparation": {"$ref": "#/components/schemas/BusinessFlowInputPlan"}}, "required": ["id", "flowId", "versionId", "projectId", "conversationId", "runId", "name", "goal", "status", "currentNode", "revision", "createdAt", "updatedAt", "definitionSnapshot", "nodes", "events"], "additionalProperties": true}
     BusinessFlowRunSummary: {"type": "object", "description": "本人当前项目的轻量执行历史，不读取完整步骤或重新扫描资料。", "properties": {"id": {"type": "string", "description": "沿用AgentWorkflow的真实执行编号", "format": "uuid"}, "flowId": {"type": "integer", "description": "业务流登记编号", "minimum": 1}, "versionId": {"type": "integer", "description": "本次冻结的发布版本编号", "minimum": 1}, "projectId": {"type": "integer", "description": "所属单一项目", "minimum": 1}, "conversationId": {"anyOf": [{"type": "integer", "description": "父智能体会话编号", "minimum": 1}, {"type": "null"}], "description": "父智能体会话编号"}, "runId": {"anyOf": [{"type": "integer", "description": "父对话轮次编号；审核请求不冒充新用户轮次", "minimum": 1}, {"type": "null"}], "description": "父对话轮次编号；审核请求不冒充新用户轮次"}, "name": {"type": "string", "description": "业务流名称"}, "goal": {"type": "string", "description": "本次科研目标"}, "status": {"type": "string", "description": "执行状态，沿用工作流状态并可表达审核与返修"}, "currentNode": {"type": "string", "description": "当前节点编码；未开始时可为空"}, "revision": {"type": "integer", "description": "状态修订号；人工决定必须绑定当前修订", "minimum": 0}, "createdAt": {"type": "string", "description": "启动时间", "format": "date-time"}, "updatedAt": {"type": "string", "description": "最后状态更新时间", "format": "date-time"}}, "required": ["id", "flowId", "versionId", "projectId", "conversationId", "runId", "name", "goal", "status", "currentNode", "revision", "createdAt", "updatedAt"], "additionalProperties": true}
@@ -20487,5 +20756,5 @@ components:
     BusinessFlowInputPlanItem: {"type": "object", "description": "可直接使用、可转换或仍需配置的一项输入；不修改原件", "properties": {"role": {"type": "string", "description": "来源角色绑定键"}, "sourceName": {"type": "string", "description": "真实来源名称"}, "sourceType": {"type": "string", "description": "实际来源类型"}, "targetSemantics": {"type": "string", "description": "目标语义"}, "checksum": {"type": "string", "description": "冻结的包摘要"}, "inputKey": {"type": "string", "description": "真实来源输入键"}, "outputKey": {"type": "string", "description": "真实目标输出键"}, "targetType": {"type": "string", "description": "目标资料类型"}, "taskId": {"type": "string", "description": "真实计算任务编号"}, "sourceId": {"type": "integer", "minimum": 1, "description": "原始资料编号"}, "versionId": {"type": "integer", "minimum": 1, "description": "冻结转换版本"}, "resourceId": {"type": "integer", "minimum": 1, "description": "真实入库的派生资料编号"}, "outputId": {"type": "integer", "minimum": 1, "description": "真实计算输出编号"}, "sourceRevision": {"type": "string", "format": "date-time", "description": "来源冻结修订"}, "targetTypes": {"type": "array", "description": "允许的目标类型", "items": {"type": "string", "description": "资料类型"}}, "status": {"type": "string", "description": "真实规划或执行状态", "enum": ["direct", "convert", "needs_parameters", "needs_choice", "unavailable", "waiting_compute", "waiting_import", "ready", "needs_script", "generating_script", "reviewing_script", "needs_clarification", "failed"]}, "fields": {"type": "array", "description": "真实来源字段", "items": {"type": "string", "description": "字段名"}}, "candidates": {"type": "array", "description": "当前允许的转换候选", "items": {"$ref": "#/components/schemas/BusinessFlowInputAdapterCandidate"}}, "parameters": {"type": "object", "description": "真实manifest已声明的有界参数值", "additionalProperties": true}, "actualParameters": {"type": "object", "description": "真实manifest已声明的有界参数值", "additionalProperties": true}, "missingParameters": {"type": "array", "description": "仍需指定的参数键", "items": {"type": "string", "description": "参数键"}}, "fieldTargets": {"type": "object", "description": "人工字段语义到转换参数的映射", "additionalProperties": {"type": "string", "description": "语义键"}}, "sourceBands": {"type": "integer", "minimum": 0, "description": "实际来源波段数量；非栅格为0"}, "script": {"$ref": "#/components/schemas/BusinessFlowInputScriptSummary"}, "nodeId": {"type": "string", "description": "节点间输入准备的所属节点；初始输入可省略"}, "sourceIds": {"type": "array", "description": "真实授权来源集合", "items": {"type": "integer", "description": "资料编号", "minimum": 1}, "maxItems": 30}}, "required": ["role", "sourceId", "sourceName", "sourceType", "sourceRevision", "targetTypes", "targetSemantics", "status"], "additionalProperties": false}
     BusinessFlowInputPlan: {"type": "object", "description": "所有业务流共用的输入兼容性规划及真实适配记录", "properties": {"ready": {"type": "boolean", "description": "是否所有来源均已可用或具备完整方案"}, "items": {"type": "array", "description": "逐来源的输入方案", "items": {"$ref": "#/components/schemas/BusinessFlowInputPlanItem"}, "maxItems": 30}}, "required": ["ready", "items"], "additionalProperties": false}
     BusinessFlowInputPreparation: {"type": "object", "description": "只读规划，不运行模型、算子或修改原始资料", "properties": {"versionId": {"type": "integer", "minimum": 1, "description": "发布流程版本"}, "inputs": {"type": "object", "description": "来源资料绑定", "additionalProperties": {"type": "integer", "minimum": 1, "description": "资料编号"}, "maxProperties": 30}, "inputAdapters": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoices"}, "uploadBatchId": {"type": "string", "description": "专业任务资料批次；只允许当前用户、本项目的真实上传或目录引用", "pattern": "^[a-f0-9]{32}$"}}, "required": ["versionId", "inputs"], "additionalProperties": false}
-    BusinessFlowDecision: {"type": "object", "description": "只有真实用户可提交人工决定，绑定当前节点和修订，拒绝陈旧或重复越权操作。", "properties": {"nodeId": {"type": "string", "description": "当前等待人工决定的节点编码"}, "revision": {"type": "integer", "description": "最后读取的状态修订号", "minimum": 0}, "decision": {"type": "string", "description": "明确批准或要求返修", "enum": ["approve", "request_changes"]}, "feedback": {"type": "string", "description": "返修原因或补充要求", "maxLength": 4000}, "idempotencyKey": {"type": "string", "description": "稳定决定重试键", "minLength": 8, "maxLength": 80}}, "required": ["nodeId", "revision", "decision", "feedback", "idempotencyKey"], "additionalProperties": false}
+    BusinessFlowDecision: {"type": "object", "description": "只有真实用户可提交人工决定，绑定当前节点和修订。retry_context仅恢复上下文等待，不写human.approved；停止沿用cancel。", "properties": {"nodeId": {"type": "string", "description": "当前等待决定的节点编码"}, "revision": {"type": "integer", "description": "最后读取的状态修订号", "minimum": 0}, "decision": {"type": "string", "description": "明确批准、要求返修或重试上下文", "enum": ["approve", "request_changes", "retry_context"]}, "feedback": {"type": "string", "description": "返修原因或收紧范围说明", "maxLength": 4000}, "skipEvidenceIds": {"type": "array", "description": "仅retry_context可提交当前等待清单中的非必需证据编号；不能跳过直接依赖或指令点名证据", "uniqueItems": true, "items": {"type": "string", "maxLength": 160}}, "contextScope": {"$ref": "#/components/schemas/BusinessFlowContextScope"}, "idempotencyKey": {"type": "string", "description": "稳定决定重试键", "minLength": 8, "maxLength": 80}}, "required": ["nodeId", "revision", "decision", "feedback", "idempotencyKey"], "additionalProperties": false}
     BusinessFlowInputBinding: {"description": "互斥的算子输入来源：资料角色或本业务流前序算子的已登记输出，不授予额外访问和入库权限。", "oneOf": [{"type": "object", "description": "当前执行开始时绑定的资料角色，仍执行当前项目与资料访问校验。", "properties": {"role": {"type": "string", "description": "inputRequirements中的资料角色编码", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}}, "required": ["role"], "additionalProperties": false}, {"type": "object", "description": "当前节点依赖祖先中的真实算子输出；不能引用外部任务、他人结果、未来节点或归档文件。", "properties": {"nodeId": {"type": "string", "description": "前序operator节点编码，必须在当前dependsOn祖先集合中", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}, "outputKey": {"type": "string", "description": "上游已发布算法manifest中的输出键；kind必须匹配当前输入", "minLength": 1, "maxLength": 80}}, "required": ["nodeId", "outputKey"], "additionalProperties": false}]}

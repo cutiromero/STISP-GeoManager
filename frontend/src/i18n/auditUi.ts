@@ -1,5 +1,10 @@
 import { useTranslation } from "react-i18next";
 export const auditUiZh = {
+  项目功能全局开关: "项目功能全局开关",
+  "全局开启覆盖单项目开关；关闭后恢复各项目设置。内容配置仍独立，不会复制其他项目的数据。":
+    "全局开启覆盖单项目开关；关闭后恢复各项目设置。内容配置仍独立，不会复制其他项目的数据。",
+  对所有项目开启: "对所有项目开启",
+  项目功能: "项目功能",
   会议现场: "会议现场",
   "编辑备注（正文不展示）": "编辑备注（正文不展示）",
   内容类型不匹配: "内容类型不匹配",
@@ -109,6 +114,11 @@ export const auditUiZh = {
     "每次在一个项目内查看和操作数据、地图工程及成果。公开项目所有人可读；其他项目仅获配对应标签的用户及超管可读。",
 };
 export const auditUiEn = {
+  项目功能全局开关: "Global project features",
+  "全局开启覆盖单项目开关；关闭后恢复各项目设置。内容配置仍独立，不会复制其他项目的数据。":
+    "Global enablement overrides individual switches. Turning it off restores each project's settings. Content stays project-specific and is never copied from another project.",
+  对所有项目开启: "Enable for all projects",
+  项目功能: "Project features",
   会议现场: "Conference highlights",
   "编辑备注（正文不展示）": "Editorial notes (not displayed)",
   内容类型不匹配: "Content type does not match",

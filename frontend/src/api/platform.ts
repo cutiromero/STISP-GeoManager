@@ -9,6 +9,8 @@ import type {
   ProjectTagInput,
   ProjectTagList,
   ProjectAssignment,
+  ProjectFeature,
+  ProjectFeatureInput,
 } from "./generated/types.gen";
 
 export type { ContentArticle, ContentArticleInput, ProjectTag };
@@ -21,6 +23,16 @@ export const platformApi = {
     requestJson<ProjectTag>("/api/projects/", { method: "POST", body }),
   updateProject: (id: number, body: ProjectTagInput) =>
     requestJson<ProjectTag>(`/api/projects/${id}/`, { method: "POST", body }),
+  setProjectFeature: (id: number, key: string, body: ProjectFeatureInput) =>
+    requestJson<ProjectTag>(
+      `/api/projects/${id}/features/${encodeURIComponent(key)}/`,
+      { method: "POST", body },
+    ),
+  setGlobalProjectFeature: (key: string, enabled: boolean) =>
+    requestJson<ProjectFeature>(
+      `/api/projects/features/${encodeURIComponent(key)}/`,
+      { method: "POST", body: { enabled } },
+    ),
   assignment: (id: number) =>
     requestJson<ProjectAssignment>(`/api/projects/assignments/${id}/`),
   assign: (userId: number, projectIds: number[], allowPublicProject: boolean) =>

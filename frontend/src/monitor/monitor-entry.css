@@ -1,0 +1,39 @@
+.monitor-entry {
+  margin-block: 22px;
+  border-color: #225769;
+  background:
+    radial-gradient(ellipse at 75% 20%, #12495b 0%, transparent 62%), #0a2032;
+  color: #e9f9ff;
+  cursor: pointer;
+}
+.monitor-entry-content {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.monitor-entry-icon {
+  font-size: 52px;
+  color: #68dec9;
+}
+.monitor-entry-copy {
+  flex: 1;
+  min-width: 0;
+}
+.monitor-entry-copy h2 {
+  color: #e9f9ff;
+  margin: 8px 0;
+  font-size: 24px;
+}
+.monitor-entry-copy p {
+  color: #acc5d1;
+  margin: 0;
+}
+@media (max-width: 700px) {
+  .monitor-entry-content {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .monitor-entry-icon {
+    font-size: 32px;
+  }
+}

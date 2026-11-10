@@ -78,9 +78,8 @@
   border: 1px solid #e1eaf2;
   border-radius: 14px;
 }
-.editorial-card .ant-card-cover img {
+.editorial-card .card-cover {
   height: 205px;
-  object-fit: cover;
   background: #e9f1f8;
 }
 .editorial-card-placeholder {

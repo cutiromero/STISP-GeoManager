@@ -42,7 +42,7 @@ from apps.core.principal_visibility import (
     user_is_visible_to,
 )
 from apps.core.storage import app_path
-from apps.catalog.thumbnails import thumbnail_response
+from apps.catalog.thumbnails import source_for, thumbnail_response
 
 LAYOUT_MAX_BYTES = 512 * 1024
 WORKSPACE_SNAPSHOT_MAX_BYTES = 1024 * 1024
@@ -465,10 +465,10 @@ def map_composition_version_file(request, composition_id: int, version_number: i
         version.artifact_path if variant == "artifact" else version.preview_path
     )
     path = app_path(*relative_path.split("/"))
+    if variant == "thumbnail":
+        return thumbnail_response(source_for(version), request=request)
     if not path.is_file():
         return JsonResponse({"detail": "专题成果文件不存在"}, status=404)
-    if variant == "thumbnail":
-        return thumbnail_response(path, f"composition-version-{version.id}")
     extension = "png" if variant == "preview" else version.format
     filename = f"{composition.name}_V{version.version_number}.{extension}"
     return FileResponse(
@@ -912,7 +912,10 @@ def _serialize_version(version: MapCompositionVersion) -> dict[str, Any]:
         "snapshotSchemaVersion": version.snapshot_schema_version,
         "snapshotChecksum": version.snapshot_checksum,
         "previewUrl": f"{base}?variant=preview&projectTagId={version.project_tag_id}",
-        "thumbnailUrl": f"{base}?variant=thumbnail&projectTagId={version.project_tag_id}",
+        "thumbnailUrl": (
+            f"{base}?variant=thumbnail&projectTagId={version.project_tag_id}"
+            f"&v={source_for(version).version}"
+        ),
         "downloadUrl": f"{base}?variant=artifact&projectTagId={version.project_tag_id}",
         "createdAt": version.created_at.isoformat(),
     }

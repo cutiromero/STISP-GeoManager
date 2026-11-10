@@ -9,6 +9,9 @@ class CatalogConfig(AppConfig):
     verbose_name = "数据目录"
 
     def ready(self) -> None:
+        from apps.catalog.thumbnails import register_thumbnail_writes
+
+        register_thumbnail_writes()
         global _startup_scan_started
         if _startup_scan_started:
             return

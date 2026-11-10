@@ -1,6 +1,6 @@
 import helpContent from "./helpContent.json";
 import helpGuidePreview from "../assets/about/help-guide-preview.png";
-import knowledgePopulusForestImage from "../assets/about/knowledge-populus-forest.png";
+import knowledgePopulusForestImage from "@card-assets/about/knowledge-populus-forest.png.webp";
 
 export type AboutSectionKey =
   | "system"

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "时空智能服务平台 API",
-    "description": "时空智能服务平台后端接口文档。\n\n## 认证方式\n本平台使用 Django Session 认证机制：\n1. `GET /api/auth/csrf/` 获取 CSRF Token\n2. `POST /api/auth/login/` 登录建立 Session\n3. 后续请求携带 `sessionid` Cookie 和 `X-CSRFToken` 请求头\n\n## 权限体系\n- **功能权限**：30 余项细粒度功能权限，通过用户组分配，按后台权限、日志权限、概览权限、数据权限、人员权限分组管理\n- **数据访问权限**：基于 `access_groups` 的数据隔离\n普通资源目录、搜索、图层列表以及复用目录集合的后台列表、导出和统计，依据明确的内部source前缀及注册规则code隐藏任务上传、工作副本、内部规则、修改表和评价材料；普通业务上传和计算成果保留，不按资料名称过滤。目录隐藏不改变已绑定任务和历史证据原有的项目、ACL及按编号读取规则。普通智能体另执行更严格的成果溯源检查。\n\n## 错误处理\n所有错误响应包含 `detail` 字段描述错误原因。\nAPI 接口不会返回登录页 HTML：未认证请求返回 JSON `401`，CSRF 校验失败返回 JSON `403`。\n",
+    "description": "时空智能服务平台后端接口文档。\n\n## 认证方式\n本平台使用 Django Session 认证机制：\n1. `GET /api/auth/csrf/` 获取 CSRF Token\n2. `POST /api/auth/login/` 登录建立 Session\n3. 后续请求携带 `sessionid` Cookie 和 `X-CSRFToken` 请求头\n\n## 权限体系\n- **功能权限**：30 余项细粒度功能权限，通过用户组分配，按后台权限、日志权限、概览权限、数据权限、人员权限分组管理\n- **数据访问权限**：基于 `access_groups` 的数据隔离\n普通资源目录、搜索、图层列表以及复用目录集合的后台列表、导出和统计，依据明确的内部source前缀及注册规则code隐藏任务上传、工作副本、内部规则、修改表和评价材料；普通业务上传和计算成果保留，不按资料名称过滤。目录隐藏不改变已绑定任务和历史证据原有的项目、ACL及按编号读取规则。普通智能体另执行更严格的成果溯源检查。\n\n## 浏览器身份与响应来源\nAPI 响应包含 X-STISP-Build（入口脚本路径）及 X-Request-Id（请求关联号）。JSON 元数据响应默认 private,no-store；已声明的文件、瓦片缓存规则优先。浏览器可发送 X-STISP-Session（页面登录 familyId，非凭据）；若与当前 Cookie 会话身份不一致，受保护操作在进入业务处理前返回 JSON 409、code=auth_context_changed。该可选围栏不授予权限，未发送时仍执行原有 Session、项目和 ACL 鉴权。bootstrap、csrf、login、register、guest-login、browser-session 不检查此围栏。\n\n## 错误处理\n所有错误响应包含 `detail` 字段描述错误原因。\nAPI 接口不会返回登录页 HTML：未认证请求返回 JSON `401`，CSRF 校验失败返回 JSON `403`。\n",
     "version": "0.1.0",
     "contact": {
       "name": "API Support",
@@ -1216,7 +1216,7 @@
           "认证接口"
         ],
         "summary": "维护当前平台页面的登录生命周期",
-        "description": "登录、注册或游客登录后先使用start登记页面；resume恢复刷新页面或加入仍在线的同源标签。heartbeat每30秒续期120秒；suspend在页面离开时立即挂起当前页，20秒内可凭原令牌恢复正常刷新。没有可续接页面时abandon在后端注销旧会话。最后页面挂起或租约过期后，受保护接口返回401。令牌只保存在页面会话内，不用于URL、持久Cookie或本地持久存储。",
+        "description": "登录后start登记页面；每30秒heartbeat维持120秒访问租约。已登记且未挂起的页面可在最后租约结束后12小时内凭正确令牌恢复，用于后台节流、断网及休眠；Cookie本身不能恢复失效租约。suspend立即停止当前页访问，正常刷新可在120秒内凭原令牌resume。新标签优先同源交接，交接未响应时可用有效Cookie和CSRF通过join加入仍有在线页面的会话；无在线页面时join拒绝。abandon不注销仍有在线或可恢复页面的共享会话；主动logout仍立即注销。familyId仅用于同一次登录的跨标签退出通知，不作为鉴权令牌。",
         "operationId": "updateBrowserSession",
         "security": [
           {
@@ -1410,6 +1410,11 @@
       }
     },
     "/api/auth/me/": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BrowserSessionFamily"
+        }
+      ],
       "get": {
         "tags": [
           "认证接口"
@@ -1547,6 +1552,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "$ref": "#/components/responses/BrowserIdentityChanged"
           }
         }
       }
@@ -11065,6 +11073,7 @@
                       "fileFormat": "pdf",
                       "sizeBytes": 2457600,
                       "previewUrl": "/api/catalog/results/21/file/?variant=preview",
+                      "thumbnailUrl": "/api/catalog/results/21/file/?variant=thumbnail&projectTagId=1&v=mock-result-v1",
                       "downloadUrl": "/api/catalog/results/21/file/?variant=artifact",
                       "owner": {
                         "id": 8,
@@ -11460,7 +11469,15 @@
               ],
               "default": "artifact"
             },
-            "description": "artifact 下载原文件，preview 在浏览器内预览；thumbnail 返回长边不超过640像素的WebP缩略图，仅PNG、JPG/JPEG成果提供，其余格式返回400"
+            "description": "artifact 下载原文件，preview 在浏览器内预览；thumbnail 只读取预生成的 WebP，长边不超过640像素、最多48KiB，PDF使用首页，非可视类型返回统一占位。缺图返回不缓存的小占位并后台补生成，绝不读取或渲染原图。"
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "description": "缩略图内容版本；旧版本请求返回404。",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "X-Project-Id",
@@ -11483,7 +11500,7 @@
         ],
         "responses": {
           "200": {
-            "description": "文件内容",
+            "description": "文件内容；thumbnail为预生成WebP或极小占位，长缓存必须重验证，登录/私有响应no-store。",
             "headers": {
               "Content-Disposition": {
                 "schema": {
@@ -11519,8 +11536,18 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "预生成卡片小图或缺失占位。"
+                }
               }
             }
+          },
+          "304": {
+            "description": "当前仍有访问权限且缩略图ETag未改变。"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -11677,6 +11704,7 @@
                         "snapshotSchemaVersion": 2,
                         "snapshotChecksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                         "previewUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=preview",
+                        "thumbnailUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=thumbnail&projectTagId=1&v=mock-map-v1",
                         "downloadUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=artifact",
                         "createdAt": "2026-07-14T15:30:00+08:00"
                       },
@@ -11693,6 +11721,7 @@
                           "snapshotSchemaVersion": 2,
                           "snapshotChecksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                           "previewUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=preview",
+                          "thumbnailUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=thumbnail&projectTagId=1&v=mock-map-v1",
                           "downloadUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=artifact",
                           "createdAt": "2026-07-14T15:30:00+08:00"
                         }
@@ -12213,6 +12242,7 @@
                   "snapshotSchemaVersion": 2,
                   "snapshotChecksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                   "previewUrl": "/api/catalog/map-compositions/11/versions/2/file/?variant=preview",
+                  "thumbnailUrl": "/api/catalog/map-compositions/11/versions/2/file/?variant=thumbnail&projectTagId=1&v=mock-map-v2",
                   "downloadUrl": "/api/catalog/map-compositions/11/versions/2/file/?variant=artifact",
                   "createdAt": "2026-07-14T16:30:00+08:00"
                 }
@@ -12622,7 +12652,15 @@
               ],
               "default": "artifact"
             },
-            "description": "artifact 返回正式成果并触发下载；preview 返回 PNG 预览；thumbnail 返回由预览生成的长边不超过640像素的WebP缩略图"
+            "description": "artifact 返回正式成果并触发下载；preview 返回 PNG 预览；thumbnail 只读取保存成果时生成的 WebP（最长边640像素、最多48KiB），缺图返回占位并后台补生成，不触发地图渲染。"
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "description": "缩略图内容版本；旧版本请求返回404。",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "X-Project-Id",
@@ -12660,8 +12698,18 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "保存版本时准备的卡片小图或缺失占位。"
+                }
               }
             }
+          },
+          "304": {
+            "description": "当前仍有访问权限且缩略图ETag未改变。"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -16321,6 +16369,11 @@
       }
     },
     "/api/projects/": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BrowserSessionFamily"
+        }
+      ],
       "get": {
         "tags": [
           "公共接口"
@@ -16346,11 +16399,16 @@
                       "description": "公共内容",
                       "isDefault": true,
                       "isActive": true,
-                      "sortOrder": 0
+                      "sortOrder": 0,
+                      "enabledFeatures": [],
+                      "configuredFeatures": [],
+                      "monitorConfig": null
                     }
                   ],
                   "canManage": false,
                   "canAssign": false,
+                  "defaultProjectId": 1,
+                  "featureCatalog": [],
                   "assignableItems": []
                 }
               }
@@ -16450,6 +16508,190 @@
             }
           }
         ]
+      }
+    },
+    "/api/projects/features/{featureKey}/": {
+      "post": {
+        "tags": [
+          "管理后台"
+        ],
+        "summary": "超管设置项目功能全局开关",
+        "description": "仅超级管理员可设置并写入审计。全局开启覆盖单项目开关，但不授予项目访问权限，也不复制内容配置；全局关闭恢复各项目原设置。",
+        "operationId": "setGlobalProjectFeature",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "featureKey",
+            "in": "path",
+            "required": true,
+            "description": "已注册的功能标识。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "是否对所有项目开启。"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "全局开关已保存并审计。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectFeature"
+                },
+                "example": {
+                  "key": "ecology_monitor",
+                  "globallyEnabled": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "功能未注册。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectTagId}/features/{featureKey}/": {
+      "post": {
+        "tags": [
+          "管理后台"
+        ],
+        "summary": "超管设置单项目功能与内容配置",
+        "description": "仅超级管理员可设置并写入审计。enabled 和 config 至少提供一项，省略保留原值，config 为 null 时清除配置。项目功能不能替代账号权限或项目授权。",
+        "operationId": "setProjectFeature",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectTagId",
+            "in": "path",
+            "required": true,
+            "description": "目标项目标签 ID，与当前项目请求头无关。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "featureKey",
+            "in": "path",
+            "required": true,
+            "description": "已注册的功能标识。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectFeatureInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "项目功能已保存并审计，返回最新有效功能清单。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTag"
+                },
+                "example": {
+                  "id": 6,
+                  "name": "塔大胡杨",
+                  "code": "05",
+                  "description": "胡杨林生态研究",
+                  "isDefault": false,
+                  "isActive": true,
+                  "sortOrder": 50,
+                  "enabledFeatures": [
+                    "ecology_monitor"
+                  ],
+                  "configuredFeatures": [
+                    "ecology_monitor"
+                  ],
+                  "monitorConfig": {
+                    "title": "塔里木河流域胡杨林生态监测",
+                    "source": "tarim_poplar_mock",
+                    "initialView": {
+                      "center": [
+                        84,
+                        39.9
+                      ],
+                      "zoom": 2.05,
+                      "regionZoom": 5.15
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "项目或功能不存在。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/projects/{projectTagId}/": {
@@ -16691,8 +16933,28 @@
                   "$ref": "#/components/schemas/ContentArticleList"
                 },
                 "example": {
-                  "items": [],
-                  "total": 0,
+                  "items": [
+                    {
+                      "id": 1,
+                      "projectTagId": 1,
+                      "kind": "news",
+                      "title": "团队研究进展",
+                      "summary": "卡片封面使用写入时预生成的小图。",
+                      "category": "研究进展",
+                      "body": "正文与详情仍可读取原图。",
+                      "status": "published",
+                      "coverUrl": "/api/content/assets/1/",
+                      "thumbnailUrl": "/api/content/assets/1/?variant=thumbnail&v=mock-content-v1",
+                      "eventDate": "2026-11-10",
+                      "publishedAt": "2026-11-10T08:00:00Z",
+                      "source": "团队资料",
+                      "pinned": false,
+                      "revision": 1,
+                      "assets": [],
+                      "links": []
+                    }
+                  ],
+                  "total": 1,
                   "canEdit": false
                 }
               }
@@ -17132,12 +17394,12 @@
           "公共接口"
         ],
         "summary": "读取已授权内容媒体",
-        "description": "科普和团队动态为平台公共内容，与业务项目无关。已发布正文与附件允许匿名阅读；草稿、下架内容及附件仅内容管理员可访问，写入仍需内容管理权限。所有内容及附件固定存储归属公开项目 1，请求中的项目头和查询参数不参与内容范围选择。 暂存附件仅上传者可见，即使正文已发布也不公开；24 小时后过期。",
+        "description": "科普和团队动态为平台公共内容，与业务项目无关。已发布正文与附件允许匿名阅读；草稿、下架内容及附件仅内容管理员可访问，写入仍需内容管理权限。所有内容及附件固定存储归属公开项目 1，请求中的项目头和查询参数不参与内容范围选择。 暂存附件仅上传者可见，即使正文已发布也不公开；24 小时后过期。variant=thumbnail只读写入时生成的WebP，缺失返回64字节占位并后台补生成；版本失效返回404，缓存必须重验证，登录响应沿用no-store。",
         "operationId": "downloadContentAsset",
         "security": [],
         "responses": {
           "200": {
-            "description": "按条目状态鉴权后的媒体文件。",
+            "description": "按条目状态鉴权后的媒体文件；thumbnail 为预生成 WebP 或极小占位。",
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -17145,8 +17407,18 @@
                   "format": "binary",
                   "description": "媒体二进制。"
                 }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "description": "预生成的卡片封面或占位图。"
+                }
               }
             }
+          },
+          "304": {
+            "description": "当前仍有媒体访问权限且缩略图ETag未改变。"
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -17174,6 +17446,27 @@
             "schema": {
               "type": "integer",
               "minimum": 1
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "description": "artifact读取原文件；thumbnail只读预生成卡片小图。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "artifact",
+                "thumbnail"
+              ],
+              "default": "artifact"
+            }
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "description": "返回地址携带的内容版本标识；旧版本不可读取新内容。",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -17345,14 +17638,7 @@
             }
           },
           "409": {
-            "description": "版本/配额/幂等键冲突",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "$ref": "#/components/responses/BrowserIdentityChanged"
           },
           "503": {
             "description": "隔离环境不可用",
@@ -17365,7 +17651,12 @@
             }
           }
         }
-      }
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/BrowserSessionFamily"
+        }
+      ]
     },
     "/api/compute/categories/": {
       "get": {
@@ -18708,6 +18999,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "detail": "输入语义预检未通过，请按gaps补齐映射或转换数据",
+                  "gaps": [
+                    {
+                      "code": "MISSING_ROLE",
+                      "input": "source",
+                      "role": "stratum_name",
+                      "field": "",
+                      "expected": {
+                        "types": [
+                          "string"
+                        ]
+                      },
+                      "actual": null,
+                      "remedy": "complete_mapping"
+                    }
+                  ]
                 }
               }
             }
@@ -21096,6 +21405,20 @@
                         }
                       ],
                       "workflowId": "69ac90d1-999f-44b7-9b68-1da1f726a142"
+                    },
+                    "generationParameters": {
+                      "workflowModelActivity": {
+                        "stage": "执行分析示例",
+                        "status": "thinking",
+                        "thinkingText": "仅用于开发演示的增量片段。",
+                        "thinkingChars": 14,
+                        "outputChars": 0,
+                        "attempt": 1,
+                        "reasoningEffort": "medium",
+                        "thinkingEnabled": true,
+                        "truncated": false
+                      },
+                      "workflowModelActivitySequence": 7
                     }
                   },
                   "events": [],
@@ -21209,6 +21532,225 @@
             }
           }
         ]
+      }
+    },
+    "/api/agent/runs/{runId}/stream/": {
+      "get": {
+        "tags": [
+          "智能体"
+        ],
+        "operationId": "streamAgentRun",
+        "summary": "持续接收智能体运行事件",
+        "description": "仅本人当前项目运行。以一致快照开始，随后发送思考、答复增量及工具事件；断线重连重新取得快照，不重新执行模型或算子。每连接最多25秒，定期核对当前登录、页面会话、项目和全部历史依据访问权。最多3个进程间共享流槽；满额503时客户端使用原进度查询。snapshot的data为AgentRunPoll，progress为AgentStreamProgress，error为AgentStreamError，end为AgentStreamEnd。生成中的预览仍须最终证据及协议校验，不包含工具参数。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "当前单个项目ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "项目标识"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "本人真实运行ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "运行标识"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE事件流；每帧为event/data/id字段及空行，UTF-8编码，注释为心跳。Cache-Control=no-store/no-transform，禁用代理缓冲及压缩缓冲。",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "标准SSE帧，data为对应事件类型的JSON对象"
+                },
+                "x-event-schemas": {
+                  "snapshot": {
+                    "type": "object",
+                    "description": "短轮询响应，终态停止；刷新可恢复 answer",
+                    "properties": {
+                      "run": {
+                        "$ref": "#/components/schemas/AgentRun"
+                      },
+                      "events": {
+                        "type": "array",
+                        "description": "游标之后的最多 100 条事件",
+                        "items": {
+                          "$ref": "#/components/schemas/AgentEvent"
+                        }
+                      },
+                      "cursor": {
+                        "type": "integer",
+                        "description": "下一次轮询游标"
+                      }
+                    },
+                    "required": [
+                      "run",
+                      "events",
+                      "cursor"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "progress": {
+                    "type": "object",
+                    "description": "当前连接一致快照后的事件增量，fromCursor必须等于客户端当前游标",
+                    "properties": {
+                      "runId": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "当前运行ID"
+                      },
+                      "conversationId": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "当前会话ID"
+                      },
+                      "fromCursor": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "增量之前的事件游标"
+                      },
+                      "cursor": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "本批最后一个事件游标"
+                      },
+                      "events": {
+                        "type": "array",
+                        "maxItems": 100,
+                        "description": "严格按ID递增的真实事件",
+                        "items": {
+                          "$ref": "#/components/schemas/AgentEvent"
+                        }
+                      }
+                    },
+                    "required": [
+                      "runId",
+                      "conversationId",
+                      "fromCursor",
+                      "cursor",
+                      "events"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "error": {
+                    "type": "object",
+                    "description": "响应开始后的运行访问错误；立即停止应用后续事件",
+                    "properties": {
+                      "detail": {
+                        "type": "string",
+                        "description": "可读错误说明"
+                      },
+                      "status": {
+                        "type": "integer",
+                        "description": "等价HTTP状态码"
+                      }
+                    },
+                    "required": [
+                      "detail",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "end": {
+                    "type": "object",
+                    "description": "当前连接结束，任务不会因此停止",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "enum": [
+                          "renew",
+                          "settled"
+                        ],
+                        "description": "renew重新连接，settled按真实状态处理完成或等待"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "项目或参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "当前权限不足",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "对象不存在或无权访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "流槽满额或数据库暂忙；使用原进度查询并有界重试",
+            "headers": {
+              "Retry-After": {
+                "description": "建议等待秒数",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "重试等待秒数"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/agent/runs/{runId}/interaction/": {
@@ -26387,6 +26929,17 @@
               "description": "标识",
               "minimum": 1
             }
+          },
+          {
+            "name": "band",
+            "in": "query",
+            "required": false,
+            "description": "实际栅格波段，缺省1；不能超出实际输出波段数",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1024
+            }
           }
         ]
       }
@@ -26500,8 +27053,1275 @@
               "description": "标识",
               "minimum": 1
             }
+          },
+          {
+            "name": "band",
+            "in": "query",
+            "required": false,
+            "description": "实际栅格波段，缺省1；不能超出实际输出波段数",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1024
+            }
           }
         ]
+      }
+    },
+    "/api/business-flows/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "listBusinessFlows",
+        "summary": "查看项目业务流目录",
+        "description": "当前项目业务流元数据目录。按名称、说明或编码进行服务端搜索，稳定按名称和编号排序；offset/limit分页，每次最多50项，通过多读1项判断nextOffset，不执行总数COUNT。普通用户仅查看启用定义，项目和当前权限每次重新核对。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "名称、说明或编码的模糊搜索词；去除首尾空白，最多使用120字。",
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "当前查询的零起始偏移；更改搜索词后从0开始。",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "单页目录条数，默认50，范围1至50。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 50
+            }
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "registerBusinessFlow",
+        "summary": "登记业务流并发布第一版",
+        "description": "登记业务流并发布第一版。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "经界面确认的有界业务参数",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessFlowCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/business-flows/{flowId}/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "flowId",
+          "in": "path",
+          "required": true,
+          "description": "当前项目业务流登记编号",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "getBusinessFlow",
+        "summary": "读取流程定义和发布版本",
+        "description": "读取流程定义和发布版本。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "updateBusinessFlow",
+        "summary": "修改业务流元信息",
+        "description": "修改业务流元信息。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "经界面确认的有界业务参数",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessFlowUpdate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/business-flows/{flowId}/versions/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "flowId",
+          "in": "path",
+          "required": true,
+          "description": "当前项目业务流登记编号",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "publishBusinessFlowVersion",
+        "summary": "发布业务流新版本",
+        "description": "发布业务流新版本。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "经界面确认的有界业务参数",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessFlowVersionPublish"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/business-flows/{flowId}/start/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "flowId",
+          "in": "path",
+          "required": true,
+          "description": "当前项目业务流登记编号",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "startBusinessFlow",
+        "summary": "启动业务流",
+        "description": "从不可变发布版本冻结执行快照，复用AgentWorkflow队列和当前本人会话。执行者必须拥有科研智能体权限；算子、资料、模型和输入规范再次校验。AI审核为独立请求和上下文，不可替用户批准。重要人工门禁须明确用户决定。幂等重试返回同一真实执行。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "经界面确认的有界业务参数",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessFlowStart"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/business-flows/{flowId}/prepare-inputs/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "flowId",
+          "in": "path",
+          "required": true,
+          "description": "当前项目业务流登记编号",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "prepareBusinessFlowInputs",
+        "summary": "规划业务流输入适配",
+        "description": "公共只读预检：实时核对项目、用户、来源与当前允许的已发布转换能力。返回直接使用、可转换、需参数或缺少能力，不启动模型/计算，不代替人工批准。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "真实输入兼容性和适配候选",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowInputPlan"
+                },
+                "example": {
+                  "ready": true,
+                  "items": [
+                    {
+                      "role": "observations",
+                      "sourceId": 81,
+                      "sourceName": "区域观测栅格",
+                      "sourceType": "raster",
+                      "sourceRevision": "2026-11-10T00:00:00Z",
+                      "targetTypes": [
+                        "table"
+                      ],
+                      "targetSemantics": "raster_band_statistics_v1",
+                      "status": "convert",
+                      "versionId": 9,
+                      "inputKey": "source",
+                      "outputKey": "prepared",
+                      "targetType": "table",
+                      "parameters": {
+                        "band": 0
+                      },
+                      "fields": [],
+                      "candidates": [
+                        {
+                          "versionId": 9,
+                          "name": "栅格波段统计转表",
+                          "description": "根据实际有效像元统计各波段，不修改原始数据",
+                          "targetType": "table",
+                          "parameters": [
+                            {
+                              "key": "band",
+                              "label": "统计波段",
+                              "type": "integer",
+                              "default": 0,
+                              "min": 0,
+                              "max": 1024
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "经界面确认的有界业务参数",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessFlowInputPreparation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/business-flows/runs/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "listBusinessFlowRuns",
+        "summary": "查看本人业务流执行历史",
+        "description": "查看本人业务流执行历史。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowRunList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/business-flows/runs/{workflowId}/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "workflowId",
+          "in": "path",
+          "required": true,
+          "description": "当前用户和项目的真实业务流执行编号",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "getBusinessFlowRun",
+        "summary": "读取业务流真实进度与审核轨迹",
+        "description": "读取业务流真实进度与审核轨迹。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowRun"
+                },
+                "example": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "flowId": 2,
+                  "versionId": 21,
+                  "projectId": 3,
+                  "conversationId": 31,
+                  "runId": 41,
+                  "name": "资料摘要",
+                  "goal": "按实际可见资料形成摘要",
+                  "status": "waiting_approval",
+                  "currentNode": "analyse",
+                  "revision": 7,
+                  "definitionSnapshot": {
+                    "schemaVersion": 1,
+                    "adapter": "research_flow",
+                    "inputRequirements": [],
+                    "nodes": [
+                      {
+                        "id": "analyse",
+                        "title": "分析资料",
+                        "description": "保留引用和局限",
+                        "kind": "agent",
+                        "dependsOn": [],
+                        "dataRoles": [],
+                        "instruction": "基于实际证据形成结论",
+                        "review": {
+                          "ai": false,
+                          "human": false,
+                          "maxRevisions": 0
+                        }
+                      }
+                    ],
+                    "outputRequirements": [
+                      "资料摘要"
+                    ]
+                  },
+                  "nodes": [
+                    {
+                      "nodeId": "analyse",
+                      "status": "waiting_context",
+                      "attempt": 1,
+                      "executor": {
+                        "status": "context_waiting"
+                      },
+                      "reviewer": {
+                        "status": "not_required"
+                      },
+                      "human": {
+                        "required": false,
+                        "status": "not_required",
+                        "reason": ""
+                      },
+                      "outputs": {},
+                      "contextManagement": {
+                        "nodeId": "analyse",
+                        "level": 3,
+                        "beforeTokens": 40000,
+                        "afterTokens": 33000,
+                        "inputBudgetTokens": 24000,
+                        "measurementCount": 7,
+                        "evidenceIds": [
+                          "optional"
+                        ]
+                      },
+                      "contextRecovery": {
+                        "nodeId": "analyse",
+                        "level": 3,
+                        "beforeTokens": 40000,
+                        "afterTokens": 33000,
+                        "evidence": [
+                          {
+                            "id": "optional",
+                            "title": "补充资料",
+                            "bytes": 18000,
+                            "required": false
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "events": [
+                    {
+                      "id": 7,
+                      "nodeId": "analyse",
+                      "actor": "system",
+                      "kind": "context_required",
+                      "status": "waiting_approval",
+                      "message": "本节点输入整理至第3档仍无法发送，可缩小范围、跳过非必需证据或停止",
+                      "createdAt": "2026-11-10T00:00:00Z"
+                    }
+                  ],
+                  "resultResourceIds": [],
+                  "resultOutputIds": [],
+                  "createdAt": "2026-11-10T00:00:00Z",
+                  "updatedAt": "2026-11-10T00:01:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/business-flows/runs/{workflowId}/decide/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "workflowId",
+          "in": "path",
+          "required": true,
+          "description": "当前用户和项目的真实业务流执行编号",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "decideBusinessFlowNode",
+        "summary": "提交人工批准或返修要求",
+        "description": "提交人工批准或返修要求。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "经界面确认的有界业务参数",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessFlowDecision"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/business-flows/runs/{workflowId}/cancel/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "workflowId",
+          "in": "path",
+          "required": true,
+          "description": "当前用户和项目的真实业务流执行编号",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "cancelBusinessFlow",
+        "summary": "用户停止业务流",
+        "description": "当前登录用户可停止本人当前项目的业务流，不以智能体或源资料继续可用为前提。响应只保留安全控制状态，清除执行/审核正文、节点outputs和events；实际计算取消仍检查真实任务归属与计算权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/business-flows/runs/{workflowId}/pause/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "workflowId",
+          "in": "path",
+          "required": true,
+          "description": "当前用户和项目的真实业务流执行编号",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "pauseBusinessFlow",
+        "summary": "用户暂停业务流",
+        "description": "用户暂停业务流。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/business-flows/runs/{workflowId}/resume/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号；不支持all。读写均重验当前项目访问。",
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "workflowId",
+          "in": "path",
+          "required": true,
+          "description": "当前用户和项目的真实业务流执行编号",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "resumeBusinessFlow",
+        "summary": "用户继续业务流",
+        "description": "用户继续业务流。当前项目、真实用户、策略和数据访问权由服务端检查；定义发布不授予执行或数据修改权限。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/business-flows/runs/{workflowId}/input-script/": {
+      "get": {
+        "operationId": "getBusinessFlowInputScript",
+        "tags": [
+          "BusinessFlows"
+        ],
+        "summary": "查看实际适配脚本",
+        "description": "按需读取；每次核对当前账号、项目、原始来源与派生输入ACL，不触发生成或计算",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "本人当前项目任务编号",
+            "schema": {
+              "type": "string",
+              "description": "UUID",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": true,
+            "description": "真实输入衔接键",
+            "schema": {
+              "type": "string",
+              "description": "输入键"
+            }
+          },
+          {
+            "name": "attempt",
+            "in": "query",
+            "required": false,
+            "description": "省略读取最新实际代码",
+            "schema": {
+              "type": "integer",
+              "description": "尝试序号",
+              "minimum": 1,
+              "maximum": 3
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowInputScriptDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限已变化",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在或无权访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "任务或资料修订已变化",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/business-flows/runs/{workflowId}/input-clarification/": {
+      "post": {
+        "operationId": "clarifyBusinessFlowInput",
+        "tags": [
+          "BusinessFlows"
+        ],
+        "summary": "补充输入资料说明并继续",
+        "description": "仅本人当前项目的实际待说明项；修订与幂等保护。补充说明不写入人工批准或AI审核通过标记",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "workflowId",
+            "in": "path",
+            "required": true,
+            "description": "本人当前项目任务编号",
+            "schema": {
+              "type": "string",
+              "description": "UUID",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessFlowInputClarification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "请先登录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "权限已变化",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "不存在或无权访问",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "任务或资料修订已变化",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -26515,6 +28335,16 @@
       }
     },
     "parameters": {
+      "BrowserSessionFamily": {
+        "name": "X-STISP-Session",
+        "in": "header",
+        "required": false,
+        "description": "可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        }
+      },
       "ShareInvitationId": {
         "name": "invitationId",
         "in": "path",
@@ -26546,6 +28376,40 @@
       }
     },
     "responses": {
+      "BrowserIdentityChanged": {
+        "description": "页面身份与 Cookie 会话不一致，业务操作未执行；重新读取当前身份及项目授权后重试。",
+        "headers": {
+          "X-STISP-Session": {
+            "description": "当前 Cookie 会话的 familyId，不包含登录 token。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-STISP-Build": {
+            "description": "服务端当前前端入口脚本路径。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Request-Id": {
+            "description": "本次请求的随机关联号，用于异常诊断。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "detail": "账号已在其他页面切换，请重新确认当前账号",
+              "code": "auth_context_changed"
+            }
+          }
+        }
+      },
       "BadRequest": {
         "description": "请求错误",
         "content": {
@@ -27294,6 +29158,11 @@
             "type": "boolean",
             "description": "科研工作流计划与恢复开关"
           },
+          "mapDisplayEnabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "允许智能体准备个人地图与展示配色；仍须当前项目数据ACL、图层加载、自定义符号化和个人工程权限，不修改原始属性、几何或文件。"
+          },
           "operatorEnabled": {
             "type": "boolean",
             "description": "允许智能体实际提交已登记算子；仍受算法和计算权限约束"
@@ -27682,6 +29551,10 @@
             "type": "boolean",
             "description": "允许数据智能体"
           },
+          "runStreamingEnabled": {
+            "type": "boolean",
+            "description": "支持可恢复运行事件流；旧服务未返回时使用既有进度查询"
+          },
           "canManage": {
             "type": "boolean",
             "description": "超级管理员"
@@ -27836,6 +29709,14 @@
         "description": "最近一次模型调用实际采用的参数；旧运行为空对象，生成用量汇总本轮各次调用",
         "additionalProperties": false,
         "properties": {
+          "workflowModelActivity": {
+            "$ref": "#/components/schemas/AgentWorkflowModelActivity",
+            "description": "关联工作流最近一次真实模型活动的有界快照，经父运行SSE增量更新；不同请求不拼接思考"
+          },
+          "workflowModelActivitySequence": {
+            "type": "integer",
+            "description": "最近模型活动记录编号，用于隔离阶段和重试请求的思考增量"
+          },
           "serviceContextWindowTokens": {
             "type": "integer",
             "description": "模型服务报告的真实总窗口"
@@ -28422,10 +30303,79 @@
           }
         }
       },
+      "AgentPlatformAction": {
+        "type": "object",
+        "description": "服务端从真实工具操作记录重建的站内入口；不是模型自报网址，点击后仍由相应接口核验当前项目和权限。",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "title",
+          "projectId",
+          "resourceIds"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "workspace",
+              "page"
+            ],
+            "description": "已保存的个人地图，或允许的平台页面。"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160,
+            "description": "已保存工程名称或页面名称。"
+          },
+          "projectId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "本轮所属的单个项目，不能跨项目。"
+          },
+          "sceneId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "workspace类型的真实工程编号；仅任务所有者的当前项目工程。"
+          },
+          "page": {
+            "type": "string",
+            "enum": [
+              "map",
+              "resources",
+              "compute",
+              "knowledge",
+              "business_flows"
+            ],
+            "description": "page类型允许的页面；business_flows打开当前项目业务流目录（/business-flows），只提供入口，不授予执行或批准权限。前端按枚举生成固定站内地址。"
+          },
+          "resourceIds": {
+            "type": "array",
+            "maxItems": 5,
+            "uniqueItems": true,
+            "description": "地图所引用并已重新核验的业务资料编号；页面入口为空数组。",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "授权业务资源编号。"
+            }
+          }
+        }
+      },
       "AgentRun": {
         "type": "object",
-        "description": "持久运行记录；引用失权时返回 403，不返回旧内容",
+        "description": "持久运行记录；引用失权时返回403，不返回旧内容。轮询支持gzip；资源依据集合批量实时授权，仅单次检查复用来源查询计划，不跨轮询缓存访问结果。",
         "properties": {
+          "businessFlow": {
+            "$ref": "#/components/schemas/BusinessFlowRun"
+          },
+          "platformActions": {
+            "type": "array",
+            "maxItems": 10,
+            "description": "本轮已完成的平台展示操作入口；从真实证据和本人私有工程重建，当前失权或工程停用时不返回可用按钮。",
+            "items": {
+              "$ref": "#/components/schemas/AgentPlatformAction"
+            }
+          },
           "interaction": {
             "description": "当前或最近的问题卡；未提问时为空。",
             "anyOf": [
@@ -28581,8 +30531,8 @@
           },
           "answerPreview": {
             "type": "string",
-            "maxLength": 24000,
-            "description": "尚未通过最终校验的真实增量预览；普通chat允许自然语言正文，agent仅允许已确认action=final的answer字符串增量解码结果。不含工具参数或原始JSON，前端仅纯文本展示。上限24000个Unicode字符，最终answer不截断；成功后清空，失败、断流或取消保留已接收片段，重试或工具调用时重置。"
+            "maxLength": 1048576,
+            "description": "尚未通过最终校验的真实增量预览；普通chat允许自然语言正文，agent仅允许确认action=final后的answer字符串。不含工具参数或原始JSON；前端可按受控Markdown渲染，不执行HTML、外部资源或代码。最多1048576个Unicode字符，最终answer不截断。成功后清空；失败、断流或取消保留已接收片段，重试或工具调用时重置。内部使用增量事件和稀疏检查点，避免重复保存完整正文。"
           },
           "detail": {
             "type": "string",
@@ -28649,18 +30599,21 @@
               "text",
               "thinking",
               "answer_preview",
+              "answer_delta",
               "tool_started",
               "tool_completed",
               "context",
               "parameters",
               "usage",
               "interaction",
-              "continuation"
+              "continuation",
+              "business_flow_state",
+              "workflow_model_activity"
             ]
           },
           "text": {
             "type": "string",
-            "description": "增量文字或简要操作说明；answer_preview为当前最多24000个Unicode字符的纯文本预览快照，普通chat允许自然正文，agent仅提取已确认action=final的answer字符串，不含工具参数或原始JSON。空串表示重置，界面仅通过run.answerPreview显示而不拼接此事件"
+            "description": "增量文字或简要说明；answer_preview是答复检查点（空串重置），answer_delta只追加该检查点后的真实正文。仅普通chat自然语言或agent确认final后的answer可进入预览，不含工具参数。HTTP轮询使用run.answerPreview，SSE按事件ID拼接且遇检查点替换，总上限1048576字符。"
           },
           "createdAt": {
             "type": "string",
@@ -28672,6 +30625,85 @@
           "kind",
           "text",
           "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "AgentStreamProgress": {
+        "type": "object",
+        "description": "当前连接一致快照后的事件增量，fromCursor必须等于客户端当前游标",
+        "properties": {
+          "runId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "当前运行ID"
+          },
+          "conversationId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "当前会话ID"
+          },
+          "fromCursor": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "增量之前的事件游标"
+          },
+          "cursor": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "本批最后一个事件游标"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 100,
+            "description": "严格按ID递增的真实事件",
+            "items": {
+              "$ref": "#/components/schemas/AgentEvent"
+            }
+          }
+        },
+        "required": [
+          "runId",
+          "conversationId",
+          "fromCursor",
+          "cursor",
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "AgentStreamError": {
+        "type": "object",
+        "description": "响应开始后的运行访问错误；立即停止应用后续事件",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "可读错误说明"
+          },
+          "status": {
+            "type": "integer",
+            "description": "等价HTTP状态码"
+          }
+        },
+        "required": [
+          "detail",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "AgentStreamEnd": {
+        "type": "object",
+        "description": "当前连接结束，任务不会因此停止",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "renew",
+              "settled"
+            ],
+            "description": "renew重新连接，settled按真实状态处理完成或等待"
+          }
+        },
+        "required": [
+          "reason"
         ],
         "additionalProperties": false
       },
@@ -31852,6 +33884,97 @@
         ],
         "additionalProperties": false
       },
+      "ProjectFeature": {
+        "type": "object",
+        "description": "数据驱动的项目功能注册项，不代替用户权限。",
+        "required": [
+          "key",
+          "globallyEnabled"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "稳定功能标识，例如 ecology_monitor。"
+          },
+          "globallyEnabled": {
+            "type": "boolean",
+            "description": "对所有启用项目生效；关闭后恢复单项目设置。"
+          }
+        }
+      },
+      "ProjectMonitorConfig": {
+        "type": "object",
+        "description": "当前项目的监测内容配置；不回退其他项目数据。",
+        "required": [
+          "title",
+          "source",
+          "initialView"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "大屏标题。"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "tarim_poplar_mock"
+            ],
+            "description": "显式选择的模拟数据源；目前仅注册塔里木胡杨演示源。"
+          },
+          "initialView": {
+            "type": "object",
+            "description": "研究区初始视角。",
+            "required": [
+              "center",
+              "zoom",
+              "regionZoom"
+            ],
+            "properties": {
+              "center": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "description": "经度、纬度；分别限制在正负180、90度。",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "zoom": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 22,
+                "description": "初始地球视角缩放级别。"
+              },
+              "regionZoom": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 22,
+                "description": "研究区按钮缩放级别。"
+              }
+            }
+          }
+        }
+      },
+      "ProjectFeatureInput": {
+        "type": "object",
+        "description": "enabled/config 至少提供一项，省略保留原值；ecology_monitor 的非空配置必须符合 ProjectMonitorConfig。",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "单项目开关；全局开启时仍保存，但有效开关为开启。"
+          },
+          "config": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "功能专属内容配置，null 清除；监测配置包含 title、source、initialView。"
+          }
+        }
+      },
       "ProjectTag": {
         "type": "object",
         "description": "平台升级数据结构。",
@@ -31892,6 +34015,31 @@
           "sortOrder": {
             "type": "integer",
             "description": "排序。"
+          },
+          "enabledFeatures": {
+            "type": "array",
+            "description": "后端计算的有效功能清单；停用项目为空。前端入口与路由仅依据此清单，不判断项目代码。",
+            "items": {
+              "type": "string"
+            }
+          },
+          "configuredFeatures": {
+            "type": "array",
+            "description": "单项目显式开启的功能，不包含全局覆盖，用于后台设置。",
+            "items": {
+              "type": "string"
+            }
+          },
+          "monitorConfig": {
+            "description": "已开启大屏的项目专属内容配置；未开启或未配置为 null。",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProjectMonitorConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -31932,6 +34080,13 @@
             "description": "具备标签分配权限时可分配的项目集合，不代表内容访问权限。",
             "items": {
               "$ref": "#/components/schemas/ProjectTag"
+            }
+          },
+          "featureCatalog": {
+            "type": "array",
+            "description": "超级管理员可见的功能注册表与全局开关；其他账号为空。",
+            "items": {
+              "$ref": "#/components/schemas/ProjectFeature"
             }
           }
         }
@@ -32057,6 +34212,10 @@
           "coverUrl": {
             "type": "string",
             "description": "受控封面地址。"
+          },
+          "thumbnailUrl": {
+            "type": "string",
+            "description": "带内容版本的受控卡片小图地址。无封面时为空字符串，客户端显示占位，不回退coverUrl；详情仍使用coverUrl。"
           },
           "eventDate": {
             "type": "string",
@@ -32308,6 +34467,13 @@
           "detail": {
             "type": "string",
             "description": "错误描述信息"
+          },
+          "gaps": {
+            "type": "array",
+            "description": "第2版算子输入预检的机器可读差距，权限错误不返回资料信息",
+            "items": {
+              "$ref": "#/components/schemas/ComputeInputGap"
+            }
           }
         }
       },
@@ -32852,7 +35018,7 @@
       },
       "BrowserSessionRequest": {
         "type": "object",
-        "description": "平台页面会话维护请求；正常刷新续接与新标签加入均须持有服务端验证的令牌。",
+        "description": "平台页面会话维护请求；resume须持有已登记令牌，join须持有有效Cookie和CSRF且会话仍有在线页面。",
         "required": [
           "action"
         ],
@@ -32861,12 +35027,13 @@
             "type": "string",
             "enum": [
               "start",
+              "join",
               "resume",
               "heartbeat",
               "suspend",
               "abandon"
             ],
-            "description": "start用于刚登录的页面，resume用于刷新或在线标签交接，heartbeat续期，suspend挂起，abandon注销无法续接的会话。"
+            "description": "start登记新登录页面，join凭有效Cookie及CSRF加入仍在线的会话，resume恢复有正确令牌的页面，heartbeat续期，suspend挂起，abandon结束无法续接的新访问且保留其他可恢复页面。"
           },
           "pageId": {
             "type": "string",
@@ -32897,6 +35064,11 @@
           "active"
         ],
         "properties": {
+          "familyId": {
+            "type": "string",
+            "description": "同次登录的随机标识，仅用于跨标签退出通知；不授予访问权限，令牌不作为此字段返回。",
+            "pattern": "^[a-f0-9]{32}$"
+          },
           "detail": {
             "type": "string",
             "description": "生命周期处理结果说明。"
@@ -36546,7 +38718,7 @@
               "string",
               "null"
             ],
-            "description": "卡片用缩略图地址，包含所属项目的 projectTagId；仅PNG、JPG/JPEG成果提供，其余格式为null。首次请求时生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。"
+            "description": "带内容版本与projectTagId的预生成WebP卡片地址，PDF使用首页，非可视类型使用统一占位。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问；不得回退previewUrl。"
           },
           "downloadUrl": {
             "type": "string",
@@ -36844,6 +39016,7 @@
                     "hydromica",
                     "calcite",
                     "dolomite",
+                    "alterations",
                     null
                   ],
                   "description": "建议角色"
@@ -36949,6 +39122,20 @@
               "null"
             ],
             "description": "栅格波段数"
+          },
+          "semanticType": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "实际源文件声明的输入语义；执行时仍检查真实像元"
+          },
+          "bandNames": {
+            "type": "array",
+            "maxItems": 64,
+            "description": "前64个实际波段名称，完整数量见bandCount",
+            "items": {
+              "type": "string",
+              "description": "波段类别或名称"
+            }
           },
           "width": {
             "type": [
@@ -37058,6 +39245,7 @@
               "hydromica",
               "calcite",
               "dolomite",
+              "alterations",
               null
             ]
           },
@@ -37432,7 +39620,16 @@
               "properties": {
                 "mineral": {
                   "type": "string",
-                  "description": "矿物角色名"
+                  "description": "实际类别的稳定标识"
+                },
+                "label": {
+                  "type": "string",
+                  "description": "实际类别名称"
+                },
+                "band": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "命名类别集合中的实际波段，旧单波段流程缺省1"
                 },
                 "beforeOutputId": {
                   "type": "integer",
@@ -38926,7 +41123,7 @@
       "WorkspaceSceneSnapshot": {
         "type": "object",
         "additionalProperties": true,
-        "description": "工作台轻量快照 JSON。basemapId 保存受控底图标识，旧快照缺省时保留当前底图。前端只保存图层组、顺序、显隐、查询条件、空间范围、资源引用、符号化、栅格渲染引用元数据和视图状态；不得包含 geojson、FeatureCollection.features、属性表行或原始查询结果数据本体。后端拒绝含原始要素集合或超大请求体的快照。"
+        "description": "工作台轻量快照 JSON。basemapId 保存受控底图标识，旧快照缺省时保留当前底图。前端只保存图层组、顺序、显隐、查询条件、空间范围、资源引用、符号化、栅格渲染引用元数据和视图状态；不得包含 geojson、FeatureCollection.features、属性表行或原始查询结果数据本体。后端拒绝含原始要素集合或超大请求体的快照。绑定平台配色规则的图层在读取时使用当前统一规则投影，symbolization.colorPolicy记录binding=platform及revision；栅格颜色变化后重新请求后台渲染，原始快照和科学数据不回写。普通手工配色不自动绑定。"
       },
       "WorkspaceScene": {
         "type": "object",
@@ -39217,7 +41414,7 @@
           },
           "thumbnailUrl": {
             "type": "string",
-            "description": "卡片用缩略图地址，包含所属项目的 projectTagId；由PNG预览生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。"
+            "description": "带内容版本与projectTagId的预生成WebP卡片地址，保存版本时由PNG母图生成；读取绝不渲染地图。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问。"
           },
           "downloadUrl": {
             "type": "string",
@@ -41617,11 +43814,15 @@
         "properties": {
           "version": {
             "type": "integer",
-            "description": "配色流程版本，当前为2，不是平台版本。"
+            "description": "配色流程版本，当前为3，不是平台版本。"
+          },
+          "policyRevision": {
+            "type": "string",
+            "description": "统一配色规则和唯一色表来源的内容修订标识；工作流与通用展示工具共用。"
           },
           "classes": {
             "type": "array",
-            "description": "实际类别的最终配色审计，与同一资源symbolization.renderer.classes对应。",
+            "description": "保存时实际类别的配色审计；原审计保留，当前绑定规则下的显示颜色以symbolization.renderer.classes及其colorPolicy.revision为准。",
             "items": {
               "$ref": "#/components/schemas/ResultColorClassAdvice"
             }
@@ -41660,7 +43861,7 @@
           },
           "defaultVisualization": {
             "type": "object",
-            "description": "资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。",
+            "description": "资源默认可视化方案，来自default_visualization；仅详情返回，未配置时为空对象。矢量uniqueValue分类使用field、classes的value/label/color及defaultClass。具有colorAdvice或平台配色绑定的方案按当前统一规则投影，和科研智能体及逻辑推理共用同一匹配、色差与补色实现；命中色表保留原色及同色类别，原存储与科学数据不改写。",
             "properties": {
               "colorAdvice": {
                 "$ref": "#/components/schemas/ResultColorAdvice"
@@ -43047,7 +45248,7 @@
           "displayGeometry": {
             "type": "boolean",
             "default": false,
-            "description": "仅地图显示使用的量化几何；WGS84统一1e-5度网格，全体图斑边界共同节点化并量化，保持共享边界一致；不做任何形状简化，仅移除连续重复点和零面积退化环。超过280 KiB gzip目标仍保留量化精度并返回警告。不修改存储数据，不用于编辑、计算或精确导出。省略时返回原精度。"
+            "description": "仅地图显示使用的量化几何；WGS84统一1e-5度网格，全体图斑边界共同节点化并量化，保持共享边界一致；不做任何形状简化，仅移除连续重复点和零面积退化环。超过280 KiB gzip目标仍保留量化精度并返回警告。不修改存储数据，不用于编辑、计算或精确导出。无属性筛选的显示缓存按资源修订及完整参数核验；并发冷启动通过进程间锁复用，缓存命中和等待方复用不占计算槽。每个请求仍单独鉴权；等待或执行额度不足沿用503及Retry-After。省略时返回原精度。"
           },
           "attributeFilters": {
             "type": "array",
@@ -43832,7 +46033,7 @@
         "properties": {
           "code": {
             "type": "string",
-            "description": "警告代码，如 missing_geometry、invalid_longitude、coordinate_uncertainty"
+            "description": "警告代码。missing_geometry、invalid_longitude等表示真实数据质量问题；coordinate_uncertainty仅为小数精度估计；display_geometry_simplified、display_geometry_budget_exceeded为显示说明，不作为坐标异常弹窗。"
           },
           "count": {
             "type": "integer",
@@ -44012,9 +46213,12 @@
             "type": "string",
             "description": "输入类型",
             "enum": [
-              "raster",
               "vector",
-              "table"
+              "raster",
+              "table",
+              "gene",
+              "document",
+              "image"
             ]
           },
           "required": {
@@ -44032,6 +46236,92 @@
               "type": "string",
               "description": "文字"
             }
+          },
+          "description": {
+            "type": "string",
+            "description": "输入语义与限制"
+          },
+          "fields": {
+            "type": "array",
+            "description": "语义字段要求",
+            "items": {
+              "$ref": "#/components/schemas/ComputeSemanticField"
+            },
+            "maxItems": 100
+          },
+          "crs": {
+            "type": "object",
+            "description": "坐标系要求",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "description": "要求",
+                "enum": [
+                  "any",
+                  "projected",
+                  "same_as"
+                ]
+              },
+              "input": {
+                "type": "string",
+                "description": "参照的其他单输入键"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "mode"
+            ]
+          },
+          "spatial": {
+            "type": "object",
+            "description": "包围范围关系",
+            "properties": {
+              "relation": {
+                "type": "string",
+                "description": "关系",
+                "enum": [
+                  "intersects",
+                  "within"
+                ]
+              },
+              "input": {
+                "type": "string",
+                "description": "参照单输入键"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "relation",
+              "input"
+            ]
+          },
+          "repeat": {
+            "type": "object",
+            "description": "同类输入集合",
+            "properties": {
+              "min": {
+                "type": "integer",
+                "description": "最少数量",
+                "minimum": 0,
+                "maximum": 64
+              },
+              "max": {
+                "type": "integer",
+                "description": "最多数量",
+                "minimum": 0,
+                "maximum": 64
+              },
+              "labelRequired": {
+                "type": "boolean",
+                "description": "是否必须具名"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "min",
+              "max",
+              "labelRequired"
+            ]
           }
         },
         "required": [
@@ -44043,7 +46333,7 @@
       },
       "ComputeParameterSpec": {
         "type": "object",
-        "description": "受控参数表单描述；不接受脚本",
+        "description": "受控参数描述；动态Python代码仅由专用受限运行环境执行",
         "properties": {
           "key": {
             "type": "string",
@@ -44101,6 +46391,15 @@
             "type": "object",
             "description": "条件显示：key 和 equals；只支持前置参数等值",
             "additionalProperties": true
+          },
+          "maxLength": {
+            "type": "integer",
+            "description": "字符串长度上限，缺省2000；受限脚本最多16000",
+            "minimum": 1,
+            "maximum": 16000
+          },
+          "agent": {
+            "$ref": "#/components/schemas/ComputeAgentParameter"
           }
         },
         "required": [
@@ -44131,7 +46430,9 @@
               "table",
               "image",
               "report",
-              "archive"
+              "archive",
+              "gene",
+              "document"
             ]
           },
           "file": {
@@ -44141,6 +46442,21 @@
           "required": {
             "type": "boolean",
             "description": "是否必须输出"
+          },
+          "description": {
+            "type": "string",
+            "description": "输出语义与适用条件"
+          },
+          "fields": {
+            "type": "array",
+            "description": "输出字段语义",
+            "items": {
+              "$ref": "#/components/schemas/ComputeSemanticField"
+            }
+          },
+          "final": {
+            "type": "boolean",
+            "description": "是否最终成果"
           }
         },
         "required": [
@@ -44153,12 +46469,15 @@
       },
       "ComputeManifest": {
         "type": "object",
-        "description": "operator.yaml 规范化清单 v1；入口固定 main.py:run(context)",
+        "description": "规范化清单v1/v2；入口main.py:run(context)。v2上传强制校验完整语义及样例；旧登记记录不重新验证",
         "properties": {
           "schemaVersion": {
             "type": "integer",
             "description": "清单版本",
-            "const": 1
+            "enum": [
+              1,
+              2
+            ]
           },
           "identifier": {
             "type": "string",
@@ -44241,6 +46560,67 @@
               "file"
             ],
             "additionalProperties": false
+          },
+          "inputScriptBridge": {
+            "$ref": "#/components/schemas/ComputeInputScriptBridge"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/ComputeCapabilities"
+          },
+          "errors": {
+            "type": "array",
+            "description": "错误码表",
+            "items": {
+              "$ref": "#/components/schemas/ComputeOperatorErrorSpec"
+            },
+            "maxItems": 64
+          },
+          "resources": {
+            "type": "object",
+            "description": "仅供调度参考，不保证配额",
+            "properties": {
+              "duration": {
+                "type": "string",
+                "description": "耗时量级",
+                "enum": [
+                  "seconds",
+                  "minutes",
+                  "hours"
+                ]
+              },
+              "memory": {
+                "type": "string",
+                "description": "峰值内存量级",
+                "enum": [
+                  "small",
+                  "medium",
+                  "large"
+                ]
+              },
+              "scaling": {
+                "type": "string",
+                "description": "资源与规模关系"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "duration",
+              "memory",
+              "scaling"
+            ]
+          },
+          "selfTests": {
+            "type": "array",
+            "description": "包内自检组",
+            "items": {
+              "$ref": "#/components/schemas/ComputeSelfTest"
+            },
+            "maxItems": 10
+          },
+          "inputAdapter": {
+            "type": "object",
+            "description": "已有输入适配能力声明，沿用适配器校验和发现服务",
+            "additionalProperties": true
           }
         },
         "required": [
@@ -44250,7 +46630,6 @@
           "version",
           "description",
           "author",
-          "runtime",
           "inputs",
           "parameters",
           "outputs",
@@ -44298,6 +46677,14 @@
             "type": "string",
             "description": "上传时间",
             "format": "date-time"
+          },
+          "warnings": {
+            "type": "array",
+            "description": "兼容提示，v1建议升级但不拒绝",
+            "items": {
+              "type": "string",
+              "description": "提示"
+            }
           }
         },
         "required": [
@@ -44508,10 +46895,39 @@
           },
           "inputs": {
             "type": "object",
-            "description": "输入名到资源 ID",
+            "description": "输入键到资源ID；repeat端口使用具名数组",
             "additionalProperties": {
-              "type": "integer",
-              "description": "标识"
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "description": "单资源ID",
+                  "minimum": 1
+                },
+                {
+                  "type": "array",
+                  "description": "同类输入",
+                  "items": {
+                    "type": "object",
+                    "description": "集合成员",
+                    "properties": {
+                      "resourceId": {
+                        "type": "integer",
+                        "description": "资源ID",
+                        "minimum": 1
+                      },
+                      "label": {
+                        "type": "string",
+                        "description": "真实名称"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "resourceId"
+                    ]
+                  },
+                  "maxItems": 64
+                }
+              ]
             }
           },
           "parameters": {
@@ -44526,6 +46942,9 @@
           "trial": {
             "type": "boolean",
             "description": "管理员试运行草稿版本"
+          },
+          "fieldMappings": {
+            "$ref": "#/components/schemas/ComputeFieldMappings"
           }
         },
         "required": [
@@ -44792,6 +47211,23 @@
           "attemptCount": {
             "type": "integer",
             "description": "标识"
+          },
+          "failure": {
+            "description": "失败分类，旧任务和成功任务为null",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComputeFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fieldMappings": {
+            "$ref": "#/components/schemas/ComputeFieldMappings"
+          },
+          "inputCollections": {
+            "$ref": "#/components/schemas/ComputeInputCollections"
           }
         },
         "required": [
@@ -45057,12 +47493,2279 @@
           "detail": {
             "type": "string",
             "description": "文字"
+          },
+          "fieldMappings": {
+            "$ref": "#/components/schemas/ComputeFieldMappings"
+          },
+          "inputCollections": {
+            "$ref": "#/components/schemas/ComputeInputCollections"
           }
         },
         "required": [
           "valid",
           "parameters",
           "detail"
+        ]
+      },
+      "BusinessFlowReview": {
+        "type": "object",
+        "description": "每节点可选审核策略；人工批准不能由执行或审核模型替代。",
+        "properties": {
+          "ai": {
+            "type": "boolean",
+            "description": "是否要求独立审核模型"
+          },
+          "human": {
+            "type": "boolean",
+            "description": "是否要求用户明确批准"
+          },
+          "maxRevisions": {
+            "type": "integer",
+            "description": "AI不通过后最多自动返修次数，超过后保留失败原因并停止自动推进",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "model": {
+            "type": "string",
+            "description": "可选审核模型别名，仍受当前模型与策略权限约束",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "ai",
+          "human",
+          "maxRevisions"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowNode": {
+        "type": "object",
+        "description": "一个科研节点；DAG依赖无环，返修由有界审核策略表达，不接受代码或命令。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "版本内稳定节点编码",
+            "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+          },
+          "title": {
+            "type": "string",
+            "description": "节点显示名称",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "description": "节点目的与适用条件",
+            "maxLength": 2000
+          },
+          "kind": {
+            "type": "string",
+            "description": "执行类型；human节点必须保留人工批准",
+            "enum": [
+              "agent",
+              "operator",
+              "human",
+              "result"
+            ]
+          },
+          "dependsOn": {
+            "type": "array",
+            "description": "全部前置节点通过后才执行",
+            "items": {
+              "type": "string",
+              "description": "前置节点编码"
+            },
+            "maxItems": 32,
+            "uniqueItems": true
+          },
+          "dataRoles": {
+            "type": "array",
+            "description": "本节点可访问的绑定资料角色",
+            "items": {
+              "type": "string",
+              "description": "输入规范中的角色编码"
+            },
+            "maxItems": 30,
+            "uniqueItems": true
+          },
+          "algorithmVersionId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "通用算子节点固定的已发布版本；专业逻辑推理由规则注册解析",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "通用算子节点固定的已发布版本；专业逻辑推理由规则注册解析"
+          },
+          "instruction": {
+            "type": "string",
+            "description": "受平台工具与只读数据边界约束的科研任务说明",
+            "maxLength": 12000
+          },
+          "parameters": {
+            "type": "object",
+            "description": "仅research_flow算子节点的参数默认值，最多50键、深度8；执行时仍按实际manifest校验",
+            "additionalProperties": true
+          },
+          "review": {
+            "$ref": "#/components/schemas/BusinessFlowReview"
+          },
+          "inputBindings": {
+            "type": "object",
+            "description": "仅research_flow算子节点可用；manifest输入键到互斥来源的绑定。最多30键；发布时核对当前输入键、前序版本输出键及数据类型，运行时通过原入库服务生成真实就绪资源后提交后续算子。质量未通过不会因人工批准而视为通过。",
+            "maxProperties": 30,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/BusinessFlowInputBinding"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "description",
+          "kind",
+          "dependsOn",
+          "dataRoles",
+          "instruction",
+          "review"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowInputRequirement": {
+        "type": "object",
+        "description": "一项数据角色和最低输入规范；真实内容与访问权在启动和执行边界重验。",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "角色稳定编码",
+            "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+          },
+          "label": {
+            "type": "string",
+            "description": "资料角色名称",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "description": "适用数据与用途说明",
+            "maxLength": 1500
+          },
+          "dataTypes": {
+            "type": "array",
+            "description": "流程期望的目标类型；实际来源可通过已发布转换工具或Agent编写的受限脚本衔接",
+            "items": {
+              "type": "string",
+              "description": "平台数据类型",
+              "enum": [
+                "vector",
+                "raster",
+                "table",
+                "gene",
+                "document",
+                "image"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 6,
+            "uniqueItems": true
+          },
+          "required": {
+            "type": "boolean",
+            "description": "是否必须绑定该角色"
+          },
+          "requiredFields": {
+            "type": "array",
+            "description": "资料必须提供的字段名；无要求时为空",
+            "items": {
+              "type": "string",
+              "description": "条目文字"
+            },
+            "maxItems": 80,
+            "uniqueItems": true
+          },
+          "multiple": {
+            "type": "boolean",
+            "description": "同一角色允许多份来源，绑定键使用角色:来源编号；默认false"
+          },
+          "semanticType": {
+            "type": "string",
+            "description": "可选目标语义标识，与已发布适配能力匹配",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "dataTypes",
+          "required",
+          "requiredFields"
+        ],
+        "additionalProperties": false
+      },
+      "ComputeInputScriptBridge": {
+        "type": "object",
+        "description": "受限脚本执行器的真实端口与代码参数；不授予其他数据、网络或系统操作权限",
+        "properties": {
+          "inputPorts": {
+            "type": "object",
+            "description": "实际资料类型到本运行器已声明输入端口的映射",
+            "additionalProperties": {
+              "type": "array",
+              "description": "同类型可接收的输入端口",
+              "items": {
+                "type": "string",
+                "description": "输入端口键"
+              },
+              "minItems": 1,
+              "maxItems": 5
+            }
+          },
+          "outputPorts": {
+            "type": "object",
+            "description": "目标资料类型到已声明输出端口的映射",
+            "additionalProperties": {
+              "type": "string",
+              "description": "输出端口键"
+            }
+          },
+          "codeParameter": {
+            "type": "string",
+            "description": "代码参数名"
+          },
+          "targetParameter": {
+            "type": "string",
+            "description": "目标类型参数名"
+          },
+          "contractParameter": {
+            "type": "string",
+            "description": "目标规范JSON参数名"
+          },
+          "policyVersion": {
+            "type": "integer",
+            "description": "内核隔离协议版本",
+            "enum": [
+              1
+            ]
+          }
+        },
+        "required": [
+          "inputPorts",
+          "outputPorts",
+          "codeParameter",
+          "targetParameter",
+          "contractParameter",
+          "policyVersion"
+        ],
+        "additionalProperties": false
+      },
+      "ComputeSemanticField": {
+        "type": "object",
+        "description": "语义字段；输入按role绑定；legacyName仅供旧入口别名迁移",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "语义角色标识"
+          },
+          "description": {
+            "type": "string",
+            "description": "字段语义"
+          },
+          "types": {
+            "type": "array",
+            "description": "接受的逻辑类型",
+            "items": {
+              "type": "string",
+              "description": "类型",
+              "enum": [
+                "string",
+                "integer",
+                "number",
+                "boolean",
+                "datetime"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 5
+          },
+          "required": {
+            "type": "boolean",
+            "description": "是否必需"
+          },
+          "unit": {
+            "type": "string",
+            "description": "精确单位，不推断未知单位"
+          },
+          "min": {
+            "type": "number",
+            "description": "下界"
+          },
+          "max": {
+            "type": "number",
+            "description": "上界"
+          },
+          "parameter": {
+            "type": "string",
+            "description": "关联已有field/band参数"
+          },
+          "legacyName": {
+            "type": "string",
+            "description": "旧入口内部字段名，外部仍可映射其他字段"
+          },
+          "name": {
+            "type": "string",
+            "description": "输出实际字段名"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "description",
+          "types",
+          "required"
+        ]
+      },
+      "ComputeCapabilities": {
+        "type": "object",
+        "description": "受控类别及适用限制",
+        "properties": {
+          "operations": {
+            "type": "array",
+            "description": "操作类别",
+            "items": {
+              "type": "string",
+              "description": "类别",
+              "enum": [
+                "check",
+                "correct",
+                "convert",
+                "statistics",
+                "infer",
+                "map"
+              ]
+            },
+            "minItems": 1
+          },
+          "dataTypes": {
+            "type": "array",
+            "description": "作用对象",
+            "items": {
+              "type": "string",
+              "description": "资料类型",
+              "enum": [
+                "raster",
+                "vector",
+                "table",
+                "image",
+                "report",
+                "archive",
+                "document",
+                "gene"
+              ]
+            },
+            "minItems": 1
+          },
+          "summary": {
+            "type": "string",
+            "description": "能力摘要"
+          },
+          "useWhen": {
+            "type": "string",
+            "description": "适用情形"
+          },
+          "avoidWhen": {
+            "type": "string",
+            "description": "不适用情形"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "operations",
+          "dataTypes",
+          "summary",
+          "useWhen",
+          "avoidWhen"
+        ]
+      },
+      "ComputeAgentParameter": {
+        "type": "object",
+        "description": "参数调整提示，不授予额外权限",
+        "properties": {
+          "adjustable": {
+            "type": "boolean",
+            "description": "是否允许智能体调整"
+          },
+          "advice": {
+            "type": "string",
+            "description": "选择和调整建议"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "adjustable",
+          "advice"
+        ]
+      },
+      "ComputeOperatorErrorSpec": {
+        "type": "object",
+        "description": "错误码与前置条件",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "唯一大写错误码，PLATFORM_保留"
+          },
+          "meaning": {
+            "type": "string",
+            "description": "含义"
+          },
+          "precondition": {
+            "type": "string",
+            "description": "前置条件"
+          },
+          "remedy": {
+            "type": "string",
+            "description": "补救类别",
+            "enum": [
+              "adjust_parameters",
+              "convert_input",
+              "complete_mapping",
+              "replace_data",
+              "human_review",
+              "unrecoverable"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "meaning",
+          "precondition",
+          "remedy"
+        ]
+      },
+      "ComputeFailure": {
+        "type": "object",
+        "description": "结构化运行失败，不包含Python traceback",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "算子错误码或平台通用错误码"
+          },
+          "message": {
+            "type": "string",
+            "description": "调度说明"
+          },
+          "inputs": {
+            "type": "array",
+            "description": "涉及输入",
+            "items": {
+              "type": "string",
+              "description": "清单输入键"
+            }
+          },
+          "parameters": {
+            "type": "array",
+            "description": "涉及参数",
+            "items": {
+              "type": "string",
+              "description": "参数键"
+            }
+          },
+          "remedy": {
+            "type": "string",
+            "description": "补救类别",
+            "enum": [
+              "adjust_parameters",
+              "convert_input",
+              "complete_mapping",
+              "replace_data",
+              "human_review",
+              "unrecoverable"
+            ]
+          },
+          "details": {
+            "type": "object",
+            "description": "有界补充诊断，不包含秘密或主机路径",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "inputs",
+          "parameters",
+          "remedy",
+          "details"
+        ]
+      },
+      "ComputeInputGap": {
+        "type": "object",
+        "description": "预检差距，不自动执行转换",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "差距码"
+          },
+          "input": {
+            "type": "string",
+            "description": "实际输入键"
+          },
+          "role": {
+            "type": "string",
+            "description": "字段语义角色，非字段差距为空"
+          },
+          "field": {
+            "type": "string",
+            "description": "字段名或波段号文字，未知为空"
+          },
+          "expected": {
+            "description": "期望规范或类型"
+          },
+          "actual": {
+            "description": "实际元信息，未知为null"
+          },
+          "remedy": {
+            "type": "string",
+            "description": "建议补救类别",
+            "enum": [
+              "adjust_parameters",
+              "convert_input",
+              "complete_mapping",
+              "replace_data",
+              "human_review",
+              "unrecoverable"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "input",
+          "role",
+          "field",
+          "expected",
+          "actual",
+          "remedy"
+        ]
+      },
+      "ComputeFieldMappings": {
+        "type": "object",
+        "description": "实际输入键到角色映射，集合使用key__序号",
+        "additionalProperties": {
+          "type": "object",
+          "description": "语义角色绑定",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "实际字段名"
+              },
+              {
+                "type": "integer",
+                "description": "1起始波段号",
+                "minimum": 1
+              }
+            ]
+          }
+        }
+      },
+      "ComputeInputCollections": {
+        "type": "object",
+        "description": "冻结集合成员和标签，查询与重试保持一致",
+        "additionalProperties": {
+          "type": "array",
+          "description": "成员",
+          "items": {
+            "type": "object",
+            "description": "固定成员",
+            "properties": {
+              "key": {
+                "type": "string",
+                "description": "展开输入键"
+              },
+              "label": {
+                "type": "string",
+                "description": "真实名称"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "label"
+            ]
+          }
+        }
+      },
+      "ComputeSelfTest": {
+        "type": "object",
+        "description": "包内小样例",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "样例名称"
+          },
+          "fixture": {
+            "type": "string",
+            "description": "包内JSON相对路径"
+          },
+          "expect": {
+            "type": "object",
+            "description": "成功files或失败errorCode二选一",
+            "properties": {
+              "errorCode": {
+                "type": "string",
+                "description": "已声明错误码"
+              },
+              "files": {
+                "type": "object",
+                "description": "已声明输出文件摘要",
+                "additionalProperties": {
+                  "type": "object",
+                  "description": "可验证输出摘要",
+                  "properties": {
+                    "rows": {
+                      "type": "integer",
+                      "description": "行数",
+                      "minimum": 0
+                    },
+                    "columns": {
+                      "type": "array",
+                      "description": "必需字段",
+                      "items": {
+                        "type": "string",
+                        "description": "字段名"
+                      }
+                    },
+                    "bands": {
+                      "type": "integer",
+                      "description": "波段数",
+                      "minimum": 0
+                    },
+                    "sha256": {
+                      "type": "string",
+                      "description": "SHA256"
+                    },
+                    "contains": {
+                      "type": "string",
+                      "description": "文本包含短语"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "fixture",
+          "expect"
+        ]
+      },
+      "BusinessFlowInputPreparationPolicy": {
+        "type": "object",
+        "description": "新任务输入与节点衔接策略；不允许更改固定科研步骤或替代人工批准",
+        "properties": {
+          "allowScripts": {
+            "type": "boolean",
+            "description": "允许Agent按实际资料编写受限衔接脚本，缺省true"
+          },
+          "reviewScripts": {
+            "type": "boolean",
+            "description": "额外独立AI审核适配脚本；缺省false，节点自身的审核保持原配置"
+          },
+          "maxRepairs": {
+            "type": "integer",
+            "description": "脚本失败后最多返修次数，缺省2",
+            "minimum": 0,
+            "maximum": 2
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "BusinessFlowInputScriptSummary": {
+        "type": "object",
+        "description": "适配脚本进度摘要；代码按需读取，不随状态帧反复传送",
+        "properties": {
+          "attempt": {
+            "type": "integer",
+            "description": "当前真实脚本尝试序号",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "status": {
+            "type": "string",
+            "description": "真实编写、审核或执行状态"
+          },
+          "sha256": {
+            "type": "string",
+            "description": "实际代码SHA256，尚未生成时为空"
+          },
+          "summary": {
+            "type": "string",
+            "description": "本次衔接目的和处理说明"
+          },
+          "question": {
+            "type": "string",
+            "description": "确实缺少必要含义时需要用户补充的资料说明"
+          },
+          "lastError": {
+            "type": "string",
+            "description": "真实失败原因的有界摘要"
+          },
+          "available": {
+            "type": "boolean",
+            "description": "是否已有可按需查看的实际代码"
+          }
+        },
+        "required": [
+          "attempt",
+          "status",
+          "sha256",
+          "summary",
+          "available"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowInputScriptDetail": {
+        "type": "object",
+        "description": "本人当前项目任务的实际适配脚本和审计；原始资料不被改写",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "输入衔接绑定键"
+          },
+          "attempt": {
+            "type": "integer",
+            "description": "代码尝试序号",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "language": {
+            "type": "string",
+            "description": "语言",
+            "enum": [
+              "python"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "description": "模型实际编写的代码",
+            "maxLength": 16000
+          },
+          "sha256": {
+            "type": "string",
+            "description": "代码SHA256",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "description": "当前真实状态"
+          },
+          "summary": {
+            "type": "string",
+            "description": "转换目的和假设"
+          },
+          "diagnostics": {
+            "type": "array",
+            "description": "实际执行或审核反馈，最多8条",
+            "items": {
+              "type": "string",
+              "description": "有界诊断"
+            },
+            "maxItems": 8
+          },
+          "sourceIds": {
+            "type": "array",
+            "description": "本次实际授权来源",
+            "items": {
+              "type": "integer",
+              "description": "资料编号",
+              "minimum": 1
+            },
+            "maxItems": 30
+          },
+          "targetType": {
+            "type": "string",
+            "description": "声明的目标资料类型",
+            "enum": [
+              "vector",
+              "raster",
+              "table",
+              "gene",
+              "document",
+              "image"
+            ]
+          }
+        },
+        "required": [
+          "role",
+          "attempt",
+          "language",
+          "code",
+          "sha256",
+          "status",
+          "summary",
+          "diagnostics",
+          "sourceIds",
+          "targetType"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowInputClarification": {
+        "type": "object",
+        "description": "仅补充数据适配所需含义；不批准任何科研或对象修改节点",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "当前待说明的输入衔接键"
+          },
+          "feedback": {
+            "type": "string",
+            "description": "用户的实际资料说明",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "revision": {
+            "type": "integer",
+            "description": "当前业务流控制修订",
+            "minimum": 0
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "本次说明的幂等键",
+            "minLength": 8,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "role",
+          "feedback",
+          "revision",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowSpec": {
+        "type": "object",
+        "description": "不可变科研流程规范。通用research_flow逐节点自由配置审核；专业geology_generic锁定骨架、资料角色、人工门禁（仅inputs/apply）及真实AI边界（仅apply/finish）。",
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "description": "定义规范版本",
+            "enum": [
+              1
+            ]
+          },
+          "adapter": {
+            "type": "string",
+            "description": "平台注册执行适配器",
+            "enum": [
+              "geology_generic",
+              "research_flow"
+            ]
+          },
+          "inputRequirements": {
+            "type": "array",
+            "description": "输入资料规范",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowInputRequirement"
+            },
+            "maxItems": 30
+          },
+          "nodes": {
+            "type": "array",
+            "description": "无环依赖节点，最多32个",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowNode"
+            },
+            "minItems": 1,
+            "maxItems": 32
+          },
+          "outputRequirements": {
+            "type": "array",
+            "description": "最终成果说明",
+            "items": {
+              "type": "string",
+              "description": "条目文字"
+            },
+            "maxItems": 30
+          },
+          "inputPreparation": {
+            "$ref": "#/components/schemas/BusinessFlowInputPreparationPolicy"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "adapter",
+          "inputRequirements",
+          "nodes",
+          "outputRequirements"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowDefinition": {
+        "type": "object",
+        "description": "当前项目内的业务流登记；发布版本不被元信息修改覆盖。",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "业务流登记编号",
+            "minimum": 1
+          },
+          "projectId": {
+            "type": "integer",
+            "description": "唯一所属项目",
+            "minimum": 1
+          },
+          "ownerId": {
+            "type": "integer",
+            "description": "登记所有者",
+            "minimum": 1
+          },
+          "code": {
+            "type": "string",
+            "description": "当前项目唯一稳定编码",
+            "pattern": "^[a-z][a-z0-9_-]{1,79}$"
+          },
+          "name": {
+            "type": "string",
+            "description": "业务流名称",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "description": "科研任务、适用条件与用途",
+            "maxLength": 3000
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "是否允许新任务启动"
+          },
+          "currentVersionId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "当前发布版本编号",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前发布版本编号"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "登记时间",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "元信息版本时间，也是保存的乐观并发凭据",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "ownerId",
+          "code",
+          "name",
+          "description",
+          "isActive",
+          "currentVersionId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowVersion": {
+        "type": "object",
+        "description": "已发布不可变版本；任务冻结此版本，不随后续发布改变。",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "不可变版本编号",
+            "minimum": 1
+          },
+          "flowId": {
+            "type": "integer",
+            "description": "所属业务流登记编号",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "description": "同一业务流内递增的发布序号",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "description": "仅返回已发布版本",
+            "enum": [
+              "published"
+            ]
+          },
+          "definition": {
+            "$ref": "#/components/schemas/BusinessFlowSpec"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "版本创建时间",
+            "format": "date-time"
+          },
+          "publishedAt": {
+            "type": "string",
+            "description": "发布时间",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "flowId",
+          "version",
+          "status",
+          "definition",
+          "createdAt",
+          "publishedAt"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowSummary": {
+        "type": "object",
+        "description": "业务流目录的轻量摘要；完整定义按需读取。",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "业务流登记编号",
+            "minimum": 1
+          },
+          "projectId": {
+            "type": "integer",
+            "description": "唯一所属项目",
+            "minimum": 1
+          },
+          "ownerId": {
+            "type": "integer",
+            "description": "登记所有者",
+            "minimum": 1
+          },
+          "code": {
+            "type": "string",
+            "description": "当前项目唯一稳定编码",
+            "pattern": "^[a-z][a-z0-9_-]{1,79}$"
+          },
+          "name": {
+            "type": "string",
+            "description": "业务流名称",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "description": "科研任务、适用条件与用途",
+            "maxLength": 3000
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "是否允许新任务启动"
+          },
+          "currentVersionId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "当前发布版本编号",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前发布版本编号"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "登记时间",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "元信息版本时间，也是保存的乐观并发凭据",
+            "format": "date-time"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "当前发布序号",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "当前发布序号"
+          },
+          "nodeCount": {
+            "type": "integer",
+            "description": "节点数",
+            "minimum": 0
+          },
+          "aiReviewCount": {
+            "type": "integer",
+            "description": "配置AI审核的节点数",
+            "minimum": 0
+          },
+          "humanReviewCount": {
+            "type": "integer",
+            "description": "必须人工决定的节点数",
+            "minimum": 0
+          },
+          "inputCount": {
+            "type": "integer",
+            "description": "输入资料角色数",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "ownerId",
+          "code",
+          "name",
+          "description",
+          "isActive",
+          "currentVersionId",
+          "createdAt",
+          "updatedAt",
+          "version",
+          "nodeCount",
+          "aiReviewCount",
+          "humanReviewCount",
+          "inputCount"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowDetail": {
+        "type": "object",
+        "description": "登记、当前发布版本和最近发布历史。",
+        "properties": {
+          "flow": {
+            "$ref": "#/components/schemas/BusinessFlowDefinition"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessFlowVersion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "可空标识"
+          },
+          "versions": {
+            "type": "array",
+            "description": "最近50个不可变版本",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowVersion"
+            }
+          },
+          "canManage": {
+            "type": "boolean",
+            "description": "是否可登记和发布版本"
+          }
+        },
+        "required": [
+          "flow",
+          "version",
+          "versions",
+          "canManage"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowList": {
+        "type": "object",
+        "description": "当前项目业务流目录的一页；普通用户仅看启用项，不返回总条数。",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "目录摘要，最多50项",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowSummary"
+            }
+          },
+          "canManage": {
+            "type": "boolean",
+            "description": "是否可维护目录"
+          },
+          "nextOffset": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "仅有后续页时返回下一页offset；缺省表示当前查询已加载完。请求下一页必须保持相同q。"
+          }
+        },
+        "required": [
+          "items",
+          "canManage"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowActorState": {
+        "type": "object",
+        "description": "执行或独立审核智能体的当前公开状态，不传工具密钥或内部提示。",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "当前状态，如pending、running、passed、rejected、skipped"
+          },
+          "model": {
+            "type": "string",
+            "description": "执行使用的模型别名"
+          },
+          "answer": {
+            "type": "string",
+            "description": "节点产出或公开结果摘要"
+          },
+          "reason": {
+            "type": "string",
+            "description": "状态原因或审核不通过原因"
+          },
+          "decision": {
+            "type": "string",
+            "description": "审核判断，不构成人工授权"
+          },
+          "feedback": {
+            "type": "string",
+            "description": "交给执行智能体的具体返修反馈"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": true
+      },
+      "BusinessFlowHumanState": {
+        "type": "object",
+        "description": "人在回路的明确决定；审核模型不能写入approved状态。",
+        "properties": {
+          "required": {
+            "type": "boolean",
+            "description": "当前节点是否必须人工决定"
+          },
+          "status": {
+            "type": "string",
+            "description": "人工状态，如pending、approved、changes_requested、not_required"
+          },
+          "reason": {
+            "type": "string",
+            "description": "为什么需要用户决定或用户反馈"
+          }
+        },
+        "required": [
+          "required",
+          "status",
+          "reason"
+        ],
+        "additionalProperties": true
+      },
+      "BusinessFlowContextManagement": {
+        "type": "object",
+        "description": "本节点实际输入整理的有界审计摘要，不含证据正文或台账。",
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "当前节点编码"
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "description": "原样、内部截短、索引摘要或分批归纳档位"
+          },
+          "beforeTokens": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "整理前实测token数"
+          },
+          "afterTokens": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "整理后实测token数"
+          },
+          "inputBudgetTokens": {
+            "type": "integer",
+            "description": "实际模型窗口扣除输出与安全余量后的策略预算"
+          },
+          "measurementCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 19,
+            "description": "本次整理分词请求数上界19"
+          },
+          "noticeSummary": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "逐项省略说明，含证据编号、处理方式、原始与保留规模及前几处字段计数，不含正文"
+          },
+          "evidenceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "本次被整理的证据编号"
+          }
+        },
+        "required": [
+          "nodeId",
+          "level"
+        ],
+        "additionalProperties": true
+      },
+      "BusinessFlowContextRecovery": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BusinessFlowContextManagement"
+          },
+          {
+            "type": "object",
+            "description": "通过现有节点决定通道恢复的上下文等待，不构成人工科研批准。",
+            "properties": {
+              "evidence": {
+                "type": "array",
+                "description": "当前证据规模和是否禁止跳过，不含正文。",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "实际证据编号"
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "证据标题"
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "原始证据字节数"
+                    },
+                    "required": {
+                      "type": "boolean",
+                      "description": "必需角色、直接依赖或指令点名证据不可跳过"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "bytes",
+                    "required"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "evidence"
+            ]
+          }
+        ]
+      },
+      "BusinessFlowContextScope": {
+        "type": "object",
+        "description": "用户明确收紧样本与文本范围，仅影响资料投影，不修改原始数据或科研规范。",
+        "properties": {
+          "maxItems": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "每个样本或分组数组最多保留项数"
+          },
+          "maxTextCharacters": {
+            "type": "integer",
+            "minimum": 80,
+            "maximum": 1000,
+            "description": "每个长文本最多保留字符数"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BusinessFlowNodeState": {
+        "type": "object",
+        "description": "当前节点真实执行、审核、返修和人工状态。",
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "对应冻结规范中的节点编码"
+          },
+          "status": {
+            "type": "string",
+            "description": "节点状态；waiting_context表示上下文等待，不是科研审批"
+          },
+          "attempt": {
+            "type": "integer",
+            "description": "本节点执行尝试序号",
+            "minimum": 0
+          },
+          "executor": {
+            "$ref": "#/components/schemas/BusinessFlowActorState"
+          },
+          "reviewer": {
+            "$ref": "#/components/schemas/BusinessFlowActorState"
+          },
+          "human": {
+            "$ref": "#/components/schemas/BusinessFlowHumanState"
+          },
+          "outputs": {
+            "type": "object",
+            "description": "仅包含本节点产出的结论或真实算子结果引用",
+            "additionalProperties": true
+          },
+          "contextManagement": {
+            "$ref": "#/components/schemas/BusinessFlowContextManagement"
+          },
+          "contextRecovery": {
+            "$ref": "#/components/schemas/BusinessFlowContextRecovery"
+          }
+        },
+        "required": [
+          "nodeId",
+          "status",
+          "attempt",
+          "executor",
+          "reviewer",
+          "human",
+          "outputs"
+        ],
+        "additionalProperties": true
+      },
+      "BusinessFlowEvent": {
+        "type": "object",
+        "description": "执行者、审核者、用户和系统之间可追溯的状态事件。",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "当前执行内递增事件序号",
+            "minimum": 0
+          },
+          "nodeId": {
+            "type": "string",
+            "description": "相关节点；全局事件可为空"
+          },
+          "actor": {
+            "type": "string",
+            "description": "事件来源角色",
+            "enum": [
+              "executor",
+              "reviewer",
+              "human",
+              "system"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "description": "事件类型，例如started、review_rejected、revision_requested、human_approved"
+          },
+          "status": {
+            "type": "string",
+            "description": "发生后的真实状态"
+          },
+          "message": {
+            "type": "string",
+            "description": "面向用户的事件说明"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "事件时间",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "nodeId",
+          "actor",
+          "kind",
+          "status",
+          "message",
+          "createdAt"
+        ],
+        "additionalProperties": true
+      },
+      "BusinessFlowRun": {
+        "type": "object",
+        "description": "绑定不可变定义的真实执行；AI审核和人工批准分别记录，不跳过原有权限与科研检查。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "沿用AgentWorkflow的真实执行编号",
+            "format": "uuid"
+          },
+          "flowId": {
+            "type": "integer",
+            "description": "业务流登记编号",
+            "minimum": 1
+          },
+          "versionId": {
+            "type": "integer",
+            "description": "本次冻结的发布版本编号",
+            "minimum": 1
+          },
+          "projectId": {
+            "type": "integer",
+            "description": "所属单一项目",
+            "minimum": 1
+          },
+          "conversationId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "父智能体会话编号",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "父智能体会话编号"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "父对话轮次编号；审核请求不冒充新用户轮次",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "父对话轮次编号；审核请求不冒充新用户轮次"
+          },
+          "name": {
+            "type": "string",
+            "description": "业务流名称"
+          },
+          "goal": {
+            "type": "string",
+            "description": "本次科研目标"
+          },
+          "status": {
+            "type": "string",
+            "description": "执行状态，沿用工作流状态并可表达审核与返修"
+          },
+          "currentNode": {
+            "type": "string",
+            "description": "当前节点编码；未开始时可为空"
+          },
+          "revision": {
+            "type": "integer",
+            "description": "状态修订号；人工决定必须绑定当前修订",
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "启动时间",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "最后状态更新时间",
+            "format": "date-time"
+          },
+          "definitionSnapshot": {
+            "$ref": "#/components/schemas/BusinessFlowSpec"
+          },
+          "nodes": {
+            "type": "array",
+            "description": "本次节点状态",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowNodeState"
+            },
+            "maxItems": 32
+          },
+          "events": {
+            "type": "array",
+            "description": "有界可追溯过程事件",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowEvent"
+            }
+          },
+          "inputPreparation": {
+            "$ref": "#/components/schemas/BusinessFlowInputPlan"
+          }
+        },
+        "required": [
+          "id",
+          "flowId",
+          "versionId",
+          "projectId",
+          "conversationId",
+          "runId",
+          "name",
+          "goal",
+          "status",
+          "currentNode",
+          "revision",
+          "createdAt",
+          "updatedAt",
+          "definitionSnapshot",
+          "nodes",
+          "events"
+        ],
+        "additionalProperties": true
+      },
+      "BusinessFlowRunSummary": {
+        "type": "object",
+        "description": "本人当前项目的轻量执行历史，不读取完整步骤或重新扫描资料。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "沿用AgentWorkflow的真实执行编号",
+            "format": "uuid"
+          },
+          "flowId": {
+            "type": "integer",
+            "description": "业务流登记编号",
+            "minimum": 1
+          },
+          "versionId": {
+            "type": "integer",
+            "description": "本次冻结的发布版本编号",
+            "minimum": 1
+          },
+          "projectId": {
+            "type": "integer",
+            "description": "所属单一项目",
+            "minimum": 1
+          },
+          "conversationId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "父智能体会话编号",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "父智能体会话编号"
+          },
+          "runId": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "父对话轮次编号；审核请求不冒充新用户轮次",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "父对话轮次编号；审核请求不冒充新用户轮次"
+          },
+          "name": {
+            "type": "string",
+            "description": "业务流名称"
+          },
+          "goal": {
+            "type": "string",
+            "description": "本次科研目标"
+          },
+          "status": {
+            "type": "string",
+            "description": "执行状态，沿用工作流状态并可表达审核与返修"
+          },
+          "currentNode": {
+            "type": "string",
+            "description": "当前节点编码；未开始时可为空"
+          },
+          "revision": {
+            "type": "integer",
+            "description": "状态修订号；人工决定必须绑定当前修订",
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "启动时间",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "最后状态更新时间",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "flowId",
+          "versionId",
+          "projectId",
+          "conversationId",
+          "runId",
+          "name",
+          "goal",
+          "status",
+          "currentNode",
+          "revision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": true
+      },
+      "BusinessFlowRunList": {
+        "type": "object",
+        "description": "本人当前项目最近30个业务流执行。",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "轻量执行摘要，最多30项",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowRunSummary"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowCreate": {
+        "type": "object",
+        "description": "登记并立即发布第一版；仅当前项目超级管理员可调用。",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "当前项目唯一稳定编码",
+            "pattern": "^[a-z][a-z0-9_-]{1,79}$"
+          },
+          "name": {
+            "type": "string",
+            "description": "业务流名称",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "description": "科研任务、适用条件与用途",
+            "maxLength": 3000
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "是否允许新任务启动"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/BusinessFlowSpec"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "definition"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowUpdate": {
+        "type": "object",
+        "description": "只修改登记元信息，不覆盖已发布定义。",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "业务流名称",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "description": "科研任务、适用条件与用途",
+            "maxLength": 3000
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "是否允许新任务启动"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "元信息版本时间，也是保存的乐观并发凭据",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowVersionPublish": {
+        "type": "object",
+        "description": "发布新不可变版本并设为当前版本；不修改正在运行任务的快照。",
+        "properties": {
+          "definition": {
+            "$ref": "#/components/schemas/BusinessFlowSpec"
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "元信息版本时间，也是保存的乐观并发凭据",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "definition",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowStart": {
+        "type": "object",
+        "description": "按固定版本启动任务；数据编号仍按当前用户、项目和隐私边界重验。",
+        "properties": {
+          "versionId": {
+            "type": "integer",
+            "description": "省略时使用当前发布版本",
+            "minimum": 1
+          },
+          "goal": {
+            "type": "string",
+            "description": "本次目标",
+            "minLength": 1,
+            "maxLength": 12000
+          },
+          "model": {
+            "type": "string",
+            "description": "执行模型别名",
+            "maxLength": 80
+          },
+          "reviewerModel": {
+            "type": "string",
+            "description": "独立审核请求使用的模型别名；可与执行模型相同但上下文和职责独立",
+            "maxLength": 80
+          },
+          "inputs": {
+            "type": "object",
+            "description": "角色到当前项目资料编号的映射，最多30项",
+            "additionalProperties": {
+              "type": "integer",
+              "description": "资料编号",
+              "minimum": 1
+            }
+          },
+          "parameters": {
+            "type": "object",
+            "description": "受控任务参数，不新增任意根级配置。research_flow仅允许nodeParameters对象（operator节点ID→该已发布算法manifest声明的参数值对象）；节点必须存在且类型为operator，未知节点/参数键不静默忽略。与冻结node.parameters默认值合并后，真实取值、类型、字段和波段仍由计算中心验证。geology_generic只允许既有专业参数及uploadBatchId；禁止_businessFlow等内部状态。",
+            "additionalProperties": true
+          },
+          "conversationId": {
+            "type": "integer",
+            "description": "可选本人当前项目会话，未传则由服务器建立",
+            "minimum": 1
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "同一操作重试的稳定键",
+            "minLength": 8,
+            "maxLength": 80
+          },
+          "inputAdapters": {
+            "$ref": "#/components/schemas/BusinessFlowInputAdapterChoices"
+          }
+        },
+        "required": [
+          "goal",
+          "model",
+          "inputs",
+          "parameters",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowInputAdapterChoice": {
+        "type": "object",
+        "description": "已发布转换版本及其参数，不授予额外访问权",
+        "properties": {
+          "versionId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "已发布转换版本"
+          },
+          "parameters": {
+            "type": "object",
+            "description": "真实manifest已声明的有界参数值",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BusinessFlowInputAdapterChoices": {
+        "type": "object",
+        "description": "来源绑定键到显式适配选择",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/BusinessFlowInputAdapterChoice"
+        },
+        "maxProperties": 30
+      },
+      "BusinessFlowInputAdapterCandidate": {
+        "type": "object",
+        "description": "当前项目及用户允许的已发布输入转换工具",
+        "properties": {
+          "versionId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "算子版本编号"
+          },
+          "name": {
+            "type": "string",
+            "description": "工具名称"
+          },
+          "description": {
+            "type": "string",
+            "description": "转换的含义与限制"
+          },
+          "targetType": {
+            "type": "string",
+            "description": "真实目标类型"
+          },
+          "parameters": {
+            "type": "array",
+            "description": "真实manifest参数规范",
+            "items": {
+              "$ref": "#/components/schemas/ComputeParameterSpec"
+            }
+          }
+        },
+        "required": [
+          "versionId",
+          "name",
+          "description",
+          "targetType",
+          "parameters"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowInputPlanItem": {
+        "type": "object",
+        "description": "可直接使用、可转换或仍需配置的一项输入；不修改原件",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "来源角色绑定键"
+          },
+          "sourceName": {
+            "type": "string",
+            "description": "真实来源名称"
+          },
+          "sourceType": {
+            "type": "string",
+            "description": "实际来源类型"
+          },
+          "targetSemantics": {
+            "type": "string",
+            "description": "目标语义"
+          },
+          "checksum": {
+            "type": "string",
+            "description": "冻结的包摘要"
+          },
+          "inputKey": {
+            "type": "string",
+            "description": "真实来源输入键"
+          },
+          "outputKey": {
+            "type": "string",
+            "description": "真实目标输出键"
+          },
+          "targetType": {
+            "type": "string",
+            "description": "目标资料类型"
+          },
+          "taskId": {
+            "type": "string",
+            "description": "真实计算任务编号"
+          },
+          "sourceId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "原始资料编号"
+          },
+          "versionId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "冻结转换版本"
+          },
+          "resourceId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "真实入库的派生资料编号"
+          },
+          "outputId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "真实计算输出编号"
+          },
+          "sourceRevision": {
+            "type": "string",
+            "format": "date-time",
+            "description": "来源冻结修订"
+          },
+          "targetTypes": {
+            "type": "array",
+            "description": "允许的目标类型",
+            "items": {
+              "type": "string",
+              "description": "资料类型"
+            }
+          },
+          "status": {
+            "type": "string",
+            "description": "真实规划或执行状态",
+            "enum": [
+              "direct",
+              "convert",
+              "needs_parameters",
+              "needs_choice",
+              "unavailable",
+              "waiting_compute",
+              "waiting_import",
+              "ready",
+              "needs_script",
+              "generating_script",
+              "reviewing_script",
+              "needs_clarification",
+              "failed"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "description": "真实来源字段",
+            "items": {
+              "type": "string",
+              "description": "字段名"
+            }
+          },
+          "candidates": {
+            "type": "array",
+            "description": "当前允许的转换候选",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowInputAdapterCandidate"
+            }
+          },
+          "parameters": {
+            "type": "object",
+            "description": "真实manifest已声明的有界参数值",
+            "additionalProperties": true
+          },
+          "actualParameters": {
+            "type": "object",
+            "description": "真实manifest已声明的有界参数值",
+            "additionalProperties": true
+          },
+          "missingParameters": {
+            "type": "array",
+            "description": "仍需指定的参数键",
+            "items": {
+              "type": "string",
+              "description": "参数键"
+            }
+          },
+          "fieldTargets": {
+            "type": "object",
+            "description": "人工字段语义到转换参数的映射",
+            "additionalProperties": {
+              "type": "string",
+              "description": "语义键"
+            }
+          },
+          "sourceBands": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "实际来源波段数量；非栅格为0"
+          },
+          "script": {
+            "$ref": "#/components/schemas/BusinessFlowInputScriptSummary"
+          },
+          "nodeId": {
+            "type": "string",
+            "description": "节点间输入准备的所属节点；初始输入可省略"
+          },
+          "sourceIds": {
+            "type": "array",
+            "description": "真实授权来源集合",
+            "items": {
+              "type": "integer",
+              "description": "资料编号",
+              "minimum": 1
+            },
+            "maxItems": 30
+          }
+        },
+        "required": [
+          "role",
+          "sourceId",
+          "sourceName",
+          "sourceType",
+          "sourceRevision",
+          "targetTypes",
+          "targetSemantics",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowInputPlan": {
+        "type": "object",
+        "description": "所有业务流共用的输入兼容性规划及真实适配记录",
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "description": "是否所有来源均已可用或具备完整方案"
+          },
+          "items": {
+            "type": "array",
+            "description": "逐来源的输入方案",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowInputPlanItem"
+            },
+            "maxItems": 30
+          }
+        },
+        "required": [
+          "ready",
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowInputPreparation": {
+        "type": "object",
+        "description": "只读规划，不运行模型、算子或修改原始资料",
+        "properties": {
+          "versionId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "发布流程版本"
+          },
+          "inputs": {
+            "type": "object",
+            "description": "来源资料绑定",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "资料编号"
+            },
+            "maxProperties": 30
+          },
+          "inputAdapters": {
+            "$ref": "#/components/schemas/BusinessFlowInputAdapterChoices"
+          },
+          "uploadBatchId": {
+            "type": "string",
+            "description": "专业任务资料批次；只允许当前用户、本项目的真实上传或目录引用",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        },
+        "required": [
+          "versionId",
+          "inputs"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowDecision": {
+        "type": "object",
+        "description": "只有真实用户可提交人工决定，绑定当前节点和修订。retry_context仅恢复上下文等待，不写human.approved；停止沿用cancel。",
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "当前等待决定的节点编码"
+          },
+          "revision": {
+            "type": "integer",
+            "description": "最后读取的状态修订号",
+            "minimum": 0
+          },
+          "decision": {
+            "type": "string",
+            "description": "明确批准、要求返修或重试上下文",
+            "enum": [
+              "approve",
+              "request_changes",
+              "retry_context"
+            ]
+          },
+          "feedback": {
+            "type": "string",
+            "description": "返修原因或收紧范围说明",
+            "maxLength": 4000
+          },
+          "skipEvidenceIds": {
+            "type": "array",
+            "description": "仅retry_context可提交当前等待清单中的非必需证据编号；不能跳过直接依赖或指令点名证据",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            }
+          },
+          "contextScope": {
+            "$ref": "#/components/schemas/BusinessFlowContextScope"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "稳定决定重试键",
+            "minLength": 8,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "nodeId",
+          "revision",
+          "decision",
+          "feedback",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowInputBinding": {
+        "description": "互斥的算子输入来源：资料角色或本业务流前序算子的已登记输出，不授予额外访问和入库权限。",
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "当前执行开始时绑定的资料角色，仍执行当前项目与资料访问校验。",
+            "properties": {
+              "role": {
+                "type": "string",
+                "description": "inputRequirements中的资料角色编码",
+                "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+              }
+            },
+            "required": [
+              "role"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "description": "当前节点依赖祖先中的真实算子输出；不能引用外部任务、他人结果、未来节点或归档文件。",
+            "properties": {
+              "nodeId": {
+                "type": "string",
+                "description": "前序operator节点编码，必须在当前dependsOn祖先集合中",
+                "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+              },
+              "outputKey": {
+                "type": "string",
+                "description": "上游已发布算法manifest中的输出键；kind必须匹配当前输入",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "nodeId",
+              "outputKey"
+            ],
+            "additionalProperties": false
+          }
         ]
       }
     }

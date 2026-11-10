@@ -6,8 +6,9 @@ import {
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Layout, Typography } from "antd";
-import poplarWaterGoldenImage from "../assets/about/poplar-water-golden.jpeg";
-import xjafsMonitoringTowerImage from "../assets/about/xjafs-monitoring-tower.png";
+import poplarWaterGoldenImage from "@card-assets/about/poplar-water-golden.jpeg.webp";
+import xjafsMonitoringTowerImage from "@card-assets/about/xjafs-monitoring-tower.png.webp";
+import CardCover from "../components/CardCover";
 import knowledgeAncientPoplarImage from "../assets/portal/knowledge-ancient-poplar.png";
 import { aboutSectionByKey } from "../about/aboutSections";
 import { protectionCases, speciesArchiveSections } from "../about/contentV2";
@@ -149,7 +150,10 @@ export default function KnowledgePage() {
 
             <div className="knowledge-v2-image-story">
               <figure>
-                <img alt="河流与金色胡杨林" src={poplarWaterGoldenImage} />
+                <CardCover
+                  alt="河流与金色胡杨林"
+                  thumbnailUrl={poplarWaterGoldenImage}
+                />
               </figure>
               <div>
                 <span>文化与景观</span>
@@ -189,9 +193,9 @@ export default function KnowledgePage() {
                 </Typography.Paragraph>
               </div>
               <figure>
-                <img
+                <CardCover
                   alt="胡杨林森林梯度观测塔"
-                  src={xjafsMonitoringTowerImage}
+                  thumbnailUrl={xjafsMonitoringTowerImage}
                 />
                 <figcaption>定位观测将保护成效转化为连续科学数据</figcaption>
               </figure>

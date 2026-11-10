@@ -8,6 +8,33 @@
 
 无属性筛选显示查询的缓存检查、进程间锁和执行槽按顺序处理：只有真正的缓存缺失计算占执行槽；相同缓存目标的并发请求复用先完成的结果，版本分别核验，原503重试协议保留。输入版本与显示缓存共用存储锁入口，栅格摘要不重复读取像元来取得掩膜，科学摘要协议不变。完整边界及必过命令见[重复工作治理与效率回归](efficiency-contracts.md)。
 
+## 卡片图片规则
+
+展示卡片只使用 `CardCover` 的 `thumbnailUrl`，不引用 `coverUrl`、`previewUrl`、下载地址或原始静态图片，也不在缺图时回退原图。正文、详情预览与下载继续使用原文件。封面组件预留尺寸、显示加载/失败占位，默认懒加载；首屏封面可通过 `priority` 显式优先加载。无可视内容的工程、项目不应为了装饰而触发地图渲染。
+
+后端共用入口为 `apps.catalog.thumbnails`。`ResultArtifact`、`Asset`、`MapCompositionVersion` 的普通模型写入自动准备小图；文章保存自动补齐封面，封面的条件更新路径也必须显式调用 `prepare_instance_thumbnail`。不要用 `bulk_create` 或 `QuerySet.update` 绕过文件内容更新的预生成入口。地图成果从保存的 PNG 母图生成，只有版式、尚无母图的草稿显示占位，不在卡片读取时重新渲染地图。
+
+普通卡片最长边 640 像素，静态成员肖像最长边 320 像素；均为 WebP，初始质量 76，每张最多 48 KiB，超限依次降低质量至 64、52、40，必要时再缩小。PDF 首页在写入/回填时通过现有 `pdftoppm` 渲染；非可视文件使用统一的 64 字节 WebP 类型占位图，界面保留文件类型标签。生成失败不影响原文件保存，读取返回不缓存的占位，不返回原图。
+
+缓存位于 TOML 的 `application.storage.app_data` 下 `cache/thumbnails`，按对象和内容版本寻址。编码使用进程间文件锁及原子替换；列表序列化不读取原图、不计算文件摘要，读取接口只打开一个缓存文件。缺失项交给单线程后台队列补生成，队列最多 64 项，同版本合并，失败冷却 60 秒；进程退出后可由后续访问或幂等回填命令恢复。现有配置没有缩略图容量上限，本入口不另设隐式配额。
+
+缩略图沿用原媒体接口，先检查原有项目、发布状态、功能权限、暂存所有者及专题版本可见性，再查缓存或比较 ETag。地址携带内容版本，旧版本不能读取新内容。受控媒体使用一年存储期但必须重验证的 `Cache-Control`，不使用 `immutable`；登录或私有项目响应仍由中间件覆盖为 `no-store`，撤权/下架后旧地址不得命中 304。公开静态资产由 Vite 的内容哈希控制缓存。
+
+静态小图由 `scripts/prepare_card_assets.py` 调用同一后端编码器生成到 `frontend/.cache/card-assets`，Vite 开发启动和构建前自动运行。原图不修改，生成物不入 Git。发布工具已有的四项本机构建素材仍须在本机存在：三张未跟踪肖像用于生成小图，成果页横幅仍作为非卡片横幅使用；素材只作为本机构建输入，不提交原图。构建命令的 `PATH` 必须包含项目后端 Python 环境。浏览器检查入口自动准备并复制这些派生图片到其既有测试镜像，不修改源码或 Mock。
+
+升级后先执行 `python backend/manage.py backfill_card_thumbnails --dry-run`，再执行 `python backend/manage.py backfill_card_thumbnails`；两者均读取已选 TOML，不切换数据根目录。命令覆盖所有项目、文章媒体及全部地图版本，重复运行跳过已完成版本；可用 `--kind result|asset|composition --after-id N --limit N` 分批续跑。失败项输出主键并使命令非零退出。前端 AST 防回退检查和检查器回归始终接入 `make verify-fast`。
+
+本机在仓库根目录使用项目解释器执行回填：
+
+```sh
+PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
+"$PY" backend/manage.py backfill_card_thumbnails --dry-run
+"$PY" backend/manage.py backfill_card_thumbnails
+"$PY" backend/manage.py backfill_card_thumbnails --kind result --after-id 100 --limit 100
+```
+
+回填是全平台维护操作，包含私有项目，不受当前页面所选项目限制。每 25 项输出进度，每类结束及整体结束输出 `scanned/ready/missing/generated/failed`。可中断后重跑；`--after-id` 跳过已处理主键，`--limit` 分别作用于每类来源，分批时应显式指定 `--kind`。修复失败来源后直接重跑，不清空缓存，也不修改原始科研文件。
+
 ## 科研智能体地图操作（2026-11-08）
 
 普通智能体的流式授权与历史轮询按当前资源集合批量查询，重复依据去重，任务内部资料继续逐项核对真实绑定。业务来源查询计划仅在一次授权检查内复用；不跨轮询缓存可见行，下一次检查重新核对项目、owner_only、账号、策略和来源。流式实时检查间隔保持0.5秒上限，思考、正文及证据不裁剪，任务预算与思考模式不改。运行轮询支持gzip，减少重复证据传输。
@@ -2618,6 +2645,14 @@ A: 重新提交相同的任务请求即可。
 
 ### 管理端点
 
+#### 项目功能开关与内容配置
+
+通用项目功能使用 `projects.ProjectFeature` 注册表和 `ProjectFeatureSetting` 单项目设置，不与账号功能权限或项目成员授权混用。`GET /api/projects/` 的项目项返回有效 `enabledFeatures`、单项目 `configuredFeatures` 与 `monitorConfig`；超管还可读 `featureCatalog`。前端只按后端有效清单决定入口和路由，不维护项目代码白名单；项目停用时有效清单为空。全局开启不会授予任何项目访问权限。
+
+仅超级管理员可调用 `POST /api/projects/{projectTagId}/features/{featureKey}/` 设置 `enabled` 或 `config`；省略保留、`config: null` 清空。`POST /api/projects/features/{featureKey}/` 的 `enabled` 控制全局开关。全局开启优先，关闭后恢复各项目原设置；配置不跨项目回退。设置与审计同事务。后台项目标签管理提供各已注册功能的项目与全局开关。
+
+命令 `python manage.py project_feature ecology_monitor --project 05 --enable --actor <超管用户名>` 开启单项目；换成 `--disable` 关闭；将 `--project 05` 换成 `--all-projects` 控制全局开关。新功能先用 `project_feature <功能标识> --register --actor <超管用户名>` 注册，默认全局及所有项目关闭，无需再加项目代码常量；具体功能的业务接口仍须独立校验账号权限、项目授权和功能状态。监测内容配置格式、安全迁移和完整命令见 [生态监测说明](ecology-monitor.md)。
+
 | API | 行为与权限 |
 | --- | --- |
 | GET `/api/projects/` | `items` 是可读取标签；`defaultProjectId` 是授权默认项目或 null；`assignableItems` 是管理员可分配列表，两者不要混用 |
@@ -2695,6 +2730,10 @@ API 以 `docs/openapi.yaml` 为准，生成代码实际位于 `frontend/src/api/
 ## 2026-09-19 计算中心 API
 
 `/api/compute/` 接口定义见 OpenAPI。算法清单驱动输入与参数表单；上传 ZIP 不执行代码。任务绑定算法版本、项目、用户及参数；输入固定时记录 SHA256。提交需 compute.submit_task，维护需 compute.manage_algorithms，发布需 compute.publish_algorithm，源码下载需 compute.download_algorithm，管理员任务访问需 compute.manage_tasks 且项目授权；结果下载叠加 catalog.export_dataresource，入库叠加 catalog.add_dataresource（现有上传权限）。POST 显式传 X-Project-Id。没有任务历史的算法登记可通过 DELETE 删除其版本包；已有任务历史的算法只能归档停用。503 表示隔离环境或独立worker未就绪，不会回退为主机执行。结果导入异步且幂等；源任务成功与入库状态分别显示。
+
+算子制作规范见 [operator-authoring.md](operator-authoring.md)。新包使用第2版语义清单，上传检查包内自检资料；第1版继续接受并返回升级提示，不对历史数据库清单追加验证。`new_operator` 生成骨架，`check_operator` 通过既有运行环境验证实际小样例。提交可带语义 `fieldMappings` 和具名集合，失败400返回 `gaps`；任务查询的 `failure` 提供结构化错误，原 `error` 字符串保留。数据库迁移为 `compute.0007_operator_protocol`，运行器需同时提供 `deploy/compute/operator_sdk.py`。
+
+只读目录服务为 `apps.compute.operator_catalog.operator_catalog(user, project, operation=None, data_type=None, keyword="", max_bytes=8192, limit=50)`；筛选当前授权范围内最新、已发布且允许智能体调用的版本。每项 UTF-8 紧凑 JSON 有字节硬上限，截断时返回 `truncated` 和 `summaryCounts`；按 `versionId` 可在原有授权边界读取完整清单。不在模型目录中展开自检资料或上传代码。
 
 ## 智能体接口（2026-09-21）
 
@@ -3072,6 +3111,10 @@ API JSON 元数据默认 `Cache-Control: private,no-store`，文件和瓦片的�
 前端共享`requestJson`对GET的成功HTTP/异常媒体或损坏JSON响应最多执行一次传输恢复，附加仅用于绕过异常中间缓存的`_stisp_read`地址标记，服务器不将该标记解释为业务参数。恢复前后及正文解析后仍核对账号、项目与取消状态，诊断保留实际响应来源。结构缺字段、HTTP权限拒绝及POST等写请求不通过此机制重放；任务启动和人工批准继续依赖原幂等键和实时权限。接口响应契约、模型预算及资料版本机制保持原有语义。
 
 ## 业务流通用输入适配
+
+### 通用节点上下文恢复
+
+`BusinessFlowNodeState`可选`contextManagement`与`contextRecovery`，由既有运行快照与事件传递，不另发上下文详情或轮询。`contextManagement`记录0至3档、实测token、预算、分词次数和不含正文的noticeSummary；`waiting_context`节点对应工作流`waiting_approval`，不设置科研人工门禁。`POST /api/business-flows/runs/{workflowId}/decide/`的`decision=retry_context`仅恢复该等待，可选`skipEvidenceIds`与`contextScope`；后者只允许收紧`maxItems`（1至10）与`maxTextCharacters`（80至1000）。必需、直接依赖或指令点名证据不能跳过，普通人工批准不能处理上下文等待；停止沿用cancel，权限和修订校验不变。实际发送快照、台账和完整证据不出现在状态响应中。详细投影、归纳调用预算与台账上限见`business-flows.md`的“上下文整理、台账与可恢复等待”。
 
 所有业务流通过相同的输入规范与已发布能力目录规划资料，不按业务名称或固定类别列表匹配。inputRequirements声明dataTypes、requiredFields，可选semanticType（语义协议）与multiple。multiple允许role:resourceId形式的多个来源；单输入算子仍需明确的归并工具，不会静默丢掉其他来源。
 

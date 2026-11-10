@@ -1,4 +1,5 @@
 import { useAppContext } from "../contexts/AppContext";
+import CardCover from "../components/CardCover";
 import { canReadHelp, downloadHelp } from "../about/helpAccess";
 import {
   BookOutlined,
@@ -114,9 +115,9 @@ export function KnowledgeSection({
             </div>
           </div>
           <figure>
-            <img
+            <CardCover
               alt="河畔古胡杨林景观"
-              src={aboutAssets.knowledgePopulusForestImage}
+              thumbnailUrl={aboutAssets.knowledgePopulusForestImage}
             />
             <figcaption>河畔古胡杨林与荒漠绿洲生态屏障</figcaption>
           </figure>

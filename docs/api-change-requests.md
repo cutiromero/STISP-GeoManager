@@ -1,5 +1,44 @@
 # API Change Requests
 
+## API-20261110-011 - 算子语义清单与结构化诊断
+
+- Status: BackendReady
+- Owner: codex/xintao，单人负责规范、计算模块、示例与验证。
+- Endpoints: 既有POST /api/compute/algorithms/{algorithmId}/versions/、/api/compute/preflight/、/api/compute/tasks/及任务查询，不新增HTTP入口。
+- Change type: 向后兼容的第2版清单、集合与语义映射、可选诊断字段；第1版及历史数据库清单继续可用。
+- OpenAPI change: ComputeManifest接受v1/v2，补充能力、输入输出语义、参数调整、前置条件/错误码、资源与自检；ComputeTaskCreate允许具名输入数组和fieldMappings；ComputeTask返回failure、fieldMappings、inputCollections；ErrorResponse增加可选gaps；ComputeVersion增加warnings。
+- Mock examples: mock/prism/examples/92-compute-operator-protocol.json。
+- Frontend reason: 后续按实际gaps准备来源，按failure.code与remedy提供诊断；现有error字符串保留。
+- Backend implementation notes: 上传静态检查不执行代码；check_operator在原运行边界执行小样例；SDK通过运行器提供；只读operator_catalog复用现有项目范围和权限、按UTF-8字节限长。agent与business_flows由后续任务接入，不改变其执行链。
+- Verification: 第1/2版清单、真实进程错误分类、自检/脚手架、字段/类型/单位/CRS差距、集合与重试、旧矿物与集合逐字节结果、目录权限与体量；契约五项及计算模块回归。
+- Result: 本地源码实现，验收细节见.runtime/task-reports/operator-authoring-j1.md；服务器尚未重新登记发布。
+
+## API-20261110-010 - 通用项目功能与监测内容配置
+
+- Status: BackendReady
+- Owner: codex/xintao，单人负责契约、实现与验证。
+- Endpoints: GET /api/projects/；POST /api/projects/{projectTagId}/features/{featureKey}/；POST /api/projects/features/{featureKey}/。
+- Change type: 增量增加项目有效功能清单、项目配置和超管开关接口。
+- OpenAPI change: ProjectTag 增加 enabledFeatures、configuredFeatures、monitorConfig；ProjectTagList 增加 featureCatalog；新增 ProjectFeature、ProjectMonitorConfig、ProjectFeatureInput。
+- Mock examples: 90-platform-upgrade.json 项目列表；91-project-features.json 单项目与全局设置响应。
+- Frontend reason: 入口和独立路由按服务端有效功能控制，未开启可返回，开启无配置为空状态；项目管理页提供单项目与全局开关。
+- Backend implementation notes: 注册表和单项目设置存数据库，全局开关优先且不授予项目权限；配置独立不回退；仅超管操作，设置与现有审计同事务。0003_project_features 安全新增表，仅对已有 code=05 初始化，重复初始化不覆盖设置。
+- Verification: 开关/全局恢复、权限、审计、参数校验、通用命令、迁移与缺失项目、批量读取次数；入口/路由、空状态、项目切换与管理开关；契约五项和项目要求门禁。
+- Result: [项目功能交付记录](../.runtime/task-reports/project-features-report.md)。
+
+## API-20261110-009 - 全站卡片预生成缩略图
+
+- Status: BackendReady
+- Owner: codex/xintao，单人负责契约、实现与验收。
+- Endpoints: GET /api/catalog/results/{resultId}/file/；GET /api/catalog/map-compositions/{compositionId}/versions/{versionNumber}/file/；GET /api/content/assets/{assetId}/；内容列表与详情。
+- Change type: ContentArticle增加可选thumbnailUrl；媒体读取增加thumbnail变体；已有成果thumbnail扩展到PDF及类型占位，读取不再生成。
+- OpenAPI change: 缩略图带内容版本；WebP最长边640像素、最多48KiB；缺失返回小占位并后台补生成，原图预览和下载保持独立。
+- Mock examples: 90-platform-upgrade.json增加文章小图；55-results.json与50-map-compositions.json补齐带版本的成果小图地址。
+- Frontend reason: 全站卡片统一CardCover，不再回退原图；正文、详情、下载保持原文件。
+- Backend implementation notes: 模型写入钩子同步预生成，条件更新封面显式补齐；读取沿用原资源权限与项目范围，长期缓存必须重验证，私有/登录响应no-store。
+- Verification: 写入、只读、缺失补齐、版本、权限撤销、回填续跑、读取次数、防回退、契约五项与效率门禁。
+- Result: [卡片缩略图交付记录](../.runtime/task-reports/card-thumbnails-report.md)。
+
 ## API-20261109-002 - 智能体持续事件流与增量正文
 
 - Status: BackendReady
@@ -530,7 +569,11 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261110-010 | BackendReady | 项目清单与项目功能设置 | 通用项目灰度及监测配置 | Updated | 90-platform-upgrade.json、91-project-features.json | Implemented | 后端、迁移、前端与契约回归 | 全局开启不复制内容或授予权限 |
+| API-20261110-011 | BackendReady | 计算版本/预检/任务 | 语义清单与结构化诊断 | Updated | 92-compute-operator-protocol.json | Implemented | 计算、自检、一致性、权限与契约回归 | 第1版继续有效；不自动替换已发布版本 |
+| API-20261110-009 | BackendReady | Results, compositions and content media | 卡片预生成小图 | Updated | 90-platform-upgrade.json、50-map-compositions.json、55-results.json | Implemented | 写入、只读、ACL、回填与防回退 | 详情与下载保持原图 |
 | API-20261110-007 | BackendReady | Agent run reads and SSE | Real workflow model deltas and bounded snapshots | Updated | 106-agent-generic-chat.json | Implemented | Stream, session, graph and budget regressions | No task replay or approval change |
+| API-20261110-008 | BackendReady | Business flow run and decide | 上下文整理与可恢复等待 | Updated | 144-business-flow-context.json | Implemented | 桩模型、分词、链式引用与恢复回归 | 不替代科研人工批准 |
 | API-20261109-001 | BackendReady | Existing resource reads/query | Concurrent reuse and cache admission | Updated | Existing fixtures | Shared locks and read coordinator | Efficiency contracts | ACL and scientific digests preserved |
 | API-20261109-002 | BackendReady | Agent run SSE and bootstrap | Resumable read stream and answer deltas | Updated | Controlled byte streams | Bounded WSGI slots and live authorization | Stream and efficiency regressions | Local regressions passed; deployment receipt records live acceptance |
 | API-20261109-003 | BackendReady | Business flow catalog and runs | Immutable versions and configurable review | Updated | Built-in declarations and regression fixtures | Shared workflow runtime and independent review | Catalog, access and execution regressions | Catalog checks passed; unified acceptance pending |
@@ -1705,6 +1748,19 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Backend implementation: 初始输入和节点间数据经同一准备服务；已有工具优先，必要时Agent依据真实字段/样本生成Python，受限运行、检查输出并按实际错误返修。固定科学算子、版本、人工批准和实时ACL不改变；原件只读，派生输入私有。脚本代码不随SSE状态重复传输。
 - Verification: 无预置转换器的非地质数据实际生成代码并处理；已登记工具失败后的脚本修复；节点间类型/字段适配；越权文件/网络/进程拒绝，原件及元信息未改、停止/撤权、预算/版本隔离、实际人工说明与脚本按需读取次数。
 
+
+## API-20261110-008 - 通用业务流上下文管理与恢复
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/business-flows/runs/{workflowId}/；POST /api/business-flows/runs/{workflowId}/decide/；既有父运行事件通道。
+- Change type: 向后兼容的可选运行元信息与显式上下文重试决定。
+- OpenAPI change: BusinessFlowNodeState增加可选contextManagement/contextRecovery；BusinessFlowDecision增加retry_context及可选skipEvidenceIds/contextScope，不增加接口或轮询。
+- Mock examples: mock/prism/examples/144-business-flow-context.json。
+- Frontend reason: 展示实际整理档位、过大证据和不可跳过标记；允许收紧范围、跳过非必需证据后重试或停止。
+- Backend implementation notes: 节点只传播自身产出，私有台账和实际发送快照分别维护；真实窗口和实测token控制0至3档，最多8次归纳及19次分词；归纳共用原调用额度。上下文等待复用waiting_approval与修订、幂等、控制代次，不写human.approved。撤权控制回执隐藏所有资料正文。
+- Verification: 上下文、执行、审核、运行、编排、算子返修/运行及资料衔接定点测试118项通过；后端效率门禁136项通过；契约五条与typecheck通过。浏览器恢复检查和build:verify在Vite写共享node_modules/.vite-temp时受沙箱EPERM阻断。make verify-fast未全通过，失败明细见本地验收记录。
+- Result: 已实现本地代码，尚未部署。Prism契约bundle已生成，完整mock:build因既有143-business-flow-input-preparation.json缺少操作路径包装而无法注入示例；真实模型窗口、分词与归纳质量需在获授权的服务器环境验收。
 
 ## API-20261110-007 - 工作流模型活动增量与刷新恢复
 

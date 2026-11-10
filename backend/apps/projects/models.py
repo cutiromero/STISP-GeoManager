@@ -59,3 +59,27 @@ class ProjectMembership(models.Model):
                 fields=("project", "user"), name="unique_project_member"
             )
         ]
+
+
+class ProjectFeature(models.Model):
+    key = models.SlugField(max_length=80, unique=True)
+    globally_enabled = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("key",)
+
+
+class ProjectFeatureSetting(models.Model):
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, related_name="feature_settings"
+    )
+    feature = models.ForeignKey(ProjectFeature, on_delete=models.CASCADE)
+    enabled = models.BooleanField(default=False)
+    config = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("project", "feature"), name="unique_project_feature"
+            )
+        ]

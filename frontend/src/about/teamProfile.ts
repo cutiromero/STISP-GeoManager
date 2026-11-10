@@ -1,14 +1,14 @@
-import portrait0 from "../assets/team/shen-zhanfeng.png";
-import portrait1 from "../assets/team/wang-haoyu.jpeg";
-import portrait2 from "../assets/team/ma-yubo.jpeg";
-import portrait3 from "../assets/team/zhang-yihan.png";
-import portrait4 from "../assets/team/gong-xintao.jpeg";
-import portrait5 from "../assets/team/cheng-wenyan.png";
-import portrait6 from "../assets/team/huang-siqi.jpeg";
-import portrait7 from "../assets/team/li-maolin.jpeg";
-import portrait8 from "../assets/team/han-yang.jpeg";
-import portrait9 from "../assets/team/sun-shuhui.jpeg";
-import portrait10 from "../assets/team/gao-danning.jpeg";
+import portrait0 from "@card-assets/team/shen-zhanfeng.png.webp";
+import portrait1 from "@card-assets/team/wang-haoyu.jpeg.webp";
+import portrait2 from "@card-assets/team/ma-yubo.jpeg.webp";
+import portrait3 from "@card-assets/team/zhang-yihan.png.webp";
+import portrait4 from "@card-assets/team/gong-xintao.jpeg.webp";
+import portrait5 from "@card-assets/team/cheng-wenyan.png.webp";
+import portrait6 from "@card-assets/team/huang-siqi.jpeg.webp";
+import portrait7 from "@card-assets/team/li-maolin.jpeg.webp";
+import portrait8 from "@card-assets/team/han-yang.jpeg.webp";
+import portrait9 from "@card-assets/team/sun-shuhui.jpeg.webp";
+import portrait10 from "@card-assets/team/gao-danning.jpeg.webp";
 
 export type TeamMember = {
   id: string;

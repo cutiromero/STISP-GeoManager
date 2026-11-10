@@ -71,6 +71,7 @@ const MapPage = lazy(() => import("./pages/MapPage"));
 const ComputePage = lazy(() => import("./compute/ComputePage"));
 const NonGeoPage = lazy(() => import("./pages/NonGeoPage"));
 const ResultsPage = lazy(() => import("./pages/ResultsPage"));
+const EcologyMonitorPage = lazy(() => import("./pages/EcologyMonitorPage"));
 const AgentPage = lazy(() => import("./agent/AgentPage"));
 const BusinessFlowsPage = lazy(
   () => import("./businessflows/BusinessFlowsPage"),
@@ -346,6 +347,10 @@ export default function App({
                       <ResultsPage />
                     </RouteTransition>
                   }
+                />
+                <Route
+                  path="/results/ecology-monitor"
+                  element={<EcologyMonitorPage />}
                 />
                 <Route
                   path="/warning"

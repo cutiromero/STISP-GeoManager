@@ -1,0 +1,23 @@
+{
+  "POST /api/projects/features/{featureKey}/": {
+    "200": { "key": "ecology_monitor", "globallyEnabled": true }
+  },
+  "POST /api/projects/{projectTagId}/features/{featureKey}/": {
+    "200": {
+      "id": 6,
+      "name": "塔大胡杨",
+      "code": "05",
+      "description": "胡杨林生态研究",
+      "isDefault": false,
+      "isActive": true,
+      "sortOrder": 50,
+      "enabledFeatures": ["ecology_monitor"],
+      "configuredFeatures": ["ecology_monitor"],
+      "monitorConfig": {
+        "title": "塔里木河流域胡杨林生态监测",
+        "source": "tarim_poplar_mock",
+        "initialView": { "center": [84, 39.9], "zoom": 2.05, "regionZoom": 5.15 }
+      }
+    }
+  }
+}

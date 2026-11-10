@@ -11,13 +11,15 @@ from .access import available_projects, default_project_id, public_project_allow
 from .assignments import set_project_assignments
 from .context import is_superadmin
 from .models import Project, ProjectMembership
+from .models import ProjectFeature
+from .features import UNSET, feature_state, serialize_feature, set_feature
 
 
 def can_assign(user):
     return is_superadmin(user)
 
 
-def serialize(project):
+def serialize(project, features=None):
     return {
         "id": project.id,
         "name": project.name,
@@ -26,6 +28,10 @@ def serialize(project):
         "isDefault": project.is_default,
         "isActive": project.is_active,
         "sortOrder": project.sort_order,
+        **feature_state(
+            project,
+            list(ProjectFeature.objects.all()) if features is None else features,
+        ),
     }
 
 
@@ -42,14 +48,21 @@ def payload(request):
 @require_http_methods(["GET", "POST"])
 def projects(request):
     if request.method == "GET":
-        query = available_projects(request.user)
+        query = available_projects(request.user).prefetch_related("feature_settings")
+        features = list(ProjectFeature.objects.all())
         return JsonResponse(
             {
-                "items": [serialize(p) for p in query],
+                "items": [serialize(p, features) for p in query],
                 "canManage": is_superadmin(request.user),
                 "canAssign": can_assign(request.user),
                 "defaultProjectId": default_project_id(request.user),
-                "assignableItems": [serialize(p) for p in Project.objects.all()]
+                "featureCatalog": [serialize_feature(f) for f in features]
+                if is_superadmin(request.user)
+                else [],
+                "assignableItems": [
+                    serialize(p, features)
+                    for p in Project.objects.prefetch_related("feature_settings")
+                ]
                 if can_assign(request.user)
                 else [],
             }
@@ -132,3 +145,37 @@ def assignments(request, user_id):
             ),
         }
     )
+
+
+@require_http_methods(["POST"])
+def project_feature(request, project_id, feature_key):
+    if not is_superadmin(request.user):
+        return JsonResponse({"detail": "只有超级管理员可以维护项目功能"}, status=403)
+    project = get_object_or_404(Project, pk=project_id)
+    feature = get_object_or_404(ProjectFeature, key=feature_key)
+    data = payload(request)
+    set_feature(
+        request.user,
+        feature,
+        project=project,
+        enabled=data.get("enabled", UNSET),
+        config=data.get("config", UNSET),
+        request=request,
+    )
+    return JsonResponse(serialize(project))
+
+
+@require_http_methods(["POST"])
+def global_feature(request, feature_key):
+    if not is_superadmin(request.user):
+        return JsonResponse({"detail": "只有超级管理员可以维护项目功能"}, status=403)
+    feature = get_object_or_404(ProjectFeature, key=feature_key)
+    data = payload(request)
+    row = set_feature(
+        request.user,
+        feature,
+        enabled=data.get("enabled", UNSET),
+        config=data.get("config", UNSET),
+        request=request,
+    )
+    return JsonResponse(serialize_feature(row))

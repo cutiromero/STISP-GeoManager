@@ -40,7 +40,7 @@ from apps.core.runtime_config import RuntimeConfigError, runtime_upload_max_mb
 from apps.core.storage import app_path
 from apps.catalog.thumbnails import (
     CACHE_CONTROL,
-    THUMBNAIL_EXTENSIONS,
+    source_for,
     thumbnail_response,
 )
 
@@ -359,8 +359,6 @@ def result_artifact_file(request, result_id: int):
             {"detail": "variant 仅支持 artifact、preview 或 thumbnail"}, status=400
         )
     extension = Path(artifact.file_name).suffix.lower()
-    if variant == "thumbnail" and extension not in THUMBNAIL_EXTENSIONS:
-        return JsonResponse({"detail": "该成果格式没有缩略图"}, status=400)
     if variant == "preview" and extension not in PREVIEWABLE_RESULT_EXTENSIONS:
         return JsonResponse({"detail": "该成果格式不支持在线预览"}, status=400)
     if variant == "artifact" and not has_feature_perm(
@@ -368,10 +366,10 @@ def result_artifact_file(request, result_id: int):
     ):
         return feature_denied_response(request.user)
     path = app_path(*artifact.file_path.split("/"))
+    if variant == "thumbnail":
+        return thumbnail_response(source_for(artifact), request=request)
     if not path.is_file():
         return JsonResponse({"detail": "成果文件不存在"}, status=404)
-    if variant == "thumbnail":
-        return thumbnail_response(path, f"result-{artifact.id}")
     response = FileResponse(
         path.open("rb"),
         as_attachment=variant == "artifact",
@@ -532,9 +530,7 @@ def _serialize_result(artifact: ResultArtifact, request_user) -> dict[str, Any]:
         "previewUrl": f"{base}?variant=preview&projectTagId={artifact.project_tag_id}",
         "thumbnailUrl": (
             f"{base}?variant=thumbnail&projectTagId={artifact.project_tag_id}"
-            f"&v={int(artifact.updated_at.timestamp())}"
-            if f".{extension}" in THUMBNAIL_EXTENSIONS
-            else None
+            f"&v={source_for(artifact).version}"
         ),
         "downloadUrl": f"{base}?variant=artifact&projectTagId={artifact.project_tag_id}",
         "owner": _serialize_user(owner),

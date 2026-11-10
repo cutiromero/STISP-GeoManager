@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 // ==================== CONFIGURATION ====================
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -59,6 +60,11 @@ let code = 1;
 let child;
 const forward = (signal) => child?.kill(signal);
 try {
+  execFileSync(
+    "python",
+    [join(frontend, "../scripts/prepare_card_assets.py")],
+    { stdio: "inherit" },
+  );
   const dependencies = await realpath(join(frontend, "node_modules"));
   const before = await hashes(frontend);
   let cwd = frontend,
@@ -81,6 +87,11 @@ try {
       },
     });
     await symlink(dependencies, join(mirror, "node_modules"), "dir");
+    await cp(
+      join(frontend, ".cache/card-assets"),
+      join(mirror, ".cache/card-assets"),
+      { recursive: true },
+    );
     cwd = mirror;
     config = "vitest.browser.mirror.config.mjs";
     await writeFile(

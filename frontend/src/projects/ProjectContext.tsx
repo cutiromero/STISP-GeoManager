@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { platformApi, type ProjectTag } from "../api/platform";
+import type { ProjectFeature } from "../api/generated/types.gen";
 import { useLocation } from "react-router-dom";
 import { useAppContext } from "../contexts/AppContext";
 import { authorizationIdentity } from "../auth/authorizationIdentity";
@@ -32,6 +33,7 @@ type ProjectContextValue = {
   assignableProjects: ProjectTag[];
   canManage: boolean;
   canAssign: boolean;
+  featureCatalog: ProjectFeature[];
   refresh: () => Promise<void>;
   choose: (
     id: string,
@@ -54,6 +56,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
   const [canManage, setCanManage] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
+  const [featureCatalog, setFeatureCatalog] = useState<ProjectFeature[]>([]);
   const [resolvedIdentity, setResolvedIdentity] = useState<string>();
   const authKey = authorizationIdentity(user);
   const [loadError, setLoadError] = useState("");
@@ -105,6 +108,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setAssignableProjects(data.assignableItems ?? data.items);
     setCanManage(data.canManage);
     setCanAssign(data.canAssign);
+    setFeatureCatalog(data.featureCatalog ?? []);
     if (
       !data.items.some((p) => p.isActive && String(p.id) === currentRef.current)
     ) {
@@ -207,6 +211,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         assignableProjects,
         canManage,
         canAssign,
+        featureCatalog,
         refresh,
         choose,
       }}

@@ -18,6 +18,11 @@ from django.views.decorators.http import require_http_methods
 
 from apps.core.permissions import has_feature_perm
 from apps.core.storage import app_path
+from apps.catalog.thumbnails import (
+    prepare_instance_thumbnail,
+    source_for,
+    thumbnail_response,
+)
 from apps.audit.service import log_operation
 from apps.projects.context import is_superadmin, selected_project_id
 from apps.projects.views import payload
@@ -58,6 +63,12 @@ def serialize(article):
         "eventDate": article.event_date.isoformat() if article.event_date else "",
         "publishedAt": article.published_at.isoformat() if article.published_at else "",
         "coverUrl": asset_url(article.cover_asset) if article.cover_asset_id else "",
+        "thumbnailUrl": (
+            f"{asset_url(article.cover_asset)}?variant=thumbnail"
+            f"&v={source_for(article.cover_asset).version}"
+            if article.cover_asset_id
+            else ""
+        ),
         "assets": [
             serialize_asset(a) for a in article.assets.all() if a.expires_at is None
         ],
@@ -183,6 +194,8 @@ def article_detail(request, article_id):
             asset.delete()
             transaction.on_commit(lambda target=target: target.unlink(missing_ok=True))
     article.refresh_from_db()
+    if article.cover_asset_id:
+        prepare_instance_thumbnail(article.cover_asset)
     log_operation(
         request.user, "内容管理", "保存内容", "success", article.title, request
     )
@@ -332,6 +345,8 @@ def asset_file(request, asset_id):
     if asset.article.status != "published" and not can_edit(request.user):
         return JsonResponse({"detail": "媒体不存在或未发布"}, status=404)
     target = app_path(asset.path)
+    if request.GET.get("variant") == "thumbnail":
+        return thumbnail_response(source_for(asset), request=request)
     if not target.is_file():
         return JsonResponse({"detail": "文件不存在"}, status=404)
     response = FileResponse(

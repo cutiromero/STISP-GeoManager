@@ -13,6 +13,7 @@ vi.mock("../projects/ProjectContext", () => ({
   useProjectContext: () => ({
     canAssign: true,
     canManage: false,
+    featureCatalog: [],
     refresh: mocks.refresh,
     assignableProjects: [
       { id: 1, name: "公开", code: "default", isDefault: true, isActive: true },

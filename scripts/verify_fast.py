@@ -372,6 +372,20 @@ def plan(
     def add(name: str, cwd: str, command: tuple[str, ...], kind: str) -> None:
         steps.append(Step(name, cwd, command, TIMEOUTS[kind]))
 
+    if (root / "frontend/scripts/check-card-images.mjs").is_file():
+        add(
+            "卡片图片规则",
+            "frontend",
+            ("node", "scripts/check-card-images.mjs"),
+            "lint",
+        )
+        add(
+            "卡片图片规则回归",
+            "frontend",
+            ("node", "--test", "scripts/check-card-images.test.mjs"),
+            "unit",
+        )
+
     python_files = [
         path
         for path in paths

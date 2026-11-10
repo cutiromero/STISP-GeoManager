@@ -64,6 +64,7 @@
             "snapshotSchemaVersion": 2,
             "snapshotChecksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "previewUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=preview",
+            "thumbnailUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=thumbnail&projectTagId=1&v=mock-map-v1",
             "downloadUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=artifact",
             "createdAt": "2026-07-14T15:30:00+08:00"
           },
@@ -80,6 +81,7 @@
               "snapshotSchemaVersion": 2,
               "snapshotChecksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "previewUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=preview",
+              "thumbnailUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=thumbnail&projectTagId=1&v=mock-map-v1",
               "downloadUrl": "/api/catalog/map-compositions/11/versions/1/file/?variant=artifact",
               "createdAt": "2026-07-14T15:30:00+08:00"
             }
@@ -234,6 +236,7 @@
       "snapshotSchemaVersion": 2,
       "snapshotChecksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "previewUrl": "/api/catalog/map-compositions/11/versions/2/file/?variant=preview",
+      "thumbnailUrl": "/api/catalog/map-compositions/11/versions/2/file/?variant=thumbnail&projectTagId=1&v=mock-map-v2",
       "downloadUrl": "/api/catalog/map-compositions/11/versions/2/file/?variant=artifact",
       "createdAt": "2026-07-14T16:30:00+08:00"
     }

@@ -1103,12 +1103,11 @@
   position: relative;
   margin: 0;
 }
-.knowledge-v2-image-story img,
-.knowledge-v2-protection-lead img {
+.knowledge-v2-image-story .card-cover,
+.knowledge-v2-protection-lead .card-cover {
   display: block;
   width: 100%;
   height: 290px;
-  object-fit: cover;
 }
 .knowledge-v2-image-story > div,
 .knowledge-v2-protection-lead > div {

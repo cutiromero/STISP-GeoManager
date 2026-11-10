@@ -201,7 +201,7 @@ class ResultArtifactApiTests(TestCase):
                     self.assertIn("sandbox", preview["Content-Security-Policy"])
                     preview.close()
 
-    def test_image_card_thumbnail_is_bounded_cached_and_pdf_has_none(self):
+    def test_image_and_pdf_card_thumbnails_are_prepared_bounded_and_cached(self):
         large = BytesIO()
         Image.new("RGB", (2000, 1000), color=(20, 120, 80)).save(large, format="PNG")
         with self.result_storage():
@@ -213,13 +213,16 @@ class ResultArtifactApiTests(TestCase):
                 file=uploaded("report.pdf", valid_pdf(), "application/pdf"),
                 result_type="report",
             ).json()
-            self.assertIsNone(document["thumbnailUrl"])
-            self.assertEqual(
-                self.client.get(
-                    document["previewUrl"].replace("preview", "thumbnail")
-                ).status_code,
-                400,
-            )
+            self.assertIn("variant=thumbnail", document["thumbnailUrl"])
+            pdf_response = self.client.get(document["thumbnailUrl"])
+            self.assertEqual(pdf_response.status_code, 200)
+            self.assertEqual(pdf_response["X-Thumbnail-Status"], "ready")
+            pdf_body = b"".join(pdf_response.streaming_content)
+            pdf_response.close()
+            with Image.open(BytesIO(pdf_body)) as pdf_thumbnail:
+                self.assertLessEqual(max(pdf_thumbnail.size), 640)
+                self.assertEqual(pdf_thumbnail.format, "WEBP")
+            self.assertLessEqual(len(pdf_body), 48 * 1024)
             bodies = []
             for _ in range(2):
                 response = self.client.get(image["thumbnailUrl"])
@@ -482,7 +485,9 @@ def valid_png() -> bytes:
 
 
 def valid_pdf() -> bytes:
-    return b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
+    buffer = BytesIO()
+    Image.new("RGB", (640, 480), color=(20, 120, 80)).save(buffer, format="PDF")
+    return buffer.getvalue()
 
 
 def grant(user, *specs: tuple[str, str]) -> None:

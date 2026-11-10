@@ -34,6 +34,7 @@
           "fileFormat": "pdf",
           "sizeBytes": 2457600,
           "previewUrl": "/api/catalog/results/21/file/?variant=preview",
+          "thumbnailUrl": "/api/catalog/results/21/file/?variant=thumbnail&projectTagId=1&v=mock-result-v1",
           "downloadUrl": "/api/catalog/results/21/file/?variant=artifact",
           "owner": {
             "id": 8,

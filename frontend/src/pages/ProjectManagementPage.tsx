@@ -78,6 +78,39 @@ export default function ProjectManagementPage() {
         <Card>{ui("当前账号没有标签管理权限。")}</Card>
       ) : (
         <>
+          <Card title={ui("项目功能全局开关")}>
+            <Typography.Paragraph type="secondary">
+              {ui(
+                "全局开启覆盖单项目开关；关闭后恢复各项目设置。内容配置仍独立，不会复制其他项目的数据。",
+              )}
+            </Typography.Paragraph>
+            <Space wrap>
+              {context.featureCatalog.map((feature) => (
+                <Space key={feature.key}>
+                  <Typography.Text>{feature.key}</Typography.Text>
+                  <Switch
+                    aria-label={`${feature.key} ${ui("对所有项目开启")}`}
+                    checked={feature.globallyEnabled}
+                    disabled={!context.canManage || saving}
+                    onChange={async (enabled) => {
+                      setSaving(true);
+                      try {
+                        await platformApi.setGlobalProjectFeature(
+                          feature.key,
+                          enabled,
+                        );
+                        await context.refresh();
+                      } catch (error) {
+                        message.error(String(error));
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                  />
+                </Space>
+              ))}
+            </Space>
+          </Card>
           <Table
             rowKey="id"
             pagination={false}
@@ -86,6 +119,45 @@ export default function ProjectManagementPage() {
               { title: ui("项目标签"), dataIndex: "name" },
               { title: ui("编码"), dataIndex: "code" },
               { title: ui("说明"), dataIndex: "description" },
+              {
+                title: ui("项目功能"),
+                render: (_, project: ProjectTag) => (
+                  <Space orientation="vertical">
+                    {context.featureCatalog.map((feature) => (
+                      <Space key={feature.key}>
+                        <Typography.Text>{feature.key}</Typography.Text>
+                        <Switch
+                          aria-label={`${project.name} ${feature.key}`}
+                          checked={
+                            feature.globallyEnabled ||
+                            project.configuredFeatures?.includes(feature.key)
+                          }
+                          disabled={
+                            !context.canManage ||
+                            saving ||
+                            feature.globallyEnabled
+                          }
+                          onChange={async (enabled) => {
+                            setSaving(true);
+                            try {
+                              await platformApi.setProjectFeature(
+                                project.id,
+                                feature.key,
+                                { enabled },
+                              );
+                              await context.refresh();
+                            } catch (error) {
+                              message.error(String(error));
+                            } finally {
+                              setSaving(false);
+                            }
+                          }}
+                        />
+                      </Space>
+                    ))}
+                  </Space>
+                ),
+              },
               {
                 title: ui("维护"),
                 render: (_, p) => (

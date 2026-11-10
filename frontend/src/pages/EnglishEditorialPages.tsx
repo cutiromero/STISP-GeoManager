@@ -11,8 +11,9 @@ import {
 } from "@ant-design/icons";
 import { Button, Layout, Typography } from "antd";
 import type { ReactNode } from "react";
-import poplarWaterGoldenImage from "../assets/about/poplar-water-golden.jpeg";
-import xjafsMonitoringTowerImage from "../assets/about/xjafs-monitoring-tower.png";
+import poplarWaterGoldenImage from "@card-assets/about/poplar-water-golden.jpeg.webp";
+import xjafsMonitoringTowerImage from "@card-assets/about/xjafs-monitoring-tower.png.webp";
+import CardCover from "../components/CardCover";
 import knowledgeAncientPoplarImage from "../assets/portal/knowledge-ancient-poplar.png";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useAppContext } from "../contexts/AppContext";
@@ -338,9 +339,9 @@ export function EnglishKnowledgePage() {
             </div>
             <div className="knowledge-v2-image-story">
               <figure>
-                <img
+                <CardCover
                   alt="Golden poplar forest beside a river"
-                  src={poplarWaterGoldenImage}
+                  thumbnailUrl={poplarWaterGoldenImage}
                 />
               </figure>
               <div>
@@ -387,9 +388,9 @@ export function EnglishKnowledgePage() {
                 </Typography.Paragraph>
               </div>
               <figure>
-                <img
+                <CardCover
                   alt="Poplar-forest observation tower"
-                  src={xjafsMonitoringTowerImage}
+                  thumbnailUrl={xjafsMonitoringTowerImage}
                 />
                 <figcaption>
                   Long-term observations convert management outcomes into

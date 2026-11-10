@@ -11,6 +11,7 @@ import { Button, Popconfirm, Space, Tag, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 import type { MapComposition } from "../../types";
 import ShareButton from "../../sharing/ShareButton";
+import CardCover from "../CardCover";
 
 interface Props {
   composition: MapComposition;
@@ -47,6 +48,11 @@ export default function MapCompositionCard({
         disabled={!composition.canPreview || !previewVersion}
         onClick={onPreview}
       >
+        <CardCover
+          thumbnailUrl={previewVersion?.thumbnailUrl}
+          alt={composition.name}
+          fit="contain"
+        />
         {previewVersion ? (
           <>
             <EyeOutlined />

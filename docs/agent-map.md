@@ -38,6 +38,7 @@ export PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 - 最小：`make verify-fast`；浏览器：`cd frontend && node scripts/run-browser-check.mjs src/compute/ComputePage.browser.test.tsx`；版本准备与结果读取另跑 `make check-efficiency`。
 
 ## 核心、权限与项目
+- 通用项目功能：`backend/apps/projects/features.py`、`models.py`、管理命令 `project_feature`；前端 `ProjectManagementPage.tsx`、`monitor/project.ts`；回归 `backend/tests/integration/test_project_features.py`、`frontend/src/monitor/projectFeatures.test.tsx`、`frontend/src/projects/ProjectFeatures.browser.test.tsx`；开启与扩展见 `docs/ecology-monitor.md`。
 - 后端入口：`backend/apps/core/permissions.py`、`auth_views.py`、`account_access.py`、`browser_sessions.py`、`config.py`；项目范围 `backend/apps/projects/access.py`、`context.py`、`scoping.py`；共享摘要 `backend/apps/core/file_evidence.py`。
 - 前端入口：`frontend/src/auth/`、`frontend/src/projects/ProjectContext.tsx`、`frontend/src/api/client.ts`、`frontend/src/App.tsx`。
 - 测试：`backend/tests/integration/core/test_permissions.py`、`test_account_access.py`、`test_browser_sessions.py`、`backend/tests/integration/test_project_public_policy.py`；浏览器 `frontend/src/api/AccountIsolation.efficiency.browser.test.tsx`、`frontend/src/projects/ProjectContext.browser.test.tsx`。
@@ -57,6 +58,7 @@ export PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 ## 知识、内容与领域数据
 - 知识：`backend/apps/knowledge/views.py`、`library.py`、`formal_rules.py`；前端 `frontend/src/knowledge/KnowledgePage.tsx`；测试 `backend/tests/integration/test_knowledge_library.py`、`frontend/src/knowledge/KnowledgeLibrary.browser.test.tsx`。
 - 内容：`backend/apps/content/views.py`、`science_document.py`；前端 `frontend/src/pages/EditorialPage.tsx`；测试 `backend/tests/unit/test_science_document.py`、`backend/tests/integration/test_science_column_refresh.py`、`frontend/src/pages/EditorialPage.browser.test.tsx`。
+- 卡片图片共用入口：`frontend/src/components/CardCover.tsx`、`backend/apps/catalog/thumbnails.py`；写入与只读回归 `backend/tests/integration/catalog/test_card_thumbnails.py`；回填 `backfill_card_thumbnails`；规则见 `docs/developer-guide.md` 的“卡片图片规则”。
 - 领域模型：`backend/apps/ecology/models.py`、`backend/apps/omics/views.py`、`backend/apps/standards/views.py`；测试 `backend/tests/unit/test_ecology_demo_algorithms.py`、`backend/tests/integration/omics/test_api.py`、`backend/tests/integration/catalog/test_api.py`。
 - 最小：`make verify-fast`；知识浏览器：`cd frontend && node scripts/run-browser-check.mjs src/knowledge/KnowledgeLibrary.browser.test.tsx`。
 

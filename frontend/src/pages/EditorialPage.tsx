@@ -1,4 +1,5 @@
 import { useAuditText } from "../i18n/auditUi";
+import CardCover from "../components/CardCover";
 import {
   App,
   Button,
@@ -437,17 +438,10 @@ export default function EditorialPage({
                   key={item.id}
                   className="editorial-card"
                   cover={
-                    item.coverUrl ? (
-                      <img
-                        loading="lazy"
-                        src={item.coverUrl}
-                        alt={item.title}
-                      />
-                    ) : (
-                      <div className="editorial-card-placeholder">
-                        {ui(item.category)}
-                      </div>
-                    )
+                    <CardCover
+                      thumbnailUrl={item.thumbnailUrl}
+                      alt={item.title}
+                    />
                   }
                 >
                   <Tag color="blue">{ui(item.category)}</Tag>

@@ -3337,6 +3337,70 @@ export type AgentResourceList = {
 };
 
 /**
+ * 数据驱动的项目功能注册项，不代替用户权限。
+ */
+export type ProjectFeature = {
+    /**
+     * 稳定功能标识，例如 ecology_monitor。
+     */
+    key: string;
+    /**
+     * 对所有启用项目生效；关闭后恢复单项目设置。
+     */
+    globallyEnabled: boolean;
+};
+
+/**
+ * 当前项目的监测内容配置；不回退其他项目数据。
+ */
+export type ProjectMonitorConfig = {
+    /**
+     * 大屏标题。
+     */
+    title: string;
+    /**
+     * 显式选择的模拟数据源；目前仅注册塔里木胡杨演示源。
+     */
+    source: 'tarim_poplar_mock';
+    /**
+     * 研究区初始视角。
+     */
+    initialView: {
+        /**
+         * 经度、纬度；分别限制在正负180、90度。
+         */
+        center: [
+            number,
+            number
+        ];
+        /**
+         * 初始地球视角缩放级别。
+         */
+        zoom: number;
+        /**
+         * 研究区按钮缩放级别。
+         */
+        regionZoom: number;
+    };
+};
+
+/**
+ * enabled/config 至少提供一项，省略保留原值；ecology_monitor 的非空配置必须符合 ProjectMonitorConfig。
+ */
+export type ProjectFeatureInput = {
+    /**
+     * 单项目开关；全局开启时仍保存，但有效开关为开启。
+     */
+    enabled?: boolean;
+    /**
+     * 功能专属内容配置，null 清除；监测配置包含 title、source、initialView。
+     */
+    config?: {
+        [key: string]: unknown;
+    } | null;
+};
+
+/**
  * 平台升级数据结构。
  */
 export type ProjectTag = {
@@ -3368,6 +3432,18 @@ export type ProjectTag = {
      * 排序。
      */
     sortOrder: number;
+    /**
+     * 后端计算的有效功能清单；停用项目为空。前端入口与路由仅依据此清单，不判断项目代码。
+     */
+    enabledFeatures?: Array<string>;
+    /**
+     * 单项目显式开启的功能，不包含全局覆盖，用于后台设置。
+     */
+    configuredFeatures?: Array<string>;
+    /**
+     * 已开启大屏的项目专属内容配置；未开启或未配置为 null。
+     */
+    monitorConfig?: ProjectMonitorConfig | null;
 };
 
 /**
@@ -3394,6 +3470,10 @@ export type ProjectTagList = {
      * 具备标签分配权限时可分配的项目集合，不代表内容访问权限。
      */
     assignableItems?: Array<ProjectTag>;
+    /**
+     * 超级管理员可见的功能注册表与全局开关；其他账号为空。
+     */
+    featureCatalog?: Array<ProjectFeature>;
 };
 
 /**
@@ -3480,6 +3560,10 @@ export type ContentArticle = {
      * 受控封面地址。
      */
     coverUrl: string;
+    /**
+     * 带内容版本的受控卡片小图地址。无封面时为空字符串，客户端显示占位，不回退coverUrl；详情仍使用coverUrl。
+     */
+    thumbnailUrl?: string;
     /**
      * 事件日期 YYYY-MM-DD，允许空字符串。
      */
@@ -3656,6 +3740,10 @@ export type ErrorResponse = {
      * 错误描述信息
      */
     detail: string;
+    /**
+     * 第2版算子输入预检的机器可读差距，权限错误不返回资料信息
+     */
+    gaps?: Array<ComputeInputGap>;
 };
 
 export type DetailResponse = {
@@ -6165,7 +6253,7 @@ export type ResultArtifact = {
      */
     previewUrl: string;
     /**
-     * 卡片用缩略图地址，包含所属项目的 projectTagId；仅PNG、JPG/JPEG成果提供，其余格式为null。首次请求时生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。
+     * 带内容版本与projectTagId的预生成WebP卡片地址，PDF使用首页，非可视类型使用统一占位。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问；不得回退previewUrl。
      */
     thumbnailUrl: string | null;
     /**
@@ -7813,7 +7901,7 @@ export type MapCompositionVersion = {
      */
     previewUrl: string;
     /**
-     * 卡片用缩略图地址，包含所属项目的 projectTagId；由PNG预览生成并缓存于服务器；公开访问允许浏览器缓存，登录用户或私有项目沿用不缓存策略。
+     * 带内容版本与projectTagId的预生成WebP卡片地址，保存版本时由PNG母图生成；读取绝不渲染地图。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问。
      */
     thumbnailUrl: string;
     /**
@@ -10524,6 +10612,57 @@ export type ComputeInputSpec = {
      * 允许的几何类型，空表示不限
      */
     geometryTypes?: Array<string>;
+    /**
+     * 输入语义与限制
+     */
+    description?: string;
+    /**
+     * 语义字段要求
+     */
+    fields?: Array<ComputeSemanticField>;
+    /**
+     * 坐标系要求
+     */
+    crs?: {
+        /**
+         * 要求
+         */
+        mode: 'any' | 'projected' | 'same_as';
+        /**
+         * 参照的其他单输入键
+         */
+        input?: string;
+    };
+    /**
+     * 包围范围关系
+     */
+    spatial?: {
+        /**
+         * 关系
+         */
+        relation: 'intersects' | 'within';
+        /**
+         * 参照单输入键
+         */
+        input: string;
+    };
+    /**
+     * 同类输入集合
+     */
+    repeat?: {
+        /**
+         * 最少数量
+         */
+        min: number;
+        /**
+         * 最多数量
+         */
+        max: number;
+        /**
+         * 是否必须具名
+         */
+        labelRequired: boolean;
+    };
 };
 
 /**
@@ -10580,6 +10719,7 @@ export type ComputeParameterSpec = {
      * 字符串长度上限，缺省2000；受限脚本最多16000
      */
     maxLength?: number;
+    agent?: ComputeAgentParameter;
 };
 
 /**
@@ -10606,16 +10746,28 @@ export type ComputeOutputSpec = {
      * 是否必须输出
      */
     required: boolean;
+    /**
+     * 输出语义与适用条件
+     */
+    description?: string;
+    /**
+     * 输出字段语义
+     */
+    fields?: Array<ComputeSemanticField>;
+    /**
+     * 是否最终成果
+     */
+    final?: boolean;
 };
 
 /**
- * operator.yaml 规范化清单 v1；入口固定 main.py:run(context)
+ * 规范化清单v1/v2；入口main.py:run(context)。v2上传强制校验完整语义及样例；旧登记记录不重新验证
  */
 export type ComputeManifest = {
     /**
      * 清单版本
      */
-    schemaVersion: 1;
+    schemaVersion: 1 | 2;
     /**
      * 算法稳定标识
      */
@@ -10639,7 +10791,7 @@ export type ComputeManifest = {
     /**
      * 经管理员配置的运行环境 ID
      */
-    runtime: string;
+    runtime?: string;
     /**
      * 列表
      */
@@ -10679,6 +10831,38 @@ export type ComputeManifest = {
         file: string;
     };
     inputScriptBridge?: ComputeInputScriptBridge;
+    capabilities?: ComputeCapabilities;
+    /**
+     * 错误码表
+     */
+    errors?: Array<ComputeOperatorErrorSpec>;
+    /**
+     * 仅供调度参考，不保证配额
+     */
+    resources?: {
+        /**
+         * 耗时量级
+         */
+        duration: 'seconds' | 'minutes' | 'hours';
+        /**
+         * 峰值内存量级
+         */
+        memory: 'small' | 'medium' | 'large';
+        /**
+         * 资源与规模关系
+         */
+        scaling: string;
+    };
+    /**
+     * 包内自检组
+     */
+    selfTests?: Array<ComputeSelfTest>;
+    /**
+     * 已有输入适配能力声明，沿用适配器校验和发现服务
+     */
+    inputAdapter?: {
+        [key: string]: unknown;
+    };
 };
 
 /**
@@ -10714,6 +10898,10 @@ export type ComputeVersion = {
      * 上传时间
      */
     createdAt: string;
+    /**
+     * 兼容提示，v1建议升级但不拒绝
+     */
+    warnings?: Array<string>;
 };
 
 /**
@@ -10869,10 +11057,19 @@ export type ComputeTaskCreate = {
      */
     versionId: number;
     /**
-     * 输入名到资源 ID
+     * 输入键到资源ID；repeat端口使用具名数组
      */
     inputs: {
-        [key: string]: number;
+        [key: string]: number | Array<{
+            /**
+             * 资源ID
+             */
+            resourceId: number;
+            /**
+             * 真实名称
+             */
+            label?: string;
+        }>;
     };
     /**
      * 按版本声明校验的参数
@@ -10888,6 +11085,7 @@ export type ComputeTaskCreate = {
      * 管理员试运行草稿版本
      */
     trial?: boolean;
+    fieldMappings?: ComputeFieldMappings;
 };
 
 /**
@@ -11084,6 +11282,12 @@ export type ComputeTask = {
      * 标识
      */
     attemptCount: number;
+    /**
+     * 失败分类，旧任务和成功任务为null
+     */
+    failure?: ComputeFailure | null;
+    fieldMappings?: ComputeFieldMappings;
+    inputCollections?: ComputeInputCollections;
 };
 
 /**
@@ -11254,6 +11458,8 @@ export type ComputePreflight = {
      * 文字
      */
     detail: string;
+    fieldMappings?: ComputeFieldMappings;
+    inputCollections?: ComputeInputCollections;
 };
 
 /**
@@ -11399,6 +11605,255 @@ export type ComputeInputScriptBridge = {
      * 内核隔离协议版本
      */
     policyVersion: 1;
+};
+
+/**
+ * 语义字段；输入按role绑定；legacyName仅供旧入口别名迁移
+ */
+export type ComputeSemanticField = {
+    /**
+     * 语义角色标识
+     */
+    role: string;
+    /**
+     * 字段语义
+     */
+    description: string;
+    /**
+     * 接受的逻辑类型
+     */
+    types: Array<'string' | 'integer' | 'number' | 'boolean' | 'datetime'>;
+    /**
+     * 是否必需
+     */
+    required: boolean;
+    /**
+     * 精确单位，不推断未知单位
+     */
+    unit?: string;
+    /**
+     * 下界
+     */
+    min?: number;
+    /**
+     * 上界
+     */
+    max?: number;
+    /**
+     * 关联已有field/band参数
+     */
+    parameter?: string;
+    /**
+     * 旧入口内部字段名，外部仍可映射其他字段
+     */
+    legacyName?: string;
+    /**
+     * 输出实际字段名
+     */
+    name?: string;
+};
+
+/**
+ * 受控类别及适用限制
+ */
+export type ComputeCapabilities = {
+    /**
+     * 操作类别
+     */
+    operations: Array<'check' | 'correct' | 'convert' | 'statistics' | 'infer' | 'map'>;
+    /**
+     * 作用对象
+     */
+    dataTypes: Array<'raster' | 'vector' | 'table' | 'image' | 'report' | 'archive' | 'document' | 'gene'>;
+    /**
+     * 能力摘要
+     */
+    summary: string;
+    /**
+     * 适用情形
+     */
+    useWhen: string;
+    /**
+     * 不适用情形
+     */
+    avoidWhen: string;
+};
+
+/**
+ * 参数调整提示，不授予额外权限
+ */
+export type ComputeAgentParameter = {
+    /**
+     * 是否允许智能体调整
+     */
+    adjustable: boolean;
+    /**
+     * 选择和调整建议
+     */
+    advice: string;
+};
+
+/**
+ * 错误码与前置条件
+ */
+export type ComputeOperatorErrorSpec = {
+    /**
+     * 唯一大写错误码，PLATFORM_保留
+     */
+    code: string;
+    /**
+     * 含义
+     */
+    meaning: string;
+    /**
+     * 前置条件
+     */
+    precondition: string;
+    /**
+     * 补救类别
+     */
+    remedy: 'adjust_parameters' | 'convert_input' | 'complete_mapping' | 'replace_data' | 'human_review' | 'unrecoverable';
+};
+
+/**
+ * 结构化运行失败，不包含Python traceback
+ */
+export type ComputeFailure = {
+    /**
+     * 算子错误码或平台通用错误码
+     */
+    code: string;
+    /**
+     * 调度说明
+     */
+    message: string;
+    /**
+     * 涉及输入
+     */
+    inputs: Array<string>;
+    /**
+     * 涉及参数
+     */
+    parameters: Array<string>;
+    /**
+     * 补救类别
+     */
+    remedy: 'adjust_parameters' | 'convert_input' | 'complete_mapping' | 'replace_data' | 'human_review' | 'unrecoverable';
+    /**
+     * 有界补充诊断，不包含秘密或主机路径
+     */
+    details: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * 预检差距，不自动执行转换
+ */
+export type ComputeInputGap = {
+    /**
+     * 差距码
+     */
+    code: string;
+    /**
+     * 实际输入键
+     */
+    input: string;
+    /**
+     * 字段语义角色，非字段差距为空
+     */
+    role: string;
+    /**
+     * 字段名或波段号文字，未知为空
+     */
+    field: string;
+    /**
+     * 期望规范或类型
+     */
+    expected: unknown;
+    /**
+     * 实际元信息，未知为null
+     */
+    actual: unknown;
+    /**
+     * 建议补救类别
+     */
+    remedy: 'adjust_parameters' | 'convert_input' | 'complete_mapping' | 'replace_data' | 'human_review' | 'unrecoverable';
+};
+
+/**
+ * 实际输入键到角色映射，集合使用key__序号
+ */
+export type ComputeFieldMappings = {
+    [key: string]: {
+        [key: string]: string | number;
+    };
+};
+
+/**
+ * 冻结集合成员和标签，查询与重试保持一致
+ */
+export type ComputeInputCollections = {
+    [key: string]: Array<{
+        /**
+         * 展开输入键
+         */
+        key: string;
+        /**
+         * 真实名称
+         */
+        label: string;
+    }>;
+};
+
+/**
+ * 包内小样例
+ */
+export type ComputeSelfTest = {
+    /**
+     * 样例名称
+     */
+    name: string;
+    /**
+     * 包内JSON相对路径
+     */
+    fixture: string;
+    /**
+     * 成功files或失败errorCode二选一
+     */
+    expect: {
+        /**
+         * 已声明错误码
+         */
+        errorCode?: string;
+        /**
+         * 已声明输出文件摘要
+         */
+        files?: {
+            [key: string]: {
+                /**
+                 * 行数
+                 */
+                rows?: number;
+                /**
+                 * 必需字段
+                 */
+                columns?: Array<string>;
+                /**
+                 * 波段数
+                 */
+                bands?: number;
+                /**
+                 * SHA256
+                 */
+                sha256?: string;
+                /**
+                 * 文本包含短语
+                 */
+                contains?: string;
+            };
+        };
+    };
 };
 
 /**
@@ -11779,6 +12234,83 @@ export type BusinessFlowHumanState = {
 };
 
 /**
+ * 本节点实际输入整理的有界审计摘要，不含证据正文或台账。
+ */
+export type BusinessFlowContextManagement = {
+    /**
+     * 当前节点编码
+     */
+    nodeId: string;
+    /**
+     * 原样、内部截短、索引摘要或分批归纳档位
+     */
+    level: number;
+    /**
+     * 整理前实测token数
+     */
+    beforeTokens?: number;
+    /**
+     * 整理后实测token数
+     */
+    afterTokens?: number;
+    /**
+     * 实际模型窗口扣除输出与安全余量后的策略预算
+     */
+    inputBudgetTokens?: number;
+    /**
+     * 本次整理分词请求数上界19
+     */
+    measurementCount?: number;
+    /**
+     * 逐项省略说明，含证据编号、处理方式、原始与保留规模及前几处字段计数，不含正文
+     */
+    noticeSummary?: Array<string>;
+    /**
+     * 本次被整理的证据编号
+     */
+    evidenceIds?: Array<string>;
+    [key: string]: unknown;
+};
+
+export type BusinessFlowContextRecovery = BusinessFlowContextManagement & {
+    /**
+     * 当前证据规模和是否禁止跳过，不含正文。
+     */
+    evidence: Array<{
+        /**
+         * 实际证据编号
+         */
+        id: string;
+        /**
+         * 证据标题
+         */
+        title: string;
+        /**
+         * 原始证据字节数
+         */
+        bytes: number;
+        /**
+         * 必需角色、直接依赖或指令点名证据不可跳过
+         */
+        required: boolean;
+    }>;
+};
+
+/**
+ * 用户明确收紧样本与文本范围，仅影响资料投影，不修改原始数据或科研规范。
+ */
+export type BusinessFlowContextScope = {
+    /**
+     * 每个样本或分组数组最多保留项数
+     */
+    maxItems?: number;
+    /**
+     * 每个长文本最多保留字符数
+     */
+    maxTextCharacters?: number;
+};
+
+/**
  * 当前节点真实执行、审核、返修和人工状态。
  */
 export type BusinessFlowNodeState = {
@@ -11787,7 +12319,7 @@ export type BusinessFlowNodeState = {
      */
     nodeId: string;
     /**
-     * 节点状态
+     * 节点状态；waiting_context表示上下文等待，不是科研审批
      */
     status: string;
     /**
@@ -11798,11 +12330,13 @@ export type BusinessFlowNodeState = {
     reviewer: BusinessFlowActorState;
     human: BusinessFlowHumanState;
     /**
-     * 已产生的真实节点结果与受控引用
+     * 仅包含本节点产出的结论或真实算子结果引用
      */
     outputs: {
         [key: string]: unknown;
     };
+    contextManagement?: BusinessFlowContextManagement;
+    contextRecovery?: BusinessFlowContextRecovery;
     [key: string]: unknown;
 };
 
@@ -12276,11 +12810,11 @@ export type BusinessFlowInputPreparation = {
 };
 
 /**
- * 只有真实用户可提交人工决定，绑定当前节点和修订，拒绝陈旧或重复越权操作。
+ * 只有真实用户可提交人工决定，绑定当前节点和修订。retry_context仅恢复上下文等待，不写human.approved；停止沿用cancel。
  */
 export type BusinessFlowDecision = {
     /**
-     * 当前等待人工决定的节点编码
+     * 当前等待决定的节点编码
      */
     nodeId: string;
     /**
@@ -12288,13 +12822,18 @@ export type BusinessFlowDecision = {
      */
     revision: number;
     /**
-     * 明确批准或要求返修
+     * 明确批准、要求返修或重试上下文
      */
-    decision: 'approve' | 'request_changes';
+    decision: 'approve' | 'request_changes' | 'retry_context';
     /**
-     * 返修原因或补充要求
+     * 返修原因或收紧范围说明
      */
     feedback: string;
+    /**
+     * 仅retry_context可提交当前等待清单中的非必需证据编号；不能跳过直接依赖或指令点名证据
+     */
+    skipEvidenceIds?: Array<string>;
+    contextScope?: BusinessFlowContextScope;
     /**
      * 稳定决定重试键
      */
@@ -16313,9 +16852,13 @@ export type DownloadResultArtifactData = {
          */
         projectTagId?: string;
         /**
-         * artifact 下载原文件，preview 在浏览器内预览；thumbnail 返回长边不超过640像素的WebP缩略图，仅PNG、JPG/JPEG成果提供，其余格式返回400
+         * artifact 下载原文件，preview 在浏览器内预览；thumbnail 只读取预生成的 WebP，长边不超过640像素、最多48KiB，PDF使用首页，非可视类型返回统一占位。缺图返回不缓存的小占位并后台补生成，绝不读取或渲染原图。
          */
         variant?: 'artifact' | 'preview' | 'thumbnail';
+        /**
+         * 缩略图内容版本；旧版本请求返回404。
+         */
+        v?: string;
     };
     url: '/api/catalog/results/{resultId}/file/';
 };
@@ -16343,7 +16886,7 @@ export type DownloadResultArtifactError = DownloadResultArtifactErrors[keyof Dow
 
 export type DownloadResultArtifactResponses = {
     /**
-     * 文件内容
+     * 文件内容；thumbnail为预生成WebP或极小占位，长缓存必须重验证，登录/私有响应no-store。
      */
     200: Blob | File;
 };
@@ -16804,9 +17347,13 @@ export type DownloadMapCompositionVersionData = {
          */
         projectTagId?: string;
         /**
-         * artifact 返回正式成果并触发下载；preview 返回 PNG 预览；thumbnail 返回由预览生成的长边不超过640像素的WebP缩略图
+         * artifact 返回正式成果并触发下载；preview 返回 PNG 预览；thumbnail 只读取保存成果时生成的 WebP（最长边640像素、最多48KiB），缺图返回占位并后台补生成，不触发地图渲染。
          */
         variant?: 'artifact' | 'preview' | 'thumbnail';
+        /**
+         * 缩略图内容版本；旧版本请求返回404。
+         */
+        v?: string;
     };
     url: '/api/catalog/map-compositions/{compositionId}/versions/{versionNumber}/file/';
 };
@@ -17959,6 +18506,99 @@ export type CreateProjectTagResponses = {
 
 export type CreateProjectTagResponse = CreateProjectTagResponses[keyof CreateProjectTagResponses];
 
+export type SetGlobalProjectFeatureData = {
+    body: {
+        /**
+         * 是否对所有项目开启。
+         */
+        enabled: boolean;
+    };
+    path: {
+        /**
+         * 已注册的功能标识。
+         */
+        featureKey: string;
+    };
+    query?: never;
+    url: '/api/projects/features/{featureKey}/';
+};
+
+export type SetGlobalProjectFeatureErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 功能未注册。
+     */
+    404: ErrorResponse;
+};
+
+export type SetGlobalProjectFeatureError = SetGlobalProjectFeatureErrors[keyof SetGlobalProjectFeatureErrors];
+
+export type SetGlobalProjectFeatureResponses = {
+    /**
+     * 全局开关已保存并审计。
+     */
+    200: ProjectFeature;
+};
+
+export type SetGlobalProjectFeatureResponse = SetGlobalProjectFeatureResponses[keyof SetGlobalProjectFeatureResponses];
+
+export type SetProjectFeatureData = {
+    body: ProjectFeatureInput;
+    path: {
+        /**
+         * 目标项目标签 ID，与当前项目请求头无关。
+         */
+        projectTagId: number;
+        /**
+         * 已注册的功能标识。
+         */
+        featureKey: string;
+    };
+    query?: never;
+    url: '/api/projects/{projectTagId}/features/{featureKey}/';
+};
+
+export type SetProjectFeatureErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 项目或功能不存在。
+     */
+    404: ErrorResponse;
+};
+
+export type SetProjectFeatureError = SetProjectFeatureErrors[keyof SetProjectFeatureErrors];
+
+export type SetProjectFeatureResponses = {
+    /**
+     * 项目功能已保存并审计，返回最新有效功能清单。
+     */
+    200: ProjectTag;
+};
+
+export type SetProjectFeatureResponse = SetProjectFeatureResponses[keyof SetProjectFeatureResponses];
+
 export type UpdateProjectTagData = {
     /**
      * 待保存数据。
@@ -18466,6 +19106,14 @@ export type DownloadContentAssetData = {
         assetId: number;
     };
     query?: {
+        /**
+         * artifact读取原文件；thumbnail只读预生成卡片小图。
+         */
+        variant?: 'artifact' | 'thumbnail';
+        /**
+         * 返回地址携带的内容版本标识；旧版本不可读取新内容。
+         */
+        v?: string;
         /**
          * 平台公共内容忽略此项目参数，不受当前业务项目影响。
          */

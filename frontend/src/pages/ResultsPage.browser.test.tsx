@@ -113,6 +113,9 @@ const viewer: User = {
   },
 };
 
+const thumbnailUrl =
+  "data:image/webp;base64,UklGRjgAAABXRUJQVlA4ICwAAAAQAwCdASogABQAPrVWpE0nJKOiKAgA4BaJaQDA3BanFAAA/vJB236jwpgAAA==";
+
 const publishedVersion = {
   id: 103,
   compositionId: 27,
@@ -221,41 +224,79 @@ describe("ResultsPage published map compositions", () => {
     });
   });
 
-  it("loads the published version from the workbench and exposes its preview and download", async () => {
-    renderResultsPage();
+  it.each([true, false])(
+    "loads the published version from the workbench and exposes its preview and download, thumbnail=%s",
+    async (hasThumbnail) => {
+      mockApi.mapCompositions.mockResolvedValue({
+        items: [
+          {
+            ...publishedComposition,
+            publishedVersion: {
+              ...publishedVersion,
+              thumbnailUrl: hasThumbnail ? thumbnailUrl : undefined,
+            },
+          },
+        ],
+        availableAudienceGroups: [],
+      });
+      renderResultsPage();
 
-    expect(
-      await screen.findByText("塔里木河胡杨分布专题图"),
-    ).toBeInTheDocument();
-    expect(mockApi.mapCompositions).toHaveBeenCalledWith({
-      status: "published",
-    });
-    expect(screen.getByText("V3")).toBeInTheDocument();
-    expect(
-      screen.getByText("来源工程：塔里木河胡杨监测工程"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByAltText("塔里木河胡杨分布专题图成果预览"),
-    ).toHaveAttribute("src", publishedVersion.previewUrl);
+      expect(
+        await screen.findByText("塔里木河胡杨分布专题图"),
+      ).toBeInTheDocument();
+      expect(mockApi.mapCompositions).toHaveBeenCalledWith({
+        status: "published",
+      });
+      expect(screen.getByText("V3")).toBeInTheDocument();
+      expect(
+        screen.getByText("来源工程：塔里木河胡杨监测工程"),
+      ).toBeInTheDocument();
+      const previewAlt = "塔里木河胡杨分布专题图成果预览";
+      const cover = screen
+        .getByRole("img", { name: previewAlt })
+        .closest(".card-cover");
+      expect(cover).not.toBeNull();
+      if (hasThumbnail) {
+        const image = await screen.findByAltText(previewAlt);
+        expect(image).toHaveAttribute("src", thumbnailUrl);
+        expect(image).toHaveAttribute("loading", "lazy");
+      } else {
+        expect(cover).toHaveAttribute("data-state", "placeholder");
+        expect(cover!.querySelector("img")).toBeNull();
+      }
+      expect(
+        document.querySelector(`img[src="${publishedVersion.previewUrl}"]`),
+      ).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /查看详情/ }));
+      fireEvent.click(screen.getByRole("button", { name: /查看详情/ }));
 
-    expect(
-      screen.getAllByAltText("塔里木河胡杨分布专题图成果预览"),
-    ).toHaveLength(2);
-    expect(
-      screen.queryByTitle("塔里木河胡杨分布专题图 PDF 预览"),
-    ).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getAllByRole("img", { name: previewAlt })).toHaveLength(
+          2,
+        ),
+      );
+      expect(
+        screen
+          .getAllByAltText(previewAlt)
+          .filter(
+            (image) =>
+              image.getAttribute("src") === publishedVersion.previewUrl,
+          ),
+      ).toHaveLength(1);
+      expect(
+        screen.queryByTitle("塔里木河胡杨分布专题图 PDF 预览"),
+      ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /下载成果/ }));
+      fireEvent.click(screen.getByRole("button", { name: /下载成果/ }));
 
-    await waitFor(() =>
-      expect(mockApi.downloadMapCompositionVersion).toHaveBeenCalledWith(
-        publishedComposition.id,
-        publishedVersion.versionNumber,
-      ),
-    );
-  });
+      await waitFor(() =>
+        expect(mockApi.downloadMapCompositionVersion).toHaveBeenCalledWith(
+          publishedComposition.id,
+          publishedVersion.versionNumber,
+        ),
+      );
+    },
+  );
 
   it.each([true, false])(
     "opens only the currently visible related data, linked=%s",

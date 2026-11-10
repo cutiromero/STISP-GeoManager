@@ -2,6 +2,7 @@ import react from "@vitejs/plugin-react";
 import { playwright } from "@vitest/browser-playwright";
 import { existsSync } from "node:fs";
 import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
 
 const windowsChromePath =
   "C:/Program Files/Google/Chrome/Application/chrome.exe";
@@ -14,6 +15,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      "@card-assets": fileURLToPath(
+        new URL("./.cache/card-assets", import.meta.url),
+      ),
       "@ant-design/pro-components": "@ant-design/pro-components/es",
     },
   },

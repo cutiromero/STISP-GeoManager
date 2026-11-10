@@ -14,6 +14,13 @@ CONFIGURATION = "测试配置"
 REPOSITORY = Path(__file__).resolve().parents[2]
 
 
+def test_card_image_rules_always_run_without_card_changes(tmp_path):
+    create(tmp_path, "frontend/scripts/check-card-images.mjs")
+    steps, _ = fast.plan(tmp_path, [])
+    assert ("node", "scripts/check-card-images.mjs") in commands(steps)
+    assert ("node", "--test", "scripts/check-card-images.test.mjs") in commands(steps)
+
+
 def create(root, path, text=""):
     destination = root / path
     destination.parent.mkdir(parents=True, exist_ok=True)

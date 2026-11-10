@@ -1,4 +1,6 @@
 import { ProjectLabel } from "../projects/ProjectLabel";
+import MonitorEntryCard from "../monitor/MonitorEntryCard";
+import CardCover from "../components/CardCover";
 import {
   AppstoreOutlined,
   BarChartOutlined,
@@ -259,6 +261,7 @@ export default function ResultsPage() {
           </div>
         </section>
 
+        <MonitorEntryCard />
         <ResearchDemoShowcase />
 
         {!canViewResults && (
@@ -764,21 +767,22 @@ function ResultCard({
 
 function ResultCover({ item }: { item: PublishedResult }) {
   const { t } = useTranslation();
-  const previewUrl = resultThumbnailUrl(item) ?? resultPreviewUrl(item);
+  const thumbnailUrl = resultThumbnailUrl(item);
   const format = resultFormat(item);
   const imagePreview = resultPreviewIsImage(item);
   return (
     <div
       className={`result-card-cover${imagePreview ? "" : " result-card-cover-file"}`}
     >
-      {previewUrl && imagePreview ? (
-        <Image
-          alt={t("results.previewAlt", { name: resultName(item) })}
-          preview={false}
-          src={previewUrl}
-        />
-      ) : (
-        <div className="result-file-cover-placeholder">
+      <CardCover
+        alt={t("results.previewAlt", { name: resultName(item) })}
+        thumbnailUrl={thumbnailUrl}
+      />
+      {!thumbnailUrl && (
+        <div
+          className="result-file-cover-placeholder"
+          style={{ position: "absolute", inset: 0 }}
+        >
           {resultFormatIcon(item)}
           <strong>{format.toUpperCase()}</strong>
           <span>{sourceLabel(item, t)}</span>

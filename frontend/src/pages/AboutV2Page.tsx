@@ -21,6 +21,7 @@ import digitalCity from "../assets/spatiotemporal/digital-city.png";
 import digitalEarth from "../assets/spatiotemporal/digital-earth.png";
 import aircasLogo from "../assets/team/aircas-logo.png";
 import WorkspaceHeader from "../components/WorkspaceHeader";
+import CardCover from "../components/CardCover";
 import { platformBrand } from "../config/platformBrand";
 import { useAppContext } from "../contexts/AppContext";
 import { DocsSection } from "./KnowledgeHelpSections";
@@ -266,13 +267,13 @@ function TeamIntroduction({ en }: { en: boolean }) {
           {teamMembers.map((member) => (
             <article className="air-member-card" key={member.id}>
               <div className="air-member-summary">
-                <img
+                <CardCover
                   className="air-member-portrait"
-                  src={member.portrait}
+                  thumbnailUrl={member.portrait}
                   alt={
                     en ? `${member.englishName} portrait` : `${member.name}照片`
                   }
-                  loading="lazy"
+                  aspectRatio="26 / 35"
                 />
                 <div>
                   <h3>{en ? member.englishName : member.name}</h3>

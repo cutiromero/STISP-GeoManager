@@ -97,6 +97,8 @@ pnpm run dev:with-mock
 
 ### 前后端分工与交接
 
+计算中心算子制作采用 [operator-authoring.md](operator-authoring.md) 的第2版规范；接口交接记录为 `API-20261110-011`。后端提供带权限的只读 `operator_catalog`、预检 `gaps` 和运行 `failure`，不在目录读取时执行算子或自动转换数据。智能体工具目录与业务流输入准备需显式接入这些服务，不能用字段相似度或前端门禁替代真实来源检查。旧版本包保持不可变，新包须上传新草稿、实际试运行后发布；旧工作流固定的版本不会随示例源码升级而改变。
+
 - 前端维护 `docs/openapi.yaml`、`docs/api-change-requests.md` 和按领域划分的 `mock/prism/examples/`；生成类型来自契约，不能在 UI 类型文件手写另一套 DTO。示例使用实际可用的资料元信息，缺失时使用合理的中文小样例，不依赖其他开发者机器的绝对路径。
 - API 交接记录写明接口、变更、前端原因、示例文件、后端实现注意点及验证预期。修改契约或示例后运行 `api:changes:check`；生成的 Prism 文件只通过 `mock:build` 更新。
 - 后端按契约、示例及交接记录实现行为和测试，真实响应一致后才标记已实现。无法安全实现时先提出契约调整，不静默返回不同结构。
@@ -163,6 +165,8 @@ make verify-fast
 假设改动通过向同一规划函数注入单文件列表执行 `--list` 和实际步骤，不修改应用文件或 Git 状态。最初选择的栅格 `color_mapping.py` 样本执行 0.721s（计划 0.234s），13 项测试通过，但文件已有 Ruff 格式差异使检查失败；没有为计时修改该应用文件。中级浏览器、完整大改门禁及发布流程未取得成功耗时，不作估计。
 
 ## 统一发布与数据保护
+
+卡片预生成缩略图升级：候选切换前，使用候选代码、项目后端解释器及该环境已有 TOML，先运行 `python backend/manage.py backfill_card_thumbnails --dry-run`，再运行 `python backend/manage.py backfill_card_thumbnails`；失败项修复后重跑，已完成版本不会重编码。确认 `pdftoppm` 可用后再验收 PDF 首页。存量回填不得触及原始科研文件，不能以本机空库替换服务器业务库；本机构建仍通过已有 `local.buildResources` 提供四张未跟踪原图，构建会自动生成肖像小图，原图不进 Git。具体规格、权限与续跑规则见开发指南“卡片图片规则”。
 
 发布入口固定为 `tools/release/release.py`，子命令仅用 `inspect`、`fast`、`full`、`status`、`rollback`。入口未就绪或检查失败即停止，不在 `.runtime` 新写、复制改写或串接历史私有发布脚本。下文 Docker 与镜像章节只描述相应运行环境，不授权绕开统一入口或启用旧 GitHub Actions 自动部署。
 

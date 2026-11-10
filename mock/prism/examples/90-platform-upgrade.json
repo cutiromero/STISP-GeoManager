@@ -14,11 +14,16 @@
           "description": "公共内容",
           "isDefault": true,
           "isActive": true,
-          "sortOrder": 0
+          "sortOrder": 0,
+          "enabledFeatures": [],
+          "configuredFeatures": [],
+          "monitorConfig": null
         }
       ],
       "canManage": false,
       "canAssign": false,
+      "defaultProjectId": 1,
+      "featureCatalog": [],
       "assignableItems": []
     }
   },
@@ -29,8 +34,16 @@
   },
   "GET /api/content/articles/": {
     "200": {
-      "items": [],
-      "total": 0,
+      "items": [{
+        "id": 1, "projectTagId": 1, "kind": "news", "title": "团队研究进展",
+        "summary": "卡片封面使用写入时预生成的小图。", "category": "研究进展",
+        "body": "正文与详情仍可读取原图。", "status": "published",
+        "coverUrl": "/api/content/assets/1/",
+        "thumbnailUrl": "/api/content/assets/1/?variant=thumbnail&v=mock-content-v1",
+        "eventDate": "2026-11-10", "publishedAt": "2026-11-10T08:00:00Z",
+        "source": "团队资料", "pinned": false, "revision": 1, "assets": [], "links": []
+      }],
+      "total": 1,
       "canEdit": false
     }
   }
