@@ -89,6 +89,20 @@
             }
           ],
           "workflowId": "69ac90d1-999f-44b7-9b68-1da1f726a142"
+        },
+        "generationParameters": {
+          "workflowModelActivity": {
+            "stage": "执行分析示例",
+            "status": "thinking",
+            "thinkingText": "仅用于开发演示的增量片段。",
+            "thinkingChars": 14,
+            "outputChars": 0,
+            "attempt": 1,
+            "reasoningEffort": "medium",
+            "thinkingEnabled": true,
+            "truncated": false
+          },
+          "workflowModelActivitySequence": 7
         }
       },
       "events": [],

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
+
+from django.db import transaction
 
 from django.utils import timezone
 
@@ -113,41 +116,49 @@ class WorkflowModelActivity:
             "output_refs": {"modelActivity": dict(self.state)},
             "finished_at": None if status in ACTIVE_STATUSES else checked_at,
         }
-        if self.step_id is None:
-            record = AgentWorkflowStep.objects.create(
-                workflow=self.workflow,
-                sequence=self.workflow.steps.count() + 1,
-                kind=ACTIVITY_KIND,
-                action={
-                    "stage": self.identity["stage"],
-                    "attempt": self.state["attempt"],
-                },
-                **values,
-            )
-            self.step_id = record.id
-        else:
-            AgentWorkflowStep.objects.filter(
-                pk=self.step_id, workflow=self.workflow
-            ).update(**values)
-        if self.workflow.parameters.get("_businessFlow"):
-            from .workflow_model_events import publish_activity
+        # The cursor and the snapshot must commit together: a reconnect must
+        # never observe new thinking before its corresponding stream event.
+        atomic = (
+            transaction.atomic
+            if self.workflow.parameters.get("_businessFlow")
+            else nullcontext
+        )
+        with atomic():
+            if self.step_id is None:
+                record = AgentWorkflowStep.objects.create(
+                    workflow=self.workflow,
+                    sequence=self.workflow.steps.count() + 1,
+                    kind=ACTIVITY_KIND,
+                    action={
+                        "stage": self.identity["stage"],
+                        "attempt": self.state["attempt"],
+                    },
+                    **values,
+                )
+                self.step_id = record.id
+            else:
+                AgentWorkflowStep.objects.filter(
+                    pk=self.step_id, workflow=self.workflow
+                ).update(**values)
+            if self.workflow.parameters.get("_businessFlow"):
+                from .workflow_model_events import publish_activity
 
-            reset = self.published_step != self.step_id
-            pending = self.state["thinkingChars"] - (
-                0 if reset else self.published_chars
-            )
-            delta = self.state["thinkingText"][-pending:] if pending > 0 else ""
-            publish_activity(
-                self.workflow,
-                self.step_id,
-                self.state,
-                delta,
-                reset=reset or pending > THINKING_TEXT_LIMIT,
-            )
-            self.published_step, self.published_chars = (
-                self.step_id,
-                self.state["thinkingChars"],
-            )
+                reset = self.published_step != self.step_id
+                pending = self.state["thinkingChars"] - (
+                    0 if reset else self.published_chars
+                )
+                delta = self.state["thinkingText"][-pending:] if pending > 0 else ""
+                publish_activity(
+                    self.workflow,
+                    self.step_id,
+                    self.state,
+                    delta,
+                    reset=reset or pending > THINKING_TEXT_LIMIT,
+                )
+                self.published_step, self.published_chars = (
+                    self.step_id,
+                    self.state["thinkingChars"],
+                )
         self.saved_at, self.saved_status = time.monotonic(), status
 
     def fail(self):

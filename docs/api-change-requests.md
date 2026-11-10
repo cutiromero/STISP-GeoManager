@@ -530,7 +530,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
-| API-20261110-007 | BackendReady | Agent run reads and SSE | Real workflow model deltas and bounded snapshots | Updated | 108-workflow-model-activity.json | Implemented | Stream, session, graph and budget regressions | No task replay or approval change |
+| API-20261110-007 | BackendReady | Agent run reads and SSE | Real workflow model deltas and bounded snapshots | Updated | 106-agent-generic-chat.json | Implemented | Stream, session, graph and budget regressions | No task replay or approval change |
 | API-20261109-001 | BackendReady | Existing resource reads/query | Concurrent reuse and cache admission | Updated | Existing fixtures | Shared locks and read coordinator | Efficiency contracts | ACL and scientific digests preserved |
 | API-20261109-002 | BackendReady | Agent run SSE and bootstrap | Resumable read stream and answer deltas | Updated | Controlled byte streams | Bounded WSGI slots and live authorization | Stream and efficiency regressions | Local regressions passed; deployment receipt records live acceptance |
 | API-20261109-003 | BackendReady | Business flow catalog and runs | Immutable versions and configurable review | Updated | Built-in declarations and regression fixtures | Shared workflow runtime and independent review | Catalog, access and execution regressions | Catalog checks passed; unified acceptance pending |
@@ -1704,7 +1704,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Endpoints: GET /api/agent/runs/{runId}/、GET /api/agent/runs/{runId}/stream/；原页面会话续期接口。
 - Change type: 现有运行快照增加可选模型活动元信息，SSE增加workflow_model_activity事件。
 - OpenAPI change: AgentGenerationParameters增加workflowModelActivity与workflowModelActivitySequence，复用AgentWorkflowModelActivity；AgentEvent.kind扩展新枚举。
-- Mock examples: mock/prism/examples/108-workflow-model-activity.json；真实增量、重连、跨工作流拒绝和请求切换回归夹具。
+- Mock examples: mock/prism/examples/106-agent-generic-chat.json；真实增量、重连、跨工作流拒绝和请求切换回归夹具。
 - Frontend reason: 正在打开的实际模型思考随父运行实时更新，默认全图缩放，短暂页面续期失败可自动恢复项目列表。
 - Backend implementation notes: 活动按原0.6秒节流持久化并发布真实思考增量；刷新从最新活动记录恢复，不重放生成。独立审核复用元信息去重与来源引用，坐标保留在完整输出。公开执行者不传内部结构化decision；权限和人工批准保持原边界。
 - Verification: 分段到达早于完成、请求隔离、有界Unicode、刷新一致、实际token预算、原件与完整摘要一致、真实撤权及停止、健康通道不额外轮询。
