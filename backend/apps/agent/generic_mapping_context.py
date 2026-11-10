@@ -20,6 +20,8 @@ PLAN_KEYS = (
     "knowledgeSelection",
     "unitOverrides",
     "phase",
+    "effectiveInputs",
+    "preparedInputProfiles",
 )
 
 
@@ -70,7 +72,10 @@ class MappingRuleContext:
         """Called only inside ModelStreamGuard, including the initial rule read."""
         from .logic_configuration import snapshot
         from .models import WorkflowUpload
-        from .workflow_resources import resolve_upload_resource
+        from .workflow_resources import (
+            resolve_upload_resource,
+            resolve_workflow_resource,
+        )
 
         if _state(workflow) != self._state:
             raise PermissionDenied("字段判断的资料、规则或知识设置已变化，请重新核对")
@@ -97,7 +102,25 @@ class MappingRuleContext:
                 "id": str(upload.pk),
             }
             for item in self._roles:
-                if item["role"] == role and item["_profile"] != upload.profile:
+                if item["role"] != role:
+                    continue
+                effective = workflow.plan.get("effectiveInputs", {}).get(role, identity)
+                expected = upload.profile
+                if effective != identity:
+                    prepared = resolve_workflow_resource(
+                        user, policy, effective, workflow
+                    )
+                    key = str(effective) + ":" + prepared.updated_at.isoformat()
+                    expected = workflow.plan.get("preparedInputProfiles", {}).get(key)
+                    uploads[role]["prepared"] = {
+                        "resourceId": prepared.pk,
+                        "revision": prepared.updated_at.isoformat(),
+                    }
+                if (
+                    item["resourceId"] != effective
+                    or expected is None
+                    or item["_profile"] != expected
+                ):
                     raise PermissionDenied("字段判断的资料样本已变化，请重新核对")
         if self._uploads is not None and uploads != self._uploads:
             raise PermissionDenied("字段判断的资料版本已变化，请重新核对")

@@ -335,6 +335,15 @@ def propose_mapping(workflow, user, policy):
     from .generic_mapping import model_targets
 
     roles = _review_roles(workflow, user, policy)
+    if any(
+        item["resourceId"] != workflow.plan["uploadInputs"][item["role"]]
+        for item in roles
+    ):
+        # Freeze the already-read derived profiles before model streaming. The
+        # live guard checks their resource revision and ACL without rereading.
+        from .workflow_controls import save_workflow_state
+
+        save_workflow_state(workflow, update_fields=["plan"])
     mode, note = "mock", []
     known_fields = (
         workflow.plan.get("chatExecution", {}).get("combinedInputReview")

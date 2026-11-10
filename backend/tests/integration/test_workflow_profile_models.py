@@ -109,6 +109,7 @@ def profiles(setup_compute, settings, monkeypatch):  # noqa: F811
         roles = [
             {
                 "role": "lithology",
+                "resourceId": mapping_resource.id,
                 "label": "地质图",
                 "fields": ["DCMC"],
                 "_profile": upload.profile,

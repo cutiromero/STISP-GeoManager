@@ -126,6 +126,88 @@ def infer(env):
     return generic_mapping.model_targets(env["workflow"], env["policy"], env["roles"])
 
 
+@pytest.fixture
+def derived_bound(bound):
+    workflow = bound["workflow"]
+    derived = DataResource.objects.create(
+        name="已适配的工作资料",
+        code="derived-mapping-profile",
+        data_type="vector",
+        owner_only=True,
+        maintainer=bound["owner"],
+        source=f"workflow-working:{workflow.pk}:input-adapter:lithology",
+    )
+    profile = {
+        "kind": "vector",
+        "crs": "EPSG:32646",
+        "featureCount": 2,
+        "geometryTypes": ["Polygon"],
+        "fields": [{"name": "derived_name", "type": "text", "samples": ["八宝山组"]}],
+    }
+    workflow.plan["effectiveInputs"] = {"lithology": derived.pk}
+    workflow.plan["preparedInputProfiles"] = {
+        str(derived.pk) + ":" + derived.updated_at.isoformat(): profile
+    }
+    workflow.resource_ids.append(derived.pk)
+    workflow.save(update_fields=["plan", "resource_ids"])
+    roles = deepcopy(bound["roles"])
+    roles[0].update(resourceId=derived.pk, _profile=profile, fields=["derived_name"])
+    for target in roles[0]["targets"]:
+        target["field"] = "derived_name" if target["key"] == "name" else None
+    return {**bound, "roles": roles, "derived": derived}
+
+
+def test_mapping_uses_the_frozen_derived_profile_without_reopening_files(
+    derived_bound, monkeypatch
+):
+    from apps.agent import workflow_uploads
+
+    reader = Mock(
+        side_effect=AssertionError(
+            "The streaming guard must reuse its version-bound profile"
+        )
+    )
+    monkeypatch.setattr(workflow_uploads, "catalog_profile", reader)
+    sent = capture(derived_bound, monkeypatch, selected="derived_name")
+    result = infer(derived_bound)
+    assert result["lithology"]["name"]["field"] == "derived_name"
+    assert sent[0]["roles"]["lithology"]["fields"][0]["name"] == "derived_name"
+    reader.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["derived_revision", "source_profile", "binding", "cached_profile", "derived_acl"],
+)
+def test_mapping_still_rejects_source_or_derived_changes_during_stream(
+    derived_bound, monkeypatch, change
+):
+    env = derived_bound
+
+    def mutate():
+        current = AgentWorkflow.objects.get(pk=env["workflow"].pk)
+        if change == "derived_revision":
+            env["derived"].description = "Changed"
+            env["derived"].save()
+        elif change == "source_profile":
+            upload = WorkflowUpload.objects.get(workflow=current)
+            upload.profile["fields"][0]["samples"] = ["Changed"]
+            upload.save(update_fields=["profile"])
+        elif change == "binding":
+            current.plan["effectiveInputs"] = {}
+            current.save(update_fields=["plan"])
+        elif change == "cached_profile":
+            current.plan["preparedInputProfiles"] = {}
+            current.save(update_fields=["plan"])
+        else:
+            env["derived"].maintainer = env["outsider"]
+            env["derived"].save(update_fields=["maintainer"])
+
+    capture(env, monkeypatch, selected="derived_name", during_stream=mutate)
+    with pytest.raises(PermissionDenied):
+        infer(env)
+
+
 def test_arbitrary_fields_distinguish_strata_places_codes_and_keep_model_choice(
     bound, monkeypatch
 ):

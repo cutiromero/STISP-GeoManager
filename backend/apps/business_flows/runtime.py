@@ -204,7 +204,14 @@ def serialize_run(user, workflow, *, control_only=False):
                         row["status"] in {"direct", "ready"}
                         for row in workflow.plan.get("inputAdaptations", [])
                     ),
-                    "items": workflow.plan.get("inputAdaptations", []),
+                    "items": [
+                        {
+                            key: value
+                            for key, value in item.items()
+                            if key != "preparationSignature"
+                        }
+                        for item in workflow.plan.get("inputAdaptations", [])
+                    ],
                 }
             }
             if not control_only
