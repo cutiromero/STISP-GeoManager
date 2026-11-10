@@ -23,6 +23,11 @@ it("rejects successful HTML and incomplete definitions instead of passing them t
           headers: { "Content-Type": "text/html" },
         }),
       )
+      .mockResolvedValueOnce(
+        new Response("<!doctype html><title>unexpected</title>", {
+          headers: { "Content-Type": "text/html" },
+        }),
+      )
       .mockResolvedValueOnce(json({ items: null, canManage: false }))
       .mockResolvedValueOnce(
         json({

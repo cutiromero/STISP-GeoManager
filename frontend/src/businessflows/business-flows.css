@@ -375,6 +375,9 @@
 .business-flow-mobile-trigger {
   display: none;
 }
+.business-flow-empty-state > .ant-alert {
+  width: min(520px, 100%);
+}
 .business-flow-graph {
   min-width: 0;
 }
@@ -768,10 +771,10 @@
 }
 .business-flow-activity {
   margin: 16px 0;
-  padding: 18px 19px;
-  border: 1px solid #dce7e9;
-  border-radius: 14px;
-  background: #fcfdfc;
+  padding: 20px 0;
+  border-top: 1px solid #e3e9ec;
+  border-bottom: 1px solid #e3e9ec;
+  background: transparent;
   color: #4f6c77;
 }
 .business-flow-activity.needs-human {
@@ -851,16 +854,15 @@
 }
 .business-flow-actors {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
 }
 .business-flow-actor {
   display: flex;
   gap: 9px;
-  padding: 12px;
-  border: 1px solid #e4eced;
-  background: #fff;
-  border-radius: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid #edf1f3;
+  background: transparent;
   min-width: 0;
 }
 .business-flow-actor-icon {
@@ -890,7 +892,7 @@
   line-height: 1.8;
 }
 .business-flow-actor-heading strong {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: #5b7c86;
 }
@@ -901,7 +903,7 @@
 .business-flow-actor small {
   display: block;
   margin-top: 3px;
-  font-size: 9px;
+  font-size: 11px;
   color: #a4b2b8;
   overflow-wrap: anywhere;
 }
@@ -917,13 +919,10 @@
   color: #ab8b61;
 }
 .business-flow-actor-answer {
-  max-height: 190px;
-  overflow: auto;
-  scrollbar-width: thin;
   margin-top: 8px;
 }
 .business-flow-actor-answer .agent-markdown {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.9;
   color: #64818d;
 }
@@ -1008,8 +1007,8 @@
 }
 .business-flow-human-review {
   margin-top: 15px;
-  border: 1px solid #eddec0;
-  border-radius: 11px;
+  border-left: 3px solid #c5a56c;
+  border-radius: 0;
   background: #fffcf6;
   padding: 15px;
 }
@@ -1062,135 +1061,9 @@
   padding-top: 16px;
   min-width: 0;
 }
-.business-flow-launch-panel {
-  border: 1px solid #d2e2e5;
-  border-radius: 14px;
-  padding: 18px;
-  margin: 14px 0;
-  background: #f8fbfa;
-  color: #54737e;
-}
-.business-flow-launch-panel > header {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  margin-bottom: 16px;
-}
-.business-flow-launch-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  background: #eaf3f2;
-  color: #6c929b;
-  border: 1px solid #dce8e9;
-  border-radius: 11px;
-  flex-shrink: 0;
-}
-.business-flow-launch-panel > header > div {
-  display: grid;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-}
-.business-flow-launch-panel > header small {
-  color: #8ea3aa;
-  font-size: 10px;
-}
-.business-flow-launch-panel > header strong {
-  color: #3f636e;
-  font-size: 14px;
-  line-height: 1.7;
-}
-.business-flow-launch-loading {
-  display: grid;
-  place-items: center;
-  min-height: 80px;
-}
-.business-flow-launch-field {
-  display: grid;
-  gap: 9px;
-  margin: 14px 0;
-  color: #6a8994;
-  font-size: 12px;
-}
-.business-flow-launch-field > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.business-flow-launch-field > small {
-  color: #94a9b1;
-  font-size: 10px;
-  line-height: 1.85;
-}
-.business-flow-launch-field .ant-select {
-  width: 100%;
-  min-width: 0;
-}
-.business-flow-launch-field .ant-tag {
-  margin: 0;
-  color: #9e987e;
-  font-size: 9px;
-}
-.business-flow-launch-roles {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 20px;
-  margin: 14px 0 8px;
-}
-.business-flow-launch-roles > span,
-.business-flow-launch-roles > label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #829ba4;
-  font-size: 11px;
-}
-.business-flow-launch-roles strong {
-  color: #688b96;
-  font-weight: 500;
-  font-size: 11px;
-}
-.business-flow-launch-roles .ant-select {
-  min-width: 150px;
-  max-width: 220px;
-}
-.business-flow-launch-note {
-  color: #93a8b0;
-  font-size: 10px;
-  line-height: 1.85;
-  margin: 8px 0 15px;
-}
-.business-flow-launch-note.is-required {
-  color: #ac966c;
-}
-.business-flow-launch-panel > footer {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  justify-content: space-between;
-  border-top: 1px solid #e0eaeb;
-  margin-top: 17px;
-  padding-top: 15px;
-}
-.business-flow-launch-panel > footer > span {
-  color: #9aabb1;
-  font-size: 10px;
-  line-height: 1.8;
-  flex: 1;
-}
-.business-flow-launch-panel > footer .ant-btn-primary {
-  border-radius: 9px;
-  background: #4a7d87;
-  box-shadow: none;
-}
 @media (max-width: 600px) {
-  .business-flow-activity,
-  .business-flow-launch-panel {
-    padding: 14px;
-    border-radius: 11px;
+  .business-flow-activity {
+    padding: 14px 0;
   }
   .business-flow-activity-header {
     flex-wrap: wrap;
@@ -1203,13 +1076,6 @@
     flex-wrap: wrap;
   }
   .business-flow-human-decision .ant-btn {
-    width: 100%;
-  }
-  .business-flow-launch-panel > footer {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .business-flow-launch-panel > footer .ant-btn-primary {
     width: 100%;
   }
   .business-flow-activity-actions .ant-space {

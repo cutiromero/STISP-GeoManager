@@ -867,6 +867,7 @@ function AgentWorkspace({
   }, [runs.length]);
 
   const open = async (c: AgentConversation) => {
+    setBusinessLaunch(undefined);
     clearLogicUploads();
     const seq = ++sequence.current;
     setHistoryLoading(c);
@@ -941,6 +942,7 @@ function AgentWorkspace({
   useEffect(() => {
     if (
       !canUse ||
+      businessLaunch ||
       demoLaunch.current ||
       restoredConversation.current ||
       current ||
@@ -959,7 +961,7 @@ function AgentWorkspace({
     const preferred =
       conversations.find((item) => item.id === preferredId) ?? conversations[0];
     if (preferred) void open(preferred);
-  }, [canUse, conversationStorageKey, conversations, current]);
+  }, [canUse, businessLaunch, conversationStorageKey, conversations, current]);
   const send = async (text = prompt, demoScenario?: AgentResearchScenario) => {
     if (
       !canUse ||
@@ -1508,7 +1510,10 @@ function AgentWorkspace({
             onChange={layout.setSidebar}
           />
         )}
-        <main className="agent-main" inert={showHistory && layout.narrow}>
+        <main
+          className={`agent-main${businessLaunch && canUse ? " is-preparing-flow" : ""}`}
+          inert={showHistory && layout.narrow}
+        >
           <div className="agent-toolbar">
             <div className="agent-toolbar-heading">
               <Button
@@ -1567,6 +1572,7 @@ function AgentWorkspace({
             <BusinessFlowLaunch
               launch={businessLaunch}
               model={model}
+              compact={layout.narrow}
               conversationId={
                 current?.archived || taskLocked ? undefined : current?.id
               }
@@ -1695,6 +1701,7 @@ function AgentWorkspace({
           )}
           <div
             className="agent-messages"
+            hidden={Boolean(businessLaunch && canUse)}
             ref={viewport}
             onScroll={(event) => {
               const box = event.currentTarget;
@@ -2005,7 +2012,7 @@ function AgentWorkspace({
               </section>
             ))}
           </div>
-          {showLatest && runs.length > 0 && (
+          {!businessLaunch && showLatest && runs.length > 0 && (
             <div className="agent-latest-bar">
               <Button
                 icon={<ArrowDownOutlined />}
@@ -2020,7 +2027,7 @@ function AgentWorkspace({
               </Button>
             </div>
           )}
-          {canUse && (
+          {canUse && !businessLaunch && (
             <div className="agent-composer">
               <AgentResizeHandle
                 orientation="horizontal"

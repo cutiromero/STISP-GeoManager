@@ -183,6 +183,7 @@ class ApiError extends Error {
 
 type SdkModule = typeof sdkTypes;
 const resourceReads = new ReadFlights();
+let readRecoverySequence = 0;
 
 async function readAwareFetch(
   load: () => Promise<Response>,
@@ -502,6 +503,7 @@ export async function requestJson<T>(
     ? () => options.signal?.throwIfAborted()
     : requestScope();
   const headers = new Headers();
+  headers.set("Accept", "application/json");
   headers.set("Accept-Language", currentLocale());
   const entry = typeof document === "undefined" ? "" : moduleEntry(document);
   if (entry) headers.set("X-App-Entry", entry);
@@ -558,64 +560,93 @@ export async function requestJson<T>(
     check();
     if (!independent)
       observeResponseIdentity(response.headers.get("X-STISP-Session"));
-    let data: unknown;
-    try {
-      data = await parseResponseBody(response);
-    } catch (error) {
+    const decode = async (current: Response, requestedUrl: string) => {
+      let data: unknown;
+      try {
+        data = await parseResponseBody(current);
+      } catch (error) {
+        check();
+        if (isAbortError(error)) throw error;
+        recordResponseDiagnostic(
+          requestedUrl,
+          current,
+          undefined,
+          "invalid_json",
+        );
+        if (!current.ok)
+          throw new ApiError(
+            errorMessage(null, current.status),
+            current.status,
+          );
+        throw new ResponseFormatError("response: invalid JSON");
+      }
       check();
-      if (isAbortError(error)) throw error;
-      recordResponseDiagnostic(
-        request.url,
-        response,
-        undefined,
-        "invalid_json",
-      );
-      if (!response.ok)
+      if (!current.ok) {
+        notifyAuthorizationFailure(current.status, requestedUrl);
+        recordResponseDiagnostic(
+          requestedUrl,
+          current,
+          data,
+          `http:${current.status}`,
+        );
         throw new ApiError(
-          errorMessage(null, response.status),
-          response.status,
+          errorMessage(data, current.status),
+          current.status,
+          data,
         );
-      throw new ResponseFormatError("response: invalid JSON");
-    }
-    check();
-    if (!response.ok) {
-      notifyAuthorizationFailure(response.status, request.url);
-      recordResponseDiagnostic(
-        request.url,
-        response,
-        data,
-        `http:${response.status}`,
-      );
-      throw new ApiError(
-        errorMessage(data, response.status),
-        response.status,
-        data,
-      );
-    }
+      }
+      try {
+        if (
+          current.status !== 204 &&
+          !jsonContentType(current.headers.get("Content-Type"))
+        )
+          throw new ResponseFormatError(
+            "unexpected_content_type",
+            "平台接口返回了非JSON内容，请重试。",
+          );
+        if (current.status !== 204)
+          validateApiContract(request.url, data, method);
+        options.validate?.(data);
+      } catch (error) {
+        recordResponseDiagnostic(
+          requestedUrl,
+          current,
+          data,
+          error instanceof ResponseFormatError
+            ? error.issue
+            : "invalid_structure",
+        );
+        throw error;
+      }
+      return data as T;
+    };
     try {
-      if (
-        response.status !== 204 &&
-        !jsonContentType(response.headers.get("Content-Type"))
-      )
-        throw new ResponseFormatError(
-          "unexpected_content_type",
-          "平台接口返回了非JSON内容，请重试。",
-        );
-      if (response.status !== 204)
-        validateApiContract(request.url, data, method);
-      options.validate?.(data);
+      return await decode(response, request.url);
     } catch (error) {
-      recordResponseDiagnostic(
-        request.url,
-        response,
-        data,
-        error instanceof ResponseFormatError
-          ? error.issue
-          : "invalid_structure",
+      // Recover an occasional HTML/invalid-JSON transport reply once. Mutations,
+      // permission failures and malformed JSON contracts are never replayed.
+      if (
+        method !== "GET" ||
+        !response.ok ||
+        !(error instanceof ResponseFormatError) ||
+        !["unexpected_content_type", "response: invalid JSON"].includes(
+          error.issue,
+        )
+      )
+        throw error;
+      check();
+      const retryUrl = new URL(request.url);
+      retryUrl.searchParams.set(
+        "_stisp_read",
+        `${Date.now().toString(36)}-${++readRecoverySequence}`,
       );
-      throw error;
+      const retry = new Request(retryUrl, init);
+      response = await readAwareFetch(() => fetch(retry), method, request.url);
+      check();
+      if (!independent)
+        observeResponseIdentity(response.headers.get("X-STISP-Session"));
+      return await decode(response, retry.url);
     }
-    return data as T;
   } finally {
     cancellation.dispose();
   }

@@ -13,6 +13,7 @@ import { page } from "vitest/browser";
 import { computeApi } from "../api/compute";
 import { computeVersion } from "../agent/computeFlow.testFixtures";
 import { businessFlowsApi } from "../api/businessFlows";
+import { ApiError } from "../api/client";
 import type { BusinessFlowNodeState } from "../api/generated/types.gen";
 import platformStyles from "../styles.css?inline";
 import BusinessFlowsPage from "./BusinessFlowsPage";
@@ -84,6 +85,35 @@ function show() {
     </>,
   );
 }
+
+it("keeps the diagram and goal after a transient refresh, and clears them after revoked access", async () => {
+  show();
+  await screen.findByRole("heading", { name: geologyFlow.name });
+  const goal = screen.getByRole("textbox", { name: "这次希望完成什么任务" });
+  fireEvent.change(goal, { target: { value: "本次分析要求" } });
+  vi.mocked(businessFlowsApi.detail).mockRejectedValueOnce(
+    new TypeError("temporary network error"),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "刷新业务流", exact: true }),
+  );
+  await screen.findByText("暂时无法更新，已保留当前流程");
+  expect(screen.getByRole("heading", { name: geologyFlow.name })).toBeVisible();
+  expect(goal).toHaveValue("本次分析要求");
+  vi.mocked(businessFlowsApi.detail).mockRejectedValueOnce(
+    new ApiError("项目访问已撤销", 403),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "重新加载", exact: true }),
+  );
+  await screen.findByText("项目访问已撤销");
+  expect(
+    screen.queryByRole("heading", { name: geologyFlow.name }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "开始业务流", exact: true }),
+  ).not.toBeInTheDocument();
+});
 beforeEach(() => {
   session.project = "3";
   session.canAgent = true;

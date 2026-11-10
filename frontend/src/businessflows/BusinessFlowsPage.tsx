@@ -7,6 +7,7 @@ import {
   MenuOutlined,
   PlusOutlined,
   RightOutlined,
+  ReloadOutlined,
   RobotOutlined,
   SearchOutlined,
   UserOutlined,
@@ -27,6 +28,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import WorkspaceHeader from "../components/WorkspaceHeader";
+import { ApiError } from "../api/client";
+import { downloadResponseDiagnostics } from "../api/responseDiagnostics";
 import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
 import { useAgentBootstrapState } from "../agent/useAgentBootstrap";
@@ -240,12 +243,14 @@ export default function BusinessFlowsPage() {
     }
   };
   useEffect(() => {
-    setDetail(null);
+    if (detailScope !== scope || detailValue?.flow.id !== selectedId) {
+      setDetail(null);
+      setGoal("");
+      setNodeId(undefined);
+    }
     setDetailScope(scope);
     setDetailLoading(false);
     setDetailError("");
-    setGoal("");
-    setNodeId(undefined);
     if (selectedId === undefined) return;
     const controller = new AbortController();
     setDetailLoading(true);
@@ -256,10 +261,16 @@ export default function BusinessFlowsPage() {
           setDetail(result);
       })
       .catch((error) => {
-        if (!controller.signal.aborted && currentScope.current === scope)
+        if (!controller.signal.aborted && currentScope.current === scope) {
+          if (
+            error instanceof ApiError &&
+            [401, 403, 404].includes(error.status)
+          )
+            setDetail(null);
           setDetailError(
             error instanceof Error ? error.message : "无法读取业务流详情",
           );
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted && currentScope.current === scope)
@@ -469,11 +480,11 @@ export default function BusinessFlowsPage() {
       <div className="business-flows-workspace">
         {catalog}
         <main className="business-flow-main">
-          {detailLoading ? (
+          {detailLoading && !detail ? (
             <div className="business-flow-loading">
               <Spin />
             </div>
-          ) : detailError ? (
+          ) : detailError && !detail ? (
             <div className="business-flow-empty-state">
               <Alert
                 showIcon
@@ -481,16 +492,38 @@ export default function BusinessFlowsPage() {
                 title={ui("业务流暂时无法打开", "Flow could not be opened")}
                 description={detailError}
                 action={
-                  <Button
-                    onClick={() => setDetailAttempt((value) => value + 1)}
-                  >
-                    {ui("重新加载", "Retry")}
-                  </Button>
+                  <Space wrap>
+                    <Button
+                      onClick={() => setDetailAttempt((value) => value + 1)}
+                    >
+                      {ui("重新加载", "Retry")}
+                    </Button>
+                    <Button type="text" onClick={downloadResponseDiagnostics}>
+                      {ui("下载诊断", "Download diagnostics")}
+                    </Button>
+                  </Space>
                 }
               />
             </div>
           ) : detail && version && spec ? (
             <>
+              {detailError && (
+                <Alert
+                  type="warning"
+                  title={ui(
+                    "暂时无法更新，已保留当前流程",
+                    "Update unavailable; current flow retained",
+                  )}
+                  description={detailError}
+                  action={
+                    <Button
+                      onClick={() => setDetailAttempt((value) => value + 1)}
+                    >
+                      {ui("重新加载", "Retry")}
+                    </Button>
+                  }
+                />
+              )}
               <header className="business-flow-main-header">
                 <div className="business-flow-topline">
                   <Space>
@@ -509,6 +542,14 @@ export default function BusinessFlowsPage() {
                     </span>
                   </Space>
                   <Space wrap>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<ReloadOutlined />}
+                      aria-label={ui("刷新业务流", "Refresh flow")}
+                      loading={detailLoading}
+                      onClick={() => setDetailAttempt((value) => value + 1)}
+                    />
                     <Tag variant="filled">{ui("已发布", "Published")}</Tag>
                     <Select
                       size="small"

@@ -184,6 +184,10 @@ export function readableBusinessFlowEvents(
         "requesting",
         "responding",
         "validating",
+        "completed",
+        "accepted",
+        "changes_requested",
+        "progress",
       ].includes(event.kind)
     )
       continue;
@@ -937,6 +941,7 @@ function Actor({
   flowStatus: string;
 }) {
   const ui = useComputeText();
+  const [answerExpanded, setAnswerExpanded] = useState(false);
   const interrupted =
     ["paused", "cancelled", "failed", "interrupted"].includes(flowStatus) &&
     [
@@ -998,7 +1003,25 @@ function Actor({
         )}
         {value.answer && (
           <div className="business-flow-actor-answer">
-            <SafeMarkdown text={value.answer} />
+            <SafeMarkdown
+              text={
+                !answerExpanded && value.answer.length > 600
+                  ? value.answer.slice(0, 420) + "…"
+                  : value.answer
+              }
+            />
+            {value.answer.length > 600 && (
+              <Button
+                type="link"
+                size="small"
+                aria-expanded={answerExpanded}
+                onClick={() => setAnswerExpanded((value) => !value)}
+              >
+                {answerExpanded
+                  ? ui("收起分析", "Collapse analysis")
+                  : ui("展开完整分析", "Read full analysis")}
+              </Button>
+            )}
           </div>
         )}
         {(value.reason || value.feedback) && (

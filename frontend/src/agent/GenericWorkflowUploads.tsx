@@ -1,6 +1,8 @@
 import {
   Alert,
   Button,
+  Checkbox,
+  Input,
   Modal,
   Pagination,
   Select,
@@ -9,6 +11,13 @@ import {
   Typography,
   Upload,
 } from "antd";
+import {
+  DatabaseOutlined,
+  DeleteOutlined,
+  FileOutlined,
+  PlusOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
 import {
   useEffect,
   useRef,
@@ -68,6 +77,7 @@ export default function GenericWorkflowUploads({
   onClose,
   onRestored,
   onSelectionChange,
+  presentation = "default",
 }: {
   batchId: string;
   model: string;
@@ -80,7 +90,9 @@ export default function GenericWorkflowUploads({
   onClose?: () => void;
   onRestored?: (result: AgentLogicConfigurationResult) => void;
   onSelectionChange?: () => void;
+  presentation?: "default" | "business-flow";
 }) {
+  const polished = presentation === "business-flow";
   const [items, setItems] = useState<AgentWorkflowUpload[]>([]);
   useEffect(() => onCountChange?.(items.length), [items, onCountChange]);
   const [uploading, setUploading] = useState<string>();
@@ -335,11 +347,32 @@ export default function GenericWorkflowUploads({
   };
   return (
     <section
-      className={`agent-demo-form${uploadOnly ? " agent-logic-intake" : ""}`}
+      className={
+        polished
+          ? "flow-materials"
+          : `agent-demo-form${uploadOnly ? " agent-logic-intake" : ""}`
+      }
       aria-label="上传本次资料"
     >
-      <div className="agent-demo-form-heading">
-        <strong>{uploadOnly ? "逻辑推理资料" : "上传本次资料"}</strong>
+      <div
+        className={
+          polished ? "flow-materials-heading" : "agent-demo-form-heading"
+        }
+      >
+        {polished ? (
+          <div>
+            <strong>
+              {polished
+                ? "任务资料"
+                : uploadOnly
+                  ? "逻辑推理资料"
+                  : "上传本次资料"}
+            </strong>
+            {polished && <span>{items.length} 份已选</span>}
+          </div>
+        ) : (
+          <strong>{uploadOnly ? "逻辑推理资料" : "上传本次资料"}</strong>
+        )}
         {onClose && (
           <Button size="small" type="text" onClick={onClose}>
             收起
@@ -352,8 +385,10 @@ export default function GenericWorkflowUploads({
         </p>
       )}
       {restoreWarning && <Alert type="warning" title={restoreWarning} />}
-      <Space wrap>
+      <Space wrap className={polished ? "flow-materials-tools" : undefined}>
         <Button
+          icon={polished ? <PlusOutlined /> : undefined}
+          aria-label="选择系统数据"
           disabled={disabled || Boolean(uploading) || recognizing}
           onClick={() => setCatalogOpen(true)}
         >
@@ -370,7 +405,11 @@ export default function GenericWorkflowUploads({
               return false;
             }}
           >
-            <Button disabled={disabled || Boolean(uploading)}>
+            <Button
+              icon={polished ? <UploadOutlined /> : undefined}
+              aria-label="上传文件/ZIP"
+              disabled={disabled || Boolean(uploading)}
+            >
               上传文件/ZIP
             </Button>
           </Upload>
@@ -378,7 +417,8 @@ export default function GenericWorkflowUploads({
         {uploadOnly && items.length > 0 && (
           <Button
             size="small"
-            danger
+            danger={!polished}
+            type={polished ? "text" : "default"}
             disabled={disabled || Boolean(uploading)}
             onClick={async () => {
               for (const item of items) await remove(item);
@@ -391,6 +431,8 @@ export default function GenericWorkflowUploads({
       <Modal
         title="选择系统数据"
         open={catalogOpen}
+        width={polished ? 720 : undefined}
+        className={polished ? "flow-materials-picker" : undefined}
         onCancel={() => setCatalogOpen(false)}
         onOk={() => void addCatalog()}
         okText="加入本次任务"
@@ -399,7 +441,11 @@ export default function GenericWorkflowUploads({
           disabled: disabled || !catalogSelected.length || Boolean(uploading),
         }}
       >
-        <p>最近更新优先，共 {catalogTotal} 份。可搜索名称或说明，跨页选择。</p>
+        <p>
+          {polished
+            ? `从当前项目选择资料，已选 ${catalogSelected.length} 份`
+            : `最近更新优先，共 ${catalogTotal} 份。可搜索名称或说明，跨页选择。`}
+        </p>
         {catalogError && <Alert type="error" title={catalogError} />}
         <Select
           aria-label="按数据目录筛选"
@@ -416,46 +462,96 @@ export default function GenericWorkflowUploads({
             setCatalogPage(1);
           }}
         />
-        <Select
-          mode="multiple"
-          style={{ width: "100%" }}
-          aria-label="选择系统数据资源"
-          placeholder="搜索名称并勾选资料"
-          loading={catalogLoading}
-          filterOption={false}
-          showSearch={{
-            onSearch: (value) => {
-              setCatalogQuery(value);
-              setCatalogPage(1);
-            },
-          }}
-          value={catalogSelected}
-          labelRender={(option) =>
-            catalogNames.current.get(Number(option.value)) ?? option.label
-          }
-          optionRender={(option) => (
-            <div style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
-              {option.data.label}
+        {polished ? (
+          <>
+            <Input.Search
+              aria-label="搜索任务资料"
+              placeholder="搜索资料名称或说明"
+              allowClear
+              value={catalogQuery}
+              onChange={(event) => {
+                setCatalogQuery(event.target.value);
+                setCatalogPage(1);
+              }}
+            />
+            <div
+              className="flow-materials-candidates"
+              aria-busy={catalogLoading}
+            >
+              {catalogItems.map((item) => (
+                <Checkbox
+                  key={item.id}
+                  className="flow-materials-candidate"
+                  aria-label={`选择${item.name}`}
+                  checked={catalogSelected.includes(item.id)}
+                  disabled={
+                    disabled ||
+                    Boolean(uploading) ||
+                    items.some((entry) => entry.resourceId === item.id)
+                  }
+                  onChange={(event) =>
+                    setCatalogSelected((previous) =>
+                      event.target.checked
+                        ? [...new Set([...previous, item.id])]
+                        : previous.filter((id) => id !== item.id),
+                    )
+                  }
+                >
+                  <span>
+                    <strong>{item.name}</strong>
+                    <small>
+                      {kindLabels[item.dataType as keyof typeof kindLabels] ??
+                        item.dataType}{" "}
+                      · {item.directoryName || "未分组"}
+                    </small>
+                  </span>
+                </Checkbox>
+              ))}
+              {!catalogLoading && !catalogItems.length && <p>没有匹配的资料</p>}
             </div>
-          )}
-          onSelect={(value) =>
-            setCatalogSelected((current) =>
-              current.includes(value) ? current : [...current, value],
-            )
-          }
-          onDeselect={(value) =>
-            setCatalogSelected((current) =>
-              current.filter((item) => item !== value),
-            )
-          }
-          onClear={() => setCatalogSelected([])}
-          disabled={disabled || Boolean(uploading)}
-          options={catalogItems.map((item) => ({
-            value: item.id,
-            label: `${item.name}（${kindLabels[item.dataType as keyof typeof kindLabels] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}）`,
-            disabled: items.some((entry) => entry.resourceId === item.id),
-          }))}
-        />
+          </>
+        ) : (
+          <Select
+            mode="multiple"
+            style={{ width: "100%" }}
+            aria-label="选择系统数据资源"
+            placeholder="搜索名称并勾选资料"
+            loading={catalogLoading}
+            filterOption={false}
+            showSearch={{
+              onSearch: (value) => {
+                setCatalogQuery(value);
+                setCatalogPage(1);
+              },
+            }}
+            value={catalogSelected}
+            labelRender={(option) =>
+              catalogNames.current.get(Number(option.value)) ?? option.label
+            }
+            optionRender={(option) => (
+              <div style={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
+                {option.data.label}
+              </div>
+            )}
+            onSelect={(value) =>
+              setCatalogSelected((current) =>
+                current.includes(value) ? current : [...current, value],
+              )
+            }
+            onDeselect={(value) =>
+              setCatalogSelected((current) =>
+                current.filter((item) => item !== value),
+              )
+            }
+            onClear={() => setCatalogSelected([])}
+            disabled={disabled || Boolean(uploading)}
+            options={catalogItems.map((item) => ({
+              value: item.id,
+              label: `${item.name}（${kindLabels[item.dataType as keyof typeof kindLabels] ?? item.dataType} · ${item.directoryName || "未分组"} · 登记 ${item.createdAt?.slice(0, 10) ?? ""}）`,
+              disabled: items.some((entry) => entry.resourceId === item.id),
+            }))}
+          />
+        )}
         <Pagination
           size="small"
           current={catalogPage}
@@ -488,16 +584,27 @@ export default function GenericWorkflowUploads({
         <Typography.Text role="status">正在读取：{uploading}</Typography.Text>
       )}
       {error && <Alert type="error" showIcon title={error} />}
-      {recognizing && (
-        <Alert type="info" showIcon title="智能体正在识别资料角色…" />
-      )}
-      {suggestions && !recognizing && (
-        <Alert
-          type="success"
-          showIcon
-          title="智能体已识别资料角色，请核对后生成执行计划"
-        />
-      )}
+      {recognizing &&
+        (polished ? (
+          <p className="flow-materials-footnote" role="status">
+            AI 正在识别资料用途…
+          </p>
+        ) : (
+          <Alert type="info" showIcon title="智能体正在识别资料角色…" />
+        ))}
+      {suggestions &&
+        !recognizing &&
+        (polished ? (
+          <p className="flow-materials-footnote" role="status">
+            AI 已给出用途建议，可在列表中调整。
+          </p>
+        ) : (
+          <Alert
+            type="success"
+            showIcon
+            title="智能体已识别资料角色，请核对后生成执行计划"
+          />
+        ))}
       {!inputs.lithology &&
         suggestions?.questions.map((question) => (
           <Alert key={question} type="warning" title={question} />
@@ -509,37 +616,87 @@ export default function GenericWorkflowUploads({
           description="可重试识别或手动选择资料角色"
         />
       )}
-      {!uploadOnly && items.length > 0 && (
-        <Button
-          loading={recognizing}
-          disabled={disabled || Boolean(uploading)}
-          onClick={() => void recognize()}
-        >
-          {recognitionError ? "重试识别" : "识别资料角色"}
-        </Button>
+      {(!uploadOnly || polished) &&
+        items.length > 0 &&
+        (!polished || items.some((item) => !roleOf(item))) && (
+          <Button
+            loading={recognizing}
+            disabled={disabled || Boolean(uploading)}
+            onClick={() => void recognize()}
+          >
+            {recognitionError
+              ? "重试识别"
+              : polished
+                ? "AI 识别资料用途"
+                : "识别资料角色"}
+          </Button>
+        )}
+      {polished && items.length === 0 && !uploading && (
+        <div className="flow-materials-empty">
+          <FileOutlined />
+          <strong>添加本次分析要使用的资料</strong>
+          <p>可选择平台数据或上传文件，原始资料保持只读。</p>
+        </div>
       )}
-      <div className={uploadOnly ? "agent-logic-files" : undefined}>
+      {polished && items.length > 0 && (
+        <div className="flow-materials-columns">
+          <span>资料</span>
+          <span>用途</span>
+        </div>
+      )}
+      <div
+        className={
+          polished
+            ? "flow-materials-list"
+            : uploadOnly
+              ? "agent-logic-files"
+              : undefined
+        }
+      >
         {items.map((item) => {
           const role = roleOf(item);
           return (
-            <div key={item.id} className="agent-demo-fields">
+            <div
+              key={item.id}
+              className={polished ? "flow-materials-row" : "agent-demo-fields"}
+            >
+              {polished && (
+                <span className="flow-materials-file-icon">
+                  {item.source === "catalog" ? (
+                    <DatabaseOutlined />
+                  ) : (
+                    <FileOutlined />
+                  )}
+                </span>
+              )}
               <Space orientation="vertical" size={2} style={{ minWidth: 0 }}>
                 <Space size={6} wrap>
-                  <strong>{item.fileName}</strong>
-                  <Tag>
-                    {item.source === "catalog" ? "系统数据" : "上传资料"}
-                  </Tag>
-                  <Tag>{kindLabels[item.dataType]}</Tag>
-                  {uploadOnly && (
-                    <Tag>
-                      {genericRoles.find((entry) => entry.key === item.roleHint)
-                        ?.label || "发送后识别角色"}
-                    </Tag>
-                  )}
-                  {!uploadOnly && item.profile.crs && (
-                    <Tag>{item.profile.crs}</Tag>
+                  <strong title={item.fileName}>{item.fileName}</strong>
+                  {!polished && (
+                    <>
+                      <Tag>
+                        {item.source === "catalog" ? "系统数据" : "上传资料"}
+                      </Tag>
+                      <Tag>{kindLabels[item.dataType]}</Tag>
+                      {uploadOnly && (
+                        <Tag>
+                          {genericRoles.find(
+                            (entry) => entry.key === item.roleHint,
+                          )?.label || "发送后识别角色"}
+                        </Tag>
+                      )}
+                      {!uploadOnly && item.profile.crs && (
+                        <Tag>{item.profile.crs}</Tag>
+                      )}
+                    </>
                   )}
                 </Space>
+                {polished && (
+                  <small className="flow-materials-file-meta">
+                    {kindLabels[item.dataType]} ·{" "}
+                    {item.source === "catalog" ? "平台数据" : "本次上传"}
+                  </small>
+                )}
                 {!uploadOnly && (
                   <Typography.Text type="secondary">
                     {profileSummary(item)}
@@ -561,15 +718,15 @@ export default function GenericWorkflowUploads({
                   </Typography.Text>
                 ))}
               </Space>
-              {!uploadOnly && (
+              {(!uploadOnly || polished) && (
                 <label>
-                  <span>资料角色</span>
+                  <span>{polished ? "用途" : "资料角色"}</span>
                   <Select
                     aria-label={`${item.fileName}的资料角色`}
                     allowClear
                     disabled={disabled || recognizing || Boolean(uploading)}
                     value={role}
-                    placeholder="不使用"
+                    placeholder={polished ? "待指定" : "不使用"}
                     options={genericRoles
                       .filter(
                         (entry) =>
@@ -596,16 +753,25 @@ export default function GenericWorkflowUploads({
               )}
               <Button
                 size="small"
+                type={polished ? "text" : "default"}
+                icon={polished ? <DeleteOutlined /> : undefined}
+                aria-label={polished ? `移除${item.fileName}` : undefined}
                 disabled={disabled || recognizing || Boolean(uploading)}
                 onClick={() => void remove(item)}
               >
-                移除
+                {polished ? null : "移除"}
               </Button>
             </div>
           );
         })}
       </div>
-      {uploadOnly && items.length > 0 && (
+      {polished && (
+        <p className="flow-materials-footnote">
+          用途可由 AI
+          建议或手动指定，启动后会核对资料与字段。移除仅取消本次引用。
+        </p>
+      )}
+      {uploadOnly && !polished && items.length > 0 && (
         <Alert
           type="info"
           showIcon

@@ -1,9 +1,12 @@
 import {
   AuditOutlined,
+  BranchesOutlined,
   CloseOutlined,
   DatabaseOutlined,
+  DownOutlined,
   PlayCircleOutlined,
   RobotOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Input, Select, Spin, Tag } from "antd";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -28,6 +31,7 @@ import {
 import { useComputeText } from "../compute/ui";
 import { createUuid } from "../utils/uuid";
 import "./business-flows.css";
+import "./business-flow-launch.css";
 
 // Candidate reads are bounded metadata. Search is remote and shared by all roles.
 const CANDIDATE_SEARCH_DELAY_MS = 280;
@@ -47,12 +51,14 @@ export default function BusinessFlowLaunch({
   conversationId,
   onStarted,
   onCancel,
+  compact = false,
 }: {
   launch: BusinessFlowLaunchIntent;
   model: string;
   conversationId?: number;
   onStarted: (flow: BusinessFlowRun) => void | Promise<void>;
   onCancel: () => void;
+  compact?: boolean;
 }) {
   const ui = useComputeText();
   const { bootstrap } = useAgentBootstrapState();
@@ -67,6 +73,7 @@ export default function BusinessFlowLaunch({
   const [reviewer, setReviewer] = useState<string>();
   const [batchId, setBatchId] = useState(() => createUuid().replace(/-/g, ""));
   const [uploading, setUploading] = useState(false);
+  const [materialCount, setMaterialCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [resources, setResources] = useState<AgentResource[]>([]);
   const [resourceState, setResourceState] = useState<
@@ -408,11 +415,11 @@ export default function BusinessFlowLaunch({
     >
       <header>
         <span className="business-flow-launch-icon">
-          <RobotOutlined />
+          <BranchesOutlined />
         </span>
         <div>
           <small>
-            {ui("业务流", "BUSINESS FLOW")}
+            {ui("任务准备", "PREPARE TASK")}
             {version ? ` · v${version.version}` : ""}
           </small>
           <strong>{launch.title}</strong>
@@ -446,186 +453,269 @@ export default function BusinessFlowLaunch({
         />
       ) : version ? (
         <>
-          {error && <Alert type="error" showIcon title={error} />}
-          <label
-            className="business-flow-launch-field"
-            htmlFor="business-flow-launch-goal"
-          >
-            {ui("本次任务目标", "Task goal")}
-            <Input.TextArea
-              id="business-flow-launch-goal"
-              value={goal}
-              disabled={busy}
-              onChange={(event) => setGoal(event.target.value)}
-              maxLength={12000}
-              autoSize={{ minRows: 2, maxRows: 5 }}
-            />
-          </label>
-          <div className="business-flow-launch-roles">
-            <span>
-              <RobotOutlined />
-              {ui("执行智能体", "Executor")}
-              <strong>
-                {modelOptions.find((option) => option.value === model)?.label ||
-                  model ||
-                  ui("尚未选择模型", "No model selected")}
-              </strong>
-            </span>
-            {needsReview && (
-              <label>
-                <AuditOutlined />
-                {ui("独立审核智能体", "Independent reviewer")}
-                <Select
-                  aria-label={ui("审核模型", "Reviewer model")}
-                  value={reviewerModel || undefined}
-                  options={
-                    modelOptions.length
-                      ? modelOptions
-                      : model
-                        ? [{ value: model, label: model, disabled: false }]
-                        : []
-                  }
-                  disabled={busy}
-                  onChange={setReviewer}
-                />
-              </label>
-            )}
-          </div>
-          {needsReview && (
-            <p className="business-flow-launch-note">
-              {ui(
-                "审核使用独立的上下文和判断。可以复用同一模型，但不会继承执行智能体的批准权限，也不能代您作决定。",
-                "The reviewer uses an independent context and judgment. It may use the same model, but cannot inherit executor approvals or decide for you.",
-              )}
-            </p>
-          )}
-          {isLegacy ? (
-            <Suspense fallback={<Spin />}>
-              <GenericWorkflowUploads
-                batchId={batchId}
-                model={model}
-                inputs={inputs}
-                onInputsChange={setInputs}
-                onActivityChange={setUploading}
-                disabled={busy}
-                uploadOnly
-                onRestored={(result) => {
-                  if (result.configuration)
-                    setInputs(result.configuration.roles);
-                }}
-              />
-            </Suspense>
-          ) : version.definition.inputRequirements.length ? (
-            <div className="business-flow-launch-inputs">
-              {version.definition.inputRequirements.map((input) => (
-                <label className="business-flow-launch-field" key={input.key}>
-                  <span>
-                    <DatabaseOutlined />
-                    {input.label}
-                    {input.required && (
-                      <Tag variant="filled">{ui("必需", "Required")}</Tag>
-                    )}
-                  </span>
-                  <Select
-                    aria-label={`${input.label}：选择资料`}
-                    value={inputs[input.key]}
-                    showSearch={{
-                      filterOption: false,
-                      onSearch: searchCandidates,
-                      searchValue: openRole === input.key ? resourceSearch : "",
-                    }}
-                    open={openRole === input.key}
-                    labelRender={({ value, label }) =>
-                      candidateLabels.current.get(Number(value)) ??
-                      label ??
-                      ui("已选择资料", "Selected data")
-                    }
-                    allowClear={!input.required}
+          <div className="flow-launch-scroll">
+            <div className="flow-launch-grid">
+              <div className="flow-launch-form">
+                {error && <Alert type="error" showIcon title={error} />}
+                <label
+                  className="business-flow-launch-field"
+                  htmlFor="business-flow-launch-goal"
+                >
+                  {ui("本次任务目标", "Task goal")}
+                  <Input.TextArea
+                    id="business-flow-launch-goal"
+                    value={goal}
                     disabled={busy}
-                    loading={resourceState === "loading"}
-                    onOpenChange={(open) => openCandidates(input.key, open)}
-                    placeholder={ui(
-                      "输入名称搜索当前项目的授权资料",
-                      "Search authorized project data by name",
+                    onChange={(event) => setGoal(event.target.value)}
+                    maxLength={12000}
+                    autoSize={{ minRows: 2, maxRows: 5 }}
+                  />
+                </label>
+                <div className="business-flow-launch-roles">
+                  <span>
+                    <RobotOutlined />
+                    {ui("执行智能体", "Executor")}
+                    <strong>
+                      {modelOptions.find((option) => option.value === model)
+                        ?.label ||
+                        model ||
+                        ui("尚未选择模型", "No model selected")}
+                    </strong>
+                  </span>
+                  {needsReview && (
+                    <label>
+                      <AuditOutlined />
+                      {ui("独立审核智能体", "Independent reviewer")}
+                      <Select
+                        aria-label={ui("审核模型", "Reviewer model")}
+                        value={reviewerModel || undefined}
+                        options={
+                          modelOptions.length
+                            ? modelOptions
+                            : model
+                              ? [
+                                  {
+                                    value: model,
+                                    label: model,
+                                    disabled: false,
+                                  },
+                                ]
+                              : []
+                        }
+                        disabled={busy}
+                        onChange={setReviewer}
+                      />
+                    </label>
+                  )}
+                </div>
+                {needsReview && (
+                  <p className="business-flow-launch-note">
+                    {ui(
+                      "审核智能体独立检查结果；需要人工决定的节点仍由您确认。",
+                      "The reviewer checks results independently. Human decisions remain yours.",
                     )}
-                    options={resources
-                      .filter((resource) =>
-                        (input.dataTypes as readonly string[]).includes(
-                          resource.dataType,
-                        ),
-                      )
-                      .map((resource) => ({
-                        value: resource.id,
-                        label: resource.name,
-                      }))}
-                    notFoundContent={
-                      resourceState === "loading" ? (
-                        <Spin size="small" />
-                      ) : (
-                        resourceError || ui("暂无匹配资料", "No matching data")
-                      )
-                    }
-                    onChange={(value) =>
-                      setInputs((previous) => {
-                        const next = { ...previous };
-                        if (value === undefined) delete next[input.key];
-                        else next[input.key] = value;
-                        return next;
-                      })
+                  </p>
+                )}
+                {isLegacy ? (
+                  <Suspense fallback={<Spin />}>
+                    <GenericWorkflowUploads
+                      batchId={batchId}
+                      model={model}
+                      inputs={inputs}
+                      onInputsChange={setInputs}
+                      onActivityChange={setUploading}
+                      disabled={busy}
+                      uploadOnly
+                      presentation="business-flow"
+                      onCountChange={setMaterialCount}
+                      onRestored={(result) => {
+                        if (result.configuration)
+                          setInputs(result.configuration.roles);
+                      }}
+                    />
+                  </Suspense>
+                ) : version.definition.inputRequirements.length ? (
+                  <div className="business-flow-launch-inputs">
+                    <h3>{ui("任务资料", "Task data")}</h3>
+                    {version.definition.inputRequirements.map((input) => (
+                      <label
+                        className="business-flow-launch-field"
+                        key={input.key}
+                      >
+                        <span>
+                          <DatabaseOutlined />
+                          {input.label}
+                          {input.required && (
+                            <Tag variant="filled">{ui("必需", "Required")}</Tag>
+                          )}
+                        </span>
+                        <Select
+                          aria-label={`${input.label}：选择资料`}
+                          value={inputs[input.key]}
+                          showSearch={{
+                            filterOption: false,
+                            onSearch: searchCandidates,
+                            searchValue:
+                              openRole === input.key ? resourceSearch : "",
+                          }}
+                          open={openRole === input.key}
+                          labelRender={({ value, label }) =>
+                            candidateLabels.current.get(Number(value)) ??
+                            label ??
+                            ui("已选择资料", "Selected data")
+                          }
+                          allowClear={!input.required}
+                          disabled={busy}
+                          loading={resourceState === "loading"}
+                          onOpenChange={(open) =>
+                            openCandidates(input.key, open)
+                          }
+                          placeholder={ui(
+                            "输入名称搜索当前项目的授权资料",
+                            "Search authorized project data by name",
+                          )}
+                          options={resources
+                            .filter((resource) =>
+                              (input.dataTypes as readonly string[]).includes(
+                                resource.dataType,
+                              ),
+                            )
+                            .map((resource) => ({
+                              value: resource.id,
+                              label: resource.name,
+                            }))}
+                          notFoundContent={
+                            resourceState === "loading" ? (
+                              <Spin size="small" />
+                            ) : (
+                              resourceError ||
+                              ui("暂无匹配资料", "No matching data")
+                            )
+                          }
+                          onChange={(value) =>
+                            setInputs((previous) => {
+                              const next = { ...previous };
+                              if (value === undefined) delete next[input.key];
+                              else next[input.key] = value;
+                              return next;
+                            })
+                          }
+                        />
+                        <small>
+                          {input.description}
+                          {input.requiredFields.length
+                            ? ` ${ui("启动时核对字段：", "Fields checked on start: ")}${input.requiredFields.join("、")}`
+                            : ""}
+                        </small>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="business-flow-launch-note">
+                    {ui(
+                      "本流程无需预先绑定固定资料。",
+                      "This flow does not require fixed input bindings.",
+                    )}
+                  </p>
+                )}
+                {resourceError && (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    title={resourceError}
+                    action={
+                      <Button size="small" onClick={retryCandidates}>
+                        {ui("重试读取资料", "Retry data")}
+                      </Button>
                     }
                   />
-                  <small>
-                    {input.description}
-                    {input.requiredFields.length
-                      ? ` ${ui("启动时核对字段：", "Fields checked on start: ")}${input.requiredFields.join("、")}`
-                      : ""}
-                  </small>
-                </label>
-              ))}
+                )}
+                {missing.length > 0 && (
+                  <p className="business-flow-launch-note is-required">
+                    {ui("请补齐必需资料：", "Required inputs: ")}
+                    {missing.map((input) => input.label).join("、")}
+                  </p>
+                )}
+                {!bootstrap?.workerOnline && (
+                  <Alert
+                    type="info"
+                    showIcon
+                    title={ui(
+                      "执行服务正在连接，已有资料选择会保留。",
+                      "Connecting to the executor. Your input choices are retained.",
+                    )}
+                  />
+                )}
+              </div>
+              <aside
+                className="flow-launch-outline"
+                aria-label={ui("本次执行路径", "Execution path")}
+              >
+                <details open={!compact}>
+                  <summary>
+                    {ui("执行路径", "Execution path")}
+                    <span>
+                      {version.definition.nodes.length} {ui("个节点", "nodes")}{" "}
+                      <DownOutlined />
+                    </span>
+                  </summary>
+                  <ol>
+                    {version.definition.nodes.map((node, index) => (
+                      <li key={node.id}>
+                        <span className="flow-launch-node-number">
+                          {index + 1}
+                        </span>
+                        <div>
+                          <strong>{node.title}</strong>
+                          {(node.review.ai || node.review.human) && (
+                            <small>
+                              {node.review.ai && (
+                                <span>
+                                  <AuditOutlined />{" "}
+                                  {ui("独立审核", "AI review")}
+                                </span>
+                              )}
+                              {node.review.human && (
+                                <span>
+                                  <UserOutlined />{" "}
+                                  {ui("人工决定", "Human decision")}
+                                </span>
+                              )}
+                            </small>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+                <p>
+                  {ui(
+                    "按发布版本执行，所有结果与审核意见保留在同一任务中。",
+                    "Execution follows this version. Results and reviews stay in one task.",
+                  )}
+                </p>
+              </aside>
             </div>
-          ) : (
-            <p className="business-flow-launch-note">
-              {ui(
-                "本流程无需预先绑定固定资料。",
-                "This flow does not require fixed input bindings.",
-              )}
-            </p>
-          )}
-          {resourceError && (
-            <Alert
-              type="warning"
-              showIcon
-              title={resourceError}
-              action={
-                <Button size="small" onClick={retryCandidates}>
-                  {ui("重试读取资料", "Retry data")}
-                </Button>
-              }
-            />
-          )}
-          {missing.length > 0 && (
-            <p className="business-flow-launch-note is-required">
-              {ui("请补齐必需资料：", "Required inputs: ")}
-              {missing.map((input) => input.label).join("、")}
-            </p>
-          )}
-          {!bootstrap?.workerOnline && (
-            <Alert
-              type="info"
-              showIcon
-              title={ui(
-                "执行服务正在连接，已有资料选择会保留。",
-                "Connecting to the executor. Your input choices are retained.",
-              )}
-            />
-          )}
+          </div>
           <footer>
             <span>
               {ui(
-                "按已发布版本执行，审核与人工节点遵循流程定义。",
-                "Execution follows the published version, including its review and human gates.",
+                uploading
+                  ? "正在准备资料…"
+                  : isLegacy
+                    ? `已选 ${materialCount} 份资料`
+                    : `已绑定 ${Object.keys(inputs).length} 份资料`,
+                uploading
+                  ? "Preparing data…"
+                  : `${isLegacy ? materialCount : Object.keys(inputs).length} data sources selected`,
               )}
             </span>
+            <Button
+              disabled={busy}
+              onClick={() => callbacks.current.onCancel()}
+            >
+              {ui("返回对话", "Back to conversation")}
+            </Button>
             <Button
               type="primary"
               icon={<PlayCircleOutlined />}
