@@ -11,6 +11,8 @@ $PYTHON tools/release/release.py inspect --execute
 $PYTHON tools/release/release.py fast --execute
 ```
 
+前端构建会调用仓库里的 Python 脚本；工具把运行自身的解释器所在目录放在构建环境 `PATH` 的最前面，因此必须用上面的项目解释器运行。候选端口由本机配置 `[candidate].port` 指定，须为服务器上空闲的端口。
+
 | 命令 | 用途 |
 | --- | --- |
 | `inspect` | 正式根、SHA、版本、四类进程、队列、磁盘、双锁，以及本机 Git 差异 |

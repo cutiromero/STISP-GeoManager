@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import time
 import tomllib
@@ -404,7 +405,16 @@ def package_source(
                             stderr=subprocess.STDOUT,
                             check=True,
                             timeout=config["local"]["buildSeconds"],
-                            env={**os.environ, **BUILD_ENVIRONMENT},
+                            env={
+                                **os.environ,
+                                **BUILD_ENVIRONMENT,
+                                "PATH": os.pathsep.join(
+                                    [
+                                        str(Path(sys.executable).parent),
+                                        os.environ.get("PATH", ""),
+                                    ]
+                                ),
+                            },
                         )
                 finally:
                     (root / "frontend/node_modules").unlink()
