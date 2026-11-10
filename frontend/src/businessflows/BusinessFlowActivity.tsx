@@ -32,6 +32,7 @@ import ThinkingStream from "../agent/ThinkingStream";
 import SafeMarkdown from "../agent/SafeMarkdown";
 import FieldMappingReview from "../agent/FieldMappingReview";
 import BusinessFlowNodeOutputs from "./BusinessFlowNodeOutputs";
+import BusinessFlowInputPreparation from "./BusinessFlowInputPreparation";
 import BusinessFlowGraph from "./BusinessFlowGraph";
 import {
   businessFlowProgress,
@@ -214,7 +215,18 @@ export default function BusinessFlowActivity({
       node.reviewer.status === "unavailable",
   );
   const unavailable = controlOnly || accessBlocked;
+  const preparationQuestion =
+    flow.inputPreparation?.items.some(
+      (item) => item.status === "needs_clarification",
+    ) ?? false;
+  const preparingInputs =
+    flow.inputPreparation &&
+    !flow.inputPreparation.ready &&
+    flow.inputPreparation.items.some(
+      (item) => !["direct", "ready"].includes(item.status),
+    );
   const needsHuman = Boolean(
+    !preparationQuestion &&
     flow.status !== "paused" &&
     current?.human.required &&
     current.human.status === "pending" &&
@@ -438,7 +450,9 @@ export default function BusinessFlowActivity({
                   : undefined
           }
         >
-          {statusLabels[flow.status] ?? flow.status}
+          {preparationQuestion
+            ? ui("需要补充资料说明", "Input clarification needed")
+            : (statusLabels[flow.status] ?? flow.status)}
         </Tag>
       </header>
       <div className="business-flow-activity-progress">
@@ -478,7 +492,14 @@ export default function BusinessFlowActivity({
           }
         />
       )}
-      {!unavailable && current && (
+      {!unavailable && (
+        <BusinessFlowInputPreparation
+          flow={flow}
+          onChanged={accept}
+          onAccessBlocked={() => setAccessBlocked(true)}
+        />
+      )}
+      {!unavailable && current && !preparingInputs && (
         <div className="business-flow-activity-current">
           <div className="business-flow-current-title">
             <span>

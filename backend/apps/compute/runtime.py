@@ -8,6 +8,7 @@ started in a short-lived child process using the configured Python runtime.
 
 import hashlib
 import importlib.metadata
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ import sys
 import tarfile
 import threading
 import time
+from functools import lru_cache
 
 from django.conf import settings
 from .config import config
@@ -35,7 +37,26 @@ NATIVE_PACKAGES = (
 )
 
 
-def _failure_message(status):
+def _failure_message(status, *, scripted=False):
+    if scripted:
+        details = status.get("scriptDiagnostics")
+        if isinstance(details, dict) and set(details) == {
+            "errorType",
+            "message",
+            "line",
+        }:
+            kind, message, line = (
+                details[key] for key in ("errorType", "message", "line")
+            )
+            if (
+                isinstance(kind, str)
+                and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,63}", kind)
+                and isinstance(message, str)
+                and len(message) <= 600
+                and "\x00" not in message
+                and (line is None or type(line) is int and 1 <= line <= 16000)
+            ):
+                return "适配脚本执行失败：" + json.dumps(details, ensure_ascii=False)
     generic = "算法运行失败，请检查输入条件、参数和算法实现；可在修正后重试"
     error_type = status.get("error_type", "")
     detail = status.get("error_detail", "")
@@ -107,7 +128,39 @@ def _native_state():
         "imageDigest": digest,
         "detail": "本机进程计算环境就绪",
         "packages": identity["packages"],
+        "scriptIsolation": script_isolation_status(),
     }
+
+
+@lru_cache(maxsize=4)
+def _script_probe(path, identity):
+    spec = importlib.util.spec_from_file_location("platform_script_sandbox_probe", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.probe()
+
+
+def script_isolation_status():
+    if config().mode != "native":
+        return {
+            "available": False,
+            "reason": "当前部署未启用受限脚本解释器",
+            "policyVersion": 1,
+        }
+    path = settings.PROGRAM_ROOT / "deploy/compute/script_sandbox.py"
+    if not path.is_file():
+        return {
+            "available": False,
+            "reason": "受限脚本解释器尚未部署",
+            "policyVersion": 1,
+        }
+    stat = path.stat()
+    try:
+        return dict(
+            _script_probe(str(path), (stat.st_ino, stat.st_size, stat.st_mtime_ns))
+        )
+    except (ImportError, OSError, RuntimeError):
+        return {"available": False, "reason": "受限脚本隔离未就绪", "policyVersion": 1}
 
 
 def inspect_runtime():
@@ -266,6 +319,16 @@ def _execute_native(attempt, package, inputs, destination, manifest, heartbeat):
     runtime = inspect_runtime()
     if not runtime["ready"]:
         raise ComputeError(runtime["detail"], 503)
+    scripted = manifest["runtime"] == "python-data-script-v1"
+    runner = (
+        settings.PROGRAM_ROOT
+        / "deploy/compute"
+        / ("script_runner.py" if scripted else "runner.py")
+    )
+    if scripted:
+        isolation = script_isolation_status()
+        if not isolation["available"] or not runner.is_file():
+            raise ComputeError(isolation.get("reason") or "受限脚本运行器尚未就绪", 503)
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", attempt.runtime_digest):
         raise ComputeError("算法版本尚未绑定本机进程运行环境", 503)
     status_path = destination / "__platform_status.json"
@@ -276,7 +339,7 @@ def _execute_native(attempt, package, inputs, destination, manifest, heartbeat):
     command = [
         cfg.interpreter,
         "-I",
-        str(settings.PROGRAM_ROOT / "deploy" / "compute" / "runner.py"),
+        str(runner),
         "--algorithm-dir",
         str(package.resolve()),
         "--input-dir",
@@ -315,7 +378,7 @@ def _execute_native(attempt, package, inputs, destination, manifest, heartbeat):
                 except ValueError as exc:
                     raise ComputeError("算法返回的状态信息不合法") from exc
                 if status.get("status") != "succeeded":
-                    raise ComputeError(_failure_message(status))
+                    raise ComputeError(_failure_message(status, scripted=scripted))
                 break
             if process.poll() is not None:
                 raise ComputeError("计算进程提前退出，可能超出内存限制或算法异常")
@@ -334,6 +397,8 @@ def execute(attempt, package, inputs, destination, manifest, heartbeat):
         return _execute_native(
             attempt, package, inputs, destination, manifest, heartbeat
         )
+    if manifest["runtime"] == "python-data-script-v1":
+        raise ComputeError("当前运行环境未配置受限数据脚本；未降级为普通算法执行", 503)
     runtime = inspect_runtime()
     if not runtime["ready"]:
         raise ComputeError(runtime["detail"], 503)

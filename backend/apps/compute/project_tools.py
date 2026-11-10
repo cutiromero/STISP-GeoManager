@@ -44,9 +44,10 @@ def topic_algorithms(query, selected_id):
     query = query.alias(
         _input_adapter=Exists(
             AlgorithmVersion.objects.filter(
+                Q(manifest__inputAdapter__isnull=False)
+                | Q(manifest__inputScriptBridge__isnull=False),
                 algorithm_id=OuterRef("pk"),
                 status="published",
-                manifest__inputAdapter__isnull=False,
             )
         )
     )

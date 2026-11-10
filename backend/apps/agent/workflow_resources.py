@@ -91,6 +91,103 @@ def _workflow_input_ids(workflow):
     return values
 
 
+def authorize_workflow_resources(user, policy, identities, workflow):
+    """Batch the same live ACL and provenance checks used by the single resolver."""
+    from .models import AgentWorkflow, WorkflowUpload
+    from .resource_discovery import (
+        acl_resources,
+        discover_resources,
+        _validate_identity,
+    )
+    from apps.compute.models import ComputeImport
+
+    selected = set(identities)
+    if not selected:
+        return
+    for identity in selected:
+        _validate_identity(identity)
+    _check_scope(user, workflow)
+    if not AgentWorkflow.objects.filter(
+        pk=workflow.pk, owner=user, project_tag_id=workflow.project_tag_id
+    ).exists():
+        raise PermissionDenied("科研任务不存在或已不可用")
+    resources = (
+        acl_resources(user, policy, selected)
+        .only("id", "source", "owner_only", "maintainer_id")
+        .in_bulk()
+    )
+    if set(resources) != selected:
+        raise PermissionDenied("资源不存在、已失效或无权访问")
+    inputs = _workflow_input_ids(workflow)
+    allowed = set()
+    for identity, resource in resources.items():
+        if (
+            identity in inputs
+            and resource.owner_only
+            and resource.maintainer_id == workflow.owner_id
+        ):
+            if any(
+                resource.source == prefix + str(workflow.pk)
+                or resource.source.startswith(prefix + str(workflow.pk) + ":")
+                for prefix in PRIVATE_SOURCE_PREFIXES
+            ):
+                allowed.add(identity)
+    remaining = selected - allowed
+    if remaining:
+        task_ids = workflow.steps.exclude(compute_task_id=None).values(
+            "compute_task_id"
+        )
+        allowed.update(
+            ComputeImport.objects.filter(
+                resource_id__in=remaining,
+                status="ready",
+                output__task__status="succeeded",
+                output__task__trial=False,
+                output__task__owner_id=workflow.owner_id,
+                output__task__project_tag_id=workflow.project_tag_id,
+                output__task_id__in=task_ids,
+            ).values_list("resource_id", flat=True)
+        )
+    remaining = selected - allowed
+    if remaining and workflow.plan.get("uploadBatchId"):
+        allowed.update(
+            WorkflowUpload.objects.filter(
+                workflow=workflow,
+                owner=user,
+                project_tag_id=workflow.project_tag_id,
+                batch_id=workflow.plan["uploadBatchId"],
+                resource_id__in=remaining & inputs,
+                source="upload",
+            ).values_list("resource_id", flat=True)
+        )
+    remaining = selected - allowed
+    if remaining:
+        rule_ids = {
+            workflow.plan.get("rulesResourceId"),
+            workflow.plan.get("inputs", {}).get("rules"),
+        }
+        rule_ids.discard(None)
+        if remaining & rule_ids:
+            allowed.update(
+                scenario_rule_resources(user, policy, workflow.workflow_type)
+                .filter(pk__in=remaining & rule_ids & inputs)
+                .values_list("pk", flat=True)
+            )
+    remaining = selected - allowed
+    if remaining:
+        candidates = remaining & inputs
+        if workflow.resource_ids:
+            candidates &= set(workflow.resource_ids)
+        allowed.update(
+            discover_resources(user, policy)
+            .filter(pk__in=candidates)
+            .values_list("pk", flat=True)
+        )
+    # Retain specialized historical update-chain handling without duplicating it.
+    for identity in selected - allowed:
+        resolve_workflow_resource(user, policy, identity, workflow)
+
+
 def resolve_generated_resource(user, policy, identity, workflow, purpose):
     """Recover a server-generated packet by its fixed task marker, never by selection."""
     from .models import AgentWorkflow

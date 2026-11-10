@@ -178,8 +178,10 @@ def parameter_values(manifest, metadata, params):
         elif kind == "boolean":
             if type(value) is not bool:
                 raise ComputeError(p["label"] + "必须为布尔值")
-        elif not isinstance(value, str) or len(value) > 2000:
-            raise ComputeError(p["label"] + "必须为不超过2000字的文字")
+        elif not isinstance(value, str) or len(value) > p.get("maxLength", 2000):
+            raise ComputeError(
+                p["label"] + f"必须为不超过{p.get('maxLength', 2000)}字的文字"
+            )
         if kind == "enum" and value not in p["choices"]:
             raise ComputeError(p["label"] + "不在选项内")
         if kind in {"field", "band"}:
@@ -260,6 +262,17 @@ def validate_submission(user, body):
         metadata[spec["key"]] = info
         resources.append((spec["key"], resource, info))
     normalized = parameter_values(manifest, metadata, params)
+    if manifest["runtime"] == "python-data-script-v1" and not resources:
+        raise ComputeError("数据衔接脚本至少需要一份实际授权的来源")
+    if manifest["runtime"] == "python-data-script-v1":
+        from .script_contracts import read_contract
+
+        try:
+            read_contract(manifest, normalized)
+        except (ValueError, TypeError) as error:
+            if isinstance(error, ComputeError):
+                raise
+            raise ComputeError("脚本目标规范不是有效JSON对象") from error
     canonical = {
         "name": name,
         "versionId": version.id,

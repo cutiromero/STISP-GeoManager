@@ -25,6 +25,8 @@ EXTENSIONS = {
     "image": {".png", ".jpg"},
     "report": {".pdf"},
     "archive": {".zip"},
+    "document": {".txt", ".md", ".json"},
+    "gene": {".fa", ".fasta", ".fna"},
 }
 
 
@@ -126,8 +128,8 @@ def validate_manifest(manifest):
         r"[A-Za-z0-9][A-Za-z0-9._-]{0,39}", result["version"]
     ):
         raise ComputeError("标识或版本只允许规范的字母、数字及分隔符")
-    if manifest.get("runtime") != "python-geospatial-v1":
-        raise ComputeError("请选择已支持的 python-geospatial-v1 运行环境")
+    if manifest.get("runtime") not in {"python-geospatial-v1", "python-data-script-v1"}:
+        raise ComputeError("请选择平台已支持的运行环境")
     result.update(
         schemaVersion=1,
         runtime=manifest["runtime"],
@@ -183,8 +185,15 @@ def validate_manifest(manifest):
                 required=item.get("required", True) is True,
             )
             if section == "inputs":
-                if item.get("kind") not in {"raster", "vector", "table"}:
-                    raise ComputeError("输入仅支持 raster/vector/table")
+                if item.get("kind") not in {
+                    "raster",
+                    "vector",
+                    "table",
+                    "gene",
+                    "document",
+                    "image",
+                }:
+                    raise ComputeError("输入须为平台已登记的资料类型")
                 if "minBands" in item and (
                     type(item["minBands"]) is not int
                     or not 1 <= item["minBands"] <= 1024
@@ -223,6 +232,12 @@ def validate_manifest(manifest):
                     "band",
                 }:
                     raise ComputeError("参数类型不支持")
+                if "maxLength" in item and (
+                    item["type"] != "string"
+                    or type(item["maxLength"]) is not int
+                    or not 1 <= item["maxLength"] <= 16000
+                ):
+                    raise ComputeError("字符串长度上限须为1至16000")
                 for bound in ("min", "max"):
                     if bound in item and (
                         type(item[bound]) not in {int, float}
@@ -259,11 +274,23 @@ def validate_manifest(manifest):
         from .adapter_capabilities import validate_capability
 
         try:
-            result["inputAdapter"] = validate_capability(
+            capability = validate_capability(
                 {**result, "inputAdapter": manifest["inputAdapter"]}
             )
+            if capability is not None:
+                result["inputAdapter"] = capability
         except (ValueError, TypeError, KeyError, AttributeError) as error:
             raise ComputeError("输入适配能力声明无效：" + str(error)) from error
+    from .script_capabilities import validate_bridge
+
+    try:
+        bridge = validate_bridge(
+            {**result, "inputScriptBridge": manifest.get("inputScriptBridge")}
+        )
+        if bridge is not None:
+            result["inputScriptBridge"] = bridge
+    except (ValueError, TypeError, KeyError) as error:
+        raise ComputeError("受限脚本能力声明无效：" + str(error)) from error
     try:
         serialized = json.dumps(result, allow_nan=False)
     except (ValueError, TypeError, RecursionError) as exc:

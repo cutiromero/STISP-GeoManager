@@ -10511,7 +10511,7 @@ export type ComputeInputSpec = {
     /**
      * 输入类型
      */
-    kind: 'raster' | 'vector' | 'table';
+    kind: 'vector' | 'raster' | 'table' | 'gene' | 'document' | 'image';
     /**
      * 必填
      */
@@ -10527,7 +10527,7 @@ export type ComputeInputSpec = {
 };
 
 /**
- * 受控参数表单描述；不接受脚本
+ * 受控参数描述；动态Python代码仅由专用受限运行环境执行
  */
 export type ComputeParameterSpec = {
     /**
@@ -10576,6 +10576,10 @@ export type ComputeParameterSpec = {
     when?: {
         [key: string]: unknown;
     };
+    /**
+     * 字符串长度上限，缺省2000；受限脚本最多16000
+     */
+    maxLength?: number;
 };
 
 /**
@@ -10593,7 +10597,7 @@ export type ComputeOutputSpec = {
     /**
      * 类型
      */
-    kind: 'raster' | 'vector' | 'table' | 'image' | 'report' | 'archive';
+    kind: 'raster' | 'vector' | 'table' | 'image' | 'report' | 'archive' | 'gene' | 'document';
     /**
      * 输出目录内文件名
      */
@@ -10674,6 +10678,7 @@ export type ComputeManifest = {
          */
         file: string;
     };
+    inputScriptBridge?: ComputeInputScriptBridge;
 };
 
 /**
@@ -11341,7 +11346,7 @@ export type BusinessFlowInputRequirement = {
      */
     description: string;
     /**
-     * 流程期望的目标类型；实际来源不符时统一规划已发布的输入转换能力
+     * 流程期望的目标类型；实际来源可通过已发布转换工具或Agent编写的受限脚本衔接
      */
     dataTypes: Array<'vector' | 'raster' | 'table' | 'gene' | 'document' | 'image'>;
     /**
@@ -11360,6 +11365,160 @@ export type BusinessFlowInputRequirement = {
      * 可选目标语义标识，与已发布适配能力匹配
      */
     semanticType?: string;
+};
+
+/**
+ * 受限脚本执行器的真实端口与代码参数；不授予其他数据、网络或系统操作权限
+ */
+export type ComputeInputScriptBridge = {
+    /**
+     * 实际资料类型到本运行器已声明输入端口的映射
+     */
+    inputPorts: {
+        [key: string]: Array<string>;
+    };
+    /**
+     * 目标资料类型到已声明输出端口的映射
+     */
+    outputPorts: {
+        [key: string]: string;
+    };
+    /**
+     * 代码参数名
+     */
+    codeParameter: string;
+    /**
+     * 目标类型参数名
+     */
+    targetParameter: string;
+    /**
+     * 目标规范JSON参数名
+     */
+    contractParameter: string;
+    /**
+     * 内核隔离协议版本
+     */
+    policyVersion: 1;
+};
+
+/**
+ * 新任务输入与节点衔接策略；不允许更改固定科研步骤或替代人工批准
+ */
+export type BusinessFlowInputPreparationPolicy = {
+    /**
+     * 允许Agent按实际资料编写受限衔接脚本，缺省true
+     */
+    allowScripts?: boolean;
+    /**
+     * 额外独立AI审核适配脚本；缺省false，节点自身的审核保持原配置
+     */
+    reviewScripts?: boolean;
+    /**
+     * 脚本失败后最多返修次数，缺省2
+     */
+    maxRepairs?: number;
+};
+
+/**
+ * 适配脚本进度摘要；代码按需读取，不随状态帧反复传送
+ */
+export type BusinessFlowInputScriptSummary = {
+    /**
+     * 当前真实脚本尝试序号
+     */
+    attempt: number;
+    /**
+     * 真实编写、审核或执行状态
+     */
+    status: string;
+    /**
+     * 实际代码SHA256，尚未生成时为空
+     */
+    sha256: string;
+    /**
+     * 本次衔接目的和处理说明
+     */
+    summary: string;
+    /**
+     * 确实缺少必要含义时需要用户补充的资料说明
+     */
+    question?: string;
+    /**
+     * 真实失败原因的有界摘要
+     */
+    lastError?: string;
+    /**
+     * 是否已有可按需查看的实际代码
+     */
+    available: boolean;
+};
+
+/**
+ * 本人当前项目任务的实际适配脚本和审计；原始资料不被改写
+ */
+export type BusinessFlowInputScriptDetail = {
+    /**
+     * 输入衔接绑定键
+     */
+    role: string;
+    /**
+     * 代码尝试序号
+     */
+    attempt: number;
+    /**
+     * 语言
+     */
+    language: 'python';
+    /**
+     * 模型实际编写的代码
+     */
+    code: string;
+    /**
+     * 代码SHA256
+     */
+    sha256: string;
+    /**
+     * 当前真实状态
+     */
+    status: string;
+    /**
+     * 转换目的和假设
+     */
+    summary: string;
+    /**
+     * 实际执行或审核反馈，最多8条
+     */
+    diagnostics: Array<string>;
+    /**
+     * 本次实际授权来源
+     */
+    sourceIds: Array<number>;
+    /**
+     * 声明的目标资料类型
+     */
+    targetType: 'vector' | 'raster' | 'table' | 'gene' | 'document' | 'image';
+};
+
+/**
+ * 仅补充数据适配所需含义；不批准任何科研或对象修改节点
+ */
+export type BusinessFlowInputClarification = {
+    /**
+     * 当前待说明的输入衔接键
+     */
+    role: string;
+    /**
+     * 用户的实际资料说明
+     */
+    feedback: string;
+    /**
+     * 当前业务流控制修订
+     */
+    revision: number;
+    /**
+     * 本次说明的幂等键
+     */
+    idempotencyKey: string;
 };
 
 /**
@@ -11386,6 +11545,7 @@ export type BusinessFlowSpec = {
      * 最终成果说明
      */
     outputRequirements: Array<string>;
+    inputPreparation?: BusinessFlowInputPreparationPolicy;
 };
 
 /**
@@ -12034,7 +12194,7 @@ export type BusinessFlowInputPlanItem = {
     /**
      * 真实规划或执行状态
      */
-    status: 'direct' | 'convert' | 'needs_parameters' | 'needs_choice' | 'unavailable' | 'waiting_compute' | 'waiting_import' | 'ready';
+    status: 'direct' | 'convert' | 'needs_parameters' | 'needs_choice' | 'unavailable' | 'waiting_compute' | 'waiting_import' | 'ready' | 'needs_script' | 'generating_script' | 'reviewing_script' | 'needs_clarification' | 'failed';
     /**
      * 真实来源字段
      */
@@ -12069,6 +12229,15 @@ export type BusinessFlowInputPlanItem = {
      * 实际来源波段数量；非栅格为0
      */
     sourceBands?: number;
+    script?: BusinessFlowInputScriptSummary;
+    /**
+     * 节点间输入准备的所属节点；初始输入可省略
+     */
+    nodeId?: string;
+    /**
+     * 真实授权来源集合
+     */
+    sourceIds?: Array<number>;
 };
 
 /**
@@ -23577,3 +23746,104 @@ export type ResumeBusinessFlowResponses = {
 };
 
 export type ResumeBusinessFlowResponse = ResumeBusinessFlowResponses[keyof ResumeBusinessFlowResponses];
+
+export type GetBusinessFlowInputScriptData = {
+    body?: never;
+    path: {
+        /**
+         * UUID
+         */
+        workflowId: string;
+    };
+    query: {
+        /**
+         * 输入键
+         */
+        role: string;
+        /**
+         * 尝试序号
+         */
+        attempt?: number;
+    };
+    url: '/api/business-flows/runs/{workflowId}/input-script/';
+};
+
+export type GetBusinessFlowInputScriptErrors = {
+    /**
+     * 参数错误
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 权限已变化
+     */
+    403: ErrorResponse;
+    /**
+     * 不存在或无权访问
+     */
+    404: ErrorResponse;
+    /**
+     * 任务或资料修订已变化
+     */
+    409: ErrorResponse;
+};
+
+export type GetBusinessFlowInputScriptError = GetBusinessFlowInputScriptErrors[keyof GetBusinessFlowInputScriptErrors];
+
+export type GetBusinessFlowInputScriptResponses = {
+    /**
+     * 成功
+     */
+    200: BusinessFlowInputScriptDetail;
+};
+
+export type GetBusinessFlowInputScriptResponse = GetBusinessFlowInputScriptResponses[keyof GetBusinessFlowInputScriptResponses];
+
+export type ClarifyBusinessFlowInputData = {
+    body: BusinessFlowInputClarification;
+    path: {
+        /**
+         * UUID
+         */
+        workflowId: string;
+    };
+    query?: never;
+    url: '/api/business-flows/runs/{workflowId}/input-clarification/';
+};
+
+export type ClarifyBusinessFlowInputErrors = {
+    /**
+     * 参数错误
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 权限已变化
+     */
+    403: ErrorResponse;
+    /**
+     * 不存在或无权访问
+     */
+    404: ErrorResponse;
+    /**
+     * 任务或资料修订已变化
+     */
+    409: ErrorResponse;
+};
+
+export type ClarifyBusinessFlowInputError = ClarifyBusinessFlowInputErrors[keyof ClarifyBusinessFlowInputErrors];
+
+export type ClarifyBusinessFlowInputResponses = {
+    /**
+     * 成功
+     */
+    200: BusinessFlowRun;
+};
+
+export type ClarifyBusinessFlowInputResponse = ClarifyBusinessFlowInputResponses[keyof ClarifyBusinessFlowInputResponses];

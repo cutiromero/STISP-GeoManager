@@ -42,11 +42,15 @@ def _source(resource):
         return raster_source_path(dataset.source_relative_path), None
     if resource.data_type == "vector":
         return vector_geopackage_path(), resource.storage_path
-    if resource.file_format.upper() == "SQLITE":
+    if resource.data_type == "table" and resource.file_format.upper() == "SQLITE":
         return table_data_path("data.sqlite"), resource.storage_path
     from apps.catalog.nongeo import _resource_file_path
 
-    return _resource_file_path(resource), None
+    return (
+        _resource_file_path(resource)
+        if resource.data_type == "table"
+        else _resource_file_path(resource, analysis_limit=False)
+    ), None
 
 
 def _source_identity(path, dependencies=()):

@@ -22,6 +22,22 @@ def require_manager(user):
 
 
 def validate_bindings(spec, project_id):
+    from .input_policy import for_definition
+    from .script_bridges import choose_bridge, versions as script_versions
+
+    script_policy = for_definition(spec)
+    bridge_options = None
+
+    def can_prepare(kinds, target):
+        nonlocal bridge_options
+        if not script_policy["allowScripts"]:
+            return False
+        if bridge_options is None:
+            bridge_options = script_versions()
+        return (
+            choose_bridge(None, kinds, [target], available=bridge_options) is not None
+        )
+
     identities = {
         node["algorithmVersionId"]
         for node in spec["nodes"]
@@ -62,7 +78,11 @@ def validate_bindings(spec, project_id):
         for key, source in bindings.items():
             required_kind = inputs[key]["kind"]
             if "role" in source:
-                if required_kind not in roles[source["role"]]["dataTypes"]:
+                if required_kind not in roles[source["role"]][
+                    "dataTypes"
+                ] and not can_prepare(
+                    roles[source["role"]]["dataTypes"], required_kind
+                ):
                     raise ValidationError("绑定资料角色的类型与算子输入不兼容：" + key)
                 continue
             upstream = nodes[source["nodeId"]]
@@ -75,7 +95,14 @@ def validate_bindings(spec, project_id):
                 raise ValidationError(
                     "前序已发布算子不存在声明的输出键：" + source["outputKey"]
                 )
-            if output["kind"] == "archive" or output["kind"] != required_kind:
+            source_kind = (
+                "document"
+                if output["kind"] in {"archive", "report"}
+                else output["kind"]
+            )
+            if source_kind != required_kind and not can_prepare(
+                [source_kind], required_kind
+            ):
                 raise ValidationError(
                     "前序输出不能作为当前算子输入：类型不兼容或属于归档文件"
                 )

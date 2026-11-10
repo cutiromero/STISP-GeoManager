@@ -77,7 +77,9 @@ def resource_nongeo_query(request, pk: int):
     if not isinstance(payload, dict):
         return JsonResponse({"detail": "请求体必须是 JSON 对象"}, status=400)
     try:
-        limit = _bounded_integer(payload.get("limit", DEFAULT_QUERY_LIMIT), 1, MAX_QUERY_LIMIT, "limit")
+        limit = _bounded_integer(
+            payload.get("limit", DEFAULT_QUERY_LIMIT), 1, MAX_QUERY_LIMIT, "limit"
+        )
         offset = _bounded_integer(payload.get("offset", 0), 0, 10_000_000, "offset")
         sort_field = str(payload.get("sortField") or "").strip() or None
         sort_direction = str(payload.get("sortDirection") or "asc").strip().lower()
@@ -107,11 +109,18 @@ def resource_nongeo_query(request, pk: int):
 def _authorized_resource(request, pk: int):
     if not has_feature_perm(request.user, "core.query_data"):
         return None, feature_denied_response(request.user)
-    resource = DataResource.objects.filter(pk=pk, status=DataResource.Status.ACTIVE).first()
+    resource = DataResource.objects.filter(
+        pk=pk, status=DataResource.Status.ACTIVE
+    ).first()
     if resource is None:
         return None, JsonResponse({"detail": "数据资源不存在"}, status=404)
-    if resource.data_type not in {DataResource.DataType.TABLE, DataResource.DataType.GENE}:
-        return None, JsonResponse({"detail": "该资源不是可分析的非地理表格或基因数据"}, status=400)
+    if resource.data_type not in {
+        DataResource.DataType.TABLE,
+        DataResource.DataType.GENE,
+    }:
+        return None, JsonResponse(
+            {"detail": "该资源不是可分析的非地理表格或基因数据"}, status=400
+        )
     if not user_can_access(resource, request.user):
         return None, JsonResponse({"detail": "无权访问该数据资源"}, status=403)
     return resource, None
@@ -125,7 +134,10 @@ def _resource_dataframe(
     sort_field: str | None = None,
     sort_direction: str = "asc",
 ) -> tuple[pd.DataFrame, int, dict[str, str]]:
-    if resource.data_type == DataResource.DataType.TABLE and resource.file_format.upper() == "SQLITE":
+    if (
+        resource.data_type == DataResource.DataType.TABLE
+        and resource.file_format.upper() == "SQLITE"
+    ):
         return _sqlite_dataframe(
             resource,
             limit=limit,
@@ -171,7 +183,9 @@ def _sqlite_dataframe(
         if not exists:
             raise NonGeoAnalysisError("数据资源对应的后台表格不存在")
         quoted_table = _quote_sqlite_identifier(table_name)
-        column_rows = connection.execute(f"PRAGMA table_info({quoted_table})").fetchall()
+        column_rows = connection.execute(
+            f"PRAGMA table_info({quoted_table})"
+        ).fetchall()
         columns = [str(row[1]) for row in column_rows]
         if not columns:
             raise NonGeoAnalysisError("后台表格没有可分析字段")
@@ -204,11 +218,16 @@ def _sqlite_dataframe(
     return dataframe, total_count, descriptions
 
 
-def _resource_file_path(resource: DataResource) -> Path:
+def _resource_file_path(resource: DataResource, *, analysis_limit=True) -> Path:
     relative = PurePosixPath(resource.storage_path.replace("\\", "/"))
     if relative.is_absolute() or ".." in relative.parts:
         raise NonGeoAnalysisError("数据资源存储路径无效")
     root = gene_data_path().parent.resolve()
+    if relative.parts and relative.parts[0] not in {"table", "gene"}:
+        relative = (
+            PurePosixPath("gene" if resource.data_type == "gene" else "table")
+            / relative
+        )
     path = root.joinpath(*relative.parts).resolve()
     try:
         path.relative_to(root)
@@ -216,6 +235,8 @@ def _resource_file_path(resource: DataResource) -> Path:
         raise NonGeoAnalysisError("数据资源存储路径越出非地理数据目录") from exc
     if not path.is_file():
         raise NonGeoAnalysisError("数据资源文件不存在")
+    if not analysis_limit:
+        return path
     try:
         configured_mb = runtime_upload_max_mb()
     except RuntimeConfigError as exc:
@@ -307,7 +328,11 @@ def _read_fastq(path: Path) -> list[dict[str, Any]]:
             sequence = source.readline().strip().upper()
             separator = source.readline()
             quality = source.readline().rstrip("\r\n")
-            if not header.startswith("@") or not separator.startswith("+") or len(sequence) != len(quality):
+            if (
+                not header.startswith("@")
+                or not separator.startswith("+")
+                or len(sequence) != len(quality)
+            ):
                 raise NonGeoAnalysisError("FASTQ 文件结构无效或记录不完整")
             identifier, _, description = header[1:].strip().partition(" ")
             canonical = sum(sequence.count(base) for base in "ACGT")
@@ -346,11 +371,23 @@ def _read_vcf(path: Path) -> pd.DataFrame:
                 rows.append(line.rstrip("\r\n").split("\t"))
     if not header:
         raise NonGeoAnalysisError("VCF 文件缺少字段头")
-    return pd.DataFrame(rows, columns=header[: max((len(row) for row in rows), default=len(header))])
+    return pd.DataFrame(
+        rows, columns=header[: max((len(row) for row in rows), default=len(header))]
+    )
 
 
 def _read_gff(path: Path) -> pd.DataFrame:
-    columns = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"]
+    columns = [
+        "seqid",
+        "source",
+        "type",
+        "start",
+        "end",
+        "score",
+        "strand",
+        "phase",
+        "attributes",
+    ]
     rows: list[list[str]] = []
     with path.open("r", encoding="utf-8-sig", errors="replace") as source:
         for line in source:
@@ -381,7 +418,9 @@ def _read_genbank(path: Path) -> list[dict[str, Any]]:
             elif current is not None and line.startswith("DEFINITION"):
                 current["definition"] = line[12:].strip()
             elif current is not None and line.startswith("ACCESSION"):
-                current["accession"] = line[12:].strip().split()[0] if line[12:].strip() else ""
+                current["accession"] = (
+                    line[12:].strip().split()[0] if line[12:].strip() else ""
+                )
             elif line.startswith("//") and current:
                 records.append(current)
                 current = None
@@ -399,7 +438,9 @@ def _analytics_payload(
     total_count: int,
     descriptions: dict[str, str],
 ) -> dict[str, Any]:
-    profiles = _field_profiles(dataframe, total_count=total_count, descriptions=descriptions)
+    profiles = _field_profiles(
+        dataframe, total_count=total_count, descriptions=descriptions
+    )
     categorical = _categorical_distributions(dataframe, profiles)
     numeric = _numeric_distributions(dataframe, profiles)
     correlation = _correlation(dataframe, profiles)
@@ -488,9 +529,13 @@ def _field_profiles(
             "nullable": bool(missing.any()),
             "nonNullCount": estimated_non_null,
             "nullCount": max(0, total_count - estimated_non_null),
-            "completeness": round(non_null_count / analyzed_count, 6) if analyzed_count else 0,
+            "completeness": round(non_null_count / analyzed_count, 6)
+            if analyzed_count
+            else 0,
             "uniqueCount": unique_count,
-            "sampleValues": [_json_scalar(value) for value in populated.head(3).tolist()],
+            "sampleValues": [
+                _json_scalar(value) for value in populated.head(3).tolist()
+            ],
         }
         if is_numeric and numeric.notna().any():
             values = numeric.dropna().astype(float)
@@ -505,9 +550,14 @@ def _field_profiles(
     return profiles
 
 
-def _field_role(name: str, unique_count: int, populated_count: int, is_numeric: bool) -> str:
+def _field_role(
+    name: str, unique_count: int, populated_count: int, is_numeric: bool
+) -> str:
     normalized = name.strip().lower()
-    if any(token in normalized for token in ("longitude", "latitude", "lon", "lat", "经度", "纬度")):
+    if any(
+        token in normalized
+        for token in ("longitude", "latitude", "lon", "lat", "经度", "纬度")
+    ):
         return "coordinate"
     if any(token in normalized for token in ("date", "time", "日期", "时间")):
         return "date"
@@ -566,7 +616,11 @@ def _numeric_distributions(dataframe: pd.DataFrame, profiles: list[dict[str, Any
     for profile in profiles:
         if profile["role"] != "measure":
             continue
-        values = pd.to_numeric(dataframe[profile["name"]], errors="coerce").dropna().astype(float)
+        values = (
+            pd.to_numeric(dataframe[profile["name"]], errors="coerce")
+            .dropna()
+            .astype(float)
+        )
         if values.empty:
             continue
         minimum = float(values.min())
@@ -619,7 +673,9 @@ def _histogram_bins(values: pd.Series, minimum: float, maximum: float):
 
 
 def _correlation(dataframe: pd.DataFrame, profiles: list[dict[str, Any]]):
-    fields = [profile["name"] for profile in profiles if profile["role"] == "measure"][:6]
+    fields = [profile["name"] for profile in profiles if profile["role"] == "measure"][
+        :6
+    ]
     if len(fields) < 2:
         return None
     numeric = pd.DataFrame(
@@ -657,7 +713,9 @@ def _table_payload(
                 "name": column,
                 "type": _field_type(series, numeric, is_numeric),
                 "nullable": bool(missing.any()),
-                "sampleValues": [_json_scalar(value) for value in populated.head(3).tolist()],
+                "sampleValues": [
+                    _json_scalar(value) for value in populated.head(3).tolist()
+                ],
                 "description": descriptions.get(column, ""),
             }
         )

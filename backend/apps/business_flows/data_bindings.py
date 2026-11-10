@@ -16,6 +16,7 @@ def prepare_inputs(workflow, user, policy, node, version, available):
     pending = []
     node_states = state(workflow)["nodes"]
     specs = {item["key"]: item for item in version.manifest["inputs"]}
+    actual_types = {}
     explicit = node.get("inputBindings", {})
     if set(explicit) - set(specs):
         raise ComputeError("业务流输入绑定不属于当前算子的清单")
@@ -37,8 +38,13 @@ def prepare_inputs(workflow, user, policy, node, version, available):
                     if logical_role(key, requirements) == binding["role"]
                 ]
                 if len(collection) > 1:
+                    if workflow.plan.get("inputPreparationPolicy", {}).get(
+                        "allowScripts"
+                    ):
+                        result[key] = collection
+                        continue
                     raise ComputeError(
-                        "算子端口需要单份规范资料；多份来源须先通过已登记的归并工具处理"
+                        "算子端口需要单份规范资料；当前流程未启用多份来源衔接"
                     )
                 identity = collection[0] if collection else None
             if identity is None and not specs[key].get("required", True):
@@ -56,7 +62,10 @@ def prepare_inputs(workflow, user, policy, node, version, available):
             user, source["outputs"]["taskId"], policy, workflow=workflow
         )
         output = task.outputs.filter(key=binding["outputKey"]).first()
-        if output is None or output.kind != specs[key]["kind"]:
+        if output is None or (
+            output.kind != specs[key]["kind"]
+            and not workflow.plan.get("inputPreparationPolicy", {}).get("allowScripts")
+        ):
             raise ComputeError("上游结果不存在或类型不符合下游算子输入")
         require_automatic_quality(output)
         imported = ComputeImport.objects.filter(output=output).first()
@@ -112,18 +121,31 @@ def prepare_inputs(workflow, user, policy, node, version, available):
             continue
         chosen = available.get(key)
         if chosen is None:
+            available_ids = {
+                identity
+                for values in available.values()
+                for identity in (values if isinstance(values, list) else [values])
+            }
+            for identity in available_ids - actual_types.keys():
+                actual_types[identity] = resolve_workflow_resource(
+                    user, policy, identity, workflow
+                ).data_type
             candidates = {
-                row["id"]
-                for role, row in workflow.parameters["_businessFlow"][
-                    "inputVersions"
-                ].items()
-                if role in available and row["dataType"] == spec["kind"]
+                identity
+                for identity in available_ids
+                if actual_types[identity] == spec["kind"]
             }
             if len(candidates) == 1:
                 chosen = next(iter(candidates))
+            elif len(available) == 1 and workflow.plan.get(
+                "inputPreparationPolicy", {}
+            ).get("allowScripts"):
+                chosen = next(iter(available.values()))
         if chosen is not None:
             result[key] = chosen
         elif spec.get("required", True):
             raise ComputeError("算子输入无法唯一匹配：" + key)
     node_states[node["id"]].pop("inputPreparation", None)
-    return result
+    from .node_inputs import prepare
+
+    return prepare(workflow, user, policy, node, version, result)

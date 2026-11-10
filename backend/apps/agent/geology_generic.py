@@ -225,6 +225,7 @@ def validate_creation(
         converted = adaptation_map.get(role, {}).get("status") in {
             "convert",
             "needs_parameters",
+            "needs_script",
         }
         if upload.resource.data_type != kind and not converted:
             raise ComputeError(role_label(role) + "需要已登记的输入适配工具")

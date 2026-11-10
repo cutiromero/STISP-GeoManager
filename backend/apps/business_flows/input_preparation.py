@@ -27,7 +27,12 @@ def _save(workflow, message):
     if workflow.workflow_type == "business_flow":
         from .state import emit, binding, state
 
-        node_id = binding(workflow)["definitionSnapshot"]["nodes"][0]["id"]
+        nodes = binding(workflow)["definitionSnapshot"]["nodes"]
+        node_id = (
+            workflow.current_step
+            if workflow.current_step in {node["id"] for node in nodes}
+            else nodes[0]["id"]
+        )
         node = state(workflow)["nodes"][node_id]
         node["executor"].update(status="preparing", summary=message)
         emit(workflow, "executor", node_id, "preparing_inputs", message)
@@ -37,13 +42,25 @@ def _save(workflow, message):
         persist(workflow)
 
 
+def bind_prepared(workflow, entry, identity):
+    if entry.get("nodeId"):
+        workflow.plan.setdefault("preparedNodeInputs", {}).setdefault(
+            entry["nodeId"], {}
+        )[entry["nodeInputKey"]] = identity
+    else:
+        workflow.plan.setdefault("effectiveInputs", {})[entry["role"]] = identity
+        if workflow.workflow_type == "business_flow":
+            workflow.plan["inputs"][entry["role"]] = identity
+    workflow.resource_ids = sorted(set(workflow.resource_ids) | {identity})
+
+
 def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
     """False means actual work is pending; a healthy ready plan is a pure reuse."""
     entries = workflow.plan.get("inputAdaptations", [])
     if not entries or workflow.plan.get("inputAdaptationComplete"):
         return True
     confirmed_fields = confirmed_fields or {}
-    effective = workflow.plan.setdefault("effectiveInputs", {})
+    workflow.plan.setdefault("effectiveInputs", {})
     for entry in entries:
         check_pause(workflow)
         if workflow.cancel_requested:
@@ -53,13 +70,18 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
             raise ComputeError("输入资料已变化，请重新确认适配方案", 409)
         role = entry["role"]
         if entry["status"] == "direct":
-            effective[role] = resource.pk
+            bind_prepared(workflow, entry, resource.pk)
             continue
+        if (entry.get("script") or entry.get("scriptMode")) and not entry.get("taskId"):
+            from .script_preparation import prepare
+
+            if not prepare(workflow, user, policy, entry):
+                return False
         if entry.get("resourceId"):
             prepared = resolve_workflow_resource(
                 user, policy, entry["resourceId"], workflow
             )
-            effective[role] = prepared.pk
+            bind_prepared(workflow, entry, prepared.pk)
             continue
         if entry["status"] not in {
             "convert",
@@ -101,6 +123,14 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                         "checksum": version.checksum,
                         "parameters": parameters,
                         "output": entry["outputKey"],
+                        **(
+                            {
+                                "scriptInputs": entry.get("scriptInputs"),
+                                "scriptSources": entry.get("sources"),
+                            }
+                            if entry.get("scriptMode")
+                            else {}
+                        ),
                     },
                     sort_keys=True,
                     ensure_ascii=False,
@@ -128,9 +158,7 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                     outputId=shared["outputId"],
                     actualParameters=parameters,
                 )
-                effective[role] = prepared.pk
-                if workflow.workflow_type == "business_flow":
-                    workflow.plan["inputs"][role] = prepared.pk
+                bind_prepared(workflow, entry, prepared.pk)
                 continue
             if any(key not in parameters for key in entry.get("missingParameters", [])):
                 raise ComputeError("请先确认资料转换需要的字段：" + role)
@@ -148,10 +176,17 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                     {
                         "name": "输入适配 · " + entry["sourceName"][:100],
                         "versionId": version.pk,
-                        "inputs": {entry["inputKey"]: resource.pk},
+                        "inputs": entry["scriptInputs"]
+                        if entry.get("scriptMode")
+                        else {entry["inputKey"]: resource.pk},
                         "parameters": parameters,
                         "idempotencyKey": f"adapt-{workflow.pk}-"
-                        + hashlib.sha256(role.encode()).hexdigest()[:16],
+                        + hashlib.sha256(role.encode()).hexdigest()[:16]
+                        + (
+                            f"-s{entry['scriptAttempt']}"
+                            if entry.get("scriptMode")
+                            else ""
+                        ),
                     },
                 )
                 entry.update(
@@ -160,6 +195,8 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                     actualParameters=parameters,
                 )
                 workflow.operator_steps += 1
+                if entry.get("scriptMode"):
+                    entry["scriptStatus"] = "running"
                 workflow.status = "waiting_compute"
                 step(
                     workflow,
@@ -183,6 +220,13 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
         if task.status in {"queued", "validating", "running", "cancelling"}:
             return False
         if task.status != "succeeded":
+            if task.status == "failed" and workflow.plan.get(
+                "inputPreparationPolicy", {}
+            ).get("allowScripts"):
+                from .script_preparation import fallback
+
+                fallback(workflow, user, policy, entry, task.error)
+                return False
             raise ComputeError("输入转换未能完成：" + task.error[:250])
         output = task.outputs.filter(
             key=entry["outputKey"], kind=entry["targetType"]
@@ -201,6 +245,8 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                     user, output, request_source=f"workflow:{workflow.pk}"
                 )
                 entry["status"] = "waiting_import"
+                if entry.get("scriptMode"):
+                    entry["scriptStatus"] = "registering"
                 _save(workflow, "输入转换已完成，正在登记本次任务的派生资料")
         if imported.status in {"failed", "deleted"}:
             raise ComputeError("输入转换结果准备失败：" + imported.error[:200])
@@ -217,8 +263,12 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
             prepared.owner_only = True
             prepared.save(update_fields=["source", "owner_only", "updated_at"])
         entry.update(status="ready", resourceId=prepared.pk, outputId=output.pk)
-        effective[role] = prepared.pk
-        workflow.resource_ids = sorted(set(workflow.resource_ids) | {prepared.pk})
+        bind_prepared(workflow, entry, prepared.pk)
+        if entry.get("scriptMode"):
+            entry["scriptStatus"] = "completed"
+            entry["scriptCurrent"].update(
+                status="succeeded", taskId=str(task.pk), resourceId=prepared.pk
+            )
         step(
             workflow,
             "input_adapted",
@@ -234,8 +284,9 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
         if workflow.workflow_type == "business_flow":
             from .state import state
 
-            state(workflow).setdefault("consumedOutputs", []).append(output.pk)
-            workflow.plan["inputs"][role] = prepared.pk
+            consumed = state(workflow).setdefault("consumedOutputs", [])
+            if output.pk not in consumed:
+                consumed.append(output.pk)
         workflow.status = "queued"
         _save(workflow, "输入适配已完成，继续已发布流程")
     workflow.plan["inputAdaptationComplete"] = True

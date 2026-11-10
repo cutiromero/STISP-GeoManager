@@ -166,7 +166,16 @@ export default function InputAdaptationReview({
               {kinds[item.sourceType] ?? item.sourceType} →{" "}
               {item.targetTypes.map((type) => kinds[type] ?? type).join(" / ")}
             </small>
-            {item.status === "unavailable" ? (
+            {item.status === "needs_script" ? (
+              <Alert
+                type="info"
+                title={ui(
+                  "由智能体自主编写衔接脚本",
+                  "The agent will write a preparation script",
+                )}
+                description={item.script?.summary}
+              />
+            ) : item.status === "unavailable" ? (
               <Alert
                 type="info"
                 title={ui(
@@ -174,7 +183,8 @@ export default function InputAdaptationReview({
                   "No published converter meets this requirement",
                 )}
                 description={ui(
-                  "保留当前选择。可选择其他资料，或在计算中心登记兼容的转换算子后重试。",
+                  item.script?.summary ||
+                    "保留当前选择。可选择其他资料，或在计算中心登记兼容的转换算子后重试。",
                   "Keep this selection, choose another source, or register a compatible converter in the compute center.",
                 )}
               />

@@ -379,7 +379,8 @@ def inputs(request):
     require_actor(request.user, project_id(), "submit_task", "core.browse_data")
     query = filter_accessible(
         DataResource.objects.filter(
-            status="active", data_type__in=["raster", "vector", "table"]
+            status="active",
+            data_type__in=["raster", "vector", "table", "gene", "document", "image"],
         ),
         request.user,
     ).order_by("-id")

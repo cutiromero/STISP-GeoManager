@@ -371,8 +371,10 @@ def _q(name):
     return '"' + name.replace('"', '""') + '"'
 
 
-def frame(resource):
+def frame(resource, *, limit=ROW_LIMIT):
     """Bound memory; never decode vector geometries or execute data file macros."""
+    if type(limit) is not int or not 1 <= limit <= ROW_LIMIT:
+        raise ValidationError("样本行数超出平台允许范围")
     if resource.data_type == "vector" or (
         resource.data_type == "table" and resource.file_format.upper() == "SQLITE"
     ):
@@ -404,7 +406,7 @@ def frame(resource):
             data = pd.read_sql_query(
                 f"SELECT {','.join(_q(c) for c in columns)} FROM {_q(table)} LIMIT ?",
                 db,
-                params=(ROW_LIMIT + 1,),
+                params=(limit + 1,),
             )
             descriptions = {}
             if db.execute(
@@ -427,7 +429,7 @@ def frame(resource):
             data = pd.read_csv(
                 path,
                 sep="\t" if path.suffix.lower() == ".tsv" else ",",
-                nrows=ROW_LIMIT + 1,
+                nrows=limit + 1,
             )
         elif path.suffix.lower() == ".xlsx":
             from openpyxl import load_workbook
@@ -442,7 +444,7 @@ def frame(resource):
                 if len(headers) > 100:
                     raise ValidationError("字段过多，请先导入平台表格库")
                 data = pd.DataFrame(
-                    islice(rows, ROW_LIMIT + 1), columns=[str(c) for c in headers]
+                    islice(rows, limit + 1), columns=[str(c) for c in headers]
                 )
             finally:
                 workbook.close()
@@ -454,8 +456,8 @@ def frame(resource):
         raise ValidationError("此类型仅支持元数据，不支持行统计")
     if len(data.columns) > 100 or data.memory_usage(deep=True).sum() > 32 * 1024 * 1024:
         raise ValidationError("数据过宽或内容过大，请缩小源数据")
-    truncated = len(data) > ROW_LIMIT
-    data = data.iloc[:ROW_LIMIT].copy()
+    truncated = len(data) > limit
+    data = data.iloc[:limit].copy()
     for column in data.columns:
         if data[column].map(lambda x: isinstance(x, bytes)).any():
             data = data.drop(columns=column)
@@ -463,9 +465,9 @@ def frame(resource):
         "scope": "prefix_sample" if truncated else "full",
         "truncated": truncated,
         "scannedRows": len(data),
-        "rowLimit": ROW_LIMIT,
+        "rowLimit": limit,
         "fieldDescriptions": descriptions,
-        "limitation": "仅前10000条，不代表总体"
+        "limitation": f"仅前{limit}条，不代表总体"
         if truncated
         else "完整读取；单位以字段说明为准",
     }

@@ -121,6 +121,13 @@ def create_workflow(user, project_id, value, *, chat_execution=None, input_plan=
             "rulesResourceId": rules_id,
             **({"inputAdaptations": input_plan} if input_plan else {}),
         }
+        from apps.business_flows.input_policy import for_definition
+        from apps.business_flows.builtins import geology_definition
+
+        generic_plan["inputPreparationPolicy"] = {
+            **for_definition(geology_definition()),
+            "allowScripts": False,
+        }
         inputs = {}
     elif value.get("uploadBatchId") is not None:
         raise ComputeError("只有通用地质推理使用上传批次")

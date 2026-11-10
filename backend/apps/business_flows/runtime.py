@@ -119,6 +119,8 @@ def canonical_current_node(workflow):
 
 
 def serialize_run(user, workflow, *, control_only=False):
+    from .script_preparation import public_item
+
     if control_only:
         if (
             workflow.owner_id != user.pk
@@ -209,11 +211,7 @@ def serialize_run(user, workflow, *, control_only=False):
                         for row in workflow.plan.get("inputAdaptations", [])
                     ),
                     "items": [
-                        {
-                            key: value
-                            for key, value in item.items()
-                            if key != "preparationSignature"
-                        }
+                        public_item(item)
                         for item in workflow.plan.get("inputAdaptations", [])
                     ],
                 }
@@ -229,6 +227,8 @@ def _inputs(
 ):
     from .input_adapters import logical_role, plan_inputs
     from apps.compute.data import list_candidate
+    from .input_policy import for_definition
+    from .script_bridges import versions as bridge_catalog
 
     supplied = value.get("inputs", {})
     specs = {item["key"]: item for item in definition["inputRequirements"]}
@@ -270,11 +270,7 @@ def _inputs(
         else:
             resource = resolve_discoverable_resource(user, policy, identity)
         if resource.pk not in cached:
-            metadata = (
-                list_candidate(resource)
-                if resource.data_type in {"vector", "raster", "table"}
-                else {"fields": []}
-            )
+            metadata = list_candidate(resource)
             if resource.data_type == "raster" and specs[logical[role]].get(
                 "semanticType"
             ):
@@ -318,6 +314,12 @@ def _inputs(
         sources,
         value.get("inputAdapters"),
         available=available,
+        script_policy=for_definition(definition)
+        if policy.get("operatorEnabled", False)
+        else None,
+        bridge_versions=bridge_catalog(permitted=allowed_adapter_ids)
+        if allowed_adapter_ids is not None
+        else None,
     )
     if not preview and not planned["ready"]:
         raise ValidationError("输入仍需配置转换能力或参数，请先查看输入适配方案")
@@ -438,7 +440,9 @@ def start_flow(user, version, value, *, source_run=None):
         if source_run and source_run.algorithm_selection_mode == "manual"
         else None,
     )
-    if any(item["status"] == "convert" for item in input_plan["items"]):
+    if any(
+        item["status"] in {"convert", "needs_script"} for item in input_plan["items"]
+    ):
         from apps.compute.access import require_actor
 
         if not policy.get("operatorEnabled", False):
@@ -584,6 +588,14 @@ def start_flow(user, version, value, *, source_run=None):
             }
             for row in input_plan["items"]
         ]
+        from .input_policy import for_definition
+
+        workflow.plan["inputPreparationPolicy"] = {
+            **for_definition(definition),
+            "algorithmVersionIds": sorted(source_run.algorithm_version_ids)
+            if source_run and source_run.algorithm_selection_mode == "manual"
+            else None,
+        }
         if workflow.workflow_type == "business_flow":
             workflow.plan["businessFlow"] = initial_state(definition)
         else:

@@ -222,6 +222,38 @@ def own_workflow(user, workflow_id, *, allow_cancel=False):
 
 
 @endpoint(["GET"])
+def input_script(request, workflow_id):
+    from .script_api import detail
+
+    attempt = request.GET.get("attempt")
+    if attempt is not None:
+        try:
+            attempt = int(attempt)
+        except (TypeError, ValueError) as error:
+            raise ValidationError("脚本尝试序号须为整数") from error
+    value = detail(
+        request.user,
+        own_workflow(request.user, workflow_id),
+        request.GET.get("role"),
+        attempt,
+    )
+    return JsonResponse(value)
+
+
+@endpoint(["POST"])
+def input_clarification(request, workflow_id):
+    from .script_api import clarify
+    from .runtime import serialize_run
+
+    workflow = clarify(
+        request.user,
+        own_workflow(request.user, workflow_id),
+        body(request, {"role", "feedback", "revision", "idempotencyKey"}),
+    )
+    return JsonResponse(serialize_run(request.user, workflow))
+
+
+@endpoint(["GET"])
 def runs(request):
     from apps.agent.models import AgentWorkflow
     from apps.agent.policy import require_access

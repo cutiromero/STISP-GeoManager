@@ -2,9 +2,11 @@
 
 import csv
 import json
+import re
 import shutil
 import sqlite3
 from contextlib import closing
+from pathlib import PurePosixPath
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import UploadedFile
@@ -81,6 +83,12 @@ def list_candidate(resource: DataResource) -> dict:
             result.update(_vector_candidate_schema(resource))
         elif resource.data_type == "table":
             result["fields"] = _table_candidate_fields(resource)
+        elif resource.data_type in {"gene", "document", "image"}:
+            from apps.catalog.nongeo import _resource_file_path
+
+            result["sizeBytes"] = (
+                _resource_file_path(resource, analysis_limit=False).stat().st_size
+            )
         else:
             raise ComputeError("该资源暂不支持计算")
     except ComputeError:
@@ -233,6 +241,12 @@ def candidate(resource, *, raster_metadata=False):
 
         frame, _, _ = _resource_dataframe(resource, limit=1, offset=0)
         result["fields"] = [str(c) for c in frame.columns]
+    elif resource.data_type in {"gene", "document", "image"}:
+        from apps.catalog.nongeo import _resource_file_path
+
+        result["sizeBytes"] = (
+            _resource_file_path(resource, analysis_limit=False).stat().st_size
+        )
     else:
         raise ComputeError("该资源暂不支持计算")
     return result
@@ -250,9 +264,11 @@ def freeze_input(record, directory):
     if resource.updated_at.isoformat() != record.snapshot["updatedAt"]:
         raise ComputeError("输入数据在提交后已修改，请重新选择数据提交")
     kind = resource.data_type
-    target = directory / (
-        record.key + {"raster": ".tif", "vector": ".gpkg", "table": ".csv"}[kind]
-    )
+    extension = {"raster": ".tif", "vector": ".gpkg", "table": ".csv"}.get(kind)
+    if extension is None:
+        raw = PurePosixPath(resource.storage_path.replace("\\", "/")).suffix
+        extension = raw if re.fullmatch(r"\.[a-zA-Z0-9]{1,10}", raw) else ".bin"
+    target = directory / (record.key + extension)
     limit = config().input_mb * 1024**2
     if kind in {"vector", "table"}:
         limit = min(limit, 120 * 1024**2)
@@ -342,6 +358,13 @@ def _materialize_input(resource, target, limit):
                 ("1970-01-01T00:00:00.000Z",),
             )
             connection.commit()
+    elif kind in {"gene", "document", "image"}:
+        from apps.catalog.nongeo import _resource_file_path
+
+        source = _resource_file_path(resource, analysis_limit=False)
+        if source.stat().st_size > limit:
+            raise ComputeError("输入原始文件超过大小限制")
+        shutil.copyfile(source, target)
     else:
         if resource.file_format.upper() == "SQLITE":
             table = '"' + resource.storage_path.replace('"', '""') + '"'
@@ -372,7 +395,16 @@ def _materialize_input(resource, target, limit):
         raise ComputeError("输入快照超过大小限制")
 
 
-def inspect_output(path, kind):
+def inspect_output(path, kind, *, contract=None):
+    metadata = _inspect_output(path, kind, contract=contract)
+    if contract:
+        from .script_contracts import validate_metadata
+
+        validate_metadata(metadata, kind, contract)
+    return metadata
+
+
+def _inspect_output(path, kind, *, contract=None):
     if not path.is_file() or path.is_symlink() or path.stat().st_size == 0:
         raise ComputeError("算法没有生成有效的输出文件")
     if path.stat().st_size > config().output_mb * 1024**2:
@@ -398,9 +430,16 @@ def inspect_output(path, kind):
             if not src.count or not src.width or not src.height:
                 raise ComputeError("栅格输出为空")
             for _, window in src.block_windows(1):
-                src.read(
-                    window=window
-                )  # Detect truncated data, not just a valid header.
+                if (contract or {}).get("semanticType") == "class_mask_stack_v1":
+                    import numpy as np
+
+                    values = src.read(window=window, masked=True)
+                    if not np.isin(values.compressed(), [0, 1]).all():
+                        raise ComputeError(
+                            "实际类别掩膜含非0/1有效像元，不能作为分类输入"
+                        )
+                else:
+                    src.read(window=window)  # Verify each actual block once.
             return {
                 "crs": str(src.crs),
                 "width": src.width,
@@ -477,6 +516,50 @@ def inspect_output(path, kind):
             if head != b"%PDF-" or b"%%EOF" not in stream.read():
                 raise ComputeError("PDF输出格式不正确")
         return {"format": "PDF"}
+    if kind in {"document", "gene"}:
+        records, has_header = 0, False
+        with path.open(encoding="utf-8-sig") as stream:
+            for line in stream:
+                if "\x00" in line:
+                    raise ComputeError("文本输出含无效字符")
+                if kind == "gene":
+                    value = line.strip()
+                    if value.startswith(">"):
+                        if not value[1:].strip():
+                            raise ComputeError("FASTA记录需要真实名称")
+                        records += 1
+                        has_header = True
+                    elif value and (
+                        not has_header
+                        or any(
+                            not (char.isascii() and (char.isalpha() or char in "*-?. "))
+                            for char in value
+                        )
+                    ):
+                        raise ComputeError("基因输出须为有效FASTA序列")
+        if kind == "gene" and not records:
+            raise ComputeError("FASTA输出没有实际记录")
+        if path.suffix == ".json":
+            if path.stat().st_size > 32 * 1024**2:
+                raise ComputeError("结构化文档不得超过32MiB")
+            json.loads(path.read_text(encoding="utf-8-sig"))
+        return {
+            "format": "FASTA" if kind == "gene" else path.suffix[1:].upper(),
+            "records": records,
+            **(
+                {
+                    "fields": [
+                        "sequenceId",
+                        "description",
+                        "length",
+                        "gcContent",
+                        "sequencePreview",
+                    ]
+                }
+                if kind == "gene"
+                else {}
+            ),
+        }
     raise ComputeError("未知输出类型")
 
 
@@ -601,9 +684,9 @@ def import_output(record):
         resource = DataResource.objects.create(
             name=record.name,
             code=f"compute-{output.id}",
-            data_type="image" if output.kind == "image" else "document",
+            data_type=output.kind if output.kind in {"image", "gene"} else "document",
             file_format=path.suffix[1:].upper(),
-            storage_path=relative,
+            storage_path="table/" + relative,
             size_bytes=output.size_bytes,
             maintainer=record.requested_by,
             source=marker,

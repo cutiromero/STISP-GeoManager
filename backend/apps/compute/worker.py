@@ -119,6 +119,8 @@ def run_task(task):
         if manifest != task.version.manifest:
             raise ComputeError("算法包与固定清单不一致")
         context = {"inputs": {}, "parameters": task.parameters}
+        if manifest["runtime"] == "python-data-script-v1":
+            context["manifest"] = manifest
         total = 0
         for item in task.input_records.select_related("resource"):
             heartbeat(True)
@@ -154,11 +156,20 @@ def run_task(task):
         ).update(stage="检查并登记结果", progress=85)
         output_rows = []
         quality = quality_metadata(read_quality_report(results, manifest))
+        script_contract = None
+        if manifest["runtime"] == "python-data-script-v1":
+            from .script_contracts import read_contract
+
+            script_contract = read_contract(manifest, task.parameters)
         for spec in manifest["outputs"]:
             path = results / spec["file"]
             if not path.exists() and not spec["required"]:
                 continue
-            metadata = inspect_output(path, spec["kind"])
+            metadata = (
+                inspect_output(path, spec["kind"], contract=script_contract)
+                if script_contract is not None
+                else inspect_output(path, spec["kind"])
+            )
             metadata.update(quality)
             heartbeat(True)
             output_rows.append((spec, path, metadata, checksum(path)))

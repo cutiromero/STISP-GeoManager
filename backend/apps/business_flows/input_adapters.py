@@ -26,6 +26,8 @@ def capabilities(user, *, pinned=()):
     found = {}
     selected = []
     for version in rows:
+        if not isinstance(version.manifest.get("inputAdapter"), dict):
+            continue
         if (
             version.algorithm_id not in found or version.pk in pinned
         ) and agent_algorithm_allowed(version):
@@ -112,7 +114,16 @@ def _parameters(version, metadata, selected):
     return result, missing
 
 
-def plan_inputs(user, requirements, sources, choices=None, *, available=None):
+def plan_inputs(
+    user,
+    requirements,
+    sources,
+    choices=None,
+    *,
+    available=None,
+    script_policy=None,
+    bridge_versions=None,
+):
     """Return explainable direct/convert/configuration plans; never run a task."""
     if len(sources) > MAX_INPUTS:
         raise ValidationError("本次输入资料超过业务流上限")
@@ -237,8 +248,18 @@ def plan_inputs(user, requirements, sources, choices=None, *, available=None):
             )
         elif matching:
             item["status"] = "needs_choice"
+        elif script_policy and script_policy.get("allowScripts", False) and not choice:
+            from .script_bridges import choose_bridge, planned_script
+
+            bridge = choose_bridge(
+                user, [resource.data_type], spec["dataTypes"], available=bridge_versions
+            )
+            if bridge is not None:
+                item.update(planned_script(bridge))
         plans.append(item)
     return {
-        "ready": all(item["status"] in {"direct", "convert"} for item in plans),
+        "ready": all(
+            item["status"] in {"direct", "convert", "needs_script"} for item in plans
+        ),
         "items": plans,
     }

@@ -283,18 +283,11 @@ def _callbacks(workflow, node, actor):
     updated = [0.0]
 
     def record(value):
-        calls = state(workflow).setdefault("requestedIds", [])
         request_id = value.get("requestId")
-        if value.get("status") == "requesting" and request_id not in calls:
-            limit = min(MAX_MODEL_CALLS, workflow.max_iterations)
-            spent = (
-                workflow.plan.get("actualModelCallCount", 0)
-                if workflow.workflow_type != "business_flow"
-                else 0
-            )
-            if len(calls) + spent >= limit:
-                raise ComputeError("业务流已达到本次模型请求额度，已保留当前结果")
-            calls.append(request_id)
+        if value.get("status") == "requesting":
+            from .model_requests import admit
+
+            admit(workflow, request_id, maximum=MAX_MODEL_CALLS)
         entry.setdefault("attempts", [])
         previous = next(
             (item for item in entry["attempts"] if item.get("requestId") == request_id),
@@ -362,11 +355,21 @@ def _operator(workflow, user, policy, node, item, evidence):
 
         if version.algorithm.identifier in EDIT_CHECKS:
             raise PermissionDenied("此修改算子须使用原专业业务流逐项批准")
-        available = {
-            role: workflow.plan["inputs"][role]
-            for role in node["dataRoles"]
-            if role in workflow.plan["inputs"]
+        from .input_adapters import logical_role
+
+        requirements = {
+            row["key"]: row
+            for row in binding(workflow)["definitionSnapshot"]["inputRequirements"]
         }
+        available = {}
+        for role in node["dataRoles"]:
+            identities = [
+                identity
+                for key, identity in workflow.plan["inputs"].items()
+                if logical_role(key, requirements) == role
+            ]
+            if identities:
+                available[role] = identities[0] if len(identities) == 1 else identities
         from .data_bindings import prepare_inputs
 
         inputs = prepare_inputs(workflow, user, policy, node, version, available)

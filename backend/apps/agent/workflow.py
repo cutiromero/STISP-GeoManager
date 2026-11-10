@@ -100,10 +100,15 @@ def _authorize(workflow, *, history=False):
         raise PermissionDenied("MH-workflow功能已关闭")
     if not history and workflow.plan.get("deletedResources"):
         raise PermissionDenied("该科研任务引用的数据已删除，请重新选择数据后发起任务")
-    for rid in workflow.resource_ids:
-        if history and historical_deletion(workflow, user, p, rid):
-            continue
-        resolve_workflow_resource(user, p, rid, workflow, history=history)
+    if history:
+        for rid in workflow.resource_ids:
+            if historical_deletion(workflow, user, p, rid):
+                continue
+            resolve_workflow_resource(user, p, rid, workflow, history=True)
+    else:
+        from .workflow_resources import authorize_workflow_resources
+
+        authorize_workflow_resources(user, p, workflow.resource_ids, workflow)
     validate_knowledge(workflow, user, history=history)
     if not history:
         from .workflow_model_policy import workflow_model_policy

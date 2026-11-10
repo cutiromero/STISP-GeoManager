@@ -61,6 +61,7 @@ def normalize_definition(value):
             "inputRequirements",
             "nodes",
             "outputRequirements",
+            "inputPreparation",
         },
         "流程定义",
     )
@@ -78,6 +79,10 @@ def normalize_definition(value):
     ):
         invalid("流程定义版本或执行适配器无效")
     result = json.loads(encoded)
+    if "inputPreparation" in result:
+        from .input_policy import validate
+
+        result["inputPreparation"] = validate(result["inputPreparation"])
     inputs = result.get("inputRequirements", [])
     nodes = result.get("nodes", [])
     if not isinstance(inputs, list) or len(inputs) > MAX_ROLES:

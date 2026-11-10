@@ -12,6 +12,8 @@ import type {
   BusinessFlowVersionPublish,
   BusinessFlowInputPreparation,
   BusinessFlowInputPlan,
+  BusinessFlowInputScriptDetail,
+  BusinessFlowInputClarification,
 } from "./generated/types.gen";
 
 const invalid = (field: string): never => {
@@ -186,6 +188,47 @@ export function assertBusinessFlowRun(value: unknown) {
   }
 }
 export const businessFlowsApi = {
+  inputScript: (
+    id: string,
+    role: string,
+    options: { signal?: AbortSignal; attempt?: number } = {},
+  ) => {
+    const query = new URLSearchParams({
+      role,
+      ...(options.attempt ? { attempt: String(options.attempt) } : {}),
+    });
+    return requestJson<BusinessFlowInputScriptDetail>(
+      `/api/business-flows/runs/${encodeURIComponent(id)}/input-script/?${query}`,
+      {
+        signal: options.signal,
+        validate: (value) => {
+          const script = record(value, "inputScript");
+          if (
+            script.role !== role ||
+            script.language !== "python" ||
+            typeof script.code !== "string" ||
+            script.code.length > 16000 ||
+            typeof script.sha256 !== "string" ||
+            !/^[a-f0-9]{64}$/.test(script.sha256) ||
+            !Number.isSafeInteger(script.attempt) ||
+            typeof script.summary !== "string" ||
+            !texts(script.diagnostics) ||
+            !Array.isArray(script.sourceIds)
+          )
+            invalid("inputScript");
+        },
+      },
+    );
+  },
+  clarifyInput: (id: string, body: BusinessFlowInputClarification) =>
+    requestJson<BusinessFlowRun>(
+      `/api/business-flows/runs/${encodeURIComponent(id)}/input-clarification/`,
+      {
+        method: "POST",
+        body,
+        validate: assertBusinessFlowRun,
+      },
+    ),
   prepareInputs: (
     id: number,
     body: BusinessFlowInputPreparation,
@@ -223,6 +266,11 @@ export const businessFlowsApi = {
                 "waiting_compute",
                 "waiting_import",
                 "ready",
+                "needs_script",
+                "generating_script",
+                "reviewing_script",
+                "needs_clarification",
+                "failed",
               ].includes(String(item.status)) ||
               (item.fields !== undefined && !texts(item.fields))
             )

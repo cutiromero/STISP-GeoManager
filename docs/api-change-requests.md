@@ -1696,6 +1696,15 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 - 同期结果契约：alterationRasters新增可选label/band，map-preview与其image接口接受可选band。后端按真实命名波段生成PNG与共用色表，缓存身份包含波段和规则；前端不重做栅格符号化。旧单波段引用仍保持原协议。
 
+## API-20261110-006 业务流自主编写衔接脚本
+
+- Status: Planned；契约已补充，主助手统一实现和验收。
+- Endpoints: 新增GET业务流input-script（按输入键与尝试序号读取真实代码/诊断），POST input-clarification（补充必要资料含义，不批准科研节点）。
+- Contract: BusinessFlowSpec可选inputPreparation策略（脚本开关、可选独立AI审阅、最多两次返修）；输入规划/运行摘要增加真实脚本阶段与按需查看标记。Compute输入允许六种已登记资料，参数maxLength缺省仍为2000，仅显式声明可达16000；专用python-data-script-v1与inputScriptBridge规范固定受限执行器，不运行算法包自带入口。
+- Frontend reason: 在普通对话宽度展示资料衔接进度，代码按需查看；只有资料含义确有歧义时提交说明，不增加常规审批。
+- Backend implementation: 初始输入和节点间数据经同一准备服务；已有工具优先，必要时Agent依据真实字段/样本生成Python，受限运行、检查输出并按实际错误返修。固定科学算子、版本、人工批准和实时ACL不改变；原件只读，派生输入私有。脚本代码不随SSE状态重复传输。
+- Verification: 无预置转换器的非地质数据实际生成代码并处理；已登记工具失败后的脚本修复；节点间类型/字段适配；越权文件/网络/进程拒绝，原件及元信息未改、停止/撤权、预算/版本隔离、实际人工说明与脚本按需读取次数。
+
 
 ## API-20261110-007 - 工作流模型活动增量与刷新恢复
 

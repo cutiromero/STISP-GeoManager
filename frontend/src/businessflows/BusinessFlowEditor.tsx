@@ -376,6 +376,63 @@ export default function BusinessFlowEditor({
           />
         </Form.Item>
       </Form>
+      <details className="flow-input-policy" style={{ marginBottom: 16 }}>
+        <summary>{ui("资料衔接策略", "Input preparation policy")}</summary>
+        <div
+          style={{ display: "flex", gap: 20, flexWrap: "wrap", paddingTop: 12 }}
+        >
+          <label>
+            <Switch
+              size="small"
+              checked={spec.inputPreparation?.allowScripts !== false}
+              onChange={(allowScripts) =>
+                setSpec((old) => ({
+                  ...old,
+                  inputPreparation: { ...old.inputPreparation, allowScripts },
+                }))
+              }
+            />{" "}
+            {ui(
+              "允许智能体编写衔接脚本",
+              "Allow agent-written preparation scripts",
+            )}
+          </label>
+          <label>
+            <Switch
+              size="small"
+              checked={
+                spec.inputPreparation?.reviewScripts ??
+                spec.nodes.some((node) => node.review.ai)
+              }
+              onChange={(reviewScripts) =>
+                setSpec((old) => ({
+                  ...old,
+                  inputPreparation: { ...old.inputPreparation, reviewScripts },
+                }))
+              }
+            />{" "}
+            {ui("独立审核衔接脚本", "Independently review preparation scripts")}
+          </label>
+          <label>
+            {ui("最多返修", "Repair limit")}{" "}
+            <InputNumber
+              size="small"
+              min={0}
+              max={2}
+              value={spec.inputPreparation?.maxRepairs ?? 2}
+              onChange={(value) =>
+                setSpec((old) => ({
+                  ...old,
+                  inputPreparation: {
+                    ...old.inputPreparation,
+                    maxRepairs: value ?? 2,
+                  },
+                }))
+              }
+            />
+          </label>
+        </div>
+      </details>
       {managedSkeleton && (
         <Alert
           type="info"
