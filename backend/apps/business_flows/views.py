@@ -165,6 +165,7 @@ def start(request, flow_id):
             "parameters",
             "conversationId",
             "idempotencyKey",
+            "inputAdapters",
         },
     )
     for name in ("model", "reviewerModel"):
@@ -187,6 +188,25 @@ def start(request, flow_id):
     version = get_object_or_404(flow.versions, pk=version_id, status="published")
     workflow = start_flow(request.user, version, value)
     return JsonResponse(serialize_run(request.user, workflow), status=202)
+
+
+@endpoint(["POST"])
+def prepare_inputs(request, flow_id):
+    from .runtime import _inputs
+    from apps.agent.policy import require_access
+
+    policy = require_access(request.user, "agent")
+    flow = get_object_or_404(BusinessFlowDefinition.objects, pk=flow_id, is_active=True)
+    value = body(request, {"versionId", "inputs", "inputAdapters", "uploadBatchId"})
+    if type(value.get("versionId")) is not int:
+        raise ValidationError("请选择真实发布版本")
+    version = get_object_or_404(
+        flow.versions, pk=value["versionId"], status="published"
+    )
+    _, _, planned = _inputs(
+        request.user, version.definition, value, policy, preview=True
+    )
+    return JsonResponse(planned)
 
 
 def own_workflow(user, workflow_id, *, allow_cancel=False):

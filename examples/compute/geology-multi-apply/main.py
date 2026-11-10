@@ -11,8 +11,10 @@ from multi_io import (
     write_vector,
 )
 from multi_raster import RasterAlterations, empty_vectors
+from multi_stack import raster_inputs
 
 
+@raster_inputs("apply")
 def run(context):
     config = settings(context)
     lithology, faults, area, rules, units, aliases, snapshot = inputs(context, config)

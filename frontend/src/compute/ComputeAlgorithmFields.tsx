@@ -36,7 +36,7 @@ export function resetLinkedComputeParameters(
   }
 }
 
-function ParameterControl({
+export function ComputeParameterControl({
   parameter,
   candidate,
   value,
@@ -45,7 +45,7 @@ function ParameterControl({
   id,
 }: {
   parameter: ComputeParameterSpec;
-  candidate?: ComputeCandidate;
+  candidate?: Pick<ComputeCandidate, "fields" | "bands">;
   value?: unknown;
   checked?: boolean;
   onChange?: (value: unknown) => void;
@@ -386,7 +386,10 @@ export default function ComputeAlgorithmFields({
                   </div>
                 }
               >
-                <ParameterControl parameter={parameter} candidate={candidate} />
+                <ComputeParameterControl
+                  parameter={parameter}
+                  candidate={candidate}
+                />
               </Form.Item>
             );
           })}

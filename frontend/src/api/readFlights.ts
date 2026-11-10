@@ -22,9 +22,12 @@ export function isReadOnlyRequest(method: string, url: string) {
   return (
     ["GET", "HEAD"].includes(method.toUpperCase()) ||
     (method.toUpperCase() === "POST" &&
-      /^\/api\/catalog\/resources\/[1-9]\d*\/(?:query|nongeo-query)\/$/.test(
+      (/^\/api\/business-flows\/[1-9]\d*\/prepare-inputs\/$/.test(
         new URL(url, "http://read.invalid").pathname,
-      ))
+      ) ||
+        /^\/api\/catalog\/resources\/[1-9]\d*\/(?:query|nongeo-query)\/$/.test(
+          new URL(url, "http://read.invalid").pathname,
+        )))
   );
 }
 

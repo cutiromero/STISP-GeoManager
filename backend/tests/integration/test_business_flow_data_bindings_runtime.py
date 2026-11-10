@@ -392,18 +392,34 @@ def test_role_binding_does_not_skip_its_declared_required_fields(chains):
                 "definition": definition,
             },
         )
-        workflow = runtime.start_flow(
-            env["owner"],
-            version,
-            {
-                "model": "mock",
-                "inputs": {"source": env["resource"].pk, "context": env["resource"].pk},
-                "idempotencyKey": uuid4().hex,
-            },
-        )
-    advance(env, workflow)
-    assert workflow.status == "failed", workflow.detail
-    with project_scope(env["scope"]):
+        body = {
+            "model": "mock",
+            "inputs": {"source": env["resource"].pk, "context": env["resource"].pk},
+            "idempotencyKey": uuid4().hex,
+        }
+        from django.core.exceptions import ValidationError
+        from apps.agent.models import AgentWorkflow
+
+        before = AgentWorkflow.objects.count()
+        with patch("apps.agent.business_flow_execution.execute_node") as model:
+            from apps.agent.policy import require_access
+
+            _, _, preview = runtime._inputs(
+                env["owner"],
+                version.definition,
+                body,
+                require_access(env["owner"], "agent"),
+                preview=True,
+            )
+            assert {item["role"]: item["status"] for item in preview["items"]} == {
+                "source": "direct",
+                "context": "unavailable",
+            }
+            assert preview["ready"] is False
+            with pytest.raises(ValidationError):
+                runtime.start_flow(env["owner"], version, body)
+            model.assert_not_called()
+        assert AgentWorkflow.objects.count() == before
         assert not ComputeTask.objects.exists()
 
 

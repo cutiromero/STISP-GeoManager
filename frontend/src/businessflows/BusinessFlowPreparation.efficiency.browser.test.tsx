@@ -18,7 +18,11 @@ import { businessFlowsApi } from "../api/businessFlows";
 import AgentPage from "../agent/AgentPage";
 import { genericRoles } from "../agent/GenericWorkflowUploads";
 import BusinessFlowLaunch from "./BusinessFlowLaunch";
-import { geologyDetail, businessFlowRun } from "./businessFlow.testFixtures";
+import {
+  geologyDetail,
+  businessFlowRun,
+  directInputPlan,
+} from "./businessFlow.testFixtures";
 import platformStyles from "../styles.css?inline";
 
 vi.mock("../components/WorkspaceHeader", () => ({
@@ -146,6 +150,9 @@ const roles = Object.fromEntries(
 );
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.spyOn(businessFlowsApi, "prepareInputs").mockImplementation(
+    async (_id, request) => directInputPlan(request),
+  );
   sessionStorage.clear();
   localStorage.clear();
   vi.spyOn(agentApi, "conversations").mockResolvedValue({ items: [] });

@@ -231,7 +231,7 @@ def render_report(workflow, tasks):
                     ]
                 )
                 lines.extend(
-                    f"| {_cell(row['mineral'])} | {_cell(row['original_pixels'])} | {_cell(row['hit_pixels'])} | {_cell(row['retained_pixels'])} | {_cell(row['hit_area_m2'])} | {_cell(row['hydrothermal_pixels'])} |"
+                    f"| {_cell(row.get('mineral_name') or row['mineral'])} | {_cell(row['original_pixels'])} | {_cell(row['hit_pixels'])} | {_cell(row['retained_pixels'])} | {_cell(row['hit_area_m2'])} | {_cell(row['hydrothermal_pixels'])} |"
                     for row in quality
                 )
                 lines.append("")

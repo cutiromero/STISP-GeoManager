@@ -36,7 +36,49 @@ _CACHE: OrderedDict[str, tuple[bytes, dict]] = OrderedDict()
 _CACHE_LOCK = threading.Lock()
 
 
-def _rules(output) -> dict:
+def _rules(output, band=1) -> dict:
+    if output.key in {
+        "alteration_stack_before",
+        "alteration_stack_corrected",
+        "alteration_stack_changes",
+    }:
+        metadata = output.metadata
+        names = metadata.get("bandNames", [])
+        if not 1 <= band <= len(names) or not names[band - 1]:
+            raise ComputeError("类别波段不存在或缺少实际名称")
+        changes = output.key.endswith("_changes")
+        rules = {
+            "band": band,
+            "palette": "alteration-changes" if changes else "alteration",
+            "range": None,
+        }
+        if not changes:
+            from apps.agent.result_colors import category_style
+            from apps.agent.color_library import policy_revision
+
+            tables = metadata.get("mapBandColorTables", [])
+            table = next(
+                (
+                    item
+                    for item in tables
+                    if item.get("band") == band
+                    and item.get("policyRevision") == policy_revision()
+                ),
+                None,
+            )
+            if table:
+                rules["colorTable"] = table["classes"]
+            else:
+                style, _ = category_style("mineral", [names[band - 1]])
+                rules["colorTable"] = [
+                    {"value": 0, "label": "无蚀变", "color": "#00000000"},
+                    {
+                        "value": 1,
+                        "label": names[band - 1],
+                        "color": style["renderer"]["classes"][0]["color"] + "ff",
+                    },
+                ]
+        return rules
     if output.key == "prospect_support":
         return {
             "band": 1,
@@ -88,7 +130,7 @@ def _rules(output) -> dict:
                 ]
         return rules
     return {
-        "band": 1,
+        "band": band,
         "palette": "blue",
         "range": [-1, 1] if output.key.lower() in {"ndvi", "ndwi"} else None,
     }
@@ -233,11 +275,15 @@ def _render(source: Path, png: Path, side: int, rules: dict) -> dict:
 
 
 @checksum_scope()
-def ensure_map_preview(output) -> tuple[bytes, dict]:
+def ensure_map_preview(output, band=1) -> tuple[bytes, dict]:
     """Caller must authorize the task and current source resources on each request."""
     source = _source(output)
     side = min(MAX_PREVIEW_SIDE, runtime_max_raster_side_pixels())
-    rules = _rules(output)
+    if type(band) is not int or not 1 <= band <= getattr(output, "metadata", {}).get(
+        "bands", 1
+    ):
+        raise ComputeError("波段不属于实际计算结果")
+    rules = _rules(output, band)
     try:
         fingerprint = _fingerprint(output, source, side, rules)
         directory = app_path(

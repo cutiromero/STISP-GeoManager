@@ -510,14 +510,15 @@ def output_map_preview(request, output_id):
     from .map_preview import ensure_map_preview
 
     output = authorized_map_output(request, output_id)
-    _, metadata = ensure_map_preview(output)
+    band = map_preview_band(request)
+    _, metadata = ensure_map_preview(output, band)
     return JsonResponse(
         {
             "name": output.task.name + " \u00b7 " + output.label,
             "kind": "raster",
             "metadata": {**output.metadata, **metadata},
             "temporary": True,
-            "imageUrl": f"/api/compute/outputs/{output.id}/map-preview/image/?projectTagId={output.task.project_tag_id}",
+            "imageUrl": f"/api/compute/outputs/{output.id}/map-preview/image/?projectTagId={output.task.project_tag_id}&band={band}",
             "imageCoordinates": metadata["imageCoordinates"],
         }
     )
@@ -528,11 +529,21 @@ def output_map_image(request, output_id):
     from .map_preview import ensure_map_preview
 
     output = authorized_map_output(request, output_id)
-    image, _ = ensure_map_preview(output)
+    image, _ = ensure_map_preview(output, map_preview_band(request))
     response = HttpResponse(image, content_type="image/png")
     response["X-Content-Type-Options"] = "nosniff"
     response["Cache-Control"] = "private, no-store"
     return response
+
+
+def map_preview_band(request):
+    try:
+        band = int(request.GET.get("band", "1"))
+    except (TypeError, ValueError) as exc:
+        raise ComputeError("地图预览波段须为整数") from exc
+    if not 1 <= band <= 1024:
+        raise ComputeError("地图预览波段须为1至1024")
+    return band
 
 
 @endpoint(["POST"])

@@ -21,7 +21,11 @@ import {
 } from "../projects/session";
 import { invalidateBrowserRequests } from "../auth/browserSession";
 import BusinessFlowLaunch from "./BusinessFlowLaunch";
-import { researchDetail, researchVersion } from "./businessFlow.testFixtures";
+import {
+  researchDetail,
+  researchVersion,
+  directInputPlan,
+} from "./businessFlow.testFixtures";
 
 vi.mock("../agent/useAgentBootstrap", () => ({
   useAgentBootstrapState: () => ({
@@ -87,6 +91,9 @@ async function choose(name: string) {
   );
 }
 beforeEach(() => {
+  vi.spyOn(businessFlowsApi, "prepareInputs").mockImplementation(
+    async (_id, request) => directInputPlan(request),
+  );
   setActiveProject("3");
   const definition = {
     ...researchVersion.definition,

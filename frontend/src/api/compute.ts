@@ -119,8 +119,10 @@ export const computeApi = {
     requestJson<ComputePreview>(`/api/compute/outputs/${id}/preview/`),
   vectorPreview: (id: number) =>
     requestJson<ComputePreview>(`/api/compute/outputs/${id}/preview/?view=map`),
-  mapPreview: (id: number) =>
-    requestJson<ComputeMapPreview>(`/api/compute/outputs/${id}/map-preview/`),
+  mapPreview: (id: number, band?: number) =>
+    requestJson<ComputeMapPreview>(
+      `/api/compute/outputs/${id}/map-preview/${band ? `?band=${band}` : ""}`,
+    ),
   upload: async (id: number, file: File): Promise<ComputeVersion> => {
     const body = new FormData();
     body.set("file", file);

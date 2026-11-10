@@ -8,6 +8,7 @@ from multi_windows import create
 from prospect_fields import PROFILES, base_fields, profile_fields
 from prospect_zones import delineate
 from prospect_evidence import platform_evidence
+from multi_stack import raster_inputs
 
 # ==================== CONFIGURATION ====================
 DEFAULTS = {
@@ -85,6 +86,7 @@ def current_intersections(context, faults, area, rules, epsg):
     return points
 
 
+@raster_inputs("prospect")
 def run(context):
     config = configuration(context)
     lithology, faults, area, rules, units, _, snapshot = inputs(context, config)

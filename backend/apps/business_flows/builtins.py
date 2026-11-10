@@ -13,6 +13,7 @@ GEOLOGY_ROLES = {
     "hydromica": ("水云母化", "raster"),
     "calcite": ("方解石化", "raster"),
     "dolomite": ("白云石化", "raster"),
+    "alterations": ("分类识别资料（不限类别，可多份）", "raster"),
 }
 GEOLOGY_NODES = (
     ("inputs", "确认资料与字段", "agent", tuple(GEOLOGY_ROLES)),
@@ -20,7 +21,12 @@ GEOLOGY_NODES = (
     ("apply", "审核与处置建议", "agent", tuple(GEOLOGY_ROLES)),
     ("recheck", "修正结果复核", "operator", tuple(GEOLOGY_ROLES)),
     ("relations", "构造关系重建", "operator", ("lithology", "faults", "coverage")),
-    ("prospect", "找矿远景推断", "operator", ("lithology", "faults", *MINERALS)),
+    (
+        "prospect",
+        "找矿远景推断",
+        "operator",
+        ("lithology", "faults", *MINERALS, "alterations"),
+    ),
     ("finish", "整理报告与成果", "result", ()),
 )
 
@@ -63,6 +69,11 @@ def geology_definition():
                 "dataTypes": [kind],
                 "required": key == "lithology",
                 "requiredFields": [],
+                **(
+                    {"multiple": True, "semanticType": "class_mask_stack_v1"}
+                    if key == "alterations"
+                    else {}
+                ),
             }
             for key, (label, kind) in GEOLOGY_ROLES.items()
         ],

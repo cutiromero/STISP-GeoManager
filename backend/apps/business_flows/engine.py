@@ -103,7 +103,6 @@ def resolve_evidence(workflow, rows):
 
 
 def input_evidence(workflow, user, policy, node):
-    from apps.agent.resource_discovery import resolve_discoverable_resource
     from apps.catalog.data_query import get_resource_profile
 
     values = state(workflow)
@@ -113,7 +112,7 @@ def input_evidence(workflow, user, policy, node):
         for item in binding(workflow)["definitionSnapshot"]["inputRequirements"]
     }
     result = []
-    roles = list(
+    declared_roles = list(
         dict.fromkeys(
             [
                 *node["dataRoles"],
@@ -125,12 +124,21 @@ def input_evidence(workflow, user, policy, node):
             ]
         )
     )
+    from .input_adapters import logical_role
+
+    roles = [
+        key
+        for key in workflow.plan["inputs"]
+        if logical_role(key, specs) in declared_roles
+    ]
     schemas = values.setdefault("inputSchemas", {})
     for role in roles:
         identity = workflow.plan["inputs"].get(role)
         if identity is None:
             continue
-        resource = resolve_discoverable_resource(user, policy, identity)
+        from apps.agent.workflow_resources import resolve_workflow_resource
+
+        resource = resolve_workflow_resource(user, policy, identity, workflow)
         cache_key = f"{identity}:{resource.updated_at.isoformat()}"
         if cache_key not in cached:
             metadata = {
@@ -225,9 +233,11 @@ def input_evidence(workflow, user, policy, node):
                 "title": resource.name,
                 "result": metadata,
             }
-        if set(specs[role].get("requiredFields", [])) - set(schemas.get(cache_key, [])):
+        if set(specs[logical_role(role, specs)].get("requiredFields", [])) - set(
+            schemas.get(cache_key, [])
+        ):
             raise ComputeError(
-                specs[role]["label"]
+                specs[logical_role(role, specs)]["label"]
                 + "缺少业务流要求的字段，不能因复用资料跳过角色规范"
             )
         result.append(deepcopy(cached[cache_key]))
@@ -490,6 +500,10 @@ def advance(workflow_id):
             if workflow.cancel_requested:
                 workflow.status, workflow.detail = "cancelled", "已停止业务流"
                 persist(workflow)
+                return
+            from .input_preparation import advance_inputs
+
+            if not advance_inputs(workflow, user, policy):
                 return
             definition = binding(workflow)["definitionSnapshot"]
             value = state(workflow)

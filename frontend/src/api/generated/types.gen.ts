@@ -6331,7 +6331,7 @@ export type AgentWorkflowRoleResult = {
         /**
          * 建议角色
          */
-        role: 'lithology' | 'faults' | 'coverage' | 'units' | 'hematite' | 'chlorite' | 'hydromica' | 'calcite' | 'dolomite' | null;
+        role: 'lithology' | 'faults' | 'coverage' | 'units' | 'hematite' | 'chlorite' | 'hydromica' | 'calcite' | 'dolomite' | 'alterations' | null;
         /**
          * 判断依据或规则退回说明
          */
@@ -6390,6 +6390,14 @@ export type AgentWorkflowUploadProfile = {
      */
     bandCount?: number | null;
     /**
+     * 实际源文件声明的输入语义；执行时仍检查真实像元
+     */
+    semanticType?: string;
+    /**
+     * 前64个实际波段名称，完整数量见bandCount
+     */
+    bandNames?: Array<string>;
+    /**
      * 栅格列数
      */
     width?: number | null;
@@ -6446,7 +6454,7 @@ export type AgentWorkflowUpload = {
     /**
      * 平台推荐的资料角色；无法判断时为null
      */
-    roleHint: 'lithology' | 'faults' | 'coverage' | 'units' | 'hematite' | 'chlorite' | 'hydromica' | 'calcite' | 'dolomite' | null;
+    roleHint: 'lithology' | 'faults' | 'coverage' | 'units' | 'hematite' | 'chlorite' | 'hydromica' | 'calcite' | 'dolomite' | 'alterations' | null;
     profile: AgentWorkflowUploadProfile;
     /**
      * 已绑定的工作流UUID；未绑定时为null
@@ -6666,9 +6674,17 @@ export type AgentMultiElementMap = {
      */
     alterationRasters?: Array<{
         /**
-         * 矿物角色名
+         * 实际类别的稳定标识
          */
         mineral: string;
+        /**
+         * 实际类别名称
+         */
+        label?: string;
+        /**
+         * 命名类别集合中的实际波段，旧单波段流程缺省1
+         */
+        band?: number;
         /**
          * 修改前识别栅格计算输出ID
          */
@@ -11317,7 +11333,7 @@ export type BusinessFlowInputRequirement = {
      */
     description: string;
     /**
-     * 允许的数据类型
+     * 流程期望的目标类型；实际来源不符时统一规划已发布的输入转换能力
      */
     dataTypes: Array<'vector' | 'raster' | 'table' | 'gene' | 'document' | 'image'>;
     /**
@@ -11328,6 +11344,14 @@ export type BusinessFlowInputRequirement = {
      * 资料必须提供的字段名；无要求时为空
      */
     requiredFields: Array<string>;
+    /**
+     * 同一角色允许多份来源，绑定键使用角色:来源编号；默认false
+     */
+    multiple?: boolean;
+    /**
+     * 可选目标语义标识，与已发布适配能力匹配
+     */
+    semanticType?: string;
 };
 
 /**
@@ -11714,6 +11738,7 @@ export type BusinessFlowRun = {
      * 有界可追溯过程事件
      */
     events: Array<BusinessFlowEvent>;
+    inputPreparation?: BusinessFlowInputPlan;
     [key: string]: unknown;
 };
 
@@ -11882,6 +11907,195 @@ export type BusinessFlowStart = {
      * 同一操作重试的稳定键
      */
     idempotencyKey: string;
+    inputAdapters?: BusinessFlowInputAdapterChoices;
+};
+
+/**
+ * 已发布转换版本及其参数，不授予额外访问权
+ */
+export type BusinessFlowInputAdapterChoice = {
+    /**
+     * 已发布转换版本
+     */
+    versionId?: number;
+    /**
+     * 真实manifest已声明的有界参数值
+     */
+    parameters?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * 来源绑定键到显式适配选择
+ */
+export type BusinessFlowInputAdapterChoices = {
+    [key: string]: BusinessFlowInputAdapterChoice;
+};
+
+/**
+ * 当前项目及用户允许的已发布输入转换工具
+ */
+export type BusinessFlowInputAdapterCandidate = {
+    /**
+     * 算子版本编号
+     */
+    versionId: number;
+    /**
+     * 工具名称
+     */
+    name: string;
+    /**
+     * 转换的含义与限制
+     */
+    description: string;
+    /**
+     * 真实目标类型
+     */
+    targetType: string;
+    /**
+     * 真实manifest参数规范
+     */
+    parameters: Array<ComputeParameterSpec>;
+};
+
+/**
+ * 可直接使用、可转换或仍需配置的一项输入；不修改原件
+ */
+export type BusinessFlowInputPlanItem = {
+    /**
+     * 来源角色绑定键
+     */
+    role: string;
+    /**
+     * 真实来源名称
+     */
+    sourceName: string;
+    /**
+     * 实际来源类型
+     */
+    sourceType: string;
+    /**
+     * 目标语义
+     */
+    targetSemantics: string;
+    /**
+     * 冻结的包摘要
+     */
+    checksum?: string;
+    /**
+     * 真实来源输入键
+     */
+    inputKey?: string;
+    /**
+     * 真实目标输出键
+     */
+    outputKey?: string;
+    /**
+     * 目标资料类型
+     */
+    targetType?: string;
+    /**
+     * 真实计算任务编号
+     */
+    taskId?: string;
+    /**
+     * 原始资料编号
+     */
+    sourceId: number;
+    /**
+     * 冻结转换版本
+     */
+    versionId?: number;
+    /**
+     * 真实入库的派生资料编号
+     */
+    resourceId?: number;
+    /**
+     * 真实计算输出编号
+     */
+    outputId?: number;
+    /**
+     * 来源冻结修订
+     */
+    sourceRevision: string;
+    /**
+     * 允许的目标类型
+     */
+    targetTypes: Array<string>;
+    /**
+     * 真实规划或执行状态
+     */
+    status: 'direct' | 'convert' | 'needs_parameters' | 'needs_choice' | 'unavailable' | 'waiting_compute' | 'waiting_import' | 'ready';
+    /**
+     * 真实来源字段
+     */
+    fields?: Array<string>;
+    /**
+     * 当前允许的转换候选
+     */
+    candidates?: Array<BusinessFlowInputAdapterCandidate>;
+    /**
+     * 真实manifest已声明的有界参数值
+     */
+    parameters?: {
+        [key: string]: unknown;
+    };
+    /**
+     * 真实manifest已声明的有界参数值
+     */
+    actualParameters?: {
+        [key: string]: unknown;
+    };
+    /**
+     * 仍需指定的参数键
+     */
+    missingParameters?: Array<string>;
+    /**
+     * 人工字段语义到转换参数的映射
+     */
+    fieldTargets?: {
+        [key: string]: string;
+    };
+    /**
+     * 实际来源波段数量；非栅格为0
+     */
+    sourceBands?: number;
+};
+
+/**
+ * 所有业务流共用的输入兼容性规划及真实适配记录
+ */
+export type BusinessFlowInputPlan = {
+    /**
+     * 是否所有来源均已可用或具备完整方案
+     */
+    ready: boolean;
+    /**
+     * 逐来源的输入方案
+     */
+    items: Array<BusinessFlowInputPlanItem>;
+};
+
+/**
+ * 只读规划，不运行模型、算子或修改原始资料
+ */
+export type BusinessFlowInputPreparation = {
+    /**
+     * 发布流程版本
+     */
+    versionId: number;
+    /**
+     * 来源资料绑定
+     */
+    inputs: {
+        [key: string]: number;
+    };
+    inputAdapters?: BusinessFlowInputAdapterChoices;
+    /**
+     * 专业任务资料批次；只允许当前用户、本项目的真实上传或目录引用
+     */
+    uploadBatchId?: string;
 };
 
 /**
@@ -22507,6 +22721,10 @@ export type PreviewComputeOutputMapData = {
          * 标识
          */
         projectTagId: number;
+        /**
+         * 实际栅格波段，缺省1；不能超出实际输出波段数
+         */
+        band?: number;
     };
     url: '/api/compute/outputs/{outputId}/map-preview/';
 };
@@ -22562,6 +22780,10 @@ export type RenderComputeOutputMapData = {
          * 标识
          */
         projectTagId: number;
+        /**
+         * 实际栅格波段，缺省1；不能超出实际输出波段数
+         */
+        band?: number;
     };
     url: '/api/compute/outputs/{outputId}/map-preview/image/';
 };
@@ -22954,6 +23176,65 @@ export type StartBusinessFlowResponses = {
 };
 
 export type StartBusinessFlowResponse = StartBusinessFlowResponses[keyof StartBusinessFlowResponses];
+
+export type PrepareBusinessFlowInputsData = {
+    /**
+     * 经界面确认的有界业务参数
+     */
+    body: BusinessFlowInputPreparation;
+    headers: {
+        /**
+         * 唯一当前项目编号；不支持all。读写均重验当前项目访问。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前项目业务流登记编号
+         */
+        flowId: number;
+    };
+    query?: never;
+    url: '/api/business-flows/{flowId}/prepare-inputs/';
+};
+
+export type PrepareBusinessFlowInputsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 当前资源状态或名称发生冲突
+     */
+    409: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type PrepareBusinessFlowInputsError = PrepareBusinessFlowInputsErrors[keyof PrepareBusinessFlowInputsErrors];
+
+export type PrepareBusinessFlowInputsResponses = {
+    /**
+     * 真实输入兼容性和适配候选
+     */
+    200: BusinessFlowInputPlan;
+};
+
+export type PrepareBusinessFlowInputsResponse = PrepareBusinessFlowInputsResponses[keyof PrepareBusinessFlowInputsResponses];
 
 export type ListBusinessFlowRunsData = {
     body?: never;

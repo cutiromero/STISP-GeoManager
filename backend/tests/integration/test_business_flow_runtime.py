@@ -3,7 +3,7 @@
 from copy import deepcopy
 from uuid import uuid4
 
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 import pytest
 
 from apps.agent.models import AgentRun
@@ -729,11 +729,22 @@ def test_shared_resource_cache_still_validates_each_roles_required_fields(
     monkeypatch.setattr(
         "apps.agent.business_flow_execution.execute_node", execution_stub(calls)
     )
-    workflow, _ = start(
-        env,
-        version,
-        inputs={"source": env["resource"].pk, "context": env["resource"].pk},
-    )
-    advance(env, workflow)
-    assert workflow.status == "failed", workflow.detail
+    inputs = {"source": env["resource"].pk, "context": env["resource"].pk}
+    with project_scope(env["scope"]):
+        from apps.agent.policy import require_access
+
+        _, _, planned = runtime._inputs(
+            env["user"],
+            version.definition,
+            {"inputs": inputs},
+            require_access(env["user"], "agent", "mock"),
+            preview=True,
+        )
+        assert planned["ready"] is False
+        assert {item["role"]: item["status"] for item in planned["items"]} == {
+            "source": "direct",
+            "context": "unavailable",
+        }
+    with pytest.raises(ValidationError, match="输入仍需配置"):
+        start(env, version, inputs=inputs)
     assert not calls

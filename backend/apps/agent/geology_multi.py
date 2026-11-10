@@ -90,7 +90,54 @@ FIELDS = (
 )
 
 
-def graph(segment="all", raster=False):
+def graph(segment="all", raster=False, stack=False):
+    if stack:
+        initial = {
+            key: key for key in ("lithology", "faults", "coverage", "alteration_stack")
+        }
+        initial["rules"] = "frozen_rules"
+        revised = {
+            **initial,
+            "lithology": "apply/lithology",
+            "faults": "apply/faults",
+            "alteration_stack": "apply/alteration_stack_corrected",
+            "alteration_stack_weight": "apply/alteration_stack_weight",
+        }
+        stages = [
+            ("check", "geology-multi-check", initial),
+            (
+                "apply",
+                "geology-multi-apply",
+                {
+                    **initial,
+                    "issues": "check/issues",
+                    "approved_changes": "approved_changes",
+                },
+            ),
+            ("recheck", "geology-multi-check", revised),
+        ]
+        if segment != "lithology":
+            stages.append(
+                (
+                    "relations",
+                    "geology-multi-relations",
+                    {
+                        "faults": "apply/faults",
+                        "before_faults": "faults",
+                        "coverage": "coverage",
+                        "rules": "frozen_rules",
+                    },
+                )
+            )
+        if segment in {"all", "alteration"}:
+            stages.append(
+                (
+                    "prospect",
+                    "geology-multi-prospect",
+                    {**revised, "intersections": "relations/intersections"},
+                )
+            )
+        return stages
     initial = {key: key for key in ROLES if key != "rules"}
     initial["rules"] = "frozen_rules"
     edit = {**initial, "issues": "check/issues", "approved_changes": "approved_changes"}
@@ -155,7 +202,13 @@ def graph(segment="all", raster=False):
 
 
 def validate_inputs(user, policy, inputs, parameters, selected=(), *, workflow=None):
-    if not isinstance(inputs, dict) or set(inputs) != set(ROLES):
+    roles = (
+        {key: kind for key, kind in ROLES.items() if kind != "raster"}
+        | {"alteration_stack": "raster"}
+        if isinstance(inputs, dict) and "alteration_stack" in inputs
+        else ROLES
+    )
+    if not isinstance(inputs, dict) or set(inputs) != set(roles):
         raise ComputeError("请完整选择岩性、构造、研究区、五类矿物和项目地质规则")
     if parameters.get("segment", "all") not in SEGMENTS:
         raise ComputeError("分段入口请选择综合、岩性、构造或蚀变")
@@ -183,7 +236,7 @@ def validate_inputs(user, policy, inputs, parameters, selected=(), *, workflow=N
             and type(parameters[key]) is not int
         ):
             raise ComputeError("综合推理参数超出有效类型或范围：" + key)
-    for role, kind in ROLES.items():
+    for role, kind in roles.items():
         resource = (
             resolve_workflow_resource(user, policy, inputs[role], workflow)
             if workflow is not None
@@ -192,7 +245,9 @@ def validate_inputs(user, policy, inputs, parameters, selected=(), *, workflow=N
             )
         )
         if resource.data_type != kind or resource.status != "active":
-            raise ComputeError(LABELS[role] + "的数据类型或状态不适用")
+            raise ComputeError(
+                LABELS.get(role, "类别栅格集") + "的数据类型或状态不适用"
+            )
         if (resource.source or "").startswith(
             (
                 "geology-multi-reference:",
@@ -222,7 +277,9 @@ def validate_inputs(user, policy, inputs, parameters, selected=(), *, workflow=N
             if {"inj_id", "inj_type", "fake_type"} & fields:
                 raise ComputeError("请使用去标签的中性编号运行输入")
         if kind in {"raster", "vector"} and not metadata.get("crs"):
-            raise ComputeError(LABELS[role] + "缺少坐标系，无法核对空间关系")
+            raise ComputeError(
+                LABELS.get(role, "类别栅格集") + "缺少坐标系，无法核对空间关系"
+            )
     return read_rules(user, policy, inputs["rules"], selected, workflow=workflow)
 
 
@@ -380,6 +437,7 @@ def prepare(workflow, user, policy):
         },
         multiGraph=graph(
             workflow.parameters.get("segment", "all"),
+            stack="alteration_stack" in workflow.plan["inputs"],
             raster=any(
                 item.get("key") == "alteration_summary"
                 for item in workflow.plan.get("algorithms", {})

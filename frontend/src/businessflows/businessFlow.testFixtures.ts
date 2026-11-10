@@ -4,7 +4,44 @@ import type {
   BusinessFlowSpec,
   BusinessFlowSummary,
   BusinessFlowVersion,
+  BusinessFlowInputPreparation,
+  BusinessFlowInputPlan,
 } from "../api/generated/types.gen";
+export function directInputPlan(
+  request: BusinessFlowInputPreparation,
+): BusinessFlowInputPlan {
+  return {
+    ready: true,
+    items: Object.entries(request.inputs).map(([role, id]) => {
+      const base = role.split(":")[0]!;
+      const kind = ["lithology", "structure", "faults", "coverage"].includes(
+        base,
+      )
+        ? "vector"
+        : [
+              "alteration",
+              "hematite",
+              "chlorite",
+              "hydromica",
+              "calcite",
+              "dolomite",
+              "alterations",
+            ].includes(base)
+          ? "raster"
+          : "table";
+      return {
+        role,
+        sourceId: id,
+        sourceName: `资料 ${id}`,
+        sourceType: kind,
+        sourceRevision: "2026-11-10T00:00:00Z",
+        targetTypes: [kind],
+        targetSemantics: "",
+        status: "direct",
+      };
+    }),
+  };
+}
 export const researchSpec: BusinessFlowSpec = {
   schemaVersion: 1,
   adapter: "research_flow",

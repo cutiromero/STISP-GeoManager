@@ -4,6 +4,55 @@ import json
 from pathlib import Path
 
 
+def stack_port(manifest):
+    """The named-band port is a collection contract, not a mineral-name list."""
+    suffix = manifest["identifier"].removeprefix("geology-multi-")
+    if suffix not in {"check", "apply", "prospect"}:
+        return manifest
+    legacy = {"hematite", "chlorite", "hydromica", "calcite", "dolomite"}
+    for row in manifest["inputs"]:
+        if row["key"].removesuffix("_weight") in legacy:
+            row["required"] = False
+    for key, label in [
+        ("alteration_stack", "类别掩膜栅格集（类别不限预置示例）"),
+        ("alteration_stack_weight", "同类别、同网格的证据权重栅格集"),
+    ]:
+        if not any(row["key"] == key for row in manifest["inputs"]):
+            manifest["inputs"].append(
+                {
+                    "key": key,
+                    "label": label,
+                    "kind": "raster",
+                    "minBands": 1,
+                    "required": False,
+                }
+            )
+    for row in manifest["outputs"]:
+        if any(row["key"].startswith(key + "_") for key in legacy):
+            row["required"] = False
+    suffixes = (
+        ["before", "hits", "groups"]
+        if suffix == "check"
+        else ["corrected", "weight", "changes"]
+        if suffix == "apply"
+        else []
+    )
+    for kind in suffixes:
+        key = "alteration_stack_" + kind
+        if not any(row["key"] == key for row in manifest["outputs"]):
+            manifest["outputs"].append(
+                {
+                    "key": key,
+                    "label": "类别栅格集 · " + kind,
+                    "kind": "raster",
+                    "file": key + ".tif",
+                    "required": False,
+                }
+            )
+    manifest["version"] = "2.3.0" if suffix == "prospect" else "1.3.0"
+    return manifest
+
+
 def create(only=None):
     def vector(key, label, geometry):
         return {"key": key, "label": label, "kind": "vector", "geometryTypes": geometry}
@@ -256,6 +305,9 @@ def create(only=None):
             "timeoutSeconds": 900,
             "deterministic": True,
         }
+        if suffix == "prospect" and (directory / "operator.yaml").exists():
+            manifest = json.loads((directory / "operator.yaml").read_text())
+        manifest = stack_port(manifest)
         for row in manifest["outputs"]:
             if row["kind"] == "vector":
                 row["required"] = (

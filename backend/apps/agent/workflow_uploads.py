@@ -158,8 +158,11 @@ def raster_profile(path) -> dict:
             else None
         )
         warnings = [] if src.crs else ["缺少坐标系"]
-        if src.count != 1:
-            warnings.append("蚀变识别结果应为单波段栅格")
+        if (
+            src.count != 1
+            and src.tags().get("stisp_input_semantics") != "class_mask_stack_v1"
+        ):
+            warnings.append("多波段资料将按已登记的类别适配能力检查")
         return {
             "kind": "raster",
             "crs": src.crs.to_string() if src.crs else None,
@@ -167,6 +170,8 @@ def raster_profile(path) -> dict:
             "featureCount": None,
             "bounds": bounds,
             "bandCount": src.count,
+            "semanticType": src.tags().get("stisp_input_semantics", "")[:100],
+            "bandNames": [value or "" for value in src.descriptions[:64]],
             "width": src.width,
             "height": src.height,
             "fields": [],
@@ -198,11 +203,21 @@ def role_hint(file_name: str, profile: dict) -> str | None:
                 for role, words in MINERAL_HINTS.items()
                 if any(w in lowered for w in words)
             ),
-            None,
+            "alterations",
         )
     if profile["kind"] == "table":
         return "units"
     geometry = " ".join(profile["geometryTypes"])
+    if any(
+        word in lowered for word in ("蚀变", "矿物", "alteration", "mineral")
+    ) or any(
+        any(
+            word in field.get("name", "").casefold()
+            for word in ("mineral", "alteration", "矿物", "蚀变")
+        )
+        for field in profile.get("fields", [])
+    ):
+        return "alterations"
     if "Line" in geometry:
         return "faults"
     if "Polygon" in geometry:

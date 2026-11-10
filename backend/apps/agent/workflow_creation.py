@@ -8,7 +8,7 @@ from .models import AgentPolicy, AgentWorkflow
 from .policy import require_access
 
 
-def create_workflow(user, project_id, value, *, chat_execution=None):
+def create_workflow(user, project_id, value, *, chat_execution=None, input_plan=None):
     p = require_access(user, "agent", value.get("model"))
     if not p.get("workflowEnabled", True):
         raise ComputeError("MH-workflow功能已关闭", 403)
@@ -79,12 +79,47 @@ def create_workflow(user, project_id, value, *, chat_execution=None):
         from .geology_generic import validate_creation
 
         batch_id = value.get("uploadBatchId")
-        rules_id = validate_creation(user, p, inputs, parameters, batch_id, key)
+        if input_plan is None:
+            from apps.business_flows.builtins import geology_definition
+            from apps.business_flows.input_adapters import plan_inputs
+            from .workflow_uploads import batch_uploads
+
+            uploads = {row.resource_id: row for row in batch_uploads(user, batch_id)}
+            if set(inputs.values()) - set(uploads):
+                raise ComputeError("资料角色只能选择本次任务上传的资料或已授权目录引用")
+            planned = plan_inputs(
+                user,
+                geology_definition()["inputRequirements"],
+                {
+                    role: (
+                        uploads[identity].resource,
+                        {
+                            **uploads[identity].profile,
+                            "bands": uploads[identity].profile.get("bandCount", 0),
+                        },
+                    )
+                    for role, identity in inputs.items()
+                },
+            )
+            if not planned["ready"]:
+                raise ComputeError("请先在业务流资料准备中选择输入适配工具与参数")
+            input_plan = [
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key not in {"fields", "candidates"}
+                }
+                for row in planned["items"]
+            ]
+        rules_id = validate_creation(
+            user, p, inputs, parameters, batch_id, key, adaptations=input_plan
+        )
         resources_selected = sorted(set(inputs.values()) | {rules_id})
         generic_plan = {
             "uploadInputs": inputs,
             "uploadBatchId": batch_id,
             "rulesResourceId": rules_id,
+            **({"inputAdaptations": input_plan} if input_plan else {}),
         }
         inputs = {}
     elif value.get("uploadBatchId") is not None:

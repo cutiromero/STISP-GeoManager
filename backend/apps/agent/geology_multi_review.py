@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import math
+import hashlib
 
 from django.db import transaction
 from shapely.geometry import shape
@@ -1012,6 +1013,43 @@ def update_map(workflow):
         if item.get("outputId")
     }
     rasters = []
+    if check_outputs.get("alteration_stack_before"):
+        from .alteration_result_colors import MINERALS
+
+        names = workflow.plan.get("classMaskPreparation", {}).get("classes")
+        if names is None:
+            from apps.compute.models import ComputeOutput
+
+            output = (
+                ComputeOutput.objects.filter(
+                    pk=check_outputs["alteration_stack_before"]
+                )
+                .only("metadata")
+                .first()
+            )
+            names = (
+                []
+                if not output or output.metadata.get("emptyCollection")
+                else output.metadata.get("bandNames", [])
+            )
+        for band, name in enumerate(names, 1):
+            key = next(
+                (key for key, value in MINERALS.items() if value == name),
+                "class_" + hashlib.sha256(name.encode()).hexdigest()[:16],
+            )
+            entry = {
+                "mineral": key,
+                "label": name,
+                "band": band,
+                "beforeOutputId": check_outputs["alteration_stack_before"],
+            }
+            for field, suffix in (
+                ("afterOutputId", "corrected"),
+                ("changesOutputId", "changes"),
+            ):
+                if "alteration_stack_" + suffix in apply_outputs:
+                    entry[field] = apply_outputs["alteration_stack_" + suffix]
+            rasters.append(entry)
     for mineral in ("hematite", "chlorite", "hydromica", "calcite", "dolomite"):
         if mineral + "_before" not in check_outputs:
             continue

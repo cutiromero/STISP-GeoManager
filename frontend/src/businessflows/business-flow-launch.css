@@ -244,6 +244,54 @@
   margin-top: 28px;
   min-width: 0;
 }
+.flow-input-adaptation {
+  border-top: 1px solid #e6edef;
+  margin-top: 22px;
+  padding-top: 16px;
+  min-width: 0;
+}
+.flow-input-adaptation > p {
+  color: #8a9ba4;
+  font-size: 12px;
+}
+.flow-input-adaptation h3 {
+  font-size: 14px;
+  color: #456573;
+}
+.flow-input-adaptation-source {
+  padding: 12px 0;
+  border-bottom: 1px solid #edf1f3;
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+.flow-input-adaptation-source > strong {
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.flow-input-adaptation-source > small,
+.flow-input-adaptation-source > p {
+  color: #8b9da5;
+  font-size: 11px;
+  margin: 0;
+  line-height: 1.8;
+}
+.flow-input-adaptation-parameters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 12px;
+}
+.flow-input-adaptation-parameters > label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  font-size: 11px;
+  color: #81969f;
+}
+.flow-input-adaptation-parameters .ant-input-number {
+  width: 100%;
+}
 .flow-materials-heading {
   display: flex;
   align-items: center;

@@ -80,7 +80,7 @@ beforeEach(() => {
   });
 });
 
-function rasterWorkflow() {
+function rasterWorkflow(mineral = "calcite") {
   const workflow = reviewWorkflow(true);
   workflow.workflowType = "geology_multi_element_reasoning";
   workflow.plan.inputs = { lithology: 101, faults: 102 };
@@ -98,12 +98,12 @@ function rasterWorkflow() {
     id: "raster-change",
     kind: "multi_element" as const,
     element: "alteration" as const,
-    featureId: "AG-calcite-carbonate",
+    featureId: `AG-${mineral}-carbonate`,
     ruleId: "A-01",
     action: "downweight",
     title: "碳酸盐岩背景矿物降权",
     observations: {
-      mineral: "calcite",
+      mineral,
       raster_protocol: "alteration-pixels-v1",
       pixel_count: 100,
     },
@@ -157,7 +157,7 @@ function rasterWorkflow() {
     changes: [],
     alterationRasters: [
       {
-        mineral: "calcite",
+        mineral,
         beforeOutputId: 900,
         afterOutputId: 901,
         changesOutputId: 902,
@@ -211,6 +211,62 @@ function mockRasterReads(failRaster = false) {
     return reviewQuery(id, id === 102 || id === 202 ? lines : beforeReviewMap);
   });
 }
+
+it("按实际类别波段展示新增矿物，不限制为五类", async () => {
+  const workflow = rasterWorkflow("class_pyrite");
+  workflow.plan.inputs = { lithology: 101, faults: 102, alteration_stack: 103 };
+  workflow.plan.multiElementMap!.alterationRasters = [
+    {
+      mineral: "class_pyrite",
+      label: "黄铁矿化",
+      band: 2,
+      beforeOutputId: 900,
+      afterOutputId: 901,
+      changesOutputId: 902,
+    },
+  ];
+  mockRasterReads();
+  const fallback = request.getMockImplementation()!;
+  request.mockImplementation(async (url: string) => {
+    if (url.includes("map-preview")) {
+      const output = Number(url.match(/outputs\/(\d+)/)?.[1]);
+      return {
+        ...rasterPreview(output),
+        metadata: {
+          colorTable: [{ value: 1, label: "黄铁矿化", color: "#f5a623ff" }],
+        },
+      };
+    }
+    return fallback(url);
+  });
+  render(
+    <App>
+      <MemoryRouter>
+        <MultiElementWorkspace
+          workflow={workflow}
+          suggestionId={null}
+          onReload={() => {}}
+        />
+      </MemoryRouter>
+    </App>,
+  );
+  await waitFor(() =>
+    expect(
+      screen
+        .getByLabelText("修正后地质图地图")
+        .querySelector('image[data-layer="alteration:class_pyrite"]'),
+    ).toBeInTheDocument(),
+  );
+  const previews = request.mock.calls.filter(([url]) =>
+    String(url).includes("map-preview"),
+  );
+  expect(previews.map(([url]) => url).sort()).toEqual(
+    [900, 901, 902]
+      .map((id) => `/api/compute/outputs/${id}/map-preview/?band=2`)
+      .sort(),
+  );
+  expect(screen.getByText("黄铁矿化")).toBeVisible();
+});
 
 it("栅格矿物章节与保存位置直接显示实际PNG，不再读取旧蚀变矢量", async () => {
   const workflow = rasterWorkflow();

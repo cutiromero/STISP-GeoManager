@@ -39,6 +39,7 @@ export const genericRoles: {
   key: UploadRole;
   label: string;
   kind: AgentWorkflowUpload["dataType"];
+  dataTypes?: AgentWorkflowUpload["dataType"][];
 }[] = [
   { key: "lithology", label: "地质图（必需）", kind: "vector" },
   { key: "faults", label: "构造线", kind: "vector" },
@@ -49,7 +50,18 @@ export const genericRoles: {
   { key: "hydromica", label: "水云母化识别结果", kind: "raster" },
   { key: "calcite", label: "方解石化识别结果", kind: "raster" },
   { key: "dolomite", label: "白云石化识别结果", kind: "raster" },
+  {
+    key: "alterations",
+    label: "分类识别资料（不限类别，可多份）",
+    kind: "raster",
+    dataTypes: ["vector", "raster"],
+  },
 ];
+
+export const workflowRoleKey = (role: string, resourceId: number) =>
+  role === "alterations" ? `${role}:${resourceId}` : role;
+export const workflowRoleName = (role: string) =>
+  role.startsWith("alterations:") ? "alterations" : role;
 
 const kindLabels = { vector: "矢量", raster: "栅格", table: "表格" } as const;
 
@@ -78,6 +90,7 @@ export default function GenericWorkflowUploads({
   onRestored,
   onSelectionChange,
   presentation = "default",
+  allowedRoles,
 }: {
   batchId: string;
   model: string;
@@ -91,6 +104,7 @@ export default function GenericWorkflowUploads({
   onRestored?: (result: AgentLogicConfigurationResult) => void;
   onSelectionChange?: () => void;
   presentation?: "default" | "business-flow";
+  allowedRoles?: string[];
 }) {
   const polished = presentation === "business-flow";
   const [items, setItems] = useState<AgentWorkflowUpload[]>([]);
@@ -189,9 +203,12 @@ export default function GenericWorkflowUploads({
             result.items.map((item) => ({
               ...item,
               roleHint:
-                genericRoles.find(
-                  (role) =>
-                    result.configuration?.roles[role.key] === item.resourceId,
+                genericRoles.find((role) =>
+                  Object.entries(result.configuration?.roles ?? {}).some(
+                    ([key, id]) =>
+                      workflowRoleName(key) === role.key &&
+                      id === item.resourceId,
+                  ),
                 )?.key ?? item.roleHint,
             })),
           );
@@ -229,15 +246,20 @@ export default function GenericWorkflowUploads({
     return () => controller.abort();
   }, [batchId, uploadOnly]);
   const roleOf = (item: AgentWorkflowUpload) =>
-    Object.entries(inputs).find(([, id]) => id === item.resourceId)?.[0];
+    workflowRoleName(
+      Object.entries(inputs).find(([, id]) => id === item.resourceId)?.[0] ??
+        "",
+    ) || undefined;
   const assign = (item: AgentWorkflowUpload, role: string | undefined) =>
     onInputsChange((old) => {
       const next = Object.fromEntries(
         Object.entries(old).filter(
-          ([key, id]) => id !== item.resourceId && key !== role,
+          ([key, id]) =>
+            id !== item.resourceId &&
+            key !== (role ? workflowRoleKey(role, item.resourceId) : role),
         ),
       );
-      if (role) next[role] = item.resourceId;
+      if (role) next[workflowRoleKey(role, item.resourceId)] = item.resourceId;
       return next;
     });
   const recognize = async () => {
@@ -255,9 +277,9 @@ export default function GenericWorkflowUploads({
           if (
             item.role &&
             !manual.current.has(item.resourceId) &&
-            !next[item.role]
+            !next[workflowRoleKey(item.role, item.resourceId)]
           )
-            next[item.role] = item.resourceId;
+            next[workflowRoleKey(item.role, item.resourceId)] = item.resourceId;
         }
         return next;
       });
@@ -730,8 +752,12 @@ export default function GenericWorkflowUploads({
                     options={genericRoles
                       .filter(
                         (entry) =>
-                          entry.kind === item.dataType &&
-                          (entry.kind !== "vector" ||
+                          (!allowedRoles || allowedRoles.includes(entry.key)) &&
+                          (entry.dataTypes ?? [entry.kind]).includes(
+                            item.dataType,
+                          ) &&
+                          (entry.key === "alterations" ||
+                            entry.kind !== "vector" ||
                             item.profile.geometryTypes?.some((geometry) =>
                               geometry.includes(
                                 entry.key === "faults" ? "Line" : "Polygon",

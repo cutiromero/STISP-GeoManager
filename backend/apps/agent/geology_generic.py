@@ -8,6 +8,7 @@ multi-element operators, decisions and approvals unchanged.
 from __future__ import annotations
 
 import math
+import re
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -30,6 +31,7 @@ ROLES = {
     "coverage": "vector",
     "units": "table",
     **{mineral: "raster" for mineral in MINERALS},
+    "alterations": "raster",
 }
 GEOMETRY = {"lithology": "Polygon", "faults": "LineString", "coverage": "Polygon"}
 LABELS = {
@@ -42,6 +44,7 @@ LABELS = {
     "hydromica": "水云母化识别结果",
     "calcite": "方解石化识别结果",
     "dolomite": "白云石化识别结果",
+    "alterations": "分类识别资料",
 }
 # (key, label, required, name keywords). Object IDs are never mapped: working
 # copies get neutral generated IDs so labels in a user's IDs cannot reach checks.
@@ -134,7 +137,25 @@ def _uploads(user, inputs, batch_id):
     return {upload.resource_id: upload for upload in query}
 
 
-def validate_creation(user, policy, inputs, parameters, batch_id, key):
+def alteration_role(role):
+    return (
+        role in MINERALS
+        or role == "alterations"
+        or bool(re.fullmatch(r"alterations:[1-9][0-9]{0,15}", role))
+    )
+
+
+def role_kind(role):
+    return "raster" if alteration_role(role) else ROLES.get(role)
+
+
+def role_label(role):
+    return LABELS.get(role, "分类识别资料")
+
+
+def validate_creation(
+    user, policy, inputs, parameters, batch_id, key, *, adaptations=None
+):
     """Check roles against the batch's real files; return the project rules id.
 
     A batch already bound to the workflow with this idempotency key passes so a
@@ -146,7 +167,7 @@ def validate_creation(user, policy, inputs, parameters, batch_id, key):
     if (
         not isinstance(inputs, dict)
         or "lithology" not in inputs
-        or set(inputs) - set(ROLES)
+        or any(not role_kind(role) for role in inputs)
     ):
         raise ComputeError("请至少指定地质图，其他资料角色可选")
     if len(set(inputs.values())) != len(inputs):
@@ -165,11 +186,16 @@ def validate_creation(user, policy, inputs, parameters, batch_id, key):
             raise ComputeError("参数超出有效范围：" + name)
     # The run reads three vector copies, the rasters (one shared all-zero stand-in
     # for missing minerals) and the rules, so check the limit before field review.
-    rasters = sum(mineral in inputs for mineral in MINERALS)
-    working = 3 + rasters + (rasters < len(MINERALS)) + 1
+    rasters = sum(alteration_role(role) for role in inputs)
+    working = (
+        5
+        if any(role.startswith("alterations") for role in inputs)
+        else 3 + rasters + (rasters < len(MINERALS)) + 1
+    )
     if policy["maxResources"] > 0 and working > policy["maxResources"]:
         raise ComputeError("场景输入超过当前资源上限")
     uploads = {u.resource_id: u for u in batch_uploads(user, batch_id)}
+    adaptation_map = {entry["role"]: entry for entry in adaptations or []}
     bound = {u.workflow_id for u in uploads.values()} - {None}
     if not uploads or (
         bound
@@ -195,17 +221,33 @@ def validate_creation(user, policy, inputs, parameters, batch_id, key):
             else None,
         )
         profile = upload.profile
-        if upload.resource.data_type != ROLES[role]:
-            raise ComputeError(LABELS[role] + "的资料类型不适用")
+        kind = role_kind(role)
+        converted = adaptation_map.get(role, {}).get("status") in {
+            "convert",
+            "needs_parameters",
+        }
+        if upload.resource.data_type != kind and not converted:
+            raise ComputeError(role_label(role) + "需要已登记的输入适配工具")
         expected = GEOMETRY.get(role)
-        if expected and not any(
-            expected in value for value in profile.get("geometryTypes", [])
+        if (
+            expected
+            and not converted
+            and not any(expected in value for value in profile.get("geometryTypes", []))
         ):
-            raise ComputeError(LABELS[role] + "的几何类型不适用")
-        if ROLES[role] != "table" and not profile.get("crs"):
-            raise ComputeError(LABELS[role] + "缺少坐标系")
-        if ROLES[role] == "raster" and profile.get("bandCount") != 1:
-            raise ComputeError(LABELS[role] + "须为单波段栅格")
+            raise ComputeError(role_label(role) + "的几何类型不适用")
+        if (
+            kind != "table"
+            and upload.resource.data_type in {"vector", "raster"}
+            and not profile.get("crs")
+        ):
+            raise ComputeError(role_label(role) + "缺少坐标系")
+        if (
+            kind == "raster"
+            and not converted
+            and not role.startswith("alterations")
+            and profile.get("bandCount") != 1
+        ):
+            raise ComputeError(role_label(role) + "须为单波段栅格")
     return project_rules(user, policy).id
 
 
@@ -247,23 +289,34 @@ def heuristic_targets(role, profile):
     return result
 
 
-def _review_roles(workflow, user):
+def _review_roles(workflow, user, policy):
+    from .workflow_uploads import catalog_profile
+
     inputs = workflow.plan["uploadInputs"]
     uploads = _uploads(user, inputs, workflow.plan["uploadBatchId"])
     roles = []
     for role, identity in inputs.items():
-        if role not in TARGETS:
+        if role not in TARGETS and not role.startswith("alterations"):
             continue
         upload = uploads[identity]
+        effective = workflow.plan.get("effectiveInputs", {}).get(role, identity)
+        profile = upload.profile
+        if effective != identity:
+            prepared = resolve_workflow_resource(user, policy, effective, workflow)
+            cache = workflow.plan.setdefault("preparedInputProfiles", {})
+            key = str(effective) + ":" + prepared.updated_at.isoformat()
+            if key not in cache:
+                cache[key] = catalog_profile(prepared)
+            profile = cache[key]
         roles.append(
             {
                 "role": role,
-                "label": LABELS[role],
-                "resourceId": identity,
+                "label": role_label(role),
+                "resourceId": effective,
                 "fileName": upload.file_name,
-                "fields": [f["name"] for f in upload.profile.get("fields", [])],
-                "targets": heuristic_targets(role, upload.profile),
-                "_profile": upload.profile,
+                "fields": [f["name"] for f in profile.get("fields", [])],
+                "targets": heuristic_targets(role, profile) if role in TARGETS else [],
+                "_profile": profile,
             }
         )
     return roles
@@ -281,7 +334,7 @@ def _questions(roles):
 def propose_mapping(workflow, user, policy):
     from .generic_mapping import model_targets
 
-    roles = _review_roles(workflow, user)
+    roles = _review_roles(workflow, user, policy)
     mode, note = "mock", []
     known_fields = (
         workflow.plan.get("chatExecution", {}).get("combinedInputReview")
@@ -433,7 +486,7 @@ def prepare_generic(workflow, user, policy) -> bool:
             )
             uploads = list(batch_uploads(user, workflow.plan["uploadBatchId"]))
             if origin and matching_configuration(origin, uploads):
-                roles = _review_roles(workflow, user)
+                roles = _review_roles(workflow, user, policy)
                 for item in roles:
                     item.pop("_profile")
                 review = {

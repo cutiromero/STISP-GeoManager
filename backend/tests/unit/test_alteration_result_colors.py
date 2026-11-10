@@ -67,3 +67,30 @@ def test_unavailable_model_has_honest_deterministic_audit_and_preview_does_not_s
     )
     assert result[0]["mapColorTable"]["source"] == "deterministic"
     assert raster.metadata == {} and not raster.save.called and not audit.called
+
+
+def test_named_class_stack_uses_actual_labels_and_one_shared_palette(monkeypatch):
+    model = Mock(return_value=None)
+    monkeypatch.setattr(colors, "model_colors", model)
+    monkeypatch.setattr(colors, "log_operation", Mock())
+    previous = []
+    monkeypatch.setattr(
+        colors.ComputeOutput.objects, "filter", Mock(side_effect=lambda **_: previous)
+    )
+    workflow = SimpleNamespace(result_ids=[], owner=None, id="stack-palette")
+    before = output(10, "calcite", "before")
+    before.key = "alteration_stack_before"
+    before.metadata = {"bandNames": ["黄铁矿化", "高岭石化", "萤石化"]}
+    colors.style_alteration_outputs(workflow, [before])
+    assert model.call_args.args[2] == ["萤石化", "高岭石化", "黄铁矿化"]
+    tables = before.metadata["mapBandColorTables"]
+    assert [item["label"] for item in tables] == before.metadata["bandNames"]
+    assert [item["band"] for item in tables] == [1, 2, 3]
+    assert len({item["classes"][1]["color"] for item in tables}) == 3
+    previous.append(before)
+    after = output(11, "calcite", "corrected")
+    after.key = "alteration_stack_corrected"
+    after.metadata = {"bandNames": before.metadata["bandNames"]}
+    colors.style_alteration_outputs(workflow, [after])
+    assert model.call_count == 1
+    assert after.metadata["mapBandColorTables"] == tables

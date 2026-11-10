@@ -316,48 +316,66 @@ def _domains(workflow) -> list[str]:
 
 def _versions(workflow, graph) -> dict:
     identifiers = {identifier for _, identifier, _ in graph}
-    versions = {}
-    for identifier in identifiers:
-        chat = workflow.plan.get("chatExecution", {})
-        permitted_versions = chat.get("algorithmVersionIds")
-        options = (
-            AlgorithmVersion.objects.select_related("algorithm")
-            .filter(
-                algorithm__in=allowed_algorithms(),
-                algorithm__identifier=identifier,
-                algorithm__enabled=True,
-                status="published",
-            )
-            .order_by("-created_at", "-id")
+    chat = workflow.plan.get("chatExecution", {})
+    frozen = workflow.plan.get("preparedAlgorithmFamily", {})
+    options = (
+        AlgorithmVersion.objects.select_related("algorithm")
+        .filter(
+            algorithm__in=allowed_algorithms(),
+            algorithm__identifier__in=identifiers,
+            algorithm__enabled=True,
+            status="published",
         )
-        if permitted_versions is not None:
-            options = options.filter(pk__in=permitted_versions)
-        version = next((v for v in options if agent_algorithm_allowed(v)), None)
-        if version is None:
-            raise ComputeError("场景所需算法尚未发布或不可调用：" + identifier)
+        .order_by("algorithm_id", "-created_at", "-id")
+    )
+    if frozen:
+        if not identifiers <= set(frozen):
+            raise ComputeError("已冻结算子家族不包含当前执行节点")
+        options = options.filter(
+            pk__in=[frozen[key]["versionId"] for key in identifiers]
+        )
+    if chat.get("algorithmVersionIds") is not None:
+        options = options.filter(pk__in=chat["algorithmVersionIds"])
+    versions = {}
+    for version in options:
+        identifier = version.algorithm.identifier
+        if identifier in versions or not agent_algorithm_allowed(version):
+            continue
+        snapshot = {"versionId": version.id, "checksum": version.checksum}
+        if frozen and frozen[identifier] != snapshot:
+            raise PermissionDenied("冻结的科研算法版本已变化")
         snapshots = chat.get("algorithmSnapshots")
-        if snapshots is not None and snapshots.get(identifier) != {
-            "versionId": version.id,
-            "checksum": version.checksum,
-        }:
+        if snapshots is not None and snapshots.get(identifier) != snapshot:
             raise PermissionDenied("科研算法在聊天解析后已变化，请重新匹配")
         versions[identifier] = {
-            "versionId": version.id,
-            "checksum": version.checksum,
+            **snapshot,
             "name": version.algorithm.name,
             "manifest": version.manifest,
         }
+    if set(versions) != identifiers:
+        raise ComputeError(
+            "场景所需算法尚未发布或不可调用："
+            + ", ".join(sorted(identifiers - set(versions)))
+        )
     return versions
 
 
 def prepare_demo(workflow, user, p) -> None:
     if workflow.workflow_type == GENERIC:
+        from apps.business_flows.input_preparation import advance_inputs
+
+        if not advance_inputs(workflow, user, p):
+            return
         from .geology_generic import prepare_generic
 
         if prepare_generic(workflow, user, p):
             return
     roles = ROLES[workflow.workflow_type]
     inputs = workflow.plan.get("inputs", {})
+    if workflow.workflow_type in MULTI_FAMILY and "alteration_stack" in inputs:
+        roles = {key: kind for key, kind in roles.items() if kind != "raster"} | {
+            "alteration_stack": "raster"
+        }
     if not isinstance(inputs, dict) or set(inputs) != set(roles):
         raise ComputeError("请按场景明确选择全部输入角色")
     if p["maxResources"] > 0 and len(set(inputs.values())) > p["maxResources"]:
@@ -373,6 +391,7 @@ def prepare_demo(workflow, user, p) -> None:
         multi_knowledge = prepare(workflow, user, p)
         expected_graph = multi_graph(
             segment,
+            stack="alteration_stack" in inputs,
             raster=any(
                 item.get("key") == "alteration_summary"
                 for item in validated_versions["geology-multi-check"]["manifest"].get(

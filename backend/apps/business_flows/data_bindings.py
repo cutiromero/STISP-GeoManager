@@ -22,6 +22,25 @@ def prepare_inputs(workflow, user, policy, node, version, available):
     for key, binding in explicit.items():
         if "role" in binding:
             identity = workflow.plan["inputs"].get(binding["role"])
+            if identity is None:
+                from .input_adapters import logical_role
+
+                requirements = {
+                    item["key"]: item
+                    for item in workflow.parameters["_businessFlow"][
+                        "definitionSnapshot"
+                    ]["inputRequirements"]
+                }
+                collection = [
+                    value
+                    for key, value in workflow.plan["inputs"].items()
+                    if logical_role(key, requirements) == binding["role"]
+                ]
+                if len(collection) > 1:
+                    raise ComputeError(
+                        "算子端口需要单份规范资料；多份来源须先通过已登记的归并工具处理"
+                    )
+                identity = collection[0] if collection else None
             if identity is None and not specs[key].get("required", True):
                 continue
             if identity is None:

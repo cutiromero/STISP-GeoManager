@@ -105,12 +105,18 @@ def render(payload: dict) -> dict:
         raise PreviewError("地图预览尺寸无效")
     rules = payload.get("rules") or {}
     palette = rules.get("palette")
-    if rules.get("band") != 1 or palette not in {
-        "blue",
-        "alteration",
-        "alteration-changes",
-        "prospect-confidence",
-    }:
+    band = rules.get("band")
+    if (
+        type(band) is not int
+        or not 1 <= band <= 1024
+        or palette
+        not in {
+            "blue",
+            "alteration",
+            "alteration-changes",
+            "prospect-confidence",
+        }
+    ):
         raise PreviewError("地图预览渲染规则无效")
     fixed_range = rules.get("range")
     if fixed_range not in (
@@ -134,7 +140,7 @@ def render(payload: dict) -> dict:
         raise PreviewError("地图预览颜色表无效")
     with rasterio.Env(GDAL_PAM_ENABLED="NO", GDAL_CACHEMAX=64 * 1024**2):
         with rasterio.open(Path(payload["raster_path"])) as src:
-            if src.driver != "GTiff" or src.count < 1:
+            if src.driver != "GTiff" or not 1 <= band <= src.count:
                 raise PreviewError("该计算结果暂不支持地图预览")
             bounds = geographic_bounds(src)
             _, native_width, native_height = calculate_default_transform(
@@ -162,7 +168,7 @@ def render(payload: dict) -> dict:
                 warp_mem_limit=64,
                 warp_extras={"NUM_THREADS": "1"},
             ) as vrt:
-                values = vrt.read(1, masked=True)
+                values = vrt.read(band, masked=True)
                 # GDAL does not expose a floating alpha band as read_masks(1).
                 # Read it explicitly so source NoData and warped margins stay clear.
                 if ColorInterp.alpha in vrt.colorinterp:

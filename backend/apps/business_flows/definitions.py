@@ -86,7 +86,16 @@ def normalize_definition(value):
     for item in inputs:
         keys(
             item,
-            {"key", "label", "description", "dataTypes", "required", "requiredFields"},
+            {
+                "key",
+                "label",
+                "description",
+                "dataTypes",
+                "required",
+                "requiredFields",
+                "multiple",
+                "semanticType",
+            },
             "输入规范",
         )
         role = text(item.get("key"), "资料角色", 64)
@@ -104,6 +113,10 @@ def normalize_definition(value):
             invalid("资料必选标记必须是布尔值")
         item["required"] = item.get("required", False)
         item["requiredFields"] = strings(item.get("requiredFields", []), "必需字段")
+        if "multiple" in item and type(item["multiple"]) is not bool:
+            invalid("多来源标记必须为布尔值")
+        if "semanticType" in item:
+            item["semanticType"] = text(item["semanticType"], "目标输入语义", 100)
     if not isinstance(nodes, list) or not 1 <= len(nodes) <= MAX_NODES:
         invalid("业务流必须包含1至32个节点")
     node_ids = set()
@@ -278,6 +291,10 @@ def normalize_definition(value):
     if result["adapter"] == "geology_generic":
         from .builtins import GEOLOGY_NODES, GEOLOGY_ROLES
 
+        legacy_inputs = set(item["key"] for item in inputs) == set(GEOLOGY_ROLES) - {
+            "alterations"
+        }
+
         if [node["id"] for node in nodes] != [row[0] for row in GEOLOGY_NODES]:
             invalid("逻辑推理使用已登记的专业流程骨架，不能增删或重排节点")
         for index, (identity, _title, kind, expected_roles) in enumerate(GEOLOGY_NODES):
@@ -286,7 +303,12 @@ def normalize_definition(value):
             if (
                 node["kind"] not in expected_kind
                 or node["dependsOn"] != ([GEOLOGY_NODES[index - 1][0]] if index else [])
-                or node["dataRoles"] != list(expected_roles)
+                or node["dataRoles"]
+                != [
+                    role
+                    for role in expected_roles
+                    if not legacy_inputs or role != "alterations"
+                ]
                 or node.get("algorithmVersionId") is not None
             ):
                 invalid("逻辑推理的节点类型、资料角色和算子绑定由专业适配器管理")
@@ -294,9 +316,16 @@ def normalize_definition(value):
                 invalid("专业流程的人工决定固定为资料确认和处置批准，不能由图配置增删")
             if identity not in {"apply", "finish"} and node["review"]["ai"]:
                 invalid("专业流程独立AI审核仅适用于处置建议和成果整理的实际决策边界")
-        if set(item["key"] for item in inputs) != set(GEOLOGY_ROLES):
+        if not legacy_inputs and set(item["key"] for item in inputs) != set(
+            GEOLOGY_ROLES
+        ):
             invalid("逻辑推理资料角色必须与专业流程一致")
         for item in inputs:
+            if item["key"] == "alterations" and (
+                item.get("multiple") is not True
+                or item.get("semanticType") != "class_mask_stack_v1"
+            ):
+                invalid("专业分类集合须保留多来源和命名类别掩膜规范")
             if item["dataTypes"] != [GEOLOGY_ROLES[item["key"]][1]] or (
                 item["key"] == "lithology" and not item["required"]
             ):

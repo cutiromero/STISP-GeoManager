@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "geology-multi-prospect",
   "name": "优先核查远景区分析",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "仅使用修正后岩性、构造、蚀变及有效权重，以连续支持场圈定平滑远景区；同一连通支持带合并，区域无重叠，输出红黄蓝渐变热力图及逐区依据。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -49,31 +49,36 @@
       "key": "hematite",
       "label": "赤铁矿遥感矿物识别结果",
       "kind": "raster",
-      "minBands": 1
+      "minBands": 1,
+      "required": false
     },
     {
       "key": "chlorite",
       "label": "绿泥石遥感矿物识别结果",
       "kind": "raster",
-      "minBands": 1
+      "minBands": 1,
+      "required": false
     },
     {
       "key": "hydromica",
       "label": "水云母遥感矿物识别结果",
       "kind": "raster",
-      "minBands": 1
+      "minBands": 1,
+      "required": false
     },
     {
       "key": "calcite",
       "label": "方解石遥感矿物识别结果",
       "kind": "raster",
-      "minBands": 1
+      "minBands": 1,
+      "required": false
     },
     {
       "key": "dolomite",
       "label": "白云石遥感矿物识别结果",
       "kind": "raster",
-      "minBands": 1
+      "minBands": 1,
+      "required": false
     },
     {
       "key": "intersections",
@@ -116,6 +121,20 @@
     {
       "key": "dolomite_weight",
       "label": "白云石遥感矿物识别结果权重",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "alteration_stack",
+      "label": "类别掩膜栅格集（类别不限预置示例）",
+      "kind": "raster",
+      "minBands": 1,
+      "required": false
+    },
+    {
+      "key": "alteration_stack_weight",
+      "label": "同类别、同网格的证据权重栅格集",
       "kind": "raster",
       "minBands": 1,
       "required": false

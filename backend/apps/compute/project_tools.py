@@ -36,4 +36,19 @@ def topic_algorithms(query, selected_id):
         )
     else:
         return query
+    # Published conversion capabilities are domain-neutral shared tools. Their
+    # declaration does not widen the enclosing public/current-project scope.
+    from django.db.models import Exists, OuterRef
+    from .models import AlgorithmVersion
+
+    query = query.alias(
+        _input_adapter=Exists(
+            AlgorithmVersion.objects.filter(
+                algorithm_id=OuterRef("pk"),
+                status="published",
+                manifest__inputAdapter__isnull=False,
+            )
+        )
+    )
+    common |= Q(_input_adapter=True)
     return query.filter(own | common | shared)

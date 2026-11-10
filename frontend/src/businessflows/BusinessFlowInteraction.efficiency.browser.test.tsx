@@ -26,6 +26,7 @@ import BusinessFlowActivity, {
 import BusinessFlowLaunch from "./BusinessFlowLaunch";
 import {
   businessFlowRun,
+  directInputPlan,
   geologyDetail,
   geologySpec,
   researchDetail,
@@ -144,6 +145,9 @@ function showLaunch(launch = intent, callback = vi.fn()) {
   };
 }
 beforeEach(() => {
+  vi.spyOn(businessFlowsApi, "prepareInputs").mockImplementation(
+    async (_id, request) => directInputPlan(request),
+  );
   vi.spyOn(businessFlowsApi, "run").mockResolvedValue(businessFlowRun());
   vi.spyOn(businessFlowsApi, "detail").mockResolvedValue(researchDetail);
   vi.spyOn(agentApi, "resources").mockResolvedValue({
@@ -374,6 +378,9 @@ it("loads generic input choices only when needed and starts the exact selected v
       selector: ".ant-select-item-option-content",
     }),
   );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "开始业务流" })).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "开始业务流" }));
   fireEvent.click(screen.getByRole("button", { name: "开始业务流" }));
   await waitFor(() => expect(callback).toHaveBeenCalledOnce());
@@ -418,6 +425,9 @@ it("binds professional launch uploads to one batch and does not load ordinary ca
   });
   fireEvent.click(
     await screen.findByRole("button", { name: "选择已有地质图" }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "开始业务流" })).toBeEnabled(),
   );
   fireEvent.click(screen.getByRole("button", { name: "开始业务流" }));
   await waitFor(() => expect(start).toHaveBeenCalledOnce());

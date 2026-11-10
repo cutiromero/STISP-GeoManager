@@ -61,10 +61,23 @@ TOOLS = {
             ("query", "offset", "limit"),
         ),
         ToolSpec(
+            "prepare_business_flow_inputs",
+            "business_flow",
+            "只读规划业务流输入：versionId、inputs必需，inputAdapters和uploadBatchId可选。按真实资料与流程规范查已发布转换能力，返回字段、候选工具和需补参数；不启动计算。来源格式不同不能直接判定任务不可做。",
+            ("versionId", "inputs", "inputAdapters", "uploadBatchId"),
+        ),
+        ToolSpec(
             "start_business_flow",
             "business_flow",
             "按目录真实versionId启动业务流；goal、inputs(角色到已授权资源ID)、parameters可选、reviewerModel可选。必须按该版本资料规范绑定；启动后由业务流处理，不再重复提交算子或伪造人工批准。",
-            ("versionId", "goal", "inputs", "parameters", "reviewerModel"),
+            (
+                "versionId",
+                "goal",
+                "inputs",
+                "parameters",
+                "reviewerModel",
+                "inputAdapters",
+            ),
         ),
         ToolSpec(
             "search_resources",
@@ -1066,7 +1079,11 @@ def execute(run, name, args):
     p = require_access(user, "agent", run.model)
     check_evidence(run, user, p)
     _check_special_capability(spec, p)
-    if name in {"list_business_flows", "start_business_flow"}:
+    if name in {
+        "list_business_flows",
+        "prepare_business_flow_inputs",
+        "start_business_flow",
+    }:
         from apps.business_flows.tools import execute_business_flow_tool
 
         return execute_business_flow_tool(run, user, name, args)

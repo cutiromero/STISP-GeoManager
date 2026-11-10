@@ -149,6 +149,51 @@ def request_output_import(user, output, name="", *, request_source=""):
     return record
 
 
+def parameter_values(manifest, metadata, params):
+    """One pure manifest validator for planning and actual compute admission."""
+    normalized = {}
+    for p in manifest["parameters"]:
+        when = p.get("when")
+        if when and normalized.get(when["key"]) != when["equals"]:
+            continue
+        value = params.get(p["key"], p.get("default"))
+        if value is None:
+            if p["required"]:
+                raise ComputeError("请填写参数：" + p["label"])
+            continue
+        kind = p["type"]
+        if kind in {"number", "integer", "band"}:
+            if (
+                type(value) not in {int, float}
+                or not math.isfinite(value)
+                or (kind != "number" and type(value) is not int)
+            ):
+                raise ComputeError(
+                    p["label"]
+                    + "必须是有效数字"
+                    + ("（整数）" if kind != "number" else "")
+                )
+            if value < p.get("min", -math.inf) or value > p.get("max", math.inf):
+                raise ComputeError(p["label"] + "超出允许范围")
+        elif kind == "boolean":
+            if type(value) is not bool:
+                raise ComputeError(p["label"] + "必须为布尔值")
+        elif not isinstance(value, str) or len(value) > 2000:
+            raise ComputeError(p["label"] + "必须为不超过2000字的文字")
+        if kind == "enum" and value not in p["choices"]:
+            raise ComputeError(p["label"] + "不在选项内")
+        if kind in {"field", "band"}:
+            source = metadata.get(p["input"])
+            if (
+                not source
+                or (kind == "field" and value not in source["fields"])
+                or (kind == "band" and not 1 <= value <= source["bands"])
+            ):
+                raise ComputeError(p["label"] + "不属于选中的数据")
+        normalized[p["key"]] = value
+    return normalized
+
+
 def validate_submission(user, body):
     require_actor(user, project_id(), "submit_task", "core.browse_data")
     name = clean_text(body.get("name"), 160, "任务名称")
@@ -214,46 +259,7 @@ def validate_submission(user, body):
             raise ComputeError(spec["label"] + "的几何类型不匹配")
         metadata[spec["key"]] = info
         resources.append((spec["key"], resource, info))
-    normalized = {}
-    for p in manifest["parameters"]:
-        when = p.get("when")
-        if when and normalized.get(when["key"]) != when["equals"]:
-            continue
-        value = params.get(p["key"], p.get("default"))
-        if value is None:
-            if p["required"]:
-                raise ComputeError("请填写参数：" + p["label"])
-            continue
-        kind = p["type"]
-        if kind in {"number", "integer", "band"}:
-            if (
-                type(value) not in {int, float}
-                or not math.isfinite(value)
-                or (kind != "number" and type(value) is not int)
-            ):
-                raise ComputeError(
-                    p["label"]
-                    + "必须是有效数字"
-                    + ("（整数）" if kind != "number" else "")
-                )
-            if value < p.get("min", -math.inf) or value > p.get("max", math.inf):
-                raise ComputeError(p["label"] + "超出允许范围")
-        elif kind == "boolean":
-            if type(value) is not bool:
-                raise ComputeError(p["label"] + "必须为布尔值")
-        elif not isinstance(value, str) or len(value) > 2000:
-            raise ComputeError(p["label"] + "必须为不超过2000字的文字")
-        if kind == "enum" and value not in p["choices"]:
-            raise ComputeError(p["label"] + "不在选项内")
-        if kind in {"field", "band"}:
-            source = metadata.get(p["input"])
-            if (
-                not source
-                or (kind == "field" and value not in source["fields"])
-                or (kind == "band" and not 1 <= value <= source["bands"])
-            ):
-                raise ComputeError(p["label"] + "不属于选中的数据")
-        normalized[p["key"]] = value
+    normalized = parameter_values(manifest, metadata, params)
     canonical = {
         "name": name,
         "versionId": version.id,

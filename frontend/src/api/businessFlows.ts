@@ -10,6 +10,8 @@ import type {
   BusinessFlowStart,
   BusinessFlowUpdate,
   BusinessFlowVersionPublish,
+  BusinessFlowInputPreparation,
+  BusinessFlowInputPlan,
 } from "./generated/types.gen";
 
 const invalid = (field: string): never => {
@@ -184,6 +186,94 @@ export function assertBusinessFlowRun(value: unknown) {
   }
 }
 export const businessFlowsApi = {
+  prepareInputs: (
+    id: number,
+    body: BusinessFlowInputPreparation,
+    options: { signal?: AbortSignal } = {},
+  ) =>
+    requestJson<BusinessFlowInputPlan>(
+      `/api/business-flows/${id}/prepare-inputs/`,
+      {
+        method: "POST",
+        body,
+        ...options,
+        validate: (value) => {
+          const plan = record(value, "inputPreparation");
+          if (
+            typeof plan.ready !== "boolean" ||
+            !Array.isArray(plan.items) ||
+            plan.items.length > 30
+          )
+            invalid("inputPreparation");
+          for (const raw of plan.items as unknown[]) {
+            const item = record(raw, "inputPreparation.item");
+            if (
+              typeof item.role !== "string" ||
+              typeof item.sourceName !== "string" ||
+              !Number.isSafeInteger(item.sourceId) ||
+              !texts(item.targetTypes) ||
+              typeof item.sourceType !== "string" ||
+              typeof item.sourceRevision !== "string" ||
+              ![
+                "direct",
+                "convert",
+                "needs_parameters",
+                "needs_choice",
+                "unavailable",
+                "waiting_compute",
+                "waiting_import",
+                "ready",
+              ].includes(String(item.status)) ||
+              (item.fields !== undefined && !texts(item.fields))
+            )
+              invalid("inputPreparation.item");
+            if (item.candidates !== undefined) {
+              if (
+                !Array.isArray(item.candidates) ||
+                item.candidates.length > 60
+              )
+                invalid("inputPreparation.candidates");
+              for (const rawCandidate of item.candidates as unknown[]) {
+                const candidate = record(
+                  rawCandidate,
+                  "inputPreparation.candidate",
+                );
+                if (
+                  !Number.isSafeInteger(candidate.versionId) ||
+                  typeof candidate.name !== "string" ||
+                  typeof candidate.description !== "string" ||
+                  !Array.isArray(candidate.parameters) ||
+                  candidate.parameters.length > 30
+                )
+                  invalid("inputPreparation.candidate");
+                for (const rawParameter of candidate.parameters as unknown[]) {
+                  const parameter = record(
+                    rawParameter,
+                    "inputPreparation.parameter",
+                  );
+                  if (
+                    typeof parameter.key !== "string" ||
+                    typeof parameter.label !== "string" ||
+                    ![
+                      "number",
+                      "integer",
+                      "string",
+                      "boolean",
+                      "field",
+                      "band",
+                      "enum",
+                    ].includes(String(parameter.type)) ||
+                    (parameter.choices !== undefined &&
+                      !texts(parameter.choices))
+                  )
+                    invalid("inputPreparation.parameter");
+                }
+              }
+            }
+          }
+        },
+      },
+    ),
   list: (
     options: {
       signal?: AbortSignal;

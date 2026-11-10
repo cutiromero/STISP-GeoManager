@@ -255,6 +255,15 @@ def validate_manifest(manifest):
         raise ComputeError("输出文件名不能重复")
     if result.get("qualityReport", {}).get("file") in files:
         raise ComputeError("质量报告文件名不能与普通输出重复")
+    if "inputAdapter" in manifest:
+        from .adapter_capabilities import validate_capability
+
+        try:
+            result["inputAdapter"] = validate_capability(
+                {**result, "inputAdapter": manifest["inputAdapter"]}
+            )
+        except (ValueError, TypeError, KeyError, AttributeError) as error:
+            raise ComputeError("输入适配能力声明无效：" + str(error)) from error
     try:
         serialized = json.dumps(result, allow_nan=False)
     except (ValueError, TypeError, RecursionError) as exc:

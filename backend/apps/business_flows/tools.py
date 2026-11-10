@@ -81,6 +81,25 @@ def execute_business_flow_tool(run, user, name, args):
         run.resource_ids
     ):
         raise ValidationError("业务流资料超出了本轮手动选择范围")
+    if name == "prepare_business_flow_inputs":
+        from .runtime import _inputs
+
+        policy = require_access(user, "agent", run.model)
+        _, _, planned = _inputs(
+            user,
+            version.definition,
+            {
+                "inputs": inputs,
+                "inputAdapters": args.get("inputAdapters"),
+                "uploadBatchId": args.get("uploadBatchId"),
+            },
+            policy,
+            preview=True,
+            allowed_adapter_ids=set(run.algorithm_version_ids)
+            if run.algorithm_selection_mode == "manual"
+            else None,
+        )
+        return planned, []
     if run.algorithm_selection_mode == "manual":
         versions = {
             node["algorithmVersionId"]
@@ -136,6 +155,7 @@ def execute_business_flow_tool(run, user, name, args):
             "reviewerModel": args.get("reviewerModel") or run.model,
             "conversationId": run.conversation_id,
             "idempotencyKey": f"business-tool-{run.pk}-{version.pk}",
+            "inputAdapters": args.get("inputAdapters", {}),
         },
         source_run=run,
     )

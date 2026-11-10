@@ -14,6 +14,8 @@ import type {
   AgentResource,
   BusinessFlowRun,
   BusinessFlowVersion,
+  BusinessFlowInputAdapterChoices,
+  BusinessFlowInputPlan,
 } from "../api/generated/types.gen";
 import { businessFlowsApi } from "../api/businessFlows";
 import { agentApi } from "../api/agent";
@@ -30,6 +32,8 @@ import {
 } from "../auth/browserSession";
 import { useComputeText } from "../compute/ui";
 import { createUuid } from "../utils/uuid";
+import { canonicalReadKey } from "../api/readFlights";
+import InputAdaptationReview, { preparationKey } from "./InputAdaptationReview";
 import "./business-flows.css";
 import "./business-flow-launch.css";
 
@@ -70,6 +74,14 @@ export default function BusinessFlowLaunch({
     typeof launch.goal === "string" ? launch.goal : "",
   );
   const [inputs, setInputs] = useState<Record<string, number>>({});
+  const [adapterChoices, setAdapterChoices] =
+    useState<BusinessFlowInputAdapterChoices>({});
+  const [preparation, setPreparation] = useState<{
+    key: string;
+    ready: boolean;
+    plan?: BusinessFlowInputPlan;
+  }>();
+  const previousInputs = useRef(inputs);
   const [reviewer, setReviewer] = useState<string>();
   const [batchId, setBatchId] = useState(() => createUuid().replace(/-/g, ""));
   const [uploading, setUploading] = useState(false);
@@ -193,6 +205,28 @@ export default function BusinessFlowLaunch({
     return () => controller.abort();
   }, [launch.definitionId, launch.versionId, attempt]);
   const isLegacy = version?.definition.adapter === "geology_generic";
+  const inputRequest = {
+    versionId: launch.versionId,
+    inputs,
+    inputAdapters: adapterChoices,
+    ...(isLegacy ? { uploadBatchId: batchId } : {}),
+  };
+  const inputKey = preparationKey(inputRequest);
+  const inputReady = preparation?.key === inputKey && preparation.ready;
+  useEffect(() => {
+    const old = previousInputs.current;
+    previousInputs.current = inputs;
+    setAdapterChoices((previous) => {
+      const next = Object.fromEntries(
+        Object.entries(previous).filter(
+          ([role]) => inputs[role] !== undefined && inputs[role] === old[role],
+        ),
+      );
+      return Object.keys(next).length === Object.keys(previous).length
+        ? previous
+        : next;
+    });
+  }, [canonicalReadKey(inputs)]);
   const needsReview = Boolean(
     version?.definition.nodes.some((node) => node.review.ai),
   );
@@ -206,7 +240,13 @@ export default function BusinessFlowLaunch({
     }));
   const missing =
     version?.definition.inputRequirements.filter(
-      (input) => input.required && !inputs[input.key],
+      (input) =>
+        input.required &&
+        !Object.keys(inputs).some(
+          (key) =>
+            key === input.key ||
+            (input.multiple && key.startsWith(input.key + ":")),
+        ),
     ) ?? [];
   const loadCandidates = async (query = wantedQuery.current, force = false) => {
     if (!roleOpen.current || !alive.current) return;
@@ -349,6 +389,10 @@ export default function BusinessFlowLaunch({
       );
       return;
     }
+    if (!inputReady) {
+      setError("请先完成输入适配方案，当前任务尚未启动。");
+      return;
+    }
     if (!model || !bootstrap?.canAgent || !bootstrap.workerOnline) {
       setError("智能体执行服务尚未就绪，请连接成功后再开始。");
       return;
@@ -367,9 +411,17 @@ export default function BusinessFlowLaunch({
         Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)),
       ),
       parameters: isLegacy ? { uploadBatchId: batchId } : {},
+      inputAdapters: Object.fromEntries(
+        (preparation?.plan?.items ?? [])
+          .filter((item) => item.status === "convert" && item.versionId)
+          .map((item) => [
+            item.role,
+            { versionId: item.versionId, parameters: item.parameters ?? {} },
+          ]),
+      ),
       ...(conversationId !== undefined ? { conversationId } : {}),
     };
-    const fingerprint = JSON.stringify([launch.definitionId, body]);
+    const fingerprint = canonicalReadKey([launch.definitionId, body]);
     if (retry.current?.fingerprint !== fingerprint)
       retry.current = { fingerprint, key: createUuid() };
     try {
@@ -405,6 +457,7 @@ export default function BusinessFlowLaunch({
     bootstrap.workerOnline &&
     !busy &&
     !uploading &&
+    inputReady &&
     !missing.length &&
     goal.trim(),
   );
@@ -527,10 +580,25 @@ export default function BusinessFlowLaunch({
                       disabled={busy}
                       uploadOnly
                       presentation="business-flow"
+                      allowedRoles={version.definition.inputRequirements.map(
+                        (input) => input.key,
+                      )}
                       onCountChange={setMaterialCount}
                       onRestored={(result) => {
-                        if (result.configuration)
-                          setInputs(result.configuration.roles);
+                        if (result.configuration) {
+                          const valid = new Set(
+                            result.items.map((item) => item.resourceId),
+                          );
+                          setInputs(
+                            Object.fromEntries(
+                              Object.entries(result.configuration.roles).filter(
+                                ([, id]) =>
+                                  valid.has(id) &&
+                                  !result.unavailableResourceIds.includes(id),
+                              ),
+                            ),
+                          );
+                        }
                       }}
                     />
                   </Suspense>
@@ -551,7 +619,18 @@ export default function BusinessFlowLaunch({
                         </span>
                         <Select
                           aria-label={`${input.label}：选择资料`}
-                          value={inputs[input.key]}
+                          mode={input.multiple ? "multiple" : undefined}
+                          value={
+                            input.multiple
+                              ? Object.entries(inputs)
+                                  .filter(
+                                    ([key]) =>
+                                      key === input.key ||
+                                      key.startsWith(input.key + ":"),
+                                  )
+                                  .map(([, id]) => id)
+                              : inputs[input.key]
+                          }
                           showSearch={{
                             filterOption: false,
                             onSearch: searchCandidates,
@@ -574,16 +653,10 @@ export default function BusinessFlowLaunch({
                             "输入名称搜索当前项目的授权资料",
                             "Search authorized project data by name",
                           )}
-                          options={resources
-                            .filter((resource) =>
-                              (input.dataTypes as readonly string[]).includes(
-                                resource.dataType,
-                              ),
-                            )
-                            .map((resource) => ({
-                              value: resource.id,
-                              label: resource.name,
-                            }))}
+                          options={resources.map((resource) => ({
+                            value: resource.id,
+                            label: resource.name,
+                          }))}
                           notFoundContent={
                             resourceState === "loading" ? (
                               <Spin size="small" />
@@ -592,11 +665,24 @@ export default function BusinessFlowLaunch({
                               ui("暂无匹配资料", "No matching data")
                             )
                           }
-                          onChange={(value) =>
+                          onChange={(value: number | number[] | undefined) =>
                             setInputs((previous) => {
                               const next = { ...previous };
-                              if (value === undefined) delete next[input.key];
-                              else next[input.key] = value;
+                              if (input.multiple) {
+                                for (const key of Object.keys(next))
+                                  if (
+                                    key === input.key ||
+                                    key.startsWith(input.key + ":")
+                                  )
+                                    delete next[key];
+                                for (const id of Array.isArray(value)
+                                  ? value
+                                  : [])
+                                  next[`${input.key}:${id}`] = id;
+                              } else if (value === undefined)
+                                delete next[input.key];
+                              else if (typeof value === "number")
+                                next[input.key] = value;
                               return next;
                             })
                           }
@@ -630,6 +716,15 @@ export default function BusinessFlowLaunch({
                     }
                   />
                 )}
+                <InputAdaptationReview
+                  flowId={launch.definitionId}
+                  request={inputRequest}
+                  disabled={busy}
+                  onChoices={setAdapterChoices}
+                  onStatus={(key, ready, plan) =>
+                    setPreparation({ key, ready, plan })
+                  }
+                />
                 {missing.length > 0 && (
                   <p className="business-flow-launch-note is-required">
                     {ui("请补齐必需资料：", "Required inputs: ")}

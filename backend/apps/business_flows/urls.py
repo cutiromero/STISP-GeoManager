@@ -12,4 +12,5 @@ urlpatterns = [
     path("<int:flow_id>/", views.flow_detail),
     path("<int:flow_id>/versions/", views.versions),
     path("<int:flow_id>/start/", views.start),
+    path("<int:flow_id>/prepare-inputs/", views.prepare_inputs),
 ]

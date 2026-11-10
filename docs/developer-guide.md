@@ -3070,3 +3070,19 @@ API JSON 元数据默认 `Cache-Control: private,no-store`，文件和瓦片的�
 `GET /api/business-flows/?q=...&offset=0&limit=50`按名称、说明和编码执行当前项目范围内的搜索，按名称、编号稳定排序。`limit`为1至50，`offset`为0至1000000。响应保持`items/canManage`；只有后续页存在时增加`nextOffset`。服务端只读取`limit+1`条判定是否有后续页，不另查总数。前端对搜索词防抖并取消旧请求，加载更多按编号去重；查询及翻页不重新读取当前已选流程详情，切换项目清除旧目录与选择。
 
 前端共享`requestJson`对GET的成功HTTP/异常媒体或损坏JSON响应最多执行一次传输恢复，附加仅用于绕过异常中间缓存的`_stisp_read`地址标记，服务器不将该标记解释为业务参数。恢复前后及正文解析后仍核对账号、项目与取消状态，诊断保留实际响应来源。结构缺字段、HTTP权限拒绝及POST等写请求不通过此机制重放；任务启动和人工批准继续依赖原幂等键和实时权限。接口响应契约、模型预算及资料版本机制保持原有语义。
+
+## 业务流通用输入适配
+
+所有业务流通过相同的输入规范与已发布能力目录规划资料，不按业务名称或固定类别列表匹配。inputRequirements声明dataTypes、requiredFields，可选semanticType（语义协议）与multiple。multiple允许role:resourceId形式的多个来源；单输入算子仍需明确的归并工具，不会静默丢掉其他来源。
+
+`POST /api/business-flows/{flowId}/prepare-inputs/`接受versionId、inputs、可选inputAdapters与uploadBatchId。它是只读预检，返回ready与items，不启动模型、算子或任务。每项状态为direct、convert、needs_parameters、needs_choice或unavailable。明确目标语义且仅有一个兼容转换器时可自动规划；未声明语义时需要选择适合任务含义的转换器。字段只能选实际来源字段。
+
+start接受同一inputAdapters对象：键是输入角色，值是versionId及parameters。未完成的方案在创建任务前被拒绝。启动固定原始来源的版本、转换器版本与校验和；后续计算沿用ComputeTask、质量检查与ComputeImport，重复唤醒不重复提交。暂停、停止、实时权限与预算沿用已有边界。科学参数不包含业务流内部状态。
+
+新增转换能力在计算中心登记普通算子，通过真实试运行后发布。manifest的inputAdapter声明inputKey、outputKey、sourceKind、targetKind及可选targetSemantics、fieldHints、fieldTargets、metadataParameters、outputFields。只支持一个必需来源，其他输入必须可选；声明必须与manifest真实端口及参数一致。metadataParameters仅允许来源名称、来源类型和坐标系，不接受文件路径、代码或SQL。能力声明本身不授予任何额外权限。
+
+派生输入来源标记为workflow-working，只有产生它的工作流真实绑定后才可读取，不进入普通任务候选。原始属性、几何、像元和文件保持只读。新增任务只需声明输入规范、登记匹配转换能力并验证，无需修改通用调度器。平台不能自动完成尚未登记的任意转换。
+
+逻辑推理新增可多份的分类识别资料角色，矢量按真实类别字段栅格化，命名波段栅格按真实类别处理。类别名称不受预置五种矿物限制；64类和4000像素边长属于计算资源边界，超限需显式调整，不能静默截断或降低分辨率。旧流程版本、旧算子和旧审批保持可追溯。
+
+命名类别结果的对比页按实际label和band绑定输出。计算输出map-preview及image支持可选band（缺省1，实时校验真实波段上限），后端统一渲染与共享配色，预览缓存包含完整波段和色表身份。已发布的通用inputAdapter能力可在各领域项目复用，仍受公共/本项目范围、启用状态和现有算法权限限制。

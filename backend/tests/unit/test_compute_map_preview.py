@@ -64,6 +64,35 @@ def source_path(output) -> Path:
     return map_preview.app_path(output.path)
 
 
+def test_named_class_bands_render_separately_and_reuse_only_matching_previews(output):
+    path = source_path(output)
+    with rasterio.open(path) as src:
+        profile = {**src.profile, "count": 2, "dtype": "uint8", "nodata": 255}
+    values = np.zeros((profile["height"], profile["width"]), dtype="uint8")
+    values[:, :150] = 1
+    with rasterio.open(path, "w", **profile) as target:
+        target.write(values, 1)
+        target.write(1 - values, 2)
+        target.set_band_description(1, "黄铁矿化")
+        target.set_band_description(2, "高岭石化")
+    output.key = "alteration_stack_before"
+    output.checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+    output.metadata = {"bands": 2, "bandNames": ["黄铁矿化", "高岭石化"]}
+    with patch.object(map_preview, "_render", wraps=map_preview._render) as render:
+        first, one = map_preview.ensure_map_preview(output, 1)
+        second, two = map_preview.ensure_map_preview(output, 2)
+        assert first != second
+        assert one["colorTable"][1]["label"] == "黄铁矿化"
+        assert two["colorTable"][1]["label"] == "高岭石化"
+        assert one["colorTable"][1]["color"] != two["colorTable"][1]["color"]
+        assert map_preview.ensure_map_preview(output, 2)[0] == second
+        assert render.call_count == 2
+        with pytest.raises(ComputeError, match="波段"):
+            map_preview.ensure_map_preview(output, 3)
+        assert render.call_count == 2
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == output.checksum
+
+
 @pytest.mark.parametrize(
     "key", ["calcite_before", "calcite_corrected", "calcite_changes"]
 )

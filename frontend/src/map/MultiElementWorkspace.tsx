@@ -230,12 +230,18 @@ export default function MultiElementWorkspace({
     void Promise.all(
       refs.map(async (item) => {
         const [before, after, changes] = await Promise.all([
-          computeApi.mapPreview(item.beforeOutputId),
+          item.band
+            ? computeApi.mapPreview(item.beforeOutputId, item.band)
+            : computeApi.mapPreview(item.beforeOutputId),
           item.afterOutputId
-            ? computeApi.mapPreview(item.afterOutputId)
+            ? item.band
+              ? computeApi.mapPreview(item.afterOutputId, item.band)
+              : computeApi.mapPreview(item.afterOutputId)
             : Promise.resolve(undefined),
           item.changesOutputId
-            ? computeApi.mapPreview(item.changesOutputId)
+            ? item.band
+              ? computeApi.mapPreview(item.changesOutputId, item.band)
+              : computeApi.mapPreview(item.changesOutputId)
             : Promise.resolve(undefined),
         ]);
         return [
@@ -588,7 +594,10 @@ export default function MultiElementWorkspace({
   ];
   const declaresRasterAnalysis =
     !["lithology", "structure"].includes(String(workflow.parameters.segment)) &&
-    (mineralKeys.some((key) => Number(record(workflow.plan.inputs)[key]) > 0) ||
+    (Number(record(workflow.plan.inputs).alteration_stack) > 0 ||
+      mineralKeys.some(
+        (key) => Number(record(workflow.plan.inputs)[key]) > 0,
+      ) ||
       Object.values(record(workflow.plan.algorithms)).some((algorithm) => {
         const outputs = record(record(algorithm).manifest).outputs;
         return (

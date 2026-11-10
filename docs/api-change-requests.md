@@ -1681,3 +1681,16 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 ## 2026-11-10 业务流目录完整可发现性
 
 `listBusinessFlows`增加可选`q/offset/limit`查询参数：服务端按名称、说明及编码搜索并稳定分页，默认50、最多50。`BusinessFlowList`新增可选`nextOffset`，省略表示本查询结束；维持已有必需字段，采用`limit+1`探测而不COUNT。前端搜索防抖280ms，旧请求中止，分页去重追加；搜索与节点选择不重读选中定义。验证覆盖51项目录、编码搜索、跨项目、取消与迟到响应、无COUNT及详情请求计数。
+
+## API-20261110-005 通用业务流输入适配
+
+- Status: BackendReady
+- Owner: codex/xintao；主助手统一完成契约、后端与前端。
+- Endpoints: 新增只读 `POST /api/business-flows/{flowId}/prepare-inputs/`，start和智能体启动工具接受可选inputAdapters。预检只读取规范、当前授权元信息及已发布能力，不启动模型或计算。
+- Change: 输入规范新增可选semanticType与multiple；多份来源使用role:resourceId键。返回direct、convert、needs_parameters、needs_choice、unavailable及真实可用版本、字段和参数。没有目标语义时不因只有一个转换器就擅自选择。启动冻结版本、参数和原始来源修订。
+- Frontend reason: 用户可以选择类型不同的资料，查看转换工具、确认必要字段后开始；科研智能体使用同一预检与执行入口。
+- Backend implementation: manifest保留经校验的inputAdapter能力，转换复用ComputeTask和ComputeImport队列。每次执行实时检查项目、来源和版本；派生资料仅本工作流可用，原件只读。节点状态可选inputPreparation；停止回执不返回撤权资料。
+- Mock example: mock/prism/examples/143-business-flow-input-preparation.json。
+- Verification: 非地质栅格转统计表、多类别矢量栅格化；预检零计算、实际队列提交/入库各一次，来源或版本变化、撤权、停止、预算、迟到响应和源文件未修改。OpenAPI、生成类型和API文档同步。
+
+- 同期结果契约：alterationRasters新增可选label/band，map-preview与其image接口接受可选band。后端按真实命名波段生成PNG与共用色表，缓存身份包含波段和规则；前端不重做栅格符号化。旧单波段引用仍保持原协议。

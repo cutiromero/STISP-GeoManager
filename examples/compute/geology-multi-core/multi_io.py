@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import tempfile
 
 import geopandas as gpd
 import numpy as np
@@ -23,6 +24,35 @@ RASTERS = {
     "calcite": "方解石化",
     "dolomite": "白云石化",
 }
+
+
+def raster_band_identity(path):
+    """Keep the exact values-then-masks digest while decoding each block once."""
+    from multi_windows import ordered_windows, GDAL_CACHE_MB
+
+    with rasterio.open(path) as src:
+        if src.count != 1 or src.crs is None:
+            raise ValueError("类别波段需要单波段和真实坐标系")
+        pixels = hashlib.sha256()
+        with (
+            tempfile.SpooledTemporaryFile(max_size=8 * 1024**2) as masks,
+            rasterio.Env(GDAL_CACHEMAX=GDAL_CACHE_MB * 1024**2),
+        ):
+            for window in ordered_windows(src):
+                values = src.read(1, window=window, masked=True)
+                pixels.update(values.filled(0).tobytes())
+                masks.write(np.ma.getmaskarray(values).tobytes())
+            masks.seek(0)
+            for chunk in iter(lambda: masks.read(1024**2), b""):
+                pixels.update(chunk)
+        return {
+            "crs": src.crs.to_wkt(),
+            "transform": list(src.transform),
+            "shape": src.shape,
+            "pixels": pixels.hexdigest(),
+        }
+
+
 ISSUE_FIELDS = [
     "issue_id",
     "element",
@@ -246,7 +276,6 @@ def frame_identity(frame):
 
 
 def inputs(context, config, include_rasters=True):
-    from multi_windows import GDAL_CACHE_MB, ordered_windows
 
     epsg = config["working_epsg"]
     lithology = vector(
@@ -289,29 +318,7 @@ def inputs(context, config, include_rasters=True):
             if verified and verified.get("raster") is not None:
                 raster_identity[key] = verified["raster"]
             else:
-                with rasterio.open(context.input_path(key)) as src:
-                    if src.crs is None or src.count != 1:
-                        raise ValueError("蚀变影像需要单波段和真实坐标系")
-                    pixels = hashlib.sha256()
-                    with rasterio.Env(GDAL_CACHEMAX=GDAL_CACHE_MB * 1024 * 1024):
-                        for window in ordered_windows(src):
-                            pixels.update(
-                                src.read(1, window=window, masked=True)
-                                .filled(0)
-                                .tobytes()
-                            )
-                        for window in ordered_windows(src):
-                            pixels.update(
-                                np.ma.getmaskarray(
-                                    src.read(1, window=window, masked=True)
-                                ).tobytes()
-                            )
-                    raster_identity[key] = {
-                        "crs": src.crs.to_wkt(),
-                        "transform": list(src.transform),
-                        "shape": src.shape,
-                        "pixels": pixels.hexdigest(),
-                    }
+                raster_identity[key] = raster_band_identity(context.input_path(key))
             try:
                 weight_path = context.input_path(key + "_weight")
             except KeyError:
@@ -330,6 +337,11 @@ def inputs(context, config, include_rasters=True):
                             stream, "sha256"
                         ).hexdigest()
     payload = {
+        **(
+            {"class_labels": context._class_mask_labels}
+            if hasattr(context, "_class_mask_labels")
+            else {}
+        ),
         "lithology": frame_identity(lithology),
         "faults": frame_identity(faults),
         "coverage": frame_identity(coverage),

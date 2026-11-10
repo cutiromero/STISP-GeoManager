@@ -205,7 +205,9 @@ def style_lithology(resource):
         resource.save(update_fields=["default_visualization", "updated_at"])
 
 
-def _register_copies(workflow, user, uploads, lithology, coverage, faults, created):
+def _register_copies(
+    workflow, user, uploads, lithology, coverage, faults, created, *, sources=None
+):
     """Create the working resources, appending each to ``created`` as it lands."""
     marker = f"workflow-working:{workflow.id}:"
     copies = {}
@@ -230,6 +232,14 @@ def _register_copies(workflow, user, uploads, lithology, coverage, faults, creat
     visualization["symbolization"] = name_symbolization(lithology)
     copies["lithology"].default_visualization = visualization
     copies["lithology"].save(update_fields=["default_visualization", "updated_at"])
+    from .alteration_stack import supports_stack, prepare_stack
+
+    if supports_stack(workflow, user):
+        prepared = prepare_stack(workflow, user, sources, coverage)
+        created.append(prepared)
+        return copies, {"alteration_stack": prepared.pk}
+    if any(role.startswith("alterations") for role in uploads):
+        raise ComputeError("当前地质算子尚未发布可变类别输入版本，请先完成算子升级")
     missing = [m for m in MINERALS if m not in uploads]
     rasters = {m: uploads[m] for m in MINERALS if m in uploads}
     if missing:
@@ -248,7 +258,10 @@ def build_inputs(workflow, user, policy) -> None:
     if workflow.plan.get("workingCopies"):
         return
     check_cancelled(workflow)
-    uploads = workflow.plan["uploadInputs"]
+    uploads = {
+        role: workflow.plan.get("effectiveInputs", {}).get(role, identity)
+        for role, identity in workflow.plan["uploadInputs"].items()
+    }
     mapping = workflow.plan["confirmedMapping"]
     source = {
         role: resolve_workflow_resource(user, policy, identity, workflow)
@@ -273,7 +286,14 @@ def build_inputs(workflow, user, policy) -> None:
     created = []
     try:
         copies, rasters = _register_copies(
-            workflow, user, uploads, lithology, coverage, faults, created
+            workflow,
+            user,
+            uploads,
+            lithology,
+            coverage,
+            faults,
+            created,
+            sources=source,
         )
         if "units" in source:
             from apps.catalog.nongeo import _resource_dataframe
@@ -293,7 +313,10 @@ def build_inputs(workflow, user, policy) -> None:
     workflow.parameters = {
         **workflow.parameters,
         "working_epsg": epsg,
-        "segment": "all" if provided & {"faults", *MINERALS} else "lithology",
+        "segment": "all"
+        if "faults" in provided
+        or any(role in MINERALS or role.startswith("alterations") for role in provided)
+        else "lithology",
     }
     workflow.plan.update(
         inputs=inputs,

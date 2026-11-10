@@ -500,6 +500,43 @@ export default function BusinessFlowEditor({
                 />
               </label>
               <label className="business-flow-editor-field full">
+                {ui("目标数据语义（可选）", "Target data semantics (optional)")}
+                <Input
+                  value={input.semanticType ?? ""}
+                  maxLength={100}
+                  disabled={managedSkeleton}
+                  placeholder="例如 class_mask_stack_v1 或 raster_band_statistics_v1"
+                  onChange={(event) =>
+                    setSpec((old) => ({
+                      ...old,
+                      inputRequirements: old.inputRequirements.map((row, i) =>
+                        i === index
+                          ? {
+                              ...row,
+                              semanticType: event.target.value || undefined,
+                            }
+                          : row,
+                      ),
+                    }))
+                  }
+                />
+              </label>
+              <label className="business-flow-editor-field">
+                {ui("允许多份来源", "Allow multiple sources")}
+                <Switch
+                  checked={input.multiple ?? false}
+                  disabled={managedSkeleton}
+                  onChange={(multiple) =>
+                    setSpec((old) => ({
+                      ...old,
+                      inputRequirements: old.inputRequirements.map((row, i) =>
+                        i === index ? { ...row, multiple } : row,
+                      ),
+                    }))
+                  }
+                />
+              </label>
+              <label className="business-flow-editor-field full">
                 {ui("资料说明", "Description")}
                 <Input
                   value={input.description}

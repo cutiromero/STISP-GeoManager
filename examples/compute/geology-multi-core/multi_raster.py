@@ -23,6 +23,7 @@ from multi_grid import LithologyGrids
 
 RULE_PRIORITY = ("A-04", "A-01", "A-02", "A-03", "A-05")
 SUMMARY_FIELDS = [
+    "mineral_name",
     "group_id",
     "rule_id",
     "rule_version",
@@ -41,6 +42,7 @@ SUMMARY_FIELDS = [
     "representatives_json",
 ]
 QUALITY_FIELDS = [
+    "mineral_name",
     "mineral",
     "original_pixels",
     "hit_pixels",
@@ -111,7 +113,9 @@ def read_raw(source, window, area, mask=None):
 
 def read_weights(source, window, shape):
     weights = (
-        source.read(1, window=window) if source else np.ones(shape, dtype="float32")
+        source.read(1, window=window, masked=True).filled(0)
+        if source
+        else np.ones(shape, dtype="float32")
     )
     if not np.isfinite(weights).all() or ((weights < 0) | (weights > 1)).any():
         raise ValueError("蚀变权重必须在0和1之间")
@@ -371,6 +375,7 @@ class RasterAlterations:
                     zip(
                         QUALITY_FIELDS,
                         [
+                            name,
                             mineral,
                             original,
                             hit,
@@ -417,6 +422,7 @@ class RasterAlterations:
             zip(
                 SUMMARY_FIELDS,
                 [
+                    name,
                     group_id,
                     rule_id,
                     rule["version"],
@@ -451,6 +457,7 @@ class RasterAlterations:
             )
         }
         measurements.update(
+            mineral_name=name,
             bbox=bounds,
             representatives=representatives,
             raster_protocol="alteration-pixels-v1",
@@ -621,10 +628,15 @@ class RasterAlterations:
         write_table(
             context.output_path("group_index.csv"),
             [
-                {"group_id": group_id, "mineral": key, "ordinal": ordinal}
+                {
+                    "group_id": group_id,
+                    "mineral": key,
+                    "mineral_name": RASTERS.get(key, key),
+                    "ordinal": ordinal,
+                }
                 for group_id, (key, ordinal, _) in self.groups.items()
             ],
-            ["group_id", "mineral", "ordinal"],
+            ["group_id", "mineral", "mineral_name", "ordinal"],
         )
         self.workspace.cleanup()
         self.grids = None

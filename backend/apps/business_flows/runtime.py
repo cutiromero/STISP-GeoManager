@@ -197,41 +197,120 @@ def serialize_run(user, workflow, *, control_only=False):
         "resultOutputIds": [] if control_only else workflow.result_ids,
         "createdAt": workflow.created_at.isoformat(),
         "updatedAt": workflow.updated_at.isoformat(),
+        **(
+            {
+                "inputPreparation": {
+                    "ready": all(
+                        row["status"] in {"direct", "ready"}
+                        for row in workflow.plan.get("inputAdaptations", [])
+                    ),
+                    "items": workflow.plan.get("inputAdaptations", []),
+                }
+            }
+            if not control_only
+            else {}
+        ),
     }
 
 
-def _inputs(user, definition, value, policy):
+def _inputs(
+    user, definition, value, policy, *, preview=False, allowed_adapter_ids=None
+):
+    from .input_adapters import logical_role, plan_inputs
+    from apps.compute.data import list_candidate
+
     supplied = value.get("inputs", {})
     specs = {item["key"]: item for item in definition["inputRequirements"]}
     if (
         not isinstance(supplied, dict)
-        or set(supplied) - set(specs)
+        or len(supplied) > 30
         or any(
             type(identity) is not int or identity < 1 for identity in supplied.values()
         )
     ):
         raise ValidationError("资料角色必须使用业务流声明的角色和真实资源编号")
-    if any(item["required"] and key not in supplied for key, item in specs.items()):
+    logical = {key: logical_role(key, specs) for key in supplied}
+    if not preview and any(
+        item["required"] and key not in logical.values() for key, item in specs.items()
+    ):
         raise ValidationError("请补齐业务流必需的输入资料")
-    versions = {}
+    versions, sources, cached = {}, {}, {}
+    batch_id = value.get("parameters", {}).get("uploadBatchId") or value.get(
+        "uploadBatchId"
+    )
+    if definition["adapter"] == "geology_generic" and batch_id:
+        from apps.agent.models import WorkflowUpload
+
+        cached = {
+            row.resource_id: {**row.profile, "bands": row.profile.get("bandCount", 0)}
+            for row in WorkflowUpload.objects.filter(
+                owner=user, batch_id=batch_id, resource_id__in=list(supplied.values())
+            ).only("resource_id", "profile")
+        }
     for role, identity in supplied.items():
         if definition["adapter"] == "geology_generic":
             from apps.agent.workflow_resources import resolve_upload_resource
 
-            resource = resolve_upload_resource(
-                user, policy, identity, value.get("parameters", {}).get("uploadBatchId")
+            resource = (
+                resolve_upload_resource(user, policy, identity, batch_id)
+                if batch_id
+                else resolve_discoverable_resource(user, policy, identity)
             )
         else:
             resource = resolve_discoverable_resource(user, policy, identity)
-        if resource.data_type not in specs[role]["dataTypes"]:
-            raise ValidationError(specs[role]["label"] + "的资料类型不符合流程规范")
+        if resource.pk not in cached:
+            metadata = (
+                list_candidate(resource)
+                if resource.data_type in {"vector", "raster", "table"}
+                else {"fields": []}
+            )
+            if resource.data_type == "raster" and specs[logical[role]].get(
+                "semanticType"
+            ):
+                from apps.raster.models import RasterDataset
+
+                dataset = (
+                    RasterDataset.objects.filter(data_resource=resource, status="ready")
+                    .only("source_gdalinfo")
+                    .first()
+                )
+                metadata["semanticType"] = (
+                    (
+                        (dataset.source_gdalinfo or {})
+                        .get("metadata", {})
+                        .get("", {})
+                        .get("stisp_input_semantics", "")
+                    )
+                    if dataset
+                    else ""
+                )
+            cached[resource.pk] = metadata
+        sources[role] = resource, cached[resource.pk]
         versions[role] = {
             "id": identity,
             "name": resource.name,
             "dataType": resource.data_type,
             "updatedAt": resource.updated_at.isoformat(),
         }
-    return dict(supplied), versions
+    available = None
+    if allowed_adapter_ids is not None:
+        from .input_adapters import capabilities
+
+        available = [
+            row
+            for row in capabilities(user, pinned=allowed_adapter_ids)
+            if row.pk in allowed_adapter_ids
+        ]
+    planned = plan_inputs(
+        user,
+        definition["inputRequirements"],
+        sources,
+        value.get("inputAdapters"),
+        available=available,
+    )
+    if not preview and not planned["ready"]:
+        raise ValidationError("输入仍需配置转换能力或参数，请先查看输入适配方案")
+    return dict(supplied), versions, planned
 
 
 @retry_run_admission
@@ -323,6 +402,11 @@ def start_flow(user, version, value, *, source_run=None):
             "goal": goal,
             "inputs": value.get("inputs", {}),
             "parameters": parameters,
+            **(
+                {"inputAdapters": value["inputAdapters"]}
+                if value.get("inputAdapters")
+                else {}
+            ),
             "conversationId": value.get("conversationId"),
             "sourceRunId": source_run.pk if source_run else None,
         }
@@ -334,7 +418,22 @@ def start_flow(user, version, value, *, source_run=None):
         if binding(previous).get("requestHash") != request_hash:
             raise ComputeError("幂等键已用于另一份业务流请求", 409)
         return previous
-    inputs, revisions = _inputs(user, definition, value, policy)
+    inputs, revisions, input_plan = _inputs(
+        user,
+        definition,
+        value,
+        policy,
+        allowed_adapter_ids=set(source_run.algorithm_version_ids)
+        if source_run and source_run.algorithm_selection_mode == "manual"
+        else None,
+    )
+    if any(item["status"] == "convert" for item in input_plan["items"]):
+        from apps.compute.access import require_actor
+
+        if not policy.get("operatorEnabled", False):
+            raise PermissionDenied("当前策略未允许输入适配调用算子")
+        require_actor(user, selected_project_id(), "submit_task")
+        require_actor(user, selected_project_id(), "catalog.add_dataresource")
     if (
         definition["adapter"] == "research_flow"
         and policy["maxResources"] > 0
@@ -390,7 +489,19 @@ def start_flow(user, version, value, *, source_run=None):
                 "uploadBatchId": parameters.pop("uploadBatchId", None),
                 "parameters": parameters,
             }
-            workflow = create_workflow(user, selected_project_id(), original)
+            workflow = create_workflow(
+                user,
+                selected_project_id(),
+                original,
+                input_plan=[
+                    {
+                        key: item
+                        for key, item in row.items()
+                        if key not in {"fields", "candidates"}
+                    }
+                    for row in input_plan["items"]
+                ],
+            )
         else:
             workflow = AgentWorkflow.objects.create(
                 owner=user,
@@ -454,6 +565,14 @@ def start_flow(user, version, value, *, source_run=None):
             "revision": 0,
             "requestHash": request_hash,
         }
+        workflow.plan["inputAdaptations"] = [
+            {
+                key: item
+                for key, item in row.items()
+                if key not in {"fields", "candidates"}
+            }
+            for row in input_plan["items"]
+        ]
         if workflow.workflow_type == "business_flow":
             workflow.plan["businessFlow"] = initial_state(definition)
         else:
