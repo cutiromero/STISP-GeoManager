@@ -26,6 +26,7 @@ from .models import (
     RuntimeLease,
 )
 from .packages import ComputeError, checksum, inspect_package
+from .failures import generic_failure
 from .quality import quality_metadata, read_quality_report
 from .runtime import execute, inspect_runtime, stop_container, stop_native
 from .services import ACTIVE, check_live_task
@@ -67,6 +68,7 @@ def run_task(task):
         started_at=timezone.now(),
         stage="固定输入并检查数据",
         progress=5,
+        failure={},
     ):
         return
     task.refresh_from_db()
@@ -118,8 +120,16 @@ def run_task(task):
         manifest = inspect_package(archive, package)
         if manifest != task.version.manifest:
             raise ComputeError("算法包与固定清单不一致")
-        context = {"inputs": {}, "parameters": task.parameters}
-        if manifest.get("runtime") == "python-data-script-v1":
+        context = {
+            "inputs": {},
+            "parameters": task.parameters,
+            "fieldMappings": task.field_mappings,
+            "inputCollections": task.input_collections,
+        }
+        if (
+            manifest.get("runtime") == "python-data-script-v1"
+            or manifest.get("schemaVersion") == 2
+        ):
             context["manifest"] = manifest
         total = 0
         for item in task.input_records.select_related("resource"):
@@ -236,6 +246,10 @@ def run_task(task):
             status=status,
             stage="已取消" if status == "cancelled" else "计算失败",
             error=message,
+            failure={}
+            if status == "cancelled"
+            else getattr(exc, "failure", None)
+            or generic_failure("PLATFORM_VALIDATION"),
             finished_at=timezone.now(),
             unread=True,
         )
@@ -275,7 +289,14 @@ def recover():
         task.stage = "上次执行中断，等待重新执行" if retry else "执行已中断，可重试"
         task.attempt_token = ""
         task.finished_at = None if retry else timezone.now()
-        task.save(update_fields=["status", "stage", "attempt_token", "finished_at"])
+        task.failure = (
+            generic_failure("PLATFORM_INTERRUPTED")
+            if task.status == "interrupted"
+            else {}
+        )
+        task.save(
+            update_fields=["status", "stage", "attempt_token", "finished_at", "failure"]
+        )
     ComputeImport.objects.filter(status="running").update(
         status="queued", error="上次入库中断，正在恢复"
     )

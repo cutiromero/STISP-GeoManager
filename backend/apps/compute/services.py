@@ -22,6 +22,7 @@ from .models import (
     RuntimeLease,
 )
 from .packages import ComputeError, clean_text
+from .preflight import expand_bindings, gap, semantic_preflight
 
 ACTIVE = ("queued", "validating", "running", "cancelling")
 
@@ -235,11 +236,24 @@ def validate_submission(user, body):
         raise ComputeError("输入或参数包含未声明字段")
     resources = []
     metadata = {}
-    for spec in manifest["inputs"]:
-        rid = inputs.get(spec["key"])
+    bindings, collections, input_specs = expand_bindings(manifest, inputs)
+    shape_gaps = []
+    candidate_cache = {}
+    for spec in input_specs:
+        rid = bindings.get(spec["key"])
         if rid is None and not spec["required"]:
             continue
         if type(rid) is not int:
+            if manifest.get("schemaVersion") == 2:
+                shape_gaps.append(
+                    gap(
+                        "MISSING_INPUT",
+                        spec["key"],
+                        "replace_data",
+                        expected=spec["kind"],
+                    )
+                )
+                continue
             raise ComputeError("请选择输入数据：" + spec["label"])
         resource = DataResource.objects.filter(
             pk=rid, status="active", project_tag_id=project_id()
@@ -249,18 +263,64 @@ def validate_submission(user, body):
         if not user_can_access(resource, user):
             raise ComputeError("输入数据不存在、已停用或无权访问", 404)
         if resource.data_type != spec["kind"]:
+            if manifest.get("schemaVersion") == 2:
+                shape_gaps.append(
+                    gap(
+                        "INPUT_KIND",
+                        spec["key"],
+                        "convert_input",
+                        expected=spec["kind"],
+                        actual=resource.data_type,
+                    )
+                )
+                continue
             raise ComputeError(spec["label"] + "的数据类型不符合算法要求")
-        info = candidate(resource)
+        if rid not in candidate_cache:
+            candidate_cache[rid] = (
+                candidate(resource, semantic_metadata=True)
+                if manifest.get("schemaVersion") == 2
+                else candidate(resource)
+            )
+        info = candidate_cache[rid]
         if info["sizeBytes"] > config().input_mb * 1024**2:
             raise ComputeError("输入超过平台大小限制")
         if info["bands"] < spec.get("minBands", 0):
+            if manifest.get("schemaVersion") == 2:
+                shape_gaps.append(
+                    gap(
+                        "BAND_COUNT",
+                        spec["key"],
+                        "replace_data",
+                        expected=spec["minBands"],
+                        actual=info["bands"],
+                    )
+                )
+                continue
             raise ComputeError(spec["label"] + "的波段数量不足")
         if spec.get("geometryTypes") and not set(info["geometryTypes"]) <= set(
             spec["geometryTypes"]
         ):
+            if manifest.get("schemaVersion") == 2:
+                shape_gaps.append(
+                    gap(
+                        "GEOMETRY_TYPE",
+                        spec["key"],
+                        "convert_input",
+                        expected=spec["geometryTypes"],
+                        actual=info["geometryTypes"],
+                    )
+                )
+                continue
             raise ComputeError(spec["label"] + "的几何类型不匹配")
         metadata[spec["key"]] = info
         resources.append((spec["key"], resource, info))
+    if shape_gaps:
+        raise ComputeError("输入数据类型不符合算子要求", gaps=shape_gaps)
+    field_mappings = {}
+    if manifest.get("schemaVersion") == 2:
+        field_mappings, params = semantic_preflight(
+            manifest, metadata, body.get("fieldMappings", {}), params, specs=input_specs
+        )
     normalized = parameter_values(manifest, metadata, params)
     if manifest.get("runtime") == "python-data-script-v1" and not resources:
         raise ComputeError("数据衔接脚本至少需要一份实际授权的来源")
@@ -280,6 +340,8 @@ def validate_submission(user, body):
         "parameters": normalized,
         "trial": trial,
     }
+    if manifest.get("schemaVersion") == 2:
+        canonical.update(fieldMappings=field_mappings, inputCollections=collections)
     digest = hashlib.sha256(
         json.dumps(canonical, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()
@@ -291,6 +353,8 @@ def validate_submission(user, body):
         "resources": resources,
         "digest": digest,
         "trial": trial,
+        "field_mappings": field_mappings,
+        "input_collections": collections,
     }
 
 
@@ -341,6 +405,8 @@ def submit(user, body, retry_of=None):
             request_hash=data["digest"],
             trial=data["trial"],
             retry_of=retry_of,
+            field_mappings=data["field_mappings"],
+            input_collections=data["input_collections"],
         )
         ComputeInput.objects.bulk_create(
             [
@@ -410,8 +476,9 @@ def task_action(task, user, action):
             {
                 "name": task.name,
                 "versionId": task.version_id,
-                "inputs": {r.key: r.resource_id for r in task.input_records.all()},
+                "inputs": _retry_inputs(task),
                 "parameters": task.parameters,
+                "fieldMappings": task.field_mappings,
                 "trial": task.trial,
                 "idempotencyKey": uuid.uuid4().hex,
             },
@@ -420,3 +487,13 @@ def task_action(task, user, action):
     else:
         raise ComputeError("不支持该任务操作")
     return task
+
+
+def _retry_inputs(task):
+    inputs = {record.key: record.resource_id for record in task.input_records.all()}
+    for key, entries in task.input_collections.items():
+        inputs[key] = [
+            {"resourceId": inputs.pop(entry["key"]), "label": entry["label"]}
+            for entry in entries
+        ]
+    return inputs

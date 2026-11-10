@@ -1,6 +1,7 @@
 import io
 from pathlib import Path
 import zipfile
+import yaml
 from django.conf import settings
 from .packages import ComputeError
 
@@ -30,3 +31,8 @@ def build_package(template_id):
             }:
                 archive.writestr(path.name, path.read_bytes())
     return stream.getvalue(), name
+
+
+def package_version(data):
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        return str(yaml.safe_load(archive.read("operator.yaml"))["version"])

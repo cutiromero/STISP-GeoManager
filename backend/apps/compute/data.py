@@ -192,7 +192,7 @@ def _table_candidate_fields(resource: DataResource) -> list[str]:
     return [str(column) for column in frame.columns]
 
 
-def candidate(resource, *, raster_metadata=False):
+def candidate(resource, *, raster_metadata=False, semantic_metadata=False):
     result = _candidate_record(resource)
     if resource.data_type == "raster":
         import rasterio
@@ -204,6 +204,19 @@ def candidate(resource, *, raster_metadata=False):
             raise ComputeError("栅格尚未处理完成")
         with rasterio.open(raster_source_path(dataset.source_relative_path)) as src:
             result.update(bands=src.count, crs=str(src.crs or ""))
+            if semantic_metadata:
+                result.update(
+                    bounds=list(src.bounds),
+                    fieldTypes={
+                        str(index): _semantic_type(dtype)
+                        for index, dtype in enumerate(src.dtypes, 1)
+                    },
+                    fieldUnits={
+                        str(index): unit
+                        for index, unit in enumerate(src.units, 1)
+                        if unit
+                    },
+                )
             if raster_metadata:
                 result["rasterMetadata"] = {
                     "source": "actual_compute_input_file",
@@ -236,11 +249,26 @@ def candidate(resource, *, raster_metadata=False):
             crs=info.get("crs") or "",
             geometryTypes=[info["geometry_type"]],
         )
+        if semantic_metadata:
+            result.update(
+                fieldTypes={
+                    str(name): _semantic_type(str(dtype))
+                    for name, dtype in zip(info["fields"], info["dtypes"])
+                },
+                bounds=list(info["total_bounds"])
+                if info["total_bounds"] is not None
+                else [],
+            )
     elif resource.data_type == "table":
         from apps.catalog.nongeo import _resource_dataframe
 
         frame, _, _ = _resource_dataframe(resource, limit=1, offset=0)
         result["fields"] = [str(c) for c in frame.columns]
+        if semantic_metadata:
+            result["fieldTypes"] = {
+                str(name): _semantic_type(str(dtype))
+                for name, dtype in frame.dtypes.items()
+            }
     elif resource.data_type in {"gene", "document", "image"}:
         from apps.catalog.nongeo import _resource_file_path
 
@@ -250,6 +278,19 @@ def candidate(resource, *, raster_metadata=False):
     else:
         raise ComputeError("该资源暂不支持计算")
     return result
+
+
+def _semantic_type(dtype):
+    dtype = dtype.lower()
+    if "datetime" in dtype or dtype in {"date", "timestamp"}:
+        return "datetime"
+    if "bool" in dtype:
+        return "boolean"
+    if "int" in dtype:
+        return "integer"
+    if "float" in dtype or "double" in dtype or "decimal" in dtype:
+        return "number"
+    return "string"
 
 
 def freeze_input(record, directory):

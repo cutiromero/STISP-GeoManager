@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "raster-ndvi",
   "name": "NDVI示例",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "NDVI示例的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
   "author": "平台示例算法",
   "runtime": "python-geospatial-v1",
@@ -39,9 +39,33 @@
       "label": "NDVI栅格",
       "kind": "raster",
       "file": "ndvi.tif",
-      "required": true
+      "required": true,
+      "description": "无量纲NDVI，红光与近红外应用文件scale/offset后计算，分母为0或无效观测写为NoData=-9999；保留原网格，不代表植被类型真值。",
+      "fields": [
+        {
+          "role": "ndvi",
+          "description": "近红外与红光归一化差值",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "unit": "1"
+        }
+      ],
+      "final": true
     }
   ],
   "timeoutSeconds": 1800,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "convert"
+    ],
+    "dataTypes": [
+      "raster"
+    ],
+    "summary": "NDVI示例的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
+    "useWhen": "输入具备NDVI示例所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

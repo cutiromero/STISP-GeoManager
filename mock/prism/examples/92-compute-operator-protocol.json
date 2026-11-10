@@ -1,0 +1,8 @@
+{
+  "POST /api/compute/preflight/": {
+      "400": {
+        "detail": "输入语义预检未通过，请按gaps补齐映射或转换数据",
+        "gaps": [{"code": "MISSING_ROLE", "input": "source", "role": "stratum_name", "field": "", "expected": {"types": ["string"]}, "actual": null, "remedy": "complete_mapping"}]
+      }
+  }
+}

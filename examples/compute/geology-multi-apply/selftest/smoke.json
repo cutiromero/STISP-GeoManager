@@ -1,0 +1,2016 @@
+{
+  "inputs": {
+    "lithology": {
+      "kind": "vector",
+      "crs": "EPSG:32646",
+      "features": [
+        {
+          "id": "0",
+          "type": "Feature",
+          "properties": {
+            "feature_id": "G1",
+            "name": "carbonate",
+            "geo_sym": "C",
+            "conf": 0.9,
+            "confidence_kind": "模拟分类置信度"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  300000.0,
+                  4000000.0
+                ],
+                [
+                  300000.0,
+                  4001000.0
+                ],
+                [
+                  300500.0,
+                  4001000.0
+                ],
+                [
+                  300500.0,
+                  4000000.0
+                ],
+                [
+                  300000.0,
+                  4000000.0
+                ]
+              ],
+              [
+                [
+                  300200.0,
+                  4000200.0
+                ],
+                [
+                  300100.0,
+                  4000200.0
+                ],
+                [
+                  300100.0,
+                  4000100.0
+                ],
+                [
+                  300200.0,
+                  4000100.0
+                ],
+                [
+                  300200.0,
+                  4000200.0
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "id": "1",
+          "type": "Feature",
+          "properties": {
+            "feature_id": "G2",
+            "name": "carbonate",
+            "geo_sym": "C",
+            "conf": 0.9,
+            "confidence_kind": "模拟分类置信度"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  300500.0,
+                  4000000.0
+                ],
+                [
+                  300500.0,
+                  4001000.0
+                ],
+                [
+                  301000.0,
+                  4001000.0
+                ],
+                [
+                  301000.0,
+                  4000000.0
+                ],
+                [
+                  300500.0,
+                  4000000.0
+                ]
+              ],
+              [
+                [
+                  300900.0,
+                  4000900.0
+                ],
+                [
+                  300800.0,
+                  4000900.0
+                ],
+                [
+                  300800.0,
+                  4000800.0
+                ],
+                [
+                  300900.0,
+                  4000800.0
+                ],
+                [
+                  300900.0,
+                  4000900.0
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "id": "2",
+          "type": "Feature",
+          "properties": {
+            "feature_id": "G3",
+            "name": "old",
+            "geo_sym": "O",
+            "conf": 0.5,
+            "confidence_kind": "模拟分类置信度"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  300200.0,
+                  4000100.0
+                ],
+                [
+                  300200.0,
+                  4000200.0
+                ],
+                [
+                  300100.0,
+                  4000200.0
+                ],
+                [
+                  300100.0,
+                  4000100.0
+                ],
+                [
+                  300200.0,
+                  4000100.0
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "id": "3",
+          "type": "Feature",
+          "properties": {
+            "feature_id": "G4",
+            "name": "carbonate",
+            "geo_sym": "O",
+            "conf": 0.5,
+            "confidence_kind": "模拟分类置信度"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  300900.0,
+                  4000800.0
+                ],
+                [
+                  300900.0,
+                  4000900.0
+                ],
+                [
+                  300800.0,
+                  4000900.0
+                ],
+                [
+                  300800.0,
+                  4000800.0
+                ],
+                [
+                  300900.0,
+                  4000800.0
+                ]
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "faults": {
+      "kind": "vector",
+      "crs": "EPSG:32646",
+      "features": [
+        {
+          "id": "0",
+          "type": "Feature",
+          "properties": {
+            "line_id": "F1"
+          },
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                300400.0,
+                4000300.0
+              ],
+              [
+                300900.0,
+                4000300.0
+              ]
+            ]
+          }
+        },
+        {
+          "id": "1",
+          "type": "Feature",
+          "properties": {
+            "line_id": "F2"
+          },
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                300600.0,
+                4000100.0
+              ],
+              [
+                300600.0,
+                4000800.0
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "coverage": {
+      "kind": "vector",
+      "crs": "EPSG:32646",
+      "features": [
+        {
+          "id": "0",
+          "type": "Feature",
+          "properties": {
+            "coverage_id": "extent"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  301000.0,
+                  4000000.0
+                ],
+                [
+                  301000.0,
+                  4001000.0
+                ],
+                [
+                  300000.0,
+                  4001000.0
+                ],
+                [
+                  300000.0,
+                  4000000.0
+                ],
+                [
+                  301000.0,
+                  4000000.0
+                ]
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "rules": {
+      "kind": "table",
+      "columns": [
+        "rule_id",
+        "rule_version",
+        "knowledge_id",
+        "knowledge_revision",
+        "params_json",
+        "rule_json",
+        "units_json",
+        "aliases_json"
+      ],
+      "rows": [
+        {
+          "rule_id": "L-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "1",
+          "knowledge_revision": "1",
+          "params_json": "{\"enclose_ratio\": 0.95, \"max_area_km2\": 3, \"fault_buffer_m\": 50}",
+          "rule_json": "{\"id\": \"L-01\", \"name\": \"L-01\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "{\"C\": {\"name\": \"carbonate\", \"category\": \"stratum\", \"age_ma\": 200, \"group\": \"carbonate\", \"favorable\": false}, \"O\": {\"name\": \"old\", \"category\": \"stratum\", \"age_ma\": 500, \"group\": \"clastic\", \"favorable\": false}}",
+          "aliases_json": "{\"carbonate\": \"C\", \"old\": \"O\"}"
+        },
+        {
+          "rule_id": "L-03",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "2",
+          "knowledge_revision": "1",
+          "params_json": "{}",
+          "rule_json": "{\"id\": \"L-03\", \"name\": \"L-03\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "3",
+          "knowledge_revision": "1",
+          "params_json": "{\"cover_ratio\": 0.8, \"cover_units\": []}",
+          "rule_json": "{\"id\": \"S-01\", \"name\": \"S-01\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-02",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "4",
+          "knowledge_revision": "1",
+          "params_json": "{\"boundary_buffer_m\": 20, \"boundary_ratio\": 0.8, \"min_sinuosity\": 1.15}",
+          "rule_json": "{\"id\": \"S-02\", \"name\": \"S-02\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-03",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "5",
+          "knowledge_revision": "1",
+          "params_json": "{\"max_length_m\": 100, \"isolation_m\": 50}",
+          "rule_json": "{\"id\": \"S-03\", \"name\": \"S-03\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-04",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "6",
+          "knowledge_revision": "1",
+          "params_json": "{\"turn_angle\": 100, \"min_turns\": 2}",
+          "rule_json": "{\"id\": \"S-04\", \"name\": \"S-04\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-05",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "7",
+          "knowledge_revision": "1",
+          "params_json": "{\"snap_dist_m\": 100, \"max_angle\": 45}",
+          "rule_json": "{\"id\": \"S-05\", \"name\": \"S-05\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "8",
+          "knowledge_revision": "1",
+          "params_json": "{\"dominant_ratio\": 0.5}",
+          "rule_json": "{\"id\": \"A-01\", \"name\": \"A-01\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-02",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "9",
+          "knowledge_revision": "1",
+          "params_json": "{\"dominant_ratio\": 0.5}",
+          "rule_json": "{\"id\": \"A-02\", \"name\": \"A-02\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-03",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "10",
+          "knowledge_revision": "1",
+          "params_json": "{\"dominant_ratio\": 0.5}",
+          "rule_json": "{\"id\": \"A-03\", \"name\": \"A-03\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-04",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "11",
+          "knowledge_revision": "1",
+          "params_json": "{\"dominant_ratio\": 0.5}",
+          "rule_json": "{\"id\": \"A-04\", \"name\": \"A-04\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-05",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "12",
+          "knowledge_revision": "1",
+          "params_json": "{\"min_area_m2\": 2600}",
+          "rule_json": "{\"id\": \"A-05\", \"name\": \"A-05\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "P-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "13",
+          "knowledge_revision": "1",
+          "params_json": "{\"main_fault_min_length_m\": 10000, \"buffer_main_m\": 500, \"buffer_secondary_m\": 100, \"buffer_intersection_main_secondary_m\": 100, \"buffer_intersection_other_m\": 100}",
+          "rule_json": "{\"id\": \"P-01\", \"name\": \"P-01\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "P-02",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "14",
+          "knowledge_revision": "1",
+          "params_json": "{\"evidence_method\": \"weighted_neighborhood_presence_v2\", \"search_m\": 100, \"min_types\": 2, \"alteration_types\": [\"\\u8d64\\u94c1\\u77ff\\u5316\", \"\\u7eff\\u6ce5\\u77f3\\u5316\", \"\\u6c34\\u4e91\\u6bcd\\u5316\", \"\\u65b9\\u89e3\\u77f3\\u5316\", \"\\u767d\\u4e91\\u77f3\\u5316\"]}",
+          "rule_json": "{\"id\": \"P-02\", \"name\": \"P-02\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "P-03",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "15",
+          "knowledge_revision": "1",
+          "params_json": "{}",
+          "rule_json": "{\"id\": \"P-03\", \"name\": \"P-03\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        }
+      ]
+    },
+    "hematite": {
+      "kind": "raster",
+      "shape": [
+        100,
+        100
+      ],
+      "dtype": "uint8",
+      "crs": "EPSG:32646",
+      "transform": [
+        10.0,
+        0.0,
+        300000.0,
+        0.0,
+        -10.0,
+        4001000.0
+      ],
+      "nodata": 0.0,
+      "fill": 0,
+      "pixels": [
+        [
+          35,
+          60,
+          1
+        ],
+        [
+          35,
+          61,
+          1
+        ],
+        [
+          35,
+          62,
+          1
+        ],
+        [
+          35,
+          63,
+          1
+        ],
+        [
+          35,
+          64,
+          1
+        ],
+        [
+          36,
+          60,
+          1
+        ],
+        [
+          36,
+          61,
+          1
+        ],
+        [
+          36,
+          62,
+          1
+        ],
+        [
+          36,
+          63,
+          1
+        ],
+        [
+          36,
+          64,
+          1
+        ],
+        [
+          37,
+          60,
+          1
+        ],
+        [
+          37,
+          61,
+          1
+        ],
+        [
+          37,
+          62,
+          1
+        ],
+        [
+          37,
+          63,
+          1
+        ],
+        [
+          37,
+          64,
+          1
+        ],
+        [
+          38,
+          60,
+          1
+        ],
+        [
+          38,
+          61,
+          1
+        ],
+        [
+          38,
+          62,
+          1
+        ],
+        [
+          38,
+          63,
+          1
+        ],
+        [
+          38,
+          64,
+          1
+        ],
+        [
+          39,
+          60,
+          1
+        ],
+        [
+          39,
+          61,
+          1
+        ],
+        [
+          39,
+          62,
+          1
+        ],
+        [
+          39,
+          63,
+          1
+        ],
+        [
+          39,
+          64,
+          1
+        ]
+      ]
+    },
+    "chlorite": {
+      "kind": "raster",
+      "shape": [
+        100,
+        100
+      ],
+      "dtype": "uint8",
+      "crs": "EPSG:32646",
+      "transform": [
+        10.0,
+        0.0,
+        300000.0,
+        0.0,
+        -10.0,
+        4001000.0
+      ],
+      "nodata": 0.0,
+      "fill": 0,
+      "pixels": [
+        [
+          35,
+          60,
+          1
+        ],
+        [
+          35,
+          61,
+          1
+        ],
+        [
+          35,
+          62,
+          1
+        ],
+        [
+          35,
+          63,
+          1
+        ],
+        [
+          35,
+          64,
+          1
+        ],
+        [
+          36,
+          60,
+          1
+        ],
+        [
+          36,
+          61,
+          1
+        ],
+        [
+          36,
+          62,
+          1
+        ],
+        [
+          36,
+          63,
+          1
+        ],
+        [
+          36,
+          64,
+          1
+        ],
+        [
+          37,
+          60,
+          1
+        ],
+        [
+          37,
+          61,
+          1
+        ],
+        [
+          37,
+          62,
+          1
+        ],
+        [
+          37,
+          63,
+          1
+        ],
+        [
+          37,
+          64,
+          1
+        ],
+        [
+          38,
+          60,
+          1
+        ],
+        [
+          38,
+          61,
+          1
+        ],
+        [
+          38,
+          62,
+          1
+        ],
+        [
+          38,
+          63,
+          1
+        ],
+        [
+          38,
+          64,
+          1
+        ],
+        [
+          39,
+          60,
+          1
+        ],
+        [
+          39,
+          61,
+          1
+        ],
+        [
+          39,
+          62,
+          1
+        ],
+        [
+          39,
+          63,
+          1
+        ],
+        [
+          39,
+          64,
+          1
+        ]
+      ]
+    },
+    "hydromica": {
+      "kind": "raster",
+      "shape": [
+        100,
+        100
+      ],
+      "dtype": "uint8",
+      "crs": "EPSG:32646",
+      "transform": [
+        10.0,
+        0.0,
+        300000.0,
+        0.0,
+        -10.0,
+        4001000.0
+      ],
+      "nodata": 0.0,
+      "fill": 0,
+      "pixels": []
+    },
+    "calcite": {
+      "kind": "raster",
+      "shape": [
+        100,
+        100
+      ],
+      "dtype": "uint8",
+      "crs": "EPSG:32646",
+      "transform": [
+        10.0,
+        0.0,
+        300000.0,
+        0.0,
+        -10.0,
+        4001000.0
+      ],
+      "nodata": 0.0,
+      "fill": 0,
+      "pixels": [
+        [
+          30,
+          40,
+          1
+        ],
+        [
+          30,
+          41,
+          1
+        ],
+        [
+          30,
+          42,
+          1
+        ],
+        [
+          30,
+          43,
+          1
+        ],
+        [
+          30,
+          44,
+          1
+        ],
+        [
+          30,
+          45,
+          1
+        ],
+        [
+          30,
+          46,
+          1
+        ],
+        [
+          30,
+          47,
+          1
+        ],
+        [
+          30,
+          48,
+          1
+        ],
+        [
+          30,
+          49,
+          1
+        ],
+        [
+          30,
+          50,
+          1
+        ],
+        [
+          30,
+          51,
+          1
+        ],
+        [
+          30,
+          52,
+          1
+        ],
+        [
+          30,
+          53,
+          1
+        ],
+        [
+          30,
+          54,
+          1
+        ],
+        [
+          30,
+          55,
+          1
+        ],
+        [
+          30,
+          56,
+          1
+        ],
+        [
+          30,
+          57,
+          1
+        ],
+        [
+          30,
+          58,
+          1
+        ],
+        [
+          30,
+          59,
+          1
+        ],
+        [
+          31,
+          40,
+          1
+        ],
+        [
+          31,
+          41,
+          1
+        ],
+        [
+          31,
+          42,
+          1
+        ],
+        [
+          31,
+          43,
+          1
+        ],
+        [
+          31,
+          44,
+          1
+        ],
+        [
+          31,
+          45,
+          1
+        ],
+        [
+          31,
+          46,
+          1
+        ],
+        [
+          31,
+          47,
+          1
+        ],
+        [
+          31,
+          48,
+          1
+        ],
+        [
+          31,
+          49,
+          1
+        ],
+        [
+          31,
+          50,
+          1
+        ],
+        [
+          31,
+          51,
+          1
+        ],
+        [
+          31,
+          52,
+          1
+        ],
+        [
+          31,
+          53,
+          1
+        ],
+        [
+          31,
+          54,
+          1
+        ],
+        [
+          31,
+          55,
+          1
+        ],
+        [
+          31,
+          56,
+          1
+        ],
+        [
+          31,
+          57,
+          1
+        ],
+        [
+          31,
+          58,
+          1
+        ],
+        [
+          31,
+          59,
+          1
+        ],
+        [
+          32,
+          40,
+          1
+        ],
+        [
+          32,
+          41,
+          1
+        ],
+        [
+          32,
+          42,
+          1
+        ],
+        [
+          32,
+          43,
+          1
+        ],
+        [
+          32,
+          44,
+          1
+        ],
+        [
+          32,
+          45,
+          1
+        ],
+        [
+          32,
+          46,
+          1
+        ],
+        [
+          32,
+          47,
+          1
+        ],
+        [
+          32,
+          48,
+          1
+        ],
+        [
+          32,
+          49,
+          1
+        ],
+        [
+          32,
+          50,
+          1
+        ],
+        [
+          32,
+          51,
+          1
+        ],
+        [
+          32,
+          52,
+          1
+        ],
+        [
+          32,
+          53,
+          1
+        ],
+        [
+          32,
+          54,
+          1
+        ],
+        [
+          32,
+          55,
+          1
+        ],
+        [
+          32,
+          56,
+          1
+        ],
+        [
+          32,
+          57,
+          1
+        ],
+        [
+          32,
+          58,
+          1
+        ],
+        [
+          32,
+          59,
+          1
+        ],
+        [
+          33,
+          40,
+          1
+        ],
+        [
+          33,
+          41,
+          1
+        ],
+        [
+          33,
+          42,
+          1
+        ],
+        [
+          33,
+          43,
+          1
+        ],
+        [
+          33,
+          44,
+          1
+        ],
+        [
+          33,
+          45,
+          1
+        ],
+        [
+          33,
+          46,
+          1
+        ],
+        [
+          33,
+          47,
+          1
+        ],
+        [
+          33,
+          48,
+          1
+        ],
+        [
+          33,
+          49,
+          1
+        ],
+        [
+          33,
+          50,
+          1
+        ],
+        [
+          33,
+          51,
+          1
+        ],
+        [
+          33,
+          52,
+          1
+        ],
+        [
+          33,
+          53,
+          1
+        ],
+        [
+          33,
+          54,
+          1
+        ],
+        [
+          33,
+          55,
+          1
+        ],
+        [
+          33,
+          56,
+          1
+        ],
+        [
+          33,
+          57,
+          1
+        ],
+        [
+          33,
+          58,
+          1
+        ],
+        [
+          33,
+          59,
+          1
+        ],
+        [
+          34,
+          40,
+          1
+        ],
+        [
+          34,
+          41,
+          1
+        ],
+        [
+          34,
+          42,
+          1
+        ],
+        [
+          34,
+          43,
+          1
+        ],
+        [
+          34,
+          44,
+          1
+        ],
+        [
+          34,
+          45,
+          1
+        ],
+        [
+          34,
+          46,
+          1
+        ],
+        [
+          34,
+          47,
+          1
+        ],
+        [
+          34,
+          48,
+          1
+        ],
+        [
+          34,
+          49,
+          1
+        ],
+        [
+          34,
+          50,
+          1
+        ],
+        [
+          34,
+          51,
+          1
+        ],
+        [
+          34,
+          52,
+          1
+        ],
+        [
+          34,
+          53,
+          1
+        ],
+        [
+          34,
+          54,
+          1
+        ],
+        [
+          34,
+          55,
+          1
+        ],
+        [
+          34,
+          56,
+          1
+        ],
+        [
+          34,
+          57,
+          1
+        ],
+        [
+          34,
+          58,
+          1
+        ],
+        [
+          34,
+          59,
+          1
+        ],
+        [
+          35,
+          40,
+          1
+        ],
+        [
+          35,
+          41,
+          1
+        ],
+        [
+          35,
+          42,
+          1
+        ],
+        [
+          35,
+          43,
+          1
+        ],
+        [
+          35,
+          44,
+          1
+        ],
+        [
+          35,
+          45,
+          1
+        ],
+        [
+          35,
+          46,
+          1
+        ],
+        [
+          35,
+          47,
+          1
+        ],
+        [
+          35,
+          48,
+          1
+        ],
+        [
+          35,
+          49,
+          1
+        ],
+        [
+          35,
+          50,
+          1
+        ],
+        [
+          35,
+          51,
+          1
+        ],
+        [
+          35,
+          52,
+          1
+        ],
+        [
+          35,
+          53,
+          1
+        ],
+        [
+          35,
+          54,
+          1
+        ],
+        [
+          35,
+          55,
+          1
+        ],
+        [
+          35,
+          56,
+          1
+        ],
+        [
+          35,
+          57,
+          1
+        ],
+        [
+          35,
+          58,
+          1
+        ],
+        [
+          35,
+          59,
+          1
+        ],
+        [
+          36,
+          40,
+          1
+        ],
+        [
+          36,
+          41,
+          1
+        ],
+        [
+          36,
+          42,
+          1
+        ],
+        [
+          36,
+          43,
+          1
+        ],
+        [
+          36,
+          44,
+          1
+        ],
+        [
+          36,
+          45,
+          1
+        ],
+        [
+          36,
+          46,
+          1
+        ],
+        [
+          36,
+          47,
+          1
+        ],
+        [
+          36,
+          48,
+          1
+        ],
+        [
+          36,
+          49,
+          1
+        ],
+        [
+          36,
+          50,
+          1
+        ],
+        [
+          36,
+          51,
+          1
+        ],
+        [
+          36,
+          52,
+          1
+        ],
+        [
+          36,
+          53,
+          1
+        ],
+        [
+          36,
+          54,
+          1
+        ],
+        [
+          36,
+          55,
+          1
+        ],
+        [
+          36,
+          56,
+          1
+        ],
+        [
+          36,
+          57,
+          1
+        ],
+        [
+          36,
+          58,
+          1
+        ],
+        [
+          36,
+          59,
+          1
+        ],
+        [
+          37,
+          40,
+          1
+        ],
+        [
+          37,
+          41,
+          1
+        ],
+        [
+          37,
+          42,
+          1
+        ],
+        [
+          37,
+          43,
+          1
+        ],
+        [
+          37,
+          44,
+          1
+        ],
+        [
+          37,
+          45,
+          1
+        ],
+        [
+          37,
+          46,
+          1
+        ],
+        [
+          37,
+          47,
+          1
+        ],
+        [
+          37,
+          48,
+          1
+        ],
+        [
+          37,
+          49,
+          1
+        ],
+        [
+          37,
+          50,
+          1
+        ],
+        [
+          37,
+          51,
+          1
+        ],
+        [
+          37,
+          52,
+          1
+        ],
+        [
+          37,
+          53,
+          1
+        ],
+        [
+          37,
+          54,
+          1
+        ],
+        [
+          37,
+          55,
+          1
+        ],
+        [
+          37,
+          56,
+          1
+        ],
+        [
+          37,
+          57,
+          1
+        ],
+        [
+          37,
+          58,
+          1
+        ],
+        [
+          37,
+          59,
+          1
+        ],
+        [
+          38,
+          40,
+          1
+        ],
+        [
+          38,
+          41,
+          1
+        ],
+        [
+          38,
+          42,
+          1
+        ],
+        [
+          38,
+          43,
+          1
+        ],
+        [
+          38,
+          44,
+          1
+        ],
+        [
+          38,
+          45,
+          1
+        ],
+        [
+          38,
+          46,
+          1
+        ],
+        [
+          38,
+          47,
+          1
+        ],
+        [
+          38,
+          48,
+          1
+        ],
+        [
+          38,
+          49,
+          1
+        ],
+        [
+          38,
+          50,
+          1
+        ],
+        [
+          38,
+          51,
+          1
+        ],
+        [
+          38,
+          52,
+          1
+        ],
+        [
+          38,
+          53,
+          1
+        ],
+        [
+          38,
+          54,
+          1
+        ],
+        [
+          38,
+          55,
+          1
+        ],
+        [
+          38,
+          56,
+          1
+        ],
+        [
+          38,
+          57,
+          1
+        ],
+        [
+          38,
+          58,
+          1
+        ],
+        [
+          38,
+          59,
+          1
+        ],
+        [
+          39,
+          40,
+          1
+        ],
+        [
+          39,
+          41,
+          1
+        ],
+        [
+          39,
+          42,
+          1
+        ],
+        [
+          39,
+          43,
+          1
+        ],
+        [
+          39,
+          44,
+          1
+        ],
+        [
+          39,
+          45,
+          1
+        ],
+        [
+          39,
+          46,
+          1
+        ],
+        [
+          39,
+          47,
+          1
+        ],
+        [
+          39,
+          48,
+          1
+        ],
+        [
+          39,
+          49,
+          1
+        ],
+        [
+          39,
+          50,
+          1
+        ],
+        [
+          39,
+          51,
+          1
+        ],
+        [
+          39,
+          52,
+          1
+        ],
+        [
+          39,
+          53,
+          1
+        ],
+        [
+          39,
+          54,
+          1
+        ],
+        [
+          39,
+          55,
+          1
+        ],
+        [
+          39,
+          56,
+          1
+        ],
+        [
+          39,
+          57,
+          1
+        ],
+        [
+          39,
+          58,
+          1
+        ],
+        [
+          39,
+          59,
+          1
+        ]
+      ]
+    },
+    "dolomite": {
+      "kind": "raster",
+      "shape": [
+        100,
+        100
+      ],
+      "dtype": "uint8",
+      "crs": "EPSG:32646",
+      "transform": [
+        10.0,
+        0.0,
+        300000.0,
+        0.0,
+        -10.0,
+        4001000.0
+      ],
+      "nodata": 0.0,
+      "fill": 0,
+      "pixels": []
+    },
+    "issues": {
+      "kind": "table",
+      "columns": [
+        "issue_id",
+        "element",
+        "feature_id",
+        "rule_id",
+        "rule_version",
+        "knowledge_id",
+        "knowledge_revision",
+        "status",
+        "suggested_action",
+        "candidate_action",
+        "candidate_target_code",
+        "allowed_actions_json",
+        "target_code",
+        "measurements_json",
+        "conditions",
+        "exceptions",
+        "reason",
+        "snapshot_hash",
+        "geometry_json"
+      ],
+      "rows": [
+        {
+          "issue_id": "AG-8a41735c5d106cc32719b185",
+          "element": "alteration",
+          "feature_id": "AG-8a41735c5d106cc32719b185",
+          "rule_id": "A-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "8",
+          "knowledge_revision": "1",
+          "status": "suggested",
+          "suggested_action": "exclude",
+          "candidate_action": "",
+          "candidate_target_code": "",
+          "allowed_actions_json": "[\"keep\",\"review\",\"downweight\",\"exclude\"]",
+          "target_code": "",
+          "measurements_json": "{\"area_m2\":20000.0,\"bbox\":[300400.0,4000600.0,300600.0,4000700.0],\"boundary\":false,\"component_count\":1,\"group_id\":\"AG-8a41735c5d106cc32719b185\",\"mineral\":\"calcite\",\"mineral_name\":\"方解石化\",\"pixel_count\":200,\"raster_protocol\":\"alteration-pixels-v1\",\"representatives\":[{\"area_m2\":20000.0,\"bbox\":[300400.0,4000600.0,300600.0,4000700.0]}],\"rock_group\":\"carbonate\",\"unit_code\":\"C\"}",
+          "conditions": "",
+          "exceptions": "",
+          "reason": "A-01 · 方解石化 · C",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "geometry_json": "{\"coordinates\":[[[90.78411929772334,36.129624709465624],[90.78409396112075,36.13052560817555],[90.78187288617352,36.130484479230915],[90.78189824812107,36.12958358187066],[90.78411929772334,36.129624709465624]]],\"type\":\"Polygon\"}"
+        },
+        {
+          "issue_id": "AG-017f1c8693e4d753c169f49c",
+          "element": "alteration",
+          "feature_id": "AG-017f1c8693e4d753c169f49c",
+          "rule_id": "A-05",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "12",
+          "knowledge_revision": "1",
+          "status": "suggested",
+          "suggested_action": "downweight",
+          "candidate_action": "",
+          "candidate_target_code": "",
+          "allowed_actions_json": "[\"keep\",\"review\",\"downweight\",\"exclude\"]",
+          "target_code": "",
+          "measurements_json": "{\"area_m2\":2500.0,\"bbox\":[300600.0,4000600.0,300650.0,4000650.0],\"boundary\":false,\"component_count\":1,\"group_id\":\"AG-017f1c8693e4d753c169f49c\",\"mineral\":\"chlorite\",\"mineral_name\":\"绿泥石化\",\"pixel_count\":25,\"raster_protocol\":\"alteration-pixels-v1\",\"representatives\":[{\"area_m2\":2500.0,\"bbox\":[300600.0,4000600.0,300650.0,4000650.0]}],\"rock_group\":\"carbonate\",\"unit_code\":\"C\"}",
+          "conditions": "",
+          "exceptions": "",
+          "reason": "A-05 · 绿泥石化 · C",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "geometry_json": "{\"coordinates\":[[[90.78467456082707,36.12963498493587],[90.78466189583447,36.13008543447833],[90.78410662956263,36.13007515883949],[90.78411929772334,36.129624709465624],[90.78467456082707,36.12963498493587]]],\"type\":\"Polygon\"}"
+        },
+        {
+          "issue_id": "AG-79a28e973afc9b32d54efe0f",
+          "element": "alteration",
+          "feature_id": "AG-79a28e973afc9b32d54efe0f",
+          "rule_id": "A-05",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "12",
+          "knowledge_revision": "1",
+          "status": "suggested",
+          "suggested_action": "downweight",
+          "candidate_action": "",
+          "candidate_target_code": "",
+          "allowed_actions_json": "[\"keep\",\"review\",\"downweight\",\"exclude\"]",
+          "target_code": "",
+          "measurements_json": "{\"area_m2\":2500.0,\"bbox\":[300600.0,4000600.0,300650.0,4000650.0],\"boundary\":false,\"component_count\":1,\"group_id\":\"AG-79a28e973afc9b32d54efe0f\",\"mineral\":\"hematite\",\"mineral_name\":\"赤铁矿化\",\"pixel_count\":25,\"raster_protocol\":\"alteration-pixels-v1\",\"representatives\":[{\"area_m2\":2500.0,\"bbox\":[300600.0,4000600.0,300650.0,4000650.0]}],\"rock_group\":\"carbonate\",\"unit_code\":\"C\"}",
+          "conditions": "",
+          "exceptions": "",
+          "reason": "A-05 · 赤铁矿化 · C",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "geometry_json": "{\"coordinates\":[[[90.78467456082707,36.12963498493587],[90.78466189583447,36.13008543447833],[90.78410662956263,36.13007515883949],[90.78411929772334,36.129624709465624],[90.78467456082707,36.12963498493587]]],\"type\":\"Polygon\"}"
+        },
+        {
+          "issue_id": "I-eac0bad0e948ad19d72ed5c9",
+          "element": "lithology",
+          "feature_id": "G3",
+          "rule_id": "L-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "1",
+          "knowledge_revision": "1",
+          "status": "suggested",
+          "suggested_action": "reclassify",
+          "candidate_action": "",
+          "candidate_target_code": "",
+          "allowed_actions_json": "[\"keep\",\"review\",\"reclassify\",\"merge\"]",
+          "target_code": "C",
+          "measurements_json": "{\"age_ma\":500,\"area_m2\":10000.0,\"classification_confidence_kind\":\"模拟分类置信度\",\"fault_distance_m\":223.60679774997897,\"host_age_ma\":200,\"host_code\":\"C\",\"host_feature_ids\":[\"G1\"],\"shared_boundary_ratio\":1.0,\"simulation_confidence\":0.5}",
+          "conditions": "本区适用条件",
+          "exceptions": "保留地质例外",
+          "reason": "O图斑的100.0%外边界由C单元包围，分类置信度仅0.50，建议重分类为围岩C；批准后才修改。",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "geometry_json": "{\"coordinates\":[[[90.77980412257932,36.12503793081904],[90.77977874092174,36.12593882758436],[90.77866827074634,36.12591823049146],[90.7786936650734,36.12501733440207],[90.77980412257932,36.12503793081904]]],\"type\":\"Polygon\"}"
+        },
+        {
+          "issue_id": "I-3dda74d162b9af392fc465d5",
+          "element": "lithology",
+          "feature_id": "G4",
+          "rule_id": "L-03",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "2",
+          "knowledge_revision": "1",
+          "status": "suggested",
+          "suggested_action": "set_code",
+          "candidate_action": "",
+          "candidate_target_code": "",
+          "allowed_actions_json": "[\"set_code\",\"keep\",\"review\"]",
+          "target_code": "C",
+          "measurements_json": "{\"expected_code\":\"C\",\"name\":\"carbonate\",\"observed_code\":\"O\"}",
+          "conditions": "本区适用条件",
+          "exceptions": "保留地质例外",
+          "reason": "名称对应冻结代号C，当前记录为O；建议只修正代号。",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "geometry_json": "{\"coordinates\":[[[90.78740028226865,36.131488125028554],[90.78737498143751,36.13238902545823],[90.7862644146813,36.13236849563947],[90.78628972818623,36.1314675958835],[90.78740028226865,36.131488125028554]]],\"type\":\"Polygon\"}"
+        }
+      ]
+    },
+    "approved_changes": {
+      "kind": "table",
+      "columns": [
+        "issue_id",
+        "feature_id",
+        "rule_id",
+        "rule_version",
+        "snapshot_hash",
+        "action",
+        "target_code",
+        "weight",
+        "reason"
+      ],
+      "rows": [
+        {
+          "issue_id": "AG-8a41735c5d106cc32719b185",
+          "feature_id": "AG-8a41735c5d106cc32719b185",
+          "rule_id": "A-01",
+          "rule_version": "0.1-draft",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "action": "keep",
+          "target_code": "",
+          "weight": "1",
+          "reason": "审核当前测量与规则后批准本项操作"
+        },
+        {
+          "issue_id": "AG-017f1c8693e4d753c169f49c",
+          "feature_id": "AG-017f1c8693e4d753c169f49c",
+          "rule_id": "A-05",
+          "rule_version": "0.1-draft",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "action": "keep",
+          "target_code": "",
+          "weight": "1",
+          "reason": "审核当前测量与规则后批准本项操作"
+        },
+        {
+          "issue_id": "AG-79a28e973afc9b32d54efe0f",
+          "feature_id": "AG-79a28e973afc9b32d54efe0f",
+          "rule_id": "A-05",
+          "rule_version": "0.1-draft",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "action": "keep",
+          "target_code": "",
+          "weight": "1",
+          "reason": "审核当前测量与规则后批准本项操作"
+        },
+        {
+          "issue_id": "I-eac0bad0e948ad19d72ed5c9",
+          "feature_id": "G3",
+          "rule_id": "L-01",
+          "rule_version": "0.1-draft",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "action": "keep",
+          "target_code": "",
+          "weight": "1",
+          "reason": "审核当前测量与规则后批准本项操作"
+        },
+        {
+          "issue_id": "I-3dda74d162b9af392fc465d5",
+          "feature_id": "G4",
+          "rule_id": "L-03",
+          "rule_version": "0.1-draft",
+          "snapshot_hash": "d13735b9aab6e54d9fe9014a1c8aa1de76f028041e09a8fab038d22c6e2652ad",
+          "action": "keep",
+          "target_code": "",
+          "weight": "1",
+          "reason": "审核当前测量与规则后批准本项操作"
+        }
+      ]
+    }
+  },
+  "parameters": {
+    "grid_resolution_m": 50,
+    "min_zone_area_m2": 0
+  }
+}

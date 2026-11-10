@@ -2,13 +2,63 @@
   "schemaVersion": 1,
   "identifier": "vector-metrics",
   "name": "矢量面积与周长",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "为面矢量添加WGS84椭球面积（平方米）和边界长度（米，含孔洞），保留原属性和坐标系。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
-  "inputs": [{"key": "features", "label": "面矢量", "kind": "vector", "required": true}],
+  "inputs": [
+    {
+      "key": "features",
+      "label": "面矢量",
+      "kind": "vector",
+      "required": true
+    }
+  ],
   "parameters": [],
-  "outputs": [{"key": "metrics", "label": "面积周长结果", "kind": "vector", "file": "metrics.gpkg", "required": true}],
+  "outputs": [
+    {
+      "key": "metrics",
+      "label": "面积周长结果",
+      "kind": "vector",
+      "file": "metrics.gpkg",
+      "required": true,
+      "description": "保留来源属性、几何和CRS，增加WGS84椭球面积与含孔洞边界的总周长。",
+      "fields": [
+        {
+          "role": "area",
+          "name": "area_m2",
+          "description": "WGS84椭球面积",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "unit": "m2"
+        },
+        {
+          "role": "perimeter",
+          "name": "perimeter_m",
+          "description": "WGS84椭球上的外环与内环总长度",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "unit": "m"
+        }
+      ],
+      "final": true
+    }
+  ],
   "timeoutSeconds": 1800,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "statistics"
+    ],
+    "dataTypes": [
+      "vector"
+    ],
+    "summary": "为面矢量添加WGS84椭球面积（平方米）和边界长度（米，含孔洞），保留原属性和坐标系。",
+    "useWhen": "输入具备矢量面积与周长所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

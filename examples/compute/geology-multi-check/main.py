@@ -11,8 +11,10 @@ from multi_io import (
 )
 from multi_raster import RasterAlterations, empty_vectors
 from multi_stack import raster_inputs
+from multi_collection import collection_inputs
 
 
+@collection_inputs
 @raster_inputs("check")
 def run(context):
     config = settings(context)

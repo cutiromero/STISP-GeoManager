@@ -2,20 +2,92 @@
   "schemaVersion": 1,
   "identifier": "vector-geometry-repair",
   "name": "地质图面几何修复",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "修复面要素自相交、无效环等几何问题；保留原输入、属性和坐标系，逐要素报告有效性与面积变化。遇到空几何、降维或面积变化超限时标记需审核。用于地质图几何检查，不判断岩性、矿物或地层语义。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
-  "agent": {"enabled": true},
-  "qualityReport": {"file": "quality.json"},
-  "inputs": [{"key": "features", "label": "待检查的面矢量", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"], "required": true}],
-  "parameters": [{"key": "max_area_change_pct", "label": "需审核的面积变化阈值（%）", "type": "number", "min": 0, "max": 100, "default": 5, "required": true}],
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
+  "inputs": [
+    {
+      "key": "features",
+      "label": "待检查的面矢量",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ],
+      "required": true
+    }
+  ],
+  "parameters": [
+    {
+      "key": "max_area_change_pct",
+      "label": "需审核的面积变化阈值（%）",
+      "type": "number",
+      "min": 0,
+      "max": 100,
+      "default": 5,
+      "required": true
+    }
+  ],
   "outputs": [
-    {"key": "repaired", "label": "完整修复面（全部有效时生成）", "kind": "vector", "file": "repaired.gpkg", "required": false},
-    {"key": "repair_log", "label": "逐要素修复记录", "kind": "table", "file": "repair-log.csv", "required": true},
-    {"key": "repair_summary", "label": "修复检查汇总", "kind": "table", "file": "repair-summary.csv", "required": true},
-    {"key": "repair_audit", "label": "原始输入与修复审核包", "kind": "archive", "file": "repair-audit.zip", "required": true}
+    {
+      "key": "repaired",
+      "label": "完整修复面（全部有效时生成）",
+      "kind": "vector",
+      "file": "repaired.gpkg",
+      "required": false,
+      "description": "完整修复面（全部有效时生成）；由地质图面几何修复按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "repair_log",
+      "label": "逐要素修复记录",
+      "kind": "table",
+      "file": "repair-log.csv",
+      "required": true,
+      "description": "逐要素修复记录；由地质图面几何修复按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": false
+    },
+    {
+      "key": "repair_summary",
+      "label": "修复检查汇总",
+      "kind": "table",
+      "file": "repair-summary.csv",
+      "required": true,
+      "description": "修复检查汇总；由地质图面几何修复按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": false
+    },
+    {
+      "key": "repair_audit",
+      "label": "原始输入与修复审核包",
+      "kind": "archive",
+      "file": "repair-audit.zip",
+      "required": true,
+      "description": "原始输入与修复审核包；由地质图面几何修复按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": false
+    }
   ],
   "timeoutSeconds": 1800,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "correct"
+    ],
+    "dataTypes": [
+      "vector"
+    ],
+    "summary": "修复面要素自相交、无效环等几何问题；保留原输入、属性和坐标系，逐要素报告有效性与面积变化。遇到空几何、降维或面积变化超限时标记需审核。用于地质图几何检查，不判断岩性、矿物或地层语义。",
+    "useWhen": "输入具备地质图面几何修复所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

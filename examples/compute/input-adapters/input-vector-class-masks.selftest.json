@@ -1,0 +1,11 @@
+{
+  "inputs": {
+    "source": {
+      "kind": "vector",
+      "crs": "EPSG:32646",
+      "features": [{"type": "Feature", "properties": {"category": "石英"}, "geometry": {"type": "Polygon", "coordinates": [[[300000, 4000000], [300100, 4000000], [300100, 4000100], [300000, 4000100], [300000, 4000000]]]}}]
+    }
+  },
+  "parameters": {"category_field": "category", "resolution_m": 100, "target_epsg": 32646},
+  "fieldMappings": {"source": {"category_field": "category"}}
+}

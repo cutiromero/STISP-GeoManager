@@ -2,30 +2,130 @@
   "schemaVersion": 1,
   "identifier": "geology-map-correct",
   "name": "地质成果受约束修正",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "重新核对当前数据、专家知识、内容校验和及获批操作，只填补唯一宿主的内部漏填或更新明确矛盾的时代属性，输出新地图和实际变化。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
-  "agent": {"enabled": true},
-  "qualityReport": {"file": "quality.json"},
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
   "inputs": [
-    {"key": "features", "label": "待检查地质图", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"]},
-    {"key": "coverage", "label": "制图覆盖范围与例外", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"]},
-    {"key": "rules", "label": "专家知识检查规则", "kind": "table"},
-    {"key": "changes", "label": "用户批准的修改建议", "kind": "table"}
+    {
+      "key": "features",
+      "label": "待检查地质图",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "coverage",
+      "label": "制图覆盖范围与例外",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "rules",
+      "label": "专家知识检查规则",
+      "kind": "table"
+    },
+    {
+      "key": "changes",
+      "label": "用户批准的修改建议",
+      "kind": "table"
+    }
   ],
   "parameters": [
-    {"key": "working_epsg", "label": "面积计算投影 EPSG", "type": "integer", "default": 32646, "min": 1, "max": 999999},
-    {"key": "max_changes", "label": "本轮修改数量上限", "type": "integer", "default": 2, "min": 1, "max": 10},
-    {"key": "max_gap_area_m2", "label": "漏填筛查面积上限（平方米）", "type": "number", "default": 300000, "min": 1, "max": 10000000},
-    {"key": "geometry_tolerance_m", "label": "空间核对容差（米）", "type": "number", "default": 0.01, "min": 0.000001, "max": 0.1}
+    {
+      "key": "working_epsg",
+      "label": "面积计算投影 EPSG",
+      "type": "integer",
+      "default": 32646,
+      "min": 1,
+      "max": 999999
+    },
+    {
+      "key": "max_changes",
+      "label": "本轮修改数量上限",
+      "type": "integer",
+      "default": 2,
+      "min": 1,
+      "max": 10
+    },
+    {
+      "key": "max_gap_area_m2",
+      "label": "漏填筛查面积上限（平方米）",
+      "type": "number",
+      "default": 300000,
+      "min": 1,
+      "max": 10000000
+    },
+    {
+      "key": "geometry_tolerance_m",
+      "label": "空间核对容差（米）",
+      "type": "number",
+      "default": 0.01,
+      "min": 0.000001,
+      "max": 0.1
+    }
   ],
   "outputs": [
-    {"key": "corrected", "label": "修正后地质图", "kind": "vector", "file": "corrected.gpkg"},
-    {"key": "changes_map", "label": "修改范围", "kind": "vector", "file": "changes.gpkg"},
-    {"key": "changes", "label": "获批修改与执行记录", "kind": "table", "file": "changes.csv"},
-    {"key": "statistics", "label": "修改前后统计", "kind": "table", "file": "statistics.csv"}
+    {
+      "key": "corrected",
+      "label": "修正后地质图",
+      "kind": "vector",
+      "file": "corrected.gpkg",
+      "description": "修正后地质图；由地质成果受约束修正按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "changes_map",
+      "label": "修改范围",
+      "kind": "vector",
+      "file": "changes.gpkg",
+      "description": "修改范围；由地质成果受约束修正按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "changes",
+      "label": "获批修改与执行记录",
+      "kind": "table",
+      "file": "changes.csv",
+      "description": "获批修改与执行记录；由地质成果受约束修正按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": false
+    },
+    {
+      "key": "statistics",
+      "label": "修改前后统计",
+      "kind": "table",
+      "file": "statistics.csv",
+      "description": "修改前后统计；由地质成果受约束修正按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": false
+    }
   ],
   "timeoutSeconds": 300,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "correct"
+    ],
+    "dataTypes": [
+      "table",
+      "vector"
+    ],
+    "summary": "重新核对当前数据、专家知识、内容校验和及获批操作，只填补唯一宿主的内部漏填或更新明确矛盾的时代属性，输出新地图和实际变化。",
+    "useWhen": "输入具备地质成果受约束修正所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import UploadedFile
 from django.core.management.base import BaseCommand, CommandError
 from apps.compute.models import AlgorithmCategory, AlgorithmResource
-from apps.compute.templates import build_package
+from apps.compute.templates import build_package, package_version
 from apps.compute.views import store_version
 from apps.projects.context import ProjectScope, project_scope, is_superadmin
 
@@ -70,7 +70,9 @@ class Command(BaseCommand):
                         "created_by": user,
                     },
                 )
-                if not algorithm.versions.filter(version="1.0.0").exists():
+                if not algorithm.versions.filter(
+                    version=package_version(data)
+                ).exists():
                     store_version(
                         algorithm,
                         UploadedFile(

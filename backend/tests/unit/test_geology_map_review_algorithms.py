@@ -177,7 +177,7 @@ def test_manifests_and_standalone_package_logic(name):
     spec = validate_manifest(
         yaml.safe_load((ROOT / name / "operator.yaml").read_text(encoding="utf-8"))
     )
-    assert spec["version"] == "1.0.1" and spec["qualityReport"] == {
+    assert spec["version"] == "1.0.2" and spec["qualityReport"] == {
         "file": "quality.json"
     }
     assert (ROOT / "geology-map-check/review_logic.py").read_bytes() == (

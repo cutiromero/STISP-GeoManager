@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "vector-buffer",
   "name": "矢量缓冲区",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "矢量缓冲区的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
   "author": "平台示例算法",
   "runtime": "python-geospatial-v1",
@@ -32,9 +32,23 @@
       "label": "缓冲区",
       "kind": "vector",
       "file": "buffer.gpkg",
-      "required": true
+      "required": true,
+      "description": "按distance米在自动选择的本地区域UTM中建立缓冲，再返回来源CRS；保留输入属性，原始几何不修改。",
+      "fields": [],
+      "final": true
     }
   ],
   "timeoutSeconds": 1800,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "convert"
+    ],
+    "dataTypes": [
+      "vector"
+    ],
+    "summary": "矢量缓冲区的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
+    "useWhen": "输入具备矢量缓冲区所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

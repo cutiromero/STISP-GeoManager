@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "table-group-summary",
   "name": "表格分组汇总",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "表格分组汇总的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
   "author": "平台示例算法",
   "runtime": "python-geospatial-v1",
@@ -50,9 +50,43 @@
       "label": "分组统计表",
       "kind": "table",
       "file": "summary.csv",
-      "required": true
+      "required": true,
+      "description": "按指定group列分组，对指定value列执行method聚合；输出实际列名保持所选输入列名，数值含义和单位随聚合方式解释。",
+      "fields": [
+        {
+          "role": "group_value",
+          "description": "分组值，实际字段名为group参数指定的列名",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true
+        },
+        {
+          "role": "aggregated_value",
+          "description": "聚合结果，实际字段名为value参数指定的列名；计数是记录数，其他聚合按来源单位解释",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": false
     }
   ],
   "timeoutSeconds": 1800,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "statistics"
+    ],
+    "dataTypes": [
+      "table"
+    ],
+    "summary": "表格分组汇总的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
+    "useWhen": "输入具备表格分组汇总所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

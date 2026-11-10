@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "identifier": "geology-multi-apply",
   "name": "获批操作执行",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "获批操作执行。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -20,7 +20,51 @@
       "geometryTypes": [
         "Polygon",
         "MultiPolygon"
-      ]
+      ],
+      "description": "岩性图；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "feature_id",
+          "description": "稳定图斑标识",
+          "types": [
+            "string",
+            "integer"
+          ],
+          "required": true,
+          "legacyName": "feature_id"
+        },
+        {
+          "role": "stratum_name",
+          "description": "名称",
+          "types": [
+            "string"
+          ],
+          "required": true,
+          "legacyName": "name"
+        },
+        {
+          "role": "stratum_code",
+          "description": "地层或岩性代码",
+          "types": [
+            "string"
+          ],
+          "required": true,
+          "legacyName": "geo_sym"
+        },
+        {
+          "role": "confidence",
+          "description": "分类置信度",
+          "types": [
+            "number",
+            "integer"
+          ],
+          "required": false,
+          "legacyName": "conf"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "faults",
@@ -29,7 +73,23 @@
       "geometryTypes": [
         "LineString",
         "MultiLineString"
-      ]
+      ],
+      "description": "构造图；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "fault_id",
+          "description": "稳定构造线标识",
+          "types": [
+            "string",
+            "integer"
+          ],
+          "required": false,
+          "legacyName": "line_id"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "coverage",
@@ -38,106 +98,585 @@
       "geometryTypes": [
         "Polygon",
         "MultiPolygon"
-      ]
+      ],
+      "description": "研究区制图范围；原始来源只读，输出为新派生数据。",
+      "fields": [],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "rules",
       "label": "显式启用的试用规则及版本",
-      "kind": "table"
+      "kind": "table",
+      "description": "显式启用的试用规则及版本；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "rule_id",
+          "description": "规则标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_id"
+        },
+        {
+          "role": "rule_version",
+          "description": "冻结规则版本",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_version"
+        },
+        {
+          "role": "knowledge_id",
+          "description": "知识条目标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "knowledge_id"
+        },
+        {
+          "role": "knowledge_revision",
+          "description": "知识修订号",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "knowledge_revision"
+        },
+        {
+          "role": "params_json",
+          "description": "规则参数JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "params_json"
+        },
+        {
+          "role": "rule_json",
+          "description": "规则正文JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_json"
+        },
+        {
+          "role": "units_json",
+          "description": "地质单元字典JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": false,
+          "legacyName": "units_json"
+        },
+        {
+          "role": "aliases_json",
+          "description": "地质单元同义词JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": false,
+          "legacyName": "aliases_json"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "hematite",
       "label": "赤铁矿遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "赤铁矿遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "chlorite",
       "label": "绿泥石遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "绿泥石遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "hydromica",
       "label": "水云母遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "水云母遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "calcite",
       "label": "方解石遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "方解石遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "dolomite",
       "label": "白云石遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "白云石遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "issues",
       "label": "本轮完整检查清单",
-      "kind": "table"
+      "kind": "table",
+      "description": "本轮完整检查清单；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "issue_id",
+          "description": "问题稳定标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "issue_id"
+        },
+        {
+          "role": "element",
+          "description": "冻结审核信息：element",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "element"
+        },
+        {
+          "role": "feature_id",
+          "description": "稳定图斑标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "feature_id"
+        },
+        {
+          "role": "rule_id",
+          "description": "规则标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_id"
+        },
+        {
+          "role": "rule_version",
+          "description": "冻结规则版本",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_version"
+        },
+        {
+          "role": "knowledge_id",
+          "description": "知识条目标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "knowledge_id"
+        },
+        {
+          "role": "knowledge_revision",
+          "description": "知识修订号",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "knowledge_revision"
+        },
+        {
+          "role": "status",
+          "description": "审核状态",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "status"
+        },
+        {
+          "role": "suggested_action",
+          "description": "建议动作，不代表已批准",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "suggested_action"
+        },
+        {
+          "role": "candidate_action",
+          "description": "冻结审核信息：candidate_action",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "candidate_action"
+        },
+        {
+          "role": "candidate_target_code",
+          "description": "冻结审核信息：candidate_target_code",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "candidate_target_code"
+        },
+        {
+          "role": "allowed_actions_json",
+          "description": "冻结审核信息：allowed_actions_json",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "allowed_actions_json"
+        },
+        {
+          "role": "target_code",
+          "description": "目标岩性代码",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "target_code"
+        },
+        {
+          "role": "measurements_json",
+          "description": "测量证据JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "measurements_json"
+        },
+        {
+          "role": "conditions",
+          "description": "冻结审核信息：conditions",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "conditions"
+        },
+        {
+          "role": "exceptions",
+          "description": "冻结审核信息：exceptions",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "exceptions"
+        },
+        {
+          "role": "reason",
+          "description": "证据与操作说明",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "reason"
+        },
+        {
+          "role": "snapshot_hash",
+          "description": "实际输入与规则快照摘要",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "snapshot_hash"
+        },
+        {
+          "role": "geometry_json",
+          "description": "问题空间位置JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "geometry_json"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "approved_changes",
       "label": "逐项批准的操作",
-      "kind": "table"
+      "kind": "table",
+      "description": "逐项批准的操作；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "issue_id",
+          "description": "问题稳定标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "issue_id"
+        },
+        {
+          "role": "feature_id",
+          "description": "稳定图斑标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "feature_id"
+        },
+        {
+          "role": "rule_id",
+          "description": "规则标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_id"
+        },
+        {
+          "role": "rule_version",
+          "description": "冻结规则版本",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_version"
+        },
+        {
+          "role": "snapshot_hash",
+          "description": "实际输入与规则快照摘要",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "snapshot_hash"
+        },
+        {
+          "role": "action",
+          "description": "人工批准动作",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "action"
+        },
+        {
+          "role": "target_code",
+          "description": "目标岩性代码",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "target_code"
+        },
+        {
+          "role": "weight",
+          "description": "保留权重",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "weight"
+        },
+        {
+          "role": "reason",
+          "description": "证据与操作说明",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "reason"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "hematite_weight",
       "label": "赤铁矿遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "赤铁矿遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "chlorite_weight",
       "label": "绿泥石遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "绿泥石遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "hydromica_weight",
       "label": "水云母遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "水云母遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "calcite_weight",
       "label": "方解石遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "方解石遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "dolomite_weight",
       "label": "白云石遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "白云石遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "alteration_stack",
       "label": "类别掩膜栅格集（类别不限预置示例）",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "类别掩膜栅格集（类别不限预置示例）；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "alteration_stack_weight",
       "label": "同类别、同网格的证据权重栅格集",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "同类别、同网格的证据权重栅格集；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     }
   ],
   "parameters": [
@@ -147,7 +686,12 @@
       "type": "integer",
       "default": 32646,
       "min": 1,
-      "max": 999999
+      "max": 999999,
+      "help": "米制工作投影EPSG；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": false,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "segment",
@@ -159,7 +703,12 @@
         "lithology",
         "structure",
         "alteration"
-      ]
+      ],
+      "help": "本次检查范围；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "grid_resolution_m",
@@ -167,7 +716,12 @@
       "type": "number",
       "default": 100,
       "min": 10,
-      "max": 1000
+      "max": 1000,
+      "help": "综合分析网格（米）；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "min_zone_area_m2",
@@ -175,7 +729,12 @@
       "type": "number",
       "default": 200000,
       "min": 0,
-      "max": 100000000
+      "max": 100000000,
+      "help": "远景区最小面积（平方米）；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     }
   ],
   "outputs": [
@@ -184,193 +743,1421 @@
       "label": "修正后岩性图",
       "kind": "vector",
       "file": "lithology.gpkg",
-      "required": true
+      "required": true,
+      "description": "修正后岩性图；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "feature_id",
+          "description": "稳定图斑标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "feature_id"
+        },
+        {
+          "role": "name",
+          "description": "名称",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "name"
+        },
+        {
+          "role": "geo_sym",
+          "description": "地层或岩性代码",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "geo_sym"
+        },
+        {
+          "role": "conf",
+          "description": "分类置信度",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "conf"
+        },
+        {
+          "role": "confidence_kind",
+          "description": "修正后岩性图的confidence_kind字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "confidence_kind"
+        }
+      ],
+      "final": true
     },
     {
       "key": "faults",
       "label": "修正后构造及处理状态",
       "kind": "vector",
       "file": "faults.gpkg",
-      "required": false
+      "required": false,
+      "description": "修正后构造及处理状态；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "line_id",
+          "description": "稳定构造线标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "line_id"
+        },
+        {
+          "role": "state",
+          "description": "修正后构造及处理状态的state字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "state"
+        },
+        {
+          "role": "weight",
+          "description": "保留权重",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "weight"
+        }
+      ],
+      "final": true
     },
     {
       "key": "final_faults",
       "label": "修正后构造图",
       "kind": "vector",
       "file": "final_faults.gpkg",
-      "required": false
+      "required": false,
+      "description": "修正后构造图；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "line_id",
+          "description": "稳定构造线标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "line_id"
+        }
+      ],
+      "final": true
     },
     {
       "key": "changes",
       "label": "实际执行的操作",
       "kind": "table",
-      "file": "changes.csv"
+      "file": "changes.csv",
+      "description": "实际执行的操作；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "issue_id",
+          "description": "问题稳定标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "issue_id"
+        },
+        {
+          "role": "feature_id",
+          "description": "稳定图斑标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "feature_id"
+        },
+        {
+          "role": "rule_id",
+          "description": "规则标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "rule_id"
+        },
+        {
+          "role": "rule_version",
+          "description": "冻结规则版本",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "rule_version"
+        },
+        {
+          "role": "snapshot_hash",
+          "description": "实际输入与规则快照摘要",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "snapshot_hash"
+        },
+        {
+          "role": "action",
+          "description": "人工批准动作",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "action"
+        },
+        {
+          "role": "target_code",
+          "description": "目标岩性代码",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "target_code"
+        },
+        {
+          "role": "weight",
+          "description": "保留权重",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "weight"
+        },
+        {
+          "role": "reason",
+          "description": "证据与操作说明",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "reason"
+        },
+        {
+          "role": "element",
+          "description": "实际执行的操作的element字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "element"
+        },
+        {
+          "role": "group_id",
+          "description": "实际执行的操作的group_id字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "group_id"
+        },
+        {
+          "role": "pixel_count",
+          "description": "实际执行的操作的pixel_count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "pixel_count"
+        },
+        {
+          "role": "knowledge_id",
+          "description": "知识条目标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "knowledge_id"
+        },
+        {
+          "role": "knowledge_revision",
+          "description": "知识修订号",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "knowledge_revision"
+        },
+        {
+          "role": "old_code",
+          "description": "实际执行的操作的old_code字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "old_code"
+        },
+        {
+          "role": "new_code",
+          "description": "实际执行的操作的new_code字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "new_code"
+        },
+        {
+          "role": "host_feature_id",
+          "description": "实际执行的操作的host_feature_id字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "host_feature_id"
+        },
+        {
+          "role": "absorbed_ids",
+          "description": "实际执行的操作的absorbed_ids字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "absorbed_ids"
+        },
+        {
+          "role": "actual_changed",
+          "description": "实际执行的操作的actual_changed字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "actual_changed"
+        },
+        {
+          "role": "area_m2",
+          "description": "实际执行的操作的area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "area_m2"
+        },
+        {
+          "role": "involved_area_m2",
+          "description": "实际执行的操作的involved_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "involved_area_m2"
+        },
+        {
+          "role": "geometry_change_area_m2",
+          "description": "实际执行的操作的geometry_change_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "geometry_change_area_m2"
+        },
+        {
+          "role": "class_change_area_m2",
+          "description": "实际执行的操作的class_change_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "class_change_area_m2"
+        },
+        {
+          "role": "attribute_change_area_m2",
+          "description": "实际执行的操作的attribute_change_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "attribute_change_area_m2"
+        },
+        {
+          "role": "removed_internal_boundary_m",
+          "description": "实际执行的操作的removed_internal_boundary_m字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "removed_internal_boundary_m"
+        },
+        {
+          "role": "length_m",
+          "description": "实际执行的操作的length_m字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "length_m"
+        },
+        {
+          "role": "measurements_json",
+          "description": "测量证据JSON",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "measurements_json"
+        }
+      ],
+      "final": false
     },
     {
       "key": "statistics",
       "label": "岩性前后面积统计",
       "kind": "table",
-      "file": "statistics.csv"
+      "file": "statistics.csv",
+      "description": "岩性前后面积统计；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "geo_sym",
+          "description": "地层或岩性代码",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "geo_sym"
+        },
+        {
+          "role": "before_count",
+          "description": "岩性前后面积统计的before_count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "before_count"
+        },
+        {
+          "role": "after_count",
+          "description": "岩性前后面积统计的after_count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "after_count"
+        },
+        {
+          "role": "before_area_m2",
+          "description": "岩性前后面积统计的before_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "before_area_m2"
+        },
+        {
+          "role": "after_area_m2",
+          "description": "岩性前后面积统计的after_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "after_area_m2"
+        },
+        {
+          "role": "delta_area_m2",
+          "description": "岩性前后面积统计的delta_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "delta_area_m2"
+        }
+      ],
+      "final": false
     },
     {
       "key": "changes_lithology_issues",
       "label": "修正记录 岩性疑点",
       "kind": "vector",
       "file": "changes_lithology_issues.gpkg",
-      "required": false
+      "required": false,
+      "description": "修正记录 岩性疑点；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [],
+      "final": true
     },
     {
       "key": "changes_fault_issues",
       "label": "修正记录 构造疑点",
       "kind": "vector",
       "file": "changes_fault_issues.gpkg",
-      "required": false
+      "required": false,
+      "description": "修正记录 构造疑点；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [],
+      "final": true
     },
     {
       "key": "alteration_summary",
       "label": "蚀变逐像元归类汇总",
       "kind": "table",
-      "file": "alteration_summary.csv"
+      "file": "alteration_summary.csv",
+      "description": "蚀变逐像元归类汇总；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "mineral_name",
+          "description": "蚀变逐像元归类汇总的mineral_name字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "mineral_name"
+        },
+        {
+          "role": "group_id",
+          "description": "蚀变逐像元归类汇总的group_id字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "group_id"
+        },
+        {
+          "role": "rule_id",
+          "description": "规则标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "rule_id"
+        },
+        {
+          "role": "rule_version",
+          "description": "冻结规则版本",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "rule_version"
+        },
+        {
+          "role": "knowledge_id",
+          "description": "知识条目标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "knowledge_id"
+        },
+        {
+          "role": "knowledge_revision",
+          "description": "知识修订号",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "knowledge_revision"
+        },
+        {
+          "role": "mineral",
+          "description": "蚀变逐像元归类汇总的mineral字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "mineral"
+        },
+        {
+          "role": "unit_code",
+          "description": "蚀变逐像元归类汇总的unit_code字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "unit_code"
+        },
+        {
+          "role": "rock_group",
+          "description": "蚀变逐像元归类汇总的rock_group字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "rock_group"
+        },
+        {
+          "role": "boundary",
+          "description": "蚀变逐像元归类汇总的boundary字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "boundary"
+        },
+        {
+          "role": "suggested_action",
+          "description": "建议动作，不代表已批准",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "suggested_action"
+        },
+        {
+          "role": "status",
+          "description": "审核状态",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "status"
+        },
+        {
+          "role": "pixel_count",
+          "description": "蚀变逐像元归类汇总的pixel_count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "pixel_count"
+        },
+        {
+          "role": "area_m2",
+          "description": "蚀变逐像元归类汇总的area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "area_m2"
+        },
+        {
+          "role": "component_count",
+          "description": "蚀变逐像元归类汇总的component_count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "component_count"
+        },
+        {
+          "role": "bbox_json",
+          "description": "蚀变逐像元归类汇总的bbox_json字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "bbox_json"
+        },
+        {
+          "role": "representatives_json",
+          "description": "蚀变逐像元归类汇总的representatives_json字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "representatives_json"
+        }
+      ],
+      "final": false
     },
     {
       "key": "alteration_quality",
       "label": "蚀变像元质量统计",
       "kind": "table",
-      "file": "alteration_quality.csv"
+      "file": "alteration_quality.csv",
+      "description": "蚀变像元质量统计；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "mineral_name",
+          "description": "蚀变像元质量统计的mineral_name字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "mineral_name"
+        },
+        {
+          "role": "mineral",
+          "description": "蚀变像元质量统计的mineral字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "mineral"
+        },
+        {
+          "role": "original_pixels",
+          "description": "蚀变像元质量统计的original_pixels字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "original_pixels"
+        },
+        {
+          "role": "hit_pixels",
+          "description": "蚀变像元质量统计的hit_pixels字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "hit_pixels"
+        },
+        {
+          "role": "retained_pixels",
+          "description": "蚀变像元质量统计的retained_pixels字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "retained_pixels"
+        },
+        {
+          "role": "original_area_m2",
+          "description": "蚀变像元质量统计的original_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "original_area_m2"
+        },
+        {
+          "role": "hit_area_m2",
+          "description": "蚀变像元质量统计的hit_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "hit_area_m2"
+        },
+        {
+          "role": "retained_area_m2",
+          "description": "蚀变像元质量统计的retained_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "retained_area_m2"
+        },
+        {
+          "role": "hydrothermal_pixels",
+          "description": "蚀变像元质量统计的hydrothermal_pixels字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "hydrothermal_pixels"
+        },
+        {
+          "role": "hydrothermal_area_m2",
+          "description": "蚀变像元质量统计的hydrothermal_area_m2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "hydrothermal_area_m2"
+        },
+        {
+          "role": "boundary_pixels",
+          "description": "蚀变像元质量统计的boundary_pixels字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "boundary_pixels"
+        }
+      ],
+      "final": false
     },
     {
       "key": "group_index",
       "label": "稳定组与栅格整数索引",
       "kind": "table",
-      "file": "group_index.csv"
+      "file": "group_index.csv",
+      "description": "稳定组与栅格整数索引；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "group_id",
+          "description": "稳定组与栅格整数索引的group_id字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "group_id"
+        },
+        {
+          "role": "mineral",
+          "description": "稳定组与栅格整数索引的mineral字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "mineral"
+        },
+        {
+          "role": "mineral_name",
+          "description": "稳定组与栅格整数索引的mineral_name字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "mineral_name"
+        },
+        {
+          "role": "ordinal",
+          "description": "稳定组与栅格整数索引的ordinal字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "ordinal"
+        }
+      ],
+      "final": false
     },
     {
       "key": "hematite_corrected",
       "label": "赤铁矿遥感矿物识别结果 corrected",
       "kind": "raster",
       "file": "hematite_corrected.tif",
-      "required": false
+      "required": false,
+      "description": "赤铁矿遥感矿物识别结果 corrected；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元赤铁矿遥感矿物识别结果 corrected；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "hematite_weight",
       "label": "赤铁矿遥感矿物识别结果 weight",
       "kind": "raster",
       "file": "hematite_weight.tif",
-      "required": false
+      "required": false,
+      "description": "赤铁矿遥感矿物识别结果 weight；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元赤铁矿遥感矿物识别结果 weight；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "hematite_changes",
       "label": "赤铁矿遥感矿物识别结果 changes",
       "kind": "raster",
       "file": "hematite_changes.tif",
-      "required": false
+      "required": false,
+      "description": "赤铁矿遥感矿物识别结果 changes；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元赤铁矿遥感矿物识别结果 changes；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "chlorite_corrected",
       "label": "绿泥石遥感矿物识别结果 corrected",
       "kind": "raster",
       "file": "chlorite_corrected.tif",
-      "required": false
+      "required": false,
+      "description": "绿泥石遥感矿物识别结果 corrected；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元绿泥石遥感矿物识别结果 corrected；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "chlorite_weight",
       "label": "绿泥石遥感矿物识别结果 weight",
       "kind": "raster",
       "file": "chlorite_weight.tif",
-      "required": false
+      "required": false,
+      "description": "绿泥石遥感矿物识别结果 weight；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元绿泥石遥感矿物识别结果 weight；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "chlorite_changes",
       "label": "绿泥石遥感矿物识别结果 changes",
       "kind": "raster",
       "file": "chlorite_changes.tif",
-      "required": false
+      "required": false,
+      "description": "绿泥石遥感矿物识别结果 changes；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元绿泥石遥感矿物识别结果 changes；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "hydromica_corrected",
       "label": "水云母遥感矿物识别结果 corrected",
       "kind": "raster",
       "file": "hydromica_corrected.tif",
-      "required": false
+      "required": false,
+      "description": "水云母遥感矿物识别结果 corrected；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元水云母遥感矿物识别结果 corrected；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "hydromica_weight",
       "label": "水云母遥感矿物识别结果 weight",
       "kind": "raster",
       "file": "hydromica_weight.tif",
-      "required": false
+      "required": false,
+      "description": "水云母遥感矿物识别结果 weight；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元水云母遥感矿物识别结果 weight；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "hydromica_changes",
       "label": "水云母遥感矿物识别结果 changes",
       "kind": "raster",
       "file": "hydromica_changes.tif",
-      "required": false
+      "required": false,
+      "description": "水云母遥感矿物识别结果 changes；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元水云母遥感矿物识别结果 changes；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "calcite_corrected",
       "label": "方解石遥感矿物识别结果 corrected",
       "kind": "raster",
       "file": "calcite_corrected.tif",
-      "required": false
+      "required": false,
+      "description": "方解石遥感矿物识别结果 corrected；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元方解石遥感矿物识别结果 corrected；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "calcite_weight",
       "label": "方解石遥感矿物识别结果 weight",
       "kind": "raster",
       "file": "calcite_weight.tif",
-      "required": false
+      "required": false,
+      "description": "方解石遥感矿物识别结果 weight；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元方解石遥感矿物识别结果 weight；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "calcite_changes",
       "label": "方解石遥感矿物识别结果 changes",
       "kind": "raster",
       "file": "calcite_changes.tif",
-      "required": false
+      "required": false,
+      "description": "方解石遥感矿物识别结果 changes；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元方解石遥感矿物识别结果 changes；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "dolomite_corrected",
       "label": "白云石遥感矿物识别结果 corrected",
       "kind": "raster",
       "file": "dolomite_corrected.tif",
-      "required": false
+      "required": false,
+      "description": "白云石遥感矿物识别结果 corrected；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元白云石遥感矿物识别结果 corrected；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "dolomite_weight",
       "label": "白云石遥感矿物识别结果 weight",
       "kind": "raster",
       "file": "dolomite_weight.tif",
-      "required": false
+      "required": false,
+      "description": "白云石遥感矿物识别结果 weight；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元白云石遥感矿物识别结果 weight；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "dolomite_changes",
       "label": "白云石遥感矿物识别结果 changes",
       "kind": "raster",
       "file": "dolomite_changes.tif",
-      "required": false
+      "required": false,
+      "description": "白云石遥感矿物识别结果 changes；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元白云石遥感矿物识别结果 changes；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "alteration_stack_corrected",
       "label": "类别栅格集 · corrected",
       "kind": "raster",
       "file": "alteration_stack_corrected.tif",
-      "required": false
+      "required": false,
+      "description": "类别栅格集 · corrected；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元类别栅格集 · corrected；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "alteration_stack_weight",
       "label": "类别栅格集 · weight",
       "kind": "raster",
       "file": "alteration_stack_weight.tif",
-      "required": false
+      "required": false,
+      "description": "类别栅格集 · weight；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元类别栅格集 · weight；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "alteration_stack_changes",
       "label": "类别栅格集 · changes",
       "kind": "raster",
       "file": "alteration_stack_changes.tif",
-      "required": false
+      "required": false,
+      "description": "类别栅格集 · changes；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元类别栅格集 · changes；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     }
   ],
   "timeoutSeconds": 900,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "correct"
+    ],
+    "dataTypes": [
+      "raster",
+      "table",
+      "vector"
+    ],
+    "summary": "获批操作执行。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
+    "useWhen": "已绑定研究区、实际观测和显式规则版本；需要获批操作执行。",
+    "avoidWhen": "不把遥感识别或规则建议视为地质真值；未绑定规则或缺少人工批准时不得自动修正。"
+  },
+  "errors": [
+    {
+      "code": "INPUT_INVALID",
+      "meaning": "实际输入、规则或参数未通过算子已有检查",
+      "remedy": "replace_data",
+      "precondition": "输入须满足清单语义及算子规则约束；人工批准必须绑定当前快照"
+    }
+  ],
+  "resources": {
+    "duration": "minutes",
+    "memory": "medium",
+    "scaling": "时间随实际像元/要素与规则数量增加；栅格分块读取，复杂几何叠加可能增加峰值内存。small约小于512MiB，medium约512MiB至2GiB，large高于2GiB；均非资源保证。"
+  },
+  "selfTests": [
+    {
+      "name": "真实小样例运行",
+      "fixture": "selftest/smoke.json",
+      "expect": {
+        "files": {
+          "changes.csv": {
+            "rows": 5,
+            "columns": [
+              "issue_id",
+              "feature_id",
+              "rule_id",
+              "rule_version",
+              "snapshot_hash",
+              "action",
+              "target_code",
+              "weight",
+              "reason",
+              "element",
+              "group_id",
+              "pixel_count",
+              "knowledge_id",
+              "knowledge_revision",
+              "old_code",
+              "new_code",
+              "host_feature_id",
+              "absorbed_ids",
+              "actual_changed",
+              "area_m2",
+              "involved_area_m2",
+              "geometry_change_area_m2",
+              "class_change_area_m2",
+              "attribute_change_area_m2",
+              "removed_internal_boundary_m",
+              "length_m",
+              "measurements_json"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

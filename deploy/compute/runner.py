@@ -32,13 +32,18 @@ def failure_details(error):
         detail = "计算数值异常"
     elif isinstance(error, SystemExit):
         detail = "算法主动退出"
-    return {"error_type": error_type, "error_detail": detail}
+    result = {"error_type": error_type, "error_detail": detail}
+    if isinstance(error, MemoryError):
+        result["error_category"] = "memory"
+    return result
 
 
 class Context:
     def __init__(self, request, input_dir, output_dir):
         self.inputs = request["inputs"]
         self.parameters = request["parameters"]
+        self.field_mappings = request.get("fieldMappings", {})
+        self.input_collections = request.get("inputCollections", {})
         self.input_dir = input_dir
         self.output_dir = output_dir
 
@@ -93,6 +98,7 @@ def main():
     output_dir = Path(options.output_dir)
     request = json.loads((input_dir / "context.json").read_text(encoding="utf-8"))
     sys.path.insert(0, str(algorithm_dir))
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     status = "failed"
     failure = {}
     try:
@@ -106,12 +112,35 @@ def main():
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            module.run(Context(request, input_dir, output_dir))
+            from operator_sdk import bound_context
+
+            with bound_context(
+                Context(request, input_dir, output_dir), request.get("manifest", {})
+            ) as context:
+                module.run(context)
         status = "succeeded"
     except BaseException as error:
         failure = failure_details(error)
+        report = output_dir / "__operator_error.json"
+        if report.exists():
+            try:
+                if (
+                    report.is_symlink()
+                    or not report.is_file()
+                    or report.stat().st_size > 8192
+                ):
+                    raise ValueError("错误报告无效")
+                with report.open("rb") as stream:
+                    raw = stream.read(8193)
+                if len(raw) > 8192:
+                    raise ValueError("错误报告超限")
+                failure["operatorError"] = json.loads(raw)
+            except (OSError, ValueError, RecursionError):
+                failure["operatorError"] = {"invalid": True}
     temporary = output_dir / "__platform_status.tmp"
-    temporary.write_text(json.dumps({"status": status, **failure}), encoding="utf-8")
+    temporary.write_text(
+        json.dumps({"status": status, **failure}, ensure_ascii=False), encoding="utf-8"
+    )
     temporary.replace(output_dir / "__platform_status.json")
     # Keep bounded tmpfs alive for the host to retrieve declared files.
     while True:

@@ -2,28 +2,117 @@
   "schemaVersion": 1,
   "identifier": "geology-map-check",
   "name": "地质成果智能检查",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "依据带来源的专家规则检查完整制图范围内的内部漏填和地层时代属性矛盾，生成实际问题位置、理由与统计。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
-  "agent": {"enabled": true},
-  "qualityReport": {"file": "quality.json"},
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
   "inputs": [
-    {"key": "features", "label": "待检查地质图", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"]},
-    {"key": "coverage", "label": "制图覆盖范围与例外", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"]},
-    {"key": "rules", "label": "专家知识检查规则", "kind": "table"}
+    {
+      "key": "features",
+      "label": "待检查地质图",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "coverage",
+      "label": "制图覆盖范围与例外",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "rules",
+      "label": "专家知识检查规则",
+      "kind": "table"
+    }
   ],
   "parameters": [
-    {"key": "working_epsg", "label": "面积计算投影 EPSG", "type": "integer", "default": 32646, "min": 1, "max": 999999},
-    {"key": "max_changes", "label": "本轮修改数量上限", "type": "integer", "default": 2, "min": 1, "max": 10},
-    {"key": "max_gap_area_m2", "label": "漏填筛查面积上限（平方米）", "type": "number", "default": 300000, "min": 1, "max": 10000000},
-    {"key": "geometry_tolerance_m", "label": "空间核对容差（米）", "type": "number", "default": 0.01, "min": 0.000001, "max": 0.1}
+    {
+      "key": "working_epsg",
+      "label": "面积计算投影 EPSG",
+      "type": "integer",
+      "default": 32646,
+      "min": 1,
+      "max": 999999
+    },
+    {
+      "key": "max_changes",
+      "label": "本轮修改数量上限",
+      "type": "integer",
+      "default": 2,
+      "min": 1,
+      "max": 10
+    },
+    {
+      "key": "max_gap_area_m2",
+      "label": "漏填筛查面积上限（平方米）",
+      "type": "number",
+      "default": 300000,
+      "min": 1,
+      "max": 10000000
+    },
+    {
+      "key": "geometry_tolerance_m",
+      "label": "空间核对容差（米）",
+      "type": "number",
+      "default": 0.01,
+      "min": 0.000001,
+      "max": 0.1
+    }
   ],
   "outputs": [
-    {"key": "issues", "label": "发现的问题", "kind": "table", "file": "issues.csv"},
-    {"key": "issues_map", "label": "问题位置与建议修改范围", "kind": "vector", "file": "issues.gpkg", "required": false},
-    {"key": "statistics", "label": "检查统计", "kind": "table", "file": "statistics.csv"}
+    {
+      "key": "issues",
+      "label": "发现的问题",
+      "kind": "table",
+      "file": "issues.csv",
+      "description": "发现的问题；由地质成果智能检查按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": false
+    },
+    {
+      "key": "issues_map",
+      "label": "问题位置与建议修改范围",
+      "kind": "vector",
+      "file": "issues.gpkg",
+      "required": false,
+      "description": "问题位置与建议修改范围；由地质成果智能检查按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "statistics",
+      "label": "检查统计",
+      "kind": "table",
+      "file": "statistics.csv",
+      "description": "检查统计；由地质成果智能检查按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": false
+    }
   ],
   "timeoutSeconds": 300,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "check"
+    ],
+    "dataTypes": [
+      "table",
+      "vector"
+    ],
+    "summary": "依据带来源的专家规则检查完整制图范围内的内部漏填和地层时代属性矛盾，生成实际问题位置、理由与统计。",
+    "useWhen": "输入具备地质成果智能检查所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

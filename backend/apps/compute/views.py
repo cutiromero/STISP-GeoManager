@@ -58,7 +58,10 @@ def endpoint(methods, public=False):
                     raise ComputeError("写入前必须显式选择所属项目标签")
                 return view(request, *args, **kwargs)
             except ComputeError as exc:
-                return JsonResponse({"detail": str(exc)}, status=exc.status)
+                body = {"detail": str(exc)}
+                if exc.gaps is not None:
+                    body["gaps"] = exc.gaps
+                return JsonResponse(body, status=exc.status)
             except ValidationError as exc:
                 return JsonResponse({"detail": "；".join(exc.messages)}, status=400)
             except IntegrityError:
@@ -415,6 +418,8 @@ def preflight(request):
         {
             "valid": True,
             "parameters": data["parameters"],
+            "fieldMappings": data["field_mappings"],
+            "inputCollections": data["input_collections"],
             "detail": "权限、类型和参数检查通过；提交后将固定输入并进行完整文件检查",
         }
     )

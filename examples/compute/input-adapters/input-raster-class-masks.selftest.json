@@ -1,0 +1,4 @@
+{
+  "inputs": {"source": {"kind": "raster", "shape": [2, 2], "crs": "EPSG:32646", "transform": [100, 0, 300000, 0, -100, 4000200], "nodata": 255, "fill": 0, "pixels": [[0, 0, 1]], "name": "石英"}},
+  "parameters": {"label": "石英", "class_labels": "{}"}
+}

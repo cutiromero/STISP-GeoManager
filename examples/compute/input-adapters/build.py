@@ -4,12 +4,13 @@ from pathlib import Path
 import io
 import json
 import zipfile
+import runpy
 
 # ==================== CONFIGURATION ====================
 ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
 DEFAULT_OUTPUT = ROOT / ".runtime/input-adapter-packages"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 SPECS = {
     "input-vector-class-masks": (
         "分类矢量栅格化",
@@ -116,7 +117,7 @@ def manifest(identifier):
             }
         ]
         capability["outputFields"] = ["band", "name", "count", "min", "max", "mean"]
-    return {
+    value = {
         "schemaVersion": 1,
         "identifier": identifier,
         "name": name,
@@ -140,6 +141,9 @@ def manifest(identifier):
         "timeoutSeconds": 900,
         "deterministic": True,
     }
+    return runpy.run_path(str(HERE.parent / "operator_metadata.py"))[
+        "adapter_manifest"
+    ](value)
 
 
 def build(identifier):
@@ -151,6 +155,8 @@ def build(identifier):
         "README.md": (manifest(identifier)["description"] + "\n").encode(),
         "data_adapters.py": (ROOT / "backend/apps/core/data_adapters.py").read_bytes(),
     }
+    data["main.py"] += b"\nfrom operator_sdk import diagnosed\nrun = diagnosed()(run)\n"
+    data["selftest/smoke.json"] = (HERE / (identifier + ".selftest.json")).read_bytes()
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, raw in sorted(data.items()):

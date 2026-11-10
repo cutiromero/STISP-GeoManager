@@ -24,6 +24,14 @@ from functools import lru_cache
 from django.conf import settings
 from .config import config
 from .packages import ComputeError
+from .failures import runtime_failure, status_failure
+
+MAX_STATUS_BYTES = 16384
+
+
+def _status_limit(manifest):
+    return MAX_STATUS_BYTES if manifest.get("schemaVersion") == 2 else 4096
+
 
 NATIVE_PACKAGES = (
     "numpy",
@@ -364,24 +372,39 @@ def _execute_native(attempt, package, inputs, destination, manifest, heartbeat):
     pid_file.write_text(str(process.pid), encoding="ascii")
     started = time.monotonic()
     timeout = min(cfg.timeout_seconds, manifest["timeoutSeconds"])
+    status_limit = _status_limit(manifest)
     try:
         while True:
             heartbeat()
             if time.monotonic() - started > timeout:
-                raise ComputeError(f"计算超过{timeout}秒时限，请减少数据规模或调整算法")
+                raise runtime_failure(
+                    "PLATFORM_TIMEOUT",
+                    f"计算超过{timeout}秒时限，请减少数据规模或调整算法",
+                )
             if status_path.is_file():
-                raw = status_path.read_bytes()
-                if len(raw) > 4096:
-                    raise ComputeError("算法返回的状态信息不合法")
+                with status_path.open("rb") as stream:
+                    raw = stream.read(status_limit + 1)
+                if status_path.is_symlink() or len(raw) > status_limit:
+                    raise runtime_failure("PLATFORM_INVALID_ERROR")
                 try:
                     status = json.loads(raw)
                 except ValueError as exc:
-                    raise ComputeError("算法返回的状态信息不合法") from exc
+                    raise runtime_failure("PLATFORM_INVALID_ERROR") from exc
+                if (
+                    not isinstance(status, dict)
+                    or not isinstance(status.get("status"), str)
+                    or status["status"] not in {"succeeded", "failed"}
+                ):
+                    raise runtime_failure("PLATFORM_INVALID_ERROR")
                 if status.get("status") != "succeeded":
-                    raise ComputeError(_failure_message(status, scripted=scripted))
+                    raise status_failure(
+                        status, manifest, _failure_message(status, scripted=scripted)
+                    )
                 break
             if process.poll() is not None:
-                raise ComputeError("计算进程提前退出，可能超出内存限制或算法异常")
+                raise runtime_failure(
+                    "PLATFORM_CRASH", "计算进程提前退出，可能超出内存限制或算法异常"
+                )
             time.sleep(0.5)
         heartbeat()
     finally:
@@ -445,6 +468,7 @@ def execute(attempt, package, inputs, destination, manifest, heartbeat):
         (package, "/algorithm"),
         (inputs, "/inputs"),
         (settings.PROGRAM_ROOT / "deploy/compute/runner.py", "/runner.py"),
+        (settings.PROGRAM_ROOT / "deploy/compute/operator_sdk.py", "/operator_sdk.py"),
     ]:
         value = mount_path(host)
         if "," in value:
@@ -477,34 +501,50 @@ def execute(attempt, package, inputs, destination, manifest, heartbeat):
         command("start", name)
         started = time.monotonic()
         timeout = min(cfg.timeout_seconds, manifest["timeoutSeconds"])
+        status_limit = _status_limit(manifest)
         while True:
             heartbeat()
             if time.monotonic() - started > timeout:
-                raise ComputeError(f"计算超过{timeout}秒时限，请减少数据规模或调整算法")
+                raise runtime_failure(
+                    "PLATFORM_TIMEOUT",
+                    f"计算超过{timeout}秒时限，请减少数据规模或调整算法",
+                )
             probe = command(
                 "exec",
                 name,
                 "head",
                 "-c",
-                "4097",
+                str(status_limit + 1),
                 "/output/__platform_status.json",
                 check=False,
             )
             if probe.returncode == 0:
-                if len(probe.stdout) > 4096:
-                    raise ComputeError("算法返回的状态信息不合法")
+                if len(probe.stdout) > status_limit:
+                    raise runtime_failure("PLATFORM_INVALID_ERROR")
                 try:
                     status = json.loads(probe.stdout)
                 except ValueError as exc:
-                    raise ComputeError("算法返回的状态信息不合法") from exc
+                    raise runtime_failure("PLATFORM_INVALID_ERROR") from exc
+                if (
+                    not isinstance(status, dict)
+                    or not isinstance(status.get("status"), str)
+                    or status["status"] not in {"succeeded", "failed"}
+                ):
+                    raise runtime_failure("PLATFORM_INVALID_ERROR")
                 if status.get("status") != "succeeded":
-                    raise ComputeError(_failure_message(status))
+                    raise status_failure(status, manifest, _failure_message(status))
                 break
             running = command(
                 "inspect", "--format", "{{.State.Running}}", name
             ).stdout.strip()
             if running != b"true":
-                raise ComputeError("计算进程提前退出，可能超出内存限制或算法异常")
+                oom = (
+                    command(
+                        "inspect", "--format", "{{.State.OOMKilled}}", name
+                    ).stdout.strip()
+                    == b"true"
+                )
+                raise runtime_failure("PLATFORM_OOM" if oom else "PLATFORM_CRASH")
             time.sleep(2)
         heartbeat()
         # Read the live mount through the fixed container tar binary: Docker's

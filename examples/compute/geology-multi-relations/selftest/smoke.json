@@ -1,0 +1,259 @@
+{
+  "inputs": {
+    "faults": {
+      "kind": "vector",
+      "crs": "EPSG:32646",
+      "features": [
+        {
+          "id": "0",
+          "type": "Feature",
+          "properties": {
+            "line_id": "F1"
+          },
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                300400.0,
+                4000300.0
+              ],
+              [
+                300900.0,
+                4000300.0
+              ]
+            ]
+          }
+        },
+        {
+          "id": "1",
+          "type": "Feature",
+          "properties": {
+            "line_id": "F2"
+          },
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                300600.0,
+                4000100.0
+              ],
+              [
+                300600.0,
+                4000800.0
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "coverage": {
+      "kind": "vector",
+      "crs": "EPSG:32646",
+      "features": [
+        {
+          "id": "0",
+          "type": "Feature",
+          "properties": {
+            "coverage_id": "extent"
+          },
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  301000.0,
+                  4000000.0
+                ],
+                [
+                  301000.0,
+                  4001000.0
+                ],
+                [
+                  300000.0,
+                  4001000.0
+                ],
+                [
+                  300000.0,
+                  4000000.0
+                ],
+                [
+                  301000.0,
+                  4000000.0
+                ]
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "rules": {
+      "kind": "table",
+      "columns": [
+        "rule_id",
+        "rule_version",
+        "knowledge_id",
+        "knowledge_revision",
+        "params_json",
+        "rule_json",
+        "units_json",
+        "aliases_json"
+      ],
+      "rows": [
+        {
+          "rule_id": "L-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "1",
+          "knowledge_revision": "1",
+          "params_json": "{\"enclose_ratio\": 0.95, \"max_area_km2\": 3, \"fault_buffer_m\": 50}",
+          "rule_json": "{\"id\": \"L-01\", \"name\": \"L-01\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "{\"C\": {\"name\": \"carbonate\", \"category\": \"stratum\", \"age_ma\": 200, \"group\": \"carbonate\", \"favorable\": false}, \"O\": {\"name\": \"old\", \"category\": \"stratum\", \"age_ma\": 500, \"group\": \"clastic\", \"favorable\": false}}",
+          "aliases_json": "{\"carbonate\": \"C\", \"old\": \"O\"}"
+        },
+        {
+          "rule_id": "L-03",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "2",
+          "knowledge_revision": "1",
+          "params_json": "{}",
+          "rule_json": "{\"id\": \"L-03\", \"name\": \"L-03\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "3",
+          "knowledge_revision": "1",
+          "params_json": "{\"cover_ratio\": 0.8, \"cover_units\": []}",
+          "rule_json": "{\"id\": \"S-01\", \"name\": \"S-01\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-02",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "4",
+          "knowledge_revision": "1",
+          "params_json": "{\"boundary_buffer_m\": 20, \"boundary_ratio\": 0.8, \"min_sinuosity\": 1.15}",
+          "rule_json": "{\"id\": \"S-02\", \"name\": \"S-02\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-03",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "5",
+          "knowledge_revision": "1",
+          "params_json": "{\"max_length_m\": 100, \"isolation_m\": 50}",
+          "rule_json": "{\"id\": \"S-03\", \"name\": \"S-03\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-04",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "6",
+          "knowledge_revision": "1",
+          "params_json": "{\"turn_angle\": 100, \"min_turns\": 2}",
+          "rule_json": "{\"id\": \"S-04\", \"name\": \"S-04\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "S-05",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "7",
+          "knowledge_revision": "1",
+          "params_json": "{\"snap_dist_m\": 100, \"max_angle\": 45}",
+          "rule_json": "{\"id\": \"S-05\", \"name\": \"S-05\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "8",
+          "knowledge_revision": "1",
+          "params_json": "{\"dominant_ratio\": 0.5}",
+          "rule_json": "{\"id\": \"A-01\", \"name\": \"A-01\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-02",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "9",
+          "knowledge_revision": "1",
+          "params_json": "{\"dominant_ratio\": 0.5}",
+          "rule_json": "{\"id\": \"A-02\", \"name\": \"A-02\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-03",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "10",
+          "knowledge_revision": "1",
+          "params_json": "{\"dominant_ratio\": 0.5}",
+          "rule_json": "{\"id\": \"A-03\", \"name\": \"A-03\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-04",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "11",
+          "knowledge_revision": "1",
+          "params_json": "{\"dominant_ratio\": 0.5}",
+          "rule_json": "{\"id\": \"A-04\", \"name\": \"A-04\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "A-05",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "12",
+          "knowledge_revision": "1",
+          "params_json": "{\"min_area_m2\": 2600}",
+          "rule_json": "{\"id\": \"A-05\", \"name\": \"A-05\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "P-01",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "13",
+          "knowledge_revision": "1",
+          "params_json": "{\"main_fault_min_length_m\": 10000, \"buffer_main_m\": 500, \"buffer_secondary_m\": 100, \"buffer_intersection_main_secondary_m\": 100, \"buffer_intersection_other_m\": 100}",
+          "rule_json": "{\"id\": \"P-01\", \"name\": \"P-01\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "P-02",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "14",
+          "knowledge_revision": "1",
+          "params_json": "{\"evidence_method\": \"weighted_neighborhood_presence_v2\", \"search_m\": 100, \"min_types\": 2, \"alteration_types\": [\"\\u8d64\\u94c1\\u77ff\\u5316\", \"\\u7eff\\u6ce5\\u77f3\\u5316\", \"\\u6c34\\u4e91\\u6bcd\\u5316\", \"\\u65b9\\u89e3\\u77f3\\u5316\", \"\\u767d\\u4e91\\u77f3\\u5316\"]}",
+          "rule_json": "{\"id\": \"P-02\", \"name\": \"P-02\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        },
+        {
+          "rule_id": "P-03",
+          "rule_version": "0.1-draft",
+          "knowledge_id": "15",
+          "knowledge_revision": "1",
+          "params_json": "{}",
+          "rule_json": "{\"id\": \"P-03\", \"name\": \"P-03\", \"condition\": \"\\u672c\\u533a\\u9002\\u7528\\u6761\\u4ef6\", \"status\": \"\\u8349\\u62df\", \"basis\": {\"gap\": \"\\u4fdd\\u7559\\u5730\\u8d28\\u4f8b\\u5916\"}}",
+          "units_json": "",
+          "aliases_json": ""
+        }
+      ]
+    }
+  },
+  "parameters": {
+    "grid_resolution_m": 50,
+    "min_zone_area_m2": 0
+  }
+}

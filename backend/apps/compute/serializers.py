@@ -4,6 +4,9 @@ from .models import ComputeTask, ComputeImport
 
 def version_data(version):
     return {
+        "warnings": ["建议升级到第2版算子清单，以提供输入语义和可诊断错误"]
+        if version.manifest.get("schemaVersion", 1) == 1
+        else [],
         "id": version.id,
         "version": version.version,
         "status": version.status,
@@ -108,6 +111,9 @@ def task_data(task):
         "stage": task.stage,
         "progress": task.progress,
         "error": task.error,
+        "failure": task.failure or None,
+        "fieldMappings": task.field_mappings,
+        "inputCollections": task.input_collections,
         "parameters": task.parameters,
         "inputs": [
             {

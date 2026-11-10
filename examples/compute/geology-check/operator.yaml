@@ -1,20 +1,106 @@
 {
-  "schemaVersion": 1, "identifier": "geology-check", "name": "填图检查与调查一致性",
-  "version": "1.0.1", "description": "检查稳定要素编号、几何有效性、面重叠与调查资料属性一致性。小规则集示范，未提供边界时不判断缝隙。", "author": "STISP",
-  "runtime": "python-geospatial-v1", "agent": {"enabled": true}, "qualityReport": {"file": "quality.json"},
+  "schemaVersion": 1,
+  "identifier": "geology-check",
+  "name": "填图检查与调查一致性",
+  "version": "1.0.2",
+  "description": "检查稳定要素编号、几何有效性、面重叠与调查资料属性一致性。小规则集示范，未提供边界时不判断缝隙。",
+  "author": "STISP",
+  "runtime": "python-geospatial-v1",
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
   "inputs": [
-    {"key": "features", "label": "初始或修复地图", "kind": "vector", "geometryTypes": ["Polygon", "MultiPolygon"]},
-    {"key": "surveys", "label": "调查证据记录", "kind": "table"},
-    {"key": "rules", "label": "允许使用的结构化规则", "kind": "table"}
+    {
+      "key": "features",
+      "label": "初始或修复地图",
+      "kind": "vector",
+      "geometryTypes": [
+        "Polygon",
+        "MultiPolygon"
+      ]
+    },
+    {
+      "key": "surveys",
+      "label": "调查证据记录",
+      "kind": "table"
+    },
+    {
+      "key": "rules",
+      "label": "允许使用的结构化规则",
+      "kind": "table"
+    }
   ],
   "parameters": [
-    {"key": "working_epsg", "label": "调查坐标与检查工作投影EPSG", "type": "integer", "default": 32645, "min": 1, "max": 999999},
-    {"key": "tolerance_m", "label": "证据位置容差（米）", "type": "number", "default": 1, "min": 0, "max": 100},
-    {"key": "overlap_area_m2", "label": "重叠面积容差（平方米）", "type": "number", "default": 1, "min": 0, "max": 100}
+    {
+      "key": "working_epsg",
+      "label": "调查坐标与检查工作投影EPSG",
+      "type": "integer",
+      "default": 32645,
+      "min": 1,
+      "max": 999999
+    },
+    {
+      "key": "tolerance_m",
+      "label": "证据位置容差（米）",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 100
+    },
+    {
+      "key": "overlap_area_m2",
+      "label": "重叠面积容差（平方米）",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 100
+    }
   ],
   "outputs": [
-    {"key": "issues", "label": "问题与修改条件清单", "kind": "table", "file": "issues.csv"},
-    {"key": "issues_map", "label": "问题位置", "kind": "vector", "file": "issues.gpkg", "required": false},
-    {"key": "statistics", "label": "检查统计", "kind": "table", "file": "statistics.csv"}
-  ], "timeoutSeconds": 300, "deterministic": true
+    {
+      "key": "issues",
+      "label": "问题与修改条件清单",
+      "kind": "table",
+      "file": "issues.csv",
+      "description": "问题与修改条件清单；由填图检查与调查一致性按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": false
+    },
+    {
+      "key": "issues_map",
+      "label": "问题位置",
+      "kind": "vector",
+      "file": "issues.gpkg",
+      "required": false,
+      "description": "问题位置；由填图检查与调查一致性按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "statistics",
+      "label": "检查统计",
+      "kind": "table",
+      "file": "statistics.csv",
+      "description": "检查统计；由填图检查与调查一致性按所选参数生成，来源与规则版本须保持可追溯。",
+      "fields": [],
+      "final": false
+    }
+  ],
+  "timeoutSeconds": 300,
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "check"
+    ],
+    "dataTypes": [
+      "table",
+      "vector"
+    ],
+    "summary": "检查稳定要素编号、几何有效性、面重叠与调查资料属性一致性。小规则集示范，未提供边界时不判断缝隙。",
+    "useWhen": "输入具备填图检查与调查一致性所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

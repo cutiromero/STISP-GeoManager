@@ -31,9 +31,11 @@ EXTENSIONS = {
 
 
 class ComputeError(ValueError):
-    def __init__(self, message, status=400):
+    def __init__(self, message, status=400, *, gaps=None, failure=None):
         super().__init__(message)
         self.status = status
+        self.gaps = gaps
+        self.failure = failure
 
 
 @dataclass
@@ -113,8 +115,12 @@ def clean_text(value, maximum, label, required=True):
 
 
 def validate_manifest(manifest):
-    if not isinstance(manifest, dict) or manifest.get("schemaVersion") != 1:
-        raise ComputeError("清单必须是 schemaVersion: 1 的对象")
+    if (
+        not isinstance(manifest, dict)
+        or type(manifest.get("schemaVersion")) is not int
+        or manifest["schemaVersion"] not in {1, 2}
+    ):
+        raise ComputeError("清单必须是 schemaVersion: 1 或 2 的对象")
     result = {}
     for name, maximum in [
         ("identifier", 80),
@@ -131,7 +137,7 @@ def validate_manifest(manifest):
     if manifest.get("runtime") not in {"python-geospatial-v1", "python-data-script-v1"}:
         raise ComputeError("请选择平台已支持的运行环境")
     result.update(
-        schemaVersion=1,
+        schemaVersion=manifest["schemaVersion"],
         runtime=manifest["runtime"],
         deterministic=manifest.get("deterministic", False) is True,
     )
@@ -291,6 +297,12 @@ def validate_manifest(manifest):
             result["inputScriptBridge"] = bridge
     except (ValueError, TypeError, KeyError) as error:
         raise ComputeError("受限脚本能力声明无效：" + str(error)) from error
+    from .manifest_v2 import validate_semantics
+
+    try:
+        validate_semantics(result, manifest)
+    except (TypeError, KeyError, AttributeError) as error:
+        raise ComputeError("语义清单字段类型或引用无效：" + str(error)) from error
     try:
         serialized = json.dumps(result, allow_nan=False)
     except (ValueError, TypeError, RecursionError) as exc:
@@ -355,6 +367,16 @@ def inspect_package(path, extract_to=None):
             ):
                 raise ComputeError("清单不能使用 YAML 锚点或别名")
             manifest = validate_manifest(yaml.safe_load(source))
+            if manifest["schemaVersion"] == 2:
+                from .operator_checks import MAX_FIXTURE_BYTES, validate_fixture
+
+                for test in manifest["selfTests"]:
+                    if test["fixture"] not in archive.namelist():
+                        raise ComputeError("缺少自检样例：" + test["fixture"])
+                    fixture_entry = archive.getinfo(test["fixture"])
+                    if fixture_entry.file_size > MAX_FIXTURE_BYTES:
+                        raise ComputeError("自检样例不可超过1 MiB")
+                    validate_fixture(archive.read(fixture_entry), manifest)
             if extract_to:
                 for item in items:
                     dest = extract_to.joinpath(*PurePosixPath(item.filename).parts)

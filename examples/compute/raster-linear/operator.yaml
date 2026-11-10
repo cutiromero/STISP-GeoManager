@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "identifier": "raster-linear",
   "name": "栅格线性变换",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "栅格线性变换的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
   "author": "平台示例算法",
   "runtime": "python-geospatial-v1",
@@ -45,9 +45,32 @@
       "label": "变换后的栅格",
       "kind": "raster",
       "file": "transformed.tif",
-      "required": true
+      "required": true,
+      "description": "所选波段经scale与offset线性变换的单波段派生栅格；保留源网格，输出单位由输入单位和变换参数共同决定。",
+      "fields": [
+        {
+          "role": "transformed_value",
+          "description": "线性变换后的有效像元值，不自动声明定标状态",
+          "types": [
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     }
   ],
   "timeoutSeconds": 1800,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "convert"
+    ],
+    "dataTypes": [
+      "raster"
+    ],
+    "summary": "栅格线性变换的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
+    "useWhen": "输入具备栅格线性变换所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

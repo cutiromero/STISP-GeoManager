@@ -1,0 +1,8 @@
+{
+  "inputs": {"source_table_1": {"kind": "table", "rows": [{"name": "样例对象"}]}},
+  "parameters": {
+    "target_type": "table",
+    "target_contract": "{\"dataTypes\":[\"table\"],\"requiredFields\":[\"name\"]}",
+    "code": "import pandas as pd\n\ndef run(context):\n    frame = pd.read_csv(context.input_path('source_table_1'))\n    frame.to_csv(context.output_path('prepared.csv'), index=False)\n"
+  }
+}

@@ -25,6 +25,11 @@ def build(identifier):
     files.update(
         {path.name: path.read_bytes() for path in sorted(source.glob("prospect_*.py"))}
     )
+    for path in sorted((source / "selftest").glob("*.json")):
+        files["selftest/" + path.name] = path.read_bytes()
+    files["main.py"] += (
+        b"\nfrom operator_sdk import diagnosed\nrun = diagnosed()(run)\n"
+    )
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, data in sorted(files.items()):

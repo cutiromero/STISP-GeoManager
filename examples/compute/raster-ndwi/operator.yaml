@@ -2,16 +2,70 @@
   "schemaVersion": 1,
   "identifier": "raster-ndwi",
   "name": "NDWI水体指数",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "按(绿光−近红外)/(绿光＋近红外)计算水体指数，保留坐标和无效像元；输出连续指数供水体判读。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
-  "inputs": [{"key": "image", "label": "多波段反射率影像", "kind": "raster", "minBands": 2, "required": true}],
-  "parameters": [
-    {"key": "green", "label": "绿光波段", "type": "band", "input": "image", "default": 1, "required": true},
-    {"key": "nir", "label": "近红外波段", "type": "band", "input": "image", "default": 2, "required": true}
+  "inputs": [
+    {
+      "key": "image",
+      "label": "多波段反射率影像",
+      "kind": "raster",
+      "minBands": 2,
+      "required": true
+    }
   ],
-  "outputs": [{"key": "ndwi", "label": "NDWI指数栅格", "kind": "raster", "file": "ndwi.tif", "required": true}],
+  "parameters": [
+    {
+      "key": "green",
+      "label": "绿光波段",
+      "type": "band",
+      "input": "image",
+      "default": 1,
+      "required": true
+    },
+    {
+      "key": "nir",
+      "label": "近红外波段",
+      "type": "band",
+      "input": "image",
+      "default": 2,
+      "required": true
+    }
+  ],
+  "outputs": [
+    {
+      "key": "ndwi",
+      "label": "NDWI指数栅格",
+      "kind": "raster",
+      "file": "ndwi.tif",
+      "required": true,
+      "description": "无量纲NDWI，由指定绿光与近红外波段计算，保留原网格与无效观测语义；不是经过地面验证的水体分类。",
+      "fields": [
+        {
+          "role": "ndwi",
+          "description": "绿光与近红外归一化差值",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "unit": "1"
+        }
+      ],
+      "final": true
+    }
+  ],
   "timeoutSeconds": 1800,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "convert"
+    ],
+    "dataTypes": [
+      "raster"
+    ],
+    "summary": "按(绿光−近红外)/(绿光＋近红外)计算水体指数，保留坐标和无效像元；输出连续指数供水体判读。",
+    "useWhen": "输入具备NDWI水体指数所需的实际来源和显式参数。",
+    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
+  }
 }

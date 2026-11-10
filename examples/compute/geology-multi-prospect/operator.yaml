@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "identifier": "geology-multi-prospect",
   "name": "优先核查远景区分析",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "仅使用修正后岩性、构造、蚀变及有效权重，以连续支持场圈定平滑远景区；同一连通支持带合并，区域无重叠，输出红黄蓝渐变热力图及逐区依据。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -20,7 +20,51 @@
       "geometryTypes": [
         "Polygon",
         "MultiPolygon"
-      ]
+      ],
+      "description": "岩性图；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "feature_id",
+          "description": "稳定图斑标识",
+          "types": [
+            "string",
+            "integer"
+          ],
+          "required": true,
+          "legacyName": "feature_id"
+        },
+        {
+          "role": "stratum_name",
+          "description": "名称",
+          "types": [
+            "string"
+          ],
+          "required": true,
+          "legacyName": "name"
+        },
+        {
+          "role": "stratum_code",
+          "description": "地层或岩性代码",
+          "types": [
+            "string"
+          ],
+          "required": true,
+          "legacyName": "geo_sym"
+        },
+        {
+          "role": "confidence",
+          "description": "分类置信度",
+          "types": [
+            "number",
+            "integer"
+          ],
+          "required": false,
+          "legacyName": "conf"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "faults",
@@ -29,7 +73,23 @@
       "geometryTypes": [
         "LineString",
         "MultiLineString"
-      ]
+      ],
+      "description": "构造图；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "fault_id",
+          "description": "稳定构造线标识",
+          "types": [
+            "string",
+            "integer"
+          ],
+          "required": false,
+          "legacyName": "line_id"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "coverage",
@@ -38,47 +98,171 @@
       "geometryTypes": [
         "Polygon",
         "MultiPolygon"
-      ]
+      ],
+      "description": "研究区制图范围；原始来源只读，输出为新派生数据。",
+      "fields": [],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "rules",
       "label": "显式绑定的地质规则及版本",
-      "kind": "table"
+      "kind": "table",
+      "description": "显式绑定的地质规则及版本；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "rule_id",
+          "description": "规则标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_id"
+        },
+        {
+          "role": "rule_version",
+          "description": "冻结规则版本",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_version"
+        },
+        {
+          "role": "knowledge_id",
+          "description": "知识条目标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "knowledge_id"
+        },
+        {
+          "role": "knowledge_revision",
+          "description": "知识修订号",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "knowledge_revision"
+        },
+        {
+          "role": "params_json",
+          "description": "规则参数JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "params_json"
+        },
+        {
+          "role": "rule_json",
+          "description": "规则正文JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_json"
+        },
+        {
+          "role": "units_json",
+          "description": "地质单元字典JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": false,
+          "legacyName": "units_json"
+        },
+        {
+          "role": "aliases_json",
+          "description": "地质单元同义词JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": false,
+          "legacyName": "aliases_json"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "hematite",
       "label": "赤铁矿遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "赤铁矿遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "chlorite",
       "label": "绿泥石遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "绿泥石遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "hydromica",
       "label": "水云母遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "水云母遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "calcite",
       "label": "方解石遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "方解石遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "dolomite",
       "label": "白云石遥感矿物识别结果",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "白云石遥感矿物识别结果；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "intersections",
@@ -88,56 +272,96 @@
         "Point",
         "MultiPoint"
       ],
-      "required": false
+      "required": false,
+      "description": "当前构造交汇点；原始来源只读，输出为新派生数据。",
+      "fields": [],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "hematite_weight",
       "label": "赤铁矿遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "赤铁矿遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "chlorite_weight",
       "label": "绿泥石遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "绿泥石遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "hydromica_weight",
       "label": "水云母遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "水云母遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "calcite_weight",
       "label": "方解石遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "方解石遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "dolomite_weight",
       "label": "白云石遥感矿物识别结果权重",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "白云石遥感矿物识别结果权重；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "alteration_stack",
       "label": "类别掩膜栅格集（类别不限预置示例）",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "类别掩膜栅格集（类别不限预置示例）；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     },
     {
       "key": "alteration_stack_weight",
       "label": "同类别、同网格的证据权重栅格集",
       "kind": "raster",
       "minBands": 1,
-      "required": false
+      "required": false,
+      "description": "同类别、同网格的证据权重栅格集；原始来源只读，输出为新派生数据。 像元逐一参与计算，须为米制投影；类别掩膜0/1/255，权重为0至1；不得将未知单位栅格直接视为丰度。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      }
     }
   ],
   "parameters": [
@@ -150,7 +374,12 @@
         "focused",
         "balanced",
         "regional"
-      ]
+      ],
+      "help": "远景区范围尺度；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "working_epsg",
@@ -158,7 +387,12 @@
       "type": "integer",
       "default": 32646,
       "min": 1,
-      "max": 999999
+      "max": 999999,
+      "help": "米制投影EPSG；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": false,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "segment",
@@ -170,7 +404,12 @@
         "lithology",
         "structure",
         "alteration"
-      ]
+      ],
+      "help": "资料范围；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "prospect_grid_resolution_m",
@@ -178,7 +417,12 @@
       "type": "number",
       "default": 50,
       "min": 25,
-      "max": 200
+      "max": 200,
+      "help": "远景区分析网格（米）；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "min_zone_area_km2",
@@ -186,7 +430,12 @@
       "type": "number",
       "default": 1.0,
       "min": 0.01,
-      "max": 30
+      "max": 30,
+      "help": "最小目标面积（平方公里）；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "min_core_area_km2",
@@ -194,7 +443,12 @@
       "type": "number",
       "default": 0.05,
       "min": 0.001,
-      "max": 5
+      "max": 5,
+      "help": "最小核心面积（平方公里）；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "core_score_min",
@@ -202,7 +456,12 @@
       "type": "number",
       "default": 0.62,
       "min": 0,
-      "max": 1
+      "max": 1,
+      "help": "核心支持门槛；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "alteration_density_scale",
@@ -210,7 +469,12 @@
       "type": "number",
       "default": 0.08,
       "min": 0.001,
-      "max": 1
+      "max": 1,
+      "help": "蚀变覆盖尺度；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "peripheral_min_weighted_types",
@@ -218,7 +482,12 @@
       "type": "number",
       "default": 1.5,
       "min": 1,
-      "max": 5
+      "max": 5,
+      "help": "外围最低加权矿物类型数；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "peripheral_min_density",
@@ -226,7 +495,12 @@
       "type": "number",
       "default": 0.002,
       "min": 0,
-      "max": 1
+      "max": 1,
+      "help": "外围最低平滑加权覆盖比例；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "support_smooth_m",
@@ -234,7 +508,12 @@
       "type": "number",
       "default": 100,
       "min": 25,
-      "max": 250
+      "max": 250,
+      "help": "连续支持场平滑尺度（米）；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     }
   ],
   "outputs": [
@@ -243,33 +522,249 @@
       "label": "修正后优先核查远景区",
       "kind": "vector",
       "file": "after_zones.gpkg",
-      "required": false
+      "required": false,
+      "description": "修正后优先核查远景区；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [],
+      "final": true
     },
     {
       "key": "prospect_support",
       "label": "远景相对置信度热力图",
       "kind": "raster",
-      "file": "prospect_support.tif"
+      "file": "prospect_support.tif",
+      "description": "远景相对置信度热力图；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元远景相对置信度热力图；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "strong_core",
       "label": "强证据核心",
       "kind": "raster",
-      "file": "strong_core.tif"
+      "file": "strong_core.tif",
+      "description": "强证据核心；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "pixel_value",
+          "description": "逐像元强证据核心；与来源网格一致；类别掩膜0/1/255，组号为非负整数，权重0至1。",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true
+        }
+      ],
+      "final": true
     },
     {
       "key": "evidence",
       "label": "每区实测依据链",
       "kind": "table",
-      "file": "evidence.csv"
+      "file": "evidence.csv",
+      "description": "每区实测依据链；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "schema_version",
+          "description": "每区实测依据链的schema_version字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "schema_version"
+        },
+        {
+          "role": "phase",
+          "description": "每区实测依据链的phase字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "phase"
+        },
+        {
+          "role": "zone_id",
+          "description": "每区实测依据链的zone_id字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "zone_id"
+        },
+        {
+          "role": "area_km2",
+          "description": "每区实测依据链的area_km2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "area_km2"
+        },
+        {
+          "role": "evidence_json",
+          "description": "每区实测依据链的evidence_json字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "evidence_json"
+        }
+      ],
+      "final": false
     },
     {
       "key": "statistics",
       "label": "修正后远景区统计",
       "kind": "table",
-      "file": "statistics.csv"
+      "file": "statistics.csv",
+      "description": "修正后远景区统计；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "schema_version",
+          "description": "修正后远景区统计的schema_version字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "schema_version"
+        },
+        {
+          "role": "method",
+          "description": "修正后远景区统计的method字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "method"
+        },
+        {
+          "role": "phase",
+          "description": "修正后远景区统计的phase字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "phase"
+        },
+        {
+          "role": "profile",
+          "description": "修正后远景区统计的profile字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "profile"
+        },
+        {
+          "role": "zone_count",
+          "description": "修正后远景区统计的zone_count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "zone_count"
+        },
+        {
+          "role": "area_km2",
+          "description": "修正后远景区统计的area_km2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "area_km2"
+        }
+      ],
+      "final": false
     }
   ],
   "timeoutSeconds": 900,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "infer"
+    ],
+    "dataTypes": [
+      "raster",
+      "table",
+      "vector"
+    ],
+    "summary": "仅使用修正后岩性、构造、蚀变及有效权重，以连续支持场圈定平滑远景区；同一连通支持带合并，区域无重叠，输出红黄蓝渐变热力图及逐区依据。",
+    "useWhen": "已绑定研究区、实际观测和显式规则版本；需要优先核查远景区分析。",
+    "avoidWhen": "不把遥感识别或规则建议视为地质真值；未绑定规则或缺少人工批准时不得自动修正。"
+  },
+  "errors": [
+    {
+      "code": "INPUT_INVALID",
+      "meaning": "实际输入、规则或参数未通过算子已有检查",
+      "remedy": "replace_data",
+      "precondition": "输入须满足清单语义及算子规则约束；人工批准必须绑定当前快照"
+    }
+  ],
+  "resources": {
+    "duration": "minutes",
+    "memory": "medium",
+    "scaling": "时间随实际像元/要素与规则数量增加；栅格分块读取，复杂几何叠加可能增加峰值内存。small约小于512MiB，medium约512MiB至2GiB，large高于2GiB；均非资源保证。"
+  },
+  "selfTests": [
+    {
+      "name": "真实小样例运行",
+      "fixture": "selftest/smoke.json",
+      "expect": {
+        "files": {
+          "statistics.csv": {
+            "rows": 1,
+            "columns": [
+              "schema_version",
+              "method",
+              "phase",
+              "profile",
+              "zone_count",
+              "area_km2"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

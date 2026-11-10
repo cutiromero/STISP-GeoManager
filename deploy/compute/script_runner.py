@@ -238,6 +238,7 @@ def main():
     args = parser.parse_args()
     input_dir, output_dir = Path(args.input_dir), Path(args.output_dir)
     status = {"status": "failed"}
+    value = {}
     try:
         context_path = input_dir / "context.json"
         if context_path.stat().st_size > 2 * 1024**2:
@@ -252,6 +253,17 @@ def main():
             error_detail="输入或参数校验失败",
             scriptDiagnostics=details,
         )
+        if details["errorType"] == "ScriptTimeout":
+            status["error_category"] = "timeout"
+        elif value.get("manifest", {}).get("schemaVersion") == 2:
+            status["operatorError"] = {
+                "code": "SCRIPT_FAILED",
+                "message": details["message"],
+                "inputs": [],
+                "parameters": [],
+                "remedy": "human_review",
+                "details": {"scriptDiagnostics": details},
+            }
     temporary = output_dir / "__platform_status.tmp"
     temporary.write_text(json.dumps(status, ensure_ascii=False))
     temporary.replace(output_dir / "__platform_status.json")

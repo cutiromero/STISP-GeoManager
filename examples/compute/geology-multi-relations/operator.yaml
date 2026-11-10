@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "identifier": "geology-multi-relations",
   "name": "构造关系重建",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "构造关系重建。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -20,7 +20,23 @@
       "geometryTypes": [
         "LineString",
         "MultiLineString"
-      ]
+      ],
+      "description": "构造图；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "fault_id",
+          "description": "稳定构造线标识",
+          "types": [
+            "string",
+            "integer"
+          ],
+          "required": false,
+          "legacyName": "line_id"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "coverage",
@@ -29,12 +45,111 @@
       "geometryTypes": [
         "Polygon",
         "MultiPolygon"
-      ]
+      ],
+      "description": "研究区制图范围；原始来源只读，输出为新派生数据。",
+      "fields": [],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "rules",
       "label": "显式启用的试用规则及版本",
-      "kind": "table"
+      "kind": "table",
+      "description": "显式启用的试用规则及版本；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "rule_id",
+          "description": "规则标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_id"
+        },
+        {
+          "role": "rule_version",
+          "description": "冻结规则版本",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_version"
+        },
+        {
+          "role": "knowledge_id",
+          "description": "知识条目标识",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "knowledge_id"
+        },
+        {
+          "role": "knowledge_revision",
+          "description": "知识修订号",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "knowledge_revision"
+        },
+        {
+          "role": "params_json",
+          "description": "规则参数JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "params_json"
+        },
+        {
+          "role": "rule_json",
+          "description": "规则正文JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "legacyName": "rule_json"
+        },
+        {
+          "role": "units_json",
+          "description": "地质单元字典JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": false,
+          "legacyName": "units_json"
+        },
+        {
+          "role": "aliases_json",
+          "description": "地质单元同义词JSON",
+          "types": [
+            "string",
+            "integer",
+            "number"
+          ],
+          "required": false,
+          "legacyName": "aliases_json"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     },
     {
       "key": "before_faults",
@@ -44,7 +159,23 @@
         "LineString",
         "MultiLineString"
       ],
-      "required": false
+      "required": false,
+      "description": "处理前构造图（比较用）；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "fault_id",
+          "description": "稳定构造线标识",
+          "types": [
+            "string",
+            "integer"
+          ],
+          "required": false,
+          "legacyName": "line_id"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     }
   ],
   "parameters": [
@@ -54,7 +185,12 @@
       "type": "integer",
       "default": 32646,
       "min": 1,
-      "max": 999999
+      "max": 999999,
+      "help": "米制工作投影EPSG；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": false,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "segment",
@@ -66,7 +202,12 @@
         "lithology",
         "structure",
         "alteration"
-      ]
+      ],
+      "help": "本次检查范围；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "grid_resolution_m",
@@ -74,7 +215,12 @@
       "type": "number",
       "default": 100,
       "min": 10,
-      "max": 1000
+      "max": 1000,
+      "help": "综合分析网格（米）；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     },
     {
       "key": "min_zone_area_m2",
@@ -82,7 +228,12 @@
       "type": "number",
       "default": 200000,
       "min": 0,
-      "max": 100000000
+      "max": 100000000,
+      "help": "远景区最小面积（平方米）；按实际来源和任务目标设置，取值须满足声明范围。",
+      "agent": {
+        "adjustable": true,
+        "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
+      }
     }
   ],
   "outputs": [
@@ -91,22 +242,258 @@
       "label": "处理前几何与推测交汇点",
       "kind": "vector",
       "file": "before_intersections.gpkg",
-      "required": false
+      "required": false,
+      "description": "处理前几何与推测交汇点；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [],
+      "final": true
     },
     {
       "key": "intersections",
       "label": "几何与推测交汇点",
       "kind": "vector",
       "file": "intersections.gpkg",
-      "required": false
+      "required": false,
+      "description": "几何与推测交汇点；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "point_id",
+          "description": "几何与推测交汇点的point_id字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "point_id"
+        },
+        {
+          "role": "f1",
+          "description": "几何与推测交汇点的f1字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "f1"
+        },
+        {
+          "role": "f2",
+          "description": "几何与推测交汇点的f2字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "f2"
+        },
+        {
+          "role": "type",
+          "description": "几何与推测交汇点的type字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "type"
+        },
+        {
+          "role": "inferred",
+          "description": "几何与推测交汇点的inferred字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "inferred"
+        },
+        {
+          "role": "gap_m",
+          "description": "几何与推测交汇点的gap_m字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "gap_m"
+        },
+        {
+          "role": "angle_deg",
+          "description": "几何与推测交汇点的angle_deg字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "angle_deg"
+        },
+        {
+          "role": "rule_id",
+          "description": "规则标识",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "rule_id"
+        },
+        {
+          "role": "rule_version",
+          "description": "冻结规则版本",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "rule_version"
+        },
+        {
+          "role": "weight",
+          "description": "保留权重",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "weight"
+        }
+      ],
+      "final": true
     },
     {
       "key": "statistics",
       "label": "交汇关系统计",
       "kind": "table",
-      "file": "statistics.csv"
+      "file": "statistics.csv",
+      "description": "交汇关系统计；语义与输入规则版本保持一致，不能作为独立地质真值。",
+      "fields": [
+        {
+          "role": "kind",
+          "description": "交汇关系统计的kind字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "kind"
+        },
+        {
+          "role": "count",
+          "description": "交汇关系统计的count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "count"
+        },
+        {
+          "role": "before_count",
+          "description": "交汇关系统计的before_count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "before_count"
+        },
+        {
+          "role": "after_count",
+          "description": "交汇关系统计的after_count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "after_count"
+        },
+        {
+          "role": "delta_count",
+          "description": "交汇关系统计的delta_count字段；具体判据沿用冻结规则",
+          "types": [
+            "string",
+            "integer",
+            "number",
+            "boolean"
+          ],
+          "required": false,
+          "name": "delta_count"
+        }
+      ],
+      "final": false
     }
   ],
   "timeoutSeconds": 900,
-  "deterministic": true
+  "deterministic": true,
+  "capabilities": {
+    "operations": [
+      "infer"
+    ],
+    "dataTypes": [
+      "table",
+      "vector"
+    ],
+    "summary": "构造关系重建。依据显式绑定的试用知识和当前输入真实测量，不读取独立评价材料；修改须逐项批准，保留、待裁定、降权和剔除分别记录。",
+    "useWhen": "已绑定研究区、实际观测和显式规则版本；需要构造关系重建。",
+    "avoidWhen": "不把遥感识别或规则建议视为地质真值；未绑定规则或缺少人工批准时不得自动修正。"
+  },
+  "errors": [
+    {
+      "code": "INPUT_INVALID",
+      "meaning": "实际输入、规则或参数未通过算子已有检查",
+      "remedy": "replace_data",
+      "precondition": "输入须满足清单语义及算子规则约束；人工批准必须绑定当前快照"
+    }
+  ],
+  "resources": {
+    "duration": "minutes",
+    "memory": "medium",
+    "scaling": "时间随实际像元/要素与规则数量增加；栅格分块读取，复杂几何叠加可能增加峰值内存。small约小于512MiB，medium约512MiB至2GiB，large高于2GiB；均非资源保证。"
+  },
+  "selfTests": [
+    {
+      "name": "真实小样例运行",
+      "fixture": "selftest/smoke.json",
+      "expect": {
+        "files": {
+          "statistics.csv": {
+            "rows": 2,
+            "columns": [
+              "kind",
+              "count",
+              "before_count",
+              "after_count",
+              "delta_count"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }
