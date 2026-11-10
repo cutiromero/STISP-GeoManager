@@ -88,3 +88,4 @@ export PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 - 脚本回归最小命令：`"$PY" -m pytest scripts/tests/test_verify_fast.py -q`。
 - 效率行为边界与回归：`docs/efficiency-contracts.md`；完整入口：`make check-efficiency`，使用项目环境或显式 `EFFICIENCY_PYTHON`。
 - 发布唯一入口：`tools/release/release.py`，仅 `inspect`、`fast`、`full`、`status`、`rollback`；说明见 `tools/release/README.md`。
+- 新增型迁移分类：`tools/release/migrations.py`；候选旧代码兼容：`compatibility.py`；结构指纹/正式迁移/回退门禁：`server.py`、`protocol.py`；回归：`tools/release/tests/test_migrations.py`、`test_schema_release.py`、`test_compute_migration.py`。仅 full 可凭同包候选证据推进结构，回滚永不恢复数据库。

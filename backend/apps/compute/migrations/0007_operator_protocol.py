@@ -7,16 +7,16 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="computetask",
             name="failure",
-            field=models.JSONField(default=dict, blank=True),
+            field=models.JSONField(default=dict, blank=True, db_default={}),
         ),
         migrations.AddField(
             model_name="computetask",
             name="field_mappings",
-            field=models.JSONField(default=dict, blank=True),
+            field=models.JSONField(default=dict, blank=True, db_default={}),
         ),
         migrations.AddField(
             model_name="computetask",
             name="input_collections",
-            field=models.JSONField(default=dict, blank=True),
+            field=models.JSONField(default=dict, blank=True, db_default={}),
         ),
     ]

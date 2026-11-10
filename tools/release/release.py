@@ -26,7 +26,7 @@ RECEIPTS = REPO / ".runtime/releases"
 PUBLISH_STEPS = (
     "读取正式启动器、提交、四类进程、任务队列、磁盘和双锁；冻结身份快照",
     "已跟踪文件干净、列出未跟踪文件、当前固定个人分支、HEAD 与 origin 个人分支精确一致；验证正式提交祖先关系",
-    "比较迁移、科学算子、前端输入；fast 的三个拒绝条件任一命中即停止",
+    "比较迁移、科学算子、前端输入；fast 遇到任何迁移拒绝；full 用 AST 逐操作分类，拒绝项须人工制定方案",
     "在系统临时目录的英文路径 git archive 精确提交，排除已知开发说明链接",
     "前端有变化：复制并摘要本机资源、用配置的 pnpm 前缀 run build:verify（/static/）、移除构建输入资源；无变化：核对正式前端逐文件 SHA-256 后复用",
     "生成可复现完整包、增量包、文件清单；冻结启动器、工具、包和清单摘要",
@@ -34,7 +34,7 @@ PUBLISH_STEPS = (
     "独立会话启动，持有双发布锁；重新核对完整基线、解包到全新发布目录",
     "迁移源码和已应用状态门禁；排空任务；备份数据库、配置、静态文件和启动器",
     "归档旧/新完整前端公共依赖，独立 collectstatic；停 web、二次排空、停三个 worker、静止备份",
-    "migrate + schema 不变门禁；原子切换静态树和两个 APP_ROOT；启动 worker 后启动 web",
+    "静止备份后 migrate；无迁移须 schema 不变，有新增须正式结构指纹及迁移记录等于候选；再切静态树和两个 APP_ROOT、启动 worker 后启动 web",
     "进程身份、worker 锁/心跳、依赖服务、健康接口、首页 JS 摘要与 Content-Type 硬检查",
     "轮询直至已接受/已回滚/需人工处理；取回清单和回执；删除临时源码与发布包",
 )
@@ -45,7 +45,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "command", choices=("inspect", "fast", "full", "status", "rollback")
     )
-    parser.add_argument("--config", type=Path, default=configuration.CONFIG_PATH)
+    parser.add_argument("--config", type=Path)
     parser.add_argument(
         "--execute",
         action="store_true",
@@ -144,14 +144,14 @@ def plan(args, config, repo, emit=print):
                     "7a. 独立候选：备份正式元数据库、复制 secret key（不输出）、重定向 app/research，保留 native 策略并禁启动扫描。"
                 )
                 emit(
-                    "7b. 候选迁移、隔离复制历史/会话、check/静态归档、启动四角色及健康门禁、可选 --candidate-check，随后停止候选四角色。"
+                    "7b. 候选迁移、记录结构指纹及迁移记录；基线 manage.py check、只读及回滚事务 INSERT 兼容检查；保留历史隔离、新代码 check/静态归档、四角色健康门禁与可选钩子。"
                 )
         if args.command == "full":
             emit(
-                "限制：候选可测试迁移；原正式 noSchemaChanges / migration_map / unchanged_schema 门禁不放宽，含 schema 变化不能正式切换。"
+                "迁移规则：仅新表、可空或带 db_default 的新增列、新表索引/约束及可证明只写同迁移新表的数据操作；拒绝删改重命名、已有表唯一约束与无法判断的操作。分类、候选指纹、旧代码兼容证据必须绑定同一包摘要。"
             )
         emit(
-            "失败：切换后自动回滚代码/启动器/静态树；永不恢复数据库。schema/进程身份不明则保留 DEPLOY.lock，需人工处理。"
+            "失败：切换后健康失败仅回滚代码/启动器/静态树；数据库结构保持前进，回执记录旧代码兼容证据和静止备份位置。结构指纹/迁移记录或进程身份不明保留 DEPLOY.lock，转人工，永不恢复数据库。"
         )
     elif args.command == "inspect":
         emit(
@@ -169,6 +169,9 @@ def plan(args, config, repo, emit=print):
     else:
         emit(
             "读取当前已接受清单与 rollback-context；验证旧代码、旧启动器、备份、当前配置、schema 和双锁。"
+        )
+        emit(
+            "结构比旧代码新时，先核对同包分类、候选指纹、旧代码兼容证据及迁移记录，全部匹配才允许回退；永不执行逆迁移或恢复数据库。"
         )
         emit(
             "独立会话：排空、备份当前状态、停 web/worker、保存静止数据库、恢复上一个静态树和启动器、原身份启动旧代码并过健康门禁。"
@@ -432,6 +435,14 @@ def publish(args, config, repo, executor):
             manifest["untrackedFiles"] = untracked
             manifest["rollbackFiles"] = previous_files
             manifest["baselineRoleRoots"] = baseline["roleRoots"]
+            classification = artifacts.classify_migrations(
+                manifest, previous_files, work / "source"
+            )
+            server.write_json(output / "migration-classification.json", classification)
+            server.require(
+                classification["allowed"],
+                artifacts.migrations.rejection(classification),
+            )
             if args.candidate_check:
                 server.require(args.candidate_check.is_file(), "候选钩子脚本不存在")
                 manifest["candidateHook"] = {"sha256": server.sha(args.candidate_check)}
@@ -515,7 +526,16 @@ def explicit_rollback(args, config, executor):
 
 def main(argv=None, *, executor_factory=Executor, repo=REPO):
     args = parse_args(argv)
-    config = configuration.load(args.config, executing=args.execute)
+    config_path = args.config or configuration.CONFIG_PATH
+    if (
+        args.config is None
+        and not args.execute
+        and not args.local_only
+        and not config_path.exists()
+    ):
+        config_path = Path(__file__).with_name("config.example.toml")
+        print("未配置 release.local.toml，以下仅为样例离线计划，不代表真实服务器配置。")
+    config = configuration.load(config_path, executing=args.execute)
     if args.local_only:
         local_stages(args, config, repo)
         return 0

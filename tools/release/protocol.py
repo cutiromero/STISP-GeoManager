@@ -337,7 +337,7 @@ def rollback(config, release, ops, lock_state):
         original["commit"] == release["baseline"]["commit"], "回退来源与观测身份不一致"
     )
     context = json.loads((current_root / "rollback-context.json").read_text())
-    server.unchanged_schema(config, context["schemaVersion"])
+    server.rollback_database_gate(config, original, context)
     previous = original["baseline"]["appRoot"]
     server.require(context["previousRoot"] == previous, "回退上下文与原基线不一致")
     server.verify_tree(previous, original["rollbackFiles"])
@@ -365,13 +365,7 @@ def rollback(config, release, ops, lock_state):
         "回退启动器不是冻结的旧启动器",
     )
     baseline = server.baseline_gate(config, release)
-    schema_release = {
-        **original,
-        "appRoot": previous,
-        "baseline": {**original["baseline"], "appRoot": original["appRoot"]},
-        "releaseDir": str(ops),
-    }
-    server.migration_gate(config, schema_release)
+    server.migration_gate(config, original, after=True)
     server.drain(config)
     server.baseline_gate(config, release)
     old = baseline["processes"]
@@ -415,8 +409,9 @@ def rollback(config, release, ops, lock_state):
             "回退最终排空出现新任务",
         )
         server.backup_database(config, ops / "rollback-backup/meta-quiesced.db")
-        server.unchanged_schema(config, context["schemaVersion"])
+        server.rollback_database_gate(config, original, context)
         server.operator_bootstrap(config, original, rollback=True)
+        server.rollback_database_gate(config, original, context)
         os.replace(static, ops / "static-before-rollback")
         os.replace(previous_static, static)
         server.replace_launcher(config, (backup / "launcher.sh").read_bytes())
@@ -436,11 +431,13 @@ def rollback(config, release, ops, lock_state):
                 journal=launched,
             )
         server.wait_gate(restore_config, original, launched, started, old=True)
+        server.rollback_database_gate(config, original, context)
         receipt = {
             "rolledBack": True,
             "commit": original["baseline"]["commit"],
             "previousRelease": original["commit"],
-            "databaseRestored": False,
+            **server.database_receipt(original, backup),
+            "rollbackBackup": str(ops / "rollback-backup"),
             "at": datetime.now(timezone.utc).isoformat(),
         }
         server.write_json(ops / TERMINAL[1], receipt)

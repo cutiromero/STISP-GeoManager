@@ -8,9 +8,11 @@ import subprocess
 import time
 
 if __package__:
-    from . import artifacts, server
+    from . import artifacts, compatibility, migrations, server
 else:
     import artifacts
+    import compatibility
+    import migrations
     import server
 
 
@@ -97,12 +99,32 @@ def run(config, release, package, operations, candidate_options):
     with tarfile.open(package) as archive:
         archive.extractall(code, filter="data")
     server.verify_tree(code, release["files"])
+    candidate_release = {**release, "appRoot": str(code)}
+    server.migration_sources_gate(candidate_release)
+    classification = release["migrationClassification"]
+    server.require(classification["allowed"], migrations.rejection(classification))
     (code / ".runtime").mkdir(mode=0o700)
     (code / ".runtime/config-path").write_text(str(config_path))
     (code / ".runtime/config-path").chmod(0o600)
+    baseline_applied = server.applied_migrations(candidate_config)
+    baseline_plan = server.migration_plan(
+        config, release["baseline"]["appRoot"], root / "baseline-migrations.private.log"
+    )
+    server.require(
+        not baseline_plan["pending"] and baseline_plan["applied"] == baseline_applied,
+        "候选副本的迁移记录与基线代码不一致",
+    )
     server.manage(
         candidate_config, code, ["migrate", "--noinput"], root / "migrate.private.log"
     )
+    migrated_state = server.database_state(candidate_config)
+    server.require(
+        migrated_state["appliedMigrations"]
+        == sorted(baseline_applied + server.added_migration_ids(classification)),
+        "候选迁移记录不符合新增集合",
+    )
+    legacy = compatibility.run(candidate_config, release, root)
+    server.verify_database_state(candidate_config, migrated_state)
     isolation_script = (
         "import sys;sys.path.insert(0," + repr(str(ops)) + ");"
         "import candidate_support as support;support.configure(" + repr(str(ops)) + ");"
@@ -245,6 +267,15 @@ def run(config, release, package, operations, candidate_options):
         if cleanup_errors:
             raise server.ManualIntervention("候选进程未能全部按身份正常停止")
     server.baseline_gate(config, release)
+    server.verify_database_state(candidate_config, migrated_state)
     receipt = artifacts.acceptance(release, checks)
+    receipt["migrationEvidence"] = {
+        "archiveSha256": release["package"]["sha256"],
+        "classificationDigest": server.digest(classification),
+        "databaseState": migrated_state,
+        "baselineAppliedMigrations": baseline_applied,
+        "compatibility": legacy,
+    }
+    server.migration_evidence_gate({**release, "candidateAcceptance": receipt})
     server.write_json(ops / "candidate-accepted.json", receipt)
     return receipt

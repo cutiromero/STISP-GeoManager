@@ -38,6 +38,7 @@ pnpm --config.verify-deps-before-run=false --config.manage-package-manager-versi
 
 契约五条命令依次为 `generate:api`、`check:api`、`api:changes:check`、`api:docs`、`api:lint`，均在 `frontend` 用上述 pnpm 前缀执行。
 发布只用 `tools/release/release.py` 的 `inspect`、`fast`、`full`、`status`、`rollback`；入口不可用则停止发布，禁止在 `.runtime` 手写或复制改写发布脚本。
+`fast` 拒绝任何迁移；`full` 仅允许静态分类通过、同包候选结构指纹和旧代码兼容证据齐备的新增型迁移。回滚永不恢复数据库；结构或迁移记录偏离候选时保锁转人工，规则见 `tools/release/BEHAVIOR.md`。
 
 ## 效率门禁范围
 实际改变资源读取/查询/统计、文件摘要/像元/掩膜校验、输入版本与算子准备、缓存/锁/并发合并、轮询/会话历史/上下文/SSE，以及这些路径的撤权、取消、失败重试或失效行为时，必须跑 `make check-efficiency`。

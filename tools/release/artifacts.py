@@ -18,8 +18,9 @@ import tomllib
 import zipfile
 
 if __package__:
-    from . import server
+    from . import migrations, server
 else:
+    import migrations
     import server
 
 EXCLUDED_LINKS = {".claude", "CLAUDE.md"}
@@ -38,6 +39,8 @@ SCIENTIFIC_PATTERNS = (
 )
 FRONTEND_INPUTS = ("frontend/", "packages/", "pnpm-lock.yaml", "pnpm-workspace.yaml")
 TOOL_FILES = (
+    "migrations.py",
+    "compatibility.py",
     "server.py",
     "artifacts.py",
     "candidate.py",
@@ -108,7 +111,7 @@ def diff_summary(repo, base, commit):
 def fast_reasons(summary):
     reasons = []
     if summary["migrations"]:
-        reasons.append("包含数据库迁移文件，请改用 full；正式 schema 门禁仍独立生效")
+        reasons.append("包含数据库迁移文件，请改用 full 的新增型迁移分类与兼容门禁")
     if not summary["scientificOperatorsUnchanged"]:
         reasons.append("包含算子或科学计算脚本改动，请改用 full")
     if not summary["ancestorVerified"]:
@@ -529,3 +532,19 @@ def freeze(artifact, baseline, summary, config, mode, release_id):
             },
         )
     return manifest
+
+
+def classify_migrations(manifest, baseline_files, source):
+    baseline = server.migration_files(baseline_files)
+    current = server.migration_files(manifest["files"])
+    result = migrations.classify(
+        baseline, current, lambda name: (source / name).read_bytes()
+    )
+    result.update(
+        {
+            "archiveSha256": manifest["package"]["sha256"],
+            "baseCommit": manifest["baseline"]["commit"],
+        }
+    )
+    manifest["migrationClassification"] = result
+    return result

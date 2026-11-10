@@ -168,7 +168,7 @@ def test_known_remote_validation_failure_stops_without_polling(
         release.wait_job(Recorder(), config, "/remote/ops", "a" * 64, tmp_path)
 
 
-def test_full_schema_change_stops_after_candidate_before_production_stage(
+def test_full_schema_change_without_evidence_stops_before_production_stage(
     job, layout, monkeypatch
 ):
     operations, manifest = job
@@ -182,7 +182,7 @@ def test_full_schema_change_stops_after_candidate_before_production_stage(
             value, {"candidateMigrations": True}
         ),
     )
-    with pytest.raises(server.ReleaseError, match="without migration"):
+    with pytest.raises(server.ReleaseError, match="绑定同一包"):
         protocol.run_job(
             operations, server.sha(operations / "frozen-manifest.json"), "publish"
         )

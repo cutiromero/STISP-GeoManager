@@ -40,6 +40,21 @@ def test_config_example_and_execution_placeholders():
         configuration.load(EXAMPLE, executing=True)
 
 
+def test_default_plan_without_local_config_uses_explicit_sample_notice(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(configuration, "CONFIG_PATH", tmp_path / "missing.toml")
+    monkeypatch.setattr(artifacts, "commit_id", lambda *args: "a" * 40)
+    monkeypatch.setattr(artifacts, "git", lambda *args, **kwargs: "codex/xintao")
+    monkeypatch.setattr(artifacts, "untracked_files", lambda repo: [])
+    assert release.main(["full"]) == 0
+    assert "样例离线计划" in capsys.readouterr().out
+    with pytest.raises(configuration.ConfigError):
+        release.main(["full", "--execute"])
+    with pytest.raises(configuration.ConfigError):
+        release.main(["full", "--config", str(tmp_path / "missing.toml")])
+
+
 def test_release_and_fast_verification_share_pnpm_prefix(config):
     from scripts.verify_fast import PNPM
 

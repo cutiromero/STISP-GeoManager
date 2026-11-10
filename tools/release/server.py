@@ -20,6 +20,11 @@ import tomllib
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 import uuid
 
+if __package__:
+    from . import migrations
+else:
+    import migrations
+
 CONFIG_FILE = Path(__file__).with_name("remote-config.json")
 DEFAULTS = {}
 RUNTIME_INVARIANTS = {
@@ -485,10 +490,7 @@ def load_release(config, manifest_path, expected_sha):
         value["baseline"]["launcherSha256"] == config["expectedLauncherSha256"],
         "Unexpected previous launcher",
     )
-    require(
-        value["noSchemaChanges"] is True,
-        "This tool only permits a release without migration changes",
-    )
+    migration_evidence_gate(value)
     require(
         value["releaseToolSha256"] == sha(__file__),
         "Release tool differs from the reviewed frozen tool",
@@ -585,29 +587,170 @@ def manage(config, root, args, log):
 def migration_map(root):
     return {
         str(path.relative_to(root)): sha(path)
-        for path in Path(root).glob("backend/apps/*/migrations/*.py")
+        for path in Path(root).glob("**/migrations/**/*.py")
+        if not {".runtime", "__pycache__"} & set(path.relative_to(root).parts)
     }
 
 
-def migration_gate(config, release):
+def migration_files(files):
+    return {
+        name: item["sha256"]
+        for name, item in files.items()
+        if "/migrations/" in name and name.endswith(".py")
+    }
+
+
+def migration_evidence_gate(release):
+    classification = release.get("migrationClassification")
+    if release.get("mode") == "fast":
+        require(release.get("noSchemaChanges") is True, "fast 遇到任何迁移都拒绝")
+    if release.get("noSchemaChanges") is True:
+        if classification:
+            require(
+                classification.get("allowed") is True
+                and not classification["addedMigrations"]
+                and not classification["files"],
+                "无迁移声明与分类不一致",
+            )
+        return
+    receipt = release.get("candidateAcceptance", {})
+    evidence = receipt.get("migrationEvidence", {})
+    compatibility = evidence.get("compatibility", {})
+    package = release["package"]["sha256"]
     require(
-        migration_map(release["appRoot"])
-        == migration_map(release["baseline"]["appRoot"]),
-        "Migration sources differ; a separate schema release procedure is required",
+        release.get("mode") == "full"
+        and classification
+        and classification.get("allowed") is True
+        and classification.get("addedMigrations")
+        and classification.get("archiveSha256") == package
+        and classification.get("baseCommit") == release["baseline"]["commit"]
+        and receipt.get("accepted") is True
+        and receipt.get("commit") == release["commit"]
+        and receipt.get("version") == release["version"]
+        and receipt.get("archiveSha256") == package
+        and evidence.get("archiveSha256") == package
+        and evidence.get("classificationDigest") == digest(classification)
+        and compatibility.get("archiveSha256") == package
+        and compatibility.get("baseCommit") == release["baseline"]["commit"]
+        and compatibility.get("classificationDigest") == digest(classification)
+        and all(
+            compatibility.get(key) is True
+            for key in ("passed", "djangoCheck", "read", "insertRolledBack")
+        ),
+        "迁移必须全部允许，且分类、候选结构指纹、旧代码兼容检查绑定同一包；否则需要人工制定方案",
     )
+    state = evidence.get("databaseState", {})
+    fingerprint = state.get("fingerprint", {})
+    require(
+        fingerprint.get("sha256") == digest(fingerprint.get("schema"))
+        and isinstance(fingerprint.get("schema"), list)
+        and isinstance(state.get("appliedMigrations"), list),
+        "候选结构指纹或迁移记录缺失",
+    )
+    require(
+        evidence.get("baselineAppliedMigrations") is not None
+        and state["appliedMigrations"]
+        == sorted(
+            evidence["baselineAppliedMigrations"] + added_migration_ids(classification)
+        ),
+        "候选迁移记录不符合基线加新增集合",
+    )
+
+
+def migration_sources_gate(release):
+    baseline = migration_map(release["baseline"]["appRoot"])
+    current = migration_map(release["appRoot"])
+    classification = release.get("migrationClassification")
+    if release.get("noSchemaChanges") is True:
+        require(
+            current == baseline,
+            "Migration sources differ; fast/无迁移发布不允许源码变化",
+        )
+        return
+    require(
+        classification and baseline == classification["baselineMigrations"],
+        "Migration sources differ: 基线迁移摘要不一致",
+    )
+    actual = migrations.classify(
+        baseline, current, lambda name: (Path(release["appRoot"]) / name).read_bytes()
+    )
+    actual.update(
+        {
+            "archiveSha256": release["package"]["sha256"],
+            "baseCommit": release["baseline"]["commit"],
+        }
+    )
+    require(actual["allowed"], migrations.rejection(actual))
+    require(
+        actual == classification,
+        "Migration sources differ: 新增文件集合或分类与清单不一致",
+    )
+
+
+def added_migration_ids(classification):
+    return sorted(
+        [Path(name).parts[-3], Path(name).stem]
+        for name in classification["addedMigrations"]
+        if Path(name).stem != "__init__"
+    )
+
+
+def applied_migrations(config):
+    with readonly_db(config) as db:
+        return [
+            list(row)
+            for row in db.execute(
+                "SELECT app, name FROM django_migrations ORDER BY app, name"
+            )
+        ]
+
+
+def migration_plan(config, root, log):
+    text = manage(config, root, ["showmigrations", "--plan"], log)
+    entries = re.findall(r"^\[([X ])\]\s+(\w+)\.([\w]+)\s*$", text, re.MULTILINE)
+    require(entries, "Production has no recognized migration plan")
+    return {
+        "applied": sorted([app, name] for mark, app, name in entries if mark == "X"),
+        "pending": sorted([app, name] for mark, app, name in entries if mark != "X"),
+    }
+
+
+def migration_gate(config, release, *, after=False):
+    migration_evidence_gate(release)
+    migration_sources_gate(release)
+    plans = {}
     for label, root in (
         ("old", release["baseline"]["appRoot"]),
         ("new", release["appRoot"]),
     ):
-        text = manage(
+        plans[label] = migration_plan(
             config,
             root,
-            ["showmigrations", "--plan"],
             Path(release["releaseDir"]) / ("showmigrations-" + label + ".private.txt"),
         )
+    require(not plans["old"]["pending"], "Production has unapplied baseline migrations")
+    if release["noSchemaChanges"]:
         require(
-            "[X]" in text and "[ ]" not in text,
+            not plans["new"]["pending"] and plans["new"] == plans["old"],
             "Production has unapplied or unrecognized migrations",
+        )
+        require(
+            applied_migrations(config) == plans["old"]["applied"],
+            "正式库迁移记录不等于基线计划",
+        )
+    else:
+        evidence = release["candidateAcceptance"]["migrationEvidence"]
+        baseline = evidence["baselineAppliedMigrations"]
+        added = added_migration_ids(release["migrationClassification"])
+        require(plans["old"]["applied"] == baseline, "基线迁移计划与候选证据不一致")
+        expected = sorted(baseline + added) if after else baseline
+        require(
+            applied_migrations(config) == expected, "正式库的已应用迁移与预期不一致"
+        )
+        require(
+            plans["new"]["applied"] == expected
+            and plans["new"]["pending"] == ([] if after else added),
+            "新增迁移计划与冻结集合不一致",
         )
     manage(
         config,
@@ -671,6 +814,103 @@ def unchanged_schema(config, expected):
         raise SchemaChanged("Database schema identity is unavailable") from None
     if current != expected:
         raise SchemaChanged("Unexpected schema mutation")
+
+
+def schema_fingerprint(config):
+    with readonly_db(config) as db:
+        schema = []
+        for kind, name, table, sql in db.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name"
+        ):
+            normalized = (
+                " ".join(
+                    re.findall(
+                        r"'(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|`(?:``|[^`])*`|\[[^\]]*\]|\w+|[^\s]",
+                        sql,
+                    )
+                )
+                if sql
+                else None
+            )
+            item = {"type": kind, "name": name, "table": table, "sql": normalized}
+            quoted = '"' + name.replace('"', '""') + '"'
+            if kind == "table":
+                item["columns"] = [
+                    list(row)
+                    for row in db.execute("PRAGMA table_xinfo(" + quoted + ")")
+                ]
+                item["foreignKeys"] = sorted(
+                    [
+                        list(row)
+                        for row in db.execute("PRAGMA foreign_key_list(" + quoted + ")")
+                    ]
+                )
+                indexes = []
+                for _, index, unique, origin, partial in db.execute(
+                    "PRAGMA index_list(" + quoted + ")"
+                ):
+                    index_quote = '"' + index.replace('"', '""') + '"'
+                    indexes.append(
+                        {
+                            "name": index,
+                            "unique": unique,
+                            "origin": origin,
+                            "partial": partial,
+                            "columns": [
+                                list(row)
+                                for row in db.execute(
+                                    "PRAGMA index_xinfo(" + index_quote + ")"
+                                )
+                            ],
+                        }
+                    )
+                item["indexes"] = sorted(indexes, key=lambda value: value["name"])
+            schema.append(item)
+        return {"sha256": digest(schema), "schema": schema}
+
+
+def database_state(config):
+    return {
+        "fingerprint": schema_fingerprint(config),
+        "appliedMigrations": applied_migrations(config),
+    }
+
+
+def verify_database_state(config, expected):
+    try:
+        current = database_state(config)
+    except Exception:
+        raise SchemaChanged("数据库结构或迁移记录身份不可读，转人工") from None
+    if current != expected:
+        raise SchemaChanged("数据库结构指纹或迁移记录与候选证据不一致，转人工")
+
+
+def rollback_database_gate(config, release, context):
+    require(
+        bool(context.get("databaseAdvanced")) == (not release["noSchemaChanges"]),
+        "回退上下文的结构前进标记不符",
+    )
+    if not context.get("databaseAdvanced"):
+        unchanged_schema(config, context["schemaVersion"])
+        return
+    migration_evidence_gate(release)
+    migration_sources_gate(release)
+    expected = release["candidateAcceptance"]["migrationEvidence"]["databaseState"]
+    require(context.get("databaseState") == expected, "回退上下文与候选结构证据不一致")
+    verify_database_state(config, expected)
+
+
+def database_receipt(release, backup):
+    advanced = release.get("noSchemaChanges") is False
+    return {
+        "databaseAdvanced": advanced,
+        "databaseHandling": "数据库结构已前进，旧代码经兼容检查可运行"
+        if advanced
+        else "数据库结构未变化",
+        "backup": str(backup),
+        "quiescedBackup": str(Path(backup) / "meta-quiesced.db"),
+        "databaseRestored": False,
+    }
 
 
 def stage(config, release, package):
@@ -1053,15 +1293,22 @@ def cutover(config, release, lock_state):
             {"meta-quiesced.db": sha(backup_dir / "meta-quiesced.db")},
         )
         schema_before = schema_version(config)
+        rollback_context = {
+            "schemaVersion": schema_before,
+            "backup": str(backup_dir),
+            "previousRoot": release["baseline"]["appRoot"],
+            "previousLauncherSha256": release["baseline"]["launcherSha256"],
+            "databaseAdvanced": not release["noSchemaChanges"],
+        }
+        if not release["noSchemaChanges"]:
+            rollback_context["databaseState"] = release["candidateAcceptance"][
+                "migrationEvidence"
+            ]["databaseState"]
         write_json(
             root / "rollback-context.json",
-            {
-                "schemaVersion": schema_before,
-                "backup": str(backup_dir),
-                "previousRoot": release["baseline"]["appRoot"],
-                "previousLauncherSha256": release["baseline"]["launcherSha256"],
-            },
+            rollback_context,
         )
+        migration_gate(config, release)
         try:
             manage(
                 config,
@@ -1069,14 +1316,17 @@ def cutover(config, release, lock_state):
                 ["migrate", "--noinput"],
                 root / "migrate.private.txt",
             )
-            migration_gate(config, release)
         finally:
             # Even a failed migration command must not restart old code against an
             # unexpected schema. No database file is ever restored by this tool.
-            unchanged_schema(config, schema_before)
+            rollback_database_gate(config, release, rollback_context)
+        try:
+            migration_gate(config, release, after=True)
+        except ReleaseError as error:
+            raise SchemaChanged("迁移后状态无法确认：" + str(error)) from None
         bootstrap_attempted = True
         operator_bootstrap(config, release)
-        unchanged_schema(config, schema_before)
+        rollback_database_gate(config, release, rollback_context)
         os.replace(static, old_static)
         static_moved = True
         os.replace(prepared, static)
@@ -1108,6 +1358,7 @@ def cutover(config, release, lock_state):
                 config, old, environments, release["appRoot"], (role,), journal=launched
             )
         wait_gate(config, release, launched, started_at)
+        rollback_database_gate(config, release, rollback_context)
         write_json(
             root / "production-accepted.json",
             {
@@ -1116,8 +1367,7 @@ def cutover(config, release, lock_state):
                 "version": release["version"],
                 "at": datetime.now(timezone.utc).isoformat(),
                 "processes": launched,
-                "backup": str(backup_dir),
-                "databaseRestored": False,
+                **database_receipt(release, backup_dir),
             },
         )
     except BaseException as error:
@@ -1139,6 +1389,8 @@ def cutover(config, release, lock_state):
                 "Safe automatic recovery is unavailable; DEPLOY.lock is retained and no old role is restarted"
             ) from None
         try:
+            if "rollback_context" in locals():
+                rollback_database_gate(config, release, rollback_context)
             if "web" in launched:
                 stop(config, launched["web"])
                 launched.pop("web")
@@ -1148,6 +1400,8 @@ def cutover(config, release, lock_state):
                 launched.pop(role)
             if bootstrap_attempted:
                 operator_bootstrap(config, release, rollback=True)
+            if "rollback_context" in locals():
+                rollback_database_gate(config, release, rollback_context)
             if static_moved:
                 if static.exists():
                     os.replace(static, root / "static-failed-new")
@@ -1174,7 +1428,7 @@ def cutover(config, release, lock_state):
                     "rolledBack": True,
                     "reasonType": type(error).__name__,
                     "processes": restored,
-                    "databaseRestored": False,
+                    **database_receipt(release, backup_dir),
                     "at": datetime.now(timezone.utc).isoformat(),
                 },
             )

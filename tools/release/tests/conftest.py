@@ -44,6 +44,10 @@ def layout(tmp_path, monkeypatch, config):
         for table in server.ACTIVE:
             connection.execute(f'CREATE TABLE "{table}" (status TEXT)')
         connection.execute("CREATE TABLE marker (value TEXT)")
+        connection.execute("CREATE TABLE django_migrations (app TEXT, name TEXT)")
+        connection.execute(
+            "INSERT INTO django_migrations VALUES ('app', '0001_initial')"
+        )
         connection.execute("INSERT INTO marker VALUES ('不可恢复覆盖')")
     (app / "static/assets").mkdir(parents=True)
     (app / "static/assets/old.js").write_text("console.log('old')")
