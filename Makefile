@@ -3,6 +3,12 @@
 
 .PHONY: help version-patch version-minor version-major changelog tag
 
+VERIFY_FAST_PYTHON ?= /opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
+
+.PHONY: verify-fast
+verify-fast:
+	$(VERIFY_FAST_PYTHON) scripts/verify_fast.py
+
 # Efficiency verification configuration: use the activated project runtime.
 EFFICIENCY_PYTHON ?= python
 EFFICIENCY_PNPM ?= pnpm
@@ -16,6 +22,7 @@ check-efficiency:
 # Default target
 help:
 	@echo "Available commands:"
+	@echo "  make verify-fast      - 按工作区改动运行快速验证"
 	@echo "  make check-efficiency - Verify concurrent reuse, cancellation, invalidation and live authorization"
 	@echo "  make version-patch    - Bump patch version (0.1.0 -> 0.1.1)"
 	@echo "  make version-minor    - Bump minor version (0.1.0 -> 0.2.0)"

@@ -27,21 +27,21 @@
 
 ## 本地环境
 
-前端使用 Node.js 和 pnpm，禁止使用 npm 运行项目脚本。
+本机后端使用 Conda `stisp-geomanager`，解释器为 `/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python`。依赖缺失先确认安装，不切换到 base 或其他环境。Windows 环境说明见 `docs/local-conda-setup.md`；Pixi 配置保留给其他运行环境，不作为本机命令。
+
+前端使用 Node.js 和 pnpm，禁止使用 npm 运行项目脚本。在包含 `frontend/package.json` 的目录执行 pnpm，避免 Corepack 在仓库根目录尝试下载默认版本。现有依赖可以只读复用，不运行自动安装。
 
 ```bash
 cd frontend
-pnpm install
-pnpm dev
+export COREPACK_ENABLE_NETWORK=0
+pnpm --config.verify-deps-before-run=false --config.manage-package-manager-versions=false run dev
 ```
 
-后端使用 Pixi 管理 Python、Django、GDAL、GeoPandas、Rasterio 等运行依赖。首次运行或依赖变化后先安装 Pixi 环境：
+后端本机启动：
 
 ```bash
 cd backend
-pixi install
-pixi run migrate
-pixi run dev
+/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python manage.py runserver --config ../config/app.test.toml
 ```
 
 默认开发配置使用 `config/app.test.toml`。业务数据根目录和科研数据根目录只从 TOML 读取，代码、业务数据和科研数据必须分离。
@@ -61,9 +61,9 @@ pnpm run build
 
 ```bash
 cd backend
-pixi run test
-pixi run format
-pixi run lint
+/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python -m pytest
+/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python -m ruff format --check .
+/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python -m ruff check .
 ```
 
 ## API 与 Mock
@@ -95,6 +95,14 @@ cd frontend
 pnpm run dev:with-mock
 ```
 
+### 前后端分工与交接
+
+- 前端维护 `docs/openapi.yaml`、`docs/api-change-requests.md` 和按领域划分的 `mock/prism/examples/`；生成类型来自契约，不能在 UI 类型文件手写另一套 DTO。示例使用实际可用的资料元信息，缺失时使用合理的中文小样例，不依赖其他开发者机器的绝对路径。
+- API 交接记录写明接口、变更、前端原因、示例文件、后端实现注意点及验证预期。修改契约或示例后运行 `api:changes:check`；生成的 Prism 文件只通过 `mock:build` 更新。
+- 后端按契约、示例及交接记录实现行为和测试，真实响应一致后才标记已实现。无法安全实现时先提出契约调整，不静默返回不同结构。
+- 前后端分人开发时不越界修改对方应用代码；必须跨界时先明确交接范围，并在完成报告中说明。契约与生成物先落地，再做后端实现、前端使用，最后更新文档；共享文件避免并行覆盖。
+- `frontend/src/types.ts`、`frontend/src/App.tsx`、`backend/apps/core/permissions.py`、实现笔记和 Changelog 仅在任务确需时最小修改。不用临时前端兜底或未声明后端兼容分支掩盖契约缺口。
+
 ## 测试分层
 
 后端测试使用 pytest + pytest-django：
@@ -102,6 +110,7 @@ pnpm run dev:with-mock
 - `backend/tests/unit/` 覆盖配置加载、路径约束、字段规范化、查询过滤、栅格规则、瓦片坐标、进度解析等纯逻辑。
 - `backend/tests/integration/` 使用 Django test client 覆盖认证、权限、目录、图层、导入、导出、栅格和后台管理 API。
 - 需要文件、GeoPackage、SQLite 或上传样本时，测试必须使用临时目录或测试内创建的小样本，不依赖真实业务或科研数据目录。
+- 导入回归验证结构、字段类型、坐标字段及空间范围，失败返回可纠正的结构化错误；目录分类保持主题、时间、空间和来源一致。数据、权限、配置、导入、导出及栅格任务的关键操作沿用 audit 记录。
 - 超级管理员隔离回归测试覆盖用户列表、角色列表、日志查询、日志角色范围、上传人脱敏和访问角色过滤；新增权限隔离问题时优先在 `backend/tests/integration/core/test_api.py` 或对应应用集成测试中补充后端断言，确保敏感主体不从 API 返回。
 - 权限安全回归需要覆盖组合入口，而不是只测单个接口。`FeaturePermissionTests::test_regular_admin_security_surfaces_do_not_serialize_superadmin_principals` 以非超级管理员身份连续读取用户、角色、操作日志和 Dashboard，断言响应集合中没有超级管理员账号、角色、Django superuser 或其日志摘要。
 
@@ -113,25 +122,59 @@ pnpm run dev:with-mock
 - 长程用户体验回归使用 `pnpm run test:browser -- src/App.browser.test.tsx -t "long research user journey"`，从普通科研用户视角覆盖进入地图、选择资源、查询加载图层、查看图层范围开关、进入后台日志，并确认认证授权、系统设置、系统日志和超级管理员主体均不可见。
 - 真实地图交互或 WebGL 行为需要独立引入 Playwright 等浏览器 E2E，不混入稳定 CI 测试。
 
-提交前至少运行：
+验证范围按 `AGENTS.md` 的“变更分级”执行，不为局部界面调整自动运行完整构建和浏览器全套。测试使用临时配置和小样本，不能通过放宽断言、删除 mock 或关闭原有检查消除失败。
+
+### 快速验证入口
 
 ```bash
-cd backend
-pixi run test
-
-cd ../frontend
-pnpm run check:api
-pnpm test
+make verify-fast
+/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python scripts/verify_fast.py --list
+/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python scripts/verify_fast.py --base main --browser
+/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python -m pytest scripts/tests/test_verify_fast.py -q
 ```
 
-涉及 TypeScript、格式、lint 或构建时，补充运行：
+默认比较 HEAD 与当前工作树，包含已暂存、未暂存和未跟踪文件；不操作索引或分支。`--base` 改比较基准，`--list` 仅打印计划，`--browser` 才执行浏览器测试；无可检查改动时成功退出。解释器、pnpm 前缀、测试映射及各步超时集中在 `scripts/verify_fast.py` 顶部。
 
-```bash
-cd frontend
-pnpm run check
-pnpm run typecheck
-pnpm run build:verify
-```
+- `backend/`、`scripts/` 下的 Python 文件先做增量 Ruff 格式检查；其他 Python 工具显式列为未自动覆盖，走所属工具自己的验证入口。后端优先使用显式映射、同名或应用前缀测试；找不到同名测试时，在应用映射范围内用 AST 识别直接模块引用，包括 import/from（含别名、函数内导入）、完整模块属性访问、patch/monkeypatch/import_module 等字符串路径，不依据 reverse 或 URL 猜测间接关系。仍无直接引用时才退回应用范围，并输出“未找到直接相关测试，已退回应用级范围，共 N 个文件”；13 个应用均有映射。非效率路径排除 `efficiency` 标记，模块级全效率测试不启动空选择。路径命中只纳入相关效率用例，不等于已运行完整效率门禁。
+- 后端测试集合取并集并排除不适用的全效率文件后，超过配置区 `BACKEND_TEST_FILE_WARNING_LIMIT`（默认 15）时，在计划开头醒目显示数量、预计扩大的原因；只提示、不截断，仍按原集合执行。静态引用不等于完整调用链覆盖；API、权限、并发及其他高风险变更仍须执行对应完整门禁。
+- 前端以 `vitest related` 选择单元测试，TypeScript 改动附加类型检查，现存改动文件交给 oxlint。oxlint 不检查 CSS 语义，因此 CSS 另做 Oxfmt 格式检查。只有浏览器用例、没有相关单元用例时，明确显示无单元测试，并列出浏览器命令，不把它说成界面验证通过。
+- 单元检查使用既有 `vitest.config.ts` 和 `--configLoader native`，避免 Vite 把临时配置写入仓库外的共享 `node_modules`；不更改测试集合或断言。浏览器仍只走 `frontend/scripts/run-browser-check.mjs`，由该入口验证源码一致性并管理 ASCII 临时镜像。
+- 契约或 Mock 示例变更运行 `check:api`、`api:changes:check`；这不代替大改动的契约五条完整流程。文档与图片不触发测试。快速入口自身或 Makefile 改动也会运行脚本映射回归。
+- 浏览器候选由本地静态 import/export 依赖闭包及配置映射补充；全局样式影响所有浏览器文件。动态拼接路径、间接注册、运行时依赖和源码内容语义不能完全推断；新增入口须补映射并人工确认列表。新应用缺映射直接失败，不默默漏测。无法找到对应测试的脚本只检查格式，仍需人工补充行为回归。
+- 超时、格式问题、命令不可用或任一步失败均返回非零，并继续展示其他步骤结果。该入口不构建、不部署，也不代替权限、缓存、并发或科学一致性相关的大改门禁。
+
+### 本机验证耗时
+
+测量日期 2026-11-10；同一工作区、已有 Conda 和 pnpm 依赖，使用单调时钟记录墙钟时间。日志与原始 JSON 在 `.runtime/agent-rules-20261110/`。下表是观测值，不承诺其他机器或冷缓存耗时。
+
+| 检查 | 墙钟时间 | 结果 |
+| --- | ---: | --- |
+| 前端 `typecheck` | 5.306s | 通过 |
+| 前端全量 `pnpm test` | 0.399s | 沙箱拒绝向仓库外共享依赖的 `.vite-temp` 写配置，未运行测试 |
+| 同一 Vitest 配置、全量用例，`--configLoader native run` | 3.419s | 83 文件、589 用例通过 |
+| `build:verify` | 10.634s | 品牌、文案、契约和类型阶段通过；效率单元阶段受上述写限制阻断，未到 Vite 构建 |
+| 后端全量收集 `--collect-only -q` | 1.876s | 成功收集 3504 项 |
+| 后端 `-m efficiency -q` | 27.111s | 106 通过、3398 未选 |
+| 假设只改 `backend/apps/core/cli.py` | 计划 0.202s；执行 0.592s | 格式和 8 项相关测试通过 |
+| 假设只改 `frontend/src/components/RightSidePanel.tsx` | 计划 0.196s；执行 7.464s | 21 项相关单元、类型、lint 通过 |
+| 假设只改 `frontend/src/styles/login.css` | 计划 0.202s；执行 1.733s | 无相关单元用例；oxlint 调用、CSS 格式通过，浏览器未执行 |
+| 当前工作区 `make verify-fast` | 21.181s | 6 个 Python 文件格式、51 项后端测试、31 项映射测试通过；独立发布工具显式列为未覆盖 |
+
+假设改动通过向同一规划函数注入单文件列表执行 `--list` 和实际步骤，不修改应用文件或 Git 状态。最初选择的栅格 `color_mapping.py` 样本执行 0.721s（计划 0.234s），13 项测试通过，但文件已有 Ruff 格式差异使检查失败；没有为计时修改该应用文件。中级浏览器、完整大改门禁及发布流程未取得成功耗时，不作估计。
+
+## 统一发布与数据保护
+
+发布入口固定为 `tools/release/release.py`，子命令仅用 `inspect`、`fast`、`full`、`status`、`rollback`。入口未就绪或检查失败即停止，不在 `.runtime` 新写、复制改写或串接历史私有发布脚本。下文 Docker 与镜像章节只描述相应运行环境，不授权绕开统一入口或启用旧 GitHub Actions 自动部署。
+
+发布顺序：本机验证并冻结精确 commit SHA 和发布包 → 上传新候选目录 → 候选验收 → 备份与切换 → 生产验收及回执 → 按授权同步同一 SHA 到 GitHub。开发分支备份不等于服务器验收。小更新可不升级版本；统一升级时再更新版本文件、Changelog 及新标签，不移动已有正式标签，不批量推送历史标签。
+
+配置、业务数据、科研数据与代码分离，不以本机数据库覆盖生产库。保留原始交接包、发布回执、发布目录及恢复点；仅管理已核实身份的本项目进程，不擅自重启 vLLM、Jupyter 或 AutoDL 代理。服务器应急修改先取到独立目录审查，再合并为新的本地提交并重新验收，不能用服务器目录覆盖工作树。回执、发布包和同步的 GitHub 提交必须一致；效率门禁与实际数据验收结果进入发布回执。
+
+### 浏览器发布兼容与账号隔离
+
+替换正式静态目录前，用新候选代码的 `archive_frontend_assets --source <上一正式版本>/frontend/dist` 保存完整公共构建依赖，并归档新构建；两者归档成功才切换。历史资源位于应用缓存，不复制科研资料；默认保留 14 天、64 构建、512MiB。旧资源未命中时提供明确的手动刷新操作，不自动循环 reload。正式前端验证构建保留默认 `/static/` 基址。
+
+每个前端请求在响应正文解析完成及处理 401/403 前，仍核对发起时的登录代次、授权范围、项目和取消状态；迟到旧响应不得进入新账号界面。不得延长授权缓存、吞掉真实超时、构造空权限或跳过后端 ACL 来消除错误。异常 HTML 与缺字段由统一响应边界拒绝，保留可重试界面。浏览器回归使用既有入口并核对源码一致，不删除 mock 或放宽断言绕过环境问题。
 
 ## Docker 部署
 
@@ -310,7 +353,7 @@ Windows 中文数据路径下，GDAL CLI 需要由 `apps/core/cli.py` 统一封�
 
 ### 常规排查
 
-- pnpm 依赖异常：运行 `pnpm store prune` 后删除 `node_modules/` 并重新 `pnpm install`。
-- Pixi 环境创建失败：运行 `pixi clean cache -y` 后重新执行 `cd backend && pixi install`。
-- GDAL 相关错误：确认命令通过 `pixi run ...` 执行，并检查 `backend/pixi.toml` 与 `backend/pixi.lock` 是否包含 `gdal`、`geopandas`、`rasterio`。
-- 权限问题：不要用 `sudo` 运行 pnpm 或 Pixi，优先检查安装路径和目录权限。
+- pnpm 依赖异常：先核对 Node、项目 `packageManager` 和现有依赖位置；共享依赖只读不可写时，不删除或重装其他工作区的依赖。需要安装或清理先确认范围。
+- 本机 Python/GDAL 错误：先核对是否使用本节指定的 `stisp-geomanager` 解释器及其 GDAL/PROJ 路径；缺包先询问，不改 base 或其他环境。
+- 其他机器的 Pixi 环境问题：核对 `backend/pixi.toml` 与 `backend/pixi.lock`，按该运行环境的部署说明处理，不套用到本机。
+- 权限问题：不要用 `sudo` 运行 pnpm 或环境管理器，优先检查安装路径和目录权限。

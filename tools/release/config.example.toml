@@ -1,0 +1,63 @@
+# 复制到 config/release.local.toml；仅 SSH 密钥认证，不填写口令。
+# 已公开到跟踪文档的地址/路径来自 docs/development-handover-20261102.md。
+# REPLACE_ 路径未见于已跟踪文档，必须在沙箱外核实。
+[ssh]
+host = "101.42.12.157"
+port = 57865
+user = "root"
+options = ["ConnectTimeout=15", "ServerAliveInterval=15", "ServerAliveCountMax=4"]
+
+[local]
+branch = "codex/xintao"
+pnpm = ["pnpm", "--config.verify-deps-before-run=false", "--config.manage-package-manager-versions=false"]
+buildResources = [
+  "frontend/src/assets/team/han-yang.jpeg",
+  "frontend/src/assets/team/sun-shuhui.jpeg",
+  "frontend/src/assets/team/gao-danning.jpeg",
+  "frontend/src/assets/portal/results-showcase-20260924.png",
+]
+buildSeconds = 1800
+commandSeconds = 3600
+statusPollSeconds = 2
+
+[server]
+launcher = "/root/autodl-tmp/geomanager-start-6007.sh"
+productionConfig = "/root/autodl-tmp/geomanager-config-0.1.6-production/app.toml"
+python = "/root/autodl-tmp/geomanager-env-20260919/bin/python3.14"
+waitress = "/REPLACE_VERIFIED_ENV/bin/waitress-serve"
+appData = "/root/autodl-tmp/geomanager-data-20260919/app"
+researchData = "/root/autodl-tmp/geomanager-data-20260919/research"
+logDir = "/REPLACE_VERIFIED_DATA/logs"
+deployLock = "/REPLACE_VERIFIED_ROOT/DEPLOY.lock"
+publishLock = "/root/autodl-tmp/geomanager-publish.lock"
+releaseParent = "/root/autodl-tmp"
+opsParent = "/REPLACE_VERIFIED_ROOT/release-operations"
+projData = "/REPLACE_VERIFIED_ENV/share/proj"
+gdalData = "/REPLACE_VERIFIED_ENV/share/gdal"
+baseUrl = "http://127.0.0.1:6007"
+healthPath = "/api/health/"
+drainSeconds = 900
+stopSeconds = 40
+healthSeconds = 120
+pollSeconds = 2
+backupSeconds = 180
+managementSeconds = 300
+maxArchiveBytes = 1073741824
+maxExpandedBytes = 4294967296
+minimumFreeBytes = 536870912
+staticPreparationAllowanceBytes = 134217728
+httpSeconds = 10
+sqliteSeconds = 10
+heartbeatMaxAgeSeconds = 40
+startVerificationSeconds = 0.1
+stopPollSeconds = 0.2
+webThreads = 8
+webConnectionLimit = 100
+webChannelSeconds = 720
+productionPort = 6007
+protectedPorts = [19000, 19010, 19020]
+
+[candidate]
+port = 16744
+commandSeconds = 600
+hookSeconds = 600
