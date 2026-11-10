@@ -340,8 +340,8 @@ def _store_raster(uploaded, user, name, source):
             for chunk in uploaded.chunks():
                 output.write(chunk)
         profile = raster_profile(path)
-        if profile["crs"] is None or profile["bandCount"] != 1:
-            raise ComputeError("蚀变识别结果须为带坐标系的单波段GeoTIFF")
+        if not profile["crs"] or profile["bandCount"] < 1:
+            raise ComputeError("栅格资料须为带坐标系和有效波段的GeoTIFF")
         try:
             dataset = import_raster_file(
                 path,
@@ -457,8 +457,8 @@ def catalog_profile(resource):
     if dataset is None:
         raise ComputeError("栅格尚未处理完成")
     profile = raster_profile(raster_source_path(dataset.source_relative_path))
-    if not profile["crs"] or profile["bandCount"] != 1:
-        raise ComputeError("蚀变识别结果须为带坐标系的单波段栅格")
+    if not profile["crs"] or profile["bandCount"] < 1:
+        raise ComputeError("栅格资料须具有坐标系和有效波段")
     return profile
 
 

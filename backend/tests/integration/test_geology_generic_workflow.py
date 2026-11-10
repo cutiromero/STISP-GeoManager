@@ -378,7 +378,8 @@ def test_failed_input_build_leaves_no_active_copies(generic, monkeypatch):
     assert not copies.filter(status="active").exists()
 
 
-def test_raster_upload_is_private_from_import_and_off_the_layer_list(generic):
+@pytest.mark.parametrize("bands", [1, 7])
+def test_raster_upload_is_private_from_import_and_off_the_layer_list(generic, bands):
     import io
 
     import numpy as np
@@ -394,12 +395,16 @@ def test_raster_upload_is_private_from_import_and_off_the_layer_list(generic):
         driver="GTiff",
         width=4,
         height=4,
-        count=1,
+        count=bands,
         dtype="uint8",
         crs="EPSG:4326",
         transform=from_origin(97.0, 35.61, 0.001, 0.001),
     ) as target:
-        target.write(np.ones((1, 4, 4), dtype="uint8"))
+        target.write(np.ones((bands, 4, 4), dtype="uint8"))
+        for band in range(1, bands + 1):
+            target.set_band_description(band, f"实际类别{band}")
+        if bands > 1:
+            target.update_tags(stisp_input_semantics="class_mask_stack_v1")
     seen = []
     original = catalog_sync.DataResource.objects.update_or_create
 
@@ -418,6 +423,10 @@ def test_raster_upload_is_private_from_import_and_off_the_layer_list(generic):
     finally:
         catalog_sync.DataResource.objects.update_or_create = original
     assert upload.role_hint == "hematite"
+    from apps.agent.workflow_uploads import catalog_profile
+    profile = catalog_profile(upload.resource)
+    assert profile["bandCount"] == bands
+    assert profile["bandNames"] == [f"实际类别{band}" for band in range(1, bands + 1)]
     # The resource is written owner-only with the task source in one step.
     assert seen[-1]["owner_only"] is True
     assert seen[-1]["source"] == "workflow-upload:" + generic["batch"]
