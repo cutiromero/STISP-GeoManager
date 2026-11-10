@@ -66,6 +66,50 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it.each([1440, 1920])(
+  "业务流运行卡片在%s宽屏中保持与对话一致的居中宽度",
+  async (width) => {
+    await page.viewport(width, 1000);
+    try {
+      render(
+        <App>
+          <MemoryRouter>
+            <div className="agent-shell">
+              <main className="agent-main">
+                <div className="agent-messages">
+                  <section className="agent-turn">
+                    <LogicTaskWorkspace
+                      workflow={task({
+                        status: "failed",
+                        detail: "综合推理包含未声明参数",
+                      })}
+                    />
+                  </section>
+                </div>
+              </main>
+            </div>
+          </MemoryRouter>
+        </App>,
+      );
+      const panel = screen
+        .getByRole("region", { name: "工作流进度卡片" })
+        .getBoundingClientRect();
+      const container = document
+        .querySelector(".agent-messages")!
+        .getBoundingClientRect();
+      expect(panel.width).toBeLessThanOrEqual(841);
+      expect(panel.left - container.left).toBeGreaterThanOrEqual(24);
+      expect(
+        Math.abs(
+          (panel.left + panel.right - container.left - container.right) / 2,
+        ),
+      ).toBeLessThanOrEqual(12);
+    } finally {
+      await page.viewport(1600, 900);
+    }
+  },
+);
+
 it("完成首屏显示实际结果和四阶段，无预取或重复确认；成果按需读取", async () => {
   const workflow = task();
   show(workflow);

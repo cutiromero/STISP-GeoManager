@@ -293,11 +293,18 @@ def prepare(workflow, user, policy):
     require_actor(user, workflow.project_tag_id, "catalog.add_dataresource")
     if workflow.plan.get("knowledgeSelection", {}).get("mode") == "none":
         raise ComputeError("本案例需要读取显式绑定的试用知识，请启用地质知识依据")
+    # The business-flow binding is server orchestration state, not an operator
+    # parameter. All other keys still pass the strict scientific allowlist.
+    parameters = {
+        key: value
+        for key, value in workflow.parameters.items()
+        if key != "_businessFlow"
+    }
     resource, entries, units, aliases = validate_inputs(
         user,
         policy,
         workflow.plan["inputs"],
-        workflow.parameters,
+        parameters,
         workflow.resource_ids,
         workflow=workflow,
     )

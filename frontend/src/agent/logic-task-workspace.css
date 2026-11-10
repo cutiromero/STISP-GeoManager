@@ -519,9 +519,3 @@
     height: 300px;
   }
 }
-
-@media (min-width: 1100px) {
-  .agent-messages:has(.logic-task-workspace) {
-    padding-inline: 24px;
-  }
-}

@@ -2240,6 +2240,9 @@
 }
 .agent-turn {
   margin-bottom: 40px;
+  max-width: 840px;
+  margin-inline: auto;
+  min-width: 0;
 }
 .agent-user-message {
   background: #f3f1ec;
