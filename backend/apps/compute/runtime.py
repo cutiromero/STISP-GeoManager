@@ -319,7 +319,7 @@ def _execute_native(attempt, package, inputs, destination, manifest, heartbeat):
     runtime = inspect_runtime()
     if not runtime["ready"]:
         raise ComputeError(runtime["detail"], 503)
-    scripted = manifest["runtime"] == "python-data-script-v1"
+    scripted = manifest.get("runtime") == "python-data-script-v1"
     runner = (
         settings.PROGRAM_ROOT
         / "deploy/compute"
@@ -397,7 +397,7 @@ def execute(attempt, package, inputs, destination, manifest, heartbeat):
         return _execute_native(
             attempt, package, inputs, destination, manifest, heartbeat
         )
-    if manifest["runtime"] == "python-data-script-v1":
+    if manifest.get("runtime") == "python-data-script-v1":
         raise ComputeError("当前运行环境未配置受限数据脚本；未降级为普通算法执行", 503)
     runtime = inspect_runtime()
     if not runtime["ready"]:

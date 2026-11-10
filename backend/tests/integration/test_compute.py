@@ -143,6 +143,22 @@ def test_public_algorithm_private_inputs_and_idempotency(setup_compute):
     assert post(env, "tasks/", project=1).status_code == 404
 
 
+def test_submit_legacy_manifest_without_runtime(setup_compute):
+    env = setup_compute
+    version = env["version"]
+    version.manifest.pop("runtime")
+    version.save(update_fields=["manifest"])
+
+    response = post(env, "tasks/")
+
+    assert response.status_code == 200, response.content
+    task = ComputeTask.objects.get(pk=response.json()["id"])
+    assert task.status == "queued"
+    assert task.version_id == version.id
+    assert "runtime" not in task.version.manifest
+    assert task.input_records.get().resource_id == env["resource"].id
+
+
 def test_algorithm_catalog_orders_categories_before_names(setup_compute):
     from apps.compute.models import AlgorithmCategory
 

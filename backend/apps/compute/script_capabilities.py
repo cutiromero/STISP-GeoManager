@@ -10,7 +10,7 @@ POLICY_VERSION = 1
 
 def validate_bridge(manifest):
     value = manifest.get("inputScriptBridge")
-    if manifest["runtime"] != RUNTIME:
+    if manifest.get("runtime") != RUNTIME:
         if value is not None:
             raise ValueError("脚本衔接能力只能绑定专用受限解释器")
         return None

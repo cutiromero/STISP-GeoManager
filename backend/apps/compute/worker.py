@@ -119,7 +119,7 @@ def run_task(task):
         if manifest != task.version.manifest:
             raise ComputeError("算法包与固定清单不一致")
         context = {"inputs": {}, "parameters": task.parameters}
-        if manifest["runtime"] == "python-data-script-v1":
+        if manifest.get("runtime") == "python-data-script-v1":
             context["manifest"] = manifest
         total = 0
         for item in task.input_records.select_related("resource"):
@@ -157,7 +157,7 @@ def run_task(task):
         output_rows = []
         quality = quality_metadata(read_quality_report(results, manifest))
         script_contract = None
-        if manifest["runtime"] == "python-data-script-v1":
+        if manifest.get("runtime") == "python-data-script-v1":
             from .script_contracts import read_contract
 
             script_contract = read_contract(manifest, task.parameters)

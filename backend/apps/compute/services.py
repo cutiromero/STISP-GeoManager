@@ -262,9 +262,9 @@ def validate_submission(user, body):
         metadata[spec["key"]] = info
         resources.append((spec["key"], resource, info))
     normalized = parameter_values(manifest, metadata, params)
-    if manifest["runtime"] == "python-data-script-v1" and not resources:
+    if manifest.get("runtime") == "python-data-script-v1" and not resources:
         raise ComputeError("数据衔接脚本至少需要一份实际授权的来源")
-    if manifest["runtime"] == "python-data-script-v1":
+    if manifest.get("runtime") == "python-data-script-v1":
         from .script_contracts import read_contract
 
         try:
