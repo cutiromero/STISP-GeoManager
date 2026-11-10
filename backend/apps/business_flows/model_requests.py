@@ -27,6 +27,22 @@ def admit(workflow, request_id, *, maximum=MAX_MODEL_CALLS):
             raise ModelCallBudgetExceeded(
                 "业务流已达到本次模型请求额度，已保留当前结果"
             )
+        item = state(workflow).get("nodes", {}).get(workflow.current_step, {})
+        loop = item.get("toolLoop")
+        if loop is not None and request_id not in loop.setdefault("requestIds", []):
+            from .state import binding
+            from .node_contracts import recovery_contract
+
+            node = next(
+                row
+                for row in binding(workflow)["definitionSnapshot"]["nodes"]
+                if row["id"] == workflow.current_step
+            )
+            contract = node.get("contract") or recovery_contract(node)
+            if loop["modelCalls"] >= contract["maxModelCalls"]:
+                raise ModelCallBudgetExceeded("节点模型调用额度已用尽，已保留当前结果")
+            loop["requestIds"].append(request_id)
+            loop["modelCalls"] += 1
         calls.append(request_id)
     else:
         calls = workflow.plan.setdefault("inputScriptRequestIds", [])

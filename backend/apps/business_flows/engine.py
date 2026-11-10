@@ -26,6 +26,10 @@ MAX_MODEL_CALLS = 256
 MAX_REVIEW_REPACKS = 3
 
 
+class OperatorRevisionRejected(ComputeError):
+    pass
+
+
 def cancel_tasks(user, workflow):
     from apps.compute.services import task_action
 
@@ -253,7 +257,7 @@ def input_evidence(workflow, user, policy, node):
             for row in binding(workflow)["definitionSnapshot"]["nodes"]
             if row["id"] == dependency
         )
-        if dependency_node["kind"] == "operator":
+        if dependency_node["kind"] == "operator" or dependency_node.get("contract"):
             result.extend(
                 resolve_evidence(
                     workflow, previous.get("outputs", {}).get("evidence", [])
@@ -310,7 +314,11 @@ def _callbacks(workflow, node, actor):
         else:
             previous.update(deepcopy(value))
         entry[actor].update(
-            status=value.get("status", "running"),
+            status="running"
+            if actor == "executor"
+            and entry.get("toolLoop") is not None
+            and value.get("status") == "completed"
+            else value.get("status", "running"),
             model=value.get("modelAlias", workflow.model),
             audit=deepcopy(value),
         )
@@ -417,7 +425,7 @@ def _operator(workflow, user, policy, node, item, evidence):
                 **_callbacks(workflow, node, "executor"),
             )
             if not planned["canRepair"]:
-                raise ComputeError(
+                raise OperatorRevisionRejected(
                     "执行智能体无法在当前算子参数范围内完成返修：" + planned["reason"]
                 )
             parameters = planned["parameters"]
@@ -440,7 +448,7 @@ def _operator(workflow, user, policy, node, item, evidence):
                     "inputs": inputs,
                     "parameters": parameters,
                     "trial": False,
-                    "idempotencyKey": f"business-{workflow.pk}-{node['id']}-{item['attempt']}",
+                    "idempotencyKey": f"business-{workflow.pk}-{node['id']}-{item['attempt']}-{item.get('recoveryRevision', 0)}",
                 },
             )
             AgentWorkflowStep.objects.get_or_create(
@@ -468,7 +476,9 @@ def _operator(workflow, user, policy, node, item, evidence):
     if task.status in {"queued", "validating", "running", "cancelling"}:
         return None
     if task.status != "succeeded":
-        raise ComputeError("节点算子未完成：" + (task.error or task.status))
+        raise ComputeError(
+            "节点算子未完成：" + (task.error or task.status), failure=task.failure
+        )
     actual = []
     for output in task.outputs.all():
         if output.kind == "archive":
@@ -525,7 +535,7 @@ def advance(workflow_id):
             remaining = [
                 node
                 for node in definition["nodes"]
-                if value["nodes"][node["id"]]["status"] != "succeeded"
+                if value["nodes"][node["id"]]["status"] not in {"succeeded", "skipped"}
             ]
             if not remaining:
                 _finish(workflow, user, policy)
@@ -535,7 +545,7 @@ def advance(workflow_id):
                     node
                     for node in remaining
                     if all(
-                        value["nodes"][key]["status"] == "succeeded"
+                        value["nodes"][key]["status"] in {"succeeded", "skipped"}
                         for key in node["dependsOn"]
                     )
                 ),
@@ -550,6 +560,20 @@ def advance(workflow_id):
                 if item["attempt"] > node["review"]["maxRevisions"]:
                     raise ComputeError("节点已达到独立审核返修上限")
                 feedback = deepcopy(item["reviewer"])
+                if item.get("toolLoop") is not None:
+                    item["toolLoop"]["invalidOutputIds"] = list(
+                        dict.fromkeys(
+                            [
+                                *item["toolLoop"].get("invalidOutputIds", []),
+                                *[
+                                    row["id"]
+                                    for row in item.get("outputs", {}).get(
+                                        "evidence", []
+                                    )
+                                ],
+                            ]
+                        )
+                    )
                 item["revisionEvidence"] = deepcopy(
                     item.get("outputs", {}).get("evidence", [])
                 )
@@ -579,8 +603,37 @@ def advance(workflow_id):
                 emit(workflow, "executor", node["id"], "node_started", workflow.detail)
             evidence = input_evidence(workflow, user, policy, node)
             if not item["executor"].get("summary"):
-                if node["kind"] == "operator":
-                    result = _operator(workflow, user, policy, node, item, evidence)
+                if (
+                    node.get("contract")
+                    or item.get("toolLoop")
+                    and not item["toolLoop"].get("manualRetry")
+                ):
+                    from .node_loop import advance_loop
+
+                    result = advance_loop(
+                        workflow,
+                        user,
+                        policy,
+                        node,
+                        item,
+                        evidence,
+                        guard=guard,
+                        callbacks=_callbacks(workflow, node, "executor"),
+                    )
+                    if result is None:
+                        return
+                elif node["kind"] == "operator":
+                    from .data_bindings import InputQualityRejected
+
+                    try:
+                        result = _operator(workflow, user, policy, node, item, evidence)
+                    except (OperatorRevisionRejected, InputQualityRejected):
+                        raise
+                    except ComputeError as error:
+                        from .node_loop import observe_failure, observation
+
+                        observe_failure(workflow, node, item, observation(error))
+                        return
                     if result is None:
                         return
                 elif (
@@ -851,6 +904,20 @@ def advance(workflow_id):
                 "businessFlowControlEpoch", 0
             ) != workflow.policy_snapshot.get("businessFlowControlEpoch", 0):
                 return
+            if isinstance(error, ComputeError) and not current.cancel_requested:
+                current_item = state(workflow)["nodes"].get(workflow.current_step, {})
+                if current_item.get("toolLoop", {}).get("pending", {}).get("preparing"):
+                    from .node_loop import wait_recovery, observation
+
+                    current_node = next(
+                        row
+                        for row in binding(workflow)["definitionSnapshot"]["nodes"]
+                        if row["id"] == workflow.current_step
+                    )
+                    wait_recovery(
+                        workflow, current_node, current_item, observation(error)
+                    )
+                    return
             workflow.status = (
                 "cancelled"
                 if current.cancel_requested

@@ -140,6 +140,8 @@ def normalize_definition(value):
                 "parameters",
                 "inputBindings",
                 "review",
+                "contract",
+                "allowSkip",
             },
             "流程节点",
         )
@@ -156,6 +158,14 @@ def normalize_definition(value):
         )
         if not isinstance(node.get("kind"), str) or node.get("kind") not in NODE_KINDS:
             invalid("未知节点类型")
+        if "allowSkip" in node and type(node["allowSkip"]) is not bool:
+            invalid("allowSkip必须为布尔值")
+        if "contract" in node:
+            if node["kind"] != "agent" or result["adapter"] != "research_flow":
+                invalid("仅通用智能体节点可声明执行合同")
+            from .node_contracts import normalize_contract
+
+            node["contract"] = normalize_contract(node["contract"])
         node["dependsOn"] = strings(node.get("dependsOn", []), "节点依赖", MAX_NODES)
         node["dataRoles"] = strings(
             node.get("dataRoles", []), "节点资料角色", MAX_ROLES
@@ -291,7 +301,9 @@ def normalize_definition(value):
                 invalid(
                     "算子输出连线必须来自当前节点的前序依赖祖先，不能自指、引用未知或未来节点"
                 )
-            if by_id[upstream]["kind"] != "operator":
+            if by_id[upstream]["kind"] != "operator" and not by_id[upstream].get(
+                "contract"
+            ):
                 invalid("输入连线只可引用前序算子的真实输出")
     if result["adapter"] == "geology_generic":
         from .builtins import GEOLOGY_NODES, GEOLOGY_ROLES

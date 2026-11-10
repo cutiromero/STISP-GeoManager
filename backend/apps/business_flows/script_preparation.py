@@ -174,6 +174,8 @@ def _guard(workflow, entry, resources):
 
     def check():
         base()
+        if time.monotonic() >= getattr(workflow, "_node_loop_deadline", float("inf")):
+            raise ModelError("节点资料衔接主动处理时限已用尽")
         user = fresh_user(workflow.owner_id)
         current = require_access(user, "agent", workflow.model)
         if not current.get("operatorEnabled", False):
@@ -293,6 +295,46 @@ def fallback(workflow, user, current_policy, entry, error):
 
 
 def prepare(workflow, user, current_policy, entry):
+    from .state import state, persist
+    from .node_contracts import recovery_contract
+
+    item = (
+        state(workflow).get("nodes", {}).get(entry.get("nodeId"), {})
+        if workflow.parameters.get("_businessFlow")
+        else {}
+    )
+    loop = item.get("toolLoop")
+    if loop is None:
+        return _prepare(workflow, user, current_policy, entry)
+    node = next(
+        row
+        for row in binding(workflow)["definitionSnapshot"]["nodes"]
+        if row["id"] == entry["nodeId"]
+    )
+    contract = node.get("contract") or recovery_contract(node)
+    remaining = (
+        min(contract["maxSeconds"], current_policy["maxRunSeconds"])
+        - loop["elapsedSeconds"]
+    )
+    if remaining < 1:
+        raise ComputeError("节点资料衔接时限已用尽")
+    started = time.monotonic()
+    previous_deadline = getattr(workflow, "_node_loop_deadline", float("inf"))
+    workflow._node_loop_deadline = min(previous_deadline, started + remaining)
+    try:
+        return _prepare(
+            workflow,
+            user,
+            {**current_policy, "maxRunSeconds": max(1, int(remaining))},
+            entry,
+        )
+    finally:
+        workflow._node_loop_deadline = previous_deadline
+        loop["elapsedSeconds"] += time.monotonic() - started
+        persist(workflow)
+
+
+def _prepare(workflow, user, current_policy, entry):
     from apps.agent import input_script_model
     from .script_evidence import evidence
 

@@ -34,7 +34,11 @@ def _save(workflow, message):
             else nodes[0]["id"]
         )
         node = state(workflow)["nodes"][node_id]
-        node["executor"].update(status="preparing", summary=message)
+        node["executor"].update(status="preparing")
+        if node.get("toolLoop") is None:
+            node["executor"]["summary"] = message
+        else:
+            node["executor"]["progressMessage"] = message
         emit(workflow, "executor", node_id, "preparing_inputs", message)
     else:
         from apps.agent.demo_workflow import _save as persist
@@ -164,6 +168,27 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                 raise ComputeError("请先确认资料转换需要的字段：" + role)
             if workflow.operator_steps >= workflow.max_operator_steps:
                 raise ComputeError("输入适配已达到本次任务的算子次数上限")
+            loop = None
+            if entry.get("nodeId") and workflow.parameters.get("_businessFlow"):
+                from .state import state, binding
+                from .node_contracts import recovery_contract
+
+                node = next(
+                    row
+                    for row in binding(workflow)["definitionSnapshot"]["nodes"]
+                    if row["id"] == entry["nodeId"]
+                )
+                loop = state(workflow)["nodes"][node["id"]].get("toolLoop")
+                contract = node.get("contract") or recovery_contract(node)
+                if (
+                    loop is not None
+                    and loop["operatorCalls"] >= contract["maxOperatorCalls"]
+                ):
+                    raise ComputeError("资料衔接已达到本节点算子调用上限")
+                if loop is not None and loop["elapsedSeconds"] >= min(
+                    contract["maxSeconds"], policy["maxRunSeconds"]
+                ):
+                    raise ComputeError("资料衔接已达到本节点主动处理时限")
             with transaction.atomic():
                 current = locked_workflow(workflow.pk)
                 check_pause(current)
@@ -186,7 +211,8 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                             f"-s{entry['scriptAttempt']}"
                             if entry.get("scriptMode")
                             else ""
-                        ),
+                        )
+                        + (f"-n{loop['steps']}" if loop is not None else ""),
                     },
                 )
                 entry.update(
@@ -195,6 +221,9 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                     actualParameters=parameters,
                 )
                 workflow.operator_steps += 1
+                if loop is not None:
+                    loop["operatorCalls"] += 1
+                    loop.setdefault("taskIds", []).append(str(task.pk))
                 if entry.get("scriptMode"):
                     entry["scriptStatus"] = "running"
                 workflow.status = "waiting_compute"

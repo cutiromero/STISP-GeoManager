@@ -86,6 +86,28 @@ def validate_bindings(spec, project_id):
                     raise ValidationError("绑定资料角色的类型与算子输入不兼容：" + key)
                 continue
             upstream = nodes[source["nodeId"]]
+            if upstream.get("contract"):
+                output = next(
+                    (
+                        row
+                        for row in upstream["contract"]["requiredOutputs"]
+                        if row["name"] == source["outputKey"]
+                    ),
+                    None,
+                )
+                if output is None or output["semanticType"] == "analysis":
+                    raise ValidationError(
+                        "前序合同未声明可供计算使用的真实输出：" + source["outputKey"]
+                    )
+                from .definitions import DATA_TYPES
+
+                if (
+                    output["semanticType"] in DATA_TYPES
+                    and output["semanticType"] != required_kind
+                    and not can_prepare([output["semanticType"]], required_kind)
+                ):
+                    raise ValidationError("合同声明的成果类型与下游输入不兼容")
+                continue
             upstream_manifest = versions[upstream["algorithmVersionId"]].manifest
             outputs = {
                 item["key"]: item for item in upstream_manifest.get("outputs", [])

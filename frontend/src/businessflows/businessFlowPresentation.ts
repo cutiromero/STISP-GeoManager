@@ -21,6 +21,7 @@ export const flowStateLabels: Record<string, string> = {
   waiting_review: "独立审核中",
   waiting_human: "等待您决定",
   waiting_context: "等待整理输入",
+  waiting_recovery: "等待恢复本节点",
   waiting_approval: "等待您决定",
   waiting_compute: "算子计算中",
   repairing: "返工中",

@@ -636,6 +636,77 @@ def test_professional_review_budget_wait_retries_without_approving_science(
         assert runtime.decide_flow(env["user"], current, value).pk == current.pk
 
 
+def test_compute_failure_waits_and_retries_original_scientific_stage(legacy_flow):
+    from apps.business_flows import runtime
+    from apps.compute.models import AlgorithmResource, AlgorithmVersion, ComputeTask
+
+    env = legacy_flow
+    workflow = env["create"]()
+    with project_scope(env["scope"]):
+        algorithm = AlgorithmResource.objects.create(
+            identifier="legacy-recovery-check",
+            name="原科学算子",
+            created_by=env["admin"],
+        )
+        version = AlgorithmVersion.objects.create(
+            algorithm=algorithm,
+            version="1.0.0",
+            manifest={},
+            checksum="a" * 64,
+            package_path="unused-test.zip",
+            status="published",
+        )
+        task = ComputeTask.objects.create(
+            name="原阶段失败任务",
+            owner=env["user"],
+            version=version,
+            status="failed",
+            error="输入资料不适用",
+            failure={"code": "BAD_DATA", "remedy": "replace_data"},
+            idempotency_key=uuid4().hex,
+        )
+        workflow.plan["stages"][0]["taskId"] = str(task.pk)
+        workflow.status, workflow.detail = "failed", "本步计算未成功：输入资料不适用"
+        workflow.save(update_fields=["plan", "status", "detail"])
+        scientific = deepcopy(workflow.plan)
+        legacy.synchronize(workflow.pk)
+        workflow.refresh_from_db()
+        public = runtime.serialize_run(env["user"], workflow)
+        item = next(row for row in public["nodes"] if row["nodeId"] == "apply")
+        assert (
+            workflow.status == "waiting_approval"
+            and item["status"] == "waiting_recovery"
+        )
+        assert workflow.plan == scientific
+        payload = {
+            "nodeId": "apply",
+            "revision": state(workflow)["revision"],
+            "decision": "retry_recovery",
+            "feedback": "重试原科学阶段",
+            "idempotencyKey": uuid4().hex,
+        }
+        with pytest.raises(ComputeError, match="原审核链路"):
+            runtime.decide_flow(
+                env["user"], workflow, {**payload, "recoveryInputs": {"lithology": 9}}
+            )
+        with pytest.raises(ComputeError, match="不可跳过"):
+            runtime.decide_flow(
+                env["user"], workflow, {**payload, "decision": "skip_node"}
+            )
+        current = runtime.decide_flow(env["user"], workflow, payload)
+        assert (
+            current.status == "queued"
+            and current.plan["stageIndex"] == scientific["stageIndex"]
+        )
+        assert (
+            current.plan["stages"][0]["decision"] == scientific["stages"][0]["decision"]
+        )
+        assert current.plan["phase"] == scientific["phase"]
+        assert not current.plan["stages"][0].get("taskId")
+        assert state(current)["nodes"]["apply"]["human"]["status"] != "approved"
+        assert runtime.decide_flow(env["user"], current, payload).pk == current.pk
+
+
 def test_approval_statistics_preserves_all_dimensions_areas_pixels_and_approval_binding():
     from apps.agent.geology_multi_results import approval_statistics
 

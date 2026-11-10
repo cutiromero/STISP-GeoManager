@@ -35,6 +35,7 @@ import FieldMappingReview from "../agent/FieldMappingReview";
 import BusinessFlowNodeOutputs from "./BusinessFlowNodeOutputs";
 import BusinessFlowInputPreparation from "./BusinessFlowInputPreparation";
 import BusinessFlowContextRecovery from "./BusinessFlowContextRecovery";
+import BusinessFlowNodeRecovery from "./BusinessFlowNodeRecovery";
 import BusinessFlowGraph from "./BusinessFlowGraph";
 import {
   businessFlowProgress,
@@ -58,6 +59,7 @@ const nodeActive = new Set([
   "waiting_approval",
   "waiting_compute",
   "waiting_context",
+  "waiting_recovery",
 ]);
 const statusLabels: Record<string, string> = {
   pending: "尚未开始",
@@ -76,6 +78,7 @@ const statusLabels: Record<string, string> = {
   waiting_approval: "等待您决定",
   waiting_compute: "算子计算中",
   waiting_context: "等待整理输入",
+  waiting_recovery: "等待恢复本节点",
   context_waiting: "等待整理输入",
   succeeded: "已完成",
   completed: "已完成",
@@ -132,6 +135,7 @@ export function readableBusinessFlowEvents(
     const previous = result[result.length - 1];
     if (
       previous &&
+      event.kind !== "node_tool_step" &&
       previous.nodeId === event.nodeId &&
       previous.actor === event.actor &&
       previous.kind === event.kind &&
@@ -586,6 +590,57 @@ export default function BusinessFlowActivity({
               </details>
             )}
           </section>
+        )}
+      {!unavailable && currentDefinition?.contract && (
+        <section aria-label="节点执行合同">
+          <strong>节点目标：{currentDefinition.contract.goal}</strong>
+          <p>验收条件：{currentDefinition.contract.acceptance.join("；")}</p>
+          <p>
+            必需输出：
+            {currentDefinition.contract.requiredOutputs
+              .map((output) => `${output.name}（${output.semanticType}）`)
+              .join("、")}
+          </p>
+          <p>允许工具：{currentDefinition.contract.tools.join("、")}</p>
+          <p>
+            步数 {current?.toolProgress?.steps ?? 0}/
+            {currentDefinition.contract.maxSteps ?? 12}；模型调用{" "}
+            {current?.toolProgress?.modelCalls ?? 0}/
+            {currentDefinition.contract.maxModelCalls ?? 8}；算子调用{" "}
+            {current?.toolProgress?.operatorCalls ?? 0}/
+            {currentDefinition.contract.maxOperatorCalls ?? 3}
+          </p>
+        </section>
+      )}
+      {!unavailable &&
+        !isTerminal &&
+        flow.status === "waiting_approval" &&
+        current?.recovery && (
+          <BusinessFlowNodeRecovery
+            key={`${flow.id}:${current.nodeId}:${flow.revision}`}
+            node={current}
+            busy={Boolean(busy)}
+            legacy={isLegacy}
+            onDecide={(options) => {
+              const value = {
+                nodeId: current.nodeId,
+                revision: flow.revision,
+                ...options,
+              };
+              const fingerprint = JSON.stringify([flow.id, value]);
+              if (decisionKey.current?.fingerprint !== fingerprint)
+                decisionKey.current = { fingerprint, key: createUuid() };
+              void perform(options.decision, () =>
+                businessFlowsApi.decide(flow.id, {
+                  ...value,
+                  idempotencyKey: decisionKey.current!.key,
+                }),
+              );
+            }}
+            onStop={() =>
+              void perform("cancel", () => businessFlowsApi.cancel(flow.id))
+            }
+          />
         )}
       {!unavailable &&
         !isTerminal &&

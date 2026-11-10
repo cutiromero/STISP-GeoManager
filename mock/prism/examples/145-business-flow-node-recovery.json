@@ -1,0 +1,174 @@
+{
+  "POST /api/business-flows/runs/{workflowId}/decide/": {
+    "200": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "flowId": 2,
+      "versionId": 21,
+      "projectId": 3,
+      "conversationId": 31,
+      "runId": 41,
+      "name": "资料摘要",
+      "goal": "按实际可见资料形成摘要",
+      "status": "waiting_approval",
+      "currentNode": "adaptive_statistics",
+      "revision": 7,
+      "definitionSnapshot": {
+        "schemaVersion": 1,
+        "adapter": "research_flow",
+        "inputPreparation": {
+          "allowScripts": true,
+          "reviewScripts": true,
+          "maxRepairs": 2
+        },
+        "inputRequirements": [
+          {
+            "key": "source",
+            "label": "待统计资料",
+            "description": "真实项目资料，字段含义不明时询问用户，原始资料只读。",
+            "dataTypes": [
+              "table",
+              "document"
+            ],
+            "required": true,
+            "requiredFields": [],
+            "multiple": true
+          }
+        ],
+        "nodes": [
+          {
+            "id": "adaptive_statistics",
+            "title": "选择算子并适配资料",
+            "description": "查询statistics能力，预检实际资料，必要时映射字段或审核衔接脚本，再运行并读取成果。",
+            "kind": "agent",
+            "dependsOn": [],
+            "dataRoles": [
+              "source"
+            ],
+            "instruction": "根据实际资料选用有统计能力且允许智能体调用的已发布算子；不能猜测单位或矿物类别含义。失败时说明补救依据，不修改原始资料。",
+            "contract": {
+              "goal": "从当前授权目录选择合适算子，完成实际资料的统计并交付可追溯成果。",
+              "acceptance": [
+                "已通过输入预检",
+                "已读取真实成功算子的统计结果",
+                "说明字段、集合类别及适用限制"
+              ],
+              "requiredOutputs": [
+                {
+                  "name": "statistics",
+                  "semanticType": "operator_result"
+                }
+              ],
+              "tools": [
+                "read_evidence",
+                "operator_catalog",
+                "preflight_operator",
+                "run_operator",
+                "prepare_input",
+                "ask_user",
+                "finish_node"
+              ],
+              "maxSteps": 12,
+              "maxModelCalls": 12,
+              "maxOperatorCalls": 3,
+              "maxRecoveries": 3,
+              "maxSeconds": 180
+            },
+            "review": {
+              "ai": false,
+              "human": true,
+              "maxRevisions": 0
+            },
+            "allowSkip": false
+          },
+          {
+            "id": "finish",
+            "title": "汇总成果",
+            "description": "只汇总实际成果和用户明确接受的结果。",
+            "kind": "result",
+            "dependsOn": [
+              "adaptive_statistics"
+            ],
+            "dataRoles": [],
+            "instruction": "保留实际计算依据和适用限制。",
+            "review": {
+              "ai": false,
+              "human": false,
+              "maxRevisions": 0
+            }
+          }
+        ],
+        "outputRequirements": [
+          "真实统计结果",
+          "字段与类别说明",
+          "用户接受记录"
+        ]
+      },
+      "nodes": [
+        {
+          "nodeId": "adaptive_statistics",
+          "status": "waiting_recovery",
+          "attempt": 1,
+          "executor": {
+            "status": "context_waiting"
+          },
+          "reviewer": {
+            "status": "not_required"
+          },
+          "human": {
+            "required": false,
+            "status": "not_required",
+            "reason": ""
+          },
+          "outputs": {},
+          "recovery": {
+            "reason": "字段“矿物名称”没有明确语义对应，自动补救尚不能确认。",
+            "question": "请确认类别字段，或更换已规范的资料。",
+            "attempts": [
+              "补充字段映射：目标列缺失",
+              "请求资料衔接：需要确认类别含义"
+            ],
+            "allowSkip": false,
+            "options": [
+              "retry_recovery",
+              "cancel"
+            ],
+            "failure": {
+              "code": "MISSING_ROLE",
+              "remedy": "human_review",
+              "gaps": []
+            }
+          },
+          "toolProgress": {
+            "steps": 4,
+            "modelCalls": 4,
+            "operatorCalls": 1,
+            "recoveries": 1,
+            "history": [
+              {
+                "step": 1,
+                "action": "operator_catalog",
+                "summary": "查询可用算子：返回2个当前权限内可调用算子",
+                "evidenceId": "node-tool-adaptive_statistics-1"
+              }
+            ]
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": 7,
+          "nodeId": "adaptive_statistics",
+          "actor": "executor",
+          "kind": "node_tool_step",
+          "status": "waiting_approval",
+          "message": "请求资料衔接：需要确认类别含义",
+          "createdAt": "2026-11-10T00:01:00Z"
+        }
+      ],
+      "resultResourceIds": [],
+      "resultOutputIds": [],
+      "createdAt": "2026-11-10T00:00:00Z",
+      "updatedAt": "2026-11-10T00:01:00Z"
+    }
+  }
+}

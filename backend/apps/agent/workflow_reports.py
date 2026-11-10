@@ -141,14 +141,28 @@ def authorize_context(
     if has_rounds and current_ids - {str(identity) for identity in ids}:
         raise PermissionDenied("本轮计算没有真实任务步骤绑定")
     tasks = []
+    failed_attempts = {}
+    if workflow.parameters.get("_businessFlow"):
+        from apps.business_flows.state import state
+
+        failed_attempts = state(workflow).get("recoveredFailures", {})
     for identity in ids:
         task = authorized_task(
             user,
             identity,
             policy,
             workflow=workflow,
-            history=history or has_rounds and str(identity) not in current_ids,
+            history=history
+            or str(identity) in failed_attempts
+            or has_rounds
+            and str(identity) not in current_ids,
         )
+        if (
+            task.owner_id == workflow.owner_id
+            and task.status in {"failed", "cancelled"}
+            and str(identity) in failed_attempts
+        ):
+            continue
         if task.owner_id != workflow.owner_id or task.status != "succeeded":
             raise PermissionDenied("报告计算记录不属于本次已完成流程")
         tasks.append(task)

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "adapter": "research_flow",
+  "inputPreparation": { "allowScripts": true, "reviewScripts": true, "maxRepairs": 2 },
+  "inputRequirements": [{
+    "key": "source", "label": "待统计资料", "description": "真实项目资料，字段含义不明时询问用户，原始资料只读。",
+    "dataTypes": ["table", "document"], "required": true, "requiredFields": [], "multiple": true
+  }],
+  "nodes": [{
+    "id": "adaptive_statistics", "title": "选择算子并适配资料", "description": "查询statistics能力，预检实际资料，必要时映射字段或审核衔接脚本，再运行并读取成果。",
+    "kind": "agent", "dependsOn": [], "dataRoles": ["source"],
+    "instruction": "根据实际资料选用有统计能力且允许智能体调用的已发布算子；不能猜测单位或矿物类别含义。失败时说明补救依据，不修改原始资料。",
+    "contract": {
+      "goal": "从当前授权目录选择合适算子，完成实际资料的统计并交付可追溯成果。",
+      "acceptance": ["已通过输入预检", "已读取真实成功算子的统计结果", "说明字段、集合类别及适用限制"],
+      "requiredOutputs": [{ "name": "statistics", "semanticType": "operator_result" }],
+      "tools": ["read_evidence", "operator_catalog", "preflight_operator", "run_operator", "prepare_input", "ask_user", "finish_node"],
+      "maxSteps": 12, "maxModelCalls": 12, "maxOperatorCalls": 3, "maxRecoveries": 3, "maxSeconds": 180
+    },
+    "review": { "ai": false, "human": true, "maxRevisions": 0 }, "allowSkip": false
+  }, {
+    "id": "finish", "title": "汇总成果", "description": "只汇总实际成果和用户明确接受的结果。", "kind": "result",
+    "dependsOn": ["adaptive_statistics"], "dataRoles": [], "instruction": "保留实际计算依据和适用限制。",
+    "review": { "ai": false, "human": false, "maxRevisions": 0 }
+  }],
+  "outputRequirements": ["真实统计结果", "字段与类别说明", "用户接受记录"]
+}

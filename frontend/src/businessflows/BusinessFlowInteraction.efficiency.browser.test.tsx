@@ -372,13 +372,13 @@ it("loads generic input choices only when needed and starts the exact selected v
   await waitFor(() =>
     expect(
       screen.getByText("授权样地数据", {
-        selector: ".ant-select-item-option-content",
+        selector: '.ant-select-item-option-content [role="group"]',
       }),
     ).toBeVisible(),
   );
   fireEvent.click(
     screen.getByText("授权样地数据", {
-      selector: ".ant-select-item-option-content",
+      selector: '.ant-select-item-option-content [role="group"]',
     }),
   );
   await waitFor(() =>

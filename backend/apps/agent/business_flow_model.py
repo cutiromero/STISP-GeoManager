@@ -173,6 +173,7 @@ def request_node_result(
     on_progress=None,
     on_thinking=None,
     on_record=None,
+    tools=None,
 ):
     """Run a fresh request; persistence and all actual operations stay in the runtime."""
     if role not in {"executor", "reviewer"}:
@@ -541,6 +542,16 @@ def request_node_result(
                 summarize=summarize,
                 checked=checked.poll,
                 locked=bool(snapshot),
+                measurements=TokenMeasurements(
+                    model,
+                    counter=lambda model, messages, thinking, effort: (
+                        provider.count_tokens(
+                            model, messages, thinking, effort, tools=tools
+                        )
+                    ),
+                )
+                if tools
+                else None,
             )
             if snapshot:
                 management["level"] = snapshot.get("contextManagement", {}).get(
@@ -554,8 +565,12 @@ def request_node_result(
             if (
                 entry
                 and role == "executor"
-                and (not context or context.get("purpose") == "data_preparation")
+                and (
+                    not context
+                    or context.get("purpose") in {"data_preparation", "node_tools"}
+                )
             ):
+                previous_snapshot = entry.get("executionContextId")
                 values.setdefault("contextSnapshots", {})[record["requestId"]] = {
                     key: deepcopy(packet[key])
                     for key in ("evidence", "contextNotice", "ledger")
@@ -573,6 +588,21 @@ def request_node_result(
                     for row in evidence_sizes(items, node, direct_ids)
                     if row["required"]
                 ]
+                if context and context.get("purpose") == "node_tools":
+                    saved = values["contextSnapshots"][record["requestId"]]
+                    saved.update(purpose="node_execution", toolLoop=True)
+                    observation = packet.get("nodeContext", {}).get("observation")
+                    if observation:
+                        for row in saved["evidence"]:
+                            if row["id"] == observation["evidenceId"]:
+                                row.pop("summary", None)
+                                row["result"] = deepcopy(observation["result"])
+                    if (
+                        values["contextSnapshots"]
+                        .get(previous_snapshot, {})
+                        .get("toolLoop")
+                    ):
+                        values["contextSnapshots"].pop(previous_snapshot)
                 entry["executionContextId"] = record["requestId"]
             if entry:
                 entry["contextManagement"] = deepcopy(management)
@@ -614,6 +644,7 @@ def request_node_result(
                 on_usage=usage_received,
                 on_thinking=thinking_received,
                 monitor_guard=checked.poll,
+                **({"tools": tools} if tools else {}),
             )
         ) as response:
             for chunk in response:

@@ -166,6 +166,7 @@ def start(request, flow_id):
             "conversationId",
             "idempotencyKey",
             "inputAdapters",
+            "agentEnabled",
         },
     )
     for name in ("model", "reviewerModel"):
@@ -351,6 +352,8 @@ def decide(request, workflow_id):
             "idempotencyKey",
             "skipEvidenceIds",
             "contextScope",
+            "recoveryInputs",
+            "recoveryParameters",
         },
     )
     if (
@@ -359,7 +362,14 @@ def decide(request, workflow_id):
         or type(value.get("revision")) is not int
         or value["revision"] < 0
         or not isinstance(value.get("decision"), str)
-        or value["decision"] not in {"approve", "request_changes", "retry_context"}
+        or value["decision"]
+        not in {
+            "approve",
+            "request_changes",
+            "retry_context",
+            "retry_recovery",
+            "skip_node",
+        }
         or not isinstance(value.get("feedback", ""), str)
         or len(value.get("feedback", "")) > 4000
         or not isinstance(value.get("idempotencyKey"), str)

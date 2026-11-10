@@ -344,9 +344,10 @@ def prepare_packet(
     summarize,
     checked,
     locked=False,
+    measurements=None,
 ):
     budget = input_budget(policy, window)
-    measurements = TokenMeasurements(model)
+    measurements = measurements or TokenMeasurements(model)
     before = None
     attempted = 0
 

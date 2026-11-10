@@ -316,6 +316,8 @@ pnpm run api:docs
 
 ### API 契约规范
 
+业务流定义的 `BusinessFlowNode.contract` 为可选节点执行合同，缺省保持旧节点行为；运行状态增加有界 `toolProgress` 和 `recovery`。节点决定沿用原接口，`retry_recovery` 携带当前节点 `recoveryInputs / recoveryParameters`，`skip_node` 仅供定义允许且无人工门禁的通用节点；不批准科研结果、不重置额度。工具观察正文只保留在节点私有证据中，公共轮询与事件仅投影摘要。完整合同和权限约束见 `business-flows.md`。
+
 `docs/openapi.yaml` 是唯一权威 API 契约，使用 OpenAPI 3.1.0。新增、删除或修改接口时，先更新契约，再同步后端实现、前端类型、mock 示例和文档说明。
 
 强制规则：

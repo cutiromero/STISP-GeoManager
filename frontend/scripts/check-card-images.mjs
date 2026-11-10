@@ -144,13 +144,13 @@ export function checkCardSource(filename, text) {
             reject(attribute, "卡片封面或背景引用原图");
         }
       }
-      if (/Card\.tsx$/.test(filename) && /^(img|Image|picture)$/.test(name))
+      if (filename.endsWith("Card.tsx") && /^(img|Image|picture)$/.test(name))
         reject(node, "卡片模块直接渲染图片");
     }
     ts.forEachChild(node, visit);
   }
   visit(source);
-  if (/teamProfile\.ts$/.test(filename)) {
+  if (filename.endsWith("teamProfile.ts")) {
     for (const statement of source.statements) {
       if (
         ts.isImportDeclaration(statement) &&

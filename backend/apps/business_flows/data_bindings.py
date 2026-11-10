@@ -11,6 +11,10 @@ from apps.compute.services import request_output_import
 from .state import emit, state, WorkflowControlChanged
 
 
+class InputQualityRejected(ComputeError):
+    pass
+
+
 def prepare_inputs(workflow, user, policy, node, version, available):
     result = {}
     pending = []
@@ -58,16 +62,46 @@ def prepare_inputs(workflow, user, policy, node, version, available):
             "taskId"
         ):
             raise ComputeError("上游节点尚未通过全部审核，不能提供计算输入")
-        task = authorized_task(
-            user, source["outputs"]["taskId"], policy, workflow=workflow
-        )
-        output = task.outputs.filter(key=binding["outputKey"]).first()
+        if "contractOutputs" in source:
+            from apps.compute.models import ComputeOutput
+
+            declared = next(
+                (
+                    row
+                    for row in source["contractOutputs"]
+                    if row["name"] == binding["outputKey"]
+                ),
+                None,
+            )
+            visible = {row["id"] for row in source["outputs"].get("evidence", [])}
+            identity = declared.get("evidenceId", "") if declared else ""
+            if (
+                identity not in visible
+                or not identity.startswith("output-")
+                or not identity[7:].isdigit()
+            ):
+                raise ComputeError("上游合同没有交付该具名真实成果")
+            output = (
+                ComputeOutput.objects.select_related("task")
+                .filter(pk=int(identity[7:]))
+                .first()
+            )
+            if output is not None:
+                authorized_task(user, output.task_id, policy, workflow=workflow)
+        else:
+            task = authorized_task(
+                user, source["outputs"]["taskId"], policy, workflow=workflow
+            )
+            output = task.outputs.filter(key=binding["outputKey"]).first()
         if output is None or (
             output.kind != specs[key]["kind"]
             and not workflow.plan.get("inputPreparationPolicy", {}).get("allowScripts")
         ):
             raise ComputeError("上游结果不存在或类型不符合下游算子输入")
-        require_automatic_quality(output)
+        try:
+            require_automatic_quality(output)
+        except ComputeError as error:
+            raise InputQualityRejected(str(error), error.status) from error
         imported = ComputeImport.objects.filter(output=output).first()
         if imported is None:
             with transaction.atomic():

@@ -100,6 +100,9 @@ def projected_state(workflow):
             answer=plan["finalDecision"].get("judgement", ""),
             summary=plan["finalDecision"].get("resultSummary", ""),
         )
+    for item in value["nodes"].values():
+        if item.get("recovery") and workflow.status == "waiting_approval":
+            item["status"] = "waiting_recovery"
     return value
 
 
@@ -110,6 +113,41 @@ def synchronize(workflow_id):
         or workflow.workflow_type == "business_flow"
     ):
         return
+    if workflow.status == "failed":
+        from apps.compute.models import ComputeTask
+        from .runtime import canonical_current_node
+        from .node_loop import wait_recovery
+
+        stages = workflow.plan.get("stages", [])
+        index = workflow.plan.get("stageIndex", 0)
+        stage = stages[index] if index < len(stages) else {}
+        task = (
+            ComputeTask._base_manager.filter(
+                pk=stage["taskId"],
+                owner_id=workflow.owner_id,
+                project_tag_id=workflow.project_tag_id,
+            ).first()
+            if stage.get("taskId")
+            else None
+        )
+        if task and task.status in {"failed", "cancelled"}:
+            node_id = canonical_current_node(workflow)
+            node = next(
+                row
+                for row in binding(workflow)["definitionSnapshot"]["nodes"]
+                if row["id"] == node_id
+            )
+            wait_recovery(
+                workflow,
+                node,
+                state(workflow)["nodes"][node_id],
+                {
+                    **(task.failure or {}),
+                    "message": workflow.detail,
+                    "taskId": str(task.pk),
+                },
+            )
+            state(workflow)["nodes"][node_id]["recovery"]["taskId"] = str(task.pk)
     if workflow.current_step in {"review_mapping", "review_plan", "build_inputs"}:
         # UI uses canonical input node, while the original executor keeps its phase.
         pass

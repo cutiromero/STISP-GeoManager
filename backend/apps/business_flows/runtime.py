@@ -142,6 +142,18 @@ def serialize_run(user, workflow, *, control_only=False):
         item.pop("executionContextId", None)
         item.pop("contextPreviousExecutor", None)
         item.pop("reviewContextBudget", None)
+        loop = item.pop("toolLoop", None)
+        if loop:
+            item["toolProgress"] = {
+                key: deepcopy(loop.get(key))
+                for key in (
+                    "steps",
+                    "modelCalls",
+                    "operatorCalls",
+                    "recoveries",
+                    "history",
+                )
+            }
         # The legacy executor keeps its full structured decision privately.
         # Public actor.decision is reserved for the review decision string.
         if isinstance(item.get("executor", {}).get("decision"), dict):
@@ -150,6 +162,7 @@ def serialize_run(user, workflow, *, control_only=False):
             workflow.workflow_type == "geology_generic"
             and workflow.status == "waiting_approval"
             and not item.get("contextRecovery")
+            and not item.get("recovery")
             and node["id"] == canonical_current_node(workflow)
         ):
             item["human"].update(
@@ -364,6 +377,8 @@ def start_flow(user, version, value, *, source_run=None):
     except (ValueError, TypeError, RecursionError) as error:
         raise ValidationError("启动参数必须是有限数值的有界JSON") from error
     definition = deepcopy(version.definition)
+    if type(value.get("agentEnabled", True)) is not bool:
+        raise ValidationError("agentEnabled必须为布尔值")
     if any(node["kind"] == "operator" for node in definition["nodes"]):
         if not policy.get("operatorEnabled", False):
             raise PermissionDenied("当前策略未允许业务流调用算子")
@@ -416,6 +431,7 @@ def start_flow(user, version, value, *, source_run=None):
             "versionId": version.pk,
             "model": model,
             "reviewerModel": reviewer,
+            "agentEnabled": value.get("agentEnabled", True),
             "goal": goal,
             "inputs": value.get("inputs", {}),
             "parameters": parameters,
@@ -583,6 +599,7 @@ def start_flow(user, version, value, *, source_run=None):
             "reviewerModel": reviewer,
             "revision": 0,
             "requestHash": request_hash,
+            "agentEnabled": value.get("agentEnabled", True),
         }
         workflow.plan["inputAdaptations"] = [
             {
@@ -613,6 +630,10 @@ def start_flow(user, version, value, *, source_run=None):
 
 
 def decide_flow(user, workflow, value):
+    if value.get("decision") in {"retry_recovery", "skip_node"}:
+        from .node_recovery import decide_recovery
+
+        return decide_recovery(user, workflow, value)
     authorize(user, workflow)
     if workflow.workflow_type != "business_flow":
         if value.get("decision") == "retry_context":
@@ -621,6 +642,8 @@ def decide_flow(user, workflow, value):
             return retry_context(user, workflow, value)
         raise ComputeError("专业流程的重要决定请在原审核卡中确认", 409)
     node_id, decision = value.get("nodeId"), value.get("decision")
+    if any(key in value for key in ("recoveryInputs", "recoveryParameters")):
+        raise ValidationError("恢复资料与参数只能用于retry_recovery决定")
     feedback = value.get("feedback", "")
     key = value.get("idempotencyKey")
     if (
@@ -726,6 +749,15 @@ def decide_flow(user, workflow, value):
             item["revisionEvidence"] = deepcopy(
                 item.get("outputs", {}).get("evidence", [])
             )
+            if item.get("toolLoop") is not None:
+                item["toolLoop"]["invalidOutputIds"] = list(
+                    dict.fromkeys(
+                        [
+                            *item["toolLoop"].get("invalidOutputIds", []),
+                            *[row["id"] for row in item["revisionEvidence"]],
+                        ]
+                    )
+                )
             item["outputs"] = {}
             item.pop("computeTaskId", None)
         else:

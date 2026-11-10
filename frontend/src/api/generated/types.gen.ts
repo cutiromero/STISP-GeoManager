@@ -11533,6 +11533,123 @@ export type BusinessFlowNode = {
     inputBindings?: {
         [key: string]: BusinessFlowInputBinding;
     };
+    contract?: BusinessFlowNodeContract;
+    /**
+     * 仅无人工门禁的通用节点可由用户明确跳过
+     */
+    allowSkip?: boolean;
+};
+
+/**
+ * 通用智能体节点有界合同；缺省保持旧单次请求。
+ */
+export type BusinessFlowNodeContract = {
+    /**
+     * 节点要达成的目标
+     */
+    goal: string;
+    /**
+     * 全部需要满足的验收条件
+     */
+    acceptance: Array<string>;
+    /**
+     * 必须交付的具名真实证据
+     */
+    requiredOutputs: Array<{
+        /**
+         * 版本内唯一输出名称
+         */
+        name: string;
+        /**
+         * 分析、算子成果、资料类型或已登记语义类型
+         */
+        semanticType: string;
+    }>;
+    /**
+     * 本节点允许的平台工具白名单
+     */
+    tools: Array<'read_evidence' | 'operator_catalog' | 'preflight_operator' | 'run_operator' | 'prepare_input' | 'ask_user' | 'finish_node'>;
+    /**
+     * 节点动作步数硬上限，恢复不重置
+     */
+    maxSteps?: number;
+    /**
+     * 节点实际模型请求硬上限，含归纳与脚本审核
+     */
+    maxModelCalls?: number;
+    /**
+     * 节点算子调用硬上限，含资料衔接
+     */
+    maxOperatorCalls?: number;
+    /**
+     * 自动补救次数硬上限
+     */
+    maxRecoveries?: number;
+    /**
+     * 节点主动处理累计秒数上限
+     */
+    maxSeconds?: number;
+};
+
+/**
+ * 失败恢复与提问，不批准科研节点
+ */
+export type BusinessFlowNodeRecovery = {
+    /**
+     * 当前问题的通俗说明
+     */
+    reason: string;
+    /**
+     * 需要用户回答的问题，可为空
+     */
+    question: string;
+    /**
+     * 已经尝试的有界补救摘要
+     */
+    attempts: Array<string>;
+    /**
+     * 是否允许用户跳过，不替代人工审批
+     */
+    allowSkip: boolean;
+    /**
+     * 当前可选恢复或停止操作
+     */
+    options: Array<'retry_recovery' | 'skip_node' | 'cancel'>;
+    /**
+     * 真实结构化错误码、补救类别与差距
+     */
+    failure: {
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
+};
+
+/**
+ * 仅工具步摘要，不含工具证据正文
+ */
+export type BusinessFlowToolProgress = {
+    /**
+     * 已采用的动作数
+     */
+    steps: number;
+    /**
+     * 已发送的模型请求数
+     */
+    modelCalls: number;
+    /**
+     * 已提交的算子数
+     */
+    operatorCalls: number;
+    /**
+     * 已尝试的自动补救数
+     */
+    recoveries: number;
+    /**
+     * 逐步动作、参数和结果摘要及耗用，不含完整证据
+     */
+    history: Array<{
+        [key: string]: unknown;
+    }>;
 };
 
 /**
@@ -12319,7 +12436,7 @@ export type BusinessFlowNodeState = {
      */
     nodeId: string;
     /**
-     * 节点状态；waiting_context表示上下文等待，不是科研审批
+     * 节点状态；waiting_context表示上下文等待，不是科研审批；waiting_recovery表示可恢复等待，工作流仍为waiting_approval
      */
     status: string;
     /**
@@ -12337,6 +12454,8 @@ export type BusinessFlowNodeState = {
     };
     contextManagement?: BusinessFlowContextManagement;
     contextRecovery?: BusinessFlowContextRecovery;
+    recovery?: BusinessFlowNodeRecovery;
+    toolProgress?: BusinessFlowToolProgress;
     [key: string]: unknown;
 };
 
@@ -12610,6 +12729,10 @@ export type BusinessFlowStart = {
      */
     idempotencyKey: string;
     inputAdapters?: BusinessFlowInputAdapterChoices;
+    /**
+     * 允许智能体执行合同与自动补救；关闭时算子失败直接等待用户
+     */
+    agentEnabled?: boolean;
 };
 
 /**
@@ -12822,9 +12945,9 @@ export type BusinessFlowDecision = {
      */
     revision: number;
     /**
-     * 明确批准、要求返修或重试上下文
+     * 批准、返修、重试上下文、恢复本节点或明确跳过；后两者不批准科研结果
      */
-    decision: 'approve' | 'request_changes' | 'retry_context';
+    decision: 'approve' | 'request_changes' | 'retry_context' | 'retry_recovery' | 'skip_node';
     /**
      * 返修原因或收紧范围说明
      */
@@ -12838,6 +12961,18 @@ export type BusinessFlowDecision = {
      * 稳定决定重试键
      */
     idempotencyKey: string;
+    /**
+     * 仅恢复决定：当前节点角色到新资料编号，后端重新校验权限、修订及规范
+     */
+    recoveryInputs?: {
+        [key: string]: number;
+    };
+    /**
+     * 用户明确调整的当前算子参数，仍须通过原清单校验
+     */
+    recoveryParameters?: {
+        [key: string]: unknown;
+    };
 };
 
 /**

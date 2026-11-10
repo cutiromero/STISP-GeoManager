@@ -40,12 +40,14 @@ def model_window(model):
     raise ModelError("模型服务未提供实际上下文窗口，请管理员检查部署")
 
 
-def count_tokens(model, messages, thinking=False, effort="medium"):
+def count_tokens(model, messages, thinking=False, effort="medium", *, tools=None):
     body = {
         "model": model.model_id,
         "messages": messages,
         "add_generation_prompt": True,
     }
+    if tools:
+        body["tools"] = tools
     if model.qwen:
         body["chat_template_kwargs"] = {
             "enable_thinking": thinking,
@@ -90,6 +92,7 @@ def stream(
     reasoning_effort="medium",
     on_usage=None,
     monitor_guard=None,
+    tools=None,
 ):
     """No proxies/redirects; cancellation shuts down the upstream socket."""
     url = urlsplit(model.base_url)
@@ -111,7 +114,9 @@ def stream(
     # Qwen's constrained JSON decoder can suppress the reasoning stream even
     # with enable_thinking=True. Keep the prompt protocol and strict worker
     # validation, but let deep-mode responses include their native think block.
-    if structured and not (model.qwen and thinking):
+    if tools:
+        body.update(tools=tools, tool_choice="required", parallel_tool_calls=False)
+    if structured and not tools and not (model.qwen and thinking):
         body["response_format"] = {"type": "json_object"}
     done = threading.Event()
     failures = []
@@ -242,6 +247,9 @@ def stream(
                     in_thinking = True
             return "".join(output)
 
+        tool_arguments = ""
+        tool_name = ""
+        tool_seen = False
         while True:
             guard()
             line = response.readline(65537)
@@ -266,6 +274,16 @@ def stream(
             choice = choices[0]
             content = choice.get("delta", {}).get("content")
             delta = choice.get("delta", {})
+            if tools and delta.get("tool_calls"):
+                for call in delta["tool_calls"]:
+                    if call.get("index", 0) != 0:
+                        raise ModelError("节点每步只允许一个工具动作")
+                    tool_seen = True
+                    function = call.get("function", {})
+                    tool_name += function.get("name", "")
+                    tool_arguments += function.get("arguments", "")
+                    if len(tool_arguments.encode()) > 65536:
+                        raise ModelError("节点工具参数超过安全上限")
             reasoning = (
                 delta.get("reasoning_content")
                 or delta.get("reasoning")
@@ -279,11 +297,17 @@ def stream(
             if content:
                 if not isinstance(content, str):
                     raise ModelError("模型文本响应格式错误")
+                if tools and content.strip():
+                    raise ModelError("原生工具协议混入正文，不能作为唯一动作")
                 emitted = emit_content(content)
                 if emitted:
                     yield emitted
             if choice.get("finish_reason") == "length":
                 length_limited = True
+        if tools:
+            if not tool_seen or tool_name != "node_action":
+                raise ModelError("原生工具协议未返回唯一node_action")
+            yield tool_arguments
         if inline_buffer:
             if in_thinking or (implicit_thinking and not saw_reasoning_field):
                 emit_thinking(inline_buffer)

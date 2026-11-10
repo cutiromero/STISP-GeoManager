@@ -22,6 +22,7 @@ class ModelConfig:
     # Qwen/Gemma services.  Keep this in the registry so the UI can show the
     # model window without exposing the private endpoint.
     context_window_tokens: int = 32768
+    native_tools: bool = False
 
 
 def registry():

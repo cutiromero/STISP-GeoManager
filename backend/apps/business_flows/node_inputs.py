@@ -9,7 +9,7 @@ from .script_bridges import choose_bridge, planned_script, versions
 from .state import emit
 
 
-def prepare(workflow, user, policy, node, version, inputs):
+def prepare(workflow, user, policy, node, version, inputs, *, force_keys=()):
     settings = workflow.plan.get("inputPreparationPolicy", {})
     if not settings.get("allowScripts"):
         return inputs
@@ -24,7 +24,7 @@ def prepare(workflow, user, policy, node, version, inputs):
     schemas = workflow.plan.setdefault("inputPreparationSchemas", {})
     result, pending = {}, False
     for key, identities in inputs.items():
-        if key in ready:
+        if key in ready and key not in force_keys:
             resource = resolve_workflow_resource(user, policy, ready[key], workflow)
             result[key] = resource.pk
             continue
@@ -40,7 +40,11 @@ def prepare(workflow, user, policy, node, version, inputs):
             if item["type"] == "field" and item.get("input") == key
         ]
         required = [name for name in required if isinstance(name, str)]
-        direct = len(resources) == 1 and resources[0].data_type == spec["kind"]
+        direct = (
+            key not in force_keys
+            and len(resources) == 1
+            and resources[0].data_type == spec["kind"]
+        )
         if direct and (required or spec.get("minBands") or spec.get("geometryTypes")):
             resource = resources[0]
             identity = str(resource.pk) + ":" + resource.updated_at.isoformat()
@@ -62,6 +66,9 @@ def prepare(workflow, user, policy, node, version, inputs):
             "node-" + hashlib.sha256((node["id"] + ":" + key).encode()).hexdigest()[:24]
         )
         entries = workflow.plan.setdefault("inputAdaptations", [])
+        if key in force_keys:
+            ready.pop(key, None)
+            entries[:] = [row for row in entries if row["role"] != role]
         entry = next((row for row in entries if row["role"] == role), None)
         if entry is None:
             bridge = choose_bridge(
@@ -104,6 +111,7 @@ def prepare(workflow, user, policy, node, version, inputs):
                     + node.get("instruction", ""),
                     "minBands": spec.get("minBands", 0),
                     "geometryTypes": spec.get("geometryTypes", []),
+                    "inputSpecification": spec,
                 },
                 **planning,
             }

@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261111-001 - 业务流节点工具合同与失败恢复
+
+- Status: BackendReady
+- Owner: codex/xintao，单人负责前后端、契约与专项验证。
+- Endpoints: 既有业务流登记/发布、启动、运行读取与POST /api/business-flows/runs/{workflowId}/decide/；不新增HTTP入口。
+- Change type: 增量可选合同、计量及恢复字段，原流程与原决定不变。
+- OpenAPI change: BusinessFlowNode增加contract、allowSkip；BusinessFlowStart增加agentEnabled；BusinessFlowNodeState增加toolProgress、recovery及waiting_recovery语义；BusinessFlowDecision增加retry_recovery、skip_node、recoveryInputs、recoveryParameters。
+- Mock examples: mock/prism/examples/145-business-flow-node-recovery.json。
+- Frontend reason: 展示节点合同、调用耗用、工具活动与失败原因；从本节点恢复、回答、更换资料、调整参数、明确跳过或停止。
+- Backend implementation notes: 节点私有状态保存循环与待执行动作；复用目录、真实预检、任务队列、脚本审核、上下文预算、台账及控制代次；失败计算不充当报告成果；专业适配器只接等待，不改科学与批准边界；无需迁移。
+- Verification: 节点合同、工具范围/参数、原生与JSON协议、五类数据差异、额度/时限、上下文等待、暂停/取消/撤权/重启、专业预算和旧流程回归；契约五项与Mock生成。
+- Result: 本地源码接入，实测与未验证事项见.runtime/task-reports/business-flow-j2.md。
+
 ## API-20261110-011 - 算子语义清单与结构化诊断
 
 - Status: BackendReady
@@ -569,6 +582,7 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| API-20261111-001 | BackendReady | Business flow define/start/run/decisions | 节点合同与失败恢复 | Updated | 145-business-flow-node-recovery.json | Implemented | 工具、五场景、控制、预算与旧流程回归 | 不重置额度、不替代人工批准 |
 | API-20261110-010 | BackendReady | 项目清单与项目功能设置 | 通用项目灰度及监测配置 | Updated | 90-platform-upgrade.json、91-project-features.json | Implemented | 后端、迁移、前端与契约回归 | 全局开启不复制内容或授予权限 |
 | API-20261110-011 | BackendReady | 计算版本/预检/任务 | 语义清单与结构化诊断 | Updated | 92-compute-operator-protocol.json | Implemented | 计算、自检、一致性、权限与契约回归 | 第1版继续有效；不自动替换已发布版本 |
 | API-20261110-009 | BackendReady | Results, compositions and content media | 卡片预生成小图 | Updated | 90-platform-upgrade.json、50-map-compositions.json、55-results.json | Implemented | 写入、只读、ACL、回填与防回退 | 详情与下载保持原图 |

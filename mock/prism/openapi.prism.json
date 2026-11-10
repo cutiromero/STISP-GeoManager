@@ -27875,6 +27875,176 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BusinessFlowRun"
+                },
+                "example": {
+                  "id": "00000000-0000-4000-8000-000000000001",
+                  "flowId": 2,
+                  "versionId": 21,
+                  "projectId": 3,
+                  "conversationId": 31,
+                  "runId": 41,
+                  "name": "资料摘要",
+                  "goal": "按实际可见资料形成摘要",
+                  "status": "waiting_approval",
+                  "currentNode": "adaptive_statistics",
+                  "revision": 7,
+                  "definitionSnapshot": {
+                    "schemaVersion": 1,
+                    "adapter": "research_flow",
+                    "inputPreparation": {
+                      "allowScripts": true,
+                      "reviewScripts": true,
+                      "maxRepairs": 2
+                    },
+                    "inputRequirements": [
+                      {
+                        "key": "source",
+                        "label": "待统计资料",
+                        "description": "真实项目资料，字段含义不明时询问用户，原始资料只读。",
+                        "dataTypes": [
+                          "table",
+                          "document"
+                        ],
+                        "required": true,
+                        "requiredFields": [],
+                        "multiple": true
+                      }
+                    ],
+                    "nodes": [
+                      {
+                        "id": "adaptive_statistics",
+                        "title": "选择算子并适配资料",
+                        "description": "查询statistics能力，预检实际资料，必要时映射字段或审核衔接脚本，再运行并读取成果。",
+                        "kind": "agent",
+                        "dependsOn": [],
+                        "dataRoles": [
+                          "source"
+                        ],
+                        "instruction": "根据实际资料选用有统计能力且允许智能体调用的已发布算子；不能猜测单位或矿物类别含义。失败时说明补救依据，不修改原始资料。",
+                        "contract": {
+                          "goal": "从当前授权目录选择合适算子，完成实际资料的统计并交付可追溯成果。",
+                          "acceptance": [
+                            "已通过输入预检",
+                            "已读取真实成功算子的统计结果",
+                            "说明字段、集合类别及适用限制"
+                          ],
+                          "requiredOutputs": [
+                            {
+                              "name": "statistics",
+                              "semanticType": "operator_result"
+                            }
+                          ],
+                          "tools": [
+                            "read_evidence",
+                            "operator_catalog",
+                            "preflight_operator",
+                            "run_operator",
+                            "prepare_input",
+                            "ask_user",
+                            "finish_node"
+                          ],
+                          "maxSteps": 12,
+                          "maxModelCalls": 12,
+                          "maxOperatorCalls": 3,
+                          "maxRecoveries": 3,
+                          "maxSeconds": 180
+                        },
+                        "review": {
+                          "ai": false,
+                          "human": true,
+                          "maxRevisions": 0
+                        },
+                        "allowSkip": false
+                      },
+                      {
+                        "id": "finish",
+                        "title": "汇总成果",
+                        "description": "只汇总实际成果和用户明确接受的结果。",
+                        "kind": "result",
+                        "dependsOn": [
+                          "adaptive_statistics"
+                        ],
+                        "dataRoles": [],
+                        "instruction": "保留实际计算依据和适用限制。",
+                        "review": {
+                          "ai": false,
+                          "human": false,
+                          "maxRevisions": 0
+                        }
+                      }
+                    ],
+                    "outputRequirements": [
+                      "真实统计结果",
+                      "字段与类别说明",
+                      "用户接受记录"
+                    ]
+                  },
+                  "nodes": [
+                    {
+                      "nodeId": "adaptive_statistics",
+                      "status": "waiting_recovery",
+                      "attempt": 1,
+                      "executor": {
+                        "status": "context_waiting"
+                      },
+                      "reviewer": {
+                        "status": "not_required"
+                      },
+                      "human": {
+                        "required": false,
+                        "status": "not_required",
+                        "reason": ""
+                      },
+                      "outputs": {},
+                      "recovery": {
+                        "reason": "字段“矿物名称”没有明确语义对应，自动补救尚不能确认。",
+                        "question": "请确认类别字段，或更换已规范的资料。",
+                        "attempts": [
+                          "补充字段映射：目标列缺失",
+                          "请求资料衔接：需要确认类别含义"
+                        ],
+                        "allowSkip": false,
+                        "options": [
+                          "retry_recovery",
+                          "cancel"
+                        ],
+                        "failure": {
+                          "code": "MISSING_ROLE",
+                          "remedy": "human_review",
+                          "gaps": []
+                        }
+                      },
+                      "toolProgress": {
+                        "steps": 4,
+                        "modelCalls": 4,
+                        "operatorCalls": 1,
+                        "recoveries": 1,
+                        "history": [
+                          {
+                            "step": 1,
+                            "action": "operator_catalog",
+                            "summary": "查询可用算子：返回2个当前权限内可调用算子",
+                            "evidenceId": "node-tool-adaptive_statistics-1"
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "events": [
+                    {
+                      "id": 7,
+                      "nodeId": "adaptive_statistics",
+                      "actor": "executor",
+                      "kind": "node_tool_step",
+                      "status": "waiting_approval",
+                      "message": "请求资料衔接：需要确认类别含义",
+                      "createdAt": "2026-11-10T00:01:00Z"
+                    }
+                  ],
+                  "resultResourceIds": [],
+                  "resultOutputIds": [],
+                  "createdAt": "2026-11-10T00:00:00Z",
+                  "updatedAt": "2026-11-10T00:01:00Z"
                 }
               }
             }
@@ -47620,6 +47790,14 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/BusinessFlowInputBinding"
             }
+          },
+          "contract": {
+            "$ref": "#/components/schemas/BusinessFlowNodeContract"
+          },
+          "allowSkip": {
+            "type": "boolean",
+            "default": false,
+            "description": "仅无人工门禁的通用节点可由用户明确跳过"
           }
         },
         "required": [
@@ -47631,6 +47809,208 @@
           "dataRoles",
           "instruction",
           "review"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowNodeContract": {
+        "type": "object",
+        "description": "通用智能体节点有界合同；缺省保持旧单次请求。",
+        "properties": {
+          "goal": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "节点要达成的目标"
+          },
+          "acceptance": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "description": "全部需要满足的验收条件"
+          },
+          "requiredOutputs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 100,
+                  "description": "版本内唯一输出名称"
+                },
+                "semanticType": {
+                  "type": "string",
+                  "maxLength": 100,
+                  "description": "分析、算子成果、资料类型或已登记语义类型"
+                }
+              },
+              "required": [
+                "name",
+                "semanticType"
+              ],
+              "additionalProperties": false
+            },
+            "description": "必须交付的具名真实证据"
+          },
+          "tools": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 7,
+            "items": {
+              "type": "string",
+              "enum": [
+                "read_evidence",
+                "operator_catalog",
+                "preflight_operator",
+                "run_operator",
+                "prepare_input",
+                "ask_user",
+                "finish_node"
+              ]
+            },
+            "description": "本节点允许的平台工具白名单"
+          },
+          "maxSteps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 12,
+            "description": "节点动作步数硬上限，恢复不重置"
+          },
+          "maxModelCalls": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12,
+            "default": 8,
+            "description": "节点实际模型请求硬上限，含归纳与脚本审核"
+          },
+          "maxOperatorCalls": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6,
+            "default": 3,
+            "description": "节点算子调用硬上限，含资料衔接"
+          },
+          "maxRecoveries": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "default": 3,
+            "description": "自动补救次数硬上限"
+          },
+          "maxSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600,
+            "default": 180,
+            "description": "节点主动处理累计秒数上限"
+          }
+        },
+        "required": [
+          "goal",
+          "acceptance",
+          "requiredOutputs",
+          "tools"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowNodeRecovery": {
+        "type": "object",
+        "description": "失败恢复与提问，不批准科研节点",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "当前问题的通俗说明"
+          },
+          "question": {
+            "type": "string",
+            "description": "需要用户回答的问题，可为空"
+          },
+          "attempts": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+              "type": "string"
+            },
+            "description": "已经尝试的有界补救摘要"
+          },
+          "allowSkip": {
+            "type": "boolean",
+            "description": "是否允许用户跳过，不替代人工审批"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "retry_recovery",
+                "skip_node",
+                "cancel"
+              ]
+            },
+            "description": "当前可选恢复或停止操作"
+          },
+          "failure": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "真实结构化错误码、补救类别与差距"
+          }
+        },
+        "required": [
+          "reason",
+          "question",
+          "attempts",
+          "allowSkip",
+          "options",
+          "failure"
+        ],
+        "additionalProperties": true
+      },
+      "BusinessFlowToolProgress": {
+        "type": "object",
+        "description": "仅工具步摘要，不含工具证据正文",
+        "properties": {
+          "steps": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "已采用的动作数"
+          },
+          "modelCalls": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "已发送的模型请求数"
+          },
+          "operatorCalls": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "已提交的算子数"
+          },
+          "recoveries": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "已尝试的自动补救数"
+          },
+          "history": {
+            "type": "array",
+            "maxItems": 24,
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "description": "逐步动作、参数和结果摘要及耗用，不含完整证据"
+          }
+        },
+        "required": [
+          "steps",
+          "modelCalls",
+          "operatorCalls",
+          "recoveries",
+          "history"
         ],
         "additionalProperties": false
       },
@@ -48908,7 +49288,7 @@
           },
           "status": {
             "type": "string",
-            "description": "节点状态；waiting_context表示上下文等待，不是科研审批"
+            "description": "节点状态；waiting_context表示上下文等待，不是科研审批；waiting_recovery表示可恢复等待，工作流仍为waiting_approval"
           },
           "attempt": {
             "type": "integer",
@@ -48934,6 +49314,12 @@
           },
           "contextRecovery": {
             "$ref": "#/components/schemas/BusinessFlowContextRecovery"
+          },
+          "recovery": {
+            "$ref": "#/components/schemas/BusinessFlowNodeRecovery"
+          },
+          "toolProgress": {
+            "$ref": "#/components/schemas/BusinessFlowToolProgress"
           }
         },
         "required": [
@@ -49372,6 +49758,11 @@
           },
           "inputAdapters": {
             "$ref": "#/components/schemas/BusinessFlowInputAdapterChoices"
+          },
+          "agentEnabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "允许智能体执行合同与自动补救；关闭时算子失败直接等待用户"
           }
         },
         "required": [
@@ -49686,11 +50077,13 @@
           },
           "decision": {
             "type": "string",
-            "description": "明确批准、要求返修或重试上下文",
+            "description": "批准、返修、重试上下文、恢复本节点或明确跳过；后两者不批准科研结果",
             "enum": [
               "approve",
               "request_changes",
-              "retry_context"
+              "retry_context",
+              "retry_recovery",
+              "skip_node"
             ]
           },
           "feedback": {
@@ -49715,6 +50108,21 @@
             "description": "稳定决定重试键",
             "minLength": 8,
             "maxLength": 80
+          },
+          "recoveryInputs": {
+            "type": "object",
+            "description": "仅恢复决定：当前节点角色到新资料编号，后端重新校验权限、修订及规范",
+            "maxProperties": 30,
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "recoveryParameters": {
+            "type": "object",
+            "description": "用户明确调整的当前算子参数，仍须通过原清单校验",
+            "maxProperties": 50,
+            "additionalProperties": true
           }
         },
         "required": [
