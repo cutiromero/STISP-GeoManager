@@ -17,8 +17,6 @@ import type {
   AgentWorkflow,
   AgentWorkflowConfirmation,
   BusinessFlowActorState,
-  BusinessFlowNode,
-  BusinessFlowNodeState,
   BusinessFlowEvent,
   BusinessFlowRun,
 } from "../api/generated/types.gen";
@@ -34,6 +32,11 @@ import SafeMarkdown from "../agent/SafeMarkdown";
 import FieldMappingReview from "../agent/FieldMappingReview";
 import BusinessFlowNodeOutputs from "./BusinessFlowNodeOutputs";
 import BusinessFlowGraph from "./BusinessFlowGraph";
+import {
+  businessFlowProgress,
+  nodeStageProgress,
+} from "./businessFlowPresentation";
+export { businessFlowProgress } from "./businessFlowPresentation";
 import "./business-flows.css";
 
 const WorkflowCard = lazy(() => import("../agent/WorkflowCard"));
@@ -95,78 +98,6 @@ const actorIcons = {
   human: <UserOutlined />,
   system: <CheckOutlined />,
 };
-function nodeStageProgress(
-  node: BusinessFlowNode,
-  value?: BusinessFlowNodeState,
-) {
-  const execution = node.kind !== "human";
-  const ai = node.review.ai;
-  const human = Boolean(
-    node.review.human || node.kind === "human" || value?.human.required,
-  );
-  const succeeded = Boolean(value && finished.has(value.status));
-  const executionDone =
-    execution &&
-    Boolean(
-      succeeded ||
-      (value &&
-        (["succeeded", "completed", "executed"].includes(
-          value.executor.status,
-        ) ||
-          [
-            "executed",
-            "reviewing",
-            "waiting_human",
-            "waiting_approval",
-          ].includes(value.status))),
-    );
-  const reviewDone =
-    ai &&
-    Boolean(
-      succeeded ||
-      (value &&
-        (["passed", "accepted", "succeeded", "completed"].includes(
-          value.reviewer.status,
-        ) ||
-          value.reviewer.decision === "accept")),
-    );
-  const humanDone =
-    human &&
-    Boolean(
-      succeeded ||
-      (value && ["approved", "completed"].includes(value.human.status)),
-    );
-  return {
-    total: Number(execution) + Number(ai) + Number(human),
-    done: Number(executionDone) + Number(reviewDone) + Number(humanDone),
-    executionDone,
-    reviewDone,
-    humanDone,
-  };
-}
-export function businessFlowProgress(flow: BusinessFlowRun) {
-  let total = 0,
-    done = 0;
-  const states = new Map(flow.nodes.map((node) => [node.nodeId, node]));
-  for (const node of flow.definitionSnapshot.nodes) {
-    const progress = nodeStageProgress(node, states.get(node.id));
-    total += progress.total;
-    done += progress.done;
-  }
-  const completedNodes =
-    flow.status === "succeeded"
-      ? flow.definitionSnapshot.nodes.length
-      : flow.nodes.filter((node) => finished.has(node.status)).length;
-  return {
-    percent:
-      flow.status === "succeeded"
-        ? 100
-        : Math.min(99, total ? Math.round((done * 100) / total) : 0),
-    total,
-    done,
-    completedNodes,
-  };
-}
 export function readableBusinessFlowEvents(
   events: readonly BusinessFlowEvent[],
 ) {
@@ -207,9 +138,13 @@ export function readableBusinessFlowEvents(
 export default function BusinessFlowActivity({
   flow,
   onChanged,
+  inspectNode,
+  onAccessBlocked,
 }: {
   flow: BusinessFlowRun;
   onChanged: (flow: BusinessFlowRun) => void;
+  inspectNode?: { nodeId: string; request: number };
+  onAccessBlocked?: () => void;
 }) {
   const ui = useComputeText();
   const latest = useRef(flow);
@@ -220,11 +155,20 @@ export default function BusinessFlowActivity({
   const sequence = useRef(0);
   const inFlight = useRef(false);
   const [accessBlocked, setAccessBlocked] = useState(false);
+  useEffect(() => {
+    if (accessBlocked) onAccessBlocked?.();
+  }, [accessBlocked, onAccessBlocked]);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<string>();
+  useEffect(() => {
+    if (inspectNode) {
+      setSelected(inspectNode.nodeId);
+      setExpanded(true);
+    }
+  }, [inspectNode]);
   const [reportOpen, setReportOpen] = useState(false);
   const [legacyOpen, setLegacyOpen] = useState(false);
   const [legacy, setLegacy] = useState<AgentWorkflow>();
@@ -465,6 +409,7 @@ export default function BusinessFlowActivity({
   return (
     <section
       className={`business-flow-activity${needsHuman ? " needs-human" : ""}`}
+      data-business-flow-id={flow.id}
       aria-label={ui("业务流工作状态", "Business flow activity")}
     >
       <header className="business-flow-activity-header">
@@ -535,8 +480,8 @@ export default function BusinessFlowActivity({
           <div className="business-flow-current-title">
             <span>
               {ui(
-                `当前第 ${Math.min(complete + 1, definition.nodes.length)}/${definition.nodes.length} 节点`,
-                `Node ${Math.min(complete + 1, definition.nodes.length)} of ${definition.nodes.length}`,
+                `当前第 ${Math.max(1, definition.nodes.findIndex((node) => node.id === current.nodeId) + 1)}/${definition.nodes.length} 节点`,
+                `Node ${Math.max(1, definition.nodes.findIndex((node) => node.id === current.nodeId) + 1)} of ${definition.nodes.length}`,
               )}
             </span>
             <strong>{currentDefinition?.title ?? current.nodeId}</strong>
@@ -707,6 +652,9 @@ export default function BusinessFlowActivity({
           <BusinessFlowGraph
             nodes={definition.nodes}
             states={flow.nodes}
+            events={flow.events}
+            currentNode={flow.currentNode}
+            flowStatus={flow.status}
             compact
             selectedNode={selected ?? current?.nodeId}
             onSelectNode={(node) => setSelected(node.id)}

@@ -4,10 +4,12 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import type {
   AgentBootstrap,
   AgentRun,
@@ -16,7 +18,8 @@ import type {
 import { agentApi } from "../api/agent";
 import { businessFlowsApi } from "../api/businessFlows";
 import AgentPage from "../agent/AgentPage";
-import { businessFlowRun } from "./businessFlow.testFixtures";
+import { businessFlowRun, geologySpec } from "./businessFlow.testFixtures";
+import platformStyles from "../styles.css?inline";
 
 vi.mock("../components/WorkspaceHeader", () => ({
   default: () => <header>STISP</header>,
@@ -247,3 +250,110 @@ it("catalog handoff opens launch preparation then restores the exact persisted f
     screen.queryByRole("button", { name: "启动已发布业务流" }),
   ).not.toBeInTheDocument();
 });
+
+it.each([
+  [1440, 1000],
+  [1024, 768],
+  [390, 844],
+])(
+  "keeps live workflow progress to the right and usable at %sx%s without extra reads",
+  async (width, height) => {
+    await page.viewport(width, height);
+    try {
+      const value = flow({
+        definitionSnapshot: geologySpec,
+        name: "岩性—构造—蚀变综合推理",
+        currentNode: "apply",
+        status: "running",
+      });
+      value.nodes = geologySpec.nodes.map((node, index) => ({
+        nodeId: node.id,
+        status: index < 2 ? "succeeded" : index === 2 ? "executing" : "pending",
+        attempt: index === 2 ? 2 : index < 2 ? 1 : 0,
+        executor: {
+          status: index < 2 ? "succeeded" : index === 2 ? "running" : "pending",
+          answer:
+            index === 2
+              ? "正在依据审批反馈补充构造关系与蚀变分布的对应证据。"
+              : undefined,
+        },
+        reviewer: { status: "pending" },
+        human: {
+          required: node.review.human,
+          status: index < 2 ? "approved" : "pending",
+          reason: "",
+        },
+        outputs: {},
+      }));
+      value.events = [
+        {
+          id: 3,
+          actor: "human",
+          nodeId: "apply",
+          kind: "request_changes",
+          status: "queued",
+          message: "请补充构造线与蚀变分布的对应依据，再提交审批。",
+          createdAt: "2026-11-10T00:02:00Z",
+        },
+      ];
+      vi.mocked(agentApi.detail).mockResolvedValue({
+        conversation,
+        runs: [run(value)],
+      });
+      render(<style>{platformStyles}</style>);
+      show();
+      const monitor = await screen.findByRole("complementary", {
+        name: "业务流实时进度",
+      });
+      const main = document.querySelector<HTMLElement>(".agent-main")!;
+      if (width >= 1200) {
+        expect(monitor.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+          main.getBoundingClientRect().right,
+        );
+      } else {
+        await page.screenshot({
+          path: `../../test-results/business-flow-monitor-collapsed-${width}.png`,
+        });
+        fireEvent.click(
+          within(monitor).getByRole("button", { name: "展开流程进度" }),
+        );
+      }
+      expect(within(monitor).getByText("退回此节点")).toBeVisible();
+      expect(within(monitor).getByText("执行中 · 第 2 次")).toBeVisible();
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      expect(monitor.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      const reads = vi.mocked(agentApi.detail).mock.calls.length;
+      await page.screenshot({
+        path: `../../test-results/business-flow-monitor-${width}.png`,
+      });
+      if (width >= 1200) {
+        fireEvent.click(
+          within(monitor).getByRole("button", { name: "展开流程全图" }),
+        );
+        const dialog = await screen.findByRole("dialog");
+        await waitFor(() =>
+          expect(
+            Math.abs(dialog.getBoundingClientRect().right - width),
+          ).toBeLessThanOrEqual(1),
+        );
+        expect(
+          within(dialog).getByRole("region", {
+            name: "业务流程图，可横向滚动",
+          }),
+        ).toBeVisible();
+        await waitFor(() =>
+          expect(
+            dialog.querySelectorAll(".flow-return-links path"),
+          ).toHaveLength(1),
+        );
+        await page.screenshot({
+          path: "../../test-results/business-flow-return-diagram.png",
+        });
+      }
+      expect(agentApi.detail).toHaveBeenCalledTimes(reads);
+      expect(agentApi.resources).not.toHaveBeenCalled();
+    } finally {
+      await page.viewport(1600, 900);
+    }
+  },
+);
