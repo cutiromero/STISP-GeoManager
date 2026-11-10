@@ -1,5 +1,6 @@
 import PlatformActions from "./PlatformActions";
 import BusinessFlowActivity from "../businessflows/BusinessFlowActivity";
+import BusinessFlowMonitor from "../businessflows/BusinessFlowMonitor";
 import BusinessFlowLaunch, {
   type BusinessFlowLaunchIntent,
 } from "../businessflows/BusinessFlowLaunch";
@@ -363,6 +364,15 @@ function AgentWorkspace({
         run.businessFlow.status,
       ),
   );
+  const monitoredFlow = (
+    businessBlocked ?? [...runs].reverse().find((run) => run.businessFlow)
+  )?.businessFlow;
+  const [inspectedFlowNode, setInspectedFlowNode] = useState<{
+    flowId: string;
+    nodeId: string;
+    request: number;
+  }>();
+  const [blockedFlowId, setBlockedFlowId] = useState<string>();
   const taskLocked = Boolean(running || waitingRun || businessBlocked);
   const reviewPending =
     waitingRun?.interaction?.status === "pending" &&
@@ -1791,6 +1801,14 @@ function AgentWorkspace({
                     <BusinessFlowActivity
                       flow={r.businessFlow}
                       onChanged={acceptBusinessFlow}
+                      inspectNode={
+                        inspectedFlowNode?.flowId === r.businessFlow.id
+                          ? inspectedFlowNode
+                          : undefined
+                      }
+                      onAccessBlocked={() =>
+                        setBlockedFlowId(r.businessFlow!.id)
+                      }
                     />
                   )}
                   {r.attachments.length > 0 && (
@@ -2403,6 +2421,41 @@ function AgentWorkspace({
             </div>
           )}
         </main>
+        {canUse &&
+          !businessLaunch &&
+          !historyLoading &&
+          !historyFailure &&
+          monitoredFlow &&
+          monitoredFlow.conversationId === current?.id && (
+            <BusinessFlowMonitor
+              key={monitoredFlow.id}
+              flow={monitoredFlow}
+              accessBlocked={blockedFlowId === monitoredFlow.id}
+              onLocate={(nodeId) => {
+                setInspectedFlowNode({
+                  flowId: monitoredFlow.id,
+                  nodeId,
+                  request: Date.now(),
+                });
+                const box = viewport.current;
+                const card = Array.from(
+                  box?.querySelectorAll<HTMLElement>(
+                    "[data-business-flow-id]",
+                  ) ?? [],
+                ).find(
+                  (element) =>
+                    element.dataset.businessFlowId === monitoredFlow.id,
+                );
+                if (box && card) {
+                  box.scrollTop +=
+                    card.getBoundingClientRect().top -
+                    box.getBoundingClientRect().top -
+                    24;
+                  followLatest.current = false;
+                }
+              }}
+            />
+          )}
       </div>
       {mode === "agent" && canUse && (
         <Drawer
