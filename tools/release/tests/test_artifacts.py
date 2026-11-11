@@ -254,6 +254,7 @@ def test_build_keeps_tracked_generated_docs_and_disables_install(
         assert kwargs["env"]["pnpm_config_verify_deps_before_run"] == "false"
         assert kwargs["env"]["pnpm_config_manage_package_manager_versions"] == "false"
         assert kwargs["env"]["COREPACK_ENABLE_NETWORK"] == "0"
+        assert kwargs["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
         frontend = Path(kwargs["cwd"])
         for name in config["local"]["buildResources"]:
             assert (frontend.parent / name).read_bytes() == b"local build image"

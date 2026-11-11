@@ -53,6 +53,7 @@ BUILD_ENVIRONMENT = {
     "pnpm_config_manage_package_manager_versions": "false",
     "pnpm_config_update_notifier": "false",
     "COREPACK_ENABLE_NETWORK": "0",
+    "PYTHONDONTWRITEBYTECODE": "1",
 }
 
 

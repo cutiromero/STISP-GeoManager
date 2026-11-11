@@ -40,6 +40,25 @@ def test_config_example_and_execution_placeholders():
         configuration.load(EXAMPLE, executing=True)
 
 
+def test_optional_connection_reuse_requires_private_local_socket_directory(tmp_path):
+    socket_dir = tmp_path / "ssh"
+    socket_dir.mkdir(mode=0o700)
+    additions = f'"ControlMaster=auto", "ControlPersist=60", "ControlPath={socket_dir}/control", '
+    path = tmp_path / "config.toml"
+    path.write_text(
+        EXAMPLE.read_text().replace("options = [", "options = [" + additions)
+    )
+    assert "ControlMaster=auto" in configuration.load(path)["ssh"]["options"]
+    with pytest.raises(configuration.ConfigError, match="占位"):
+        configuration.load(path, executing=True)
+    socket_dir.chmod(0o755)
+    with pytest.raises(configuration.ConfigError, match="0700"):
+        configuration.load(path, executing=True)
+    path.write_text(path.read_text().replace('"ControlPersist=60", ', ""))
+    with pytest.raises(configuration.ConfigError, match="连接复用"):
+        configuration.load(path)
+
+
 def test_default_plan_without_local_config_uses_explicit_sample_notice(
     tmp_path, monkeypatch, capsys
 ):

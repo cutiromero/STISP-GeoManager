@@ -1,7 +1,9 @@
 """严格加载不含口令的发布配置。"""
 
 from pathlib import Path, PurePosixPath
+import os
 import re
+import stat
 import tomllib
 
 if __package__:
@@ -63,6 +65,9 @@ SSH_OPTIONS = (
     "ServerAliveInterval=",
     "ServerAliveCountMax=",
     "IdentitiesOnly=yes",
+    "ControlMaster=auto",
+    "ControlPersist=60",
+    "ControlPath=",
 )
 
 
@@ -121,6 +126,37 @@ def load(path=CONFIG_PATH, *, executing=False):
             or any(char in option for char in "\n\r\0")
         ):
             raise ConfigError("SSH options 仅接受密钥、known_hosts、连接与保活选项")
+    controls = [option for option in ssh["options"] if option.startswith("Control")]
+    if controls:
+        paths = [
+            option.removeprefix("ControlPath=")
+            for option in controls
+            if option.startswith("ControlPath=")
+        ]
+        if (
+            len(controls) != 3
+            or "ControlMaster=auto" not in controls
+            or "ControlPersist=60" not in controls
+            or len(paths) != 1
+        ):
+            raise ConfigError(
+                "SSH 连接复用须同时指定 ControlMaster=auto、ControlPersist=60 和唯一 ControlPath"
+            )
+        socket = Path(paths[0])
+        if (
+            not socket.is_absolute()
+            or ".." in socket.parts
+            or re.search(r"[\s%]", str(socket))
+        ):
+            raise ConfigError("ControlPath 必须为不含空白、替换符或上跳的绝对路径")
+        if executing and (
+            not socket.parent.is_dir()
+            or socket.parent.is_symlink()
+            or socket.is_symlink()
+            or stat.S_IMODE(socket.parent.stat().st_mode) & 0o077
+            or socket.parent.stat().st_uid != os.getuid()
+        ):
+            raise ConfigError("ControlPath 的父目录必须由当前用户独占并设为 0700")
     remote = value["server"]
     if any(remote[name] != expected for name, expected in RUNTIME_INVARIANTS.items()):
         raise ConfigError("HTTP、心跳、进程和监听参数须保持样例中的历史精确门禁")

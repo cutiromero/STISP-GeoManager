@@ -13,6 +13,8 @@ $PYTHON tools/release/release.py fast --execute
 
 前端构建会调用仓库里的 Python 脚本；工具把运行自身的解释器所在目录放在构建环境 `PATH` 的最前面，因此必须用上面的项目解释器运行。候选端口由本机配置 `[candidate].port` 指定，须为服务器上空闲的端口。
 
+构建禁用 Python 字节码缓存，避免临时导出目录中的 `__pycache__` 进入归档。遇到频繁创建 SSH 连接导致传输断开时，可在本机 `[ssh].options` 同时增加 `ControlMaster=auto`、`ControlPersist=60` 和 `ControlPath=/绝对私有目录/control`，使 SSH 与 SCP 复用同一条认证连接。套接字父目录必须由当前用户持有、权限为 `0700`；仍保持密钥认证与严格主机指纹校验，连接空闲60秒后退出。
+
 | 命令 | 用途 |
 | --- | --- |
 | `inspect` | 正式根、SHA、版本、四类进程、队列、磁盘、双锁，以及本机 Git 差异 |
