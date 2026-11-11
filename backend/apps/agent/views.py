@@ -316,20 +316,67 @@ def conversation_detail(request, conversation_id):
             }
         )
     if request.method == "DELETE":
+        from .conversation_cleanup import confirmed_plan, cleanup_generated_data
+        from .interactions import BLOCKING
+
+        value = (
+            body(request, ["deleteGeneratedData", "confirmationToken"], max_bytes=4096)
+            if request.body
+            else {}
+        )
+        delete_data = value.get("deleteGeneratedData", False)
+        token = value.get("confirmationToken", "")
+        if type(delete_data) is not bool or not isinstance(token, str):
+            raise ApiProblem("删除参数无效")
+        plan = None
         with transaction.atomic():
             # Acquire write lock before checking active work, also serializes submit.
-            Conversation.objects.filter(pk=c.pk).update(updated_at=timezone.now())
+            if not Conversation.objects.filter(pk=c.pk).update(
+                updated_at=F("updated_at")
+            ):
+                raise Http404
+            c.refresh_from_db()
             if (
-                c.runs.filter(status__in=ACTIVE).exists()
+                c.runs.filter(status__in=BLOCKING).exists()
                 or AgentWorkflow.objects.filter(
                     chat_runs__conversation=c,
                     status__in=WORKFLOW_ACTIVE,
-                    parameters__has_key="_businessFlow",
                 ).exists()
             ):
                 raise ApiProblem("请先停止活动运行", 409)
+            if delete_data:
+                try:
+                    plan = confirmed_plan(c, request, token)
+                except ValueError as exc:
+                    raise ApiProblem(str(exc), 409) from exc
+                log_operation(
+                    request.user,
+                    "智能体",
+                    "确认会话数据清理范围",
+                    "success",
+                    json.dumps(
+                        {key: plan[key] for key in ("scope", "resources", "outputs")},
+                        ensure_ascii=False,
+                    ),
+                    request,
+                    target_type="agent_conversation",
+                    target_id=conversation_id,
+                )
             c.delete()
-        return JsonResponse({"detail": "会话已删除"})
+        result = {"detail": "会话已删除"}
+        if plan is not None:
+            result["cleanup"] = cleanup_generated_data(plan, request)
+        log_operation(
+            request.user,
+            "智能体",
+            "删除会话",
+            "success",
+            json.dumps(result, ensure_ascii=False),
+            request,
+            target_type="agent_conversation",
+            target_id=conversation_id,
+        )
+        return JsonResponse(result)
     value = body(request, ["title", "archived"])
     if "title" in value:
         if (
@@ -348,6 +395,17 @@ def conversation_detail(request, conversation_id):
         c.archived = value["archived"]
     c.save(update_fields=["title", "archived", "updated_at"])
     return JsonResponse(conversation_json(c))
+
+
+@endpoint(["GET"])
+def conversation_deletion_preview(request, conversation_id):
+    from .conversation_cleanup import public_preview
+
+    c = own_conversation(request.user, conversation_id)
+    try:
+        return JsonResponse(public_preview(c, request))
+    except ValueError as exc:
+        raise ApiProblem(str(exc), 409) from exc
 
 
 @endpoint(["POST"])

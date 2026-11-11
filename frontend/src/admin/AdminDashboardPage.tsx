@@ -592,16 +592,18 @@ export default function AdminDashboardPage({
               )}
               {server.cards.disks && (
                 <ServerCard
-                  title={english ? "Disks" : "硬盘"}
+                  title={english ? "Platform storage partition" : "平台存储分区"}
                   model={diskModelText(server)}
                   usage={server.cards.disks.usagePercent}
                   lines={[
                     english
-                      ? `${server.cards.disks.count} disks`
-                      : `数量 ${server.cards.disks.count}`,
-                    `${formatBytes(server.cards.disks.usedBytes)} / ${formatBytes(
+                      ? `${server.cards.disks.count} physical disks detected; capacities shown above`
+                      : `检测到 ${server.cards.disks.count} 块物理硬盘，容量见型号旁`,
+                    `${english ? "Partition used / total" : "所在分区已用 / 总容量"}：${formatBytes(server.cards.disks.usedBytes, true)} / ${formatBytes(
                       server.cards.disks.totalBytes,
+                      true,
                     )}`,
+                    `${english ? "Available to the platform" : "平台当前可用"}：${formatBytes(server.cards.disks.freeBytes, true)}`,
                   ]}
                   icon={<HddOutlined />}
                 />
@@ -2446,9 +2448,11 @@ function formatArea(value: number) {
   return `${value.toFixed(3)} km²`;
 }
 
-function formatBytes(value: number) {
+function formatBytes(value: number, binaryUnits = false) {
   if (!value) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
+  const units = binaryUnits
+    ? ["B", "KiB", "MiB", "GiB", "TiB"]
+    : ["B", "KB", "MB", "GB", "TB"];
   let current = value;
   let unitIndex = 0;
   while (current >= 1024 && unitIndex < units.length - 1) {
@@ -2468,7 +2472,11 @@ function diskModelText(server: AdminDashboardServer) {
     return "";
   }
   const models = disks.devices
-    .map((device) => device.model || device.name)
+    .map((device) =>
+      [device.model || device.name, device.size ? `(${device.size})` : ""]
+        .filter(Boolean)
+        .join(" "),
+    )
     .filter(Boolean);
   return models.length > 0 ? models.join("、") : disks.mount;
 }

@@ -32,7 +32,12 @@ logger = logging.getLogger(__name__)
 
 
 def delete_resource(
-    request, resource_id: int, *, confirmed_snapshot=None, duplicate_resource_id=None
+    request,
+    resource_id: int,
+    *,
+    confirmed_snapshot=None,
+    duplicate_resource_id=None,
+    deletion_guard=None,
 ) -> dict:
     """One guarded deletion shared by the catalog and existing admin controls."""
     result = {
@@ -57,6 +62,12 @@ def delete_resource(
             if resource is None or not user_can_access(resource, request.user):
                 return result
             result["name"] = resource.name
+            if deletion_guard is not None and not deletion_guard(resource):
+                return {
+                    **result,
+                    "status": "blocked",
+                    "detail": "该数据仍有其他引用或无权清理，已保留",
+                }
             duplicate_proof = None
             if duplicate_resource_id is not None:
                 from .resource_duplicates import verify_duplicate

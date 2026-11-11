@@ -1,0 +1,24 @@
+{
+  "GET /api/agent/conversations/{conversationId}/deletion-preview/": {
+    "200": {
+      "conversationId": 17,
+      "resourceCount": 2,
+      "outputCount": 5,
+      "retainedCount": 1,
+      "estimatedBytes": 2097152,
+      "confirmationToken": "mock-confirmation-token-not-valid-on-server"
+    }
+  },
+  "DELETE /api/agent/conversations/{conversationId}/": {
+    "200": {
+      "detail": "会话已删除",
+      "cleanup": {
+        "deletedResources": 2,
+        "deletedOutputs": 4,
+        "retainedResources": 1,
+        "retainedOutputs": 1,
+        "failedItems": 0
+      }
+    }
+  }
+}

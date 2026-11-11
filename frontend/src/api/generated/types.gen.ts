@@ -1405,6 +1405,87 @@ export type AgentConversationUpdate = {
 };
 
 /**
+ * 当前会话可清理的数据范围，不包含原始输入及其他引用的数据
+ */
+export type AgentConversationDeletionPreview = {
+    /**
+     * 会话 ID
+     */
+    conversationId: number;
+    /**
+     * 可清理的已入库计算成果数
+     */
+    resourceCount: number;
+    /**
+     * 可清理的独立计算输出文件数
+     */
+    outputCount: number;
+    /**
+     * 因引用或权限而保留的入库成果数
+     */
+    retainedCount: number;
+    /**
+     * 可清理数据的估算字节数，不保证等于实际释放量
+     */
+    estimatedBytes: number;
+    /**
+     * 绑定本人、项目、会话及删除范围的短期确认令牌
+     */
+    confirmationToken: string;
+};
+
+/**
+ * 删除会话时的可选数据清理
+ */
+export type AgentConversationDeleteInput = {
+    /**
+     * 同时清理本会话独占的计算数据
+     */
+    deleteGeneratedData?: boolean;
+    /**
+     * deleteGeneratedData为true时须提供预检查返回的令牌
+     */
+    confirmationToken?: string;
+};
+
+/**
+ * 会话删除后的实际数据清理计数，失败项保留并写审计
+ */
+export type AgentConversationCleanupResult = {
+    /**
+     * 实际删除的已入库计算成果数
+     */
+    deletedResources: number;
+    /**
+     * 实际删除的独立计算输出文件数
+     */
+    deletedOutputs: number;
+    /**
+     * 保留的已入库计算成果数
+     */
+    retainedResources: number;
+    /**
+     * 保留的独立计算输出文件数
+     */
+    retainedOutputs: number;
+    /**
+     * 清理失败的条目数
+     */
+    failedItems: number;
+};
+
+/**
+ * 会话删除结果
+ */
+export type AgentConversationDeleteResult = {
+    /**
+     * 删除说明
+     */
+    detail: string;
+    cleanup?: AgentConversationCleanupResult;
+};
+
+/**
  * 提交任务
  */
 export type AgentRunInput = {
@@ -20749,7 +20830,10 @@ export type CreateAgentConversationResponses = {
 export type CreateAgentConversationResponse = CreateAgentConversationResponses[keyof CreateAgentConversationResponses];
 
 export type DeleteAgentConversationData = {
-    body?: never;
+    /**
+     * 可选数据清理，省略时只删除会话及其分析记录
+     */
+    body?: AgentConversationDeleteInput;
     headers: {
         /**
          * 项目 ID
@@ -20803,7 +20887,7 @@ export type DeleteAgentConversationResponses = {
     /**
      * 操作成功
      */
-    200: ErrorResponse;
+    200: AgentConversationDeleteResult;
 };
 
 export type DeleteAgentConversationResponse = DeleteAgentConversationResponses[keyof DeleteAgentConversationResponses];
@@ -20930,6 +21014,58 @@ export type UpdateAgentConversationResponses = {
 };
 
 export type UpdateAgentConversationResponse = UpdateAgentConversationResponses[keyof UpdateAgentConversationResponses];
+
+export type PreviewAgentConversationDeletionData = {
+    body?: never;
+    headers: {
+        /**
+         * 项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 会话 ID
+         */
+        conversationId: number;
+    };
+    query?: never;
+    url: '/api/agent/conversations/{conversationId}/deletion-preview/';
+};
+
+export type PreviewAgentConversationDeletionErrors = {
+    /**
+     * 请求无效
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 当前功能不可用
+     */
+    403: ErrorResponse;
+    /**
+     * 会话不存在或不属于当前用户和项目
+     */
+    404: ErrorResponse;
+    /**
+     * 需分批清理的超大范围
+     */
+    409: ErrorResponse;
+};
+
+export type PreviewAgentConversationDeletionError = PreviewAgentConversationDeletionErrors[keyof PreviewAgentConversationDeletionErrors];
+
+export type PreviewAgentConversationDeletionResponses = {
+    /**
+     * 删除范围预检查
+     */
+    200: AgentConversationDeletionPreview;
+};
+
+export type PreviewAgentConversationDeletionResponse = PreviewAgentConversationDeletionResponses[keyof PreviewAgentConversationDeletionResponses];
 
 export type CreateAgentRunData = {
     /**

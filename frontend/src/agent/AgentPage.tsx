@@ -16,7 +16,6 @@ import {
   Input,
   Layout,
   Modal,
-  Popconfirm,
   Space,
   Switch,
   Tag,
@@ -32,7 +31,6 @@ import {
   ArrowDownOutlined,
   CopyOutlined,
   EditOutlined,
-  DeleteOutlined,
   PaperClipOutlined,
   MenuOutlined,
   CloseOutlined,
@@ -77,6 +75,7 @@ import ActiveWorkflowNotice from "./ActiveWorkflowNotice";
 import ResearchIntentCard from "./ResearchIntentCard";
 import LiveActivity, { ActivityMark } from "./LiveActivity";
 import AnswerPreview from "./AnswerPreview";
+import ConversationDeleteButton from "./ConversationDeleteButton";
 import RunProcess from "./RunProcess";
 import {
   runActivity,
@@ -1420,29 +1419,14 @@ function AgentWorkspace({
               >
                 {c.archived ? ui("恢复", "Restore") : ui("归档", "Archive")}
               </Button>
-              <Popconfirm
-                title={ui(
-                  "删除会话及其分析记录？",
-                  "Delete this conversation and its evidence?",
-                )}
-                onConfirm={() =>
-                  agentApi
-                    .remove(c.id)
-                    .then(() => {
-                      if (current?.id === c.id) reset();
-                      return refreshList();
-                    })
-                    .catch(report)
-                }
-              >
-                <Button
-                  size="small"
-                  type="text"
-                  danger
-                  aria-label={ui("删除", "Delete")}
-                  icon={<DeleteOutlined />}
-                />
-              </Popconfirm>
+              <ConversationDeleteButton
+                conversation={c}
+                onDeleted={async () => {
+                  if (current?.id === c.id) reset();
+                  await refreshList();
+                }}
+                onError={report}
+              />
             </Space>
           </div>
         ))}

@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261111-002 - 删除对话时可选清理任务数据
+
+- Status: BackendReady
+- Owner: codex/xintao，单人负责前后端、契约及验证。
+- Endpoints: 新增 GET /api/agent/conversations/{conversationId}/deletion-preview/；扩展 DELETE /api/agent/conversations/{conversationId}/。
+- Change type: 默认保留数据；新增可选删除参数、短期范围确认令牌和实际清理计数，无数据库迁移。
+- OpenAPI change: AgentConversationDeletionPreview、AgentConversationDeleteInput、AgentConversationCleanupResult、AgentConversationDeleteResult。
+- Mock examples: mock/prism/examples/146-conversation-cleanup.json；前后端专项夹具覆盖真实归属、默认保留、勾选清理、引用保护、预检查失败及确认过期。
+- Frontend reason: 删除弹窗默认不勾选，显示可清理成果、文件数量和估算容量，执行后反馈实际结果。
+- Backend implementation notes: 从会话运行、工作流步骤及计算后续记录确定任务，不接收外部资源或路径；已入库成果沿用删除数据权限及共享存储事务删除，跨对话、计算及工程引用保留；原始输入保持可用。会话删除和清理分阶段执行，逐项复核，失败保留并反馈，不声称全量成功。
+- Verification: 归属与项目隔离、活动阻断、确认过期、资源换版、并发引用、原始资料及共享成果保护、真实文件清理、失败反馈；契约五项、相关浏览器和效率门禁。
+- Result: 默认保留和显式勾选两条路径已接入；专项验证及生产回执记录于本轮验收目录。
+
 ## API-20261111-001 - 业务流节点工具合同与失败恢复
 
 - Status: BackendReady
@@ -582,6 +595,8 @@ Frontend owns `docs/openapi.yaml` and `mock/prism/examples/*.json`. Whenever fro
 Status: BackendReady。本任务依次完成契约、后端、前端三个职责：bootstrap 增加 `defaultReasoningEffort`，运行提交增加可选 `reasoningEffort`；仅深度模式允许 `low/medium/xhigh`，优先于后台和预算默认值。数据库迁移 `0010_user_reasoning_effort`；worker 上下文计数和生成使用同一强度。HTTP 模型捕获、接口校验与两种模式浏览器交互测试通过。真实远端模型尚未联调。
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261111-002 | BackendReady | conversation deletion-preview / DELETE | 可选任务数据清理 | 已更新 | 146-conversation-cleanup | 已实现 | 专项及门禁 | 默认保留、归属及引用保护、实际计数 |
 | API-20261111-001 | BackendReady | Business flow define/start/run/decisions | 节点合同与失败恢复 | Updated | 145-business-flow-node-recovery.json | Implemented | 工具、五场景、控制、预算与旧流程回归 | 不重置额度、不替代人工批准 |
 | API-20261110-010 | BackendReady | 项目清单与项目功能设置 | 通用项目灰度及监测配置 | Updated | 90-platform-upgrade.json、91-project-features.json | Implemented | 后端、迁移、前端与契约回归 | 全局开启不复制内容或授予权限 |
 | API-20261110-011 | BackendReady | 计算版本/预检/任务 | 语义清单与结构化诊断 | Updated | 92-compute-operator-protocol.json | Implemented | 计算、自检、一致性、权限与契约回归 | 第1版继续有效；不自动替换已发布版本 |

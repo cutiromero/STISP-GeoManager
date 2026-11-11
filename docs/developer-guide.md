@@ -2845,6 +2845,8 @@ GET `/api/compute/outputs/{outputId}/map-preview/` 返回后端PNG地址和WGS84
 
 ## 历史计算结果确认清理（2026-10-16）
 
+智能体删除会话时默认保留任务数据。删除弹窗通过 `GET /api/agent/conversations/{conversationId}/deletion-preview/` 显示可清理成果、输出文件和估算容量；用户勾选后，`DELETE` 请求携带 `deleteGeneratedData=true` 和短期 `confirmationToken`。服务端从真实运行关联确定范围，不接收任意资源编号或文件路径。会话存在活动或等待任务时拒绝删除；原始输入、其他会话或计算的引用、已保存工程和成果展示继续保护。已入库成果仍要求现有数据删除权限。删除会话后逐项复核数据及文件，返回实际删除、保留及失败计数；计算与科研任务的历史及删除凭据保留，不能将清理失败报告为成功删除。
+
 `POST /api/catalog/resources/delete-preview/` 接收当前项目的 `resourceIds`，返回逐项 `deletable|confirmation_required|blocked|not_found`、影响说明、历史引用数和 `confirmationToken`。沿用目录删除权限，跨项目和不可见资源统一隐藏名称。10分钟令牌绑定用户、项目、资源和当时引用状态；依赖变化或令牌过期需重新预览。
 
 原 `POST /api/catalog/resources/delete/` 额外接收 `historyConfirmationToken`。仅计算结果允许确认后解除已结束计算和科研工作流历史引用；运行、等待回答/审核/计算、入库中，以及成果和已保存工程等有效引用继续保护。预览时被阻止或不可见的项目不因等待期间状态变化而被顺带删除。普通上传原始数据沿用原保护。

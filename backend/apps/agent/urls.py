@@ -8,6 +8,10 @@ urlpatterns = [
     path("conversations/", views.conversations),
     path("conversations/<int:conversation_id>/", views.conversation_detail),
     path(
+        "conversations/<int:conversation_id>/deletion-preview/",
+        views.conversation_deletion_preview,
+    ),
+    path(
         "conversations/<int:conversation_id>/attachments/",
         views.conversation_attachments,
     ),

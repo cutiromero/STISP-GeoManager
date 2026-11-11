@@ -7218,16 +7218,23 @@ paths:
       - 智能体
       operationId: deleteAgentConversation
       summary: 删除本人会话及证据（有活动运行时拒绝）
-      description: 删除本人会话及证据（有活动运行时拒绝）。仅正式登录用户；每次按当前项目、所有者、功能及超管策略重新授权。数据工具不授予额外项目权限。
+      description: 默认保留任务数据；可凭当前删除预检查的确认令牌同时清理本会话独占的计算结果。原始输入、其他任务或工程引用的数据保留，目录成果清理仍要求现有删除数据权限；逐项执行重新授权，部分清理失败返回实际计数。有活动运行时拒绝。
       security:
       - sessionAuth: []
+      requestBody:
+        required: false
+        description: 可选数据清理，省略时只删除会话及其分析记录
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentConversationDeleteInput'
       responses:
         '200':
           description: 操作成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/AgentConversationDeleteResult'
         '400':
           description: 请求参数无效
           content:
@@ -7287,6 +7294,56 @@ paths:
           type: integer
           description: 对象 ID
           minimum: 1
+  /api/agent/conversations/{conversationId}/deletion-preview/:
+    get:
+      tags: [智能体]
+      operationId: previewAgentConversationDeletion
+      summary: 预检查删除本人会话时可清理的计算数据
+      description: 按本人和当前项目查找真实任务关联，返回可清理的成果、独立输出文件及估算容量。只读检查；确认令牌十分钟有效，删除时重新检查范围和引用，不授予原始资料或其他对话的数据删除权限。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID，禁止 all
+        schema: {type: integer, minimum: 1, description: 项目 ID}
+      - name: conversationId
+        in: path
+        required: true
+        description: 本人会话 ID
+        schema: {type: integer, minimum: 1, description: 会话 ID}
+      responses:
+        '200':
+          description: 删除范围预检查
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentConversationDeletionPreview'}
+        '400':
+          description: 请求无效
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '401':
+          description: 请先登录
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '403':
+          description: 当前功能不可用
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '404':
+          description: 会话不存在或不属于当前用户和项目
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '409':
+          description: 需分批清理的超大范围
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
   /api/agent/conversations/{conversationId}/runs/:
     post:
       tags:
@@ -10542,6 +10599,44 @@ components:
           description: 归档状态
       required: []
       additionalProperties: false
+    AgentConversationDeletionPreview:
+      type: object
+      description: 当前会话可清理的数据范围，不包含原始输入及其他引用的数据
+      additionalProperties: false
+      required: [conversationId, resourceCount, outputCount, retainedCount, estimatedBytes, confirmationToken]
+      properties:
+        conversationId: {type: integer, description: 会话 ID}
+        resourceCount: {type: integer, minimum: 0, description: 可清理的已入库计算成果数}
+        outputCount: {type: integer, minimum: 0, description: 可清理的独立计算输出文件数}
+        retainedCount: {type: integer, minimum: 0, description: 因引用或权限而保留的入库成果数}
+        estimatedBytes: {type: integer, format: int64, minimum: 0, description: 可清理数据的估算字节数，不保证等于实际释放量}
+        confirmationToken: {type: string, description: 绑定本人、项目、会话及删除范围的短期确认令牌}
+    AgentConversationDeleteInput:
+      type: object
+      description: 删除会话时的可选数据清理
+      additionalProperties: false
+      properties:
+        deleteGeneratedData: {type: boolean, default: false, description: 同时清理本会话独占的计算数据}
+        confirmationToken: {type: string, maxLength: 3000, description: deleteGeneratedData为true时须提供预检查返回的令牌}
+    AgentConversationCleanupResult:
+      type: object
+      description: 会话删除后的实际数据清理计数，失败项保留并写审计
+      additionalProperties: false
+      required: [deletedResources, deletedOutputs, retainedResources, retainedOutputs, failedItems]
+      properties:
+        deletedResources: {type: integer, minimum: 0, description: 实际删除的已入库计算成果数}
+        deletedOutputs: {type: integer, minimum: 0, description: 实际删除的独立计算输出文件数}
+        retainedResources: {type: integer, minimum: 0, description: 保留的已入库计算成果数}
+        retainedOutputs: {type: integer, minimum: 0, description: 保留的独立计算输出文件数}
+        failedItems: {type: integer, minimum: 0, description: 清理失败的条目数}
+    AgentConversationDeleteResult:
+      type: object
+      description: 会话删除结果
+      additionalProperties: false
+      required: [detail]
+      properties:
+        detail: {type: string, description: 删除说明}
+        cleanup: {$ref: '#/components/schemas/AgentConversationCleanupResult'}
     AgentRunInput:
       type: object
       description: 提交任务

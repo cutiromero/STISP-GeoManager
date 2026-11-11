@@ -5,6 +5,8 @@ import {
   assertConversation,
   assertConversationDetail,
   assertConversationList,
+  assertConversationDeletionPreview,
+  assertConversationDeleteResult,
   assertRunPoll,
 } from "./agentResponse";
 import {
@@ -20,6 +22,9 @@ import type {
   AgentConversationDetail,
   AgentConversationList,
   AgentConversationUpdate,
+  AgentConversationDeleteInput,
+  AgentConversationDeleteResult,
+  AgentConversationDeletionPreview,
   AgentRun,
   AgentRunInput,
   AgentRunPoll,
@@ -120,9 +125,20 @@ export const agentApi = {
       body,
       validate: assertConversation,
     }),
-  remove: (id: number) =>
-    requestJson<{ detail: string }>(`/api/agent/conversations/${id}/`, {
+  deletionPreview: (id: number, options: { signal?: AbortSignal } = {}) =>
+    requestJson<AgentConversationDeletionPreview>(`/api/agent/conversations/${id}/deletion-preview/`, {
+      ...options,
+      validate: (data) => {
+        assertConversationDeletionPreview(data);
+        if (data.conversationId !== id)
+          throw new ResponseFormatError("deletionPreview.conversationId: request mismatch");
+      },
+    }),
+  remove: (id: number, body?: AgentConversationDeleteInput) =>
+    requestJson<AgentConversationDeleteResult>(`/api/agent/conversations/${id}/`, {
       method: "DELETE",
+      ...(body ? { body } : {}),
+      validate: assertConversationDeleteResult,
     }),
   submit: (id: number, body: AgentRunInput) =>
     requestJson<AgentRun>(`/api/agent/conversations/${id}/runs/`, {
