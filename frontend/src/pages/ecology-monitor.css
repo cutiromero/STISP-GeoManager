@@ -10,7 +10,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 22px 28px 0;
+  padding: 12px 20px 0;
   overflow: hidden;
   color: #e2f2f7;
   background: #030b13;
@@ -27,20 +27,21 @@
 .monitor-topbar {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding-bottom: 22px;
+  gap: 14px;
+  min-height: 42px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--monitor-line);
 }
 .monitor-title {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
 }
 .monitor-title-mark {
   color: var(--monitor-accent);
-  font-size: 52px;
+  font-size: 30px;
   line-height: 1;
 }
 .monitor-title span,
@@ -50,11 +51,12 @@
   font-size: 10px;
 }
 .monitor-title h1 {
-  margin: 4px 0;
+  margin: 0;
   color: #eefaff;
   font-weight: 600;
-  font-size: clamp(21px, 1.7vw, 34px);
-  letter-spacing: 3px;
+  font-size: clamp(18px, 1.3vw, 24px);
+  line-height: 1.3;
+  letter-spacing: 1px;
 }
 .monitor-title p {
   margin: 0;
@@ -70,7 +72,7 @@
   font-variant-numeric: tabular-nums;
 }
 .monitor-topbar-meta time {
-  font-size: 18px;
+  font-size: 13px;
   color: #e0edf2;
 }
 .monitor-topbar-meta span {
@@ -88,7 +90,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1.8fr) minmax(480px, 0.85fr);
   gap: 20px;
-  padding-top: 20px;
+  padding-top: 12px;
 }
 .monitor-globe-panel {
   position: relative;
@@ -123,6 +125,36 @@
   height: 100%;
 }
 .monitor-planet-stage[data-view="globe"] .monitor-map-point {
+  width: 9px;
+  height: 9px;
+  background: var(--point-color, #65dfc8);
+  box-shadow: 0 0 9px var(--point-color, #65dfc8);
+}
+.monitor-planet-stage[data-view="globe"] .monitor-point-core {
+  width: 3px;
+  height: 3px;
+}
+.monitor-planet-stage[data-view="globe"] .monitor-point-core::after {
+  display: none;
+}
+.monitor-map-cluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  color: #e2fff8;
+  background: #0b2a36e8;
+  border: 1px solid #65dfc8;
+  border-radius: 5px;
+  box-shadow: 0 0 24px #65dfc840;
+  font-size: 12px;
+  cursor: pointer;
+}
+.monitor-map-cluster strong {
+  color: #8bf5d9;
+  white-space: nowrap;
+}
+.monitor-planet-stage[data-view="region"] .monitor-map-cluster {
   display: none;
 }
 .monitor-space-background {
@@ -141,24 +173,32 @@
     radial-gradient(ellipse at 78% 24%, #16375032, transparent 48%),
     radial-gradient(ellipse at 65% 88%, #15274340, transparent 55%), #030b13;
   filter: blur(25px);
-  animation: monitor-space-drift 28s ease-in-out infinite alternate;
+  animation: monitor-space-drift 18s ease-in-out infinite alternate;
 }
 .monitor-space-stars {
   position: absolute;
-  inset: -3%;
-  width: 106%;
-  height: 106%;
-  animation: monitor-stars-drift 70s ease-in-out infinite alternate;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  animation: monitor-stars-drift 34s linear infinite alternate;
+}
+.monitor-space-star {
+  animation: monitor-star-shimmer 5s ease-in-out infinite alternate;
+}
+@keyframes monitor-star-shimmer {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
 }
 @keyframes monitor-stars-drift {
   from {
-    transform: translate3d(-1%, -0.5%, 0);
+    transform: translate3d(-2.5%, -1.5%, 0) scale(1.02);
   }
   to {
-    transform: translate3d(1%, 0.5%, 0);
+    transform: translate3d(2.5%, 1.5%, 0) scale(1.05);
   }
 }
 .ecology-monitor[data-motion="paused"] .monitor-space-stars,
+.ecology-monitor[data-motion="paused"] .monitor-space-star,
 .ecology-monitor[data-motion="paused"] .monitor-space-background::before {
   animation-play-state: paused;
 }
@@ -938,9 +978,9 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ecology-monitor .monitor-point-core::after,
-  .ecology-monitor .monitor-point-flash,
-  .ecology-monitor .monitor-number > span {
+  .ecology-monitor[data-motion="paused"] .monitor-point-core::after,
+  .ecology-monitor[data-motion="paused"] .monitor-point-flash,
+  .ecology-monitor[data-motion="paused"] .monitor-number > span {
     animation: none;
   }
   .ecology-monitor .monitor-rank-label i {

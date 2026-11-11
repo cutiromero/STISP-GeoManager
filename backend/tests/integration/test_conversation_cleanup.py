@@ -26,7 +26,7 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 
 @pytest.fixture
-def generated(setup_agent):
+def generated(setup_agent, transactional_db):
     s = setup_agent
     s["user"].user_permissions.add(
         Permission.objects.get(

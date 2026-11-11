@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261111-003 - 项目删除及通用数据保护
+
+- Status: BackendReady
+- Owner: codex/xintao，单人负责前后端、契约及定点验证。
+- Endpoints: 新增 GET /api/projects/{projectTagId}/deletion-preview/；新增 DELETE /api/projects/{projectTagId}/。
+- Change type: 超管再次确认后移除项目并清理独占内容，通用资料保留；新增可空 deleted_at 审计标记。
+- OpenAPI change: ProjectDeletionSummary、ProjectDeletionPreview、ProjectDeletionInput、ProjectDeletionResult。
+- Mock examples: mock/prism/examples/147-project-deletion.json。
+- Frontend reason: 项目维护表提供删除入口，显示独占及保留范围，要求输入完整名称并显式确认清理。
+- Backend implementation notes: 独立于当前项目请求头重新核对超管与目标；预览令牌绑定内容快照，活动任务、原始文件或关联变化拒绝。外部引用及无法证明归属的记录保留；已有共享存储保护扩展到批量事务，其他项目的路径、符号链接、硬链接及共用数据库保留。内部项目身份用于审计，已删除项目不能重新启用或复用编码。
+- Verification: 按用户指定采用轻量定点验证：超管及公开项目、跨项目共用、批量存储、确认失效和回滚；大屏自转、背景动效、全球数据及紧凑头部浏览器回归；契约与类型检查。
+- Result: 本轮定点验证、标准 full 发布及生产只读验收回执保存于运维验收目录。
+
 ## API-20261111-002 - 删除对话时可选清理任务数据
 
 - Status: BackendReady
@@ -596,6 +609,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261111-003 | BackendReady | project deletion-preview / DELETE | 项目删除与通用资料保留 | 已更新 | 147-project-deletion | 已实现 | 定点权限、事务、引用、存储及浏览器 | 新增可空审计列，公开项目保护 |
 | API-20261111-002 | BackendReady | conversation deletion-preview / DELETE | 可选任务数据清理 | 已更新 | 146-conversation-cleanup | 已实现 | 专项及门禁 | 默认保留、归属及引用保护、实际计数 |
 | API-20261111-001 | BackendReady | Business flow define/start/run/decisions | 节点合同与失败恢复 | Updated | 145-business-flow-node-recovery.json | Implemented | 工具、五场景、控制、预算与旧流程回归 | 不重置额度、不替代人工批准 |
 | API-20261110-010 | BackendReady | 项目清单与项目功能设置 | 通用项目灰度及监测配置 | Updated | 90-platform-upgrade.json、91-project-features.json | Implemented | 后端、迁移、前端与契约回归 | 全局开启不复制内容或授予权限 |

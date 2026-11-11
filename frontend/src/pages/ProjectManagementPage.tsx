@@ -17,6 +17,7 @@ import { useProjectContext } from "../projects/ProjectContext";
 import { platformApi, type ProjectTag } from "../api/platform";
 import { api } from "../api/client";
 import type { User } from "../types";
+import ProjectDeleteButton from "../projects/ProjectDeleteButton";
 
 export default function ProjectManagementPage() {
   const ui = useAuditText();
@@ -208,6 +209,16 @@ export default function ProjectManagementPage() {
                   >
                     {ui("编辑")}
                   </Button>
+                ),
+              },
+              {
+                title: ui("删除"),
+                render: (_, project: ProjectTag) => (
+                  <ProjectDeleteButton project={project} disabled={!context.canManage || saving}
+                    onDeleted={async () => {
+                      setIds(previous => previous.filter(id => id !== project.id));
+                      await context.refresh();
+                    }} />
                 ),
               },
               {

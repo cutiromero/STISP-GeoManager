@@ -10,6 +10,7 @@ class Project(models.Model):
     description = models.TextField(blank=True)
     is_default = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
     sort_order = models.IntegerField(default=100)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL

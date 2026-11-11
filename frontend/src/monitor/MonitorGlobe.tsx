@@ -18,12 +18,16 @@ import { projectTransformRequest } from "../projects/session";
 import { riskColors, typeColors } from "./state";
 import type { MonitorEvent, MonitorSnapshot } from "./types";
 
-const rotationResumeMs = 15000;
+const rotationResumeMs = 1800;
 
 export function globeFit(width: number, height: number) {
   const diameter = Math.max(120, Math.min(width * 0.86, height * 0.86));
   const zoom = Math.min(3.5, Math.log2((diameter * Math.PI) / 512));
   return { zoom, diameter: (512 * 2 ** zoom) / Math.PI };
+}
+
+export function isRegionalZoom(zoom: number, width: number, height: number) {
+  return zoom > globeFit(width, height).zoom + 0.8;
 }
 
 export function connectionFeatures(
@@ -82,6 +86,7 @@ export default function MonitorGlobe({
   const { bootstrap } = useAppContext();
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | undefined>(undefined);
+  const overview = useRef<{ marker: mapboxgl.Marker; element: HTMLButtonElement } | undefined>(undefined);
   const markers = useRef(
     new Map<string, { marker: mapboxgl.Marker; element: HTMLButtonElement }>(),
   );
@@ -189,6 +194,18 @@ export default function MonitorGlobe({
           .addTo(map);
         markers.current.set(station.id, { marker, element });
       }
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "monitor-map-cluster";
+      element.setAttribute("aria-label", t("monitor.openStudyArea"));
+      const label = document.createElement("span");
+      label.textContent = t("monitor.studyArea");
+      const count = document.createElement("strong");
+      count.textContent = `${latest.current.snapshot.stations.length} ${t("monitor.siteUnit")}`;
+      element.append(label, count);
+      element.addEventListener("click", () => focus(true));
+      const marker = new mapboxgl.Marker({ element }).setLngLat(camera.center).addTo(map);
+      overview.current = { marker, element };
       setReady(true);
     };
     const pause = () => {
@@ -199,6 +216,7 @@ export default function MonitorGlobe({
       pause();
     };
     const end = () => {
+      if (!interacting.current) return;
       interacting.current = false;
       pause();
     };
@@ -212,12 +230,13 @@ export default function MonitorGlobe({
     };
     const leave = () => {
       hovered.current = false;
+      if (!interacting.current) pausedUntil.current = 0;
     };
     const zoomed = () => {
-      regional.current = map.getZoom() >= 3;
+      regional.current = isRegionalZoom(map.getZoom(), host.clientWidth, host.clientHeight);
       setRegionalView(regional.current);
       for (const layer of map.getStyle().layers ?? [])
-        if (layer.type === "symbol" || layer.type === "line")
+        if (!layer.id.startsWith("monitor-") && (layer.type === "symbol" || layer.type === "line"))
           map.setLayoutProperty(
             layer.id,
             "visibility",
@@ -256,6 +275,8 @@ export default function MonitorGlobe({
       window.removeEventListener("pointercancel", end);
       markers.current.forEach(({ marker }) => marker.remove());
       markers.current.clear();
+      overview.current?.marker.remove();
+      overview.current = undefined;
       map.remove();
       mapRef.current = undefined;
     };
@@ -266,6 +287,8 @@ export default function MonitorGlobe({
     (
       mapRef.current?.getSource("monitor-links") as GeoJSONSource | undefined
     )?.setData(connectionFeatures(snapshot));
+    const count = overview.current?.element.querySelector("strong");
+    if (count) count.textContent = `${snapshot.stations.length} ${t("monitor.siteUnit")}`;
     for (const station of snapshot.stations) {
       const point = markers.current.get(station.id);
       if (!point) continue;
@@ -302,10 +325,10 @@ export default function MonitorGlobe({
         !interacting.current &&
         !hovered.current &&
         time > pausedUntil.current &&
-        map.getZoom() < 4.5
+        !regional.current
       ) {
         const center = map.getCenter();
-        map.setCenter([center.lng - elapsed * 0.00035, center.lat]);
+        map.setCenter([center.lng - elapsed * 0.00075, center.lat]);
       }
       frame = requestAnimationFrame(spin);
     };
@@ -320,7 +343,7 @@ export default function MonitorGlobe({
     mapRef.current?.flyTo({
       ...camera,
       zoom: regional ? initialView.regionZoom : view.zoom,
-      duration: animated ? 1400 : 0,
+      duration: latest.current.animated ? 1400 : 0,
     });
   };
   return (

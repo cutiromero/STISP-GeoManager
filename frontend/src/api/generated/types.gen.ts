@@ -3558,6 +3558,78 @@ export type ProjectTagList = {
 };
 
 /**
+ * 目标项目独占清理范围与通用资料保留统计，内部项目身份仅作审计保留
+ */
+export type ProjectDeletionSummary = {
+    /**
+     * 目标项目 ID
+     */
+    projectId: number;
+    /**
+     * 目标项目名称
+     */
+    name: string;
+    /**
+     * 独占目录资源数量
+     */
+    resourceCount: number;
+    /**
+     * 独占业务记录数量
+     */
+    recordCount: number;
+    /**
+     * 保留的通用资源数量
+     */
+    sharedResourceCount: number;
+    /**
+     * 保留的共享或无法确认独占的存储引用数量
+     */
+    sharedFileCount: number;
+    /**
+     * 独占文件估算字节数，不等同于实际物理空间释放量
+     */
+    estimatedBytes: number;
+};
+
+/**
+ * 删除项目的只读范围与十分钟确认令牌
+ */
+export type ProjectDeletionPreview = ProjectDeletionSummary & {
+    /**
+     * 绑定超管、项目及清理范围的确认令牌
+     */
+    confirmationToken: string;
+};
+
+/**
+ * 删除项目的再次确认
+ */
+export type ProjectDeletionInput = {
+    /**
+     * 完整项目名称，须与预检查一致
+     */
+    confirmedName: string;
+    /**
+     * 明确确认清理项目独占内容，通用资料始终保留
+     */
+    deleteExclusiveData: true;
+    /**
+     * 删除预检查返回的令牌
+     */
+    confirmationToken: string;
+};
+
+/**
+ * 项目已从可用清单移除，实际删除及通用数据保留情况
+ */
+export type ProjectDeletionResult = ProjectDeletionSummary & {
+    /**
+     * 实际删除结果或隔离文件待清理提示
+     */
+    detail: string;
+};
+
+/**
  * 平台升级数据结构。
  */
 export type ProjectTagInput = {
@@ -18815,6 +18887,55 @@ export type SetProjectFeatureResponses = {
 
 export type SetProjectFeatureResponse = SetProjectFeatureResponses[keyof SetProjectFeatureResponses];
 
+export type DeleteProjectTagData = {
+    /**
+     * 用户明确确认的删除范围
+     */
+    body: ProjectDeletionInput;
+    path: {
+        /**
+         * 待删除项目 ID，独立于当前项目请求头
+         */
+        projectTagId: number;
+    };
+    query?: never;
+    url: '/api/projects/{projectTagId}/';
+};
+
+export type DeleteProjectTagErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 项目不存在或已删除
+     */
+    404: ErrorResponse;
+    /**
+     * 名称或范围确认无效、共享引用变化、内置项目或仍有活动任务
+     */
+    409: ErrorResponse;
+};
+
+export type DeleteProjectTagError = DeleteProjectTagErrors[keyof DeleteProjectTagErrors];
+
+export type DeleteProjectTagResponses = {
+    /**
+     * 项目已移除并返回实际删除范围，共享数据保留
+     */
+    200: ProjectDeletionResult;
+};
+
+export type DeleteProjectTagResponse = DeleteProjectTagResponses[keyof DeleteProjectTagResponses];
+
 export type UpdateProjectTagData = {
     /**
      * 待保存数据。
@@ -18865,6 +18986,52 @@ export type UpdateProjectTagResponses = {
 };
 
 export type UpdateProjectTagResponse = UpdateProjectTagResponses[keyof UpdateProjectTagResponses];
+
+export type PreviewProjectDeletionData = {
+    body?: never;
+    path: {
+        /**
+         * 待检查项目 ID
+         */
+        projectTagId: number;
+    };
+    query?: never;
+    url: '/api/projects/{projectTagId}/deletion-preview/';
+};
+
+export type PreviewProjectDeletionErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 项目不存在或已删除
+     */
+    404: ErrorResponse;
+    /**
+     * 内置项目、仍有活动任务或无法确认清理边界
+     */
+    409: ErrorResponse;
+};
+
+export type PreviewProjectDeletionError = PreviewProjectDeletionErrors[keyof PreviewProjectDeletionErrors];
+
+export type PreviewProjectDeletionResponses = {
+    /**
+     * 删除预检查结果与短期确认令牌
+     */
+    200: ProjectDeletionPreview;
+};
+
+export type PreviewProjectDeletionResponse = PreviewProjectDeletionResponses[keyof PreviewProjectDeletionResponses];
 
 export type GetProjectAssignmentData = {
     body?: never;

@@ -30,7 +30,7 @@ def project_access_query(user) -> Q:
 
 
 def available_projects(user):
-    query = Project.objects.all()
+    query = Project.objects.filter(deleted_at__isnull=True)
     if not is_superadmin(user):
         query = (
             query.filter(is_active=True).filter(project_access_query(user)).distinct()

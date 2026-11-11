@@ -4,6 +4,8 @@ import {
   FullscreenExitOutlined,
   FullscreenOutlined,
   EnvironmentOutlined,
+  PauseOutlined,
+  CaretRightOutlined,
 } from "@ant-design/icons";
 import {
   Alert,
@@ -113,7 +115,10 @@ export function EcologyMonitorDashboard({
   const { t } = useTranslation();
   const { message } = App.useApp();
   const { snapshot, error, lastEvent } = useMonitor(source);
-  const { visible, reducedMotion, animated } = useMonitorActivity();
+  const { visible, reducedMotion } = useMonitorActivity();
+  const [motionOverride, setMotionOverride] = useState<boolean>();
+  const motionEnabled = motionOverride ?? !reducedMotion;
+  const animated = visible && motionEnabled;
   const navigate = useNavigate();
   const root = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState<string>();
@@ -159,30 +164,33 @@ export function EcologyMonitorDashboard({
     >
       <MonitorSpaceBackground />
       <header className="monitor-topbar">
-        <div className="monitor-title">
+        <div className="monitor-title" title={t("monitor.subtitle")}>
           <div className="monitor-title-mark" aria-hidden="true">
             ◎
           </div>
           <div>
-            <span>{t("monitor.eyebrow")}</span>
             <h1>{config.title}</h1>
-            <p>{t("monitor.subtitle")}</p>
           </div>
         </div>
         <div className="monitor-topbar-meta">
-          <time>{new Date(now).toLocaleString(locale, { hour12: false })}</time>
-          <span>
-            {t("monitor.updatedAt", {
+          <time title={`${new Date(now).toLocaleString(locale, { hour12: false })} · ${t("monitor.updatedAt", {
               time: snapshot
                 ? new Date(snapshot.updatedAt).toLocaleTimeString(locale, {
                     hour12: false,
                   })
                 : "—",
-            })}
-          </span>
+            })}`}>
+            {new Date(now).toLocaleTimeString(locale, { hour12: false })}
+          </time>
         </div>
         <div className="monitor-topbar-actions">
+          <Button size="small" icon={motionEnabled ? <PauseOutlined /> : <CaretRightOutlined />}
+            aria-label={t(motionEnabled ? "monitor.pauseMotion" : "monitor.playMotion")}
+            onClick={() => setMotionOverride(!motionEnabled)} aria-pressed={motionEnabled}>
+            {t(motionEnabled ? "monitor.pauseMotion" : "monitor.playMotion")}
+          </Button>
           <Button
+            size="small"
             icon={
               fullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />
             }
@@ -191,6 +199,7 @@ export function EcologyMonitorDashboard({
             {t(fullscreen ? "monitor.exitFullscreen" : "monitor.fullscreen")}
           </Button>
           <Button
+            size="small"
             icon={<ArrowLeftOutlined />}
             onClick={() => navigate("/results")}
           >
@@ -281,6 +290,7 @@ export function EcologyMonitorDashboard({
                   <div className="monitor-point-menu">
                     <div
                       className="monitor-station-selector"
+                      role="group"
                       aria-label={t("monitor.stationSelector")}
                     >
                       {snapshot.stations.map((station) => (
@@ -379,7 +389,7 @@ export function EcologyMonitorDashboard({
           {t(visible ? "monitor.feedRunning" : "monitor.feedPaused")}
         </span>
         <span>
-          {t(reducedMotion ? "monitor.motionReduced" : "monitor.rotationHint")}
+          {t(motionEnabled ? "monitor.rotationHint" : reducedMotion ? "monitor.motionReduced" : "monitor.motionPaused")}
         </span>
         <span>{t("monitor.simulationOnly")}</span>
       </footer>

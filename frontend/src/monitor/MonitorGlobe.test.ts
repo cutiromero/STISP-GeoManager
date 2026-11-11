@@ -5,12 +5,19 @@ import {
   createBasemapStyle,
 } from "../map/basemapStyle";
 import { createMockMonitorSource } from "./mockSource";
-import { connectionFeatures } from "./MonitorGlobe";
+import { connectionFeatures, globeFit, isRegionalZoom } from "./MonitorGlobe";
 import { installMonitorMapboxMock } from "./test/monitorMapbox";
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("监测地图边界", () => {
+  it("大窗口拟合后的完整地球不会被绝对缩放阈值误判为研究区", () => {
+    for (const [width, height] of [[1000, 700], [2200, 1700], [3200, 2400]]) {
+      const global = globeFit(width, height).zoom;
+      expect(isRegionalZoom(global, width, height)).toBe(false);
+      expect(isRegionalZoom(global + 1.1, width, height)).toBe(true);
+    }
+  });
   it("替身从真实默认导出替换构造器，支持加载、中文底图、点位及资源释放", async () => {
     const state = installMonitorMapboxMock();
     const container = { append: vi.fn() } as unknown as HTMLElement;

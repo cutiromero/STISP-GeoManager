@@ -1,0 +1,16 @@
+{
+  "GET /api/projects/{projectTagId}/deletion-preview/": {
+    "200": {
+      "projectId": 13, "name": "测试项目", "resourceCount": 2, "recordCount": 8,
+      "sharedResourceCount": 1, "sharedFileCount": 1, "estimatedBytes": 2048,
+      "confirmationToken": "mock-project-token-not-valid-on-server"
+    }
+  },
+  "DELETE /api/projects/{projectTagId}/": {
+    "200": {
+      "detail": "项目及独占数据已删除，共享数据已保留",
+      "projectId": 13, "name": "测试项目", "resourceCount": 2, "recordCount": 8,
+      "sharedResourceCount": 1, "sharedFileCount": 1, "estimatedBytes": 2048
+    }
+  }
+}

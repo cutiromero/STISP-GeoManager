@@ -80,8 +80,20 @@ def _resource_file_in_project(resource) -> Path | None:
 class ResourceStorageDeletion:
     """Stage files and SQLite changes before committing a metadata deletion."""
 
-    def __init__(self, resource):
+    def __init__(self, resource, *, deleting_resource_ids=(), deleting_layer_ids=()):
         self.resource = resource
+        self.deleting_resource_ids = (
+            {resource.pk, *deleting_resource_ids} if resource else set()
+        )
+        self.deleting_layer_ids = set(deleting_layer_ids)
+        if (
+            resource
+            and deleting_resource_ids
+            and DataResource._base_manager.filter(pk__in=self.deleting_resource_ids)
+            .exclude(project_tag_id=resource.project_tag_id)
+            .exists()
+        ):
+            raise StoragePathError("批量清理不能扩大到其他项目")
         self.files: set[Path] = set()
         self.shared = False
         self.databases: list[tuple[Path, str, bool]] = []
@@ -91,13 +103,24 @@ class ResourceStorageDeletion:
         self.removed_count = 0
         self.cleanup_failed = False
         self.recovery_failed = False
-        self._plan()
+        if resource is not None:
+            self._plan()
+
+    @classmethod
+    def combine(cls, plans):
+        batch = cls(None)
+        for plan in plans:
+            batch.files.update(plan.files)
+            batch.databases.extend(plan.databases)
+            batch.shared = batch.shared or plan.shared
+        batch.databases = list(dict.fromkeys(batch.databases))
+        return batch
 
     def _plan(self):
         resource = self.resource
         # Inspect every project, comparing actual storage roots rather than
         # treating identical relative names in separate directories as shared.
-        others = DataResource._base_manager.exclude(pk=resource.pk)
+        others = DataResource._base_manager.exclude(pk__in=self.deleting_resource_ids)
         linked_layers = resource.map_layers.values_list("id", flat=True)
         geographic = resource.data_type == "vector"
         database_path = (
@@ -118,7 +141,9 @@ class ResourceStorageDeletion:
         }
         candidate_projects.update(
             project_id
-            for project_id, name in MapLayer._base_manager.exclude(pk__in=linked_layers)
+            for project_id, name in MapLayer._base_manager.exclude(
+                pk__in=[*linked_layers, *self.deleting_layer_ids]
+            )
             .filter(layer_type=resource.data_type)
             .values_list("project_tag_id", "source_path")
             if name.strip().casefold() == table_identity
@@ -170,7 +195,9 @@ class ResourceStorageDeletion:
             if relative:
                 candidate = _safe_file(vector_original_path(), relative)
                 shared = False
-                for other in VectorDataset._base_manager.exclude(pk=dataset.pk):
+                for other in VectorDataset._base_manager.exclude(
+                    resource_id__in=self.deleting_resource_ids
+                ):
                     if not other.source_archive_path:
                         continue
                     try:
@@ -191,8 +218,9 @@ class ResourceStorageDeletion:
 
     def _plan_rasters(self):
         datasets = list(self.resource.raster_datasets.all())
-        own_ids = [dataset.id for dataset in datasets]
-        others = RasterDataset._base_manager.exclude(pk__in=own_ids)
+        others = RasterDataset._base_manager.exclude(
+            data_resource_id__in=self.deleting_resource_ids
+        )
         fields = {
             "source_relative_path": "raster/original",
             "processed_relative_path": "raster/preprocessed",
@@ -202,7 +230,7 @@ class ResourceStorageDeletion:
         shared_files = set()
         for project_id, value in (
             DataResource._base_manager.filter(data_type="raster")
-            .exclude(pk=self.resource.pk)
+            .exclude(pk__in=self.deleting_resource_ids)
             .values_list("project_tag_id", "storage_path")
         ):
             if value:
@@ -219,7 +247,8 @@ class ResourceStorageDeletion:
                     continue
         for project_id, value in (
             MapLayer._base_manager.filter(layer_type="raster")
-            .exclude(data_resource=self.resource)
+            .exclude(data_resource_id__in=self.deleting_resource_ids)
+            .exclude(pk__in=self.deleting_layer_ids)
             .values_list("project_tag_id", "source_path")
         ):
             if value:
@@ -330,15 +359,19 @@ class ResourceStorageDeletion:
         GEOPACKAGE_WRITE_LOCK.acquire()
         self.locked = True
         try:
+            database_aliases = {}
             for path, table, geographic in self.databases:
                 if not path.exists():
                     continue
                 if connection.vendor != "sqlite":
                     raise StoragePathError("当前数据库不支持资源存储事务删除")
-                alias = "catalog_delete_" + uuid4().hex
                 with connection.cursor() as cursor:
-                    cursor.execute(f'ATTACH DATABASE %s AS "{alias}"', [str(path)])
-                    self.aliases.append(alias)
+                    alias = database_aliases.get(path)
+                    if alias is None:
+                        alias = "catalog_delete_" + uuid4().hex
+                        cursor.execute(f'ATTACH DATABASE %s AS "{alias}"', [str(path)])
+                        self.aliases.append(alias)
+                        database_aliases[path] = alias
                     self._drop_table(cursor, alias, table, geographic)
             for path in sorted(self.files):
                 if path.exists():

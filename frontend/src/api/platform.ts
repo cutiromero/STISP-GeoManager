@@ -11,6 +11,9 @@ import type {
   ProjectAssignment,
   ProjectFeature,
   ProjectFeatureInput,
+  ProjectDeletionPreview,
+  ProjectDeletionInput,
+  ProjectDeletionResult,
 } from "./generated/types.gen";
 
 export type { ContentArticle, ContentArticleInput, ProjectTag };
@@ -23,6 +26,10 @@ export const platformApi = {
     requestJson<ProjectTag>("/api/projects/", { method: "POST", body }),
   updateProject: (id: number, body: ProjectTagInput) =>
     requestJson<ProjectTag>(`/api/projects/${id}/`, { method: "POST", body }),
+  previewProjectDeletion: (id: number, options: { signal?: AbortSignal } = {}) =>
+    requestJson<ProjectDeletionPreview>(`/api/projects/${id}/deletion-preview/`, options),
+  deleteProject: (id: number, body: ProjectDeletionInput) =>
+    requestJson<ProjectDeletionResult>(`/api/projects/${id}/`, { method: "DELETE", body }),
   setProjectFeature: (id: number, key: string, body: ProjectFeatureInput) =>
     requestJson<ProjectTag>(
       `/api/projects/${id}/features/${encodeURIComponent(key)}/`,

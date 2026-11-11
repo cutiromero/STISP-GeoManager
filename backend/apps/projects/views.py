@@ -61,7 +61,9 @@ def projects(request):
                 else [],
                 "assignableItems": [
                     serialize(p, features)
-                    for p in Project.objects.prefetch_related("feature_settings")
+                    for p in Project.objects.filter(
+                        deleted_at__isnull=True
+                    ).prefetch_related("feature_settings")
                 ]
                 if can_assign(request.user)
                 else [],
@@ -72,6 +74,10 @@ def projects(request):
     data = payload(request)
     project = Project(created_by=request.user)
     apply_values(project, data)
+    if Project.objects.filter(code=project.code, deleted_at__isnull=False).exists():
+        return JsonResponse(
+            {"detail": "该编码保留用于已删除项目的审计记录，请使用新的编码"}, status=400
+        )
     project.full_clean()
     project.save()
     log_operation(
@@ -99,11 +105,26 @@ def apply_values(project, data):
         raise ValidationError("公开项目不能停用")
 
 
-@require_http_methods(["POST"])
+@require_http_methods(["POST", "DELETE"])
 def project_detail(request, project_id):
+    if request.method == "DELETE" and not request.user.is_authenticated:
+        return JsonResponse({"detail": "请先登录"}, status=401)
     if not is_superadmin(request.user):
         return JsonResponse({"detail": "只有超级管理员可以维护项目标签"}, status=403)
-    project = get_object_or_404(Project, pk=project_id)
+    project = get_object_or_404(Project, pk=project_id, deleted_at__isnull=True)
+    if request.method == "DELETE":
+        from .deletion import remove
+
+        if len(request.body) > 4096:
+            return JsonResponse({"detail": "删除请求过大"}, status=400)
+
+        data = payload(request)
+        if set(data) - {"confirmedName", "deleteExclusiveData", "confirmationToken"}:
+            return JsonResponse({"detail": "删除参数无效"}, status=400)
+        try:
+            return JsonResponse(remove(project, request.user, data, request))
+        except ValidationError as error:
+            return JsonResponse({"detail": "；".join(error.messages)}, status=409)
     apply_values(project, payload(request))
     project.full_clean()
     project.save()
@@ -151,7 +172,7 @@ def assignments(request, user_id):
 def project_feature(request, project_id, feature_key):
     if not is_superadmin(request.user):
         return JsonResponse({"detail": "只有超级管理员可以维护项目功能"}, status=403)
-    project = get_object_or_404(Project, pk=project_id)
+    project = get_object_or_404(Project, pk=project_id, deleted_at__isnull=True)
     feature = get_object_or_404(ProjectFeature, key=feature_key)
     data = payload(request)
     set_feature(
@@ -179,3 +200,18 @@ def global_feature(request, feature_key):
         request=request,
     )
     return JsonResponse(serialize_feature(row))
+
+
+@require_http_methods(["GET"])
+def project_deletion_preview(request, project_id):
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "请先登录"}, status=401)
+    if not is_superadmin(request.user):
+        return JsonResponse({"detail": "只有超级管理员可以删除项目"}, status=403)
+    from .deletion import preview
+
+    project = get_object_or_404(Project, pk=project_id, deleted_at__isnull=True)
+    try:
+        return JsonResponse(preview(project, request.user))
+    except ValidationError as error:
+        return JsonResponse({"detail": "；".join(error.messages)}, status=409)

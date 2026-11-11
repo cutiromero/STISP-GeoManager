@@ -6170,6 +6170,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
   /api/projects/{projectTagId}/:
+    delete:
+      tags: [管理后台]
+      operationId: deleteProjectTag
+      summary: 超管确认删除项目及独占数据，保留通用数据
+      description: 需预检查令牌、完整项目名称和独占数据清理确认。只删除目标项目独占的记录及文件；公共资料、外部引用和共享存储保留，不改为公开权限。项目登记从可用清单移除，保留内部审计身份；公开项目及有活动任务的项目拒绝删除。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: projectTagId
+        in: path
+        required: true
+        description: 待删除项目 ID，独立于当前项目请求头
+        schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        description: 用户明确确认的删除范围
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProjectDeletionInput'}
+      responses:
+        '200':
+          description: 项目已移除并返回实际删除范围，共享数据保留
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProjectDeletionResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404':
+          description: 项目不存在或已删除
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '409':
+          description: 名称或范围确认无效、共享引用变化、内置项目或仍有活动任务
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
     post:
       tags:
       - 管理后台
@@ -6218,6 +6256,39 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ProjectTagInput'
+  /api/projects/{projectTagId}/deletion-preview/:
+    get:
+      tags: [管理后台]
+      operationId: previewProjectDeletion
+      summary: 超管预检查项目删除范围与共享数据保留情况
+      description: 只读汇总项目独占记录、共享资料和可清理文件容量。令牌绑定当前超管、目标项目及内容快照，十分钟有效；执行前重新检查，不授权删除外部项目数据。
+      security:
+      - sessionAuth: []
+      parameters:
+      - name: projectTagId
+        in: path
+        required: true
+        description: 待检查项目 ID
+        schema: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: 删除预检查结果与短期确认令牌
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProjectDeletionPreview'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404':
+          description: 项目不存在或已删除
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '409':
+          description: 内置项目、仍有活动任务或无法确认清理边界
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
   /api/projects/assignments/{userId}/:
     get:
       tags:
@@ -12354,6 +12425,43 @@ components:
           description: 超级管理员可见的功能注册表与全局开关；其他账号为空。
           items:
             $ref: '#/components/schemas/ProjectFeature'
+    ProjectDeletionSummary:
+      type: object
+      description: 目标项目独占清理范围与通用资料保留统计，内部项目身份仅作审计保留
+      required: [projectId, name, resourceCount, recordCount, sharedResourceCount, sharedFileCount, estimatedBytes]
+      properties:
+        projectId: {type: integer, description: 目标项目 ID}
+        name: {type: string, description: 目标项目名称}
+        resourceCount: {type: integer, minimum: 0, description: 独占目录资源数量}
+        recordCount: {type: integer, minimum: 0, description: 独占业务记录数量}
+        sharedResourceCount: {type: integer, minimum: 0, description: 保留的通用资源数量}
+        sharedFileCount: {type: integer, minimum: 0, description: 保留的共享或无法确认独占的存储引用数量}
+        estimatedBytes: {type: integer, format: int64, minimum: 0, description: 独占文件估算字节数，不等同于实际物理空间释放量}
+    ProjectDeletionPreview:
+      description: 删除项目的只读范围与十分钟确认令牌
+      allOf:
+      - $ref: '#/components/schemas/ProjectDeletionSummary'
+      - type: object
+        required: [confirmationToken]
+        properties:
+          confirmationToken: {type: string, description: 绑定超管、项目及清理范围的确认令牌}
+    ProjectDeletionInput:
+      type: object
+      description: 删除项目的再次确认
+      additionalProperties: false
+      required: [confirmedName, deleteExclusiveData, confirmationToken]
+      properties:
+        confirmedName: {type: string, maxLength: 120, description: 完整项目名称，须与预检查一致}
+        deleteExclusiveData: {type: boolean, const: true, description: 明确确认清理项目独占内容，通用资料始终保留}
+        confirmationToken: {type: string, maxLength: 3000, description: 删除预检查返回的令牌}
+    ProjectDeletionResult:
+      description: 项目已从可用清单移除，实际删除及通用数据保留情况
+      allOf:
+      - $ref: '#/components/schemas/ProjectDeletionSummary'
+      - type: object
+        required: [detail]
+        properties:
+          detail: {type: string, description: 实际删除结果或隔离文件待清理提示}
     ProjectTagInput:
       type: object
       description: 平台升级数据结构。

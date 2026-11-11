@@ -7,6 +7,8 @@ const stars = Array.from({ length: 320 }, (_, id) => ({
   radius: id % 29 === 0 ? 1.65 : id % 7 === 0 ? 1.05 : 0.65,
   opacity: 0.3 + (id % 9) * 0.075,
   color: id % 17 === 0 ? "#ffe5c5" : id % 5 === 0 ? "#b6d8ff" : "#ecf2ff",
+  shimmer: id % 5 === 0,
+  delay: -(id % 13) * 0.53,
 }));
 
 export default memo(function MonitorSpaceBackground() {
@@ -20,6 +22,8 @@ export default memo(function MonitorSpaceBackground() {
         {stars.map((star) => (
           <circle
             key={star.id}
+            className={star.shimmer ? "monitor-space-star" : undefined}
+            style={star.shimmer ? { animationDelay: `${star.delay}s` } : undefined}
             cx={star.x}
             cy={star.y}
             r={star.radius}
