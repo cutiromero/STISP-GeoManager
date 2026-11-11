@@ -230,7 +230,6 @@ export default function MonitorGlobe({
     };
     const leave = () => {
       hovered.current = false;
-      if (!interacting.current) pausedUntil.current = 0;
     };
     const zoomed = () => {
       regional.current = isRegionalZoom(map.getZoom(), host.clientWidth, host.clientHeight);

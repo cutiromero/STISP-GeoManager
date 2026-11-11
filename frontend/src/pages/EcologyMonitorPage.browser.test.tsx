@@ -424,6 +424,19 @@ it("地图外点击不会暂停地球，背景有位移与星光动态", async (
   expect(document.querySelector(".ecology-monitor")).toHaveAttribute("data-motion", "running");
 });
 
+it("移出地球不会抢断切回全球视角的镜头动画，动画结束后恢复自转", async () => {
+  const control = await controlledSource();
+  render(<AntApp><MemoryRouter><EcologyMonitorDashboard source={control.source} config={monitorConfig} /></MemoryRouter></AntApp>);
+  await waitFor(() => expect(mapState.maps[0]?.api.setCenter).toHaveBeenCalled());
+  const map = mapState.maps[0]!.api;
+  fireEvent.click(screen.getByRole("button", { name: /全球视角$/ }));
+  fireEvent.pointerLeave(screen.getByLabelText("塔里木河流域监测地球"));
+  map.setCenter.mockClear();
+  await new Promise(resolve => setTimeout(resolve, 100));
+  expect(map.setCenter).not.toHaveBeenCalled();
+  await waitFor(() => expect(map.setCenter).toHaveBeenCalled(), { timeout: 2500 });
+});
+
 it("减少动态设置下可由用户明确启动演示动效", async () => {
   reducedMotion = true;
   const control = await controlledSource();
