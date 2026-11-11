@@ -3,8 +3,18 @@ import {
   CloseOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
+  EnvironmentOutlined,
 } from "@ant-design/icons";
-import { Alert, App, Button, ConfigProvider, Result, Spin, theme } from "antd";
+import {
+  Alert,
+  App,
+  Button,
+  ConfigProvider,
+  Popover,
+  Result,
+  Spin,
+  theme,
+} from "antd";
 import {
   type CSSProperties,
   useEffect,
@@ -145,6 +155,7 @@ export function EcologyMonitorDashboard({
       data-motion={animated ? "running" : "paused"}
       data-reduced-motion={reducedMotion}
     >
+      <div className="monitor-space-background" aria-hidden="true" />
       <header className="monitor-topbar">
         <div className="monitor-title">
           <div className="monitor-title-mark" aria-hidden="true">
@@ -199,44 +210,6 @@ export function EcologyMonitorDashboard({
             className="monitor-globe-panel"
             aria-label={t("monitor.networkTitle")}
           >
-            <div className="monitor-globe-heading">
-              <div>
-                <span className="monitor-eyebrow">
-                  {t("monitor.networkEyebrow")}
-                </span>
-                <h2>{t("monitor.networkTitle")}</h2>
-              </div>
-              <span className="monitor-signal">
-                <i />
-                {t("monitor.simulatedFeed")}
-              </span>
-            </div>
-            <div className="monitor-network-stats">
-              <div>
-                <span>{t("monitor.stationCount")}</span>
-                <strong>
-                  <MonitorNumber value={snapshot.stations.length} />
-                  <small>{t("monitor.siteUnit")}</small>
-                </strong>
-              </div>
-              <div>
-                <span>{t("monitor.activeAlerts")}</span>
-                <strong
-                  className="monitor-warm"
-                  data-testid="active-alert-count"
-                >
-                  <MonitorNumber value={activeAlerts} />
-                  <small>{t("monitor.alertUnit")}</small>
-                </strong>
-              </div>
-              <div>
-                <span>{t("monitor.receivedEvents")}</span>
-                <strong data-testid="event-count">
-                  <MonitorNumber value={snapshot.sequence} />
-                  <small>{t("monitor.eventUnit")}</small>
-                </strong>
-              </div>
-            </div>
             <MonitorGlobe
               initialView={config.initialView}
               snapshot={snapshot}
@@ -295,51 +268,87 @@ export function EcologyMonitorDashboard({
                 </time>
               </aside>
             )}
-            <div className="monitor-map-caption">
-              <span>{t("monitor.researchArea")}</span>
-              <small>{t("monitor.mapHint")}</small>
-            </div>
-            <div className="monitor-map-bottom">
-              <div className="monitor-map-legend">
-                <div>
-                  {Object.entries(typeColors).map(([type, color]) => (
-                    <span key={type}>
-                      <i style={{ background: color }} />
-                      {t(`monitor.type.${type}`)}
-                    </span>
-                  ))}
-                </div>
-                <div>
-                  {riskLevels.map((level) => (
-                    <span key={level}>
-                      <i
-                        className="monitor-ring-key"
-                        style={{ borderColor: riskColors[level] }}
-                      />
-                      {t(`monitor.level.${level}`)}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div
-                className="monitor-station-selector"
-                aria-label={t("monitor.stationSelector")}
+            <div className="monitor-point-picker">
+              <Popover
+                trigger="click"
+                placement="topLeft"
+                title={t("monitor.stationSelector")}
+                content={
+                  <div className="monitor-point-menu">
+                    <div
+                      className="monitor-station-selector"
+                      aria-label={t("monitor.stationSelector")}
+                    >
+                      {snapshot.stations.map((station) => (
+                        <Button
+                          key={station.id}
+                          size="small"
+                          type={selectedId === station.id ? "primary" : "text"}
+                          onClick={() => setSelectedId(station.id)}
+                        >
+                          {station.name}
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="monitor-map-legend">
+                      <div>
+                        {Object.entries(typeColors).map(([type, color]) => (
+                          <span key={type}>
+                            <i style={{ background: color }} />
+                            {t(`monitor.type.${type}`)}
+                          </span>
+                        ))}
+                      </div>
+                      <div>
+                        {riskLevels.map((level) => (
+                          <span key={level}>
+                            <i
+                              className="monitor-ring-key"
+                              style={{ borderColor: riskColors[level] }}
+                            />
+                            {t(`monitor.level.${level}`)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <p>{t("monitor.dataDisclaimer")}</p>
+                  </div>
+                }
               >
-                {snapshot.stations.map((station) => (
-                  <Button
-                    key={station.id}
-                    size="small"
-                    type={selectedId === station.id ? "primary" : "text"}
-                    onClick={() => setSelectedId(station.id)}
-                  >
-                    {station.name}
-                  </Button>
-                ))}
-              </div>
-              <p>{t("monitor.dataDisclaimer")}</p>
+                <Button icon={<EnvironmentOutlined />}>
+                  {snapshot.stations.length} {t("monitor.siteUnit")}
+                </Button>
+              </Popover>
             </div>
           </section>
           <div className="monitor-information">
+            <div className="monitor-summary">
+              <div>
+                <span>{t("monitor.stationCount")}</span>
+                <strong>
+                  <MonitorNumber value={snapshot.stations.length} />
+                  <small>{t("monitor.siteUnit")}</small>
+                </strong>
+              </div>
+              <div>
+                <span>{t("monitor.activeAlerts")}</span>
+                <strong
+                  className="monitor-warm"
+                  data-testid="active-alert-count"
+                >
+                  <MonitorNumber value={activeAlerts} />
+                  <small>{t("monitor.alertUnit")}</small>
+                </strong>
+              </div>
+              <div>
+                <span>{t("monitor.receivedEvents")}</span>
+                <strong data-testid="event-count">
+                  <MonitorNumber value={snapshot.sequence} />
+                  <small>{t("monitor.eventUnit")}</small>
+                </strong>
+              </div>
+            </div>
+
             <RiskPanel snapshot={snapshot} />
             <MetricsPanel snapshot={snapshot} />
             <TrendPanel snapshot={snapshot} locale={locale} />

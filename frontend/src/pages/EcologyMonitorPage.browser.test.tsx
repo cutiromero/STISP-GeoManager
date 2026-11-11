@@ -353,7 +353,7 @@ it("减少动态效果时不自转、不自动滚动，新事件仍正常更新"
   expect(screen.getByText("已遵循系统设置：减少动态效果")).toBeInTheDocument();
 });
 
-it("地球自动转动，鼠标移入左侧暂停，移开后恢复", async () => {
+it("鼠标悬停地球暂停自转，背景继续运动，移开后恢复", async () => {
   const control = await controlledSource();
   const view = render(
     <AntApp>
@@ -368,12 +368,20 @@ it("地球自动转动，鼠标移入左侧暂停，移开后恢复", async () =
   await waitFor(() => expect(mapState.maps).toHaveLength(1));
   const map = mapState.maps[0]!.api;
   await waitFor(() => expect(map.setCenter).toHaveBeenCalled());
-  const panel = screen.getByRole("region", { name: "流域监测网络" });
-  fireEvent.pointerEnter(panel);
+  const globe = screen.getByLabelText("塔里木河流域监测地球");
+  const bounds = globe.getBoundingClientRect();
+  fireEvent.pointerMove(globe, {
+    clientX: bounds.left + bounds.width / 2,
+    clientY: bounds.top + bounds.height / 2,
+  });
   map.setCenter.mockClear();
   await new Promise((resolve) => setTimeout(resolve, 100));
   expect(map.setCenter).not.toHaveBeenCalled();
-  fireEvent.pointerLeave(panel);
+  expect(
+    getComputedStyle(document.querySelector(".monitor-space-background")!, "::before")
+      .animationPlayState,
+  ).toBe("running");
+  fireEvent.pointerLeave(globe);
   await waitFor(() => expect(map.setCenter).toHaveBeenCalled());
   view.unmount();
 });

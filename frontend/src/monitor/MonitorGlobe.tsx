@@ -17,13 +17,12 @@ import {
 import { projectTransformRequest } from "../projects/session";
 import { riskColors, typeColors } from "./state";
 import type { MonitorEvent, MonitorSnapshot } from "./types";
-import MonitorOrbitScene from "./MonitorOrbitScene";
 
 const rotationResumeMs = 15000;
 
-export function globeFit(width: number, height: number, maximumZoom: number) {
-  const diameter = Math.max(120, Math.min(width * 0.66, height * 0.78));
-  const zoom = Math.min(maximumZoom, Math.log2((diameter * Math.PI) / 512));
+export function globeFit(width: number, height: number) {
+  const diameter = Math.max(120, Math.min(width * 0.86, height * 0.86));
+  const zoom = Math.min(3.5, Math.log2((diameter * Math.PI) / 512));
   return { zoom, diameter: (512 * 2 ** zoom) / Math.PI };
 }
 
@@ -101,13 +100,8 @@ export default function MonitorGlobe({
     if (!container.current) return;
     let map: MapboxMap;
     const host = container.current;
-    const panel = host.closest(".monitor-globe-panel") ?? host;
     const fit = () => {
-      const view = globeFit(
-        host.clientWidth,
-        host.clientHeight,
-        initialView.zoom,
-      );
+      const view = globeFit(host.clientWidth, host.clientHeight);
       host.parentElement?.style.setProperty(
         "--planet-diameter",
         `${view.diameter}px`,
@@ -141,12 +135,14 @@ export default function MonitorGlobe({
           map.setPaintProperty(layer.id, "raster-saturation", -0.25);
           map.setPaintProperty(layer.id, "raster-brightness-max", 0.85);
         }
+        if (layer.type === "symbol")
+          map.setLayoutProperty(layer.id, "visibility", "none");
       }
       map.setFog({
         color: "#a5e6e7",
         "high-color": "#3287a4",
-        "space-color": "#050c17",
-        "star-intensity": 0.65,
+        "space-color": "#030b13",
+        "star-intensity": 0,
         "horizon-blend": 0.08,
       });
       map.addSource("monitor-links", {
@@ -207,8 +203,14 @@ export default function MonitorGlobe({
       pause();
     };
     const error = () => setMapError(true);
-    const enter = () => {
-      hovered.current = true;
+    const move = (event: PointerEvent) => {
+      const rect = host.getBoundingClientRect();
+      const radius = globeFit(rect.width, rect.height).diameter / 2;
+      hovered.current =
+        Math.hypot(
+          event.clientX - rect.left - rect.width / 2,
+          event.clientY - rect.top - rect.height / 2,
+        ) <= radius;
     };
     const leave = () => {
       hovered.current = false;
@@ -216,6 +218,13 @@ export default function MonitorGlobe({
     const zoomed = () => {
       regional.current = map.getZoom() >= 3;
       setRegionalView(regional.current);
+      for (const layer of map.getStyle().layers ?? [])
+        if (layer.type === "symbol")
+          map.setLayoutProperty(
+            layer.id,
+            "visibility",
+            regional.current ? "visible" : "none",
+          );
     };
     map.on("load", load);
     map.on("error", error);
@@ -225,8 +234,8 @@ export default function MonitorGlobe({
     map.on("rotatestart", start);
     map.on("rotateend", end);
     map.on("zoomend", zoomed);
-    panel.addEventListener("pointerenter", enter);
-    panel.addEventListener("pointerleave", leave);
+    host.addEventListener("pointermove", move);
+    host.addEventListener("pointerleave", leave);
     host.addEventListener("pointerdown", start);
     host.addEventListener("wheel", pause, { passive: true });
     host.addEventListener("keydown", pause);
@@ -240,8 +249,8 @@ export default function MonitorGlobe({
     resize.observe(host);
     return () => {
       resize.disconnect();
-      panel.removeEventListener("pointerenter", enter);
-      panel.removeEventListener("pointerleave", leave);
+      host.removeEventListener("pointermove", move);
+      host.removeEventListener("pointerleave", leave);
       host.removeEventListener("pointerdown", start);
       host.removeEventListener("wheel", pause);
       host.removeEventListener("keydown", pause);
@@ -309,9 +318,7 @@ export default function MonitorGlobe({
   const focus = (regional: boolean) => {
     pausedUntil.current = performance.now() + rotationResumeMs;
     const host = container.current;
-    const view = host
-      ? globeFit(host.clientWidth, host.clientHeight, initialView.zoom)
-      : camera;
+    const view = host ? globeFit(host.clientWidth, host.clientHeight) : camera;
     mapRef.current?.flyTo({
       ...camera,
       zoom: regional ? initialView.regionZoom : view.zoom,
@@ -329,7 +336,7 @@ export default function MonitorGlobe({
           className="monitor-map"
           aria-label={t("monitor.globeLabel")}
         />
-        <MonitorOrbitScene center={initialView.center} />
+        <div className="monitor-earth-atmosphere" aria-hidden="true" />
       </div>
       {mapError && (
         <div className="monitor-map-notice" role="status">
