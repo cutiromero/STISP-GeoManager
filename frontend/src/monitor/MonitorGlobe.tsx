@@ -139,9 +139,9 @@ export default function MonitorGlobe({
           map.setLayoutProperty(layer.id, "visibility", "none");
       }
       map.setFog({
-        color: "#a5e6e7",
-        "high-color": "#3287a4",
-        "space-color": "#030b13",
+        color: "rgba(126, 172, 208, 0.45)",
+        "high-color": "rgba(48, 83, 132, 0.2)",
+        "space-color": "rgba(0, 0, 0, 0)",
         "star-intensity": 0,
         "horizon-blend": 0.08,
       });
@@ -205,12 +205,10 @@ export default function MonitorGlobe({
     const error = () => setMapError(true);
     const move = (event: PointerEvent) => {
       const rect = host.getBoundingClientRect();
-      const radius = globeFit(rect.width, rect.height).diameter / 2;
-      hovered.current =
-        Math.hypot(
-          event.clientX - rect.left - rect.width / 2,
-          event.clientY - rect.top - rect.height / 2,
-        ) <= radius;
+      hovered.current = map.isPointOnSurface([
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+      ]);
     };
     const leave = () => {
       hovered.current = false;
@@ -336,7 +334,6 @@ export default function MonitorGlobe({
           className="monitor-map"
           aria-label={t("monitor.globeLabel")}
         />
-        <div className="monitor-earth-atmosphere" aria-hidden="true" />
       </div>
       {mapError && (
         <div className="monitor-map-notice" role="status">

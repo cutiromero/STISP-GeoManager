@@ -378,11 +378,16 @@ it("鼠标悬停地球暂停自转，背景继续运动，移开后恢复", asyn
   map.setCenter.mockClear();
   await new Promise((resolve) => setTimeout(resolve, 100));
   expect(map.setCenter).not.toHaveBeenCalled();
+  expect(map.isPointOnSurface).toHaveBeenCalled();
   expect(
     getComputedStyle(
       document.querySelector(".monitor-space-background")!,
       "::before",
     ).animationPlayState,
+  ).toBe("running");
+  expect(
+    getComputedStyle(document.querySelector(".monitor-space-stars")!)
+      .animationPlayState,
   ).toBe("running");
   fireEvent.pointerLeave(globe);
   await waitFor(() => expect(map.setCenter).toHaveBeenCalled());

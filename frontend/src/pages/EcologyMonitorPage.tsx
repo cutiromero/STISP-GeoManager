@@ -27,6 +27,7 @@ import { useNavigate } from "react-router-dom";
 import type { ProjectMonitorConfig } from "../api/generated/types.gen";
 import { currentLocale } from "../i18n";
 import MonitorGlobe from "../monitor/MonitorGlobe";
+import MonitorSpaceBackground from "../monitor/MonitorSpaceBackground";
 import {
   AlertsPanel,
   AssessmentPanel,
@@ -156,7 +157,7 @@ export function EcologyMonitorDashboard({
       data-motion={animated ? "running" : "paused"}
       data-reduced-motion={reducedMotion}
     >
-      <div className="monitor-space-background" aria-hidden="true" />
+      <MonitorSpaceBackground />
       <header className="monitor-topbar">
         <div className="monitor-title">
           <div className="monitor-title-mark" aria-hidden="true">

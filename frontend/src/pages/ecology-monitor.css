@@ -125,35 +125,6 @@
 .monitor-planet-stage[data-view="globe"] .monitor-map-point {
   display: none;
 }
-.monitor-planet-stage[data-view="globe"] .mapboxgl-canvas {
-  mask-image: radial-gradient(
-    circle at center,
-    #000 calc(var(--planet-diameter, 500px) * 0.54),
-    transparent calc(var(--planet-diameter, 500px) * 0.65)
-  );
-}
-.monitor-earth-atmosphere {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: calc(var(--planet-diameter, 500px) * 1.04);
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  pointer-events: none;
-  box-shadow:
-    0 0 40px #479bd823,
-    0 0 110px 20px #1b659b1a;
-  background: radial-gradient(
-    circle at 28% 25%,
-    transparent 32%,
-    #01060d12 65%,
-    #00071065 100%
-  );
-}
-.monitor-planet-stage[data-view="region"] .monitor-earth-atmosphere {
-  opacity: 0;
-}
 .monitor-space-background {
   position: absolute;
   inset: 0;
@@ -172,6 +143,22 @@
   filter: blur(25px);
   animation: monitor-space-drift 28s ease-in-out infinite alternate;
 }
+.monitor-space-stars {
+  position: absolute;
+  inset: -3%;
+  width: 106%;
+  height: 106%;
+  animation: monitor-stars-drift 70s ease-in-out infinite alternate;
+}
+@keyframes monitor-stars-drift {
+  from {
+    transform: translate3d(-1%, -0.5%, 0);
+  }
+  to {
+    transform: translate3d(1%, 0.5%, 0);
+  }
+}
+.ecology-monitor[data-motion="paused"] .monitor-space-stars,
 .ecology-monitor[data-motion="paused"] .monitor-space-background::before {
   animation-play-state: paused;
 }
@@ -411,7 +398,6 @@
   border: 1px solid #a0cbdb20;
   border-radius: 7px;
   background: transparent;
-  backdrop-filter: blur(3px);
   overflow: hidden;
 }
 .monitor-panel-heading {

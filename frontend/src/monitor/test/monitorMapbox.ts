@@ -34,6 +34,7 @@ export function createMonitorMapMock(options: MapOptions) {
     stop: vi.fn(),
     getCenter: vi.fn(() => ({ lng: 84, lat: 40 })),
     getZoom: vi.fn(() => 2),
+    isPointOnSurface: vi.fn(() => true),
     setCenter: vi.fn(),
     flyTo: vi.fn(),
     jumpTo: vi.fn(),
