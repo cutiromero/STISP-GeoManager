@@ -16,10 +16,11 @@ import time
 import tomllib
 
 if __package__:
-    from . import artifacts, candidate, server
+    from . import artifacts, candidate, development, server
 else:
     import artifacts
     import candidate
+    import development
     import server
 
 TERMINAL = (
@@ -32,6 +33,13 @@ TERMINAL = (
 def bind(config):
     value = dict(config)
     raw = tomllib.loads(Path(value["productionConfig"]).read_text())
+    development_enabled = (
+        raw.get("application", {}).get("development", {}).get("enabled", False)
+    )
+    server.require(
+        not development_enabled or value.get("developmentMode", False),
+        "运行环境已启用开发存储规则，发布配置必须设置 server.developmentMode=true",
+    )
     storage = raw["application"]["storage"]
     server.require(
         storage["app_data"] == value["appData"]
@@ -154,7 +162,11 @@ def describe(config, *, strict=True):
             },
             "frontendFiles": frontend_files(root),
             "roleRoots": config["expectedRoleRoots"],
-            "rollbackAvailable": (root.parent / "rollback-context.json").is_file(),
+            "rollbackAvailable": not config.get("developmentMode", False)
+            and (root.parent / "rollback-context.json").is_file(),
+            "codeRecoveryPolicy": "rebuild_from_git"
+            if config.get("developmentMode", False)
+            else "stored_release",
         }
     )
     return snapshot
@@ -326,6 +338,10 @@ def launch(ops, fingerprint, action="publish"):
 
 
 def rollback(config, release, ops, lock_state):
+    server.require(
+        not config.get("developmentMode", False),
+        "开发模式只保留现用程序；请从 GitHub 指定提交生成恢复提交，经候选验收后重新发布，保留当前原始数据",
+    )
     current_root = Path(server.launcher_root(config)).parent
     accepted = json.loads((current_root / "production-accepted.json").read_text())
     original = json.loads((current_root / "frozen-manifest.json").read_text())
@@ -492,6 +508,18 @@ def run_job(ops, fingerprint, action):
             )
             progress(ops, "排空、备份、切换及健康门禁")
             server.cutover(config, release, lock_state)
+            if config.get("developmentMode", False):
+                try:
+                    development.prune_after_acceptance(config, release, ops)
+                except Exception as cleanup_error:
+                    server.write_json(
+                        ops / "development-cleanup-pending.json",
+                        {
+                            "reason": str(cleanup_error),
+                            "productionAccepted": True,
+                            "at": datetime.now(timezone.utc).isoformat(),
+                        },
+                    )
     except BaseException as error:
         if release is not None:
             for name in TERMINAL:
@@ -511,6 +539,17 @@ def run_job(ops, fingerprint, action):
             )
         raise
     finally:
+        if config.get("developmentMode", False):
+            try:
+                development.cleanup_candidate(config, ops)
+            except Exception as cleanup_error:
+                server.write_json(
+                    ops / "candidate-cleanup-pending.json",
+                    {
+                        "reason": str(cleanup_error),
+                        "at": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
         if release is not None:
             for name in TERMINAL:
                 path = Path(release["releaseDir"]) / name

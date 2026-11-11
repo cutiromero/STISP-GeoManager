@@ -17,6 +17,8 @@ commandSeconds = 3600
 statusPollSeconds = 2
 
 [server]
+# 开发期仅长期保留当前运行代码；验收后清理旧版本和候选副本，不保存发布整库快照。
+developmentMode = true
 launcher = "/root/autodl-tmp/geomanager-start-6007.sh"
 productionConfig = "/root/autodl-tmp/geomanager-config-0.1.6-production/app.toml"
 python = "/root/autodl-tmp/geomanager-env-20260919/bin/python3.14"

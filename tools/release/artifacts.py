@@ -46,6 +46,7 @@ TOOL_FILES = (
     "artifacts.py",
     "candidate.py",
     "candidate_support.py",
+    "development.py",
     "protocol.py",
 )
 BUILD_ENVIRONMENT = {

@@ -900,9 +900,9 @@ def rollback_database_gate(config, release, context):
     verify_database_state(config, expected)
 
 
-def database_receipt(release, backup):
+def database_receipt(release, backup, config=None):
     advanced = release.get("noSchemaChanges") is False
-    return {
+    receipt = {
         "databaseAdvanced": advanced,
         "databaseHandling": "数据库结构已前进，旧代码经兼容检查可运行"
         if advanced
@@ -911,6 +911,13 @@ def database_receipt(release, backup):
         "quiescedBackup": str(Path(backup) / "meta-quiesced.db"),
         "databaseRestored": False,
     }
+    if config and config.get("developmentMode", False):
+        receipt.update(
+            quiescedBackup=None,
+            databaseBackupCreated=False,
+            backupPolicy="original_inputs_only",
+        )
+    return receipt
 
 
 def stage(config, release, package):
@@ -968,6 +975,12 @@ def backup(config, directory):
     shutil.copy2(config["launcher"], directory / "launcher.sh")
     os.chmod(directory / "app.toml", 0o600)
     os.chmod(directory / "launcher.sh", 0o700)
+    if config.get("developmentMode", False):
+        write_json(
+            directory / "hashes.json",
+            {name: sha(directory / name) for name in ("app.toml", "launcher.sh")},
+        )
+        return
     static = Path(config["appData"]) / "static"
     require(
         static.is_dir()
@@ -1287,11 +1300,12 @@ def cutover(config, release, lock_state):
             not any(active_counts(config)[table] for table in ACTIVE),
             "Work appeared after final drain",
         )
-        backup_database(config, backup_dir / "meta-quiesced.db")
-        write_json(
-            backup_dir / "quiesced-sha256.json",
-            {"meta-quiesced.db": sha(backup_dir / "meta-quiesced.db")},
-        )
+        if not config.get("developmentMode", False):
+            backup_database(config, backup_dir / "meta-quiesced.db")
+            write_json(
+                backup_dir / "quiesced-sha256.json",
+                {"meta-quiesced.db": sha(backup_dir / "meta-quiesced.db")},
+            )
         schema_before = schema_version(config)
         rollback_context = {
             "schemaVersion": schema_before,
@@ -1367,7 +1381,7 @@ def cutover(config, release, lock_state):
                 "version": release["version"],
                 "at": datetime.now(timezone.utc).isoformat(),
                 "processes": launched,
-                **database_receipt(release, backup_dir),
+                **database_receipt(release, backup_dir, config),
             },
         )
     except BaseException as error:
@@ -1428,7 +1442,7 @@ def cutover(config, release, lock_state):
                     "rolledBack": True,
                     "reasonType": type(error).__name__,
                     "processes": restored,
-                    **database_receipt(release, backup_dir),
+                    **database_receipt(release, backup_dir, config),
                     "at": datetime.now(timezone.utc).isoformat(),
                 },
             )

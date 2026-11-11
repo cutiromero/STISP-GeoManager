@@ -23,6 +23,7 @@ TEST_BUILD_RESOURCES = [
 def config():
     value = configuration.load(ROOT / "tools/release/config.example.toml")
     value["local"]["buildResources"] = list(TEST_BUILD_RESOURCES)
+    value["server"]["developmentMode"] = False
     return value
 
 

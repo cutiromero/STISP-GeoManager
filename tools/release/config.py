@@ -48,6 +48,7 @@ REQUIRED = {
         "statusPollSeconds": int,
     },
     "server": {
+        "developmentMode": bool,
         **dict.fromkeys(SERVER_PATHS, str),
         "baseUrl": str,
         "healthPath": str,
@@ -80,6 +81,8 @@ def load(path=CONFIG_PATH, *, executing=False):
         value = tomllib.loads(Path(path).read_text())
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise ConfigError(f"无法读取发布配置 {path}：{type(error).__name__}") from None
+    if isinstance(value.get("server"), dict):
+        value["server"].setdefault("developmentMode", False)
     if set(value) != set(REQUIRED):
         raise ConfigError("配置必须且只能包含 ssh、local、server、candidate 四个节")
     for section, fields in REQUIRED.items():

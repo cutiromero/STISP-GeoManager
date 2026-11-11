@@ -32,9 +32,9 @@ PUBLISH_STEPS = (
     "生成可复现完整包、增量包、文件清单；冻结启动器、工具、包和清单摘要",
     "创建独立远端操作目录；SCP 上传较小的包和固定工具；服务器校验并按需重建完整包",
     "独立会话启动，持有双发布锁；重新核对完整基线、解包到全新发布目录",
-    "迁移源码和已应用状态门禁；排空任务；备份数据库、配置、静态文件和启动器",
-    "归档旧/新完整前端公共依赖，独立 collectstatic；停 web、二次排空、停三个 worker、静止备份",
-    "静止备份后 migrate；无迁移须 schema 不变，有新增须正式结构指纹及迁移记录等于候选；再切静态树和两个 APP_ROOT、启动 worker 后启动 web",
+    "迁移源码和已应用状态门禁；排空任务；按环境存储策略保留必要配置及恢复凭据",
+    "准备前端公共依赖，独立 collectstatic；停 web、二次排空、停三个 worker；按环境策略保存静止状态",
+    "执行 migrate；无迁移须 schema 不变，有新增须正式结构指纹及迁移记录等于候选；再切静态树和两个 APP_ROOT、启动 worker 后启动 web",
     "进程身份、worker 锁/心跳、依赖服务、健康接口、首页 JS 摘要与 Content-Type 硬检查",
     "轮询直至已接受/已回滚/需人工处理；取回清单和回执；删除临时源码与发布包",
 )
@@ -166,6 +166,10 @@ def plan(args, config, repo, emit=print):
             latest = sorted(RECEIPTS.iterdir())[-1:]
             if latest:
                 emit(f"最近本机记录：{latest[0]}")
+    elif config["server"].get("developmentMode", False):
+        emit(
+            "开发模式只保留现用程序；请从 GitHub 指定提交生成恢复提交，经候选验证后重新发布，保留当前原始数据。"
+        )
     else:
         emit(
             "读取当前已接受清单与 rollback-context；验证旧代码、旧启动器、备份、当前配置、schema 和双锁。"
@@ -536,6 +540,11 @@ def main(argv=None, *, executor_factory=Executor, repo=REPO):
         config_path = Path(__file__).with_name("config.example.toml")
         print("未配置 release.local.toml，以下仅为样例离线计划，不代表真实服务器配置。")
     config = configuration.load(config_path, executing=args.execute)
+    if args.command == "rollback" and args.execute:
+        server.require(
+            not config["server"].get("developmentMode", False),
+            "开发模式请从 GitHub 指定提交重建并重新发布；不依赖服务器旧目录，不恢复旧数据库",
+        )
     if args.local_only:
         local_stages(args, config, repo)
         return 0
