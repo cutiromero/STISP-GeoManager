@@ -14,6 +14,7 @@ import rasterio
 import yaml
 
 from apps.compute import runtime
+from apps.compute import operator_checks
 from apps.compute.failures import reported_failure
 from apps.compute.operator_checks import check_package, source_packages
 from apps.compute.packages import ComputeError, inspect_package, validate_manifest
@@ -41,6 +42,30 @@ def test_skeleton_manifest_and_real_selftest(skeleton, monkeypatch):
     assert "单行表格复制：通过" in output.getvalue()
     with pytest.raises(Exception, match="目标目录已存在"):
         call_command("new_operator", "protocol-test", directory=directory.parent)
+
+
+def test_selftest_inputs_use_the_same_portable_snapshot_boundary_as_tasks(
+    skeleton, monkeypatch
+):
+    monkeypatch.setattr(runtime, "config", native_config)
+    execute = operator_checks.execute
+    observed = []
+
+    def inspect_inputs(attempt, package, inputs, outputs, manifest, heartbeat):
+        request = json.loads((inputs / "context.json").read_text())
+        for item in request["inputs"].values():
+            assert item["path"].startswith("/inputs/")
+            source = inputs / item["path"].removeprefix("/inputs/")
+            assert source.is_file()
+            assert checksum(source) == item["sha256"]
+            observed.append(source)
+        return execute(attempt, package, inputs, outputs, manifest, heartbeat)
+
+    from apps.compute.packages import checksum
+
+    monkeypatch.setattr(operator_checks, "execute", inspect_inputs)
+    check_package(source_packages(skeleton[0])[0][1])
+    assert observed
 
 
 def test_repeated_inputs_have_runnable_selftest(skeleton, monkeypatch):

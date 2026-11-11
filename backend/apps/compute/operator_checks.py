@@ -261,7 +261,10 @@ def check_package(data, *, emit=lambda message: None):
             )
             prepared, collections = materialize_fixture(fixture, inputs, manifest)
             request = {
-                "inputs": prepared,
+                "inputs": {
+                    key: {**item, "path": "/inputs/" + Path(item["path"]).name}
+                    for key, item in prepared.items()
+                },
                 "inputCollections": collections,
                 "parameters": fixture["parameters"],
                 "fieldMappings": fixture.get("fieldMappings", {}),
