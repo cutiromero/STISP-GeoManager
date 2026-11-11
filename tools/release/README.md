@@ -34,7 +34,9 @@ $PYTHON tools/release/release.py fast --execute
 - 正式切换保留排空、双锁、备份和健康门禁。静止备份后才执行 `migrate`，再核对结构指纹和全部迁移记录与候选一致，之后才能切换静态树与启动器。基线迁移文件必须逐字节不变，新增文件集合必须与清单相同，迁移前正式已应用记录必须精确等于基线。
 - 健康失败只回退代码、启动器和静态文件，**不执行逆迁移、不恢复任何数据库**。回执注明“数据库结构已前进，旧代码经兼容检查可运行”，并保存静止备份路径。显式 `rollback` 对较新的结构核对同一证据、结构指纹及迁移记录后才允许回退。
 
-`local.pnpm` 是命令参数列表，默认前缀与 `scripts/verify_fast.py`、AGENTS.md 一致：`pnpm --config.verify-deps-before-run=false --config.manage-package-manager-versions=false`；工具不执行依赖安装或修改锁文件。`local.buildResources` 是仓库相对路径列表，默认包含三张团队照片和一张成果展示图。正式构建前复制到 Git 导出目录，缺少任何一张即停止并给出路径；逐文件 SHA-256 写入清单和 `build-resources.json`，构建后删除输入副本，只将正式 dist 与冻结源码一起打包。资源不得覆盖已跟踪源码，亦不得直接写入 dist 或 node_modules。
+`local.pnpm` 是命令参数列表，默认前缀与 `scripts/verify_fast.py`、AGENTS.md 一致：`pnpm --config.verify-deps-before-run=false --config.manage-package-manager-versions=false`；工具不执行依赖安装或修改锁文件。
+
+`local.buildResources` 是尚未进入 Git 的额外构建输入路径列表，默认 `[]`。团队照片和成果展示图随源码保存在 Git 中，通过 Git 导出目录直接参与构建，无需列入该配置。重建仍依赖外部素材的历史提交时，可按对应发布清单填写额外资源；工具在构建前复制这些文件，缺少文件即停止，逐文件 SHA-256 写入清单和 `build-resources.json`，构建后删除额外输入副本。额外资源不得覆盖已跟踪源码，亦不得直接写入 dist 或 node_modules。
 
 切换失败自动恢复代码、启动器和静态树；结构指纹或迁移记录偏离候选、结构身份不可读、进程身份不明或恢复失败则保留 `DEPLOY.lock`，转人工，不自动启动旧代码。先运行 `status --execute`，检查回执给出的阶段及远端操作目录 `driver.private.log`；不删除锁、不反复发起切换。显式回退只支持本工具创建且保留完整回退证据的已接受版本；旧现场脚本发布的版本仍可作为首次发布基线，但不能凭空生成回退证据。回退后的数据库保留新增迁移记录；不得把它冒充为旧代码的干净迁移基线继续 fast 发布。
 

@@ -10,12 +10,8 @@ options = ["ConnectTimeout=15", "ServerAliveInterval=15", "ServerAliveCountMax=4
 [local]
 branch = "codex/xintao"
 pnpm = ["pnpm", "--config.verify-deps-before-run=false", "--config.manage-package-manager-versions=false"]
-buildResources = [
-  "frontend/src/assets/team/han-yang.jpeg",
-  "frontend/src/assets/team/sun-shuhui.jpeg",
-  "frontend/src/assets/team/gao-danning.jpeg",
-  "frontend/src/assets/portal/results-showcase-20260924.png",
-]
+# 已跟踪素材随 Git 源码导出；这里只填写未进入 Git 的额外构建输入。
+buildResources = []
 buildSeconds = 1800
 commandSeconds = 3600
 statusPollSeconds = 2

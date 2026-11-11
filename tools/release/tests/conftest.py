@@ -11,11 +11,19 @@ import pytest
 from tools.release import artifacts, config as configuration, server
 
 ROOT = Path(__file__).resolve().parents[3]
+TEST_BUILD_RESOURCES = [
+    "frontend/src/assets/team/han-yang.jpeg",
+    "frontend/src/assets/team/sun-shuhui.jpeg",
+    "frontend/src/assets/team/gao-danning.jpeg",
+    "frontend/src/assets/portal/results-showcase-20260924.png",
+]
 
 
 @pytest.fixture
 def config():
-    return configuration.load(ROOT / "tools/release/config.example.toml")
+    value = configuration.load(ROOT / "tools/release/config.example.toml")
+    value["local"]["buildResources"] = list(TEST_BUILD_RESOURCES)
+    return value
 
 
 @pytest.fixture

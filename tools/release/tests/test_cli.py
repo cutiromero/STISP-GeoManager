@@ -24,7 +24,7 @@ EXAMPLE = Path(__file__).resolve().parents[1] / "config.example.toml"
         ('baseUrl = "http://127.0.0.1:6007"', 'baseUrl = "http://example.invalid"'),
         ('pnpm = ["pnpm",', "pnpm = [12,"),
         ('pnpm = ["pnpm",', 'pnpm = ["",'),
-        ('"frontend/src/assets/team/han-yang.jpeg"', '"../outside.jpeg"'),
+        ('buildResources = []', 'buildResources = ["../outside.jpeg"]'),
     ],
 )
 def test_config_missing_invalid(tmp_path, replace_with):
