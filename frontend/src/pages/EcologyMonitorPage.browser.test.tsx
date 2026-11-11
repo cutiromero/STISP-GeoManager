@@ -440,6 +440,10 @@ it("目标分辨率和窄屏无横向溢出", async () => {
     expect(metrics.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       metrics.closest(".monitor-panel")!.getBoundingClientRect().bottom,
     );
+    for (const number of root.querySelectorAll<HTMLElement>(".monitor-number"))
+      expect(number.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+        Number.parseFloat(getComputedStyle(number).fontSize),
+      );
   }
   await page.viewport(1920, 1080);
   await page.screenshot({ path: "ecology-monitor-desktop.png" });

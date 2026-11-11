@@ -179,6 +179,7 @@
 .monitor-number {
   display: inline-block;
   overflow: hidden;
+  line-height: 1.2;
   vertical-align: bottom;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-variant-numeric: tabular-nums;
@@ -196,6 +197,15 @@
   inset: 0;
   width: 100%;
   height: 100%;
+}
+.monitor-planet-stage[data-view="globe"] .monitor-map-point {
+  width: 11px;
+  height: 11px;
+  box-shadow: 0 0 8px var(--point-color, #65dfc8);
+}
+.monitor-planet-stage[data-view="globe"] .monitor-point-core {
+  width: 4px;
+  height: 4px;
 }
 .monitor-orbital-scene {
   position: absolute;
