@@ -10,7 +10,7 @@ import runpy
 ROOT = Path(__file__).resolve().parents[3]
 HERE = Path(__file__).resolve().parent
 DEFAULT_OUTPUT = ROOT / ".runtime/input-adapter-packages"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 SPECS = {
     "input-vector-class-masks": (
         "分类矢量栅格化",

@@ -462,19 +462,8 @@ function AgentWorkspace({
     : mode === "chat"
       ? ui("快速对话", "Quick chat")
       : ui("科研智能体", "Research agent");
-  const workflowLabel = logicProject
-    ? ui("逻辑推理", "Logical reasoning")
-    : ui("MH-workflow", "MH-workflow");
-  const openLogicPanel = () => {
-    setLogicPanelMounted(true);
-    setLogicUploadsOpen(true);
-    setPrompt(
-      (value) =>
-        value ||
-        "请检查这些资料的岩性、构造与蚀变关系，识别不一致之处，给出处置建议并生成对比成果。",
-    );
-  };
-  const workflowButton = mode === "agent" && (
+  const openLogicFlow = () => navigate("/business-flows");
+  const workflowButton = mode === "agent" && !logicProject && (
     <Button
       type="text"
       icon={<NodeIndexOutlined />}
@@ -483,10 +472,10 @@ function AgentWorkspace({
           ? "agent-workflow-attention"
           : ""
       }
-      onClick={() => (logicProject ? openLogicPanel() : setWorkflowOpen(true))}
+      onClick={() => setWorkflowOpen(true)}
     >
-      {workflowLabel}
-      {!logicProject && composerWorkflowStatus && (
+      {ui("MH-workflow", "MH-workflow")}
+      {composerWorkflowStatus && (
         <span>{workflowStatusLabels[composerWorkflowStatus]}</span>
       )}
     </Button>
@@ -1773,10 +1762,10 @@ function AgentWorkspace({
                         {question}
                       </Button>
                     ))}
-                    <Button type="primary" onClick={openLogicPanel}>
+                    <Button type="primary" onClick={openLogicFlow}>
                       {ui(
-                        "上传我的地质资料做逻辑推理",
-                        "Upload my geology data for reasoning",
+                        "从业务流开始逻辑推理",
+                        "Start reasoning with a business flow",
                       )}
                     </Button>
                   </div>
@@ -1911,6 +1900,10 @@ function AgentWorkspace({
                           })
                         }
                         onRestart={() => {
+                          if (logicProject) {
+                            openLogicFlow();
+                            return;
+                          }
                           setPrompt(
                             `请重新发起一次分析：${r.researchIntent?.goal}。先核对上次失败原因，复用可用的已有计算结果；需要重新计算的部分请说明。`,
                           );
@@ -2162,7 +2155,7 @@ function AgentWorkspace({
                   {logicProject &&
                     !logicUploadsOpen &&
                     logicUploadCount > 0 && (
-                      <Button type="text" onClick={openLogicPanel}>
+                      <Button type="text" onClick={openLogicFlow}>
                         已选 {logicUploadCount} 份资料 · 展开
                       </Button>
                     )}
@@ -2269,7 +2262,6 @@ function AgentWorkspace({
                         业务流
                       </Button>
                     )}
-                    {logicProject && workflowButton}
                     {mode === "agent" && bootstrap && !logicProject && (
                       <AgentToolSelection
                         bootstrap={bootstrap}
@@ -2461,7 +2453,7 @@ function AgentWorkspace({
       </div>
       {mode === "agent" && canUse && (
         <Drawer
-          title={workflowLabel}
+          title={ui("MH-workflow", "MH-workflow")}
           open={workflowOpen}
           onClose={() => setWorkflowOpen(false)}
           size={layout.workflow}

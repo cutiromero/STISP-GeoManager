@@ -839,7 +839,7 @@ export default function BusinessFlowActivity({
         </div>
       )}
       <footer className="business-flow-activity-actions">
-        <Space wrap>
+        <Space wrap align="center" size={8}>
           <Button
             type="text"
             size="small"
@@ -900,6 +900,7 @@ export default function BusinessFlowActivity({
             <Button
               type="text"
               size="small"
+              icon={<FileTextOutlined />}
               onClick={() => setLegacyOpen((value) => !value)}
             >
               {legacyOpen

@@ -345,3 +345,180 @@ it("keeps selections across remote searches and does not reread the restored sou
   expect(catalog).toHaveBeenCalledTimes(2);
   expect(agentApi.restoreLogicConfiguration).toHaveBeenCalledOnce();
 });
+
+it.each([
+  [1461, 812, 7],
+  [1461, 812, 40],
+  [360, 800, 7],
+  [360, 800, 40],
+])(
+  "新版准备页 %sx%s、%s 份资料时目标和启动操作保持可用",
+  async (width, height, count) => {
+    await page.viewport(width, height);
+    const selected = Array.from({ length: count }, (_, index) => ({
+      ...structuredClone(items[index % items.length]!),
+      id: `restored-${index}`,
+      resourceId: 900 + index,
+      fileName: `第${index + 1}份地质调查资料及矿物识别结果`,
+    }));
+    vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
+      configuration: {
+        resourceIds: selected.map((item) => item.resourceId),
+        roles: Object.fromEntries(
+          selected.map((item) => [item.roleHint!, item.resourceId]),
+        ),
+        fieldMapping: {},
+        prompt: "旧要求",
+        reasoningEffort: "low",
+      },
+      items: selected,
+      unavailableResourceIds: [],
+    });
+    showWorkspace();
+    await screen.findByText(selected[0]!.fileName);
+    const panel = screen.getByRole("region", { name: "业务流启动准备" });
+    expect(panel.querySelectorAll(".flow-materials-row")).toHaveLength(count);
+    const goal = screen.getByRole("textbox", { name: "本次任务目标" });
+    expect(goal).toHaveValue(intent.goal);
+    expect(goal).toBeVisible();
+    const start = screen.getByRole("button", {
+      name: "开始业务流",
+      exact: true,
+    });
+    await waitFor(() => expect(start).toBeEnabled());
+    const check = () => {
+      const bounds = start.getBoundingClientRect();
+      expect(bounds.top).toBeGreaterThanOrEqual(0);
+      expect(bounds.bottom).toBeLessThanOrEqual(height);
+      expect(bounds.right).toBeLessThanOrEqual(width);
+    };
+    check();
+    const scroll = panel.querySelector<HTMLElement>(".flow-launch-scroll")!;
+    await act(async () => {
+      scroll.scrollTop = scroll.scrollHeight;
+    });
+    check();
+    expect(agentApi.restoreLogicConfiguration).toHaveBeenCalledOnce();
+  },
+);
+
+it("复用来源通过业务流启动并冻结版本和本次目标", async () => {
+  const start = vi
+    .spyOn(businessFlowsApi, "start")
+    .mockResolvedValue(businessFlowRun());
+  const submit = vi.spyOn(agentApi, "submit");
+  render(
+    <App>
+      <BusinessFlowLaunch
+        launch={intent}
+        model="qwen"
+        onStarted={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    </App>,
+  );
+  await screen.findByText(items[0]!.fileName);
+  const action = screen.getByRole("button", {
+    name: "开始业务流",
+    exact: true,
+  });
+  await waitFor(() => expect(action).toBeEnabled());
+  fireEvent.click(action);
+  await waitFor(() => expect(start).toHaveBeenCalledOnce());
+  expect(start.mock.calls[0]![1]).toMatchObject({
+    versionId: version.id,
+    goal: intent.goal,
+    inputs: roles,
+    parameters: { uploadBatchId: expect.stringMatching(/^[a-f0-9]{32}$/) },
+  });
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it("退出准备保留引用，重新打开仍可恢复，只有清空才解除引用", async () => {
+  const remove = vi
+    .spyOn(agentApi, "deleteWorkflowUpload")
+    .mockResolvedValue(undefined);
+  const view = showWorkspace();
+  await screen.findByText(items[0]!.fileName);
+  fireEvent.click(
+    screen.getByRole("button", { name: "取消业务流准备", exact: true }),
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("region", { name: "业务流启动准备" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(remove).not.toHaveBeenCalled();
+  view.unmount();
+  showWorkspace();
+  await screen.findByText(items[0]!.fileName);
+  fireEvent.click(screen.getByRole("button", { name: "清空", exact: true }));
+  await waitFor(() => expect(remove).toHaveBeenCalledTimes(items.length));
+  await waitFor(() =>
+    expect(screen.queryByText(items[0]!.fileName)).not.toBeInTheDocument(),
+  );
+  expect(
+    screen.getByRole("button", { name: "开始业务流", exact: true }),
+  ).toBeDisabled();
+});
+
+it("ZIP 上传经业务流角色绑定后启动，不进入旧对话提交路径", async () => {
+  vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
+    configuration: null,
+    items: [],
+    unavailableResourceIds: [],
+  });
+  const upload = {
+    ...structuredClone(items[0]!),
+    id: "zip-geology",
+    source: "upload" as const,
+  };
+  vi.spyOn(agentApi, "uploadWorkflowBatch").mockResolvedValue({
+    items: [upload],
+    errors: [],
+  });
+  const start = vi
+    .spyOn(businessFlowsApi, "start")
+    .mockResolvedValue(businessFlowRun());
+  const submit = vi.spyOn(agentApi, "submit");
+  render(
+    <App>
+      <BusinessFlowLaunch
+        launch={intent}
+        model="qwen"
+        onStarted={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    </App>,
+  );
+  await screen.findByRole("button", { name: "上传文件/ZIP", exact: true });
+  const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
+  fireEvent.change(input, {
+    target: {
+      files: [
+        new File(["fixture"], "地质资料.zip", { type: "application/zip" }),
+      ],
+    },
+  });
+  await screen.findByText(upload.fileName);
+  const role = screen.getByRole("combobox", {
+    name: upload.fileName + "的资料角色",
+  });
+  fireEvent.mouseDown(role);
+  fireEvent.click(await screen.findByText("地质图（必需）", { exact: true }));
+  const action = screen.getByRole("button", {
+    name: "开始业务流",
+    exact: true,
+  });
+  await waitFor(() => expect(action).toBeEnabled());
+  fireEvent.click(action);
+  await waitFor(() => expect(start).toHaveBeenCalledOnce());
+  expect(start.mock.calls[0]![1]).toMatchObject({
+    versionId: version.id,
+    inputs: { lithology: upload.resourceId },
+  });
+  expect(start.mock.calls[0]![1].parameters?.uploadBatchId).toMatch(
+    /^[a-f0-9]{32}$/,
+  );
+  expect(submit).not.toHaveBeenCalled();
+});

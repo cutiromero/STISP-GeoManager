@@ -848,9 +848,25 @@
   border-top: 1px solid #edf1f2;
 }
 .business-flow-activity-actions .ant-btn {
-  font-size: 12px;
-  color: #829ba6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding-inline: 9px;
+  line-height: 20px;
+  font-size: 13px;
+  color: #647f8d;
   border-radius: 7px;
+}
+.business-flow-activity-actions .ant-space-item {
+  display: flex;
+  align-items: center;
+}
+.business-flow-activity-actions .ant-btn .anticon {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  line-height: 1;
 }
 .business-flow-activity-note {
   color: #8ca1a9;

@@ -6,9 +6,8 @@ import {
   within,
 } from "@testing-library/react";
 import { App } from "antd";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
 import { agentApi } from "../api/agent";
 import type {
   AgentBootstrap,
@@ -122,11 +121,18 @@ const chatRun = (): AgentRun => ({
   updatedAt: "",
   researchIntent: structuredClone(intent),
 });
+function CurrentPath() {
+  return <output data-testid="current-path">{useLocation().pathname}</output>;
+}
 function show() {
   return render(
     <App>
       <MemoryRouter initialEntries={["/agent/workbench"]}>
-        <AgentPage />
+        <Routes>
+          <Route path="/agent/workbench" element={<AgentPage />} />
+          <Route path="/business-flows" element={<h1>业务流目录</h1>} />
+        </Routes>
+        <CurrentPath />
       </MemoryRouter>
     </App>,
   );
@@ -324,219 +330,26 @@ beforeEach(() => {
 });
 afterEach(() => sessionStorage.clear());
 
-it.each([
-  [1461, 812, 7],
-  [360, 800, 7],
-  [1461, 812, 40],
-  [360, 800, 40],
-])(
-  "%ipx×%ipx：%i 份资料及复用提示不挤出输入框和发送按钮",
-  async (width, height, count) => {
-    await page.viewport(width, height);
-    const items = Array.from({ length: count }, (_, index) => ({
-      ...upload,
-      id: `catalog-${812 + index}`,
-      resourceId: 812 + index,
-      fileName: `第${index + 1}份地质调查资料与矿物识别结果.geojson`,
-      source: "catalog" as const,
-    }));
-    vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
-      configuration: {
-        resourceIds: items.map((item) => item.resourceId),
-        roles: { lithology: 812 },
-        fieldMapping: { lithology: { name: "DCMC" } },
-        prompt: "沿用上次的检查要求",
-        reasoningEffort: "low",
-      },
-      items,
-      unavailableResourceIds: [],
-    });
-    const mounted = show();
-    try {
-      fireEvent.click(
-        await screen.findByRole("button", { name: /(^|\s)逻辑推理$/ }),
-      );
-      await screen.findByText("沿用上次已确认的角色和字段");
-      const input = screen.getByRole("textbox", { name: "输入消息" });
-      const send = screen.getByRole("button", { name: "发送" });
-      const assertInViewport = (element: HTMLElement) => {
-        expect(element).toBeVisible();
-        const bounds = element.getBoundingClientRect();
-        expect(bounds.width).toBeGreaterThan(0);
-        expect(bounds.height).toBeGreaterThan(0);
-        expect(bounds.top).toBeGreaterThanOrEqual(0);
-        expect(bounds.bottom).toBeLessThanOrEqual(height);
-        expect(bounds.left).toBeGreaterThanOrEqual(0);
-        expect(bounds.right).toBeLessThanOrEqual(width);
-        const composer = document
-          .querySelector(".agent-composer")!
-          .getBoundingClientRect();
-        expect(bounds.top).toBeGreaterThanOrEqual(composer.top);
-        expect(bounds.bottom).toBeLessThanOrEqual(composer.bottom);
-        expect(
-          element.contains(
-            document.elementFromPoint(
-              bounds.left + bounds.width / 2,
-              bounds.top + bounds.height / 2,
-            ),
-          ),
-        ).toBe(true);
-      };
-      assertInViewport(input);
-      assertInViewport(send);
-      const files = document.querySelector<HTMLElement>(".agent-logic-files")!;
-      expect(files.scrollHeight).toBeGreaterThan(files.clientHeight);
-      files.scrollTop = files.scrollHeight;
-      const context = document.querySelector<HTMLElement>(
-        ".agent-composer-context",
-      )!;
-      context.scrollTop = context.scrollHeight;
-      assertInViewport(input);
-      assertInViewport(send);
-      context.scrollTop = 0;
-      fireEvent.click(screen.getByRole("button", { name: "收起" }));
-      expect(
-        screen.getByRole("button", { name: `已选 ${count} 份资料 · 展开` }),
-      ).toBeVisible();
-      assertInViewport(input);
-      assertInViewport(send);
-      expect(input).toHaveValue("沿用上次的检查要求");
-    } finally {
-      mounted.unmount();
-      await page.viewport(1600, 900);
-    }
-  },
-);
-
-it("360px 输入区恢复服务端配置，收起保留选择且发送显式复用请求", async () => {
-  await page.viewport(360, 800);
-  vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
-    configuration: {
-      resourceIds: [812],
-      roles: { lithology: 812 },
-      fieldMapping: { lithology: { name: "DCMC" } },
-      prompt: "沿用上次的检查要求",
-      reasoningEffort: "low",
-    },
-    items: [{ ...upload, source: "catalog" }],
-    unavailableResourceIds: [],
+it("逻辑项目仅通过业务流入口发起新任务，历史直接入口不再加载", async () => {
+  show();
+  const entry = await screen.findByRole("button", {
+    name: "从业务流开始逻辑推理",
+    exact: true,
   });
-  const mounted = show();
-  try {
-    const trigger = await screen.findByRole("button", {
-      name: /(^|\s)逻辑推理$/,
-    });
-    expect(trigger).not.toHaveTextContent("执行失败");
-    fireEvent.click(trigger);
-    await screen.findByText("沿用上次已确认的角色和字段");
-    const input = screen.getByPlaceholderText(
-      "输入问题，Enter 发送，Shift+Enter 换行",
-    );
-    expect(input).toHaveValue("沿用上次的检查要求");
-    const panel = screen.getByRole("region", { name: "上传本次资料" });
-    expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(360);
-    fireEvent.click(screen.getByRole("button", { name: "收起" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "已选 1 份资料 · 展开" }),
-    );
-    expect(agentApi.restoreLogicConfiguration).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(upload.fileName)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "发送" }));
-    await waitFor(() =>
-      expect(agentApi.submit).toHaveBeenCalledWith(
-        44,
-        expect.objectContaining({
-          prompt: "沿用上次的检查要求",
-          reuseConfirmedConfiguration: true,
-          thinkingMode: "fast",
-        }),
-      ),
-    );
-  } finally {
-    mounted.unmount();
-    await page.viewport(1600, 900);
-  }
-});
-
-it("收起资料不删除引用，清空作为独立操作解除系统数据引用", async () => {
-  vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
-    configuration: {
-      resourceIds: [812],
-      roles: { lithology: 812 },
-      fieldMapping: { lithology: { name: "DCMC" } },
-      prompt: "核对系统资料",
-      reasoningEffort: "low",
-    },
-    items: [{ ...upload, source: "catalog" }],
-    unavailableResourceIds: [],
-  });
-  vi.spyOn(agentApi, "deleteWorkflowUpload").mockResolvedValue(undefined);
-  const mounted = show();
-  try {
-    fireEvent.click(
-      await screen.findByRole("button", { name: /(^|\s)逻辑推理$/ }),
-    );
-    await screen.findByText(upload.fileName);
-    fireEvent.click(screen.getByRole("button", { name: "收起" }));
-    expect(agentApi.deleteWorkflowUpload).not.toHaveBeenCalled();
-    fireEvent.click(
-      screen.getByRole("button", { name: "已选 1 份资料 · 展开" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: /清\s*空/ }));
-    await waitFor(() =>
-      expect(agentApi.deleteWorkflowUpload).toHaveBeenCalledWith(upload.id),
-    );
-    await waitFor(() =>
-      expect(screen.queryByText(upload.fileName)).not.toBeInTheDocument(),
-    );
-    expect(
-      screen.queryByText("沿用上次已确认的角色和字段"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "选择系统数据" })).toBeVisible();
-  } finally {
-    mounted.unmount();
-  }
-});
-
-it("逻辑推理入口显示计算任务所属对话与查看入口，停放任务不提示阻塞", async () => {
-  vi.mocked(agentApi.activeWorkflow).mockResolvedValue({
-    item: {
-      id: "computing-workflow",
-      goal: "核对另一区地质图",
-      workflowType: "geology_generic",
-      status: "running",
-      updatedAt: "2026-11-05T08:00:00Z",
-      projectId: 3,
-      conversationId: 42,
-      conversationTitle: "另一区复查",
-    },
-    parked: [
-      {
-        id: "parked-workflow",
-        goal: "等待旧结果确认",
-        workflowType: "geology_generic",
-        status: "waiting_approval",
-        updatedAt: "2026-11-04T08:00:00Z",
-        projectId: 3,
-      },
-    ],
-  });
-  const mounted = show();
-  try {
-    fireEvent.click(
-      await screen.findByRole("button", { name: /(^|\s)逻辑推理$/ }),
-    );
-    expect(
-      await screen.findByText("正在计算或排队：核对另一区地质图"),
-    ).toBeVisible();
-    expect(screen.getByText(/对话：另一区复查/)).toBeVisible();
-    expect(
-      screen.getByText("已停放，不阻挡新任务：等待旧结果确认"),
-    ).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "查看" })).toHaveLength(2);
-  } finally {
-    mounted.unmount();
-  }
+  expect(
+    screen.queryByRole("button", { name: /(^|\s)逻辑推理$/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("region", { name: "上传本次资料" }),
+  ).not.toBeInTheDocument();
+  expect(agentApi.restoreLogicConfiguration).not.toHaveBeenCalled();
+  fireEvent.click(entry);
+  await waitFor(() =>
+    expect(screen.getByTestId("current-path")).toHaveTextContent(
+      "/business-flows",
+    ),
+  );
+  expect(agentApi.submit).not.toHaveBeenCalled();
 });
 
 it("沿用配置的对话卡片仍要求本次计划确认，并提供一键重新核对", async () => {
@@ -593,39 +406,12 @@ it("资料确认直接显示本次模型角色判断及具体依据", async () =
   }
 });
 
-it("逻辑项目在当前对话从ZIP上传走到批准，恢复历史并保留成果地图入口", async () => {
+it("历史逻辑任务恢复字段确认、批准和成果地图，不依赖已移除的启动入口", async () => {
   workflow.updatedAt = "2026-11-05T00:00:00Z";
+  intent.questions = [];
+  syncIntent();
+  runs = [chatRun()];
   const mounted = show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: /(^|\s)逻辑推理$/ }),
-  );
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "上传文件/ZIP" })).toBeEnabled(),
-  );
-  const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
-  fireEvent.change(input, {
-    target: {
-      files: [
-        new File(["fixture"], "本次资料.zip", { type: "application/zip" }),
-      ],
-    },
-  });
-  await screen.findByText(/已选 1 份资料/);
-  expect(agentApi.recognizeWorkflowRoles).not.toHaveBeenCalled();
-  fireEvent.change(
-    screen.getByPlaceholderText("输入问题，Enter 发送，Shift+Enter 换行"),
-    { target: { value: "检查上传资料并比较远景区" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  await screen.findByRole("combobox", { name: "第1份：地质图.geojson" });
-  expect(agentApi.submit).toHaveBeenCalledWith(
-    44,
-    expect.objectContaining({
-      uploadBatchId: expect.stringMatching(/^[a-f0-9]{32}$/),
-    }),
-  );
-  expect(screen.queryByRole("dialog")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "继续分析" }));
   const fields = await screen.findByRole("region", { name: "确认字段含义" });
   fireEvent.click(within(fields).getByRole("button", { name: "确认并开始" }));
   await waitFor(() =>

@@ -99,6 +99,71 @@
   flex-wrap: wrap;
   margin: 18px 0;
 }
+.logic-stage-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.logic-stage-title h4 {
+  margin: 0;
+}
+.logic-primary-actions .logic-description {
+  flex: 1 1 240px;
+  margin: 0;
+}
+.logic-task-workspace.is-compact {
+  border-radius: 10px;
+  background: #fcfdfd;
+}
+.logic-task-workspace.is-compact .logic-task-header {
+  padding: 14px 18px 10px;
+}
+.logic-task-workspace.is-compact .logic-task-heading h3 {
+  font-size: 14px;
+}
+.logic-task-workspace.is-compact .logic-header-actions .ant-btn {
+  height: 28px;
+  font-size: 12px;
+}
+.logic-task-workspace.is-compact > .ant-tabs > .ant-tabs-nav {
+  padding: 0 18px;
+}
+.logic-task-workspace.is-compact > .ant-tabs > .ant-tabs-content-holder {
+  padding: 16px 18px;
+}
+.logic-task-workspace.is-compact .ant-tabs-tab {
+  padding-block: 10px;
+  font-size: 13px;
+}
+.logic-task-workspace.is-compact .logic-stage-title h4 {
+  font-size: 15px;
+  line-height: 1.5;
+}
+.logic-task-workspace.is-compact .logic-primary-actions {
+  margin: 12px 0;
+}
+.logic-task-workspace.is-compact .logic-map-link {
+  height: 30px;
+  padding-inline: 10px;
+}
+.logic-task-workspace.is-compact .logic-primary-actions .logic-description {
+  font-size: 12px;
+}
+.logic-task-workspace.is-compact .logic-thinking-preview {
+  margin-top: 14px;
+  padding-top: 10px;
+}
+.logic-task-workspace.is-compact .logic-input-summary {
+  margin-top: 14px;
+  padding-top: 10px;
+}
+.logic-task-workspace.is-compact .logic-result-metrics {
+  margin: 18px 0 10px;
+}
+.logic-task-workspace.is-compact .logic-result-metrics strong {
+  font-size: 26px;
+}
 .logic-map-link {
   display: inline-flex;
   align-items: center;

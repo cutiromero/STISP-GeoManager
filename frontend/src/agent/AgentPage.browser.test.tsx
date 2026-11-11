@@ -3127,7 +3127,7 @@ it("logic effort restores deep xhigh when the user chooses the default strength"
 });
 
 it.each(["low", "medium", "xhigh"] as const)(
-  "logic effort preserves restored %s configuration through asynchronous bootstrap recovery",
+  "logic chat preserves selected %s effort through asynchronous bootstrap recovery without legacy intake",
   async (effort) => {
     projectCode.value = "02";
     vi.spyOn(agentApi, "restoreLogicConfiguration").mockResolvedValue({
@@ -3144,13 +3144,19 @@ it.each(["low", "medium", "xhigh"] as const)(
     vi.spyOn(agentApi, "activeWorkflow").mockResolvedValue({ item: null });
     const mounted = showAgent("workbench");
     await screen.findByText("旧问题");
-    fireEvent.click(screen.getByText("逻辑推理", { exact: true }));
+    const control = screen.getByRole("button", { name: "调整思考强度" });
+    fireEvent.click(control);
+    const slider = await screen.findByRole("slider", { name: "思考强度" });
+    fireEvent.keyDown(slider, { key: "Home", keyCode: 36 });
+    for (
+      let step = 0;
+      step < ["low", "medium", "xhigh"].indexOf(effort);
+      step++
+    )
+      fireEvent.keyDown(slider, { key: "ArrowRight", keyCode: 39 });
+    fireEvent.click(control);
+    expect(agentApi.restoreLogicConfiguration).not.toHaveBeenCalled();
     const label = { low: "轻量", medium: "标准", xhigh: "深入" }[effort];
-    await waitFor(() =>
-      expect(screen.getByRole("textbox", { name: "输入消息" })).toHaveValue(
-        "沿用已确认的分析设置",
-      ),
-    );
     expect(
       screen.getByRole("button", { name: "调整思考强度" }),
     ).toHaveTextContent(label);

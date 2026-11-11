@@ -6,9 +6,12 @@ It does not import Django or resolve platform files: callers provide authorized 
 
 from contextlib import ExitStack
 import math
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import rasterio
+from rasterio.enums import MaskFlags
 from rasterio.features import rasterize
 from rasterio.transform import from_origin
 from rasterio.warp import (
@@ -168,9 +171,14 @@ def binary_raster_masks(path, output, *, label="", class_labels=None):
                 dst.set_band_description(band, name)
             for _, window in src.block_windows(1):
                 if binary:
-                    values = (
-                        src.read(window=window, masked=True).filled(255).astype("uint8")
-                    )
+                    values = src.read(window=window, masked=True)
+                    if src.nodata == 0:
+                        masks = np.ma.getmaskarray(values).copy()
+                        for index, flags in enumerate(src.mask_flag_enums):
+                            if MaskFlags.nodata in flags:
+                                masks[index][values.data[index] == 0] = False
+                        values = np.ma.array(values.data, mask=masks, copy=False)
+                    values = values.filled(255).astype("uint8")
                     dst.write(values, window=window)
                 else:
                     raw = src.read(1, window=window, masked=True)
@@ -216,6 +224,8 @@ def combine_masks(
         readers = []
         resolutions = []
         channels = {}
+        explicit_masks = {}
+        normalized_sources = {}
         for entry in entries:
             cancelled()
             src = stack.enter_context(rasterio.open(entry["path"]))
@@ -226,6 +236,10 @@ def combine_masks(
             )
             resolutions.append(abs(transform.a))
             readers.append(src)
+            explicit_masks[src.name] = any(
+                MaskFlags.per_dataset in flags or MaskFlags.alpha in flags
+                for flags in src.mask_flag_enums
+            )
             for band in range(1, src.count + 1):
                 label = (
                     src.descriptions[band - 1]
@@ -261,6 +275,23 @@ def combine_masks(
                     (profile["height"], profile["width"]), 255, dtype="uint8"
                 )
                 for src, index in channels.get(name, []):
+                    if explicit_masks[src.name]:
+                        original = src.name
+                        if original not in normalized_sources:
+                            directory = stack.enter_context(
+                                TemporaryDirectory(
+                                    prefix=".mask-domain-", dir=Path(output).parent
+                                )
+                            )
+                            canonical = Path(directory) / "masks.tif"
+                            # GDAL ignores a dataset mask when src_nodata is
+                            # supplied. Encode the real mask as canonical 255
+                            # before reprojecting so it cannot be lost.
+                            binary_raster_masks(original, canonical, label="掩膜")
+                            normalized_sources[original] = stack.enter_context(
+                                rasterio.open(canonical)
+                            )
+                        src = normalized_sources[original]
                     temporary = np.full(result.shape, 255, dtype="uint8")
                     reproject(
                         rasterio.band(src, index),
@@ -269,7 +300,11 @@ def combine_masks(
                         src_crs=src.crs,
                         dst_transform=profile["transform"],
                         dst_crs=crs,
-                        src_nodata=src.nodata,
+                        # Binary-mask ports define 0 as observed absence. Some
+                        # legacy detection GeoTIFFs also declare NoData=0;
+                        # normalize that metadata to the stack's missing value
+                        # while retaining real missing values such as 255.
+                        src_nodata=255 if src.nodata == 0 else src.nodata,
                         dst_nodata=255,
                         resampling=Resampling.nearest,
                     )

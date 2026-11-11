@@ -49,6 +49,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
   const {
     workflow,
     busy = false,
+    compact = false,
     onCancel,
     onPause,
     onResume,
@@ -146,7 +147,8 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
     summary?.sourceCount ?? (inputSummary.length || undefined);
   const compare = (
     <Button
-      type="primary"
+      type={compact ? "default" : "primary"}
+      size={compact ? "small" : undefined}
       className="logic-map-link"
       target="_blank"
       rel="noopener"
@@ -200,7 +202,10 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
   const preparing = workflow.plan.phase === "review_mapping";
   const overview = (
     <div className="logic-overview">
-      <h4>{logicCurrentTitle(workflow)}</h4>
+      <div className="logic-stage-title">
+        {logicRunning(workflow) && <Spin size="small" />}
+        <h4>{logicCurrentTitle(workflow)}</h4>
+      </div>
       {deleted.length > 0 && (
         <Alert
           type="info"
@@ -212,7 +217,9 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
         <div className="logic-primary-actions">
           {compare}
           <span className="logic-description">
-            可先查看当前资料与阶段成果，后续结果生成后在对比页刷新。
+            {compact
+              ? "可先查看当前资料与阶段成果。"
+              : "可先查看当前资料与阶段成果，后续结果生成后在对比页刷新。"}
           </span>
         </div>
       )}
@@ -401,7 +408,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
             {workflow.pauseRequested
               ? "当前步骤到达保存点后停止后续处理。"
               : "当前无需操作，任务进度会持续保存。"}
-            {progressText && ` ${progressText}。`}
+            {!compact && progressText && ` ${progressText}。`}
           </p>
         </>
       )}
@@ -462,14 +469,19 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
     </div>
   );
   return (
-    <section className="logic-task-workspace" aria-label="工作流进度卡片">
+    <section
+      className={`logic-task-workspace${compact ? " is-compact" : ""}`}
+      aria-label="工作流进度卡片"
+    >
       <header className="logic-task-header">
         <div>
           <div className="logic-task-heading">
             <h3>
-              {workflow.workflowType === "geology_generic"
-                ? "地质综合分析"
-                : "海德乌拉地质综合分析"}
+              {compact
+                ? "专业分析详情"
+                : workflow.workflowType === "geology_generic"
+                  ? "地质综合分析"
+                  : "海德乌拉地质综合分析"}
             </h3>
             <Tag
               color={
@@ -486,10 +498,10 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
               {logicStatus(workflow)}
             </Tag>
           </div>
-          <p>逻辑推理 · 本次资料</p>
+          {!compact && <p>逻辑推理 · 本次资料</p>}
         </div>
         <div className="logic-header-actions">
-          {logicRunning(workflow) && onPause && (
+          {!compact && logicRunning(workflow) && onPause && (
             <Button
               aria-label="暂停"
               icon={<PauseOutlined />}
@@ -499,17 +511,20 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
               暂停
             </Button>
           )}
-          {workflow.status === "paused" && onResume && !deleted.length && (
-            <Button
-              type="primary"
-              aria-label="继续"
-              icon={<PlayCircleOutlined />}
-              loading={busy}
-              onClick={onResume}
-            >
-              继续
-            </Button>
-          )}
+          {!compact &&
+            workflow.status === "paused" &&
+            onResume &&
+            !deleted.length && (
+              <Button
+                type="primary"
+                aria-label="继续"
+                icon={<PlayCircleOutlined />}
+                loading={busy}
+                onClick={onResume}
+              >
+                继续
+              </Button>
+            )}
           <Dropdown
             trigger={["click"]}
             menu={{
@@ -522,6 +537,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           >
             <Button
               aria-label="更多任务操作"
+              size={compact ? "small" : undefined}
               disabled={busy}
               icon={<MoreOutlined />}
             >
@@ -530,27 +546,29 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
           </Dropdown>
         </div>
       </header>
-      <ol className="logic-phase-bar" aria-label="四个分析阶段">
-        {logicPhases.map((name, index) => (
-          <li
-            key={name}
-            className={
-              index < phase
-                ? "is-complete"
-                : index === phase
-                  ? "is-current"
-                  : ""
-            }
-            aria-current={index === phase ? "step" : undefined}
-          >
-            <span className="logic-phase-track" />
-            <span>
-              {index < phase && <CheckOutlined />}
-              {name}
-            </span>
-          </li>
-        ))}
-      </ol>
+      {!compact && (
+        <ol className="logic-phase-bar" aria-label="四个分析阶段">
+          {logicPhases.map((name, index) => (
+            <li
+              key={name}
+              className={
+                index < phase
+                  ? "is-complete"
+                  : index === phase
+                    ? "is-current"
+                    : ""
+              }
+              aria-current={index === phase ? "step" : undefined}
+            >
+              <span className="logic-phase-track" />
+              <span>
+                {index < phase && <CheckOutlined />}
+                {name}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
       <Tabs
         activeKey={view}
         onChange={setView}
