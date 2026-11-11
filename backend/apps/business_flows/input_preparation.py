@@ -319,4 +319,7 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
         workflow.status = "queued"
         _save(workflow, "输入适配已完成，继续已发布流程")
     workflow.plan["inputAdaptationComplete"] = True
+    # The next model guard reads the durable plan, including direct bindings.
+    # Freeze this transition before handing control to that model request.
+    _save(workflow, "输入资料已准备好，继续已发布流程")
     return True

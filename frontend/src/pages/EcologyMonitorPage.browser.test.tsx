@@ -308,9 +308,10 @@ it("渲染全部窗口，事件更新数字、预警与研判，地图点位可�
   expect(screen.getByText(/测试预警已汇入/)).toBeInTheDocument();
   expect(screen.getByText("模拟态势已更新")).toBeInTheDocument();
   fireEvent.click(
-    mapState.points.find(
-      (point) => point.getAttribute("aria-label") === "英苏河段",
-    )!,
+    screen.getByRole("button", { name: "选择监测点位", exact: true }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "英苏河段", exact: true }),
   );
   const details = screen.getByRole("complementary", { name: "点位详情" });
   expect(
@@ -378,8 +379,10 @@ it("鼠标悬停地球暂停自转，背景继续运动，移开后恢复", asyn
   await new Promise((resolve) => setTimeout(resolve, 100));
   expect(map.setCenter).not.toHaveBeenCalled();
   expect(
-    getComputedStyle(document.querySelector(".monitor-space-background")!, "::before")
-      .animationPlayState,
+    getComputedStyle(
+      document.querySelector(".monitor-space-background")!,
+      "::before",
+    ).animationPlayState,
   ).toBe("running");
   fireEvent.pointerLeave(globe);
   await waitFor(() => expect(map.setCenter).toHaveBeenCalled());

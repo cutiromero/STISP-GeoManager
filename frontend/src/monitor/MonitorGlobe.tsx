@@ -135,7 +135,7 @@ export default function MonitorGlobe({
           map.setPaintProperty(layer.id, "raster-saturation", -0.25);
           map.setPaintProperty(layer.id, "raster-brightness-max", 0.85);
         }
-        if (layer.type === "symbol")
+        if (layer.type === "symbol" || layer.type === "line")
           map.setLayoutProperty(layer.id, "visibility", "none");
       }
       map.setFog({
@@ -219,7 +219,7 @@ export default function MonitorGlobe({
       regional.current = map.getZoom() >= 3;
       setRegionalView(regional.current);
       for (const layer of map.getStyle().layers ?? [])
-        if (layer.type === "symbol")
+        if (layer.type === "symbol" || layer.type === "line")
           map.setLayoutProperty(
             layer.id,
             "visibility",

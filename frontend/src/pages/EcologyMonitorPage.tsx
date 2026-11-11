@@ -116,6 +116,7 @@ export function EcologyMonitorDashboard({
   const navigate = useNavigate();
   const root = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState<string>();
+  const [pointMenuOpen, setPointMenuOpen] = useState(false);
   const [now, setNow] = useState(Date.now);
   const [fullscreen, setFullscreen] = useState(false);
   const locale = currentLocale();
@@ -271,6 +272,8 @@ export function EcologyMonitorDashboard({
             <div className="monitor-point-picker">
               <Popover
                 trigger="click"
+                open={pointMenuOpen}
+                onOpenChange={setPointMenuOpen}
                 placement="topLeft"
                 title={t("monitor.stationSelector")}
                 content={
@@ -284,7 +287,10 @@ export function EcologyMonitorDashboard({
                           key={station.id}
                           size="small"
                           type={selectedId === station.id ? "primary" : "text"}
-                          onClick={() => setSelectedId(station.id)}
+                          onClick={() => {
+                            setSelectedId(station.id);
+                            setPointMenuOpen(false);
+                          }}
                         >
                           {station.name}
                         </Button>
@@ -315,7 +321,10 @@ export function EcologyMonitorDashboard({
                   </div>
                 }
               >
-                <Button icon={<EnvironmentOutlined />}>
+                <Button
+                  icon={<EnvironmentOutlined />}
+                  aria-label={t("monitor.stationSelector")}
+                >
                   {snapshot.stations.length} {t("monitor.siteUnit")}
                 </Button>
               </Popover>

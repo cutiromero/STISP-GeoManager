@@ -118,8 +118,8 @@ def test_conversion_queue_is_idempotent_and_import_is_workflow_private(adapted):
         record.refresh_from_db()
         assert record.status == "ready", record.error
     assert prepare(env) is True
-    # Completion flag is saved by the caller's normal state commit.
-    workflow.save(update_fields=["plan", "resource_ids"])
+    workflow.refresh_from_db()
+    assert workflow.plan["inputAdaptationComplete"] is True
     with project_scope(env["scope"]):
         workflow.refresh_from_db()
         prepared = record.resource

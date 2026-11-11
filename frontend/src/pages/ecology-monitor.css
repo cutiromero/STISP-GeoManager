@@ -123,8 +123,7 @@
   height: 100%;
 }
 .monitor-planet-stage[data-view="globe"] .monitor-map-point {
-  opacity: 0;
-  pointer-events: none;
+  display: none;
 }
 .monitor-planet-stage[data-view="globe"] .mapboxgl-canvas {
   mask-image: radial-gradient(
@@ -220,7 +219,7 @@
   position: absolute;
   z-index: 3;
   bottom: 17px;
-  left: 18px;
+  left: calc(50% - 220px);
 }
 .monitor-point-menu {
   width: min(370px, 80vw);
@@ -448,7 +447,7 @@
 }
 .monitor-risk-content {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
   height: calc(100% - 30px);
   justify-content: space-around;
@@ -456,7 +455,7 @@
 .monitor-gauge {
   position: relative;
   flex: 0 1 140px;
-  min-width: 100px;
+  min-width: 80px;
   max-width: 170px;
   aspect-ratio: 1;
 }
@@ -487,6 +486,7 @@
   margin: 0;
   flex: 1;
   max-width: 160px;
+  min-width: 84px;
 }
 .monitor-risk-legend li {
   display: flex;
@@ -495,11 +495,13 @@
   padding: 6px 0;
   font-size: 11px;
   color: #bdd0da;
+  white-space: nowrap;
 }
 .monitor-risk-legend i {
   width: 5px;
   height: 5px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 .monitor-risk-legend strong {
   margin-left: auto;

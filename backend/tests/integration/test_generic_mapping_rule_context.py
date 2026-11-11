@@ -126,6 +126,40 @@ def infer(env):
     return generic_mapping.model_targets(env["workflow"], env["policy"], env["roles"])
 
 
+def test_direct_flow_inputs_are_frozen_before_the_first_live_mapping_guard(
+    bound, monkeypatch
+):
+    from apps.business_flows.input_preparation import advance_inputs
+    from apps.projects.context import ProjectScope, project_scope
+
+    env = bound
+    workflow = env["workflow"]
+    identity = workflow.plan["uploadInputs"]["lithology"]
+    resource = DataResource.objects.get(pk=identity)
+    workflow.plan["inputAdaptations"] = [
+        {
+            "role": "lithology",
+            "sourceId": identity,
+            "sourceRevision": resource.updated_at.isoformat(),
+            "status": "direct",
+        }
+    ]
+    workflow.save(update_fields=["plan"])
+    sent = capture(env, monkeypatch)
+    with project_scope(
+        ProjectScope(
+            (workflow.project_tag_id,), workflow.project_tag_id, env["owner"].id
+        )
+    ):
+        assert advance_inputs(workflow, env["owner"], env["policy"])
+        result = infer(env)
+    assert result["lithology"]["name"]["field"] == env["roles"][0]["fields"][0]
+    assert len(sent) == 1
+    workflow.refresh_from_db()
+    assert workflow.plan["effectiveInputs"] == {"lithology": identity}
+    assert workflow.plan["inputAdaptationComplete"] is True
+
+
 @pytest.fixture
 def derived_bound(bound):
     workflow = bound["workflow"]
