@@ -116,7 +116,7 @@
 }
 .monitor-planet-stage {
   position: absolute;
-  inset: 0 0 34px;
+  inset: 0;
 }
 .ecology-monitor .monitor-map {
   position: absolute;
@@ -264,11 +264,16 @@
 .monitor-map-controls {
   position: absolute;
   z-index: 3;
-  left: 50%;
-  bottom: 17px;
-  transform: translateX(-50%);
+  top: 14px;
+  right: 14px;
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
+}
+.monitor-map-controls .ant-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
 }
 .monitor-map-notice {
   position: absolute;
@@ -959,7 +964,8 @@
     left: 12px;
   }
   .monitor-map-controls {
-    bottom: 17px;
+    top: 12px;
+    right: 12px;
   }
   .monitor-summary {
     flex-wrap: wrap;

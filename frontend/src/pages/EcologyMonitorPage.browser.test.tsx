@@ -308,10 +308,7 @@ it("渲染全部窗口，事件更新数字、预警与研判，地图点位可�
   expect(screen.getByText(/测试预警已汇入/)).toBeInTheDocument();
   expect(screen.getByText("模拟态势已更新")).toBeInTheDocument();
   fireEvent.click(
-    screen.getByRole("button", { name: "选择监测点位", exact: true }),
-  );
-  fireEvent.click(
-    await within(screen.getByRole("group", { name: "选择监测点位" })).findByRole("button", { name: "英苏河段", exact: true }),
+    within(screen.getByLabelText("塔里木河流域监测地球")).getByRole("button", { name: "英苏河段", exact: true }),
   );
   const details = screen.getByRole("complementary", { name: "点位详情" });
   expect(
@@ -405,6 +402,12 @@ it("全球视角保留点位和连线，点击监测区可聚焦，头部保持�
   act(() => map.emit("zoomend"));
   expect(map.api.setLayoutProperty).not.toHaveBeenCalledWith("monitor-links", "visibility", "none");
   expect(document.querySelector(".monitor-topbar")!.getBoundingClientRect().height).toBeLessThan(80);
+  expect(screen.queryByRole("button", { name: "选择监测点位" })).toBeNull();
+  const global = screen.getByRole("button", { name: "全球视角", exact: true });
+  expect(global.textContent).toBe("");
+  fireEvent.mouseOver(global);
+  const tooltip = await screen.findByRole("tooltip", { name: "全球视角" });
+  await waitFor(() => expect(tooltip).toBeVisible());
   fireEvent.click(overview);
   expect(map.api.flyTo).toHaveBeenCalledWith(expect.objectContaining({ zoom: monitorConfig.initialView.regionZoom }));
 });

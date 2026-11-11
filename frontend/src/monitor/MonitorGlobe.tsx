@@ -1,5 +1,5 @@
 import { AimOutlined, GlobalOutlined } from "@ant-design/icons";
-import { Button } from "antd";
+import { Button, Tooltip } from "antd";
 import mapboxgl, {
   type GeoJSONSource,
   type GeoJSONSourceSpecification,
@@ -363,12 +363,12 @@ export default function MonitorGlobe({
         </div>
       )}
       <div className="monitor-map-controls">
-        <Button icon={<GlobalOutlined />} onClick={() => focus(false)}>
-          {t("monitor.globalView")}
-        </Button>
-        <Button icon={<AimOutlined />} onClick={() => focus(true)}>
-          {t("monitor.regionView")}
-        </Button>
+        <Tooltip title={t("monitor.globalView")} placement="left">
+          <Button shape="circle" aria-label={t("monitor.globalView")} icon={<GlobalOutlined />} onClick={() => focus(false)} />
+        </Tooltip>
+        <Tooltip title={t("monitor.regionView")} placement="left">
+          <Button shape="circle" aria-label={t("monitor.regionView")} icon={<AimOutlined />} onClick={() => focus(true)} />
+        </Tooltip>
       </div>
     </>
   );

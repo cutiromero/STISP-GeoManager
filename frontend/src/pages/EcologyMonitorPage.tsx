@@ -3,7 +3,6 @@ import {
   CloseOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
-  EnvironmentOutlined,
   PauseOutlined,
   CaretRightOutlined,
 } from "@ant-design/icons";
@@ -12,7 +11,6 @@ import {
   App,
   Button,
   ConfigProvider,
-  Popover,
   Result,
   Spin,
   theme,
@@ -45,8 +43,6 @@ import {
   metricPrecision,
   metricUnits,
   riskColors,
-  riskLevels,
-  typeColors,
 } from "../monitor/state";
 import { metricIds, type MonitorDataSource } from "../monitor/types";
 import { useMonitor, useMonitorActivity } from "../monitor/useMonitor";
@@ -122,7 +118,6 @@ export function EcologyMonitorDashboard({
   const navigate = useNavigate();
   const root = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState<string>();
-  const [pointMenuOpen, setPointMenuOpen] = useState(false);
   const [now, setNow] = useState(Date.now);
   const [fullscreen, setFullscreen] = useState(false);
   const locale = currentLocale();
@@ -279,67 +274,6 @@ export function EcologyMonitorDashboard({
                 </time>
               </aside>
             )}
-            <div className="monitor-point-picker">
-              <Popover
-                trigger="click"
-                open={pointMenuOpen}
-                onOpenChange={setPointMenuOpen}
-                placement="topLeft"
-                title={t("monitor.stationSelector")}
-                content={
-                  <div className="monitor-point-menu">
-                    <div
-                      className="monitor-station-selector"
-                      role="group"
-                      aria-label={t("monitor.stationSelector")}
-                    >
-                      {snapshot.stations.map((station) => (
-                        <Button
-                          key={station.id}
-                          size="small"
-                          type={selectedId === station.id ? "primary" : "text"}
-                          onClick={() => {
-                            setSelectedId(station.id);
-                            setPointMenuOpen(false);
-                          }}
-                        >
-                          {station.name}
-                        </Button>
-                      ))}
-                    </div>
-                    <div className="monitor-map-legend">
-                      <div>
-                        {Object.entries(typeColors).map(([type, color]) => (
-                          <span key={type}>
-                            <i style={{ background: color }} />
-                            {t(`monitor.type.${type}`)}
-                          </span>
-                        ))}
-                      </div>
-                      <div>
-                        {riskLevels.map((level) => (
-                          <span key={level}>
-                            <i
-                              className="monitor-ring-key"
-                              style={{ borderColor: riskColors[level] }}
-                            />
-                            {t(`monitor.level.${level}`)}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <p>{t("monitor.dataDisclaimer")}</p>
-                  </div>
-                }
-              >
-                <Button
-                  icon={<EnvironmentOutlined />}
-                  aria-label={t("monitor.stationSelector")}
-                >
-                  {snapshot.stations.length} {t("monitor.siteUnit")}
-                </Button>
-              </Popover>
-            </div>
           </section>
           <div className="monitor-information">
             <div className="monitor-summary">
