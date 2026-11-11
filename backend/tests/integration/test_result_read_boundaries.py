@@ -57,7 +57,9 @@ def test_revocation_during_batch_read_blocks_returning_collected_rows(
     demo, monkeypatch
 ):
     workflow, output = results(demo)
-    original = demo_results._read_output
+    # read_results reads every output through _read_task_output after one
+    # task check; revoking during that loop must still fail the final check.
+    original = demo_results._read_task_output
     checked = []
 
     def revoke(*args):
@@ -69,7 +71,7 @@ def test_revocation_during_batch_read_blocks_returning_collected_rows(
             ).delete()
         return value
 
-    monkeypatch.setattr(demo_results, "_read_output", revoke)
+    monkeypatch.setattr(demo_results, "_read_task_output", revoke)
     with pytest.raises((PermissionDenied, demo_results.ComputeError)):
         demo_results.read_results(workflow, demo["owner"], demo["policy"], output.task)
 

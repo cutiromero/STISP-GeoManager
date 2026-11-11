@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "identifier": "geology-multi-prospect",
   "name": "优先核查远景区分析",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "仅使用修正后岩性、构造、蚀变及有效权重，以连续支持场圈定平滑远景区；同一连通支持带合并，区域无重叠，输出红黄蓝渐变热力图及逐区依据。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",

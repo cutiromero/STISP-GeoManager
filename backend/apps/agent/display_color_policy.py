@@ -151,13 +151,16 @@ def refresh_snapshot(snapshot):
                 continue
             layer = dict(source_layer)
             group["children"].append(layer)
-            layer["symbolization"] = refresh_style(
+            style = refresh_style(
                 layer.get("symbolization"),
                 bound=agent_map or bool(layer.get("colorAdvice")),
             )
-            if layer.get("layerType") == "raster" and layer[
+            # Layers saved without a style keep that shape; no empty key is added.
+            if style is not None or "symbolization" in layer:
+                layer["symbolization"] = style
+            if layer.get("layerType") == "raster" and layer.get(
                 "symbolization"
-            ] is not source_layer.get("symbolization"):
+            ) is not source_layer.get("symbolization"):
                 layer.pop("tileUrl", None)
                 layer["renderStatus"] = "queued"
     return result

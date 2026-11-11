@@ -1082,8 +1082,14 @@ def _collection_cancelled(workflow) -> bool:
     check_pause(workflow)
     if not current.cancel_requested and current.status != "cancelled":
         return False
+    # The control merge keeps the stored plan once cancellation is requested,
+    # so the terminal phase is written to that stored plan under this lock.
+    plan = {**current.plan, "phase": "cancelled"}
+    AgentWorkflow.objects.filter(pk=workflow.id).update(
+        plan=plan, plan_hash=_state_hash(plan)
+    )
+    workflow.plan = plan
     workflow.status, workflow.detail = "cancelled", "已停止场景后续处理"
-    workflow.plan["phase"] = "cancelled"
     _save(workflow)
     return True
 

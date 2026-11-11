@@ -283,6 +283,18 @@ export default function BusinessFlowsPage() {
     detail?.versions.find((item) => item.id === requestedVersion) ??
     detail?.version;
   const spec = version?.definition;
+  // Identical per-input notes are shown once in the section heading.
+  const inputNotes = spec?.inputRequirements ?? [];
+  const firstInputNote = inputNotes[0]?.description;
+  const sharedInputNote =
+    inputNotes.length > 1 &&
+    firstInputNote &&
+    inputNotes.every(
+      (input) =>
+        input.description === firstInputNote && !input.requiredFields.length,
+    )
+      ? firstInputNote
+      : "";
   const node = spec?.nodes.find((item) => item.id === nodeId) ?? spec?.nodes[0];
   const aiCount = spec?.nodes.filter((item) => item.review.ai).length ?? 0;
   const humanCount =
@@ -544,7 +556,6 @@ export default function BusinessFlowsPage() {
                   <Space wrap>
                     <Button
                       type="text"
-                      size="small"
                       icon={<ReloadOutlined />}
                       aria-label={ui("刷新业务流", "Refresh flow")}
                       loading={detailLoading}
@@ -552,7 +563,6 @@ export default function BusinessFlowsPage() {
                     />
                     <Tag variant="filled">{ui("已发布", "Published")}</Tag>
                     <Select
-                      size="small"
                       aria-label={ui("选择流程版本", "Select flow version")}
                       value={version.id}
                       options={detail.versions.map((item) => ({
@@ -575,7 +585,7 @@ export default function BusinessFlowsPage() {
                       {ui("开始业务流", "Start flow")}
                     </Button>
                     {detail.canManage && (
-                      <Button size="small" onClick={() => setEditor("version")}>
+                      <Button onClick={() => setEditor("version")}>
                         {ui("发布新版本", "Publish new version")}
                       </Button>
                     )}
@@ -652,10 +662,11 @@ export default function BusinessFlowsPage() {
                   <div className="business-flow-section-heading">
                     <h3>{ui("开始前需要的资料", "Required inputs")}</h3>
                     <p>
-                      {ui(
-                        "启动时绑定本项目的授权资料",
-                        "Bind authorized project data when starting",
-                      )}
+                      {sharedInputNote ||
+                        ui(
+                          "启动时绑定本项目的授权资料",
+                          "Bind authorized project data when starting",
+                        )}
                     </p>
                   </div>
                   {spec.inputRequirements.length ? (
@@ -665,20 +676,26 @@ export default function BusinessFlowsPage() {
                           <DatabaseOutlined />
                           <div>
                             <strong>{input.label}</strong>
-                            <small>
+                            <small
+                              className={
+                                input.required ? "is-required" : undefined
+                              }
+                            >
                               {input.required
                                 ? ui("必需", "Required")
                                 : ui("可选", "Optional")}
                             </small>
-                            <p>
-                              {input.description ||
-                                input.dataTypes
-                                  .map((value) => dataTypes[value] ?? value)
-                                  .join(" / ")}
-                              {input.requiredFields.length
-                                ? ` · ${ui("需包含字段：", "Required fields: ")}${input.requiredFields.join("、")}`
-                                : ""}
-                            </p>
+                            {!sharedInputNote && (
+                              <p>
+                                {input.description ||
+                                  input.dataTypes
+                                    .map((value) => dataTypes[value] ?? value)
+                                    .join(" / ")}
+                                {input.requiredFields.length
+                                  ? ` · ${ui("需包含字段：", "Required fields: ")}${input.requiredFields.join("、")}`
+                                  : ""}
+                              </p>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -707,13 +724,13 @@ export default function BusinessFlowsPage() {
                   </section>
                 )}
                 <section className="business-flow-start">
-                  <div>
-                    <label htmlFor="business-flow-goal">
-                      {ui(
-                        "这次希望完成什么任务",
-                        "What would you like to accomplish?",
-                      )}
-                    </label>
+                  <label htmlFor="business-flow-goal">
+                    {ui(
+                      "这次希望完成什么任务",
+                      "What would you like to accomplish?",
+                    )}
+                  </label>
+                  <div className="business-flow-start-row">
                     <Input.TextArea
                       id="business-flow-goal"
                       value={goal}
@@ -722,30 +739,30 @@ export default function BusinessFlowsPage() {
                       maxLength={12000}
                       placeholder={detail.flow.description || detail.flow.name}
                     />
-                    <p>
-                      {ui(
-                        "进入智能体后选择资料和模型。执行、独立审核与人工决定会沿同一条流程显示。",
-                        "Choose data and models in the agent. Execution, independent review and human decisions appear along the same flow.",
-                      )}
-                    </p>
+                    <Button
+                      type="primary"
+                      icon={<RightOutlined />}
+                      aria-label={ui("交给智能体执行", "Run with the agent")}
+                      disabled={!canStart}
+                      title={
+                        !canStart
+                          ? ui(
+                              "登录并获得智能体权限后可发起业务流",
+                              "Sign in with agent access to start a flow",
+                            )
+                          : undefined
+                      }
+                      onClick={launch}
+                    >
+                      {ui("交给智能体执行", "Run with the agent")}
+                    </Button>
                   </div>
-                  <Button
-                    type="primary"
-                    icon={<RightOutlined />}
-                    aria-label={ui("交给智能体执行", "Run with the agent")}
-                    disabled={!canStart}
-                    title={
-                      !canStart
-                        ? ui(
-                            "登录并获得智能体权限后可发起业务流",
-                            "Sign in with agent access to start a flow",
-                          )
-                        : undefined
-                    }
-                    onClick={launch}
-                  >
-                    {ui("交给智能体执行", "Run with the agent")}
-                  </Button>
+                  <p>
+                    {ui(
+                      "进入智能体后选择资料和模型。执行、独立审核与人工决定会沿同一条流程显示。",
+                      "Choose data and models in the agent. Execution, independent review and human decisions appear along the same flow.",
+                    )}
+                  </p>
                 </section>
               </div>
             </>

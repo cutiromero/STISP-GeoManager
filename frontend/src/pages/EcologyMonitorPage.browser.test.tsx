@@ -223,7 +223,7 @@ it("其他代码项目可开启，配置标题与初始视角生效，切换后�
   await screen.findByRole("heading", { name: config.title });
   await waitFor(() => expect(mapState.maps).toHaveLength(1));
   expect(mapState.maps[0]!.options.center).toEqual([102, 30]);
-  expect(mapState.maps[0]!.options.zoom).toBe(3);
+  expect(mapState.maps[0]!.options.zoom).toBeLessThanOrEqual(3);
   project.current = "7";
   view.rerender(resultsView());
   await screen.findByText("尚未配置监测内容");
@@ -353,6 +353,31 @@ it("减少动态效果时不自转、不自动滚动，新事件仍正常更新"
   expect(screen.getByText("已遵循系统设置：减少动态效果")).toBeInTheDocument();
 });
 
+it("地球自动转动，鼠标移入左侧暂停，移开后恢复", async () => {
+  const control = await controlledSource();
+  const view = render(
+    <AntApp>
+      <MemoryRouter>
+        <EcologyMonitorDashboard
+          source={control.source}
+          config={monitorConfig}
+        />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await waitFor(() => expect(mapState.maps).toHaveLength(1));
+  const map = mapState.maps[0]!.api;
+  await waitFor(() => expect(map.setCenter).toHaveBeenCalled());
+  const panel = screen.getByRole("region", { name: "流域监测网络" });
+  fireEvent.pointerEnter(panel);
+  map.setCenter.mockClear();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(map.setCenter).not.toHaveBeenCalled();
+  fireEvent.pointerLeave(panel);
+  await waitFor(() => expect(map.setCenter).toHaveBeenCalled());
+  view.unmount();
+});
+
 it("列表悬停和键盘聚焦暂停滚动，页面隐藏停止模拟产出并在恢复后继续", async () => {
   const source = createMockMonitorSource({ intervalMs: 100 });
   const view = render(
@@ -398,6 +423,7 @@ it("目标分辨率和窄屏无横向溢出", async () => {
   await screen.findByTestId("monitor-alert-list");
   for (const [width, height] of [
     [1920, 1080],
+    [1710, 835],
     [1366, 768],
     [2560, 1440],
     [390, 844],
@@ -407,6 +433,13 @@ it("目标分辨率和窄屏无横向溢出", async () => {
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
     for (const panel of root.querySelectorAll<HTMLElement>(".monitor-panel"))
       expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
+    const map = root.querySelector<HTMLElement>(".monitor-map")!;
+    expect(getComputedStyle(map).position).toBe("absolute");
+    expect(map.clientHeight).toBeGreaterThan(250);
+    const metrics = root.querySelector<HTMLElement>(".monitor-metrics")!;
+    expect(metrics.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      metrics.closest(".monitor-panel")!.getBoundingClientRect().bottom,
+    );
   }
   await page.viewport(1920, 1080);
   await page.screenshot({ path: "ecology-monitor-desktop.png" });

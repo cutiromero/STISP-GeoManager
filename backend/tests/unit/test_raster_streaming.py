@@ -201,7 +201,10 @@ def run_comparison(directory, case, before_prospect=None):
             **raster_inputs(initial, edited),
             "intersections": relations.output_path("intersections.gpkg"),
         },
-        initial.parameters,
+        {
+            "prospect_grid_resolution_m": initial.parameters["grid_resolution_m"],
+            "min_zone_area_km2": 0.01,
+        },
     )
     # Preserve historical inspection/application inputs; v2 applies only to the terminal stage.
     rule_rows = read(initial.inputs["rules"])

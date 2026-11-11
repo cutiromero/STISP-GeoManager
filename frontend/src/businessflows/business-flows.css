@@ -105,7 +105,7 @@
 }
 .business-flow-card-version {
   color: #8b9a9e;
-  font-size: 11px;
+  font-size: 12px;
 }
 .business-flow-catalog-card p {
   margin: 0 0 13px;
@@ -123,7 +123,7 @@
   align-items: center;
   gap: 7px 12px;
   color: #8a999f;
-  font-size: 11px;
+  font-size: 12px;
 }
 .business-flow-card-foot > span {
   display: inline-flex;
@@ -161,7 +161,7 @@
   align-items: center;
   gap: 7px;
   color: #7a9298;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
 }
 .business-flow-main-header h2 {
@@ -214,7 +214,7 @@
 .business-flow-section-heading p {
   margin: 0;
   color: #96a3a6;
-  font-size: 11px;
+  font-size: 12px;
 }
 .business-flow-overview-grid {
   display: grid;
@@ -237,7 +237,7 @@
   gap: 6px;
   align-items: center;
   color: #8b9da3;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   margin-bottom: 9px;
 }
@@ -260,7 +260,7 @@
 }
 .business-flow-inspector-section > strong {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: #647f8b;
   margin-bottom: 8px;
   font-weight: 600;
@@ -295,36 +295,49 @@
 }
 .business-flow-inputs {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 8px;
 }
 .business-flow-input {
   display: flex;
   gap: 10px;
-  padding: 11px 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
   border: 1px solid #e5eced;
   border-radius: 9px;
   background: #fff;
 }
 .business-flow-input > .anticon {
   color: #77949b;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 .business-flow-input > div {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
 }
 .business-flow-input strong {
-  font-size: 12px;
+  min-width: 0;
+  font-size: 13px;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 .business-flow-input small {
+  flex-shrink: 0;
   color: #96a5aa;
-  font-size: 10px;
-  margin-left: 7px;
+  font-size: 12px;
+}
+.business-flow-input small.is-required {
+  color: #a7804f;
+  font-weight: 500;
 }
 .business-flow-input p {
-  margin: 4px 0 0;
-  font-size: 11px;
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
   color: #8a9ca3;
   line-height: 1.7;
 }
@@ -332,34 +345,38 @@
   margin-top: 24px;
 }
 .business-flow-start {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
   margin-top: 28px;
-  padding: 21px;
+  padding: 20px;
   border: 1px solid #dce8e8;
   border-radius: 13px;
   background: #f5f9f8;
 }
-.business-flow-start > div {
-  flex: 1;
-  min-width: 0;
-}
 .business-flow-start label {
   display: block;
   margin-bottom: 8px;
-  color: #51717a;
-  font-size: 12px;
+  color: #36545f;
+  font-size: 14px;
   font-weight: 600;
+}
+.business-flow-start-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+.business-flow-start-row textarea {
+  flex: 1;
+  min-width: 0;
 }
 .business-flow-start p {
   margin: 8px 0 0;
   color: #8b9da4;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 .business-flow-start .ant-btn-primary {
-  min-height: 38px;
+  height: auto;
+  min-height: 40px;
+  padding-inline: 20px;
   flex-shrink: 0;
   border-radius: 9px;
   background: #497b85;
@@ -436,7 +453,7 @@
 }
 .business-flow-editor-advanced textarea {
   font-family: ui-monospace, monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 @media (max-width: 1200px) {
   .business-flows-workspace {
@@ -504,8 +521,9 @@
   }
   .business-flow-start {
     padding: 16px;
+  }
+  .business-flow-start-row {
     flex-direction: column;
-    align-items: stretch;
   }
   .business-flow-start .ant-btn-primary {
     width: 100%;
@@ -528,7 +546,7 @@
   gap: 7px;
   margin-bottom: 13px;
   color: #77919a;
-  font-size: 11px;
+  font-size: 12px;
 }
 .business-flow-editor-field > .ant-select {
   width: 100%;
@@ -594,13 +612,13 @@
 }
 .business-flow-activity-eyebrow {
   color: #91a5ab;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
 }
 .business-flow-activity-header .ant-tag {
   flex-shrink: 0;
   margin: 0;
-  font-size: 10px;
+  font-size: 11px;
 }
 .business-flow-activity-progress {
   display: flex;
@@ -615,7 +633,7 @@
 }
 .business-flow-activity-progress > span {
   color: #96a8ad;
-  font-size: 10px;
+  font-size: 11px;
   white-space: nowrap;
 }
 .business-flow-current-title {
@@ -628,7 +646,7 @@
 }
 .business-flow-current-title > span {
   color: #99abb1;
-  font-size: 10px;
+  font-size: 11px;
 }
 .business-flow-current-title > strong {
   font-weight: 550;
@@ -636,7 +654,7 @@
 }
 .business-flow-current-title > small {
   color: #ac9270;
-  font-size: 10px;
+  font-size: 11px;
 }
 .business-flow-actors {
   display: grid;
@@ -684,17 +702,17 @@
 }
 .business-flow-actor-heading > span {
   color: #94a7ae;
-  font-size: 10px;
+  font-size: 11px;
 }
 .business-flow-actor small {
   display: block;
   margin-top: 3px;
-  font-size: 11px;
+  font-size: 12px;
   color: #a4b2b8;
   overflow-wrap: anywhere;
 }
 .business-flow-actor p {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.9;
   color: #8b9fa7;
   margin: 7px 0 0;
@@ -737,7 +755,7 @@
   border-radius: 50%;
   background: #f0f5f5;
   color: #87a4ac;
-  font-size: 10px;
+  font-size: 11px;
   flex-shrink: 0;
 }
 .actor-reviewer > .business-flow-event-symbol {
@@ -755,7 +773,7 @@
 .business-flow-activity-events p {
   margin: 4px 0 0;
   color: #7f98a3;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.85;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -784,7 +802,7 @@
 .business-flow-human-decision p {
   margin: 6px 0 0;
   color: #ae9a78;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.8;
 }
 .business-flow-human-decision .ant-btn {
@@ -807,7 +825,7 @@
 }
 .business-flow-human-review > p {
   color: #aa997b;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.8;
   margin: 9px 0;
 }
@@ -830,13 +848,13 @@
   border-top: 1px solid #edf1f2;
 }
 .business-flow-activity-actions .ant-btn {
-  font-size: 11px;
+  font-size: 12px;
   color: #829ba6;
   border-radius: 7px;
 }
 .business-flow-activity-note {
   color: #8ca1a9;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.85;
   margin: 12px 0;
 }
@@ -870,7 +888,7 @@
 }
 .business-flow-actor-thinking {
   margin-top: 9px;
-  font-size: 10px;
+  font-size: 11px;
   color: #92a7af;
 }
 .business-flow-actor-thinking > summary {
@@ -879,13 +897,13 @@
 .business-flow-actor-thinking .agent-thinking-content {
   margin-top: 8px;
   max-height: 160px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .business-flow-node-outputs {
   margin-top: 12px;
 }
 .business-flow-node-outputs > .ant-btn {
-  font-size: 11px;
+  font-size: 12px;
   color: #7f9aa6;
   border-radius: 7px;
 }
@@ -913,5 +931,5 @@
 }
 .business-flow-current-title .business-flow-stage-complete {
   color: #7f9c91;
-  font-size: 10px;
+  font-size: 11px;
 }

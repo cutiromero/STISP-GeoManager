@@ -36,6 +36,7 @@ export function createMonitorMapMock(options: MapOptions) {
     getZoom: vi.fn(() => 2),
     setCenter: vi.fn(),
     flyTo: vi.fn(),
+    jumpTo: vi.fn(),
     remove: vi.fn(() => events.clear()),
   };
   return {
@@ -54,6 +55,8 @@ export function installMonitorMapboxMock() {
   vi.spyOn(mapboxgl, "Map").mockImplementation(
     class {
       constructor(options: MapOptions) {
+        if (typeof options.container !== "string")
+          options.container.classList?.add("mapboxgl-map");
         const map = createMonitorMapMock(options);
         maps.push(map);
         queueMicrotask(() => map.emit("load"));

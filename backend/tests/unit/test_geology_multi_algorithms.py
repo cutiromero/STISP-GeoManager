@@ -571,11 +571,11 @@ def test_operator_packages_are_deterministic_and_declare_clean_outputs():
             assert (
                 manifest["version"]
                 == (
-                    "2.4.0"
+                    "2.4.1"
                     if suffix == "prospect"
-                    else "1.3.0"
+                    else "1.3.1"
                     if suffix == "relations"
-                    else "1.4.0"
+                    else "1.4.1"
                 )
                 and manifest["deterministic"]
             )

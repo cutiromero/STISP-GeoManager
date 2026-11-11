@@ -453,4 +453,16 @@ def report(context, metrics, summary):
 
 
 def geojson_geometry(geometry, epsg):
-    return dump(mapping(gpd.GeoSeries([geometry], crs=epsg).to_crs(4326).iloc[0]))
+    # Display geometry travels with approvals. Canonical decimal coordinates
+    # avoid CPU/PROJ last-bit differences; input identities and measurements
+    # retain their original precision and are still compared exactly.
+    def rounded(value):
+        if isinstance(value, dict):
+            return {key: rounded(item) for key, item in value.items()}
+        if isinstance(value, (tuple, list)):
+            return [rounded(item) for item in value]
+        return round(value, 9) if isinstance(value, float) else value
+
+    return dump(
+        rounded(mapping(gpd.GeoSeries([geometry], crs=epsg).to_crs(4326).iloc[0]))
+    )

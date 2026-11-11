@@ -187,15 +187,186 @@
   display: inline-block;
   animation: monitor-digit-in 0.45s ease both;
 }
-.monitor-map {
+.monitor-planet-stage {
   position: absolute;
-  inset: 50px 0 125px;
+  inset: 115px 0 130px;
+}
+.ecology-monitor .monitor-map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.monitor-orbital-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  transition: opacity 0.6s;
+}
+.monitor-starfield {
+  width: 100%;
+  height: 100%;
+  fill: #c3edee;
+  filter: drop-shadow(0 0 3px #6ed9df);
+  mask-image: radial-gradient(circle at center, transparent 18%, #000 55%);
+  animation: monitor-stars 8s ease-in-out infinite alternate;
+}
+.monitor-planet-aura {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--planet-diameter, 320px) + 4px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1px solid #b8f8e9a6;
+  border-radius: 50%;
+  box-shadow:
+    0 0 5px 1px #d2fff2b0,
+    0 0 26px 4px #50cdd45c,
+    0 0 65px 14px #287db62e,
+    inset 0 0 18px 1px #7edada4a;
+  background: radial-gradient(circle at 30% 25%, #e7d5a515, transparent 48%);
+}
+.monitor-orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--planet-diameter, 320px) * 1.55);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid #e9c185aa;
+  box-shadow:
+    0 0 9px #edc38150,
+    inset 0 0 7px #edc38130;
+  transform: translate(-50%, -50%) rotate(-23deg) rotateX(71deg);
+}
+.monitor-orbit::before,
+.monitor-orbit::after,
+.monitor-orbit i,
+.monitor-orbit b {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 1px solid #bdeff050;
+}
+.monitor-orbit::after {
+  inset: 8px;
+  border-color: #ffde9c70;
+  box-shadow: 0 0 12px #ffc57540;
+}
+.monitor-orbit i {
+  inset: -14px;
+  border: 5px dashed #c9a46663;
+  animation: monitor-orbit-spin 95s linear infinite;
+}
+.monitor-orbit b {
+  inset: 0;
+  border: 0;
+  animation: monitor-orbit-spin 24s linear infinite;
+}
+.monitor-orbit b::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff5c9;
+  box-shadow: 0 0 12px 4px #ffd28c;
+}
+.monitor-orbit-polar {
+  width: calc(var(--planet-diameter, 320px) * 1.28);
+  border-color: #75d8dba0;
+  transform: translate(-50%, -50%) rotate(27deg) rotateY(63deg);
+  opacity: 0.7;
+}
+.monitor-orbit-polar i {
+  border-color: #6acbd83d;
+  animation-direction: reverse;
+}
+.monitor-orbit-polar b {
+  animation-duration: 37s;
+  animation-direction: reverse;
+}
+.monitor-orbit-reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--planet-diameter, 320px) * 1.18);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid #8bcecf28;
+  background: repeating-conic-gradient(
+    #93cfcf60 0deg 0.5deg,
+    transparent 0.5deg 6deg
+  );
+  mask-image: radial-gradient(transparent 68%, #000 69% 70%, transparent 71%);
+}
+.monitor-orbit-platform {
+  position: absolute;
+  width: 74%;
+  height: 16%;
+  left: 13%;
+  bottom: 1%;
+  border: 1px solid #5cb6c434;
+  border-radius: 50%;
+  box-shadow:
+    0 0 22px #57cfc513,
+    inset 0 0 18px #57cfc510;
+  background: repeating-radial-gradient(
+    ellipse at center,
+    transparent 0 17%,
+    #67b6bb25 18%,
+    transparent 19% 24%
+  );
+}
+.monitor-coordinate {
+  position: absolute;
+  color: #80b1ba;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+.monitor-coordinate-north {
+  right: 24px;
+  top: 22px;
+}
+.monitor-coordinate-south {
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  opacity: 0.7;
+}
+.monitor-planet-stage[data-view="region"] .monitor-orbital-scene {
+  opacity: 0;
+}
+.monitor-globe-panel:hover .monitor-orbital-scene *,
+.ecology-monitor[data-motion="paused"] .monitor-orbital-scene * {
+  animation-play-state: paused;
+}
+@keyframes monitor-orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes monitor-stars {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.9;
+  }
 }
 .monitor-map-controls {
   position: absolute;
   z-index: 3;
   right: 18px;
-  top: 180px;
+  bottom: 146px;
   display: flex;
   gap: 6px;
 }
@@ -381,7 +552,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows:
-    minmax(180px, 1fr) minmax(170px, 0.9fr) minmax(205px, 1.2fr)
+    minmax(245px, 1fr) minmax(170px, 0.9fr) minmax(205px, 1.2fr)
     auto;
   gap: 14px;
   padding-right: 4px;
@@ -824,7 +995,7 @@
   }
   .monitor-information {
     gap: 10px;
-    grid-template-rows: 185px 175px 215px auto;
+    grid-template-rows: 235px 175px 215px auto;
   }
   .monitor-panel {
     padding: 12px;
@@ -845,7 +1016,7 @@
     font-size: 27px;
   }
   .monitor-map-controls {
-    top: 175px;
+    bottom: 146px;
   }
   .monitor-map-bottom {
     padding: 12px;
@@ -889,7 +1060,7 @@
   }
   .monitor-information {
     overflow: visible;
-    grid-template-rows: 200px 190px 230px auto;
+    grid-template-rows: 245px 190px 230px auto;
   }
 }
 @media (max-width: 640px) {
@@ -929,7 +1100,7 @@
     gap: 20px;
   }
   .monitor-map-controls {
-    top: 195px;
+    bottom: 190px;
   }
   .monitor-map-caption {
     bottom: 230px;
@@ -952,6 +1123,9 @@
   }
   .monitor-metric strong {
     font-size: 26px;
+  }
+  .monitor-panel:has(.monitor-metrics) {
+    min-height: 245px;
   }
   .monitor-assessment-footer {
     align-items: flex-start;

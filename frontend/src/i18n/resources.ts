@@ -43,7 +43,8 @@ export const zhCN = {
       feedRunning: "演示数据流运行中 · 每 4 秒更新",
       feedPaused: "页面隐藏 · 数据流已暂停",
       motionReduced: "已遵循系统设置：减少动态效果",
-      rotationHint: "交互后暂停自转 15 秒；放大至研究区时保持视角",
+      rotationHint:
+        "鼠标移入暂停自转，移开恢复；拖拽后暂停 15 秒，研究区视角保持静止",
       riskTitle: "区域综合风险指数",
       riskUnit: "演示模型 / 100",
       compositeRisk: "综合风险",
@@ -1140,7 +1141,7 @@ export const enUS = {
       feedPaused: "Page hidden · Stream paused",
       motionReduced: "System preference applied: reduced motion",
       rotationHint:
-        "Rotation pauses for 15 seconds after interaction and stays off at regional zoom",
+        "Hover to pause rotation, leave to resume; dragging pauses for 15 seconds, and regional views stay still",
       riskTitle: "Regional composite risk",
       riskUnit: "Demo model / 100",
       compositeRisk: "Composite risk",

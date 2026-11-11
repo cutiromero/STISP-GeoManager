@@ -7,7 +7,7 @@
   gap: 10px 18px;
   margin-bottom: 12px;
   color: #86969b;
-  font-size: 11px;
+  font-size: 12px;
 }
 .business-flow-graph-legend > span {
   display: inline-flex;
@@ -45,13 +45,13 @@
 }
 .business-flow-graph-controls .ant-btn {
   color: #77938b;
-  font-size: 11px;
+  font-size: 12px;
 }
 .business-flow-graph-controls output {
   display: inline-block;
   min-width: 38px;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 .business-flow-graph-canvas {
   position: relative;
@@ -187,7 +187,7 @@
   overflow-wrap: anywhere;
 }
 .business-flow-node-eyebrow {
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.6;
   color: #97a5a6;
 }
@@ -285,7 +285,7 @@
   white-space: nowrap;
 }
 .flow-review-gate small {
-  font-size: 10px;
+  font-size: 12px;
   color: #a1aca9;
 }
 .flow-gate-icon {
@@ -316,7 +316,7 @@
 }
 .flow-hub-members span {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: #93a195;
 }
 .flow-hub-members .tone-active {
@@ -359,7 +359,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 9px;
+  font-size: 11px;
   color: #ae7e45;
 }
 .flow-return-badge.is-resolved {
