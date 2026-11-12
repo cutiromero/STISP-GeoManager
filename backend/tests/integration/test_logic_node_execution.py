@@ -86,7 +86,7 @@ def node_action(packet, *, mapping_failure=False):
     )
     history = [row["action"] for row in context["history"]]
     arguments = {key: approved[key] for key in ("versionId", "inputs")}
-    arguments["parameters"] = {}  # The manifest/frozen defaults remain effective.
+    arguments["parameters"] = deepcopy(approved["parameters"])
     arguments["fieldMappings"] = {}
     if mapping_failure and packet["node"]["id"] == "check" and context.get("failure"):
         arguments["fieldMappings"] = {"lithology": {"feature_id": "feature_id"}}

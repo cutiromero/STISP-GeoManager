@@ -62,12 +62,15 @@ def node_definition(workflow, stage):
         parameters=deepcopy(stage["parameters"]),
         instruction=(
             "查询本节点已登记算子后选择版本，按approved-inputs绑定输入并填写参数；必须先预检相同方案再运行。"
+            "固定参数可省略，也可原样复述approved-inputs中的冻结值；绝不能改值。"
+            "approved-inputs已给出该冻结版本的完整端口绑定和参数；查询确认身份后先直接预检，只在诊断需要时补读对应契约，不要逐列阅读输出schema。"
             "科学配方、输入来源与批准处置范围已冻结；不能为减少报错改变阈值、网格、规则或对象范围。"
             "失败依据code/remedy/gaps修正字段映射；涉及科学配方或更换资料须ask_user，不能自行批准。"
             "真实计算成功后读取statistics证据，再finish_node交付；质量复核仍由原专业服务执行。"
         ),
         contract={
-            "goal": node["title"],
+            "goal": node["title"]
+            + "：查询确认冻结版本后，先直接预检approved-inputs已提供的完整绑定及参数，通过后运行并交付真实统计；只在诊断需要时补读契约，不逐列阅读无关输出schema。",
             "acceptance": [
                 "已查询登记版本并按冻结科学配方预检",
                 "真实计算成功且已读取统计，未代替科研批准",

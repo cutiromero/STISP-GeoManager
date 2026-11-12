@@ -717,6 +717,75 @@ def test_mapping_cannot_modify_nonadjustable_linked_parameter(operators, monkeyp
         assert not ComputeTask.objects.exists()
 
 
+def test_professional_parameter_restatement_keeps_fixed_values_immutable(operators):
+    from apps.business_flows import logic_nodes
+    from apps.business_flows.node_loop import submission
+
+    env = operators
+    upgrade(env)
+    version = env["version"]
+    version.manifest["parameters"].append(
+        {
+            "key": "fixed_value",
+            "label": "固定参数",
+            "type": "string",
+            "default": "original",
+            "required": False,
+            "agent": {"adjustable": False},
+        }
+    )
+    version.save(update_fields=["manifest"])
+    workflow = create(env)
+    workflow.workflow_type = "geology_generic"
+    workflow.parameters["_businessFlow"]["nodeExecution"] = logic_nodes.EXECUTION_MODE
+    parameters = {
+        row["key"]: row["default"]
+        for row in version.manifest["parameters"]
+        if "default" in row
+    }
+    parameters.update(env["body"]["parameters"])
+    stage = {
+        "name": "calculate",
+        "identifier": version.algorithm.identifier,
+        "parameters": parameters,
+    }
+    workflow.plan.update(
+        stages=[stage],
+        stageIndex=0,
+        algorithms={
+            version.algorithm.identifier: {
+                "versionId": version.pk,
+                "checksum": version.checksum,
+            }
+        },
+    )
+    workflow.save(update_fields=["workflow_type", "parameters", "plan"])
+    node = logic_nodes.node_definition(workflow, stage)
+    item = state(workflow)["nodes"]["calculate"]
+    loop = loop_state(item)
+    loop.update(catalogIds=[version.pk], approvedInputs={"table": env["resource"].pk})
+    arguments = {
+        "versionId": version.pk,
+        "inputs": loop["approvedInputs"],
+        "parameters": {"fixed_value": "original"},
+    }
+    with project_scope(env["scope"]):
+        policy = {**default_policy(), "operatorEnabled": True}
+        _, body = submission(workflow, env["owner"], policy, node, loop, arguments)
+        assert body["parameters"]["fixed_value"] == "original"
+        for value in ["changed", 1, None]:
+            with pytest.raises(ComputeError, match="固定科学参数"):
+                submission(
+                    workflow,
+                    env["owner"],
+                    policy,
+                    node,
+                    loop,
+                    {**arguments, "parameters": {"fixed_value": value}},
+                )
+    assert not ComputeTask.objects.exists()
+
+
 def test_restart_pending_action_does_not_request_another_model(operators, monkeypatch):
     env = operators
     workflow = create(env)

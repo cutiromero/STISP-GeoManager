@@ -311,8 +311,6 @@ def submission(workflow, user, policy, node, loop, arguments):
         for key, row in specs.items()
         if row.get("agent", {}).get("adjustable") is True
     }
-    if set(parameters) - adjustable:
-        raise ComputeError("参数只能修改清单中agent.adjustable=true的项目")
     baseline = (
         node.get("parameters", {})
         if version.pk == node.get("algorithmVersionId")
@@ -323,6 +321,24 @@ def submission(workflow, user, policy, node, loop, arguments):
         **workflow.parameters.get("nodeParameters", {}).get(node["id"], {}),
         **loop.get("humanParameters", {}),
     }
+    from . import logic_nodes
+
+    fixed_keys = set(parameters) - adjustable
+    if fixed_keys:
+        if not logic_nodes.enabled(workflow):
+            raise ComputeError("参数只能修改清单中agent.adjustable=true的项目")
+        changed = [
+            key
+            for key in fixed_keys
+            if key not in specs
+            or key not in baseline
+            or type(parameters[key]) is not type(baseline[key])
+            or parameters[key] != baseline[key]
+        ]
+        if changed:
+            raise ComputeError(
+                "固定科学参数不能改变，需沿用已确认值：" + "、".join(sorted(changed))
+            )
     parameters = {**baseline, **parameters}
     for input_spec in input_specs:
         selected = mappings.get(input_spec["key"], {})
@@ -350,8 +366,6 @@ def submission(workflow, user, policy, node, loop, arguments):
         "name": binding(workflow)["name"] + " · " + node["title"],
         "idempotencyKey": f"node-{workflow.pk}-{node['id']}-{loop['steps']}",
     }
-    from . import logic_nodes
-
     if logic_nodes.enabled(workflow):
         logic_nodes.check_submission(workflow, node, version, body)
     return version, body
