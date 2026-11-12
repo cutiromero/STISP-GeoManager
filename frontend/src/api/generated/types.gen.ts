@@ -11733,7 +11733,7 @@ export type BusinessFlowNodeContract = {
     /**
      * 本节点允许的平台工具白名单
      */
-    tools: Array<'read_evidence' | 'operator_catalog' | 'preflight_operator' | 'run_operator' | 'prepare_input' | 'ask_user' | 'finish_node'>;
+    tools: Array<'read_evidence' | 'read_task_record' | 'operator_catalog' | 'preflight_operator' | 'run_operator' | 'prepare_input' | 'ask_user' | 'finish_node'>;
     /**
      * 节点动作步数硬上限，恢复不重置
      */
@@ -11751,7 +11751,7 @@ export type BusinessFlowNodeContract = {
      */
     maxRecoveries?: number;
     /**
-     * 节点主动处理累计秒数上限
+     * 节点主动处理累计秒数上限；单次模型请求另受当前策略maxRunSeconds限制，等待队列和人工响应不计入
      */
     maxSeconds?: number;
 };

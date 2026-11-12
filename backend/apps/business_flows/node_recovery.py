@@ -57,6 +57,12 @@ def decide_recovery(user, workflow, value):
             raise ComputeError("该节点不在当前恢复等待版本，请刷新", 409)
         definition = binding(current)["definitionSnapshot"]
         node = next(row for row in definition["nodes"] if row["id"] == node_id)
+        from .execution_session import session
+
+        if current.workflow_type == "business_flow" and session(current):
+            from .main_loop import compile_node
+
+            node = compile_node(node)
         if value["decision"] == "skip_node":
             if (
                 current.workflow_type != "business_flow"
@@ -185,7 +191,7 @@ def decide_recovery(user, workflow, value):
                 "status": "pending" if node["review"]["ai"] else "not_required"
             }
             item["status"] = "executing"
-            if node["kind"] == "operator":
+            if node["kind"] == "operator" and not session(current):
                 item["recoveryHistory"] = deepcopy(loop["history"])
                 item["recoveryRevision"] = item.get("recoveryRevision", 0) + 1
                 if parameters:
@@ -196,8 +202,7 @@ def decide_recovery(user, workflow, value):
             elif (
                 loop["steps"] >= node["contract"]["maxSteps"]
                 or loop["modelCalls"] >= node["contract"]["maxModelCalls"]
-                or loop["elapsedSeconds"]
-                >= min(node["contract"]["maxSeconds"], policy["maxRunSeconds"])
+                or loop["elapsedSeconds"] >= node["contract"]["maxSeconds"]
             ):
                 raise ComputeError(
                     "本节点执行预算已用尽，不能通过人工重试重置额度；请跳过（若允许）或停止",

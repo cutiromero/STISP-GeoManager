@@ -11,6 +11,17 @@ ACTIONS = {"set_code", "merge", "reclassify", "exclude", "downweight"}
 
 def report_payload(payload, workflow):
     """A report reads real totals and evidence; it does not review edits again."""
+    payload["reportTemplate"] = {
+        "summaryField": "resultSummary",
+        "analysisField": "findings",
+        "suggestedTopics": [
+            "主要问题及可能成因",
+            "实际处置效果与复查剩余问题",
+            "岩性、构造、蚀变证据关系与远景解释",
+            "适用限制及后续核查建议",
+        ],
+        "rule": "由本任务主执行智能体形成证据分析；主题按资料适用性取舍，不要求固定段数、措辞或字数。平台附入实际统计和成果引用。",
+    }
     payload["knowledge"] = [
         {
             key: entry[key]

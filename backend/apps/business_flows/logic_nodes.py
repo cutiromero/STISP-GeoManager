@@ -78,11 +78,11 @@ def node_definition(workflow, stage):
             ],
             "requiredOutputs": [{"name": "result", "semanticType": "operator_result"}],
             "tools": TOOLS,
-            "maxSteps": 24,
-            "maxModelCalls": 12,
-            "maxOperatorCalls": 3,
-            "maxRecoveries": 3,
-            "maxSeconds": 600,
+            "maxSteps": 32,
+            "maxModelCalls": 32,
+            "maxOperatorCalls": 6,
+            "maxRecoveries": 4,
+            "maxSeconds": 3600,
         },
     )
     if session(workflow):

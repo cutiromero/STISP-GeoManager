@@ -135,6 +135,13 @@ def render_report(workflow, tasks):
             if not (key == "resultSummary" and "mock" in modes)
         },
     )
+    findings = final.get("findings", [])
+    if findings and final.get("modelMode") == "real":
+        lines.extend(["## 综合分析", ""])
+        # Findings are the main executor's accepted prose, not operator text.
+        for finding in findings:
+            if isinstance(finding, str) and finding.strip():
+                lines.extend([_text(finding, 2000), ""])
     if "mock" in modes:
         actions = Counter(ACTIONS.get(row["action"], row["action"]) for row in changes)
         lines.extend(

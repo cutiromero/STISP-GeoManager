@@ -13,11 +13,11 @@ TOOLS = {
     "finish_node",
 }
 LIMITS = {
-    "maxSteps": (1, 24, 12),
-    "maxModelCalls": (1, 12, 8),
-    "maxOperatorCalls": (0, 6, 3),
-    "maxRecoveries": (0, 3, 3),
-    "maxSeconds": (1, 600, 180),
+    "maxSteps": (1, 128, 32),
+    "maxModelCalls": (1, 128, 32),
+    "maxOperatorCalls": (0, 32, 6),
+    "maxRecoveries": (0, 8, 4),
+    "maxSeconds": (1, 14400, 3600),
 }
 MAX_TOOL_BYTES = 8192
 MAX_FRAGMENT_BYTES = 4096

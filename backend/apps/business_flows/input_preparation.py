@@ -185,8 +185,9 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                     and loop["operatorCalls"] >= contract["maxOperatorCalls"]
                 ):
                     raise ComputeError("资料衔接已达到本节点算子调用上限")
-                if loop is not None and loop["elapsedSeconds"] >= min(
-                    contract["maxSeconds"], policy["maxRunSeconds"]
+                if (
+                    loop is not None
+                    and loop["elapsedSeconds"] >= contract["maxSeconds"]
                 ):
                     raise ComputeError("资料衔接已达到本节点主动处理时限")
             with transaction.atomic():

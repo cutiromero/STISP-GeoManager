@@ -12,8 +12,6 @@ from .config import registry
 from .decision_audit import response_artifact
 
 # Configuration: bound evidence size; generation and time inherit the live policy.
-MAX_CONTEXT_TOKENS = 32768
-MAX_PAYLOAD_BYTES = 192 * 1024
 MAX_REVISIONS = 3
 MAX_PROTOCOL_REPAIRS = 1
 MAX_INVALID_RESPONSE_CHARACTERS = 6000
@@ -26,7 +24,7 @@ INSTRUCTION = """你是独立的科研业务流节点审核智能体，不是执
 decision只能为accept或request_changes；reason是非空中文理由。
 issues是数组，每项严格为code,message,evidenceIds；evidenceIds引用本次输入真实证据编号。
 审核回复的evidenceIds只引用最外层evidence数组的id；报告内部的来源引用用于核对，不构成新的审核证据编号。
-accept时issues必须为空，repairInstructions为空字符串，evidenceIds必须覆盖全部提供的证据。
+accept时issues必须为空，repairInstructions为空字符串；evidenceIds覆盖requiredEvidenceIds指定的关键证据，并引用实际采用的其他依据，无需抄写全部辅助索引。
 request_changes时至少给出一个具体问题及可执行的返修说明；不得以有风险为由要求执行者越过人工门禁。
 输入不足、输出不符合要求或证据相互矛盾时要求返修，不能猜测通过。
 无论是否通过审核，你均不能批准人工节点，也不能要求取消或跳过人工审核。"""
@@ -64,7 +62,7 @@ def _configuration(node, attempt):
     return review
 
 
-def _validate(raw, available):
+def _validate(raw, available, *, required=()):
     try:
         value = json.loads(raw)
     except (ValueError, TypeError) as error:
@@ -99,7 +97,7 @@ def _validate(raw, available):
     if not isinstance(repair, str) or len(repair) > 4000:
         raise ComputeError("独立审核返修说明无效")
     if value["decision"] == "accept":
-        if issues or repair.strip() or set(refs) != available:
+        if issues or repair.strip() or not set(required) <= set(refs):
             raise ComputeError("独立审核通过结论不完整或自相矛盾，未予通过")
     elif not issues or not repair.strip():
         raise ComputeError("独立审核返修必须有具体问题与返修说明")
@@ -130,6 +128,14 @@ def review_node(
     started = time.monotonic()
     feedback, last = None, {}
     selected_policy = policy
+    required = {
+        row["id"]
+        for row in evidence
+        if row.get("required")
+        or row["kind"] == "output"
+        or row["id"] in {"execution-result", "node-result", "preparation-script"}
+    }
+    # A bare review still needs actual evidence; _citations enforces this.
 
     def record(value):
         if feedback:
@@ -151,16 +157,16 @@ def review_node(
                 evidence,
                 role="reviewer",
                 instruction=INSTRUCTION,
-                validate=_validate,
+                validate=lambda raw, available: _validate(
+                    raw, available, required=required & available
+                ),
                 guard=guard,
                 model_alias=alias,
                 policy=selected_policy,
                 feedback=feedback,
                 human_required=review["human"],
-                caps={
-                    "maxContextTokens": MAX_CONTEXT_TOKENS,
-                    "maxContextBytes": MAX_PAYLOAD_BYTES,
-                },
+                caps={},
+                required_evidence_ids=sorted(required),
                 on_progress=on_progress,
                 on_thinking=on_thinking,
                 on_record=record,

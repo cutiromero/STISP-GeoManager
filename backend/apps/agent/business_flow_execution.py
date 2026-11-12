@@ -7,8 +7,6 @@ from .business_flow_model import _citations, _text, request_node_result
 from .business_flow_model import provider as provider
 
 # Configuration: bound evidence size; generation and time inherit the live policy.
-MAX_CONTEXT_TOKENS = 32768
-MAX_PAYLOAD_BYTES = 192 * 1024
 MAX_REVISIONS = 3
 INSTRUCTION = """你是科研业务流的执行分析智能体，必须遵循冻结节点规范。
 你只解释本次提供的真实元数据、算子输出和证据，不直接调用工具、不改动数据、不改变流程。
@@ -130,10 +128,7 @@ def execute_node(
         feedback=_feedback(feedback),
         policy=policy,
         human_required=review.get("human") is True,
-        caps={
-            "maxContextTokens": MAX_CONTEXT_TOKENS,
-            "maxContextBytes": MAX_PAYLOAD_BYTES,
-        },
+        caps={},
         on_record=on_record,
         on_progress=on_progress,
         on_thinking=on_thinking,

@@ -5,17 +5,26 @@ from apps.compute.packages import ComputeError
 MAX_MODEL_CALLS = 256
 
 
-def request_limit(policy):
+def request_limit(policy, definition=None):
     """A zero tool-step setting means unlimited; the platform ceiling still applies."""
     steps = policy["maxSteps"]
-    return MAX_MODEL_CALLS if steps == 0 else min(MAX_MODEL_CALLS, max(4, steps * 2))
+    if steps == 0:
+        return MAX_MODEL_CALLS
+    routing = (
+        len(definition["nodes"]) + 1
+        if definition and definition.get("executionMode") == "main_agent"
+        else 0
+    )
+    # Main-agent routing is mandatory framework overhead. Without this reserve
+    # a valid 32-goal flow cannot even finish its shortest path under defaults.
+    return min(MAX_MODEL_CALLS, max(4, steps * 2) + routing)
 
 
 class ModelCallBudgetExceeded(ComputeError):
     pass
 
 
-def admit(workflow, request_id, *, maximum=MAX_MODEL_CALLS):
+def admit(workflow, request_id, *, maximum=MAX_MODEL_CALLS, node_scoped=True):
     if not isinstance(request_id, str) or not request_id:
         raise ComputeError("模型请求缺少实际编号")
     if workflow.parameters.get("_businessFlow"):
@@ -35,7 +44,11 @@ def admit(workflow, request_id, *, maximum=MAX_MODEL_CALLS):
             )
         item = state(workflow).get("nodes", {}).get(workflow.current_step, {})
         loop = item.get("toolLoop")
-        if loop is not None and request_id not in loop.setdefault("requestIds", []):
+        if (
+            node_scoped
+            and loop is not None
+            and request_id not in loop.setdefault("requestIds", [])
+        ):
             from .state import binding
             from .node_contracts import recovery_contract
 

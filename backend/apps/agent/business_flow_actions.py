@@ -6,10 +6,7 @@ from apps.compute.packages import ComputeError
 from .business_flow_model import request_node_result
 from .config import registry
 
-CAPS = {
-    "maxContextTokens": 32768,
-    "maxContextBytes": 192 * 1024,
-}
+CAPS = {}  # The live user/model policy owns the request window.
 ARGUMENT_KEYS = {
     "start_node": {"nodeId"},
     "finish_workflow": {"summary"},
@@ -70,12 +67,12 @@ view默认execution，完整提供输入、可调参数、错误和输出端口�
 若具体算子条目的truncated=true，按versionId补查必要的执行约束；目录观察带有片段索引时按索引读必要部分，不要重复查询相同目录或猜测端口。
 目录超出单步观察字节上限时提供版本索引及offset/length；仅按需读取未提供的输入、字段或参数约束，不必逐列阅读输出schema。
 若节点已提供同一冻结版本的完整输入绑定与参数，查证登记身份后可直接预检；按预检gaps补充必要信息，不能臆造或改变约束。
-失败先核对failure的code/remedy/gaps，不能对相同错误重复同类补救；不得重试平台故障或不可恢复。
+失败先核对failure的code/remedy/gaps，可以继续调整不同参数或映射，但不得重复相同失败方案；不得重试平台故障或不可恢复。
 修复提交需声明remedy：adjust_parameters/complete_mapping/convert_input/replace_operator之一。
 无法处理用ask_user.question提问。不能编造结果、声称读取未发送内容、批准节点或改变科学规则。
-finish_node须给summary、outputs[{name,semanticType,evidenceId}]、evidenceIds、limitations、acceptanceChecks。
+finish_node须给summary、outputs[{name,semanticType,evidenceId}]、evidenceIds、limitations；acceptanceChecks可补充验收说明。
 summary为非空字符串；outputs和evidenceIds为非空数组；limitations必须为字符串数组，没有限制时用[]，不能用null或字符串。
-acceptanceChecks逐字列出已满足的合同验收条件；输出必须引用实际证据，不能拿失败记录当成果。
+验收依据真实输出与证据核对；不必抄写验收条件，不能拿失败记录当成果。
 工具参数约束：""" + json.dumps(
     {key: sorted(value) for key, value in ARGUMENT_KEYS.items()}, ensure_ascii=False
 )

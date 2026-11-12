@@ -116,6 +116,15 @@ def test_user_adjudication_marker_comes_from_actual_change_record(monkeypatch):
     assert rows[0]["reason"] in text
 
 
+def test_accepted_agent_analysis_is_in_the_downloaded_report(monkeypatch):
+    workflow, task, _ = report_fixture(monkeypatch)
+    analysis = "处置效果：降权保留了线索，不能将复查命中等同于处置失败。"
+    workflow.plan["finalDecision"].update(modelMode="real", findings=[analysis])
+    text = render_report(workflow, [task]).decode()
+    assert "## 综合分析" in text and analysis in text
+    assert text.index(analysis) < text.index("## 实际统计")
+
+
 def test_clean_report_links_deliverable_layers_not_calculation_states(monkeypatch):
     workflow, task, _ = report_fixture(monkeypatch)
     task.version.manifest = {

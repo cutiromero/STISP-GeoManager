@@ -462,9 +462,6 @@ def check_remedy(loop, arguments, action, contract):
     remedy = arguments.get("remedy")
     if not isinstance(remedy, str) or remedy not in REMEDIES:
         raise RemedyRejected("失败后的运行或转换须明确声明补救类别")
-    key = failure["code"] + ":" + remedy
-    if key in loop["remedies"]:
-        raise RemedyRejected("同一错误码已经尝试过这种补救，不得重复")
     if loop["recoveries"] >= contract["maxRecoveries"]:
         raise RemedyRejected("节点自恢复额度已用尽")
     if any(
@@ -495,6 +492,20 @@ def check_remedy(loop, arguments, action, contract):
         raise RemedyRejected("替换补救必须选择不同算子")
     if action == "prepare_input" and remedy != "convert_input":
         raise RemedyRejected("资料衔接须声明convert_input")
+    from .state import digest
+
+    # Distinct parameters/mappings may need several attempts for the same error.
+    # Compare effective proposals, not only the diagnostic category.
+    proposal = {
+        key: deepcopy(previous.get(key, {}))
+        for key in ("inputs", "parameters", "fieldMappings")
+    }
+    proposal["versionId"] = arguments.get("versionId", previous.get("versionId"))
+    for name in ("inputs", "parameters", "fieldMappings"):
+        proposal[name].update(arguments.get(name, {}))
+    key = failure["code"] + ":" + remedy + ":" + digest(proposal)
+    if key in loop["remedies"]:
+        raise RemedyRejected("同一错误的相同实际方案已经尝试过，不得重复")
     loop["remedies"].append(key)
     loop["recoveries"] += 1
 
@@ -546,7 +557,13 @@ def store_result(workflow, node, item, action, result, *, arguments=None):
             "message": "目录详情已登记；按本证据编号及条目的offset/length读取清单，单项最多4096字节",
         }
     while len(encoded(preview)) > MAX_TOOL_BYTES:
-        preview["preview"] = preview["preview"][: max(0, len(preview["preview"]) - 256)]
+        if "operators" in preview:
+            preview["operators"].pop()
+            preview["omittedOperators"] = preview.get("omittedOperators", 0) + 1
+        else:
+            preview["preview"] = preview["preview"][
+                : max(0, len(preview["preview"]) - 256)
+            ]
     loop["lastObservation"] = {"evidenceId": identity, "result": preview}
     summary = (
         ACTION_LABELS.get(action, "被拒绝的工具动作")
@@ -704,8 +721,15 @@ def finish(node, item, arguments, evidence):
         or any(not isinstance(value, str) or len(value) > 1000 for value in limitations)
     ):
         raise ComputeError("节点限制说明无效")
-    if arguments.get("acceptanceChecks") != contract["acceptance"]:
-        raise ComputeError("尚未逐项确认合同验收条件")
+    checks = arguments.get("acceptanceChecks", [])
+    if (
+        not isinstance(checks, list)
+        or any(not isinstance(value, str) or len(value) > 1000 for value in checks)
+        or len(checks) > 8
+    ):
+        raise ComputeError("验收说明须为最多8项的文字数组")
+    # Self-repeating acceptance text proves nothing. Output bindings and real
+    # evidence above, followed by configured review, establish completion.
     item["contractOutputs"] = deepcopy(outputs)
     return {
         "summary": summary.strip(),
@@ -807,9 +831,10 @@ def execute_tool(
             loop["preflightDigest"] = submission_digest(body)
             return {"valid": True, "gaps": [], "message": "预检通过，尚未提交计算"}
         from . import logic_nodes
+        from .execution_session import session
 
         if (
-            logic_nodes.enabled(workflow)
+            (logic_nodes.enabled(workflow) or session(workflow))
             and action == "run_operator"
             and loop.get("preflightDigest") != logic_nodes.submission_digest(body)
         ):
@@ -820,8 +845,6 @@ def execute_tool(
 
             if not workflow.plan.get("inputPreparationPolicy", {}).get("allowScripts"):
                 raise ComputeError("本次运行未启用资料衔接脚本，不能绕过审核")
-            if not workflow.plan["inputPreparationPolicy"].get("reviewScripts"):
-                raise ComputeError("合同节点的资料衔接必须启用现有独立脚本审核")
             from types import SimpleNamespace
             from apps.compute.preflight import expand_bindings
 
@@ -987,7 +1010,12 @@ def advance_tool_execution(
         authorized_task(user, task_id, policy, workflow=workflow)
     if item.get("recovery"):
         return None
-    if loop.get("failure") and loop["recoveries"] >= contract["maxRecoveries"]:
+    if (
+        loop.get("failure")
+        and loop["recoveries"] >= contract["maxRecoveries"]
+        and not loop.get("taskId")
+        and not loop.get("pending")
+    ):
         wait_recovery(workflow, node, item, loop["failure"])
         return None
     if loop.get("taskId"):
@@ -1002,9 +1030,7 @@ def advance_tool_execution(
         if result is None:
             return None
         loop["elapsedSeconds"] += time.monotonic() - started
-        if loop["elapsedSeconds"] >= min(
-            contract["maxSeconds"], policy["maxRunSeconds"]
-        ):
+        if loop["elapsedSeconds"] >= contract["maxSeconds"]:
             wait_recovery(
                 workflow,
                 node,
@@ -1048,9 +1074,7 @@ def advance_tool_execution(
             arguments=loop["pending"]["arguments"],
         )
         return None
-    remaining = (
-        min(contract["maxSeconds"], policy["maxRunSeconds"]) - loop["elapsedSeconds"]
-    )
+    remaining = contract["maxSeconds"] - loop["elapsedSeconds"]
     if (
         not loop.get("pending") and loop["steps"] >= contract["maxSteps"]
     ) or remaining < 1:
@@ -1139,11 +1163,18 @@ def advance_tool_execution(
                     },
                 },
                 guard=checked,
-                policy={**policy, "maxRunSeconds": max(1, int(remaining))},
+                policy={
+                    **policy,
+                    "maxRunSeconds": max(
+                        1, min(policy["maxRunSeconds"], int(remaining))
+                    ),
+                },
                 on_record=record,
                 on_progress=callbacks.get("on_progress"),
                 on_thinking=callbacks.get("on_thinking"),
             )
+            loop.pop("formatRetries", None)
+            loop.pop("formatFeedback", None)
             loop["steps"] += 1
             loop["pending"] = {
                 key: deepcopy(response[key]) for key in ("action", "arguments")

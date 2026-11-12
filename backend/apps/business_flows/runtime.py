@@ -589,7 +589,9 @@ def start_flow(user, version, value, *, source_run=None):
                 resource_ids=sorted(set(inputs.values())),
                 parameters=parameters,
                 import_results=True,
-                max_iterations=request_limit(policy),
+                max_iterations=request_limit(
+                    policy, definition if value.get("agentEnabled", True) else None
+                ),
                 max_operator_steps=policy["maxOperatorSteps"],
                 plan={
                     "inputs": inputs,
@@ -653,7 +655,7 @@ def start_flow(user, version, value, *, source_run=None):
             from .logic_nodes import EXECUTION_MODE
 
             workflow.parameters["_businessFlow"]["nodeExecution"] = EXECUTION_MODE
-            workflow.max_iterations = request_limit(policy)
+            workflow.max_iterations = request_limit(policy, definition)
         workflow.plan["inputAdaptations"] = [
             {
                 key: item

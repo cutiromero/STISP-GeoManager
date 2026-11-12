@@ -48546,11 +48546,12 @@
           "tools": {
             "type": "array",
             "uniqueItems": true,
-            "maxItems": 7,
+            "maxItems": 8,
             "items": {
               "type": "string",
               "enum": [
                 "read_evidence",
+                "read_task_record",
                 "operator_catalog",
                 "preflight_operator",
                 "run_operator",
@@ -48564,37 +48565,37 @@
           "maxSteps": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 24,
-            "default": 12,
+            "maximum": 128,
+            "default": 32,
             "description": "节点动作步数硬上限，恢复不重置"
           },
           "maxModelCalls": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 12,
-            "default": 8,
+            "maximum": 128,
+            "default": 32,
             "description": "节点实际模型请求硬上限，含归纳与脚本审核"
           },
           "maxOperatorCalls": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 6,
-            "default": 3,
+            "maximum": 32,
+            "default": 6,
             "description": "节点算子调用硬上限，含资料衔接"
           },
           "maxRecoveries": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 3,
-            "default": 3,
+            "maximum": 8,
+            "default": 4,
             "description": "自动补救次数硬上限"
           },
           "maxSeconds": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 600,
-            "default": 180,
-            "description": "节点主动处理累计秒数上限"
+            "maximum": 14400,
+            "default": 3600,
+            "description": "节点主动处理累计秒数上限；单次模型请求另受当前策略maxRunSeconds限制，等待队列和人工响应不计入"
           }
         },
         "required": [

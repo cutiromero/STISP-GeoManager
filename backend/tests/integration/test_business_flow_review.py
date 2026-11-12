@@ -156,6 +156,34 @@ def test_rejection_contains_actionable_feedback_without_hidden_second_request(
     assert len(calls) == 1
 
 
+def test_review_cites_required_result_without_copying_every_auxiliary_index(
+    env, monkeypatch
+):
+    install_stream(monkeypatch, {**ACCEPT, "evidenceIds": ["execution-result"]})
+    evidence = [
+        *deepcopy(EVIDENCE),
+        {
+            "id": "execution-result",
+            "kind": "analysis",
+            "title": "执行结果",
+            "summary": "核对完成",
+        },
+    ]
+    assert run(env, evidence=evidence)["decision"] == "accept"
+    install_stream(monkeypatch, ACCEPT)
+    with pytest.raises(ComputeError, match="不完整"):
+        run(env, evidence=evidence)
+
+
+def test_review_uses_live_context_setting_without_hidden_32k_ceiling(env, monkeypatch):
+    monkeypatch.setattr(review.provider, "model_window", lambda model: 65536)
+    monkeypatch.setattr(review.provider, "count_tokens", lambda *args: 40000)
+    install_stream(monkeypatch)
+    result = run(env)
+    assert result["audit"]["inputTokens"] == 40000
+    assert result["audit"]["inputLimit"] == default_policy()["maxContextTokens"]
+
+
 @pytest.mark.parametrize("language", ["json", "JSON", ""])
 def test_complete_json_fence_preserves_strict_review_and_raw_audit(
     env, monkeypatch, language

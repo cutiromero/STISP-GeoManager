@@ -22,6 +22,7 @@ from .business_flow_context import (
     prepare_projected_request,
     input_budget,
     TokenMeasurements,
+    compact_work_context,
 )
 from .model_guard import ModelStreamGuard
 from .models import AgentWorkflow
@@ -191,6 +192,7 @@ def request_node_result(
     on_thinking=None,
     on_record=None,
     tools=None,
+    required_evidence_ids=None,
 ):
     """Run a fresh request; persistence and all actual operations stay in the runtime."""
     if role not in {"executor", "reviewer"}:
@@ -227,6 +229,8 @@ def request_node_result(
         "humanApprovalRequired": human_required,
         "evidence": items,
     }
+    if required_evidence_ids is not None:
+        packet["requiredEvidenceIds"] = required_evidence_ids
     if feedback is not None:
         packet["revisionFeedback"] = feedback
     if context is not None:
@@ -340,7 +344,13 @@ def request_node_result(
         if status == "requesting" and (managed or professional):
             from apps.business_flows.model_requests import admit
 
-            admit(workflow, record["requestId"])
+            admit(
+                workflow,
+                record["requestId"],
+                node_scoped=not (
+                    context and context.get("executionScope") == "workflow"
+                ),
+            )
         if status == "requesting":
             from .model_activity import WorkflowModelActivity
 
@@ -419,9 +429,9 @@ def request_node_result(
             ]
 
             def project(level):
-                value = (
-                    deepcopy(packet) if not level else _deduplicate(deepcopy(packet))
-                )
+                value = compact_work_context(packet) if level else deepcopy(packet)
+                if level >= 2:
+                    value = _deduplicate(value)
                 return [
                     {
                         "role": "system",
@@ -437,8 +447,11 @@ def request_node_result(
                 window,
                 node_id=node_id,
                 checked=checked.poll,
-                levels=range(2),
-                notices=packet["contextNotice"],
+                levels=range(3),
+                notices=[
+                    *packet["contextNotice"],
+                    "超出窗口时自动压缩近期行动，完整统计、规则条件、批准范围和成果引用保留。",
+                ],
                 measurements=TokenMeasurements(
                     model,
                     thinking=effective["_thinking"],

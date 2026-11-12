@@ -312,10 +312,7 @@ def prepare(workflow, user, current_policy, entry):
         if row["id"] == entry["nodeId"]
     )
     contract = node.get("contract") or recovery_contract(node)
-    remaining = (
-        min(contract["maxSeconds"], current_policy["maxRunSeconds"])
-        - loop["elapsedSeconds"]
-    )
+    remaining = contract["maxSeconds"] - loop["elapsedSeconds"]
     if remaining < 1:
         raise ComputeError("节点资料衔接时限已用尽")
     started = time.monotonic()
@@ -325,7 +322,12 @@ def prepare(workflow, user, current_policy, entry):
         return _prepare(
             workflow,
             user,
-            {**current_policy, "maxRunSeconds": max(1, int(remaining))},
+            {
+                **current_policy,
+                "maxRunSeconds": max(
+                    1, min(current_policy["maxRunSeconds"], int(remaining))
+                ),
+            },
             entry,
         )
     finally:

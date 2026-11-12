@@ -81,6 +81,32 @@ BACKEND_TESTS = {
     "standards": ("integration/core/test_api.py", "integration/catalog/test_api.py"),
 }
 BACKEND_OVERRIDES = {
+    "backend/apps/agent/input_script_model.py": (
+        "integration/test_input_script_preparation_runtime.py",
+        "integration/test_business_flow_context.py",
+        "integration/test_business_flow_node_tools.py",
+        "unit/test_business_flow_resilience.py",
+    ),
+    "backend/apps/business_flows/model_requests.py": (
+        "integration/test_business_flow_runtime.py",
+        "integration/test_business_flow_main_agent.py",
+        "integration/test_business_flow_node_tools.py",
+        "integration/test_business_flow_context.py",
+        "integration/test_input_script_preparation_runtime.py",
+        "integration/test_logic_node_execution.py",
+        "unit/test_business_flow_resilience.py",
+    ),
+    "backend/apps/business_flows/node_recovery.py": (
+        "integration/test_business_flow_node_tools.py",
+        "integration/test_business_flow_main_agent.py",
+        "integration/test_logic_node_execution.py",
+    ),
+    "backend/apps/business_flows/script_preparation.py": (
+        "integration/test_input_script_preparation_runtime.py",
+        "integration/test_business_flow_node_tools.py",
+        "integration/test_business_flow_context.py",
+        "unit/test_business_flow_resilience.py",
+    ),
     "backend/apps/agent/business_flow_actions.py": (
         "unit/test_business_flow_tool_protocol.py",
         "integration/test_business_flow_node_tools.py",

@@ -604,11 +604,11 @@ export default function BusinessFlowActivity({
           <p>允许工具：{currentDefinition.contract.tools.join("、")}</p>
           <p>
             步数 {current?.toolProgress?.steps ?? 0}/
-            {currentDefinition.contract.maxSteps ?? 12}；模型调用{" "}
+            {currentDefinition.contract.maxSteps ?? 32}；模型调用{" "}
             {current?.toolProgress?.modelCalls ?? 0}/
-            {currentDefinition.contract.maxModelCalls ?? 8}；算子调用{" "}
+            {currentDefinition.contract.maxModelCalls ?? 32}；算子调用{" "}
             {current?.toolProgress?.operatorCalls ?? 0}/
-            {currentDefinition.contract.maxOperatorCalls ?? 3}
+            {currentDefinition.contract.maxOperatorCalls ?? 6}
           </p>
         </section>
       )}

@@ -220,3 +220,78 @@ def test_main_executor_selects_legal_milestones_and_rejects_future_nodes(
         workflow.parameters["_businessFlow"]["executorSession"]["loop"]["completed"]
         is True
     )
+
+
+def test_main_agent_question_resumes_an_implicit_contract_without_new_executor(
+    flows, monkeypatch
+):
+    env = flows
+    calls = install_model(monkeypatch)
+    normal = provider.stream
+    asked = False
+
+    def stream(model, messages, maximum, guard, **options):
+        nonlocal asked
+        packet = json.loads(messages[1]["content"])
+        if (
+            packet.get("nodeContext", {}).get("task", {}).get("phase") == "work"
+            and not asked
+        ):
+            asked = True
+            guard()
+            yield json.dumps(
+                {"action": "ask_user", "arguments": {"question": "请确认资料范围"}}
+            )
+        else:
+            yield from normal(model, messages, maximum, guard, **options)
+
+    monkeypatch.setattr(provider, "stream", stream)
+    with project_scope(env["scope"]):
+        _, version = catalog.register_flow(
+            env["admin"],
+            {
+                "code": "question-" + uuid4().hex[:8],
+                "name": "主执行补充说明",
+                "definition": source_summary_definition(main_agent=True),
+            },
+        )
+        workflow = runtime.start_flow(
+            env["user"],
+            version,
+            {
+                "model": "mock",
+                "goal": "理解资料并说明依据",
+                "inputs": {"source": env["resource"].pk},
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+        identity = workflow.parameters["_businessFlow"]["executorSession"]["id"]
+        for _ in range(3):
+            engine.advance(workflow.pk)
+            workflow.refresh_from_db()
+            if workflow.status == "waiting_approval":
+                break
+        assert workflow.status == "waiting_approval"
+        workflow = runtime.decide_flow(
+            env["user"],
+            workflow,
+            {
+                "nodeId": "summarize",
+                "decision": "retry_recovery",
+                "feedback": "以本次绑定资料为准",
+                "revision": state(workflow)["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+        for _ in range(12):
+            engine.advance(workflow.pk)
+            workflow.refresh_from_db()
+            if workflow.status == "succeeded":
+                break
+        assert workflow.status == "succeeded", workflow.detail
+        assert workflow.parameters["_businessFlow"]["executorSession"]["id"] == identity
+        assert any(
+            row["packet"].get("nodeContext", {}).get("userAnswer")
+            == "以本次绑定资料为准"
+            for row in calls
+        )

@@ -91,7 +91,7 @@ def take_action(
         role="executor",
         instruction=MAIN_INSTRUCTION + tool_guidance,
         validate=validate,
-        caps={"maxContextTokens": 32768, "maxContextBytes": 192 * 1024},
+        caps={},
         guard=guard,
         policy=policy,
         context={

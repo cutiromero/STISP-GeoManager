@@ -13,7 +13,7 @@ from apps.agent.models import AgentPolicy
 from apps.agent.policy import default_policy
 from apps.business_flows import catalog, engine, runtime
 from apps.business_flows.builtins import source_summary_definition
-from apps.business_flows.node_contracts import normalize_contract, TOOLS
+from apps.business_flows.node_contracts import normalize_contract, TOOLS, LIMITS
 from apps.business_flows.node_loop import loop_state, execute_tool, check_remedy
 from apps.business_flows.state import state
 from apps.catalog.models import DataResource
@@ -255,6 +255,76 @@ def advance(env, workflow, count=1):
 def finish_flow(env, workflow):
     advance(env, workflow, 3)
     assert workflow.status == "succeeded", workflow.detail
+
+
+def test_node_elapsed_budget_does_not_reuse_single_request_timeout(
+    operators, monkeypatch
+):
+    env = operators
+    upgrade(env)
+    workflow = create(env)
+    loop = loop_state(state(workflow)["nodes"]["calculate"])
+    loop["elapsedSeconds"] = default_policy()["maxRunSeconds"] + 1
+    workflow.save(update_fields=["plan"])
+    calls = install(monkeypatch, [action("operator_catalog", operation="statistics")])
+    item = advance(env, workflow)
+    assert len(calls) == 1 and item["status"] != "waiting_recovery"
+
+
+def test_last_allowed_recovery_still_collects_its_successful_result(
+    operators, monkeypatch
+):
+    env = operators
+    upgrade(env)
+    workflow = create(env, node_contract=contract(maxRecoveries=1))
+    arguments = submit_args(env)
+    install(
+        monkeypatch,
+        [
+            action("operator_catalog", operation="statistics"),
+            action("run_operator", **arguments),
+            action(
+                "run_operator",
+                **submit_args(
+                    env,
+                    parameters={"threshold": 0.6},
+                    remedy="adjust_parameters",
+                ),
+            ),
+            finish_action,
+        ],
+    )
+    item = advance(env, workflow, 2)
+    with project_scope(env["scope"]):
+        ComputeTask.objects.filter(pk=item["computeTaskId"]).update(
+            status="failed",
+            error="需要调整参数",
+            failure={"code": "BOUNDS", "remedy": "adjust_parameters"},
+        )
+    item = advance(env, workflow, 2)
+    assert item["toolLoop"]["recoveries"] == 1
+    finish_task(env, item["computeTaskId"], "RECOVERED")
+    item = advance(env, workflow)
+    assert not item.get("recovery")
+    advance(env, workflow)
+    finish_flow(env, workflow)
+
+
+def test_format_repair_is_available_again_after_a_valid_action(operators, monkeypatch):
+    env = operators
+    workflow = create(env)
+    calls = install(
+        monkeypatch,
+        [
+            "bad-json",
+            action("operator_catalog", operation="statistics"),
+            "another-bad-json",
+            action("ask_user", question="请确认资料用途"),
+        ],
+    )
+    item = advance(env, workflow, 4)
+    assert len(calls) == 4
+    assert item["recovery"]["question"] == "请确认资料用途"
 
 
 def test_different_field_names_recovered_by_semantic_mapping(operators, monkeypatch):
@@ -501,11 +571,7 @@ def test_text_format_requests_existing_script_and_review(scripts, monkeypatch):
 @pytest.mark.parametrize(
     "changes",
     [
-        {"maxSteps": 25},
-        {"maxModelCalls": 13},
-        {"maxOperatorCalls": 7},
-        {"maxRecoveries": 4},
-        {"maxSeconds": 601},
+        *[{key: limits[1] + 1} for key, limits in LIMITS.items()],
         {"tools": ["shell"]},
         {"requiredOutputs": []},
         {"acceptance": []},
@@ -656,6 +722,13 @@ def test_recovery_does_not_repeat_same_error_remedy():
     check_remedy(loop, arguments, "run_operator", contract())
     with pytest.raises(ComputeError, match="不得重复"):
         check_remedy(loop, arguments, "run_operator", contract())
+    check_remedy(
+        loop,
+        {"parameters": {"threshold": 0.6}, "remedy": "adjust_parameters"},
+        "run_operator",
+        contract(),
+    )
+    assert loop["recoveries"] == 2
 
 
 @pytest.mark.parametrize(
