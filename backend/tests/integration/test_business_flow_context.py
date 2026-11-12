@@ -11,6 +11,7 @@ from apps.agent import provider
 from apps.agent.business_flow_context import (
     ContextReviewRequired,
     MAX_TOKEN_MEASUREMENTS,
+    MAX_EVIDENCE_ITEMS,
     prepare_packet,
     project_evidence,
 )
@@ -362,7 +363,11 @@ def test_five_node_chain_stops_raw_ancestor_propagation_and_measures_sizes(
 
 def test_review_receives_exact_execution_projection_and_notices(flows, monkeypatch):
     _, version = flows["create"](one=True, ai=True)
-    calls = install_model(monkeypatch, window=12500)
+    from apps.agent.policy import default_policy
+
+    calls = install_model(
+        monkeypatch, window=default_policy()["maxOutputTokens"] + 4308
+    )
     monkeypatch.setattr(
         engine,
         "input_evidence",
@@ -400,7 +405,11 @@ def test_batch_requests_share_call_budget_and_audits(flows, monkeypatch, quota):
                 "definition": spec,
             },
         )
-    calls = install_model(monkeypatch, window=8192 + 256 + 2100)
+    from apps.agent.policy import default_policy
+
+    calls = install_model(
+        monkeypatch, window=default_policy()["maxOutputTokens"] + 256 + 2100
+    )
     monkeypatch.setattr(engine, "input_evidence", lambda *args: deepcopy(rows))
     workflow, _ = start(flows, version)
     with project_scope(flows["scope"]):
@@ -526,19 +535,32 @@ def test_projection_deduplicates_and_does_not_use_geology_fields():
 
 
 def test_evidence_count_protection_waits_instead_of_disabling_the_limit(monkeypatch):
-    rows = [evidence(f"source-{index}", {"value": "x" * 900}) for index in range(101)]
+    rows = [
+        evidence(f"source-{index}", {"value": "x" * 900})
+        for index in range(MAX_EVIDENCE_ITEMS + 1)
+    ]
     with pytest.raises(ContextReviewRequired) as caught:
         prepare(monkeypatch, rows, 11000)
     assert caught.value.details["level"] == 3
-    assert len(caught.value.details["evidence"]) == 101
+    assert len(caught.value.details["evidence"]) == MAX_EVIDENCE_ITEMS + 1
+
+
+def test_more_than_100_small_references_can_fit_the_actual_token_budget(monkeypatch):
+    actual, _, _ = prepare(
+        monkeypatch,
+        [evidence(f"s-{index}", {"count": index}) for index in range(120)],
+        11000,
+    )
+    assert len(actual[0]["evidence"]) == 120
 
 
 def test_review_smaller_window_reexecutes_with_matching_evidence(flows, monkeypatch):
     _, version = flows["create"](one=True, ai=True)
     calls = install_model(monkeypatch)
-    # Review inherits the configured 8192-token generation reserve. Keep the
-    # same smaller input allowance while allowing that reserve to fit.
-    windows = iter([32768, 12096, 32768, 12096])
+    from apps.agent.policy import default_policy
+
+    output = default_policy()["maxOutputTokens"]
+    windows = iter([32768 + output, 3904 + output, 32768 + output, 3904 + output])
     monkeypatch.setattr(provider, "model_window", lambda model: next(windows))
     monkeypatch.setattr(
         engine, "input_evidence", lambda *args: [evidence(result={"text": "x" * 18000})]
@@ -562,7 +584,10 @@ def test_required_source_cannot_be_skipped_after_index_projection(flows, monkeyp
 
     _, version = flows["create"](one=True, ai=True)
     calls = install_model(monkeypatch)
-    windows = iter([8192 + 256 + 3500, 6000])
+    from apps.agent.policy import default_policy
+
+    output = default_policy()["maxOutputTokens"]
+    windows = iter([output + 256 + 3500, output + 256 + 1000])
     monkeypatch.setattr(provider, "model_window", lambda model: next(windows))
     rows = [evidence(f"source-{index}", {"value": "x" * 900}) for index in range(30)]
     rows[0]["required"] = True

@@ -1868,3 +1868,13 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 - Frontend: 沿用现有节点合同与计数展示，同步缺省值。
 - Reports: 沿用现有decision.findings作为主执行综合分析正文，渲染进实际下载报告；结果统计和详细处置继续来自真实任务。
 - Verification: 主循环、故障恢复、上下文事实保护、审核关键引用、报告正文及契约生成检查；正式网站验收待远端服务恢复。
+
+## API-20261113-001 业务流任务预算及恢复状态传输
+
+- Change type: BusinessFlowStart新增可选budgetProfile与maxOutputTokens；沿用父AgentRun的预算字段，不新增数据库结构。
+- Endpoints: POST业务流start解析和冻结预算；GET运行状态及POST decide传递可恢复等待信息。
+- Contract: BusinessFlowContextRecovery可选kind、budgetScope、usedRequests、usedOperatorCalls和limit。kind区分model_call_limit、operator_call_limit及model_protocol_error。专业预算等待补齐nodeId、level、evidence；未实测token字段不输出null冒充数字。
+- Behavior: 直接启动按执行和配置审核模型的较小可见窗口解析预算，执行时重验实际服务能力；会话工具启动继承父预算。任务额度提高后允许显式继续，保留计数及成果，节点合同上限保持有效。
+- Frontend: 启动页预算控件、总窗口与可用输入分开展示；等待面板区分输入和请求次数，隐藏专业流程不支持的缩减操作。请求回复校验实际运行及版本身份；切换任务隔离旧思考和迟到错误。
+- Defaults: 单次生成默认16384，标准账号任务生成可选上限32768，任务算子默认16次；输入上限49152、默认字节边界384000、任务平台请求上限256不变。已有显式策略不自动改写。
+- Verification: HTTP启动预算落库、权限和幂等、实际请求继承、等待恢复、长引用及完整科学事实、本地浏览器任务切换；正式站验收待服务器恢复。

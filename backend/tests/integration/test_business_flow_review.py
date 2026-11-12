@@ -181,7 +181,8 @@ def test_review_uses_live_context_setting_without_hidden_32k_ceiling(env, monkey
     install_stream(monkeypatch)
     result = run(env)
     assert result["audit"]["inputTokens"] == 40000
-    assert result["audit"]["inputLimit"] == default_policy()["maxContextTokens"]
+    assert result["audit"]["inputLimit"] > 32768
+    assert result["audit"]["inputLimit"] + result["audit"]["outputLimit"] + 256 <= 65536
 
 
 @pytest.mark.parametrize("language", ["json", "JSON", ""])

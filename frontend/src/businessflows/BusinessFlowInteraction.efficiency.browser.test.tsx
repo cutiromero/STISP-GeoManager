@@ -16,7 +16,10 @@ import { computeApi } from "../api/compute";
 import { liveComputeTask } from "../agent/computeFlow.testFixtures";
 import { agentApi } from "../api/agent";
 import { ApiError } from "../api/client";
-import type { BusinessFlowRun } from "../api/generated/types.gen";
+import type {
+  AgentBudgetOptions,
+  BusinessFlowRun,
+} from "../api/generated/types.gen";
 import platformStyles from "../styles.css?inline";
 import { reviewWorkflow } from "../map/geologyReview.testFixtures";
 import BusinessFlowActivity, {
@@ -33,11 +36,16 @@ import {
   researchVersion,
 } from "./businessFlow.testFixtures";
 
+const budgetState = vi.hoisted(() => ({
+  options: undefined as AgentBudgetOptions | undefined,
+}));
 vi.mock("../agent/useAgentBootstrap", () => ({
   useAgentBootstrapState: () => ({
     bootstrap: {
       canAgent: true,
       workerOnline: true,
+      canManage: true,
+      budgets: budgetState.options,
       models: [
         {
           alias: "executor",
@@ -45,6 +53,7 @@ vi.mock("../agent/useAgentBootstrap", () => ({
           allowAgent: true,
           status: "online",
           supportsThinking: true,
+          contextWindowTokens: 262144,
         },
         {
           alias: "reviewer",
@@ -150,6 +159,7 @@ function showLaunch(launch = intent, callback = vi.fn()) {
   };
 }
 beforeEach(() => {
+  budgetState.options = undefined;
   vi.spyOn(businessFlowsApi, "prepareInputs").mockImplementation(
     async (_id, request) => directInputPlan(request),
   );
@@ -175,6 +185,76 @@ beforeEach(() => {
   });
 });
 afterEach(() => vi.restoreAllMocks());
+
+it("sends the selected task budget and preserves the explicitly chosen reasoning effort", async () => {
+  budgetState.options = {
+    enabled: true,
+    tier: "standard",
+    defaultProfile: "normal",
+    maxPromptCharacters: 262144,
+    limits: {
+      contextWindowTokens: 65536,
+      maxOutputTokens: 32768,
+      maxRunSeconds: 600,
+    },
+    profiles: ["normal", "materials", "reasoning"].map((value) => ({
+      budgetProfile: value as "normal" | "materials" | "reasoning",
+      tier: "standard" as const,
+      contextWindowTokens: 65536,
+      maxOutputTokens: value === "reasoning" ? 32768 : 16384,
+      maxRunSeconds: 600,
+      reasoningEffort:
+        value === "reasoning" ? ("xhigh" as const) : ("medium" as const),
+      requestedMaxOutputTokens: null,
+    })),
+  };
+  const detail = {
+    ...researchDetail,
+    version: {
+      ...researchVersion,
+      definition: {
+        ...researchVersion.definition,
+        inputRequirements: researchVersion.definition.inputRequirements.map(
+          (input) => ({ ...input, required: false }),
+        ),
+      },
+    },
+  };
+  detail.versions = [detail.version];
+  vi.mocked(businessFlowsApi.detail).mockResolvedValue(detail);
+  const start = vi
+    .spyOn(businessFlowsApi, "start")
+    .mockResolvedValue(businessFlowRun({ status: "queued" }));
+  showLaunch();
+  await screen.findByRole("combobox", { name: "分析方案" });
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "分析方案" }));
+  fireEvent.click(
+    await screen.findByText("长推理", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  fireEvent.click(screen.getByText("高级设置", { exact: true }));
+  fireEvent.change(screen.getByRole("spinbutton", { name: "本次生成上限" }), {
+    target: { value: "24000" },
+  });
+  fireEvent.blur(screen.getByRole("spinbutton", { name: "本次生成上限" }));
+  await waitFor(() =>
+    expect(screen.getByText(/可用输入.*41,280/)).toBeVisible(),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "开始业务流" })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "开始业务流" }));
+  await waitFor(() => expect(start).toHaveBeenCalledOnce());
+  expect(start).toHaveBeenCalledWith(
+    2,
+    expect.objectContaining({
+      budgetProfile: "reasoning",
+      maxOutputTokens: 24000,
+      reasoningEffort: "medium",
+    }),
+  );
+});
 
 it("keeps AI acceptance separate from a real human approval and never polls while parked", async () => {
   const decide = vi

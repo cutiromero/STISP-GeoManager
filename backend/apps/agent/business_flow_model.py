@@ -811,6 +811,9 @@ def request_node_result(
                 **details,
                 "reason": str(error),
                 "kind": "model_call_limit",
+                "budgetScope": error.scope,
+                **({"usedRequests": error.used} if error.used is not None else {}),
+                **({"limit": error.limit} if error.limit is not None else {}),
                 "requested": False,
                 "evidence": evidence_sizes(items, node, set()),
             }

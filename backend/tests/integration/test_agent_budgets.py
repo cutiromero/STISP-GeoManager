@@ -31,7 +31,7 @@ def test_role_limits_and_snapshot(setup_agent):  # noqa: F811
         normal["contextWindowTokens"],
         normal["maxOutputTokens"],
         normal["maxRunSeconds"],
-    ) == (65536, 16384, 600)
+    ) == (65536, 32768, 600)
     privileged = resolve_budget(
         env["admin"], policy, "reasoning", service_window=262144
     )
@@ -53,7 +53,7 @@ def test_role_limits_and_snapshot(setup_agent):  # noqa: F811
         check_budget_access(env["admin"], policy, privileged)
 
 
-@pytest.mark.parametrize("output", [True, 0, 16385, 262144, "65536"])
+@pytest.mark.parametrize("output", [True, 0, 32769, 262144, "65536"])
 def test_cannot_request_more_than_role_allows(setup_agent, output):  # noqa: F811
     with pytest.raises(ValidationError):
         resolve_budget(setup_agent["user"], enabled_policy(), "normal", output, 262144)
@@ -104,7 +104,7 @@ def test_submission_budget_and_idempotency(setup_agent):  # noqa: F811
     )
     assert response.status_code == 202, response.content
     run = AgentRun._base_manager.get(pk=response.json()["id"])
-    assert run.budget_snapshot["maxOutputTokens"] == 16384
+    assert run.budget_snapshot["maxOutputTokens"] == 32768
     assert (
         c.post(
             endpoint, json.dumps(data), content_type="application/json", **env["header"]

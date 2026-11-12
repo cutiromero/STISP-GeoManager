@@ -22,6 +22,7 @@ import {
   completedFlowNodes,
   flowStateLabels,
   nodeStageProgress,
+  nodeStateLabel,
 } from "./businessFlowPresentation";
 import "./business-flow-monitor.css";
 
@@ -128,7 +129,21 @@ export default function BusinessFlowMonitor({
         destroyOnHidden
       >
         {mainTrace && !unavailable && (
-          <BusinessFlowNodeTrace flowId={flow.id} nodeId="_main" />
+          <BusinessFlowNodeTrace
+            flowId={flow.id}
+            nodeId="_main"
+            state={stateMap.get(flow.currentNode)}
+            progressKey={JSON.stringify([
+              flow.status,
+              flow.currentNode,
+              flow.nodes.map((node) => [
+                node.nodeId,
+                node.status,
+                node.attempt,
+                node.toolProgress?.steps,
+              ]),
+            ])}
+          />
         )}
       </Drawer>
       <p
@@ -178,10 +193,7 @@ export default function BusinessFlowMonitor({
                 const stages = nodeStageProgress(node, state);
                 const skipped = state?.status === "skipped";
                 const status =
-                  active && halted
-                    ? stateText
-                    : (flowStateLabels[state?.status ?? "pending"] ??
-                      state?.status);
+                  active && halted ? stateText : nodeStateLabel(state);
                 return (
                   <button
                     type="button"

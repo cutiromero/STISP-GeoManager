@@ -53,6 +53,50 @@ def encoded(value):
     ).encode()
 
 
+def node_configuration(workflow, node, loop):
+    return {
+        "versionId": node.get("algorithmVersionId"),
+        "inputBindings": deepcopy(node.get("inputBindings", {})),
+        "parameters": {
+            **node.get("parameters", {}),
+            **workflow.parameters.get("nodeParameters", {}).get(node["id"], {}),
+            **loop.get("humanParameters", {}),
+        },
+    }
+
+
+def node_defaults(workflow, node, loop):
+    """Small exact preview; long/code values remain behind an evidence reference."""
+    configured = node_configuration(workflow, node, loop)
+
+    def preview(values, *, bindings=False):
+        result = {}
+        for key, value in values.items():
+            if not bindings and (
+                key.casefold() in {"code", "script", "sql"}
+                or isinstance(value, (dict, list))
+                or len(encoded(value)) > 240
+            ):
+                continue
+            candidate = {**result, key: value}
+            if len(encoded(candidate)) <= 1536:
+                result = candidate
+        return result
+
+    parameters = preview(configured["parameters"])
+    bindings = preview(configured["inputBindings"], bindings=True)
+    return {
+        "versionId": configured["versionId"],
+        "configuredParameters": parameters,
+        "parametersComplete": len(parameters) == len(configured["parameters"]),
+        "parameterCount": len(configured["parameters"]),
+        "inputBindings": bindings,
+        "bindingsComplete": len(bindings) == len(configured["inputBindings"]),
+        "bindingCount": len(configured["inputBindings"]),
+        "evidenceId": "node-config-" + node["id"],
+    }
+
+
 def loop_state(item):
     return item.setdefault(
         "toolLoop",
@@ -326,8 +370,6 @@ def submission(workflow, user, policy, node, loop, arguments):
 
     fixed_keys = set(parameters) - adjustable
     if fixed_keys:
-        if not logic_nodes.enabled(workflow):
-            raise ComputeError("参数只能修改清单中agent.adjustable=true的项目")
         changed = [
             key
             for key in fixed_keys
@@ -687,12 +729,25 @@ def finish(node, item, arguments, evidence):
     if missing:
         raise ComputeError("节点尚缺必需输出：" + "、".join(missing))
     actual = {row["id"]: row for row in evidence}
+    own_outputs = {
+        row["id"]
+        for row in item.get("outputs", {}).get("evidence", [])
+        if row.get("kind") == "output"
+    }
+    if (
+        node.get("kind") == "operator" or node.get("algorithmVersionId")
+    ) and not own_outputs:
+        raise ComputeError("算子节点尚无本节点真实计算输出，不能直接交付")
     for row in outputs:
         if row["evidenceId"] in item.get("toolLoop", {}).get("invalidOutputIds", []):
             raise ComputeError(
                 "该成果已被退回，须提交修订后的真实结果，不能直接重新交付"
             )
         source = actual.get(row.get("evidenceId"))
+        if row["semanticType"] != "analysis" and row["evidenceId"] not in own_outputs:
+            raise ComputeError(
+                "算子节点必须交付本节点真实计算的输出，不能用上游成果代替执行"
+            )
         if not source or (
             row["semanticType"] != "analysis" and source["kind"] != "output"
         ):
@@ -768,6 +823,8 @@ def execute_tool(
             arguments.get("offset", 0),
             arguments.get("length", MAX_FRAGMENT_BYTES),
         )
+        if identity == "node-config-" + node["id"] and node.get("kind") == "operator":
+            rows[identity] = {"result": node_configuration(workflow, node, loop)}
         if not isinstance(identity, str) or identity not in rows:
             raise ComputeError("证据不属于本节点可见范围")
         if (
@@ -839,6 +896,20 @@ def execute_tool(
             and loop.get("preflightDigest") != logic_nodes.submission_digest(body)
         ):
             raise ComputeError("须先对相同版本、输入、参数和字段映射完成预检，才能计算")
+        if action == "run_operator":
+            from .model_requests import operator_budget_wait
+
+            if loop["operatorCalls"] >= contract["maxOperatorCalls"]:
+                raise operator_budget_wait(
+                    node["id"],
+                    loop["operatorCalls"],
+                    contract["maxOperatorCalls"],
+                    scope="node",
+                )
+            if workflow.operator_steps >= workflow.max_operator_steps:
+                raise operator_budget_wait(
+                    node["id"], workflow.operator_steps, workflow.max_operator_steps
+                )
         check_remedy(loop, arguments, action, contract)
         if action == "prepare_input":
             from .node_inputs import prepare
@@ -877,11 +948,6 @@ def execute_tool(
                 "inputs": collection_shape(converted, collections),
                 "message": "资料衔接已完成或无需转换",
             }
-        if (
-            loop["operatorCalls"] >= contract["maxOperatorCalls"]
-            or workflow.operator_steps >= workflow.max_operator_steps
-        ):
-            raise ComputeError("节点或本次运行的算子调用额度已用尽")
         with transaction.atomic():
             current = locked_workflow(workflow.pk)
             if (
@@ -1103,7 +1169,12 @@ def advance_tool_execution(
                 if loop["modelCalls"] >= contract["maxModelCalls"]:
                     from .model_requests import ModelCallBudgetExceeded
 
-                    raise ModelCallBudgetExceeded("节点模型调用额度已用尽")
+                    raise ModelCallBudgetExceeded(
+                        "节点模型调用额度已用尽",
+                        scope="node",
+                        used=loop["modelCalls"],
+                        limit=contract["maxModelCalls"],
+                    )
                 identities.append(value["requestId"])
                 loop["modelCalls"] += 1
         callbacks["on_record"](value)
@@ -1130,6 +1201,18 @@ def advance_tool_execution(
                 return None
             rows = [
                 *evidence,
+                *(
+                    [
+                        {
+                            "id": "node-config-" + node["id"],
+                            "kind": "plan",
+                            "title": "当前节点的既有配置",
+                            "summary": "默认版本、参数及输入绑定的只读配置引用；当前短预览见nodeDefaults，完整值按需读取。",
+                        }
+                    ]
+                    if node.get("kind") == "operator"
+                    else []
+                ),
                 *[
                     {
                         "id": row["id"],
@@ -1155,6 +1238,12 @@ def advance_tool_execution(
                     "jsonFallback": loop.get("jsonFallback", False),
                     "formatFeedback": loop.get("formatFeedback", ""),
                     "revisionFeedback": item.get("feedback"),
+                    "manualRecovery": bool(loop.get("manualRecovery")),
+                    **(
+                        {"nodeDefaults": node_defaults(workflow, node, loop)}
+                        if node.get("kind") == "operator"
+                        else {}
+                    ),
                     "remaining": {
                         "steps": contract["maxSteps"] - loop["steps"],
                         "modelCalls": contract["maxModelCalls"] - loop["modelCalls"],

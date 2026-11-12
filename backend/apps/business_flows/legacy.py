@@ -17,9 +17,15 @@ from .state import binding, state, emit, persist, TERMINAL, digest
 def projected_state(workflow):
     value = deepcopy(state(workflow))
     plan = workflow.plan
-    stages = {item["name"]: item for item in plan.get("stages", [])}
+
+    def stage_node_id(item):
+        return "finish" if item.get("identifier") == "finish" else item["name"]
+
+    stages = {stage_node_id(item): item for item in plan.get("stages", [])}
+    if isinstance(plan.get("finalStage"), dict):
+        stages["finish"] = plan["finalStage"]
     index = plan.get("stageIndex", 0)
-    completed = {item["name"] for item in plan.get("stages", [])[:index]}
+    completed = {stage_node_id(item) for item in plan.get("stages", [])[:index]}
     inputs = value["nodes"]["inputs"]
     ready = bool(
         plan.get("confirmedMapping")
@@ -81,7 +87,28 @@ def projected_state(workflow):
         if stage.get("contextBudgetReview") and workflow.status == "waiting_approval":
             item["status"] = "waiting_context"
             item["contextRecovery"] = deepcopy(stage["contextBudgetReview"])
+            item["contextRecovery"].setdefault("nodeId", identity)
+            item["contextRecovery"].setdefault("level", 0)
+            item["contextRecovery"].setdefault("evidence", [])
+            for key in (
+                "beforeTokens",
+                "afterTokens",
+                "inputBudgetTokens",
+                "measurementCount",
+            ):
+                if item["contextRecovery"].get(key) is None:
+                    item["contextRecovery"].pop(key, None)
             item["contextManagement"] = deepcopy(stage.get("contextManagement", {}))
+            item["contextManagement"].setdefault("nodeId", identity)
+            item["contextManagement"].setdefault("level", 0)
+            for key in (
+                "beforeTokens",
+                "afterTokens",
+                "inputBudgetTokens",
+                "measurementCount",
+            ):
+                if item["contextManagement"].get(key) is None:
+                    item["contextManagement"].pop(key, None)
         if identity == "apply":
             approved = bool(stage.get("modificationsApproval"))
             item["human"].update(
@@ -101,6 +128,8 @@ def projected_state(workflow):
             summary=plan["finalDecision"].get("resultSummary", ""),
         )
     for item in value["nodes"].values():
+        if item.get("contextRecovery") and workflow.status == "waiting_approval":
+            item["status"] = "waiting_context"
         if item.get("recovery") and workflow.status == "waiting_approval":
             item["status"] = "waiting_recovery"
     return value
@@ -410,7 +439,7 @@ def retry_context(user, workflow, value):
         )
     with transaction.atomic():
         current = locked_workflow(workflow.pk)
-        authorize(user, current)
+        live_policy = authorize(user, current)
         values = state(current)
         receipts = values.setdefault("decisions", {})
         fingerprint = digest(value)
@@ -431,20 +460,31 @@ def retry_context(user, workflow, value):
             current.plan.get("phase") == "budget_exhausted"
             or item["contextRecovery"].get("kind") == "model_call_limit"
         ):
-            raise ComputeError(
-                "模型请求额度已用完，请缩小任务范围后重新发起；不能通过重试重置计数",
-                409,
-            )
+            from .model_requests import renew_task_budget
+
+            renew_task_budget(current, live_policy, item["contextRecovery"])
+        from .model_requests import renew_operator_budget
+
+        renew_operator_budget(current, live_policy, item["contextRecovery"])
         require_compute_slot(user, current.pk)
         stage = next(
-            row
-            for row in current.plan["stages"]
-            if row["name"]
-            in {node_id, "final_analysis" if node_id == "finish" else node_id}
+            (
+                row
+                for row in current.plan.get("stages", [])
+                if row["name"]
+                in {node_id, "final_analysis" if node_id == "finish" else node_id}
+            ),
+            current.plan.get("finalStage") if node_id == "finish" else None,
         )
-        history = {"contextBudgetReview": stage.pop("contextBudgetReview")}
-        candidates = [stage]
-        batches = stage.get("modelBatches", {})
+        if stage is None and node_id != "inputs":
+            raise ComputeError("当前等待阶段已变化，请刷新后重试", 409)
+        history = (
+            {"contextBudgetReview": stage.pop("contextBudgetReview")}
+            if stage is not None
+            else None
+        )
+        candidates = [stage] if stage is not None else []
+        batches = stage.get("modelBatches", {}) if stage is not None else {}
         candidates.extend(
             row["stage"]
             for row in batches.get("batches", [])
@@ -456,16 +496,20 @@ def retry_context(user, workflow, value):
                 candidate.setdefault("modelBudgetHistory", []).append(
                     {"modelAttempts": candidate.pop("modelAttempts")}
                 )
-        stage.setdefault("modelBudgetHistory", []).append(history)
-        stage["status"] = "pending"
+        if stage is not None:
+            stage.setdefault("modelBudgetHistory", []).append(history)
+            stage["status"] = "pending"
         values["nodes"][node_id].pop("contextRecovery", None)
         values["nodes"][node_id]["status"] = "executing"
         receipts[key] = fingerprint
-        current.plan["phase"] = "decide"
+        if stage is not None:
+            current.plan["phase"] = "decide"
         current.plan_hash = _state_hash(current.plan)
         current.status, current.detail = (
             "queued",
-            "将重新核对本节点输入预算；未批准科研结果、未重置模型计数",
+            "将重试本次审核，保留执行结果与模型计数；未批准科研结果"
+            if item["contextRecovery"].get("kind") == "model_protocol_error"
+            else "将重新核对本节点输入预算；未批准科研结果、未重置模型计数",
         )
         current.policy_snapshot["businessFlowControlEpoch"] = (
             current.policy_snapshot.get("businessFlowControlEpoch", 0) + 1
@@ -478,6 +522,8 @@ def retry_context(user, workflow, value):
                 "status",
                 "detail",
                 "policy_snapshot",
+                "max_iterations",
+                "max_operator_steps",
                 "updated_at",
             ]
         )

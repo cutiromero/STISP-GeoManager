@@ -52,6 +52,7 @@ def cancel_tasks(user, workflow):
 def live_guard(workflow):
     touched = [0.0]
     frozen = deepcopy(binding(workflow))
+    frozen_resource_ids = tuple(workflow.resource_ids or [])
     epoch = workflow.policy_snapshot.get("businessFlowControlEpoch", 0)
 
     def guard():
@@ -87,7 +88,12 @@ def live_guard(workflow):
             raise PermissionDenied("业务流已停用或执行权限已收窄")
         from .runtime import authorize_inputs
 
-        authorize_inputs(user, policy, frozen.get("inputVersions", {}))
+        authorize_inputs(
+            user,
+            policy,
+            frozen.get("inputVersions", {}),
+            additional_ids=frozen_resource_ids,
+        )
         if time.monotonic() - touched[0] >= 2:
             AgentWorkflow.objects.filter(pk=current.pk).update(heartbeat=timezone.now())
             touched[0] = time.monotonic()
@@ -400,7 +406,11 @@ def _operator(workflow, user, policy, node, item, evidence):
     task_id = item.get("computeTaskId")
     if not task_id:
         if workflow.operator_steps >= workflow.max_operator_steps:
-            raise ComputeError("业务流已达到算子执行上限")
+            from .model_requests import operator_budget_wait
+
+            raise operator_budget_wait(
+                node["id"], workflow.operator_steps, workflow.max_operator_steps
+            )
         version = AlgorithmVersion.objects.select_related("algorithm").get(
             pk=node["algorithmVersionId"],
             status="published",

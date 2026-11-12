@@ -121,8 +121,10 @@ export default function TaskBudgetControl({
                     type="secondary"
                     style={{ margin: "4px 0" }}
                   >
-                    {ui("可用上下文", "Available context")}{" "}
+                    {ui("总窗口", "Total window")}{" "}
                     {budget.window.toLocaleString()} token /{" "}
+                    {ui("可用输入", "Available input")}{" "}
+                    {budget.input.toLocaleString()} token /{" "}
                     {ui("时限", "Timeout")} {budget.seconds / 60}{" "}
                     {ui("分钟", "minutes")}
                   </Typography.Paragraph>

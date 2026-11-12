@@ -52,11 +52,10 @@ def default_policy():
         "defaultChatModel": first,
         "defaultAgentModel": agent,
         "dailyRuns": 100,
-        # Context is tracked as a conservative UTF-8 byte budget.  With the
-        # current 32K-token local model window this leaves room for the answer
-        # and system/tool instructions instead of failing on a small file.
+        # Bytes bound request size; actual token counts and the serving window
+        # separately reserve space for generation and system/tool instructions.
         "maxContextBytes": 384000,
-        "maxOutputTokens": 8192,
+        "maxOutputTokens": 16384,
         "maxContextTokens": 49152,
         "reasoningEffort": "medium",
         "temperature": 0.2,
@@ -64,7 +63,7 @@ def default_policy():
         "maxSteps": 32,
         "maxResources": 3,
         "maxIterations": 5,
-        "maxOperatorSteps": 8,
+        "maxOperatorSteps": 16,
         "maxProtocolRetries": 1,
         "maxRunSeconds": 600,
         "allowDocuments": True,

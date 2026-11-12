@@ -5,6 +5,7 @@ import json
 from apps.compute.packages import ComputeError
 from .business_flow_model import _citations, _text, request_node_result
 from .business_flow_model import provider as provider
+from .business_flow_context import MAX_EVIDENCE_ITEMS
 
 # Configuration: bound evidence size; generation and time inherit the live policy.
 MAX_REVISIONS = 3
@@ -71,7 +72,7 @@ def _feedback(value):
         references = issue.get("evidenceIds", [])
         if (
             not isinstance(references, list)
-            or len(references) > 100
+            or len(references) > MAX_EVIDENCE_ITEMS
             or any(
                 not isinstance(item, str) or not 1 <= len(item) <= 160
                 for item in references

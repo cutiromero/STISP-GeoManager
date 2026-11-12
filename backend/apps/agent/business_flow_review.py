@@ -48,6 +48,25 @@ class ReviewSyntaxError(ComputeError):
         )
 
 
+class ReviewResultError(ComputeError):
+    """A bound review response was rejected; no approval or execution occurred."""
+
+
+def protocol_wait(node, evidence, reason):
+    from .business_flow_context import ContextReviewRequired, evidence_sizes
+
+    return ContextReviewRequired(
+        {
+            "nodeId": node["id"],
+            "level": 0,
+            "kind": "model_protocol_error",
+            "reason": "审核响应未通过校验，执行结果已保留：" + reason[:500],
+            "evidence": evidence_sizes(evidence, node, {row["id"] for row in evidence}),
+            "requested": False,
+        }
+    )
+
+
 def _configuration(node, attempt):
     if not isinstance(node, dict) or not isinstance(node.get("review"), dict):
         raise ComputeError("节点独立审核配置无效")
@@ -136,6 +155,17 @@ def review_node(
         or row["id"] in {"execution-result", "node-result", "preparation-script"}
     }
     # A bare review still needs actual evidence; _citations enforces this.
+    bound = bool(workflow.parameters.get("_businessFlow"))
+
+    def validate(raw, available):
+        try:
+            return _validate(raw, available, required=required & available)
+        except ReviewSyntaxError:
+            raise
+        except ComputeError as error:
+            if bound:
+                raise ReviewResultError(str(error)) from error
+            raise
 
     def record(value):
         if feedback:
@@ -157,9 +187,7 @@ def review_node(
                 evidence,
                 role="reviewer",
                 instruction=INSTRUCTION,
-                validate=lambda raw, available: _validate(
-                    raw, available, required=required & available
-                ),
+                validate=validate,
                 guard=guard,
                 model_alias=alias,
                 policy=selected_policy,
@@ -177,6 +205,8 @@ def review_node(
                     previousRequestId=feedback["previousRequestId"],
                 )
             return {**result, "humanApprovalRequired": review["human"]}
+        except ReviewResultError as error:
+            raise protocol_wait(node, evidence, str(error)) from error
         except ReviewSyntaxError as error:
             record(
                 {
@@ -187,6 +217,8 @@ def review_node(
             )
             remaining = last["timeLimitSeconds"] - math.ceil(time.monotonic() - started)
             if repair == MAX_PROTOCOL_REPAIRS or remaining <= 0:
+                if bound:
+                    raise protocol_wait(node, evidence, str(error)) from error
                 raise
             feedback = {
                 "kind": "invalid_review_json",

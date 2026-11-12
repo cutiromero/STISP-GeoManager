@@ -896,14 +896,25 @@ def _pause(workflow, stage, reason, outputs=None) -> None:
     workflow.status, workflow.detail = "waiting_approval", reason[:300]
     stage["status"] = "needs_review"
     if stage.get("contextBudgetReview"):
-        from .workflow_diagnostics import record_issue
+        from .workflow_diagnostics import context_next_action, record_issue
 
         stage["contextBudgetReview"].setdefault(
             "nodeId", "finish" if stage["identifier"] == "finish" else stage["name"]
         )
         stage["contextBudgetReview"].setdefault("level", 0)
         stage["contextBudgetReview"].setdefault("evidence", [])
-        record_issue(workflow, "budget", reason, waiting=True)
+        kind = (
+            "model_protocol"
+            if stage["contextBudgetReview"].get("kind") == "model_protocol_error"
+            else "budget"
+        )
+        record_issue(
+            workflow,
+            kind,
+            reason,
+            waiting=True,
+            next_action=context_next_action(stage["contextBudgetReview"]),
+        )
     _save(workflow)
     checkpoint(workflow, "review_results", {"stage": stage["name"], "reason": reason})
 
@@ -957,6 +968,10 @@ def _minimum_model_requests(workflow, stage):
 
 def _exhaust_model_budget(workflow, stage, minimum_remaining):
     calls = workflow.plan.get("actualModelCallCount", 0)
+    if workflow.parameters.get("_businessFlow"):
+        from apps.business_flows.state import state as business_state
+
+        calls += len(business_state(workflow).get("requestedIds", []))
     batches = stage.get("modelBatches") or {}
     if batches:
         batches["status"] = "budget_exhausted"
@@ -982,6 +997,7 @@ def _exhaust_model_budget(workflow, stage, minimum_remaining):
         "level": 0,
         "evidence": [],
         "kind": "model_call_limit",
+        "budgetScope": "task",
         "reason": "模型请求额度不足",
         "requested": False,
         **summary,
@@ -1424,6 +1440,14 @@ def advance_demo(workflow_id) -> None:
                 workflow.operator_steps >= workflow.max_operator_steps
                 and stage["identifier"] != "finish"
             ):
+                if workflow.parameters.get("_businessFlow"):
+                    from apps.business_flows.model_requests import operator_budget_wait
+
+                    raise operator_budget_wait(
+                        stage["name"],
+                        workflow.operator_steps,
+                        workflow.max_operator_steps,
+                    )
                 raise ComputeError("已达到场景算子步骤上限")
             if (
                 workflow.workflow_type in MULTI_FAMILY
@@ -2007,7 +2031,11 @@ def advance_demo(workflow_id) -> None:
             _save(workflow, acknowledge_pause=True)
             return
         except ContextReviewRequired as exc:
-            from .workflow_diagnostics import record_issue
+            from .workflow_diagnostics import (
+                category,
+                context_next_action,
+                record_issue,
+            )
 
             stage = (
                 workflow.plan.get("finalStage")
@@ -2032,7 +2060,24 @@ def advance_demo(workflow_id) -> None:
                 _pause(workflow, stage, str(exc))
             else:
                 workflow.status = "waiting_approval"
-                record_issue(workflow, "budget", str(exc), waiting=True)
+                if workflow.parameters.get("_businessFlow"):
+                    from apps.business_flows.state import state as business_state
+
+                    item = business_state(workflow)["nodes"].get(
+                        exc.details.get("nodeId", "inputs")
+                    )
+                    if item is not None:
+                        item.update(
+                            status="waiting_context",
+                            contextRecovery={**exc.details, "reason": str(exc)},
+                        )
+                record_issue(
+                    workflow,
+                    category(exc),
+                    str(exc),
+                    waiting=True,
+                    next_action=context_next_action(exc.details),
+                )
                 _save(workflow)
         except PermissionDenied as exc:
             workflow.status, workflow.detail = "interrupted", str(exc)[:300]

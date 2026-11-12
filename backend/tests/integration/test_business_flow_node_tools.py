@@ -653,9 +653,27 @@ def test_loop_limits_wait_instead_of_failing(operators, monkeypatch, limit):
         install(monkeypatch, [])
     workflow.save(update_fields=["plan"])
     item = advance(env, workflow, 2 if limit == "maxOperatorCalls" else 1)
-    assert (
-        workflow.status == "waiting_approval" and item["status"] == "waiting_recovery"
-    )
+    assert workflow.status == "waiting_approval"
+    if limit == "maxOperatorCalls":
+        assert item["status"] == "waiting_context"
+        assert item["contextRecovery"]["kind"] == "operator_call_limit"
+        assert item["contextRecovery"]["budgetScope"] == "node"
+        with (
+            project_scope(env["scope"]),
+            pytest.raises(ComputeError, match="不能通过重试"),
+        ):
+            runtime.decide_flow(
+                env["owner"],
+                workflow,
+                {
+                    "nodeId": "calculate",
+                    "decision": "retry_context",
+                    "revision": state(workflow)["revision"],
+                    "idempotencyKey": uuid4().hex,
+                },
+            )
+    else:
+        assert item["status"] == "waiting_recovery"
 
 
 def test_format_retry_once_and_whitelist(operators, monkeypatch):
@@ -989,7 +1007,7 @@ def test_unadjustable_parameter_and_out_of_scope_resource_are_observations(
     )
     item = advance(env, workflow, 4)
     observations = [call["packet"]["nodeContext"].get("observation") for call in calls]
-    assert "agent.adjustable" in observations[2]["result"]["message"]
+    assert "固定科学参数不能改变" in observations[2]["result"]["message"]
     assert "不能扩大范围" in observations[3]["result"]["message"]
     assert item["status"] == "waiting_recovery"
     with project_scope(env["scope"]):
@@ -1092,6 +1110,120 @@ def test_nonretryable_failures_never_ask_model_again(
         task.save()
     item = advance(env, workflow, 2)
     assert item["status"] == "waiting_recovery" and len(calls) == 2
+
+
+def test_operator_allowance_resume_keeps_pending_remedy_and_all_usage(
+    operators, monkeypatch
+):
+    env = operators
+    upgrade(env)
+    workflow = create(env)
+    remedy = action(
+        "run_operator",
+        **submit_args(env, parameters={"threshold": 0.6}, remedy="adjust_parameters"),
+    )
+    calls = install(
+        monkeypatch,
+        [
+            action("operator_catalog"),
+            action("run_operator", **submit_args(env)),
+            remedy,
+        ],
+    )
+    item = advance(env, workflow, 2)
+    with project_scope(env["scope"]):
+        ComputeTask.objects.filter(pk=item["computeTaskId"]).update(
+            status="failed",
+            failure={"code": "BAD_PARAMETERS", "remedy": "adjust_parameters"},
+        )
+    advance(env, workflow)
+    workflow.operator_steps = workflow.max_operator_steps
+    workflow.save(update_fields=["operator_steps"])
+    item = advance(env, workflow)
+    loop = item["toolLoop"]
+    before = deepcopy(loop)
+    assert item["contextRecovery"]["kind"] == "operator_call_limit"
+    assert (
+        loop["pending"] == remedy and loop["recoveries"] == 0 and not loop["remedies"]
+    )
+    payload = {
+        "nodeId": "calculate",
+        "decision": "retry_context",
+        "revision": state(workflow)["revision"],
+        "idempotencyKey": uuid4().hex,
+    }
+    with project_scope(env["scope"]):
+        with pytest.raises(ComputeError, match="尚未增加"):
+            runtime.decide_flow(env["owner"], workflow, payload)
+        AgentPolicy.objects.update(
+            value={**AgentPolicy.objects.get(pk=1).value, "maxOperatorSteps": 32}
+        )
+        workflow = runtime.decide_flow(env["owner"], workflow, payload)
+        assert workflow.operator_steps == 16 and workflow.max_operator_steps == 32
+        assert runtime.decide_flow(env["owner"], workflow, payload).pk == workflow.pk
+    item = advance(env, workflow)
+    loop = item["toolLoop"]
+    assert len(calls) == 3, (
+        "The saved tool action must resume without another model call"
+    )
+    assert loop["recoveries"] == 1 and len(loop["remedies"]) == 1
+    assert (
+        loop["modelCalls"] == before["modelCalls"] and loop["steps"] == before["steps"]
+    )
+    assert workflow.operator_steps == 17
+    assert len(state(workflow)["budgetAdjustments"]) == 1
+    with project_scope(env["scope"]):
+        assert ComputeTask.objects.count() == 2
+        assert (
+            ComputeTask.objects.get(pk=item["computeTaskId"]).parameters["threshold"]
+            == 0.6
+        )
+    assert item["human"]["status"] != "approved"
+
+
+def test_platform_failure_waits_for_explicit_retry_then_allows_original_action(
+    operators, monkeypatch
+):
+    env = operators
+    upgrade(env)
+    workflow = create(env)
+    calls = install(
+        monkeypatch,
+        [
+            action("operator_catalog"),
+            action("run_operator", **submit_args(env)),
+            action("run_operator", **submit_args(env)),
+        ],
+    )
+    item = advance(env, workflow, 2)
+    with project_scope(env["scope"]):
+        ComputeTask.objects.filter(pk=item["computeTaskId"]).update(
+            status="failed",
+            failure={"code": "PLATFORM_TIMEOUT", "remedy": "adjust_parameters"},
+        )
+    item = advance(env, workflow, 2)
+    assert item["status"] == "waiting_recovery" and len(calls) == 2
+    before = deepcopy(item["toolLoop"])
+    with project_scope(env["scope"]):
+        workflow = runtime.decide_flow(
+            env["owner"],
+            workflow,
+            {
+                "nodeId": "calculate",
+                "decision": "retry_recovery",
+                "revision": state(workflow)["revision"],
+                "feedback": "计算服务已恢复，请重试",
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+    loop = state(workflow)["nodes"]["calculate"]["toolLoop"]
+    assert not loop.get("failure") and not loop.get("lastObservation")
+    assert loop["modelCalls"] == before["modelCalls"] and loop["operatorCalls"] == 1
+    item = advance(env, workflow)
+    assert calls[-1]["packet"]["nodeContext"]["manualRecovery"] is True
+    assert item.get("computeTaskId") and item["status"] != "waiting_recovery"
+    assert item["toolLoop"]["operatorCalls"] == 2 and workflow.operator_steps == 2
+    assert item["human"]["status"] != "approved"
 
 
 def test_catalog_replacement_requires_equivalent_capabilities(operators, monkeypatch):

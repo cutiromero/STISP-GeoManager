@@ -16,6 +16,7 @@ import type {
   BusinessFlowVersion,
   BusinessFlowInputAdapterChoices,
   BusinessFlowInputPlan,
+  AgentBudgetProfileId,
 } from "../api/generated/types.gen";
 import { businessFlowsApi } from "../api/businessFlows";
 import { agentApi } from "../api/agent";
@@ -39,6 +40,7 @@ import { RESOURCE_SEARCH_DELAY_MS } from "../agent/resourceSearch";
 import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "../agent/ReasoningEffortControl";
+import TaskBudgetControl from "../agent/TaskBudgetControl";
 import "./business-flows.css";
 import "./business-flow-launch.css";
 
@@ -93,6 +95,17 @@ export default function BusinessFlowLaunch({
   const previousInputs = useRef(inputs);
   const [reviewer, setReviewer] = useState<string>();
   const [effort, setEffort] = useState(reasoningEffort);
+  const [budgetProfile, setBudgetProfile] =
+    useState<AgentBudgetProfileId>("normal");
+  const [outputTokens, setOutputTokens] = useState<number>();
+  useEffect(() => {
+    setBudgetProfile(bootstrap?.budgets?.defaultProfile ?? "normal");
+    setOutputTokens(undefined);
+  }, [
+    bootstrap?.budgets?.defaultProfile,
+    launch.definitionId,
+    launch.versionId,
+  ]);
   useEffect(() => setEffort(reasoningEffort), [reasoningEffort]);
   const [batchId, setBatchId] = useState(() => createUuid().replace(/-/g, ""));
   const [uploading, setUploading] = useState(false);
@@ -244,6 +257,21 @@ export default function BusinessFlowLaunch({
     version?.definition.nodes.some((node) => node.review.ai),
   );
   const reviewerModel = reviewer ?? model;
+  const budgetAliases = [
+    model,
+    ...(version?.definition.nodes
+      .filter((node) => node.review.ai)
+      .map((node) => node.review.model || reviewerModel) ?? []),
+  ];
+  const budgetWindow = Math.min(
+    ...budgetAliases.map(
+      (alias) =>
+        bootstrap?.models.find((item) => item.alias === alias)
+          ?.contextWindowTokens ??
+        bootstrap?.budgets?.limits.contextWindowTokens ??
+        32768,
+    ),
+  );
   const thinkingAvailable =
     bootstrap?.thinkingEnabled !== false &&
     Boolean(
@@ -431,6 +459,14 @@ export default function BusinessFlowLaunch({
       model,
       reviewerModel,
       ...(thinkingAvailable ? { reasoningEffort: effort } : {}),
+      ...(bootstrap.budgets?.enabled
+        ? {
+            budgetProfile,
+            ...(outputTokens !== undefined
+              ? { maxOutputTokens: outputTokens }
+              : {}),
+          }
+        : {}),
       inputs: Object.fromEntries(
         Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)),
       ),
@@ -596,6 +632,29 @@ export default function BusinessFlowLaunch({
                       onReasoningEffortChange?.(selected);
                     }}
                   />
+                )}
+                {bootstrap?.budgets?.enabled && (
+                  <div>
+                    <TaskBudgetControl
+                      canManage={bootstrap.canManage}
+                      options={bootstrap.budgets}
+                      profile={budgetProfile}
+                      output={outputTokens}
+                      serviceWindow={budgetWindow}
+                      disabled={busy}
+                      onProfile={(value) => {
+                        setBudgetProfile(value);
+                        setOutputTokens(undefined);
+                      }}
+                      onOutput={setOutputTokens}
+                    />
+                    <p className="business-flow-launch-note">
+                      {ui(
+                        "额度受所用模型窗口限制，每次请求分别计量；思考强度沿用上方所选档位。",
+                        "Model windows bound this budget, counted per request. Thinking effort follows the selection above.",
+                      )}
+                    </p>
+                  </div>
                 )}
                 {needsReview && (
                   <p className="business-flow-launch-note">

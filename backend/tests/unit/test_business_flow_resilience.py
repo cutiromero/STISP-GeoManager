@@ -16,9 +16,11 @@ from apps.business_flows.model_requests import (
     admit,
     ModelCallBudgetExceeded,
     request_limit,
+    check_start_budget,
 )
-from apps.business_flows.node_loop import finish
+from apps.business_flows.node_loop import finish, node_defaults, node_configuration
 from apps.business_flows.state import state
+from apps.compute.packages import ComputeError
 
 
 def request_packet():
@@ -81,6 +83,128 @@ def test_history_compacts_without_an_extra_model_and_keeps_latest_observation():
     assert actual["evidence"] == original["evidence"] and packet == original
 
 
+def test_valid_revision_feedback_can_reference_more_than_100_visible_items():
+    from apps.agent.business_flow_execution import _feedback
+
+    references = [f"source-{i}" for i in range(120)]
+    result = _feedback(
+        {
+            "reason": "字段对应需要补齐",
+            "repairInstructions": "按实际字段补齐映射",
+            "issues": [
+                {
+                    "code": "mapping",
+                    "message": "这些来源需要核对",
+                    "evidenceIds": references,
+                }
+            ],
+        }
+    )
+    assert result["issues"][0]["evidenceIds"] == references
+
+
+@pytest.mark.parametrize("kind", ["operator", "agent"])
+def test_calculation_milestone_cannot_deliver_only_an_upstream_output(kind):
+    node = {
+        "kind": kind,
+        "algorithmVersionId": 7,
+        "contract": {
+            "acceptance": ["真实计算"],
+            "requiredOutputs": [{"name": "result", "semanticType": "operator_result"}],
+        },
+    }
+    arguments = {
+        "summary": "结果已保存",
+        "limitations": [],
+        "evidenceIds": ["upstream"],
+        "outputs": [
+            {
+                "name": "result",
+                "semanticType": "operator_result",
+                "evidenceId": "upstream",
+            }
+        ],
+    }
+    with pytest.raises(ComputeError, match="本节点真实计算"):
+        finish(node, {}, arguments, [{"id": "upstream", "kind": "output"}])
+    arguments["evidenceIds"] = ["own"]
+    arguments["outputs"][0]["evidenceId"] = "own"
+    result = finish(
+        node,
+        {"outputs": {"evidence": [{"id": "own", "kind": "output"}]}},
+        arguments,
+        [{"id": "upstream", "kind": "output"}, {"id": "own", "kind": "output"}],
+    )
+    assert result["evidenceIds"] == ["own"]
+
+
+def test_long_compute_flow_is_rejected_before_its_known_minimum_can_exhaust_quota():
+    definition = {
+        "adapter": "research_flow",
+        "executionMode": "main_agent",
+        "nodes": [{"kind": "operator", "review": {"ai": True}} for _ in range(32)],
+    }
+    with pytest.raises(ComputeError, match="至少需要193次模型请求"):
+        check_start_budget(
+            {"maxSteps": 32, "maxOperatorSteps": 64}, definition, {"items": []}
+        )
+    check_start_budget(
+        {"maxSteps": 128, "maxOperatorSteps": 64}, definition, {"items": []}
+    )
+
+
+def test_input_preparation_is_included_in_the_minimum_operator_allowance():
+    from apps.business_flows.builtins import geology_definition
+
+    plan = {
+        "items": [
+            {"sourceId": i, "versionId": 1, "status": "needs_script"} for i in range(7)
+        ]
+    }
+    with pytest.raises(ComputeError, match="至少需要12次算子调用"):
+        check_start_budget(
+            {"maxSteps": 32, "maxOperatorSteps": 8},
+            geology_definition(main_agent=True),
+            plan,
+        )
+    check_start_budget(
+        {"maxSteps": 32, "maxOperatorSteps": 16},
+        geology_definition(main_agent=True),
+        plan,
+    )
+
+
+def test_operator_configuration_preview_preserves_defaults_without_inlining_long_code():
+    workflow = SimpleNamespace(
+        parameters={"nodeParameters": {"calculate": {"threshold": 0.8}}}
+    )
+    node = {
+        "id": "calculate",
+        "algorithmVersionId": 17,
+        "parameters": {
+            "threshold": 0.7,
+            "code": "private-script-body" * 1000,
+            "mapping": {"x": "y"},
+        },
+        "inputBindings": {"table": {"nodeId": "previous", "outputKey": "features"}},
+    }
+    loop = {"humanParameters": {"threshold": 0.9}}
+    preview = node_defaults(workflow, node, loop)
+    assert preview["versionId"] == 17 and preview["configuredParameters"] == {
+        "threshold": 0.9
+    }
+    assert preview["inputBindings"]["table"] == {
+        "nodeId": "previous",
+        "outputKey": "features",
+    }
+    assert not preview["parametersComplete"] and len(encode(preview).encode()) < 4096
+    assert "private-script-body" not in encode(preview)
+    assert (
+        node_configuration(workflow, node, loop)["parameters"]["code"]
+        == node["parameters"]["code"]
+    )
+
+
 def test_scientific_facts_and_approved_parameters_survive_projection():
     evidence = [
         {
@@ -100,6 +224,43 @@ def test_scientific_facts_and_approved_parameters_survive_projection():
     for key in ("verifiedReportFacts", "parameters", "conditions", "decision"):
         assert actual[0]["result"][key] == evidence[0]["result"][key]
     assert len(actual[0]["result"]["sample"]) == 10 and notices
+
+
+@pytest.mark.parametrize(
+    "byte_limit, accepted", [(96 * 1024, False), (384 * 1024, True)]
+)
+def test_complete_facts_follow_the_configured_byte_and_token_budget(
+    byte_limit, accepted
+):
+    packet = request_packet()
+    packet["nodeContext"] = {}
+    packet["evidence"][0]["result"] = {
+        "conditions": ["适用条件" * 20 + str(i) for i in range(500)]
+    }
+    options = dict(
+        direct_ids={"approved-inputs"},
+        checked=lambda: None,
+        summarize=lambda *args: pytest.fail("完整科学条件不能交给有损摘要"),
+        measurements=SimpleNamespace(
+            cache={},
+            measure=lambda messages, checked: sum(
+                len(row["content"]) for row in messages
+            ),
+        ),
+    )
+    policy = {
+        "maxContextTokens": 49152,
+        "maxOutputTokens": 16384,
+        "maxContextBytes": byte_limit,
+    }
+    if accepted:
+        actual, _, audit = prepare_packet(
+            packet, "核对完整条件", None, policy, 65536, **options
+        )
+        assert actual["evidence"] == packet["evidence"] and audit["level"] == 0
+    else:
+        with pytest.raises(ContextReviewRequired):
+            prepare_packet(packet, "核对完整条件", None, policy, 65536, **options)
 
 
 def test_protected_facts_are_never_replaced_by_lossy_batch_summary():

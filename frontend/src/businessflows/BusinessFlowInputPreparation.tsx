@@ -37,6 +37,8 @@ export default function BusinessFlowInputPreparation({
   const latest = useRef(flow);
   latest.current = flow;
   const mounted = useRef(true);
+  const generation = useRef(0);
+  const clarificationPending = useRef(false);
   const read = useRef<AbortController | undefined>(undefined);
   const [selected, setSelected] = useState<string>();
   const [script, setScript] = useState<BusinessFlowInputScriptDetail>();
@@ -49,12 +51,18 @@ export default function BusinessFlowInputPreparation({
   );
   useEffect(() => {
     mounted.current = true;
+    generation.current++;
+    clarificationPending.current = false;
     setSelected(undefined);
     setScript(undefined);
     setError("");
     setFeedback({});
+    setLoading(false);
+    setBusy(undefined);
+    key.current = undefined;
     return () => {
       mounted.current = false;
+      generation.current++;
       read.current?.abort();
     };
   }, [flow.id]);
@@ -95,15 +103,25 @@ export default function BusinessFlowInputPreparation({
       )
         setScript(value);
     } catch (value) {
-      if (!controller.signal.aborted && mounted.current) denied(value);
+      if (
+        !controller.signal.aborted &&
+        mounted.current &&
+        !(value instanceof Error && value.name === "AbortError")
+      )
+        denied(value);
     } finally {
       if (!controller.signal.aborted && mounted.current) setLoading(false);
     }
   };
   const clarify = async (role: string) => {
-    if (busy || !feedback[role]?.trim()) return;
+    if (clarificationPending.current || !feedback[role]?.trim()) return;
     const current = latest.current,
-      scope = requestScope();
+      scope = requestScope(),
+      owned = generation.current;
+    const active = () =>
+      mounted.current &&
+      generation.current === owned &&
+      latest.current.id === current.id;
     const fingerprint = JSON.stringify([
       current.id,
       current.revision,
@@ -113,6 +131,7 @@ export default function BusinessFlowInputPreparation({
     if (key.current?.fingerprint !== fingerprint)
       key.current = { fingerprint, value: createUuid() };
     setBusy(role);
+    clarificationPending.current = true;
     setError("");
     try {
       const next = await businessFlowsApi.clarifyInput(current.id, {
@@ -122,16 +141,15 @@ export default function BusinessFlowInputPreparation({
         idempotencyKey: key.current!.value,
       });
       scope();
-      if (
-        mounted.current &&
-        latest.current.id === current.id &&
-        next.revision >= latest.current.revision
-      )
-        onChanged(next);
+      if (active() && next.revision >= latest.current.revision) onChanged(next);
     } catch (value) {
-      if (mounted.current) denied(value);
+      if (active() && !(value instanceof Error && value.name === "AbortError"))
+        denied(value);
     } finally {
-      if (mounted.current) setBusy(undefined);
+      if (active()) {
+        clarificationPending.current = false;
+        setBusy(undefined);
+      }
     }
   };
   return (
@@ -191,6 +209,7 @@ export default function BusinessFlowInputPreparation({
                 />
                 <Button
                   type="primary"
+                  aria-label={ui("提交说明并继续", "Submit clarification")}
                   loading={busy === row.role}
                   disabled={
                     !feedback[row.role]?.trim() ||

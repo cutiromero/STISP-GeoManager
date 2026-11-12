@@ -642,6 +642,53 @@ def test_professional_review_budget_wait_retries_without_approving_science(
         assert runtime.decide_flow(env["user"], current, value).pk == current.pk
 
 
+def test_professional_review_protocol_wait_preserves_results_and_retries_only_review(
+    legacy_flow, monkeypatch
+):
+    from apps.agent.business_flow_context import ContextReviewRequired
+    from apps.agent.demo_workflow import _pause
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = env["create"]()
+    stage = workflow.plan["stages"][0]
+    producer = Mock()
+
+    def no_body(*args, **kwargs):
+        yield from ()
+
+    monkeypatch.setattr(review.provider, "stream", no_body)
+    with project_scope(env["scope"]):
+        with pytest.raises(ContextReviewRequired) as waiting:
+            review_stage(env, workflow, stage, (stage["decision"], []), producer)
+        assert waiting.value.details["kind"] == "model_protocol_error"
+        stage["contextBudgetReview"] = waiting.value.details
+        _pause(workflow, stage, str(waiting.value))
+        legacy.synchronize(workflow.pk)
+        workflow.refresh_from_db()
+        assert workflow.steps.filter(
+            kind="workflow_diagnostic", error_code="model_protocol"
+        ).exists()
+        current = runtime.decide_flow(
+            env["user"],
+            workflow,
+            {
+                "nodeId": "apply",
+                "decision": "retry_context",
+                "revision": state(workflow)["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+        provider_sequence(monkeypatch, [verdict()])
+        actual = current.plan["stages"][0]
+        assert (
+            review_stage(env, current, actual, (actual["decision"], []), producer)[0]
+            == actual["decision"]
+        )
+        producer.assert_not_called()
+        assert not actual.get("modificationsApproval")
+
+
 def test_compute_failure_waits_and_retries_original_scientific_stage(legacy_flow):
     from apps.business_flows import runtime
     from apps.compute.models import AlgorithmResource, AlgorithmVersion, ComputeTask
@@ -711,6 +758,103 @@ def test_compute_failure_waits_and_retries_original_scientific_stage(legacy_flow
         assert not current.plan["stages"][0].get("taskId")
         assert state(current)["nodes"]["apply"]["human"]["status"] != "approved"
         assert runtime.decide_flow(env["user"], current, payload).pk == current.pk
+
+
+@pytest.mark.parametrize(
+    "kind", ["input_window", "operator_call_limit", "model_protocol_error"]
+)
+def test_initial_input_wait_resumes_without_a_scientific_stage(
+    legacy_flow, monkeypatch, kind
+):
+    from apps.agent import demo_workflow
+    from apps.agent.business_flow_context import ContextReviewRequired
+    from apps.agent.models import AgentPolicy
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = env["create"]()
+    workflow.plan.update(phase="prepare", stages=[], actualModelCallCount=2)
+    workflow.current_step = "prepare"
+    workflow.operator_steps = workflow.max_operator_steps = 16
+    workflow.execute_operators = False
+    workflow.save(
+        update_fields=[
+            "plan",
+            "current_step",
+            "operator_steps",
+            "max_operator_steps",
+            "execute_operators",
+        ]
+    )
+
+    def prepare(*args):
+        raise ContextReviewRequired(
+            {
+                "nodeId": "inputs",
+                "kind": kind,
+                "level": 0,
+                "evidence": [],
+                "budgetScope": "task",
+                "reason": "输入准备需要调整允许额度",
+                **(
+                    {"usedOperatorCalls": 16, "limit": 16}
+                    if kind == "operator_call_limit"
+                    else {}
+                ),
+            }
+        )
+
+    monkeypatch.setattr(demo_workflow, "prepare_demo", prepare)
+    demo_workflow.advance_demo(workflow.pk)
+    workflow.refresh_from_db()
+    with project_scope(env["scope"]):
+        public = runtime.serialize_run(env["user"], workflow)
+        assert (
+            workflow.status == "waiting_approval" and public["currentNode"] == "inputs"
+        )
+        inputs = next(row for row in public["nodes"] if row["nodeId"] == "inputs")
+        assert (
+            inputs["status"] == "waiting_context"
+            and inputs["contextRecovery"]["kind"] == kind
+        )
+        assert inputs["contextRecovery"]["reason"][:100] in workflow.detail
+        if kind == "operator_call_limit":
+            assert "提高允许调用额度" in workflow.detail
+            assert "收紧资料范围" not in workflow.detail
+        elif kind == "model_protocol_error":
+            assert "重试本次审核" in workflow.detail
+            assert workflow.steps.filter(
+                kind="workflow_diagnostic", error_code="model_protocol"
+            ).exists()
+        if kind == "operator_call_limit":
+            AgentPolicy.objects.update_or_create(
+                pk=1, defaults={"value": {**default_policy(), "maxOperatorSteps": 32}}
+            )
+        current = runtime.decide_flow(
+            env["user"],
+            workflow,
+            {
+                "nodeId": "inputs",
+                "decision": "retry_context",
+                "revision": state(workflow)["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+        assert current.status == "queued" and current.plan["phase"] == "prepare"
+        assert (
+            current.plan["stages"] == [] and current.plan["actualModelCallCount"] == 2
+        )
+        assert current.operator_steps == 16
+        assert state(current)["nodes"]["inputs"]["human"]["status"] != "approved"
+        assert not state(current)["nodes"]["inputs"].get("contextRecovery")
+        resumed = []
+        monkeypatch.setattr(
+            demo_workflow,
+            "prepare_demo",
+            lambda *args: resumed.append(args[0].plan["phase"]),
+        )
+        demo_workflow.advance_demo(current.pk)
+        assert resumed == ["prepare"]
 
 
 def test_approval_statistics_preserves_all_dimensions_areas_pixels_and_approval_binding():

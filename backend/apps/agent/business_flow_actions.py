@@ -57,6 +57,8 @@ INSTRUCTION = """你是科研业务流节点执行者。遵守nodeContext.contra
 只可选择本次目录给出的versionId，只可使用visibleInputs及本节点转换产生的资料。
 run_operator/preflight_operator使用versionId、inputs(端口→resourceId或具名集合)、parameters、fieldMappings。
 普通节点parameters仅提交agent.adjustable=true的参数；专业节点明确允许时可原样复述已冻结固定参数，绝不能改值，其余沿用冻结值或默认值。
+nodeDefaults给出节点已配置的默认版本、参数及输入绑定，先按versionId查询核对，以此为起点适配；配置已经由平台填入，沿用时无需重复提交参数。固定配置可以原样复述，不能改值。
+nodeDefaults的Complete=false表示仅有短预览，不能把缺省条目当作没有配置。完整配置按其evidenceId使用read_evidence按需读取，不要为抄写默认值读取长代码或文件正文。
 集合成员格式为{"resourceId":整数,"label":"类别名"}；fieldMappings遵循目录的语义角色。
 单输入也可使用{"outputId":整数}引用直接依赖的真实成果，平台通过现有队列准备后再提交，不得引用无关成果。
 prepare_input复用现有脚本生成、独立审核、隔离执行；不是执行任意脚本的工具。
@@ -68,11 +70,13 @@ view默认execution，完整提供输入、可调参数、错误和输出端口�
 目录超出单步观察字节上限时提供版本索引及offset/length；仅按需读取未提供的输入、字段或参数约束，不必逐列阅读输出schema。
 若节点已提供同一冻结版本的完整输入绑定与参数，查证登记身份后可直接预检；按预检gaps补充必要信息，不能臆造或改变约束。
 失败先核对failure的code/remedy/gaps，可以继续调整不同参数或映射，但不得重复相同失败方案；不得重试平台故障或不可恢复。
+manualRecovery=true表示用户已通过平台恢复决定明确要求继续，可重新预检并重试已处理的环境故障；不是新的工具、参数或科研批准授权，既有计数不重置。
 修复提交需声明remedy：adjust_parameters/complete_mapping/convert_input/replace_operator之一。
 无法处理用ask_user.question提问。不能编造结果、声称读取未发送内容、批准节点或改变科学规则。
 finish_node须给summary、outputs[{name,semanticType,evidenceId}]、evidenceIds、limitations；acceptanceChecks可补充验收说明。
 summary为非空字符串；outputs和evidenceIds为非空数组；limitations必须为字符串数组，没有限制时用[]，不能用null或字符串。
 验收依据真实输出与证据核对；不必抄写验收条件，不能拿失败记录当成果。
+operator节点必须交付本节点真实计算产生的输出，不能把上游结果直接当作本节点已执行的成果。
 工具参数约束：""" + json.dumps(
     {key: sorted(value) for key, value in ARGUMENT_KEYS.items()}, ensure_ascii=False
 )

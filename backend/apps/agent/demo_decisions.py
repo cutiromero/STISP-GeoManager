@@ -1304,7 +1304,24 @@ def _decide_once(
         payload["ledger"] = professional_ledger(workflow)
         from apps.business_flows.main_loop import specialized_context, MAIN_IDENTITY
 
-        payload["task"] = specialized_context(workflow, node_id)
+        previous_payload = stage.get("modelRequestPayload", {})
+        previous_payload = (
+            previous_payload if isinstance(previous_payload, dict) else {}
+        )
+        previous_session = previous_payload.get("executionSession", {})
+        previous_session = (
+            previous_session if isinstance(previous_session, dict) else {}
+        )
+        # This request's short task prefix must remain stable during replay.
+        # Its accepted reply may already have appended a note to the live task.
+        # Scientific inputs, ACL and all other payload fields are still rebuilt.
+        payload["task"] = (
+            previous_payload["task"]
+            if stage.get("modelAttempts")
+            and previous_session.get("id") == execution["id"]
+            and isinstance(previous_payload.get("task"), dict)
+            else specialized_context(workflow, node_id)
+        )
         instruction = (
             MAIN_IDENTITY
             + "当前工具子步骤按下列结果格式形成分析或报告：\n"

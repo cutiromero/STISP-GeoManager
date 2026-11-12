@@ -19,6 +19,20 @@ import {
 } from "./businessFlowPresentation";
 import { businessFlowRun, geologySpec } from "./businessFlow.testFixtures";
 
+it("does not count an input-budget wait before execution as completed work", () => {
+  const flow = businessFlowRun({ status: "waiting_approval" });
+  for (const node of flow.nodes) {
+    node.status = "pending";
+    node.executor = { status: "pending" };
+    node.reviewer = { status: "pending" };
+    node.human.status = "pending";
+  }
+  flow.nodes[0]!.status = "waiting_context";
+  expect(businessFlowProgress(flow).done).toBe(0);
+  flow.nodes[0]!.executor.status = "succeeded";
+  expect(businessFlowProgress(flow).done).toBe(1);
+});
+
 function returnedFlow(): BusinessFlowRun {
   const flow = businessFlowRun({ status: "queued" });
   flow.nodes[0] = {

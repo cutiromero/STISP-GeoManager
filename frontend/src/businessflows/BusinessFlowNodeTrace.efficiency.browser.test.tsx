@@ -16,6 +16,50 @@ import { businessFlowRun } from "./businessFlow.testFixtures";
 
 afterEach(() => vi.restoreAllMocks());
 
+it("refreshes at a completed tool action without rereading for each thinking frame", async () => {
+  const read = vi
+    .spyOn(businessFlowsApi, "nodeTrace")
+    .mockResolvedValue(trace());
+  const state = businessFlowRun().nodes[0]!;
+  state.status = "executing";
+  state.toolProgress = {
+    steps: 1,
+    modelCalls: 1,
+    operatorCalls: 0,
+    recoveries: 0,
+    history: [],
+  };
+  const view = render(
+    <App>
+      <BusinessFlowNodeTrace flowId="flow" nodeId="analyse" state={state} />
+    </App>,
+  );
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  view.rerender(
+    <App>
+      <BusinessFlowNodeTrace
+        flowId="flow"
+        nodeId="analyse"
+        state={{
+          ...state,
+          executor: { ...state.executor, thinking: "新思考增量" },
+        }}
+      />
+    </App>,
+  );
+  expect(read).toHaveBeenCalledTimes(1);
+  view.rerender(
+    <App>
+      <BusinessFlowNodeTrace
+        flowId="flow"
+        nodeId="analyse"
+        state={{ ...state, toolProgress: { ...state.toolProgress!, steps: 2 } }}
+      />
+    </App>,
+  );
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+});
+
 function trace(nodeId = "analyse"): NodeTrace {
   return {
     nodeId,
@@ -153,4 +197,55 @@ it("clears saved trace content when current permission is revoked", async () => 
   expect(
     screen.queryByText("核对实际输入后先预检，再提交计算。"),
   ).not.toBeInTheDocument();
+});
+
+it("hides cached live node thinking immediately on explicit permission revocation", async () => {
+  vi.spyOn(businessFlowsApi, "nodeTrace")
+    .mockResolvedValueOnce(trace())
+    .mockRejectedValueOnce(new ApiError("资料已撤权", 403));
+  const state = businessFlowRun().nodes[0]!;
+  state.executor = { status: "running", thinking: "当前敏感思考" };
+  render(
+    <App>
+      <BusinessFlowNodeTrace flowId="flow" nodeId="analyse" state={state} />
+    </App>,
+  );
+  await screen.findByText("核对实际输入后先预检，再提交计算。");
+  expect(screen.getByText("当前敏感思考")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "读取最新节点记录" }));
+  await screen.findByText("资料已撤权");
+  expect(screen.queryByText("当前敏感思考")).not.toBeInTheDocument();
+});
+
+it("hides an already loaded trace immediately while another task is loading", async () => {
+  let complete!: (value: NodeTrace) => void;
+  vi.spyOn(businessFlowsApi, "nodeTrace")
+    .mockResolvedValueOnce(trace())
+    .mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          complete = done;
+        }),
+    );
+  const view = render(
+    <App>
+      <BusinessFlowNodeTrace flowId="first" nodeId="analyse" />
+    </App>,
+  );
+  await screen.findByText("核对实际输入后先预检，再提交计算。");
+  view.rerender(
+    <App>
+      <BusinessFlowNodeTrace flowId="second" nodeId="analyse" />
+    </App>,
+  );
+  await waitFor(() =>
+    expect(businessFlowsApi.nodeTrace).toHaveBeenCalledTimes(2),
+  );
+  expect(
+    screen.queryByText("核对实际输入后先预检，再提交计算。"),
+  ).not.toBeInTheDocument();
+  await act(async () => complete(trace()));
+  expect(
+    await screen.findByText("核对实际输入后先预检，再提交计算。"),
+  ).toBeVisible();
 });

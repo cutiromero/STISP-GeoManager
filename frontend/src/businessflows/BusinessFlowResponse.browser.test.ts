@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { businessFlowsApi } from "../api/businessFlows";
 import { resetProjectSession, setActiveProject } from "../projects/session";
 import { endBrowserSession } from "../auth/browserSession";
-import { geologyDetail } from "./businessFlow.testFixtures";
+import { businessFlowRun, geologyDetail } from "./businessFlow.testFixtures";
 
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), {
@@ -104,4 +104,46 @@ it("rejects a mismatched detail and a malformed run actor state", async () => {
   await expect(businessFlowsApi.run("flow-run")).rejects.toMatchObject({
     name: "ResponseFormatError",
   });
+});
+
+it("rejects a well formed response belonging to a different requested workflow", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(json(businessFlowRun({ id: "other-run" }))),
+  );
+  await expect(businessFlowsApi.run("expected-run")).rejects.toMatchObject({
+    name: "ResponseFormatError",
+  });
+  await expect(businessFlowsApi.pause("expected-run")).rejects.toMatchObject({
+    name: "ResponseFormatError",
+  });
+});
+
+it("rejects malformed recovery and trace payloads before rendering nested fields", async () => {
+  const run = businessFlowRun();
+  Object.assign(run.nodes[0]!, {
+    contextRecovery: { nodeId: "analyse", level: 0 },
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce(json(run))
+      .mockResolvedValueOnce(
+        json({
+          nodeId: "analyse",
+          title: "节点",
+          requests: [{ id: "broken" }],
+          actions: [],
+          historical: false,
+          nextOffset: null,
+        }),
+      ),
+  );
+  await expect(businessFlowsApi.run(run.id)).rejects.toMatchObject({
+    name: "ResponseFormatError",
+  });
+  await expect(
+    businessFlowsApi.nodeTrace(run.id, "analyse"),
+  ).rejects.toMatchObject({ name: "ResponseFormatError" });
 });

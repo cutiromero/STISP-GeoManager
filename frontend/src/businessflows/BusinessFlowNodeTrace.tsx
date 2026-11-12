@@ -10,6 +10,7 @@ import type {
   BusinessFlowNodeTrace as NodeTrace,
 } from "../api/generated/types.gen";
 import { businessFlowsApi } from "../api/businessFlows";
+import { ApiError } from "../api/client";
 import { useComputeText } from "../compute/ui";
 import ThinkingStream from "../agent/ThinkingStream";
 import "./business-flow-node-trace.css";
@@ -36,15 +37,26 @@ export default function BusinessFlowNodeTrace({
   flowId,
   nodeId,
   state,
+  progressKey,
 }: {
   flowId: string;
   nodeId: string;
   state?: BusinessFlowNodeState;
+  progressKey?: string;
 }) {
   const ui = useComputeText();
-  const [trace, setTrace] = useState<NodeTrace>();
+  const [loaded, setLoaded] = useState<{
+    flowId: string;
+    nodeId: string;
+    value: NodeTrace;
+  }>();
+  const trace =
+    loaded?.flowId === flowId && loaded.nodeId === nodeId
+      ? loaded.value
+      : undefined;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [revision, setRevision] = useState(0);
   const request = useRef<AbortController | null>(null);
   const latest = useRef({ flowId, nodeId });
@@ -66,22 +78,34 @@ export default function BusinessFlowNodeTrace({
         latest.current.nodeId !== nodeId
       )
         return;
-      setTrace((previous) =>
-        offset && previous
-          ? {
-              ...value,
-              requests: [
-                ...previous.requests,
-                ...value.requests.filter(
-                  (row) => !previous.requests.some((old) => old.id === row.id),
-                ),
-              ],
-            }
-          : value,
-      );
+      setAccessDenied(false);
+      setLoaded((previous) => ({
+        flowId,
+        nodeId,
+        value:
+          offset && previous?.flowId === flowId && previous.nodeId === nodeId
+            ? {
+                ...value,
+                requests: [
+                  ...previous.value.requests,
+                  ...value.requests.filter(
+                    (row) =>
+                      !previous.value.requests.some((old) => old.id === row.id),
+                  ),
+                ],
+              }
+            : value,
+      }));
     } catch (reason) {
-      if (pending.signal.aborted) return;
-      setTrace(undefined);
+      if (
+        pending.signal.aborted ||
+        latest.current.flowId !== flowId ||
+        latest.current.nodeId !== nodeId
+      )
+        return;
+      setLoaded(undefined);
+      if (reason instanceof ApiError && [401, 403, 404].includes(reason.status))
+        setAccessDenied(true);
       setError(
         reason instanceof Error ? reason.message : "暂时无法读取节点记录",
       );
@@ -92,9 +116,17 @@ export default function BusinessFlowNodeTrace({
   useEffect(() => {
     void read();
     return () => request.current?.abort();
-    // Per-token updates use the existing stream; read full records only at node boundaries.
+    // Per-token updates use the existing stream; read records at tool/node boundaries.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flowId, nodeId, state?.status, state?.attempt, revision]);
+  }, [
+    flowId,
+    nodeId,
+    state?.status,
+    state?.attempt,
+    state?.toolProgress?.steps,
+    progressKey,
+    revision,
+  ]);
   const actors = [
     {
       role: "executor",
@@ -137,6 +169,8 @@ export default function BusinessFlowNodeTrace({
       {actors
         .filter(
           (actor) =>
+            !accessDenied &&
+            (nodeId !== "_main" || actor.role === "executor") &&
             typeof actor.value?.thinking === "string" &&
             [
               "running",
@@ -150,7 +184,9 @@ export default function BusinessFlowNodeTrace({
           <details className="flow-node-live-thinking" key={actor.role}>
             <summary>
               {actor.label} ·{" "}
-              {ui("本节点实时思考预览", "Live node thinking preview")}
+              {nodeId === "_main"
+                ? ui("主执行当前思考", "Live main executor thinking")
+                : ui("本节点实时思考预览", "Live node thinking preview")}
             </summary>
             <ThinkingStream
               text={String(actor.value?.thinking ?? "")}

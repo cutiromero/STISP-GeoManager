@@ -79,9 +79,16 @@ def test_python_same_module_is_narrower_than_app_fallback(tmp_path):
 def test_override_and_app_prefixed_name(tmp_path):
     create(tmp_path, "backend/tests/integration/test_business_flow_review.py")
     create(tmp_path, "backend/tests/integration/test_business_flow_legacy.py")
+    create(
+        tmp_path, "backend/tests/integration/test_business_flow_budget_boundaries.py"
+    )
     assert fast.backend_tests(
         tmp_path, "backend/apps/agent/business_flow_review.py"
-    ) == {"tests/integration/test_business_flow_review.py"}
+    ) == {
+        "tests/integration/test_business_flow_review.py",
+        "tests/integration/test_business_flow_legacy.py",
+        "tests/integration/test_business_flow_budget_boundaries.py",
+    }
     assert fast.backend_tests(tmp_path, "backend/apps/business_flows/legacy.py") == {
         "tests/integration/test_business_flow_legacy.py"
     }

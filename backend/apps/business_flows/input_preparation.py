@@ -167,6 +167,20 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
             if any(key not in parameters for key in entry.get("missingParameters", [])):
                 raise ComputeError("请先确认资料转换需要的字段：" + role)
             if workflow.operator_steps >= workflow.max_operator_steps:
+                if workflow.parameters.get("_businessFlow"):
+                    from .model_requests import operator_budget_wait
+                    from .state import binding
+
+                    node_id = (
+                        entry.get("nodeId")
+                        or binding(workflow)["definitionSnapshot"]["nodes"][0]["id"]
+                    )
+                    raise operator_budget_wait(
+                        node_id,
+                        workflow.operator_steps,
+                        workflow.max_operator_steps,
+                        preparation_role=entry["role"],
+                    )
                 raise ComputeError("输入适配已达到本次任务的算子次数上限")
             loop = None
             if entry.get("nodeId") and workflow.parameters.get("_businessFlow"):
@@ -184,7 +198,15 @@ def advance_inputs(workflow, user, policy, *, confirmed_fields=None):
                     loop is not None
                     and loop["operatorCalls"] >= contract["maxOperatorCalls"]
                 ):
-                    raise ComputeError("资料衔接已达到本节点算子调用上限")
+                    from .model_requests import operator_budget_wait
+
+                    raise operator_budget_wait(
+                        node["id"],
+                        loop["operatorCalls"],
+                        contract["maxOperatorCalls"],
+                        scope="node",
+                        preparation_role=entry["role"],
+                    )
                 if (
                     loop is not None
                     and loop["elapsedSeconds"] >= contract["maxSeconds"]

@@ -24,7 +24,7 @@ import { useComputeText } from "../compute/ui";
 import {
   businessFlowReturn,
   completedFlowNodes,
-  flowStateLabels,
+  nodeStateLabel,
 } from "./businessFlowPresentation";
 import BusinessFlowReviewHub, {
   reviewGateState,
@@ -590,9 +590,7 @@ export default function BusinessFlowGraph({
                     icon: <DeploymentUnitOutlined />,
                   };
                   const returned = businessFlowReturn(events, state);
-                  const status = state
-                    ? (flowStateLabels[state.status] ?? state.status)
-                    : kind.label;
+                  const status = state ? nodeStateLabel(state) : kind.label;
                   const activeReturn = returned && !returned.resolved;
                   return (
                     <div

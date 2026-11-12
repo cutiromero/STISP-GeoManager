@@ -208,6 +208,11 @@ def decide_recovery(user, workflow, value):
                     "本节点执行预算已用尽，不能通过人工重试重置额度；请跳过（若允许）或停止",
                     409,
                 )
+        if value["decision"] == "retry_recovery" and item.get("toolLoop") is not None:
+            resumed = item["toolLoop"]
+            if resumed.pop("failure", None):
+                resumed.pop("lastObservation", None)
+            resumed["manualRecovery"] = True
         item.pop("recovery", None)
         require_compute_slot(user, current.pk)
         receipts[key] = fingerprint

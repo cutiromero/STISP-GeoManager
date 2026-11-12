@@ -167,7 +167,9 @@ def test_cancel_and_operator_budget_block_before_submission(adapted):
     workflow = env["workflow"]
     workflow.operator_steps = workflow.max_operator_steps
     workflow.save(update_fields=["operator_steps"])
-    with pytest.raises(ComputeError, match="上限"):
+    from apps.agent.business_flow_context import ContextReviewRequired
+
+    with pytest.raises(ContextReviewRequired, match="额度"):
         prepare(env)
     with project_scope(env["scope"]):
         runtime.control_flow(env["owner"], workflow, "cancel")

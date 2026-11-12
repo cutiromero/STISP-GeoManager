@@ -12730,6 +12730,26 @@ export type BusinessFlowContextManagement = {
 
 export type BusinessFlowContextRecovery = BusinessFlowContextManagement & {
     /**
+     * 等待原因；model_call_limit、operator_call_limit分别表示模型和算子调用额度不足，model_protocol_error表示审核响应未通过校验；不能通过截减证据恢复这些等待。
+     */
+    kind?: string;
+    /**
+     * 模型调用额度来源；task可在当前策略允许额度增加后继续，node受发布合同上限约束。
+     */
+    budgetScope?: 'task' | 'node';
+    /**
+     * 已消耗的真实请求数，恢复不重置。
+     */
+    usedRequests?: number;
+    /**
+     * 已消耗的算子调用次数，明确恢复后仍保留。
+     */
+    usedOperatorCalls?: number;
+    /**
+     * 触发等待时的调用上限。
+     */
+    limit?: number;
+    /**
      * 当前证据规模和是否禁止跳过，不含正文。
      */
     evidence: Array<{
@@ -13077,6 +13097,14 @@ export type BusinessFlowStart = {
      * 本次业务流全部执行、审核及返修请求的思考强度，默认标准medium；low轻量，xhigh深度。模型与当前策略须支持深度思考；通过会话工具启动时继承发起运行的思考模式与强度。
      */
     reasoningEffort?: 'low' | 'medium' | 'xhigh';
+    /**
+     * 管理员开启任务预算后选择本次方案；通过会话工具发起时继承父运行预算，不替换思考强度。
+     */
+    budgetProfile?: AgentBudgetProfileId;
+    /**
+     * 可选的本次单轮生成上限，受当前账号及实际服务窗口约束；记录到父运行供主执行和独立审核共用。
+     */
+    maxOutputTokens?: number;
 };
 
 /**

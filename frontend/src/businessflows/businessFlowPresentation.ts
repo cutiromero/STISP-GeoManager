@@ -37,6 +37,21 @@ export const flowStateLabels: Record<string, string> = {
   interrupted: "已中断",
 };
 
+export function nodeStateLabel(state?: BusinessFlowNodeState) {
+  if (state?.status === "waiting_context") {
+    if (state.contextRecovery?.kind === "model_protocol_error")
+      return "等待重试审核";
+    if (
+      state.contextRecovery?.kind === "model_call_limit" ||
+      state.contextRecovery?.kind === "operator_call_limit"
+    )
+      return "等待处理调用额度";
+  }
+  return (
+    flowStateLabels[state?.status ?? "pending"] ?? state?.status ?? "尚未开始"
+  );
+}
+
 export function nodeStageProgress(
   node: BusinessFlowNode,
   value?: BusinessFlowNodeState,
@@ -59,7 +74,6 @@ export function nodeStageProgress(
             "executed",
             "reviewing",
             "waiting_human",
-            "waiting_context",
             "waiting_approval",
           ].includes(value.status))),
     );

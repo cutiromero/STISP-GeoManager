@@ -168,6 +168,8 @@ def start(request, flow_id):
             "inputAdapters",
             "agentEnabled",
             "reasoningEffort",
+            "budgetProfile",
+            "maxOutputTokens",
         },
     )
     for name in ("model", "reviewerModel"):

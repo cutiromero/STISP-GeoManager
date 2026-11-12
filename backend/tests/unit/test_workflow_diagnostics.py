@@ -9,7 +9,7 @@ from django.core.exceptions import PermissionDenied
 from apps.agent.business_flow_context import ContextReviewRequired
 from apps.agent.context import InputBudgetError
 from apps.agent.provider import ModelError
-from apps.agent.workflow_diagnostics import category, record_issue
+from apps.agent.workflow_diagnostics import category, record_issue, context_next_action
 from apps.compute.packages import ComputeError
 
 
@@ -47,3 +47,20 @@ def test_long_failure_retains_next_action_and_full_private_reason(prefix):
     assert step.call_args.kwargs["error_code"] == "data"
     if prefix == "结果入库失败":
         assert workflow.detail.startswith(prefix)
+
+
+@pytest.mark.parametrize(
+    "kind", ["model_call_limit", "operator_call_limit", "model_protocol_error"]
+)
+def test_context_wait_uses_its_actual_recovery_action_in_persisted_diagnostics(kind):
+    workflow = SimpleNamespace(current_step="inputs", detail="")
+    action = context_next_action({"kind": kind, "budgetScope": "task"})
+    with patch("apps.agent.workflow.step"):
+        diagnostic = record_issue(
+            workflow, "budget", "实际等待原因", waiting=True, next_action=action
+        )
+    assert diagnostic["nextAction"] in workflow.detail
+    assert "收紧资料范围" not in workflow.detail
+    assert (
+        "重试本次审核" if kind == "model_protocol_error" else "提高允许调用额度"
+    ) in workflow.detail

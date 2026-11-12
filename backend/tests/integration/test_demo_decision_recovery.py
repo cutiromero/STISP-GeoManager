@@ -79,10 +79,39 @@ def test_complete_accepted_response_recovers_with_no_new_request(
 def test_configured_output_above_4096_recovers_without_new_request(retry_model):
     workflow, stage, results, original = saved_response()
     audit = copy.deepcopy(stage["modelAttempts"])
-    assert audit[0]["outputLimit"] == default_policy()["maxOutputTokens"] == 8192
+    assert audit[0]["outputLimit"] == default_policy()["maxOutputTokens"]
+    assert audit[0]["outputLimit"] > 4096
     assert replay(workflow, stage, results) == original
     assert stage["modelAttempts"] == audit
     assert stage["recoveredModelAttempt"] == 1
+
+
+def test_main_executor_history_does_not_invalidate_a_saved_current_step_reply(
+    retry_model,
+):
+    from apps.business_flows.builtins import source_summary_definition
+    from apps.business_flows.execution_session import initialize, session
+
+    workflow, stage, results = ordinary_stage()
+    workflow.workflow_type = "business_flow"
+    workflow.parameters = {
+        "_businessFlow": {
+            "definitionSnapshot": source_summary_definition(main_agent=True),
+            "versionId": 1,
+        }
+    }
+    initialize(workflow)
+    original, _ = run(
+        [model_response(stage["identifier"], [])], workflow, stage, results
+    )
+    workflow.max_iterations = workflow.iteration = 1
+    workflow.plan["actualModelCallCount"] = 1
+    assert len(session(workflow)["loop"]["history"]) == 1
+    assert replay(workflow, stage, results) == original
+    assert len(session(workflow)["loop"]["history"]) == 1
+    workflow.goal = "实际目标已经改变"
+    with pytest.raises(ComputeError, match="已有模型请求记录"):
+        replay(workflow, stage, results)
 
 
 @pytest.mark.parametrize("retry", [False, True])

@@ -650,6 +650,7 @@ export default function BusinessFlowActivity({
             key={`${flow.id}:${current.nodeId}:${flow.revision}`}
             node={current}
             busy={Boolean(busy)}
+            legacy={isLegacy}
             onRetry={(
               options: Pick<
                 BusinessFlowDecision,

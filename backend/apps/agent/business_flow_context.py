@@ -6,8 +6,7 @@ import json
 from . import provider
 
 SAFETY_TOKENS = 256
-MAX_EVIDENCE_ITEMS = 100
-MAX_EVIDENCE_BYTES = 96 * 1024
+MAX_EVIDENCE_ITEMS = 512
 ROW_LIMIT = 10
 FIELD_LIMIT = 40
 GROUP_LIMIT = 8
@@ -107,6 +106,13 @@ def notice_summary(notice):
 class ContextReviewRequired(Exception):
     def __init__(self, details):
         self.details = details
+        if details.get("kind") in {
+            "model_call_limit",
+            "operator_call_limit",
+            "model_protocol_error",
+        }:
+            super().__init__(details["reason"])
+            return
         super().__init__(
             f"节点{details['nodeId']}输入整理至第{details['level']}档仍无法发送；"
             "请收紧范围或调整生成预留后重试，或停止任务。"
@@ -435,7 +441,6 @@ def prepare_packet(
             tokens <= budget
             and len(encode(value).encode()) <= policy["maxContextBytes"]
             and len(value["evidence"]) <= MAX_EVIDENCE_ITEMS
-            and len(encode(value["evidence"]).encode()) <= MAX_EVIDENCE_BYTES
         )
 
     def details(value, tokens, level):
@@ -463,7 +468,7 @@ def prepare_packet(
         value_details["reason"] = (
             f"完整请求{tokens} token，可用{budget} token；"
             f"证据{len(value['evidence'])}/{MAX_EVIDENCE_ITEMS}项；"
-            f"证据{len(encode(value['evidence']).encode())}/{MAX_EVIDENCE_BYTES}字节，"
+            f"证据{len(encode(value['evidence']).encode())}字节，"
             f"数据包{len(encode(value).encode())}/{policy['maxContextBytes']}字节。"
         )
         value_details["evidence"] = evidence_sizes(

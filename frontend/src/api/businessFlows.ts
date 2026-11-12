@@ -186,7 +186,30 @@ export function assertBusinessFlowRun(value: unknown) {
           invalid(actor + "." + key);
       }
     }
+    if (node.contextRecovery !== undefined) {
+      const recovery = record(node.contextRecovery, "contextRecovery");
+      if (
+        !Number.isSafeInteger(recovery.level) ||
+        !Array.isArray(recovery.evidence)
+      )
+        invalid("contextRecovery");
+      for (const raw of recovery.evidence as unknown[]) {
+        const item = record(raw, "contextRecovery.evidence");
+        if (
+          typeof item.id !== "string" ||
+          typeof item.title !== "string" ||
+          !Number.isSafeInteger(item.bytes) ||
+          Number(item.bytes) < 0 ||
+          typeof item.required !== "boolean"
+        )
+          invalid("contextRecovery.evidence");
+      }
+    }
   }
+}
+function assertRequestedRun(value: unknown, id: string) {
+  assertBusinessFlowRun(value);
+  if ((value as BusinessFlowRun).id !== id) invalid("run.id");
 }
 export const businessFlowsApi = {
   inputScript: (
@@ -227,7 +250,7 @@ export const businessFlowsApi = {
       {
         method: "POST",
         body,
-        validate: assertBusinessFlowRun,
+        validate: (value) => assertRequestedRun(value, id),
       },
     ),
   prepareInputs: (
@@ -382,7 +405,15 @@ export const businessFlowsApi = {
     requestJson<BusinessFlowRun>(`/api/business-flows/${id}/start/`, {
       method: "POST",
       body,
-      validate: assertBusinessFlowRun,
+      validate: (value) => {
+        assertBusinessFlowRun(value);
+        const run = value as BusinessFlowRun;
+        if (
+          run.flowId !== id ||
+          (body.versionId !== undefined && run.versionId !== body.versionId)
+        )
+          invalid("run.versionId");
+      },
     }),
   runs: (options: { signal?: AbortSignal } = {}) =>
     requestJson<BusinessFlowRunList>("/api/business-flows/runs/", {
@@ -394,7 +425,7 @@ export const businessFlowsApi = {
   run: (id: string, options: { signal?: AbortSignal } = {}) =>
     requestJson<BusinessFlowRun>(
       `/api/business-flows/runs/${encodeURIComponent(id)}/`,
-      { ...options, validate: assertBusinessFlowRun },
+      { ...options, validate: (value) => assertRequestedRun(value, id) },
     ),
   nodeTrace: (
     id: string,
@@ -420,6 +451,36 @@ export const businessFlowsApi = {
             )
           )
             invalid("nodeTrace");
+          if (
+            (value.requests as unknown[]).length > 5 ||
+            (value.actions as unknown[]).length > 24
+          )
+            invalid("nodeTrace.records");
+          for (const raw of value.requests as unknown[]) {
+            const item = record(raw, "nodeTrace.request");
+            if (
+              typeof item.id !== "string" ||
+              !["executor", "reviewer"].includes(String(item.role)) ||
+              !Number.isSafeInteger(item.attempt) ||
+              typeof item.status !== "string" ||
+              typeof item.model !== "string" ||
+              typeof item.thinkingEnabled !== "boolean" ||
+              typeof item.reasoningEffort !== "string" ||
+              typeof item.thinkingText !== "string" ||
+              !Number.isSafeInteger(item.thinkingChars) ||
+              typeof item.thinkingTruncated !== "boolean"
+            )
+              invalid("nodeTrace.request");
+            if (item.response !== null) {
+              const response = record(item.response, "nodeTrace.response");
+              if (
+                typeof response.content !== "string" ||
+                !Number.isSafeInteger(response.sizeBytes) ||
+                typeof response.truncated !== "boolean"
+              )
+                invalid("nodeTrace.response");
+            }
+          }
         },
       },
     );
@@ -427,21 +488,25 @@ export const businessFlowsApi = {
   decide: (id: string, body: BusinessFlowDecision) =>
     requestJson<BusinessFlowRun>(
       `/api/business-flows/runs/${encodeURIComponent(id)}/decide/`,
-      { method: "POST", body, validate: assertBusinessFlowRun },
+      {
+        method: "POST",
+        body,
+        validate: (value) => assertRequestedRun(value, id),
+      },
     ),
   cancel: (id: string) =>
     requestJson<BusinessFlowRun>(
       `/api/business-flows/runs/${encodeURIComponent(id)}/cancel/`,
-      { method: "POST", validate: assertBusinessFlowRun },
+      { method: "POST", validate: (value) => assertRequestedRun(value, id) },
     ),
   pause: (id: string) =>
     requestJson<BusinessFlowRun>(
       `/api/business-flows/runs/${encodeURIComponent(id)}/pause/`,
-      { method: "POST", validate: assertBusinessFlowRun },
+      { method: "POST", validate: (value) => assertRequestedRun(value, id) },
     ),
   resume: (id: string) =>
     requestJson<BusinessFlowRun>(
       `/api/business-flows/runs/${encodeURIComponent(id)}/resume/`,
-      { method: "POST", validate: assertBusinessFlowRun },
+      { method: "POST", validate: (value) => assertRequestedRun(value, id) },
     ),
 };

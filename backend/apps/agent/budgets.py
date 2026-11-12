@@ -17,7 +17,7 @@ def defaults():
         "defaultBudgetProfile": "normal",
         "budgetProfiles": {
             "normal": {
-                "maxOutputTokens": 32768,
+                "maxOutputTokens": 16384,
                 "maxRunSeconds": 1800,
                 "reasoningEffort": "medium",
             },
@@ -35,7 +35,7 @@ def defaults():
         "budgetLimits": {
             "standard": {
                 "contextWindowTokens": 65536,
-                "maxOutputTokens": 16384,
+                "maxOutputTokens": 32768,
                 "maxRunSeconds": 600,
             },
             "superadmin": {

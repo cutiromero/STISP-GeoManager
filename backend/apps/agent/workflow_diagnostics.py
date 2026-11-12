@@ -22,6 +22,11 @@ def category(error):
 
     if isinstance(error, PermissionDenied):
         return "permission"
+    if (
+        isinstance(error, ContextReviewRequired)
+        and error.details.get("kind") == "model_protocol_error"
+    ):
+        return "model_protocol"
     if isinstance(error, (InputBudgetError, ContextReviewRequired)):
         return "budget"
     message = str(error)
@@ -40,10 +45,21 @@ def category(error):
     return "data"
 
 
-def record_issue(workflow, kind, reason, *, waiting=False):
+def context_next_action(details):
+    if details.get("kind") in {"model_call_limit", "operator_call_limit"}:
+        if details.get("budgetScope") == "node":
+            return "节点合同额度已用尽，需调整流程版本后重新发起；重试不重置计数"
+        return "请管理员提高允许调用额度后继续原任务；保留计数和成果，截减证据不能解决"
+    if details.get("kind") == "model_protocol_error":
+        return "查看本节点诊断后重试本次审核；保留执行成果，不批准科研处置"
+    return None
+
+
+def record_issue(workflow, kind, reason, *, waiting=False, next_action=None):
     from .workflow import step
 
-    label, next_action = LABELS[kind]
+    label, default_action = LABELS[kind]
+    next_action = next_action or default_action
     diagnostic = {
         "category": kind,
         "reason": str(reason),

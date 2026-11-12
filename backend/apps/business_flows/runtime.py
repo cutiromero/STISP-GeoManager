@@ -69,14 +69,20 @@ def authorize(user, workflow, *, history=False):
 
                 authorize_demo(workflow, user, policy)
     if not history or workflow.workflow_type == "business_flow":
-        authorize_inputs(user, policy, bind.get("inputVersions", {}), history=history)
+        authorize_inputs(
+            user,
+            policy,
+            bind.get("inputVersions", {}),
+            history=history,
+            additional_ids=workflow.resource_ids,
+        )
     return policy
 
 
-def authorize_inputs(user, policy, versions, *, history=False):
+def authorize_inputs(user, policy, versions, *, history=False, additional_ids=()):
     from apps.agent.resource_discovery import acl_resources
 
-    identities = {item["id"] for item in versions.values()}
+    identities = {item["id"] for item in versions.values()} | set(additional_ids or [])
     if not identities:
         return
     visible = (
@@ -356,6 +362,56 @@ def _inputs(
     return dict(supplied), versions, planned
 
 
+def _launch_budget(user, policy, model, value, source_run, reviewer_aliases=()):
+    from apps.agent.config import registry
+
+    from apps.agent.budgets import PROFILES, check_budget_access, resolve_budget
+
+    if "budgetProfile" in value and (
+        not isinstance(value["budgetProfile"], str)
+        or value["budgetProfile"] not in PROFILES
+    ):
+        raise ValidationError("任务预算方案无效")
+    if "maxOutputTokens" in value and (
+        type(value["maxOutputTokens"]) is not int or value["maxOutputTokens"] < 128
+    ):
+        raise ValidationError("本次生成额度须为至少128的整数")
+
+    if source_run:
+        budget_snapshot = deepcopy(source_run.budget_snapshot)
+        check_budget_access(user, policy, budget_snapshot)
+        if (
+            "budgetProfile" in value
+            and value["budgetProfile"] != budget_snapshot.get("budgetProfile", "")
+            or "maxOutputTokens" in value
+            and value["maxOutputTokens"]
+            != budget_snapshot.get("requestedMaxOutputTokens")
+        ):
+            raise ValidationError("业务流预算必须继承发起运行的选择")
+    else:
+        from apps.agent.policy import visible_models
+
+        serving_window = None
+        if policy.get("taskBudgetsEnabled"):
+            windows = {
+                row["alias"]: row["contextWindowTokens"]
+                for row in visible_models(user, "agent", policy)
+            }
+            configs = registry()
+            serving_window = min(
+                windows.get(alias, configs[alias].context_window_tokens)
+                for alias in {model, *reviewer_aliases}
+            )
+        budget_snapshot = resolve_budget(
+            user,
+            policy,
+            value.get("budgetProfile", ""),
+            value.get("maxOutputTokens"),
+            serving_window,
+        )
+    return budget_snapshot
+
+
 @retry_run_admission
 def start_flow(user, version, value, *, source_run=None):
     if (
@@ -452,11 +508,12 @@ def start_flow(user, version, value, *, source_run=None):
             }:
                 raise ValidationError("启动参数包含算子清单未声明字段")
     reviewer = value.get("reviewerModel") or model
-    for alias in {
+    reviewer_aliases = {
         node["review"].get("model") or reviewer
         for node in definition["nodes"]
         if node["review"]["ai"]
-    }:
+    }
+    for alias in reviewer_aliases:
         require_access(user, "agent", alias)
         if (
             source_run.thinking_mode == "deep" if source_run else thinking
@@ -464,6 +521,9 @@ def start_flow(user, version, value, *, source_run=None):
             raise PermissionDenied(
                 "审核模型不支持本次深度思考设置，请选择支持思考的模型"
             )
+    budget_snapshot = _launch_budget(
+        user, policy, model, value, source_run, reviewer_aliases
+    )
     request_hash = digest(
         {
             "versionId": version.pk,
@@ -484,6 +544,16 @@ def start_flow(user, version, value, *, source_run=None):
             "thinkingMode": source_run.thinking_mode
             if source_run
             else ("deep" if thinking else "fast"),
+            **(
+                {"budgetProfile": value["budgetProfile"]}
+                if "budgetProfile" in value
+                else {}
+            ),
+            **(
+                {"maxOutputTokens": value["maxOutputTokens"]}
+                if "maxOutputTokens" in value
+                else {}
+            ),
         }
     )
     previous = AgentWorkflow._base_manager.filter(
@@ -501,6 +571,11 @@ def start_flow(user, version, value, *, source_run=None):
         allowed_adapter_ids=set(source_run.algorithm_version_ids)
         if source_run and source_run.algorithm_selection_mode == "manual"
         else None,
+    )
+    from .model_requests import check_start_budget
+
+    check_start_budget(
+        policy, definition, input_plan, agent_enabled=value.get("agentEnabled", True)
     )
     if any(
         item["status"] in {"convert", "needs_script"} for item in input_plan["items"]
@@ -612,6 +687,8 @@ def start_flow(user, version, value, *, source_run=None):
             knowledge_selection={"mode": "none", "domains": [], "_contextRunIds": []},
             thinking_mode="deep" if thinking else "fast",
             reasoning_effort=effort if thinking else "",
+            budget_profile=budget_snapshot.get("budgetProfile", ""),
+            budget_snapshot=budget_snapshot,
         )
         if run.owner_id != user.pk or run.project_tag_id != workflow.project_tag_id:
             raise PermissionDenied("业务流与发起对话归属不一致")
@@ -717,7 +794,7 @@ def decide_flow(user, workflow, value):
         raise ValidationError("证据范围只允许用于上下文重试，不能改变科研人工批准")
     with transaction.atomic():
         current = locked_workflow(workflow.pk)
-        authorize(user, current)
+        live_policy = authorize(user, current)
         value_state = state(current)
         receipts = value_state.setdefault("decisions", {})
         fingerprint = digest(
@@ -751,13 +828,19 @@ def decide_flow(user, workflow, value):
                     409,
                 )
             from .context_recovery import retry_node
+            from .model_requests import renew_task_budget, renew_operator_budget
 
+            recovery_kind = item["contextRecovery"].get("kind")
+            renew_task_budget(current, live_policy, item["contextRecovery"])
+            renew_operator_budget(current, live_policy, item["contextRecovery"])
             retry_node(current, item, value)
             require_compute_slot(user, current.pk)
             receipts[key] = fingerprint
             current.status, current.detail = (
                 "queued",
-                "上下文范围已更新，将重试当前节点；未批准科研结果",
+                "将重试本次审核，保留执行成果；未批准科研结果"
+                if recovery_kind == "model_protocol_error"
+                else "上下文范围已更新，将重试当前节点；未批准科研结果",
             )
             current.policy_snapshot["businessFlowControlEpoch"] = (
                 current.policy_snapshot.get("businessFlowControlEpoch", 0) + 1
@@ -769,6 +852,8 @@ def decide_flow(user, workflow, value):
                     "status",
                     "detail",
                     "policy_snapshot",
+                    "max_iterations",
+                    "max_operator_steps",
                     "updated_at",
                 ]
             )

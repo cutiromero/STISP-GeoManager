@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { App } from "antd";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { BusinessFlowInputScriptDetail } from "../api/generated/types.gen";
@@ -134,4 +140,54 @@ it("hides code and notifies the parent on explicit access revocation", async () 
   fireEvent.click(screen.getByRole("button", { name: "查看适配脚本" }));
   await waitFor(() => expect(blocked).toHaveBeenCalledOnce());
   expect(screen.queryByText(code)).not.toBeInTheDocument();
+});
+
+it("isolates a late clarification failure from a newly selected task", async () => {
+  let reject!: (reason: unknown) => void;
+  const send = vi
+    .spyOn(businessFlowsApi, "clarifyInput")
+    .mockImplementationOnce(
+      () =>
+        new Promise((_done, fail) => {
+          reject = fail;
+        }),
+    )
+    .mockResolvedValueOnce(businessFlowRun({ id: "new-task", revision: 99 }));
+  const value = flow();
+  value.inputPreparation!.items[0]!.status = "needs_clarification";
+  const changed = vi.fn(),
+    blocked = vi.fn();
+  const show = (id: string) => (
+    <App>
+      <BusinessFlowInputPreparation
+        flow={{ ...value, id }}
+        onChanged={changed}
+        onAccessBlocked={blocked}
+      />
+    </App>
+  );
+  const view = render(show("old-task"));
+  fireEvent.change(screen.getByRole("textbox", { name: "补充资料说明" }), {
+    target: { value: "旧任务说明" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "提交说明并继续" }));
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+  view.rerender(show("new-task"));
+  fireEvent.change(screen.getByRole("textbox", { name: "补充资料说明" }), {
+    target: { value: "新任务说明" },
+  });
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "提交说明并继续" }),
+    ).toBeEnabled(),
+  );
+  await act(async () => reject(new ApiError("旧任务资料已撤权", 403)));
+  expect(blocked).not.toHaveBeenCalled();
+  expect(screen.queryByText("旧任务资料已撤权")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "提交说明并继续" }));
+  await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+  expect(send).toHaveBeenLastCalledWith(
+    "new-task",
+    expect.objectContaining({ feedback: "新任务说明" }),
+  );
 });

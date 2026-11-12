@@ -81,6 +81,27 @@ BACKEND_TESTS = {
     "standards": ("integration/core/test_api.py", "integration/catalog/test_api.py"),
 }
 BACKEND_OVERRIDES = {
+    "backend/apps/agent/budgets.py": (
+        "integration/test_agent_budgets.py",
+        "integration/test_workflow_model_policy.py",
+        "integration/test_business_flow_budget_boundaries.py",
+        "integration/test_business_flow_reasoning_effort.py",
+    ),
+    "backend/apps/agent/business_flow_context.py": (
+        "integration/test_business_flow_context.py",
+        "integration/test_business_flow_main_agent.py",
+        "integration/test_logic_flow_budget_audit.py",
+        "integration/test_logic_auxiliary_budget_audit.py",
+        "unit/test_business_flow_resilience.py",
+    ),
+    "backend/apps/business_flows/runtime.py": (
+        "integration/test_business_flow_runtime.py",
+        "integration/test_business_flow_budget_boundaries.py",
+        "integration/test_business_flow_main_agent.py",
+        "integration/test_business_flow_reasoning_effort.py",
+        "integration/test_business_flow_legacy.py",
+        "integration/test_business_flow_input_bindings.py",
+    ),
     "backend/apps/agent/input_script_model.py": (
         "integration/test_input_script_preparation_runtime.py",
         "integration/test_business_flow_context.py",
@@ -88,6 +109,7 @@ BACKEND_OVERRIDES = {
         "unit/test_business_flow_resilience.py",
     ),
     "backend/apps/business_flows/model_requests.py": (
+        "integration/test_business_flow_budget_boundaries.py",
         "integration/test_business_flow_runtime.py",
         "integration/test_business_flow_main_agent.py",
         "integration/test_business_flow_node_tools.py",
@@ -145,6 +167,8 @@ BACKEND_OVERRIDES = {
     ),
     "backend/apps/agent/business_flow_review.py": (
         "integration/test_business_flow_review.py",
+        "integration/test_business_flow_budget_boundaries.py",
+        "integration/test_business_flow_legacy.py",
     ),
     "backend/apps/business_flows/legacy.py": (
         "integration/test_business_flow_legacy.py",

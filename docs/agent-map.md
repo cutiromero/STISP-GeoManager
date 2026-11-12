@@ -8,7 +8,7 @@ export PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 ```
 
 ## 业务流
-- 新流程搭建标准：`docs/business-flow-development-standard.md`；主执行、校验与上下文排查：`docs/business-flow-audit-20261112.md`。新流程以同一主执行者贯穿任务，节点不是独立执行智能体。
+- 新流程搭建标准：`docs/business-flow-development-standard.md`；主执行、校验与上下文排查：`docs/business-flow-audit-20261112.md`；传输与预算排查：`docs/business-flow-boundary-budget-audit-20261113.md`。新流程以同一主执行者贯穿任务，节点不是独立执行智能体。
 - 节点工具合同与循环：`backend/apps/business_flows/node_contracts.py`、`node_loop.py`、`node_recovery.py`；模型协议 `backend/apps/agent/business_flow_actions.py`；前端恢复 `frontend/src/businessflows/BusinessFlowNodeRecovery.tsx`。示范 `examples/business-flows/adaptive-statistics.json`；专项 `backend/tests/integration/test_business_flow_node_tools.py`、`backend/tests/unit/test_business_flow_tool_protocol.py`、`frontend/src/businessflows/BusinessFlowNodeRecovery.efficiency.browser.test.tsx`。行为见 `docs/business-flows.md` 的“节点合同与有限工具循环”“失败自恢复与等待”。
 - 后端入口：`backend/apps/business_flows/views.py`、`catalog.py`、`definitions.py`、`runtime.py`、`engine.py`；输入：同目录 `input_preparation.py`、`input_adapters.py`、`node_inputs.py`；专业衔接：`legacy.py`。
 - 前端入口：`frontend/src/businessflows/BusinessFlowsPage.tsx`；样式与状态在 `frontend/src/businessflows/`。
