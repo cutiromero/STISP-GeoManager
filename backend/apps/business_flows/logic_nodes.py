@@ -164,7 +164,9 @@ def catalog_rows(workflow, user, policy, node, arguments):
     identity = arguments.get("versionId")
     if identity is not None and (type(identity) is not int or identity != version.pk):
         raise ComputeError("只能查询本节点已确认的算子版本")
-    description = compact_description(version, MAX_EVIDENCE_BYTES - 1024)
+    description = compact_description(
+        version, MAX_EVIDENCE_BYTES - 1024, view=arguments.get("view", "execution")
+    )
     if description["truncated"]:
         raise ComputeError("登记算子语义清单超过节点可读范围，请补齐可调用清单")
     return [description]

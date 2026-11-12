@@ -5,6 +5,12 @@ from apps.compute.packages import ComputeError
 MAX_MODEL_CALLS = 256
 
 
+def request_limit(policy):
+    """A zero tool-step setting means unlimited; the platform ceiling still applies."""
+    steps = policy["maxSteps"]
+    return MAX_MODEL_CALLS if steps == 0 else min(MAX_MODEL_CALLS, max(4, steps * 2))
+
+
 class ModelCallBudgetExceeded(ComputeError):
     pass
 

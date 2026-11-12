@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 import json
+from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import geopandas as gpd
@@ -11,6 +13,7 @@ import rasterio
 from django.utils import timezone
 
 from apps.agent import provider
+from apps.agent.models import AgentPolicy
 from apps.agent.workflow import run_workflow, resume_waiting
 from apps.business_flows import catalog, runtime
 from apps.business_flows.builtins import builtin_flows
@@ -35,6 +38,45 @@ pytestmark = [pytest.mark.django_db, pytest.mark.efficiency]
 # Configuration: both paths use identical fixture files, rules and approvals.
 MAX_ADVANCES = 180
 EFFORT = "medium"
+
+
+@pytest.mark.parametrize("name", ["check", "apply", "relations", "prospect"])
+def test_execution_catalog_keeps_input_contract_and_fits_node_read_budget(name):
+    from apps.compute.operator_catalog import compact_description
+    from apps.compute.packages import validate_manifest
+    from apps.business_flows.node_contracts import (
+        MAX_EVIDENCE_BYTES,
+        MAX_FRAGMENT_BYTES,
+    )
+
+    source = (
+        Path(__file__).resolve().parents[3]
+        / f"examples/compute/geology-multi-{name}/operator.yaml"
+    )
+    manifest = validate_manifest(json.loads(source.read_text()))
+    version = SimpleNamespace(
+        pk=17,
+        manifest=manifest,
+        version=manifest["version"],
+        algorithm=SimpleNamespace(
+            identifier=manifest["identifier"], name=manifest["name"]
+        ),
+    )
+    full = compact_description(version, MAX_EVIDENCE_BYTES)
+    execution = compact_description(version, MAX_EVIDENCE_BYTES, view="execution")
+    assert execution["inputs"] == full["inputs"]
+    assert execution["parameters"] == full["parameters"]
+    assert execution["errors"] == full["errors"]
+    assert {(row["key"], row["kind"]) for row in execution["outputs"]} == {
+        (row["key"], row["kind"]) for row in full["outputs"]
+    }
+    assert execution["fullContractLookup"] == {"versionId": 17, "view": "full"}
+    assert execution["truncated"] is False
+    size = len(
+        json.dumps(execution, ensure_ascii=False, separators=(",", ":")).encode()
+    )
+    reads = (size + MAX_FRAGMENT_BYTES - 1) // MAX_FRAGMENT_BYTES
+    assert 4 + reads + 1 <= 12  # Catalog, preflight, run, finish, and one repair.
 
 
 def node_action(packet, *, mapping_failure=False):
@@ -220,6 +262,9 @@ def test_seven_nodes_match_original_science_with_real_operators(
     from apps.projects.context import ProjectScope, project_scope
 
     settings.AGENT_MODELS[0]["qwen"] = True
+    # Match the real account's existing configuration: zero means unlimited.
+    policy = {**generic["policy"], "maxSteps": 0, "maxIterations": 20}
+    AgentPolicy.objects.update_or_create(pk=1, defaults={"value": policy})
     generic["project"].code = "02"
     generic["project"].save(update_fields=["code"])
     monkeypatch.setattr("apps.compute.services.candidate", candidate)
@@ -264,6 +309,8 @@ def test_seven_nodes_match_original_science_with_real_operators(
             else:
                 results.append(run_to_completion(generic, workflow))
         old, new = results
+        assert new.max_iterations == 256
+        assert new.plan["modelCallBudget"]["minimumStageRequests"] == 23
         counts = compare_science(old, new)
         assert {path: checksum(path) for path in source_checksums} == source_checksums
         assert all(counts.values())

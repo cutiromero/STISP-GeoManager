@@ -107,3 +107,28 @@ def test_initial_dispatch_uses_one_model_decision_before_any_compute(generic):
         assert model.call_args.args[2][key] == expected_policy[key]
     assert workflow.plan["stages"][0]["decision"]["nextAction"] == "geology-multi-check"
     assert ComputeTask.objects.count() == 1
+
+
+def test_failed_preparation_keeps_verified_rules_and_owned_history_readable(generic):
+    from apps.knowledge.trial_rules import authorize_trial_evidence
+
+    workflow, _ = ready_mapping(generic)
+    assert confirm(generic, workflow, executeAfterMapping=True).status_code == 200
+    workflow.refresh_from_db()
+    workflow.max_iterations = 0
+    workflow.save(update_fields=["max_iterations"])
+    advance_demo(workflow.pk)
+    workflow.refresh_from_db()
+    assert workflow.status == "failed"
+    assert not ComputeTask.objects.exists()
+    assert workflow.plan["trialRuleBindings"] and workflow.evidence
+    expected = {row["id"] for row in workflow.plan["trialRuleBindings"]}
+    assert (
+        authorize_trial_evidence(workflow, generic["owner"], history=True) == expected
+    )
+    source = AgentRun.objects.filter(research_workflow=workflow).order_by("pk").first()
+    response = generic["client"].get(
+        f"/api/agent/conversations/{source.conversation_id}/",
+        HTTP_X_PROJECT_ID=str(generic["project"].pk),
+    )
+    assert response.status_code == 200, response.content

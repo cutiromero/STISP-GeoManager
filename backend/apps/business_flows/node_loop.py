@@ -752,6 +752,7 @@ def execute_tool(
                 limit=limit,
                 max_bytes=4096,
                 version_id=arguments.get("versionId"),
+                view=arguments.get("view", "execution"),
             )
         )
         loop["catalogIds"] = list(

@@ -14,7 +14,14 @@ CAPS = {
 }
 ARGUMENT_KEYS = {
     "read_evidence": {"evidenceId", "offset", "length"},
-    "operator_catalog": {"operation", "dataType", "keyword", "limit", "versionId"},
+    "operator_catalog": {
+        "operation",
+        "dataType",
+        "keyword",
+        "limit",
+        "versionId",
+        "view",
+    },
     "preflight_operator": {"versionId", "inputs", "parameters", "fieldMappings"},
     "run_operator": {"versionId", "inputs", "parameters", "fieldMappings", "remedy"},
     "prepare_input": {"versionId", "inputs", "parameters", "remedy"},
@@ -57,6 +64,7 @@ parameters只能包含清单中agent.adjustable=true的参数；其他参数沿�
 prepare_input复用现有脚本生成、独立审核、隔离执行；不是执行任意脚本的工具。
 read_evidence按evidenceId、offset(UTF-8字节偏移)、length(最多4096)取真实证据片段。
 operator_catalog可按operation/dataType/keyword筛选，limit最多20。
+view默认execution，完整提供输入、可调参数、错误和输出端口；调度无需逐个读取输出字段。需要逐输出字段契约时才选view=full并提供versionId。
 若目录truncated=true，用operator_catalog.versionId查询该登记版本的完整语义清单，不可从截短目录猜测端口。
 目录超出单步观察字节上限时提供全部返回版本的索引及offset/length；用read_evidence读取该目录证据的完整单项清单后再设置字段与参数。
 失败先核对failure的code/remedy/gaps，不能对相同错误重复同类补救；不得重试平台故障或不可恢复。

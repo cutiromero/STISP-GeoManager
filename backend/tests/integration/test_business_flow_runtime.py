@@ -60,6 +60,22 @@ def start(env, version, **options):
     return workflow, value
 
 
+@pytest.mark.parametrize(
+    "steps,expected", [(0, 256), (1, 4), (8, 16), (32, 64), (256, 256)]
+)
+def test_tool_step_limit_zero_keeps_its_unlimited_meaning(flows, steps, expected):
+    from apps.agent.models import AgentPolicy
+    from apps.agent.policy import default_policy
+
+    AgentPolicy.objects.update_or_create(
+        pk=1, defaults={"value": {**default_policy(), "maxSteps": steps}}
+    )
+    _, version = flows["create"]()
+    workflow, _ = start(flows, version)
+    assert workflow.max_iterations == expected
+    assert AgentPolicy.objects.get(pk=1).value["maxSteps"] == steps
+
+
 def execution_stub(calls, *, before_return=None):
     def execute(workflow, node, attempt, evidence, **kwargs):
         calls.append(

@@ -20,7 +20,9 @@ def _encoded_size(value):
     )
 
 
-def compact_description(version, max_bytes=DEFAULT_MAX_BYTES):
+def compact_description(version, max_bytes=DEFAULT_MAX_BYTES, *, view="full"):
+    if not isinstance(view, str) or view not in {"execution", "full"}:
+        raise ComputeError("算子目录视图须为execution或full")
     manifest = version.manifest
     capability = manifest.get("capabilities")
     if not isinstance(capability, dict):
@@ -43,6 +45,23 @@ def compact_description(version, max_bytes=DEFAULT_MAX_BYTES):
         "errors": deepcopy(manifest.get("errors", [])),
         "truncated": False,
     }
+    if view == "execution":
+        value["view"] = "execution"
+        value["outputFieldCounts"] = {
+            row["key"]: len(row.get("fields", [])) for row in value["outputs"]
+        }
+        value["outputs"] = [
+            {
+                key: row[key]
+                for key in ("key", "label", "kind", "required", "final")
+                if key in row
+            }
+            for row in value["outputs"]
+        ]
+        value["fullContractLookup"] = {"versionId": version.pk, "view": "full"}
+        value["scope"] = (
+            "输入、可调参数、错误和输出端口完整；输出逐字段契约可按需查询full视图。"
+        )
     if _encoded_size(value) <= max_bytes:
         return value
     value["truncated"] = True
@@ -75,6 +94,7 @@ def operator_catalog(
     max_bytes=DEFAULT_MAX_BYTES,
     limit=50,
     version_id=None,
+    view="full",
 ):
     """每个算法返回最新可调用发布版本；max_bytes为UTF-8紧凑JSON字节数。"""
     selected = project.pk if hasattr(project, "pk") else project
@@ -92,6 +112,8 @@ def operator_catalog(
         raise ComputeError("关键词须为至多160字文字")
     if version_id is not None and (type(version_id) is not int or version_id < 1):
         raise ComputeError("算子版本编号须为正整数")
+    if not isinstance(view, str) or view not in {"execution", "full"}:
+        raise ComputeError("算子目录视图须为execution或full")
     from .packages import EXTENSIONS
 
     if data_type is not None and data_type not in EXTENSIONS:
@@ -136,7 +158,9 @@ def operator_catalog(
             if keyword and keyword.casefold() not in searchable.casefold():
                 continue
             result.append(
-                compact_description(version, 32768 if version_id else max_bytes)
+                compact_description(
+                    version, 32768 if version_id else max_bytes, view=view
+                )
             )
             if len(result) >= limit:
                 break

@@ -391,6 +391,9 @@ def prepare_demo(workflow, user, p) -> None:
         validated_versions = _versions(workflow, multi_graph(segment))
         workflow.plan["algorithms"] = validated_versions
         multi_knowledge = prepare(workflow, user, p)
+        # Preparation may stop before the final plan exists. Keep its verified
+        # rule bindings and evidence together so an owned failed task stays readable.
+        workflow.evidence = multi_knowledge
         expected_graph = multi_graph(
             segment,
             stack="alteration_stack" in inputs,
@@ -476,6 +479,10 @@ def prepare_demo(workflow, user, p) -> None:
             )
         )
     if workflow.max_iterations < decisions_required:
+        if logic_nodes.enabled(workflow):
+            raise ComputeError(
+                f"本次业务流模型请求预算不足：额度{workflow.max_iterations}次，最低需要{decisions_required}次；请调整允许额度或任务范围后重新发起"
+            )
         raise ComputeError("请将场景模型决策上限至少设为" + str(decisions_required))
     if workflow.max_operator_steps < required_steps:
         raise ComputeError("请将场景算子步骤上限至少设为" + str(required_steps))

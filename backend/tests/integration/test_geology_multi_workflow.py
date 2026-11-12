@@ -59,6 +59,55 @@ def test_freezing_rules_requires_project_write_permission_before_any_write(multi
     assert not path.exists()
 
 
+def test_recover_preparation_evidence_validates_original_rules_without_restarting(
+    multi,
+):
+    from django.core.management import call_command
+
+    workflow = multi["workflow"]
+    expected = [row for row in workflow.evidence if row.get("trialBinding")]
+    workflow.evidence = []
+    workflow.status = "failed"
+    workflow.execute_operators = False
+    workflow.save()
+    output = io.StringIO()
+    call_command(
+        "repair_workflow_preparation", workflow=str(workflow.pk), stdout=output
+    )
+    workflow.refresh_from_db()
+    assert workflow.evidence == []
+    call_command(
+        "repair_workflow_preparation",
+        workflow=str(workflow.pk),
+        apply=True,
+        stdout=io.StringIO(),
+    )
+    workflow.refresh_from_db()
+    assert workflow.evidence == expected
+    assert workflow.status == "failed" and workflow.execute_operators is False
+    assert workflow.steps.filter(kind="preparation_evidence_recovered").count() == 1
+    assert authorize_trial_evidence(workflow, multi["owner"], history=True) == {
+        row["id"] for row in expected
+    }
+
+
+def test_recover_preparation_evidence_rejects_a_changed_frozen_file(multi):
+    from django.core.management import call_command
+    from django.core.management.base import CommandError
+
+    workflow = multi["workflow"]
+    workflow.evidence, workflow.status = [], "failed"
+    workflow.save()
+    path = table_data_path(f"demo/workflows/{workflow.pk}/trial-rules.csv")
+    path.write_text("changed")
+    with pytest.raises(CommandError, match="不一致"):
+        call_command(
+            "repair_workflow_preparation", workflow=str(workflow.pk), apply=True
+        )
+    workflow.refresh_from_db()
+    assert workflow.evidence == [] and workflow.status == "failed"
+
+
 def csv_bytes(columns, rows):
     stream = io.StringIO(newline="")
     writer = csv.DictWriter(stream, fieldnames=columns)

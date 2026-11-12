@@ -22,6 +22,7 @@ from apps.agent.workflow_slots import require_compute_slot
 from apps.compute.packages import ComputeError
 from apps.projects.context import selected_project_id
 from .models import BusinessFlowVersion
+from .model_requests import request_limit
 from .state import (
     binding,
     digest,
@@ -576,7 +577,7 @@ def start_flow(user, version, value, *, source_run=None):
                 resource_ids=sorted(set(inputs.values())),
                 parameters=parameters,
                 import_results=True,
-                max_iterations=min(256, max(4, policy["maxSteps"] * 2)),
+                max_iterations=request_limit(policy),
                 max_operator_steps=policy["maxOperatorSteps"],
                 plan={
                     "inputs": inputs,
@@ -637,7 +638,7 @@ def start_flow(user, version, value, *, source_run=None):
             from .logic_nodes import EXECUTION_MODE
 
             workflow.parameters["_businessFlow"]["nodeExecution"] = EXECUTION_MODE
-            workflow.max_iterations = min(256, max(4, policy["maxSteps"] * 2))
+            workflow.max_iterations = request_limit(policy)
         workflow.plan["inputAdaptations"] = [
             {
                 key: item
