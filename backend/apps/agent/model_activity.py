@@ -46,6 +46,14 @@ class WorkflowModelActivity:
             self.identity.update(
                 nodeId=node_id or canonical_current_node(workflow), actor=actor
             )
+            from apps.business_flows.execution_session import session
+
+            execution = session(workflow)
+            if execution and actor == "executor":
+                self.identity.update(
+                    executorSessionId=execution["id"],
+                    skillTitle=execution["skill"]["title"],
+                )
         if request_id:
             self.identity["requestId"] = request_id
         self.response_text = None
@@ -177,7 +185,13 @@ class WorkflowModelActivity:
                         "attempt": self.state["attempt"],
                         **{
                             key: self.identity[key]
-                            for key in ("nodeId", "actor", "requestId")
+                            for key in (
+                                "nodeId",
+                                "actor",
+                                "requestId",
+                                "executorSessionId",
+                                "skillTitle",
+                            )
                             if key in self.identity
                         },
                     },

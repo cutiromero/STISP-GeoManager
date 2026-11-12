@@ -82,6 +82,17 @@ def test_execution_catalog_keeps_input_contract_and_fits_node_read_budget(name):
 
 def node_action(packet, *, mapping_failure=False):
     context = packet["nodeContext"]
+    phase = context.get("task", {}).get("phase")
+    if phase == "select_node":
+        return {
+            "action": "start_node",
+            "arguments": {"nodeId": context["task"]["readyNodes"][0]["id"]},
+        }
+    if phase == "finish_workflow":
+        return {
+            "action": "finish_workflow",
+            "arguments": {"summary": "全部科研目标、实际计算和审核均已完成"},
+        }
     approved = next(
         row["result"] for row in packet["evidence"] if row["id"] == "approved-inputs"
     )
@@ -325,7 +336,7 @@ def test_seven_nodes_match_original_science_with_real_operators(
                 results.append(run_to_completion(generic, workflow))
         old, new = results
         assert new.max_iterations == 256
-        assert new.plan["modelCallBudget"]["minimumStageRequests"] == 23
+        assert new.plan["modelCallBudget"]["minimumStageRequests"] == 29
         counts = compare_science(old, new)
         assert {path: checksum(path) for path in source_checksums} == source_checksums
         assert all(counts.values())
@@ -345,7 +356,12 @@ def test_seven_nodes_match_original_science_with_real_operators(
                 assert loop["recoveries"] == 1
             assert [row["action"] for row in loop["history"]] == expected_actions
             assert loop["modelCalls"] == len(expected_actions)
-        tool_calls = [options for packet, options in calls if "nodeContext" in packet]
+        tool_calls = [
+            options
+            for packet, options in calls
+            if "nodeContext" in packet
+            and packet["nodeContext"].get("task", {}).get("phase", "work") == "work"
+        ]
         assert len(tool_calls) == (21 if mapping_failure else 20)
         assert all(
             row["thinking"] is True and row["reasoning_effort"] == EFFORT

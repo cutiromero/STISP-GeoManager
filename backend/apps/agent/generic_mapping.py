@@ -178,13 +178,20 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
     try:
         error = None
         guard.poll()
+        from apps.business_flows.execution_session import guidance, request_context
+
+        payload = _payload(roles, rule_context.payload)
+        execution = request_context(workflow, "inputs")
+        if execution:
+            from apps.business_flows.main_loop import specialized_context
+
+            payload.update(executionSession=execution, taskGoal=workflow.goal)
+            payload["task"] = specialized_context(workflow, "inputs")
         messages = [
-            {"role": "system", "content": INSTRUCTION},
+            {"role": "system", "content": INSTRUCTION + guidance(workflow, "inputs")},
             {
                 "role": "user",
-                "content": json.dumps(
-                    _payload(roles, rule_context.payload), ensure_ascii=False
-                ),
+                "content": json.dumps(payload, ensure_ascii=False),
             },
         ]
         try:
@@ -248,6 +255,14 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
             else:
                 guard.poll()
                 progress("complete")
+                from apps.business_flows.main_loop import remember
+
+                remember(
+                    workflow,
+                    "inputs",
+                    "propose_field_mapping",
+                    "已形成真实字段对应建议，重要映射仍由用户确认",
+                )
                 return result
         raise error
     except Exception:

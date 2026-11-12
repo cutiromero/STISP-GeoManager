@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261112-002 - 业务流配套技能与持续主执行会话
+
+- Status: BackendReady
+- Owner: codex/xintao，当前助手完成契约、实现与验证。
+- Endpoints: 沿用业务流定义、发布、启动、运行读取和节点trace接口，不增加轮询。
+- Change type: 向后兼容的可选配套技能与主执行会话元信息。
+- OpenAPI change: BusinessFlowSpec.skill为有界核心指导与节点专项说明；BusinessFlowRun及BusinessFlowNodeTrace可选mainAgent，模型记录可选executorSessionId。
+- Mock examples: 沿用业务流示例，增加版本冻结、跨节点同一执行会话和技能大小约束的隔离测试。
+- Frontend reason: 启动前可查看配套技能，节点详情可辨认持续主执行会话；类别映射参数提供填写说明。
+- Backend implementation notes: 新任务冻结短技能与会话身份，模型输入按角色重建有界上下文；任务台账仅保存短摘要与成果引用，按需回顾已完成节点。专业参数按登记语义开放调整，核心算法及真实权限和人工批准保持。
+- Verification: 跨节点延续、失败返修、暂停恢复、技能版本隔离、引用读取与越权拒绝、台账大小及科学一致性、契约和正式浏览器验收。
+- Result: 任务级主执行选择合法目标，不派生节点执行智能体；定向路由、暂停恢复、技能版本及短台账检查通过，真实科学算子与换波段测试通过。正式网站验收与发布结果保存到精确提交的回执。
+
 ## API-20261112-001 - 按节点读取模型思考、正文和行动
 
 - Status: BackendReady
@@ -635,6 +648,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261112-002 | BackendReady | Business flow skill and main agent | 任务级主执行循环与有界技能 | Updated | 146节点记录 | Implemented | 版本、会话、台账、调整与恢复 | 不扩大上下文或审批权限 |
 | API-20261112-001 | BackendReady | Business flow node trace | 节点思考、实际响应和工具行动按需读取 | Updated | 146节点记录 | Implemented | 权限隔离、分页、节点切换及显示 | 不执行计算或科研批准 |
 | API-20261111-004 | BackendReady | Business flow start | 思考设置与专业节点工具执行 | Updated | 现有示例 | Implemented | 三档请求及真实七节点对照 | 科学配方与批准保持有效 |
 | API-20261111-003 | BackendReady | project deletion-preview / DELETE | 项目删除与通用资料保留 | 已更新 | 147-project-deletion | 已实现 | 定点权限、事务、引用、存储及浏览器 | 新增可空审计列，公开项目保护 |

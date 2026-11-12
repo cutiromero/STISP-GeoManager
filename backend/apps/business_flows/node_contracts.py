@@ -4,6 +4,7 @@ from .definitions import invalid, keys, strings, text
 
 TOOLS = {
     "read_evidence",
+    "read_task_record",
     "operator_catalog",
     "preflight_operator",
     "run_operator",

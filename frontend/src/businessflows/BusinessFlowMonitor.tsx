@@ -44,6 +44,7 @@ export default function BusinessFlowMonitor({
   const ui = useComputeText();
   const [open, setOpen] = useState(false);
   const [diagram, setDiagram] = useState(false);
+  const [mainTrace, setMainTrace] = useState(false);
   const [selection, setSelection] = useState<{
     flowId: string;
     nodeId: string;
@@ -110,6 +111,26 @@ export default function BusinessFlowMonitor({
           onClick={() => setOpen((value) => !value)}
         />
       </header>
+      {flow.mainAgent && !unavailable && (
+        <p className="flow-monitor-live">
+          <RobotOutlined />{" "}
+          {ui("主执行智能体持续处理", "Continuous main executor")}
+          <Button type="link" size="small" onClick={() => setMainTrace(true)}>
+            {ui("查看主执行记录", "View main executor trace")}
+          </Button>
+        </p>
+      )}
+      <Drawer
+        title={ui("主执行智能体 · 完整任务循环", "Main executor · Task loop")}
+        open={mainTrace}
+        onClose={() => setMainTrace(false)}
+        size={720}
+        destroyOnHidden
+      >
+        {mainTrace && !unavailable && (
+          <BusinessFlowNodeTrace flowId={flow.id} nodeId="_main" />
+        )}
+      </Drawer>
       <p
         className={`flow-monitor-live${halted ? " is-halted" : ""}`}
         role="status"

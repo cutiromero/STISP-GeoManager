@@ -17,30 +17,49 @@ def size(value):
 
 
 def professional_ledger(workflow):
+    values = state(workflow)
     entries = []
     for stage in workflow.plan.get("stages", []):
         if stage.get("status") != "completed":
             continue
-        entries.append(
-            {
-                "nodeId": stage["name"],
-                "summary": text(stage.get("decision", {}).get("resultSummary"), 240),
-                "taskId": stage.get("taskId"),
-                "outputs": [
-                    {key: row.get(key) for key in ("outputId", "checksum", "key")}
-                    for row in stage.get("results", [])
-                ],
-                "humanApproved": bool(
-                    stage.get("manualApproved") or stage.get("modificationsApproval")
-                ),
-            }
-        )
+        item = values.get("nodes", {}).get(stage["name"], {})
+        actor = item.get("executor", {})
+        results = stage.get("results", [])
+        record = {
+            "nodeId": stage["name"],
+            "summary": text(
+                actor.get("summary") or stage.get("decision", {}).get("resultSummary"),
+                240,
+            ),
+            "taskId": stage.get("taskId"),
+            "outputs": [
+                {key: row.get(key) for key in ("outputId", "checksum", "key")}
+                for row in results[:MAX_REFERENCES]
+            ],
+            "outputCount": len(results),
+            "limitations": [
+                text(value, 120) for value in actor.get("limitations", [])[:2]
+            ],
+            "reviewDecision": item.get("reviewer", {}).get("decision", "not_required"),
+            "humanApproved": bool(
+                stage.get("manualApproved") or stage.get("modificationsApproval")
+            ),
+        }
+        entries.append(_bound(record, MAX_RECORD_BYTES - 32))
+    for record in entries[:-RECENT_RECORDS]:
+        record["summary"] = text(record["summary"], 96)
+        _bound(record, MAX_OLD_RECORD_BYTES - 32)
     ledger = {
         "goal": text(workflow.goal, 1024),
         "entries": entries,
+        "unresolved": [
+            {"nodeId": row["nodeId"], "limitations": row["limitations"][:1]}
+            for row in entries
+            if row.get("limitations")
+        ][-8:],
         "scope": "台账仅为索引；科学事实与批准范围以本次实际证据为准",
     }
-    state(workflow)["ledger"] = deepcopy(ledger)
+    values["ledger"] = deepcopy(ledger)
     return ledger
 
 
@@ -53,7 +72,7 @@ def _bound(record, maximum):
     while size(record) > maximum:
         arrays = [
             key
-            for key in ("sources", "evidence", "findings", "limitations")
+            for key in ("sources", "evidence", "outputs", "findings", "limitations")
             if record.get(key)
         ]
         if arrays:

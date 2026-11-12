@@ -214,6 +214,43 @@ def input_evidence(workflow, user, policy, node):
                     metadata["contentRead"] = True
                 metadata.setdefault("contentScope", "metadata")
                 schemas[cache_key] = [field["name"] for field in fields]
+            if resource.data_type == "raster":
+                from apps.raster.models import RasterDataset
+
+                dataset = (
+                    RasterDataset.objects.filter(data_resource=resource, status="ready")
+                    .only("source_gdalinfo")
+                    .first()
+                )
+                bands = (
+                    (dataset.source_gdalinfo or {}).get("bands", []) if dataset else []
+                )
+                metadata.update(
+                    bands=len(bands),
+                    bandMetadata=[
+                        {
+                            "band": band.get("band", index),
+                            "description": str(band.get("description", ""))[:160],
+                            **{
+                                key: band[key]
+                                for key in ("type", "scale", "offset", "unitType")
+                                if key in band
+                            },
+                            "spectralMetadata": {
+                                key: str(value)[:160]
+                                for domain in band.get("metadata", {}).values()
+                                if isinstance(domain, dict)
+                                for key, value in domain.items()
+                                if any(
+                                    word in key.casefold()
+                                    for word in ("wavelength", "band_name", "波长")
+                                )
+                            },
+                        }
+                        for index, band in enumerate(bands[:64], 1)
+                    ],
+                    bandMetadataComplete=len(bands) <= 64,
+                )
             if resource.data_type == "document" and resource.file_format.upper() in {
                 "TXT",
                 "MD",
@@ -538,19 +575,36 @@ def advance(workflow_id):
                 if value["nodes"][node["id"]]["status"] not in {"succeeded", "skipped"}
             ]
             if not remaining:
+                from .execution_session import session
+
+                if session(workflow):
+                    from .main_loop import finish_workflow
+
+                    if not finish_workflow(
+                        workflow, user, policy, summary=workflow.detail
+                    ):
+                        return
                 _finish(workflow, user, policy)
                 return
-            node = next(
-                (
-                    node
-                    for node in remaining
-                    if all(
-                        value["nodes"][key]["status"] in {"succeeded", "skipped"}
-                        for key in node["dependsOn"]
-                    )
-                ),
-                None,
-            )
+            ready = [
+                candidate
+                for candidate in remaining
+                if all(
+                    value["nodes"][key]["status"] in {"succeeded", "skipped"}
+                    for key in candidate["dependsOn"]
+                )
+            ]
+            from .execution_session import session
+
+            if session(workflow):
+                from .main_loop import select_node, compile_node
+
+                node = select_node(workflow, user, policy, ready)
+                if node is None:
+                    return
+                node = compile_node(node)
+            else:
+                node = ready[0] if ready else None
             if node is None:
                 raise ComputeError("业务流没有可执行的依赖节点")
             item = value["nodes"][node["id"]]
@@ -603,7 +657,22 @@ def advance(workflow_id):
                 emit(workflow, "executor", node["id"], "node_started", workflow.detail)
             evidence = input_evidence(workflow, user, policy, node)
             if not item["executor"].get("summary"):
-                if (
+                if session(workflow):
+                    from .main_loop import advance_active
+
+                    result = advance_active(
+                        workflow,
+                        user,
+                        policy,
+                        node,
+                        item,
+                        evidence,
+                        guard=guard,
+                        callbacks=_callbacks(workflow, node, "executor"),
+                    )
+                    if result is None:
+                        return
+                elif (
                     node.get("contract")
                     or item.get("toolLoop")
                     and not item["toolLoop"].get("manualRetry")

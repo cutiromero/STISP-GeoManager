@@ -122,6 +122,7 @@ def canonical_current_node(workflow):
 
 
 def serialize_run(user, workflow, *, control_only=False):
+    from .execution_session import public_session
     from .script_preparation import public_item
 
     if control_only:
@@ -227,6 +228,11 @@ def serialize_run(user, workflow, *, control_only=False):
         "resultOutputIds": [] if control_only else workflow.result_ids,
         "createdAt": workflow.created_at.isoformat(),
         "updatedAt": workflow.updated_at.isoformat(),
+        **(
+            {"mainAgent": public_session(workflow)}
+            if not control_only and public_session(workflow)
+            else {}
+        ),
         **(
             {
                 "inputPreparation": {
@@ -638,6 +644,9 @@ def start_flow(user, version, value, *, source_run=None):
             "requestHash": request_hash,
             "agentEnabled": value.get("agentEnabled", True),
         }
+        from .execution_session import initialize
+
+        initialize(workflow)
         if workflow.workflow_type == "geology_generic" and value.get(
             "agentEnabled", True
         ):

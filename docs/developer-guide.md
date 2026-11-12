@@ -322,6 +322,8 @@ pnpm run api:docs
 
 `docs/openapi.yaml` 是唯一权威 API 契约，使用 OpenAPI 3.1.0。新增、删除或修改接口时，先更新契约，再同步后端实现、前端类型、mock 示例和文档说明。
 
+业务流的可选`executionMode=main_agent`启用任务级主执行循环，旧定义省略时保留节点执行。可选`skill`只保存短核心和节点说明，随不可变版本固定。运行及节点trace的`mainAgent`仅返回身份与技能摘要；trace的`nodeId=_main`按需聚合同一主执行会话，普通节点仍按节点筛选，独立审核不混入主执行调用。
+
 强制规则：
 
 - `operationId` 使用唯一 camelCase 名称。

@@ -49,8 +49,8 @@ def enrich(manifest, operation, *, use_when=None, avoid_when=None):
             parameter["label"] + "；按实际来源和任务目标设置，取值须满足声明范围。",
         )
         parameter["agent"] = {
-            "adjustable": parameter["type"] not in {"field", "band"}
-            and parameter["key"] not in {"working_epsg", "code", "target_contract"},
+            "adjustable": parameter["key"]
+            not in {"working_epsg", "code", "target_contract"},
             "advice": "仅在来源证据和任务约束允许时按范围调整；不得为减少报错而放宽科学判据或人工批准。"
             if parameter["type"] not in {"field", "band"}
             else "根据实际字段或波段的语义证据绑定，不按名称猜测；优先使用字段映射。",

@@ -62,6 +62,8 @@ def normalize_definition(value):
             "nodes",
             "outputRequirements",
             "inputPreparation",
+            "skill",
+            "executionMode",
         },
         "流程定义",
     )
@@ -79,6 +81,10 @@ def normalize_definition(value):
     ):
         invalid("流程定义版本或执行适配器无效")
     result = json.loads(encoded)
+    if not isinstance(result.get("executionMode", "nodes"), str) or result.get(
+        "executionMode", "nodes"
+    ) not in {"nodes", "main_agent"}:
+        invalid("业务流执行方式须为nodes或main_agent")
     if "inputPreparation" in result:
         from .input_policy import validate
 
@@ -343,6 +349,10 @@ def normalize_definition(value):
                 item["key"] == "lithology" and not item["required"]
             ):
                 invalid("逻辑推理资料类型或必需岩性图规范无效")
+    if "skill" in result:
+        from .execution_session import normalize_skill
+
+        result["skill"] = normalize_skill(result["skill"], node_ids)
     result["inputRequirements"] = inputs
     result["nodes"] = nodes
     result["outputRequirements"] = strings(

@@ -125,6 +125,13 @@ def validate_fixture(raw, manifest):
                 or not source.get("crs")
             ):
                 raise ComputeError("自检栅格须含1至128像元shape、六项transform及crs")
+            bands = source.get("bands")
+            if bands is not None and (
+                not isinstance(bands, list)
+                or not 1 <= len(bands) <= 64
+                or any(not isinstance(band, dict) for band in bands)
+            ):
+                raise ComputeError("自检栅格bands须为1至64项波段说明")
         if source["kind"] in {"document", "gene"} and not isinstance(
             source.get("text"), str
         ):
@@ -170,28 +177,30 @@ def materialize_fixture(fixture, directory, manifest):
                 or not 1 <= width <= 128
             ):
                 raise ComputeError("自检栅格单边须为1至128像元")
-            values = np.full(
-                (height, width),
-                source.get("fill", 0),
-                dtype=source.get("dtype", "uint8"),
+            bands = source.get("bands") or [source]
+            values = np.empty(
+                (len(bands), height, width), dtype=source.get("dtype", "uint8")
             )
-            for row, column, value in source.get("pixels", []):
-                values[row, column] = value
+            for index, band in enumerate(bands):
+                values[index].fill(band.get("fill", source.get("fill", 0)))
+                for row, column, value in band.get("pixels", []):
+                    values[index, row, column] = value
             with rasterio.open(
                 target,
                 "w",
                 driver="GTiff",
                 height=height,
                 width=width,
-                count=1,
+                count=len(bands),
                 dtype=values.dtype,
                 crs=source["crs"],
                 transform=Affine(*source["transform"]),
                 nodata=source.get("nodata"),
             ) as output:
-                output.write(values, 1)
-                if source.get("name"):
-                    output.set_band_description(1, source["name"])
+                output.write(values)
+                for index, band in enumerate(bands, 1):
+                    if band.get("name"):
+                        output.set_band_description(index, band["name"])
         else:
             target.write_text(source["text"], encoding="utf-8")
         inputs[key] = {"path": str(target.resolve()), "sha256": checksum(target)}

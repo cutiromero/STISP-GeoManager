@@ -54,6 +54,37 @@ function trace(nodeId = "analyse"): NodeTrace {
   };
 }
 
+it("opens the single main executor trace on demand without mixing node reads", async () => {
+  const flow = businessFlowRun();
+  flow.mainAgent = {
+    id: "a".repeat(32),
+    mode: "main_agent_v1",
+    skillTitle: "科研执行指导",
+    skillHash: "b".repeat(64),
+    flowVersionId: flow.versionId,
+  };
+  const main = trace("_main");
+  main.mainAgent = flow.mainAgent;
+  main.requests[0]!.executorSessionId = flow.mainAgent.id;
+  main.requests[0]!.nodeId = "analyse";
+  const read = vi.spyOn(businessFlowsApi, "nodeTrace").mockResolvedValue(main);
+  render(
+    <App>
+      <BusinessFlowMonitor flow={flow} onLocate={vi.fn()} />
+    </App>,
+  );
+  expect(read).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "查看主执行记录" }));
+  await screen.findByText("核对实际输入后先预检，再提交计算。");
+  expect(read).toHaveBeenCalledOnce();
+  expect(read).toHaveBeenCalledWith(
+    flow.id,
+    "_main",
+    expect.objectContaining({ offset: 0 }),
+  );
+  expect(screen.getByText(/执行会话 aaaaaaaa/)).toBeVisible();
+});
+
 it("reads only a clicked node and exposes actual thinking, response and action", async () => {
   const read = vi
     .spyOn(businessFlowsApi, "nodeTrace")

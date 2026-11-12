@@ -11,7 +11,10 @@ CAPS = {
     "maxContextBytes": 192 * 1024,
 }
 ARGUMENT_KEYS = {
+    "start_node": {"nodeId"},
+    "finish_workflow": {"summary"},
     "read_evidence": {"evidenceId", "offset", "length"},
+    "read_task_record": {"nodeId", "offset", "limit"},
     "operator_catalog": {
         "operation",
         "dataType",
@@ -61,6 +64,7 @@ run_operator/preflight_operator使用versionId、inputs(端口→resourceId或�
 单输入也可使用{"outputId":整数}引用直接依赖的真实成果，平台通过现有队列准备后再提交，不得引用无关成果。
 prepare_input复用现有脚本生成、独立审核、隔离执行；不是执行任意脚本的工具。
 read_evidence按evidenceId、offset(UTF-8字节偏移)、length(最多4096)取真实证据片段。
+read_task_record按nodeId回顾本任务已完成节点的短摘要和成果引用，offset/limit对引用分页；不会读取文件正文。
 operator_catalog可按operation/dataType/keyword筛选，limit最多20。
 view默认execution，完整提供输入、可调参数、错误和输出端口；调度无需逐个读取输出字段。需要逐输出字段契约时才选view=full并提供versionId。
 若具体算子条目的truncated=true，按versionId补查必要的执行约束；目录观察带有片段索引时按索引读必要部分，不要重复查询相同目录或猜测端口。

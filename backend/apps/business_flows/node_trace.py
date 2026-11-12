@@ -28,6 +28,7 @@ def _record(record):
     return {
         "id": str(record.pk),
         "role": record.action.get("actor", "executor"),
+        "nodeId": record.action.get("nodeId", ""),
         "attempt": activity.get("attempt", record.action.get("attempt", 1)),
         "status": "failed"
         if record.status == "failed"
@@ -45,6 +46,11 @@ def _record(record):
         else None,
         "startedAt": record.started_at.isoformat(),
         "finishedAt": record.finished_at.isoformat() if record.finished_at else None,
+        **(
+            {"executorSessionId": activity["executorSessionId"]}
+            if activity.get("executorSessionId")
+            else {}
+        ),
     }
 
 
@@ -95,18 +101,30 @@ def _historical(item):
 
 
 def node_trace(user, workflow, node_id, *, offset=0):
+    from .execution_session import public_session
+
     authorize(user, workflow, history=workflow.status in TERMINAL)
     nodes = {
         node["id"]: node for node in binding(workflow)["definitionSnapshot"]["nodes"]
     }
+    main = public_session(workflow)
+    if main:
+        nodes["_main"] = {"title": "主执行智能体的完整任务循环"}
     if node_id not in nodes or type(offset) is not int or not 0 <= offset <= MAX_OFFSET:
         raise ValidationError("节点或记录分页无效")
-    item = state(workflow)["nodes"][node_id]
-    records = list(
-        workflow.steps.filter(kind=ACTIVITY_KIND, action__nodeId=node_id).order_by(
-            "-sequence", "-id"
-        )[offset : offset + PAGE_SIZE + 1]
-    )
+    if node_id == "_main":
+        from .execution_session import session
+
+        item = {"toolLoop": {"history": session(workflow)["loop"]["history"]}}
+        query = workflow.steps.filter(
+            kind=ACTIVITY_KIND,
+            action__actor="executor",
+            action__executorSessionId=main["id"],
+        )
+    else:
+        item = state(workflow)["nodes"][node_id]
+        query = workflow.steps.filter(kind=ACTIVITY_KIND, action__nodeId=node_id)
+    records = list(query.order_by("-sequence", "-id")[offset : offset + PAGE_SIZE + 1])
     historical = not records and offset == 0
     requests = (
         _historical(item)
@@ -128,4 +146,5 @@ def node_trace(user, workflow, node_id, *, offset=0):
         "actions": _safe(actions),
         "historical": historical,
         "nextOffset": offset + PAGE_SIZE if len(records) > PAGE_SIZE else None,
+        **({"mainAgent": public_session(workflow)} if public_session(workflow) else {}),
     }

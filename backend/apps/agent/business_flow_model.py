@@ -231,6 +231,15 @@ def request_node_result(
         packet["revisionFeedback"] = feedback
     if context is not None:
         packet["nodeContext"] = context
+    from apps.business_flows.execution_session import guidance, request_context
+
+    guidance_node = (
+        "_main" if context and context.get("executionScope") == "workflow" else node_id
+    )
+    execution = request_context(workflow, guidance_node, role)
+    if execution:
+        packet["executionSession"] = execution
+        instruction += guidance(workflow, guidance_node, role)
     try:
         payload = _json(packet)
     except (ValueError, TypeError) as error:
@@ -322,6 +331,7 @@ def request_node_result(
         "reasoningEffort": effective["reasoningEffort"],
         "outputLimit": effective["maxOutputTokens"],
         "timeLimitSeconds": effective["maxRunSeconds"],
+        **({"executionSession": execution} if execution else {}),
     }
     activity = None
 
@@ -340,7 +350,9 @@ def request_node_result(
                 model,
                 effective,
                 checked,
-                node_id=node_id,
+                node_id="_main"
+                if context and context.get("executionScope") == "workflow"
+                else node_id,
                 actor=role,
                 request_id=record["requestId"],
             )

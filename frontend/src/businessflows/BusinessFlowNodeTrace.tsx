@@ -127,6 +127,12 @@ export default function BusinessFlowNodeTrace({
         />
       </header>
       {error && <Alert type="warning" title={error} showIcon />}
+      {trace?.mainAgent && (
+        <p className="flow-node-trace-note">
+          <Tag>{ui("主执行智能体持续处理", "Continuous main executor")}</Tag>
+          {trace.mainAgent.skillTitle}
+        </p>
+      )}
       {busy && !trace && <Spin size="small" />}
       {actors
         .filter(
@@ -187,6 +193,19 @@ export default function BusinessFlowNodeTrace({
             <div className="flow-node-request-body">
               <div className="flow-node-request-meta">
                 <span>{row.model}</span>
+                {nodeId === "_main" && row.nodeId && (
+                  <span>
+                    {row.nodeId === "_main"
+                      ? ui("任务调度", "Task control")
+                      : row.nodeId}
+                  </span>
+                )}
+                {row.executorSessionId && (
+                  <small title={row.executorSessionId}>
+                    {ui("执行会话", "Executor session")}{" "}
+                    {row.executorSessionId.slice(0, 8)}
+                  </small>
+                )}
                 <Tag>
                   {row.thinkingEnabled
                     ? `${ui("思考强度", "Thinking effort")} ${strengths[row.reasoningEffort] ?? row.reasoningEffort}`

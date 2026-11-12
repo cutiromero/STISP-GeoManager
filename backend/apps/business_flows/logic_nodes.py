@@ -4,6 +4,7 @@ from copy import deepcopy
 
 from apps.compute.packages import ComputeError
 from .state import binding, state, persist, emit, digest
+from .execution_session import session
 
 # Configuration: preserve the approved scientific recipe and bound each actor.
 EXECUTION_MODE = "geology_node_tools_v1"
@@ -84,13 +85,77 @@ def node_definition(workflow, stage):
             "maxSeconds": 600,
         },
     )
+    if session(workflow):
+        node["instruction"] = (
+            "延续同一主执行会话完成当前节点。默认配置为起点，依据真实资料选择可见输入与上游成果引用，"
+            "按登记清单选择字段、波段和允许调整的参数；核心算法、规则来源及实际批准范围保持有效。"
+            "查询登记算子后先预检完整方案，通过后运行。失败依据code/remedy/gaps改变有效方案并再次预检，"
+            "不重复相同错误方案；必要时回顾read_task_record中的实际参数及成果引用。"
+            "真实计算成功后读取statistics并交付，保留实际参数、依据和剩余限制，不以样本代替完整统计。"
+        )
+        node["contract"]["goal"] = (
+            node["title"]
+            + "：依据任务目标和真实资料组织输入、参数与成果，先预检后运行并核对实际统计。"
+        )
+        node["contract"]["tools"] = [*TOOLS, "read_task_record"]
+        node["contract"]["acceptance"][0] = "已查询登记版本并按真实输入和清单参数预检"
     return node
 
 
 def visible_inputs(workflow, node):
-    return deepcopy(
+    values = deepcopy(
         state(workflow)["nodes"][node["id"]]["toolLoop"].get("approvedInputs", {})
     )
+    if session(workflow):
+        for group in ("uploadInputs", "effectiveInputs", "workingCopies"):
+            values.update(
+                {
+                    f"{group}:{key}": identity
+                    for key, identity in workflow.plan.get(group, {}).items()
+                    if type(identity) is int
+                }
+            )
+        values.update(
+            {
+                f"prepared:{key}": identity
+                for key, identity in workflow.plan.get("preparedNodeInputs", {})
+                .get(node["id"], {})
+                .items()
+                if type(identity) is int
+            }
+        )
+        values.update(
+            state(workflow)["nodes"][node["id"]]["toolLoop"].get("upstreamInputs", {})
+        )
+    return values
+
+
+def check_protected_inputs(inputs, expected):
+    if any(
+        inputs.get(key) != identity
+        for key, identity in expected.items()
+        if key in {"rules", "approved_changes"}
+    ):
+        raise ComputeError("规则依据或获批处置凭据不能由输入绑定替换")
+
+
+def ancestor_output_ids(workflow, node):
+    definitions = {
+        row["id"]: row for row in binding(workflow)["definitionSnapshot"]["nodes"]
+    }
+    ancestors, pending = set(), list(node.get("dependsOn", []))
+    while pending:
+        identity = pending.pop()
+        if identity not in ancestors:
+            ancestors.add(identity)
+            pending.extend(definitions[identity]["dependsOn"])
+    return {
+        row["outputId"]
+        for stage in workflow.plan.get("stages", [])
+        if stage["name"] in ancestors and stage.get("status") == "completed"
+        for row in stage.get("results", [])
+        if type(row.get("outputId")) is int
+    }
 
 
 def check_submission(workflow, node, version, body):
@@ -100,10 +165,16 @@ def check_submission(workflow, node, version, body):
         raise ComputeError("该版本不属于已确认科学配方，请重新确认计划后更换版本")
     if version.manifest.get("schemaVersion") != 2:
         raise ComputeError("该地质算子仍为旧清单，请先登记并验证第2版语义清单")
-    if body["inputs"] != visible_inputs(workflow, node):
+    if not session(workflow) and body["inputs"] != visible_inputs(workflow, node):
         raise ComputeError("输入须逐端口绑定已确认资料及真实上游成果，不能替换科研范围")
-    if body["parameters"] != stage["parameters"]:
+    if not session(workflow) and body["parameters"] != stage["parameters"]:
         raise ComputeError("科学参数与已确认配方不一致，请保留原值或请求用户重新确认")
+    if session(workflow):
+        check_protected_inputs(
+            body["inputs"],
+            state(workflow)["nodes"][node["id"]]["toolLoop"].get("approvedInputs", {}),
+        )
+        return
     # Canonical fields were confirmed before working copies were created. A
     # semantic mapping may restate them, but cannot silently swap their meaning.
     specs = {row["key"]: row for row in version.manifest["inputs"]}
@@ -135,8 +206,10 @@ def revalidate_inputs(workflow, user, policy, node, body):
         resource = create_approved_changes(workflow, user, policy, stage)
         if workflow.plan.get("approved_changes") != resource.pk:
             raise ComputeError("获批处置输入已变化，不能沿用先前预检")
-    if body["inputs"] != _inputs(workflow, stage):
+    if not session(workflow) and body["inputs"] != _inputs(workflow, stage):
         raise ComputeError("实际输入与当前专业科学方案不一致，不能提交计算")
+    if session(workflow):
+        check_protected_inputs(body["inputs"], _inputs(workflow, stage))
 
 
 def catalog_rows(workflow, user, policy, node, arguments):
@@ -203,6 +276,7 @@ def completed_task(workflow, user, policy, node, item, loop):
     ):
         stage["results"] = read_results(workflow, user, policy, task)
     results = stage["results"]
+    stage["actualParameters"] = deepcopy(task.parameters)
     statistics = [row for row in results if row["key"] == "statistics"]
     if not statistics:
         raise ComputeError("真实算子缺少必需statistics成果，不能交付节点")
@@ -228,9 +302,9 @@ def completed_task(workflow, user, policy, node, item, loop):
     }
 
 
-def advance(workflow, user, policy, stage):
+def execute_stage_tools(workflow, user, policy, stage, *, requester):
     from .engine import _callbacks, live_guard
-    from .node_loop import advance_loop, loop_state
+    from .node_loop import advance_tool_execution, loop_state
     from apps.agent.demo_workflow import _collect_stage, _save
     from apps.agent.compute_tools import authorized_task
 
@@ -254,11 +328,13 @@ def advance(workflow, user, policy, stage):
                     "identifier": stage["identifier"],
                     "versionId": node["algorithmVersionId"],
                     "approvalRecorded": bool(stage.get("modificationsApproval")),
-                    "scope": "版本与科学参数沿用已确认配方；查询目录后按实际清单填写，不得扩大处置范围",
+                    "scope": "默认配置为起点；按真实资料选择可见输入与清单允许的参数，保留核心算法、规则和批准范围"
+                    if session(workflow)
+                    else "版本与科学参数沿用已确认配方；查询目录后按实际清单填写，不得扩大处置范围",
                 },
             }
         ]
-        result = advance_loop(
+        result = advance_tool_execution(
             workflow,
             user,
             policy,
@@ -267,6 +343,7 @@ def advance(workflow, user, policy, stage):
             evidence,
             guard=live_guard(workflow),
             callbacks=_callbacks(workflow, node, "executor"),
+            requester=requester,
         )
         if result is None:
             if workflow.status == "running":
@@ -279,7 +356,9 @@ def advance(workflow, user, policy, stage):
         item["executor"].update(status="succeeded", model=workflow.model, **result)
         stage.update(
             taskId=loop["successfulTaskId"],
-            inputs=deepcopy(loop["approvedInputs"]),
+            inputs=deepcopy(
+                loop.get("lastSubmission", {}).get("inputs", loop["approvedInputs"])
+            ),
             executionMode="agent_tools",
         )
         stage["modelDispatchRecorded"] = bool(
@@ -293,3 +372,9 @@ def advance(workflow, user, policy, stage):
         emit(workflow, "executor", node["id"], "node_delivered", result["summary"])
     task = authorized_task(user, stage["taskId"], policy, workflow=workflow)
     _collect_stage(workflow, user, policy, stage, task)
+
+
+def advance(workflow, user, policy, stage):
+    from apps.agent.business_flow_actions import request_action
+
+    return execute_stage_tools(workflow, user, policy, stage, requester=request_action)

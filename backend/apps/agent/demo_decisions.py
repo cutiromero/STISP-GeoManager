@@ -1283,6 +1283,24 @@ def _decide_once(
             "降权后仍可存在问题记录，不得声称全部清零；set_code是代号修正，不能与reclassify统称岩性重分类。"
             "不得编造野外观测、修改、矿化证据或找矿成果；远景为零时如实说明。"
         )
+    from apps.business_flows.execution_session import guidance, request_context
+
+    node_id = "finish" if stage["identifier"] == "finish" else stage["name"]
+    execution = request_context(workflow, node_id)
+    if execution:
+        from apps.business_flows.ledger import professional_ledger
+
+        payload["executionSession"] = execution
+        payload["ledger"] = professional_ledger(workflow)
+        from apps.business_flows.main_loop import specialized_context, MAIN_IDENTITY
+
+        payload["task"] = specialized_context(workflow, node_id)
+        instruction = (
+            MAIN_IDENTITY
+            + "当前工具子步骤按下列结果格式形成分析或报告：\n"
+            + instruction
+        )
+        instruction += guidance(workflow, node_id)
     messages = [
         {"role": "system", "content": instruction},
         {
@@ -1562,6 +1580,14 @@ def _decide_once(
             on_attempt(record)
         decision.update(modelMode="real", modelName=model.name)
         progress("complete")
+        from apps.business_flows.main_loop import remember
+
+        remember(
+            workflow,
+            "finish" if stage["identifier"] == "finish" else stage["name"],
+            "write_report" if stage["identifier"] == "finish" else "review_disposition",
+            decision.get("resultSummary", ""),
+        )
         return decision, edits
 
 

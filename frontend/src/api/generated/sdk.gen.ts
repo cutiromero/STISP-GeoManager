@@ -3376,7 +3376,7 @@ export const listBusinessFlowRuns = <ThrowOnError extends boolean = false>(optio
 /**
  * 按节点查看真实模型思考、响应和行动
  *
- * 仅按需读取当前本人项目的历史或运行中记录；每次重新校验来源权限，不触发生成、计算或审批，不返回系统提示及凭据。
+ * 按需读取本人当前项目记录。普通节点按节点筛选；_main仅聚合同一主执行会话，不混入独立审核。不触发生成、计算、审批，不返回系统提示或凭据。
  */
 export const getBusinessFlowNodeTrace = <ThrowOnError extends boolean = false>(options: Options<GetBusinessFlowNodeTraceData, ThrowOnError>): RequestResult<GetBusinessFlowNodeTraceResponses, GetBusinessFlowNodeTraceErrors, ThrowOnError> => (options.client ?? client).get<GetBusinessFlowNodeTraceResponses, GetBusinessFlowNodeTraceErrors, ThrowOnError>({
     security: [{

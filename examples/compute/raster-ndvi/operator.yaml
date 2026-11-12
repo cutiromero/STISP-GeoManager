@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "identifier": "raster-ndvi",
   "name": "NDVI示例",
-  "version": "1.0.1",
-  "description": "NDVI示例的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
+  "version": "1.0.2",
+  "description": "依据实际红光与近红外波段计算NDVI；按输入波段语义选择red与nir，保持原网格、scale/offset与NoData处理。",
   "author": "平台示例算法",
   "runtime": "python-geospatial-v1",
   "inputs": [
@@ -12,7 +12,33 @@
       "label": "多波段影像",
       "kind": "raster",
       "minBands": 2,
-      "required": true
+      "required": true,
+      "description": "多波段影像；原始来源只读，输出为新派生数据。",
+      "fields": [
+        {
+          "role": "red",
+          "description": "红光波段",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "parameter": "red"
+        },
+        {
+          "role": "nir",
+          "description": "近红外波段",
+          "types": [
+            "integer",
+            "number"
+          ],
+          "required": true,
+          "parameter": "nir"
+        }
+      ],
+      "crs": {
+        "mode": "any"
+      }
     }
   ],
   "parameters": [
@@ -22,7 +48,12 @@
       "type": "band",
       "input": "image",
       "default": 1,
-      "required": true
+      "required": true,
+      "help": "当前输入中红光波段的实际序号，从1开始；不要沿用其他影像的固定序号。",
+      "agent": {
+        "adjustable": true,
+        "advice": "依据实际波段名称、波长或传感器信息选择；序号须在当前输入范围内，红光与近红外不能相同。"
+      }
     },
     {
       "key": "nir",
@@ -30,7 +61,12 @@
       "type": "band",
       "input": "image",
       "default": 2,
-      "required": true
+      "required": true,
+      "help": "当前输入中近红外波段的实际序号，从1开始；不要沿用其他影像的固定序号。",
+      "agent": {
+        "adjustable": true,
+        "advice": "依据实际波段名称、波长或传感器信息选择；序号须在当前输入范围内，红光与近红外不能相同。"
+      }
     }
   ],
   "outputs": [
@@ -40,11 +76,11 @@
       "kind": "raster",
       "file": "ndvi.tif",
       "required": true,
-      "description": "无量纲NDVI，红光与近红外应用文件scale/offset后计算，分母为0或无效观测写为NoData=-9999；保留原网格，不代表植被类型真值。",
+      "description": "无量纲NDVI，红光与近红外应用输入文件scale/offset后计算；分母为0或无效观测写为NoData=-9999，保留原网格。",
       "fields": [
         {
           "role": "ndvi",
-          "description": "近红外与红光归一化差值",
+          "description": "实际红光与近红外的归一化差值",
           "types": [
             "number"
           ],
@@ -64,8 +100,34 @@
     "dataTypes": [
       "raster"
     ],
-    "summary": "NDVI示例的标准接入示例；管理员须使用小样试运行并核对结果后发布。",
-    "useWhen": "输入具备NDVI示例所需的实际来源和显式参数。",
-    "avoidWhen": "不用于推断未声明的科学含义、单位或人工批准；不更改原始来源。"
-  }
+    "summary": "依据实际红光与近红外波段计算NDVI；按输入波段语义选择red与nir，保持原网格、scale/offset与NoData处理。",
+    "useWhen": "输入为具有真实红光和近红外观测的多波段影像；按波段名称、波长或明确的传感器映射选择参数。",
+    "avoidWhen": "波段含义不足以判断时先补充说明；不能把其他光谱通道猜作红光或近红外。"
+  },
+  "errors": [
+    {
+      "code": "INPUT_INVALID",
+      "meaning": "实际输入、规则或参数未通过算子已有检查",
+      "remedy": "replace_data",
+      "precondition": "输入须满足清单语义及算子规则约束；人工批准必须绑定当前快照"
+    }
+  ],
+  "resources": {
+    "duration": "minutes",
+    "memory": "medium",
+    "scaling": "时间随实际像元/要素与规则数量增加；栅格分块读取，复杂几何叠加可能增加峰值内存。small约小于512MiB，medium约512MiB至2GiB，large高于2GiB；均非资源保证。"
+  },
+  "selfTests": [
+    {
+      "name": "六波段输入选择实际红光与近红外",
+      "fixture": "selftest/smoke.json",
+      "expect": {
+        "files": {
+          "ndvi.tif": {
+            "bands": 1
+          }
+        }
+      }
+    }
+  ]
 }

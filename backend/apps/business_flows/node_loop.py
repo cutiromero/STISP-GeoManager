@@ -21,6 +21,7 @@ from .state import binding, emit, persist, state, WorkflowControlChanged
 
 ACTION_LABELS = {
     "read_evidence": "读取证据片段",
+    "read_task_record": "回顾任务节点记录",
     "operator_catalog": "查询可用算子",
     "preflight_operator": "检查算子输入差距",
     "run_operator": "提交算子计算",
@@ -385,6 +386,14 @@ def resolve_output_bindings(workflow, user, policy, node, loop, inputs):
         .get("outputs", {})
         .get("evidence", [])
     }
+    from . import logic_nodes
+    from .execution_session import session
+
+    if logic_nodes.enabled(workflow) and session(workflow):
+        visible.update(
+            f"output-{identity}"
+            for identity in logic_nodes.ancestor_output_ids(workflow, node)
+        )
     result = deepcopy(inputs)
     pending = False
     for key, reference in inputs.items():
@@ -499,7 +508,7 @@ def store_result(workflow, node, item, action, result, *, arguments=None):
     loop["evidence"][identity] = {
         "id": identity,
         "kind": "tool",
-        "title": ACTION_LABELS[action],
+        "title": ACTION_LABELS.get(action, "被拒绝的工具动作"),
         "result": deepcopy(result),
     }
     preview = (
@@ -540,7 +549,7 @@ def store_result(workflow, node, item, action, result, *, arguments=None):
         preview["preview"] = preview["preview"][: max(0, len(preview["preview"]) - 256)]
     loop["lastObservation"] = {"evidenceId": identity, "result": preview}
     summary = (
-        ACTION_LABELS[action]
+        ACTION_LABELS.get(action, "被拒绝的工具动作")
         + "："
         + (
             str(result.get("message", result.get("summary", "结果已登记为证据")))[:180]
@@ -566,6 +575,9 @@ def store_result(workflow, node, item, action, result, *, arguments=None):
     row["usage"] = deepcopy(loop.get("lastAudit", {}).get("usage", {}))
     row["requestId"] = loop.get("lastAudit", {}).get("requestId", "")
     loop["history"] = [*loop["history"], row][-MAX_HISTORY:]
+    from .main_loop import remember
+
+    remember(workflow, node["id"], action, summary)
     loop.pop("pending", None)
     emit(workflow, "executor", node["id"], "node_tool_step", summary, data=row)
 
@@ -714,6 +726,17 @@ def execute_tool(
     policy = require_access(user, "agent", workflow.model)
     if len(encoded(arguments)) > MAX_TOOL_BYTES:
         raise ComputeError("单个动作参数超过8192字节")
+    if action == "read_task_record":
+        from .execution_session import task_record
+
+        result = task_record(
+            workflow,
+            arguments.get("nodeId"),
+            offset=arguments.get("offset", 0),
+            limit=arguments.get("limit", 8),
+        )
+        guard()
+        return result
     if action == "read_evidence":
         rows = {row["id"]: row for row in [*evidence, *loop["evidence"].values()]}
         identity, offset, length = (
@@ -935,7 +958,26 @@ def collection_shape(converted, collections):
 
 
 def advance_loop(workflow, user, policy, node, item, evidence, *, guard, callbacks):
-    from apps.agent.business_flow_actions import request_action, ActionFormatError
+    from apps.agent.business_flow_actions import request_action
+
+    return advance_tool_execution(
+        workflow,
+        user,
+        policy,
+        node,
+        item,
+        evidence,
+        guard=guard,
+        callbacks=callbacks,
+        requester=request_action,
+    )
+
+
+def advance_tool_execution(
+    workflow, user, policy, node, item, evidence, *, guard, callbacks, requester
+):
+    """Execute tools and resume compute; the caller owns the model/agent loop."""
+    from apps.agent.business_flow_actions import ActionFormatError
     from apps.agent.compute_tools import authorized_task
 
     loop = loop_state(item)
@@ -1074,7 +1116,7 @@ def advance_loop(workflow, user, policy, node, item, evidence, *, guard, callbac
                     for row in loop["evidence"].values()
                 ],
             ]
-            response = request_action(
+            response = requester(
                 workflow,
                 node,
                 rows,

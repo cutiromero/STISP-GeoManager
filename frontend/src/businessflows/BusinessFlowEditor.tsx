@@ -27,6 +27,7 @@ export function newBusinessFlowSpec(): BusinessFlowSpec {
   return {
     schemaVersion: 1,
     adapter: "research_flow",
+    executionMode: "main_agent",
     inputRequirements: [],
     nodes: [
       {

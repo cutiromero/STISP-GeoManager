@@ -232,6 +232,24 @@ export default function InputAdaptationReview({
                               })
                             }
                           />
+                          {item.targetSemantics === "class_mask_stack_v1" &&
+                            spec.key === "class_labels" && (
+                              <small>
+                                {ui(
+                                  '仅含0和1时保留 {}。其他分类值按原始图例填写，例如 {"1":"类别A","2":"类别B"}，将名称替换为实际类别。数字键须覆盖全部有效值；已声明的NoData不用填写。背景值未声明为NoData时也需明确处理。',
+                                  'Keep {} for 0/1 rasters. Otherwise enter the actual value-to-label legend, for example {"1":"Class A","2":"Class B"}. Cover all valid values. Declared NoData is excluded; background values need explicit handling.',
+                                )}
+                              </small>
+                            )}
+                          {item.targetSemantics === "class_mask_stack_v1" &&
+                            spec.key === "label" && (
+                              <small>
+                                {ui(
+                                  "单波段0/1资料中，1所代表的真实类别名称；已有波段名称时优先保留。",
+                                  "For a single 0/1 band, enter the actual class represented by 1. Existing band labels are preserved.",
+                                )}
+                              </small>
+                            )}
                         </label>
                       ))}
                   </div>

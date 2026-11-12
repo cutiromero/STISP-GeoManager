@@ -659,6 +659,18 @@ export default function BusinessFlowsPage() {
                   <FlowInspector node={node} spec={spec} />
                 </div>
                 <section className="business-flow-contracts">
+                  {spec.skill && (
+                    <details>
+                      <summary>
+                        {ui("配套执行技能", "Workflow skill")} ·{" "}
+                        {spec.skill.title}
+                      </summary>
+                      <p>{spec.skill.instructions}</p>
+                      {node && spec.skill.nodeInstructions?.[node.id] && (
+                        <p>{spec.skill.nodeInstructions[node.id]}</p>
+                      )}
+                    </details>
+                  )}
                   <div className="business-flow-section-heading">
                     <h3>{ui("开始前需要的资料", "Required inputs")}</h3>
                     <p>

@@ -81,6 +81,42 @@ BACKEND_TESTS = {
     "standards": ("integration/core/test_api.py", "integration/catalog/test_api.py"),
 }
 BACKEND_OVERRIDES = {
+    "backend/apps/agent/business_flow_actions.py": (
+        "unit/test_business_flow_tool_protocol.py",
+        "integration/test_business_flow_node_tools.py",
+        "integration/test_business_flow_main_agent.py",
+    ),
+    "backend/apps/agent/business_flow_model.py": (
+        "integration/test_business_flow_context.py",
+        "integration/test_business_flow_execution.py",
+        "integration/test_business_flow_review.py",
+        "integration/test_business_flow_reasoning_effort.py",
+        "integration/test_business_flow_node_trace.py",
+        "integration/test_business_flow_main_agent.py",
+        "integration/test_logic_flow_budget_audit.py",
+    ),
+    "backend/apps/business_flows/execution_session.py": (
+        "unit/test_business_flow_main_agent.py",
+        "integration/test_business_flow_main_agent.py",
+        "integration/test_business_flow_node_trace.py",
+    ),
+    "backend/apps/business_flows/main_loop.py": (
+        "unit/test_business_flow_main_agent.py",
+        "integration/test_business_flow_main_agent.py",
+        "integration/test_main_agent_ndvi.py",
+        "integration/test_logic_node_execution.py",
+    ),
+    "backend/apps/compute/operator_checks.py": (
+        "integration/test_compute_operator_protocol.py",
+        "unit/test_compute_examples.py",
+        "integration/test_main_agent_ndvi.py",
+    ),
+    "backend/apps/compute/templates.py": (
+        "integration/test_compute.py",
+        "integration/test_compute_operator_protocol.py",
+        "integration/test_agent_compute_intent.py",
+        "integration/test_agent_raster_metadata.py",
+    ),
     "backend/apps/agent/business_flow_review.py": (
         "integration/test_business_flow_review.py",
     ),

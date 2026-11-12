@@ -100,6 +100,36 @@ function show(value = request) {
       ),
   };
 }
+it("explains class mapping beside the actual parameter input", async () => {
+  const mapping = plan();
+  const item = mapping.items[0]!;
+  item.targetTypes = ["raster"];
+  item.targetSemantics = "class_mask_stack_v1";
+  item.parameters = { class_labels: "{}" };
+  item.candidates![0]!.parameters = [
+    {
+      key: "class_labels",
+      label: "非0/1分类值的真实名称映射（JSON）",
+      type: "string",
+      default: "{}",
+    },
+  ];
+  vi.mocked(businessFlowsApi.prepareInputs).mockResolvedValue(mapping);
+  const view = show();
+  expect(await screen.findByText(/仅含0和1时保留/)).toBeVisible();
+  expect(screen.getByText(/数字键须覆盖全部有效值/)).toHaveTextContent(
+    '{"1":"类别A","2":"类别B"}',
+  );
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: '{"2":"实际类别"}' },
+  });
+  expect(view.onChoices).toHaveBeenLastCalledWith({
+    observations: {
+      versionId: 9,
+      parameters: { class_labels: '{"2":"实际类别"}' },
+    },
+  });
+});
 it("prepares non-geological data once and changes only declared conversion parameters", async () => {
   const view = show();
   await screen.findByText("区域观测栅格");

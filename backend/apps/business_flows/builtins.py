@@ -2,6 +2,8 @@
 
 from copy import deepcopy
 
+from .execution_session import default_skill
+
 MINERALS = ("hematite", "chlorite", "hydromica", "calcite", "dolomite")
 GEOLOGY_ROLES = {
     "lithology": ("岩性图", "vector"),
@@ -33,7 +35,7 @@ GEOLOGY_NODES = (
 )
 
 
-def geology_definition(*, legacy_roles=False):
+def geology_definition(*, legacy_roles=False, main_agent=False):
     input_roles = tuple(GEOLOGY_ROLES) if legacy_roles else GEOLOGY_CURRENT_ROLES
     nodes = []
     for index, (identity, title, kind, roles) in enumerate(GEOLOGY_NODES):
@@ -64,6 +66,15 @@ def geology_definition(*, legacy_roles=False):
     return {
         "schemaVersion": 1,
         "adapter": "geology_generic",
+        **({"executionMode": "main_agent"} if main_agent else {}),
+        "skill": {
+            **default_skill("geology_generic"),
+            "nodeInstructions": {
+                "inputs": "按真实字段与样本确认资料含义，蚀变类别不受示例矿物列表限制。",
+                "apply": "核对处置证据，执行范围以用户实际批准记录为准，审核通过不能替代人工批准。",
+                "finish": "使用完整实际统计与成果引用撰写结论，明确剩余问题和限制，不能以样本推算全集。",
+            },
+        },
         "inputRequirements": [
             {
                 "key": key,
@@ -90,10 +101,16 @@ def geology_definition(*, legacy_roles=False):
     }
 
 
-def source_summary_definition():
+def source_summary_definition(*, main_agent=False):
     return {
         "schemaVersion": 1,
         "adapter": "research_flow",
+        **({"executionMode": "main_agent"} if main_agent else {}),
+        "skill": {
+            "title": "只读科研资料梳理",
+            "instructions": "围绕用户目标梳理实际可见资料，区分事实、推断和未读内容。引用真实来源，按需读取有界内容，不复制完整文件或累积历史。资料不足时说明具体缺口，遇到错误依据诊断处理。遵循当前节点工具及只读要求，不能编造计算、修改或批准。",
+            "nodeInstructions": {},
+        },
         "inputRequirements": [
             {
                 "key": "source",
@@ -130,8 +147,8 @@ def source_summary_definition():
     }
 
 
-def source_review_definition():
-    definition = source_summary_definition()
+def source_review_definition(*, main_agent=False):
+    definition = source_summary_definition(main_agent=main_agent)
     summary = definition["nodes"][0]
     summary["title"] = "梳理资料并形成审校稿"
     summary["description"] = (
@@ -159,19 +176,19 @@ def builtin_flows():
                 "code": "geology-logic-reasoning",
                 "name": "逻辑推理",
                 "description": "综合岩性、构造与蚀变，检查地质一致性，经过独立审核与必要人工批准后完成修正、复核和找矿远景推断。",
-                "definition": geology_definition(),
+                "definition": geology_definition(main_agent=True),
             },
             {
                 "code": "research-source-summary",
                 "name": "科研资料摘要",
                 "description": "对当前项目已授权资料进行只读梳理，快速形成摘要与研究线索；默认无需AI审核或人工确认。",
-                "definition": source_summary_definition(),
+                "definition": source_summary_definition(main_agent=True),
             },
             {
                 "code": "research-source-review",
                 "name": "科研资料独立审校",
                 "description": "执行智能体只读梳理资料结构、适用范围与研究解释，独立审核智能体核对后由用户明确接受报告，保留审核与返修依据。",
-                "definition": source_review_definition(),
+                "definition": source_review_definition(main_agent=True),
             },
         ]
     )

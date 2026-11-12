@@ -31,9 +31,18 @@
             "truncated": false
           },
           "startedAt": "2026-11-12T05:00:00Z",
-          "finishedAt": "2026-11-12T05:00:10Z"
+          "finishedAt": "2026-11-12T05:00:10Z",
+          "nodeId": "check",
+          "executorSessionId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         }
-      ]
+      ],
+      "mainAgent": {
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mode": "main_agent_v1",
+        "skillTitle": "逻辑推理执行指导",
+        "skillHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "flowVersionId": 25
+      }
     }
   }
 }

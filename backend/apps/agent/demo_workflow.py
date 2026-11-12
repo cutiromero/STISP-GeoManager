@@ -478,6 +478,10 @@ def prepare_demo(workflow, user, p) -> None:
                 if node["id"] in {"apply", "finish"}
             )
         )
+        from apps.business_flows.execution_session import session
+
+        if session(workflow):
+            decisions_required += required_steps + 1
     if workflow.max_iterations < decisions_required:
         if logic_nodes.enabled(workflow):
             raise ComputeError(
@@ -1396,7 +1400,14 @@ def advance_demo(workflow_id) -> None:
                 and stage["identifier"] != "finish"
                 and (stage["name"] != "apply" or stage.get("modificationsApproval"))
             ):
-                logic_nodes.advance(workflow, user, p, stage)
+                from apps.business_flows.execution_session import session
+
+                if session(workflow):
+                    from apps.business_flows.main_loop import professional_tick
+
+                    professional_tick(workflow, user, p, stage)
+                else:
+                    logic_nodes.advance(workflow, user, p, stage)
                 return
             if stage.get("taskId"):
                 task = authorized_task(user, stage["taskId"], p, workflow=workflow)
@@ -1951,6 +1962,18 @@ def advance_demo(workflow_id) -> None:
                     )
                 return
             if stage["identifier"] == "finish":
+                from apps.business_flows.execution_session import session
+
+                if session(workflow):
+                    from apps.business_flows.main_loop import finish_workflow
+
+                    if not finish_workflow(
+                        workflow,
+                        user,
+                        p,
+                        summary=stage["decision"].get("resultSummary", ""),
+                    ):
+                        return
                 with transaction.atomic():
                     current = locked_workflow(workflow.id)
                     check_pause(workflow)

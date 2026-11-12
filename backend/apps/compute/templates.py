@@ -3,7 +3,7 @@ from pathlib import Path
 import zipfile
 import yaml
 from django.conf import settings
-from .packages import ComputeError
+from .packages import ComputeError, validate_manifest
 
 TEMPLATES = {
     1: "raster-linear",
@@ -21,15 +21,19 @@ def build_package(template_id):
     if not name:
         raise ComputeError("模板不存在", 404)
     directory = Path(settings.PROGRAM_ROOT) / "examples" / "compute" / name
+    manifest = validate_manifest(
+        yaml.safe_load((directory / "operator.yaml").read_text())
+    )
+    files = {"main.py", "operator.yaml", "README.md"} | {
+        test["fixture"] for test in manifest.get("selfTests", [])
+    }
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(directory.iterdir()):
-            if path.is_file() and path.name in {
-                "main.py",
-                "operator.yaml",
-                "README.md",
-            }:
-                archive.writestr(path.name, path.read_bytes())
+        for relative in sorted(files):
+            path = directory / relative
+            if not path.is_file():
+                raise ComputeError("模板缺少声明文件：" + relative)
+            archive.writestr(relative, path.read_bytes())
     return stream.getvalue(), name
 
 

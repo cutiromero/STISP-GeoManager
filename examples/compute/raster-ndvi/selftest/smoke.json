@@ -1,0 +1,20 @@
+{
+  "inputs": {
+    "image": {
+      "kind": "raster",
+      "shape": [2, 2],
+      "dtype": "float32",
+      "crs": "EPSG:32646",
+      "transform": [10, 0, 300000, 0, -10, 4000000],
+      "bands": [
+        {"name": "Blue", "fill": 9},
+        {"name": "Green", "fill": 9},
+        {"name": "Red", "fill": 2},
+        {"name": "Red edge", "fill": 9},
+        {"name": "NIR", "fill": 6},
+        {"name": "SWIR", "fill": 9}
+      ]
+    }
+  },
+  "parameters": {"red": 3, "nir": 5}
+}

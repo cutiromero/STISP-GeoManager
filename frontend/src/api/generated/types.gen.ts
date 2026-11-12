@@ -12283,6 +12283,57 @@ export type BusinessFlowSpec = {
      */
     outputRequirements: Array<string>;
     inputPreparation?: BusinessFlowInputPreparationPolicy;
+    skill?: BusinessFlowSkill;
+    /**
+     * main_agent由一个任务级主循环选择合法目标、调用工具并继续；省略保留旧节点执行方式。
+     */
+    executionMode?: 'nodes' | 'main_agent';
+};
+
+/**
+ * 随业务流版本固定的简短配套技能；只注入核心及当前节点指导，不保存文件正文。
+ */
+export type BusinessFlowSkill = {
+    /**
+     * 技能名称
+     */
+    title: string;
+    /**
+     * 简短核心执行指导，仍服从节点工具和人工边界
+     */
+    instructions: string;
+    /**
+     * 按节点选择的专项指导，不把全部节点说明一起发送
+     */
+    nodeInstructions?: {
+        [key: string]: string;
+    };
+};
+
+/**
+ * 贯穿本次任务的主执行会话，仅含身份和冻结技能引用，不传递台账或文件正文。
+ */
+export type BusinessFlowExecutorSession = {
+    /**
+     * 同一任务主执行者的稳定会话编号
+     */
+    id: string;
+    /**
+     * 持续执行模式
+     */
+    mode: 'main_agent_v1';
+    /**
+     * 本任务配套技能名称
+     */
+    skillTitle: string;
+    /**
+     * 冻结配套技能SHA-256
+     */
+    skillHash: string;
+    /**
+     * 技能所属的冻结业务流发布版本
+     */
+    flowVersionId: number;
 };
 
 /**
@@ -12545,6 +12596,14 @@ export type BusinessFlowModelTraceRecord = {
     structuredResult?: {
         [key: string]: unknown;
     };
+    /**
+     * 实际发起本次执行请求的主执行会话；独立审核和旧任务可省略
+     */
+    executorSessionId?: string;
+    /**
+     * 调用所属工作目标；_main表示任务级调度，主执行记录入口聚合同一主执行会话。
+     */
+    nodeId?: string;
 };
 
 /**
@@ -12552,7 +12611,7 @@ export type BusinessFlowModelTraceRecord = {
  */
 export type BusinessFlowNodeTrace = {
     /**
-     * 当前发布定义中的节点编号
+     * 当前节点编号；_main表示主执行完整任务循环
      */
     nodeId: string;
     /**
@@ -12577,6 +12636,7 @@ export type BusinessFlowNodeTrace = {
      * 没有更多记录时为空
      */
     nextOffset: number | null;
+    mainAgent?: BusinessFlowExecutorSession;
 };
 
 /**
@@ -12839,6 +12899,7 @@ export type BusinessFlowRun = {
      */
     events: Array<BusinessFlowEvent>;
     inputPreparation?: BusinessFlowInputPlan;
+    mainAgent?: BusinessFlowExecutorSession;
     [key: string]: unknown;
 };
 
