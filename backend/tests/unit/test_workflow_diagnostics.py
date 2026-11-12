@@ -22,6 +22,7 @@ from apps.compute.packages import ComputeError
         (ModelError("模型窗口服务不可用"), "model_protocol"),
         (ModelError("无法核实模型窗口或输入 token 数，请稍后重试"), "model_protocol"),
         (ModelError("JSON响应无效"), "model_protocol"),
+        (ComputeError("独立审核模型未返回结果正文，未予通过"), "model_protocol"),
         (ModelError("思考与正文已达到本次生成 token 上限"), "budget"),
         (ComputeError("计算未成功"), "operator"),
         (ComputeError("实际检查结果已变化"), "data"),

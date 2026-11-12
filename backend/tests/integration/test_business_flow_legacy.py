@@ -512,7 +512,12 @@ def test_final_review_uses_complete_report_facts_quality_and_frozen_approval_sco
         "check-task",
         "issues",
         [
-            {"rule_id": "R1", "status": "suggested", "feature_id": str(i)}
+            {
+                "element": "lithology",
+                "rule_id": "R1",
+                "status": "suggested",
+                "feature_id": str(i),
+            }
             for i in range(20)
         ],
     )
@@ -575,6 +580,7 @@ def test_final_review_uses_complete_report_facts_quality_and_frozen_approval_sco
     )
     facts = packet["verifiedReportFacts"]
     assert facts["initialIssueCount"] == 20
+    assert facts["initialIssuesByElement"] == {"lithology": 20}
     assert facts["recheckRemainingIssueCount"] == 9
     assert facts["executedDispositionCount"] == 11
     assert facts["executedActions"]["downweight"] == 11

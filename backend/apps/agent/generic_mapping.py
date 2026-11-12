@@ -222,6 +222,7 @@ def model_targets(workflow, policy, roles, *, on_thinking=None, on_progress=None
                     monitor_guard=guard.poll,
                 ):
                     chunks.append(chunk)
+                    activity.response(chunk)
                     output_chars += len(chunk)
                     progress("responding", outputChars=output_chars)
                 raw = _response_text("".join(chunks))

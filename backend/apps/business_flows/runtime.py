@@ -94,7 +94,9 @@ def authorize_inputs(user, policy, versions, *, history=False):
 
 
 def canonical_current_node(workflow):
-    if workflow.workflow_type == "geology_generic":
+    if workflow.workflow_type != "business_flow" and workflow.parameters.get(
+        "_businessFlow"
+    ):
         if (
             workflow.current_step
             in {
@@ -143,6 +145,10 @@ def serialize_run(user, workflow, *, control_only=False):
         item.pop("executionContextId", None)
         item.pop("contextPreviousExecutor", None)
         item.pop("reviewContextBudget", None)
+        for actor in ("executor", "reviewer"):
+            item.get(actor, {}).get("audit", {}).pop("responsePreview", None)
+        for attempt in item.get("attempts", []):
+            attempt.pop("responsePreview", None)
         loop = item.pop("toolLoop", None)
         if loop:
             item["toolProgress"] = {

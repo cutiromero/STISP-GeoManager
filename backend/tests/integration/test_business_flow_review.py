@@ -258,6 +258,33 @@ def test_repeated_malformed_review_stops_without_an_accepted_decision(env, monke
     assert not any(row["status"] == "accepted" for row in records)
 
 
+def test_minimal_acceptance_omits_only_empty_display_fields(env, monkeypatch):
+    install_stream(
+        monkeypatch, {key: ACCEPT[key] for key in ("decision", "reason", "evidenceIds")}
+    )
+    result = run(env)
+    assert result["decision"] == "accept"
+    assert result["issues"] == [] and result["repairInstructions"] == ""
+    assert result["humanApprovalRequired"] is True
+
+
+def test_thinking_without_body_stays_a_failure_and_retains_actual_activity(
+    env, monkeypatch
+):
+    def thinking_only(model, messages, maximum, guard, **options):
+        guard()
+        options["on_thinking"]("核对实际统计。")
+        yield from ()
+
+    monkeypatch.setattr(review.provider, "stream", thinking_only)
+    with pytest.raises(review.ReviewSyntaxError, match="未返回结果正文"):
+        run(env)
+    records = list(env["workflow"].steps.filter(kind="model_activity"))
+    assert len(records) == 2
+    assert all(row.output_refs["modelActivity"]["thinkingChars"] > 0 for row in records)
+    assert all(row.output_refs["modelResponse"]["content"] == "" for row in records)
+
+
 def test_protocol_repair_does_not_reset_task_model_budget(env, monkeypatch):
     env["workflow"].max_iterations = 1
     env["workflow"].save(update_fields=["max_iterations"])

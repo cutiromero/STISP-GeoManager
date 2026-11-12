@@ -1562,6 +1562,10 @@ def advance_demo(workflow_id) -> None:
                 def record_attempt(attempt):
                     # Persist rejection before another network request; the final
                     # stage already belongs to plan.finalStage when not in stages.
+                    if "responseArtifact" in attempt:
+                        activity.response(
+                            attempt["responseArtifact"]["content"], append=False
+                        )
                     blocked = False
                     with transaction.atomic():
                         if attempt["status"] == "requesting":

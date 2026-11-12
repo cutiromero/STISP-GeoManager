@@ -66,6 +66,7 @@ type EdgePosition = {
   path: string;
   tone: string;
   kind: "main" | "gate" | "return";
+  junction?: { x: number; y: number };
 };
 
 export default function BusinessFlowGraph({
@@ -238,10 +239,11 @@ export default function BusinessFlowGraph({
           const x1 = from.right - box.left + 4,
             y1 = from.top + from.height / 2 - box.top;
           const x2 = anchor.left - box.left - 8,
-            middle = (x1 + x2) / 2;
+            stub = Math.min(x1 + 56, x2 - 12),
+            middle = (stub + x2) / 2;
           edges.push({
             key: `${parent}:${node.id}`,
-            path: `M${x1},${y1} C${middle},${y1} ${middle},${y} ${x2},${y}`,
+            path: `M${x1},${y1} H${stub} C${middle},${y1} ${middle},${y} ${x2},${y}`,
             kind: "main",
             tone: (
               parent === startId
@@ -292,6 +294,13 @@ export default function BusinessFlowGraph({
         hubs[role] = gx;
         const gy = (role === "ai" ? gateBox.bottom : gateBox.top) - box.top;
         const bus = role === "ai" ? gy + 24 : gy - 24;
+        const xs = [gx, ...junctions.map((item) => item.x)];
+        edges.push({
+          key: `${role}:bus`,
+          kind: "gate",
+          tone: `role-${role}`,
+          path: `M${gx},${gy} V${bus} M${Math.min(...xs)},${bus} H${Math.max(...xs)}`,
+        });
         for (const { node, anchor, x } of junctions) {
           const state = stateMap.get(node.id);
           const y = anchor.top + anchor.height / 2 - box.top;
@@ -304,22 +313,32 @@ export default function BusinessFlowGraph({
           );
           edges.push({
             key: `${node.id}:${role}`,
-            path: `M${gx},${gy} L${gx},${bus} L${x},${bus} L${x},${y}`,
+            path: `M${x},${bus} V${y}`,
             kind: "gate",
-            tone: presentation.done ? "is-complete" : "",
+            tone: `role-${role}${presentation.done ? " is-complete" : ""}`,
+            junction: { x, y },
           });
           const returned = businessFlowReturn(events, state);
           if (
-            returned?.event.actor === (role === "ai" ? "reviewer" : "human")
+            returned &&
+            !returned.resolved &&
+            returned.event.actor === (role === "ai" ? "reviewer" : "human")
           ) {
             const rx = anchor.left + anchor.width / 2 - box.left;
-            const ry = (role === "ai" ? anchor.top : anchor.bottom) - box.top;
-            const turn = role === "ai" ? bus + 13 : bus - 13;
+            const ry =
+              (role === "ai" ? anchor.top - 5 : anchor.bottom + 5) - box.top;
+            const turn = role === "ai" ? bus + 18 : bus - 18;
+            const sx = gx + 24,
+              direction = rx >= sx ? 1 : -1;
+            const radius = Math.min(8, Math.abs(rx - sx) / 2);
+            const startDirection = Math.sign(turn - gy),
+              endDirection = Math.sign(ry - turn);
             edges.push({
               key: `${node.id}:return`,
-              path: `M${gx - 20},${gy} L${gx - 20},${turn} L${rx},${turn} L${rx},${ry}`,
+              path: `M${sx},${gy} V${turn - startDirection * radius} Q${sx},${turn} ${sx + direction * radius},${turn} H${rx - direction * radius} Q${rx},${turn} ${rx},${turn + endDirection * radius} V${ry}`,
               kind: "return",
-              tone: returned.resolved ? "is-history" : "is-returned",
+              tone: `role-${role} is-returned`,
+              junction: { x: rx, y: ry },
             });
           }
         }
@@ -405,12 +424,13 @@ export default function BusinessFlowGraph({
             {ui("人工决定", "Human decision")}
           </span>
         )}
-        {events.some((event) =>
-          ["request_changes", "review_rejected"].includes(event.kind),
-        ) && (
+        {nodes.some((node) => {
+          const returned = businessFlowReturn(events, stateMap.get(node.id));
+          return returned && !returned.resolved;
+        }) && (
           <span className="flow-return-legend">
             <ReloadOutlined />
-            {ui("虚线为退回路径", "Dashed return path")}
+            {ui("圆角回路为退回路径", "Rounded paths show returns")}
           </span>
         )}
       </div>
@@ -509,7 +529,6 @@ export default function BusinessFlowGraph({
                       data-flow-review={edge.key}
                       d={edge.path}
                       className={edge.tone}
-                      markerEnd={`url(#${marker})`}
                     />
                   ))}
               </g>
@@ -517,11 +536,20 @@ export default function BusinessFlowGraph({
                 {geometry.edges
                   .filter((edge) => edge.kind === "return")
                   .map((edge) => (
-                    <path
+                    <path key={edge.key} d={edge.path} className={edge.tone} />
+                  ))}
+              </g>
+              <g className="flow-review-junctions">
+                {geometry.edges
+                  .filter((edge) => edge.junction)
+                  .map((edge) => (
+                    <circle
                       key={edge.key}
-                      d={edge.path}
+                      data-flow-review-junction={edge.key}
+                      cx={edge.junction!.x}
+                      cy={edge.junction!.y}
+                      r={3.5}
                       className={edge.tone}
-                      markerEnd={`url(#${marker})`}
                     />
                   ))}
               </g>

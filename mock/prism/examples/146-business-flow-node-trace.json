@@ -1,0 +1,39 @@
+{
+  "GET /api/business-flows/runs/{workflowId}/nodes/{nodeId}/trace/": {
+    "200": {
+      "nodeId": "check",
+      "title": "综合一致性检查",
+      "historical": false,
+      "nextOffset": null,
+      "actions": [
+        {
+          "step": 1,
+          "action": "preflight_operator",
+          "summary": "预检通过，尚未计算",
+          "parameterSummary": "{\"working_epsg\":32646}"
+        }
+      ],
+      "requests": [
+        {
+          "id": "example-1",
+          "role": "executor",
+          "attempt": 1,
+          "status": "complete",
+          "model": "Qwen",
+          "thinkingEnabled": true,
+          "reasoningEffort": "medium",
+          "thinkingText": "按本次实际字段核对输入后先预检。",
+          "thinkingChars": 18,
+          "thinkingTruncated": false,
+          "response": {
+            "content": "{\"action\":\"preflight_operator\",\"arguments\":{\"versionId\":1}}",
+            "sizeBytes": 65,
+            "truncated": false
+          },
+          "startedAt": "2026-11-12T05:00:00Z",
+          "finishedAt": "2026-11-12T05:00:10Z"
+        }
+      ]
+    }
+  }
+}

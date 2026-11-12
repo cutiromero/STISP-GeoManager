@@ -307,9 +307,36 @@ def test_only_apply_uses_issue_candidate_rows_and_all_other_stages_keep_full_ref
     for name in ("recheck", "relations", "prospect", "final_analysis"):
         actual = model_results([item], stage_name=name)[0]
         assert actual["rows"] == [] and actual["scope"] == "reference_only"
+        assert "countsByElement" not in actual
         for key in ("outputId", "taskId", "checksum", "rowCount", "countsByRule"):
             assert actual[key] == item[key]
     assert item == original
+
+
+def test_complete_issue_totals_are_computed_before_rows_become_references(tmp_path):
+    path = tmp_path / "actual-issues.csv"
+    rows = [
+        {"element": element, "rule_id": rule, "issue_id": f"{element}-{index}"}
+        for element, rule, count in [
+            ("lithology", "L-01", 76),
+            ("structure", "S-01", 38),
+            ("alteration", "A-01", 127),
+        ]
+        for index in range(count)
+    ]
+    write_table(path, rows)
+    actual = {"key": "issues", **table_rows(path, "issues")}
+    original = copy.deepcopy(actual)
+    projected = model_results([actual], stage_name="finish")[0]
+    assert projected["rows"] == []
+    assert projected["countsByElement"] == {
+        "lithology": 76,
+        "structure": 38,
+        "alteration": 127,
+    }
+    assert sum(projected["countsByElement"].values()) == projected["rowCount"] == 241
+    assert projected["countsByRule"] == actual["countsByRule"]
+    assert actual == original
 
 
 def test_public_plan_retains_exact_approval_and_actual_changes_for_map_verification():

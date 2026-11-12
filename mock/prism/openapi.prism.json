@@ -27974,6 +27974,130 @@
         }
       }
     },
+    "/api/business-flows/runs/{workflowId}/nodes/{nodeId}/trace/": {
+      "parameters": [
+        {
+          "name": "X-Project-Id",
+          "in": "header",
+          "required": true,
+          "description": "唯一当前项目编号",
+          "schema": {
+            "type": "integer",
+            "description": "当前项目",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "workflowId",
+          "in": "path",
+          "required": true,
+          "description": "本人当前项目任务编号",
+          "schema": {
+            "type": "string",
+            "description": "任务UUID",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "nodeId",
+          "in": "path",
+          "required": true,
+          "description": "冻结流程节点编号",
+          "schema": {
+            "type": "string",
+            "description": "节点编号"
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "required": false,
+          "description": "模型请求记录分页偏移，默认0",
+          "schema": {
+            "type": "integer",
+            "description": "偏移",
+            "minimum": 0,
+            "maximum": 1000,
+            "default": 0
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "业务流"
+        ],
+        "operationId": "getBusinessFlowNodeTrace",
+        "summary": "按节点查看真实模型思考、响应和行动",
+        "description": "仅按需读取当前本人项目的历史或运行中记录；每次重新校验来源权限，不触发生成、计算或审批，不返回系统提示及凭据。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "单节点真实思考、正文及动作记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessFlowNodeTrace"
+                },
+                "example": {
+                  "nodeId": "check",
+                  "title": "综合一致性检查",
+                  "historical": false,
+                  "nextOffset": null,
+                  "actions": [
+                    {
+                      "step": 1,
+                      "action": "preflight_operator",
+                      "summary": "预检通过，尚未计算",
+                      "parameterSummary": "{\"working_epsg\":32646}"
+                    }
+                  ],
+                  "requests": [
+                    {
+                      "id": "example-1",
+                      "role": "executor",
+                      "attempt": 1,
+                      "status": "complete",
+                      "model": "Qwen",
+                      "thinkingEnabled": true,
+                      "reasoningEffort": "medium",
+                      "thinkingText": "按本次实际字段核对输入后先预检。",
+                      "thinkingChars": 18,
+                      "thinkingTruncated": false,
+                      "response": {
+                        "content": "{\"action\":\"preflight_operator\",\"arguments\":{\"versionId\":1}}",
+                        "sizeBytes": 65,
+                        "truncated": false
+                      },
+                      "startedAt": "2026-11-12T05:00:00Z",
+                      "finishedAt": "2026-11-12T05:00:10Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
     "/api/business-flows/runs/{workflowId}/": {
       "parameters": [
         {
@@ -33593,6 +33717,22 @@
         "description": "当前或最近一次实际模型请求的轻量活动快照；不含工具参数或原始响应正文，暂停、取消和终态优先使用工作流状态",
         "additionalProperties": false,
         "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "实际模型请求对应的业务流节点；普通历史工作流可省略"
+          },
+          "actor": {
+            "type": "string",
+            "enum": [
+              "executor",
+              "reviewer"
+            ],
+            "description": "本次实际模型请求的执行或审核角色"
+          },
+          "requestId": {
+            "type": "string",
+            "description": "实际节点请求标识；历史记录可省略"
+          },
           "stage": {
             "type": "string",
             "description": "实际模型请求对应的工作流阶段"
@@ -49631,6 +49771,205 @@
         "required": [
           "items",
           "canManage"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowModelResponse": {
+        "type": "object",
+        "description": "已脱敏的实际模型正文；不包含系统提示或凭据。",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "实际正文，空字符串表示模型没有返回正文"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "是否达到已有审计体积保护"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "description": "脱敏正文的原始字节数",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "content",
+          "truncated",
+          "sizeBytes"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowModelTraceRecord": {
+        "type": "object",
+        "description": "一次实际模型请求的思考与正文；历史节点状态会单独标识。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "稳定记录标识"
+          },
+          "role": {
+            "type": "string",
+            "description": "执行或审核角色",
+            "enum": [
+              "executor",
+              "reviewer"
+            ]
+          },
+          "attempt": {
+            "type": "integer",
+            "description": "科研处理或模型尝试序号",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "description": "该次模型请求的真实状态"
+          },
+          "model": {
+            "type": "string",
+            "description": "实际模型名称"
+          },
+          "thinkingEnabled": {
+            "type": "boolean",
+            "description": "该次请求是否启用思考"
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "description": "实际传递的思考强度",
+            "enum": [
+              "low",
+              "medium",
+              "xhigh"
+            ]
+          },
+          "thinkingText": {
+            "type": "string",
+            "description": "已保存的真实思考片段",
+            "maxLength": 12000
+          },
+          "thinkingChars": {
+            "type": "integer",
+            "description": "实际接收思考字符数",
+            "minimum": 0
+          },
+          "thinkingTruncated": {
+            "type": "boolean",
+            "description": "思考片段是否截断"
+          },
+          "response": {
+            "description": "实际模型正文；null表示历史未保存原文",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessFlowModelResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "description": "无逐次历史记录时可为空",
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "模型请求开始时间",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finishedAt": {
+            "description": "尚未结束或无历史记录时可为空",
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "模型请求结束时间",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "structuredResult": {
+            "type": "object",
+            "description": "历史仅保存的结构化结果，不冒充原始模型响应",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "attempt",
+          "status",
+          "model",
+          "thinkingEnabled",
+          "reasoningEffort",
+          "thinkingText",
+          "thinkingChars",
+          "thinkingTruncated",
+          "response",
+          "startedAt",
+          "finishedAt"
+        ],
+        "additionalProperties": false
+      },
+      "BusinessFlowNodeTrace": {
+        "type": "object",
+        "description": "按本人、当前项目和资料权限按需读取单节点记录，不执行或恢复任务。",
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "description": "当前发布定义中的节点编号"
+          },
+          "title": {
+            "type": "string",
+            "description": "节点名称"
+          },
+          "requests": {
+            "type": "array",
+            "description": "按新到旧返回，每页最多5次请求",
+            "items": {
+              "$ref": "#/components/schemas/BusinessFlowModelTraceRecord"
+            },
+            "maxItems": 5
+          },
+          "actions": {
+            "type": "array",
+            "description": "该节点实际工具动作及有界结果预览",
+            "items": {
+              "type": "object",
+              "description": "真实工具动作，不含密钥或提示",
+              "additionalProperties": true
+            },
+            "maxItems": 24
+          },
+          "historical": {
+            "type": "boolean",
+            "description": "是否仅有旧版节点状态，缺少逐次模型记录"
+          },
+          "nextOffset": {
+            "description": "没有更多记录时为空",
+            "anyOf": [
+              {
+                "type": "integer",
+                "description": "下一页偏移",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "nodeId",
+          "title",
+          "requests",
+          "actions",
+          "historical",
+          "nextOffset"
         ],
         "additionalProperties": false
       },

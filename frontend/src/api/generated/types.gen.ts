@@ -2882,6 +2882,18 @@ export type AgentWorkflowReportPreview = {
  */
 export type AgentWorkflowModelActivity = {
     /**
+     * 实际模型请求对应的业务流节点；普通历史工作流可省略
+     */
+    nodeId?: string;
+    /**
+     * 本次实际模型请求的执行或审核角色
+     */
+    actor?: 'executor' | 'reviewer';
+    /**
+     * 实际节点请求标识；历史记录可省略
+     */
+    requestId?: string;
+    /**
      * 实际模型请求对应的工作流阶段
      */
     stage: string;
@@ -12451,6 +12463,120 @@ export type BusinessFlowList = {
      * 仅有后续页时返回下一页offset；缺省表示当前查询已加载完。请求下一页必须保持相同q。
      */
     nextOffset?: number;
+};
+
+/**
+ * 已脱敏的实际模型正文；不包含系统提示或凭据。
+ */
+export type BusinessFlowModelResponse = {
+    /**
+     * 实际正文，空字符串表示模型没有返回正文
+     */
+    content: string;
+    /**
+     * 是否达到已有审计体积保护
+     */
+    truncated: boolean;
+    /**
+     * 脱敏正文的原始字节数
+     */
+    sizeBytes: number;
+};
+
+/**
+ * 一次实际模型请求的思考与正文；历史节点状态会单独标识。
+ */
+export type BusinessFlowModelTraceRecord = {
+    /**
+     * 稳定记录标识
+     */
+    id: string;
+    /**
+     * 执行或审核角色
+     */
+    role: 'executor' | 'reviewer';
+    /**
+     * 科研处理或模型尝试序号
+     */
+    attempt: number;
+    /**
+     * 该次模型请求的真实状态
+     */
+    status: string;
+    /**
+     * 实际模型名称
+     */
+    model: string;
+    /**
+     * 该次请求是否启用思考
+     */
+    thinkingEnabled: boolean;
+    /**
+     * 实际传递的思考强度
+     */
+    reasoningEffort: 'low' | 'medium' | 'xhigh';
+    /**
+     * 已保存的真实思考片段
+     */
+    thinkingText: string;
+    /**
+     * 实际接收思考字符数
+     */
+    thinkingChars: number;
+    /**
+     * 思考片段是否截断
+     */
+    thinkingTruncated: boolean;
+    /**
+     * 实际模型正文；null表示历史未保存原文
+     */
+    response: BusinessFlowModelResponse | null;
+    /**
+     * 无逐次历史记录时可为空
+     */
+    startedAt: string | null;
+    /**
+     * 尚未结束或无历史记录时可为空
+     */
+    finishedAt: string | null;
+    /**
+     * 历史仅保存的结构化结果，不冒充原始模型响应
+     */
+    structuredResult?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * 按本人、当前项目和资料权限按需读取单节点记录，不执行或恢复任务。
+ */
+export type BusinessFlowNodeTrace = {
+    /**
+     * 当前发布定义中的节点编号
+     */
+    nodeId: string;
+    /**
+     * 节点名称
+     */
+    title: string;
+    /**
+     * 按新到旧返回，每页最多5次请求
+     */
+    requests: Array<BusinessFlowModelTraceRecord>;
+    /**
+     * 该节点实际工具动作及有界结果预览
+     */
+    actions: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * 是否仅有旧版节点状态，缺少逐次模型记录
+     */
+    historical: boolean;
+    /**
+     * 没有更多记录时为空
+     */
+    nextOffset: number | null;
 };
 
 /**
@@ -24557,6 +24683,67 @@ export type ListBusinessFlowRunsResponses = {
 };
 
 export type ListBusinessFlowRunsResponse = ListBusinessFlowRunsResponses[keyof ListBusinessFlowRunsResponses];
+
+export type GetBusinessFlowNodeTraceData = {
+    body?: never;
+    headers: {
+        /**
+         * 当前项目
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 任务UUID
+         */
+        workflowId: string;
+        /**
+         * 节点编号
+         */
+        nodeId: string;
+    };
+    query?: {
+        /**
+         * 偏移
+         */
+        offset?: number;
+    };
+    url: '/api/business-flows/runs/{workflowId}/nodes/{nodeId}/trace/';
+};
+
+export type GetBusinessFlowNodeTraceErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+    /**
+     * 服务当前没有可用的重型任务执行槽；可按 Retry-After 退避重试
+     */
+    503: ErrorResponse;
+};
+
+export type GetBusinessFlowNodeTraceError = GetBusinessFlowNodeTraceErrors[keyof GetBusinessFlowNodeTraceErrors];
+
+export type GetBusinessFlowNodeTraceResponses = {
+    /**
+     * 单节点真实思考、正文及动作记录
+     */
+    200: BusinessFlowNodeTrace;
+};
+
+export type GetBusinessFlowNodeTraceResponse = GetBusinessFlowNodeTraceResponses[keyof GetBusinessFlowNodeTraceResponses];
 
 export type GetBusinessFlowRunData = {
     body?: never;

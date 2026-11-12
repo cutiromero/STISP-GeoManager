@@ -15,6 +15,7 @@ import { useId, useState } from "react";
 import type { BusinessFlowRun } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
 import BusinessFlowGraph, { businessFlowLevels } from "./BusinessFlowGraph";
+import BusinessFlowNodeTrace from "./BusinessFlowNodeTrace";
 import {
   businessFlowProgress,
   businessFlowReturn,
@@ -243,6 +244,14 @@ export default function BusinessFlowMonitor({
             <span>{ui("节点详情", "NODE DETAILS")}</span>
             <strong>{selected.title}</strong>
             <p>{selected.description}</p>
+            {!unavailable && !diagram && selection?.flowId === flow.id && (
+              <BusinessFlowNodeTrace
+                key={`${flow.id}:${selected.id}`}
+                flowId={flow.id}
+                nodeId={selected.id}
+                state={selectedState}
+              />
+            )}
             {!unavailable && returned && (
               <div
                 className={`flow-monitor-return-detail${returned.resolved ? " is-resolved" : ""}`}
@@ -305,6 +314,14 @@ export default function BusinessFlowMonitor({
           <div className="flow-monitor-diagram-detail">
             <strong>{selected.title}</strong>
             <p>{selected.description}</p>
+            {!unavailable && selection?.flowId === flow.id && (
+              <BusinessFlowNodeTrace
+                key={`${flow.id}:${selected.id}`}
+                flowId={flow.id}
+                nodeId={selected.id}
+                state={selectedState}
+              />
+            )}
           </div>
         )}
       </Drawer>

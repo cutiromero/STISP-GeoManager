@@ -217,6 +217,18 @@ def model_results(results, *, stage_name):
                 for row in item.get("rows", [])
             ],
         }
+        if (
+            item["key"] == "issues"
+            and item.get("scope") == "all"
+            and len(item.get("rows", [])) == item.get("rowCount")
+            and all(
+                isinstance(row.get("element"), str) and row["element"]
+                for row in item.get("rows", [])
+            )
+        ):
+            value["countsByElement"] = dict(
+                Counter(row["element"] for row in item.get("rows", []))
+            )
         if item["key"] == "issues" and stage_name == "apply":
             from .geology_issue_groups import group_summaries
 

@@ -20,7 +20,18 @@ ACTIVE_STATUSES = {"requesting", "thinking", "responding", "validating"}
 
 
 class WorkflowModelActivity:
-    def __init__(self, workflow, stage, model, policy, guard):
+    def __init__(
+        self,
+        workflow,
+        stage,
+        model,
+        policy,
+        guard,
+        *,
+        node_id=None,
+        actor="executor",
+        request_id=None,
+    ):
         self.workflow = workflow
         self.guard = guard
         self.identity = {
@@ -29,6 +40,15 @@ class WorkflowModelActivity:
             "reasoningEffort": policy["reasoningEffort"],
             "modelName": model.name,
         }
+        if workflow.parameters.get("_businessFlow"):
+            from apps.business_flows.runtime import canonical_current_node
+
+            self.identity.update(
+                nodeId=node_id or canonical_current_node(workflow), actor=actor
+            )
+        if request_id:
+            self.identity["requestId"] = request_id
+        self.response_text = None
         self.state = None
         self.step_id = None
         self.saved_at = float("-inf")
@@ -43,6 +63,8 @@ class WorkflowModelActivity:
         poll()
 
     def _initialize(self, status, attempt):
+        if status == "requesting":
+            self.response_text = None
         self.state = {
             **self.identity,
             "status": status,
@@ -66,6 +88,9 @@ class WorkflowModelActivity:
             if previous:
                 self.step_id = previous.id
                 self.state.update(previous.output_refs.get("modelActivity", {}))
+                saved_response = previous.output_refs.get("modelResponse", {})
+                if isinstance(saved_response, dict):
+                    self.response_text = saved_response.get("content")
         else:
             self.step_id = None
 
@@ -95,6 +120,15 @@ class WorkflowModelActivity:
         self.state["thinkingText"] = accumulated[-THINKING_TEXT_LIMIT:]
         self._save()
 
+    def response(self, text, *, append=True):
+        """Keep actual model text privately; live activity publishes only its size."""
+        self.guard()
+        if self.state is None:
+            self._initialize("responding", 1)
+        self.response_text = ((self.response_text or "") + text) if append else text
+        self.state.update(status="responding", outputChars=len(self.response_text))
+        self._save(force=not append)
+
     def _save(self, *, force=False):
         now = time.monotonic()
         if (
@@ -107,13 +141,22 @@ class WorkflowModelActivity:
         checked_at = timezone.now()
         self.state["updatedAt"] = checked_at.isoformat()
         status = self.state["status"]
+        from .decision_audit import response_artifact
+
         values = {
             "status": "succeeded"
             if status == "complete"
             else "failed"
             if status == "failed"
             else "running",
-            "output_refs": {"modelActivity": dict(self.state)},
+            "output_refs": {
+                "modelActivity": dict(self.state),
+                **(
+                    {"modelResponse": response_artifact(self.response_text)}
+                    if self.response_text is not None
+                    else {}
+                ),
+            },
             "finished_at": None if status in ACTIVE_STATUSES else checked_at,
         }
         # The cursor and the snapshot must commit together: a reconnect must
@@ -132,6 +175,11 @@ class WorkflowModelActivity:
                     action={
                         "stage": self.identity["stage"],
                         "attempt": self.state["attempt"],
+                        **{
+                            key: self.identity[key]
+                            for key in ("nodeId", "actor", "requestId")
+                            if key in self.identity
+                        },
                     },
                     **values,
                 )

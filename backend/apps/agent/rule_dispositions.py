@@ -56,6 +56,7 @@ def report_payload(payload, workflow):
         for item in projected
         if item["key"] == "issues"
     }
+    issues = {item.get("taskId"): item for item in projected if item["key"] == "issues"}
     changes = [
         item
         for item in projected
@@ -64,6 +65,18 @@ def report_payload(payload, workflow):
     payload["verifiedReportFacts"] = {
         "initialIssueCount": issue_counts.get(stage_tasks.get("check")),
         "recheckRemainingIssueCount": issue_counts.get(stage_tasks.get("recheck")),
+        "initialIssuesByElement": issues.get(stage_tasks.get("check"), {}).get(
+            "countsByElement"
+        ),
+        "initialIssuesByRule": issues.get(stage_tasks.get("check"), {}).get(
+            "countsByRule"
+        ),
+        "recheckIssuesByElement": issues.get(stage_tasks.get("recheck"), {}).get(
+            "countsByElement"
+        ),
+        "recheckIssuesByRule": issues.get(stage_tasks.get("recheck"), {}).get(
+            "countsByRule"
+        ),
         "executedDispositionCount": changes[0].get("rowCount") if changes else None,
         "executedActions": dict(
             Counter(

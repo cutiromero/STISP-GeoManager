@@ -5,6 +5,7 @@ urlpatterns = [
     path("", views.flows),
     path("runs/", views.runs),
     path("runs/<uuid:workflow_id>/", views.run_detail),
+    path("runs/<uuid:workflow_id>/nodes/<str:node_id>/trace/", views.node_trace),
     path("runs/<uuid:workflow_id>/decide/", views.decide),
     path("runs/<uuid:workflow_id>/input-script/", views.input_script),
     path("runs/<uuid:workflow_id>/input-clarification/", views.input_clarification),

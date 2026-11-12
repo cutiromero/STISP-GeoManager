@@ -17,7 +17,7 @@ INSTRUCTION = """你是科研业务流的执行分析智能体，必须遵循冻
 不能声称修改过原始属性或几何，也不能代替用户批准重要节点，不能编造数字、数据或已执行操作。
 若提供revisionFeedback，它是当前节点本轮必须处理的返修要求：逐项纠正问题并明确剩余限制。
 返修意见不授予新的工具、写入、发布或人工批准权限；不得通过删除不利证据来通过审核。
-只输出JSON，严格为summary,findings,limitations,evidenceIds。
+输出一个JSON对象，必填summary,evidenceIds；findings与limitations为可选数组。
 summary为非空中文摘要；findings和limitations为字符串数组。资料不足时如实写入limitations。
 evidenceIds必须是本次真实证据编号的非空数组，不得引用未提供或上一次已失效的编号。
 不要输出工具调用、执行命令、原始文件路径或人工批准字段。"""
@@ -34,17 +34,22 @@ def _validate(raw, available):
         value = json.loads(raw)
     except (TypeError, ValueError) as error:
         raise ComputeError("业务流执行分析未返回有效JSON，结果未予采用") from error
-    if not isinstance(value, dict) or set(value) != {
-        "summary",
-        "findings",
-        "limitations",
-        "evidenceIds",
-    }:
+    if (
+        not isinstance(value, dict)
+        or set(value)
+        - {
+            "summary",
+            "findings",
+            "limitations",
+            "evidenceIds",
+        }
+        or not {"summary", "evidenceIds"} <= set(value)
+    ):
         raise ComputeError("业务流执行结果字段无效，不允许工具调用或人工批准")
     return {
         "summary": _text(value["summary"], "summary", 6000),
-        "findings": _strings(value["findings"], "findings", 30, 2000),
-        "limitations": _strings(value["limitations"], "limitations", 20, 1000),
+        "findings": _strings(value.get("findings", []), "findings", 30, 2000),
+        "limitations": _strings(value.get("limitations", []), "limitations", 20, 1000),
         "evidenceIds": _citations(value["evidenceIds"], available),
     }
 

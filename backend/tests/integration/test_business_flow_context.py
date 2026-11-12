@@ -206,7 +206,7 @@ def install_model(monkeypatch, *, window=32768, tokenizer=length_tokens):
                     for identity in identities
                 ]
             }
-        elif "decision,reason,issues" in messages[0]["content"]:
+        elif messages[0]["content"].startswith("你是独立的科研业务流节点审核"):
             result = {
                 "decision": "accept",
                 "reason": "核对实际输入与已说明的省略后通过",

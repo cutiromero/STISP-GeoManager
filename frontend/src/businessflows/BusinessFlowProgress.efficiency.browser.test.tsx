@@ -80,11 +80,23 @@ it("fits all nodes and unique terminals on entry, offsets review junctions and s
   const x = (role: string) =>
     Number(
       document
-        .querySelector(`[data-flow-review="apply:${role}"]`)!
-        .getAttribute("d")!
-        .match(/L([\d.]+),[\d.]+$/)![1],
+        .querySelector(`[data-flow-review-junction="apply:${role}"]`)!
+        .getAttribute("cx"),
     );
   expect(Math.abs(x("ai") - x("human"))).toBeGreaterThanOrEqual(30);
+  const aiLink = document.querySelector<SVGPathElement>(
+    '[data-flow-review="apply:ai"]',
+  )!;
+  const humanLink = document.querySelector<SVGPathElement>(
+    '[data-flow-review="apply:human"]',
+  )!;
+  expect(aiLink.getAttribute("marker-end")).toBeNull();
+  expect(humanLink.getAttribute("marker-end")).toBeNull();
+  expect(getComputedStyle(aiLink).stroke).not.toBe(
+    getComputedStyle(humanLink).stroke,
+  );
+  expect(getComputedStyle(aiLink).strokeDasharray).not.toBe("none");
+  expect(getComputedStyle(humanLink).strokeDasharray).not.toBe("none");
   const plus = screen.getByRole("button", { name: "放大流程图" });
   fireEvent.click(plus);
   fireEvent.click(plus);
@@ -222,9 +234,9 @@ it("keeps the return while executing again and requires a new human approval aft
   });
   view.rerender(graph(revised));
   await waitFor(() =>
-    expect(
-      document.querySelector(".flow-return-links path.is-history"),
-    ).toBeTruthy(),
+    expect(document.querySelectorAll(".flow-return-links path")).toHaveLength(
+      0,
+    ),
   );
   expect(screen.getByText("返工后通过")).toBeVisible();
   expect(businessFlowProgress(revised).completedNodes).toBe(1);

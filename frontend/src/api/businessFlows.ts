@@ -14,6 +14,7 @@ import type {
   BusinessFlowInputPlan,
   BusinessFlowInputScriptDetail,
   BusinessFlowInputClarification,
+  BusinessFlowNodeTrace,
 } from "./generated/types.gen";
 
 const invalid = (field: string): never => {
@@ -395,6 +396,34 @@ export const businessFlowsApi = {
       `/api/business-flows/runs/${encodeURIComponent(id)}/`,
       { ...options, validate: assertBusinessFlowRun },
     ),
+  nodeTrace: (
+    id: string,
+    nodeId: string,
+    options: { signal?: AbortSignal; offset?: number } = {},
+  ) => {
+    const { offset = 0, ...requestOptions } = options;
+    return requestJson<BusinessFlowNodeTrace>(
+      `/api/business-flows/runs/${encodeURIComponent(id)}/nodes/${encodeURIComponent(nodeId)}/trace/?offset=${offset}`,
+      {
+        ...requestOptions,
+        validate: (raw) => {
+          const value = record(raw, "nodeTrace");
+          if (
+            value.nodeId !== nodeId ||
+            typeof value.title !== "string" ||
+            !Array.isArray(value.requests) ||
+            !Array.isArray(value.actions) ||
+            typeof value.historical !== "boolean" ||
+            !(
+              value.nextOffset === null ||
+              Number.isSafeInteger(value.nextOffset)
+            )
+          )
+            invalid("nodeTrace");
+        },
+      },
+    );
+  },
   decide: (id: string, body: BusinessFlowDecision) =>
     requestJson<BusinessFlowRun>(
       `/api/business-flows/runs/${encodeURIComponent(id)}/decide/`,

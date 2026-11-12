@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261112-001 - 按节点读取模型思考、正文和行动
+
+- Status: BackendReady
+- Owner: codex/xintao，单人完成相关契约与实现。
+- Endpoints: GET /api/business-flows/runs/{workflowId}/nodes/{nodeId}/trace/
+- Change type: 新增只读、按需分页的节点记录。
+- OpenAPI change: BusinessFlowNodeTrace、BusinessFlowModelTraceRecord、BusinessFlowModelResponse；不扩充运行快照中的正文。
+- Mock examples: 沿用已有业务流状态；节点记录用实际模型活动和隔离测试数据覆盖。
+- Frontend reason: 点击右侧节点可查看执行者、审核者逐次思考与实际响应、真实工具动作及反馈。
+- Backend implementation notes: 复用model_activity步骤，正文独立保存并脱敏；逐请求重验本人、当前项目及来源访问，历史未保存原文时明确标识。
+- Verification: 节点隔离、分页、来源撤权、停止与切换、模型记录保存、节点面板及正式浏览器七节点验收。
+- Result: 本地和正式站验收分别记录，不以后台运行代替网页验收。
+
 ## API-20261111-004 - 业务流思考设置与逻辑推理节点工具执行
 
 - Status: BackendReady
@@ -622,6 +635,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261112-001 | BackendReady | Business flow node trace | 节点思考、实际响应和工具行动按需读取 | Updated | 146节点记录 | Implemented | 权限隔离、分页、节点切换及显示 | 不执行计算或科研批准 |
 | API-20261111-004 | BackendReady | Business flow start | 思考设置与专业节点工具执行 | Updated | 现有示例 | Implemented | 三档请求及真实七节点对照 | 科学配方与批准保持有效 |
 | API-20261111-003 | BackendReady | project deletion-preview / DELETE | 项目删除与通用资料保留 | 已更新 | 147-project-deletion | 已实现 | 定点权限、事务、引用、存储及浏览器 | 新增可空审计列，公开项目保护 |
 | API-20261111-002 | BackendReady | conversation deletion-preview / DELETE | 可选任务数据清理 | 已更新 | 146-conversation-cleanup | 已实现 | 专项及门禁 | 默认保留、归属及引用保护、实际计数 |

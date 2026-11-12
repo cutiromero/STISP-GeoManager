@@ -224,6 +224,24 @@ def own_workflow(user, workflow_id, *, allow_cancel=False):
 
 
 @endpoint(["GET"])
+def node_trace(request, workflow_id, node_id):
+    from .node_trace import node_trace as read_trace
+
+    try:
+        offset = int(request.GET.get("offset", "0"))
+    except (TypeError, ValueError) as error:
+        raise ValidationError("记录分页须为整数") from error
+    return JsonResponse(
+        read_trace(
+            request.user,
+            own_workflow(request.user, workflow_id),
+            node_id,
+            offset=offset,
+        )
+    )
+
+
+@endpoint(["GET"])
 def input_script(request, workflow_id):
     from .script_api import detail
 

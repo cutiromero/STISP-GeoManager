@@ -323,12 +323,35 @@ def request_node_result(
         "outputLimit": effective["maxOutputTokens"],
         "timeLimitSeconds": effective["maxRunSeconds"],
     }
+    activity = None
 
     def publish(status, **values):
+        nonlocal activity
         if status == "requesting" and (managed or professional):
             from apps.business_flows.model_requests import admit
 
             admit(workflow, record["requestId"])
+        if status == "requesting":
+            from .model_activity import WorkflowModelActivity
+
+            activity = WorkflowModelActivity(
+                workflow,
+                node.get("title") or node_id,
+                model,
+                effective,
+                checked,
+                node_id=node_id,
+                actor=role,
+                request_id=record["requestId"],
+            )
+            activity.progress({"status": "requesting", "attempt": attempt})
+        elif activity is not None:
+            if status in {"validating", "completed", "accepted", "changes_requested"}:
+                activity.progress(
+                    {"status": "validating" if status == "validating" else "complete"}
+                )
+            elif status in {"failed", "context_waiting"}:
+                activity.fail()
         record.update(
             status=status,
             durationMs=round((time.monotonic() - started) * 1000),
@@ -363,6 +386,8 @@ def request_node_result(
 
     def thinking_received(text):
         checked()
+        if activity is not None:
+            activity.thinking(text)
         if on_thinking:
             on_thinking(text)
 
@@ -488,6 +513,8 @@ def request_node_result(
                         )
                     ) as response:
                         for chunk in response:
+                            if activity is not None:
+                                activity.response(chunk)
                             response_size += len(chunk.encode())
                             if response_size > MAX_RESPONSE_BYTES:
                                 raise ComputeError("上下文归纳响应超过安全上限")
@@ -694,8 +721,12 @@ def request_node_result(
                         "业务流节点模型响应超过安全上限，未予通过"
                     )
                 chunks.append(chunk)
+                if activity is not None:
+                    activity.response(chunk)
                 checked()
         raw = "".join(chunks)
+        if activity is not None:
+            activity.response(raw, append=False)
         checked.poll()
         normalized = _structured_text(raw)
         publish(
