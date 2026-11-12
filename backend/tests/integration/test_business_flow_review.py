@@ -133,7 +133,7 @@ def test_independent_requests_have_fresh_context_and_keep_human_gate(env, monkey
         "completion_tokens": 45,
         "total_tokens": 168,
     }
-    assert calls[0]["maximum"] <= review.MAX_OUTPUT_TOKENS
+    assert calls[0]["maximum"] == default_policy()["maxOutputTokens"]
     assert calls[0]["options"]["structured"] is True
     assert calls[0]["options"]["thinking"] is False
     assert "tools" not in calls[0]["options"]

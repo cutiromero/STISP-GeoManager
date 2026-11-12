@@ -6,10 +6,8 @@ from apps.compute.packages import ComputeError
 from .business_flow_model import _citations, _text, request_node_result
 from .business_flow_model import provider as provider
 
-# Configuration: actor limits remain below both the current policy and these caps.
-MAX_OUTPUT_TOKENS = 8192
+# Configuration: bound evidence size; generation and time inherit the live policy.
 MAX_CONTEXT_TOKENS = 32768
-MAX_EXECUTION_SECONDS = 240
 MAX_PAYLOAD_BYTES = 192 * 1024
 MAX_REVISIONS = 3
 INSTRUCTION = """你是科研业务流的执行分析智能体，必须遵循冻结节点规范。
@@ -128,10 +126,8 @@ def execute_node(
         policy=policy,
         human_required=review.get("human") is True,
         caps={
-            "maxOutputTokens": MAX_OUTPUT_TOKENS,
             "maxContextTokens": MAX_CONTEXT_TOKENS,
             "maxContextBytes": MAX_PAYLOAD_BYTES,
-            "maxRunSeconds": MAX_EXECUTION_SECONDS,
         },
         on_record=on_record,
         on_progress=on_progress,

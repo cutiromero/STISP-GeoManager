@@ -8,10 +8,8 @@ from .business_flow_model import _text, _citations, request_node_result
 from .business_flow_model import provider as provider
 from .config import registry
 
-# Configuration: current actor policy always applies the smaller ceiling.
-MAX_OUTPUT_TOKENS = 4096
+# Configuration: bound evidence size; generation and time inherit the live policy.
 MAX_CONTEXT_TOKENS = 32768
-MAX_REVIEW_SECONDS = 180
 MAX_PAYLOAD_BYTES = 192 * 1024
 MAX_REVISIONS = 3
 INSTRUCTION = """你是独立的科研业务流节点审核智能体，不是执行智能体。
@@ -112,10 +110,8 @@ def review_node(
         policy=policy,
         human_required=review["human"],
         caps={
-            "maxOutputTokens": MAX_OUTPUT_TOKENS,
             "maxContextTokens": MAX_CONTEXT_TOKENS,
             "maxContextBytes": MAX_PAYLOAD_BYTES,
-            "maxRunSeconds": MAX_REVIEW_SECONDS,
         },
         on_progress=on_progress,
         on_thinking=on_thinking,

@@ -19,9 +19,7 @@ from .business_flow_model import (
 # Configuration: a repair proposal is small and never alters inputs or tool binding.
 MAX_PARAMETERS = 30
 MAX_PARAMETER_BYTES = 32 * 1024
-MAX_OUTPUT_TOKENS = 2048
 MAX_CONTEXT_TOKENS = 32768
-MAX_REPAIR_SECONDS = 120
 MAX_PAYLOAD_BYTES = 192 * 1024
 MAX_REVISIONS = 3
 PURPOSE = "operator_parameter_repair"
@@ -241,10 +239,8 @@ def propose_parameters(
         context=context,
         human_required=review.get("human") is True,
         caps={
-            "maxOutputTokens": MAX_OUTPUT_TOKENS,
             "maxContextTokens": MAX_CONTEXT_TOKENS,
             "maxContextBytes": MAX_PAYLOAD_BYTES,
-            "maxRunSeconds": MAX_REPAIR_SECONDS,
         },
         on_record=record,
         on_progress=progress,

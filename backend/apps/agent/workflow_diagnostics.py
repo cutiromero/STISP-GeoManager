@@ -27,6 +27,8 @@ def category(error):
     message = str(error)
     if any(word in message for word in ("超时", "时限", "timeout")):
         return "timeout"
+    if "生成" in message and "token" in message.lower() and "上限" in message:
+        return "budget"
     if isinstance(error, ModelError):
         return "model_protocol"
     if any(word in message for word in ("预算", "token", "额度")):

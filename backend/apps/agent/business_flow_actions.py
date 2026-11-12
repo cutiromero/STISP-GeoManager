@@ -7,10 +7,8 @@ from .business_flow_model import request_node_result
 from .config import registry
 
 CAPS = {
-    "maxOutputTokens": 8192,
     "maxContextTokens": 32768,
     "maxContextBytes": 192 * 1024,
-    "maxRunSeconds": 240,
 }
 ARGUMENT_KEYS = {
     "read_evidence": {"evidenceId", "offset", "length"},

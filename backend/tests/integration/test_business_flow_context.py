@@ -536,7 +536,9 @@ def test_evidence_count_protection_waits_instead_of_disabling_the_limit(monkeypa
 def test_review_smaller_window_reexecutes_with_matching_evidence(flows, monkeypatch):
     _, version = flows["create"](one=True, ai=True)
     calls = install_model(monkeypatch)
-    windows = iter([32768, 8000, 32768, 8000])
+    # Review inherits the configured 8192-token generation reserve. Keep the
+    # same smaller input allowance while allowing that reserve to fit.
+    windows = iter([32768, 12096, 32768, 12096])
     monkeypatch.setattr(provider, "model_window", lambda model: next(windows))
     monkeypatch.setattr(
         engine, "input_evidence", lambda *args: [evidence(result={"text": "x" * 18000})]

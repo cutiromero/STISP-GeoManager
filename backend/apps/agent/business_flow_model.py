@@ -213,7 +213,10 @@ def request_node_result(
         chosen = (policy or live).get(key, live[key])
         if type(chosen) is not int or chosen <= 0:
             raise ComputeError("业务流节点模型预算无效")
-        effective[key] = min(live[key], chosen, caps[key])
+        ceiling = caps.get(key, live[key])
+        if type(ceiling) is not int or ceiling <= 0:
+            raise ComputeError("业务流节点模型预算无效")
+        effective[key] = min(live[key], chosen, ceiling)
     # Each role receives a separate bounded context, never a prior actor conversation.
     packet = {
         "node": {
@@ -439,7 +442,7 @@ def request_node_result(
                     contextWindowTokens=window,
                     contextManagement=management,
                     requestSha256=_digest(_json(batch_messages)),
-                    outputLimit=min(effective["maxOutputTokens"], 1024),
+                    outputLimit=effective["maxOutputTokens"],
                 )
                 cache_key = _digest(
                     _json(

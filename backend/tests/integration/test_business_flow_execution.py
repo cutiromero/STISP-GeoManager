@@ -10,7 +10,8 @@ import pytest
 
 from apps.agent import business_flow_execution as execution
 from apps.agent import business_flow_review as review
-from apps.agent.models import AgentWorkflow
+from apps.agent.models import AgentPolicy, AgentWorkflow
+from apps.agent.policy import default_policy
 from apps.agent.provider import count_tokens
 from apps.compute.packages import ComputeError
 from apps.projects.context import project_scope
@@ -70,6 +71,45 @@ def install_stream(monkeypatch, answers):
 
     monkeypatch.setattr(execution.provider, "stream", streamed)
     return calls
+
+
+@pytest.mark.parametrize("actor", ["executor", "reviewer"])
+@pytest.mark.parametrize(
+    "requested,expected_output,expected_seconds",
+    [
+        (None, 16384, 600),
+        ({"maxOutputTokens": 128, "maxRunSeconds": 90}, 128, 90),
+        ({"maxOutputTokens": 32768, "maxRunSeconds": 900}, 16384, 600),
+    ],
+)
+def test_actors_inherit_configured_generation_and_time_budgets(
+    env, monkeypatch, actor, requested, expected_output, expected_seconds
+):
+    from apps.agent import business_flow_model as transport
+    from tests.integration.test_business_flow_review import ACCEPT
+
+    AgentPolicy.objects.update_or_create(
+        pk=1, defaults={"value": {**default_policy(), "maxOutputTokens": 16384}}
+    )
+    guards = []
+    real_guard = transport.ModelStreamGuard
+
+    def capture_guard(check, deadline):
+        guard = real_guard(check, deadline)
+        guards.append(guard)
+        return guard
+
+    monkeypatch.setattr(transport, "ModelStreamGuard", capture_guard)
+    calls = install_stream(monkeypatch, [INITIAL if actor == "executor" else ACCEPT])
+    before = transport.time.monotonic()
+    with project_scope(env["scope"]):
+        function = execution.execute_node if actor == "executor" else review.review_node
+        result = function(
+            env["workflow"], NODE, 1, EVIDENCE, guard=lambda: None, policy=requested
+        )
+    after = transport.time.monotonic()
+    assert calls[0]["maximum"] == result["audit"]["outputLimit"] == expected_output
+    assert before + expected_seconds <= guards[0]._deadline <= after + expected_seconds
 
 
 @pytest.mark.efficiency

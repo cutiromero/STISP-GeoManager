@@ -10,10 +10,8 @@ from .business_flow_model import _citations, request_node_result
 MAX_CODE_CHARACTERS = 16000
 MAX_AST_NODES = 4000
 CAPS = {
-    "maxOutputTokens": 8192,
     "maxContextTokens": 32768,
     "maxContextBytes": 192 * 1024,
-    "maxRunSeconds": 180,
 }
 INSTRUCTION = """你是专业业务流中的资料衔接智能体。固定科研流程、科学算子及其参数、规则和人工批准范围不可修改。
 你可以根据本次真实来源和目标输入规范，自主编写简短Python脚本进行格式转换、字段映射、坐标转换或明确要求的数据组织。
