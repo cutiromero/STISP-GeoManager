@@ -35,7 +35,7 @@ ROLES = {
 }
 GEOMETRY = {"lithology": "Polygon", "faults": "LineString", "coverage": "Polygon"}
 LABELS = {
-    "lithology": "地质图",
+    "lithology": "岩性图",
     "faults": "构造线",
     "coverage": "研究区范围",
     "units": "填图单元表",
@@ -44,7 +44,7 @@ LABELS = {
     "hydromica": "水云母化识别结果",
     "calcite": "方解石化识别结果",
     "dolomite": "白云石化识别结果",
-    "alterations": "分类识别资料",
+    "alterations": "蚀变识别资料",
 }
 # (key, label, required, name keywords). Object IDs are never mapped: working
 # copies get neutral generated IDs so labels in a user's IDs cannot reach checks.
@@ -169,7 +169,7 @@ def validate_creation(
         or "lithology" not in inputs
         or any(not role_kind(role) for role in inputs)
     ):
-        raise ComputeError("请至少指定地质图，其他资料角色可选")
+        raise ComputeError("请至少指定岩性图，其他资料角色可选")
     if len(set(inputs.values())) != len(inputs):
         raise ComputeError("同一份资料只能对应一个角色")
     if set(parameters) - set(PARAMETERS):

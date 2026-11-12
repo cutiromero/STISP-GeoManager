@@ -14,9 +14,10 @@ from django.utils import timezone
 
 from apps.agent import provider
 from apps.agent.models import AgentPolicy
+from apps.agent.geology_generic import LABELS
 from apps.agent.workflow import run_workflow, resume_waiting
 from apps.business_flows import catalog, runtime
-from apps.business_flows.builtins import builtin_flows
+from apps.business_flows.builtins import MINERALS, builtin_flows
 from apps.business_flows.state import state
 from apps.compute.data import candidate
 from apps.compute.packages import checksum
@@ -288,7 +289,21 @@ def test_seven_nodes_match_original_science_with_real_operators(
                     "model": "mock",
                     "goal": "按相同规则核对岩性构造蚀变并生成远景与报告",
                     "reasoningEffort": EFFORT,
-                    "inputs": roles,
+                    "inputs": {
+                        f"alterations:{identity}"
+                        if role in MINERALS
+                        else role: identity
+                        for role, identity in roles.items()
+                    },
+                    "inputAdapters": {
+                        f"alterations:{identity}": {
+                            "parameters": {
+                                "label": LABELS[role].removesuffix("识别结果")
+                            }
+                        }
+                        for role, identity in roles.items()
+                        if role in MINERALS
+                    },
                     "parameters": {"uploadBatchId": generic["batch"]},
                     "agentEnabled": adaptive,
                     "idempotencyKey": uuid4().hex,

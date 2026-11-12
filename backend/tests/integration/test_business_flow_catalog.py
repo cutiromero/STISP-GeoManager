@@ -11,6 +11,9 @@ from django.test import Client
 from django.test.utils import CaptureQueriesContext
 
 from apps.business_flows.builtins import (
+    GEOLOGY_NODES,
+    GEOLOGY_ROLES,
+    MINERALS,
     builtin_flows,
     geology_definition,
     source_summary_definition,
@@ -158,6 +161,49 @@ def test_logic_definition_cannot_remove_human_decisions_or_rebind_science():
     spec = geology_definition()
     spec["nodes"][2]["review"]["ai"] = False
     assert normalize_definition(spec)["nodes"][2]["review"]["human"] is True
+
+
+def test_logic_inputs_use_one_open_ended_alteration_collection():
+    spec = normalize_definition(geology_definition())
+    roles = {item["key"]: item for item in spec["inputRequirements"]}
+    assert set(roles) == {"lithology", "faults", "coverage", "units", "alterations"}
+    assert roles["lithology"]["label"] == "岩性图"
+    assert roles["lithology"]["required"] is True
+    assert roles["alterations"]["multiple"] is True
+    assert roles["alterations"]["semanticType"] == "class_mask_stack_v1"
+    assert all(not set(node["dataRoles"]) & set(MINERALS) for node in spec["nodes"])
+    assert "alterations" in spec["nodes"][-2]["dataRoles"]
+
+
+@pytest.mark.parametrize("with_collection", [False, True])
+def test_published_mineral_roles_remain_valid_without_rewriting_history(
+    with_collection,
+):
+    spec = geology_definition()
+    spec["inputRequirements"] = [
+        {
+            "key": key,
+            "label": "地质图" if key == "lithology" else label,
+            "dataTypes": [kind],
+            "required": key == "lithology",
+            "requiredFields": [],
+            **(
+                {"multiple": True, "semanticType": "class_mask_stack_v1"}
+                if key == "alterations"
+                else {}
+            ),
+        }
+        for key, (label, kind) in GEOLOGY_ROLES.items()
+        if with_collection or key != "alterations"
+    ]
+    for node, (_identity, _title, _kind, roles) in zip(spec["nodes"], GEOLOGY_NODES):
+        node["dataRoles"] = [
+            role for role in roles if with_collection or role != "alterations"
+        ]
+    normalized = normalize_definition(spec)
+    assert normalized["inputRequirements"][0]["label"] == "地质图"
+    assert set(MINERALS) <= set(normalized["nodes"][0]["dataRoles"])
+    assert spec["nodes"] == normalized["nodes"]
 
 
 @pytest.mark.efficiency

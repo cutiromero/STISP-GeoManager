@@ -4,7 +4,7 @@ from copy import deepcopy
 
 MINERALS = ("hematite", "chlorite", "hydromica", "calcite", "dolomite")
 GEOLOGY_ROLES = {
-    "lithology": ("地质图", "vector"),
+    "lithology": ("岩性图", "vector"),
     "faults": ("构造线", "vector"),
     "coverage": ("研究区范围", "vector"),
     "units": ("填图单元表", "table"),
@@ -13,8 +13,10 @@ GEOLOGY_ROLES = {
     "hydromica": ("水云母化", "raster"),
     "calcite": ("方解石化", "raster"),
     "dolomite": ("白云石化", "raster"),
-    "alterations": ("分类识别资料（不限类别，可多份）", "raster"),
+    "alterations": ("蚀变识别资料（不限矿物种类，可多份）", "raster"),
 }
+# Retain named mineral roles for the legacy upload API and published history.
+GEOLOGY_CURRENT_ROLES = tuple(role for role in GEOLOGY_ROLES if role not in MINERALS)
 GEOLOGY_NODES = (
     ("inputs", "确认资料与字段", "agent", tuple(GEOLOGY_ROLES)),
     ("check", "综合一致性检查", "operator", tuple(GEOLOGY_ROLES)),
@@ -31,7 +33,8 @@ GEOLOGY_NODES = (
 )
 
 
-def geology_definition():
+def geology_definition(*, legacy_roles=False):
+    input_roles = tuple(GEOLOGY_ROLES) if legacy_roles else GEOLOGY_CURRENT_ROLES
     nodes = []
     for index, (identity, title, kind, roles) in enumerate(GEOLOGY_NODES):
         nodes.append(
@@ -49,7 +52,7 @@ def geology_definition():
                     "finish": "独立审核结论和证据，整理报告、地图及成果入口。",
                 }[identity],
                 "dependsOn": [GEOLOGY_NODES[index - 1][0]] if index else [],
-                "dataRoles": list(roles),
+                "dataRoles": [role for role in roles if role in input_roles],
                 "instruction": "",
                 "review": {
                     "ai": identity in {"apply", "finish"},
@@ -76,6 +79,7 @@ def geology_definition():
                 ),
             }
             for key, (label, kind) in GEOLOGY_ROLES.items()
+            if key in input_roles
         ],
         "nodes": nodes,
         "outputRequirements": [

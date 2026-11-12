@@ -306,11 +306,15 @@ def normalize_definition(value):
             ):
                 invalid("输入连线只可引用前序算子的真实输出")
     if result["adapter"] == "geology_generic":
-        from .builtins import GEOLOGY_NODES, GEOLOGY_ROLES
+        from .builtins import GEOLOGY_CURRENT_ROLES, GEOLOGY_NODES, GEOLOGY_ROLES
 
-        legacy_inputs = set(item["key"] for item in inputs) == set(GEOLOGY_ROLES) - {
-            "alterations"
-        }
+        input_roles = {item["key"] for item in inputs}
+        if input_roles not in (
+            set(GEOLOGY_CURRENT_ROLES),
+            set(GEOLOGY_ROLES),
+            set(GEOLOGY_ROLES) - {"alterations"},
+        ):
+            invalid("逻辑推理资料角色必须与专业流程一致")
 
         if [node["id"] for node in nodes] != [row[0] for row in GEOLOGY_NODES]:
             invalid("逻辑推理使用已登记的专业流程骨架，不能增删或重排节点")
@@ -321,11 +325,7 @@ def normalize_definition(value):
                 node["kind"] not in expected_kind
                 or node["dependsOn"] != ([GEOLOGY_NODES[index - 1][0]] if index else [])
                 or node["dataRoles"]
-                != [
-                    role
-                    for role in expected_roles
-                    if not legacy_inputs or role != "alterations"
-                ]
+                != [role for role in expected_roles if role in input_roles]
                 or node.get("algorithmVersionId") is not None
             ):
                 invalid("逻辑推理的节点类型、资料角色和算子绑定由专业适配器管理")
@@ -333,10 +333,6 @@ def normalize_definition(value):
                 invalid("专业流程的人工决定固定为资料确认和处置批准，不能由图配置增删")
             if identity not in {"apply", "finish"} and node["review"]["ai"]:
                 invalid("专业流程独立AI审核仅适用于处置建议和成果整理的实际决策边界")
-        if not legacy_inputs and set(item["key"] for item in inputs) != set(
-            GEOLOGY_ROLES
-        ):
-            invalid("逻辑推理资料角色必须与专业流程一致")
         for item in inputs:
             if item["key"] == "alterations" and (
                 item.get("multiple") is not True
@@ -346,7 +342,7 @@ def normalize_definition(value):
             if item["dataTypes"] != [GEOLOGY_ROLES[item["key"]][1]] or (
                 item["key"] == "lithology" and not item["required"]
             ):
-                invalid("逻辑推理资料类型或必需地质图规范无效")
+                invalid("逻辑推理资料类型或必需岩性图规范无效")
     result["inputRequirements"] = inputs
     result["nodes"] = nodes
     result["outputRequirements"] = strings(

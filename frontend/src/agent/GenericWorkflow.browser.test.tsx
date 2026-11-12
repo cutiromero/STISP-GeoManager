@@ -305,7 +305,7 @@ it("uploads multiple files together, prefills roles and preserves a manual edit"
     screen.getByRole("combobox", { name: "研究区.geojson的资料角色" }),
   );
   fireEvent.click(
-    await screen.findByText("地质图（必需）", {
+    await screen.findByText("岩性图（必需）", {
       selector: ".ant-select-item-option-content",
     }),
   );
@@ -356,7 +356,7 @@ it("allows manual roles and retry after recognition fails", async () => {
   expect(role).toBeEnabled();
   fireEvent.mouseDown(role);
   fireEvent.click(
-    await screen.findByText("地质图（必需）", {
+    await screen.findByText("岩性图（必需）", {
       selector: ".ant-select-item-option-content",
     }),
   );

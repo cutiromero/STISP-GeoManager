@@ -241,6 +241,101 @@ it.each([
   },
 );
 
+it.each(["restore", "suggest"])(
+  "新版蚀变集合通过 %s 保留多份历史矿物资料并启动",
+  async (mode) => {
+    const newSpec = structuredClone(spec);
+    const currentRoles = [
+      "lithology",
+      "faults",
+      "coverage",
+      "units",
+      "alterations",
+    ];
+    newSpec.inputRequirements = newSpec.inputRequirements
+      .filter((input) => currentRoles.includes(input.key))
+      .map((input) =>
+        input.key === "alterations"
+          ? { ...input, multiple: true, semanticType: "class_mask_stack_v1" }
+          : input,
+      );
+    newSpec.nodes = newSpec.nodes.map((node) => ({
+      ...node,
+      dataRoles: node.dataRoles.filter((key) => currentRoles.includes(key)),
+    }));
+    vi.mocked(businessFlowsApi.detail).mockResolvedValue({
+      ...detail,
+      version: { ...version, definition: newSpec },
+      versions: [{ ...version, definition: newSpec }],
+    });
+    if (mode === "suggest")
+      vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
+        configuration: null,
+        items: structuredClone(items),
+        unavailableResourceIds: [],
+      });
+    vi.spyOn(agentApi, "recognizeWorkflowRoles").mockResolvedValue({
+      source: "model",
+      questions: [],
+      items: items.map((item) => ({
+        uploadId: item.id,
+        resourceId: item.resourceId,
+        role: item.roleHint!,
+        reason: "依据实际分类资料识别用途",
+      })),
+    });
+    const start = vi
+      .spyOn(businessFlowsApi, "start")
+      .mockResolvedValue(businessFlowRun());
+    render(
+      <App>
+        <BusinessFlowLaunch
+          launch={intent}
+          model="qwen"
+          onStarted={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </App>,
+    );
+    await screen.findByText(items[0]!.fileName);
+    if (mode === "suggest")
+      fireEvent.click(screen.getByRole("button", { name: "AI 识别资料用途" }));
+    const action = screen.getByRole("button", {
+      name: "开始业务流",
+      exact: true,
+    });
+    await waitFor(() => expect(action).toBeEnabled());
+    fireEvent.mouseDown(
+      screen.getByRole("combobox", { name: items[2]!.fileName + "的资料角色" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText("蚀变识别资料（不限矿物种类，可多份）", {
+          selector: ".ant-select-item-option-content",
+        }),
+      ).toBeVisible(),
+    );
+    expect(
+      screen.queryByText("方解石化识别结果", { exact: true }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(
+      screen.getByRole("combobox", { name: items[2]!.fileName + "的资料角色" }),
+      { key: "Escape" },
+    );
+    fireEvent.click(action);
+    await waitFor(() => expect(start).toHaveBeenCalledOnce());
+    expect(start.mock.calls[0]![1].inputs).toEqual({
+      lithology: items[0]!.resourceId,
+      faults: items[1]!.resourceId,
+      ...Object.fromEntries(
+        items
+          .slice(2)
+          .map((item) => [`alterations:${item.resourceId}`, item.resourceId]),
+      ),
+    });
+  },
+);
+
 it("lets a fresh source receive one real role suggestion before starting the same flow", async () => {
   bootstrap.thinkingEnabled = true;
   bootstrap.models[0]!.supportsThinking = true;
@@ -510,7 +605,7 @@ it("ZIP 上传经业务流角色绑定后启动，不进入旧对话提交路径
     name: upload.fileName + "的资料角色",
   });
   fireEvent.mouseDown(role);
-  fireEvent.click(await screen.findByText("地质图（必需）", { exact: true }));
+  fireEvent.click(await screen.findByText("岩性图（必需）", { exact: true }));
   const action = screen.getByRole("button", {
     name: "开始业务流",
     exact: true,

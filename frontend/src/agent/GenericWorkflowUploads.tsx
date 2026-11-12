@@ -44,7 +44,7 @@ export const genericRoles: {
   kind: AgentWorkflowUpload["dataType"];
   dataTypes?: AgentWorkflowUpload["dataType"][];
 }[] = [
-  { key: "lithology", label: "地质图（必需）", kind: "vector" },
+  { key: "lithology", label: "岩性图（必需）", kind: "vector" },
   { key: "faults", label: "构造线", kind: "vector" },
   { key: "coverage", label: "研究区范围", kind: "vector" },
   { key: "units", label: "填图单元表", kind: "table" },
@@ -55,7 +55,7 @@ export const genericRoles: {
   { key: "dolomite", label: "白云石化识别结果", kind: "raster" },
   {
     key: "alterations",
-    label: "分类识别资料（不限类别，可多份）",
+    label: "蚀变识别资料（不限矿物种类，可多份）",
     kind: "raster",
     dataTypes: ["vector", "raster"],
   },
@@ -65,6 +65,26 @@ export const workflowRoleKey = (role: string, resourceId: number) =>
   role === "alterations" ? `${role}:${resourceId}` : role;
 export const workflowRoleName = (role: string) =>
   role.startsWith("alterations:") ? "alterations" : role;
+
+export function workflowInputsForRoles(
+  inputs: Record<string, number>,
+  allowedRoles?: string[],
+) {
+  return Object.fromEntries(
+    Object.entries(inputs).flatMap(([key, id]) => {
+      const role = workflowRoleName(key);
+      if (!allowedRoles || allowedRoles.includes(role)) return [[key, id]];
+      if (
+        allowedRoles.includes("alterations") &&
+        genericRoles.some(
+          (entry) => entry.key === role && entry.kind === "raster",
+        )
+      )
+        return [[workflowRoleKey("alterations", id), id]];
+      return [];
+    }),
+  );
+}
 
 const kindLabels = { vector: "矢量", raster: "栅格", table: "表格" } as const;
 
@@ -112,6 +132,7 @@ export default function GenericWorkflowUploads({
   reasoningEffort?: ReasoningEffort;
 }) {
   const polished = presentation === "business-flow";
+  const allowedRoleKey = allowedRoles?.join(",");
   const [items, setItems] = useState<AgentWorkflowUpload[]>([]);
   useEffect(() => onCountChange?.(items.length), [items, onCountChange]);
   const [uploading, setUploading] = useState<string>();
@@ -207,6 +228,17 @@ export default function GenericWorkflowUploads({
         .then((result) => {
           if (controller.signal.aborted || currentBatch.current !== batchId)
             return;
+          if (result.configuration)
+            result = {
+              ...result,
+              configuration: {
+                ...result.configuration,
+                roles: workflowInputsForRoles(
+                  result.configuration.roles,
+                  allowedRoleKey?.split(","),
+                ),
+              },
+            };
           setItems(
             result.items.map((item) => ({
               ...item,
@@ -224,7 +256,7 @@ export default function GenericWorkflowUploads({
             result.unavailableResourceIds.length
               ? `${result.unavailableResourceIds.length} 份上次资料已失效、变化或无权访问，请重新选择并核对。`
               : result.configuration && !result.configuration.roles.lithology
-                ? "上次地质图为临时资料，未纳入可复用配置，请重新选择地质图。"
+                ? "上次岩性图为临时资料，未纳入可复用配置，请重新选择岩性图。"
                 : "",
           );
           restoredCallback.current?.(result);
@@ -252,7 +284,7 @@ export default function GenericWorkflowUploads({
         // A new batch has nothing to restore.
       });
     return () => controller.abort();
-  }, [batchId, uploadOnly]);
+  }, [batchId, uploadOnly, allowedRoleKey]);
   const roleOf = (item: AgentWorkflowUpload) =>
     workflowRoleName(
       Object.entries(inputs).find(([, id]) => id === item.resourceId)?.[0] ??
@@ -291,7 +323,7 @@ export default function GenericWorkflowUploads({
           )
             next[workflowRoleKey(item.role, item.resourceId)] = item.resourceId;
         }
-        return next;
+        return workflowInputsForRoles(next, allowedRoles);
       });
     } catch (reason) {
       if (currentBatch.current === batchId)
@@ -413,7 +445,7 @@ export default function GenericWorkflowUploads({
       </div>
       {!uploadOnly && (
         <p className="agent-demo-hint">
-          可上传资料或选择当前项目的系统数据。上传资料只用于本次任务；系统数据仅建立引用，移除不影响原数据。地质图必需，其余资料可选，字段含义将在对话中确认。
+          可上传资料或选择当前项目的系统数据。上传资料只用于本次任务；系统数据仅建立引用，移除不影响原数据。岩性图必需，其余资料可选，字段含义将在对话中确认。
         </p>
       )}
       {restoreWarning && <Alert type="warning" title={restoreWarning} />}
@@ -844,7 +876,7 @@ export default function GenericWorkflowUploads({
         />
       )}
       {!uploadOnly && items.length > 0 && !inputs.lithology && (
-        <Alert type="warning" showIcon title="请把一份矢量面资料指定为地质图" />
+        <Alert type="warning" showIcon title="请把一份矢量面资料指定为岩性图" />
       )}
     </section>
   );

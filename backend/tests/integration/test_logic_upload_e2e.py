@@ -14,6 +14,7 @@ from django.utils import timezone
 from apps.agent import demo_workflow, provider
 from apps.agent.workflow import run_workflow, resume_waiting
 from apps.agent.workflow_uploads import store_upload
+from apps.agent.geology_generic import LABELS
 from apps.business_flows import catalog, legacy, runtime
 from apps.business_flows.builtins import builtin_flows
 from apps.business_flows.state import state
@@ -33,8 +34,7 @@ from tests.unit.test_geology_multi_algorithms import fixture
 
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = ROOT.parent / "逻辑推理测试数据_按草案" / "上传用"
-DATA_ROOT = ROOT.parent / "GeoManagerData-logic-qa"
-OUTPUT = ROOT / ".runtime" / "logic-node-tools-20261111" / "uploaded-e2e"
+OUTPUT = ROOT / ".runtime" / "logic-input-requirements-20261112" / "uploaded-e2e"
 INPUTS = {
     "lithology": "海德乌拉_模拟识别岩性图.gpkg",
     "faults": "示范区构造_模拟识别.gpkg",
@@ -60,11 +60,11 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
     )
     env["project"].code = "02"
     env["project"].save(update_fields=["code"])
-    data_folder = DATA_ROOT / "app" / ("task_h_e2e_" + uuid4().hex)
+    data_folder = tmp_path / "app"
     settings.PROJECT_CONFIG = replace(
         settings.PROJECT_CONFIG,
         app_data=data_folder,
-        research_data_root=DATA_ROOT / "research",
+        research_data_root=tmp_path / "research",
     )
     settings.AGENT_MODELS[0] = {**settings.AGENT_MODELS[0], "qwen": True}
     monkeypatch.setattr("apps.compute.services.candidate", candidate)
@@ -148,6 +148,7 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
     register_rules(env, synthetic)
     register_operators(env)
     identities = {}
+    adapters = {}
     source_hashes = {}
     for role, filename in INPUTS.items():
         path = SOURCE / filename
@@ -159,7 +160,16 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
             SimpleUploadedFile(filename, content),
             env["batch"],
         )
-        identities[role] = upload.resource_id
+        input_role = (
+            f"alterations:{upload.resource_id}"
+            if upload.resource.data_type == "raster"
+            else role
+        )
+        identities[input_role] = upload.resource_id
+        if input_role.startswith("alterations:"):
+            adapters[input_role] = {
+                "parameters": {"label": LABELS[role].removesuffix("识别结果")}
+            }
     with project_scope(env["scope"]):
         _, version = catalog.register_flow(env["admin"], builtin_flows()[0])
         workflow = runtime.start_flow(
@@ -170,6 +180,7 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
                 "idempotencyKey": uuid4().hex,
                 "goal": "核对上传资料并按用户批准范围完成处置、复查、构造、远景和报告",
                 "inputs": identities,
+                "inputAdapters": adapters,
                 "parameters": {"uploadBatchId": env["batch"]},
             },
         )
@@ -177,6 +188,8 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
     observe(workflow)
     for tick in range(MAX_TICKS):
         workflow.refresh_from_db()
+        if workflow.plan.get("workingCopies"):
+            assert set(workflow.plan.get("missingRoles", [])) == {"coverage", "units"}
         if workflow.status == "succeeded":
             break
         assert workflow.status not in {"failed", "interrupted", "cancelled"}, (
@@ -216,18 +229,10 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
             )
             assert response.status_code == 200, response.content
         elif workflow.status == "waiting_compute":
-            stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
-            task_id = stage.get("taskId") or state(workflow)["nodes"][stage["name"]][
-                "toolLoop"
-            ].get("taskId")
-            assert task_id, (workflow.detail, stage)
-            task = ComputeTask.objects.get(pk=task_id)
             RuntimeLease.objects.filter(name="worker").update(heartbeat=timezone.now())
-            if task.status == "queued":
+            for task in ComputeTask.objects.filter(owner=env["owner"], status="queued"):
                 native_task(task)
-            for record in ComputeImport.objects.filter(
-                output__task=task, status="queued"
-            ):
+            for record in ComputeImport.objects.filter(status="queued"):
                 process_import(record)
             resume_waiting()
         else:

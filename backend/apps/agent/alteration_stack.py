@@ -86,19 +86,23 @@ def prepare_stack(workflow, user, sources, coverage):
             raise ComputeError("输入适配尚未提供可用的分类掩膜：" + resource.name)
         dataset = datasets[resource.pk]
         tags = (dataset.source_gdalinfo or {}).get("metadata", {}).get("", {})
-        original_name = next(
+        adaptation = next(
             (
-                entry["sourceName"]
+                entry
                 for entry in workflow.plan.get("inputAdaptations", [])
                 if entry["role"] == role
             ),
-            resource.name,
+            {},
         )
+        declared_label = adaptation.get("parameters", {}).get("label")
+        original_name = adaptation.get("sourceName", resource.name)
         entries.append(
             {
                 "path": raster_source_path(dataset.source_relative_path),
                 "label": LABELS[role].removesuffix("识别结果")
                 if role in MINERALS
+                else canonical_label(declared_label)
+                if declared_label and declared_label != original_name
                 else canonical_label(original_name.rsplit("_", 1)[-1]),
                 "forceLabel": tags.get("class_label_origin") == "source_name",
             }

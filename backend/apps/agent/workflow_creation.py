@@ -89,7 +89,7 @@ def create_workflow(user, project_id, value, *, chat_execution=None, input_plan=
                 raise ComputeError("资料角色只能选择本次任务上传的资料或已授权目录引用")
             planned = plan_inputs(
                 user,
-                geology_definition()["inputRequirements"],
+                geology_definition(legacy_roles=True)["inputRequirements"],
                 {
                     role: (
                         uploads[identity].resource,

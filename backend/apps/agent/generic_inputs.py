@@ -313,6 +313,14 @@ def build_inputs(workflow, user, policy) -> None:
     inputs = {role: resource.id for role, resource in copies.items()}
     inputs.update(rasters, rules=workflow.plan["rulesResourceId"])
     provided = set(uploads)
+    optional_roles = ["faults", "coverage", "units"]
+    if "alteration_stack" in rasters:
+        if not any(
+            role in MINERALS or role.startswith("alterations") for role in provided
+        ):
+            optional_roles.append("alterations")
+    else:
+        optional_roles.extend(MINERALS)
     workflow.parameters = {
         **workflow.parameters,
         "working_epsg": epsg,
@@ -324,9 +332,7 @@ def build_inputs(workflow, user, policy) -> None:
     workflow.plan.update(
         inputs=inputs,
         workingCopies={role: resource.id for role, resource in copies.items()},
-        missingRoles=[
-            m for m in ["faults", "coverage", "units", *MINERALS] if m not in provided
-        ],
+        missingRoles=[role for role in optional_roles if role not in provided],
         droppedFaults=dropped,
         phase="inputs_ready",
     )

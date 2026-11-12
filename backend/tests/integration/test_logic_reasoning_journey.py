@@ -2,7 +2,9 @@
 
 import csv
 import json
+import runpy
 import uuid
+from unittest.mock import patch
 from pathlib import Path
 
 import geopandas as gpd
@@ -124,6 +126,21 @@ def register_operators(env):
             checksum="d" * 64,
             runtime_digest="sha256:" + "a" * 64,
         )
+    adapter = runpy.run_path(str(ROOT / "examples/compute/input-adapters/build.py"))
+    manifest = validate_manifest(adapter["manifest"]("input-raster-class-masks"))
+    algorithm = AlgorithmResource.objects.create(
+        identifier=manifest["identifier"],
+        name=manifest["name"],
+        created_by=env["owner"],
+    )
+    AlgorithmVersion.objects.create(
+        algorithm=algorithm,
+        version=manifest["version"],
+        status="published",
+        manifest=manifest,
+        checksum="d" * 64,
+        runtime_digest="sha256:" + "a" * 64,
+    )
 
 
 def system_references(env, context):
@@ -190,8 +207,16 @@ def native_task(task):
         for record in task.input_records.all()
     }
     context = Context(directory / "outputs", paths, task.parameters)
-    suffix = task.version.algorithm.identifier.removeprefix("geology-multi-")
-    load(suffix)(context)
+    if task.version.algorithm.identifier == "input-raster-class-masks":
+        from apps.core import data_adapters
+
+        with patch.dict("sys.modules", {"data_adapters": data_adapters}):
+            runpy.run_path(
+                str(ROOT / "examples/compute/input-adapters/raster_masks.py")
+            )["run"](context)
+    else:
+        suffix = task.version.algorithm.identifier.removeprefix("geology-multi-")
+        load(suffix)(context)
     metadata = quality_metadata(
         read_quality_report(context.directory, task.version.manifest)
     )
