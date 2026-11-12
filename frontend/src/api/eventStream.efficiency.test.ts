@@ -1,11 +1,53 @@
 import { expect, it, vi } from "vitest";
-import { consumeServerEvents } from "./eventStream";
+import { consumeServerEvents, STREAM_IDLE_MILLISECONDS } from "./eventStream";
 
 const encoder = new TextEncoder();
 const response = (stream: ReadableStream<Uint8Array>) =>
   new Response(stream, {
     headers: { "Content-Type": "text/event-stream; charset=utf-8" },
   });
+
+it("cancels a stalled body so the watcher can recover current progress", async () => {
+  vi.useFakeTimers();
+  try {
+    const cancel = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({ cancel });
+    const pending = consumeServerEvents(response(stream), vi.fn());
+    const rejected = expect(pending).rejects.toMatchObject({
+      name: "ResponseFormatError",
+      issue: "实时连接长时间无响应，正在恢复进度",
+    });
+    await vi.advanceTimersByTimeAsync(STREAM_IDLE_MILLISECONDS);
+    await rejected;
+    expect(cancel).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("heartbeats keep a quiet computation connected without polling", async () => {
+  vi.useFakeTimers();
+  try {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({
+      start(value) {
+        controller = value;
+      },
+    });
+    const callback = vi.fn();
+    const pending = consumeServerEvents(response(stream), callback);
+    for (let index = 0; index < 3; index++) {
+      await vi.advanceTimersByTimeAsync(STREAM_IDLE_MILLISECONDS - 1000);
+      controller.enqueue(encoder.encode(": keep-alive\n\n"));
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    controller.close();
+    await pending;
+    expect(callback).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 it("delivers real split UTF-8 frames before the response closes", async () => {
   let controller!: ReadableStreamDefaultController<Uint8Array>;

@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import { ApiError } from "./client";
 import type { AgentEvent, AgentRun } from "./generated/types.gen";
 import { applyAgentEvents, watchAgentRun } from "./watchAgentRun";
+import { consumeServerEvents, STREAM_IDLE_MILLISECONDS } from "./eventStream";
 
 const initial: AgentRun = {
   id: 1,
@@ -23,6 +24,64 @@ const event = (
   text: string,
 ): AgentEvent => ({ id, kind, text, createdAt: "" });
 const snapshot = (run = initial, cursor = 0) => ({ run, events: [], cursor });
+
+it("recovers a network interruption while the caller remains active", async () => {
+  const api = {
+    stream: vi.fn().mockRejectedValue(new TypeError("connection interrupted")),
+    poll: vi
+      .fn()
+      .mockResolvedValue(snapshot({ ...initial, status: "succeeded" })),
+  };
+  const update = vi.fn();
+  await watchAgentRun(
+    initial,
+    api,
+    new AbortController().signal,
+    update,
+    vi.fn(),
+  );
+  expect(api.poll).toHaveBeenCalledOnce();
+  expect(update.mock.calls.at(-1)?.[0].run.status).toBe("succeeded");
+});
+
+it("releases a stalled SSE reader before recovering the completed snapshot", async () => {
+  vi.useFakeTimers();
+  try {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const response = new Response(body, {
+      headers: { "Content-Type": "text/event-stream" },
+    });
+    const api = {
+      stream: vi.fn(
+        (
+          _id: number,
+          callback: (kind: string, value: unknown) => void,
+          signal?: AbortSignal,
+        ) => consumeServerEvents(response, callback, signal),
+      ),
+      poll: vi
+        .fn()
+        .mockResolvedValue(snapshot({ ...initial, status: "succeeded" })),
+    };
+    const update = vi.fn();
+    const pending = watchAgentRun(
+      initial,
+      api,
+      new AbortController().signal,
+      update,
+      vi.fn(),
+    );
+    expect(api.poll).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(STREAM_IDLE_MILLISECONDS);
+    await pending;
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(api.poll).toHaveBeenCalledOnce();
+    expect(update.mock.calls.at(-1)?.[0].run.status).toBe("succeeded");
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 it("streams the initial body before completion without polling in parallel", async () => {
   let finish!: () => void;

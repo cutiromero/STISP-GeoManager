@@ -91,10 +91,11 @@ def install_stream(monkeypatch, verdict=ACCEPT, *, after=None):
         options["on_usage"](
             {"prompt_tokens": 123, "completion_tokens": 45, "total_tokens": 168}
         )
+        answer = verdict(len(calls)) if callable(verdict) else verdict
         yield (
-            json.dumps(verdict, ensure_ascii=False)
-            if not isinstance(verdict, str)
-            else verdict
+            json.dumps(answer, ensure_ascii=False)
+            if not isinstance(answer, str)
+            else answer
         )
         if after:
             after()
@@ -188,7 +189,7 @@ def test_fence_does_not_extract_json_from_prose_or_multiple_responses(
     calls = install_stream(monkeypatch, wrapper(json.dumps(ACCEPT, ensure_ascii=False)))
     with pytest.raises(ComputeError):
         run(env)
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_fenced_model_cannot_insert_a_human_approval(env, monkeypatch):
@@ -213,7 +214,6 @@ def test_fenced_model_cannot_insert_a_human_approval(env, monkeypatch):
         {**ACCEPT, "evidenceIds": []},
         {**REJECT, "issues": []},
         {**ACCEPT, "issues": REJECT["issues"]},
-        "not json",
     ],
 )
 def test_untrusted_decisions_fail_closed_once(env, monkeypatch, malicious):
@@ -224,6 +224,48 @@ def test_untrusted_decisions_fail_closed_once(env, monkeypatch, malicious):
     assert len(calls) == 1
     assert records[-1]["status"] == "failed"
     assert all(item["status"] != "accepted" for item in records)
+
+
+def test_malformed_review_gets_one_audited_fresh_request_with_diagnostic(
+    env, monkeypatch
+):
+    malformed = '{"decision":"accept","reason":"quote "unescaped""}'
+    calls = install_stream(
+        monkeypatch, lambda index: malformed if index == 1 else ACCEPT
+    )
+    records = []
+    result = run(env, on_record=records.append)
+    assert len(calls) == 2
+    first, second = [json.loads(call["messages"][1]["content"]) for call in calls]
+    assert first["evidence"] == second["evidence"]
+    assert second["revisionFeedback"]["invalidResponse"] == malformed
+    assert "Expecting" in second["revisionFeedback"]["diagnostic"]
+    assert result["humanApprovalRequired"] is True
+    assert result["audit"]["purpose"] == "review_protocol_repair"
+    assert result["audit"]["previousRequestId"] != result["audit"]["requestId"]
+    assert result["audit"]["timeLimitSeconds"] < records[0]["timeLimitSeconds"]
+    assert any(row.get("responsePreview") == malformed for row in records)
+    assert env["workflow"].plan["actualModelCallCount"] == 2
+
+
+def test_repeated_malformed_review_stops_without_an_accepted_decision(env, monkeypatch):
+    calls = install_stream(monkeypatch, "not json")
+    records = []
+    with pytest.raises(review.ReviewSyntaxError):
+        run(env, on_record=records.append)
+    assert len(calls) == 2
+    assert records[-1]["status"] == "failed"
+    assert not any(row["status"] == "accepted" for row in records)
+
+
+def test_protocol_repair_does_not_reset_task_model_budget(env, monkeypatch):
+    env["workflow"].max_iterations = 1
+    env["workflow"].save(update_fields=["max_iterations"])
+    calls = install_stream(monkeypatch, "not json")
+    with pytest.raises(ContextReviewRequired):
+        run(env)
+    assert len(calls) == 1
+    assert env["workflow"].plan["actualModelCallCount"] == 1
 
 
 def test_accept_must_cover_all_actual_evidence(env, monkeypatch):

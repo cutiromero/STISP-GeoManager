@@ -321,6 +321,7 @@ def request_node_result(
         "thinkingEnabled": effective["_thinking"],
         "reasoningEffort": effective["reasoningEffort"],
         "outputLimit": effective["maxOutputTokens"],
+        "timeLimitSeconds": effective["maxRunSeconds"],
     }
 
     def publish(status, **values):

@@ -732,7 +732,10 @@ function AgentWorkspace({
       },
     ).catch((e) => {
       if (disposed) return;
-      if (e instanceof Error && e.name === "AbortError") return;
+      if (e instanceof Error && e.name === "AbortError") {
+        setPollFailure("实时连接已中断，请重试更新当前任务状态");
+        return;
+      }
       if (e instanceof ApiError && [401, 403, 404].includes(e.status)) {
         clearRestrictedState();
         report(e);

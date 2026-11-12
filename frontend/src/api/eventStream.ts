@@ -1,6 +1,8 @@
 import { ResponseFormatError } from "./responseDiagnostics";
 
 const MAX_FRAME_CHARACTERS = 16 * 1024 * 1024;
+// The server sends a heartbeat every two seconds, including during computation.
+export const STREAM_IDLE_MILLISECONDS = 15000;
 
 export async function consumeServerEvents(
   response: Response,
@@ -22,7 +24,23 @@ export async function consumeServerEvents(
   try {
     while (true) {
       signal?.throwIfAborted();
-      const { done, value } = await reader.read();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const stalled = new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(
+              new ResponseFormatError("实时连接长时间无响应，正在恢复进度"),
+            ),
+          STREAM_IDLE_MILLISECONDS,
+        );
+      });
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await Promise.race([reader.read(), stalled]);
+      } finally {
+        clearTimeout(timeout);
+      }
+      const { done, value } = chunk;
       signal?.throwIfAborted();
       buffer += done
         ? decoder.decode()

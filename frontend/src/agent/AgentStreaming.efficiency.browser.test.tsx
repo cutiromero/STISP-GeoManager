@@ -204,6 +204,28 @@ it("renders real stream chunks and safe Markdown before completion without concu
   expect(poll).not.toHaveBeenCalled();
 });
 
+it("offers recovery when an external stream abort would leave stale progress", async () => {
+  const stream = vi
+    .spyOn(agentApi, "stream")
+    .mockRejectedValueOnce(
+      new DOMException("connection context changed", "AbortError"),
+    )
+    .mockImplementationOnce(async (_id, callback) => {
+      callback("snapshot", {
+        run: { ...run, status: "succeeded", answer: "核对后的完成状态" },
+        events: [],
+        cursor: 1,
+      });
+    });
+  const poll = vi.spyOn(agentApi, "poll");
+  show();
+  await screen.findByText("实时连接已中断，请重试更新当前任务状态");
+  expect(poll).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "重试更新回答" }));
+  await screen.findByText("核对后的完成状态");
+  expect(stream).toHaveBeenCalledTimes(2);
+});
+
 it("unmounting closes the byte stream and does not cancel the underlying task", async () => {
   const cancelled = vi.fn();
   const response = new Response(
