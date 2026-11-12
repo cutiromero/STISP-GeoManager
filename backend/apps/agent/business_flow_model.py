@@ -5,6 +5,7 @@ from contextlib import closing
 from copy import deepcopy
 import hashlib
 import json
+import re
 import time
 from uuid import uuid4
 from django.core.exceptions import PermissionDenied
@@ -40,6 +41,15 @@ def _json(value):
 
 def _digest(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _structured_text(raw):
+    """Remove one complete JSON presentation fence; never extract prose fragments."""
+    text = raw.strip()
+    fenced = re.fullmatch(
+        r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```[ \t]*", text, re.DOTALL | re.IGNORECASE
+    )
+    return fenced.group(1).strip() if fenced else text
 
 
 def _text(value, field, maximum):
@@ -481,7 +491,7 @@ def request_node_result(
                             checked()
                     answer = "".join(chunks)
                     try:
-                        response_value = json.loads(answer)
+                        response_value = json.loads(_structured_text(answer))
                         summaries = response_value["evidence"]
                         if set(response_value) != {"evidence"} or not isinstance(
                             summaries, list
@@ -514,6 +524,9 @@ def request_node_result(
                     publish(
                         "completed",
                         responseSha256=_digest(answer),
+                        responseFormat="json_fence"
+                        if _structured_text(answer) != answer.strip()
+                        else "json",
                         responseBytes=response_size,
                     )
                     return result
@@ -680,8 +693,14 @@ def request_node_result(
                 checked()
         raw = "".join(chunks)
         checked.poll()
-        publish("validating", responseSha256=_digest(raw), responseBytes=size)
-        result = validate(raw, available)
+        normalized = _structured_text(raw)
+        publish(
+            "validating",
+            responseSha256=_digest(raw),
+            responseBytes=size,
+            responseFormat="json_fence" if normalized != raw.strip() else "json",
+        )
+        result = validate(normalized, available)
         if managed and packet.get("contextNotice") and "limitations" in result:
             result["limitations"] = [
                 *result["limitations"],

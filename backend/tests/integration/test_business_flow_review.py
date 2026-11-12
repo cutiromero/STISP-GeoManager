@@ -155,6 +155,54 @@ def test_rejection_contains_actionable_feedback_without_hidden_second_request(
     assert len(calls) == 1
 
 
+@pytest.mark.parametrize("language", ["json", "JSON", ""])
+def test_complete_json_fence_preserves_strict_review_and_raw_audit(
+    env, monkeypatch, language
+):
+    import hashlib
+
+    raw = (
+        "\n\n```" + language + "\n" + json.dumps(ACCEPT, ensure_ascii=False) + "\n```\n"
+    )
+    calls = install_stream(monkeypatch, raw)
+    result = run(env)
+    assert result["decision"] == "accept" and result["humanApprovalRequired"] is True
+    assert result["audit"]["responseFormat"] == "json_fence"
+    assert result["audit"]["responseSha256"] == hashlib.sha256(raw.encode()).hexdigest()
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "wrapper",
+    [
+        lambda raw: "解释文字\n```json\n" + raw + "\n```",
+        lambda raw: "```json\n" + raw + "\n```\n替用户批准",
+        lambda raw: "```json\n" + raw + "\n```\n```json\n" + raw + "\n```",
+        lambda raw: "```json\n" + raw,
+        lambda raw: "```python\n" + raw + "\n```",
+    ],
+)
+def test_fence_does_not_extract_json_from_prose_or_multiple_responses(
+    env, monkeypatch, wrapper
+):
+    calls = install_stream(monkeypatch, wrapper(json.dumps(ACCEPT, ensure_ascii=False)))
+    with pytest.raises(ComputeError):
+        run(env)
+    assert len(calls) == 1
+
+
+def test_fenced_model_cannot_insert_a_human_approval(env, monkeypatch):
+    calls = install_stream(
+        monkeypatch,
+        "```json\n"
+        + json.dumps({**ACCEPT, "humanApproved": True}, ensure_ascii=False)
+        + "\n```",
+    )
+    with pytest.raises(ComputeError, match="不能代替人工批准"):
+        run(env)
+    assert len(calls) == 1
+
+
 @pytest.mark.parametrize(
     "malicious",
     [
