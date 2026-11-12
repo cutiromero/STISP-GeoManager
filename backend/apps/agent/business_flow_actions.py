@@ -63,6 +63,7 @@ operator_catalog可按operation/dataType/keyword筛选，limit最多20。
 修复提交需声明remedy：adjust_parameters/complete_mapping/convert_input/replace_operator之一。
 无法处理用ask_user.question提问。不能编造结果、声称读取未发送内容、批准节点或改变科学规则。
 finish_node须给summary、outputs[{name,semanticType,evidenceId}]、evidenceIds、limitations、acceptanceChecks。
+summary为非空字符串；outputs和evidenceIds为非空数组；limitations必须为字符串数组，没有限制时用[]，不能用null或字符串。
 acceptanceChecks逐字列出已满足的合同验收条件；输出必须引用实际证据，不能拿失败记录当成果。
 工具参数约束：""" + json.dumps(
     {key: sorted(value) for key, value in ARGUMENT_KEYS.items()}, ensure_ascii=False
