@@ -16,6 +16,8 @@ from apps.agent.workflow import run_workflow, resume_waiting
 from apps.agent.workflow_uploads import store_upload
 from apps.business_flows import catalog, legacy, runtime
 from apps.business_flows.builtins import builtin_flows
+from apps.business_flows.state import state
+from tests.integration.test_logic_node_execution import node_action
 from apps.compute.data import candidate
 from apps.compute.models import ComputeImport, ComputeTask, RuntimeLease
 from apps.compute.worker import process_import
@@ -32,7 +34,7 @@ from tests.unit.test_geology_multi_algorithms import fixture
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = ROOT.parent / "逻辑推理测试数据_按草案" / "上传用"
 DATA_ROOT = ROOT.parent / "GeoManagerData-logic-qa"
-OUTPUT = ROOT / ".runtime" / "task-h" / "local-e2e"
+OUTPUT = ROOT / ".runtime" / "logic-node-tools-20261111" / "uploaded-e2e"
 INPUTS = {
     "lithology": "海德乌拉_模拟识别岩性图.gpkg",
     "faults": "示范区构造_模拟识别.gpkg",
@@ -123,16 +125,18 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
         calls.append(
             {"node": packet["node"]["id"], "tokens": tokens, "outputTokens": maximum}
         )
-        yield json.dumps(
-            {
+        value = (
+            node_action(packet)
+            if "nodeContext" in packet
+            else {
                 "decision": "accept",
                 "reason": "Mock审核仅核对已提供统计；专业裁定与批准仍由用户决定",
                 "issues": [],
                 "repairInstructions": "",
                 "evidenceIds": ["node-result"],
-            },
-            ensure_ascii=False,
+            }
         )
+        yield json.dumps(value, ensure_ascii=False)
 
     monkeypatch.setattr(provider, "stream", streamed)
     monkeypatch.setattr(
@@ -213,7 +217,11 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
             assert response.status_code == 200, response.content
         elif workflow.status == "waiting_compute":
             stage = workflow.plan["stages"][workflow.plan["stageIndex"]]
-            task = ComputeTask.objects.get(pk=stage["taskId"])
+            task_id = stage.get("taskId") or state(workflow)["nodes"][stage["name"]][
+                "toolLoop"
+            ].get("taskId")
+            assert task_id, (workflow.detail, stage)
+            task = ComputeTask.objects.get(pk=task_id)
             RuntimeLease.objects.filter(name="worker").update(heartbeat=timezone.now())
             if task.status == "queued":
                 native_task(task)
@@ -253,6 +261,10 @@ def test_uploaded_geology_business_flow_completes_all_seven_nodes(
     assert preview.status_code == download.status_code == 200
     downloaded = b"".join(download.streaming_content)
     assert hashlib.sha256(downloaded).hexdigest() == report["checksum"]
+    assert {
+        name: hashlib.sha256((SOURCE / name).read_bytes()).hexdigest()
+        for name in source_hashes
+    } == source_hashes
     OUTPUT.mkdir(parents=True, exist_ok=True)
     (OUTPUT / "report.md").write_bytes(downloaded)
     for metric in node_metrics.values():

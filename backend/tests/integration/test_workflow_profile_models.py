@@ -183,11 +183,11 @@ def test_profile_calls_count_and_generate_with_identical_thinking(profiles, thin
         == "DCMC"
     )
     assert infer_roles(profiles)["source"] == "model"
-    assert profiles["counted"] == [(thinking, "xhigh"), (thinking, "low")]
+    assert profiles["counted"] == [(thinking, "xhigh"), (thinking, "xhigh")]
     for index, (maximum, options) in enumerate(profiles["requests"]):
         assert maximum == 512
         assert options["thinking"] is thinking
-        assert options["reasoning_effort"] == ("xhigh" if index == 0 else "low")
+        assert options["reasoning_effort"] == "xhigh"
 
 
 def test_field_mapping_keeps_the_callers_smaller_output_budget(profiles):
@@ -199,7 +199,7 @@ def test_field_mapping_keeps_the_callers_smaller_output_budget(profiles):
     assert profiles["requests"][0][0] == 128
 
 
-def test_role_reference_repair_keeps_original_inputs_and_does_not_repeat_thinking(
+def test_role_reference_repair_keeps_original_inputs_and_thinking_setting(
     profiles, monkeypatch
 ):
     calls = []
@@ -234,7 +234,7 @@ def test_role_reference_repair_keeps_original_inputs_and_does_not_repeat_thinkin
     assert value["source"] == "model" and value["items"][0]["uploadId"] == str(
         profiles["upload"].id
     )
-    assert calls == [True, False] and thinking
+    assert calls == [True, True] and thinking
 
 
 @pytest.mark.parametrize("target", ["mapping", "roles"])
@@ -320,9 +320,35 @@ def test_role_inference_uses_bounded_thinking_with_authorized_source(
         idempotency_key="role-source",
     )
     assert infer_roles(profiles, source_run=run)["source"] == "model"
-    assert profiles["counted"] == [(True, "low")]
+    assert profiles["counted"] == [(thinking, effort)]
+    assert profiles["requests"][0][1]["thinking"] is thinking
+    assert profiles["requests"][0][1]["reasoning_effort"] == effort
+
+
+@pytest.mark.parametrize("effort", ["low", "medium", "xhigh"])
+def test_role_preparation_inherits_launch_setting(profiles, effort):
+    assert infer_roles(profiles, reasoning_effort=effort)["source"] == "model"
+    assert profiles["counted"] == [(True, effort)]
     assert profiles["requests"][0][1]["thinking"] is True
-    assert profiles["requests"][0][1]["reasoning_effort"] == "low"
+    assert profiles["requests"][0][1]["reasoning_effort"] == effort
+
+
+@pytest.mark.parametrize("effort", [None, [], "high"])
+def test_role_endpoint_rejects_invalid_effort(profiles, effort):
+    response = profiles["client"].post(
+        "/api/agent/workflow-uploads/recognize/",
+        json.dumps(
+            {
+                "batchId": profiles["upload"].batch_id,
+                "model": "qwen",
+                "reasoningEffort": effort,
+            }
+        ),
+        content_type="application/json",
+        HTTP_X_PROJECT_ID=str(profiles["project"].pk),
+    )
+    assert response.status_code == 400
+    assert not profiles["requests"]
 
 
 @pytest.mark.parametrize(

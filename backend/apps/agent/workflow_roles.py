@@ -114,6 +114,7 @@ def recognize_roles(
     source_run=None,
     on_thinking=None,
     previous_roles=None,
+    reasoning_effort=None,
 ):
     require_upload_access(user, project)
     policy = require_access(user, "agent", model_id)
@@ -137,14 +138,29 @@ def recognize_roles(
     model = registry().get(model_id)
     if model is None:
         raise ComputeError("模型不可用", 403)
+
+    def selected_policy(value):
+        if reasoning_effort is None:
+            return value
+        from .workflow_model_policy import REASONING_EFFORTS
+
+        if (
+            not isinstance(reasoning_effort, str)
+            or reasoning_effort not in REASONING_EFFORTS
+        ):
+            raise ComputeError("思考强度必须为low、medium或xhigh")
+        if not value["thinkingEnabled"] or not model.qwen:
+            raise PermissionDenied("当前模型或策略不支持所选思考强度")
+        if source_run and (
+            source_run.thinking_mode != "deep"
+            or source_run.reasoning_effort != reasoning_effort
+        ):
+            raise ComputeError("角色识别思考设置须与发起运行一致")
+        return {**value, "_thinking": True, "reasoningEffort": reasoning_effort}
+
+    policy = selected_policy(policy)
     requested_settings = (policy.get("_thinking"), policy["reasoningEffort"])
-    policy = {
-        **policy,
-        "reasoningEffort": "low",
-        "maxOutputTokens": min(policy["maxOutputTokens"], 4096),
-        "maxRunSeconds": min(policy["maxRunSeconds"], 90),
-    }
-    thinking = bool(policy["thinkingEnabled"] and model.qwen)
+    thinking = bool(policy.get("_thinking", policy["thinkingEnabled"] and model.qwen))
     deadline = time.monotonic() + policy["maxRunSeconds"]
     snapshots = {
         str(upload.id): (upload.resource_id, upload.resource.updated_at)
@@ -168,17 +184,12 @@ def recognize_roles(
             if current.model != model_id or current.project_tag_id != project:
                 raise PermissionDenied("资料角色识别模型或项目与来源任务不一致")
             fresh_policy = run_model_policy(current, actor, fresh_policy)
+        fresh_policy = selected_policy(fresh_policy)
         if (
             fresh_policy.get("_thinking"),
             fresh_policy["reasoningEffort"],
         ) != requested_settings:
             raise PermissionDenied("模型思考设置已变化，请重新识别资料角色")
-        fresh_policy = {
-            **fresh_policy,
-            "reasoningEffort": "low",
-            "maxOutputTokens": min(fresh_policy["maxOutputTokens"], 4096),
-            "maxRunSeconds": min(fresh_policy["maxRunSeconds"], 90),
-        }
         current_uploads = list(batch_uploads(actor, batch_id))
         if (
             any(upload.workflow_id for upload in current_uploads)
@@ -196,7 +207,12 @@ def recognize_roles(
                         actor, fresh_policy, upload.resource_id, current
                     )
         if (
-            bool(fresh_policy["thinkingEnabled"] and model.qwen) != thinking
+            bool(
+                fresh_policy.get(
+                    "_thinking", fresh_policy["thinkingEnabled"] and model.qwen
+                )
+            )
+            != thinking
             or fresh_policy["reasoningEffort"] != policy["reasoningEffort"]
             or any(
                 fresh_policy[key] < policy[key]
@@ -251,7 +267,7 @@ def recognize_roles(
             window = provider.model_window(model)
             guard.poll()
             for attempt in range(2):
-                request_thinking = thinking and attempt == 0
+                request_thinking = thinking
                 messages, management = prepare_auxiliary_request(
                     messages,
                     model,

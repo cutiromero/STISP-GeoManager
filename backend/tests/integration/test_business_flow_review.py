@@ -293,8 +293,14 @@ def test_current_budget_ceiling_wins_over_requested_policy(env, monkeypatch):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_real_http_review_request_has_no_execution_tools_or_history(env, settings):
+@pytest.mark.parametrize("effort", ["low", "medium", "xhigh"])
+def test_real_http_review_request_has_no_execution_tools_or_history(
+    env, settings, effort
+):
     requests = []
+    AgentPolicy.objects.update_or_create(
+        pk=1, defaults={"value": {**default_policy(), "reasoningEffort": effort}}
+    )
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -356,17 +362,21 @@ def test_real_http_review_request_has_no_execution_tools_or_history(env, setting
         sent = [body for path, body in requests if path == "/v1/chat/completions"]
         assert len(sent) == 1 and result["decision"] == "accept"
         assert len(sent[0]["messages"]) == 2
-        assert "tools" not in sent[0] and sent[0]["response_format"] == {
-            "type": "json_object"
-        }
+        assert "tools" not in sent[0] and "response_format" not in sent[0]
         assert (
             sent[0]["messages"]
             == [body for path, body in requests if path == "/tokenize"][0]["messages"]
         )
         assert sent[0]["chat_template_kwargs"] == {
-            "enable_thinking": False,
-            "reasoning_effort": "low",
+            "enable_thinking": True,
+            "reasoning_effort": effort,
         }
+        assert (
+            sent[0]["chat_template_kwargs"]
+            == [body for path, body in requests if path == "/tokenize"][0][
+                "chat_template_kwargs"
+            ]
+        )
         assert result["audit"]["usage"]["total_tokens"] == 168
     finally:
         server.shutdown()

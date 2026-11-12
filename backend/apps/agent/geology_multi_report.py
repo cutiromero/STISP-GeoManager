@@ -72,6 +72,7 @@ def render_report(workflow, tasks):
             raise ComputeError("报告实际类别或权重与获批参数不一致", 409)
 
     modes = {s.get("decision", {}).get("modelMode") for s in workflow.plan["stages"]}
+    modes.add(workflow.plan.get("finalDecision", {}).get("modelMode"))
     automatic = any(
         stage.get("modificationsApproval", {}).get("mode") == "rule_authorized"
         for stage in workflow.plan["stages"]
@@ -110,7 +111,9 @@ def render_report(workflow, tasks):
         ),
         {},
     )
-    if dispatch.get("modelMode") == "real":
+    if dispatch.get("modelMode") == "real" or any(
+        stage.get("modelDispatchRecorded") for stage in workflow.plan["stages"]
+    ):
         lines.extend(
             [
                 "处理方法：大模型依据资料与知识组织执行方案并调度算子，算子完成测量、修正与复核，大模型综合实际成果形成判断。",

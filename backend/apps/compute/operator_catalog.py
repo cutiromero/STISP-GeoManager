@@ -74,6 +74,7 @@ def operator_catalog(
     keyword="",
     max_bytes=DEFAULT_MAX_BYTES,
     limit=50,
+    version_id=None,
 ):
     """每个算法返回最新可调用发布版本；max_bytes为UTF-8紧凑JSON字节数。"""
     selected = project.pk if hasattr(project, "pk") else project
@@ -89,6 +90,8 @@ def operator_catalog(
         raise ComputeError("目录上限须为1024至32768字节，条数须为1至100")
     if not isinstance(keyword, str) or len(keyword) > 160:
         raise ComputeError("关键词须为至多160字文字")
+    if version_id is not None and (type(version_id) is not int or version_id < 1):
+        raise ComputeError("算子版本编号须为正整数")
     from .packages import EXTENSIONS
 
     if data_type is not None and data_type not in EXTENSIONS:
@@ -104,6 +107,8 @@ def operator_catalog(
             )
             .order_by("algorithm_id", "-created_at", "-id")
         )
+        if version_id is not None:
+            rows = rows.filter(pk=version_id)
         result, seen = [], set()
         for version in rows.iterator(chunk_size=100):
             if version.algorithm_id in seen or not agent_algorithm_allowed(version):
@@ -130,7 +135,9 @@ def operator_catalog(
             )
             if keyword and keyword.casefold() not in searchable.casefold():
                 continue
-            result.append(compact_description(version, max_bytes))
+            result.append(
+                compact_description(version, 32768 if version_id else max_bytes)
+            )
             if len(result) >= limit:
                 break
     return result

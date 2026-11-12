@@ -51,6 +51,7 @@ from .workflow_controls import (
     locked_workflow,
     save_workflow_state,
 )
+from apps.business_flows.state import WorkflowControlChanged
 
 DEMO_TYPES = {
     "ecology_investigation",
@@ -458,6 +459,21 @@ def prepare_demo(workflow, user, p) -> None:
     else:
         decisions_required = required_steps + (
             2 if workflow.workflow_type == "geology_map_review" else 1
+        )
+    from apps.business_flows import logic_nodes
+
+    if logic_nodes.enabled(workflow):
+        workflow.plan["modelPlanning"] = False
+        decisions_required = (
+            4 * required_steps
+            + 1
+            + sum(
+                bool(node["review"]["ai"])
+                for node in workflow.parameters["_businessFlow"]["definitionSnapshot"][
+                    "nodes"
+                ]
+                if node["id"] in {"apply", "finish"}
+            )
         )
     if workflow.max_iterations < decisions_required:
         raise ComputeError("请将场景模型决策上限至少设为" + str(decisions_required))
@@ -1366,6 +1382,15 @@ def advance_demo(workflow_id) -> None:
                 )
             )
             workflow.current_step = stage["name"]
+            from apps.business_flows import logic_nodes
+
+            if (
+                logic_nodes.enabled(workflow)
+                and stage["identifier"] != "finish"
+                and (stage["name"] != "apply" or stage.get("modificationsApproval"))
+            ):
+                logic_nodes.advance(workflow, user, p, stage)
+                return
             if stage.get("taskId"):
                 task = authorized_task(user, stage["taskId"], p, workflow=workflow)
                 if task.status in ACTIVE:
@@ -1471,25 +1496,7 @@ def advance_demo(workflow_id) -> None:
                 planning = (
                     workflow.plan.get("modelPlanning") and stage.get("name") == "check"
                 )
-                model_policy = (
-                    {
-                        **p,
-                        "reasoningEffort": "low",
-                        "maxOutputTokens": min(p["maxOutputTokens"], 4096),
-                        "maxRunSeconds": min(p["maxRunSeconds"], 90),
-                    }
-                    if planning
-                    else {
-                        **p,
-                        "_thinking": False,
-                        "reasoningEffort": "low",
-                        "maxOutputTokens": min(p["maxOutputTokens"], 6144),
-                        "maxRunSeconds": min(p["maxRunSeconds"], 120),
-                    }
-                    if workflow.plan.get("executionPolicy") == "rule_geology_v2"
-                    and stage["identifier"] == "finish"
-                    else p
-                )
+                model_policy = p
                 recovering_response = _has_model_progress(stage)
                 if (
                     not recovering_response
@@ -1960,6 +1967,8 @@ def advance_demo(workflow_id) -> None:
                     )
                 return
             _submit_stage(workflow, user, p, stage)
+        except WorkflowControlChanged:
+            return
         except WorkflowPaused:
             _save(workflow, acknowledge_pause=True)
             return

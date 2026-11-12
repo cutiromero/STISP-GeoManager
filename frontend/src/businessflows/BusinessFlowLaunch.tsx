@@ -36,6 +36,9 @@ import { canonicalReadKey } from "../api/readFlights";
 import InputAdaptationReview, { preparationKey } from "./InputAdaptationReview";
 import { ResourceSearchLabel } from "../agent/ResourceSearchLabel";
 import { RESOURCE_SEARCH_DELAY_MS } from "../agent/resourceSearch";
+import ReasoningEffortControl, {
+  type ReasoningEffort,
+} from "../agent/ReasoningEffortControl";
 import "./business-flows.css";
 import "./business-flow-launch.css";
 
@@ -58,6 +61,8 @@ export default function BusinessFlowLaunch({
   onStarted,
   onCancel,
   compact = false,
+  reasoningEffort = "medium",
+  onReasoningEffortChange,
 }: {
   launch: BusinessFlowLaunchIntent;
   model: string;
@@ -65,6 +70,8 @@ export default function BusinessFlowLaunch({
   onStarted: (flow: BusinessFlowRun) => void | Promise<void>;
   onCancel: () => void;
   compact?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  onReasoningEffortChange?: (value: ReasoningEffort) => void;
 }) {
   const ui = useComputeText();
   const { bootstrap } = useAgentBootstrapState();
@@ -85,6 +92,8 @@ export default function BusinessFlowLaunch({
   }>();
   const previousInputs = useRef(inputs);
   const [reviewer, setReviewer] = useState<string>();
+  const [effort, setEffort] = useState(reasoningEffort);
+  useEffect(() => setEffort(reasoningEffort), [reasoningEffort]);
   const [batchId, setBatchId] = useState(() => createUuid().replace(/-/g, ""));
   const [uploading, setUploading] = useState(false);
   const [materialCount, setMaterialCount] = useState(0);
@@ -235,6 +244,11 @@ export default function BusinessFlowLaunch({
     version?.definition.nodes.some((node) => node.review.ai),
   );
   const reviewerModel = reviewer ?? model;
+  const thinkingAvailable =
+    bootstrap?.thinkingEnabled !== false &&
+    Boolean(
+      bootstrap?.models.find((item) => item.alias === model)?.supportsThinking,
+    );
   const modelOptions = (bootstrap?.models ?? [])
     .filter((value) => value.allowAgent)
     .map((value) => ({
@@ -416,6 +430,7 @@ export default function BusinessFlowLaunch({
       goal: goal.trim(),
       model,
       reviewerModel,
+      ...(thinkingAvailable ? { reasoningEffort: effort } : {}),
       inputs: Object.fromEntries(
         Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)),
       ),
@@ -570,6 +585,18 @@ export default function BusinessFlowLaunch({
                     </label>
                   )}
                 </div>
+                {thinkingAvailable && (
+                  <ReasoningEffortControl
+                    value={effort}
+                    overridden={effort !== "medium"}
+                    disabled={busy}
+                    onChange={(value) => {
+                      const selected = value ?? "medium";
+                      setEffort(selected);
+                      onReasoningEffortChange?.(selected);
+                    }}
+                  />
+                )}
                 {needsReview && (
                   <p className="business-flow-launch-note">
                     {ui(
@@ -583,6 +610,7 @@ export default function BusinessFlowLaunch({
                     <GenericWorkflowUploads
                       batchId={batchId}
                       model={model}
+                      reasoningEffort={thinkingAvailable ? effort : undefined}
                       inputs={inputs}
                       onInputsChange={setInputs}
                       onActivityChange={setUploading}

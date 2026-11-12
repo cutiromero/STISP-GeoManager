@@ -23,7 +23,7 @@ export default function ReasoningEffortControl({
   const labels = [
     ui("轻量", "Light"),
     ui("标准", "Standard"),
-    ui("深入", "Extended"),
+    ui("深度", "Deep"),
   ];
   return (
     <Popover

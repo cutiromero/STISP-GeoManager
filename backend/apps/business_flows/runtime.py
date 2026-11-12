@@ -352,7 +352,26 @@ def start_flow(user, version, value, *, source_run=None):
     ):
         raise PermissionDenied("业务流版本不可执行")
     model, key = value.get("model"), value.get("idempotencyKey")
+    if not isinstance(model, str) or not model:
+        raise ValidationError("请选择已登记的执行模型")
     policy = require_access(user, "agent", model)
+    from apps.agent.config import registry
+    from apps.agent.workflow_model_policy import REASONING_EFFORTS
+
+    effort = value.get("reasoningEffort", "medium")
+    if not isinstance(effort, str) or effort not in REASONING_EFFORTS:
+        raise ValidationError("思考强度必须为low、medium或xhigh")
+    thinking = bool(policy.get("thinkingEnabled", True) and registry()[model].qwen)
+    if "reasoningEffort" in value and not thinking:
+        raise PermissionDenied("当前模型或策略不支持深度思考，不能应用所选强度")
+    if (
+        source_run
+        and "reasoningEffort" in value
+        and (
+            source_run.thinking_mode != "deep" or source_run.reasoning_effort != effort
+        )
+    ):
+        raise ValidationError("业务流思考设置必须与发起运行一致")
     if not policy.get("workflowEnabled", True):
         raise PermissionDenied("业务流执行权限已关闭")
     goal = value.get("goal", version.flow.description or version.flow.name)
@@ -426,6 +445,12 @@ def start_flow(user, version, value, *, source_run=None):
         if node["review"]["ai"]
     }:
         require_access(user, "agent", alias)
+        if (
+            source_run.thinking_mode == "deep" if source_run else thinking
+        ) and not registry()[alias].qwen:
+            raise PermissionDenied(
+                "审核模型不支持本次深度思考设置，请选择支持思考的模型"
+            )
     request_hash = digest(
         {
             "versionId": version.pk,
@@ -442,6 +467,10 @@ def start_flow(user, version, value, *, source_run=None):
             ),
             "conversationId": value.get("conversationId"),
             "sourceRunId": source_run.pk if source_run else None,
+            "reasoningEffort": source_run.reasoning_effort if source_run else effort,
+            "thinkingMode": source_run.thinking_mode
+            if source_run
+            else ("deep" if thinking else "fast"),
         }
     )
     previous = AgentWorkflow._base_manager.filter(
@@ -566,7 +595,8 @@ def start_flow(user, version, value, *, source_run=None):
             idempotency_key="business-flow-" + key[:60],
             resource_ids=sorted(set(inputs.values())),
             knowledge_selection={"mode": "none", "domains": [], "_contextRunIds": []},
-            thinking_mode="fast",
+            thinking_mode="deep" if thinking else "fast",
+            reasoning_effort=effort if thinking else "",
         )
         if run.owner_id != user.pk or run.project_tag_id != workflow.project_tag_id:
             raise PermissionDenied("业务流与发起对话归属不一致")
@@ -601,6 +631,13 @@ def start_flow(user, version, value, *, source_run=None):
             "requestHash": request_hash,
             "agentEnabled": value.get("agentEnabled", True),
         }
+        if workflow.workflow_type == "geology_generic" and value.get(
+            "agentEnabled", True
+        ):
+            from .logic_nodes import EXECUTION_MODE
+
+            workflow.parameters["_businessFlow"]["nodeExecution"] = EXECUTION_MODE
+            workflow.max_iterations = min(256, max(4, policy["maxSteps"] * 2))
         workflow.plan["inputAdaptations"] = [
             {
                 key: item
@@ -621,7 +658,9 @@ def start_flow(user, version, value, *, source_run=None):
             workflow.plan["businessFlow"] = initial_state(definition)
         else:
             workflow.parameters["_businessFlow"]["state"] = initial_state(definition)
-        workflow.save(update_fields=["parameters", "plan", "updated_at"])
+        workflow.save(
+            update_fields=["parameters", "plan", "max_iterations", "updated_at"]
+        )
         emit(workflow, "system", "", "started", "业务流已启动，将按发布版本逐节点处理")
         # An ordinary tool caller hands ownership to the workflow queue after returning.
         if source_run:

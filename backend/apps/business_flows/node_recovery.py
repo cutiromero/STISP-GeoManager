@@ -80,9 +80,19 @@ def decide_recovery(user, workflow, value):
                     409,
                 )
             stage = current.plan["stages"][current.plan["stageIndex"]]
-            if stage.get("taskId") != item["recovery"].get("taskId"):
-                raise ComputeError("专业阶段失败任务已变化", 409)
-            stage.pop("taskId", None)
+            from . import logic_nodes
+
+            if logic_nodes.enabled(current):
+                if "retry_recovery" not in item["recovery"]["options"]:
+                    raise ComputeError("节点额度已用尽，不能通过重试重置额度", 409)
+                loop = loop_state(item)
+                loop["userAnswer"] = value.get("feedback", "")
+                loop.pop("pending", None)
+                loop.pop("taskId", None)
+            else:
+                if stage.get("taskId") != item["recovery"].get("taskId"):
+                    raise ComputeError("专业阶段失败任务已变化", 409)
+                stage.pop("taskId", None)
             item["status"] = "executing"
             from apps.agent.workflow import _state_hash
 

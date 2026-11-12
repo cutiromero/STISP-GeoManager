@@ -489,7 +489,10 @@ def decision_payload(workflow, stage, context, results) -> dict:
         )
         payload["modelDispatchRecorded"] = any(
             item.get("name") == "check"
-            and item.get("decision", {}).get("modelMode") == "real"
+            and (
+                item.get("decision", {}).get("modelMode") == "real"
+                or item.get("modelDispatchRecorded")
+            )
             for item in workflow.plan["stages"]
         )
     if stage.get("businessFlowFeedback"):

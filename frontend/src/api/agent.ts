@@ -55,6 +55,7 @@ import type {
   GetActiveAgentWorkflowResponses,
   AgentInteractionUpdate,
   CancelAgentWorkflowData,
+  RecognizeAgentWorkflowRolesData,
 } from "./generated/types.gen";
 
 export const agentApi = {
@@ -67,12 +68,22 @@ export const agentApi = {
       form,
     );
   },
-  recognizeWorkflowRoles: (batchId: string, model: string) =>
+  recognizeWorkflowRoles: (
+    batchId: string,
+    model: string,
+    reasoningEffort?: NonNullable<
+      RecognizeAgentWorkflowRolesData["body"]
+    >["reasoningEffort"],
+  ) =>
     requestJson<AgentWorkflowRoleResult>(
       "/api/agent/workflow-uploads/recognize/",
       {
         method: "POST",
-        body: { batchId, model },
+        body: {
+          batchId,
+          model,
+          ...(reasoningEffort ? { reasoningEffort } : {}),
+        },
       },
     ),
   activeWorkflow: (options: { signal?: AbortSignal } = {}) =>
@@ -126,20 +137,28 @@ export const agentApi = {
       validate: assertConversation,
     }),
   deletionPreview: (id: number, options: { signal?: AbortSignal } = {}) =>
-    requestJson<AgentConversationDeletionPreview>(`/api/agent/conversations/${id}/deletion-preview/`, {
-      ...options,
-      validate: (data) => {
-        assertConversationDeletionPreview(data);
-        if (data.conversationId !== id)
-          throw new ResponseFormatError("deletionPreview.conversationId: request mismatch");
+    requestJson<AgentConversationDeletionPreview>(
+      `/api/agent/conversations/${id}/deletion-preview/`,
+      {
+        ...options,
+        validate: (data) => {
+          assertConversationDeletionPreview(data);
+          if (data.conversationId !== id)
+            throw new ResponseFormatError(
+              "deletionPreview.conversationId: request mismatch",
+            );
+        },
       },
-    }),
+    ),
   remove: (id: number, body?: AgentConversationDeleteInput) =>
-    requestJson<AgentConversationDeleteResult>(`/api/agent/conversations/${id}/`, {
-      method: "DELETE",
-      ...(body ? { body } : {}),
-      validate: assertConversationDeleteResult,
-    }),
+    requestJson<AgentConversationDeleteResult>(
+      `/api/agent/conversations/${id}/`,
+      {
+        method: "DELETE",
+        ...(body ? { body } : {}),
+        validate: assertConversationDeleteResult,
+      },
+    ),
   submit: (id: number, body: AgentRunInput) =>
     requestJson<AgentRun>(`/api/agent/conversations/${id}/runs/`, {
       method: "POST",

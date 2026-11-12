@@ -250,7 +250,7 @@ function AgentWorkspace({
   };
   const requestedEffort =
     thinkingMode === "deep"
-      ? (effortOverride ?? (logicProject ? "xhigh" : undefined))
+      ? (effortOverride ?? (logicProject ? "medium" : undefined))
       : undefined;
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
@@ -1556,6 +1556,13 @@ function AgentWorkspace({
             <BusinessFlowLaunch
               launch={businessLaunch}
               model={model}
+              reasoningEffort={
+                effortOverride ?? (logicProject ? "medium" : defaultEffort)
+              }
+              onReasoningEffortChange={(value) => {
+                setEffortOverride(value);
+                setThinkingMode("deep");
+              }}
               compact={layout.narrow}
               conversationId={
                 current?.archived || taskLocked ? undefined : current?.id
@@ -2083,6 +2090,12 @@ function AgentWorkspace({
                       <GenericWorkflowUploads
                         batchId={uploadBatchId}
                         model={model}
+                        reasoningEffort={
+                          deepThinkingAvailable && thinkingMode === "deep"
+                            ? (effortOverride ??
+                              (logicProject ? "medium" : defaultEffort))
+                            : undefined
+                        }
                         inputs={logicInputs}
                         uploadOnly
                         disabled={
@@ -2295,7 +2308,7 @@ function AgentWorkspace({
                       <ReasoningEffortControl
                         value={
                           logicProject
-                            ? (effortOverride ?? "xhigh")
+                            ? (effortOverride ?? "medium")
                             : (effortOverride ?? defaultEffort)
                         }
                         overridden={effortOverride !== undefined}

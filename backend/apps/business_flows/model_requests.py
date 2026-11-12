@@ -38,6 +38,15 @@ def admit(workflow, request_id, *, maximum=MAX_MODEL_CALLS):
                 for row in binding(workflow)["definitionSnapshot"]["nodes"]
                 if row["id"] == workflow.current_step
             )
+            from . import logic_nodes
+
+            if (
+                logic_nodes.enabled(workflow)
+                and workflow.current_step != "final_analysis"
+            ):
+                node = logic_nodes.node_definition(
+                    workflow, logic_nodes.current_stage(workflow, node["id"])
+                )
             contract = node.get("contract") or recovery_contract(node)
             if loop["modelCalls"] >= contract["maxModelCalls"]:
                 raise ModelCallBudgetExceeded("节点模型调用额度已用尽，已保留当前结果")

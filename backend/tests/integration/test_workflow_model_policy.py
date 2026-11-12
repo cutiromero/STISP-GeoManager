@@ -50,8 +50,8 @@ def save_policy(value):
     AgentPolicy.objects.update_or_create(pk=1, defaults={"value": value})
 
 
-def test_new_policy_defaults_to_actual_supported_xhigh(linked):
-    assert default_policy()["reasoningEffort"] == "xhigh"
+def test_new_policy_defaults_to_standard_effort(linked):
+    assert default_policy()["reasoningEffort"] == "medium"
     saved = default_policy()
     saved["reasoningEffort"] = "medium"
     save_policy(saved)
@@ -64,8 +64,8 @@ def test_new_policy_defaults_to_actual_supported_xhigh(linked):
         ("deep", "low", True, "low"),
         ("deep", "medium", True, "medium"),
         ("deep", "xhigh", True, "xhigh"),
-        ("deep", "", True, "xhigh"),
-        ("fast", "", False, "xhigh"),
+        ("deep", "", True, "medium"),
+        ("fast", "", False, "medium"),
         ("fast", "low", False, "low"),
     ],
 )
@@ -181,7 +181,7 @@ def test_direct_workflow_uses_current_policy_and_model_capability(
     save_policy(current)
     result = authorize(linked)
     assert result["_thinking"] is expected
-    assert result["reasoningEffort"] == "xhigh"
+    assert result["reasoningEffort"] == "medium"
 
 
 @pytest.mark.parametrize(

@@ -44,12 +44,14 @@ vi.mock("../agent/useAgentBootstrap", () => ({
           name: "执行模型",
           allowAgent: true,
           status: "online",
+          supportsThinking: true,
         },
         {
           alias: "reviewer",
           name: "审核模型",
           allowAgent: true,
           status: "online",
+          supportsThinking: true,
         },
       ],
     },
@@ -587,8 +589,35 @@ it("sends a separately selected reviewer model without changing the executor", a
   expect(start.mock.calls[0]?.[1]).toMatchObject({
     model: "executor",
     reviewerModel: "reviewer",
+    reasoningEffort: "medium",
   });
 });
+
+it.each(["low", "medium", "xhigh"] as const)(
+  "launch sends the selected reasoning effort %s",
+  async (effort) => {
+    const start = vi
+      .spyOn(businessFlowsApi, "start")
+      .mockResolvedValue(businessFlowRun({ status: "queued" }));
+    showLaunch();
+    const control = await screen.findByRole("button", { name: "调整思考强度" });
+    expect(control).toHaveTextContent("标准");
+    fireEvent.click(control);
+    const slider = await screen.findByRole("slider", { name: "思考强度" });
+    fireEvent.keyDown(slider, { key: "Home", keyCode: 36 });
+    for (
+      let index = 0;
+      index < ["low", "medium", "xhigh"].indexOf(effort);
+      index++
+    ) {
+      fireEvent.keyDown(slider, { key: "ArrowRight", keyCode: 39 });
+    }
+    fireEvent.click(control);
+    fireEvent.click(screen.getByRole("button", { name: "开始业务流" }));
+    await waitFor(() => expect(start).toHaveBeenCalledOnce());
+    expect(start.mock.calls[0]?.[1]).toMatchObject({ reasoningEffort: effort });
+  },
+);
 
 it("counts completed execution and independent review before the required human decision", () => {
   const waiting = businessFlowRun();

@@ -151,7 +151,7 @@ GET `/api/catalog/resources/{id}/vector-tiles/{revision}/{z}/{x}/{y}.pbf`沿用q
 
 `GET /api/agent/workflows/active/` 在当前项目智能体与MH-workflow授权后，读取本账号唯一活动任务（含暂停），返回 `{item:null}` 或含 `id/goal/workflowType/status/updatedAt/projectId` 的本人摘要。账号并发限制跨项目生效，摘要不含数据或计划。查看与取消使用既有详情、取消接口，并以目标项目ID重新授权；不绕过项目成员、模型或资料权限。前端提供任务名称、场景、状态、更新时间、查看及二次确认取消，取消中的任务在安全边界停止。
 
-逻辑推理项目使用 `ReasoningEffortControl` 的“轻量 / 标准 / 深入”滑杆，不显示“深度思考”开关。默认深入明确发送 `thinkingMode=deep` 与 `reasoningEffort=xhigh`；轻量为 `fast` 且不发送强度，标准为 `deep+medium`。“使用默认强度”恢复深入，用户明确恢复的历史配置优先。模型或策略不支持深度思考时隐藏控件并采用快速模式。固定通用场景不请求算法目录、算子候选、项目资料、场景目录与预设；上传和目标输入不等待历史任务或bootstrap。其他项目保持原控件和加载行为。
+逻辑推理项目使用 `ReasoningEffortControl` 的“轻量 / 标准 / 深度”滑杆，不显示“深度思考”开关。默认标准明确发送 `thinkingMode=deep` 与 `reasoningEffort=medium`；轻量为 `deep+low`，深度为 `deep+xhigh`，三档均开启思考。“使用默认强度”恢复标准，用户明确恢复的历史配置优先。模型或策略不支持深度思考时隐藏控件并采用快速模式。业务流启动面板使用同一三档设置，聊天入口的两处控件同步；任务全部执行、审核、返修及上下文归纳请求使用父运行的相同选择，分词与生成一致。固定通用场景不请求算法目录、算子候选、项目资料、场景目录与预设；上传和目标输入不等待历史任务或bootstrap。其他项目保持原控件和任务预算行为。
 
 `POST /api/agent/workflow-uploads/` 以 multipart 上传一个文件和客户端生成的 `batchId`（32位小写十六进制）。矢量支持 Shapefile ZIP、GeoPackage、GeoJSON，栅格支持 GeoTIFF，表格支持 CSV、XLSX，校验和大小限制沿用既有导入服务。栅格大小上限为平台 `uploadMaxMb`。资料登记为 `owner_only` 数据资源（栅格在导入写入时即为 `owner_only`），来源标记 `workflow-upload:<batchId>`，不出现在数据目录、搜索、算子输入候选、地图图层列表、后台数据管理列表与导出、首页和看板统计中；返回识别结果（类型、坐标系、几何、要素数、字段与示例取值）和推荐角色 `roleHint`。每个批次最多12个文件。`GET ...?batchId=` 列出本人当前项目该批次的上传；`DELETE .../{uploadId}/` 只能删除尚未绑定任务的上传，否则返回409。上传需要智能体访问、MH-workflow、智能体调用算子及当前项目 `catalog.add_dataresource` 权限。
 
@@ -217,7 +217,7 @@ AgentWorkflowStep.decision 为可空公开判断摘要，包含问题、发现�
 
 智能体 bootstrap 返回 `defaultReasoningEffort`。提交接口在 `thinkingMode=deep` 时接受可选 `reasoningEffort`（`low/medium/xhigh`）。显式选择优先于预算方案强度和后台默认强度；省略时沿用原默认策略。快速模式传入强度返回 400。强度持久化到本轮任务并参与幂等校验，worker 在预算解析后、上下文计数及模型请求前应用。后台深度思考开关与模型能力检查继续生效。
 
-新建后台策略默认强度为 `xhigh`，逻辑推理项目的新会话默认选择“深入”（`deep` 与 `xhigh`）。聊天发起的工作流从绑定的 `requestRunId`（无则 `originRunId`）继承模式、显式强度和任务预算；核对本人、项目、会话、所选模型及工作流绑定，不接受任意运行编号。后续授权重新核查策略与额度，来源停止、归档或授权收窄即停止执行，历史查看不重新执行该检查。独立工作流和独立角色识别采用当前后台思考策略。分词与生成使用一致的思考模式和强度。思考与正文共用有效策略的`maxOutputTokens`，选择深入不绕过输入、字节、模型窗口或真实调用次数限制。完整成员审阅保留每批15000 token输入上限；后续非编辑阶段的专用证据投影与预算规则见[logic-agent-execution.md](logic-agent-execution.md)。
+新建后台策略默认强度为 `medium`，逻辑推理项目的新会话默认选择“标准”（`deep` 与 `medium`）；已保存的管理员策略和明确选择继续有效。聊天发起的工作流从绑定的 `requestRunId`（无则 `originRunId`）继承模式、显式强度和任务预算；业务流目录启动从冻结的父运行 `runId` 继承同一设置。核对本人、项目、会话、所选模型及工作流绑定，不接受任意运行编号。后续授权重新核查策略与额度，来源停止、归档或授权收窄即停止执行；执行者和审核者分别核对其实际模型是否支持所选思考模式，不能静默关闭。分词、生成和审计使用一致的模式和强度，思考与正文共用有效生成额度。完整成员审阅和后续非编辑阶段的证据投影与预算规则见[logic-agent-execution.md](logic-agent-execution.md)。
 
 > 本文保留历史业务接入说明。历史 `accessGroupIds`、`audienceGroupIds`、`availableAccessGroups` 只用于兼容元数据，不授予或限制项目内对象访问。项目、内容、工程规则以本文最新章节及上述当前规则为准；不要沿用早期按角色共享、四大类或 all 聚合的示例。
 
@@ -3095,6 +3095,8 @@ API JSON 元数据默认 `Cache-Control: private,no-store`，文件和瓦片的�
 专业逻辑推理的固定骨架是资料确认、一致性检查、处置建议、修正复核、构造关系、找矿远景和成果整理。注册定义可以调整说明，并在处置建议、成果整理两个实际模型决策边界配置AI审核；其余节点不虚设AI审核。人工决定固定为资料确认与处置批准，不凭流程图增删旧服务不存在的门禁。不能更换专业骨架、资料角色或绑定任意算法。通用research_flow的节点仍可自由组合AI审核和人工门禁。其科学运算与原有逻辑推理复用同一执行服务，不依据流程图中模型文字自行授权修改。
 
 `POST /api/business-flows/{flowId}/start/` 绑定不可变发布版本、当前资料与唯一幂等键；返回真实 `AgentWorkflow` 执行。父会话与运行由 `conversationId`、`runId` 关联，`AgentRun.businessFlow` 在智能体中恢复完整业务流进度。客户端不能在 `parameters` 中注入 `_businessFlow`；地质上传批次可以从受控参数 `uploadBatchId` 传入旧适配器。
+
+上传准备的 `/api/agent/workflow-uploads/recognize/` 接受相同的可选 `reasoningEffort`，AI资料用途建议沿用当前启动选择。启动字段 `reasoningEffort` 接受 `low / medium / xhigh`，目录启动默认 `medium`，对应轻量、标准、深度。显式强度要求执行和审核模型均支持思考；不支持时返回403，非法值返回400。幂等摘要包含思考设置，同键不同设置返回409。通过智能体工具启动时沿用发起运行的模式、强度和预算。逻辑推理新任务在五个真实计算阶段使用共享节点工具循环，查询已登记版本、绑定已确认输入、填写允许参数、预检相同方案后计算，并读取真实统计交付；完整清单按编号分段读取。科研参数、输入版本和处置批准属于已确认科学配方，改动须重新确认，不能靠放宽阈值恢复错误。
 
 `GET /api/business-flows/runs/` 只返回当前项目本人最近30项轻量历史；详情按需读取真实执行、审核和事件。`/decide/` 只能由用户提交当前节点及 `revision` 对应的批准或返修决定；过期、重复不一致或其他账号的决定被拒绝。审核智能体的通过结论不能代替用户批准，停止与暂停也不会因为模型迟到响应而被覆盖。停止本人当前项目的任务不要求仍有智能体或源资料权限，响应清除模型正文、节点输出和事件，仅保留安全控制状态；实际计算任务取消仍通过原计算中心归属与权限检查。
 

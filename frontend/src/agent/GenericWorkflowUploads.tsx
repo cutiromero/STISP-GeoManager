@@ -28,6 +28,7 @@ import {
 import { agentApi } from "../api/agent";
 import { ResourceSearchLabel } from "./ResourceSearchLabel";
 import { scheduleResourceSearch } from "./resourceSearch";
+import type { ReasoningEffort } from "./ReasoningEffortControl";
 import type {
   AgentWorkflowUpload,
   AgentWorkflowRoleResult,
@@ -93,6 +94,7 @@ export default function GenericWorkflowUploads({
   onSelectionChange,
   presentation = "default",
   allowedRoles,
+  reasoningEffort,
 }: {
   batchId: string;
   model: string;
@@ -107,6 +109,7 @@ export default function GenericWorkflowUploads({
   onSelectionChange?: () => void;
   presentation?: "default" | "business-flow";
   allowedRoles?: string[];
+  reasoningEffort?: ReasoningEffort;
 }) {
   const polished = presentation === "business-flow";
   const [items, setItems] = useState<AgentWorkflowUpload[]>([]);
@@ -271,7 +274,9 @@ export default function GenericWorkflowUploads({
     setRecognizing(true);
     setRecognitionError("");
     try {
-      const result = await agentApi.recognizeWorkflowRoles(batchId, model);
+      const result = reasoningEffort
+        ? await agentApi.recognizeWorkflowRoles(batchId, model, reasoningEffort)
+        : await agentApi.recognizeWorkflowRoles(batchId, model);
       if (currentBatch.current !== batchId) return;
       setSuggestions(result);
       onInputsChange((old) => {

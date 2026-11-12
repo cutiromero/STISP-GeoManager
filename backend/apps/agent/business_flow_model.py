@@ -143,14 +143,21 @@ def _live_policy(workflow, alias, ceiling, source_bindings):
     # Source bindings were frozen by the caller before this request. Recheck
     # their actual runs/policies without rereading the large mutable result plan.
     current.plan = {"chatExecution": source_bindings}
+    current.parameters = {}
     user = fresh_user(current.owner_id)
-    policy = workflow_model_policy(current, user, require_access(user, "agent", alias))
+    policy = workflow_model_policy(
+        current, user, require_access(user, "agent", alias), model_alias=alias
+    )
     for key in LIMITS:
         value = policy.get(key)
         if type(value) is not int or value <= 0:
             raise PermissionDenied("业务流当前模型预算无效")
         if ceiling is not None and value < ceiling[key]:
             raise PermissionDenied("业务流节点模型预算权限已收窄，请重新确认")
+    if ceiling is not None and any(
+        policy.get(key) != ceiling.get(key) for key in ("_thinking", "reasoningEffort")
+    ):
+        raise PermissionDenied("业务流思考设置已变化，请重新确认")
     return policy
 
 
@@ -186,6 +193,10 @@ def request_node_result(
     model = registry()[alias]
     guard()
     source_bindings = deepcopy(workflow.plan.get("chatExecution", {}))
+    if not source_bindings and workflow.parameters.get("_businessFlow"):
+        source_bindings = {
+            "requestRunId": workflow.parameters["_businessFlow"].get("runId")
+        }
     live = _live_policy(workflow, alias, None, source_bindings)
     effective = dict(live)
     for key in LIMITS:
@@ -194,7 +205,6 @@ def request_node_result(
             raise ComputeError("业务流节点模型预算无效")
         effective[key] = min(live[key], chosen, caps[key])
     # Each role receives a separate bounded context, never a prior actor conversation.
-    effective.update(_thinking=False, reasoningEffort="low")
     packet = {
         "node": {
             key: node.get(key, "")
@@ -295,13 +305,13 @@ def request_node_result(
         "requestSha256": _digest(_json(messages)),
         "usage": {},
         "humanApprovalRequired": human_required,
-        "thinkingEnabled": False,
-        "reasoningEffort": "low",
+        "thinkingEnabled": effective["_thinking"],
+        "reasoningEffort": effective["reasoningEffort"],
         "outputLimit": effective["maxOutputTokens"],
     }
 
     def publish(status, **values):
-        if status == "requesting" and managed:
+        if status == "requesting" and (managed or professional):
             from apps.business_flows.model_requests import admit
 
             admit(workflow, record["requestId"])
@@ -379,7 +389,16 @@ def request_node_result(
                 levels=range(2),
                 notices=packet["contextNotice"],
                 measurements=TokenMeasurements(
-                    model, counter=context_budget.count_tokens
+                    model,
+                    thinking=effective["_thinking"],
+                    effort=effective["reasoningEffort"],
+                    counter=(
+                        lambda model, messages, thinking, effort: provider.count_tokens(
+                            model, messages, thinking, effort, tools=tools
+                        )
+                    )
+                    if tools
+                    else context_budget.count_tokens,
                 ),
             )
             record.update(
@@ -421,6 +440,8 @@ def request_node_result(
                             "baseUrl": model.base_url,
                             "budget": management["inputBudgetTokens"],
                             "outputLimit": record["outputLimit"],
+                            "thinking": effective["_thinking"],
+                            "effort": effective["reasoningEffort"],
                         }
                     )
                 )
@@ -443,10 +464,10 @@ def request_node_result(
                             record["outputLimit"],
                             checked,
                             structured=True,
-                            thinking=False,
+                            thinking=effective["_thinking"],
                             temperature=0,
                             top_p=live["topP"],
-                            reasoning_effort="low",
+                            reasoning_effort=effective["reasoningEffort"],
                             on_usage=usage_received,
                             on_thinking=thinking_received,
                             monitor_guard=checked.poll,
@@ -544,6 +565,8 @@ def request_node_result(
                 locked=bool(snapshot),
                 measurements=TokenMeasurements(
                     model,
+                    thinking=effective["_thinking"],
+                    effort=effective["reasoningEffort"],
                     counter=lambda model, messages, thinking, effort: (
                         provider.count_tokens(
                             model, messages, thinking, effort, tools=tools
@@ -618,7 +641,7 @@ def request_node_result(
                     )
         else:
             tokens, truncated = prepare_context(
-                messages, messages[1], model, effective, window, False
+                messages, messages[1], model, effective, window, effective["_thinking"]
             )
             if truncated:
                 raise ComputeError("业务流节点模型不能丢弃实际证据，未发送请求")
@@ -637,10 +660,10 @@ def request_node_result(
                 effective["maxOutputTokens"],
                 checked,
                 structured=True,
-                thinking=False,
+                thinking=effective["_thinking"],
                 temperature=min(live["temperature"], 0.1),
                 top_p=live["topP"],
-                reasoning_effort="low",
+                reasoning_effort=effective["reasoningEffort"],
                 on_usage=usage_received,
                 on_thinking=thinking_received,
                 monitor_guard=checked.poll,

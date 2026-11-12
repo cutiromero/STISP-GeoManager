@@ -23,7 +23,7 @@ def _model(policy, alias):
     return model
 
 
-def run_model_policy(run, user, policy):
+def run_model_policy(run, user, policy, *, model_alias=None):
     """Use a run with a live authorized policy; no workflow binding is required."""
     conversation = run.conversation
     scope = current_scope.get()
@@ -37,7 +37,7 @@ def run_model_policy(run, user, policy):
         raise PermissionDenied("科研任务来源不属于当前用户或项目")
     if run.cancel_requested or conversation.archived:
         raise PermissionDenied("科研任务来源已停止或归档")
-    model = _model(policy, run.model)
+    model = _model(policy, model_alias or run.model)
     if run.thinking_mode not in {"fast", "deep"} or (
         run.reasoning_effort and run.reasoning_effort not in REASONING_EFFORTS
     ):
@@ -64,7 +64,7 @@ def run_model_policy(run, user, policy):
     return result
 
 
-def workflow_model_policy(workflow, user, policy):
+def workflow_model_policy(workflow, user, policy, *, model_alias=None):
     """Resolve trusted run bindings; an invalid source never becomes a default."""
     if workflow.owner_id != user.id:
         raise PermissionDenied("科研任务不属于当前用户")
@@ -72,8 +72,11 @@ def workflow_model_policy(workflow, user, policy):
     if not isinstance(execution, dict):
         raise PermissionDenied("科研任务来源记录无效")
     keys = [key for key in ("originRunId", "requestRunId") if key in execution]
+    if not keys and workflow.parameters.get("_businessFlow"):
+        execution = {"requestRunId": workflow.parameters["_businessFlow"].get("runId")}
+        keys = ["requestRunId"]
     if not keys:
-        model = _model(policy, workflow.model)
+        model = _model(policy, model_alias or workflow.model)
         return {
             **policy,
             "_thinking": bool(policy.get("thinkingEnabled", True) and model.qwen),
@@ -99,4 +102,4 @@ def workflow_model_policy(workflow, user, policy):
     source = runs[execution.get("requestRunId", execution.get("originRunId"))]
     if source.model != workflow.model:
         raise PermissionDenied("科研任务模型与来源运行的选择不一致")
-    return run_model_policy(source, user, policy)
+    return run_model_policy(source, user, policy, model_alias=model_alias)

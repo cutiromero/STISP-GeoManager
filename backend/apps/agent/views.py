@@ -25,7 +25,6 @@ from .models import (
     AgentAttachment,
     Conversation,
     AgentRun,
-    ACTIVE,
     WORKFLOW_ACTIVE,
 )
 from .policy import (
@@ -1291,15 +1290,21 @@ def logic_configuration(request):
 def workflow_recognize_roles(request):
     from .workflow_roles import recognize_roles
 
-    value = body(request, ["batchId", "model"])
+    value = body(request, ["batchId", "model", "reasoningEffort"])
     if not isinstance(value.get("model"), str):
         raise ApiProblem("请选择模型")
+    if "reasoningEffort" in value and (
+        not isinstance(value["reasoningEffort"], str)
+        or value["reasoningEffort"] not in {"low", "medium", "xhigh"}
+    ):
+        raise ApiProblem("思考强度必须为low、medium或xhigh")
     return JsonResponse(
         recognize_roles(
             request.user,
             request.headers.get("X-Project-Id"),
             value.get("batchId"),
             value["model"],
+            reasoning_effort=value.get("reasoningEffort"),
         )
     )
 

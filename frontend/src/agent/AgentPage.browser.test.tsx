@@ -1028,7 +1028,7 @@ it.each(["chat", "workbench"])(
     fireEvent.click(trigger);
     const slider = await screen.findByRole("slider", { name: "思考强度" });
     fireEvent.keyDown(slider, { key: "End", keyCode: 35 });
-    await waitFor(() => expect(trigger).toHaveTextContent("深入"));
+    await waitFor(() => expect(trigger).toHaveTextContent("深度"));
     fireEvent.click(trigger);
     const box = container.querySelector<HTMLDivElement>(".agent-messages")!;
     box.scrollTop = 0;
@@ -1090,7 +1090,7 @@ it.each([
     fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
     const slider = await screen.findByRole("slider", { name: "思考强度" });
     await waitFor(() => expect(slider).toBeVisible());
-    for (const label of ["轻量", "标准", "深入"])
+    for (const label of ["轻量", "标准", "深度"])
       expect(screen.getByText(label, { exact: true })).toBeVisible();
     expect(reasoning).toHaveAttribute("aria-pressed", "false");
     if (effort === "low") {
@@ -3084,25 +3084,25 @@ function rerenderAgent(mounted: ReturnType<typeof showAgent>) {
   );
 }
 
-it("logic effort defaults to explicit deep xhigh without touching the slider", async () => {
+it("logic effort defaults to explicit deep medium without touching the slider", async () => {
   projectCode.value = "02";
   localStorage.setItem("agent-thinking:99:agent", "fast");
   showAgent("workbench");
   await screen.findByText("旧问题");
   expect(
     screen.getByRole("button", { name: "调整思考强度" }),
-  ).toHaveTextContent("深入");
+  ).toHaveTextContent("标准");
   await submitEffortQuestion();
   expect(agentApi.submit).toHaveBeenCalledWith(
     1,
     expect.objectContaining({
       thinkingMode: "deep",
-      reasoningEffort: "xhigh",
+      reasoningEffort: "medium",
     }),
   );
 });
 
-it("logic effort restores deep xhigh when the user chooses the default strength", async () => {
+it("logic effort restores deep medium when the user chooses the default strength", async () => {
   projectCode.value = "02";
   showAgent("workbench");
   await screen.findByText("旧问题");
@@ -3114,14 +3114,14 @@ it("logic effort restores deep xhigh when the user chooses the default strength"
   });
   expect(control).toHaveTextContent("轻量");
   fireEvent.click(screen.getByRole("button", { name: "使用默认强度" }));
-  expect(control).toHaveTextContent("深入");
+  expect(control).toHaveTextContent("标准");
   fireEvent.click(control);
   await submitEffortQuestion();
   expect(agentApi.submit).toHaveBeenCalledWith(
     1,
     expect.objectContaining({
       thinkingMode: "deep",
-      reasoningEffort: "xhigh",
+      reasoningEffort: "medium",
     }),
   );
 });
@@ -3156,7 +3156,7 @@ it.each(["low", "medium", "xhigh"] as const)(
       fireEvent.keyDown(slider, { key: "ArrowRight", keyCode: 39 });
     fireEvent.click(control);
     expect(agentApi.restoreLogicConfiguration).not.toHaveBeenCalled();
-    const label = { low: "轻量", medium: "标准", xhigh: "深入" }[effort];
+    const label = { low: "轻量", medium: "标准", xhigh: "深度" }[effort];
     expect(
       screen.getByRole("button", { name: "调整思考强度" }),
     ).toHaveTextContent(label);
@@ -3243,13 +3243,13 @@ it("logic effort resets for a different project while retaining ordinary project
   rerenderAgent(mounted);
   await screen.findByText("旧问题");
   control = screen.getByRole("button", { name: "调整思考强度" });
-  expect(control).toHaveTextContent("深入");
+  expect(control).toHaveTextContent("标准");
   await submitEffortQuestion();
   expect(agentApi.submit).toHaveBeenCalledWith(
     1,
     expect.objectContaining({
       thinkingMode: "deep",
-      reasoningEffort: "xhigh",
+      reasoningEffort: "medium",
     }),
   );
   vi.mocked(agentApi.submit).mockClear();

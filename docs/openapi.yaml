@@ -8186,6 +8186,7 @@ paths:
               properties:
                 batchId: {type: string, pattern: '^[0-9a-f]{32}$', description: 上传批次号}
                 model: {type: string, description: 当前授权模型标识}
+                reasoningEffort: {type: string, enum: [low, medium, xhigh], description: 本次资料用途建议的深度思考强度；沿用启动面板选择，省略时使用当前策略。三档均开启思考，模型或策略不支持时拒绝。}
       responses:
         '200':
           description: 可由用户修改的角色建议
@@ -10087,7 +10088,7 @@ components:
         defaultReasoningEffort:
           type: string
           enum: [low, medium, xhigh]
-          description: 后台默认思考强度，新策略为xhigh；开启任务预算时以当前方案默认值为准。逻辑项目界面默认显式选择deep+xhigh
+          description: 后台默认思考强度，新策略为medium（标准）；开启任务预算时以当前方案默认值为准。逻辑项目界面默认显式选择deep+medium
         budgets:
           $ref: '#/components/schemas/AgentBudgetOptions'
         canChat:
@@ -10769,7 +10770,7 @@ components:
           maxLength: 80
         thinkingMode:
           type: string
-          description: 思考模式；逻辑项目界面默认显式发送deep与reasoningEffort=xhigh；选择fast时不得传reasoningEffort。关联科研工作流继承本人当前项目绑定运行的选择，服务端仍复核模型能力与策略
+          description: 思考模式；逻辑项目界面默认显式发送deep与reasoningEffort=medium；选择fast时不得传reasoningEffort。关联科研工作流继承本人当前项目绑定运行的选择，服务端仍复核模型能力与策略
           enum:
           - fast
           - deep
@@ -20955,7 +20956,7 @@ components:
     BusinessFlowCreate: {"type": "object", "description": "登记并立即发布第一版；仅当前项目超级管理员可调用。", "properties": {"code": {"type": "string", "description": "当前项目唯一稳定编码", "pattern": "^[a-z][a-z0-9_-]{1,79}$"}, "name": {"type": "string", "description": "业务流名称", "maxLength": 120}, "description": {"type": "string", "description": "科研任务、适用条件与用途", "maxLength": 3000}, "isActive": {"type": "boolean", "description": "是否允许新任务启动"}, "definition": {"$ref": "#/components/schemas/BusinessFlowSpec"}}, "required": ["code", "name", "definition"], "additionalProperties": false}
     BusinessFlowUpdate: {"type": "object", "description": "只修改登记元信息，不覆盖已发布定义。", "properties": {"name": {"type": "string", "description": "业务流名称", "maxLength": 120}, "description": {"type": "string", "description": "科研任务、适用条件与用途", "maxLength": 3000}, "isActive": {"type": "boolean", "description": "是否允许新任务启动"}, "updatedAt": {"type": "string", "description": "元信息版本时间，也是保存的乐观并发凭据", "format": "date-time"}}, "required": ["updatedAt"], "additionalProperties": false}
     BusinessFlowVersionPublish: {"type": "object", "description": "发布新不可变版本并设为当前版本；不修改正在运行任务的快照。", "properties": {"definition": {"$ref": "#/components/schemas/BusinessFlowSpec"}, "updatedAt": {"type": "string", "description": "元信息版本时间，也是保存的乐观并发凭据", "format": "date-time"}}, "required": ["definition", "updatedAt"], "additionalProperties": false}
-    BusinessFlowStart: {"type": "object", "description": "按固定版本启动任务；数据编号仍按当前用户、项目和隐私边界重验。", "properties": {"versionId": {"type": "integer", "description": "省略时使用当前发布版本", "minimum": 1}, "goal": {"type": "string", "description": "本次目标", "minLength": 1, "maxLength": 12000}, "model": {"type": "string", "description": "执行模型别名", "maxLength": 80}, "reviewerModel": {"type": "string", "description": "独立审核请求使用的模型别名；可与执行模型相同但上下文和职责独立", "maxLength": 80}, "inputs": {"type": "object", "description": "角色到当前项目资料编号的映射，最多30项", "additionalProperties": {"type": "integer", "description": "资料编号", "minimum": 1}}, "parameters": {"type": "object", "description": "受控任务参数，不新增任意根级配置。research_flow仅允许nodeParameters对象（operator节点ID→该已发布算法manifest声明的参数值对象）；节点必须存在且类型为operator，未知节点/参数键不静默忽略。与冻结node.parameters默认值合并后，真实取值、类型、字段和波段仍由计算中心验证。geology_generic只允许既有专业参数及uploadBatchId；禁止_businessFlow等内部状态。", "additionalProperties": true}, "conversationId": {"type": "integer", "description": "可选本人当前项目会话，未传则由服务器建立", "minimum": 1}, "idempotencyKey": {"type": "string", "description": "同一操作重试的稳定键", "minLength": 8, "maxLength": 80}, "inputAdapters": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoices"}, "agentEnabled": {"type": "boolean", "default": true, "description": "允许智能体执行合同与自动补救；关闭时算子失败直接等待用户"}}, "required": ["goal", "model", "inputs", "parameters", "idempotencyKey"], "additionalProperties": false}
+    BusinessFlowStart: {"type": "object", "description": "按固定版本启动任务；数据编号仍按当前用户、项目和隐私边界重验。", "properties": {"versionId": {"type": "integer", "description": "省略时使用当前发布版本", "minimum": 1}, "goal": {"type": "string", "description": "本次目标", "minLength": 1, "maxLength": 12000}, "model": {"type": "string", "description": "执行模型别名", "maxLength": 80}, "reviewerModel": {"type": "string", "description": "独立审核请求使用的模型别名；可与执行模型相同但上下文和职责独立", "maxLength": 80}, "inputs": {"type": "object", "description": "角色到当前项目资料编号的映射，最多30项", "additionalProperties": {"type": "integer", "description": "资料编号", "minimum": 1}}, "parameters": {"type": "object", "description": "受控任务参数，不新增任意根级配置。research_flow仅允许nodeParameters对象（operator节点ID→该已发布算法manifest声明的参数值对象）；节点必须存在且类型为operator，未知节点/参数键不静默忽略。与冻结node.parameters默认值合并后，真实取值、类型、字段和波段仍由计算中心验证。geology_generic只允许既有专业参数及uploadBatchId；禁止_businessFlow等内部状态。", "additionalProperties": true}, "conversationId": {"type": "integer", "description": "可选本人当前项目会话，未传则由服务器建立", "minimum": 1}, "idempotencyKey": {"type": "string", "description": "同一操作重试的稳定键", "minLength": 8, "maxLength": 80}, "inputAdapters": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoices"}, "agentEnabled": {"type": "boolean", "default": true, "description": "允许智能体执行合同与自动补救；关闭时算子失败直接等待用户"}, "reasoningEffort": {"type": "string", "enum": ["low", "medium", "xhigh"], "default": "medium", "description": "本次业务流全部执行、审核及返修请求的思考强度，默认标准medium；low轻量，xhigh深度。模型与当前策略须支持深度思考；通过会话工具启动时继承发起运行的思考模式与强度。"}}, "required": ["goal", "model", "inputs", "parameters", "idempotencyKey"], "additionalProperties": false}
     BusinessFlowInputAdapterChoice: {"type": "object", "description": "已发布转换版本及其参数，不授予额外访问权", "properties": {"versionId": {"type": "integer", "minimum": 1, "description": "已发布转换版本"}, "parameters": {"type": "object", "description": "真实manifest已声明的有界参数值", "additionalProperties": true}}, "additionalProperties": false}
     BusinessFlowInputAdapterChoices: {"type": "object", "description": "来源绑定键到显式适配选择", "additionalProperties": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoice"}, "maxProperties": 30}
     BusinessFlowInputAdapterCandidate: {"type": "object", "description": "当前项目及用户允许的已发布输入转换工具", "properties": {"versionId": {"type": "integer", "minimum": 1, "description": "算子版本编号"}, "name": {"type": "string", "description": "工具名称"}, "description": {"type": "string", "description": "转换的含义与限制"}, "targetType": {"type": "string", "description": "真实目标类型"}, "parameters": {"type": "array", "description": "真实manifest参数规范", "items": {"$ref": "#/components/schemas/ComputeParameterSpec"}}}, "required": ["versionId", "name", "description", "targetType", "parameters"], "additionalProperties": false}

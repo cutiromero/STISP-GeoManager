@@ -50,12 +50,6 @@ class Command(BaseCommand):
         if len(workflow.plan.get("reportInterpretationHistory", [])) >= 6:
             raise CommandError("已保留6版报告解读，请另建任务继续分析")
         user, policy = _authorize(workflow)
-        policy = {
-            **policy,
-            "_thinking": False,
-            "reasoningEffort": "low",
-            "maxOutputTokens": min(policy["maxOutputTokens"], 6144),
-        }
         original_report = _paths(workflow)[2]
         prior = deepcopy(workflow.plan.get("finalDecision"))
         stage = {
@@ -79,9 +73,7 @@ class Command(BaseCommand):
             actor, current_policy = _authorize(current)
             authorize_demo(current, actor, current_policy, history=True)
 
-        guard = ModelStreamGuard(
-            authorize, time.monotonic() + min(policy["maxRunSeconds"], 120)
-        )
+        guard = ModelStreamGuard(authorize, time.monotonic() + policy["maxRunSeconds"])
         activity = WorkflowModelActivity(
             workflow, "更新报告分析", registry()[workflow.model], policy, guard
         )

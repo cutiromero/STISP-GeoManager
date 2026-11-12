@@ -23372,6 +23372,15 @@
                   "model": {
                     "type": "string",
                     "description": "当前授权模型标识"
+                  },
+                  "reasoningEffort": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "medium",
+                      "xhigh"
+                    ],
+                    "description": "本次资料用途建议的深度思考强度；沿用启动面板选择，省略时使用当前策略。三档均开启思考，模型或策略不支持时拒绝。"
                   }
                 }
               }
@@ -30003,7 +30012,7 @@
               "medium",
               "xhigh"
             ],
-            "description": "后台默认思考强度，新策略为xhigh；开启任务预算时以当前方案默认值为准。逻辑项目界面默认显式选择deep+xhigh"
+            "description": "后台默认思考强度，新策略为medium（标准）；开启任务预算时以当前方案默认值为准。逻辑项目界面默认显式选择deep+medium"
           },
           "budgets": {
             "$ref": "#/components/schemas/AgentBudgetOptions"
@@ -31463,7 +31472,7 @@
           },
           "thinkingMode": {
             "type": "string",
-            "description": "思考模式；逻辑项目界面默认显式发送deep与reasoningEffort=xhigh；选择fast时不得传reasoningEffort。关联科研工作流继承本人当前项目绑定运行的选择，服务端仍复核模型能力与策略",
+            "description": "思考模式；逻辑项目界面默认显式发送deep与reasoningEffort=medium；选择fast时不得传reasoningEffort。关联科研工作流继承本人当前项目绑定运行的选择，服务端仍复核模型能力与策略",
             "enum": [
               "fast",
               "deep"
@@ -50291,6 +50300,16 @@
             "type": "boolean",
             "default": true,
             "description": "允许智能体执行合同与自动补救；关闭时算子失败直接等待用户"
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "xhigh"
+            ],
+            "default": "medium",
+            "description": "本次业务流全部执行、审核及返修请求的思考强度，默认标准medium；low轻量，xhigh深度。模型与当前策略须支持深度思考；通过会话工具启动时继承发起运行的思考模式与强度。"
           }
         },
         "required": [

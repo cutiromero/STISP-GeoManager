@@ -94,13 +94,16 @@ def test_initial_dispatch_uses_one_model_decision_before_any_compute(generic):
     workflow.plan["modelPlanning"] = True
     _save(workflow)
     from apps.agent.demo_workflow import decide
+    from apps.agent.workflow import _authorize
+
+    expected_policy = _authorize(workflow)[1]
 
     assert not ComputeTask.objects.exists()
     with patch("apps.agent.demo_workflow.decide", wraps=decide) as model:
         advance_demo(workflow.id)
     workflow.refresh_from_db()
     assert model.call_count == 1
-    assert model.call_args.args[2]["reasoningEffort"] == "low"
-    assert model.call_args.args[2]["maxOutputTokens"] <= 4096
+    for key in ("reasoningEffort", "maxOutputTokens", "_thinking"):
+        assert model.call_args.args[2][key] == expected_policy[key]
     assert workflow.plan["stages"][0]["decision"]["nextAction"] == "geology-multi-check"
     assert ComputeTask.objects.count() == 1

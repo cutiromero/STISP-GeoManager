@@ -94,7 +94,11 @@ def prepare_projected_request(
     levels=range(4),
     notices=None,
 ):
-    measurements = measurements or TokenMeasurements(model)
+    measurements = measurements or TokenMeasurements(
+        model,
+        thinking=policy.get("_thinking", False),
+        effort=policy.get("reasoningEffort", "medium"),
+    )
     budget = input_budget(policy, window)
     before = None
     for recipe in levels:
@@ -347,7 +351,11 @@ def prepare_packet(
     measurements=None,
 ):
     budget = input_budget(policy, window)
-    measurements = measurements or TokenMeasurements(model)
+    measurements = measurements or TokenMeasurements(
+        model,
+        thinking=policy.get("_thinking", False),
+        effort=policy.get("reasoningEffort", "medium"),
+    )
     before = None
     attempted = 0
 

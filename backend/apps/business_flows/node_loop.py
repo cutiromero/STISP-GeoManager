@@ -199,6 +199,10 @@ def observe_failure(workflow, node, item, failure):
 
 
 def visible_inputs(workflow, node, loop):
+    from . import logic_nodes
+
+    if logic_nodes.enabled(workflow):
+        return logic_nodes.visible_inputs(workflow, node)
     from .input_adapters import logical_role
 
     specs = {
@@ -246,6 +250,10 @@ def version_for(workflow, user, node, loop, identity, policy):
         or version.algorithm.identifier in EDIT_CHECKS
     ):
         raise PermissionDenied("算子未发布、已撤权或须通过专业人工审核链路")
+    from . import logic_nodes
+
+    if logic_nodes.enabled(workflow) and identity != node["algorithmVersionId"]:
+        raise ComputeError("算子版本不属于本节点已确认科学配方，请重新确认计划")
     previous_id = (
         loop.get("failure", {}).get("versionId")
         or loop.get("lastSubmission", {}).get("versionId")
@@ -333,7 +341,7 @@ def submission(workflow, user, policy, node, loop, arguments):
     _effective(
         parameters, [{**spec, "required": False} for spec in _specs(version.manifest)]
     )
-    return version, {
+    body = {
         "versionId": version.pk,
         "inputs": inputs,
         "parameters": parameters,
@@ -342,6 +350,11 @@ def submission(workflow, user, policy, node, loop, arguments):
         "name": binding(workflow)["name"] + " · " + node["title"],
         "idempotencyKey": f"node-{workflow.pk}-{node['id']}-{loop['steps']}",
     }
+    from . import logic_nodes
+
+    if logic_nodes.enabled(workflow):
+        logic_nodes.check_submission(workflow, node, version, body)
+    return version, body
 
 
 def resolve_output_bindings(workflow, user, policy, node, loop, inputs):
@@ -544,6 +557,10 @@ def store_result(workflow, node, item, action, result, *, arguments=None):
 
 
 def completed_task(workflow, user, policy, node, item, loop):
+    from . import logic_nodes
+
+    if logic_nodes.enabled(workflow):
+        return logic_nodes.completed_task(workflow, user, policy, node, item, loop)
     from apps.agent.compute_tools import authorized_task
     from apps.agent.compute_result_tools import read_output
     from .engine import stash_evidence
@@ -711,6 +728,7 @@ def execute_tool(
         }
     if action == "operator_catalog":
         from apps.compute.operator_catalog import operator_catalog
+        from . import logic_nodes
 
         if not policy.get("operatorEnabled"):
             raise PermissionDenied("当前策略未允许算子工具")
@@ -722,14 +740,19 @@ def execute_tool(
             for key in ("operation", "dataType", "keyword")
         ):
             raise ComputeError("目录筛选条件须为文字")
-        rows = operator_catalog(
-            user,
-            workflow.project_tag_id,
-            operation=arguments.get("operation"),
-            data_type=arguments.get("dataType"),
-            keyword=arguments.get("keyword", ""),
-            limit=limit,
-            max_bytes=4096,
+        rows = (
+            logic_nodes.catalog_rows(workflow, user, policy, node, arguments)
+            if logic_nodes.enabled(workflow)
+            else operator_catalog(
+                user,
+                workflow.project_tag_id,
+                operation=arguments.get("operation"),
+                data_type=arguments.get("dataType"),
+                keyword=arguments.get("keyword", ""),
+                limit=limit,
+                max_bytes=4096,
+                version_id=arguments.get("versionId"),
+            )
         )
         loop["catalogIds"] = list(
             dict.fromkeys([*loop["catalogIds"], *[row["versionId"] for row in rows]])
@@ -741,7 +764,18 @@ def execute_tool(
         version, body = submission(workflow, user, policy, node, loop, arguments)
         if action == "preflight_operator":
             validate_submission(user, body)
+            from .logic_nodes import submission_digest
+
+            loop["preflightDigest"] = submission_digest(body)
             return {"valid": True, "gaps": [], "message": "预检通过，尚未提交计算"}
+        from . import logic_nodes
+
+        if (
+            logic_nodes.enabled(workflow)
+            and action == "run_operator"
+            and loop.get("preflightDigest") != logic_nodes.submission_digest(body)
+        ):
+            raise ComputeError("须先对相同版本、输入、参数和字段映射完成预检，才能计算")
         check_remedy(loop, arguments, action, contract)
         if action == "prepare_input":
             from .node_inputs import prepare
@@ -801,6 +835,17 @@ def execute_tool(
                 fresh_user(workflow.owner_id), "agent", workflow.model
             ).get("operatorEnabled"):
                 raise PermissionDenied("算子提交前策略已撤销执行权限")
+            if logic_nodes.enabled(workflow):
+                from apps.agent.workflow import _authorize
+                from apps.agent.demo_workflow import authorize_demo
+
+                if current.plan_hash != workflow.plan_hash:
+                    raise ComputeError("专业科学方案已变化，请重新核对后计算", 409)
+                actor, current_policy = _authorize(current)
+                authorize_demo(current, actor, current_policy)
+                logic_nodes.revalidate_inputs(
+                    current, actor, current_policy, node, body
+                )
             task = submit(user, body)
             AgentWorkflowStep.objects.get_or_create(
                 workflow=workflow,
@@ -1039,6 +1084,8 @@ def advance_loop(workflow, user, policy, node, item, evidence, *, guard, callbac
                 guard=checked,
                 policy={**policy, "maxRunSeconds": max(1, int(remaining))},
                 on_record=record,
+                on_progress=callbacks.get("on_progress"),
+                on_thinking=callbacks.get("on_thinking"),
             )
             loop["steps"] += 1
             loop["pending"] = {
@@ -1049,6 +1096,14 @@ def advance_loop(workflow, user, policy, node, item, evidence, *, guard, callbac
         action, arguments = loop["pending"]["action"], loop["pending"]["arguments"]
         if action not in contract["tools"]:
             raise ComputeError("该工具未在当前节点合同中授权")
+        from . import logic_nodes
+
+        if (
+            logic_nodes.enabled(workflow)
+            and action == "finish_node"
+            and not loop.get("successfulTaskId")
+        ):
+            raise ComputeError("尚无真实成功算子结果，不能交付专业节点")
         result = execute_tool(
             workflow,
             user,

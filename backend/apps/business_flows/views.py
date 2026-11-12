@@ -167,6 +167,7 @@ def start(request, flow_id):
             "idempotencyKey",
             "inputAdapters",
             "agentEnabled",
+            "reasoningEffort",
         },
     )
     for name in ("model", "reviewerModel"):

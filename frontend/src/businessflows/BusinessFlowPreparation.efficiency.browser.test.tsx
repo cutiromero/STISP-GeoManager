@@ -171,6 +171,8 @@ beforeEach(() => {
   });
 });
 afterEach(async () => {
+  bootstrap.thinkingEnabled = false;
+  bootstrap.models[0]!.supportsThinking = false;
   await page.viewport(1600, 900);
 });
 function showWorkspace() {
@@ -240,6 +242,8 @@ it.each([
 );
 
 it("lets a fresh source receive one real role suggestion before starting the same flow", async () => {
+  bootstrap.thinkingEnabled = true;
+  bootstrap.models[0]!.supportsThinking = true;
   vi.mocked(agentApi.restoreLogicConfiguration).mockResolvedValue({
     configuration: null,
     items: [structuredClone(items[0]!)],
@@ -289,6 +293,7 @@ it("lets a fresh source receive one real role suggestion before starting the sam
   );
   await waitFor(() => expect(button).toBeEnabled());
   expect(recognize).toHaveBeenCalledOnce();
+  expect(recognize).toHaveBeenCalledWith(expect.any(String), "qwen", "medium");
   fireEvent.click(button);
   await waitFor(() => expect(start).toHaveBeenCalledOnce());
   expect(start.mock.calls[0]![1]).toMatchObject({

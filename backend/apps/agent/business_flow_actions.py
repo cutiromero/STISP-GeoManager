@@ -14,7 +14,7 @@ CAPS = {
 }
 ARGUMENT_KEYS = {
     "read_evidence": {"evidenceId", "offset", "length"},
-    "operator_catalog": {"operation", "dataType", "keyword", "limit"},
+    "operator_catalog": {"operation", "dataType", "keyword", "limit", "versionId"},
     "preflight_operator": {"versionId", "inputs", "parameters", "fieldMappings"},
     "run_operator": {"versionId", "inputs", "parameters", "fieldMappings", "remedy"},
     "prepare_input": {"versionId", "inputs", "parameters", "remedy"},
@@ -57,6 +57,7 @@ parameters只能包含清单中agent.adjustable=true的参数；其他参数沿�
 prepare_input复用现有脚本生成、独立审核、隔离执行；不是执行任意脚本的工具。
 read_evidence按evidenceId、offset(UTF-8字节偏移)、length(最多4096)取真实证据片段。
 operator_catalog可按operation/dataType/keyword筛选，limit最多20。
+若目录truncated=true，用operator_catalog.versionId查询该登记版本的完整语义清单，不可从截短目录猜测端口。
 目录超出单步观察字节上限时提供全部返回版本的索引及offset/length；用read_evidence读取该目录证据的完整单项清单后再设置字段与参数。
 失败先核对failure的code/remedy/gaps，不能对相同错误重复同类补救；不得重试平台故障或不可恢复。
 修复提交需声明remedy：adjust_parameters/complete_mapping/convert_input/replace_operator之一。
@@ -90,7 +91,17 @@ def validate_action(raw, available):
 
 
 def request_action(
-    workflow, node, evidence, contract, context, *, guard, policy, on_record
+    workflow,
+    node,
+    evidence,
+    contract,
+    context,
+    *,
+    guard,
+    policy,
+    on_record,
+    on_progress=None,
+    on_thinking=None,
 ):
     native = registry()[workflow.model].native_tools and not context.get("jsonFallback")
     return request_node_result(
@@ -107,5 +118,7 @@ def request_action(
         context={**context, "purpose": "node_tools", "contract": contract},
         human_required=node["review"]["human"],
         on_record=on_record,
+        on_progress=on_progress,
+        on_thinking=on_thinking,
         tools=NATIVE_TOOLS if native else None,
     )

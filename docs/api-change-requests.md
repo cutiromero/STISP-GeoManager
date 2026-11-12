@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261111-004 - 业务流思考设置与逻辑推理节点工具执行
+
+- Status: BackendReady
+- Owner: codex/xintao，单人完成契约、前后端与验证。
+- Endpoints: POST /api/business-flows/{flowId}/start/、POST /api/agent/workflow-uploads/recognize/；沿用已有运行、事件与恢复决定接口。
+- Change type: 启动请求新增可选reasoningEffort；逻辑推理新任务接入节点工具循环。
+- OpenAPI change: BusinessFlowStart.reasoningEffort枚举low、medium、xhigh，默认medium；资料用途建议接受相同可选强度；更新逻辑项目默认思考说明。
+- Mock examples: 沿用现有业务流示例；新增三档请求捕获、真实科学算子及故障恢复对照测试。
+- Frontend reason: 默认标准，可选轻量、深度；启动面板和聊天设置同步，执行及审核实际生效。
+- Backend implementation notes: 从绑定父运行继承思考模式和强度，逐角色重验模型能力，分词、生成和审计一致。专业计算复用node_loop；按已确认版本、科学参数与处置范围预检和提交，诊断恢复不重置计数或替代科研批准。
+- Verification: 三档设置与无显式值、执行及审核、未知值和不支持模型、幂等、真实七节点及新旧科学对照、恢复和既有预算/控制/效率回归；契约及浏览器门禁。
+- Result: 本地验证结果见logic-node-tools-validation-20261111.md；真实模型及生产发布另行验收。
+
 ## API-20261111-003 - 项目删除及通用数据保护
 
 - Status: BackendReady
@@ -609,6 +622,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261111-004 | BackendReady | Business flow start | 思考设置与专业节点工具执行 | Updated | 现有示例 | Implemented | 三档请求及真实七节点对照 | 科学配方与批准保持有效 |
 | API-20261111-003 | BackendReady | project deletion-preview / DELETE | 项目删除与通用资料保留 | 已更新 | 147-project-deletion | 已实现 | 定点权限、事务、引用、存储及浏览器 | 新增可空审计列，公开项目保护 |
 | API-20261111-002 | BackendReady | conversation deletion-preview / DELETE | 可选任务数据清理 | 已更新 | 146-conversation-cleanup | 已实现 | 专项及门禁 | 默认保留、归属及引用保护、实际计数 |
 | API-20261111-001 | BackendReady | Business flow define/start/run/decisions | 节点合同与失败恢复 | Updated | 145-business-flow-node-recovery.json | Implemented | 工具、五场景、控制、预算与旧流程回归 | 不重置额度、不替代人工批准 |
