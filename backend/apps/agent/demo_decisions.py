@@ -134,7 +134,8 @@ def validate_decision(
         if identity not in seen:
             seen.add(identity)
             canonical.append(actual)
-    canonical = canonical[:30]
+    # Every unique reference is already bound to the authorized evidence set.
+    # Trimming here can discard the very statistics the next check requires.
     if require_output and not any(ref["kind"] == "output" for ref in canonical):
         raise ComputeError("decision.evidenceRefs 尚未引用实际计算结果")
     if require_knowledge and not any(ref["kind"] == "knowledge" for ref in canonical):
@@ -145,6 +146,39 @@ def validate_decision(
             f"decision.resultSummary 应为字符串，实际类型为 {type(summary).__name__}"
         )
     return {**value, "evidenceRefs": canonical, "resultSummary": clipped(summary, 4000)}
+
+
+def can_revalidate_reference_tail(stage):
+    """Recognize complete replies rejected by the historical 30-reference trim."""
+    attempts = stage.get("modelAttempts", [])
+    if not attempts or not isinstance(attempts[-1], dict):
+        return False
+    attempt = attempts[-1]
+    if not (
+        attempt.get("status") == "rejected"
+        and attempt.get("accepted") is False
+        and attempt.get("validationError") == "判断必须引用最近一次实际计算统计"
+        and attempt.get("truncated") is False
+        and not attempt.get("responseArtifact", {}).get("truncated", False)
+    ):
+        return False
+    try:
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", attempt["response"]).strip()
+        chosen = json.loads(raw)["decision"]["evidenceRefs"]
+        latest = {
+            ("output", str(identity))
+            for identity in stage["modelRequestPayload"]["executionState"][
+                "currentRun"
+            ]["latestStatisticsOutputIds"]
+        }
+        unique = list(dict.fromkeys((ref["kind"], str(ref["id"])) for ref in chosen))
+        return (
+            bool(latest)
+            and not latest.intersection(unique[:30])
+            and bool(latest.intersection(unique[30:]))
+        )
+    except (ValueError, TypeError, KeyError):
+        return False
 
 
 def _previous_decision(value) -> dict:
@@ -1861,6 +1895,7 @@ def _recover_decision(
             and attempt.get("status") == "response_received"
             and "accepted" not in attempt
         )
+        revalidated_tail = final and can_revalidate_reference_tail(stage)
         if (
             type(attempt.get("contentBytes")) is not int
             or attempt["contentBytes"] != content_bytes
@@ -1868,9 +1903,14 @@ def _recover_decision(
             or attempt.get("requestSha256") != request_hash
             or (
                 not received
+                and not revalidated_tail
                 and attempt.get("status") != ("accepted" if final else "rejected")
             )
-            or (not received and attempt.get("accepted") is not final)
+            or (
+                not received
+                and not revalidated_tail
+                and attempt.get("accepted") is not final
+            )
         ):
             reject()
     last = attempts[-1]
@@ -1888,6 +1928,10 @@ def _recover_decision(
     stage["recoveredModelAttempt"] = last["attempt"]
     if last.get("status") == "response_received":
         stage["recoveredResponseState"] = "validated_without_new_request"
+    elif can_revalidate_reference_tail(stage):
+        stage["recoveredResponseState"] = (
+            "reference_tail_revalidated_without_new_request"
+        )
     return decision, edits
 
 

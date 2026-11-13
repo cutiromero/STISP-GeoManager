@@ -15,13 +15,17 @@ from .state import binding, state, emit, persist, TERMINAL, digest
 
 
 def _saved_request_stage(stage):
+    from apps.agent.demo_decisions import can_revalidate_reference_tail
+
     attempts = stage.get("modelAttempts", [])
     payload = stage.get("modelRequestPayload")
     if not (
         isinstance(attempts, list)
         and attempts
         and isinstance(attempts[-1], dict)
-        and attempts[-1].get("accepted") is True
+        and (
+            attempts[-1].get("accepted") is True or can_revalidate_reference_tail(stage)
+        )
         and isinstance(attempts[-1].get("response"), str)
         and attempts[-1]["response"].strip()
         and isinstance(payload, dict)
@@ -47,6 +51,15 @@ def _review_recovery(workflow, stage):
     if current:
         return current
     if workflow.status == "failed":
+        from apps.agent.demo_decisions import can_revalidate_reference_tail
+
+        if can_revalidate_reference_tail(stage):
+            return {
+                "kind": "model_protocol_error",
+                "level": 0,
+                "evidence": [],
+                "reason": "已保存报告需重新核对完整引用；前序计算与批准记录保留。",
+            }
         for row in reversed(stage.get("modelBudgetHistory", [])):
             recovery = row.get("contextBudgetReview", {})
             if recovery:
@@ -583,8 +596,14 @@ def retry_context(user, workflow, value):
             if row.get("stage") and row.get("status") != "complete"
         )
         for candidate in candidates:
+            from apps.agent.demo_decisions import can_revalidate_reference_tail
+
             attempts = candidate.get("modelAttempts", [])
-            if attempts and not attempts[-1].get("accepted"):
+            if (
+                attempts
+                and not attempts[-1].get("accepted")
+                and not can_revalidate_reference_tail(candidate)
+            ):
                 candidate.setdefault("modelBudgetHistory", []).append(
                     {"modelAttempts": candidate.pop("modelAttempts")}
                 )

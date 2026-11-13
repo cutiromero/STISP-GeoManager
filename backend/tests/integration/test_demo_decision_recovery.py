@@ -71,6 +71,75 @@ def reordered(value):
     return value
 
 
+def many_reference_reply():
+    workflow, stage, results = ordinary_stage()
+    workflow.evidence = [
+        {"id": index, "revision": 1, "title": f"适用知识{index}"}
+        for index in range(1, 32)
+    ]
+    value = model_response(stage["identifier"], [])
+    value["decision"]["evidenceRefs"] = [
+        {"kind": "knowledge", "id": str(row["id"]), "revision": 1}
+        for row in workflow.evidence
+    ] + [{"kind": "output", "id": "102"}]
+    return workflow, stage, results, json.dumps(value, ensure_ascii=False)
+
+
+def test_latest_statistics_after_thirty_authorized_references_are_preserved(
+    retry_model,
+):
+    workflow, stage, results, raw = many_reference_reply()
+    (decision, _), requests = run([raw], workflow, stage, results)
+    assert len(requests) == 1
+    assert len(decision["evidenceRefs"]) == 32
+    assert decision["evidenceRefs"][-1]["id"] == "102"
+    wrong = json.loads(raw)
+    wrong["decision"]["evidenceRefs"][-1]["id"] = "unprovided-output"
+    with pytest.raises(ComputeError, match="并非本次授权"):
+        from apps.agent.demo_decisions import _validate_response, evidence_refs
+
+        _validate_response(
+            json.dumps(wrong),
+            workflow,
+            stage,
+            results,
+            evidence_refs(workflow, [], results),
+        )
+
+
+def test_historical_reference_trim_revalidates_saved_reply_without_model_request(
+    retry_model,
+):
+    from apps.agent import demo_decisions
+
+    workflow, stage, results, raw = many_reference_reply()
+    validate = demo_decisions.validate_decision
+
+    def old_trim(*args, **kwargs):
+        decision = validate(*args, **kwargs)
+        decision["evidenceRefs"] = decision["evidenceRefs"][:30]
+        return decision
+
+    with patch.object(demo_decisions, "validate_decision", side_effect=old_trim):
+        with pytest.raises(ComputeError, match="最近一次实际计算统计"):
+            run(["invalid-json", raw], workflow, stage, results)
+    workflow.max_iterations = workflow.iteration = 2
+    workflow.plan["actualModelCallCount"] = 2
+    audit = copy.deepcopy(stage["modelAttempts"])
+    assert demo_decisions.can_revalidate_reference_tail(stage)
+    decision, edits = replay(workflow, stage, results)
+    assert len(decision["evidenceRefs"]) == 32 and not edits
+    assert stage["modelAttempts"] == audit
+    assert (
+        stage["recoveredResponseState"]
+        == "reference_tail_revalidated_without_new_request"
+    )
+    assert workflow.plan["actualModelCallCount"] == 2
+    workflow.goal = "科研任务已改变"
+    with pytest.raises(ComputeError, match="已有模型请求记录"):
+        replay(workflow, stage, results)
+
+
 @pytest.mark.parametrize("retry", [False, True])
 @pytest.mark.parametrize("edit", [False, True])
 def test_equal_fresh_results_with_different_key_order_replay_exact_saved_request(

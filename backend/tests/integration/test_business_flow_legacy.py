@@ -848,6 +848,56 @@ def test_failed_review_without_an_accepted_response_has_no_recovery_bypass(legac
     assert workflow.status == "failed"
 
 
+def test_reference_tail_rejection_can_be_rechecked_via_public_decision(legacy_flow):
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = final_protocol_wait(env, "failed")
+    final = workflow.plan["finalStage"]
+    final.pop("contextBudgetReview")
+    final["modelRequestPayload"]["executionState"]["currentRun"] = {
+        "latestStatisticsOutputIds": [999]
+    }
+    final["modelAttempts"][-1].update(
+        accepted=False,
+        status="rejected",
+        truncated=False,
+        validationError="判断必须引用最近一次实际计算统计",
+        response=json.dumps(
+            {
+                "decision": {
+                    "evidenceRefs": [
+                        {"kind": "knowledge", "id": str(index)} for index in range(31)
+                    ]
+                    + [{"kind": "output", "id": "999"}]
+                }
+            }
+        ),
+    )
+    workflow.save(update_fields=["plan"])
+    audit = deepcopy(final["modelAttempts"])
+    before = deepcopy(workflow.plan["stages"])
+    with project_scope(env["scope"]):
+        public = runtime.serialize_run(env["user"], workflow)
+        node = next(row for row in public["nodes"] if row["nodeId"] == "finish")
+        assert node["status"] == "waiting_context"
+        current = runtime.decide_flow(
+            env["user"],
+            workflow,
+            {
+                "nodeId": "finish",
+                "decision": "retry_context",
+                "revision": public["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+    assert current.status == "queued"
+    assert current.plan["stages"] == before
+    assert current.plan["finalStage"]["modelAttempts"] == audit
+    assert current.plan["actualModelCallCount"] == 2
+    assert current.plan["finalStage"].get("status") is None
+
+
 @pytest.mark.parametrize(
     "blocked", ["cancel", "response", "decision", "running", "newer_diagnostic"]
 )
