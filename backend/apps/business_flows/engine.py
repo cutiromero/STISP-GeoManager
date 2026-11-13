@@ -125,18 +125,9 @@ def input_evidence(workflow, user, policy, node):
         for item in binding(workflow)["definitionSnapshot"]["inputRequirements"]
     }
     result = []
-    declared_roles = list(
-        dict.fromkeys(
-            [
-                *node["dataRoles"],
-                *[
-                    item["role"]
-                    for item in node.get("inputBindings", {}).values()
-                    if "role" in item
-                ],
-            ]
-        )
-    )
+    from .definitions import node_roles
+
+    declared_roles = node_roles(node)
     from .input_adapters import logical_role
 
     roles = [
@@ -408,7 +399,7 @@ def _operator(workflow, user, policy, node, item, evidence):
         submit,
     )
     from apps.agent.compute_tools import authorized_task
-    from apps.agent.compute_result_tools import read_output
+    from apps.agent.compute_result_tools import read_task_outputs
 
     if not policy.get("operatorEnabled", False):
         raise PermissionDenied("当前策略未允许业务流调用算子")
@@ -536,21 +527,15 @@ def _operator(workflow, user, policy, node, item, evidence):
             "节点算子未完成：" + (task.error or task.status), failure=task.failure
         )
     actual = []
-    for output in task.outputs.all():
-        if output.kind == "archive":
-            continue
-        value, _ = read_output(
-            parent_run(workflow),
-            user,
-            policy,
-            {"outputId": output.pk, "limit": 20},
-            workflow=workflow,
-        )
+    for value in read_task_outputs(
+        parent_run(workflow), user, policy, task, workflow=workflow
+    ):
+        output = value["output"]
         actual.append(
             {
-                "id": f"output-{output.pk}",
+                "id": f"output-{output['id']}",
                 "kind": "output",
-                "title": output.label or output.file_name,
+                "title": output["label"] or output["fileName"],
                 "result": value,
             }
         )
@@ -647,7 +632,10 @@ def advance(workflow_id):
                     item.get("outputs", {}).get("evidence", [])
                 )
                 prepare_revision(
-                    item, feedback, preserve_computation=node["kind"] != "operator"
+                    item,
+                    feedback,
+                    preserve_computation=bool(session(workflow))
+                    or node["kind"] != "operator",
                 )
             if item["status"] == "pending":
                 item["attempt"] += 1
@@ -890,7 +878,10 @@ def advance(workflow_id):
                             node["id"], review["reason"], kind="review_rejected"
                         )
                     prepare_revision(
-                        item, review, preserve_computation=node["kind"] != "operator"
+                        item,
+                        review,
+                        preserve_computation=bool(session(workflow))
+                        or node["kind"] != "operator",
                     )
                     workflow.status, workflow.detail = (
                         "queued",
@@ -946,7 +937,10 @@ def advance(workflow_id):
                     current_item["executor"]
                 )
                 current_item["executor"] = {"status": "pending"}
-                current_item["outputs"] = {}
+                if not session(workflow) or not current_item.get("toolLoop", {}).get(
+                    "successfulTaskId"
+                ):
+                    current_item["outputs"] = {}
                 current_item["status"] = "executing"
                 current_item["contextReexecute"] = True
                 current_item.pop("executionContextId", None)

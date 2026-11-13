@@ -19,11 +19,14 @@ def retry_node(workflow, item, value):
             node = next(
                 row for row in definition["nodes"] if row["id"] == item["nodeId"]
             )
+            from .execution_session import session
+
             prepare_revision(
                 item,
                 feedback,
                 manual=True,
-                preserve_computation=node["kind"] != "operator",
+                preserve_computation=bool(session(workflow))
+                or node["kind"] != "operator",
             )
         else:
             item["status"] = item.pop(

@@ -52,6 +52,21 @@ def strings(value, name, maximum=80):
     return value
 
 
+def node_roles(node):
+    return list(
+        dict.fromkeys(
+            [
+                *node["dataRoles"],
+                *[
+                    row["role"]
+                    for row in node.get("inputBindings", {}).values()
+                    if "role" in row
+                ],
+            ]
+        )
+    )
+
+
 def normalize_definition(value):
     keys(
         value,
@@ -172,6 +187,22 @@ def normalize_definition(value):
             from .node_contracts import normalize_contract
 
             node["contract"] = normalize_contract(node["contract"])
+            if result.get("executionMode") == "main_agent":
+                contract = node["contract"]
+                tools = set(contract["tools"])
+                if "run_operator" in tools and (
+                    not {"operator_catalog", "preflight_operator"} <= tools
+                    or not contract["maxOperatorCalls"]
+                ):
+                    invalid("计算合同须允许算子查询、预检并保留实际算子额度")
+                if (
+                    any(
+                        row["semanticType"] != "analysis"
+                        for row in contract["requiredOutputs"]
+                    )
+                    and "run_operator" not in tools
+                ):
+                    invalid("非分析成果合同须允许真实算子执行，不能仅凭文字完成")
         node["dependsOn"] = strings(node.get("dependsOn", []), "节点依赖", MAX_NODES)
         node["dataRoles"] = strings(
             node.get("dataRoles", []), "节点资料角色", MAX_ROLES

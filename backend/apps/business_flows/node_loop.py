@@ -260,10 +260,13 @@ def visible_inputs(workflow, node, loop):
         row["key"]: row
         for row in binding(workflow)["definitionSnapshot"]["inputRequirements"]
     }
+    from .definitions import node_roles
+
+    roles = node_roles(node)
     values = {
         key: value
         for key, value in workflow.plan.get("inputs", {}).items()
-        if logical_role(key, specs) in node["dataRoles"]
+        if logical_role(key, specs) in roles
     }
     values.update(
         {
@@ -305,6 +308,10 @@ def version_for(workflow, user, node, loop, identity, policy):
 
     if logic_nodes.enabled(workflow) and identity != node["algorithmVersionId"]:
         raise ComputeError("算子版本不属于本节点已确认科学配方，请重新确认计划")
+    if node["kind"] == "operator" and identity != node.get("algorithmVersionId"):
+        raise ComputeError(
+            "算子节点须使用冻结的登记版本；更换核心算法须发布并确认新方案"
+        )
     previous_id = (
         loop.get("failure", {}).get("versionId")
         or loop.get("lastSubmission", {}).get("versionId")
@@ -332,7 +339,7 @@ def version_for(workflow, user, node, loop, identity, policy):
     return version
 
 
-def submission(workflow, user, policy, node, loop, arguments):
+def submission(workflow, user, policy, node, loop, arguments, *, source_state=None):
     from apps.agent.workflow_resources import resolve_workflow_resource
     from apps.compute.preflight import expand_bindings
     from apps.agent.business_flow_operator_repair import _effective, _specs
@@ -352,10 +359,26 @@ def submission(workflow, user, policy, node, loop, arguments):
         raise ComputeError("工具参数超过8192字节")
     flat, _, input_specs = expand_bindings(version.manifest, inputs)
     permitted = set(visible_inputs(workflow, node, loop).values())
+    checked_sources = set()
     for identity in flat.values():
         if type(identity) is not int or identity not in permitted:
             raise ComputeError("输入不属于本节点可见资料，不能扩大范围")
-        resolve_workflow_resource(user, policy, identity, workflow)
+        if identity in checked_sources:
+            continue
+        checked_sources.add(identity)
+        resource = resolve_workflow_resource(user, policy, identity, workflow)
+        if source_state is not None:
+            from apps.compute.input_versions import source_version
+
+            source_state[str(identity)] = source_version(resource)
+    if source_state is not None:
+        from .definitions import definition_hash
+
+        source_state["algorithm"] = {
+            "id": version.pk,
+            "checksum": version.checksum,
+            "manifest": definition_hash(version.manifest),
+        }
     specs = {row["key"]: row for row in version.manifest["parameters"]}
     adjustable = {
         key
@@ -434,6 +457,30 @@ def resolve_output_bindings(workflow, user, policy, node, loop, inputs):
         .get("outputs", {})
         .get("evidence", [])
     }
+    # Publication permits explicit links to any ancestor. Restrict the added
+    # visibility to those declared links, including their named contract outputs.
+    for source in node.get("inputBindings", {}).values():
+        if "nodeId" not in source:
+            continue
+        upstream = state(workflow)["nodes"][source["nodeId"]]
+        if upstream["status"] != "succeeded":
+            raise ComputeError("上游节点尚未通过全部审核，不能提供计算输入")
+        if "contractOutputs" in upstream:
+            visible.update(
+                row["evidenceId"]
+                for row in upstream["contractOutputs"]
+                if row["name"] == source["outputKey"]
+            )
+        else:
+            from apps.compute.models import ComputeOutput
+
+            visible.update(
+                f"output-{pk}"
+                for pk in ComputeOutput.objects.filter(
+                    task_id=upstream.get("outputs", {}).get("taskId"),
+                    key=source["outputKey"],
+                ).values_list("pk", flat=True)
+            )
     from . import logic_nodes
     from .execution_session import session
 
@@ -709,7 +756,7 @@ def completed_task(workflow, user, policy, node, item, loop):
     if logic_nodes.enabled(workflow):
         return logic_nodes.completed_task(workflow, user, policy, node, item, loop)
     from apps.agent.compute_tools import authorized_task
-    from apps.agent.compute_result_tools import read_output
+    from apps.agent.compute_result_tools import read_task_outputs
     from .engine import stash_evidence
     from .state import parent_run
 
@@ -729,18 +776,14 @@ def completed_task(workflow, user, policy, node, item, loop):
         loop["failure"] = failure
         return {"failure": failure, "message": "算子未完成：" + failure["message"]}
     rows = []
-    for output in task.outputs.exclude(kind="archive")[:8]:
-        result, _ = read_output(
-            parent_run(workflow),
-            user,
-            policy,
-            {"outputId": output.pk, "limit": 20},
-            workflow=workflow,
-        )
+    for result in read_task_outputs(
+        parent_run(workflow), user, policy, task, workflow=workflow
+    ):
+        output = result["output"]
         row = {
-            "id": f"output-{output.pk}",
+            "id": f"output-{output['id']}",
             "kind": "output",
-            "title": output.label or output.file_name,
+            "title": output["label"] or output["fileName"],
             "result": result,
         }
         rows.append(row)
@@ -757,7 +800,9 @@ def completed_task(workflow, user, policy, node, item, loop):
         "status": "succeeded",
         "taskId": str(task.pk),
         "evidenceIds": [row["id"] for row in rows],
-        "outputs": rows,
+        "outputs": rows
+        if len(encoded(rows)) <= MAX_EVIDENCE_BYTES - 4096
+        else stash_evidence(workflow, rows),
         "message": "算子计算成功，真实结果已读取",
     }
 
@@ -856,6 +901,36 @@ def finish(node, item, arguments, evidence):
     }
 
 
+def check_retained_outputs(workflow, user, policy, item, *, evidence_ids=None):
+    from apps.agent.compute_tools import authorized_task
+    from apps.agent.compute_result_tools import check_output_file
+    from apps.compute.models import ComputeOutput
+    from .engine import resolve_evidence
+
+    rows = resolve_evidence(workflow, item.get("outputs", {}).get("evidence", []))
+    expected = {
+        int(row["id"][7:]): row["result"].get("checkedChecksum")
+        or row["result"].get("checksum")
+        for row in rows
+        if row.get("kind") == "output"
+        and row["id"].startswith("output-")
+        and row["id"][7:].isdigit()
+        and (evidence_ids is None or row["id"] in evidence_ids)
+    }
+    outputs = list(ComputeOutput.objects.filter(pk__in=expected))
+    if len(outputs) != len(expected):
+        raise ComputeError("保留成果已删除，不能沿用原计算交付")
+    tasks = {}
+    for output in outputs:
+        if output.task_id not in tasks:
+            tasks[output.task_id] = authorized_task(
+                user, output.task_id, policy, workflow=workflow
+            )
+        if expected[output.pk] != output.checksum:
+            raise ComputeError("保留成果的校验和已变化，不能沿用原计算交付")
+        check_output_file(output, tasks[output.task_id])
+
+
 def execute_tool(
     workflow, user, policy, node, item, action, arguments, evidence, contract, guard
 ):
@@ -942,12 +1017,16 @@ def execute_tool(
     if action in {"preflight_operator", "run_operator", "prepare_input"}:
         from apps.compute.services import validate_submission, submit
 
-        version, body = submission(workflow, user, policy, node, loop, arguments)
+        sources = {}
+        version, body = submission(
+            workflow, user, policy, node, loop, arguments, source_state=sources
+        )
         if action == "preflight_operator":
             validate_submission(user, body)
             from .logic_nodes import submission_digest
 
             loop["preflightDigest"] = submission_digest(body)
+            loop["preflightSources"] = sources
             return {"valid": True, "gaps": [], "message": "预检通过，尚未提交计算"}
         from . import logic_nodes
         from .execution_session import session
@@ -955,21 +1034,28 @@ def execute_tool(
         if (
             (logic_nodes.enabled(workflow) or session(workflow))
             and action == "run_operator"
-            and loop.get("preflightDigest") != logic_nodes.submission_digest(body)
+            and (
+                loop.get("preflightDigest") != logic_nodes.submission_digest(body)
+                or loop.get("preflightSources") != sources
+            )
         ):
             raise ComputeError("须先对相同版本、输入、参数和字段映射完成预检，才能计算")
         if action == "run_operator":
             from .model_requests import operator_budget_wait
 
-            if loop.get("successfulTaskId") and loop.get(
-                "successfulSubmissionDigest"
-            ) == logic_nodes.submission_digest(body):
+            if (
+                loop.get("successfulTaskId")
+                and loop.get("successfulSubmissionDigest")
+                == logic_nodes.submission_digest(body)
+                and loop.get("successfulSources") == sources
+            ):
                 from apps.agent.compute_tools import authorized_task
 
                 prior = authorized_task(
                     user, loop["successfulTaskId"], policy, workflow=workflow
                 )
                 if prior.status == "succeeded":
+                    check_retained_outputs(workflow, user, policy, item)
                     return {
                         "status": "succeeded",
                         "taskId": str(prior.pk),
@@ -1053,6 +1139,7 @@ def execute_tool(
                 )
             task = submit(user, body)
             loop["submittedDigest"] = logic_nodes.submission_digest(body)
+            loop["submittedSources"] = sources
             AgentWorkflowStep.objects.get_or_create(
                 workflow=workflow,
                 compute_task_id=task.pk,
@@ -1111,7 +1198,16 @@ def execute_tool(
         )
         return {"message": question}
     if action == "finish_node":
-        return finish(node, item, arguments, [*evidence, *loop["evidence"].values()])
+        result = finish(node, item, arguments, [*evidence, *loop["evidence"].values()])
+        check_retained_outputs(
+            workflow,
+            user,
+            policy,
+            item,
+            evidence_ids={row["evidenceId"] for row in arguments.get("outputs", [])},
+        )
+        guard()
+        return result
     raise ComputeError("未知节点工具")
 
 
@@ -1177,6 +1273,7 @@ def advance_tool_execution(
         if result.get("status") == "succeeded" and not result.get("failure"):
             loop["successfulTaskId"] = loop["taskId"]
             loop["successfulSubmissionDigest"] = loop.get("submittedDigest")
+            loop["successfulSources"] = deepcopy(loop.get("submittedSources"))
         loop["elapsedSeconds"] += time.monotonic() - started
         if loop["elapsedSeconds"] >= contract["maxSeconds"]:
             wait_recovery(

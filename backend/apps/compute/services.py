@@ -150,7 +150,7 @@ def request_output_import(user, output, name="", *, request_source=""):
     return record
 
 
-def parameter_values(manifest, metadata, params):
+def parameter_values(manifest, metadata, params, *, check_inputs=True):
     """One pure manifest validator for planning and actual compute admission."""
     normalized = {}
     for p in manifest["parameters"]:
@@ -185,7 +185,7 @@ def parameter_values(manifest, metadata, params):
             )
         if kind == "enum" and value not in p["choices"]:
             raise ComputeError(p["label"] + "不在选项内")
-        if kind in {"field", "band"}:
+        if check_inputs and kind in {"field", "band"}:
             source = metadata.get(p["input"])
             if (
                 not source
@@ -239,6 +239,7 @@ def validate_submission(user, body):
     bindings, collections, input_specs = expand_bindings(manifest, inputs)
     shape_gaps = []
     candidate_cache = {}
+    resource_cache = {}
     for spec in input_specs:
         rid = bindings.get(spec["key"])
         if rid is None and not spec["required"]:
@@ -255,13 +256,16 @@ def validate_submission(user, body):
                 )
                 continue
             raise ComputeError("请选择输入数据：" + spec["label"])
-        resource = DataResource.objects.filter(
-            pk=rid, status="active", project_tag_id=project_id()
-        ).first()
-        if not resource:
-            raise ComputeError("输入数据不存在、已停用或不属于当前项目", 404)
-        if not user_can_access(resource, user):
-            raise ComputeError("输入数据不存在、已停用或无权访问", 404)
+        if rid not in resource_cache:
+            resource = DataResource.objects.filter(
+                pk=rid, status="active", project_tag_id=project_id()
+            ).first()
+            if not resource:
+                raise ComputeError("输入数据不存在、已停用或不属于当前项目", 404)
+            if not user_can_access(resource, user):
+                raise ComputeError("输入数据不存在、已停用或无权访问", 404)
+            resource_cache[rid] = resource
+        resource = resource_cache[rid]
         if resource.data_type != spec["kind"]:
             if manifest.get("schemaVersion") == 2:
                 shape_gaps.append(

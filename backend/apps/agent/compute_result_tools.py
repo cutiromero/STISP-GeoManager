@@ -5,7 +5,7 @@ import json
 from django.core.exceptions import PermissionDenied, ValidationError
 
 from apps.compute.models import ComputeOutput
-from apps.compute.packages import ComputeError, checksum
+from apps.compute.packages import ComputeError, checksum, checksum_scope
 from apps.compute.serializers import output_data
 from apps.compute.result_reads import table_page, raster_statistics
 from apps.core.storage import app_path
@@ -41,11 +41,41 @@ def read_output(run, user, policy, args, *, workflow=None):
     task = authorized_task(user, output.task_id, policy, run=run, workflow=workflow)
     if workflow is None:
         require_task_selection(run, task)
+    result = _read_output(output, task, offset, limit)
+    return result, [(None, result)]
+
+
+def check_output_file(output, task):
     path = app_path(output.path)
     if task.status != "succeeded" or output.expired or not path.is_file():
         raise ComputeError("结果未成功、已过期或文件缺失，请查看真实任务状态")
     if path.is_symlink() or checksum(path) != output.checksum:
         raise ComputeError("计算结果文件内容已变化，请重新检查")
+    return path
+
+
+@checksum_scope()
+def read_task_outputs(run, user, policy, task, *, workflow):
+    """One task authorization at each boundary, not one per output."""
+    if (
+        run.research_workflow_id != workflow.pk
+        or run.owner_id != workflow.owner_id
+        or run.project_tag_id != workflow.project_tag_id
+    ):
+        raise PermissionDenied("结果读取的业务流与发起对话不一致")
+    task = authorized_task(user, task.pk, policy, run=run, workflow=workflow)
+    results = [
+        _read_output(output, task, 0, 20)
+        for output in task.outputs.exclude(kind="archive")
+        .select_related("task__project_tag")
+        .order_by("id")
+    ]
+    authorized_task(user, task.pk, policy, run=run, workflow=workflow)
+    return results
+
+
+def _read_output(output, task, offset, limit):
+    path = check_output_file(output, task)
     result = {
         "taskId": str(task.id),
         "output": output_data(output),
@@ -115,4 +145,4 @@ def read_output(run, user, policy, args, *, workflow=None):
         )
     if len(json.dumps(result, ensure_ascii=False).encode()) > 24000:
         raise ValidationError("结果元信息过大，请使用结果预览查看")
-    return result, [(None, result)]
+    return result

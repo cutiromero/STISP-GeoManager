@@ -193,6 +193,21 @@ def _table_candidate_fields(resource: DataResource) -> list[str]:
 
 
 def candidate(resource, *, raster_metadata=False, semantic_metadata=False):
+    from .input_metadata import candidate_metadata
+
+    options = {"raster": raster_metadata, "semantic": semantic_metadata}
+    return candidate_metadata(
+        resource,
+        options,
+        lambda: _read_candidate(
+            resource,
+            raster_metadata=raster_metadata,
+            semantic_metadata=semantic_metadata,
+        ),
+    )
+
+
+def _read_candidate(resource, *, raster_metadata=False, semantic_metadata=False):
     result = _candidate_record(resource)
     if resource.data_type == "raster":
         import rasterio

@@ -121,8 +121,10 @@ def decide_recovery(user, workflow, value):
             from .input_adapters import logical_role
 
             specs = {row["key"]: row for row in definition["inputRequirements"]}
+            from .definitions import node_roles
+
             if any(
-                logical_role(role, specs) not in node["dataRoles"]
+                logical_role(role, specs) not in node_roles(node)
                 for role in replacements
             ):
                 raise ComputeError("只能更换当前节点可见的资料角色", 409)

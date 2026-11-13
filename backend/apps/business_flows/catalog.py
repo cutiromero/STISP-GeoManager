@@ -136,6 +136,27 @@ def validate_bindings(spec, project_id):
             item["key"] for item in version.manifest["parameters"]
         }:
             raise ValidationError("默认参数包含登记算子版本未声明的字段")
+        if version and node.get("parameters"):
+            from apps.compute.services import parameter_values
+            from apps.compute.packages import ComputeError
+
+            try:
+                parameter_values(
+                    {
+                        **version.manifest,
+                        "parameters": [
+                            {**row, "required": False}
+                            for row in version.manifest["parameters"]
+                        ],
+                    },
+                    {},
+                    node["parameters"],
+                    check_inputs=False,
+                )
+            except ComputeError as error:
+                raise ValidationError(
+                    "默认参数不符合登记算子规范：" + str(error)
+                ) from error
 
 
 def serialize_flow(flow):

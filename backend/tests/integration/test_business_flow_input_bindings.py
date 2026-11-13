@@ -317,3 +317,25 @@ def test_declared_default_parameters_publish_without_reading_source_files(versio
     ):
         _flow, version = publish(env, spec)
     assert version.definition["nodes"][0]["parameters"] == {"threshold": 1.5}
+
+
+@pytest.mark.parametrize("value", [True, "0.5", -1, 2])
+def test_publication_rejects_invalid_default_value_before_execution(versions, value):
+    env = versions
+    up, down = env["version"](), env["version"]()
+    up.manifest["parameters"] = [
+        {
+            "key": "threshold",
+            "label": "阈值",
+            "type": "number",
+            "required": False,
+            "default": 0.5,
+            "min": 0,
+            "max": 1,
+        }
+    ]
+    up.save(update_fields=["manifest"])
+    spec = definition(up.pk, down.pk)
+    spec["nodes"][0]["parameters"] = {"threshold": value}
+    with pytest.raises(ValidationError, match="默认参数"):
+        publish(env, spec)

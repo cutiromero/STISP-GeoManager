@@ -293,8 +293,10 @@ def test_submission_rechecks_real_bands_after_advisory_metadata_becomes_stale(
         },
     )
     assert result.status_code == 400, result.content
-    assert (
-        "波段" in result.json()["detail"]
-        or "不属于选中的数据" in result.json()["detail"]
+    assert any(
+        gap["code"] == "MISSING_FIELD"
+        and gap["input"] == "image"
+        and gap["field"] == "8"
+        for gap in result.json()["gaps"]
     )
     assert ComputeTask.objects.count() == 0

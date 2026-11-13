@@ -64,6 +64,38 @@ def _source_identity(path, dependencies=()):
     return identity
 
 
+def source_version(resource):
+    """Current physical input identity; never an authorization receipt."""
+    source, _ = _source(resource)
+    return {
+        "resource": resource.pk,
+        "project": resource.project_tag_id,
+        "revision": resource.updated_at.isoformat(),
+        "kind": resource.data_type,
+        "format": resource.file_format,
+        "storage": resource.storage_path,
+        "source": _source_identity(source, _source_dependencies(resource, source)),
+    }
+
+
+def _source_dependencies(resource, source):
+    if resource.data_type != "raster":
+        return []
+    import rasterio
+
+    with rasterio.open(source) as stream:
+        dependencies = [
+            Path(value).resolve()
+            for value in stream.files
+            if Path(value).resolve() != source.resolve()
+        ]
+    dependencies += [
+        Path(str(source) + suffix) for suffix in (".aux.xml", ".msk", ".ovr")
+    ]
+    dependencies += [source.with_suffix(suffix) for suffix in (".tfw", ".wld", ".prj")]
+    return sorted(set(dependencies))
+
+
 def _table_digest(path, table, vector):
     quoted = '"' + table.replace('"', '""') + '"'
     digest = hashlib.sha256()
@@ -223,23 +255,7 @@ def stage_version(resource, key, destination, materialize, expected_checksum="")
         str(resource.project_tag_id),
         str(resource.id),
     )
-    dependencies = []
-    if resource.data_type == "raster":
-        import rasterio
-
-        with rasterio.open(source) as stream:
-            dependencies = [
-                Path(value).resolve()
-                for value in stream.files
-                if Path(value).resolve() != source.resolve()
-            ]
-        dependencies += [
-            Path(str(source) + suffix) for suffix in (".aux.xml", ".msk", ".ovr")
-        ]
-        dependencies += [
-            source.with_suffix(suffix) for suffix in (".tfw", ".wld", ".prj")
-        ]
-        dependencies = sorted(set(dependencies))
+    dependencies = _source_dependencies(resource, source)
     version = {
         "resource": resource.id,
         "project": resource.project_tag_id,

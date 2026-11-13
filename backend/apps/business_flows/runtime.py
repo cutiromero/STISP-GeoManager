@@ -886,6 +886,7 @@ def decide_flow(user, workflow, value):
             if not feedback.strip():
                 raise ValidationError("退回时请说明需要修改的内容")
             from .model_recovery import prepare_revision
+            from .execution_session import session
 
             item.pop("recoveryGuidance", None)
 
@@ -893,7 +894,8 @@ def decide_flow(user, workflow, value):
                 item,
                 {"reason": feedback[:2000], "repairInstructions": feedback},
                 manual=True,
-                preserve_computation=node["kind"] != "operator",
+                preserve_computation=bool(session(current))
+                or node["kind"] != "operator",
             )
             item["reviewer"] = {
                 "status": "pending" if node["review"]["ai"] else "not_required"
