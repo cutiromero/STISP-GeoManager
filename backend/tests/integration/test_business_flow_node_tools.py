@@ -225,6 +225,26 @@ def action(name, **arguments):
     return {"action": name, "arguments": arguments}
 
 
+def test_tool_result_returns_to_queue_without_waiting_for_stale_worker_recovery(
+    operators, monkeypatch
+):
+    from apps.agent import workflow_worker
+    from apps.agent.workflow import run_workflow
+
+    env = operators
+    workflow = create(env)
+    calls = install(
+        monkeypatch, [action("operator_catalog"), action("operator_catalog")]
+    )
+    advance(env, workflow)
+    assert workflow.status == "queued"
+    assert workflow_worker.claim() == workflow.pk
+    run_workflow(workflow.pk)
+    workflow.refresh_from_db()
+    assert workflow.status == "queued"
+    assert len(calls) == 2
+
+
 def submit_args(env, **changes):
     return {
         "versionId": env["version"].pk,

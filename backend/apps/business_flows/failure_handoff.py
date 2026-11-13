@@ -111,7 +111,7 @@ def diagnose(workflow, node, recovery):
         "receivedOutputIds",
         "validatedOutputIds",
     ):
-        if failure.get(key) is not None:
+        if failure.get(key) is not None and (key != "gaps" or failure[key]):
             facts.append(key + "=" + _preview(failure[key]))
     submitted = pending.get("arguments") or loop.get("lastSubmission")
     if submitted:
@@ -183,7 +183,7 @@ def diagnose(workflow, node, recovery):
             or recovery.get("kind", "EXECUTION_ERROR")
         ),
         "location": f"{node['title']}（{node['id']}） / {operation}",
-        "facts": facts[:MAX_FACTS],
+        "facts": list(dict.fromkeys(facts))[:MAX_FACTS],
         "attempts": list(dict.fromkeys(attempts))[-6:],
         "references": list(dict.fromkeys(references)),
         "resumeAt": "修复或补充后从本次中断位置继续，已完成成果保留；恢复时重新检查权限、输入和预算。",
@@ -233,7 +233,16 @@ def diagnose(workflow, node, recovery):
                     "id": "failure-facts",
                     "kind": "analysis",
                     "title": "本次执行错误的实际记录",
-                    "result": diagnostic,
+                    "result": {
+                        key: diagnostic[key]
+                        for key in (
+                            "code",
+                            "location",
+                            "facts",
+                            "attempts",
+                            "references",
+                        )
+                    },
                 }
             ],
             role="executor",

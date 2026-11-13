@@ -700,6 +700,9 @@ def advance(workflow_id):
                         callbacks=_callbacks(workflow, node, "executor"),
                     )
                     if result is None:
+                        if workflow.status == "running":
+                            workflow.status = "queued"
+                            persist(workflow)
                         return
                 elif (
                     node.get("contract")
@@ -719,6 +722,9 @@ def advance(workflow_id):
                         callbacks=_callbacks(workflow, node, "executor"),
                     )
                     if result is None:
+                        if workflow.status == "running":
+                            workflow.status = "queued"
+                            persist(workflow)
                         return
                 elif node["kind"] == "operator":
                     from .data_bindings import InputQualityRejected

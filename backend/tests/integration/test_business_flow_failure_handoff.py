@@ -128,6 +128,13 @@ def test_all_execution_exceptions_wait_with_diagnosis_and_resume_original_task(
         assert "private service secret" not in json.dumps(recovery)
         assert len(diagnoses) == 1
         assert diagnoses[0]["executionSession"]["id"] == identity
+        assert set(diagnoses[0]["evidence"][0]["result"]) == {
+            "code",
+            "location",
+            "facts",
+            "attempts",
+            "references",
+        }
         before = len(state(workflow)["requestedIds"])
         engine.advance(workflow.pk)
         assert len(diagnoses) == 1  # No automatic spin during human handoff.

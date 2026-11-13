@@ -1449,4 +1449,6 @@ def advance_tool_execution(
         return None
     finally:
         loop["elapsedSeconds"] += time.monotonic() - started
+        if workflow.workflow_type == "business_flow" and workflow.status == "running":
+            workflow.status = "queued"
         persist(workflow)
