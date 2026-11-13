@@ -2,5 +2,5 @@
   "title": "生态遥感监测 · 互花米草与野火",
   "source": "remote_sensing_products",
   "scenes": ["spartina", "wildfire"],
-  "initialView": {"center": [112, 32], "zoom": 2.3, "regionZoom": 5}
+  "initialView": {"center": [121.86, 31.5], "zoom": 2.3, "regionZoom": 11.5}
 }

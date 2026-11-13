@@ -237,6 +237,18 @@ it("历史分布保留未知时间和空面积，选择后才加载同一地图�
       .querySelector(".remote-product-map-canvas")!
       .getBoundingClientRect().height,
   ).toBeGreaterThan(300);
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "聚焦研究区" }),
+    ).not.toBeDisabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "聚焦研究区" }));
+  expect(maps.maps[0]?.api.flyTo).toHaveBeenCalledWith(
+    expect.objectContaining({ center: [112, 32], zoom: 5 }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "全域" }));
+  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalledTimes(2);
+  expect(api.resourceProfile).toHaveBeenCalledTimes(1);
 });
 
 it("切换场景后取消旧请求并忽略迟到产品", async () => {

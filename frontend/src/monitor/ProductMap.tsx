@@ -19,6 +19,7 @@ import { workbenchLegends, type LiveLayerLegend } from "../map/liveLegendData";
 import { createRasterLayerGroup } from "../utils/layerFactory";
 import { rasterSymbolizationFromRules } from "../symbolization";
 import { currentLocale } from "../i18n";
+import { globeFit } from "./MonitorGlobe";
 import { projectTransformRequest, projectUrl } from "../projects/session";
 import {
   RasterRenderTaskRegistry,
@@ -64,7 +65,13 @@ export default function ProductMap({
         style: createBasemapStyle(mapConfig),
         projection: "globe",
         center: config.initialView.center as [number, number],
-        zoom: config.initialView.zoom,
+        zoom: Math.min(
+          config.initialView.zoom,
+          globeFit(
+            container.current.clientWidth,
+            container.current.clientHeight,
+          ).zoom,
+        ),
         transformRequest: projectTransformRequest,
         maxZoom: 18,
       });
@@ -265,22 +272,37 @@ export default function ProductMap({
     <div className="remote-product-map" aria-label={t("remoteMonitor.map")}>
       <div ref={container} className="remote-product-map-canvas" />
       <div className="remote-map-toolbar">
+        {product && (
+          <Button
+            size="small"
+            disabled={!ready || loading}
+            onClick={() => {
+              if (boundsRef.current)
+                mapRef.current?.fitBounds(boundsRef.current, {
+                  padding: 55,
+                  maxZoom: 11,
+                });
+            }}
+          >
+            {t("remoteMonitor.fullExtent")}
+          </Button>
+        )}
         <Button
           size="small"
+          disabled={!ready || loading}
           onClick={() => {
-            if (boundsRef.current)
-              mapRef.current?.fitBounds(boundsRef.current, {
-                padding: 55,
-                maxZoom: 11,
-              });
-            else
-              mapRef.current?.flyTo({
-                center: config.initialView.center as [number, number],
-                zoom: config.initialView.regionZoom,
-              });
+            const host = mapRef.current?.getContainer();
+            mapRef.current?.flyTo({
+              center: config.initialView.center as [number, number],
+              zoom: product
+                ? config.initialView.regionZoom
+                : host
+                  ? globeFit(host.clientWidth, host.clientHeight).zoom
+                  : config.initialView.zoom,
+            });
           }}
         >
-          {t("monitor.regionView")}
+          {t(product ? "monitor.regionView" : "monitor.globalView")}
         </Button>
       </div>
       {loading && (

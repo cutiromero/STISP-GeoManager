@@ -34,4 +34,6 @@ cd backend
 
 成果展示→生态监测大屏选择场景和产品，手动刷新可读取新登记成果。没有可见成果时展示待接入状态；删除来源、停用资源或撤销 owner_only 访问后，该产品与统计不再返回。
 
+地图提供全域与研究区视角。研究区中心和放大级别由`initialView.center`、`regionZoom`配置；示例配置聚焦长江口。右侧指标对应所选成果，视角切换不重新统计或生成新任务。
+
 完整发布可使用`tools/release/release.py full --candidate-check <tools/monitoring/candidate_check.py绝对路径> --execute`。钩子先确认候选数据库、科研目录和配置均隔离，再验证场景接口、鉴权、未知时间与虚假预报拒绝；临时项目设置和会话均在回滚事务内，不登记模拟产品。

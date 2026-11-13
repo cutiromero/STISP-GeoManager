@@ -4,7 +4,7 @@
 
 ## 仓库与分支
 
-- 私有仓库：`https://github.com/cutiromero/STISP-GeoManager`。
+- 代码仓库：`https://github.com/cutiromero/STISP-GeoManager`，当前为公开仓库。
 - `origin`：上述个人仓库，保存日常开发代码与后续版本。
 - `mentor`：`https://github.com/spAurora/GeoManager.git`，保留师兄原仓库地址；本次不推送这里。
 - `handoff-bundle`：本机原交接 Git bundle；全部原引用另存于 `refs/handoff/*`。
@@ -48,6 +48,6 @@ git push -u origin HEAD
 
 GitHub Actions 在该仓库关闭，避免首次推送 main 时触发继承的 GHCR 镜像发布任务；历史工作流文件保留。尚未建立任何服务器自动部署或定时推送任务。
 
-GitHub 凭据由现有 Git Credential Manager 提供，不写入远程 URL、脚本正文或仓库。仓库保持私有，后续协作者按需授予访问权限。
+GitHub 凭据由现有 Git Credential Manager 或 SSH 密钥提供，不写入远程 URL、脚本正文或仓库。协作者写入权限按需维护。
 
 本机全局 Git 代理指向失效的 `127.0.0.1:4780`。本次已验证直接推送成功，并仅设置本仓库 `remote.origin.proxy` 为空，使新 origin 直连；全局代理和其他仓库设置保持不变。
