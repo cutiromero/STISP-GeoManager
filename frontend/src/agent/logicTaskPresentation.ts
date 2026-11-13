@@ -75,6 +75,7 @@ export function logicCurrentTitle(workflow: AgentWorkflow) {
   if (workflow.status === "cancelled") return "后续处理已停止";
   if (workflow.status === "failed") return "任务未能完成";
   if (workflow.status === "interrupted") return "访问条件发生变化，任务已中断";
+  if (workflow.status === "queued") return "正在排队，等待执行资源";
   if (workflow.status === "succeeded") return "处理结果与待核查事项";
   if (workflow.status === "waiting_approval")
     return workflow.plan.phase === "review_mapping"

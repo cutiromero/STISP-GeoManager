@@ -450,12 +450,15 @@ def _collect(workflow, user, p, task):
         checkpoint(workflow, "finalize", {"resourceIds": workflow.result_resource_ids})
 
 
-def resume_waiting():
+def resume_waiting(*, workflow_id=None):
     from .compute_tools import authorized_task
     from apps.compute.services import task_action
 
     count = 0
-    for workflow in AgentWorkflow.objects.filter(status="waiting_compute")[:30]:
+    waiting = AgentWorkflow.objects.filter(status="waiting_compute")
+    if workflow_id is not None:
+        waiting = waiting.filter(pk=workflow_id)
+    for workflow in waiting[:30]:
         from .demo_workflow import DEMO_TYPES, advance_demo
 
         if workflow.workflow_type == "business_flow":

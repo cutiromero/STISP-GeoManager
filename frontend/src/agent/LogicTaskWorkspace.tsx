@@ -403,11 +403,17 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
         </>
       ) : (
         <>
-          <p className="logic-description">{workflow.detail}</p>
+          <p className="logic-description">
+            {workflow.status === "queued"
+              ? "任务已保存，执行资源可用后会从当前步骤继续。"
+              : workflow.detail}
+          </p>
           <p className="logic-running-note">
             {workflow.pauseRequested
               ? "当前步骤到达保存点后停止后续处理。"
-              : "当前无需操作，任务进度会持续保存。"}
+              : workflow.status === "queued"
+                ? "无需重复提交或重新确认资料。"
+                : "当前无需操作，任务进度会持续保存。"}
             {!compact && progressText && ` ${progressText}。`}
           </p>
         </>

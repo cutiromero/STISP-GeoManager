@@ -66,6 +66,21 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it("排队时不把已确认资料误报为正在生成工作副本", () => {
+  show(
+    task({
+      status: "queued",
+      detail: "已确认字段含义，正在生成工作副本",
+      plan: { phase: "build_inputs", stages: [] },
+    }),
+  );
+  expect(screen.getByText("正在排队，等待执行资源")).toBeVisible();
+  expect(
+    screen.getByText("任务已保存，执行资源可用后会从当前步骤继续。"),
+  ).toBeVisible();
+  expect(screen.queryByText("已确认字段含义，正在生成工作副本")).toBeNull();
+});
+
 it.each([1440, 1920])(
   "业务流运行卡片在%s宽屏中保持与对话一致的居中宽度",
   async (width) => {

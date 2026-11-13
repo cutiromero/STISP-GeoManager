@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
 from django.db import OperationalError, close_old_connections, transaction
@@ -15,8 +16,11 @@ from .workflow import resume_waiting, run_workflow
 
 logger = logging.getLogger(__name__)
 
+# Match the existing chat queue's bounded concurrency; each task keeps its agent.
+MAX_ACTIVE_WORKFLOWS = 3
 
-def claim():
+
+def claim(*, exclude=()):
     with transaction.atomic():
         AgentRuntime.objects.update_or_create(
             name="workflow-queue", defaults={"heartbeat": timezone.now()}
@@ -24,6 +28,7 @@ def claim():
         candidate = (
             AgentWorkflow.objects.select_for_update()
             .filter(status="queued", cancel_requested=False, pause_requested=False)
+            .exclude(pk__in=exclude)
             .order_by("created_at")
             .first()
         )
@@ -83,30 +88,70 @@ def recover():
     ).update(status="queued", detail="正在从已保存计划恢复", updated_at=timezone.now())
 
 
+def _run_task(workflow_id, *, waiting=False):
+    close_old_connections()
+    try:
+        if waiting:
+            resume_waiting(workflow_id=workflow_id)
+        else:
+            run_workflow(workflow_id)
+    finally:
+        close_old_connections()
+
+
 def serve(stop=None, once=False):
     stop = stop or threading.Event()
-    while not stop.is_set():
-        try:
-            close_old_connections()
-            recover()
-            AgentRuntime.objects.update_or_create(
-                name="workflow-worker", defaults={"heartbeat": timezone.now()}
-            )
-            resume_waiting()
-            workflow_id = claim()
-            if workflow_id:
-                run_workflow(workflow_id)
-            if once:
-                break
-        except OperationalError as exc:
-            logger.warning(
-                "workflow queue busy (%s, database code=%s); retrying next heartbeat",
-                type(exc).__name__,
-                getattr(exc.__cause__, "sqlite_errorname", "unavailable"),
-            )
-        except Exception:
-            logger.exception("workflow worker tick failed")
-        stop.wait(1)
+    futures = {}
+    capacity = MAX_ACTIVE_WORKFLOWS
+    with ThreadPoolExecutor(max_workers=capacity) as pool:
+        while not stop.is_set():
+            try:
+                close_old_connections()
+                for workflow_id, future in list(futures.items()):
+                    if future.done():
+                        del futures[workflow_id]
+                        try:
+                            future.result()
+                        except Exception:
+                            logger.exception("workflow task failed")
+                # The scheduler remains alive while a task waits for its model.
+                AgentWorkflow.objects.filter(pk__in=futures, status="running").update(
+                    heartbeat=timezone.now()
+                )
+                recover()
+                AgentRuntime.objects.update_or_create(
+                    name="workflow-worker", defaults={"heartbeat": timezone.now()}
+                )
+                if once:
+                    resume_waiting()
+                    workflow_id = claim()
+                    if workflow_id:
+                        run_workflow(workflow_id)
+                    break
+                for _ in range(capacity - len(futures)):
+                    workflow_id = claim(exclude=futures)
+                    if not workflow_id:
+                        break
+                    futures[workflow_id] = pool.submit(_run_task, workflow_id)
+                waiting = list(
+                    AgentWorkflow.objects.filter(status="waiting_compute")
+                    .exclude(pk__in=futures)
+                    .order_by("updated_at")
+                    .values_list("pk", flat=True)[: capacity - len(futures)]
+                )
+                for workflow_id in waiting:
+                    futures[workflow_id] = pool.submit(
+                        _run_task, workflow_id, waiting=True
+                    )
+            except OperationalError as exc:
+                logger.warning(
+                    "workflow queue busy (%s, database code=%s); retrying next heartbeat",
+                    type(exc).__name__,
+                    getattr(exc.__cause__, "sqlite_errorname", "unavailable"),
+                )
+            except Exception:
+                logger.exception("workflow worker tick failed")
+            stop.wait(1)
     close_old_connections()
 
 
