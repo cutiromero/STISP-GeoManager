@@ -81,10 +81,10 @@ def test_long_narrative_and_merged_tail_are_marked_and_bounded():
         )
 
 
-def test_references_deduplicate_before_cap_and_check_entire_tail():
+def test_references_deduplicate_preserve_authorized_tail_and_check_entire_list():
     refs = [{"kind": "output", "id": str(index)} for index in range(40)]
     value = validate({"evidenceRefs": [refs[0]] * 40 + refs}, refs)
-    assert value["evidenceRefs"] == refs[:30]
+    assert value["evidenceRefs"] == refs
     with pytest.raises(ComputeError, match="第81项.*并非本次授权"):
         validate(
             {
