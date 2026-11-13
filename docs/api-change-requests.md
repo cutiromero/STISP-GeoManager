@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261113-004 - 遥感监测产品与场景
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: `GET /api/ecology/monitoring/`；项目配置沿用原项目功能接口。
+- Change type: 新增只读产品接口，扩展原项目监测配置；不增加数据库结构。
+- OpenAPI change: `ProjectMonitorConfig`增加`remote_sensing_products`源和可选scenes；新增`MonitoringProductManifest`、模型身份、时间依据、统计项及有界产品页。
+- Frontend reason: 大屏按项目切换互花米草/野火，真实图层复用资源profile与瓦片；时间未知、统计缺失和质量状态明确表达，不生成模拟读数。
+- Backend implementation notes: 复用RemoteSensingProduct，元数据只读查询；地图资源及全部来源同项目、启用、owner_only和任务资料范围重验。新模型产品须通过真实计算质量门禁并标准入库；管理命令内容幂等且不能覆盖原产品，不启动新调度器。
+- Mock examples: `mock/prism/examples/171-remote-monitoring.json`使用空产品页，不以演示统计替代待传资料。
+- Verification: 场景/项目/资源/来源撤权、空状态、未知时间、真实零、模型时效、分页、批量查询、前端场景切换与迟到响应隔离。
+- Result: 遥感产品读取、登记与场景展示已实现；科学输入缺项通过准备检查明确报告，部署和真实数据验收独立留档。
+
 ## API-20261113-003 - 执行错误定位与统一人工交接
 
 - Status: BackendReady
@@ -661,6 +674,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261113-004 | BackendReady | /api/ecology/monitoring/；项目功能 | 遥感产品与场景 | Updated | 171-remote-monitoring.json | Implemented | 权限、来源、科学时间、批量读取及浏览器 | 空状态不生成模拟结果 |
 | API-20261113-003 | BackendReady | Business flow recovery | 执行错误定位与人工续接 | Updated | 隔离恢复用例 | Implemented | 原会话、检查点与撤权回归 | 保留成果和原权限边界 |
 | API-20261112-002 | BackendReady | Business flow skill and main agent | 任务级主执行循环与有界技能 | Updated | 146节点记录 | Implemented | 版本、会话、台账、调整与恢复 | 不扩大上下文或审批权限 |
 | API-20261112-001 | BackendReady | Business flow node trace | 节点思考、实际响应和工具行动按需读取 | Updated | 146节点记录 | Implemented | 权限隔离、分页、节点切换及显示 | 不执行计算或科研批准 |

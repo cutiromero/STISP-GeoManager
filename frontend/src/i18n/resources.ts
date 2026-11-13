@@ -2,6 +2,72 @@ import { auditUiZh, auditUiEn } from "./auditUi";
 export const zhCN = {
   translation: {
     auditUi: auditUiZh,
+    remoteMonitor: {
+      eyebrow: "生态遥感 · 成果与证据",
+      entryTag: "专题成果 · 遥感监测",
+      legend: "图例",
+      scenes: "监测场景",
+      spartina: "互花米草",
+      wildfire: "野火",
+      poplar: "胡杨演示",
+      spartinaSubtitle: "沿海分布识别 · 斑块统计 · 可比时期变化核查",
+      wildfireSubtitle: "历史时空回放 · 区域风险概率 · 模型与观测对照",
+      catalogued: "当前项目 · 成果目录",
+      refresh: "刷新成果",
+      products: "成果列表",
+      details: "指标与依据",
+      waiting: "等待已核验成果入库",
+      unavailable: "暂时无法读取成果",
+      loadMore: "加载更早成果",
+      unknownTime: "观测时间待核实",
+      conditions: "接入条件",
+      spartinaInputs:
+        "RF：3、8、12 月影像组成一组 48 维特征。UNet：单通道影像与匹配权重。",
+      spartinaGuard: "模型、输入预处理和有效范围核实后，从研究区小样开始运行。",
+      wildfireInputs:
+        "SeasFire：0.25° 网格、8 天周期。模型需要固定顺序的 11 个驱动变量。",
+      wildfireGuard:
+        "权重 w1–w16 的窗口含义与预测时效须核实；缺少训练预处理时保持待接入。",
+      map: "遥感成果地图",
+      noLayer: "尚无可显示的成果图层",
+      noLayerHint: "完成资料验收与成果入库后，在左侧选择产品查看空间分布。",
+      loadingMap: "正在准备成果图层",
+      mapUnavailable: "地图服务暂不可用，仍可查看成果统计与来源。",
+      renderFailed: "成果图层加载失败",
+      renderTimeout: "图层准备尚未完成，请稍后刷新成果。",
+      tilesPending: "此成果尚未准备矢量瓦片，请先完成地图服务准备。",
+      spartinaMapNote:
+        "面积以成果统计口径为准。三季节输入不等于三期独立识别，未核实时间不绘制变化趋势。",
+      wildfireMapNote:
+        "0.25° 网格用于区域分析；概率不代表精确着火点，缺测和海洋不按零风险处理。",
+      observed: "观测周期",
+      model: "模型版本",
+      threshold: "概率阈值",
+      validPeriod: "预测有效期",
+      unknownLead: "未核实／不适用",
+      notDeclared: "历史／观测成果，未声明模型",
+      source: "数据来源",
+      evidence: "查看统计与时间依据",
+      registered: "成果登记于",
+      limitations: "适用范围与局限",
+      noConclusion: "尚无可报告的统计或结论",
+      noConclusionHint:
+        "缺失指标显示为“—”。成果入库前不生成模拟面积、概率、趋势或预警。",
+      route: "业务流展示路线",
+      routeHint:
+        "阶段说明展示处理路线；实际执行以已发布业务流和真实任务状态为准。",
+      openFlows: "进入业务流",
+      kind: {
+        historical: "历史成果",
+        model: "模型结果",
+        observation: "观测资料",
+      },
+      quality: {
+        unverified: "未验证",
+        passed: "已核验",
+        needs_review: "待复核",
+      },
+    },
     monitor: {
       entryTag: "专题成果 · 动态演示",
       entryTitle: "生态监测大屏",
@@ -1101,6 +1167,79 @@ export const zhCN = {
 export const enUS = {
   translation: {
     auditUi: auditUiEn,
+    remoteMonitor: {
+      eyebrow: "REMOTE SENSING · PRODUCTS & EVIDENCE",
+      entryTag: "Thematic products · Remote sensing",
+      legend: "Legend",
+      scenes: "Monitoring scenes",
+      spartina: "Spartina",
+      wildfire: "Wildfire",
+      poplar: "Poplar demo",
+      spartinaSubtitle:
+        "Coastal distribution · Patch statistics · Comparable-period change",
+      wildfireSubtitle:
+        "Historical replay · Regional probability · Model and observation comparison",
+      catalogued: "Current project · Product catalogue",
+      refresh: "Refresh products",
+      products: "Products",
+      details: "Metrics and evidence",
+      waiting: "Awaiting verified product import",
+      unavailable: "Products are temporarily unavailable",
+      loadMore: "Load earlier products",
+      unknownTime: "Observation date unverified",
+      conditions: "Integration requirements",
+      spartinaInputs:
+        "RF combines March, August and December into 48 features. UNet needs a matching single-channel input and checkpoint.",
+      spartinaGuard:
+        "Validate the model, preprocessing and valid extent before a small-area run.",
+      wildfireInputs:
+        "SeasFire uses a 0.25° grid and 8-day periods. The model requires 11 variables in a fixed order.",
+      wildfireGuard:
+        "Verify window and forecast semantics for w1–w16; training preprocessing is required before inference.",
+      map: "Remote-sensing product map",
+      noLayer: "No product layer is available yet",
+      noLayerHint:
+        "After validation and import, select a product on the left to explore its extent.",
+      loadingMap: "Preparing the product layer",
+      mapUnavailable:
+        "The map service is unavailable. Product metrics and sources remain accessible.",
+      renderFailed: "The product layer could not be loaded",
+      renderTimeout:
+        "Layer preparation is still pending. Refresh products later.",
+      tilesPending:
+        "Prepare vector tiles for this product before displaying the map.",
+      spartinaMapNote:
+        "Use the declared area method. Three seasonal inputs are not three observations; unknown dates cannot form a change series.",
+      wildfireMapNote:
+        "The 0.25° grid supports regional analysis. Probability is not an ignition point; missing and ocean cells are not zero-risk land.",
+      observed: "Observed period",
+      model: "Model version",
+      threshold: "Threshold",
+      validPeriod: "Forecast validity",
+      unknownLead: "Unverified / not applicable",
+      notDeclared: "Historical / observational product; no model declared",
+      source: "Source",
+      evidence: "View statistics and time evidence",
+      registered: "Product registered",
+      limitations: "Scope and limitations",
+      noConclusion: "No statistics or conclusions are available yet",
+      noConclusionHint:
+        "Missing values appear as “—”. No simulated area, probability, trend or alerts are generated.",
+      route: "Workflow route",
+      routeHint:
+        "Stages describe the route; execution follows published workflows and actual task state.",
+      openFlows: "Open workflows",
+      kind: {
+        historical: "Historical",
+        model: "Model result",
+        observation: "Observation",
+      },
+      quality: {
+        unverified: "Unverified",
+        passed: "Verified",
+        needs_review: "Needs review",
+      },
+    },
     monitor: {
       entryTag: "Thematic output · Live demo",
       entryTitle: "Ecological monitoring dashboard",

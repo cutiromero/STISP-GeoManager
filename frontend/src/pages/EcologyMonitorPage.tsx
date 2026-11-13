@@ -12,18 +12,20 @@ import {
   Button,
   ConfigProvider,
   Result,
+  Space,
   Spin,
   theme,
 } from "antd";
 import {
   type CSSProperties,
+  type ReactNode,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ProjectMonitorConfig } from "../api/generated/types.gen";
 import { currentLocale } from "../i18n";
 import MonitorGlobe from "../monitor/MonitorGlobe";
@@ -39,23 +41,33 @@ import {
 } from "../monitor/MonitorPanels";
 import { createMonitorSource } from "../monitor/source";
 import { useMonitorProject } from "../monitor/project";
-import {
-  metricPrecision,
-  metricUnits,
-  riskColors,
-} from "../monitor/state";
+import { metricPrecision, metricUnits, riskColors } from "../monitor/state";
 import { metricIds, type MonitorDataSource } from "../monitor/types";
 import { useMonitor, useMonitorActivity } from "../monitor/useMonitor";
+import RemoteSensingDashboard from "../monitor/RemoteSensingDashboard";
 import "./ecology-monitor.css";
 
 export default function EcologyMonitorPage() {
   const project = useMonitorProject();
   const { i18n, t } = useTranslation();
   const navigate = useNavigate();
+  const [search, setSearch] = useSearchParams();
   const config = project?.monitorConfig;
+  const scenes =
+    config?.scenes ??
+    (config?.source === "remote_sensing_products"
+      ? ["spartina", "wildfire"]
+      : []);
+  const choices = [
+    ...(config?.source === "tarim_poplar_mock" ? ["poplar"] : []),
+    ...scenes,
+  ];
+  const selectedScene = choices.includes(search.get("scene") ?? "")
+    ? search.get("scene")!
+    : choices[0];
   const source = useMemo(
     () =>
-      project && config
+      project && config?.source === "tarim_poplar_mock"
         ? createMonitorSource({
             projectId: project.id,
             locale: currentLocale(),
@@ -64,7 +76,12 @@ export default function EcologyMonitorPage() {
         : undefined,
     [project?.id, config, i18n.resolvedLanguage],
   );
-  if (!project || !config || !source)
+  if (
+    !project ||
+    !config ||
+    !choices.length ||
+    (selectedScene === "poplar" && !source)
+  )
     return (
       <Result
         status={project ? "info" : "403"}
@@ -91,22 +108,67 @@ export default function EcologyMonitorPage() {
       }}
     >
       <App>
-        <EcologyMonitorDashboard
-          key={`${project.id}:${i18n.resolvedLanguage}`}
-          source={source}
-          config={config}
-        />
+        {selectedScene === "spartina" || selectedScene === "wildfire" ? (
+          <RemoteSensingDashboard
+            key={`${project.id}:${selectedScene}:${i18n.resolvedLanguage}`}
+            config={config}
+            scene={selectedScene}
+            navigation={sceneNavigation()}
+          />
+        ) : (
+          source && (
+            <EcologyMonitorDashboard
+              key={`${project.id}:${i18n.resolvedLanguage}`}
+              source={source}
+              config={config}
+              navigation={sceneNavigation()}
+            />
+          )
+        )}
       </App>
     </ConfigProvider>
   );
+
+  function sceneNavigation() {
+    if (choices.length < 2) return null;
+    return (
+      <Space
+        className="monitor-scene-navigation"
+        role="navigation"
+        aria-label={t("remoteMonitor.scenes")}
+      >
+        {choices.map((scene) => (
+          <Button
+            key={scene}
+            size="small"
+            type={scene === selectedScene ? "primary" : "default"}
+            aria-pressed={scene === selectedScene}
+            aria-label={t(`remoteMonitor.${scene}`)}
+            onClick={() =>
+              setSearch((previous) => {
+                const next = new URLSearchParams(previous);
+                next.set("scene", scene);
+                next.set("projectTagId", String(project!.id));
+                return next;
+              })
+            }
+          >
+            {t(`remoteMonitor.${scene}`)}
+          </Button>
+        ))}
+      </Space>
+    );
+  }
 }
 
 export function EcologyMonitorDashboard({
   source,
   config,
+  navigation,
 }: {
   source: MonitorDataSource;
   config: ProjectMonitorConfig;
+  navigation?: ReactNode;
 }) {
   const { t } = useTranslation();
   const { message } = App.useApp();
@@ -167,21 +229,33 @@ export function EcologyMonitorDashboard({
             <h1>{config.title}</h1>
           </div>
         </div>
+        {navigation}
         <div className="monitor-topbar-meta">
-          <time title={`${new Date(now).toLocaleString(locale, { hour12: false })} · ${t("monitor.updatedAt", {
-              time: snapshot
-                ? new Date(snapshot.updatedAt).toLocaleTimeString(locale, {
-                    hour12: false,
-                  })
-                : "—",
-            })}`}>
+          <time
+            title={`${new Date(now).toLocaleString(locale, { hour12: false })} · ${t(
+              "monitor.updatedAt",
+              {
+                time: snapshot
+                  ? new Date(snapshot.updatedAt).toLocaleTimeString(locale, {
+                      hour12: false,
+                    })
+                  : "—",
+              },
+            )}`}
+          >
             {new Date(now).toLocaleTimeString(locale, { hour12: false })}
           </time>
         </div>
         <div className="monitor-topbar-actions">
-          <Button size="small" icon={motionEnabled ? <PauseOutlined /> : <CaretRightOutlined />}
-            aria-label={t(motionEnabled ? "monitor.pauseMotion" : "monitor.playMotion")}
-            onClick={() => setMotionOverride(!motionEnabled)} aria-pressed={motionEnabled}>
+          <Button
+            size="small"
+            icon={motionEnabled ? <PauseOutlined /> : <CaretRightOutlined />}
+            aria-label={t(
+              motionEnabled ? "monitor.pauseMotion" : "monitor.playMotion",
+            )}
+            onClick={() => setMotionOverride(!motionEnabled)}
+            aria-pressed={motionEnabled}
+          >
             {t(motionEnabled ? "monitor.pauseMotion" : "monitor.playMotion")}
           </Button>
           <Button
@@ -323,7 +397,13 @@ export function EcologyMonitorDashboard({
           {t(visible ? "monitor.feedRunning" : "monitor.feedPaused")}
         </span>
         <span>
-          {t(motionEnabled ? "monitor.rotationHint" : reducedMotion ? "monitor.motionReduced" : "monitor.motionPaused")}
+          {t(
+            motionEnabled
+              ? "monitor.rotationHint"
+              : reducedMotion
+                ? "monitor.motionReduced"
+                : "monitor.motionPaused",
+          )}
         </span>
         <span>{t("monitor.simulationOnly")}</span>
       </footer>

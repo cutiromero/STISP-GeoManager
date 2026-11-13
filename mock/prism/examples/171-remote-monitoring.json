@@ -1,0 +1,12 @@
+{
+  "GET /api/ecology/monitoring/": {
+    "200": {
+      "projectId": 5,
+      "scene": "spartina",
+      "title": "互花米草监测",
+      "route": ["选区与资料", "输入准备", "模型识别", "斑块统计", "变化核验", "成果发布"],
+      "items": [],
+      "nextBeforeId": null
+    }
+  }
+}

@@ -32,7 +32,7 @@ cd backend
 
 ## 项目内容配置与迁移
 
-`monitorConfig` 包含标题 `title`、显式数据源 `source` 和研究区 `initialView`。目前仅有 `tarim_poplar_mock` 演示源；其他项目不会自动选用它。需要演示时须明确为目标项目保存配置，接入新的数据源时扩展契约和装配器，不允许未知源回退。
+`monitorConfig`包含标题`title`、显式数据源`source`、研究区`initialView`和可选`scenes`。`tarim_poplar_mock`展示胡杨模拟点位，省略scenes时保持原演示；显式增加`["spartina", "wildfire"]`可切换本项目遥感场景。`remote_sensing_products`仅展示真实遥感产品，省略scenes时启用两场景。其他项目不自动选择数据源，未知源不回退。
 
 ```json
 {
@@ -46,11 +46,13 @@ cd backend
 
 迁移 `projects.0003_project_features` 只新增两张表和唯一约束，原项目、成员关系及科研数据不改动。已有稳定代码 `05` 的项目按 ID 关联初始化开启和首份配置，不依赖显示名称；不存在该代码时安全跳过，不创建项目。其他项目默认关闭，全局默认关闭。初始化使用 `get_or_create`，不会覆盖之后的设置；测试覆盖真实从旧版本升级、目标缺失与重复初始化。常规升级执行 `manage.py migrate` 后自动生效，无需另行手工开启。
 
-大屏包含流域监测地球、点位详情、区域综合风险、地下水埋深、土壤含水率、NDVI、胡杨长势评分、最近 24 次观测趋势、倒序预警、高风险区段排行与模拟智能体研判。报告按钮只显示“功能建设中”。所有点位、读数、风险与研判均为演示，不代表实测，不用于生态决策。
+胡杨演示包含流域监测地球、点位详情、区域综合风险、地下水埋深、土壤含水率、NDVI、胡杨长势评分、最近24次观测趋势、倒序预警、高风险区段排行与模拟智能体研判。报告按钮只显示“功能建设中”。该场景所有点位、读数、风险与研判均为演示，不代表实测。
+
+遥感场景包含成果列表、真实地图图层、指标、来源、质量与时间依据、适用范围和业务展示路线。互花米草展示分布面、面积和斑块；野火展示区域风险概率或历史观测。未知观测时间保持空值，统计缺失显示“—”，不使用登记时间、权重文件名推断观测日期或预测时效。没有产品时显示待接入状态，不生成模拟读数或结论。
 
 ## 数据源边界
 
-`frontend/src/monitor/types.ts` 定义页面唯一依赖的 `MonitorDataSource`：
+胡杨演示使用`frontend/src/monitor/types.ts`中的`MonitorDataSource`：
 
 - `getSnapshot(): Promise<MonitorSnapshot>`：返回序号、更新时间、点位、关联、预警、历史样本与研判。
 - `subscribe(listener): () => void`：订阅 `MonitorEvent`，返回幂等取消函数；最后一个订阅取消后释放数据源持有的计时器和可见性监听。
@@ -65,7 +67,11 @@ cd backend
 
 固定点位、基线和初始预警在 `frontend/src/monitor/mockData.ts`；模拟事件调度在 `frontend/src/monitor/mockSource.ts`。默认种子为 `20261110`，间隔为 4000 ms；工厂选项支持 `seed`、`intervalMs`、`now`、`locale` 与可注入的可见性源。相同种子、时钟和配置可复现事件序列。变化仅演示事件流，不模拟真实生态过程的时间尺度。
 
-`frontend/src/monitor/source.ts` 是唯一数据源装配入口，接收当前项目 ID、语言和后端项目配置，仅按显式 `source` 返回 `MonitorDataSource`。真实接入时创建实现同一接口的真实数据源，保留模拟实现用于测试，图表、点位和窗口无需改写。真实数据源负责认证、项目范围、功能开关、错误恢复、序号缺口的重新取快照、断线重连及隐藏期间的传输暂停；前端门禁不代替服务端 ACL。接入完成后同步更新整页模拟标识与连接状态文案，并按契约流程扩展数据源配置。
+`EcologyMonitorPage`按配置和场景装配页面。`frontend/src/monitor/source.ts`只装配显式胡杨模拟源；遥感产品通过`productApi.ts`读取`GET /api/ecology/monitoring/`，使用生成的OpenAPI类型。互花米草与野火不转换为地下水、土壤或胡杨长势点位。
+
+遥感产品复用`RemoteSensingProduct`和已入库`DataResource`。超级管理员用`register_monitor_product`登记产品交接清单，同项目编码和内容重复登记幂等，内容不同须新编码。新模型成果须已经通过计算中心质量门禁与标准入库，并保留任务全部来源；历史外部成果按historical登记。产品和全部来源每次读取重验项目、状态与owner_only权限。场景目录只读元数据，选择产品后使用现有profile与瓦片接口，资源接口再次鉴权；浏览器不读取原始TIFF/Zarr。
+
+页面手动刷新成果，无后台模拟更新或定时重算。切换产品取消旧profile和渲染请求，切换项目/场景释放旧地图并忽略迟到响应；读取权限失败清除旧成果与统计。栅格沿用后端异步渲染和实际瓦片采样规则，矢量使用预生成MVT，尚未准备瓦片时明确提示。完整数据、模型、业务路线与接入命令见[remote-sensing-monitoring.md](remote-sensing-monitoring.md)及`examples/monitoring/`。
 
 ## 地图与动态效果
 

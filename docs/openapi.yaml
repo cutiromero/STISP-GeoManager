@@ -72,6 +72,42 @@ tags:
 - name: 邀请分享
   description: 精确用户名邀请及本人站内通知，不扩张项目和私有资源权限
 paths:
+  /api/ecology/monitoring/:
+    get:
+      tags: [数据目录]
+      summary: 读取当前项目的遥感监测产品
+      description: 仅返回已开启ecology_monitor且显式配置的场景。需登录、browse_data及当前项目权限；地图成果和全部来源资源均重验项目、启用状态、owner_only与任务资料边界。只读元信息，不读取科学文件或触发计算。分页按产品ID倒序，最多检查200个候选；没有可见产品时仍可能有下一页。
+      operationId: getMonitoringProducts
+      security: [{sessionAuth: []}]
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 显式选择的单个项目ID，不接受all。
+        schema: {type: integer, minimum: 1}
+      - name: scene
+        in: query
+        required: true
+        description: 当前项目已配置的互花米草或野火场景。
+        schema: {type: string, enum: [spartina, wildfire]}
+      - name: beforeId
+        in: query
+        description: 上一页返回的nextBeforeId；只扫描比该ID更早的产品。
+        schema: {type: integer, minimum: 1}
+      - name: limit
+        in: query
+        description: 本页最多返回的可见产品数。
+        schema: {type: integer, minimum: 1, maximum: 60, default: 60}
+      responses:
+        '200':
+          description: 场景说明与可见产品；空列表不代表零风险或零分布。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MonitoringProductList'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/sharing/check/:
     post:
       tags: [邀请分享]
@@ -12321,8 +12357,15 @@ components:
           description: 大屏标题。
         source:
           type: string
-          enum: [tarim_poplar_mock]
-          description: 显式选择的模拟数据源；目前仅注册塔里木胡杨演示源。
+          enum: [tarim_poplar_mock, remote_sensing_products]
+          description: 胡杨模拟源或当前项目的真实遥感产品；两者不互相回退。
+        scenes:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          description: 显式开启的遥感场景。真实产品源省略时开启两场景；胡杨源省略时只展示原演示。
+          items: {type: string, enum: [spartina, wildfire], description: 遥感监测场景。}
         initialView:
           type: object
           description: 研究区初始视角。
@@ -12345,6 +12388,109 @@ components:
               minimum: 0
               maximum: 22
               description: 研究区按钮缩放级别。
+    MonitoringModel:
+      type: object
+      additionalProperties: false
+      description: 实际模型与权重身份，文件名不用于推导预报时效。
+      required: [name, version, checkpointSha256, variant, forecastLeadDays]
+      properties:
+        name: {type: string, description: 模型名称。}
+        version: {type: string, description: 实际验证的模型版本。}
+        checkpointSha256: {type: string, pattern: '^[0-9a-f]{64}$', description: 权重SHA-256。}
+        variant: {type: string, description: 变体或权重标签，例如w1；不代表已确认预测提前期。}
+        forecastLeadDays: {type: [integer, 'null'], minimum: 0, maximum: 366, description: 经目标定义核实的预测提前天数，未知为null。}
+    MonitoringTiming:
+      type: object
+      additionalProperties: false
+      description: 分开声明输入截至时间、有效区间与证据；未知时效保持null。
+      required: [inputThrough, validStart, validEnd, evidence]
+      properties:
+        inputThrough: {type: [string, 'null'], format: date, description: 输入已知资料截至日期。}
+        validStart: {type: [string, 'null'], format: date, description: 已核实的预测有效开始日期。}
+        validEnd: {type: [string, 'null'], format: date, description: 已核实的预测有效结束日期。}
+        evidence: {type: string, description: 时间坐标、目标定义和时效依据或缺项说明。}
+    MonitoringProductManifest:
+      type: object
+      description: 由超级管理员登记的已入库成果交接清单；模型结果须提供真实权重摘要，来源和地图资源须全部同项目且可访问。
+      required: [schemaVersion, code, name, resourceId, scene, kind, quality, observedStart, observedEnd, sourceResourceIds, sourceLabel, limitations, interpretation, statistics, statisticsMethod, model, threshold, timing]
+      properties:
+        schemaVersion: {type: integer, const: 1, description: 产品交接协议版本。}
+        code: {type: string, description: 同项目唯一的稳定产品编码，内容变化使用新编码。}
+        name: {type: string, description: 产品名称。}
+        resourceId: {type: integer, minimum: 1, description: 已入库的地图矢量或栅格资源ID。}
+        scene: {type: string, enum: [spartina, wildfire], description: 监测场景。}
+        kind: {type: string, enum: [historical, model, observation], description: 历史成果、模型结果或观测资料。}
+        quality: {type: string, enum: [unverified, passed, needs_review], description: 未验证、已核验或待复核；不代表自动拥有精度报告。}
+        observedStart: {type: [string, 'null'], format: date, description: 真实观测周期起始日期，未知为null。}
+        observedEnd: {type: [string, 'null'], format: date, description: 真实观测周期结束日期，未知为null。}
+        sourceResourceIds:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          description: 全部来源资源ID；任一来源不可见时不返回该产品及统计。
+          items: {type: integer, minimum: 1, description: 当前项目来源资源ID。}
+        sourceLabel: {type: string, description: 读者可理解的来源说明，不含私密路径。}
+        limitations:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: 精度、时间、分辨率、有效范围等明确局限。
+          items: {type: string, description: 一条成果局限。}
+        interpretation: {type: string, description: 基于真实成果的说明，不自动生成模拟研判。}
+        statistics:
+          type: object
+          description: 当前场景统计原值；互花米草接受area_ha、patch_count、valid_area_km2、coverage_percent，野火接受mean_probability、high_risk_area_km2、valid_coverage_percent、burned_area_ha、frp_w_m2。null表示未计算；非负有限数，概率0至1、百分比0至100。
+          additionalProperties: {type: [number, 'null'], description: 已计算数值或null。}
+        statisticsMethod: {type: string, description: 实际统计范围、面积方法、NoData和单位说明；未统计须明确写明。}
+        model:
+          description: 实际模型身份；历史或观测成果可以为null。
+          oneOf:
+          - {$ref: '#/components/schemas/MonitoringModel'}
+          - {type: 'null'}
+        threshold: {type: [number, 'null'], minimum: 0, maximum: 1, description: 实际概率阈值，未使用为null。}
+        timing: {$ref: '#/components/schemas/MonitoringTiming'}
+    MonitoringMetric:
+      type: object
+      description: 具有固定中文含义与单位的场景指标。
+      required: [key, label, unit, value]
+      properties:
+        key: {type: string, description: 稳定指标编码。}
+        label: {type: string, description: 指标名称。}
+        unit: {type: string, description: 单位；无量纲概率为空字符串。}
+        value: {type: [number, 'null'], description: 实测统计值；null在界面显示为破折号。}
+    MonitoringProduct:
+      description: 已通过全部依赖访问检查的遥感产品及地图资源。
+      allOf:
+      - {$ref: '#/components/schemas/MonitoringProductManifest'}
+      - type: object
+        required: [id, resource, registeredAt, metrics]
+        properties:
+          id: {type: integer, description: 产品ID。}
+          resource: {$ref: '#/components/schemas/ResourceListItem'}
+          registeredAt: {type: string, format: date-time, description: 登记时间，不作为观测时间。}
+          metrics:
+            type: array
+            description: 当前场景全部指标及缺失值。
+            items: {$ref: '#/components/schemas/MonitoringMetric'}
+    MonitoringProductList:
+      type: object
+      description: 一个项目、一个场景的有界产品页。
+      required: [projectId, scene, title, route, items, nextBeforeId]
+      properties:
+        projectId: {type: integer, description: 当前项目ID。}
+        scene: {type: string, enum: [spartina, wildfire], description: 当前场景。}
+        title: {type: string, description: 场景标题。}
+        route:
+          type: array
+          description: 对应业务流的展示路线，不表示这些步骤已经执行。
+          items: {type: string, description: 一个展示阶段。}
+        items:
+          type: array
+          maxItems: 60
+          description: 当前账号可见的产品；可能为空。
+          items: {$ref: '#/components/schemas/MonitoringProduct'}
+        nextBeforeId: {type: [integer, 'null'], description: 下一页游标；null表示扫描完成。}
     ProjectFeatureInput:
       type: object
       description: enabled/config 至少提供一项，省略保留原值；ecology_monitor 的非空配置必须符合 ProjectMonitorConfig。

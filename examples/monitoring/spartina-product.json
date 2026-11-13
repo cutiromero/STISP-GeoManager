@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "code": "spartina-historical-extent-v1",
+  "name": "互花米草历史分布（时间待核实）",
+  "resourceId": 1,
+  "scene": "spartina",
+  "kind": "historical",
+  "quality": "unverified",
+  "observedStart": null,
+  "observedEnd": null,
+  "sourceResourceIds": [1],
+  "sourceLabel": "用户提供的UNet历史矢量成果；资源ID须替换为本项目实际导入ID",
+  "limitations": ["观测时间待核实。", "没有独立验证样本，不报告准确率。"],
+  "interpretation": "展示已提供的分布面；不代表本次重新运行模型或确认当前分布。",
+  "statistics": {"area_ha": null, "patch_count": null},
+  "statisticsMethod": "尚未统计。面积需使用投影或椭球地表面积方法，保留有效范围和单位依据。",
+  "model": null,
+  "threshold": null,
+  "timing": {"inputThrough": null, "validStart": null, "validEnd": null, "evidence": "原成果没有可靠观测时间字段，禁止使用文件修改时间代替。"}
+}

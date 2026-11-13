@@ -58,6 +58,7 @@ export PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 - 最小：`make verify-fast`；浏览器：`cd frontend && node scripts/run-browser-check.mjs src/components/RightSidePanel.browser.test.tsx src/pages/MapPageExport.browser.test.tsx`。
 
 ## 知识、内容与领域数据
+- 遥感监测：`backend/apps/ecology/monitoring.py`、`monitoring_views.py`、`register_monitor_product`；前端`frontend/src/monitor/RemoteSensingDashboard.tsx`、`ProductMap.tsx`；准备检查`tools/monitoring/prepare.py`。路线与输入约束见`docs/remote-sensing-monitoring.md`；回归`backend/tests/integration/test_ecology_monitoring.py`、`frontend/src/monitor/RemoteSensingDashboard.browser.test.tsx`及`tools/monitoring/tests/`。
 - 知识：`backend/apps/knowledge/views.py`、`library.py`、`formal_rules.py`；前端 `frontend/src/knowledge/KnowledgePage.tsx`；测试 `backend/tests/integration/test_knowledge_library.py`、`frontend/src/knowledge/KnowledgeLibrary.browser.test.tsx`。
 - 内容：`backend/apps/content/views.py`、`science_document.py`；前端 `frontend/src/pages/EditorialPage.tsx`；测试 `backend/tests/unit/test_science_document.py`、`backend/tests/integration/test_science_column_refresh.py`、`frontend/src/pages/EditorialPage.browser.test.tsx`。
 - 卡片图片共用入口：`frontend/src/components/CardCover.tsx`、`backend/apps/catalog/thumbnails.py`；写入与只读回归 `backend/tests/integration/catalog/test_card_thumbnails.py`；回填 `backfill_card_thumbnails`；规则见 `docs/developer-guide.md` 的“卡片图片规则”。

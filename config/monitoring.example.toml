@@ -1,0 +1,24 @@
+# 复制为同目录 monitoring.local.toml；路径来自迁移配置和正式科研数据目录。
+[sources]
+spartina_alterniflora = "/root/autodl-tmp/china-europe/data/incoming/spartina_alterniflora/raw"
+wildfire = "/root/autodl-tmp/china-europe/data/incoming/wildfire/raw"
+manifest = "/root/autodl-tmp/china-europe/runtime/config/research-bundle-source-manifest.json"
+receipt = "/root/autodl-tmp/china-europe/receipts/research-bundle-import.json"
+
+[wildfire]
+# climafire-demo 附带的 Zarr 缺少坐标块；使用已核实的完整立方体。
+zarr_relative_path = "wildfire/seasfire_v0.4.zarr"
+
+[verification]
+manifest_sha256 = "f9b8e026a9c6eaafebb810d5afdf2dc608cdbd49d593e73fa1c42baaa1626b82"
+archive_sha256 = "a65b548970a0851594609a0fb41ecbe239ae8dd94e08860f3e72a88f053b9bb8"
+expected_files = 1966
+expected_logical_bytes = 128134614311
+hash_files_up_to_bytes = 16777216
+inspect_geospatial_headers = true
+
+[scientific_contracts]
+# 需由模型资料提供者给出，不能从权重文件名或试跑形状推测。
+spartina_unet = ""
+spartina_rf = ""
+wildfire = ""

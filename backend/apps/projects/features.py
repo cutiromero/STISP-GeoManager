@@ -22,8 +22,20 @@ def validate_config(key, config):
     view = config.get("initialView")
     if not isinstance(title, str) or not title.strip():
         raise ValidationError("大屏配置必须包含非空 title")
-    if config.get("source") != "tarim_poplar_mock":
+    if config.get("source") not in ("tarim_poplar_mock", "remote_sensing_products"):
         raise ValidationError("未知监测数据源")
+    if "scenes" in config:
+        scenes = config["scenes"]
+        if (
+            not isinstance(scenes, list)
+            or not 1 <= len(scenes) <= 2
+            or any(
+                not isinstance(value, str) or value not in {"spartina", "wildfire"}
+                for value in scenes
+            )
+            or len(set(scenes)) != len(scenes)
+        ):
+            raise ValidationError("监测场景须为互花米草、野火的不重复列表")
     if not isinstance(view, dict):
         raise ValidationError("大屏配置必须包含 initialView")
     center = view.get("center")

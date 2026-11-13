@@ -2,6 +2,14 @@
 
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 
+## 遥感监测产品
+
+`GET /api/ecology/monitoring/`必须登录并显式携带`X-Project-Id`，需要`core.browse_data`、项目访问和已开启的`ecology_monitor`场景。`scene`为`spartina`或`wildfire`，`limit`为1至60，`beforeId`使用前页`nextBeforeId`。响应只读现有`RemoteSensingProduct`的交接元数据，不打开影像或运行模型；地图资源及全部来源资源均须同项目、启用、可见且不是内部任务资料。任一来源撤权后，产品和派生统计不再返回。无权访问的项目遵循共享中间件返回404；未登录访问公开项目返回401，未配置场景返回403。
+
+项目`monitorConfig.source`可选`tarim_poplar_mock`或`remote_sensing_products`，可选`scenes`显式启用互花米草、野火。真实产品源省略scenes时启用两场景；胡杨源省略时保持原演示。未知源或重复/未知场景被拒绝。页面选择产品后复用catalog profile和后端栅格/矢量瓦片，不在浏览器符号化科学栅格。空值不等于零；登记日期不替代观测日期，权重标签不推导预测时效。
+
+超级管理员用`register_monitor_product --project <code> --actor <username> --manifest <path>`登记已标准入库的资源，清单遵循`MonitoringProductManifest`；同编码相同内容幂等，内容变化使用新编码。模型结果必须有真实模型版本及权重SHA-256；预测有效期须与输入截至时间、提前天数和证据一致。登记不替代计算中心质量门禁，不自动发布业务流。完整路线、原始资料核验与接入配置见[remote-sensing-monitoring.md](remote-sensing-monitoring.md)及`examples/monitoring/`。
+
 ## 效率回归与并发复用
 
 资源概况、可视化统计和显示查询的前端读取统一由`ReadFlights`合并相同在途请求；登录、项目、资源修订、参数及写入边界隔离。完整响应不在完成后缓存，取消与数据副本按使用者隔离。瓦片就绪与未就绪状态只在当前会话短期复用，实际请求仍鉴权。

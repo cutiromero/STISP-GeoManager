@@ -25,6 +25,9 @@ export function createMonitorMapMock(options: MapOptions) {
       sources.set(id, { ...source, setData: vi.fn() });
     }),
     getSource: vi.fn((id: string) => sources.get(id)),
+    removeSource: vi.fn((id: string) => sources.delete(id)),
+    removeLayer: vi.fn((id: string) => layers.delete(id)),
+    fitBounds: vi.fn(),
     getContainer: vi.fn(() => options.container),
     setLanguage: vi.fn(),
     setLayoutProperty: vi.fn(),

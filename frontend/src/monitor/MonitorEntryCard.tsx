@@ -16,7 +16,14 @@ export default function MonitorEntryCard() {
       <div className="monitor-entry-content">
         <GlobalOutlined className="monitor-entry-icon" />
         <div className="monitor-entry-copy">
-          <Tag color="cyan">{t("monitor.entryTag")}</Tag>
+          <Tag color="cyan">
+            {t(
+              project.monitorConfig?.source === "remote_sensing_products" ||
+                project.monitorConfig?.scenes?.length
+                ? "remoteMonitor.entryTag"
+                : "monitor.entryTag",
+            )}
+          </Tag>
           <h2>{t("monitor.entryTitle")}</h2>
           <p>{project.monitorConfig?.title ?? t("monitor.notConfigured")}</p>
         </div>

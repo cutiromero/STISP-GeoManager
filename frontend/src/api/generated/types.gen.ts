@@ -3452,9 +3452,13 @@ export type ProjectMonitorConfig = {
      */
     title: string;
     /**
-     * 显式选择的模拟数据源；目前仅注册塔里木胡杨演示源。
+     * 胡杨模拟源或当前项目的真实遥感产品；两者不互相回退。
      */
-    source: 'tarim_poplar_mock';
+    source: 'tarim_poplar_mock' | 'remote_sensing_products';
+    /**
+     * 显式开启的遥感场景。真实产品源省略时开启两场景；胡杨源省略时只展示原演示。
+     */
+    scenes?: Array<'spartina' | 'wildfire'>;
     /**
      * 研究区初始视角。
      */
@@ -3475,6 +3479,202 @@ export type ProjectMonitorConfig = {
          */
         regionZoom: number;
     };
+};
+
+/**
+ * 实际模型与权重身份，文件名不用于推导预报时效。
+ */
+export type MonitoringModel = {
+    /**
+     * 模型名称。
+     */
+    name: string;
+    /**
+     * 实际验证的模型版本。
+     */
+    version: string;
+    /**
+     * 权重SHA-256。
+     */
+    checkpointSha256: string;
+    /**
+     * 变体或权重标签，例如w1；不代表已确认预测提前期。
+     */
+    variant: string;
+    /**
+     * 经目标定义核实的预测提前天数，未知为null。
+     */
+    forecastLeadDays: number | null;
+};
+
+/**
+ * 分开声明输入截至时间、有效区间与证据；未知时效保持null。
+ */
+export type MonitoringTiming = {
+    /**
+     * 输入已知资料截至日期。
+     */
+    inputThrough: string | null;
+    /**
+     * 已核实的预测有效开始日期。
+     */
+    validStart: string | null;
+    /**
+     * 已核实的预测有效结束日期。
+     */
+    validEnd: string | null;
+    /**
+     * 时间坐标、目标定义和时效依据或缺项说明。
+     */
+    evidence: string;
+};
+
+/**
+ * 由超级管理员登记的已入库成果交接清单；模型结果须提供真实权重摘要，来源和地图资源须全部同项目且可访问。
+ */
+export type MonitoringProductManifest = {
+    /**
+     * 产品交接协议版本。
+     */
+    schemaVersion: 1;
+    /**
+     * 同项目唯一的稳定产品编码，内容变化使用新编码。
+     */
+    code: string;
+    /**
+     * 产品名称。
+     */
+    name: string;
+    /**
+     * 已入库的地图矢量或栅格资源ID。
+     */
+    resourceId: number;
+    /**
+     * 监测场景。
+     */
+    scene: 'spartina' | 'wildfire';
+    /**
+     * 历史成果、模型结果或观测资料。
+     */
+    kind: 'historical' | 'model' | 'observation';
+    /**
+     * 未验证、已核验或待复核；不代表自动拥有精度报告。
+     */
+    quality: 'unverified' | 'passed' | 'needs_review';
+    /**
+     * 真实观测周期起始日期，未知为null。
+     */
+    observedStart: string | null;
+    /**
+     * 真实观测周期结束日期，未知为null。
+     */
+    observedEnd: string | null;
+    /**
+     * 全部来源资源ID；任一来源不可见时不返回该产品及统计。
+     */
+    sourceResourceIds: Array<number>;
+    /**
+     * 读者可理解的来源说明，不含私密路径。
+     */
+    sourceLabel: string;
+    /**
+     * 精度、时间、分辨率、有效范围等明确局限。
+     */
+    limitations: Array<string>;
+    /**
+     * 基于真实成果的说明，不自动生成模拟研判。
+     */
+    interpretation: string;
+    /**
+     * 当前场景统计原值；互花米草接受area_ha、patch_count、valid_area_km2、coverage_percent，野火接受mean_probability、high_risk_area_km2、valid_coverage_percent、burned_area_ha、frp_w_m2。null表示未计算；非负有限数，概率0至1、百分比0至100。
+     */
+    statistics: {
+        [key: string]: number | null;
+    };
+    /**
+     * 实际统计范围、面积方法、NoData和单位说明；未统计须明确写明。
+     */
+    statisticsMethod: string;
+    /**
+     * 实际模型身份；历史或观测成果可以为null。
+     */
+    model: MonitoringModel | null;
+    /**
+     * 实际概率阈值，未使用为null。
+     */
+    threshold: number | null;
+    timing: MonitoringTiming;
+};
+
+/**
+ * 具有固定中文含义与单位的场景指标。
+ */
+export type MonitoringMetric = {
+    /**
+     * 稳定指标编码。
+     */
+    key: string;
+    /**
+     * 指标名称。
+     */
+    label: string;
+    /**
+     * 单位；无量纲概率为空字符串。
+     */
+    unit: string;
+    /**
+     * 实测统计值；null在界面显示为破折号。
+     */
+    value: number | null;
+};
+
+/**
+ * 已通过全部依赖访问检查的遥感产品及地图资源。
+ */
+export type MonitoringProduct = MonitoringProductManifest & {
+    /**
+     * 产品ID。
+     */
+    id: number;
+    resource: DataResource;
+    /**
+     * 登记时间，不作为观测时间。
+     */
+    registeredAt: string;
+    /**
+     * 当前场景全部指标及缺失值。
+     */
+    metrics: Array<MonitoringMetric>;
+};
+
+/**
+ * 一个项目、一个场景的有界产品页。
+ */
+export type MonitoringProductList = {
+    /**
+     * 当前项目ID。
+     */
+    projectId: number;
+    /**
+     * 当前场景。
+     */
+    scene: 'spartina' | 'wildfire';
+    /**
+     * 场景标题。
+     */
+    title: string;
+    /**
+     * 对应业务流的展示路线，不表示这些步骤已经执行。
+     */
+    route: Array<string>;
+    /**
+     * 当前账号可见的产品；可能为空。
+     */
+    items: Array<MonitoringProduct>;
+    /**
+     * 下一页游标；null表示扫描完成。
+     */
+    nextBeforeId: number | null;
 };
 
 /**
@@ -13441,6 +13641,62 @@ export type ResourceId = number;
  * 异步任务 ID
  */
 export type JobId = string;
+
+export type GetMonitoringProductsData = {
+    body?: never;
+    headers: {
+        /**
+         * 显式选择的单个项目ID，不接受all。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query: {
+        /**
+         * 当前项目已配置的互花米草或野火场景。
+         */
+        scene: 'spartina' | 'wildfire';
+        /**
+         * 上一页返回的nextBeforeId；只扫描比该ID更早的产品。
+         */
+        beforeId?: number;
+        /**
+         * 本页最多返回的可见产品数。
+         */
+        limit?: number;
+    };
+    url: '/api/ecology/monitoring/';
+};
+
+export type GetMonitoringProductsErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+    /**
+     * 资源不存在
+     */
+    404: ErrorResponse;
+};
+
+export type GetMonitoringProductsError = GetMonitoringProductsErrors[keyof GetMonitoringProductsErrors];
+
+export type GetMonitoringProductsResponses = {
+    /**
+     * 场景说明与可见产品；空列表不代表零风险或零分布。
+     */
+    200: MonitoringProductList;
+};
+
+export type GetMonitoringProductsResponse = GetMonitoringProductsResponses[keyof GetMonitoringProductsResponses];
 
 export type CheckShareInvitationData = {
     /**
