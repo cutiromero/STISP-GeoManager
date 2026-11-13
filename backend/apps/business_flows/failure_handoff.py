@@ -284,6 +284,13 @@ def handoff_exception(workflow, error):
     from .model_recovery import model_wait
     from .node_loop import observation
 
+    if workflow.workflow_type != "business_flow" and isinstance(error, ComputeError):
+        from .legacy import recover_failed_task
+
+        workflow.detail = str(error)[:300]
+        if recover_failed_task(workflow):
+            return
+
     node = active_node(workflow)
     item = state(workflow)["nodes"][node["id"]]
     expected = isinstance(

@@ -943,7 +943,10 @@ def test_historical_review_diagnostic_does_not_reopen_other_states(
             )
 
 
-def test_compute_failure_waits_and_retries_original_scientific_stage(legacy_flow):
+@pytest.mark.parametrize("direct_error", [False, True])
+def test_compute_failure_waits_and_retries_original_scientific_stage(
+    legacy_flow, direct_error
+):
     from apps.business_flows import runtime
     from apps.compute.models import AlgorithmResource, AlgorithmVersion, ComputeTask
 
@@ -973,9 +976,16 @@ def test_compute_failure_waits_and_retries_original_scientific_stage(legacy_flow
             idempotency_key=uuid4().hex,
         )
         workflow.plan["stages"][0]["taskId"] = str(task.pk)
-        workflow.status, workflow.detail = "failed", "本步计算未成功：输入资料不适用"
+        workflow.status, workflow.detail = (
+            "running" if direct_error else "failed",
+            "本步计算未成功：输入资料不适用",
+        )
         workflow.save(update_fields=["plan", "status", "detail"])
         scientific = deepcopy(workflow.plan)
+        if direct_error:
+            from apps.business_flows.failure_handoff import handoff_exception
+
+            handoff_exception(workflow, ComputeError(workflow.detail))
         legacy.synchronize(workflow.pk)
         workflow.refresh_from_db()
         public = runtime.serialize_run(env["user"], workflow)
