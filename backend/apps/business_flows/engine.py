@@ -1,6 +1,7 @@
 """Execute declared nodes, independently review, then honor human gates."""
 
 from copy import deepcopy
+import logging
 import time
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -24,6 +25,7 @@ from apps.agent.business_flow_model import actual_context
 PROGRESS_SECONDS = 0.6
 MAX_MODEL_CALLS = 256
 MAX_REVIEW_REPACKS = 3
+logger = logging.getLogger(__name__)
 
 
 class OperatorRevisionRejected(ComputeError):
@@ -318,7 +320,14 @@ def input_evidence(workflow, user, policy, node):
                     },
                 }
             )
-    result = list({item["id"]: item for item in result}.values())
+    from .model_recovery import clarification_evidence
+
+    result = list(
+        {
+            item["id"]: item
+            for item in [*result, *clarification_evidence(workflow, node["id"])]
+        }.values()
+    )
     if not result:
         result = [
             {
@@ -621,34 +630,25 @@ def advance(workflow_id):
             workflow.current_step, workflow.status = node["id"], "running"
             guard = live_guard(workflow)
             if item.get("reviewer", {}).get("decision") == "request_changes":
-                if item["attempt"] > node["review"]["maxRevisions"]:
-                    raise ComputeError("节点已达到独立审核返修上限")
-                feedback = deepcopy(item["reviewer"])
-                if item.get("toolLoop") is not None:
-                    item["toolLoop"]["invalidOutputIds"] = list(
-                        dict.fromkeys(
-                            [
-                                *item["toolLoop"].get("invalidOutputIds", []),
-                                *[
-                                    row["id"]
-                                    for row in item.get("outputs", {}).get(
-                                        "evidence", []
-                                    )
-                                ],
-                            ]
-                        )
+                from .model_recovery import (
+                    automatic_review_limit,
+                    model_wait,
+                    prepare_revision,
+                )
+
+                if item["attempt"] >= automatic_review_limit(item, node):
+                    raise model_wait(
+                        node["id"],
+                        item["reviewer"].get("reason", "审核需要返修"),
+                        kind="review_rejected",
                     )
+                feedback = deepcopy(item["reviewer"])
                 item["revisionEvidence"] = deepcopy(
                     item.get("outputs", {}).get("evidence", [])
                 )
-                item.update(
-                    status="pending",
-                    feedback=feedback,
-                    executor={"status": "pending"},
-                    reviewer={"status": "pending"},
-                    outputs={},
+                prepare_revision(
+                    item, feedback, preserve_computation=node["kind"] != "operator"
                 )
-                item.pop("computeTaskId", None)
             if item["status"] == "pending":
                 item["attempt"] += 1
                 item.update(
@@ -667,7 +667,26 @@ def advance(workflow_id):
                 emit(workflow, "executor", node["id"], "node_started", workflow.detail)
             evidence = input_evidence(workflow, user, policy, node)
             if not item["executor"].get("summary"):
-                if session(workflow):
+                if item.get("reanalyzeExistingOutputs") and not session(workflow):
+                    from apps.agent.business_flow_execution import execute_node
+
+                    prior = resolve_evidence(workflow, item.get("revisionEvidence", []))
+                    result = execute_node(
+                        workflow,
+                        {
+                            **node,
+                            "instruction": node.get("instruction", "")
+                            + "\n依据已保留成果与反馈重新分析；不重新提交计算，不改变实际统计。",
+                        },
+                        item["attempt"],
+                        list({row["id"]: row for row in [*evidence, *prior]}.values()),
+                        guard=guard,
+                        feedback=item.get("feedback"),
+                        policy=policy,
+                        **_callbacks(workflow, node, "executor"),
+                    )
+                    item.pop("reanalyzeExistingOutputs", None)
+                elif session(workflow):
                     from .main_loop import advance_active
 
                     result = advance_active(
@@ -753,6 +772,7 @@ def advance(workflow_id):
                         "status": "succeeded",
                     }
                 guard()
+                item.pop("reanalyzeExistingOutputs", None)
                 item["executor"].update(
                     result, status="succeeded", answer=result["summary"]
                 )
@@ -853,21 +873,19 @@ def advance(workflow_id):
                     review["reason"],
                 )
                 if review["decision"] != "accept":
-                    if item["attempt"] > node["review"]["maxRevisions"]:
-                        raise ComputeError(
-                            "节点审核未通过且已达到返修上限：" + review["reason"]
+                    from .model_recovery import (
+                        automatic_review_limit,
+                        model_wait,
+                        prepare_revision,
+                    )
+
+                    if item["attempt"] >= automatic_review_limit(item, node):
+                        raise model_wait(
+                            node["id"], review["reason"], kind="review_rejected"
                         )
-                    item["revisionEvidence"] = deepcopy(
-                        item.get("outputs", {}).get("evidence", [])
+                    prepare_revision(
+                        item, review, preserve_computation=node["kind"] != "operator"
                     )
-                    item.update(
-                        status="pending",
-                        feedback=review,
-                        executor={"status": "pending"},
-                        reviewer={"status": "pending"},
-                        outputs={},
-                    )
-                    item.pop("computeTaskId", None)
                     workflow.status, workflow.detail = (
                         "queued",
                         "执行智能体将按独立审核意见返修",
@@ -949,6 +967,8 @@ def advance(workflow_id):
                 except WorkflowControlChanged:
                     pass
                 return
+            if error.details.get("requestScope") == "workflow":
+                current_item["contextResumeStatus"] = current_item["status"]
             current_item["contextRecovery"] = deepcopy(error.details)
             current_item["contextManagement"] = {
                 key: value
@@ -997,6 +1017,43 @@ def advance(workflow_id):
                         workflow, current_node, current_item, observation(error)
                     )
                     return
+            if (
+                not current.cancel_requested
+                and not isinstance(
+                    error, (PermissionDenied, ComputeError, ValidationError)
+                )
+                and workflow.current_step in state(workflow)["nodes"]
+            ):
+                from .model_recovery import model_wait
+
+                logger.exception("business flow node requires platform recovery")
+                recovery = model_wait(
+                    workflow.current_step,
+                    str(error)[:500]
+                    if isinstance(error, ModelError)
+                    else "平台处理异常，请核查诊断并在服务恢复后继续；已完成成果保留。",
+                    kind="model_request_error"
+                    if isinstance(error, ModelError)
+                    else "platform_error",
+                    scope=getattr(error, "recovery_scope", "node"),
+                ).details
+                item = state(workflow)["nodes"][workflow.current_step]
+                if recovery.get("requestScope") == "workflow":
+                    item["contextResumeStatus"] = item["status"]
+                item.update(status="waiting_context", contextRecovery=recovery)
+                workflow.status, workflow.detail = (
+                    "waiting_approval",
+                    recovery["reason"],
+                )
+                emit(
+                    workflow,
+                    "system",
+                    workflow.current_step,
+                    "model_recovery_required",
+                    workflow.detail,
+                    data=recovery,
+                )
+                return
             workflow.status = (
                 "cancelled"
                 if current.cancel_requested

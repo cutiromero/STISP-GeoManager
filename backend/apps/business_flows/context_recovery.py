@@ -7,6 +7,30 @@ from apps.compute.packages import ComputeError
 
 def retry_node(workflow, item, value):
     recovery = item["contextRecovery"]
+    from .model_recovery import MODEL_WAIT_KINDS, save_guidance, prepare_revision
+
+    if recovery.get("kind") in MODEL_WAIT_KINDS:
+        if value.get("skipEvidenceIds") or value.get("contextScope"):
+            raise ComputeError("响应与审核错误不能通过删减证据恢复", 409)
+        save_guidance(workflow, item["nodeId"], value, recovery)
+        if recovery.get("kind") == "review_rejected":
+            feedback = item.get("reviewer", {})
+            definition = workflow.parameters["_businessFlow"]["definitionSnapshot"]
+            node = next(
+                row for row in definition["nodes"] if row["id"] == item["nodeId"]
+            )
+            prepare_revision(
+                item,
+                feedback,
+                manual=True,
+                preserve_computation=node["kind"] != "operator",
+            )
+        else:
+            item["status"] = item.pop(
+                "contextResumeStatus", "executing" if item["attempt"] else "pending"
+            )
+        item.pop("contextRecovery")
+        return
     skipped = value.get("skipEvidenceIds", [])
     scope = value.get("contextScope", {})
     if (
@@ -59,5 +83,7 @@ def retry_node(workflow, item, value):
             item["reviewer"] = {"status": "pending"}
             item["outputs"] = {}
             item.pop("executionContextId", None)
-    item["status"] = "executing" if item["attempt"] else "pending"
+    item["status"] = item.pop(
+        "contextResumeStatus", "executing" if item["attempt"] else "pending"
+    )
     item.pop("contextRecovery")

@@ -11640,7 +11640,7 @@ export type BusinessFlowReview = {
      */
     human: boolean;
     /**
-     * AI不通过后最多自动返修次数，超过后保留失败原因并停止自动推进
+     * 每个自动推进周期最多返修次数，耗尽后等待人工补充；人工明确续接不重置累计预算
      */
     maxRevisions: number;
     /**
@@ -12730,9 +12730,21 @@ export type BusinessFlowContextManagement = {
 
 export type BusinessFlowContextRecovery = BusinessFlowContextManagement & {
     /**
-     * 等待原因；model_call_limit、operator_call_limit分别表示模型和算子调用额度不足，model_protocol_error表示审核响应未通过校验；不能通过截减证据恢复这些等待。
+     * 等待原因；model_call_limit、operator_call_limit表示调用额度，model_protocol_error表示审核格式错误，model_response_error表示执行响应未通过校验，model_request_error表示服务或生成错误，review_rejected表示自动返修后仍需修改。模型错误与审核等待不能通过删减证据恢复。
      */
     kind?: string;
+    /**
+     * 本次补充说明的接收角色；执行分析由原主执行智能体继续，审核仍独立进行。
+     */
+    actor?: 'executor' | 'reviewer';
+    /**
+     * 本次实际诊断类别，用于区分格式、服务与审核问题，不含文件正文。
+     */
+    diagnosticCode?: string;
+    /**
+     * 补充说明仅用于当前节点或本次任务调度请求，不传播到其他节点。
+     */
+    requestScope?: 'node' | 'workflow';
     /**
      * 模型调用额度来源；task可在当前策略允许额度增加后继续，node受发布合同上限约束。
      */
@@ -12795,7 +12807,7 @@ export type BusinessFlowNodeState = {
      */
     nodeId: string;
     /**
-     * 节点状态；waiting_context表示上下文等待，不是科研审批；waiting_recovery表示可恢复等待，工作流仍为waiting_approval
+     * 节点状态；waiting_context表示输入、模型、审核或平台的可恢复等待，不是科研批准；waiting_recovery表示算子补救或提问等待，工作流仍为waiting_approval
      */
     status: string;
     /**
@@ -13321,7 +13333,7 @@ export type BusinessFlowDecision = {
      */
     decision: 'approve' | 'request_changes' | 'retry_context' | 'retry_recovery' | 'skip_node';
     /**
-     * 返修原因或收紧范围说明
+     * 返修原因或收紧范围说明；模型恢复的人工补充最多2000字，仅作用于当前请求
      */
     feedback: string;
     /**

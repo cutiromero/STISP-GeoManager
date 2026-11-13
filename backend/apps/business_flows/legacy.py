@@ -15,7 +15,7 @@ from .state import binding, state, emit, persist, TERMINAL, digest
 
 
 def _saved_request_stage(stage):
-    from apps.agent.demo_decisions import can_revalidate_reference_tail
+    from apps.agent.demo_decisions import can_revalidate_saved_response
 
     attempts = stage.get("modelAttempts", [])
     payload = stage.get("modelRequestPayload")
@@ -24,7 +24,7 @@ def _saved_request_stage(stage):
         and attempts
         and isinstance(attempts[-1], dict)
         and (
-            attempts[-1].get("accepted") is True or can_revalidate_reference_tail(stage)
+            attempts[-1].get("accepted") is True or can_revalidate_saved_response(stage)
         )
         and isinstance(attempts[-1].get("response"), str)
         and attempts[-1]["response"].strip()
@@ -51,9 +51,9 @@ def _review_recovery(workflow, stage):
     if current:
         return current
     if workflow.status == "failed":
-        from apps.agent.demo_decisions import can_revalidate_reference_tail
+        from apps.agent.demo_decisions import can_revalidate_saved_response
 
-        if can_revalidate_reference_tail(stage):
+        if can_revalidate_saved_response(stage):
             return {
                 "kind": "model_protocol_error",
                 "level": 0,
@@ -435,14 +435,19 @@ def review_decision(
     ):
         return initial
     begin = max(1, item.get("attempt", 0))
+    from .model_recovery import automatic_review_limit, model_wait
+
+    limit = automatic_review_limit(item, node)
     if previous.get("decision") == "request_changes":
-        if item.get("attempt", 0) > node["review"]["maxRevisions"]:
-            raise ComputeError("独立审核已达到该节点返修上限")
+        if item.get("attempt", 0) >= limit:
+            raise model_wait(
+                node_id, previous.get("reason", "审核需要返修"), kind="review_rejected"
+            )
         if item.get("candidateDigest") == candidate:
             current = producer()
         begin = item.get("attempt", 0) + 1
     # The persisted attempt survives worker restarts; no extra repair is invented.
-    for attempt in range(begin, node["review"]["maxRevisions"] + 2):
+    for attempt in range(begin, limit + 1):
         guard()
         decision, edits = current
         item.update(
@@ -504,11 +509,11 @@ def review_decision(
         )
         if result["decision"] == "accept":
             return current
-        if attempt > node["review"]["maxRevisions"]:
-            raise ComputeError("独立审核未通过并达到返修上限：" + result["reason"])
         stage["businessFlowFeedback"] = {
             key: result[key] for key in ("reason", "issues", "repairInstructions")
         }
+        if attempt >= limit:
+            raise model_wait(node_id, result["reason"], kind="review_rejected")
         # Preserve original immutable audit steps; discard only this generation's replay cache.
         stage.setdefault("businessFlowPreviousRequests", []).extend(
             {key: row.get(key) for key in ("requestSha256", "status", "accepted")}
@@ -579,6 +584,32 @@ def retry_context(user, workflow, value):
             or not _retryable_failed_review(current, stage, item["contextRecovery"])
         ):
             raise ComputeError("该失败没有可复用的已接受分析响应，不能重试审核", 409)
+        from .model_recovery import (
+            MODEL_WAIT_KINDS,
+            save_guidance,
+            archive_model_attempts,
+        )
+
+        recovery = item["contextRecovery"]
+        if recovery.get("kind") in MODEL_WAIT_KINDS:
+            reuse_platform_response = (
+                recovery.get("kind") == "platform_error"
+                and not value.get("feedback", "").strip()
+            )
+            if not reuse_platform_response:
+                save_guidance(current, node_id, value, recovery)
+            if (
+                recovery.get("actor") == "executor"
+                or recovery.get("kind") == "review_rejected"
+            ) and not reuse_platform_response:
+                if stage is not None:
+                    archive_model_attempts(stage)
+                    stage.pop("decision", None)
+                if recovery.get("kind") == "review_rejected":
+                    target = values["nodes"][node_id]
+                    target["manualReviewBaseline"] = target["attempt"]
+                    target["reviewer"] = {"status": "pending"}
+                    target["attempt"] += 1
         history = (
             {
                 "contextBudgetReview": stage.pop(
@@ -596,13 +627,13 @@ def retry_context(user, workflow, value):
             if row.get("stage") and row.get("status") != "complete"
         )
         for candidate in candidates:
-            from apps.agent.demo_decisions import can_revalidate_reference_tail
+            from apps.agent.demo_decisions import can_revalidate_saved_response
 
             attempts = candidate.get("modelAttempts", [])
             if (
                 attempts
                 and not attempts[-1].get("accepted")
-                and not can_revalidate_reference_tail(candidate)
+                and not can_revalidate_saved_response(candidate)
             ):
                 candidate.setdefault("modelBudgetHistory", []).append(
                     {"modelAttempts": candidate.pop("modelAttempts")}
@@ -622,6 +653,8 @@ def retry_context(user, workflow, value):
             "queued",
             "将重试本次审核，保留执行结果与模型计数；未批准科研结果"
             if item["contextRecovery"].get("kind") == "model_protocol_error"
+            else "将按当前说明继续本节点分析与审核；保留前序成果、模型计数和原批准记录"
+            if item["contextRecovery"].get("kind") in MODEL_WAIT_KINDS
             else "将重新核对本节点输入预算；未批准科研结果、未重置模型计数",
         )
         current.policy_snapshot["businessFlowControlEpoch"] = (

@@ -169,9 +169,16 @@ def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
                 "taskPhase": phase,
                 "readyNodes": ready,
                 "formatFeedback": loop.get("formatFeedback", ""),
-                "userAnswer": state(workflow)["nodes"][fallback["id"]]
-                .get("toolLoop", {})
-                .get("userAnswer", ""),
+                "userAnswer": (
+                    state(workflow)["nodes"][fallback["id"]]
+                    .get("toolLoop", {})
+                    .get("userAnswer", "")
+                    if state(workflow)["nodes"][fallback["id"]]
+                    .get("toolLoop", {})
+                    .get("userAnswerScope")
+                    == "workflow"
+                    else ""
+                ),
             },
             guard=live_guard(workflow),
             policy=policy,

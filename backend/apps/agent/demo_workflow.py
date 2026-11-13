@@ -2092,6 +2092,41 @@ def advance_demo(workflow_id) -> None:
             cancelled = AgentWorkflow.objects.filter(
                 pk=workflow.id, cancel_requested=True
             ).exists()
+            if (
+                not cancelled
+                and isinstance(exc, ModelError)
+                and workflow.parameters.get("_businessFlow")
+                and AgentWorkflow.objects.filter(
+                    pk=workflow.pk,
+                    status__in={"queued", "running", "waiting_compute"},
+                    pause_requested=False,
+                ).exists()
+            ):
+                from apps.business_flows.model_recovery import model_wait
+
+                active_stage = (
+                    workflow.plan.get("finalStage")
+                    if workflow.current_step == "final_analysis"
+                    else next(
+                        (
+                            s
+                            for s in workflow.plan.get("stages", [])
+                            if s.get("name") == workflow.current_step
+                        ),
+                        None,
+                    )
+                )
+                if active_stage is not None:
+                    node_id = (
+                        "finish"
+                        if active_stage.get("identifier") == "finish"
+                        else active_stage["name"]
+                    )
+                    active_stage["contextBudgetReview"] = model_wait(
+                        node_id, exc, kind="model_request_error"
+                    ).details
+                    _pause(workflow, active_stage, str(exc))
+                    return
             workflow.status = "cancelled" if cancelled else "failed"
             workflow.detail = "已停止场景后续处理" if cancelled else str(exc)[:300]
             if not cancelled:

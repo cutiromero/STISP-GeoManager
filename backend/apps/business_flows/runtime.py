@@ -840,6 +840,14 @@ def decide_flow(user, workflow, value):
                 "queued",
                 "将重试本次审核，保留执行成果；未批准科研结果"
                 if recovery_kind == "model_protocol_error"
+                else "补充说明已保存，将继续当前节点；保留前序成果与计数，未批准科研结果"
+                if recovery_kind
+                in {
+                    "model_response_error",
+                    "model_request_error",
+                    "review_rejected",
+                    "platform_error",
+                }
                 else "上下文范围已更新，将重试当前节点；未批准科研结果",
             )
             current.policy_snapshot["businessFlowControlEpoch"] = (
@@ -875,33 +883,20 @@ def decide_flow(user, workflow, value):
         if decision == "request_changes":
             if not feedback.strip():
                 raise ValidationError("退回时请说明需要修改的内容")
-            if item["attempt"] >= node["review"]["maxRevisions"] + 1:
-                raise ComputeError(
-                    "本节点已达到返修上限，请保留当前结果并重新发起调整后的流程", 409
-                )
-            item.update(
-                status="pending",
-                feedback={"reason": feedback[:2000], "repairInstructions": feedback},
-                executor={"status": "pending"},
-                reviewer={
-                    "status": "pending" if node["review"]["ai"] else "not_required"
-                },
+            from .model_recovery import prepare_revision
+
+            item.pop("recoveryGuidance", None)
+
+            prepare_revision(
+                item,
+                {"reason": feedback[:2000], "repairInstructions": feedback},
+                manual=True,
+                preserve_computation=node["kind"] != "operator",
             )
+            item["reviewer"] = {
+                "status": "pending" if node["review"]["ai"] else "not_required"
+            }
             item["human"].update(status="pending", reason=feedback)
-            item["revisionEvidence"] = deepcopy(
-                item.get("outputs", {}).get("evidence", [])
-            )
-            if item.get("toolLoop") is not None:
-                item["toolLoop"]["invalidOutputIds"] = list(
-                    dict.fromkeys(
-                        [
-                            *item["toolLoop"].get("invalidOutputIds", []),
-                            *[row["id"] for row in item["revisionEvidence"]],
-                        ]
-                    )
-                )
-            item["outputs"] = {}
-            item.pop("computeTaskId", None)
         else:
             item["human"].update(
                 status="approved",

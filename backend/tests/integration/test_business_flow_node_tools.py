@@ -312,6 +312,40 @@ def test_last_allowed_recovery_still_collects_its_successful_result(
     finish_flow(env, workflow)
 
 
+def test_identical_successful_compute_is_reused_without_resetting_budget(
+    operators, monkeypatch
+):
+    env = operators
+    upgrade(env)
+    workflow = create(env, node_contract=contract(maxOperatorCalls=1))
+    arguments = submit_args(env)
+    install(
+        monkeypatch, [action("operator_catalog"), action("run_operator", **arguments)]
+    )
+    item = advance(env, workflow, 2)
+    finish_task(env, item["computeTaskId"], "PRESERVED")
+    item = advance(env, workflow)
+    node = workflow.parameters["_businessFlow"]["definitionSnapshot"]["nodes"][0]
+    before = ComputeTask.objects.count()
+    with project_scope(env["scope"]):
+        result = execute_tool(
+            workflow,
+            env["owner"],
+            default_policy(),
+            node,
+            item,
+            "run_operator",
+            arguments,
+            [],
+            node["contract"],
+            lambda: None,
+        )
+    assert result["status"] == "succeeded"
+    assert result["taskId"] == item["computeTaskId"]
+    assert ComputeTask.objects.count() == before
+    assert item["toolLoop"]["operatorCalls"] == workflow.operator_steps == 1
+
+
 def test_format_repair_is_available_again_after_a_valid_action(operators, monkeypatch):
     env = operators
     workflow = create(env)

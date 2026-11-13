@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from apps.agent import business_flow_review as review
+from apps.agent.business_flow_context import ContextReviewRequired
 from apps.agent.models import AgentRun, AgentWorkflow, RunEvent
 from apps.agent.policy import default_policy
 from apps.business_flows import catalog, legacy
@@ -295,7 +296,7 @@ def test_professional_review_stops_at_published_repair_limit(
     calls = provider_sequence(monkeypatch, [verdict(False)])
     initial = ({"judgement": "保留当前真实结果", "resultSummary": "待修订"}, [])
     producer = Mock(return_value=initial)
-    with pytest.raises(ComputeError, match="返修上限"):
+    with pytest.raises(ContextReviewRequired, match="例外|建议"):
         review_stage(env, workflow, {"name": "apply"}, initial, producer)
     assert len(calls) == maximum + 1 and producer.call_count == maximum
     workflow.refresh_from_db()
@@ -460,7 +461,7 @@ def test_exhausted_legacy_rejection_is_not_reset_by_worker_reentry(
     initial = ({"judgement": "未通过的相同建议", "resultSummary": "保留实际结果"}, [])
     producer = Mock()
     for _ in range(2):
-        with pytest.raises(ComputeError, match="返修上限"):
+        with pytest.raises(ContextReviewRequired, match="例外|建议"):
             review_stage(env, workflow, {"name": "apply"}, deepcopy(initial), producer)
         workflow.refresh_from_db()
     assert len(calls) == 1
@@ -491,7 +492,7 @@ def test_recovered_legacy_rejection_only_uses_remaining_revision_budget(
     )
     producer = Mock(return_value=repaired)
     resumed_initial = repaired if producer_already_finished else initial
-    with pytest.raises(ComputeError, match="返修上限"):
+    with pytest.raises(ContextReviewRequired, match="例外|建议"):
         review_stage(
             env, workflow, workflow.plan["stages"][0], resumed_initial, producer
         )

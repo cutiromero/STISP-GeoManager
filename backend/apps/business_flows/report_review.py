@@ -39,6 +39,11 @@ def report_review_packet(workflow, decision, results, candidate_digest):
     )
     context["knowledge"] = model_knowledge(context["knowledge"])
     context["reportReferences"] = context.pop("availableEvidence")
+    from .model_recovery import clarification_evidence
+
+    notes = clarification_evidence(workflow, "finish")
+    if notes:
+        context["userClarification"] = notes
     return {
         "decision": decision,
         **context,

@@ -56,6 +56,11 @@ def decide_recovery(user, workflow, value):
         ):
             raise ComputeError("该节点不在当前恢复等待版本，请刷新", 409)
         definition = binding(current)["definitionSnapshot"]
+        answer_scope = (
+            "workflow"
+            if item["recovery"].get("failure", {}).get("code") == "MAIN_AGENT_QUESTION"
+            else "node"
+        )
         node = next(row for row in definition["nodes"] if row["id"] == node_id)
         from .execution_session import session
 
@@ -93,6 +98,7 @@ def decide_recovery(user, workflow, value):
                     raise ComputeError("节点额度已用尽，不能通过重试重置额度", 409)
                 loop = loop_state(item)
                 loop["userAnswer"] = value.get("feedback", "")
+                loop["userAnswerScope"] = answer_scope
                 loop.pop("pending", None)
                 loop.pop("taskId", None)
             else:
@@ -177,6 +183,7 @@ def decide_recovery(user, workflow, value):
                     **parameters,
                 }
             loop["userAnswer"] = value.get("feedback", "")
+            loop["userAnswerScope"] = answer_scope
             loop.pop("pending", None)
             loop.pop("taskId", None)
             if replacements or parameters:

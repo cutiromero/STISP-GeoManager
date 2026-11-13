@@ -39,6 +39,15 @@ export const flowStateLabels: Record<string, string> = {
 
 export function nodeStateLabel(state?: BusinessFlowNodeState) {
   if (state?.status === "waiting_context") {
+    if (state.contextRecovery?.kind === "review_rejected")
+      return "等待补充后返修";
+    if (state.contextRecovery?.kind === "platform_error") return "等待平台恢复";
+    if (
+      ["model_response_error", "model_request_error"].includes(
+        state.contextRecovery?.kind || "",
+      )
+    )
+      return "等待补充后继续";
     if (state.contextRecovery?.kind === "model_protocol_error")
       return "等待重试审核";
     if (

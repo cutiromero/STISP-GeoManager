@@ -115,7 +115,14 @@ def execute_node(
     revisions = review.get("maxRevisions", 0)
     if type(revisions) is not int or not 0 <= revisions <= MAX_REVISIONS:
         raise ComputeError("业务流节点修订上限无效")
-    if type(attempt) is not int or not 1 <= attempt <= revisions + 1:
+    from apps.business_flows.state import state
+
+    baseline = (
+        state(workflow)["nodes"].get(node["id"], {}).get("manualReviewBaseline", 0)
+        if workflow.parameters.get("_businessFlow")
+        else 0
+    )
+    if type(attempt) is not int or not 1 <= attempt - baseline <= revisions + 1:
         raise ComputeError("业务流执行已达到节点修订次数上限")
     return request_node_result(
         workflow,

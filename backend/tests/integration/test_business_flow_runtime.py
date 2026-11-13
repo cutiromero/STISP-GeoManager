@@ -414,12 +414,18 @@ def test_exhausted_ai_revision_does_not_autopass_or_keep_requesting(flows, monke
     )
     workflow, _ = start(env, version)
     advance(env, workflow)
-    assert workflow.status == "failed"
+    assert workflow.status == "waiting_approval"
+    assert (
+        state(workflow)["nodes"]["summarize"]["contextRecovery"]["kind"]
+        == "review_rejected"
+    )
     assert len(executions) == len(reviews) == 1
     assert state(workflow)["nodes"]["summarize"]["human"]["status"] == "pending"
     engine.advance(workflow.pk)
     workflow.refresh_from_db()
-    assert workflow.status == "failed" and len(executions) == len(reviews) == 1
+    assert (
+        workflow.status == "waiting_approval" and len(executions) == len(reviews) == 1
+    )
 
 
 def test_new_publication_does_not_rewrite_running_version_snapshot(flows):

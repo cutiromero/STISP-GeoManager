@@ -169,6 +169,53 @@ it("retries a model protocol wait without presenting it as input size or permiss
   expect(retry).toHaveBeenCalledExactlyOnceWith({ feedback: "" });
 });
 
+it.each([
+  "model_response_error",
+  "model_request_error",
+  "review_rejected",
+  "platform_error",
+])(
+  "sends bounded human guidance for %s through the original checkpoint",
+  async (kind) => {
+    const flow = waiting();
+    flow.nodes[0]!.contextRecovery = {
+      ...flow.nodes[0]!.contextRecovery!,
+      kind,
+      actor: "executor",
+      reason: "需要核对当前节点诊断",
+    };
+    render(
+      <App>
+        <MemoryRouter>
+          <BusinessFlowActivity flow={flow} onChanged={vi.fn()} />
+        </MemoryRouter>
+      </App>,
+    );
+    const input = screen.getByRole("textbox", { name: "补充说明后继续" });
+    expect(input).toHaveAttribute("maxlength", "2000");
+    expect(
+      screen.queryByRole("button", { name: "批准当前节点" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "缩小范围并重试" }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(input, {
+      target: { value: "保留计算，只核对最新统计和引用，再提交审核。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "补充说明并继续" }));
+    await waitFor(() => expect(businessFlowsApi.decide).toHaveBeenCalledOnce());
+    expect(businessFlowsApi.decide).toHaveBeenCalledWith(
+      flow.id,
+      expect.objectContaining({
+        nodeId: "analyse",
+        decision: "retry_context",
+        feedback: "保留计算，只核对最新统计和引用，再提交审核。",
+        revision: flow.revision,
+      }),
+    );
+  },
+);
+
 it.each(["geology_generic", "research_flow"] as const)(
   "only exposes the persisted failed-review retry for %s",
   async (adapter) => {

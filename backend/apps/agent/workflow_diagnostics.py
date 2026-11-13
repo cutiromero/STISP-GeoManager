@@ -3,6 +3,9 @@
 from django.core.exceptions import PermissionDenied
 
 LABELS = {
+    "platform": ("平台处理", "核查平台诊断，服务修复后从原节点继续；已有成果保留"),
+    "review": ("审核返修", "查看具体问题，可补充说明后继续本节点分析与审核"),
+    "model_request": ("模型连接或生成", "核对模型服务与生成诊断，恢复后从本节点继续"),
     "budget": ("预算", "收紧资料范围或调整本次生成预留后重新分析；不批准任何科研处置"),
     "model_protocol": (
         "模型响应",
@@ -22,10 +25,21 @@ def category(error):
 
     if isinstance(error, PermissionDenied):
         return "permission"
-    if (
-        isinstance(error, ContextReviewRequired)
-        and error.details.get("kind") == "model_protocol_error"
-    ):
+    if isinstance(error, ContextReviewRequired):
+        selected = {
+            "platform_error": "platform",
+            "review_rejected": "review",
+            "model_request_error": "model_request",
+        }.get(error.details.get("kind"))
+        if selected:
+            return selected
+    if isinstance(error, ContextReviewRequired) and error.details.get("kind") in {
+        "model_protocol_error",
+        "model_response_error",
+        "model_request_error",
+        "review_rejected",
+        "platform_error",
+    }:
         return "model_protocol"
     if isinstance(error, (InputBudgetError, ContextReviewRequired)):
         return "budget"
@@ -52,6 +66,13 @@ def context_next_action(details):
         return "请管理员提高允许调用额度后继续原任务；保留计数和成果，截减证据不能解决"
     if details.get("kind") == "model_protocol_error":
         return "查看本节点诊断后重试本次审核；保留执行成果，不批准科研处置"
+    if details.get("kind") in {
+        "model_response_error",
+        "model_request_error",
+        "review_rejected",
+        "platform_error",
+    }:
+        return "核对本节点诊断，可补充说明后从当前节点继续；保留成果、计数和原批准范围"
     return None
 
 

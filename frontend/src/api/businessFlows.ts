@@ -193,6 +193,21 @@ export function assertBusinessFlowRun(value: unknown) {
         !Array.isArray(recovery.evidence)
       )
         invalid("contextRecovery");
+      if (
+        recovery.actor !== undefined &&
+        !["executor", "reviewer"].includes(String(recovery.actor))
+      )
+        invalid("contextRecovery.actor");
+      if (
+        recovery.requestScope !== undefined &&
+        !["node", "workflow"].includes(String(recovery.requestScope))
+      )
+        invalid("contextRecovery.requestScope");
+      if (
+        recovery.diagnosticCode !== undefined &&
+        typeof recovery.diagnosticCode !== "string"
+      )
+        invalid("contextRecovery.diagnosticCode");
       for (const raw of recovery.evidence as unknown[]) {
         const item = record(raw, "contextRecovery.evidence");
         if (

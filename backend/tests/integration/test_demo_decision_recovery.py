@@ -140,6 +140,43 @@ def test_historical_reference_trim_revalidates_saved_reply_without_model_request
         replay(workflow, stage, results)
 
 
+def test_recorded_platform_normalization_error_revalidates_without_a_special_cap(
+    retry_model,
+):
+    from apps.agent import demo_decisions
+
+    workflow, stage, results, raw = many_reference_reply()
+    value = json.loads(raw)
+    value["decision"]["evidenceRefs"] = value["decision"]["evidenceRefs"][:10] + [
+        {"kind": "output", "id": "102"}
+    ]
+    raw = json.dumps(value, ensure_ascii=False)
+    validate = demo_decisions.validate_decision
+
+    def corrupt_normalization(*args, **kwargs):
+        result = validate(*args, **kwargs)
+        result["evidenceRefs"] = result["evidenceRefs"][:-1]
+        return result
+
+    with patch.object(
+        demo_decisions, "validate_decision", side_effect=corrupt_normalization
+    ):
+        with pytest.raises(ComputeError, match="最近一次实际计算统计"):
+            run([raw, raw], workflow, stage, results)
+    workflow.max_iterations = workflow.iteration = 2
+    workflow.plan["actualModelCallCount"] = 2
+    assert not demo_decisions.can_revalidate_reference_tail(stage)
+    assert demo_decisions.can_revalidate_saved_response(stage)
+    audit = copy.deepcopy(stage["modelAttempts"])
+    result, _ = replay(workflow, stage, results)
+    assert result["evidenceRefs"][-1]["id"] == "102"
+    assert stage["modelAttempts"] == audit
+    assert (
+        stage["recoveredResponseState"]
+        == "platform_validation_rechecked_without_new_request"
+    )
+
+
 @pytest.mark.parametrize("retry", [False, True])
 @pytest.mark.parametrize("edit", [False, True])
 def test_equal_fresh_results_with_different_key_order_replay_exact_saved_request(
@@ -234,6 +271,37 @@ def test_main_executor_history_does_not_invalidate_a_saved_current_step_reply(
     workflow.goal = "实际目标已经改变"
     with pytest.raises(ComputeError, match="已有模型请求记录"):
         replay(workflow, stage, results)
+
+
+def test_resolved_human_guidance_does_not_invalidate_its_saved_response(retry_model):
+    from apps.business_flows.builtins import source_summary_definition
+    from apps.business_flows.execution_session import initialize
+    from apps.business_flows.state import state
+
+    workflow, stage, results = ordinary_stage()
+    workflow.workflow_type = "business_flow"
+    workflow.parameters = {
+        "_businessFlow": {
+            "definitionSnapshot": source_summary_definition(main_agent=True),
+            "versionId": 1,
+        }
+    }
+    initialize(workflow)
+    stage["name"] = "summarize"
+    item = state(workflow)["nodes"]["summarize"]
+    item["recoveryGuidance"] = {
+        "instruction": "明确已读取资料的范围",
+        "diagnostic": "核对引用",
+        "actor": "executor",
+        "scope": "node",
+    }
+    original, _ = run(
+        [model_response(stage["identifier"], [])], workflow, stage, results
+    )
+    workflow.max_iterations = workflow.iteration = 1
+    workflow.plan["actualModelCallCount"] = 1
+    item.pop("recoveryGuidance")
+    assert replay(workflow, stage, results) == original
 
 
 @pytest.mark.parametrize("retry", [False, True])

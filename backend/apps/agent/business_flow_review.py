@@ -67,6 +67,7 @@ def protocol_wait(node, evidence, reason):
             "nodeId": node["id"],
             "level": 0,
             "kind": "model_protocol_error",
+            "actor": "reviewer",
             "reason": "审核响应未通过校验，执行结果已保留：" + reason[:500],
             "evidence": evidence_sizes(evidence, node, {row["id"] for row in evidence}),
             "requested": False,
@@ -145,7 +146,16 @@ def review_node(
     on_record=None,
 ):
     """Review evidence, allowing one audited JSON repair within the same budget."""
-    review = _configuration(node, attempt)
+    from apps.business_flows.state import state
+
+    baseline = (
+        state(workflow)["nodes"].get(node["id"], {}).get("manualReviewBaseline", 0)
+        if workflow.parameters.get("_businessFlow")
+        else 0
+    )
+    review = _configuration(
+        node, attempt - baseline if type(attempt) is int else attempt
+    )
     alias = model_alias or review.get("model") or workflow.model
     if review.get("model") and model_alias and review["model"] != model_alias:
         raise PermissionDenied("审核模型与冻结节点配置不一致")

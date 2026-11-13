@@ -181,6 +181,22 @@ def can_revalidate_reference_tail(stage):
         return False
 
 
+def can_revalidate_saved_response(stage):
+    if can_revalidate_reference_tail(stage):
+        return True
+    attempts = stage.get("modelAttempts", [])
+    last = attempts[-1] if isinstance(attempts, list) and attempts else {}
+    return bool(
+        last.get("status") == "rejected"
+        and last.get("accepted") is False
+        and last.get("validationDiagnostic", {}).get("normalizationMismatch") is True
+        and last.get("truncated") is False
+        and isinstance(last.get("response"), str)
+        and last["response"].strip()
+        and not last.get("responseArtifact", {}).get("truncated", False)
+    )
+
+
 def _previous_decision(value) -> dict:
     # Observations are already supplied as complete actual result rows.
     return {key: item for key, item in value.items() if key != "findings"}
@@ -867,7 +883,25 @@ def _validate_response(
             ref["kind"] == "output" and ref["id"] in current_stats
             for ref in decision["evidenceRefs"]
         ):
-            raise ComputeError("判断必须引用最近一次实际计算统计")
+            original_outputs = {
+                str(ref.get("id"))
+                for ref in value["decision"]["evidenceRefs"]
+                if ref.get("kind") == "output"
+            }
+            validated_outputs = {
+                ref["id"] for ref in decision["evidenceRefs"] if ref["kind"] == "output"
+            }
+            raise ComputeError(
+                "判断必须引用最近一次实际计算统计",
+                failure={
+                    "code": "LATEST_STATISTICS_REFERENCE",
+                    "requiredOutputIds": sorted(current_stats),
+                    "receivedOutputIds": sorted(original_outputs),
+                    "validatedOutputIds": sorted(validated_outputs),
+                    "normalizationMismatch": bool(current_stats & original_outputs)
+                    and not bool(current_stats & validated_outputs),
+                },
+            )
     if not isinstance(value["edits"], list) or (
         getattr(workflow, "workflow_type", None) not in MULTI_FAMILY
         and len(value["edits"]) > 30
@@ -1330,6 +1364,21 @@ def _decide_once(
         )
     from apps.business_flows.execution_session import guidance, request_context
 
+    from apps.business_flows.model_recovery import guidance_context
+
+    saved_payload = stage.get("modelRequestPayload", {})
+    saved_payload = saved_payload if isinstance(saved_payload, dict) else {}
+    recovery_guidance = (
+        saved_payload.get("recoveryGuidance")
+        if stage.get("modelAttempts")
+        else guidance_context(
+            workflow, "finish" if stage["identifier"] == "finish" else stage["name"]
+        )
+    )
+    if recovery_guidance:
+        payload["recoveryGuidance"] = recovery_guidance
+        instruction += "\n依据recoveryGuidance的人工补充和诊断修正本节点分析，保留已完成计算及批准范围。"
+
     node_id = "finish" if stage["identifier"] == "finish" else stage["name"]
     execution = request_context(workflow, node_id)
     if execution:
@@ -1589,6 +1638,8 @@ def _decide_once(
                 accepted=False,
                 validationError=response_artifact(str(exc))["content"],
             )
+            if isinstance(getattr(exc, "failure", None), dict):
+                record["validationDiagnostic"] = deepcopy(exc.failure)
             if on_attempt:
                 on_attempt(record)
             raise
@@ -1628,10 +1679,30 @@ def _decide_once(
                 accepted=False,
                 validationError=response_artifact(str(exc))["content"],
             )
+            if isinstance(getattr(exc, "failure", None), dict):
+                record["validationDiagnostic"] = deepcopy(exc.failure)
             if on_attempt:
                 on_attempt(record)
             progress("failed")
+            if getattr(workflow, "parameters", {}).get("_businessFlow") and (
+                getattr(exc, "failure", None) or {}
+            ).get("normalizationMismatch"):
+                from apps.business_flows.model_recovery import model_wait
+
+                node_id = "finish" if stage["identifier"] == "finish" else stage["name"]
+                raise model_wait(
+                    node_id,
+                    "平台校验前后的必需引用不一致，请核查校验诊断；原始响应与成果已保留。",
+                    kind="platform_error",
+                ) from exc
             if attempt:
+                if getattr(workflow, "parameters", {}).get("_businessFlow"):
+                    from apps.business_flows.model_recovery import model_wait
+
+                    raise model_wait(
+                        "finish" if stage["identifier"] == "finish" else stage["name"],
+                        exc,
+                    ) from exc
                 raise
             feedback_text = _repair_feedback(stage, payload, exc)
             messages = _retry_messages(base_messages, raw, feedback_text, 0)
@@ -1670,6 +1741,8 @@ def _repair_feedback(stage, payload, error):
 
         feedback["invalidEdits"] = bounded_errors(error.errors)
         feedback["validationError"] = str(error)[:2000]
+    if isinstance(getattr(error, "failure", None), dict):
+        feedback["validationDiagnostic"] = error.failure
     if stage["identifier"] == "geology-multi-apply":
         feedback["knowledgeCitationInstruction"] = (
             "按invalidEdits中的group_id及requiredKnowledgeRefs补充该规则的实际知识引用；"
@@ -1876,7 +1949,14 @@ def _recover_decision(
             except ComputeError as exc:
                 feedback = _repair_feedback(stage, payload, exc)
             else:
-                reject()
+                if can_revalidate_saved_response(
+                    {**stage, "modelAttempts": attempts[:index]}
+                ):
+                    feedback = attempt.get("feedback")
+                    if not isinstance(feedback, str):
+                        reject()
+                else:
+                    reject()
             if attempt.get("feedback") != feedback:
                 reject()
             level = attempt.get("repairLevel", 0)
@@ -1895,7 +1975,7 @@ def _recover_decision(
             and attempt.get("status") == "response_received"
             and "accepted" not in attempt
         )
-        revalidated_tail = final and can_revalidate_reference_tail(stage)
+        revalidated_tail = final and can_revalidate_saved_response(stage)
         if (
             type(attempt.get("contentBytes")) is not int
             or attempt["contentBytes"] != content_bytes
@@ -1931,6 +2011,10 @@ def _recover_decision(
     elif can_revalidate_reference_tail(stage):
         stage["recoveredResponseState"] = (
             "reference_tail_revalidated_without_new_request"
+        )
+    elif can_revalidate_saved_response(stage):
+        stage["recoveredResponseState"] = (
+            "platform_validation_rechecked_without_new_request"
         )
     return decision, edits
 
@@ -2190,7 +2274,7 @@ def _mock_decision(model, stage, refs, results, workflow) -> tuple[dict, list]:
                 if stage["name"] == "apply" and not stage.get("modificationsApproval")
                 else "模拟分析：依据本轮实际计算、已保存批准范围和本案例试用规则继续核查；地质解释仍待专业核对。"
             ),
-            evidenceRefs=[*knowledge_refs, *selected][:30],
+            evidenceRefs=[*knowledge_refs, *selected],
         )
         if stage["identifier"] == "finish":
             latest = next(

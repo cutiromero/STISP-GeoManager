@@ -955,6 +955,22 @@ def execute_tool(
         if action == "run_operator":
             from .model_requests import operator_budget_wait
 
+            if loop.get("successfulTaskId") and loop.get(
+                "successfulSubmissionDigest"
+            ) == logic_nodes.submission_digest(body):
+                from apps.agent.compute_tools import authorized_task
+
+                prior = authorized_task(
+                    user, loop["successfulTaskId"], policy, workflow=workflow
+                )
+                if prior.status == "succeeded":
+                    return {
+                        "status": "succeeded",
+                        "taskId": str(prior.pk),
+                        "outputs": item.get("outputs", {}).get("evidence", []),
+                        "message": "相同版本、输入、参数与映射已有成功计算；复用原成果引用，未重复提交。",
+                    }
+
             if loop["operatorCalls"] >= contract["maxOperatorCalls"]:
                 raise operator_budget_wait(
                     node["id"],
@@ -1030,6 +1046,7 @@ def execute_tool(
                     current, actor, current_policy, node, body
                 )
             task = submit(user, body)
+            loop["submittedDigest"] = logic_nodes.submission_digest(body)
             AgentWorkflowStep.objects.get_or_create(
                 workflow=workflow,
                 compute_task_id=task.pk,
@@ -1151,6 +1168,9 @@ def advance_tool_execution(
             result = {"failure": failure, "message": failure["message"]}
         if result is None:
             return None
+        if result.get("status") == "succeeded" and not result.get("failure"):
+            loop["successfulTaskId"] = loop["taskId"]
+            loop["successfulSubmissionDigest"] = loop.get("submittedDigest")
         loop["elapsedSeconds"] += time.monotonic() - started
         if loop["elapsedSeconds"] >= contract["maxSeconds"]:
             wait_recovery(
@@ -1290,7 +1310,9 @@ def advance_tool_execution(
                     "observation": loop.get("lastObservation"),
                     "failure": loop.get("failure"),
                     "visibleInputs": visible_inputs(workflow, node, loop),
-                    "userAnswer": loop.get("userAnswer", ""),
+                    "userAnswer": loop.get("userAnswer", "")
+                    if loop.get("userAnswerScope", "node") == "node"
+                    else "",
                     "jsonFallback": loop.get("jsonFallback", False),
                     "formatFeedback": loop.get("formatFeedback", ""),
                     "revisionFeedback": item.get("feedback"),

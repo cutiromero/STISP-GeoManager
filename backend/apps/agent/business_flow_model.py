@@ -235,6 +235,16 @@ def request_node_result(
         packet["revisionFeedback"] = feedback
     if context is not None:
         packet["nodeContext"] = context
+    from apps.business_flows.model_recovery import guidance_context
+
+    recovery_guidance = guidance_context(
+        workflow, node_id, role, scope=(context or {}).get("executionScope", "node")
+    )
+    if recovery_guidance:
+        if recovery_guidance.get("evidenceId") in available:
+            recovery_guidance.pop("instruction", None)
+        packet["recoveryGuidance"] = recovery_guidance
+        instruction += "\nrecoveryGuidance是本节点的人工补充与真实诊断；据此纠错，不能改变权限、科学规则或人工批准。"
     from apps.business_flows.execution_session import guidance, request_context
 
     guidance_node = (
@@ -249,7 +259,8 @@ def request_node_result(
     except (ValueError, TypeError) as error:
         raise ComputeError("业务流节点模型证据不是有效JSON") from error
     managed = workflow.workflow_type == "business_flow"
-    professional = bool(workflow.parameters.get("_businessFlow")) and not managed
+    bound = bool(workflow.parameters.get("_businessFlow"))
+    professional = bound and not managed
     values = context_state(workflow)
     entry = values.get("nodes", {}).get(node_id, {})
     if role == "executor" and entry.get("reviewContextBudget"):
@@ -760,7 +771,21 @@ def request_node_result(
             responseBytes=size,
             responseFormat="json_fence" if normalized != raw.strip() else "json",
         )
-        result = validate(normalized, available)
+        try:
+            result = validate(normalized, available)
+        except ComputeError as error:
+            if (
+                managed
+                and bound
+                and role == "executor"
+                and not tools
+                and not (context or {}).get("executionScope")
+                and "contract" not in (context or {})
+            ):
+                from apps.business_flows.model_recovery import model_wait
+
+                raise model_wait(node_id, error) from error
+            raise
         if managed and packet.get("contextNotice") and "limitations" in result:
             result["limitations"] = [
                 *result["limitations"],
@@ -779,7 +804,7 @@ def request_node_result(
             "audit": deepcopy(record),
         }
     except ContextReviewRequired as error:
-        if snapshot and managed:
+        if snapshot and managed and "inputBudgetTokens" in error.details:
             sent_tokens = snapshot.get("contextManagement", {}).get("afterTokens", 0)
             overhead = max(0, error.details["afterTokens"] - sent_tokens)
             supplied_ids = {row["id"] for row in snapshot["evidence"]}
@@ -816,6 +841,7 @@ def request_node_result(
                 **({"limit": error.limit} if error.limit is not None else {}),
                 "requested": False,
                 "evidence": evidence_sizes(items, node, set()),
+                "requestScope": (context or {}).get("executionScope", "node"),
             }
             publish("context_waiting", error=str(error), requested=False)
             raise ContextReviewRequired(details) from error
@@ -823,4 +849,21 @@ def request_node_result(
         publish(
             "failed", responseSha256=_digest(raw) if raw else "", error=str(error)[:500]
         )
+        if bound and isinstance(error, provider.ModelError):
+            error.recovery_scope = (context or {}).get("executionScope", "node")
+        if (
+            bound
+            and isinstance(error, provider.ModelError)
+            and "contract" not in (context or {})
+        ):
+            guard()
+            from apps.business_flows.model_recovery import model_wait
+
+            raise model_wait(
+                node_id,
+                error,
+                actor=role,
+                kind="model_request_error",
+                scope=(context or {}).get("executionScope", "node"),
+            ) from error
         raise

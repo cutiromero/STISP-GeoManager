@@ -110,6 +110,10 @@ class ContextReviewRequired(Exception):
             "model_call_limit",
             "operator_call_limit",
             "model_protocol_error",
+            "model_response_error",
+            "model_request_error",
+            "review_rejected",
+            "platform_error",
         }:
             super().__init__(details["reason"])
             return
