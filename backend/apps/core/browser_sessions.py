@@ -13,6 +13,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
 from django.db import OperationalError, transaction
+from django.db.models import F
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 
@@ -150,6 +151,13 @@ def browser_session_view(request):
     # Refetch and save only the current session row. SessionMiddleware must not
     # later save an older cached registry over another tab's update.
     with transaction.atomic():
+        # SQLite cannot upgrade an old WAL read snapshot after a worker writes.
+        # Reserve this short write before reading; page validation still uses
+        # the latest session registry and no lease is extended by this update.
+        if not Session.objects.filter(session_key=request.session.session_key).update(
+            session_data=F("session_data")
+        ):
+            return unauthorized()
         row = (
             Session.objects.select_for_update()
             .filter(session_key=request.session.session_key)
