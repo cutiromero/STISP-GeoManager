@@ -415,6 +415,57 @@ it("does not prepare reports or read flow details until the user asks", async ()
     ]),
   ).toHaveLength(2);
 });
+
+it("keeps protocol recovery separate from professional approval controls", async () => {
+  const flow = businessFlowRun({
+    definitionSnapshot: geologySpec,
+    currentNode: "apply",
+  });
+  flow.nodes = geologySpec.nodes.map((node) => ({
+    nodeId: node.id,
+    status: node.id === "apply" ? "waiting_human" : "succeeded",
+    attempt: 1,
+    executor: { status: "succeeded" },
+    reviewer: { status: node.review.ai ? "passed" : "not_required" },
+    human: {
+      required: node.review.human,
+      status: node.id === "apply" ? "pending" : "approved",
+      reason: "核对处置范围",
+    },
+    outputs: {},
+  }));
+  const display = (value: BusinessFlowRun) => (
+    <App>
+      <MemoryRouter>
+        <BusinessFlowActivity flow={value} onChanged={vi.fn()} />
+      </MemoryRouter>
+    </App>
+  );
+  const mounted = render(display(flow));
+  fireEvent.click(screen.getByRole("button", { name: "打开专业审核" }));
+  await screen.findByRole("region", { name: "原专业审核卡" });
+  const blocked = structuredClone(flow);
+  blocked.revision++;
+  const node = blocked.nodes.find((row) => row.nodeId === "apply")!;
+  node.status = "waiting_context";
+  node.contextRecovery = {
+    nodeId: "apply",
+    level: 0,
+    kind: "model_protocol_error",
+    actor: "reviewer",
+    reason: "审核引用需要修正",
+    evidence: [],
+  };
+  mounted.rerender(display(blocked));
+  expect(screen.getByRole("button", { name: "重试本次审核" })).toBeVisible();
+  expect(
+    screen.queryByRole("region", { name: "原专业审核卡" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "批准已选处置" }),
+  ).not.toBeInTheDocument();
+  expect(agentApi.workflow).toHaveBeenCalledTimes(1);
+});
 it("loads generic input choices only when needed and starts the exact selected version once", async () => {
   const detail = {
     ...researchDetail,

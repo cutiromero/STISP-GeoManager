@@ -83,6 +83,39 @@ it("shows exact execution facts separately from AI analysis on a node without hu
   ).not.toBeInTheDocument();
 });
 
+it("shows the actual review problem without a diagnostic-service disclaimer", () => {
+  const flow = waiting();
+  const node = flow.nodes[0]!;
+  node.contextRecovery = {
+    nodeId: node.nodeId,
+    level: 0,
+    evidence: [],
+    kind: "model_protocol_error",
+    diagnostic: {
+      code: "INVALID_REVIEW_CITATION",
+      location: "报告审核",
+      facts: ["审核引用了未提供的编号"],
+      attempts: [],
+      references: [],
+      resumeAt: "重试本次审核",
+      analysisStatus: "unavailable",
+      analysis: "AI诊断未完成（ComputeError）",
+      suggestions: ["通用诊断服务提示"],
+    },
+  };
+  render(
+    <BusinessFlowContextRecovery
+      node={node}
+      busy={false}
+      onRetry={vi.fn()}
+      onStop={vi.fn()}
+    />,
+  );
+  expect(screen.getByText("审核引用了未提供的编号")).toBeVisible();
+  expect(screen.queryByText(/AI诊断未完成/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "重试本次审核" })).toBeVisible();
+});
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.spyOn(businessFlowsApi, "run");

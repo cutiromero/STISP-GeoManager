@@ -309,7 +309,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
       ) : done ? (
         <>
           <p className="logic-description">
-            已按本次授权完成处理，仍需核查的对象已保留。原始资料保持不变。
+            修正成果已另存，待核查对象见下方清单。
           </p>
           {metrics.some((m) => m.value != null) && (
             <div className="logic-result-metrics" aria-label="实际结果统计">
@@ -326,7 +326,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
             </div>
           )}
           <p className="logic-stat-note">
-            处置数量与复查问题口径不同，降权后仍可能保留问题记录。未生成的统计显示“—”。
+            处置数量与复查问题口径不同，降权后仍可能保留问题记录。
           </p>
           <div className="logic-primary-actions">
             {canMap && compare}

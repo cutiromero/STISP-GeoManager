@@ -6,6 +6,23 @@ export default function BusinessFlowFailureDiagnostic({
   value?: Diagnostic;
 }) {
   if (!value) return null;
+  const analysis =
+    value.analysisStatus === "completed" ? (
+      <>
+        <h4>
+          {value.analysisStatus === "completed"
+            ? "原因分析"
+            : "原因分析暂不可用"}
+        </h4>
+        <p>{value.analysis}</p>
+        <h4>处理建议</h4>
+        <ul>
+          {value.suggestions.map((suggestion) => (
+            <li key={suggestion}>{suggestion}</li>
+          ))}
+        </ul>
+      </>
+    ) : null;
   return (
     <section aria-label="执行错误诊断">
       <h4>错误位置</h4>
@@ -28,16 +45,16 @@ export default function BusinessFlowFailureDiagnostic({
       ) : (
         <p>没有自动补救记录。</p>
       )}
-      <h4>
-        {value.analysisStatus === "completed" ? "原因分析" : "原因分析暂不可用"}
-      </h4>
-      <p>{value.analysis}</p>
-      <h4>需要您处理</h4>
-      <ul>
-        {value.suggestions.map((suggestion) => (
-          <li key={suggestion}>{suggestion}</li>
+      {analysis &&
+        (value.analysis.length > 300 ||
+        value.suggestions.join("").length > 400 ? (
+          <details>
+            <summary>查看原因分析</summary>
+            {analysis}
+          </details>
+        ) : (
+          analysis
         ))}
-      </ul>
       <p>{value.resumeAt}</p>
       <details>
         <summary>定位记录编号</summary>

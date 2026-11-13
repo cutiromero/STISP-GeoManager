@@ -218,6 +218,7 @@ export default function BusinessFlowActivity({
     : [];
   const isTerminal = terminal.has(flow.status);
   const isLegacy = definition.adapter === "geology_generic";
+  const hasContextRecovery = Boolean(current?.contextRecovery);
   const controlOnly = flow.nodes.some(
     (node) =>
       node.executor.status === "unavailable" ||
@@ -276,6 +277,11 @@ export default function BusinessFlowActivity({
     }
   }, [unavailable]);
   useEffect(() => {
+    if (hasContextRecovery) {
+      setLegacy(undefined);
+      setLegacyError("");
+      return;
+    }
     if (!isLegacy || !legacyOpen || unavailable) return;
     const controller = new AbortController();
     setLegacyError("");
@@ -299,7 +305,14 @@ export default function BusinessFlowActivity({
         }
       });
     return () => controller.abort();
-  }, [legacyOpen, isLegacy, unavailable, legacyKey, legacyAttempt]);
+  }, [
+    legacyOpen,
+    isLegacy,
+    unavailable,
+    legacyKey,
+    legacyAttempt,
+    hasContextRecovery,
+  ]);
   const accept = (next: BusinessFlowRun) => {
     if (!alive.current || next.id !== latest.current.id) return;
     if (next.revision < latest.current.revision) return;
@@ -893,7 +906,7 @@ export default function BusinessFlowActivity({
               {ui("停止", "Stop")}
             </Button>
           )}
-          {isLegacy && !needsHuman && !unavailable && (
+          {isLegacy && !needsHuman && !unavailable && !hasContextRecovery && (
             <Button
               type="text"
               size="small"
@@ -919,7 +932,7 @@ export default function BusinessFlowActivity({
           )}
         </Space>
       </footer>
-      {legacyOpen && isLegacy && !unavailable && (
+      {legacyOpen && isLegacy && !unavailable && !hasContextRecovery && (
         <div className="business-flow-legacy-review">
           {legacyError && (
             <Alert
@@ -1052,6 +1065,12 @@ function Actor({
     ["rejected", "request_changes"].includes(value.status)
       ? value.repairInstructions
       : "";
+  const comment =
+    value.reason && value.reason !== repair
+      ? value.reason
+      : value.feedback && value.feedback !== repair
+        ? value.feedback
+        : "";
   return (
     <section
       className={`business-flow-actor actor-${name}`}
@@ -1109,17 +1128,17 @@ function Actor({
             )}
           </div>
         )}
-        {(value.reason || value.feedback) &&
+        {comment &&
         name === "reviewer" &&
         ["passed", "accepted", "succeeded", "completed"].includes(
           value.status,
         ) &&
-        String(value.feedback || value.reason).length > 240 ? (
+        comment.length > 240 ? (
           <details>
             <summary>{ui("查看审核意见", "View review notes")}</summary>
-            <p>{value.feedback || value.reason}</p>
+            <p>{comment}</p>
           </details>
-        ) : value.reason || value.feedback ? (
+        ) : comment ? (
           <p
             className={
               name === "reviewer" && value.status === "rejected"
@@ -1127,7 +1146,7 @@ function Actor({
                 : ""
             }
           >
-            {value.feedback || value.reason}
+            {comment}
           </p>
         ) : null}
         {repair && (
