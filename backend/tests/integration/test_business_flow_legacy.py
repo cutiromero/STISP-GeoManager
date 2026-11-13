@@ -167,6 +167,27 @@ def assert_no_human_approval(workflow):
     assert state(workflow)["nodes"]["apply"]["human"]["status"] == "pending"
 
 
+def test_wrong_review_reference_is_diagnosed_without_rerunning_the_producer(
+    legacy_flow, monkeypatch
+):
+    env = legacy_flow
+    workflow = env["create"]()
+    stage = workflow.plan["stages"][0]
+    invalid = {**verdict(), "evidenceIds": ["output-17"]}
+    calls = provider_sequence(monkeypatch, [invalid, verdict()])
+    producer = Mock()
+    initial = (stage["decision"], [])
+    result = review_stage(env, workflow, stage, initial, producer)
+    assert result is initial and len(calls) == 2
+    producer.assert_not_called()
+    feedback = calls[1]["packet"]["revisionFeedback"]
+    assert feedback["availableEvidenceIds"] == ["node-result"]
+    assert feedback["requiredEvidenceIds"] == ["node-result"]
+    assert "引用" in feedback["diagnostic"]
+    assert calls[0]["packet"]["evidence"] == calls[1]["packet"]["evidence"]
+    assert_no_human_approval(workflow)
+
+
 def test_unbound_professional_workflow_never_calls_new_reviewer(
     legacy_flow, monkeypatch
 ):
@@ -687,6 +708,135 @@ def test_professional_review_protocol_wait_preserves_results_and_retries_only_re
         )
         producer.assert_not_called()
         assert not actual.get("modificationsApproval")
+
+
+def final_protocol_wait(env, status, *, duplicate=False):
+    workflow = env["create"]()
+    for row in workflow.plan["stages"]:
+        row["status"] = "completed"
+    workflow.plan["stageIndex"] = len(workflow.plan["stages"])
+    final = {
+        "name": "final_analysis",
+        "identifier": "finish",
+        "status": "needs_review",
+        "contextBudgetReview": {
+            "kind": "model_protocol_error",
+            "nodeId": "finish",
+            "level": 0,
+            "evidence": [],
+            "reason": "审核引用需修正",
+        },
+        "modelAttempts": [
+            {"accepted": True, "response": '{"decision":{"findings":["已保存分析"]}}'}
+        ],
+        "modelRequestPayload": {
+            "goal": workflow.goal,
+            "executionState": {"currentStage": {"planStatus": None}},
+        },
+    }
+    workflow.plan.update(
+        finalStage=final, phase="review_results", actualModelCallCount=2
+    )
+    if duplicate:
+        copied = deepcopy(final)
+        copied.pop("contextBudgetReview")
+        copied["status"] = "pending"
+        copied["modelBudgetHistory"] = [{"previousRetry": "保留原恢复审计"}]
+        workflow.plan["stages"].append(copied)
+    workflow.status, workflow.current_step = status, "final_analysis"
+    workflow.save(update_fields=["plan", "status", "current_step"])
+    return workflow
+
+
+@pytest.mark.parametrize("status", ["waiting_approval", "failed"])
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_final_review_resumes_through_public_decision_without_reexecuting_science(
+    legacy_flow, status, duplicate
+):
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = final_protocol_wait(env, status, duplicate=duplicate)
+    scientific = deepcopy(workflow.plan["stages"][: workflow.plan["stageIndex"]])
+    human = deepcopy(state(workflow)["nodes"]["apply"]["human"])
+    with project_scope(env["scope"]):
+        public = runtime.serialize_run(env["user"], workflow)
+        node = next(row for row in public["nodes"] if row["nodeId"] == "finish")
+        assert public["status"] == status and node["status"] == "waiting_context"
+        current = runtime.decide_flow(
+            env["user"],
+            workflow,
+            {
+                "nodeId": "finish",
+                "decision": "retry_context",
+                "revision": public["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+        assert current.status == "queued"
+        assert current.plan["stages"] == scientific
+        assert current.plan["actualModelCallCount"] == 2
+        assert current.plan["finalStage"]["modelAttempts"][-1]["accepted"] is True
+        assert current.plan["finalStage"].get("status") is None
+        assert not current.plan["finalStage"].get("contextBudgetReview")
+        if duplicate:
+            assert {"previousRetry": "保留原恢复审计"} in current.plan["finalStage"][
+                "modelBudgetHistory"
+            ]
+        assert state(current)["nodes"]["apply"]["human"] == human
+        assert not current.steps.filter(kind="submit_operator").exists()
+
+
+@pytest.mark.parametrize("conflict", ["request", "response"])
+def test_conflicting_final_stage_copies_are_not_silently_merged(legacy_flow, conflict):
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = final_protocol_wait(env, "failed", duplicate=True)
+    if conflict == "request":
+        workflow.plan["stages"][-1]["modelRequestPayload"]["goal"] = "另一任务的请求"
+    else:
+        workflow.plan["stages"][-1]["modelAttempts"][-1]["response"] = "另一份分析"
+    workflow.save(update_fields=["plan"])
+    original = deepcopy(workflow.plan)
+    with (
+        project_scope(env["scope"]),
+        pytest.raises(ComputeError, match="保存请求不一致"),
+    ):
+        runtime.decide_flow(
+            env["user"],
+            workflow,
+            {
+                "nodeId": "finish",
+                "decision": "retry_context",
+                "revision": state(workflow)["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+    workflow.refresh_from_db()
+    assert workflow.status == "failed" and workflow.plan == original
+
+
+def test_failed_review_without_an_accepted_response_has_no_recovery_bypass(legacy_flow):
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = final_protocol_wait(env, "failed")
+    workflow.plan["finalStage"]["modelAttempts"][-1]["accepted"] = False
+    workflow.save(update_fields=["plan"])
+    with project_scope(env["scope"]), pytest.raises(ComputeError):
+        runtime.decide_flow(
+            env["user"],
+            workflow,
+            {
+                "nodeId": "finish",
+                "decision": "retry_context",
+                "revision": state(workflow)["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+    workflow.refresh_from_db()
+    assert workflow.status == "failed"
 
 
 def test_compute_failure_waits_and_retries_original_scientific_stage(legacy_flow):

@@ -20942,7 +20942,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/BusinessFlowContextManagement"
         - type: object
-          description: 通过现有节点决定通道恢复的上下文等待，不构成人工科研批准。
+          description: 通过现有节点决定通道恢复的上下文等待，不构成人工科研批准。专业审核恢复中止但仍保存完整已接受执行响应及原审核诊断时，可在failed状态显式retry_context；其他失败不适用，恢复后仍重新核对真实资料与权限。
           properties:
             kind: {type: string, description: 等待原因；model_call_limit、operator_call_limit分别表示模型和算子调用额度不足，model_protocol_error表示审核响应未通过校验；不能通过截减证据恢复这些等待。}
             budgetScope: {type: string, enum: [task, node], description: 模型调用额度来源；task可在当前策略允许额度增加后继续，node受发布合同上限约束。}

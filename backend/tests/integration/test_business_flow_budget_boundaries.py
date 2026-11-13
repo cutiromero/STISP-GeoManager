@@ -389,9 +389,7 @@ def test_invalid_review_can_resume_without_reexecuting_the_main_agent_node(
         packet = json.loads(messages[1]["content"])
         if packet.get("nodeContext", {}).get("task", {}).get("phase") == "work":
             work_calls += 1
-        if "requiredEvidenceIds" in packet and failed_reviews < (
-            2 if failure == "syntax" else 1
-        ):
+        if "requiredEvidenceIds" in packet and failed_reviews < 2:
             failed_reviews += 1
             guard()
             if failure == "syntax":

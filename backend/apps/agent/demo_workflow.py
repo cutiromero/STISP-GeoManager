@@ -2055,7 +2055,10 @@ def advance_demo(workflow_id) -> None:
                     "reason": str(exc),
                     "requested": False,
                 }
-                if stage not in workflow.plan["stages"]:
+                if (
+                    stage["identifier"] != "finish"
+                    and stage not in workflow.plan["stages"]
+                ):
                     workflow.plan["stages"].append(stage)
                 _pause(workflow, stage, str(exc))
             else:

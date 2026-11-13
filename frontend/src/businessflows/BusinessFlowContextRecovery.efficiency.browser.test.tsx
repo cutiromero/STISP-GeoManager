@@ -169,6 +169,35 @@ it("retries a model protocol wait without presenting it as input size or permiss
   expect(retry).toHaveBeenCalledExactlyOnceWith({ feedback: "" });
 });
 
+it.each(["geology_generic", "research_flow"] as const)(
+  "only exposes the persisted failed-review retry for %s",
+  async (adapter) => {
+    const flow = waiting();
+    flow.status = "failed";
+    flow.definitionSnapshot.adapter = adapter;
+    flow.nodes[0]!.contextRecovery!.kind = "model_protocol_error";
+    render(
+      <App>
+        <MemoryRouter>
+          <BusinessFlowActivity flow={flow} onChanged={vi.fn()} />
+        </MemoryRouter>
+      </App>,
+    );
+    const button = screen.queryByRole("button", { name: "重试本次审核" });
+    if (adapter === "research_flow") {
+      expect(button).not.toBeInTheDocument();
+      return;
+    }
+    expect(button).toBeEnabled();
+    fireEvent.click(button!);
+    await waitFor(() => expect(businessFlowsApi.decide).toHaveBeenCalledOnce());
+    expect(businessFlowsApi.decide).toHaveBeenCalledWith(
+      flow.id,
+      expect.objectContaining({ decision: "retry_context", nodeId: "analyse" }),
+    );
+  },
+);
+
 it.each(["task", "node"])(
   "shows operator usage and respects the %s quota boundary",
   (scope) => {

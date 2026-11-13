@@ -643,8 +643,11 @@ export default function BusinessFlowActivity({
           />
         )}
       {!unavailable &&
-        !isTerminal &&
-        flow.status === "waiting_approval" &&
+        (flow.status === "waiting_approval" ||
+          (isLegacy &&
+            flow.status === "failed" &&
+            current?.status === "waiting_context" &&
+            current.contextRecovery?.kind === "model_protocol_error")) &&
         current?.contextRecovery && (
           <BusinessFlowContextRecovery
             key={`${flow.id}:${current.nodeId}:${flow.revision}`}

@@ -86,6 +86,33 @@ def test_configured_output_above_4096_recovers_without_new_request(retry_model):
     assert stage["recoveredModelAttempt"] == 1
 
 
+@pytest.mark.parametrize("original_status", [None, "pending"])
+def test_review_retry_reuses_accepted_response_with_original_scheduler_hint(
+    retry_model, original_status
+):
+    from apps.business_flows.legacy import _resume_stage_status
+
+    workflow, stage, results = ordinary_stage()
+    if original_status is None:
+        stage.pop("status", None)
+    else:
+        stage["status"] = original_status
+    original, _ = run(
+        [model_response(stage["identifier"], [])], workflow, stage, results
+    )
+    workflow.max_iterations = workflow.iteration = 1
+    workflow.plan["actualModelCallCount"] = 1
+    audit = copy.deepcopy(stage["modelAttempts"])
+    stage["status"] = "needs_review"
+    _resume_stage_status(stage)
+    assert replay(workflow, stage, results) == original
+    assert stage["modelAttempts"] == audit
+    assert workflow.plan["actualModelCallCount"] == 1
+    workflow.goal = "实际科研目标已改变"
+    with pytest.raises(ComputeError, match="已有模型请求记录"):
+        replay(workflow, stage, results)
+
+
 def test_main_executor_history_does_not_invalidate_a_saved_current_step_reply(
     retry_model,
 ):

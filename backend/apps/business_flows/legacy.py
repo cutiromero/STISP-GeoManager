@@ -14,6 +14,79 @@ from apps.compute.packages import ComputeError
 from .state import binding, state, emit, persist, TERMINAL, digest
 
 
+def _saved_request_stage(stage):
+    attempts = stage.get("modelAttempts", [])
+    payload = stage.get("modelRequestPayload")
+    if not (
+        isinstance(attempts, list)
+        and attempts
+        and isinstance(attempts[-1], dict)
+        and attempts[-1].get("accepted") is True
+        and isinstance(attempts[-1].get("response"), str)
+        and attempts[-1]["response"].strip()
+        and isinstance(payload, dict)
+        and isinstance(payload.get("executionState"), dict)
+    ):
+        return None
+    original = payload["executionState"].get("currentStage")
+    return original if isinstance(original, dict) and "planStatus" in original else None
+
+
+def _resume_stage_status(stage):
+    original = _saved_request_stage(stage)
+    if original is None:
+        stage["status"] = "pending"
+    elif original["planStatus"] is None:
+        stage.pop("status", None)
+    else:
+        stage["status"] = original["planStatus"]
+
+
+def _retryable_failed_review(workflow, stage, recovery=None):
+    return (
+        workflow.status == "failed"
+        and not getattr(workflow, "cancel_requested", False)
+        and workflow.current_step == stage.get("name")
+        and not stage.get("decision")
+        and (recovery or stage.get("contextBudgetReview", {})).get("kind")
+        == "model_protocol_error"
+        and _saved_request_stage(stage) is not None
+    )
+
+
+def _context_stage(workflow, node_id):
+    stages = workflow.plan.get("stages", [])
+    names = {node_id, "final_analysis" if node_id == "finish" else node_id}
+    stage = next((row for row in stages if row["name"] in names), None)
+    if node_id != "finish":
+        return stage
+    final = workflow.plan.get("finalStage") or stage
+    if final is None:
+        return None
+    index = workflow.plan.get("stageIndex", len(stages))
+    tail = stages[index:]
+    # Older waits duplicated finalStage into the calculation list. Only merge
+    # an exact copy of this saved request, preserving every calculation stage.
+    if tail:
+        if not all(
+            row.get("name") == final.get("name")
+            and row.get("identifier") == final.get("identifier") == "finish"
+            and row.get("modelRequestPayload") == final.get("modelRequestPayload")
+            and row.get("modelRequestInstruction")
+            == final.get("modelRequestInstruction")
+            and row.get("modelAttempts") == final.get("modelAttempts")
+            for row in tail
+        ):
+            raise ComputeError("最终分析的保存请求不一致，不能自动合并恢复", 409)
+        for row in tail:
+            for history in row.get("modelBudgetHistory", []):
+                if history not in final.setdefault("modelBudgetHistory", []):
+                    final["modelBudgetHistory"].append(deepcopy(history))
+        workflow.plan["stages"] = stages[:index]
+    workflow.plan["finalStage"] = final
+    return final
+
+
 def projected_state(workflow):
     value = deepcopy(state(workflow))
     plan = workflow.plan
@@ -84,7 +157,10 @@ def projected_state(workflow):
                 reason="计算中心执行实际登记算子",
                 taskId=stage["taskId"],
             )
-        if stage.get("contextBudgetReview") and workflow.status == "waiting_approval":
+        if stage.get("contextBudgetReview") and (
+            workflow.status == "waiting_approval"
+            or _retryable_failed_review(workflow, stage)
+        ):
             item["status"] = "waiting_context"
             item["contextRecovery"] = deepcopy(stage["contextBudgetReview"])
             item["contextRecovery"].setdefault("nodeId", identity)
@@ -450,7 +526,7 @@ def retry_context(user, workflow, value):
         node_id = canonical_current_node(current)
         item = projected_state(current)["nodes"].get(node_id, {})
         if (
-            current.status != "waiting_approval"
+            current.status not in {"waiting_approval", "failed"}
             or not item.get("contextRecovery")
             or value.get("nodeId") != node_id
             or str(value.get("revision")) != str(values["revision"])
@@ -467,19 +543,20 @@ def retry_context(user, workflow, value):
 
         renew_operator_budget(current, live_policy, item["contextRecovery"])
         require_compute_slot(user, current.pk)
-        stage = next(
-            (
-                row
-                for row in current.plan.get("stages", [])
-                if row["name"]
-                in {node_id, "final_analysis" if node_id == "finish" else node_id}
-            ),
-            current.plan.get("finalStage") if node_id == "finish" else None,
-        )
+        stage = _context_stage(current, node_id)
         if stage is None and node_id != "inputs":
             raise ComputeError("当前等待阶段已变化，请刷新后重试", 409)
+        if current.status == "failed" and (
+            stage is None
+            or not _retryable_failed_review(current, stage, item["contextRecovery"])
+        ):
+            raise ComputeError("该失败没有可复用的已接受分析响应，不能重试审核", 409)
         history = (
-            {"contextBudgetReview": stage.pop("contextBudgetReview")}
+            {
+                "contextBudgetReview": stage.pop(
+                    "contextBudgetReview", deepcopy(item["contextRecovery"])
+                )
+            }
             if stage is not None
             else None
         )
@@ -498,7 +575,9 @@ def retry_context(user, workflow, value):
                 )
         if stage is not None:
             stage.setdefault("modelBudgetHistory", []).append(history)
-            stage["status"] = "pending"
+            # A scheduler wait must not change the identity of a saved model
+            # request. All scientific facts are still freshly checked on replay.
+            _resume_stage_status(stage)
         values["nodes"][node_id].pop("contextRecovery", None)
         values["nodes"][node_id]["status"] = "executing"
         receipts[key] = fingerprint
