@@ -140,6 +140,104 @@ def test_main_explicit_role_binding_works_and_changed_input_invalidates_prefligh
     assert ComputeTask.objects.count() == 1
 
 
+def test_effective_preflight_accepts_explicit_and_implicit_defaults(operators):
+    env = operators
+    upgrade(env)
+    workflow = main_workflow(env)
+    explicit = submit_args(
+        env,
+        parameters={"threshold": 0.5},
+        fieldMappings={
+            "table": {"group_name": "region", "value": "value"},
+        },
+    )
+    assert tool(env, workflow, "preflight_operator", explicit)["valid"]
+    tool(env, workflow, "run_operator", submit_args(env))
+    item = state(workflow)["nodes"]["calculate"]
+    finish_task(env, item["computeTaskId"], "CANONICAL")
+    collect(env, workflow)
+    reused = tool(env, workflow, "run_operator", explicit)
+    assert reused["taskId"] == item["computeTaskId"]
+    assert item["toolLoop"]["recoveries"] == 0
+    assert ComputeTask.objects.count() == workflow.operator_steps == 1
+
+
+def test_missing_preflight_recovers_without_changing_scientific_plan(
+    operators, monkeypatch
+):
+    env = operators
+    upgrade(env)
+    workflow = main_workflow(env)
+    install(
+        monkeypatch,
+        [
+            action("start_node", nodeId="calculate"),
+            action("operator_catalog"),
+            action("run_operator", **submit_args(env)),
+            action("preflight_operator", **submit_args(env)),
+            action("run_operator", **submit_args(env)),
+        ],
+    )
+    item = advance(env, workflow, 3)
+    loop = item["toolLoop"]
+    assert loop["lastObservation"]["result"]["failure"]["code"] == "PREFLIGHT_REQUIRED"
+    assert not loop.get("failure") and loop["recoveries"] == 0
+    assert not ComputeTask.objects.exists()
+    advance(env, workflow, 2)
+    assert ComputeTask.objects.count() == workflow.operator_steps == 1
+    assert loop_state(state(workflow)["nodes"]["calculate"])["recoveries"] == 0
+
+
+def test_live_record_with_stale_preflight_failure_keeps_budget_and_resumes(operators):
+    env = operators
+    upgrade(env)
+    workflow = main_workflow(env)
+    item = state(workflow)["nodes"]["calculate"]
+    loop = loop_state(item)
+    loop.update(
+        modelCalls=21,
+        recoveries=2,
+        failure={
+            "code": "OPERATOR_FAILED",
+            "action": "run_operator",
+            "remedy": "human_review",
+            "message": "须先对相同版本、输入、参数和字段映射完成预检，才能计算",
+        },
+    )
+    loop["history"] = [
+        {"step": 3, "action": "run_operator", "summary": "原前置条件诊断"}
+    ]
+    tool(env, workflow, "preflight_operator", submit_args(env))
+    tool(env, workflow, "run_operator", submit_args(env))
+    assert ComputeTask.objects.count() == 1
+    assert loop["modelCalls"] == 21 and loop["recoveries"] == 2
+    assert len(loop["history"]) == 1 and not loop.get("failure")
+
+
+def test_failed_live_preflight_does_not_spend_recovery_or_leave_a_task(operators):
+    env = operators
+    upgrade(env)
+    workflow = main_workflow(env)
+    arguments = submit_args(env, parameters={"threshold": 0.5})
+    tool(env, workflow, "preflight_operator", arguments)
+    loop = loop_state(state(workflow)["nodes"]["calculate"])
+    loop["failure"] = {
+        "code": "BOUNDS",
+        "remedy": "adjust_parameters",
+        "message": "原计算失败",
+    }
+    loop["lastSubmission"] = arguments
+    changed = submit_args(
+        env, parameters={"threshold": 0.6}, remedy="adjust_parameters"
+    )
+    from apps.compute.packages import PreflightRequired
+
+    with pytest.raises(PreflightRequired):
+        tool(env, workflow, "run_operator", changed)
+    assert loop["recoveries"] == 0 and not loop["remedies"]
+    assert loop["failure"]["code"] == "BOUNDS" and not ComputeTask.objects.exists()
+
+
 def test_recovery_can_replace_an_explicitly_bound_role(operators):
     from apps.business_flows.node_loop import wait_recovery
     from apps.catalog.models import DataResource

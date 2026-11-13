@@ -10,7 +10,7 @@ from django.db import transaction
 from apps.agent.models import AgentWorkflowStep
 from apps.agent.provider import ModelError
 from apps.agent.workflow_controls import locked_workflow
-from apps.compute.packages import ComputeError
+from apps.compute.packages import ComputeError, PreflightRequired
 from .node_contracts import (
     MAX_TOOL_BYTES,
     MAX_FRAGMENT_BYTES,
@@ -98,7 +98,7 @@ def node_defaults(workflow, node, loop):
 
 
 def loop_state(item):
-    return item.setdefault(
+    loop = item.setdefault(
         "toolLoop",
         {
             "steps": 0,
@@ -112,6 +112,19 @@ def loop_state(item):
             "remedies": [],
         },
     )
+    # Earlier task records classified an unsatisfied preflight as a calculation
+    # failure. With no submitted task, it is safe to retire only that diagnostic;
+    # all attempts, budgets and real computation failures remain untouched.
+    failure = loop.get("failure") or {}
+    if (
+        not loop.get("taskIds")
+        and not item.get("computeTaskId")
+        and failure.get("action") == "run_operator"
+        and failure.get("message")
+        == "须先对相同版本、输入、参数和字段映射完成预检，才能计算"
+    ):
+        loop.pop("failure")
+    return loop
 
 
 def observation(error):
@@ -1022,31 +1035,31 @@ def execute_tool(
             workflow, user, policy, node, loop, arguments, source_state=sources
         )
         if action == "preflight_operator":
-            validate_submission(user, body)
+            validated = validate_submission(user, body)
             from .logic_nodes import submission_digest
 
             loop["preflightDigest"] = submission_digest(body)
             loop["preflightSources"] = sources
+            loop["preflightRequestHash"] = validated["digest"]
             return {"valid": True, "gaps": [], "message": "预检通过，尚未提交计算"}
         from . import logic_nodes
         from .execution_session import session
 
+        needs_preflight = bool(logic_nodes.enabled(workflow) or session(workflow))
         if (
-            (logic_nodes.enabled(workflow) or session(workflow))
+            needs_preflight
             and action == "run_operator"
             and (
-                loop.get("preflightDigest") != logic_nodes.submission_digest(body)
+                not loop.get("preflightRequestHash")
                 or loop.get("preflightSources") != sources
             )
         ):
-            raise ComputeError("须先对相同版本、输入、参数和字段映射完成预检，才能计算")
+            raise PreflightRequired()
         if action == "run_operator":
             from .model_requests import operator_budget_wait
 
             if (
                 loop.get("successfulTaskId")
-                and loop.get("successfulSubmissionDigest")
-                == logic_nodes.submission_digest(body)
                 and loop.get("successfulSources") == sources
             ):
                 from apps.agent.compute_tools import authorized_task
@@ -1054,7 +1067,16 @@ def execute_tool(
                 prior = authorized_task(
                     user, loop["successfulTaskId"], policy, workflow=workflow
                 )
-                if prior.status == "succeeded":
+                validated = validate_submission(user, body)
+                if (
+                    needs_preflight
+                    and validated["digest"] != loop["preflightRequestHash"]
+                ):
+                    raise PreflightRequired()
+                if (
+                    prior.status == "succeeded"
+                    and prior.request_hash == validated["digest"]
+                ):
                     check_retained_outputs(workflow, user, policy, item)
                     return {
                         "status": "succeeded",
@@ -1074,8 +1096,8 @@ def execute_tool(
                 raise operator_budget_wait(
                     node["id"], workflow.operator_steps, workflow.max_operator_steps
                 )
-        check_remedy(loop, arguments, action, contract)
         if action == "prepare_input":
+            check_remedy(loop, arguments, action, contract)
             from .node_inputs import prepare
 
             if not workflow.plan.get("inputPreparationPolicy", {}).get("allowScripts"):
@@ -1137,7 +1159,18 @@ def execute_tool(
                 logic_nodes.revalidate_inputs(
                     current, actor, current_policy, node, body
                 )
-            task = submit(user, body)
+            task = submit(
+                user,
+                body,
+                **(
+                    {"preflight_digest": loop["preflightRequestHash"]}
+                    if needs_preflight
+                    else {}
+                ),
+            )
+            # A rejected remedy rolls back this uncommitted queue insertion.
+            # Live validation/preflight rejection must not spend a recovery.
+            check_remedy(loop, arguments, action, contract)
             loop["submittedDigest"] = logic_nodes.submission_digest(body)
             loop["submittedSources"] = sources
             AgentWorkflowStep.objects.get_or_create(
@@ -1506,7 +1539,7 @@ def advance_tool_execution(
                 "run_operator",
                 "preflight_operator",
                 "prepare_input",
-            } and not isinstance(error, RemedyRejected):
+            } and not isinstance(error, (RemedyRejected, PreflightRequired)):
                 failure["versionId"] = arguments.get("versionId")
                 loop["failure"] = failure
                 loop.setdefault("lastSubmission", deepcopy(arguments))

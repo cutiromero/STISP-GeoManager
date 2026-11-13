@@ -362,8 +362,12 @@ def validate_submission(user, body):
     }
 
 
-def submit(user, body, retry_of=None):
+def submit(user, body, retry_of=None, *, preflight_digest=None):
     data = validate_submission(user, body)
+    if preflight_digest is not None and data["digest"] != preflight_digest:
+        from .packages import PreflightRequired
+
+        raise PreflightRequired()
     existing = ComputeTask.objects.filter(
         owner=user, idempotency_key=data["key"]
     ).first()

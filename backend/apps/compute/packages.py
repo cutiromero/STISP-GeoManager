@@ -38,6 +38,16 @@ class ComputeError(ValueError):
         self.failure = failure
 
 
+class PreflightRequired(ComputeError):
+    """An execution precondition, not a failed scientific calculation."""
+
+    def __init__(self):
+        super().__init__(
+            "请先使用preflight_operator对当前方案完成预检，再提交run_operator。",
+            failure={"code": "PREFLIGHT_REQUIRED", "remedy": "preflight_operator"},
+        )
+
+
 @dataclass
 class ChecksumVerification:
     cache: dict = field(default_factory=dict)
