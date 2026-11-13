@@ -1,5 +1,5 @@
-import { FileTextOutlined, RobotOutlined } from "@ant-design/icons";
-import { App, Button } from "antd";
+import { LineChartOutlined } from "@ant-design/icons";
+import { Button } from "antd";
 import {
   type CSSProperties,
   type ReactNode,
@@ -443,7 +443,6 @@ export function RankingPanel({
 
 export function AssessmentPanel({ snapshot }: { snapshot: MonitorSnapshot }) {
   const { t } = useTranslation();
-  const { message } = App.useApp();
   return (
     <MonitorPanel
       className="monitor-assessment"
@@ -457,21 +456,11 @@ export function AssessmentPanel({ snapshot }: { snapshot: MonitorSnapshot }) {
       }
     >
       <div className="monitor-assessment-copy">
-        <RobotOutlined />
+        <LineChartOutlined />
         <div>
           <p>{snapshot.assessment.summary}</p>
           <p className="monitor-advice">{snapshot.assessment.recommendation}</p>
         </div>
-      </div>
-      <div className="monitor-assessment-footer">
-        <span>{t("monitor.analysisDisclaimer")}</span>
-        <Button
-          size="small"
-          icon={<FileTextOutlined />}
-          onClick={() => message.info(t("monitor.reportPending"))}
-        >
-          {t("monitor.generateReport")}
-        </Button>
       </div>
     </MonitorPanel>
   );

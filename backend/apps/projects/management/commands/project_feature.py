@@ -30,7 +30,10 @@ class Command(BaseCommand):
         state.add_argument("--enable", action="store_true")
         state.add_argument("--disable", action="store_true")
         parser.add_argument(
-            "--config", type=Path, help="项目内容配置 JSON 路径；null 清除配置"
+            "--feature-config",
+            dest="config",
+            type=Path,
+            help="项目内容配置 JSON 路径；null 清除配置",
         )
 
     @transaction.atomic

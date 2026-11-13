@@ -177,7 +177,10 @@ export default function ProductMap({
           entries: [
             {
               id: "target",
-              label: product.resource.name,
+              label:
+                product.scene === "spartina"
+                  ? t("remoteMonitor.spartina")
+                  : product.name,
               color,
               shape: "polygon",
             },
@@ -296,7 +299,6 @@ export default function ProductMap({
       {!product && (
         <div className="remote-map-empty">
           <span>{t("remoteMonitor.noLayer")}</span>
-          <p>{t("remoteMonitor.noLayerHint")}</p>
         </div>
       )}
       {legend && (
@@ -331,9 +333,7 @@ export default function ProductMap({
           ))}
         </aside>
       )}
-      {product && (
-        <div className="remote-map-caption">{product.resource.name}</div>
-      )}
+      {product && <div className="remote-map-caption">{product.name}</div>}
     </div>
   );
 }

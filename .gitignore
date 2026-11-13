@@ -33,6 +33,7 @@ frontend/vite.config.js
 frontend/.env.local
 config/app.test.toml
 config/release.local.toml
+config/monitoring.local.toml
 test-data/
 
 # Local QA and deployment artifacts

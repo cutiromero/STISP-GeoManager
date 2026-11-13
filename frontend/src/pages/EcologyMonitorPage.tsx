@@ -19,6 +19,8 @@ import {
 import {
   type CSSProperties,
   type ReactNode,
+  Suspense,
+  lazy,
   useEffect,
   useMemo,
   useRef,
@@ -28,7 +30,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ProjectMonitorConfig } from "../api/generated/types.gen";
 import { currentLocale } from "../i18n";
-import MonitorGlobe from "../monitor/MonitorGlobe";
 import MonitorSpaceBackground from "../monitor/MonitorSpaceBackground";
 import {
   AlertsPanel,
@@ -46,6 +47,8 @@ import { metricIds, type MonitorDataSource } from "../monitor/types";
 import { useMonitor, useMonitorActivity } from "../monitor/useMonitor";
 import RemoteSensingDashboard from "../monitor/RemoteSensingDashboard";
 import "./ecology-monitor.css";
+
+const MonitorGlobe = lazy(() => import("../monitor/MonitorGlobe"));
 
 export default function EcologyMonitorPage() {
   const project = useMonitorProject();
@@ -95,6 +98,7 @@ export default function EcologyMonitorPage() {
     );
   return (
     <ConfigProvider
+      button={{ autoInsertSpace: false }}
       theme={{
         algorithm: theme.darkAlgorithm,
         token: {
@@ -290,13 +294,21 @@ export function EcologyMonitorDashboard({
             className="monitor-globe-panel"
             aria-label={t("monitor.networkTitle")}
           >
-            <MonitorGlobe
-              initialView={config.initialView}
-              snapshot={snapshot}
-              lastEvent={lastEvent}
-              animated={animated}
-              onSelect={setSelectedId}
-            />
+            <Suspense
+              fallback={
+                <div className="monitor-loading">
+                  <Spin />
+                </div>
+              }
+            >
+              <MonitorGlobe
+                initialView={config.initialView}
+                snapshot={snapshot}
+                lastEvent={lastEvent}
+                animated={animated}
+                onSelect={setSelectedId}
+              />
+            </Suspense>
             {selected && (
               <aside
                 className="monitor-station-card"

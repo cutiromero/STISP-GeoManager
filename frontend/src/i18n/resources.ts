@@ -3,23 +3,26 @@ export const zhCN = {
   translation: {
     auditUi: auditUiZh,
     remoteMonitor: {
-      eyebrow: "生态遥感 · 成果与证据",
+      eyebrow: "生态监测中心",
       entryTag: "专题成果 · 遥感监测",
       legend: "图例",
       scenes: "监测场景",
       spartina: "互花米草",
       wildfire: "野火",
       poplar: "胡杨演示",
-      spartinaSubtitle: "沿海分布识别 · 斑块统计 · 可比时期变化核查",
-      wildfireSubtitle: "历史时空回放 · 区域风险概率 · 模型与观测对照",
+      spartinaSubtitle: "沿海湿地 · 分布识别与斑块统计",
+      wildfireSubtitle: "全球网格 · 野火风险与历史观测",
       catalogued: "当前项目 · 成果目录",
       refresh: "刷新成果",
       products: "成果列表",
-      details: "指标与依据",
-      waiting: "等待已核验成果入库",
+      details: "监测概况",
+      waiting: "暂无监测成果",
       unavailable: "暂时无法读取成果",
       loadMore: "加载更早成果",
-      unknownTime: "观测时间待核实",
+      unknownTime: "日期待补充",
+      scope: "监测范围",
+      spartinaScope: "中国沿海湿地",
+      wildfireScope: "全球网格",
       conditions: "接入条件",
       spartinaInputs:
         "RF：3、8、12 月影像组成一组 48 维特征。UNet：单通道影像与匹配权重。",
@@ -29,17 +32,15 @@ export const zhCN = {
       wildfireGuard:
         "权重 w1–w16 的窗口含义与预测时效须核实；缺少训练预处理时保持待接入。",
       map: "遥感成果地图",
-      noLayer: "尚无可显示的成果图层",
-      noLayerHint: "完成资料验收与成果入库后，在左侧选择产品查看空间分布。",
+      noLayer: "暂无专题图层",
+      noLayerHint: "数据接入中",
       loadingMap: "正在准备成果图层",
-      mapUnavailable: "地图服务暂不可用，仍可查看成果统计与来源。",
+      mapUnavailable: "地图加载失败，请稍后重试。",
       renderFailed: "成果图层加载失败",
       renderTimeout: "图层准备尚未完成，请稍后刷新成果。",
-      tilesPending: "此成果尚未准备矢量瓦片，请先完成地图服务准备。",
-      spartinaMapNote:
-        "面积以成果统计口径为准。三季节输入不等于三期独立识别，未核实时间不绘制变化趋势。",
-      wildfireMapNote:
-        "0.25° 网格用于区域分析；概率不代表精确着火点，缺测和海洋不按零风险处理。",
+      tilesPending: "专题图层准备中",
+      spartinaMapNote: "沿海互花米草分布",
+      wildfireMapNote: "0.25° 网格 · 8 天周期",
       observed: "观测周期",
       model: "模型版本",
       threshold: "概率阈值",
@@ -47,13 +48,13 @@ export const zhCN = {
       unknownLead: "未核实／不适用",
       notDeclared: "历史／观测成果，未声明模型",
       source: "数据来源",
-      evidence: "查看统计与时间依据",
+      evidence: "统计口径",
       registered: "成果登记于",
-      limitations: "适用范围与局限",
-      noConclusion: "尚无可报告的统计或结论",
+      limitations: "成果信息",
+      noConclusion: "数据接入中",
       noConclusionHint:
         "缺失指标显示为“—”。成果入库前不生成模拟面积、概率、趋势或预警。",
-      route: "业务流展示路线",
+      route: "处理流程",
       routeHint:
         "阶段说明展示处理路线；实际执行以已发布业务流和真实任务状态为准。",
       openFlows: "进入业务流",
@@ -63,7 +64,7 @@ export const zhCN = {
         observation: "观测资料",
       },
       quality: {
-        unverified: "未验证",
+        unverified: "待核验",
         passed: "已核验",
         needs_review: "待复核",
       },
@@ -71,8 +72,7 @@ export const zhCN = {
     monitor: {
       entryTag: "专题成果 · 动态演示",
       entryTitle: "生态监测大屏",
-      entryDescription:
-        "走进塔里木河流域，纵览胡杨林生态态势、监测网络与智能体模拟研判。",
+      entryDescription: "塔里木河流域胡杨林监测、水土变化与生态态势。",
       enter: "进入监测大屏",
       notEnabled: "当前项目尚未开启监测大屏",
       notConfigured: "尚未配置监测内容",
@@ -91,7 +91,7 @@ export const zhCN = {
       playMotion: "启动动效",
       motionPaused: "动效已暂停",
       networkEyebrow: "河流廊道 · 生态连接",
-      simulatedFeed: "模拟事件流",
+      simulatedFeed: "监测演示",
       stationCount: "监测点位",
       activeAlerts: "待关注预警",
       receivedEvents: "接收事件",
@@ -101,8 +101,7 @@ export const zhCN = {
       globeLabel: "塔里木河流域监测地球",
       globalView: "全球视角",
       regionView: "聚焦研究区",
-      mapError:
-        "底图暂不可用，请检查现有地图服务与令牌配置；仍可通过下方点位名称查看模拟读数。",
+      mapError: "地图加载失败，请稍后重试。",
       researchArea: "塔里木河流域 · 新疆",
       mapHint: "拖动探索 · 滚轮缩放 · 点击点位查看读数",
       stationSelector: "选择监测点位",
@@ -110,13 +109,13 @@ export const zhCN = {
       closeDetails: "关闭点位详情",
       dataDisclaimer:
         "点位为真实流域范围内的示意布设，不对应实测站址；连线仅示意生态关联，非河道边界。",
-      simulationOnly: "全部数据为模拟数据 · 非实测 · 不用于决策",
+      simulationOnly: "演示数据",
       feedRunning: "演示数据流运行中 · 每 4 秒更新",
       feedPaused: "页面隐藏 · 数据流已暂停",
       motionReduced: "已遵循系统设置：减少动态效果",
       rotationHint: "悬停地球暂停自转 · 拖动旋转 · 滚轮缩放",
       riskTitle: "区域综合风险指数",
-      riskUnit: "演示模型 / 100",
+      riskUnit: "综合评分 / 100",
       compositeRisk: "综合风险",
       riskValue: "区域综合风险 {{value}} 分",
       metricsTitle: "关键生态指标",
@@ -131,8 +130,8 @@ export const zhCN = {
       noAlerts: "暂无预警事件",
       rankingTitle: "高风险区段排行",
       rankingUnit: "风险分值",
-      assessmentTitle: "智能体态势研判",
-      simulatedAnalysis: "模拟研判",
+      assessmentTitle: "生态态势研判",
+      simulatedAnalysis: "演示研判",
       analysis: "分析摘要",
       analysisDisclaimer: "规则生成的演示文本，未调用智能体或真实模型。",
       generateReport: "生成报告",
@@ -146,7 +145,7 @@ export const zhCN = {
       analysisSummary:
         "最新观测来自{{name}}，点位态势为“{{level}}”。下游水分胁迫仍是重点关注方向，需结合地下水与植被变化综合核查。",
       analysisAdvice:
-        "建议优先复核英苏—阿拉干河段水分条件，对照生态输水记录与同期遥感影像；模拟预警仅演示流程，不代表实际生态风险。",
+        "重点关注英苏—阿拉干河段水分条件，结合生态输水记录与同期遥感影像开展复核。",
       metric: {
         groundwater: "地下水埋深",
         moisture: "土壤含水率",
@@ -1168,7 +1167,7 @@ export const enUS = {
   translation: {
     auditUi: auditUiEn,
     remoteMonitor: {
-      eyebrow: "REMOTE SENSING · PRODUCTS & EVIDENCE",
+      eyebrow: "ECOLOGICAL MONITORING",
       entryTag: "Thematic products · Remote sensing",
       legend: "Legend",
       scenes: "Monitoring scenes",
@@ -1182,11 +1181,14 @@ export const enUS = {
       catalogued: "Current project · Product catalogue",
       refresh: "Refresh products",
       products: "Products",
-      details: "Metrics and evidence",
-      waiting: "Awaiting verified product import",
+      details: "Monitoring overview",
+      waiting: "No monitoring products",
       unavailable: "Products are temporarily unavailable",
       loadMore: "Load earlier products",
-      unknownTime: "Observation date unverified",
+      unknownTime: "Date pending",
+      scope: "Coverage",
+      spartinaScope: "China coastal wetlands",
+      wildfireScope: "Global grid",
       conditions: "Integration requirements",
       spartinaInputs:
         "RF combines March, August and December into 48 features. UNet needs a matching single-channel input and checkpoint.",
@@ -1197,21 +1199,16 @@ export const enUS = {
       wildfireGuard:
         "Verify window and forecast semantics for w1–w16; training preprocessing is required before inference.",
       map: "Remote-sensing product map",
-      noLayer: "No product layer is available yet",
-      noLayerHint:
-        "After validation and import, select a product on the left to explore its extent.",
+      noLayer: "No thematic layer",
+      noLayerHint: "Data integration in progress",
       loadingMap: "Preparing the product layer",
-      mapUnavailable:
-        "The map service is unavailable. Product metrics and sources remain accessible.",
+      mapUnavailable: "The map could not be loaded. Please retry later.",
       renderFailed: "The product layer could not be loaded",
       renderTimeout:
         "Layer preparation is still pending. Refresh products later.",
-      tilesPending:
-        "Prepare vector tiles for this product before displaying the map.",
-      spartinaMapNote:
-        "Use the declared area method. Three seasonal inputs are not three observations; unknown dates cannot form a change series.",
-      wildfireMapNote:
-        "The 0.25° grid supports regional analysis. Probability is not an ignition point; missing and ocean cells are not zero-risk land.",
+      tilesPending: "Preparing thematic layer",
+      spartinaMapNote: "Coastal Spartina distribution",
+      wildfireMapNote: "0.25° grid · 8-day periods",
       observed: "Observed period",
       model: "Model version",
       threshold: "Threshold",
@@ -1219,13 +1216,13 @@ export const enUS = {
       unknownLead: "Unverified / not applicable",
       notDeclared: "Historical / observational product; no model declared",
       source: "Source",
-      evidence: "View statistics and time evidence",
+      evidence: "Statistical method",
       registered: "Product registered",
-      limitations: "Scope and limitations",
-      noConclusion: "No statistics or conclusions are available yet",
+      limitations: "Product information",
+      noConclusion: "Data integration in progress",
       noConclusionHint:
         "Missing values appear as “—”. No simulated area, probability, trend or alerts are generated.",
-      route: "Workflow route",
+      route: "Processing workflow",
       routeHint:
         "Stages describe the route; execution follows published workflows and actual task state.",
       openFlows: "Open workflows",
@@ -1264,7 +1261,7 @@ export const enUS = {
       playMotion: "Enable motion",
       motionPaused: "Motion paused",
       networkEyebrow: "River corridors · Ecological links",
-      simulatedFeed: "Simulated event stream",
+      simulatedFeed: "Monitoring demo",
       stationCount: "Monitoring sites",
       activeAlerts: "Active alerts",
       receivedEvents: "Events received",
@@ -1274,8 +1271,7 @@ export const enUS = {
       globeLabel: "Tarim Basin monitoring globe",
       globalView: "Global view",
       regionView: "Focus study area",
-      mapError:
-        "The basemap is unavailable. Check the existing map service and token settings; simulated readings remain available through the site buttons below.",
+      mapError: "The map could not be loaded. Please retry later.",
       researchArea: "Tarim Basin · Xinjiang",
       mapHint: "Drag to explore · Scroll to zoom · Select a site",
       stationSelector: "Select a monitoring site",
@@ -1283,15 +1279,14 @@ export const enUS = {
       closeDetails: "Close site details",
       dataDisclaimer:
         "Illustrative sites within the real basin, not surveyed station locations. Links represent ecological relationships, not river boundaries.",
-      simulationOnly:
-        "All data simulated · Not measured · Not for decision-making",
+      simulationOnly: "Demo data",
       feedRunning: "Demo stream running · Updates every 4 seconds",
       feedPaused: "Page hidden · Stream paused",
       motionReduced: "System preference applied: reduced motion",
       rotationHint:
         "Hover over Earth to pause · Drag to rotate · Scroll to zoom",
       riskTitle: "Regional composite risk",
-      riskUnit: "Demo model / 100",
+      riskUnit: "Composite score / 100",
       compositeRisk: "Composite risk",
       riskValue: "Regional composite risk: {{value}}",
       metricsTitle: "Key ecological indicators",
@@ -1306,8 +1301,8 @@ export const enUS = {
       noAlerts: "No alerts",
       rankingTitle: "Highest-risk river sections",
       rankingUnit: "Risk score",
-      assessmentTitle: "Agent situation assessment",
-      simulatedAnalysis: "Simulated assessment",
+      assessmentTitle: "Ecological assessment",
+      simulatedAnalysis: "Demo assessment",
       analysis: "Analysis summary",
       analysisDisclaimer:
         "Rule-generated demo text; no agent or live model is called.",
@@ -1326,7 +1321,7 @@ export const enUS = {
       analysisSummary:
         "Latest observations are from {{name}}, with status {{level}}. Downstream water stress remains a priority; review groundwater and vegetation jointly.",
       analysisAdvice:
-        "Prioritize water conditions along Yingsu–Alagan, ecological water-delivery records and concurrent imagery. Simulated alerts demonstrate the workflow and do not indicate actual ecological risk.",
+        "Review water conditions along Yingsu–Alagan alongside ecological water-delivery records and concurrent imagery.",
       metric: {
         groundwater: "Groundwater depth",
         moisture: "Soil moisture",

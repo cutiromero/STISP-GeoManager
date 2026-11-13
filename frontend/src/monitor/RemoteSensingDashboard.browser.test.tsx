@@ -198,15 +198,13 @@ function view() {
 
 it("真实场景空状态不创建胡杨模拟源、站点或概率", async () => {
   render(view());
-  await screen.findByText("等待已核验成果入库");
+  await screen.findByText("暂无监测成果");
   expect(createMonitorSource).not.toHaveBeenCalled();
   expect(api.resourceProfile).not.toHaveBeenCalled();
-  expect(screen.getByText("尚无可报告的统计或结论")).toBeInTheDocument();
+  expect(screen.getByText("数据接入中")).toBeInTheDocument();
   expect(screen.queryByText("模拟事件流")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "野火", exact: true }));
-  await screen.findByText(
-    "0.25° 网格用于区域分析；概率不代表精确着火点，缺测和海洋不按零风险处理。",
-  );
+  await screen.findByText("0.25° 网格 · 8 天周期");
   expect(getMonitoringProducts).toHaveBeenLastCalledWith(
     "wildfire",
     expect.any(AbortSignal),
@@ -219,7 +217,7 @@ it("历史分布保留未知时间和空面积，选择后才加载同一地图�
   );
   render(view());
   await screen.findByText("12,881");
-  expect(screen.getAllByText("观测时间待核实").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("日期待补充").length).toBeGreaterThan(0);
   expect(screen.getByText("原始要素计数；尚未计算面积")).toBeInTheDocument();
   await waitFor(() => expect(api.resourceProfile).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(maps.maps[0]?.sources.has("product")).toBe(true));
@@ -234,6 +232,11 @@ it("历史分布保留未知时间和空面积，选择后才加载同一地图�
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
     window.innerWidth,
   );
+  expect(
+    document
+      .querySelector(".remote-product-map-canvas")!
+      .getBoundingClientRect().height,
+  ).toBeGreaterThan(300);
 });
 
 it("切换场景后取消旧请求并忽略迟到产品", async () => {
@@ -251,7 +254,7 @@ it("切换场景后取消旧请求并忽略迟到产品", async () => {
   fireEvent.click(
     await screen.findByRole("button", { name: "野火", exact: true }),
   );
-  await screen.findByText("等待已核验成果入库");
+  await screen.findByText("暂无监测成果");
   expect(oldSignal?.aborted).toBe(true);
   await act(async () => resolveOld(list("spartina", [product()])));
   expect(screen.queryByText("历史分布1")).not.toBeInTheDocument();
@@ -303,7 +306,7 @@ it("刷新权限失败后清除旧成果与统计", async () => {
 
 it("业务路线按钮只进入目录，不自动创建任务", async () => {
   render(view());
-  await screen.findByText("等待已核验成果入库");
+  await screen.findByText("暂无监测成果");
   fireEvent.click(screen.getByRole("button", { name: "进入业务流" }));
   await screen.findByText("业务流目录占位");
   expect(createMonitorSource).not.toHaveBeenCalled();

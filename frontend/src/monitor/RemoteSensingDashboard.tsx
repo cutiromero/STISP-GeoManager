@@ -4,7 +4,14 @@ import {
   ReloadOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Empty, Spin, Tag } from "antd";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  Suspense,
+  lazy,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import type {
@@ -14,10 +21,11 @@ import type {
 } from "../api/generated/types.gen";
 import { currentLocale } from "../i18n";
 import { getMonitoringProducts } from "./productApi";
-import ProductMap from "./ProductMap";
 import MonitorSpaceBackground from "./MonitorSpaceBackground";
 import { useMonitorActivity } from "./useMonitor";
 import "./remote-sensing-monitor.css";
+
+const ProductMap = lazy(() => import("./ProductMap"));
 
 export default function RemoteSensingDashboard({
   scene,
@@ -225,13 +233,21 @@ export default function RemoteSensingDashboard({
             </Button>
           )}
           <div className="remote-readiness">
-            <h4>{t("remoteMonitor.conditions")}</h4>
-            <p>{t(`remoteMonitor.${scene}Inputs`)}</p>
-            <p>{t(`remoteMonitor.${scene}Guard`)}</p>
+            <h4>{t("remoteMonitor.scope")}</h4>
+            <span>{t(`remoteMonitor.${scene}Scope`)}</span>
           </div>
         </aside>
         <section className="remote-map-panel">
-          <ProductMap product={selected} config={config} />
+          <Suspense
+            fallback={
+              <div className="remote-map-pending">
+                <Spin />
+                <span>{t("remoteMonitor.loadingMap")}</span>
+              </div>
+            }
+          >
+            <ProductMap product={selected} config={config} />
+          </Suspense>
           <div className="remote-map-footnote">
             {t(`remoteMonitor.${scene}MapNote`)}
           </div>
@@ -249,20 +265,28 @@ export default function RemoteSensingDashboard({
             )}
           </div>
           <div className="remote-metric-grid">
-            {(selected?.metrics ?? emptyMetrics(scene)).map((metric) => (
-              <div className="remote-metric" key={metric.key}>
-                <span>{metric.label}</span>
-                <strong>
-                  {metric.value === null
-                    ? "—"
-                    : metric.value.toLocaleString(currentLocale(), {
-                        maximumFractionDigits:
-                          metric.key === "mean_probability" ? 4 : 2,
-                      })}
-                  <small>{metric.unit}</small>
-                </strong>
-              </div>
-            ))}
+            {(selected?.metrics ?? emptyMetrics(scene))
+              .filter(
+                (metric) =>
+                  metric.value !== null ||
+                  emptyMetrics(scene).some(
+                    (primary) => primary.key === metric.key,
+                  ),
+              )
+              .map((metric) => (
+                <div className="remote-metric" key={metric.key}>
+                  <span>{metric.label}</span>
+                  <strong>
+                    {metric.value === null
+                      ? "—"
+                      : metric.value.toLocaleString(currentLocale(), {
+                          maximumFractionDigits:
+                            metric.key === "mean_probability" ? 4 : 2,
+                        })}
+                    <small>{metric.unit}</small>
+                  </strong>
+                </div>
+              ))}
           </div>
           {selected ? (
             <>
@@ -270,27 +294,30 @@ export default function RemoteSensingDashboard({
               <dl className="remote-provenance">
                 <dt>{t("remoteMonitor.observed")}</dt>
                 <dd>{periodLabel(selected, t("remoteMonitor.unknownTime"))}</dd>
-                <dt>{t("remoteMonitor.model")}</dt>
-                <dd>
-                  {selected.model
-                    ? `${selected.model.name} · ${selected.model.version} · ${selected.model.variant}`
-                    : t("remoteMonitor.notDeclared")}
-                </dd>
-                <dt>{t("remoteMonitor.threshold")}</dt>
-                <dd>{selected.threshold ?? "—"}</dd>
-                <dt>{t("remoteMonitor.validPeriod")}</dt>
-                <dd>
-                  {selected.timing.validStart
-                    ? `${selected.timing.validStart} — ${selected.timing.validEnd}`
-                    : t("remoteMonitor.unknownLead")}
-                </dd>
+                {selected.model && (
+                  <>
+                    <dt>{t("remoteMonitor.model")}</dt>
+                    <dd>{`${selected.model.name} · ${selected.model.version} · ${selected.model.variant}`}</dd>
+                  </>
+                )}
+                {selected.threshold !== null && (
+                  <>
+                    <dt>{t("remoteMonitor.threshold")}</dt>
+                    <dd>{selected.threshold}</dd>
+                  </>
+                )}
+                {selected.timing.validStart && (
+                  <>
+                    <dt>{t("remoteMonitor.validPeriod")}</dt>
+                    <dd>{`${selected.timing.validStart} — ${selected.timing.validEnd}`}</dd>
+                  </>
+                )}
                 <dt>{t("remoteMonitor.source")}</dt>
                 <dd>{selected.sourceLabel}</dd>
               </dl>
               <details className="remote-evidence">
                 <summary>{t("remoteMonitor.evidence")}</summary>
                 <p>{selected.statisticsMethod}</p>
-                <p>{selected.timing.evidence}</p>
                 {selected.model && (
                   <p className="remote-hash">
                     SHA-256 · {selected.model.checkpointSha256}
@@ -304,19 +331,18 @@ export default function RemoteSensingDashboard({
                   )}
                 </p>
               </details>
-              <div className="remote-limitations">
-                <h4>{t("remoteMonitor.limitations")}</h4>
+              <details className="remote-limitations">
+                <summary>{t("remoteMonitor.limitations")}</summary>
                 <ul>
                   {[...new Set(selected.limitations)].map((line) => (
                     <li key={line}>{line}</li>
                   ))}
                 </ul>
-              </div>
+              </details>
             </>
           ) : (
             <div className="remote-no-result">
               <h4>{t("remoteMonitor.noConclusion")}</h4>
-              <p>{t("remoteMonitor.noConclusionHint")}</p>
             </div>
           )}
         </aside>
@@ -324,7 +350,6 @@ export default function RemoteSensingDashboard({
       <footer className="remote-route">
         <div>
           <span>{t("remoteMonitor.route")}</span>
-          <p>{t("remoteMonitor.routeHint")}</p>
         </div>
         <ol>
           {(page?.route ?? []).map((step) => (

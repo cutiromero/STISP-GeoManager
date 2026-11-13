@@ -293,7 +293,7 @@ it("渲染全部窗口，事件更新数字、预警与研判，地图点位可�
     "生态指标动态趋势",
     "生态预警动态",
     "高风险区段排行",
-    "智能体态势研判",
+    "生态态势研判",
   ])
     expect(await screen.findByRole("region", { name })).toBeInTheDocument();
   await waitFor(() => expect(mapState.points).toHaveLength(13));
@@ -308,7 +308,10 @@ it("渲染全部窗口，事件更新数字、预警与研判，地图点位可�
   expect(screen.getByText(/测试预警已汇入/)).toBeInTheDocument();
   expect(screen.getByText("模拟态势已更新")).toBeInTheDocument();
   fireEvent.click(
-    within(screen.getByLabelText("塔里木河流域监测地球")).getByRole("button", { name: "英苏河段", exact: true }),
+    within(screen.getByLabelText("塔里木河流域监测地球")).getByRole("button", {
+      name: "英苏河段",
+      exact: true,
+    }),
   );
   const details = screen.getByRole("complementary", { name: "点位详情" });
   expect(
@@ -316,8 +319,9 @@ it("渲染全部窗口，事件更新数字、预警与研判，地图点位可�
   ).toBeInTheDocument();
   expect(details).toHaveTextContent("8.90");
   expect(details).toHaveTextContent("新模拟观测");
-  fireEvent.click(screen.getByRole("button", { name: /生成报告$/ }));
-  expect(await screen.findByText("功能建设中")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /生成报告$/ }),
+  ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "关闭点位详情" }));
   view.unmount();
   expect(control.unsubscribe).toHaveBeenCalledOnce();
@@ -393,15 +397,34 @@ it("鼠标悬停地球暂停自转，背景继续运动，移开后恢复", asyn
 
 it("全球视角保留点位和连线，点击监测区可聚焦，头部保持紧凑", async () => {
   const control = await controlledSource();
-  render(<AntApp><MemoryRouter><EcologyMonitorDashboard source={control.source} config={monitorConfig} /></MemoryRouter></AntApp>);
-  const overview = await screen.findByRole("button", { name: "查看研究区监测点位" });
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <EcologyMonitorDashboard
+          source={control.source}
+          config={monitorConfig}
+        />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  const overview = await screen.findByRole("button", {
+    name: "查看研究区监测点位",
+  });
   expect(overview).toHaveTextContent("12 处");
-  const point = mapState.points.find(point => point.classList.contains("monitor-map-point"))!;
+  const point = mapState.points.find((point) =>
+    point.classList.contains("monitor-map-point"),
+  )!;
   expect(getComputedStyle(point).display).not.toBe("none");
   const map = mapState.maps[0]!;
   act(() => map.emit("zoomend"));
-  expect(map.api.setLayoutProperty).not.toHaveBeenCalledWith("monitor-links", "visibility", "none");
-  expect(document.querySelector(".monitor-topbar")!.getBoundingClientRect().height).toBeLessThan(80);
+  expect(map.api.setLayoutProperty).not.toHaveBeenCalledWith(
+    "monitor-links",
+    "visibility",
+    "none",
+  );
+  expect(
+    document.querySelector(".monitor-topbar")!.getBoundingClientRect().height,
+  ).toBeLessThan(80);
   expect(screen.queryByRole("button", { name: "选择监测点位" })).toBeNull();
   const global = screen.getByRole("button", { name: "全球视角", exact: true });
   expect(global.textContent).toBe("");
@@ -409,44 +432,90 @@ it("全球视角保留点位和连线，点击监测区可聚焦，头部保持�
   const tooltip = await screen.findByRole("tooltip", { name: "全球视角" });
   await waitFor(() => expect(tooltip).toBeVisible());
   fireEvent.click(overview);
-  expect(map.api.flyTo).toHaveBeenCalledWith(expect.objectContaining({ zoom: monitorConfig.initialView.regionZoom }));
+  expect(map.api.flyTo).toHaveBeenCalledWith(
+    expect.objectContaining({ zoom: monitorConfig.initialView.regionZoom }),
+  );
 });
 
 it("地图外点击不会暂停地球，背景有位移与星光动态", async () => {
   const control = await controlledSource();
-  render(<AntApp><MemoryRouter><EcologyMonitorDashboard source={control.source} config={monitorConfig} /></MemoryRouter></AntApp>);
-  await waitFor(() => expect(mapState.maps[0]?.api.setCenter).toHaveBeenCalled());
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <EcologyMonitorDashboard
+          source={control.source}
+          config={monitorConfig}
+        />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await waitFor(() =>
+    expect(mapState.maps[0]?.api.setCenter).toHaveBeenCalled(),
+  );
   const map = mapState.maps[0]!.api;
   fireEvent.pointerUp(document.body);
   map.setCenter.mockClear();
   await waitFor(() => expect(map.setCenter).toHaveBeenCalled());
-  expect(getComputedStyle(document.querySelector(".monitor-space-star")!).animationName).toBe("monitor-star-shimmer");
+  expect(
+    getComputedStyle(document.querySelector(".monitor-space-star")!)
+      .animationName,
+  ).toBe("monitor-star-shimmer");
   fireEvent.click(screen.getByRole("button", { name: "暂停动效" }));
-  expect(document.querySelector(".ecology-monitor")).toHaveAttribute("data-motion", "paused");
+  expect(document.querySelector(".ecology-monitor")).toHaveAttribute(
+    "data-motion",
+    "paused",
+  );
   fireEvent.click(screen.getByRole("button", { name: "启动动效" }));
-  expect(document.querySelector(".ecology-monitor")).toHaveAttribute("data-motion", "running");
+  expect(document.querySelector(".ecology-monitor")).toHaveAttribute(
+    "data-motion",
+    "running",
+  );
 });
 
 it("移出地球不会抢断切回全球视角的镜头动画，动画结束后恢复自转", async () => {
   const control = await controlledSource();
-  render(<AntApp><MemoryRouter><EcologyMonitorDashboard source={control.source} config={monitorConfig} /></MemoryRouter></AntApp>);
-  await waitFor(() => expect(mapState.maps[0]?.api.setCenter).toHaveBeenCalled());
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <EcologyMonitorDashboard
+          source={control.source}
+          config={monitorConfig}
+        />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await waitFor(() =>
+    expect(mapState.maps[0]?.api.setCenter).toHaveBeenCalled(),
+  );
   const map = mapState.maps[0]!.api;
   fireEvent.click(screen.getByRole("button", { name: /全球视角$/ }));
   fireEvent.pointerLeave(screen.getByLabelText("塔里木河流域监测地球"));
   map.setCenter.mockClear();
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 100));
   expect(map.setCenter).not.toHaveBeenCalled();
-  await waitFor(() => expect(map.setCenter).toHaveBeenCalled(), { timeout: 2500 });
+  await waitFor(() => expect(map.setCenter).toHaveBeenCalled(), {
+    timeout: 2500,
+  });
 });
 
 it("减少动态设置下可由用户明确启动演示动效", async () => {
   reducedMotion = true;
   const control = await controlledSource();
-  render(<AntApp><MemoryRouter><EcologyMonitorDashboard source={control.source} config={monitorConfig} /></MemoryRouter></AntApp>);
+  render(
+    <AntApp>
+      <MemoryRouter>
+        <EcologyMonitorDashboard
+          source={control.source}
+          config={monitorConfig}
+        />
+      </MemoryRouter>
+    </AntApp>,
+  );
   await screen.findByRole("button", { name: "启动动效" });
   fireEvent.click(screen.getByRole("button", { name: "启动动效" }));
-  await waitFor(() => expect(mapState.maps[0]?.api.setCenter).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(mapState.maps[0]?.api.setCenter).toHaveBeenCalled(),
+  );
 });
 
 it("列表悬停和键盘聚焦暂停滚动，页面隐藏停止模拟产出并在恢复后继续", async () => {

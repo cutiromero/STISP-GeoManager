@@ -20,7 +20,7 @@
 
 ```sh
 cd backend
-<平台Python> manage.py project_feature ecology_monitor --project <项目编码> --enable --config <project-config.json绝对路径> --actor <超管用户名>
+<平台Python> manage.py project_feature ecology_monitor --project <项目编码> --enable --feature-config <project-config.json绝对路径> --actor <超管用户名>
 ```
 
 先通过现有矢量/栅格导入将地图成果登记为本项目资源。准备矢量瓦片后，将 `spartina-product.json` 的 `resourceId` 和 `sourceResourceIds` 替换为真实 ID，并填写实际来源、统计与局限；示例 ID 不能直接用于实际登记。
