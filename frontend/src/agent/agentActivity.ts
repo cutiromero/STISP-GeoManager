@@ -125,10 +125,10 @@ export function runActivity(
       state: "working",
       label:
         node?.status === "reviewing"
-          ? "独立审核智能体正在核对"
+          ? "正在审核结果"
           : node?.status === "revising"
-            ? "执行智能体正在返修"
-            : "执行智能体正在按流程处理",
+            ? "正在返修"
+            : "正在处理任务",
       detail: title,
     };
   }

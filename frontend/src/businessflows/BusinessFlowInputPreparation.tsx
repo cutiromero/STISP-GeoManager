@@ -13,7 +13,7 @@ import { useComputeText } from "../compute/ui";
 import "./business-flow-input-preparation.css";
 
 const states: Record<string, string> = {
-  needs_script: "待智能体编写",
+  needs_script: "待准备",
   generating_script: "正在编写脚本",
   reviewing_script: "独立审核脚本",
   convert: "准备转换",
@@ -163,7 +163,7 @@ export default function BusinessFlowInputPreparation({
           <span>
             {flow.inputPreparation?.ready
               ? ui("已完成", "Ready")
-              : ui("由智能体处理", "Agent processing")}
+              : ui("自动整理", "Automatic preparation")}
           </span>
         </summary>
         {error && <Alert type="warning" title={error} />}

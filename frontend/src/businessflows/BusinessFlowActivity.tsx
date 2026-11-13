@@ -768,7 +768,16 @@ export default function BusinessFlowActivity({
               </span>
               <div>
                 <span>{actorLabels[event.actor]}</span>
-                <p>{event.message}</p>
+                {event.actor === "reviewer" &&
+                ["review_accepted", "review_passed"].includes(event.kind) &&
+                event.message.length > 240 ? (
+                  <details>
+                    <summary>{ui("查看审核意见", "View review notes")}</summary>
+                    <p>{event.message}</p>
+                  </details>
+                ) : (
+                  <p>{event.message}</p>
+                )}
               </div>
             </li>
           ))}
@@ -1060,7 +1069,7 @@ function Actor({
         {readableModel && <small>{readableModel}</small>}
         {thinking && (
           <details className="business-flow-actor-thinking">
-            <summary>{ui("查看模型思考", "View model thinking")}</summary>
+            <summary>{ui("查看分析过程", "View analysis")}</summary>
             <ThinkingStream
               text={thinking}
               working={
@@ -1100,7 +1109,17 @@ function Actor({
             )}
           </div>
         )}
-        {(value.reason || value.feedback) && (
+        {(value.reason || value.feedback) &&
+        name === "reviewer" &&
+        ["passed", "accepted", "succeeded", "completed"].includes(
+          value.status,
+        ) &&
+        String(value.feedback || value.reason).length > 240 ? (
+          <details>
+            <summary>{ui("查看审核意见", "View review notes")}</summary>
+            <p>{value.feedback || value.reason}</p>
+          </details>
+        ) : value.reason || value.feedback ? (
           <p
             className={
               name === "reviewer" && value.status === "rejected"
@@ -1110,7 +1129,7 @@ function Actor({
           >
             {value.feedback || value.reason}
           </p>
-        )}
+        ) : null}
         {repair && (
           <p className="is-rejection">
             <strong>{ui("返修要求：", "Revision request: ")}</strong>
@@ -1120,14 +1139,8 @@ function Actor({
         {!value.answer && !value.reason && !value.feedback && !repair && (
           <p>
             {name === "executor"
-              ? ui(
-                  "按冻结的流程规范处理资料与任务。",
-                  "Processing data and tasks under the frozen flow definition.",
-                )
-              : ui(
-                  "只审核实际结果与依据，不代替人工批准。",
-                  "Reviewing actual results and evidence without granting human approval.",
-                )}
+              ? ui("正在处理当前节点。", "Working on the current step.")
+              : ui("正在审核结果与依据。", "Reviewing results and evidence.")}
           </p>
         )}
       </div>

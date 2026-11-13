@@ -33,7 +33,7 @@ import "./business-flows.css";
 import "./business-flow-graph.css";
 
 const kinds = {
-  agent: { label: "智能体处理", icon: <RobotOutlined /> },
+  agent: { label: "分析处理", icon: <RobotOutlined /> },
   operator: { label: "算子计算", icon: <ExperimentOutlined /> },
   human: { label: "人工决定", icon: <UserOutlined /> },
   result: { label: "成果交付", icon: <FileDoneOutlined /> },

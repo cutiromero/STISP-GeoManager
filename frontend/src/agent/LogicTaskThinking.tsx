@@ -49,7 +49,7 @@ export default function LogicTaskThinking({
   return (
     <section
       className={`logic-thinking-preview${live ? " is-live" : ""}`}
-      aria-label="模型思考预览"
+      aria-label="分析过程预览"
     >
       <div className="logic-thinking-heading">
         <span>
@@ -73,17 +73,19 @@ export default function LogicTaskThinking({
           …
         </p>
       ) : text ? (
-        <ThinkingStream
-          key={`${workflow.id}:${requestKey}`}
-          text={text.slice(-1200)}
-          working={live && activity?.status === "thinking"}
-        />
+        <details key={`${workflow.id}:${requestKey}`}>
+          <summary>展开分析片段</summary>
+          <ThinkingStream
+            text={text.slice(-1200)}
+            working={live && activity?.status === "thinking"}
+          />
+        </details>
       ) : (
         <p className="logic-muted">正在分析…</p>
       )}
       {text.length > 1200 && (
         <small className="logic-muted">
-          预览本轮最近 1200 字，展开查看已保存记录；后续调用按工具结果继续。
+          片段显示最近 1200 字，完整内容可在分析过程中查看。
         </small>
       )}
     </section>

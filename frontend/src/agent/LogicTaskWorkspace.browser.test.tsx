@@ -199,6 +199,11 @@ it("思考预览区分模型轮次、输出行动及独立审核，不将换轮�
   );
   expect(screen.getByText(/任务执行 · 综合检查 · 第 3 轮/)).toBeVisible();
   expect(screen.getAllByText(/正在整理结果/).length).toBeGreaterThan(0);
+  expect(
+    screen.getByText("已核对资料，下一步调用预检工具。"),
+  ).not.toBeVisible();
+  fireEvent.click(screen.getByText("展开分析片段"));
+  expect(screen.getByText("已核对资料，下一步调用预检工具。")).toBeVisible();
   rerender(
     <LogicTaskThinking
       workflow={task({
@@ -217,6 +222,8 @@ it("思考预览区分模型轮次、输出行动及独立审核，不将换轮�
   );
   expect(screen.getByText(/独立审核 · 综合检查 · 第 1 轮/)).toBeVisible();
   expect(screen.queryByText("已核对资料，下一步调用预检工具。")).toBeNull();
+  expect(screen.getByText("审核本次实际结果。")).not.toBeVisible();
+  fireEvent.click(screen.getByText("展开分析片段"));
   expect(screen.getByText("审核本次实际结果。")).toBeVisible();
 });
 

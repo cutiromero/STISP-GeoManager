@@ -290,11 +290,7 @@ it("sends a precise revision request and reuses its idempotency key on a transpo
     .mockResolvedValueOnce(businessFlowRun({ status: "queued", revision: 5 }));
   showActivity();
   fireEvent.click(screen.getByRole("button", { name: "要求返修" }));
-  expect(
-    await screen.findByText(
-      "请说明需要返修的原因，任务执行才能有针对性地修改。",
-    ),
-  ).toBeVisible();
+  expect(await screen.findByText("请填写需要修改的内容。")).toBeVisible();
   expect(decide).not.toHaveBeenCalled();
   fireEvent.change(screen.getByRole("textbox", { name: "审核反馈" }), {
     target: { value: "请补充这个结论的真实资料依据。" },
