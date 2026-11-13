@@ -299,7 +299,7 @@ it.each(["restore", "suggest"])(
     );
     await screen.findByText(items[0]!.fileName);
     if (mode === "suggest")
-      fireEvent.click(screen.getByRole("button", { name: "AI 识别资料用途" }));
+      fireEvent.click(screen.getByRole("button", { name: "识别资料用途" }));
     const action = screen.getByRole("button", {
       name: "开始业务流",
       exact: true,
@@ -383,9 +383,7 @@ it("lets a fresh source receive one real role suggestion before starting the sam
     exact: true,
   });
   expect(button).toBeDisabled();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "AI 识别资料用途" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "识别资料用途" }));
   await waitFor(() => expect(button).toBeEnabled());
   expect(recognize).toHaveBeenCalledOnce();
   expect(recognize).toHaveBeenCalledWith(expect.any(String), "qwen", "medium");

@@ -114,15 +114,14 @@ export default function BusinessFlowMonitor({
       </header>
       {flow.mainAgent && !unavailable && (
         <p className="flow-monitor-live">
-          <RobotOutlined />{" "}
-          {ui("主执行智能体持续处理", "Continuous main executor")}
+          <RobotOutlined /> {ui("任务运行记录", "Task records")}
           <Button type="link" size="small" onClick={() => setMainTrace(true)}>
-            {ui("查看主执行记录", "View main executor trace")}
+            {ui("查看运行记录", "View task records")}
           </Button>
         </p>
       )}
       <Drawer
-        title={ui("主执行智能体 · 完整任务循环", "Main executor · Task loop")}
+        title={ui("完整运行记录", "Complete task records")}
         open={mainTrace}
         onClose={() => setMainTrace(false)}
         size={720}
@@ -229,7 +228,7 @@ export default function BusinessFlowMonitor({
                               }
                             >
                               <AuditOutlined />
-                              {ui("AI 审核", "AI review")}
+                              {ui("结果审核", "Result review")}
                               {stages.reviewDone && !skipped && (
                                 <CheckOutlined />
                               )}
@@ -307,7 +306,7 @@ export default function BusinessFlowMonitor({
                 <p>
                   {returned.event.actor === "human"
                     ? ui("人工审批", "Human approval")
-                    : ui("AI 审核", "AI review")}{" "}
+                    : ui("结果审核", "Result review")}{" "}
                   → {selected.title} → {ui("再次审核", "Review again")}
                 </p>
                 <blockquote>{returned.event.message}</blockquote>

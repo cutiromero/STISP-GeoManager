@@ -173,7 +173,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
   const refresh = () => void load(part, false, true);
   const more = [
     { key: "data", label: "本次资料与设置" },
-    { key: "thinking", label: "查看实际模型思考" },
+    { key: "thinking", label: "查看分析过程" },
     { key: "records", label: "完整运行记录" },
     ...(taskIds.length ? [{ key: "calculations", label: "实际计算记录" }] : []),
     ...(canStop ? [{ key: "stop", label: "停止任务", danger: true }] : []),
@@ -616,9 +616,9 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
         title={
           {
             data: "本次资料与设置",
-            records: "完整运行记录与模型交互",
+            records: "完整运行记录",
             retained: "待裁定与例外依据",
-            thinking: "实际模型思考",
+            thinking: "分析过程",
             calculations: "实际计算记录",
           }[drawer ?? "data"]
         }
@@ -663,7 +663,7 @@ export default function LogicTaskWorkspace(props: LogicTaskProps) {
             {workflow.modelActivity ? (
               <WorkflowModelActivity workflow={workflow} />
             ) : (
-              <p>本次任务尚无独立模型活动记录。</p>
+              <p>暂无分析记录。</p>
             )}
             {initialThinking &&
               initialThinking !== workflow.modelActivity?.thinkingText && (

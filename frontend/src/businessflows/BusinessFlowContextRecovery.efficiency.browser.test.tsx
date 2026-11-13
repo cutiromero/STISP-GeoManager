@@ -45,22 +45,42 @@ it("shows exact execution facts separately from AI analysis on a node without hu
   const node = flow.nodes[0]!;
   node.human = { required: false, status: "not_required", reason: "" };
   node.contextRecovery = {
-    nodeId: node.nodeId, level: 0, evidence: [], kind: "execution_error",
+    nodeId: node.nodeId,
+    level: 0,
+    evidence: [],
+    kind: "execution_error",
     diagnostic: {
-      code: "CATEGORY_MAPPING_MISSING", location: "资料统计 / preflight_operator",
-      facts: ["category字段期望真实名称，实际为空"], attempts: ["预检v12发现缺少映射"],
-      references: ["compute-task:actual-42"], resumeAt: "修复后从当前预检继续。",
-      analysisStatus: "completed", analysis: "类别映射未提供，不能推断真实名称。",
+      code: "CATEGORY_MAPPING_MISSING",
+      location: "资料统计 / preflight_operator",
+      facts: ["category字段期望真实名称，实际为空"],
+      attempts: ["预检v12发现缺少映射"],
+      references: ["compute-task:actual-42"],
+      resumeAt: "修复后从当前预检继续。",
+      analysisStatus: "completed",
+      analysis: "类别映射未提供，不能推断真实名称。",
       suggestions: ["请提供category=2对应的实际类别名称。"],
     },
   };
-  render(<BusinessFlowContextRecovery node={node} busy={false} onRetry={vi.fn()} onStop={vi.fn()} />);
+  render(
+    <BusinessFlowContextRecovery
+      node={node}
+      busy={false}
+      onRetry={vi.fn()}
+      onStop={vi.fn()}
+    />,
+  );
   expect(screen.getByRole("region", { name: "执行错误诊断" })).toBeVisible();
   expect(screen.getByText("category字段期望真实名称，实际为空")).toBeVisible();
-  expect(screen.getByText("请提供category=2对应的实际类别名称。")).toBeVisible();
+  expect(
+    screen.getByText("请提供category=2对应的实际类别名称。"),
+  ).toBeVisible();
   expect(screen.getByRole("button", { name: "重试当前节点" })).toBeEnabled();
-  expect(screen.queryByRole("button", { name: "批准当前节点" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("textbox", { name: "跳过的非必需证据编号" })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "批准当前节点" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("textbox", { name: "跳过的非必需证据编号" }),
+  ).not.toBeInTheDocument();
 });
 
 beforeEach(() => {

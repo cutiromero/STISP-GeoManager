@@ -145,11 +145,7 @@ it("queries each normalized search once and does not reread selected detail on s
       screen.getByRole("complementary", { name: "节点职责与审核边界" }),
     ).getByText("审核与处置建议"),
   ).toBeVisible();
-  expect(
-    screen.getByText(
-      "此处必须由您作决定。执行与审核智能体都不能代替您的批准。",
-    ),
-  ).toBeVisible();
+  expect(screen.getByText("核对本节点结果后，选择通过或返修。")).toBeVisible();
   expect(businessFlowsApi.detail).toHaveBeenCalledOnce();
   await waitFor(() => expect(businessFlowsApi.list).toHaveBeenCalledTimes(2));
   fireEvent.change(screen.getByRole("textbox", { name: "搜索业务流" }), {
@@ -170,7 +166,7 @@ it("launches the selected published version with a task goal and no premature ex
     screen.getByRole("textbox", { name: "这次希望完成什么任务" }),
     { target: { value: "分析本次研究区的地质资料" } },
   );
-  fireEvent.click(screen.getByRole("button", { name: "交给智能体执行" }));
+  fireEvent.click(screen.getByRole("button", { name: "开始任务" }));
   const navigation = JSON.parse(screen.getByLabelText("当前导航").textContent!);
   expect(navigation.path).toBe("/agent/workbench");
   expect(navigation.state.businessFlowLaunch).toEqual({
@@ -187,7 +183,7 @@ it("shows a simple flow without inventing AI or human checkpoints", async () => 
   await screen.findByRole("heading", { name: geologyFlow.name });
   fireEvent.click(screen.getByRole("button", { name: /项目资料摘要/ }));
   await screen.findByRole("heading", { name: researchFlow.name });
-  expect(screen.getByText("无需 AI 审核")).toBeVisible();
+  expect(screen.getByText("无需结果审核")).toBeVisible();
   expect(screen.getByText("无需人工确认")).toBeVisible();
   expect(document.querySelectorAll(".business-flow-node-guards")).toHaveLength(
     0,
@@ -353,7 +349,7 @@ it.each([
         await screen.findByRole("heading", { name: researchFlow.name });
         await waitFor(() => expect(dialog).not.toBeVisible());
       }
-      const action = screen.getByRole("button", { name: "交给智能体执行" });
+      const action = screen.getByRole("button", { name: "开始任务" });
       action.scrollIntoView({ block: "center" });
       await waitFor(() =>
         expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(width),
@@ -427,7 +423,7 @@ it("keeps all legacy human gates fixed and only exposes supported independent re
       screen.getByRole("switch", { name: `${node.title}：必须由人决定` }),
     ).toBeDisabled();
     const reviewer = screen.getByRole("switch", {
-      name: `${node.title}：独立 AI 审核`,
+      name: `${node.title}：独立审核`,
     });
     if (["apply", "finish"].includes(node.id)) expect(reviewer).toBeEnabled();
     else expect(reviewer).toBeDisabled();
@@ -547,7 +543,7 @@ it("allows independent review before a generic human decision without making tha
       />
     </App>,
   );
-  const ai = screen.getByRole("switch", { name: "分析项目资料：独立 AI 审核" });
+  const ai = screen.getByRole("switch", { name: "分析项目资料：独立审核" });
   expect(ai).toBeEnabled();
   fireEvent.click(ai);
   expect(ai).toBeChecked();
@@ -558,7 +554,7 @@ it("allows independent review before a generic human decision without making tha
   expect(human).toBeDisabled();
 });
 
-it("preserves a human-only node's revision limit while independent AI review is toggled", async () => {
+it("preserves a human-only node's revision limit while independent review is toggled", async () => {
   const definition = {
     ...researchSpec,
     nodes: [
@@ -582,7 +578,7 @@ it("preserves a human-only node's revision limit while independent AI review is 
       />
     </App>,
   );
-  const ai = screen.getByRole("switch", { name: "分析项目资料：独立 AI 审核" });
+  const ai = screen.getByRole("switch", { name: "分析项目资料：独立审核" });
   const human = screen.getByRole("switch", {
     name: "分析项目资料：必须由人决定",
   });

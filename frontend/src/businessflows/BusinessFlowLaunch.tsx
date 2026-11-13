@@ -499,9 +499,7 @@ export default function BusinessFlowLaunch({
         !(reason instanceof Error && reason.name === "AbortError")
       )
         setError(
-          reason instanceof Error
-            ? reason.message
-            : "业务流暂未启动，请重试；同一次操作不会重复创建任务。",
+          reason instanceof Error ? reason.message : "业务流暂未启动，请重试。",
         );
     } finally {
       if (alive.current && identity.current === owner) {
@@ -587,7 +585,7 @@ export default function BusinessFlowLaunch({
                 <div className="business-flow-launch-roles">
                   <span>
                     <RobotOutlined />
-                    {ui("执行智能体", "Executor")}
+                    {ui("任务执行", "Executor")}
                     <strong>
                       {modelOptions.find((option) => option.value === model)
                         ?.label ||
@@ -598,7 +596,7 @@ export default function BusinessFlowLaunch({
                   {needsReview && (
                     <label>
                       <AuditOutlined />
-                      {ui("独立审核智能体", "Independent reviewer")}
+                      {ui("结果审核", "Independent reviewer")}
                       <Select
                         aria-label={ui("审核模型", "Reviewer model")}
                         value={reviewerModel || undefined}
@@ -655,14 +653,6 @@ export default function BusinessFlowLaunch({
                       )}
                     </p>
                   </div>
-                )}
-                {needsReview && (
-                  <p className="business-flow-launch-note">
-                    {ui(
-                      "审核智能体独立检查结果；需要人工决定的节点仍由您确认。",
-                      "The reviewer checks results independently. Human decisions remain yours.",
-                    )}
-                  </p>
                 )}
                 {isLegacy ? (
                   <Suspense fallback={<Spin />}>
@@ -889,7 +879,7 @@ export default function BusinessFlowLaunch({
                               {node.review.ai && (
                                 <span>
                                   <AuditOutlined />{" "}
-                                  {ui("独立审核", "AI review")}
+                                  {ui("独立审核", "Result review")}
                                 </span>
                               )}
                               {node.review.human && (

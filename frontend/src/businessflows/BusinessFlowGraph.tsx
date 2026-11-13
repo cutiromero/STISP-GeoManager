@@ -410,7 +410,7 @@ export default function BusinessFlowGraph({
         {nodes.some((node) => node.review.ai) && (
           <span>
             <AuditOutlined />
-            {ui("独立 AI 审核", "Independent AI review")}
+            {ui("独立审核", "Independent review")}
           </span>
         )}
         {nodes.some(

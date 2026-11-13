@@ -130,12 +130,12 @@ export default function BusinessFlowNodeTrace({
   const actors = [
     {
       role: "executor",
-      label: ui("执行智能体", "Executor"),
+      label: ui("任务执行", "Executor"),
       value: state?.executor,
     },
     {
       role: "reviewer",
-      label: ui("审核智能体", "Reviewer"),
+      label: ui("结果审核", "Reviewer"),
       value: state?.reviewer,
     },
   ];
@@ -161,7 +161,7 @@ export default function BusinessFlowNodeTrace({
       {error && <Alert type="warning" title={error} showIcon />}
       {trace?.mainAgent && (
         <p className="flow-node-trace-note">
-          <Tag>{ui("主执行智能体持续处理", "Continuous main executor")}</Tag>
+          <Tag>{ui("任务运行记录", "Task records")}</Tag>
           {trace.mainAgent.skillTitle}
         </p>
       )}
@@ -196,18 +196,12 @@ export default function BusinessFlowNodeTrace({
         ))}
       {trace?.historical && (
         <p className="flow-node-trace-note">
-          {ui(
-            "历史任务仅显示已保存内容；未保存的原始响应不会补造。",
-            "Historical tasks show saved content only; missing original replies are not reconstructed.",
-          )}
+          {ui("历史运行记录。", "Historical task records.")}
         </p>
       )}
       {trace && trace.requests.length === 0 && (
         <p className="flow-node-trace-note">
-          {ui(
-            "该节点尚无可读取的模型请求。系统规则汇总和人工决定不产生模型思考。",
-            "No readable model requests yet. Rule aggregation and human decisions do not generate model thinking.",
-          )}
+          {ui("暂无处理记录。", "No processing records yet.")}
         </p>
       )}
       <Collapse
@@ -220,8 +214,8 @@ export default function BusinessFlowNodeTrace({
             <span className="flow-node-request-label">
               {row.role === "reviewer" ? <AuditOutlined /> : <RobotOutlined />}
               {row.role === "reviewer"
-                ? ui("审核智能体", "Reviewer")
-                : ui("执行智能体", "Executor")}
+                ? ui("结果审核", "Reviewer")
+                : ui("任务执行", "Executor")}
               <small>{statuses[row.status] ?? row.status}</small>
             </span>
           ),

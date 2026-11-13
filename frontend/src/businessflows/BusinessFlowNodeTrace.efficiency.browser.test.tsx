@@ -118,7 +118,7 @@ it("opens the single main executor trace on demand without mixing node reads", a
     </App>,
   );
   expect(read).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "查看主执行记录" }));
+  fireEvent.click(screen.getByRole("button", { name: "查看运行记录" }));
   await screen.findByText("核对实际输入后先预检，再提交计算。");
   expect(read).toHaveBeenCalledOnce();
   expect(read).toHaveBeenCalledWith(

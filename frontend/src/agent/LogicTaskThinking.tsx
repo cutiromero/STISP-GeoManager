@@ -35,16 +35,16 @@ export default function LogicTaskThinking({
     activity?.requestId || `${activity?.stage}:${activity?.attempt}`;
   const stateLabel =
     activity?.status === "requesting"
-      ? "本轮请求已发出，等待模型响应"
+      ? "正在准备分析"
       : activity?.status === "responding"
-        ? "正在输出行动与结果"
+        ? "正在整理结果"
         : activity?.status === "validating"
-          ? "正在核验本轮响应"
+          ? "正在核对分析结果"
           : activity?.status === "complete"
-            ? "本轮响应已完成"
+            ? "本轮分析完成"
             : activity?.status === "failed"
-              ? "本轮请求未通过，查看记录中的诊断"
-              : "模型正在整理依据";
+              ? "分析未完成，请查看问题详情"
+              : "正在整理依据";
   if (!text && !live) return null;
   return (
     <section
@@ -54,19 +54,15 @@ export default function LogicTaskThinking({
       <div className="logic-thinking-heading">
         <span>
           <BulbOutlined />
-          {writing
-            ? "模型正在组织结果"
-            : live
-              ? stateLabel
-              : "最近一次模型调用"}
+          {writing ? "正在整理结果" : live ? stateLabel : "最近一次分析"}
         </span>
         <Button type="link" size="small" onClick={onExpand}>
-          查看实际思考 <RightOutlined />
+          查看分析过程 <RightOutlined />
         </Button>
       </div>
       {activity && (
         <small className="logic-muted">
-          {activity.actor === "reviewer" ? "独立审核" : "主执行智能体"}
+          {activity.actor === "reviewer" ? "独立审核" : "任务执行"}
           {` · ${activity.stage} · 第 ${activity.attempt} 轮 · ${stateLabel}`}
         </small>
       )}
@@ -83,7 +79,7 @@ export default function LogicTaskThinking({
           working={live && activity?.status === "thinking"}
         />
       ) : (
-        <p className="logic-muted">等待模型返回实际内容…</p>
+        <p className="logic-muted">正在分析…</p>
       )}
       {text.length > 1200 && (
         <small className="logic-muted">

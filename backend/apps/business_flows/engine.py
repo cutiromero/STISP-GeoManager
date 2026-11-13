@@ -370,7 +370,7 @@ def _callbacks(workflow, node, actor):
             actor,
             node["id"],
             value.get("status", "progress"),
-            ("执行智能体正在处理" if actor == "executor" else "独立审核智能体正在核对")
+            ("正在处理本节点" if actor == "executor" else "正在审核结果")
             if value.get("status") == "requesting"
             else "本次模型请求状态已保存",
         )
@@ -473,7 +473,7 @@ def _operator(workflow, user, policy, node, item, evidence):
             )
             if not planned["canRepair"]:
                 raise OperatorRevisionRejected(
-                    "执行智能体无法在当前算子参数范围内完成返修：" + planned["reason"]
+                    "当前算子参数范围内无法完成返修：" + planned["reason"]
                 )
             parameters = planned["parameters"]
             item["revisedParameters"] = parameters
@@ -651,7 +651,7 @@ def advance(workflow_id):
                         "status": "pending" if node["review"]["ai"] else "not_required"
                     },
                 )
-                workflow.detail = "执行智能体 · " + node["title"]
+                workflow.detail = "正在处理 · " + node["title"]
                 emit(workflow, "executor", node["id"], "node_started", workflow.detail)
             evidence = input_evidence(workflow, user, policy, node)
             if not item["executor"].get("summary"):
@@ -832,7 +832,7 @@ def advance(workflow_id):
                         },
                     },
                 ]
-                workflow.detail = "独立审核智能体 · " + node["title"]
+                workflow.detail = "正在审核 · " + node["title"]
                 item["status"] = "reviewing"
                 emit(
                     workflow, "reviewer", node["id"], "review_started", workflow.detail
@@ -885,7 +885,7 @@ def advance(workflow_id):
                     )
                     workflow.status, workflow.detail = (
                         "queued",
-                        "执行智能体将按独立审核意见返修",
+                        "正在按审核意见返修",
                     )
                     emit(
                         workflow,
@@ -898,8 +898,7 @@ def advance(workflow_id):
             if item["human"]["required"] and item["human"]["status"] != "approved":
                 item["status"] = "waiting_human"
                 item["human"]["reason"] = (
-                    node["description"]
-                    or "此节点需要您作决定，独立审核不能代替人工批准。"
+                    node["description"] or "请核对本节点结果后提交决定。"
                 )
                 workflow.status, workflow.detail = (
                     "waiting_approval",

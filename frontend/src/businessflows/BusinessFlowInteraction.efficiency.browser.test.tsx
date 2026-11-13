@@ -263,7 +263,7 @@ it("keeps AI acceptance separate from a real human approval and never polls whil
   const { listener } = showActivity();
   expect(screen.getByRole("button", { name: "批准当前节点" })).toBeEnabled();
   expect(
-    within(screen.getByRole("region", { name: "审核智能体" })).getByText(
+    within(screen.getByRole("region", { name: "结果审核" })).getByText(
       "审核通过",
     ),
   ).toBeVisible();
@@ -292,7 +292,7 @@ it("sends a precise revision request and reuses its idempotency key on a transpo
   fireEvent.click(screen.getByRole("button", { name: "要求返修" }));
   expect(
     await screen.findByText(
-      "请说明需要返修的原因，执行智能体才能有针对性地修改。",
+      "请说明需要返修的原因，任务执行才能有针对性地修改。",
     ),
   ).toBeVisible();
   expect(decide).not.toHaveBeenCalled();

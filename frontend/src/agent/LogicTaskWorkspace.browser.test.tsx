@@ -173,7 +173,7 @@ it("报告直接组织结果时不把此前的角色思考冒充当前思考", (
     }),
     { initialThinking: "此前识别资料角色的实际思考" },
   );
-  expect(screen.getByText("模型正在组织结果")).toBeVisible();
+  expect(screen.getByText("正在整理结果")).toBeVisible();
   expect(screen.getByText(/已接收 120 字/)).toBeVisible();
   expect(screen.queryByText("此前识别资料角色的实际思考")).toBeNull();
 });
@@ -197,8 +197,8 @@ it("思考预览区分模型轮次、输出行动及独立审核，不将换轮�
       onExpand={() => {}}
     />,
   );
-  expect(screen.getByText(/主执行智能体 · 综合检查 · 第 3 轮/)).toBeVisible();
-  expect(screen.getAllByText(/正在输出行动与结果/).length).toBeGreaterThan(0);
+  expect(screen.getByText(/任务执行 · 综合检查 · 第 3 轮/)).toBeVisible();
+  expect(screen.getAllByText(/正在整理结果/).length).toBeGreaterThan(0);
   rerender(
     <LogicTaskThinking
       workflow={task({

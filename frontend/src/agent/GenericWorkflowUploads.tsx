@@ -680,22 +680,22 @@ export default function GenericWorkflowUploads({
       {recognizing &&
         (polished ? (
           <p className="flow-materials-footnote" role="status">
-            AI 正在识别资料用途…
+            正在识别资料用途…
           </p>
         ) : (
-          <Alert type="info" showIcon title="智能体正在识别资料角色…" />
+          <Alert type="info" showIcon title="正在识别资料用途…" />
         ))}
       {suggestions &&
         !recognizing &&
         (polished ? (
           <p className="flow-materials-footnote" role="status">
-            AI 已给出用途建议，可在列表中调整。
+            资料用途已识别，可在列表中调整。
           </p>
         ) : (
           <Alert
             type="success"
             showIcon
-            title="智能体已识别资料角色，请核对后生成执行计划"
+            title="资料用途已识别，请核对后生成执行计划"
           />
         ))}
       {!inputs.lithology &&
@@ -720,7 +720,7 @@ export default function GenericWorkflowUploads({
             {recognitionError
               ? "重试识别"
               : polished
-                ? "AI 识别资料用途"
+                ? "识别资料用途"
                 : "识别资料角色"}
           </Button>
         )}
@@ -864,8 +864,7 @@ export default function GenericWorkflowUploads({
       </div>
       {polished && (
         <p className="flow-materials-footnote">
-          用途可由 AI
-          建议或手动指定，启动后会核对资料与字段。移除仅取消本次引用。
+          可自动识别或手动指定资料用途。
         </p>
       )}
       {uploadOnly && !polished && items.length > 0 && (

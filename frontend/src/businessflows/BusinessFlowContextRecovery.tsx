@@ -53,31 +53,31 @@ export default function BusinessFlowContextRecovery({
           executionWait
             ? "执行遇到问题，等待您处理后继续"
             : platformWait
-            ? "平台处理异常，修复后可从原节点继续"
-            : qualityWait
-              ? "审核要求修改，等待补充后继续"
-              : modelWait && !protocolFailure
-                ? "当前模型请求需要处理，前序成果已保留"
-                : protocolFailure
-                  ? `节点 ${node.nodeId} 审核响应需要重试`
-                  : quotaWait
-                    ? `节点 ${node.nodeId} ${operatorLimit ? "算子调用" : "模型请求"}额度不足`
-                    : `节点 ${node.nodeId} 输入整理至第${recovery.level}档仍无法发送`
+              ? "平台处理异常，修复后可从原节点继续"
+              : qualityWait
+                ? "审核要求修改，等待补充后继续"
+                : modelWait && !protocolFailure
+                  ? "当前模型请求需要处理，前序成果已保留"
+                  : protocolFailure
+                    ? `节点 ${node.nodeId} 审核响应需要重试`
+                    : quotaWait
+                      ? `节点 ${node.nodeId} ${operatorLimit ? "算子调用" : "模型请求"}额度不足`
+                      : `节点 ${node.nodeId} 输入整理至第${recovery.level}档仍无法发送`
         }
         description={
           platformWait
-            ? "自动重复尝试已停止。请先核查平台诊断，修复后从本节点继续；已有成果和审计保留。"
+            ? "请按问题详情完成处理，再从本节点继续。"
             : modelWait
-            ? "仅处理当前节点，保留前序计算、调用计数和原批准记录。补充说明会交给本节点的原智能体，不构成科研批准。"
-            : protocolFailure
-              ? "执行结果已保留，可重新请求本次审核；不会重新执行已完成的计算。"
-              : nodeLimit
-                ? "已达到本节点执行保护上限，请调整执行配置或任务范围后重新发起；当前成果保留。"
-                : quotaWait
-                  ? "已完成成果和计数保留。管理员提高允许额度后可继续，重复点击不会重置计数。"
-                  : legacy
-                    ? "专业流程保留完整科学事实与批准范围，不能在这里跳过或截减；可在调整允许预算后重试。"
-                    : "已完成节点保留。重试只处理当前节点，不批准科研结果；必需、直接依赖和指令点名证据不能跳过。"
+              ? "请补充资料说明或处理建议，然后继续本节点。"
+              : protocolFailure
+                ? "请重新发起本次审核。"
+                : nodeLimit
+                  ? "请调整执行配置或任务范围后重新发起。"
+                  : quotaWait
+                    ? "请联系管理员调整任务额度，然后继续。"
+                    : legacy
+                      ? "请调整任务预算后重试。"
+                      : "请整理本节点输入后重试。"
         }
       />
       {typeof recovery.reason === "string" && <p>{recovery.reason}</p>}
@@ -135,7 +135,7 @@ export default function BusinessFlowContextRecovery({
           {modelWait && feedback.trim()
             ? "补充说明并继续"
             : qualityWait
-              ? "交回主执行智能体返修"
+              ? "继续返修"
               : protocolFailure
                 ? "重试本次审核"
                 : quotaWait

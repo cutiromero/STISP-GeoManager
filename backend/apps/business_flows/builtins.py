@@ -45,9 +45,9 @@ def geology_definition(*, legacy_roles=False, main_agent=False):
                 "title": title,
                 "kind": kind,
                 "description": {
-                    "inputs": "由执行智能体识别资料角色和字段含义；重要映射由用户明确确认。",
+                    "inputs": "识别资料用途和字段含义，确认后开始分析。",
                     "check": "调用已登记的地质检查算子，综合岩性、构造与蚀变依据识别问题。",
-                    "apply": "独立审核智能体先核查建议与证据，处置范围仍由用户批准。",
+                    "apply": "核对处置建议与依据，选择本次执行的处置范围。",
                     "recheck": "对已批准的修正结果重新执行质量检查，保留未批准对象。",
                     "relations": "重建修正后的构造交汇关系，使用实际几何证据。",
                     "prospect": "仅依据修正后资料，综合构造、蚀变与岩性生成平滑且不重叠的找矿远景。",
@@ -152,7 +152,7 @@ def source_review_definition(*, main_agent=False):
     summary = definition["nodes"][0]
     summary["title"] = "梳理资料并形成审校稿"
     summary["description"] = (
-        "执行智能体整理实际可见的资料结构、适用范围和研究解释，独立审核智能体核对证据与局限，用户明确接受后生成报告；原始资料只读。"
+        "梳理资料结构、适用范围和研究解释，审核依据与局限，确认后生成报告。"
     )
     summary["instruction"] = (
         "请根据本次绑定资料的实际可见证据，整理资料结构、关键字段、适用范围和有依据的研究解释。明确已读内容、抽样或仅元信息的范围，区分事实与推断，说明局限；不修改原始资料。先形成待独立审核和用户接受的审校稿，不能声称用户已经批准。"
@@ -181,13 +181,13 @@ def builtin_flows():
             {
                 "code": "research-source-summary",
                 "name": "科研资料摘要",
-                "description": "对当前项目已授权资料进行只读梳理，快速形成摘要与研究线索；默认无需AI审核或人工确认。",
+                "description": "梳理项目资料，形成摘要、来源引用与后续研究线索。",
                 "definition": source_summary_definition(main_agent=True),
             },
             {
                 "code": "research-source-review",
                 "name": "科研资料独立审校",
-                "description": "执行智能体只读梳理资料结构、适用范围与研究解释，独立审核智能体核对后由用户明确接受报告，保留审核与返修依据。",
+                "description": "梳理资料结构、适用范围与研究解释，经审核和确认后形成报告。",
                 "definition": source_review_definition(main_agent=True),
             },
         ]

@@ -82,7 +82,7 @@ export default function BusinessFlowNodeRecovery({
         value={answer}
         disabled={busy}
         maxLength={4000}
-        placeholder="说明资料含义、回答智能体的问题或调整原因"
+        placeholder="补充资料说明或填写调整原因"
         onChange={(event) => setAnswer(event.target.value)}
       />
       {!legacy && (
@@ -98,7 +98,7 @@ export default function BusinessFlowNodeRecovery({
             />
           </label>
           <label>
-            调整参数（JSON；后端仍校验清单）
+            调整参数（JSON）
             <Input
               aria-label="恢复算子参数"
               value={parameters}
@@ -109,9 +109,7 @@ export default function BusinessFlowNodeRecovery({
           </label>
         </>
       )}
-      {legacy && (
-        <p>专业流程仅重试原阶段；资料、参数与批准范围仍在原专业审核中处理。</p>
-      )}
+      {legacy && <p>请在资料确认或处置审核中调整资料与参数。</p>}
       <Space wrap>
         <Button
           disabled={busy || !recovery.options.includes("retry_recovery")}
@@ -133,7 +131,6 @@ export default function BusinessFlowNodeRecovery({
           停止任务
         </Button>
       </Space>
-      <p>恢复不批准科研结果，也不重置调用与执行预算。</p>
     </section>
   );
 }

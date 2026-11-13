@@ -102,7 +102,7 @@ export default function BusinessFlowReviewHub({
           : "pending";
   const label =
     role === "ai"
-      ? ui("AI 审核", "AI review")
+      ? ui("结果审核", "Result review")
       : ui("人工审批", "Human approval");
   const status =
     nodes.length === 1

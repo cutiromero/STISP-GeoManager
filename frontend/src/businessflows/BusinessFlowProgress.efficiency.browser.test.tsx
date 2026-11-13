@@ -133,7 +133,7 @@ it("places distinct review gates off the task line and draws the real human retu
     ),
   );
   const ai = screen.getByRole("button", {
-    name: "AI 审核：分析项目资料，待进入",
+    name: "结果审核：分析项目资料，待进入",
   });
   const human = screen.getByRole("button", {
     name: "人工审批：分析项目资料，已退回",
@@ -227,7 +227,7 @@ it("keeps the return while executing again and requires a new human approval aft
   });
   view.rerender(graph(revised));
   expect(
-    screen.getByRole("button", { name: "AI 审核：分析项目资料，已通过" }),
+    screen.getByRole("button", { name: "结果审核：分析项目资料，已通过" }),
   ).toBeVisible();
   expect(
     screen.getByRole("button", { name: "人工审批：分析项目资料，待您确认" }),
@@ -256,14 +256,14 @@ it("keeps the return while executing again and requires a new human approval aft
   expect(businessFlowProgress(revised).completedNodes).toBe(1);
 });
 
-it("does not invent a return from an attempt number and distinguishes AI review from human approval", async () => {
+it("does not invent a return from an attempt number and distinguishes Result review from human approval", async () => {
   const flow = businessFlowRun();
   flow.nodes[0]!.attempt = 2;
   render(graph(flow));
   expect(document.querySelectorAll(".flow-return-links path")).toHaveLength(0);
   expect(screen.queryByText("退回此节点")).not.toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "AI 审核：分析项目资料，已通过" }),
+    screen.getByRole("button", { name: "结果审核：分析项目资料，已通过" }),
   ).toBeVisible();
   expect(
     screen.getByRole("button", { name: "人工审批：分析项目资料，待您确认" }),

@@ -445,8 +445,8 @@ export default function BusinessFlowEditor({
           type="info"
           showIcon
           title={ui(
-            "专业骨架与人工门禁由适配器维护；处置建议和最终结论可配置独立 AI 审核。",
-            "The professional adapter maintains its structure and human gates. Independent AI review can be configured for recommendations and final conclusions.",
+            "可在处置建议和报告节点配置结果审核。",
+            "Configure result review for recommendations and reports.",
           )}
           style={{ marginBottom: 16 }}
         />
@@ -921,7 +921,7 @@ export default function BusinessFlowEditor({
                 <Switch
                   size="small"
                   checked={node.review.ai}
-                  aria-label={`${node.title || node.id}：独立 AI 审核`}
+                  aria-label={`${node.title || node.id}：独立审核`}
                   disabled={
                     managedSkeleton && !["apply", "finish"].includes(node.id)
                   }
@@ -934,7 +934,7 @@ export default function BusinessFlowEditor({
                     })
                   }
                 />
-                {ui("独立 AI 审核", "Independent AI review")}
+                {ui("独立审核", "Independent review")}
               </label>
               <label>
                 <Switch

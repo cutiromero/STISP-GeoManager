@@ -371,10 +371,10 @@ it("real model activity response guards accept Unicode limits and reject malform
     updatedAt: "",
   };
   expect(() =>
-    assertAgentRun({ ...run, answerPreview: "🌍".repeat(24000) }),
+    assertAgentRun({ ...run, answerPreview: "🌍".repeat(1048576) }),
   ).not.toThrow();
   expect(() =>
-    assertAgentRun({ ...run, answerPreview: "🌍".repeat(24001) }),
+    assertAgentRun({ ...run, answerPreview: "🌍".repeat(1048577) }),
   ).toThrow(ResponseFormatError);
   expect(() => assertAgentRun({ ...run, answerPreview: {} })).toThrow(
     ResponseFormatError,

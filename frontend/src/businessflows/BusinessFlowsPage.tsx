@@ -363,7 +363,7 @@ export default function BusinessFlowsPage() {
         <h1>{ui("业务流", "Business flows")}</h1>
         <p>
           {ui(
-            "把数据、算子与专业判断组织成可靠的科研路径。",
+            "选择业务流，配置资料并查看执行结果。",
             "Organize data, operators and professional decisions into a reliable research path.",
           )}
         </p>
@@ -550,7 +550,7 @@ export default function BusinessFlowsPage() {
                     </Button>
                     <span className="business-flow-eyebrow">
                       <ApartmentOutlined />
-                      {ui("科研任务的执行路径", "A guided research workflow")}
+                      {ui("业务流详情", "Workflow details")}
                     </span>
                   </Space>
                   <Space wrap>
@@ -605,10 +605,10 @@ export default function BusinessFlowsPage() {
                     <AuditOutlined />
                     {aiCount
                       ? ui(
-                          `${aiCount} 处独立 AI 审核`,
-                          `${aiCount} independent AI reviews`,
+                          `${aiCount} 处独立审核`,
+                          `${aiCount} independent reviews`,
                         )
-                      : ui("无需 AI 审核", "No AI review required")}
+                      : ui("无需结果审核", "No review required")}
                   </span>
                   <span className={humanCount ? "is-human" : ""}>
                     <UserOutlined />
@@ -754,7 +754,7 @@ export default function BusinessFlowsPage() {
                     <Button
                       type="primary"
                       icon={<RightOutlined />}
-                      aria-label={ui("交给智能体执行", "Run with the agent")}
+                      aria-label={ui("开始任务", "Start task")}
                       disabled={!canStart}
                       title={
                         !canStart
@@ -766,13 +766,13 @@ export default function BusinessFlowsPage() {
                       }
                       onClick={launch}
                     >
-                      {ui("交给智能体执行", "Run with the agent")}
+                      {ui("开始任务", "Start task")}
                     </Button>
                   </div>
                   <p>
                     {ui(
-                      "进入智能体后选择资料和模型。执行、独立审核与人工决定会沿同一条流程显示。",
-                      "Choose data and models in the agent. Execution, independent review and human decisions appear along the same flow.",
+                      "选择资料和执行设置后开始任务，可在流程中查看进度和待确认事项。",
+                      "Choose data and execution settings, then follow progress and pending decisions in the flow.",
                     )}
                   </p>
                 </section>
@@ -897,8 +897,8 @@ function FlowInspector({
             <AuditOutlined />
             <div>
               {ui(
-                "独立审核智能体检查实际结果与依据。未通过时保留具体原因，自动返修由本节点的上限控制。",
-                "An independent agent checks actual results and evidence. Rejections retain specific reasons; automatic revisions follow this node’s limit.",
+                "审核结果与依据，发现问题时按具体意见返修。",
+                "Review results and evidence, then revise any identified issues.",
               )}
               {node.review.maxRevisions > 0 && (
                 <span>
@@ -917,8 +917,8 @@ function FlowInspector({
             <UserOutlined />
             <span>
               {ui(
-                "此处必须由您作决定。执行与审核智能体都不能代替您的批准。",
-                "Your decision is required here. Neither agent can approve on your behalf.",
+                "核对本节点结果后，选择通过或返修。",
+                "Review this node’s results, then approve or request a revision.",
               )}
             </span>
           </div>

@@ -97,8 +97,8 @@ const statusLabels: Record<string, string> = {
   unavailable: "结果不可用",
 };
 const actorLabels = {
-  executor: "执行智能体",
-  reviewer: "审核智能体",
+  executor: "任务执行",
+  reviewer: "结果审核",
   human: "您",
   system: "流程",
 };
@@ -357,7 +357,7 @@ export default function BusinessFlowActivity({
   const decide = (decision: "approve" | "request_changes") => {
     if (!current || !needsHuman || isLegacy) return;
     if (decision === "request_changes" && !feedback.trim()) {
-      setError("请说明需要返修的原因，执行智能体才能有针对性地修改。");
+      setError("请填写需要修改的内容。");
       return;
     }
     const value = {
@@ -692,8 +692,8 @@ export default function BusinessFlowActivity({
               </strong>
               <p>
                 {ui(
-                  "请在专业审核区核对资料、字段或处置范围。AI 审核通过不等于您的批准。",
-                  "Check data, fields or disposition choices in the professional review. AI acceptance is not your approval.",
+                  "请核对资料、字段和处置范围后提交决定。",
+                  "Review the data, fields and disposition scope, then submit your decision.",
                 )}
               </p>
             </div>
@@ -713,8 +713,8 @@ export default function BusinessFlowActivity({
             <p>
               {current?.human.reason ||
                 ui(
-                  "独立审核不会替代人工批准，请明确选择通过或返修。",
-                  "Independent review cannot grant human approval. Choose approval or revision explicitly.",
+                  "请核对本节点结果，选择通过或返修。",
+                  "Review this node’s results, then approve or request a revision.",
                 )}
             </p>
             <Input.TextArea

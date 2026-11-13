@@ -63,7 +63,7 @@ export function LogicTaskProcess({
         </div>
       ))}
       <div className="logic-process-footer">
-        <Button onClick={onRecords}>查看完整运行记录与模型交互</Button>
+        <Button onClick={onRecords}>查看完整运行记录</Button>
         <span>计算校验与重试按原顺序保留，不计作新的研究阶段。</span>
       </div>
     </section>
