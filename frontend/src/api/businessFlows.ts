@@ -30,6 +30,15 @@ const record = (value: unknown, field: string): Record<string, unknown> => {
 };
 const texts = (value: unknown) =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
+function assertDiagnostic(value: unknown) {
+  if (value === undefined) return;
+  const diagnostic = record(value, "diagnostic");
+  if (
+    ["code", "location", "resumeAt", "analysis"].some((key) => typeof diagnostic[key] !== "string") ||
+    ["facts", "attempts", "references", "suggestions"].some((key) => !texts(diagnostic[key])) ||
+    !["completed", "unavailable"].includes(String(diagnostic.analysisStatus))
+  ) invalid("diagnostic");
+}
 function assertSpec(value: unknown) {
   const spec = record(value, "definition");
   if (
@@ -170,6 +179,7 @@ export function assertBusinessFlowRun(value: unknown) {
     )
       invalid("nodeState");
     record(node.outputs, "outputs");
+    if (node.recovery !== undefined) assertDiagnostic(record(node.recovery, "recovery").diagnostic);
     for (const actor of ["executor", "reviewer"]) {
       const value = record(node[actor], actor);
       if (typeof value.status !== "string") invalid(actor);
@@ -188,6 +198,7 @@ export function assertBusinessFlowRun(value: unknown) {
     }
     if (node.contextRecovery !== undefined) {
       const recovery = record(node.contextRecovery, "contextRecovery");
+      assertDiagnostic(recovery.diagnostic);
       if (
         !Number.isSafeInteger(recovery.level) ||
         !Array.isArray(recovery.evidence)

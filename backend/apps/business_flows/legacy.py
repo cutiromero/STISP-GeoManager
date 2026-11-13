@@ -577,7 +577,11 @@ def retry_context(user, workflow, value):
         renew_operator_budget(current, live_policy, item["contextRecovery"])
         require_compute_slot(user, current.pk)
         stage = _context_stage(current, node_id)
-        if stage is None and node_id != "inputs":
+        if (
+            stage is None
+            and node_id != "inputs"
+            and not item["contextRecovery"].get("resumeCheckpoint")
+        ):
             raise ComputeError("当前等待阶段已变化，请刷新后重试", 409)
         if current.status == "failed" and (
             stage is None
@@ -591,6 +595,9 @@ def retry_context(user, workflow, value):
         )
 
         recovery = item["contextRecovery"]
+        from .failure_handoff import restore_checkpoint
+
+        restored = restore_checkpoint(current, recovery)
         if recovery.get("kind") in MODEL_WAIT_KINDS:
             reuse_platform_response = (
                 recovery.get("kind") == "platform_error"
@@ -599,9 +606,13 @@ def retry_context(user, workflow, value):
             if not reuse_platform_response:
                 save_guidance(current, node_id, value, recovery)
             if (
-                recovery.get("actor") == "executor"
-                or recovery.get("kind") == "review_rejected"
-            ) and not reuse_platform_response:
+                (
+                    recovery.get("actor") == "executor"
+                    or recovery.get("kind") == "review_rejected"
+                )
+                and not reuse_platform_response
+                and not restored
+            ):
                 if stage is not None:
                     archive_model_attempts(stage)
                     stage.pop("decision", None)
@@ -619,12 +630,12 @@ def retry_context(user, workflow, value):
             if stage is not None
             else None
         )
-        candidates = [stage] if stage is not None else []
+        candidates = [stage] if stage is not None and not restored else []
         batches = stage.get("modelBatches", {}) if stage is not None else {}
         candidates.extend(
             row["stage"]
             for row in batches.get("batches", [])
-            if row.get("stage") and row.get("status") != "complete"
+            if row.get("stage") and row.get("status") != "complete" and not restored
         )
         for candidate in candidates:
             from apps.agent.demo_decisions import can_revalidate_saved_response
@@ -638,15 +649,17 @@ def retry_context(user, workflow, value):
                 candidate.setdefault("modelBudgetHistory", []).append(
                     {"modelAttempts": candidate.pop("modelAttempts")}
                 )
-        if stage is not None:
+        if stage is not None and not restored:
             stage.setdefault("modelBudgetHistory", []).append(history)
             # A scheduler wait must not change the identity of a saved model
             # request. All scientific facts are still freshly checked on replay.
             _resume_stage_status(stage)
         values["nodes"][node_id].pop("contextRecovery", None)
-        values["nodes"][node_id]["status"] = "executing"
+        values["nodes"][node_id]["status"] = values["nodes"][node_id].pop(
+            "contextResumeStatus", "executing"
+        )
         receipts[key] = fingerprint
-        if stage is not None:
+        if stage is not None and not restored:
             current.plan["phase"] = "decide"
         current.plan_hash = _state_hash(current.plan)
         current.status, current.detail = (
@@ -665,6 +678,7 @@ def retry_context(user, workflow, value):
                 "plan",
                 "plan_hash",
                 "parameters",
+                "current_step",
                 "status",
                 "detail",
                 "policy_snapshot",

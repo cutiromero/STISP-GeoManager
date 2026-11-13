@@ -1,5 +1,6 @@
 import { Alert, Button, Input, Space } from "antd";
 import { useState } from "react";
+import BusinessFlowFailureDiagnostic from "./BusinessFlowFailureDiagnostic";
 import type {
   BusinessFlowDecision,
   BusinessFlowNodeState,
@@ -38,16 +39,20 @@ export default function BusinessFlowContextRecovery({
     "model_request_error",
     "review_rejected",
     "platform_error",
+    "execution_error",
   ].includes(recovery.kind || "");
   const qualityWait = recovery.kind === "review_rejected";
   const platformWait = recovery.kind === "platform_error";
+  const executionWait = recovery.kind === "execution_error";
   const nodeLimit = quotaWait && recovery.budgetScope === "node";
   return (
     <section aria-label="节点上下文等待">
       <Alert
         type="warning"
         title={
-          platformWait
+          executionWait
+            ? "执行遇到问题，等待您处理后继续"
+            : platformWait
             ? "平台处理异常，修复后可从原节点继续"
             : qualityWait
               ? "审核要求修改，等待补充后继续"
@@ -76,6 +81,7 @@ export default function BusinessFlowContextRecovery({
         }
       />
       {typeof recovery.reason === "string" && <p>{recovery.reason}</p>}
+      <BusinessFlowFailureDiagnostic value={recovery.diagnostic} />
       {modelWait && (
         <Input.TextArea
           aria-label="补充说明后继续"

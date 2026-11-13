@@ -318,6 +318,10 @@ def test_operator_without_parameter_repair_does_not_resubmit_same_task(
     finish_task(env, original, "REJECTED")
     advance(env, workflow)
     advance(env, workflow)
-    assert workflow.status == "failed" and len(plans) == 1
+    assert workflow.status == "waiting_approval" and len(plans) == 1
+    assert (
+        state(workflow)["nodes"]["calculate"]["contextRecovery"]["kind"]
+        == "execution_error"
+    )
     with project_scope(env["scope"]):
         assert ComputeTask.objects.count() == 1

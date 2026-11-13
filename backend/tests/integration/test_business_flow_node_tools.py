@@ -195,6 +195,17 @@ def install(monkeypatch, answers):
     def stream(model, messages, maximum, guard, **options):
         guard()
         packet = json.loads(messages[1]["content"])
+        if packet.get("nodeContext", {}).get("purpose") == "failure_diagnosis":
+            # This fixture counts tool decisions. Diagnosis is separately covered
+            # with real admission accounting in test_business_flow_failure_handoff.
+            yield json.dumps(
+                {
+                    "analysis": "实际工具错误需要用户核查。",
+                    "suggestions": ["请按错误码核对资料或恢复服务后继续。"],
+                },
+                ensure_ascii=False,
+            )
+            return
         calls.append({"packet": packet, "options": options})
         answer = answers.pop(0)
         if callable(answer):
@@ -718,7 +729,7 @@ def test_format_retry_once_and_whitelist(operators, monkeypatch):
     calls = install(monkeypatch, ["not json", "still not json"])
     item = advance(env, workflow, 2)
     assert len(calls) == 2 and item["status"] == "waiting_recovery"
-    assert item["toolLoop"]["modelCalls"] == 2
+    assert item["toolLoop"]["modelCalls"] == 3  # Two action attempts and one diagnosis.
 
 
 def test_large_catalog_keeps_all_returned_versions_and_byte_ranges(operators):
@@ -1000,7 +1011,27 @@ def test_pause_cancel_revocation_stop_next_tool(operators, monkeypatch, control)
         else:
             workflow = runtime.control_flow(env["owner"], workflow, control)
     advance(env, workflow)
-    assert len(calls) == 1 and workflow.status in {"paused", "cancelled", "interrupted"}
+    assert len(calls) == 1
+    if control == "revoke":
+        assert workflow.status == "waiting_approval"
+        assert (
+            state(workflow)["nodes"]["calculate"]["contextRecovery"]["kind"]
+            == "execution_error"
+        )
+        with project_scope(env["scope"]), pytest.raises(PermissionDenied):
+            runtime.decide_flow(
+                env["owner"],
+                workflow,
+                {
+                    "nodeId": "calculate",
+                    "decision": "retry_context",
+                    "feedback": "请继续",
+                    "revision": state(workflow)["revision"],
+                    "idempotencyKey": uuid4().hex,
+                },
+            )
+    else:
+        assert workflow.status in {"paused", "cancelled"}
 
 
 def test_context_budget_applies_on_every_loop_request(operators, monkeypatch):

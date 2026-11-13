@@ -360,7 +360,8 @@ def test_revoked_source_or_membership_never_reaches_execution(flows, monkeypatch
     ProjectMembership.objects.filter(project=env["project"], user=env["user"]).delete()
     engine.advance(workflow.pk)
     workflow.refresh_from_db()
-    assert workflow.status == "interrupted" and not calls
+    assert workflow.status == "waiting_approval" and not calls
+    assert state(workflow)["nodes"]["summarize"]["contextRecovery"]["permissionBlocked"]
 
 
 def test_live_source_acl_revocation_cannot_be_hidden_by_prepared_metadata(
@@ -382,7 +383,8 @@ def test_live_source_acl_revocation_cannot_be_hidden_by_prepared_metadata(
         )
     engine.advance(workflow.pk)
     workflow.refresh_from_db()
-    assert workflow.status == "interrupted" and len(calls) == 1
+    assert workflow.status == "waiting_approval" and len(calls) == 1
+    assert state(workflow)["nodes"]["summarize"]["contextRecovery"]["permissionBlocked"]
     with project_scope(env["scope"]), pytest.raises(PermissionDenied):
         runtime.serialize_run(env["user"], workflow)
 

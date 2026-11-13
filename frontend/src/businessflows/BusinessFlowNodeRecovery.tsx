@@ -1,5 +1,6 @@
 import { Alert, Button, Input, Space } from "antd";
 import { useState } from "react";
+import BusinessFlowFailureDiagnostic from "./BusinessFlowFailureDiagnostic";
 import type {
   BusinessFlowDecision,
   BusinessFlowNodeState,
@@ -64,6 +65,7 @@ export default function BusinessFlowNodeRecovery({
         description={recovery.reason}
       />
       {recovery.question && <p>{recovery.question}</p>}
+      <BusinessFlowFailureDiagnostic value={recovery.diagnostic} />
       <h4>已尝试的补救</h4>
       {recovery.attempts.length ? (
         <ul>

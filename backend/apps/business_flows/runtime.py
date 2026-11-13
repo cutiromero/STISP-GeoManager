@@ -847,6 +847,7 @@ def decide_flow(user, workflow, value):
                     "model_request_error",
                     "review_rejected",
                     "platform_error",
+                    "execution_error",
                 }
                 else "上下文范围已更新，将重试当前节点；未批准科研结果",
             )
@@ -862,6 +863,7 @@ def decide_flow(user, workflow, value):
                     "policy_snapshot",
                     "max_iterations",
                     "max_operator_steps",
+                    "current_step",
                     "updated_at",
                 ]
             )

@@ -1694,6 +1694,7 @@ def _decide_once(
                     node_id,
                     "平台校验前后的必需引用不一致，请核查校验诊断；原始响应与成果已保留。",
                     kind="platform_error",
+                    failure=getattr(exc, "failure", None),
                 ) from exc
             if attempt:
                 if getattr(workflow, "parameters", {}).get("_businessFlow"):

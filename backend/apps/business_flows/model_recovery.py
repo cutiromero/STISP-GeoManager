@@ -15,11 +15,18 @@ MODEL_WAIT_KINDS = {
     "model_request_error",
     "review_rejected",
     "platform_error",
+    "execution_error",
 }
 
 
 def model_wait(
-    node_id, reason, *, actor="executor", kind="model_response_error", scope="node"
+    node_id,
+    reason,
+    *,
+    actor="executor",
+    kind="model_response_error",
+    scope="node",
+    failure=None,
 ):
     return ContextReviewRequired(
         {
@@ -32,6 +39,11 @@ def model_wait(
             "requested": False,
             "diagnosticCode": kind.upper(),
             "requestScope": scope,
+            **(
+                {"failure": deepcopy(failure or getattr(reason, "failure", {}))}
+                if failure or getattr(reason, "failure", None)
+                else {}
+            ),
         }
     )
 

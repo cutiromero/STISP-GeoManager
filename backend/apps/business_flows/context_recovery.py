@@ -30,6 +30,9 @@ def retry_node(workflow, item, value):
                 "contextResumeStatus", "executing" if item["attempt"] else "pending"
             )
         item.pop("contextRecovery")
+        from .failure_handoff import restore_checkpoint
+
+        restore_checkpoint(workflow, recovery)
         return
     skipped = value.get("skipEvidenceIds", [])
     scope = value.get("contextScope", {})

@@ -4,7 +4,7 @@ from copy import deepcopy
 import logging
 import time
 
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.utils import timezone
 
@@ -967,6 +967,19 @@ def advance(workflow_id):
                 except WorkflowControlChanged:
                     pass
                 return
+            from .model_recovery import MODEL_WAIT_KINDS
+            from .failure_handoff import diagnose
+
+            if error.details.get("kind") in MODEL_WAIT_KINDS:
+                current_node = next(
+                    row
+                    for row in binding(workflow)["definitionSnapshot"]["nodes"]
+                    if row["id"] == workflow.current_step
+                )
+                try:
+                    diagnose(workflow, current_node, error.details)
+                except (WorkflowControlChanged, WorkflowPaused):
+                    return
             if error.details.get("requestScope") == "workflow":
                 current_item["contextResumeStatus"] = current_item["status"]
             current_item["contextRecovery"] = deepcopy(error.details)
@@ -1017,59 +1030,16 @@ def advance(workflow_id):
                         workflow, current_node, current_item, observation(error)
                     )
                     return
-            if (
-                not current.cancel_requested
-                and not isinstance(
-                    error, (PermissionDenied, ComputeError, ValidationError)
-                )
-                and workflow.current_step in state(workflow)["nodes"]
-            ):
-                from .model_recovery import model_wait
+            if not current.cancel_requested:
+                from .failure_handoff import handoff_exception
 
-                logger.exception("business flow node requires platform recovery")
-                recovery = model_wait(
-                    workflow.current_step,
-                    str(error)[:500]
-                    if isinstance(error, ModelError)
-                    else "平台处理异常，请核查诊断并在服务恢复后继续；已完成成果保留。",
-                    kind="model_request_error"
-                    if isinstance(error, ModelError)
-                    else "platform_error",
-                    scope=getattr(error, "recovery_scope", "node"),
-                ).details
-                item = state(workflow)["nodes"][workflow.current_step]
-                if recovery.get("requestScope") == "workflow":
-                    item["contextResumeStatus"] = item["status"]
-                item.update(status="waiting_context", contextRecovery=recovery)
-                workflow.status, workflow.detail = (
-                    "waiting_approval",
-                    recovery["reason"],
-                )
-                emit(
-                    workflow,
-                    "system",
-                    workflow.current_step,
-                    "model_recovery_required",
-                    workflow.detail,
-                    data=recovery,
-                )
+                logger.exception("business flow execution requires human recovery")
+                try:
+                    handoff_exception(workflow, error)
+                except (WorkflowControlChanged, WorkflowPaused):
+                    pass
                 return
-            workflow.status = (
-                "cancelled"
-                if current.cancel_requested
-                else "interrupted"
-                if isinstance(error, PermissionDenied)
-                else "failed"
-            )
-            workflow.detail = (
-                str(error)[:300]
-                if isinstance(
-                    error, (ComputeError, ModelError, PermissionDenied, ValidationError)
-                )
-                else "业务流节点未能完成，已保留此前结果"
-            )
-            if workflow.current_step in state(workflow)["nodes"]:
-                state(workflow)["nodes"][workflow.current_step]["status"] = "failed"
+            workflow.status, workflow.detail = "cancelled", "已停止业务流，前序成果保留"
             emit(workflow, "system", workflow.current_step, "stopped", workflow.detail)
 
 

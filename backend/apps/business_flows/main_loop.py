@@ -112,7 +112,7 @@ def take_action(
 def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
     from .engine import live_guard
     from .execution_session import task_record
-    from .node_loop import wait_recovery, observation
+    from .node_loop import wait_recovery
 
     definitions = binding(workflow)["definitionSnapshot"]["nodes"]
     fallback = nodes[0] if nodes else definitions[-1]
@@ -241,12 +241,10 @@ def _control(workflow, user, policy, nodes, *, closing=False, summary=""):
             workflow.status = "queued"
             persist(workflow)
             return False
-        wait_recovery(
-            workflow,
-            fallback,
-            state(workflow)["nodes"][fallback["id"]],
-            observation(error),
-        )
+        from .failure_handoff import handoff_exception
+
+        error.recovery_scope = "workflow"
+        handoff_exception(workflow, error)
         return False
 
 

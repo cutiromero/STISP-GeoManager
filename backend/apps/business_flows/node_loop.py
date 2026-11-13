@@ -184,6 +184,12 @@ def wait_recovery(workflow, node, item, failure, *, question=""):
         item["recovery"]["reason"] += (
             " 本节点合同额度已用尽，恢复不会重置额度；请停止，或在定义允许时跳过。"
         )
+    if loop.get("failure") or (
+        not question and failure.get("code") != "MAIN_AGENT_QUESTION"
+    ):
+        from .failure_handoff import diagnose
+
+        diagnose(workflow, node, item["recovery"])
     workflow.status, workflow.detail = (
         "waiting_approval",
         "节点等待恢复：" + item["recovery"]["reason"][:230],
@@ -1396,6 +1402,9 @@ def advance_tool_execution(
         if loop.get("pending"):
             action = loop["pending"]["action"]
             arguments = loop["pending"]["arguments"]
+            failure["action"] = action
+            if arguments.get("evidenceId"):
+                failure["evidenceId"] = arguments["evidenceId"]
             if action in {
                 "run_operator",
                 "preflight_operator",

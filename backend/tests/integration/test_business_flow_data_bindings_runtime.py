@@ -224,7 +224,11 @@ def test_quality_failure_cannot_be_overridden_by_a_flow_node_success(chains):
     }
     output.save(update_fields=["metadata"])
     advance(env, workflow)
-    assert workflow.status == "failed", workflow.detail
+    assert workflow.status == "waiting_approval", workflow.detail
+    assert (
+        state(workflow)["nodes"]["downstream"]["contextRecovery"]["kind"]
+        == "execution_error"
+    )
     with project_scope(env["scope"]):
         assert not ComputeImport.objects.exists() and ComputeTask.objects.count() == 1
 
@@ -256,7 +260,10 @@ def test_live_derived_resource_acl_is_checked_before_downstream_submission(chain
             owner_only=True, maintainer=env["outsider"]
         )
     advance(env, workflow)
-    assert workflow.status == "interrupted", workflow.detail
+    assert workflow.status == "waiting_approval", workflow.detail
+    assert state(workflow)["nodes"]["downstream"]["contextRecovery"][
+        "permissionBlocked"
+    ]
     with project_scope(env["scope"]):
         assert ComputeTask.objects.count() == 1
 
@@ -276,7 +283,10 @@ def test_a_same_owner_task_without_this_workflow_binding_is_not_an_input(chains)
         state(workflow)["nodes"]["upstream"]["outputs"]["taskId"] = str(other.pk)
         workflow.save(update_fields=["plan"])
     advance(env, workflow)
-    assert workflow.status == "interrupted", workflow.detail
+    assert workflow.status == "waiting_approval", workflow.detail
+    assert state(workflow)["nodes"]["downstream"]["contextRecovery"][
+        "permissionBlocked"
+    ]
     with project_scope(env["scope"]):
         assert not ComputeImport.objects.exists()
 
@@ -324,7 +334,10 @@ def test_cross_project_upstream_task_is_never_consumed_even_with_forged_step(cha
         state(workflow)["nodes"]["upstream"]["outputs"]["taskId"] = str(foreign.pk)
         workflow.save(update_fields=["plan"])
     advance(env, workflow)
-    assert workflow.status in {"interrupted", "failed"}
+    assert workflow.status == "waiting_approval"
+    assert state(workflow)["nodes"]["downstream"]["contextRecovery"][
+        "permissionBlocked"
+    ]
     with project_scope(env["scope"]):
         assert not ComputeImport.objects.exists()
 

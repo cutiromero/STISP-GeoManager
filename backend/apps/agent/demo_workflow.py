@@ -2037,6 +2037,16 @@ def advance_demo(workflow_id) -> None:
                 record_issue,
             )
 
+            if workflow.parameters.get("_businessFlow"):
+                from apps.business_flows.failure_handoff import active_node, diagnose
+                from apps.business_flows.model_recovery import MODEL_WAIT_KINDS
+
+                if exc.details.get("kind") in MODEL_WAIT_KINDS:
+                    try:
+                        diagnose(workflow, active_node(workflow), exc.details)
+                    except (WorkflowControlChanged, WorkflowPaused):
+                        return
+
             stage = (
                 workflow.plan.get("finalStage")
                 if workflow.current_step == "final_analysis"
@@ -2082,51 +2092,37 @@ def advance_demo(workflow_id) -> None:
                     next_action=context_next_action(exc.details),
                 )
                 _save(workflow)
-        except PermissionDenied as exc:
-            workflow.status, workflow.detail = "interrupted", str(exc)[:300]
-            from .workflow_diagnostics import record_issue
+        except Exception as exc:
+            if workflow.parameters.get("_businessFlow"):
+                from apps.business_flows.failure_handoff import handoff_exception
 
-            record_issue(workflow, "permission", str(exc))
-            _save(workflow, acknowledge_pause=True)
-        except (ComputeError, ValidationError, ModelError, NonGeoAnalysisError) as exc:
+                current = AgentWorkflow.objects.get(pk=workflow.pk)
+                if (
+                    not current.cancel_requested
+                    and not current.pause_requested
+                    and current.status in {"queued", "running", "waiting_compute"}
+                    and current.policy_snapshot.get("businessFlowControlEpoch", 0)
+                    == workflow.policy_snapshot.get("businessFlowControlEpoch", 0)
+                ):
+                    try:
+                        handoff_exception(workflow, exc)
+                    except (WorkflowControlChanged, WorkflowPaused):
+                        pass
+                    return
+            if isinstance(exc, PermissionDenied):
+                workflow.status, workflow.detail = "interrupted", str(exc)[:300]
+                from .workflow_diagnostics import record_issue
+
+                record_issue(workflow, "permission", str(exc))
+                _save(workflow, acknowledge_pause=True)
+                return
+            if not isinstance(
+                exc, (ComputeError, ValidationError, ModelError, NonGeoAnalysisError)
+            ):
+                raise
             cancelled = AgentWorkflow.objects.filter(
                 pk=workflow.id, cancel_requested=True
             ).exists()
-            if (
-                not cancelled
-                and isinstance(exc, ModelError)
-                and workflow.parameters.get("_businessFlow")
-                and AgentWorkflow.objects.filter(
-                    pk=workflow.pk,
-                    status__in={"queued", "running", "waiting_compute"},
-                    pause_requested=False,
-                ).exists()
-            ):
-                from apps.business_flows.model_recovery import model_wait
-
-                active_stage = (
-                    workflow.plan.get("finalStage")
-                    if workflow.current_step == "final_analysis"
-                    else next(
-                        (
-                            s
-                            for s in workflow.plan.get("stages", [])
-                            if s.get("name") == workflow.current_step
-                        ),
-                        None,
-                    )
-                )
-                if active_stage is not None:
-                    node_id = (
-                        "finish"
-                        if active_stage.get("identifier") == "finish"
-                        else active_stage["name"]
-                    )
-                    active_stage["contextBudgetReview"] = model_wait(
-                        node_id, exc, kind="model_request_error"
-                    ).details
-                    _pause(workflow, active_stage, str(exc))
-                    return
             workflow.status = "cancelled" if cancelled else "failed"
             workflow.detail = "已停止场景后续处理" if cancelled else str(exc)[:300]
             if not cancelled:

@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261113-003 - 执行错误定位与统一人工交接
+
+- Status: BackendReady
+- Owner: codex/xintao，当前助手完成契约、实现与验证。
+- Endpoints: 沿用业务流运行读取、节点trace与决定接口。
+- Change type: 恢复状态可选结构化诊断，执行异常转等待。
+- OpenAPI change: BusinessFlowFailureDiagnostic；contextRecovery及recovery可选diagnostic；execution_error等待类别。
+- Mock examples: 延续现有恢复状态示例，以隔离测试补充字段映射缺失、服务不可用和无需人工审核的普通节点恢复。
+- Frontend reason: 展示错误位置、实际差距、已尝试动作、原主执行者原因分析及需要用户处理的步骤；普通节点也可补充继续。
+- Backend implementation notes: 至多一次有界诊断请求，沿原执行会话和预算；诊断失败保留平台事实；精确恢复资料准备、节点执行和任务结束检查点，不写人工批准。
+- Verification: 输入及执行校验、未知异常、模型不可用、原会话续接与权限、暂停停止、前端显示和正式Chrome恢复验收。
+- Result: 采用原决定通道交接及续接，页面区分实际错误与AI分析；本地回归和正式站操作证据随发布记录保存。
+
 ## API-20261112-002 - 业务流配套技能与持续主执行会话
 
 - Status: BackendReady
@@ -648,6 +661,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261113-003 | BackendReady | Business flow recovery | 执行错误定位与人工续接 | Updated | 隔离恢复用例 | Implemented | 原会话、检查点与撤权回归 | 保留成果和原权限边界 |
 | API-20261112-002 | BackendReady | Business flow skill and main agent | 任务级主执行循环与有界技能 | Updated | 146节点记录 | Implemented | 版本、会话、台账、调整与恢复 | 不扩大上下文或审批权限 |
 | API-20261112-001 | BackendReady | Business flow node trace | 节点思考、实际响应和工具行动按需读取 | Updated | 146节点记录 | Implemented | 权限隔离、分页、节点切换及显示 | 不执行计算或科研批准 |
 | API-20261111-004 | BackendReady | Business flow start | 思考设置与专业节点工具执行 | Updated | 现有示例 | Implemented | 三档请求及真实七节点对照 | 科学配方与批准保持有效 |

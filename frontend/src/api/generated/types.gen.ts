@@ -11786,6 +11786,7 @@ export type BusinessFlowNodeRecovery = {
     failure: {
         [key: string]: unknown;
     };
+    diagnostic?: BusinessFlowFailureDiagnostic;
     [key: string]: unknown;
 };
 
@@ -12728,15 +12729,58 @@ export type BusinessFlowContextManagement = {
     [key: string]: unknown;
 };
 
+/**
+ * 实际故障事实和原主执行智能体的有限诊断；不包含文件全文或完整日志。
+ */
+export type BusinessFlowFailureDiagnostic = {
+    /**
+     * 实际错误类别或算子错误码
+     */
+    code: string;
+    /**
+     * 发生错误的节点与动作
+     */
+    location: string;
+    /**
+     * 平台确认的原始错误、受影响字段、期望与实际及输入版本
+     */
+    facts: Array<string>;
+    /**
+     * 实际尝试过的动作或请求错误摘要，不编造补救
+     */
+    attempts: Array<string>;
+    /**
+     * 任务、计算与模型请求的定位编号
+     */
+    references: Array<string>;
+    /**
+     * 修复后的继续位置与校验要求
+     */
+    resumeAt: string;
+    /**
+     * AI是否实际完成故障分析；不可用时仅展示平台事实
+     */
+    analysisStatus: 'completed' | 'unavailable';
+    /**
+     * 原主执行智能体的原因分析，或AI诊断未完成的明确说明
+     */
+    analysis: string;
+    /**
+     * 用户可执行的处理步骤及需要补充的内容
+     */
+    suggestions: Array<string>;
+};
+
 export type BusinessFlowContextRecovery = BusinessFlowContextManagement & {
     /**
-     * 等待原因；model_call_limit、operator_call_limit表示调用额度，model_protocol_error表示审核格式错误，model_response_error表示执行响应未通过校验，model_request_error表示服务或生成错误，review_rejected表示自动返修后仍需修改。模型错误与审核等待不能通过删减证据恢复。
+     * 等待原因；model_call_limit、operator_call_limit表示调用额度，model_protocol_error表示审核格式错误，model_response_error表示执行响应未通过校验，model_request_error表示服务或生成错误，review_rejected表示自动返修后仍需修改，execution_error表示执行或输入校验错误等待人工处理。模型错误与审核等待不能通过删减证据恢复。
      */
     kind?: string;
     /**
      * 本次补充说明的接收角色；执行分析由原主执行智能体继续，审核仍独立进行。
      */
     actor?: 'executor' | 'reviewer';
+    diagnostic?: BusinessFlowFailureDiagnostic;
     /**
      * 本次实际诊断类别，用于区分格式、服务与审核问题，不含文件正文。
      */
