@@ -19,6 +19,7 @@ import type {
 import { reviewWorkflow } from "../map/geologyReview.testFixtures";
 import FieldMappingReview from "./FieldMappingReview";
 import LogicTaskWorkspace from "./LogicTaskWorkspace";
+import LogicTaskThinking from "./LogicTaskThinking";
 import { workflowReport } from "./workflowReport.testFixtures";
 import "./agent.css";
 
@@ -175,6 +176,48 @@ it("报告直接组织结果时不把此前的角色思考冒充当前思考", (
   expect(screen.getByText("模型正在组织结果")).toBeVisible();
   expect(screen.getByText(/已接收 120 字/)).toBeVisible();
   expect(screen.queryByText("此前识别资料角色的实际思考")).toBeNull();
+});
+
+it("思考预览区分模型轮次、输出行动及独立审核，不将换轮显示为中断", () => {
+  const activity = {
+    stage: "综合检查",
+    actor: "executor" as const,
+    requestId: "first-request",
+    status: "responding" as const,
+    thinkingEnabled: true,
+    reasoningEffort: "medium" as const,
+    thinkingText: "已核对资料，下一步调用预检工具。",
+    truncated: false,
+    attempt: 3,
+    outputChars: 120,
+  };
+  const { rerender } = render(
+    <LogicTaskThinking
+      workflow={task({ status: "running", modelActivity: activity })}
+      onExpand={() => {}}
+    />,
+  );
+  expect(screen.getByText(/主执行智能体 · 综合检查 · 第 3 轮/)).toBeVisible();
+  expect(screen.getAllByText(/正在输出行动与结果/).length).toBeGreaterThan(0);
+  rerender(
+    <LogicTaskThinking
+      workflow={task({
+        status: "running",
+        modelActivity: {
+          ...activity,
+          requestId: "second-request",
+          actor: "reviewer",
+          status: "thinking",
+          attempt: 1,
+          thinkingText: "审核本次实际结果。",
+        },
+      })}
+      onExpand={() => {}}
+    />,
+  );
+  expect(screen.getByText(/独立审核 · 综合检查 · 第 1 轮/)).toBeVisible();
+  expect(screen.queryByText("已核对资料，下一步调用预检工具。")).toBeNull();
+  expect(screen.getByText("审核本次实际结果。")).toBeVisible();
 });
 
 it("暂停直接生效，停止位于更多且必须确认；暂停态只有一个继续按钮", async () => {

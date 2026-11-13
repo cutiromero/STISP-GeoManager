@@ -31,6 +31,20 @@ export default function LogicTaskThinking({
   const live = liveLogicThinking(workflow);
   const writing = live && activity?.thinkingEnabled === false;
   const text = writing ? "" : activity?.thinkingText || initialThinking || "";
+  const requestKey =
+    activity?.requestId || `${activity?.stage}:${activity?.attempt}`;
+  const stateLabel =
+    activity?.status === "requesting"
+      ? "本轮请求已发出，等待模型响应"
+      : activity?.status === "responding"
+        ? "正在输出行动与结果"
+        : activity?.status === "validating"
+          ? "正在核验本轮响应"
+          : activity?.status === "complete"
+            ? "本轮响应已完成"
+            : activity?.status === "failed"
+              ? "本轮请求未通过，查看记录中的诊断"
+              : "模型正在整理依据";
   if (!text && !live) return null;
   return (
     <section
@@ -43,33 +57,37 @@ export default function LogicTaskThinking({
           {writing
             ? "模型正在组织结果"
             : live
-              ? "模型正在整理依据"
-              : "最近一次模型思考"}
+              ? stateLabel
+              : "最近一次模型调用"}
         </span>
         <Button type="link" size="small" onClick={onExpand}>
           查看实际思考 <RightOutlined />
         </Button>
       </div>
+      {activity && (
+        <small className="logic-muted">
+          {activity.actor === "reviewer" ? "独立审核" : "主执行智能体"}
+          {` · ${activity.stage} · 第 ${activity.attempt} 轮 · ${stateLabel}`}
+        </small>
+      )}
       {writing ? (
         <p className="logic-muted">
           正在结合实际计算成果生成报告
           {activity?.outputChars ? `（已接收 ${activity.outputChars} 字）` : ""}
           …
         </p>
+      ) : text ? (
+        <ThinkingStream
+          key={`${workflow.id}:${requestKey}`}
+          text={text.slice(-1200)}
+          working={live && activity?.status === "thinking"}
+        />
       ) : (
-        live &&
-        (text ? (
-          <ThinkingStream
-            text={text.slice(-1200)}
-            working={activity?.status === "thinking"}
-          />
-        ) : (
-          <p className="logic-muted">等待模型返回实际内容…</p>
-        ))
+        <p className="logic-muted">等待模型返回实际内容…</p>
       )}
-      {live && text.length > 1200 && (
+      {text.length > 1200 && (
         <small className="logic-muted">
-          预览最近片段，展开可查看已保存的完整内容。
+          预览本轮最近 1200 字，展开查看已保存记录；后续调用按工具结果继续。
         </small>
       )}
     </section>

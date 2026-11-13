@@ -3,6 +3,8 @@
 from copy import deepcopy
 import json
 import sqlite3
+from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -727,6 +729,60 @@ def test_large_catalog_keeps_all_returned_versions_and_byte_ranges(operators):
             lambda: None,
         )
         assert json.loads(fragment["text"]) == operators_result[-1]
+
+
+@pytest.mark.parametrize("name", ["check", "apply", "relations", "prospect"])
+def test_large_execution_catalog_has_usable_summary_without_paging_entire_manifest(
+    operators, name
+):
+    from apps.business_flows.node_loop import store_result, encoded
+    from apps.business_flows.node_contracts import MAX_EVIDENCE_BYTES, MAX_TOOL_BYTES
+    from apps.compute.operator_catalog import compact_description
+
+    env = operators
+    workflow = create(env)
+    node = workflow.parameters["_businessFlow"]["definitionSnapshot"]["nodes"][0]
+    item = state(workflow)["nodes"]["calculate"]
+    loop = loop_state(item)
+    loop["steps"] = 1
+    source = (
+        Path(__file__).resolve().parents[3]
+        / f"examples/compute/geology-multi-{name}/operator.yaml"
+    )
+    manifest = json.loads(source.read_text())
+    version = SimpleNamespace(
+        pk=17,
+        manifest=manifest,
+        version=manifest["version"],
+        algorithm=SimpleNamespace(
+            identifier=manifest["identifier"], name=manifest["name"]
+        ),
+    )
+    description = compact_description(version, MAX_EVIDENCE_BYTES, view="execution")
+    result = {"operators": [description]}
+    store_result(workflow, node, item, "operator_catalog", result)
+    preview = loop["lastObservation"]["result"]
+    assert len(encoded(preview)) <= MAX_TOOL_BYTES
+    if len(encoded(result)) > MAX_TOOL_BYTES:
+        summary = preview["operators"][0]["executionSummary"]
+        assert summary["parameters"] == description["parameters"]
+        assert summary["errors"] == description["errors"]
+        assert summary["fullContractLookup"] == {"versionId": 17, "view": "full"}
+        assert [p["key"] for p in summary["inputs"]] == [
+            p["key"] for p in description["inputs"]
+        ]
+        for actual, original in zip(
+            summary["inputs"], description["inputs"], strict=True
+        ):
+            assert actual["kind"] == original["kind"]
+            assert actual["fieldRoles"] == {
+                f["role"]: f.get("legacyName", f["role"])
+                for f in original.get("fields", [])
+            }
+            assert actual["requiredFieldRoles"] == [
+                f["role"] for f in original.get("fields", []) if f.get("required")
+            ]
+        assert loop["evidence"][preview["evidenceId"]]["result"] == result
 
 
 def test_recovery_does_not_repeat_same_error_remedy():

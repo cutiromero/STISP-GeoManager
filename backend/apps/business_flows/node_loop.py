@@ -598,6 +598,62 @@ def store_result(workflow, node, item, action, result, *, arguments=None):
             "totalBytes": len(raw),
             "message": "目录详情已登记；按本证据编号及条目的offset/length读取清单，单项最多4096字节",
         }
+        if len(result["operators"]) == 1:
+            operator = result["operators"][0]
+            if operator.get("view") == "execution":
+                execution = {
+                    key: deepcopy(operator[key])
+                    for key in (
+                        "identifier",
+                        "version",
+                        "parameters",
+                        "errors",
+                        "fullContractLookup",
+                    )
+                    if key in operator
+                }
+                execution["inputs"] = [
+                    {
+                        **{
+                            key: deepcopy(port[key])
+                            for key in (
+                                "key",
+                                "kind",
+                                "required",
+                                "geometryTypes",
+                                "crs",
+                            )
+                            if key in port
+                        },
+                        "fieldRoles": {
+                            field["role"]: field.get("legacyName", field["role"])
+                            for field in port.get("fields", [])
+                        },
+                        "requiredFieldRoles": [
+                            field["role"]
+                            for field in port.get("fields", [])
+                            if field.get("required")
+                        ],
+                    }
+                    for port in operator.get("inputs", [])
+                ]
+                execution["outputs"] = [
+                    {
+                        key: port[key]
+                        for key in ("key", "kind", "required", "final")
+                        if key in port
+                    }
+                    for port in operator.get("outputs", [])
+                ]
+                compact = deepcopy(preview)
+                compact["operators"][0]["executionSummary"] = execution
+                compact["message"] = (
+                    "执行摘要提供端口、字段角色和可调参数；完整约束保留在本证据。"
+                    "仅在需要具体语义时按编号读取对应细节，无需重复拼读整个清单；"
+                    "预检始终核对完整清单。"
+                )
+                if len(encoded(compact)) <= MAX_TOOL_BYTES:
+                    preview = compact
     while len(encoded(preview)) > MAX_TOOL_BYTES:
         if "operators" in preview:
             preview["operators"].pop()
