@@ -748,15 +748,24 @@ def final_protocol_wait(env, status, *, duplicate=False):
     return workflow
 
 
-@pytest.mark.parametrize("status", ["waiting_approval", "failed"])
+@pytest.mark.parametrize(
+    "status,history_only",
+    [("waiting_approval", False), ("failed", False), ("failed", True)],
+)
 @pytest.mark.parametrize("duplicate", [False, True])
 def test_final_review_resumes_through_public_decision_without_reexecuting_science(
-    legacy_flow, status, duplicate
+    legacy_flow, status, duplicate, history_only
 ):
     from apps.business_flows import runtime
 
     env = legacy_flow
     workflow = final_protocol_wait(env, status, duplicate=duplicate)
+    if history_only:
+        final = workflow.plan["finalStage"]
+        final.setdefault("modelBudgetHistory", []).append(
+            {"contextBudgetReview": final.pop("contextBudgetReview")}
+        )
+        workflow.save(update_fields=["plan"])
     scientific = deepcopy(workflow.plan["stages"][: workflow.plan["stageIndex"]])
     human = deepcopy(state(workflow)["nodes"]["apply"]["human"])
     with project_scope(env["scope"]):
@@ -837,6 +846,50 @@ def test_failed_review_without_an_accepted_response_has_no_recovery_bypass(legac
         )
     workflow.refresh_from_db()
     assert workflow.status == "failed"
+
+
+@pytest.mark.parametrize(
+    "blocked", ["cancel", "response", "decision", "running", "newer_diagnostic"]
+)
+def test_historical_review_diagnostic_does_not_reopen_other_states(
+    legacy_flow, blocked
+):
+    from apps.business_flows import runtime
+
+    env = legacy_flow
+    workflow = final_protocol_wait(env, "failed")
+    final = workflow.plan["finalStage"]
+    final["modelBudgetHistory"] = [
+        {"contextBudgetReview": final.pop("contextBudgetReview")}
+    ]
+    if blocked == "cancel":
+        workflow.cancel_requested = True
+    elif blocked == "response":
+        final["modelAttempts"][-1]["response"] = ""
+    elif blocked == "decision":
+        final["decision"] = {"judgement": "审核已完成"}
+    elif blocked == "newer_diagnostic":
+        final["modelBudgetHistory"].append(
+            {"contextBudgetReview": {"kind": "input_window"}}
+        )
+    else:
+        workflow.status = "running"
+    workflow.save(update_fields=["plan", "status", "cancel_requested"])
+    with project_scope(env["scope"]):
+        public = runtime.serialize_run(env["user"], workflow)
+        node = next(row for row in public["nodes"] if row["nodeId"] == "finish")
+        assert not node.get("contextRecovery")
+        with pytest.raises(ComputeError):
+            runtime.decide_flow(
+                env["user"],
+                workflow,
+                {
+                    "nodeId": "finish",
+                    "decision": "retry_context",
+                    "revision": public["revision"],
+                    "idempotencyKey": uuid4().hex,
+                },
+            )
 
 
 def test_compute_failure_waits_and_retries_original_scientific_stage(legacy_flow):

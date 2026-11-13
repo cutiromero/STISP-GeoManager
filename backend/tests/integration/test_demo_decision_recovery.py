@@ -63,6 +63,32 @@ def replay(workflow, stage, results, *, guard=lambda: None):
             stream.assert_not_called()
 
 
+def reordered(value):
+    if isinstance(value, dict):
+        return {key: reordered(item) for key, item in reversed(value.items())}
+    if isinstance(value, list):
+        return [reordered(item) for item in value]
+    return value
+
+
+@pytest.mark.parametrize("retry", [False, True])
+@pytest.mark.parametrize("edit", [False, True])
+def test_equal_fresh_results_with_different_key_order_replay_exact_saved_request(
+    retry, edit, retry_model
+):
+    workflow, stage, results, original = saved_response(retry=retry, edit=edit)
+    stage["modelRequestPayload"] = copy.deepcopy(stage["modelRequestPayload"])
+    audit = copy.deepcopy(stage["modelAttempts"])
+    fresh = reordered(results)
+    assert fresh == results
+    assert list(fresh[0]) != list(results[0])
+    assert replay(workflow, stage, fresh) == original
+    assert stage["modelAttempts"] == audit
+    fresh[0]["rows"][1]["new_value"] = "实际结果已改变"
+    with pytest.raises(ComputeError, match="本步已有模型请求记录"):
+        replay(workflow, stage, fresh)
+
+
 @pytest.mark.parametrize("retry", [False, True])
 @pytest.mark.parametrize("edit", [False, True])
 def test_complete_accepted_response_recovers_with_no_new_request(
@@ -172,7 +198,8 @@ def test_budgeted_first_request_recovers_exact_projection_without_network(
     assert stage["modelAttempts"][0]["budgetLevel"] == budget_level
     assert stage["modelAttempts"][0]["inputTokens"] == 800
     assert len(requests) == len(raws)
-    assert replay(workflow, stage, results) == outcome
+    stage["modelRequestPayload"] = copy.deepcopy(stage["modelRequestPayload"])
+    assert replay(workflow, stage, reordered(results)) == outcome
 
 
 @pytest.mark.parametrize("level", [-1, 5, True])

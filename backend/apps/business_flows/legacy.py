@@ -42,13 +42,27 @@ def _resume_stage_status(stage):
         stage["status"] = original["planStatus"]
 
 
+def _review_recovery(workflow, stage):
+    current = stage.get("contextBudgetReview")
+    if current:
+        return current
+    if workflow.status == "failed":
+        for row in reversed(stage.get("modelBudgetHistory", [])):
+            recovery = row.get("contextBudgetReview", {})
+            if recovery:
+                return (
+                    recovery if recovery.get("kind") == "model_protocol_error" else {}
+                )
+    return {}
+
+
 def _retryable_failed_review(workflow, stage, recovery=None):
     return (
         workflow.status == "failed"
         and not getattr(workflow, "cancel_requested", False)
         and workflow.current_step == stage.get("name")
         and not stage.get("decision")
-        and (recovery or stage.get("contextBudgetReview", {})).get("kind")
+        and (recovery or _review_recovery(workflow, stage)).get("kind")
         == "model_protocol_error"
         and _saved_request_stage(stage) is not None
     )
@@ -157,12 +171,13 @@ def projected_state(workflow):
                 reason="计算中心执行实际登记算子",
                 taskId=stage["taskId"],
             )
-        if stage.get("contextBudgetReview") and (
+        recovery = _review_recovery(workflow, stage)
+        if recovery and (
             workflow.status == "waiting_approval"
             or _retryable_failed_review(workflow, stage)
         ):
             item["status"] = "waiting_context"
-            item["contextRecovery"] = deepcopy(stage["contextBudgetReview"])
+            item["contextRecovery"] = deepcopy(recovery)
             item["contextRecovery"].setdefault("nodeId", identity)
             item["contextRecovery"].setdefault("level", 0)
             item["contextRecovery"].setdefault("evidence", [])

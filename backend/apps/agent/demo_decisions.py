@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from copy import deepcopy
 
 from apps.compute.packages import ComputeError
 from . import provider
@@ -1769,7 +1770,20 @@ def _recover_decision(
     )
     if not valid:
         reject()
+    # Fresh facts must match before replaying the exact serialized request.
+    # Equal dictionaries can arrive in a different key order after a restart.
+    payload = deepcopy(stage["modelRequestPayload"])
     original_messages = [dict(message) for message in messages]
+    original_messages[1]["content"] = json.dumps(
+        payload,
+        ensure_ascii=False,
+        **(
+            {"separators": (",", ":")}
+            if getattr(workflow, "workflow_type", None)
+            in {"geology_map_review", *MULTI_FAMILY}
+            else {}
+        ),
+    )
     for index, attempt in enumerate(attempts):
         if not isinstance(attempt, dict):
             reject()
