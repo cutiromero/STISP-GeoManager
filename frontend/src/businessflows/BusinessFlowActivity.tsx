@@ -743,28 +743,12 @@ export default function BusinessFlowActivity({
               <Button
                 icon={<ReloadOutlined />}
                 aria-label={ui("要求返修", "Request revision")}
-                title={
-                  current &&
-                  current.attempt >
-                    (definition.nodes.find((node) => node.id === current.nodeId)
-                      ?.review.maxRevisions ?? 0)
-                    ? ui(
-                        "已到返修上限，可停止后调整流程重新发起",
-                        "Revision limit reached; start an adjusted flow",
-                      )
-                    : undefined
-                }
+                title={ui(
+                  "保留前序成果，只修改当前节点，修改后仍须审核",
+                  "Keep earlier results and revise this node; review is still required",
+                )}
                 loading={busy === "request_changes"}
-                disabled={
-                  Boolean(busy) ||
-                  Boolean(
-                    current &&
-                    current.attempt >
-                      (definition.nodes.find(
-                        (node) => node.id === current.nodeId,
-                      )?.review.maxRevisions ?? 0),
-                  )
-                }
+                disabled={Boolean(busy)}
                 onClick={() => decide("request_changes")}
               >
                 {ui("退回返修", "Request revision")}

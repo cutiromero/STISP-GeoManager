@@ -79,6 +79,43 @@ it("shows compaction and retries the current node without human approval or read
   expect(businessFlowsApi.run).not.toHaveBeenCalled();
 });
 
+it("keeps explicit human revision enabled after the automatic revision allowance", async () => {
+  const flow = businessFlowRun();
+  flow.status = "waiting_approval";
+  flow.nodes[0]!.status = "waiting_human";
+  flow.nodes[0]!.attempt = 5;
+  flow.nodes[0]!.human.required = true;
+  flow.nodes[0]!.human.status = "pending";
+  flow.definitionSnapshot.nodes[0]!.review = {
+    ai: false,
+    human: true,
+    maxRevisions: 0,
+  };
+  render(
+    <App>
+      <MemoryRouter>
+        <BusinessFlowActivity flow={flow} onChanged={vi.fn()} />
+      </MemoryRouter>
+    </App>,
+  );
+  const button = screen.getByRole("button", { name: "要求返修" });
+  expect(button).toBeEnabled();
+  fireEvent.change(screen.getByRole("textbox", { name: "审核反馈" }), {
+    target: { value: "只补充适用范围，保留前序成果。" },
+  });
+  fireEvent.click(button);
+  await waitFor(() => expect(businessFlowsApi.decide).toHaveBeenCalledOnce());
+  expect(businessFlowsApi.decide).toHaveBeenCalledWith(
+    flow.id,
+    expect.objectContaining({
+      decision: "request_changes",
+      feedback: "只补充适用范围，保留前序成果。",
+      nodeId: flow.currentNode,
+      revision: flow.revision,
+    }),
+  );
+});
+
 it("sends an explicit smaller sample scope through the original decision API", async () => {
   show();
   fireEvent.click(screen.getByRole("button", { name: "缩小范围并重试" }));
