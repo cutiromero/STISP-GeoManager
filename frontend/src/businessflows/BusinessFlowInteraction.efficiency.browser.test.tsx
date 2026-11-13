@@ -841,3 +841,25 @@ it("keeps an open professional thinking view live from parent stream props witho
   );
   expect(agentApi.workflow).toHaveBeenCalledOnce();
 });
+
+it("shows the completed review without an obsolete running message", () => {
+  const flow = businessFlowRun({ status: "succeeded", currentNode: "finish" });
+  const event = flow.events[1]!;
+  flow.events = [
+    {
+      ...event,
+      id: 101,
+      kind: "review_started",
+      message: "独立审核正在核对报告",
+    },
+    {
+      ...event,
+      id: 102,
+      kind: "review_accepted",
+      message: "报告数量与计算成果一致，审核通过。",
+    },
+  ];
+  showActivity(flow);
+  expect(screen.queryByText("独立审核正在核对报告")).not.toBeInTheDocument();
+  expect(screen.getByText("报告数量与计算成果一致，审核通过。")).toBeVisible();
+});

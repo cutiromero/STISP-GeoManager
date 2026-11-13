@@ -128,6 +128,7 @@ export function readableBusinessFlowEvents(
         "completed",
         "accepted",
         "changes_requested",
+        "review_started",
         "progress",
       ].includes(event.kind)
     )
