@@ -1,6 +1,6 @@
 # 智能体代码地图
 
-所有路径相对仓库根目录；先用 `rg -n` 定位符号，再读取命中附近片段。默认最小检查为根目录 `make verify-fast`；只看计划或附加浏览器分别使用脚本 `--list` / `--browser`。
+所有路径相对仓库根目录；先用 `rg -n` 定位符号，再读取命中附近片段。默认最小检查为根目录 `make verify-fast`，首个失败后停止；只看计划或附加浏览器分别使用脚本 `--list` / `--browser`。Makefile通过 `VERIFY_FAST_ARGS` 透传参数；同轮需要完整效率门禁时先使用 `--separate-efficiency`，再完成 `make check-efficiency`，避免快速阶段重复跑后端效率用例。
 
 下列后端命令中的 `$PY` 先在仓库根目录设置；浏览器命令在 `frontend` 执行，路径有中文时也只能使用既有 runner。
 ```sh

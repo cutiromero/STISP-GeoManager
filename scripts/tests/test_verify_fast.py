@@ -239,6 +239,25 @@ def test_efficiency_only_test_without_sensitive_change_is_not_run(tmp_path):
     assert [step.name for step in steps] == ["Python 格式"]
 
 
+def test_separate_efficiency_keeps_normal_tests_and_requires_the_other_gate(tmp_path):
+    changed = "backend/apps/agent/context.py"
+    create(tmp_path, changed)
+    create(tmp_path, "backend/tests/unit/test_context.py", "def test_regular(): pass\n")
+    only = "backend/tests/integration/test_agent_efficiency.py"
+    create(tmp_path, only, "import pytest\npytestmark = pytest.mark.efficiency\n")
+    # A changed efficiency-only test must be deferred to the complete gate too.
+    paths = [changed, only]
+    normal, _ = fast.plan(tmp_path, paths)
+    assert "tests/integration/test_agent_efficiency.py" in normal[1].command
+    notices = []
+    separated, _ = fast.plan(tmp_path, paths, notices=notices, separate_efficiency=True)
+    command = separated[1].command
+    assert "tests/unit/test_context.py" in command
+    assert "tests/integration/test_agent_efficiency.py" not in command
+    assert command[-2:] == ("-m", "not efficiency")
+    assert any("必须另行完成 make check-efficiency" in notice for notice in notices)
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -386,11 +405,28 @@ def test_run_steps_reports_failure_and_continues(monkeypatch, tmp_path, capsys):
         fast.Step("第一步", ".", ("example",), 1),
         fast.Step("第二步", ".", ("example",), 1),
     ]
-    assert fast.run_steps(tmp_path, steps) == 1
+    assert fast.run_steps(tmp_path, steps, keep_going=True) == 1
     output = capsys.readouterr().out
     assert "第一步] 失败" in output
     assert "第二步] 通过" in output
     assert "耗时" in output
+
+
+def test_first_failure_stops_before_expensive_steps(monkeypatch, tmp_path, capsys):
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 1)
+
+    monkeypatch.setattr(fast.subprocess, "run", run)
+    steps = [
+        fast.Step("格式", ".", ("format",), 1),
+        fast.Step("大型回归", ".", ("slow",), 1),
+    ]
+    assert fast.run_steps(tmp_path, steps) == 1
+    assert calls == [("format",)]
+    assert "已执行 1/2 步" in capsys.readouterr().out
 
 
 def test_main_list_never_executes(monkeypatch, capsys):
@@ -406,5 +442,24 @@ def test_main_list_never_executes(monkeypatch, capsys):
 def test_main_propagates_failed_step(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["verify_fast.py"])
     monkeypatch.setattr(fast, "changed_files", lambda *args: ["docs/openapi.yaml"])
-    monkeypatch.setattr(fast, "run_steps", lambda *args: 1)
+    monkeypatch.setattr(fast, "run_steps", lambda *args, **kwargs: 1)
     assert fast.main() == 1
+
+
+def test_main_forwards_explicit_gate_choices_without_running_app_tests(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        sys, "argv", ["verify_fast.py", "--separate-efficiency", "--keep-going"]
+    )
+    monkeypatch.setattr(fast, "changed_files", lambda *args: ["docs/openapi.yaml"])
+    calls = []
+
+    def run(root, steps, **options):
+        calls.append(options)
+        return 0
+
+    monkeypatch.setattr(fast, "run_steps", run)
+    assert fast.main() == 0
+    assert calls == [{"keep_going": True}]
+    assert "必须另行完成 make check-efficiency" in capsys.readouterr().out

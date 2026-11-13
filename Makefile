@@ -4,10 +4,11 @@
 .PHONY: help version-patch version-minor version-major changelog tag
 
 VERIFY_FAST_PYTHON ?= /opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
+VERIFY_FAST_ARGS ?=
 
 .PHONY: verify-fast
 verify-fast:
-	$(VERIFY_FAST_PYTHON) scripts/verify_fast.py
+	$(VERIFY_FAST_PYTHON) scripts/verify_fast.py $(VERIFY_FAST_ARGS)
 
 # Efficiency verification configuration: use the activated project runtime.
 EFFICIENCY_PYTHON ?= python

@@ -451,6 +451,8 @@ def plan(
     paths: list[str],
     browser: bool = False,
     notices: list[str] | None = None,
+    *,
+    separate_efficiency: bool = False,
 ) -> tuple[list[Step], list[str]]:
     steps = []
     selection_notices = []
@@ -490,10 +492,14 @@ def plan(
     for path in paths:
         if path.startswith("backend/") and path.endswith(".py"):
             tests.update(backend_tests(root, path, selection_notices))
-    efficiency = needs_efficiency(paths)
+    efficiency = needs_efficiency(paths) and not separate_efficiency
     if not efficiency:
         tests = {path for path in tests if not efficiency_only(root / "backend" / path)}
     if notices is not None:
+        if separate_efficiency:
+            notices.append(
+                "效率测试已从快速阶段分离，必须另行完成 make check-efficiency；本次不代表效率门禁通过。"
+            )
         if len(tests) > BACKEND_TEST_FILE_WARNING_LIMIT:
             reason = (
                 "部分模块未找到直接相关测试，已回退应用级范围"
@@ -501,7 +507,7 @@ def plan(
                 else "直接静态引用、同名测试或显式映射的相关文件较多，取并集后范围较大"
             )
             notices.append(
-                f"!!! 后端测试范围提示：选中 {len(tests)} 个文件，超过配置上限 "
+                f"!!! 后端测试范围提示：选中 {len(tests)} 个文件，超过提示阈值 "
                 f"{BACKEND_TEST_FILE_WARNING_LIMIT}；预计原因：{reason}；仍照常运行。"
             )
         notices.extend(selection_notices)
@@ -587,10 +593,10 @@ def plan(
     return steps, browsers
 
 
-def run_steps(root: Path, steps: list[Step]) -> int:
+def run_steps(root: Path, steps: list[Step], *, keep_going: bool = False) -> int:
     failures = 0
     environment = dict(os.environ, **ENVIRONMENT)
-    for step in steps:
+    for index, step in enumerate(steps):
         print(f"\n[{step.name}] {step.display()}", flush=True)
         started = time.monotonic()
         try:
@@ -609,6 +615,13 @@ def run_steps(root: Path, steps: list[Step]) -> int:
             f"退出码 {status}，耗时 {time.monotonic() - started:.2f}s",
             flush=True,
         )
+        if status != 0 and not keep_going:
+            print(
+                f"首个失败后停止，已执行 {index + 1}/{len(steps)} 步；"
+                "后续检查未执行。先修复失败部分，已通过且未受影响的检查不重复执行。",
+                flush=True,
+            )
+            break
     return failures
 
 
@@ -617,12 +630,26 @@ def main() -> int:
     parser.add_argument("--base", default="HEAD", help="比较基准，默认 HEAD")
     parser.add_argument("--browser", action="store_true", help="执行相关浏览器测试")
     parser.add_argument("--list", action="store_true", help="仅显示检查计划")
+    parser.add_argument(
+        "--keep-going", action="store_true", help="失败后继续检查，默认在首个失败后停止"
+    )
+    parser.add_argument(
+        "--separate-efficiency",
+        action="store_true",
+        help="完整效率门禁另行执行，快速阶段不重复运行后端efficiency用例",
+    )
     args = parser.parse_args()
     started = time.monotonic()
     notices = []
     try:
         paths = changed_files(ROOT, args.base)
-        steps, browsers = plan(ROOT, paths, args.browser, notices)
+        steps, browsers = plan(
+            ROOT,
+            paths,
+            args.browser,
+            notices,
+            separate_efficiency=args.separate_efficiency,
+        )
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"生成检查计划失败：{error}")
         return 1
@@ -648,7 +675,7 @@ def main() -> int:
         for step in steps:
             print(f"[{step.name}] {step.display()}（超时 {step.timeout}s）")
     elif steps:
-        failures = run_steps(ROOT, steps)
+        failures = run_steps(ROOT, steps, keep_going=args.keep_going)
     else:
         print("没有可验证的改动。文档、图片等不触发构建或测试。")
     if browsers:
@@ -664,7 +691,7 @@ def main() -> int:
             + shlex.join(("node", "scripts/run-browser-check.mjs", *browsers))
         )
     print(
-        f"\n汇总：{'计划' if args.list else '执行'} {len(steps)} 步，失败 {failures} 步，"
+        f"\n汇总：检查计划 {len(steps)} 步，失败 {failures} 步，"
         f"总耗时 {time.monotonic() - started:.2f}s"
     )
     return 1 if failures else 0

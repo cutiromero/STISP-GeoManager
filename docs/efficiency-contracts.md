@@ -88,6 +88,8 @@ make check-efficiency EFFICIENCY_PYTHON=/path/to/project/python
 
 该入口执行后端`efficiency`标记测试、前端在途共享单元测试和真实浏览器SDK回归。`build:verify`另外包含快速前端效率检查。触及“门禁触发范围”所列行为的提交与发布必须运行上述完整入口，并把门禁结果及实际数据验收结果放入回执。
 
+同轮快速检查使用 `make verify-fast VERIFY_FAST_ARGS=--separate-efficiency`，将后端效率用例统一交给本入口执行一次；该参数不会执行或替代完整效率门禁。分阶段记录通过结果；仅浏览器等某个阶段因环境失败时，只重跑该阶段，已通过且未受后续改动影响的阶段继续有效。
+
 回归断言覆盖：
 
 - 相同并发冷请求只实际计算一次，缓存命中不占执行槽。
