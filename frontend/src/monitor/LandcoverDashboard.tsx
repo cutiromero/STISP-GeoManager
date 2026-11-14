@@ -1,3 +1,5 @@
+import { useNavigate } from "react-router-dom";
+import { monitorResourceProfile } from "./resourceProfiles";
 import { ReloadOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Empty, Segmented, Select } from "antd";
 import {
@@ -48,6 +50,7 @@ export default function LandcoverDashboard({
   projectId: number;
 }) {
   const ui = useComputeText();
+  const navigate = useNavigate();
   const { user } = useAppContext();
   const products = useMonitoringProducts("landcover");
   const { page, loading, failure, setRevision } = products;
@@ -117,15 +120,24 @@ export default function LandcoverDashboard({
     task.flow?.nodes.filter((node) => node.status === "succeeded").length ?? 0;
   const download = async () => {
     if ((!selected && !selectedReference) || downloading) return;
+    const resource = selected?.resource ?? selectedReference!;
+    if (resource.dataType === "vector") {
+      navigate(`/map?projectTagId=${projectId}&resources=${resource.id}`);
+      return;
+    }
     setDownloading(true);
     setDownloadError(undefined);
     try {
+      const profile = await monitorResourceProfile(resource);
+      if (!profile.raster?.id)
+        throw new Error("所选成果尚无可导出的栅格数据集");
       const { blob, filename } = await api.exportLayers({
         reproject: false,
         clip: false,
         items: [
           {
             layerType: "raster",
+            datasetId: profile.raster.id,
             resourceId: selected?.resourceId ?? selectedReference!.id,
             name: selected?.name ?? selectedReference!.name,
           },
@@ -491,7 +503,9 @@ export default function LandcoverDashboard({
                         loading={downloading}
                         onClick={() => void download()}
                       >
-                        {ui("下载成果", "Download result")}
+                        {selectedReference?.dataType === "vector"
+                          ? ui("工作台导出", "Export in workbench")
+                          : ui("下载成果", "Download result")}
                       </Button>
                       <Button
                         type="link"

@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { clearMonitorResourceProfiles } from "./resourceProfiles";
 import type { LiveLayerLegend } from "../map/liveLegendData";
 
 export type MonitorLayerState = {
@@ -29,6 +30,7 @@ export function MonitorLayerStatusProvider({
 }: {
   children: ReactNode;
 }) {
+  useEffect(() => () => clearMonitorResourceProfiles(), []);
   const [states, setStates] = useState<Record<string, MonitorLayerState>>({});
   const dispatch = useMemo(
     () => ({

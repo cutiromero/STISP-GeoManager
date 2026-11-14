@@ -16,6 +16,7 @@ import type {
   ResourceProfileResponse,
 } from "../api/generated/types.gen";
 import { api } from "../api/client";
+import { clearMonitorResourceProfiles } from "./resourceProfiles";
 import EcologyMonitorPage from "../pages/EcologyMonitorPage";
 import { getMonitoringProducts } from "./productApi";
 import { createMonitorSource } from "./source";
@@ -39,6 +40,7 @@ vi.mock("./source", () => ({ createMonitorSource: vi.fn() }));
 
 let maps: ReturnType<typeof installMonitorMapboxMock>;
 beforeEach(() => {
+  clearMonitorResourceProfiles();
   vi.restoreAllMocks();
   maps = installMonitorMapboxMock();
   context.current = "17";

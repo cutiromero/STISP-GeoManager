@@ -9,7 +9,6 @@ import type {
   ProjectMonitorConfig,
   RasterRenderResult,
   ResourceListItem,
-  ResourceProfileResponse,
 } from "../api/generated/types.gen";
 import { createRasterDisplaySwap } from "./rasterDisplaySwap";
 import { useMonitorLayerStatus } from "./MonitorLayerStatus";
@@ -22,6 +21,7 @@ import {
   RasterRenderTaskRegistry,
   waitForAbortableDelay,
 } from "../utils/rasterRenderTasks";
+import { monitorResourceProfile } from "./resourceProfiles";
 import { useMonitorMap } from "./useMonitorMap";
 
 const layerIds = [
@@ -63,7 +63,6 @@ export default function ProductMap({
   const [legend, setLegend] = useState<LiveLayerLegend>();
   const target = resource ?? product?.resource;
   const title = product?.name ?? target?.name ?? "";
-  const profiles = useRef(new Map<string, ResourceProfileResponse>());
   const focused = useRef<number | undefined>(undefined);
   const hasProduct = Boolean(target);
   const report = useMonitorLayerStatus();
@@ -132,14 +131,7 @@ export default function ProductMap({
     const task = registry.start("product");
     const signal = task.controller.signal;
     const load = async () => {
-      const profileKey = `${target.id}:${target.updatedAt}`;
-      const profile =
-        profiles.current.get(profileKey) ??
-        (await api.resourceProfile(target, { signal }));
-      if (!signal.aborted) {
-        if (profiles.current.size > 4) profiles.current.clear();
-        profiles.current.set(profileKey, profile);
-      }
+      const profile = await monitorResourceProfile(target, signal);
       signal.throwIfAborted();
       let bounds = profile.bounds;
       if (profile.raster) {

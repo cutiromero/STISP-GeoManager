@@ -13,6 +13,11 @@ import type {
   MonitoringProduct,
   ResourceListItem,
 } from "../api/generated/types.gen";
+import { api } from "../api/client";
+import {
+  monitorResourceProfile,
+  clearMonitorResourceProfiles,
+} from "./resourceProfiles";
 import { businessFlowsApi } from "../api/businessFlows";
 import {
   businessFlowRun,
@@ -44,6 +49,7 @@ vi.mock("../agent/useAgentBootstrap", () => ({
     status: "ready",
   }),
 }));
+vi.mock("../utils/download", () => ({ downloadBlob: vi.fn() }));
 vi.mock("./productApi", () => ({ getMonitoringProducts: vi.fn() }));
 vi.mock("./LandcoverComparisonMap", () => ({
   default: ({
@@ -134,6 +140,7 @@ function show() {
 }
 
 beforeEach(() => {
+  clearMonitorResourceProfiles();
   vi.restoreAllMocks();
   sessionStorage.clear();
   setActiveProject("2");
@@ -311,4 +318,40 @@ it("opens the current user's batch instead of another user's newer result", asyn
       selector: ".monitor-product-identity > span",
     }),
   ).toBeVisible();
+});
+
+it("exports the registered raster dataset and reuses the map metadata", async () => {
+  const registered = { ...source, id: 1500, name: product.name };
+  const ready = { ...product, resource: registered };
+  vi.mocked(getMonitoringProducts).mockResolvedValue({
+    ...list,
+    items: [ready],
+  });
+  vi.spyOn(api, "resourceProfile").mockResolvedValue({
+    resource: registered,
+    raster: { id: 495 },
+  } as Awaited<ReturnType<typeof api.resourceProfile>>);
+  vi.spyOn(api, "exportLayers").mockResolvedValue({
+    blob: new Blob(["result"]),
+    filename: "classification.zip",
+  });
+  await monitorResourceProfile(registered);
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "下载成果", exact: true }),
+  );
+  await waitFor(() => expect(api.exportLayers).toHaveBeenCalledTimes(1));
+  expect(api.exportLayers).toHaveBeenCalledWith({
+    reproject: false,
+    clip: false,
+    items: [
+      {
+        layerType: "raster",
+        datasetId: 495,
+        resourceId: 1500,
+        name: product.name,
+      },
+    ],
+  });
+  expect(api.resourceProfile).toHaveBeenCalledTimes(1);
 });
