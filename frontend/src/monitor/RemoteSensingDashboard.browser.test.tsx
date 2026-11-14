@@ -204,7 +204,7 @@ it("真实场景空状态不创建胡杨模拟源、站点或概率", async () =
   await screen.findByText("暂无监测成果");
   expect(createMonitorSource).not.toHaveBeenCalled();
   expect(api.resourceProfile).not.toHaveBeenCalled();
-  expect(screen.getByText("数据接入中")).toBeInTheDocument();
+  expect(screen.getByText("三季节联合识别")).toBeInTheDocument();
   expect(screen.queryByText("模拟事件流")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "野火", exact: true }));
   await screen.findByText("0.25° 网格 · 8 天周期");
@@ -231,7 +231,7 @@ it("历史分布保留未知时间和空面积，选择后才加载同一地图�
       tiles: [expect.stringContaining("/101/vector-tiles/")],
     }),
   );
-  expect(maps.maps[0]?.api.fitBounds).not.toHaveBeenCalled();
+  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalled();
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
     window.innerWidth,
   );
@@ -250,7 +250,7 @@ it("历史分布保留未知时间和空面积，选择后才加载同一地图�
     expect.objectContaining({ center: [112, 32], zoom: 5 }),
   );
   fireEvent.click(screen.getByRole("button", { name: "全域" }));
-  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalledTimes(1);
+  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalledTimes(2);
   expect(api.resourceProfile).toHaveBeenCalledTimes(1);
   expect(
     document.querySelector(".monitor-layout > .monitor-globe-panel"),
@@ -323,7 +323,7 @@ it("长面积和斑块数在不同窗口内完整显示，数值与相邻指标�
         for (const metric of document.querySelectorAll(".monitor-metric")) {
           const container = metric.getBoundingClientRect();
           for (const element of metric.querySelectorAll(
-            ".monitor-number, small",
+            "strong > span, strong > small",
           )) {
             const box = element.getBoundingClientRect();
             expect(box.left).toBeGreaterThanOrEqual(container.left - 1);
@@ -333,18 +333,6 @@ it("长面积和斑块数在不同窗口内完整显示，数值与相邻指标�
             );
           }
         }
-        const gauge = document
-          .querySelector(".monitor-product-gauge")!
-          .getBoundingClientRect();
-        const number = document
-          .querySelector(".monitor-gauge-value .monitor-number")!
-          .getBoundingClientRect();
-        expect(number.width).toBeLessThanOrEqual(gauge.width * 0.7);
-        expect(number.right).toBeLessThan(
-          document
-            .querySelector(".monitor-product-overview")!
-            .getBoundingClientRect().left,
-        );
       });
     }
   } finally {
@@ -436,11 +424,12 @@ it("刷新权限失败后清除旧成果与统计", async () => {
   expect(screen.queryByText("历史分布1")).not.toBeInTheDocument();
 });
 
-it("业务路线按钮只进入目录，不自动创建任务", async () => {
+it("未发布业务流时开始入口保持禁用，不自动创建任务", async () => {
   render(view());
   await screen.findByText("暂无监测成果");
-  fireEvent.click(screen.getByRole("button", { name: "进入业务流" }));
-  await screen.findByText("业务流目录占位");
+  expect(
+    screen.getByRole("button", { name: "开始解译", exact: true }),
+  ).toBeDisabled();
   expect(createMonitorSource).not.toHaveBeenCalled();
 });
 
@@ -508,7 +497,7 @@ it("分类栅格使用服务器瓦片、实际图例和nearest采样", async () 
   fireEvent.click(await screen.findByRole("button", { name: /图例/ }));
   await screen.findByText("模型分类目标");
   expect(api.renderRasterAsync).toHaveBeenCalledWith(
-    { datasetId: 17, rulesMode: "default" },
+    expect.objectContaining({ datasetId: 17, rulesMode: "custom" }),
     { signal: expect.any(AbortSignal) },
   );
   expect(maps.maps[0]?.api.addSource).toHaveBeenCalledWith(

@@ -407,6 +407,10 @@ def process_import(record):
                 from apps.ecology.landcover import register_import
 
                 register_import(record.pk)
+            elif record.output.task.version.algorithm.identifier == "spartina-rf-infer":
+                from apps.ecology.spartina import register_import
+
+                register_import(record.pk)
             return
         except Exception as exc:
             busy = _sqlite_contention(exc)

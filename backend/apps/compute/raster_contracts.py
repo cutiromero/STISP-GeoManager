@@ -14,8 +14,19 @@ def validate_contract(value):
         "pixelSizeMeters",
         "minSide",
         "northUp",
+        "window",
     }:
         raise ComputeError("栅格输入合同包含未知字段")
+    if "window" in value and (
+        not isinstance(value["window"], list)
+        or len(value["window"]) != 4
+        or any(
+            not isinstance(key, str) or not key.isidentifier()
+            for key in value["window"]
+        )
+        or len(set(value["window"])) != 4
+    ):
+        raise ComputeError("研究区窗口须绑定四个不同的数值参数")
     for name, maximum in [("bandCount", 1024), ("minSide", 1000000)]:
         if name in value and (
             type(value[name]) is not int or not 1 <= value[name] <= maximum

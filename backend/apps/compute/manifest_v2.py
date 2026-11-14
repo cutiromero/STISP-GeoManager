@@ -422,6 +422,14 @@ def validate_semantics(result, manifest):
                     raise ComputeError("selfTests.sha256 无效")
                 if "contains" in summary:
                     text(summary["contains"], "selfTests.contains", 1000)
+    parameters = {row["key"]: row for row in result["parameters"]}
+    for port in result["inputs"]:
+        for key in (port.get("raster") or {}).get("window", []):
+            if key not in parameters or parameters[key]["type"] not in {
+                "number",
+                "integer",
+            }:
+                raise ComputeError("栅格研究区窗口须引用已声明的数值参数")
     result.update(
         errors=deepcopy(errors),
         resources=deepcopy(resources),

@@ -1,5 +1,19 @@
 # API Change Requests
 
+## API-20261114-005 - 互花米草模型解译与配套成果
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/ecology/monitoring/；沿用业务流启动、计算与标准入库接口。
+- Change type: 可选互花米草输入依据与同任务配套成果；不新增数据库结构。
+- OpenAPI change: SpartinaExtraction；MonitoringProduct.extraction、attachments；现有businessFlow和inputResources用于三季节RF组合。
+- Mock examples: 沿用171遥感空成果页，真实RF及来源关系由隔离测试与实际资料验证。
+- Frontend reason: 展示研究区、RF任务、分布统计、图例、方法输入和成果说明；共用成果来源、任务抽屉及对比地图。
+- Backend implementation notes: 发布端口声明WGS84研究区窗口，按窗口预算与固定输入版本读取大陆原件；窗口参与版本身份。受控CPU运行时沿用现有解释器，固定权重和实际依赖版本，沿用队列、取消和质量入库。
+- Verification: 48特征顺序、共同有效区、椭球面积、窗口预算与隔离、模型资产身份、配套资料ACL；共享任务、来源、真实瓦片和下载。
+- Result: 模型分类、概率和统计成为实际任务成果，真彩色窗口仅用于显示，不进入模型特征。
+
+
 
 ## API-20261114-004 - 业务流完整成果引用
 
@@ -727,6 +741,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261114-005 | BackendReady | /api/ecology/monitoring/; 计算与业务流 | 互花米草输入依据、配套成果与RF任务 | Updated | 171-remote-monitoring.json及真实候选 | Implemented | 窗口冻结、科学统计、权限、来源与浏览器 | 现有环境与三季节组合 |
 | API-20261114-004 | BackendReady | /api/business-flows/runs/{workflowId}/ | 完整成果引用与批量展示 | Updated | 原业务流示例及隔离用例 | Implemented | 引用、权限与按需读取 | 复用计算中心 |
 | API-20261114-003 | BackendReady | /api/ecology/monitoring/ | 成果来源、批次与标准资料选择 | Updated | 171-remote-monitoring.json | Implemented | 权限、批量读取与公共组件 | 本人记录边界 |
 | API-20261114-002 | BackendReady | /api/ecology/monitoring/; 业务流 | 地表覆盖产品、合同与大屏任务 | Updated | 171-remote-monitoring.json | Implemented | 科学分类、来源覆盖、入库恢复与浏览器 | 项目隔离、同一会话 |

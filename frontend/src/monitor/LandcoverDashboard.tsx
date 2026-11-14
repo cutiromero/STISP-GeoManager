@@ -26,7 +26,7 @@ import LandcoverTaskDrawer from "./LandcoverTaskDrawer";
 import type { LandcoverView } from "./LandcoverComparisonMap";
 import "./landcover-monitor.css";
 
-const ComparisonMap = lazy(() => import("./LandcoverComparisonMap"));
+const ComparisonMap = lazy(() => import("./MonitorComparisonMap"));
 const codes = [1, 2, 4, 5, 6, 8];
 const statusNames: Record<string, string> = {
   queued: "等待执行",

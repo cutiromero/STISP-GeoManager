@@ -332,32 +332,41 @@ def freeze_input(record, directory):
     limit = config().input_mb * 1024**2
     if kind in {"vector", "table"}:
         limit = min(limit, 120 * 1024**2)
-    if resource.size_bytes > limit:
+    window = record.snapshot.get("rasterWindow")
+    if resource.size_bytes > limit and not window:
         raise ComputeError("输入文件超过平台大小限制")
     if kind in {"vector", "table"} and resource.size_bytes > 120 * 1024**2:
         raise ComputeError("矢量和表格计算首期最多支持120 MiB，请先裁剪或分组")
     from .input_versions import stage_version
 
     max_band_pixels = 100_000_000
-    if record.task.version.manifest.get("runtime") == "python-geospatial-gpu-v1":
-        from .gpu_runtime import configured
+    if record.task.version.manifest.get("runtime") in {
+        "python-geospatial-gpu-v1",
+        "python-geospatial-ml-v1",
+    }:
+        from .model_runtime import configured
 
         max_band_pixels = configured(
             record.task.version.manifest, record.task.project_tag_id
         ).max_band_pixels
+
+    from .raster_windows import materialize_window
 
     prepared = stage_version(
         resource,
         record.key,
         target,
         lambda path: (
-            _materialize_input(resource, path, limit)
+            materialize_window(resource, path, window)
+            if window
+            else _materialize_input(resource, path, limit)
             if max_band_pixels == 100_000_000
             else _materialize_input(
                 resource, path, limit, max_band_pixels=max_band_pixels
             )
         ),
         record.checksum,
+        variant=window,
     )
     current = DataResource.objects.filter(
         pk=resource.id, status="active", updated_at=resource.updated_at
@@ -542,6 +551,13 @@ def _inspect_output(path, kind, *, contract=None):
                 "dtypes": list(src.dtypes),
                 "nodata": str(src.nodata),
                 "bounds": list(src.bounds),
+                **(
+                    {"rasterKind": "imagery"}
+                    if src.count == 3
+                    and src.tags().get("stisp_imagery") == "rgb"
+                    and all(dtype == "uint8" for dtype in src.dtypes)
+                    else {}
+                ),
                 **(categorical or {}),
             }
     if kind == "vector":

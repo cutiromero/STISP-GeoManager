@@ -1,0 +1,20 @@
+.monitor-task-options {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.monitor-task-options .ant-select {
+  flex: 1;
+}
+.monitor-task-records {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.monitor-task-drawer .business-flow-launch-panel {
+  margin: 0;
+}
+.monitor-task-drawer .business-flow-launch-settings summary {
+  cursor: pointer;
+  margin: 8px 0;
+}

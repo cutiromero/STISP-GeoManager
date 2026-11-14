@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 2,
+  "identifier": "spartina-rf-infer",
+  "name": "互花米草三季节RF解译",
+  "version": "1.0.0",
+  "description": "使用03、08、12月各16波段原件的同一研究区窗口执行48特征RF分类、概率和椭球面积统计。",
+  "author": "STISP",
+  "runtime": "python-geospatial-ml-v1",
+  "deterministic": true,
+  "timeoutSeconds": 1800,
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
+  "inputs": [
+    {
+      "key": "march",
+      "label": "03月16波段影像",
+      "kind": "raster",
+      "required": true,
+      "minBands": 16,
+      "description": "WGS84北向上Float32，16个固定波段。",
+      "fields": [],
+      "crs": {
+        "mode": "any"
+      },
+      "raster": {
+        "bandCount": 16,
+        "dtypes": [
+          "float32"
+        ],
+        "northUp": true,
+        "window": [
+          "west",
+          "south",
+          "east",
+          "north"
+        ]
+      }
+    },
+    {
+      "key": "august",
+      "label": "08月16波段影像",
+      "kind": "raster",
+      "required": true,
+      "minBands": 16,
+      "description": "WGS84北向上Float32，16个固定波段。",
+      "fields": [],
+      "crs": {
+        "mode": "any"
+      },
+      "raster": {
+        "bandCount": 16,
+        "dtypes": [
+          "float32"
+        ],
+        "northUp": true,
+        "window": [
+          "west",
+          "south",
+          "east",
+          "north"
+        ]
+      }
+    },
+    {
+      "key": "december",
+      "label": "12月16波段影像",
+      "kind": "raster",
+      "required": true,
+      "minBands": 16,
+      "description": "WGS84北向上Float32，16个固定波段。",
+      "fields": [],
+      "crs": {
+        "mode": "any"
+      },
+      "raster": {
+        "bandCount": 16,
+        "dtypes": [
+          "float32"
+        ],
+        "northUp": true,
+        "window": [
+          "west",
+          "south",
+          "east",
+          "north"
+        ]
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "key": "west",
+      "label": "西界",
+      "type": "number",
+      "default": 121.9,
+      "min": -180,
+      "max": 180,
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选定研究区边界。"
+      },
+      "help": "研究区WGS84经纬度边界，窗口不超过4194304像元。"
+    },
+    {
+      "key": "south",
+      "label": "南界",
+      "type": "number",
+      "default": 31.2,
+      "min": -90,
+      "max": 90,
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选定研究区边界。"
+      },
+      "help": "研究区WGS84经纬度边界，窗口不超过4194304像元。"
+    },
+    {
+      "key": "east",
+      "label": "东界",
+      "type": "number",
+      "default": 121.99,
+      "min": -180,
+      "max": 180,
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选定研究区边界。"
+      },
+      "help": "研究区WGS84经纬度边界，窗口不超过4194304像元。"
+    },
+    {
+      "key": "north",
+      "label": "北界",
+      "type": "number",
+      "default": 31.29,
+      "min": -90,
+      "max": 90,
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选定研究区边界。"
+      },
+      "help": "研究区WGS84经纬度边界，窗口不超过4194304像元。"
+    }
+  ],
+  "outputs": [
+    {
+      "key": "classification",
+      "label": "互花米草分类图",
+      "kind": "raster",
+      "file": "classification.tif",
+      "required": true,
+      "description": "0非目标区、1互花米草、255无效区；原始网格与分类图例。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "probability",
+      "label": "互花米草目标概率",
+      "kind": "raster",
+      "file": "probability.tif",
+      "required": true,
+      "description": "目标类别概率0至1；无效区为NoData。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "statistics",
+      "label": "互花米草面积统计",
+      "kind": "table",
+      "file": "statistics.csv",
+      "required": true,
+      "description": "研究区共同有效范围内的面积、覆盖与8连通斑块数。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "manifest",
+      "label": "处理依据",
+      "kind": "document",
+      "file": "result.json",
+      "required": true,
+      "description": "输入、模型与统计口径。",
+      "fields": [],
+      "final": false
+    },
+    {
+      "key": "original",
+      "label": "输入影像真彩色预览",
+      "kind": "raster",
+      "file": "original.tif",
+      "required": true,
+      "description": "实际08月原始窗口B4/B3/B2显示预览，分位拉伸不参与模型输入。",
+      "fields": [],
+      "final": false
+    }
+  ],
+  "capabilities": {
+    "operations": [
+      "infer",
+      "map",
+      "statistics"
+    ],
+    "dataTypes": [
+      "raster"
+    ],
+    "summary": "三季节48特征RF互花米草识别。",
+    "useWhen": "具有三个季节的同网格16波段影像。",
+    "avoidWhen": "影像或波段顺序不符。"
+  },
+  "errors": [
+    {
+      "code": "SPARTINA_INPUT_INVALID",
+      "meaning": "输入波段、网格或研究区不符合要求",
+      "remedy": "replace_data",
+      "precondition": "三期同网格16波段原始影像"
+    }
+  ],
+  "resources": {
+    "duration": "minutes",
+    "memory": "large",
+    "scaling": "按研究区像元数增长；三期窗口流式读取，单RF任务执行。"
+  },
+  "selfTests": [
+    {
+      "name": "拒绝非16波段影像",
+      "fixture": "selftest/invalid.json",
+      "expect": {
+        "errorCode": "SPARTINA_INPUT_INVALID"
+      }
+    }
+  ]
+}

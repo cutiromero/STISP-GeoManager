@@ -173,8 +173,11 @@ def script_isolation_status():
 
 
 def inspect_runtime(manifest=None, project_id=None):
-    if (manifest or {}).get("runtime") == "python-geospatial-gpu-v1":
-        from .gpu_runtime import inspect
+    if (manifest or {}).get("runtime") in {
+        "python-geospatial-gpu-v1",
+        "python-geospatial-ml-v1",
+    }:
+        from .model_runtime import inspect
 
         return inspect(manifest, project_id)
     if config().mode == "native":
@@ -329,8 +332,11 @@ def _native_env(cfg, package, inputs, destination):
 
 
 def _execute_native(attempt, package, inputs, destination, manifest, heartbeat):
-    if manifest.get("runtime") == "python-geospatial-gpu-v1":
-        from .gpu_runtime import binding, lease
+    if manifest.get("runtime") in {
+        "python-geospatial-gpu-v1",
+        "python-geospatial-ml-v1",
+    }:
+        from .model_runtime import binding, lease
 
         project_id = getattr(getattr(attempt, "task", None), "project_tag_id", None)
         profile, runtime = binding(manifest, project_id)
@@ -407,8 +413,13 @@ def _execute_native_process(
             GEOMANAGER_MODEL_ASSETS=profile.asset_root,
             GEOMANAGER_RUNTIME_DIGEST=attempt.runtime_digest,
         )
+        if hasattr(profile, "model_file"):
+            env.update(
+                GEOMANAGER_MODEL_FILE=profile.model_file,
+                GEOMANAGER_MODEL_SHA256=profile.model_sha256,
+            )
         task = getattr(attempt, "task", None)
-        if task:
+        if task and manifest.get("runtime") == "python-geospatial-gpu-v1":
             cache = app_path(
                 "projects",
                 str(task.project_tag_id),

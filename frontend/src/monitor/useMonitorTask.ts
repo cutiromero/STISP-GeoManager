@@ -11,8 +11,9 @@ export function useMonitorTask(
   userId: number | undefined,
   onCompleted: () => void,
   definitionId?: number,
+  scene = "landcover",
 ) {
-  const key = `monitor-task:${userId ?? "anonymous"}:${projectId}:landcover`;
+  const key = `monitor-task:${userId ?? "anonymous"}:${projectId}:${scene}:${definitionId ?? "pending"}`;
   const [flow, setFlow] = useState<BusinessFlowRun>();
   const [error, setError] = useState<string>();
   const latest = useRef(flow);
@@ -21,7 +22,11 @@ export function useMonitorTask(
   completed.current = onCompleted;
   const accept = useCallback(
     (next: BusinessFlowRun) => {
-      if (next.projectId !== projectId) return;
+      if (
+        next.projectId !== projectId ||
+        (definitionId && next.flowId !== definitionId)
+      )
+        return;
       const previous = latest.current;
       if (
         previous?.id === next.id &&
@@ -43,7 +48,7 @@ export function useMonitorTask(
       )
         completed.current();
     },
-    [projectId, key],
+    [projectId, definitionId, key],
   );
   useEffect(() => {
     if (!userId || !definitionId) return;

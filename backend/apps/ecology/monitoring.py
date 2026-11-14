@@ -35,12 +35,12 @@ SCENES = {
     "spartina": {
         "title": "互花米草监测",
         "route": [
-            "选区与资料",
-            "输入准备",
-            "模型识别",
-            "斑块统计",
-            "变化核验",
-            "成果发布",
+            "确认研究区与资料",
+            "核对三季节输入",
+            "RF解译与成果准备",
+            "核验分布统计",
+            "整理大屏成果",
+            "完成结果交付",
         ],
     },
     "wildfire": {
@@ -94,6 +94,7 @@ FIELDS = {
     "interpretation",
     "statistics",
     "classification",
+    "extraction",
     "referenceRole",
     "statisticsMethod",
     "model",
@@ -213,6 +214,12 @@ def normalize_product(value):
         if key == "patch_count" and number != int(number):
             invalid("斑块数量须为整数")
     item["statistics"] = statistics
+    if "extraction" in item:
+        from .spartina import normalize_extraction
+
+        if scene != "spartina":
+            invalid("解译输入信息只属于互花米草场景")
+        item["extraction"] = normalize_extraction(item["extraction"])
     if scene == "landcover":
         from .landcover import normalize_classification
 
@@ -358,10 +365,15 @@ def register_product(user, value, *, computed_import=None):
             or computed_import.status != "ready"
             or computed_import.output.task.owner_id != user.pk
             or computed_import.output.task.project_tag_id != selected_project_id()
-            or computed_import.output.task.version.algorithm.identifier
-            != "landcover-unet-infer"
+            or (
+                computed_import.output.task.version.algorithm.identifier,
+                value.get("scene"),
+            )
+            not in {
+                ("landcover-unet-infer", "landcover"),
+                ("spartina-rf-infer", "spartina"),
+            }
             or computed_import.resource_id != value.get("resourceId")
-            or value.get("scene") != "landcover"
         ):
             raise PermissionDenied("模型产品与本人实际入库任务不一致")
     elif not is_superadmin(user):
@@ -494,9 +506,16 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
     )
     more = examined < len(candidates)
     launch = {}
-    if scene == "landcover":
+    if scene == "spartina" and any(item.get("extraction") for item in items):
+        from .spartina import attach_related
+
+        attach_related(items, user)
+    if scene in {"landcover", "spartina"}:
         from apps.business_flows.scopes import available_flows
-        from apps.business_flows.landcover import CODE
+        from apps.business_flows.landcover import CODE as LANDCOVER_CODE
+        from apps.business_flows.spartina import CODE as SPARTINA_CODE
+
+        CODE = SPARTINA_CODE if scene == "spartina" else LANDCOVER_CODE
 
         flow = (
             available_flows()
@@ -513,39 +532,53 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
             }
         from django.db.models import Q
 
-        source_ids = {
-            identity for item in items for identity in item["sourceResourceIds"]
-        }
-        recommended = list(
-            filter_accessible(
-                DataResource.objects.filter(
-                    status="active",
-                    data_type__in=["raster", "vector"],
-                    is_compute_result=False,
+        if scene == "landcover" or flow is not None:
+            source_ids = {
+                identity for item in items for identity in item["sourceResourceIds"]
+            }
+            recommended = list(
+                filter_accessible(
+                    DataResource.objects.filter(
+                        status="active",
+                        data_type__in=["raster", "vector"],
+                        is_compute_result=False,
+                    )
+                    .filter(
+                        (
+                            Q(source__startswith="landcover-handoff:")
+                            | Q(pk__in=source_ids)
+                        )
+                        if scene == "landcover"
+                        else Q(
+                            raster_datasets__band_count=16,
+                            raster_datasets__status="ready",
+                            code__startswith="spartina-",
+                        )
+                    )
+                    .exclude(task_resource_q())
+                    .select_related("category", "inventory_group")
+                    .prefetch_related("access_groups"),
+                    user,
                 )
-                .filter(
-                    Q(source__startswith="landcover-handoff:") | Q(pk__in=source_ids)
-                )
-                .exclude(task_resource_q())
-                .select_related("category", "inventory_group")
-                .prefetch_related("access_groups"),
-                user,
-            ).order_by("id")[:128]
-        )
-        launch["inputResources"] = [
-            serialize_resource(row) for row in recommended if row.data_type == "raster"
-        ]
-        boundary = next(
-            (
-                row
+                .distinct()
+                .order_by("id")[:128]
+            )
+            launch["inputResources"] = [
+                serialize_resource(row)
                 for row in recommended
-                if row.data_type == "vector"
-                and row.source.startswith("landcover-handoff:")
-            ),
-            None,
-        )
-        if boundary:
-            launch["inputBoundary"] = serialize_resource(boundary)
+                if row.data_type == "raster"
+            ]
+            boundary = next(
+                (
+                    row
+                    for row in recommended
+                    if row.data_type == "vector"
+                    and row.source.startswith("landcover-handoff:")
+                ),
+                None,
+            )
+            if boundary:
+                launch["inputBoundary"] = serialize_resource(boundary)
 
     from django.db.models import Q
 

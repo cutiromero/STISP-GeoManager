@@ -1,0 +1,104 @@
+.spartina-card-body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 2px;
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.spartina-card-body p {
+  margin: 8px 0;
+}
+.spartina-card-body .ant-select {
+  width: 100%;
+}
+.spartina-secondary {
+  color: var(--monitor-muted);
+  font-size: 11px;
+}
+.spartina-task-status {
+  display: block;
+  color: #65dfc8;
+  font-size: 23px;
+  margin-top: 8px;
+}
+.spartina-metrics {
+  height: auto;
+  min-height: 120px;
+  overflow: visible;
+  gap: 16px 12px;
+}
+.spartina-metrics .monitor-metric {
+  container-type: inline-size;
+}
+.spartina-metrics strong {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+}
+.spartina-metrics strong > span {
+  font-family: monospace;
+  font-size: min(26px, calc(100cqi / var(--spartina-value-width)));
+}
+.spartina-metrics strong small {
+  margin: 0;
+  font-size: 10px;
+}
+.spartina-route {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  font-size: 10px;
+}
+.spartina-route span {
+  margin-right: 6px;
+  color: #65dfc8;
+}
+.spartina-color {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  background: #65d8a4;
+  border-radius: 2px;
+}
+.spartina-coverage {
+  height: 5px;
+  background: #244455;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.spartina-coverage span {
+  display: block;
+  height: 100%;
+  background: #65d8a4;
+}
+.spartina-task-region {
+  margin-bottom: 20px;
+  padding: 12px;
+  border: 1px solid #315566;
+  border-radius: 6px;
+}
+.spartina-task-region > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.spartina-task-region label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.spartina-task-region .ant-input-number {
+  flex: 1;
+  min-width: 0;
+}
+
+.spartina-card-body.monitor-assessment-copy {
+  display: block;
+}

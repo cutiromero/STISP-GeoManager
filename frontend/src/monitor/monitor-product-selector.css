@@ -61,3 +61,41 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+.monitor-product-choice {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  color: #c5dbe6;
+  border: 0;
+  border-bottom: 1px solid #24445570;
+  background: transparent;
+  text-align: left;
+  font-size: 11px;
+  cursor: pointer;
+}
+.monitor-product-choice.selected {
+  background: #173e4160;
+  box-shadow: inset 2px 0 #65dfc8;
+}
+.monitor-product-choice:hover {
+  background: #173e4180;
+}
+.monitor-product-choice strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+.monitor-product-choice time {
+  color: #8ba9bc;
+  font-size: 10px;
+}
+.monitor-product-choice > span {
+  color: #d7bf86;
+  font-size: 10px;
+}

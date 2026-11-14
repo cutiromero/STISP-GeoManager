@@ -148,6 +148,7 @@ def validate_manifest(manifest):
         "python-geospatial-v1",
         "python-data-script-v1",
         "python-geospatial-gpu-v1",
+        "python-geospatial-ml-v1",
     }:
         raise ComputeError("请选择平台已支持的运行环境")
     result.update(

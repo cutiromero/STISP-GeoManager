@@ -3684,11 +3684,51 @@ export type MonitoringProductManifest = {
      */
     model: MonitoringModel | null;
     classification?: LandcoverClassification;
+    extraction?: SpartinaExtraction;
     /**
      * 实际概率阈值，未使用为null。
      */
     threshold: number | null;
     timing: MonitoringTiming;
+};
+
+/**
+ * 互花米草实际模型解译的三季节组合、原始研究区与像元依据。
+ */
+export type SpartinaExtraction = {
+    /**
+     * 实际随机森林方法。
+     */
+    method: 'RF';
+    /**
+     * 交付资料月份组合，不作为影像获取日期。
+     */
+    inputPeriods: [
+        string,
+        string,
+        string
+    ];
+    /**
+     * 原始WGS84研究区边界。
+     */
+    bounds: [
+        number,
+        number,
+        number,
+        number
+    ];
+    /**
+     * 三期48特征共同有效像元数。
+     */
+    validPixelCount: number;
+    /**
+     * 互花米草目标像元数。
+     */
+    targetPixelCount: number;
+    /**
+     * 实际验证运行的scikit-learn版本。
+     */
+    sklearnVersion: string;
 };
 
 /**
@@ -3727,6 +3767,16 @@ export type MonitoringProduct = MonitoringProductManifest & {
      */
     registeredAt: string;
     provenance?: MonitoringProductProvenance;
+    /**
+     * 同一真实模型任务已入库且有权访问的概率、统计及输入影像显示预览。
+     */
+    attachments?: Array<{
+        /**
+         * 配套成果用途。
+         */
+        role: 'probability' | 'statistics' | 'original';
+        resource: DataResource;
+    }>;
     /**
      * 当前场景全部指标及缺失值。
      */

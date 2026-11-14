@@ -208,8 +208,11 @@ def publish_algorithm_version(user, version):
         ).exists()
     ):
         raise ComputeError("发布前必须完成一次隔离试运行，并通过结果检查", 409)
-    if version.manifest.get("runtime") == "python-geospatial-gpu-v1":
-        from .gpu_runtime import binding
+    if version.manifest.get("runtime") in {
+        "python-geospatial-gpu-v1",
+        "python-geospatial-ml-v1",
+    }:
+        from .model_runtime import binding
 
         if (
             binding(version.manifest, version.algorithm.project_tag_id)[1][
@@ -256,15 +259,21 @@ def validate_submission(user, body):
     if not isinstance(inputs, dict) or not isinstance(params, dict):
         raise ComputeError("inputs 与 parameters 必须为对象")
     manifest = version.manifest
-    if manifest.get("runtime") == "python-geospatial-gpu-v1":
-        from .gpu_runtime import configured
+    if manifest.get("runtime") in {
+        "python-geospatial-gpu-v1",
+        "python-geospatial-ml-v1",
+    }:
+        from .model_runtime import configured
 
         gpu_profile = configured(manifest, project_id())
     if set(inputs) - {item["key"] for item in manifest["inputs"]} or set(params) - {
         p["key"] for p in manifest["parameters"]
     }:
         raise ComputeError("输入或参数包含未声明字段")
-    if manifest.get("runtime") != "python-geospatial-gpu-v1":
+    if manifest.get("runtime") not in {
+        "python-geospatial-gpu-v1",
+        "python-geospatial-ml-v1",
+    }:
         gpu_profile = None
     wants_raster = gpu_profile is not None or any(
         port.get("raster") for port in manifest["inputs"]
@@ -323,6 +332,12 @@ def validate_submission(user, body):
                 else candidate(resource)
             )
         info = candidate_cache[rid]
+        if resource.data_type == "raster" and (spec.get("raster") or {}).get("window"):
+            from .raster_windows import windowed_metadata
+
+            info = windowed_metadata(
+                spec, info, parameter_values(manifest, {}, params, check_inputs=False)
+            )
         if resource.data_type == "raster":
             from .raster_contracts import gaps as raster_gaps
 
@@ -425,8 +440,11 @@ def submit(user, body, retry_of=None, *, preflight_digest=None):
             "隔离计算环境未就绪，当前无法提交计算。请联系管理员完成部署。", 503
         )
     version = data["version"]
-    if version.manifest.get("runtime") == "python-geospatial-gpu-v1":
-        from .gpu_runtime import binding
+    if version.manifest.get("runtime") in {
+        "python-geospatial-gpu-v1",
+        "python-geospatial-ml-v1",
+    }:
+        from .model_runtime import binding
 
         _, selected_runtime = binding(version.manifest, project_id())
         if (
@@ -493,10 +511,11 @@ def check_live_task(task):
         pk=task.version_id
     )
     if (
-        version.manifest.get("runtime") == "python-geospatial-gpu-v1"
+        version.manifest.get("runtime")
+        in {"python-geospatial-gpu-v1", "python-geospatial-ml-v1"}
         and task.status in ACTIVE
     ):
-        from .gpu_runtime import require_binding
+        from .model_runtime import require_binding
 
         require_binding(task)
     if (

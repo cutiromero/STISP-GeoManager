@@ -245,7 +245,9 @@ def _write_manifest(directory, metadata):
     temporary.replace(directory / "current.json")
 
 
-def stage_version(resource, key, destination, materialize, expected_checksum=""):
+def stage_version(
+    resource, key, destination, materialize, expected_checksum="", *, variant=None
+):
     if destination.exists() or destination.is_symlink():
         raise ComputeError("任务输入目标已存在，请使用新的执行目录")
     source, table = _source(resource)
@@ -253,7 +255,15 @@ def stage_version(resource, key, destination, materialize, expected_checksum="")
         "cache",
         "compute-input-versions",
         str(resource.project_tag_id),
-        str(resource.id),
+        str(resource.id)
+        + (
+            "-"
+            + hashlib.sha256(json.dumps(variant, sort_keys=True).encode()).hexdigest()[
+                :20
+            ]
+            if variant is not None
+            else ""
+        ),
     )
     dependencies = _source_dependencies(resource, source)
     version = {
@@ -264,6 +274,8 @@ def stage_version(resource, key, destination, materialize, expected_checksum="")
         "format": resource.file_format,
         "storage": resource.storage_path,
     }
+    if variant is not None:
+        version["variant"] = variant
     evidence_requested = (
         resource.data_type == "raster" and key.removeprefix("before_") in MINERALS
     )

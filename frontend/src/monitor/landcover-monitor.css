@@ -1,44 +1,3 @@
-.landcover-map {
-  position: absolute;
-  inset: 0;
-}
-.landcover-primary,
-.landcover-reference {
-  position: absolute;
-  inset: 0;
-}
-.landcover-reference .monitor-map-controls,
-.landcover-reference .remote-map-legend,
-.landcover-reference .monitor-map-cluster,
-.landcover-reference .monitor-layer-loading {
-  display: none;
-}
-.landcover-map .remote-map-legend {
-  display: none;
-}
-.landcover-map-toolbar {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 5;
-  max-width: calc(100% - 76px);
-}
-.landcover-compare-control {
-  position: absolute;
-  bottom: 24px;
-  left: 24px;
-  right: 76px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  z-index: 6;
-  color: var(--monitor-text);
-  font-size: 12px;
-}
-.landcover-compare-control input {
-  flex: 1;
-  accent-color: #65dfc8;
-}
 .landcover-card-body {
   padding: 8px 4px;
   overflow-y: auto;
@@ -112,42 +71,8 @@
   font-size: 11px;
   line-height: 1.8;
 }
-.monitor-task-options {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.monitor-task-options .ant-select {
-  flex: 1;
-}
-.monitor-task-records {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.monitor-task-drawer .business-flow-launch-panel {
-  margin: 0;
-}
-.monitor-task-drawer .business-flow-launch-settings summary {
-  cursor: pointer;
-  margin: 8px 0;
-}
 @media (max-width: 640px) {
   .landcover-composition {
     grid-template-columns: 70px minmax(0, 1fr) 38px;
   }
-}
-
-.landcover-primary {
-  pointer-events: none;
-}
-.landcover-primary > .remote-product-map {
-  clip-path: var(--landcover-clip, none);
-  pointer-events: auto;
-}
-.landcover-primary .remote-product-map-canvas {
-  opacity: var(--landcover-class-opacity, 1);
-}
-.landcover-primary > .monitor-map-controls {
-  pointer-events: auto;
 }

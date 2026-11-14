@@ -51,7 +51,7 @@ vi.mock("../agent/useAgentBootstrap", () => ({
 }));
 vi.mock("../utils/download", () => ({ downloadBlob: vi.fn() }));
 vi.mock("./productApi", () => ({ getMonitoringProducts: vi.fn() }));
-vi.mock("./LandcoverComparisonMap", () => ({
+vi.mock("./MonitorComparisonMap", () => ({
   default: ({
     mode,
     visibleCodes,
@@ -123,7 +123,7 @@ const list: MonitoringProductList = {
 };
 const current = (
   status: "queued" | "waiting_approval" | "succeeded" = "queued",
-) => businessFlowRun({ projectId: 2, status, name: "样区01解译" });
+) => businessFlowRun({ projectId: 2, flowId: 2, status, name: "样区01解译" });
 function Location() {
   const value = useLocation();
   return <output aria-label="导航位置">{value.pathname + value.search}</output>;
@@ -185,6 +185,7 @@ it("uses the six-card dashboard and submits the preselected source through the e
   const view = show();
   await screen.findByText("类型面积");
   expect(view.container.querySelectorAll(".monitor-panel")).toHaveLength(6);
+  await screen.findByTestId("map-state", {}, { timeout: 10000 });
   fireEvent.click(await screen.findByRole("checkbox", { name: "建筑" }));
   expect((await screen.findByTestId("map-state")).textContent).not.toContain(
     "6",
@@ -219,7 +220,7 @@ it("uses the six-card dashboard and submits the preselected source through the e
 });
 
 it("shares one task read between the card and drawer and refreshes products once on completion", async () => {
-  sessionStorage.setItem("monitor-task:99:2:landcover", current().id);
+  sessionStorage.setItem("monitor-task:99:2:landcover:2", current().id);
   vi.mocked(businessFlowsApi.run)
     .mockResolvedValueOnce(current())
     .mockResolvedValue(current("succeeded"));

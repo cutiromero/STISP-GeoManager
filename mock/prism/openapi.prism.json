@@ -35202,6 +35202,9 @@
           "classification": {
             "$ref": "#/components/schemas/LandcoverClassification"
           },
+          "extraction": {
+            "$ref": "#/components/schemas/SpartinaExtraction"
+          },
           "threshold": {
             "type": [
               "number",
@@ -35213,6 +35216,60 @@
           },
           "timing": {
             "$ref": "#/components/schemas/MonitoringTiming"
+          }
+        }
+      },
+      "SpartinaExtraction": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "互花米草实际模型解译的三季节组合、原始研究区与像元依据。",
+        "required": [
+          "method",
+          "inputPeriods",
+          "bounds",
+          "validPixelCount",
+          "targetPixelCount",
+          "sklearnVersion"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "const": "RF",
+            "description": "实际随机森林方法。"
+          },
+          "inputPeriods": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "交付资料月份组合，不作为影像获取日期。",
+            "items": {
+              "type": "string",
+              "description": "一个输入月份。"
+            }
+          },
+          "bounds": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "原始WGS84研究区边界。",
+            "items": {
+              "type": "number",
+              "description": "一个边界坐标。"
+            }
+          },
+          "validPixelCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "三期48特征共同有效像元数。"
+          },
+          "targetPixelCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "互花米草目标像元数。"
+          },
+          "sklearnVersion": {
+            "type": "string",
+            "description": "实际验证运行的scikit-learn版本。"
           }
         }
       },
@@ -35276,6 +35333,32 @@
               },
               "provenance": {
                 "$ref": "#/components/schemas/MonitoringProductProvenance"
+              },
+              "attachments": {
+                "type": "array",
+                "maxItems": 3,
+                "description": "同一真实模型任务已入库且有权访问的概率、统计及输入影像显示预览。",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "role",
+                    "resource"
+                  ],
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": [
+                        "probability",
+                        "statistics",
+                        "original"
+                      ],
+                      "description": "配套成果用途。"
+                    },
+                    "resource": {
+                      "$ref": "#/components/schemas/DataResource"
+                    }
+                  }
+                }
               },
               "metrics": {
                 "type": "array",

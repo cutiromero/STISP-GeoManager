@@ -360,7 +360,7 @@ def test_snapshot_reads_only_metadata_and_batches_dependency_access(
         with CaptureQueriesContext(connection) as large:
             assert len(monitoring_snapshot(user, "spartina")["items"]) == 9
     assert len(large) <= len(small)
-    assert len(large) <= 7
+    assert len(large) <= 8  # One project-owned flow lookup; no scientific reads.
 
 
 def test_command_uses_existing_project_actor_and_catalog_ids(setup_monitor, tmp_path):
