@@ -34,11 +34,10 @@ import {
   PaperClipOutlined,
   MenuOutlined,
   CloseOutlined,
-  BulbOutlined,
   NodeIndexOutlined,
 } from "@ant-design/icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import WorkspaceHeader from "../components/WorkspaceHeader";
 import { useAppContext } from "../contexts/AppContext";
 import { useProjectContext } from "../projects/ProjectContext";
@@ -56,7 +55,6 @@ import type {
   AgentBudgetProfileId,
   AgentConversation,
   AgentRun,
-  AgentResource,
   AgentEvent,
   AgentAttachment,
   AgentWorkflow,
@@ -69,9 +67,6 @@ import RunEvidence from "./RunEvidence";
 import RunComputeTasks from "./RunComputeTasks";
 import ComputeIntentCard from "./ComputeIntentCard";
 import InteractionCard from "./InteractionCard";
-import WorkflowPanel from "./WorkflowPanel";
-import GenericWorkflowUploads from "./GenericWorkflowUploads";
-import ActiveWorkflowNotice from "./ActiveWorkflowNotice";
 import ResearchIntentCard from "./ResearchIntentCard";
 import LiveActivity, { ActivityMark } from "./LiveActivity";
 import AnswerPreview from "./AnswerPreview";
@@ -84,10 +79,8 @@ import {
 } from "./agentActivity";
 import { researchDemoLaunch } from "./researchDemoLaunch";
 import AgentResizeHandle from "./AgentResizeHandle";
-import AgentToolSelection, {
+import {
   defaultToolPreferences,
-  preferencesFromRun,
-  selectionError,
   type ToolPreferences,
 } from "./AgentToolSelection";
 import useAgentLayout from "./useAgentLayout";
@@ -95,11 +88,6 @@ import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "./ReasoningEffortControl";
 import "./agent.css";
-import { workflowStatusLabels } from "./workflowFeedback";
-import {
-  genericGeologyType,
-  isLogicReasoningProject,
-} from "./multiElementScenario";
 
 const active = (r: AgentRun) =>
   ["queued", "running", "waiting_compute"].includes(r.status);
@@ -122,12 +110,11 @@ function mergeRun(old: AgentRun[], next: AgentRun): AgentRun[] {
     : [...updated, next];
 }
 
-// Plain questions a geologist would ask; the agent chooses data and knowledge itself.
-const logicExampleQuestions = [
-  "这个项目里有哪些地质资料？",
-  "八宝山组的时代、岩性和分布有什么特点？",
-  "判断一条构造线是不是假线，主要看哪些依据？",
-  "蚀变找矿远景区是怎样圈定的？",
+const exampleQuestions = [
+  "这个项目里有哪些可用资料？",
+  "请概括当前项目的数据内容和质量。",
+  "这个项目有哪些可用算法，分别适合什么任务？",
+  "请根据我的研究目标推荐分析步骤。",
 ];
 
 // Same-named conversations stay distinguishable by when they were last used.
@@ -147,37 +134,16 @@ function conversationTime(value: string) {
 export default function AgentPage() {
   const project = useProjectContext();
   const { user } = useAppContext();
-  const location = useLocation();
-  const mode = location.pathname.endsWith("workbench") ? "agent" : "chat";
-  // In the logic-reasoning project quick chat and the research agent are one page.
-  const logicProject = isLogicReasoningProject(
-    project?.projects.find((item) => String(item.id) === project.current)?.code,
-  );
-  const { bootstrap } = useAgentBootstrapState();
-  if (logicProject && mode === "chat" && bootstrap?.canAgent)
-    return <Navigate to="/agent/workbench" replace state={location.state} />;
-  return (
-    <AgentWorkspace
-      key={`${user?.id}:${project?.current}:${mode}`}
-      mode={mode}
-      logicProject={logicProject}
-    />
-  );
+  return <AgentWorkspace key={`${user?.id}:${project?.current}`} />;
 }
 
-function AgentWorkspace({
-  mode,
-  logicProject = false,
-}: {
-  mode: "chat" | "agent";
-  logicProject?: boolean;
-}) {
+function AgentWorkspace() {
   const ui = useComputeText();
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAppContext();
   const project = useProjectContext();
-  const layout = useAgentLayout(`agent-layout:${user?.id ?? "anon"}:${mode}`);
+  const layout = useAgentLayout(`agent-layout:${user?.id ?? "anon"}:agent`);
   const { message } = App.useApp();
   const {
     bootstrap,
@@ -187,6 +153,11 @@ function AgentWorkspace({
   } = useAgentBootstrapState();
   const [conversations, setConversations] = useState<AgentConversation[]>([]);
   const [current, setCurrent] = useState<AgentConversation | null>(null);
+  // New conversations use the available agent capability. Historical records
+  // retain their server mode and permissions inside the same workspace.
+  const mode =
+    current?.mode ??
+    (bootstrap?.canAgent === false && bootstrap.canChat ? "chat" : "agent");
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [computeActivities, setComputeActivities] = useState<
     Record<number, ActivityState>
@@ -235,23 +206,8 @@ function AgentWorkspace({
   const [thinkingMode, setThinkingMode] = useState<"fast" | "deep">("fast");
   const budgetProfile = bootstrap?.budgets?.defaultProfile ?? "normal";
   const [effortOverride, setEffortOverride] = useState<ReasoningEffort>();
-  const defaultEffort =
-    (bootstrap?.budgets?.enabled
-      ? bootstrap.budgets.profiles.find(
-          (item) => item.budgetProfile === budgetProfile,
-        )?.reasoningEffort
-      : bootstrap?.defaultReasoningEffort) ?? "medium";
-  const saveThinkingMode = (value: "fast" | "deep") => {
-    try {
-      localStorage.setItem(`agent-thinking:${user?.id}:${mode}`, value);
-    } catch {
-      /* The in-memory choice remains effective. */
-    }
-  };
   const requestedEffort =
-    thinkingMode === "deep"
-      ? (effortOverride ?? (logicProject ? "medium" : undefined))
-      : undefined;
+    thinkingMode === "deep" ? (effortOverride ?? "medium") : undefined;
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
   const [error, setError] = useState("");
@@ -271,13 +227,6 @@ function AgentWorkspace({
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [showLatest, setShowLatest] = useState(false);
-  const [resources, setResources] = useState<AgentResource[]>([]);
-  const [selected, setSelected] = useState<number[]>([]);
-  const [resourceState, setResourceState] = useState<
-    "idle" | "loading" | "ready" | "error"
-  >("idle");
-  const [resourceError, setResourceError] = useState("");
-  const resourceRequest = useRef<AbortController | null>(null);
   const [toolPreferences, setToolPreferences] = useState<ToolPreferences>(
     location.state?.knowledgeSelection
       ? {
@@ -293,29 +242,6 @@ function AgentWorkspace({
   const [rename, setRename] = useState<AgentConversation | null>(null);
   const [renameText, setRenameText] = useState("");
   const [showHistory, setShowHistory] = useState(false);
-  const [workflowOpen, setWorkflowOpen] = useState(false);
-  const [uploadBatchId, setUploadBatchId] = useState(() =>
-    createUuid().replace(/-/g, "").toLowerCase(),
-  );
-  const [logicUploadsOpen, setLogicUploadsOpen] = useState(false);
-  const [logicPanelMounted, setLogicPanelMounted] = useState(false);
-  const [dismissedFailure, setDismissedFailure] = useState<string>();
-  const [reuseLogicConfiguration, setReuseLogicConfiguration] = useState(false);
-  const [logicUploadCount, setLogicUploadCount] = useState(0);
-  const [logicUploading, setLogicUploading] = useState(false);
-  const [logicInputs, setLogicInputs] = useState<Record<string, number>>({});
-  const clearLogicUploads = () => {
-    setLogicUploadsOpen(false);
-    setLogicPanelMounted(false);
-    setReuseLogicConfiguration(false);
-    setLogicUploadCount(0);
-    setLogicUploading(false);
-    setLogicInputs({});
-    setUploadBatchId(createUuid().replace(/-/g, "").toLowerCase());
-  };
-  const [workflowStatus, setWorkflowStatus] =
-    useState<AgentWorkflow["status"]>();
-  const [manualWorkflow, setManualWorkflow] = useState<AgentWorkflow>();
   const [researchWorkflow, setResearchWorkflow] = useState<{
     runId: number;
     workflow: AgentWorkflow;
@@ -341,7 +267,6 @@ function AgentWorkspace({
     key: string;
     prompt: string;
     model: string;
-    selected: number[];
     thinkingMode: "fast" | "deep";
     reasoningEffort?: ReasoningEffort;
     attachmentIds: number[];
@@ -350,8 +275,6 @@ function AgentWorkspace({
     maxOutputTokens?: number;
     toolPreferences: ToolPreferences;
     demoScenario?: AgentResearchScenario;
-    uploadBatchId?: string;
-    reuseConfirmedConfiguration?: boolean;
   } | null>(null);
   const running = runs.find(active);
   const waitingRun = [...runs]
@@ -416,22 +339,7 @@ function AgentWorkspace({
       ? researchWorkflow?.workflow
       : undefined;
   const sidebarWorkflow =
-    sidebarRun?.id === latestResearch?.id && currentResearchWorkflow
-      ? currentResearchWorkflow
-      : !latestResearch &&
-          manualWorkflow &&
-          [
-            "queued",
-            "running",
-            "waiting_compute",
-            "waiting_approval",
-            "paused",
-          ].includes(manualWorkflow.status)
-        ? manualWorkflow
-        : undefined;
-  const composerWorkflowStatus = latestResearch
-    ? currentResearchWorkflow?.status
-    : workflowStatus;
+    sidebarRun?.id === latestResearch?.id ? currentResearchWorkflow : undefined;
   const sidebarActivity = sidebarWorkflow
     ? workflowActivity(sidebarWorkflow)
     : sidebarRun
@@ -456,32 +364,11 @@ function AgentWorkspace({
   const deepThinkingAvailable =
     Boolean(bootstrap?.thinkingEnabled) &&
     Boolean(selectedModel?.supportsThinking);
-  const modeLabel = logicProject
-    ? ui("智能体", "Agent")
-    : mode === "chat"
-      ? ui("快速对话", "Quick chat")
-      : ui("科研智能体", "Research agent");
-  const openLogicFlow = () => navigate("/business-flows");
-  const workflowButton = mode === "agent" && !logicProject && (
-    <Button
-      type="text"
-      icon={<NodeIndexOutlined />}
-      className={
-        composerWorkflowStatus === "waiting_approval"
-          ? "agent-workflow-attention"
-          : ""
-      }
-      onClick={() => setWorkflowOpen(true)}
-    >
-      {ui("MH-workflow", "MH-workflow")}
-      {composerWorkflowStatus && (
-        <span>{workflowStatusLabels[composerWorkflowStatus]}</span>
-      )}
-    </Button>
-  );
+  const modeLabel = ui("智能体", "Agent");
+  const openBusinessFlows = () => navigate("/business-flows");
   const attachmentsAvailable = Boolean(bootstrap?.allowAttachments);
   const internetAvailable = Boolean(bootstrap?.internetEnabled);
-  const conversationStorageKey = `agent-conversation:${user?.id ?? "anon"}:${project?.current ?? "1"}:${mode}`;
+  const conversationStorageKey = `agent-conversation:${user?.id ?? "anon"}:${project?.current ?? "1"}:agent`;
   const accessRejected =
     canUse === false ||
     bootstrapStatus === "unauthenticated" ||
@@ -497,13 +384,7 @@ function AgentWorkspace({
   const clearRestrictedState = () => {
     sequence.current++;
     listSequence.current++;
-    resourceRequest.current?.abort();
-    setResources([]);
-    setResourceState("idle");
-    setResourceError("");
-    setManualWorkflow(undefined);
     setResearchWorkflow(undefined);
-    setWorkflowStatus(undefined);
     setRuns([]);
     setComputeActivities({});
     setEvents([]);
@@ -594,11 +475,21 @@ function AgentWorkspace({
   const refreshList = async () => {
     const seq = ++listSequence.current;
     try {
-      const data = await agentApi.conversations(mode, query, archived);
-      assertConversationList(data);
+      const modes = (["agent", "chat"] as const).filter((item) =>
+        item === "agent" ? bootstrap?.canAgent : bootstrap?.canChat,
+      );
+      const pages = await Promise.all(
+        modes.map((item) => agentApi.conversations(item, query, archived)),
+      );
+      pages.forEach(assertConversationList);
+      const items = [
+        ...new Map(
+          pages.flatMap((page) => page.items).map((item) => [item.id, item]),
+        ).values(),
+      ].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || 0);
       if (alive.current && seq === listSequence.current) {
-        setConversations(data.items);
-        return data.items;
+        setConversations(items);
+        return items;
       }
     } catch (e) {
       if (alive.current && seq === listSequence.current) report(e);
@@ -614,12 +505,20 @@ function AgentWorkspace({
       void refreshList();
     }, 200);
     return () => clearTimeout(timer);
-  }, [mode, canUse, accessRejected, query, archived]);
+  }, [
+    bootstrap?.canAgent,
+    bootstrap?.canChat,
+    canUse,
+    accessRejected,
+    query,
+    archived,
+  ]);
   useEffect(() => {
-    if (!bootstrap || model) return;
+    if (!bootstrap) return;
     const candidates = bootstrap.models.filter(
       (m) => mode === "chat" || m.allowAgent,
     );
+    if (candidates.some((item) => item.alias === model)) return;
     const defaultModel =
       mode === "agent"
         ? bootstrap.defaultAgentModel
@@ -637,48 +536,8 @@ function AgentWorkspace({
     );
   }, [bootstrap, mode, model, user?.id]);
   useEffect(() => {
-    if (logicProject) return;
-    let preferred: string | null = null;
-    try {
-      preferred = localStorage.getItem(`agent-thinking:${user?.id}:${mode}`);
-    } catch {
-      /* Browser storage is optional; current controls remain usable. */
-    }
-    const next =
-      preferred === "deep" && deepThinkingAvailable ? "deep" : "fast";
-    setThinkingMode(next);
-  }, [deepThinkingAvailable, mode, user?.id, logicProject]);
-  useEffect(() => {
-    if (logicProject) setThinkingMode(deepThinkingAvailable ? "deep" : "fast");
-  }, [deepThinkingAvailable, effortOverride, logicProject]);
-  useEffect(() => {
-    if (!deepThinkingAvailable && thinkingMode !== "fast")
-      setThinkingMode("fast");
-  }, [deepThinkingAvailable, thinkingMode]);
-  const loadResources = async () => {
-    if (resourceRequest.current || resourceState === "ready" || !canUse) return;
-    const request = new AbortController();
-    resourceRequest.current = request;
-    setResourceState("loading");
-    setResourceError("");
-    try {
-      const result = await agentApi.resources("", { signal: request.signal });
-      if (!alive.current || request.signal.aborted) return;
-      setResources(result.items);
-      setResourceState("ready");
-    } catch (error) {
-      if (!alive.current || request.signal.aborted) return;
-      setResourceState("error");
-      setResourceError(
-        error instanceof Error ? error.message : "暂时无法读取数据，请重试",
-      );
-      if (error instanceof ApiError && [401, 403].includes(error.status))
-        report(error);
-    } finally {
-      if (resourceRequest.current === request) resourceRequest.current = null;
-    }
-  };
-  useEffect(() => () => resourceRequest.current?.abort(), []);
+    setThinkingMode(deepThinkingAvailable ? "deep" : "fast");
+  }, [deepThinkingAvailable]);
   useEffect(() => {
     if (!running || historyLoading) return;
     let disposed = false;
@@ -708,7 +567,6 @@ function AgentWorkspace({
               (item) => item.id === data.run.conversationId,
             );
             if (
-              logicProject &&
               data.run.status === "succeeded" &&
               runs.length === 1 &&
               runs[0]?.id === data.run.id &&
@@ -760,7 +618,6 @@ function AgentWorkspace({
   useEffect(() => {
     if (
       !titleRefresh ||
-      !logicProject ||
       accessRejected ||
       current?.id !== titleRefresh.conversationId
     )
@@ -804,7 +661,7 @@ function AgentWorkspace({
       disposed = true;
       clearTimeout(timer);
     };
-  }, [titleRefresh, current?.id, logicProject, accessRejected]);
+  }, [titleRefresh, current?.id, accessRejected]);
   useLayoutEffect(() => {
     const box = viewport.current;
     if (box && pendingScroll.current !== null) {
@@ -873,7 +730,6 @@ function AgentWorkspace({
     preloaded?: Awaited<ReturnType<typeof agentApi.detail>>,
   ) => {
     setBusinessLaunch(undefined);
-    clearLogicUploads();
     const seq = ++sequence.current;
     setHistoryLoading(c);
     setHistoryFailure(null);
@@ -900,16 +756,12 @@ function AgentWorkspace({
         setPollFailure("");
         setCurrent(detail.conversation);
         setRuns(detail.runs);
-        if (mode === "agent") {
-          const latest = detail.runs[detail.runs.length - 1];
-          const restored = preferencesFromRun(latest);
-          setToolPreferences(
-            handoffSelection.current
-              ? { ...restored, knowledgeSelection: handoffSelection.current }
-              : restored,
-          );
-          setSelected(latest?.resourceIds ?? []);
-        }
+        setToolPreferences({
+          ...defaultToolPreferences,
+          ...(handoffSelection.current
+            ? { knowledgeSelection: handoffSelection.current }
+            : {}),
+        });
         try {
           sessionStorage.setItem(
             conversationStorageKey,
@@ -966,7 +818,9 @@ function AgentWorkspace({
         assertConversationDetail(detail);
         if (
           String(detail.conversation.projectId) !== project?.current ||
-          detail.conversation.mode !== mode
+          !(detail.conversation.mode === "agent"
+            ? bootstrap?.canAgent
+            : bootstrap?.canChat)
         )
           throw new Error("会话不属于当前项目或模块。");
         const runId = Number(query.get("runId"));
@@ -981,7 +835,13 @@ function AgentWorkspace({
     return () => {
       stopped = true;
     };
-  }, [canUse, location.search, project?.current, mode]);
+  }, [
+    canUse,
+    location.search,
+    project?.current,
+    bootstrap?.canAgent,
+    bootstrap?.canChat,
+  ]);
   useEffect(() => {
     if (
       !canUse ||
@@ -1013,7 +873,6 @@ function AgentWorkspace({
       businessBlocked ||
       running ||
       uploadingAttachment ||
-      logicUploading ||
       !text.trim() ||
       !modelOnline
     )
@@ -1069,13 +928,10 @@ function AgentWorkspace({
       }
       return;
     }
-    const genericRun =
-      !demoScenario && !logicUploadCount
-        ? [...runs].reverse().find((item) => item.researchIntent)
-            ?.researchIntent
-        : undefined;
+    const genericRun = !demoScenario
+      ? [...runs].reverse().find((item) => item.researchIntent)?.researchIntent
+      : undefined;
     if (
-      logicProject &&
       genericRun?.scenario === "geology_generic" &&
       (["clarifying", "waiting_approval"].includes(genericRun.status) ||
         /^(进度|当前进度|查看进度|结果|查看结果|查看报告)$/.test(text.trim()))
@@ -1103,21 +959,12 @@ function AgentWorkspace({
       }
       return;
     }
-    const clarification =
-      !demoScenario && !logicUploadCount
-        ? [...runs]
-            .reverse()
-            .find((run) => run.researchIntent?.status === "clarifying")
-            ?.researchIntent
-        : undefined;
-    const invalidSelection =
-      mode === "agent" && !clarification
-        ? selectionError(toolPreferences, selected)
-        : "";
-    if (invalidSelection) {
-      setError(invalidSelection);
-      return;
-    }
+    const clarification = !demoScenario
+      ? [...runs]
+          .reverse()
+          .find((run) => run.researchIntent?.status === "clarifying")
+          ?.researchIntent
+      : undefined;
     setBusy(true);
     setError("");
     const seq = sequence.current;
@@ -1155,13 +1002,6 @@ function AgentWorkspace({
         previous.prompt === text &&
         previous.model === model &&
         previous.demoScenario === demoScenario &&
-        previous.uploadBatchId ===
-          (logicProject && logicUploadCount ? uploadBatchId : undefined) &&
-        previous.reuseConfirmedConfiguration ===
-          (logicProject && logicUploadCount
-            ? reuseLogicConfiguration
-            : undefined) &&
-        JSON.stringify(previous.selected) === JSON.stringify(selected) &&
         previous.thinkingMode === thinkingMode &&
         previous.reasoningEffort === requestedEffort &&
         JSON.stringify(previous.attachmentIds) ===
@@ -1181,7 +1021,6 @@ function AgentWorkspace({
               : createUuid(),
             prompt: text,
             model,
-            selected,
             thinkingMode,
             reasoningEffort: requestedEffort,
             attachmentIds: attachments.map((item) => item.id),
@@ -1192,35 +1031,19 @@ function AgentWorkspace({
             maxOutputTokens: undefined,
             toolPreferences,
             demoScenario,
-            uploadBatchId:
-              logicProject && logicUploadCount ? uploadBatchId : undefined,
-            reuseConfirmedConfiguration:
-              logicProject && logicUploadCount
-                ? reuseLogicConfiguration
-                : undefined,
           };
       failedSubmission.current = submission;
       const run = await agentApi.submit(c.id, {
         model,
         prompt: text,
         idempotencyKey: submission.key,
-        ...(!demoScenario && logicProject && logicUploadCount
-          ? {
-              uploadBatchId,
-              combineInputReview: true,
-              reuseConfirmedConfiguration: reuseLogicConfiguration,
-            }
-          : {}),
         ...(demoScenario ? { demoScenario } : {}),
         ...(bootstrap?.budgets?.enabled
           ? { budgetProfile, maxOutputTokens: undefined }
           : {}),
         thinkingMode,
         reasoningEffort: requestedEffort,
-        resourceIds:
-          mode === "agent" && toolPreferences.dataSelectionMode === "manual"
-            ? selected
-            : [],
+        resourceIds: [],
         ...(mode === "agent" ? toolPreferences : {}),
         attachmentIds: attachments.map((item) => item.id),
         internetEnabled: internetEnabled && internetAvailable,
@@ -1229,8 +1052,6 @@ function AgentWorkspace({
       pendingScroll.current = run.id;
       if (!updateRun(run, Boolean(demoScenario))) return;
       setPrompt("");
-      if (!demoScenario && logicProject && logicUploadCount)
-        clearLogicUploads();
       setEvents([]);
       failedSubmission.current = null;
       handoffSelection.current = null;
@@ -1256,7 +1077,6 @@ function AgentWorkspace({
   }, [canUse, modelOnline, busy]);
   const reset = () => {
     restoredConversation.current = true;
-    clearLogicUploads();
     sequence.current++;
     demoLaunch.current = null;
     setCurrent(null);
@@ -1273,7 +1093,6 @@ function AgentWorkspace({
     setBusinessLaunch(undefined);
     setAttachments([]);
     setInternetEnabled(false);
-    setSelected([]);
     setToolPreferences(defaultToolPreferences);
     handoffSelection.current = null;
     failedSubmission.current = null;
@@ -1475,7 +1294,7 @@ function AgentWorkspace({
           </div>
         ))}
       </div>
-      {canUse && sidebarActivity && !(logicProject && researchWorkflow) && (
+      {canUse && sidebarActivity && (
         <section className="agent-sidebar-task" aria-label="当前任务">
           <span className="agent-sidebar-task-eyebrow">当前任务</span>
           <LiveActivity
@@ -1556,34 +1375,6 @@ function AgentWorkspace({
               >
                 {ui("会话", "History")}
               </Button>
-              <nav
-                className="agent-mode-nav"
-                aria-label={ui("对话模式", "Conversation mode")}
-                hidden={logicProject}
-              >
-                {bootstrap?.canChat && (
-                  <Button
-                    aria-label={ui("快速对话", "Quick chat")}
-                    icon={<MessageOutlined />}
-                    type={mode === "chat" ? "primary" : "text"}
-                    aria-current={mode === "chat" ? "page" : undefined}
-                    onClick={() => navigate("/agent/chat")}
-                  >
-                    {ui("快速对话", "Quick chat")}
-                  </Button>
-                )}
-                {bootstrap?.canAgent && (
-                  <Button
-                    aria-label={ui("科研智能体", "Research agent")}
-                    icon={<RobotOutlined />}
-                    type={mode === "agent" ? "primary" : "text"}
-                    aria-current={mode === "agent" ? "page" : undefined}
-                    onClick={() => navigate("/agent/workbench")}
-                  >
-                    {ui("科研智能体", "Research agent")}
-                  </Button>
-                )}
-              </nav>
               <div className="agent-conversation-heading">
                 <span>{modeLabel}</span>
                 <strong title={current?.title}>
@@ -1600,9 +1391,7 @@ function AgentWorkspace({
             <BusinessFlowLaunch
               launch={businessLaunch}
               model={model}
-              reasoningEffort={
-                effortOverride ?? (logicProject ? "medium" : defaultEffort)
-              }
+              reasoningEffort={effortOverride ?? "medium"}
               onReasoningEffortChange={(value) => {
                 setEffortOverride(value);
                 setThinkingMode("deep");
@@ -1752,59 +1541,35 @@ function AgentWorkspace({
               <div className="agent-welcome">
                 <RobotOutlined />
                 <Typography.Title level={2}>
-                  {mode === "chat"
-                    ? ui("有什么想讨论的？", "What would you like to discuss?")
-                    : ui(
-                        "从项目数据中寻找答案",
-                        "Find answers in your project data",
-                      )}
+                  {ui(
+                    "从项目数据中寻找答案",
+                    "Find answers in your project data",
+                  )}
                 </Typography.Title>
                 <p>
-                  {mode === "chat"
-                    ? ui(
-                        "选择本地模型，开始一段对话。",
-                        "Choose a local model to start a conversation.",
-                      )
-                    : ui(
-                        "查找当前项目授权数据，读取字段与统计，按平台配色规则生成个人地图。",
-                        "Find authorized data, inspect fields and statistics, and prepare maps using platform color rules.",
-                      )}
+                  {ui(
+                    "直接提问，智能体将按需查找当前项目的授权资料与可用算法；完整任务可从业务流开始。",
+                    "Ask a question to discover authorized project data and algorithms, or start a task from business flows.",
+                  )}
                 </p>
-                {mode === "agent" && !logicProject && (
-                  <Button
-                    onClick={() =>
-                      setPrompt(
-                        ui(
-                          "请查找当前项目中可分析的表格，说明字段和数据质量。",
-                          "Find tables in this project and describe their fields and data quality.",
-                        ),
-                      )
-                    }
-                  >
-                    {ui("查看项目数据概况", "Explore project data")}
-                  </Button>
-                )}
-                {mode === "agent" && logicProject && (
-                  <div
-                    className="agent-example-questions"
-                    aria-label={ui("示例问题", "Example questions")}
-                  >
-                    {logicExampleQuestions.map((question) => (
-                      <Button
-                        key={question}
-                        onClick={() => setPrompt(question)}
-                      >
-                        {question}
-                      </Button>
-                    ))}
-                    <Button type="primary" onClick={openLogicFlow}>
+                <div
+                  className="agent-example-questions"
+                  aria-label={ui("示例问题", "Example questions")}
+                >
+                  {exampleQuestions.map((question) => (
+                    <Button key={question} onClick={() => setPrompt(question)}>
+                      {question}
+                    </Button>
+                  ))}
+                  {bootstrap?.canAgent && (
+                    <Button type="primary" onClick={openBusinessFlows}>
                       {ui(
-                        "从业务流开始逻辑推理",
-                        "Start reasoning with a business flow",
+                        "从业务流开始任务",
+                        "Start a task with a business flow",
                       )}
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
             {runs.map((r) => (
@@ -1934,22 +1699,7 @@ function AgentWorkspace({
                                 : previous;
                           })
                         }
-                        onRestart={() => {
-                          if (logicProject) {
-                            openLogicFlow();
-                            return;
-                          }
-                          setPrompt(
-                            `请重新发起一次分析：${r.researchIntent?.goal}。先核对上次失败原因，复用可用的已有计算结果；需要重新计算的部分请说明。`,
-                          );
-                          setSelected(
-                            Object.values(r.researchIntent?.inputs ?? {}),
-                          );
-                          setToolPreferences(preferencesFromRun(r));
-                          message.info(
-                            "任务说明已放入输入框，请检查或修改后发送。原任务记录保留。",
-                          );
-                        }}
+                        onRestart={openBusinessFlows}
                         onChanged={(next) => {
                           if (
                             !alive.current ||
@@ -2121,117 +1871,6 @@ function AgentWorkspace({
                       </Button>
                     </div>
                   )}
-                  {logicProject && logicPanelMounted && (
-                    <div
-                      className="agent-logic-panel"
-                      hidden={!logicUploadsOpen}
-                    >
-                      <ActiveWorkflowNotice
-                        projectId={String(project?.current ?? "1")}
-                        currentId={currentResearchWorkflow?.id}
-                        refreshKey={`${error}:${composerWorkflowStatus ?? ""}`}
-                      />
-                      <GenericWorkflowUploads
-                        batchId={uploadBatchId}
-                        model={model}
-                        reasoningEffort={
-                          deepThinkingAvailable && thinkingMode === "deep"
-                            ? (effortOverride ??
-                              (logicProject ? "medium" : defaultEffort))
-                            : undefined
-                        }
-                        inputs={logicInputs}
-                        uploadOnly
-                        disabled={
-                          busy || taskLocked || Boolean(current?.archived)
-                        }
-                        onInputsChange={setLogicInputs}
-                        onCountChange={setLogicUploadCount}
-                        onActivityChange={setLogicUploading}
-                        onClose={() => setLogicUploadsOpen(false)}
-                        onSelectionChange={() =>
-                          setReuseLogicConfiguration(false)
-                        }
-                        onRestored={(result) => {
-                          const configuration = result.configuration;
-                          if (!configuration) return;
-                          setPrompt((value) =>
-                            !value ||
-                            value ===
-                              "请检查这些资料的岩性、构造与蚀变关系，识别不一致之处，给出处置建议并生成对比成果。"
-                              ? configuration.prompt
-                              : value,
-                          );
-                          setEffortOverride(configuration.reasoningEffort);
-                          setThinkingMode(
-                            deepThinkingAvailable ? "deep" : "fast",
-                          );
-                          setReuseLogicConfiguration(
-                            !result.unavailableResourceIds.length &&
-                              Boolean(configuration.roles.lithology),
-                          );
-                        }}
-                      />
-                      {reuseLogicConfiguration && (
-                        <Alert
-                          type="info"
-                          title="沿用上次已确认的角色和字段"
-                          action={
-                            <Button
-                              size="small"
-                              onClick={() => setReuseLogicConfiguration(false)}
-                            >
-                              修改角色和字段
-                            </Button>
-                          }
-                        />
-                      )}
-                      {!reuseLogicConfiguration && logicUploadCount > 0 && (
-                        <Typography.Text type="secondary">
-                          发送后核对角色和字段。
-                        </Typography.Text>
-                      )}
-                    </div>
-                  )}
-                  {logicProject &&
-                    !logicUploadsOpen &&
-                    logicUploadCount > 0 && (
-                      <Button type="text" onClick={openLogicFlow}>
-                        已选 {logicUploadCount} 份资料 · 展开
-                      </Button>
-                    )}
-                  {logicProject &&
-                    !logicUploadsOpen &&
-                    composerWorkflowStatus === "failed" &&
-                    dismissedFailure !==
-                      String(
-                        currentResearchWorkflow?.id ?? latestResearch?.id,
-                      ) && (
-                      <Alert
-                        type="warning"
-                        closable
-                        title="上次任务失败"
-                        onClose={() =>
-                          setDismissedFailure(
-                            String(
-                              currentResearchWorkflow?.id ?? latestResearch?.id,
-                            ),
-                          )
-                        }
-                        action={
-                          <Button
-                            size="small"
-                            onClick={() => {
-                              viewport.current
-                                ?.querySelector(".agent-research-intent")
-                                ?.scrollIntoView({ block: "center" });
-                            }}
-                          >
-                            查看任务
-                          </Button>
-                        }
-                      />
-                    )}
                   {attachments.length > 0 && (
                     <div className="agent-attachments-row">
                       {attachments.map((item) => (
@@ -2294,33 +1933,15 @@ function AgentWorkspace({
                 </div>
                 <div className="agent-composer-footer">
                   <div className="agent-composer-tools">
-                    {mode === "agent" && (
+                    {bootstrap?.canAgent && (
                       <Button
                         type="text"
                         icon={<NodeIndexOutlined />}
+                        aria-label={ui("业务流", "Business flows")}
                         onClick={() => navigate("/business-flows")}
                       >
                         业务流
                       </Button>
-                    )}
-                    {mode === "agent" && bootstrap && !logicProject && (
-                      <AgentToolSelection
-                        bootstrap={bootstrap}
-                        resources={resources}
-                        selected={selected}
-                        value={toolPreferences}
-                        disabled={
-                          taskLocked ||
-                          busy ||
-                          !canUse ||
-                          Boolean(current?.archived)
-                        }
-                        onChange={setToolPreferences}
-                        onResources={setSelected}
-                        onLoadResources={() => void loadResources()}
-                        resourcesLoading={resourceState === "loading"}
-                        resourcesError={resourceError}
-                      />
                     )}
                     {attachmentsAvailable && (
                       <Upload
@@ -2342,6 +1963,7 @@ function AgentWorkspace({
                         <Button
                           type="text"
                           icon={<PaperClipOutlined />}
+                          aria-label={ui("上传文档", "Upload document")}
                           loading={uploadingAttachment}
                         >
                           {ui("上传文档", "Upload document")}
@@ -2350,51 +1972,13 @@ function AgentWorkspace({
                     )}
                     {deepThinkingAvailable && (
                       <ReasoningEffortControl
-                        value={
-                          logicProject
-                            ? (effortOverride ?? "medium")
-                            : (effortOverride ?? defaultEffort)
-                        }
+                        value={effortOverride ?? "medium"}
                         overridden={effortOverride !== undefined}
-                        effortEnabled={logicProject || thinkingMode === "deep"}
+                        effortEnabled
                         disabled={taskLocked || busy}
-                        onChange={(value) => {
-                          if (logicProject) {
-                            setEffortOverride(value);
-                            setThinkingMode("deep");
-                            return;
-                          }
-                          setEffortOverride(value);
-                          if (value !== undefined) {
-                            setThinkingMode("deep");
-                            saveThinkingMode("deep");
-                          }
-                        }}
+                        onChange={(value) => setEffortOverride(value)}
                       />
                     )}
-                    {deepThinkingAvailable && !logicProject && (
-                      <>
-                        <Button
-                          type="text"
-                          icon={<BulbOutlined />}
-                          className={
-                            thinkingMode === "deep" ? "agent-tool-active" : ""
-                          }
-                          aria-label={ui("深度思考", "Deep thinking")}
-                          aria-pressed={thinkingMode === "deep"}
-                          disabled={taskLocked || busy}
-                          onClick={() => {
-                            const next =
-                              thinkingMode === "deep" ? "fast" : "deep";
-                            setThinkingMode(next);
-                            saveThinkingMode(next);
-                          }}
-                        >
-                          {ui("深度思考", "Deep thinking")}
-                        </Button>
-                      </>
-                    )}
-                    {!logicProject && workflowButton}
                   </div>
                   {running ? (
                     <Button
@@ -2442,7 +2026,6 @@ function AgentWorkspace({
                         Boolean(businessBlocked) ||
                         Boolean(historyLoading) ||
                         uploadingAttachment ||
-                        logicUploading ||
                         !modelOnline ||
                         !bootstrap?.workerOnline ||
                         !prompt.trim() ||
@@ -2492,44 +2075,6 @@ function AgentWorkspace({
             />
           )}
       </div>
-      {mode === "agent" && canUse && (
-        <Drawer
-          title={ui("MH-workflow", "MH-workflow")}
-          open={workflowOpen}
-          onClose={() => setWorkflowOpen(false)}
-          size={layout.workflow}
-          classNames={{ root: "agent-workflow-drawer" }}
-        >
-          <AgentResizeHandle
-            orientation="vertical"
-            label={ui("调整工作流宽度", "Resize workflow panel")}
-            hint={ui(
-              "左右拖动调整宽度，双击恢复",
-              "Drag to resize; double-click to reset",
-            )}
-            controls="agent-workflow-content"
-            value={layout.workflow}
-            min={layout.workflowMin}
-            max={layout.workflowMax}
-            defaultValue={layout.defaults.workflow}
-            reverse
-            onChange={layout.setWorkflow}
-          />
-          <div id="agent-workflow-content">
-            <WorkflowPanel
-              model={model}
-              resourceIds={selected}
-              embedded
-              open={workflowOpen}
-              userId={user?.id}
-              bootstrap={bootstrap}
-              onStatusChange={setWorkflowStatus}
-              onWorkflowChange={setManualWorkflow}
-              fixedScenario={logicProject ? genericGeologyType : undefined}
-            />
-          </div>
-        </Drawer>
-      )}
       <Modal
         open={Boolean(rename)}
         title={ui("重命名会话", "Rename conversation")}

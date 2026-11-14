@@ -17,7 +17,6 @@ import type {
   AgentBootstrap,
   AgentConversationDetail,
   AgentRun,
-  AgentWorkflow,
 } from "../api/generated/types.gen";
 import AgentPage from "./AgentPage";
 import type { AgentBootstrapStatus } from "./useAgentBootstrap";
@@ -94,7 +93,7 @@ const bootstrap: AgentBootstrap = {
 const conversation = {
   id: 1,
   projectId: 1,
-  mode: "chat" as const,
+  mode: "agent" as const,
   title: "历史会话",
   archived: false,
   createdAt: "2026-09-24",
@@ -114,36 +113,6 @@ function run(id: number, prompt: string, answer = ""): AgentRun {
     contextTruncated: false,
     createdAt: "2026-09-24",
     updatedAt: "2026-09-24",
-  };
-}
-function workflow(status: AgentWorkflow["status"]): AgentWorkflow {
-  return {
-    id: "workflow-1",
-    projectId: 1,
-    workflowType: "research_processing",
-    goal: "分析研究区影像",
-    model: "mock",
-    status,
-    detail: "计划已生成",
-    currentStep: "plan",
-    iteration: 1,
-    operatorSteps: 0,
-    maxIterations: 3,
-    maxOperatorSteps: 3,
-    executeOperators: false,
-    resourceIds: [10],
-    algorithmVersionId: 7,
-    parameters: {},
-    resultIds: [],
-    evidence: [],
-    runtime: "worker",
-    steps: [],
-    createdAt: "2026-09-24",
-    updatedAt: "2026-09-24",
-    plan: { algorithm: "NDVI", inputNames: { image: "研究区影像" } },
-    planHash: "frozen-plan",
-    importResults: true,
-    resultResourceIds: [],
   };
 }
 function showAgent(mode: "chat" | "workbench" = "chat") {
@@ -591,7 +560,7 @@ beforeEach(() => {
   accessState.retry.mockReset();
   bootstrap.canManage = false;
   bootstrap.canAgent = true;
-  bootstrap.canChat = true;
+  bootstrap.canChat = false;
   bootstrap.allowAttachments = false;
   bootstrap.internetEnabled = false;
   bootstrap.workerOnline = true;
@@ -984,17 +953,23 @@ it("prefills a knowledge handoff without sending it automatically", async () => 
   );
   expect(agentApi.submit).not.toHaveBeenCalled();
   await screen.findByText("旧问题");
-  fireEvent.click(screen.getByRole("button", { name: "知识库" }));
-  expect(screen.getByRole("radio", { name: "手选分区" })).toBeChecked();
-  expect(
-    screen.getByText("遥感地质填图逻辑推理", {
-      selector: ".ant-select-selection-item-content",
-    }),
-  ).toBeInTheDocument();
+  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
+    target: { value: "核查霞石与石英的适用条件" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() =>
+    expect(agentApi.submit).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        knowledgeSelection: { mode: "manual", domains: ["geology"] },
+      }),
+    ),
+  );
 });
 
 it("shows the authorization message and hides tool controls for a restricted account", async () => {
   bootstrap.canAgent = false;
+  bootstrap.canChat = false;
   showAgent("workbench");
   expect(
     await screen.findByText("当前账号未获准使用此功能，请联系超级管理员。"),
@@ -1022,9 +997,8 @@ it.each(["chat", "workbench"])(
     expect(
       screen.getByRole("button", { name: "调整思考强度" }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByText("深度思考", { exact: true }));
     const trigger = await screen.findByRole("button", { name: "调整思考强度" });
-    expect(trigger).toHaveTextContent("轻量");
+    expect(trigger).toHaveTextContent("标准");
     fireEvent.click(trigger);
     const slider = await screen.findByRole("slider", { name: "思考强度" });
     fireEvent.keyDown(slider, { key: "End", keyCode: 35 });
@@ -1085,23 +1059,17 @@ it.each([
     });
     showAgent(mode);
     await screen.findByText("旧问题");
-    const reasoning = screen.getByRole("button", { name: /深度思考/ });
-    expect(reasoning).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
     const slider = await screen.findByRole("slider", { name: "思考强度" });
     await waitFor(() => expect(slider).toBeVisible());
     for (const label of ["轻量", "标准", "深度"])
       expect(screen.getByText(label, { exact: true })).toBeVisible();
-    expect(reasoning).toHaveAttribute("aria-pressed", "false");
     if (effort === "low") {
       fireEvent.keyDown(slider, { key: "Home", keyCode: 36 });
       fireEvent.keyUp(slider, { key: "Home", keyCode: 36 });
     } else fireEvent.keyDown(slider, { key: "End", keyCode: 35 });
     if (effort === "medium")
       fireEvent.keyDown(slider, { key: "ArrowLeft", keyCode: 37 });
-    await waitFor(() =>
-      expect(reasoning).toHaveAttribute("aria-pressed", "true"),
-    );
     if (effort === "medium") {
       await waitFor(() =>
         expect(slider.closest(".ant-popover")!.className).not.toMatch(
@@ -1130,47 +1098,6 @@ it.each([
     );
   },
 );
-
-it("restores administrator default and keeps the effort choices visible without enabling reasoning on open", async () => {
-  render(
-    <AntApp>
-      <MemoryRouter initialEntries={["/agent/chat"]}>
-        <AgentPage />
-      </MemoryRouter>
-    </AntApp>,
-  );
-  await screen.findByText("旧问题");
-  fireEvent.click(screen.getByText("深度思考", { exact: true }));
-  fireEvent.click(await screen.findByRole("button", { name: "调整思考强度" }));
-  fireEvent.keyDown(await screen.findByRole("slider"), {
-    key: "End",
-    keyCode: 35,
-  });
-  fireEvent.click(screen.getByRole("button", { name: "使用默认强度" }));
-  expect(
-    screen.getByRole("button", { name: "调整思考强度" }),
-  ).toHaveTextContent("轻量");
-  fireEvent.click(screen.getByText("深度思考", { exact: true }));
-  fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
-  await waitFor(() =>
-    expect(screen.getByRole("slider", { name: "思考强度" })).toBeVisible(),
-  );
-  expect(screen.getByText("选择强度将开启深度思考。")).toBeVisible();
-  fireEvent.change(
-    screen.getByPlaceholderText("输入问题，Enter 发送，Shift+Enter 换行"),
-    { target: { value: "快速问题" } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: /发送/ }));
-  await waitFor(() =>
-    expect(agentApi.submit).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({
-        thinkingMode: "fast",
-        reasoningEffort: undefined,
-      }),
-    ),
-  );
-});
 
 it.each(["chat", "workbench"] as const)(
   "%s uses the backend model and profile instead of a saved local model choice",
@@ -1266,8 +1193,15 @@ it.each([false, true])(
   },
 );
 
-it("hides unavailable agent navigation and starts reasoning from the effort choice using the backend profile", async () => {
+it("retains a single workspace for a chat-only account without granting agent access", async () => {
   bootstrap.canAgent = false;
+  bootstrap.canChat = true;
+  const chat = { ...conversation, mode: "chat" as const };
+  vi.mocked(agentApi.conversations).mockResolvedValue({ items: [chat] });
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation: chat,
+    runs: [run(1, "旧问题")],
+  });
   render(
     <AntApp>
       <MemoryRouter initialEntries={["/agent/chat"]}>
@@ -1341,7 +1275,7 @@ it("drags the sidebar and input, stops on cancel, and remembers their sizes", as
   expect(agentApi.submit).not.toHaveBeenCalled();
   await waitFor(() =>
     expect(
-      JSON.parse(localStorage.getItem("agent-layout:99:chat") ?? "null"),
+      JSON.parse(localStorage.getItem("agent-layout:99:agent") ?? "null"),
     ).toEqual({ sidebar: 340, input: 144, workflow: 720 }),
   );
   first.unmount();
@@ -1455,214 +1389,6 @@ it("keeps narrow screens usable with a dismissible sidebar and bounded input", a
   }
 });
 
-it("keeps both allowed conversation modes visible when the history sidebar is hidden", async () => {
-  await page.viewport(390, 844);
-  try {
-    showAgent("workbench");
-    await screen.findByText("旧问题");
-    expect(
-      screen.queryByRole("complementary", { name: "会话侧栏" }),
-    ).not.toBeInTheDocument();
-    const quick = screen.getByRole("button", { name: "快速对话" });
-    expect(quick).toBeVisible();
-    fireEvent.click(quick);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "快速对话" })).toHaveAttribute(
-        "aria-current",
-        "page",
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "科研智能体" }));
-    await screen.findByRole("button", { name: /MH-workflow/ });
-    expect(screen.getByRole("button", { name: "科研智能体" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(screen.getByRole("button", { name: "快速对话" })).toBeVisible();
-  } finally {
-    await page.viewport(1600, 900);
-  }
-});
-
-it("resizes the workflow from its left edge and restores its saved width", async () => {
-  vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(
-    () => {},
-  );
-  const first = showAgent("workbench");
-  await screen.findByText("旧问题");
-  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
-  const handle = await screen.findByRole("separator", {
-    name: "调整工作流宽度",
-  });
-  fireEvent.pointerDown(handle, { button: 0, pointerId: 9, clientX: 880 });
-  fireEvent.pointerMove(handle, { pointerId: 9, clientX: 720 });
-  fireEvent.pointerUp(handle, { pointerId: 9 });
-  await waitFor(() => expect(handle).toHaveAttribute("aria-valuenow", "880"));
-  const drawer = document.querySelector<HTMLElement>(
-    ".agent-workflow-drawer .ant-drawer-content-wrapper",
-  )!;
-  expect(drawer.getBoundingClientRect().width).toBe(880);
-  await waitFor(() =>
-    expect(
-      JSON.parse(localStorage.getItem("agent-layout:99:agent") ?? "null")
-        .workflow,
-    ).toBe(880),
-  );
-  first.unmount();
-  showAgent("workbench");
-  fireEvent.click(await screen.findByRole("button", { name: /MH-workflow/ }));
-  const restored = await screen.findByRole("separator", {
-    name: "调整工作流宽度",
-  });
-  expect(restored).toHaveAttribute("aria-valuenow", "880");
-  fireEvent.keyDown(restored, { key: "ArrowLeft" });
-  expect(restored).toHaveAttribute("aria-valuenow", "896");
-  fireEvent.doubleClick(restored);
-  expect(restored).toHaveAttribute("aria-valuenow", "720");
-});
-
-it("loads only scene names on opening workflow and reuses the selected draft", async () => {
-  showAgent("workbench");
-  await screen.findByText("旧问题");
-  expect(computeApi.inputs).not.toHaveBeenCalled();
-  expect(computeApi.algorithms).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "快速对话" }));
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "快速对话" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    ),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "科研智能体" }));
-  await screen.findByRole("button", { name: /MH-workflow/ });
-  expect(computeApi.inputs).not.toHaveBeenCalled();
-  expect(computeApi.algorithms).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
-  await waitFor(() =>
-    expect(screen.getByRole("combobox", { name: "研究场景" })).toBeEnabled(),
-  );
-  expect(computeApi.inputs).not.toHaveBeenCalled();
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "研究场景" }));
-  fireEvent.click(
-    await screen.findByText("通用科研计算", {
-      selector: ".ant-select-item-option-content",
-    }),
-  );
-  await waitFor(() => expect(computeApi.inputs).toHaveBeenCalledOnce());
-  await waitFor(() =>
-    expect(screen.getByRole("textbox", { name: "工作流目标" })).toBeEnabled(),
-  );
-  fireEvent.change(screen.getByRole("textbox", { name: "工作流目标" }), {
-    target: { value: "保持这份草稿" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
-  await screen.findByRole("textbox", { name: "工作流目标" });
-  expect(screen.getByRole("textbox", { name: "工作流目标" })).toHaveValue(
-    "保持这份草稿",
-  );
-  expect(computeApi.inputs).toHaveBeenCalledOnce();
-  expect(computeApi.algorithms).toHaveBeenCalledOnce();
-});
-
-it.each([
-  [1366, 768],
-  [1024, 600],
-])(
-  "keeps workflow drafts and maximum input usable at %s by %s",
-  async (width, height) => {
-    await page.viewport(width, height);
-    try {
-      const { container } = showAgent("workbench");
-      await screen.findByText("旧问题");
-      const handle = screen.getByRole("separator", { name: "调整输入框高度" });
-      fireEvent.keyDown(handle, { key: "End" });
-      const main = container.querySelector<HTMLElement>(".agent-main")!;
-      const messages = container.querySelector<HTMLElement>(".agent-messages")!;
-      const composer = container.querySelector<HTMLElement>(".agent-composer")!;
-      await waitFor(() => {
-        expect(main.scrollHeight).toBeLessThanOrEqual(main.clientHeight + 1);
-        expect(composer.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-          main.getBoundingClientRect().bottom,
-        );
-        expect(messages.getBoundingClientRect().height).toBeGreaterThanOrEqual(
-          height <= 600 ? 80 : 120,
-        );
-        expect(main.getBoundingClientRect().top).toBeGreaterThan(
-          screen.getByRole("banner").getBoundingClientRect().bottom,
-        );
-      });
-      const expectWithin = (element: HTMLElement, area: HTMLElement) => {
-        const bounds = element.getBoundingClientRect();
-        const areaBounds = area.getBoundingClientRect();
-        expect(bounds.top).toBeGreaterThanOrEqual(areaBounds.top - 1);
-        expect(bounds.bottom).toBeLessThanOrEqual(areaBounds.bottom + 1);
-      };
-      fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
-      await waitFor(() =>
-        expect(
-          screen.getByRole("combobox", { name: "研究场景" }),
-        ).toBeEnabled(),
-      );
-      fireEvent.mouseDown(screen.getByRole("combobox", { name: "研究场景" }));
-      fireEvent.click(
-        await screen.findByText("通用科研计算", {
-          selector: ".ant-select-item-option-content",
-        }),
-      );
-      let goal = await screen.findByRole("textbox", { name: "工作流目标" });
-      await waitFor(() => expect(goal).toBeEnabled());
-      const drawer = document.querySelector<HTMLElement>(
-        ".agent-workflow-drawer .ant-drawer-body",
-      )!;
-      await waitFor(() => {
-        goal.scrollIntoView({ block: "nearest" });
-        expectWithin(goal, drawer);
-      });
-      fireEvent.change(goal, { target: { value: "核查研究区数据" } });
-      fireEvent.click(screen.getByRole("button", { name: "Close" }));
-      await waitFor(() => expect(goal).not.toBeVisible());
-      fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
-      goal = await screen.findByRole("textbox", { name: "工作流目标" });
-      await waitFor(() => expect(goal).toBeVisible());
-      expect(screen.getByRole("textbox", { name: "工作流目标" })).toHaveValue(
-        "核查研究区数据",
-      );
-      fireEvent.click(screen.getByRole("button", { name: "Close" }));
-      await waitFor(() => expect(goal).not.toBeVisible());
-      fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
-      const effort = await screen.findByRole("slider", { name: "思考强度" });
-      expectWithin(
-        effort,
-        document.querySelector<HTMLElement>(".agent-reasoning-settings")!,
-      );
-      fireEvent.keyDown(effort, { key: "End", keyCode: 35 });
-      fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
-      fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
-        target: { value: "低高度窗口问题" },
-      });
-      const sendButton = screen.getByRole("button", { name: /发送/ });
-      sendButton.scrollIntoView({ block: "nearest" });
-      expectWithin(sendButton, composer);
-      expectWithin(sendButton, main);
-      fireEvent.click(sendButton);
-      await waitFor(() =>
-        expect(agentApi.submit).toHaveBeenCalledWith(
-          1,
-          expect.objectContaining({
-            prompt: "低高度窗口问题",
-            thinkingMode: "deep",
-            reasoningEffort: "xhigh",
-            budgetProfile: "normal",
-          }),
-        ),
-      );
-    } finally {
-      await page.viewport(1600, 900);
-    }
-  },
-);
-
 it("starts with a compact composer and keeps settings behind controls", async () => {
   const { container } = showAgent("workbench");
   await screen.findByText("旧问题");
@@ -1682,7 +1408,7 @@ it.each([96, 176, 240])(
   "preserves a valid saved input height of %s",
   async (input) => {
     localStorage.setItem(
-      "agent-layout:99:chat",
+      "agent-layout:99:agent",
       JSON.stringify({ sidebar: 280, input }),
     );
     showAgent();
@@ -1693,143 +1419,6 @@ it.each([96, 176, 240])(
     ).toBe(input);
   },
 );
-
-it("restores the explicit pending task on open and retains its status after closing", async () => {
-  sessionStorage.setItem("workflow-session:99:1", "research_processing");
-  sessionStorage.setItem(
-    "workflow-session:99:1:research_processing",
-    "workflow-1",
-  );
-  vi.mocked(agentApi.workflows).mockResolvedValue({
-    items: [workflow("running")],
-  });
-  vi.spyOn(agentApi, "workflow").mockResolvedValue(
-    workflow("waiting_approval"),
-  );
-  vi.spyOn(agentApi, "confirmWorkflow").mockResolvedValue(
-    workflow("succeeded"),
-  );
-  showAgent("workbench");
-  await screen.findByText("旧问题");
-  expect(screen.queryByRole("dialog")).toBeNull();
-  expect(agentApi.workflow).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: /MH-workflow/ }));
-  await screen.findByRole("button", { name: "确认执行" });
-  fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  const pending = await screen.findByRole("button", {
-    name: /MH-workflow.*等待您审核/,
-  });
-  expect(agentApi.workflow).toHaveBeenCalledWith("workflow-1", {
-    signal: expect.any(AbortSignal),
-    view: "full",
-  });
-  expect(agentApi.workflow).toHaveBeenCalledOnce();
-  fireEvent.click(pending);
-  fireEvent.click(await screen.findByRole("button", { name: "确认执行" }));
-  await waitFor(() =>
-    expect(agentApi.confirmWorkflow).toHaveBeenCalledWith(
-      "workflow-1",
-      "frozen-plan",
-    ),
-  );
-  await waitFor(() => expect(screen.queryByText("待确认")).toBeNull());
-});
-
-it("submits selected resources and a document while keeping system settings out of the composer", async () => {
-  bootstrap.allowAttachments = true;
-  bootstrap.internetEnabled = true;
-  vi.mocked(agentApi.resources).mockResolvedValue({
-    items: [
-      { id: 10, name: "研究区影像", dataType: "raster", description: "" },
-    ],
-  });
-  vi.spyOn(agentApi, "uploadAttachment").mockResolvedValue({
-    id: 5,
-    fileName: "资料.txt",
-    mediaType: "text/plain",
-    sizeBytes: 8,
-    kind: "document",
-    previewUrl: "",
-    extractedText: "测试资料",
-    createdAt: "2026-09-24",
-  });
-  showAgent("workbench");
-  await screen.findByText("旧问题");
-  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
-  fireEvent.click(
-    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
-      "radio",
-      { name: "手动选择" },
-    ),
-  );
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "限定数据资源" }));
-  fireEvent.click(
-    await screen.findByText("研究区影像", {
-      selector: ".ant-select-item-option-content",
-    }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
-  await waitFor(() =>
-    expect(
-      screen.queryByRole("radiogroup", { name: "数据选择方式" }),
-    ).not.toBeInTheDocument(),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
-  await waitFor(() =>
-    expect(screen.getByRole("slider", { name: "思考强度" })).toBeVisible(),
-  );
-  await waitFor(() =>
-    expect(
-      screen.getByRole("slider").closest(".ant-popover")!.className,
-    ).not.toMatch(/(?:-enter|-appear|-leave)/),
-  );
-  expect(screen.queryByRole("switch", { name: "联网检索" })).toBeNull();
-  expect(screen.queryByRole("combobox", { name: "选择模型" })).toBeNull();
-  expect(screen.queryByRole("combobox", { name: "分析方案" })).toBeNull();
-  expect(screen.queryByText("高级设置")).not.toBeInTheDocument();
-  const upload = screen.getByRole("button", { name: /上传文档/ });
-  const algorithm = screen.getByRole("button", { name: "调用算法" });
-  for (const property of [
-    "height",
-    "borderRadius",
-    "fontSize",
-    "backgroundColor",
-    "color",
-  ] as const) {
-    expect(getComputedStyle(upload)[property]).toBe(
-      getComputedStyle(algorithm)[property],
-    );
-  }
-  await page.screenshot({
-    path: "../../test-results/agent-composer-effort-desktop.png",
-  });
-  const file = new File(["测试资料"], "资料.txt", { type: "text/plain" });
-  fireEvent.change(
-    document.querySelector<HTMLInputElement>('input[type="file"]')!,
-    { target: { files: [file] } },
-  );
-  await screen.findByText("资料.txt", {
-    selector: ".agent-attachments-row .ant-tag",
-  });
-  expect(agentApi.uploadAttachment).toHaveBeenCalledWith(
-    1,
-    expect.objectContaining({ name: "资料.txt" }),
-  );
-  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
-    target: { value: "结合资料分析研究区" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  await waitFor(() =>
-    expect(agentApi.submit).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({
-        resourceIds: [10],
-        attachmentIds: [5],
-        internetEnabled: false,
-      }),
-    ),
-  );
-});
 
 it("shows an error with a retry action without exposing run details", async () => {
   const failed = {
@@ -1851,280 +1440,6 @@ it("shows an error with a retry action without exposing run details", async () =
       expect.objectContaining({ prompt: "重试问题" }),
     ),
   );
-});
-
-it("submits manual algorithm, data and multiple knowledge zones through explicit buttons", async () => {
-  bootstrap.algorithmOptions = Array.from({ length: 4 }, (_, index) => ({
-    versionId: index + 4,
-    algorithmId: index + 1,
-    name: `分析算法${index + 1}`,
-    version: "1.0.0",
-    description: "已发布算法",
-  }));
-  vi.mocked(agentApi.resources).mockResolvedValue({
-    items: Array.from({ length: 4 }, (_, index) => ({
-      id: index + 10,
-      name: `研究区影像${index + 1}`,
-      dataType: "raster" as const,
-      description: "",
-    })),
-  });
-  showAgent("workbench");
-  await screen.findByText("旧问题");
-  fireEvent.click(screen.getByRole("button", { name: "调用算法" }));
-  fireEvent.click(
-    within(screen.getByRole("radiogroup", { name: "算法选择方式" })).getByRole(
-      "radio",
-      { name: "手动选择" },
-    ),
-  );
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "选择调用算法" }));
-  for (let index = 1; index <= 4; index++) {
-    fireEvent.click(
-      await screen.findByText(`分析算法${index} / 1.0.0`, {
-        selector: ".ant-select-item-option-content",
-      }),
-    );
-  }
-  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
-  fireEvent.click(
-    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
-      "radio",
-      { name: "手动选择" },
-    ),
-  );
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "限定数据资源" }));
-  for (let index = 1; index <= 4; index++) {
-    fireEvent.click(
-      await screen.findByText(`研究区影像${index}`, {
-        selector: ".ant-select-item-option-content",
-      }),
-    );
-  }
-  fireEvent.click(screen.getByRole("button", { name: "知识库" }));
-  fireEvent.click(screen.getByRole("radio", { name: "手选分区" }));
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "选择知识分区" }));
-  fireEvent.click(
-    await screen.findByText("遥感基础", {
-      selector: ".ant-select-item-option-content",
-    }),
-  );
-  fireEvent.click(
-    await screen.findByText("干旱区生态安全治理", {
-      selector: ".ant-select-item-option-content",
-    }),
-  );
-  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
-    target: { value: "分析这张影像的NDVI" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  await waitFor(() =>
-    expect(agentApi.submit).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({
-        algorithmSelectionMode: "manual",
-        algorithmVersionIds: [4, 5, 6, 7],
-        dataSelectionMode: "manual",
-        resourceIds: [10, 11, 12, 13],
-        knowledgeSelection: {
-          mode: "manual",
-          domains: ["remote_sensing", "arid_ecology"],
-        },
-      }),
-    ),
-  );
-});
-
-it.each([
-  ["自动筛选", "auto"],
-  ["全部知识库", "all"],
-  ["不参考知识库", "none"],
-])(
-  "persists the %s knowledge mode in the submitted turn",
-  async (label, mode) => {
-    showAgent("workbench");
-    await screen.findByText("旧问题");
-    fireEvent.click(screen.getByRole("button", { name: "知识库" }));
-    fireEvent.click(screen.getByRole("radio", { name: label }));
-    fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
-      target: { value: "分析当前数据" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "发送" }));
-    await waitFor(() =>
-      expect(agentApi.submit).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          knowledgeSelection: { mode, domains: [] },
-          algorithmSelectionMode: "auto",
-          dataSelectionMode: "auto",
-          resourceIds: [],
-        }),
-      ),
-    );
-  },
-);
-
-it("restores saved tool choices from the latest server turn after reopening", async () => {
-  const saved = {
-    ...run(2, "保存的选择"),
-    resourceIds: [10],
-    dataSelectionMode: "manual" as const,
-    algorithmSelectionMode: "manual" as const,
-    algorithmVersionIds: [4],
-    knowledgeSelection: {
-      mode: "manual" as const,
-      domains: ["arid_ecology" as const],
-    },
-  };
-  vi.mocked(agentApi.detail).mockResolvedValue({
-    conversation,
-    runs: [run(1, "旧问题"), saved],
-  });
-  vi.mocked(agentApi.resources).mockResolvedValue({
-    items: [
-      { id: 10, name: "研究区影像", dataType: "raster", description: "" },
-    ],
-  });
-  const first = showAgent("workbench");
-  await screen.findByText("保存的选择");
-  first.unmount();
-  showAgent("workbench");
-  await screen.findByText("保存的选择");
-  fireEvent.click(screen.getByRole("button", { name: "知识库" }));
-  expect(screen.getByRole("radio", { name: "手选分区" })).toBeChecked();
-  await waitFor(() =>
-    expect(
-      screen.getByText("干旱区生态安全治理", {
-        selector: ".ant-select-selection-item-content",
-      }),
-    ).toBeVisible(),
-  );
-  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
-    target: { value: "继续分析" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  await waitFor(() =>
-    expect(agentApi.submit).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({
-        algorithmSelectionMode: "manual",
-        algorithmVersionIds: [4],
-        dataSelectionMode: "manual",
-        resourceIds: [10],
-        knowledgeSelection: saved.knowledgeSelection,
-      }),
-    ),
-  );
-});
-
-it.each([
-  ["自动筛选", "auto"],
-  ["全部知识库", "all"],
-  ["不参考知识库", "none"],
-])(
-  "clears manual restrictions when changing knowledge to %s and other tools to automatic",
-  async (label, mode) => {
-    vi.mocked(agentApi.detail).mockResolvedValue({
-      conversation,
-      runs: [
-        {
-          ...run(1, "已手选的任务"),
-          resourceIds: [10],
-          dataSelectionMode: "manual",
-          algorithmSelectionMode: "manual",
-          algorithmVersionIds: [4],
-          knowledgeSelection: { mode: "manual", domains: ["arid_ecology"] },
-        },
-      ],
-    });
-    showAgent("workbench");
-    await screen.findByText("已手选的任务");
-    fireEvent.click(screen.getByRole("button", { name: "调用算法" }));
-    fireEvent.click(
-      within(
-        screen.getByRole("radiogroup", { name: "算法选择方式" }),
-      ).getByRole("radio", { name: "自动筛选" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
-    fireEvent.click(
-      within(
-        screen.getByRole("radiogroup", { name: "数据选择方式" }),
-      ).getByRole("radio", { name: "自动筛选" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "知识库" }));
-    fireEvent.click(
-      within(
-        screen.getByRole("radiogroup", { name: "知识库参考方式" }),
-      ).getByRole("radio", { name: label }),
-    );
-    fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
-      target: { value: "重新自动分析" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "发送" }));
-    await waitFor(() =>
-      expect(agentApi.submit).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          algorithmSelectionMode: "auto",
-          algorithmVersionIds: [],
-          dataSelectionMode: "auto",
-          resourceIds: [],
-          knowledgeSelection: { mode, domains: [] },
-        }),
-      ),
-    );
-  },
-);
-
-it("asks for a manual selection before creating a run", async () => {
-  showAgent("workbench");
-  await screen.findByText("旧问题");
-  fireEvent.click(screen.getByRole("button", { name: "调用算法" }));
-  fireEvent.click(
-    within(screen.getByRole("radiogroup", { name: "算法选择方式" })).getByRole(
-      "radio",
-      { name: "手动选择" },
-    ),
-  );
-  fireEvent.change(screen.getByRole("textbox", { name: "输入消息" }), {
-    target: { value: "计算NDVI" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "发送" }));
-  expect(
-    await screen.findByText("请选择至少一个算法，或切换为自动筛选。"),
-  ).toBeVisible();
-  expect(agentApi.submit).not.toHaveBeenCalled();
-});
-
-it("keeps all three tool buttons and knowledge selection inside a 390px screen", async () => {
-  await page.viewport(390, 844);
-  try {
-    const { container } = showAgent("workbench");
-    await screen.findByText("旧问题");
-    for (const name of ["调用算法", "选择数据", "知识库"]) {
-      const button = screen.getByRole("button", { name });
-      expect(button).toBeVisible();
-      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(390);
-    }
-    fireEvent.click(screen.getByRole("button", { name: "知识库" }));
-    fireEvent.click(screen.getByRole("radio", { name: "手选分区" }));
-    const panel = document.querySelector(".agent-selection-panel")!;
-    expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(390);
-    expect(
-      container.querySelector(".agent-composer")!.getBoundingClientRect().width,
-    ).toBeLessThanOrEqual(390);
-    await waitFor(() =>
-      expect(panel.closest(".ant-popover")!.className).not.toMatch(
-        /(?:-enter|-appear|-leave)/,
-      ),
-    );
-    expect(panel.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
-    await page.screenshot({
-      path: "../../test-results/agent-knowledge-zones-mobile.png",
-    });
-  } finally {
-    await page.viewport(1600, 900);
-  }
 });
 
 it("creates one conversation when the first action uploads multiple documents", async () => {
@@ -2370,48 +1685,6 @@ it("shows the model interpretation after the same run reads the actual output", 
   await screen.findByText(completed.answer);
 });
 
-it("removes recovered workflow activity when agent permission is revoked", async () => {
-  sessionStorage.setItem("workflow-session:99:1", "research_processing");
-  sessionStorage.setItem(
-    "workflow-session:99:1:research_processing",
-    "workflow-1",
-  );
-  vi.spyOn(agentApi, "workflow").mockResolvedValue({
-    ...workflow("running"),
-    goal: "撤权后不可保留的研究任务",
-  });
-  vi.mocked(agentApi.workflows).mockResolvedValue({
-    items: [{ ...workflow("running"), goal: "撤权后不可保留的研究任务" }],
-  });
-  const mounted = showAgent("workbench");
-  fireEvent.click(await screen.findByRole("button", { name: /MH-workflow/ }));
-  await waitFor(() =>
-    expect(
-      within(screen.getByLabelText("当前任务")).getByText("正在推进研究"),
-    ).toBeInTheDocument(),
-  );
-  bootstrap.canAgent = false;
-  try {
-    mounted.rerender(
-      <AntApp>
-        <MemoryRouter initialEntries={["/agent/workbench"]}>
-          <AgentPage />
-        </MemoryRouter>
-      </AntApp>,
-    );
-    await screen.findByText("当前账号未获准使用此功能，请联系超级管理员。");
-    expect(screen.queryByLabelText("当前任务")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("撤权后不可保留的研究任务"),
-    ).not.toBeInTheDocument();
-    expect(
-      document.querySelector(".agent-activity-mark.is-working"),
-    ).not.toBeInTheDocument();
-  } finally {
-    bootstrap.canAgent = true;
-  }
-});
-
 it("keeps unknown and failed permission checks distinct from denied access", async () => {
   accessState.value = "unknown";
   accessState.status = "loading";
@@ -2512,58 +1785,6 @@ it("removes restricted conversation content after an explicit poll authorization
   await screen.findByText("当前会话访问权限已撤销");
   expect(screen.queryByText("撤权后隐藏的问题")).not.toBeInTheDocument();
   expect(screen.queryByText("撤权后隐藏的回答")).not.toBeInTheDocument();
-});
-
-it("does not share a running conversation lock between quick chat and research windows", async () => {
-  const research = {
-    ...conversation,
-    id: 2,
-    mode: "agent" as const,
-    title: "科研会话",
-  };
-  const responding = {
-    ...run(5, "快速对话正在回答", "已有回答"),
-    status: "running" as const,
-  };
-  vi.mocked(agentApi.conversations).mockImplementation(async (mode) => ({
-    items: [mode === "chat" ? conversation : research],
-  }));
-  vi.mocked(agentApi.detail).mockImplementation(async (id) =>
-    id === 1
-      ? { conversation, runs: [responding] }
-      : {
-          conversation: research,
-          runs: [{ ...run(6, "科研历史"), conversationId: 2 }],
-        },
-  );
-  vi.spyOn(agentApi, "poll").mockResolvedValue({
-    run: responding,
-    events: [],
-    cursor: 0,
-  });
-  const chat = showAgent();
-  const agent = showAgent("workbench");
-  await within(chat.container).findByText("快速对话正在回答");
-  await within(agent.container).findByText("科研历史");
-  expect(
-    within(chat.container).getByRole("button", { name: "停止回答" }),
-  ).toBeEnabled();
-  const input = within(agent.container).getByRole("textbox", {
-    name: "输入消息",
-  });
-  fireEvent.change(input, { target: { value: "另一个会话的独立问题" } });
-  fireEvent.click(
-    within(agent.container).getByRole("button", { name: "发送" }),
-  );
-  await waitFor(() =>
-    expect(agentApi.submit).toHaveBeenCalledWith(
-      2,
-      expect.objectContaining({ prompt: "另一个会话的独立问题" }),
-    ),
-  );
-  expect(
-    within(chat.container).getByText("快速对话正在回答"),
-  ).toBeInTheDocument();
 });
 
 it("allows a new conversation while another one runs without submitting twice to the current conversation", async () => {
@@ -3035,14 +2256,13 @@ it("conversation title refresh cancels pending metadata reads after switching pr
   }
 });
 
-it.each(["later turn", "other project", "failed first turn"])(
+it.each(["later turn", "failed first turn"])(
   "conversation title refresh adds no requests for a %s",
   async (scenario) => {
     vi.useFakeTimers();
     try {
       const first = prepareFirstTurnTitleRefresh();
       const responding = { ...run(31, "你好"), status: "running" as const };
-      if (scenario === "other project") projectCode.value = "default";
       if (scenario === "later turn")
         vi.mocked(agentApi.detail).mockResolvedValue({
           conversation: first,
@@ -3215,116 +2435,6 @@ it.each(["policy", "model"])(
   },
 );
 
-it("logic effort resets for a different project while retaining ordinary project preferences", async () => {
-  projectCode.value = "02";
-  const scopedConversation = () => ({
-    ...conversation,
-    mode: "agent" as const,
-    projectId: Number(projectCode.current),
-  });
-  vi.mocked(agentApi.conversations).mockImplementation(async () => ({
-    items: [scopedConversation()],
-  }));
-  vi.mocked(agentApi.detail).mockImplementation(async () => ({
-    conversation: scopedConversation(),
-    runs: [run(1, "旧问题")],
-  }));
-  const mounted = showAgent("workbench");
-  await screen.findByText("旧问题");
-  let control = screen.getByRole("button", { name: "调整思考强度" });
-  fireEvent.click(control);
-  fireEvent.keyDown(await screen.findByRole("slider", { name: "思考强度" }), {
-    key: "Home",
-    keyCode: 36,
-  });
-  expect(control).toHaveTextContent("轻量");
-  fireEvent.click(control);
-  projectCode.current = "2";
-  rerenderAgent(mounted);
-  await screen.findByText("旧问题");
-  control = screen.getByRole("button", { name: "调整思考强度" });
-  expect(control).toHaveTextContent("标准");
-  await submitEffortQuestion();
-  expect(agentApi.submit).toHaveBeenCalledWith(
-    1,
-    expect.objectContaining({
-      thinkingMode: "deep",
-      reasoningEffort: "medium",
-    }),
-  );
-  vi.mocked(agentApi.submit).mockClear();
-  projectCode.current = "3";
-  projectCode.value = "default";
-  localStorage.setItem("agent-thinking:99:agent", "fast");
-  rerenderAgent(mounted);
-  await screen.findByText("旧问题");
-  expect(
-    screen.getByText("深度思考", { exact: true }).closest("button"),
-  ).toHaveAttribute("aria-pressed", "false");
-  await submitEffortQuestion();
-  expect(agentApi.submit).toHaveBeenCalledWith(
-    1,
-    expect.objectContaining({
-      thinkingMode: "fast",
-      reasoningEffort: undefined,
-    }),
-  );
-});
-
-it("loads data candidates only when manual selection needs them and retries failures", async () => {
-  vi.mocked(agentApi.resources)
-    .mockRejectedValueOnce(new Error("候选读取暂时失败"))
-    .mockResolvedValueOnce({
-      items: [
-        { id: 10, name: "按需加载资料", dataType: "raster", description: "" },
-      ],
-    });
-  showAgent("workbench");
-  await screen.findByText("旧问题");
-  expect(agentApi.resources).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
-  expect(agentApi.resources).not.toHaveBeenCalled();
-  fireEvent.click(
-    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
-      "radio",
-      { name: "手动选择" },
-    ),
-  );
-  await waitFor(() =>
-    expect(screen.getByText("候选读取暂时失败")).toBeVisible(),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "重试读取数据" }));
-  await waitFor(() => expect(agentApi.resources).toHaveBeenCalledTimes(2));
-  fireEvent.mouseDown(screen.getByRole("combobox", { name: "限定数据资源" }));
-  await waitFor(() =>
-    expect(
-      screen.getByText("按需加载资料", {
-        selector: ".ant-select-item-option-content",
-      }),
-    ).toBeVisible(),
-  );
-});
-
-it("deduplicates a pending candidate read and cancels it on leaving the workspace", async () => {
-  vi.mocked(agentApi.resources).mockImplementation(() => new Promise(() => {}));
-  const view = showAgent("workbench");
-  await screen.findByText("旧问题");
-  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
-  fireEvent.click(
-    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
-      "radio",
-      { name: "手动选择" },
-    ),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
-  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
-  expect(agentApi.resources).toHaveBeenCalledOnce();
-  const signal = vi.mocked(agentApi.resources).mock.calls[0]?.[1]?.signal;
-  expect(signal?.aborted).toBe(false);
-  view.unmount();
-  expect(signal?.aborted).toBe(true);
-});
-
 it("offers the pending review card instead of an ineffective send button", async () => {
   const waiting = waitingQuestion();
   waiting.status = "waiting_review";
@@ -3408,10 +2518,6 @@ it("keeps thinking controls usable when browser preference storage is blocked", 
   );
   showAgent();
   await screen.findByText("旧问题");
-  const toggle = screen.getByRole("button", { name: "深度思考" });
-  expect(toggle).toHaveAttribute("aria-pressed", "false");
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute("aria-pressed", "true");
   await submitEffortQuestion();
   expect(agentApi.submit).toHaveBeenCalledWith(
     1,
@@ -3438,4 +2544,144 @@ it("keeps a new draft when the initial conversation list returns late", async ()
   );
   expect(agentApi.detail).not.toHaveBeenCalled();
   expect(screen.queryByText("旧问题")).not.toBeInTheDocument();
+});
+
+it.each(["default", "02", "demo-geology-reasoning", "ecology-private"])(
+  "uses the same compact agent interface and automatic discovery in project %s",
+  async (code) => {
+    projectCode.value = code;
+    bootstrap.canChat = true;
+    bootstrap.allowAttachments = true;
+    const { container } = showAgent("workbench");
+    await screen.findByText("旧问题");
+    expect(container.querySelector(".agent-mode-nav")).toBeNull();
+    for (const name of [
+      "快速对话",
+      "科研智能体",
+      "选择数据",
+      "调用算法",
+      "知识库",
+      "MH-workflow",
+      "深度思考",
+    ])
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "业务流" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "上传文档" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "调整思考强度" }),
+    ).toHaveTextContent("标准");
+    expect(agentApi.resources).not.toHaveBeenCalled();
+    await submitEffortQuestion();
+    expect(agentApi.submit).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        thinkingMode: "deep",
+        reasoningEffort: "medium",
+        dataSelectionMode: "auto",
+        resourceIds: [],
+        algorithmSelectionMode: "auto",
+        algorithmVersionIds: [],
+        knowledgeSelection: { mode: "auto", domains: [] },
+      }),
+    );
+    if (code === "default")
+      await page.screenshot({
+        path: "../../test-results/unified-agent-desktop.png",
+      });
+  },
+);
+
+it("shows both historical conversation types in one sidebar and preserves their permissions", async () => {
+  bootstrap.canChat = true;
+  const chat = {
+    ...conversation,
+    id: 2,
+    mode: "chat" as const,
+    title: "原普通会话",
+    updatedAt: "2026-11-13",
+  };
+  vi.mocked(agentApi.conversations).mockImplementation(async (mode) => ({
+    items: mode === "agent" ? [conversation] : [chat],
+  }));
+  vi.mocked(agentApi.detail).mockImplementation(async (id) => ({
+    conversation: id === 2 ? chat : conversation,
+    runs: [
+      {
+        ...run(id, id === 2 ? "原普通问题" : "原科研问题"),
+        conversationId: id,
+      },
+    ],
+  }));
+  showAgent("chat");
+  await screen.findByText("原普通问题");
+  expect(screen.getByRole("button", { name: /^历史会话/ })).toBeVisible();
+  expect(screen.getByRole("button", { name: /^原普通会话/ })).toBeVisible();
+  expect(agentApi.conversations).toHaveBeenCalledWith("agent", "", false);
+  expect(agentApi.conversations).toHaveBeenCalledWith("chat", "", false);
+  fireEvent.click(screen.getByRole("button", { name: /^历史会话/ }));
+  await screen.findByText("原科研问题");
+  expect(screen.queryByText("原普通问题")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "科研智能体" }),
+  ).not.toBeInTheDocument();
+});
+
+it("uses automatic discovery after reopening a turn with legacy manual restrictions", async () => {
+  vi.mocked(agentApi.detail).mockResolvedValue({
+    conversation,
+    runs: [
+      {
+        ...run(1, "原手选问题"),
+        resourceIds: [10],
+        dataSelectionMode: "manual",
+        algorithmSelectionMode: "manual",
+        algorithmVersionIds: [4],
+        knowledgeSelection: { mode: "none", domains: [] },
+      },
+    ],
+  });
+  showAgent();
+  await screen.findByText("原手选问题");
+  await submitEffortQuestion();
+  expect(agentApi.submit).toHaveBeenCalledWith(
+    1,
+    expect.objectContaining({
+      resourceIds: [],
+      dataSelectionMode: "auto",
+      algorithmVersionIds: [],
+      algorithmSelectionMode: "auto",
+      knowledgeSelection: { mode: "auto", domains: [] },
+    }),
+  );
+});
+
+it("creates an agent conversation from the legacy chat URL when agent access is available", async () => {
+  vi.mocked(agentApi.conversations).mockResolvedValue({ items: [] });
+  vi.spyOn(agentApi, "create").mockResolvedValue(conversation);
+  showAgent("chat");
+  await screen.findByText("这个项目里有哪些可用资料？");
+  await submitEffortQuestion();
+  expect(agentApi.create).toHaveBeenCalledExactlyOnceWith("agent");
+});
+
+it("keeps the shared composer usable on a 390px screen without candidate selectors", async () => {
+  await page.viewport(390, 844);
+  try {
+    bootstrap.allowAttachments = true;
+    const { container } = showAgent("workbench");
+    await screen.findByText("旧问题");
+    for (const name of ["业务流", "上传文档", "调整思考强度", "发送"]) {
+      const bounds = screen
+        .getByRole("button", { name })
+        .getBoundingClientRect();
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(391);
+    }
+    expect(container.querySelector(".agent-mode-nav")).toBeNull();
+    await page.screenshot({
+      path: "../../test-results/unified-agent-mobile.png",
+    });
+  } finally {
+    await page.viewport(1600, 900);
+  }
 });

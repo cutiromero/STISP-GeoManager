@@ -661,6 +661,6 @@ it("keeps the latest chat workflow state when an older failed task arrives later
     within(screen.getByLabelText("当前任务")).getByText("模型正在分析"),
   ).toBeVisible();
   expect(
-    screen.getByRole("button", { name: /MH-workflow.*正在分析/ }),
-  ).toBeVisible();
+    screen.queryByRole("button", { name: /MH-workflow/ }),
+  ).not.toBeInTheDocument();
 });

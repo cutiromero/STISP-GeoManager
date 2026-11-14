@@ -354,11 +354,11 @@ export default function App({
                 />
                 <Route
                   path="/warning"
-                  element={<Navigate to="/agent/chat" replace />}
+                  element={<Navigate to="/agent/workbench" replace />}
                 />
                 <Route
                   path="/agent"
-                  element={<Navigate to="/agent/chat" replace />}
+                  element={<Navigate to="/agent/workbench" replace />}
                 />
                 <Route path="/agent/chat" element={<AgentPage />} />
                 <Route path="/agent/workbench" element={<AgentPage />} />

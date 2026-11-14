@@ -333,7 +333,7 @@ afterEach(() => sessionStorage.clear());
 it("逻辑项目仅通过业务流入口发起新任务，历史直接入口不再加载", async () => {
   show();
   const entry = await screen.findByRole("button", {
-    name: "从业务流开始逻辑推理",
+    name: "从业务流开始任务",
     exact: true,
   });
   expect(
@@ -526,12 +526,13 @@ it("历史逻辑任务恢复字段确认、批准和成果地图，不依赖已�
   expect(agentApi.poll).not.toHaveBeenCalled();
 });
 
-it("其他项目仍保留MH-workflow入口，不显示对话内资料上传", async () => {
+it("所有项目共用业务流入口，不显示旧工作流和对话内资料上传", async () => {
   projectCode = "default";
   show();
   expect(
-    await screen.findByRole("button", { name: /MH-workflow/ }),
+    await screen.findByRole("button", { name: "从业务流开始任务" }),
   ).toBeVisible();
+  expect(screen.queryByRole("button", { name: /MH-workflow/ })).toBeNull();
   expect(screen.queryByRole("button", { name: /(^|\s)逻辑推理$/ })).toBeNull();
   expect(agentApi.workflowUploads).not.toHaveBeenCalled();
 });

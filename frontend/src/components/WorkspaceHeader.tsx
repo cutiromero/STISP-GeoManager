@@ -124,9 +124,7 @@ function AgentNavigationButton({
       data-nav-key="agent"
       aria-label={title}
       disabled={!allowed}
-      onClick={() =>
-        onNavigate(access?.canChat ? "/agent/chat" : "/agent/workbench")
-      }
+      onClick={() => onNavigate("/agent/workbench")}
       title={allowed ? title : t("navigation.agentPermissionRequired")}
     >
       <RobotOutlined aria-hidden="true" style={{ fontSize: 16 }} />
