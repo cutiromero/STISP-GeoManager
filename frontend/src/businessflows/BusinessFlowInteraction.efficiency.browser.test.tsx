@@ -904,6 +904,20 @@ it("lists all delivered batch rasters and statistics beside the report without e
     key: "intermediate",
     label: "不属于交付的中间文件",
   });
+  tasks[0]!.outputs.push({
+    ...tasks[0]!.outputs[0]!,
+    id: 900,
+    kind: "document",
+    fileName: "result.json",
+    label: "解译成果清单",
+  });
+  tasks[0]!.outputs.push({
+    ...tasks[0]!.outputs[0]!,
+    id: 901,
+    kind: "document",
+    fileName: "report.md",
+    label: "逐幅解译说明",
+  });
   const ids = tasks.map((task) => task.id);
   const lookup = vi
     .spyOn(computeApi, "task")
@@ -913,8 +927,21 @@ it("lists all delivered batch rasters and statistics beside the report without e
   const flow = businessFlowRun({
     status: "succeeded",
     currentNode: "finish",
-    resultOutputIds: Array.from({ length: 12 }, (_, i) => 100 + i),
+    resultOutputIds: [
+      ...Array.from({ length: 12 }, (_, i) => 100 + i),
+      900,
+      901,
+    ],
   });
+  flow.definitionSnapshot.nodes[0]!.contract = {
+    goal: "解译与统计",
+    acceptance: ["形成分类与统计"],
+    requiredOutputs: [
+      { name: "classification", semanticType: "raster" },
+      { name: "statistics", semanticType: "table" },
+    ],
+    tools: ["finish_node"],
+  };
   flow.nodes[0]!.outputs = { taskIds: ids, taskId: ids.at(-1) };
   showActivity(flow);
   expect(lookup).not.toHaveBeenCalled();
@@ -927,6 +954,8 @@ it("lists all delivered batch rasters and statistics beside the report without e
   expect(screen.getAllByText("样区1原始影像")).toHaveLength(2);
   expect(screen.getAllByText("样区6原始影像")).toHaveLength(2);
   expect(screen.queryByText("不属于交付的中间文件")).not.toBeInTheDocument();
+  expect(screen.queryByText("解译成果清单")).not.toBeInTheDocument();
+  expect(screen.queryByText("逐幅解译说明")).not.toBeInTheDocument();
   expect(lookup).toHaveBeenCalledTimes(6);
   expect(submit).not.toHaveBeenCalled();
   expect(importOutput).not.toHaveBeenCalled();

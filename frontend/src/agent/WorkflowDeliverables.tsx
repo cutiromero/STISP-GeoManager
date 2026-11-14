@@ -64,6 +64,7 @@ export default function WorkflowDeliverables({
   taskDisplayNames,
   primaryTaskIds,
   visibleOutputIds,
+  visibleOutputKinds,
   onImport,
 }: {
   items: AgentComputeTaskTracking[];
@@ -74,6 +75,7 @@ export default function WorkflowDeliverables({
   taskDisplayNames?: Record<string, string>;
   primaryTaskIds?: string[];
   visibleOutputIds?: number[];
+  visibleOutputKinds?: string[];
   onImport: (output: ComputeOutput, task: ComputeTask) => void;
 }) {
   const ui = useComputeText();
@@ -116,7 +118,9 @@ export default function WorkflowDeliverables({
   const files = items.flatMap((item) =>
     item.task.outputs
       .filter(
-        (output) => !visibleOutputIds || visibleOutputIds.includes(output.id),
+        (output) =>
+          (!visibleOutputIds || visibleOutputIds.includes(output.id)) &&
+          (!visibleOutputKinds || visibleOutputKinds.includes(output.kind)),
       )
       .map((output) => ({ ...item, output })),
   );
