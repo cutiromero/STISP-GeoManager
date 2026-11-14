@@ -15,6 +15,9 @@ const context = vi.hoisted(() => ({
   current: "2",
   projects: [] as ProjectTag[],
 }));
+vi.mock("../contexts/AppContext", () => ({
+  useAppContext: () => ({ user: { id: 1 } }),
+}));
 vi.mock("../projects/ProjectContext", () => ({
   useProjectContext: () => context,
 }));
