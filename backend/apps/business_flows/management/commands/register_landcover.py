@@ -69,7 +69,9 @@ class Command(BaseCommand):
             ).first()
             if options["stage"] == "operator":
                 stream = io.BytesIO()
-                with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
+                with zipfile.ZipFile(
+                    stream, "w", zipfile.ZIP_DEFLATED, strict_timestamps=False
+                ) as archive:
                     for path in sorted(source.rglob("*")):
                         if (
                             path.is_file()

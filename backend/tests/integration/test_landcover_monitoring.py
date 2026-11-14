@@ -207,3 +207,37 @@ def test_stage_cache_retention_protects_active_retry(imported):
         retry.save(update_fields=["status"])
         clean_stage_caches(time.time() - 86400)
         assert not old.exists()
+
+
+def test_registration_accepts_normalized_release_timestamps(
+    setup_compute, settings, tmp_path
+):
+    import io
+    import json
+    import os
+    import shutil
+    from django.core.management import call_command
+
+    env = setup_compute
+    source = settings.PROGRAM_ROOT / "examples/compute/landcover-unet"
+    target = tmp_path / "release/examples/compute/landcover-unet"
+    shutil.copytree(
+        source, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
+    )
+    for path in target.rglob("*"):
+        if path.is_file():
+            os.utime(path, (0, 0))
+    settings.PROGRAM_ROOT = tmp_path / "release"
+    results = []
+    for _ in range(2):
+        stream = io.StringIO()
+        call_command(
+            "register_landcover",
+            project=env["project"].code,
+            actor=env["admin"].username,
+            stage="operator",
+            stdout=stream,
+        )
+        results.append(json.loads(stream.getvalue()))
+    assert results[0] == results[1]
+    assert results[0]["status"] == "draft"
