@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import time
 import tomllib
+from types import SimpleNamespace
 
 # ==================== CONFIGURATION ====================
 PROJECT_CODE = "gd"
@@ -47,6 +48,7 @@ def main():
     from osgeo import gdal
     from apps.compute.models import ComputeTask, AlgorithmVersion
     from apps.core.storage import app_path
+    from apps.core.browser_sessions import prepare_browser_session
     from apps.ecology.monitoring import monitoring_snapshot
     from apps.projects.context import ProjectScope, project_scope
     from apps.projects.models import Project
@@ -137,6 +139,9 @@ def main():
         404,
     )
     client.force_login(actor)
+    browser_session = client.session
+    prepare_browser_session(SimpleNamespace(session=browser_session))
+    browser_session.save()
     expect_status(
         client.post(
             "/api/auth/browser-session/",
