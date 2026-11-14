@@ -126,3 +126,42 @@ def test_extraction_rejects_inconsistent_counts():
 
     with pytest.raises(ValidationError):
         normalize_extraction({"method": "RF"})
+
+
+def test_rf_flow_publishes_three_seasons_as_one_operator_contract(setup_compute):
+    import json
+    from pathlib import Path
+    from apps.compute.packages import validate_manifest
+    from apps.business_flows.definitions import normalize_definition
+    from apps.business_flows.spartina import definition
+    from apps.projects.context import ProjectScope
+
+    env = setup_compute
+    version = env["version"]
+    version.manifest = validate_manifest(
+        json.loads(
+            (
+                Path(__file__).resolve().parents[3]
+                / "examples/compute/spartina-rf/operator.yaml"
+            ).read_text()
+        )
+    )
+    version.save()
+    with project_scope(
+        ProjectScope((env["project"].pk,), env["project"].pk, env["owner"].pk)
+    ):
+        spec = normalize_definition(definition(version.pk))
+    assert spec["executionMode"] == "main_agent"
+    assert [row["key"] for row in spec["inputRequirements"]] == [
+        "march",
+        "august",
+        "december",
+    ]
+    operators = [row for row in spec["nodes"] if row["kind"] == "operator"]
+    assert len(operators) == 1
+    assert set(operators[0]["contract"]["importOutputs"]) == {
+        "classification",
+        "probability",
+        "statistics",
+        "original",
+    }
