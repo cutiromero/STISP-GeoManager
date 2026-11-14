@@ -121,14 +121,14 @@ export default function ProductMap({
                   rulesMode: "custom" as const,
                   rules: {
                     ...profile.raster.defaultRules,
-                    uniqueValues: rasterSymbolizationFromRules(profile.raster.defaultRules).uniqueValues.map(
-                      (row) => ({
-                        ...row,
-                        color: visibleCodes.includes(row.value)
-                          ? row.color
-                          : "#00000000",
-                      }),
-                    ),
+                    uniqueValues: rasterSymbolizationFromRules(
+                      profile.raster.defaultRules,
+                    ).uniqueValues.map((row) => ({
+                      ...row,
+                      color: visibleCodes.includes(row.value)
+                        ? row.color
+                        : "#00000000",
+                    })),
                   },
                 }
               : { rulesMode: "default" as const }),
@@ -152,7 +152,11 @@ export default function ProductMap({
         bounds = result.bounds4326;
         map.addSource("product", {
           type: "raster",
-          tiles: [projectUrl(versionedRasterTileUrl(result.tileUrl))],
+          tiles: [
+            projectUrl(versionedRasterTileUrl(result.tileUrl))
+              .replace(/%7B/g, "{")
+              .replace(/%7D/g, "}"),
+          ],
           tileSize: 256,
           minzoom: result.minZoom,
           maxzoom: result.maxZoom,

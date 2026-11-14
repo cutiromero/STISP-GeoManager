@@ -229,3 +229,36 @@ it("shares one task read between the card and drawer and refreshes products once
   expect(businessFlowsApi.run).toHaveBeenCalledTimes(2);
   expect(getMonitoringProducts).toHaveBeenCalledTimes(2);
 });
+
+it("shows RGB and disables classification for a region without a product", async () => {
+  vi.mocked(getMonitoringProducts).mockResolvedValue({
+    ...list,
+    inputResources: [
+      source,
+      { ...source, id: 1460, name: "环江油田_RGB原始影像_06_综合地表" },
+    ],
+  });
+  show();
+  const region = await screen.findByRole("combobox", { name: "选择解译样区" });
+  fireEvent.mouseDown(region);
+  fireEvent.click(
+    await screen.findByText("06_综合地表", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByTestId("map-state")).toHaveTextContent(
+      '"mode":"original"',
+    ),
+  );
+  expect(
+    screen.getByRole("radio", { name: "分类", exact: true }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("radio", { name: "叠加", exact: true }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("radio", { name: "卷帘", exact: true }),
+  ).toBeDisabled();
+  expect(businessFlowsApi.start).not.toHaveBeenCalled();
+});

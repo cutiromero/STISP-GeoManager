@@ -51,7 +51,12 @@ export default function LandcoverDashboard({
   const task = useMonitorTask(
     projectId,
     user?.id,
-    () => setRevision((value) => value + 1),
+    () => {
+      setSourceId(undefined);
+      setProductId(undefined);
+      setMode("classification");
+      setRevision((value) => value + 1);
+    },
     page?.businessFlow?.definitionId,
   );
   const resources = page?.inputResources ?? [];
@@ -65,6 +70,7 @@ export default function LandcoverDashboard({
   const selected =
     sourceProducts.find((product) => product.id === productId) ??
     sourceProducts[0];
+  const displayMode = !selected ? "original" : mode;
   const original = resources.find((resource) => resource.id === selectedSource);
   const categories = selected?.classification?.categories ?? [];
   const visibleCodes = useMemo(
@@ -130,7 +136,10 @@ export default function LandcoverDashboard({
   const empty = (
     <Empty
       image={Empty.PRESENTED_IMAGE_SIMPLE}
-      description={ui("选择样区开展解译", "Choose a region to interpret")}
+      description={ui(
+        "该样区暂无分类成果",
+        "No classification for this region",
+      )}
     />
   );
   return (
@@ -199,17 +208,21 @@ export default function LandcoverDashboard({
                   overview={page?.inputBoundary}
                   config={config}
                   animated={animated}
-                  mode={mode}
+                  mode={displayMode}
                   visibleCodes={visibleCodes}
                 />
               </Suspense>
               <div className="landcover-map-toolbar">
                 <Segmented
                   aria-label={ui("影像对比方式", "Comparison mode")}
-                  value={mode}
+                  value={displayMode}
                   onChange={(value) => setMode(value as LandcoverView)}
                   options={[
-                    { value: "classification", label: ui("分类", "Classes") },
+                    {
+                      value: "classification",
+                      label: ui("分类", "Classes"),
+                      disabled: !selected,
+                    },
                     { value: "original", label: ui("原图", "RGB") },
                     {
                       value: "overlay",

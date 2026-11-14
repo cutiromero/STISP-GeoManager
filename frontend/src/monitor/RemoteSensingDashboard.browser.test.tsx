@@ -504,7 +504,11 @@ it("分类栅格使用服务器瓦片、实际图例和nearest采样", async () 
     "product",
     expect.objectContaining({
       type: "raster",
-      tiles: [expect.stringContaining("projectTagId=17")],
+      tiles: [
+        expect.stringMatching(
+          /\/server-style\/\{z\}\/\{x\}\/\{y\}\.png\?rv=\d+&projectTagId=17$/,
+        ),
+      ],
     }),
   );
   expect(maps.maps[0]?.api.addLayer).toHaveBeenCalledWith(
