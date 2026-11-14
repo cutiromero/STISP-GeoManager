@@ -68,7 +68,11 @@ function Location() {
   const location = useLocation();
   return (
     <output aria-label="当前导航">
-      {JSON.stringify({ path: location.pathname, state: location.state })}
+      {JSON.stringify({
+        path: location.pathname,
+        search: location.search,
+        state: location.state,
+      })}
     </output>
   );
 }
@@ -603,4 +607,28 @@ it("preserves a human-only node's revision limit while independent review is tog
     human: true,
     maxRevisions: 2,
   });
+});
+
+it("shows shared availability and keeps shared definitions readonly in a private project", async () => {
+  const shared = { ...researchFlow, projectId: 1 };
+  vi.mocked(businessFlowsApi.list).mockResolvedValue({
+    items: [summary(shared, researchVersion)],
+    canManage: true,
+  });
+  vi.mocked(businessFlowsApi.detail).mockResolvedValue({
+    ...researchDetail,
+    flow: shared,
+    canManage: false,
+  });
+  show();
+  await screen.findByRole("heading", { name: shared.name });
+  expect(screen.getByText("所有项目可用")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "发布新版本" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "开始业务流", exact: true }),
+  );
+  const location = JSON.parse(screen.getByLabelText("当前导航").textContent!);
+  expect(location.search).toContain("projectTagId=3");
 });

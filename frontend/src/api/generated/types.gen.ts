@@ -12538,7 +12538,7 @@ export type BusinessFlowExecutorSession = {
 };
 
 /**
- * 当前项目内的业务流登记；发布版本不被元信息修改覆盖。
+ * 业务流登记归属一个项目；公开项目登记的通用定义可跨项目读取和启动，维护仅限登记项目。
  */
 export type BusinessFlowDefinition = {
     /**
@@ -12546,7 +12546,7 @@ export type BusinessFlowDefinition = {
      */
     id: number;
     /**
-     * 唯一所属项目
+     * 业务流登记所属项目；1表示公开共享定义，执行任务仍归当前项目
      */
     projectId: number;
     /**

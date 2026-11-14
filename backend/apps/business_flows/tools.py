@@ -3,15 +3,19 @@
 from copy import deepcopy
 import uuid
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 
 from apps.agent.policy import require_access
 from apps.compute.packages import ComputeError
-from .models import BusinessFlowDefinition, BusinessFlowVersion
+from apps.projects.context import selected_project_id
+from .models import BusinessFlowVersion
+from .scopes import available_flows, catalog_flows
 
 
 def execute_business_flow_tool(run, user, name, args):
     require_access(user, "agent", run.model)
+    if run.owner_id != user.pk or run.project_tag_id != selected_project_id():
+        raise PermissionDenied("业务流工具不属于当前账号或项目")
     if name == "list_business_flows":
         query = args.get("query", "")
         if not isinstance(query, str) or len(query) > 120:
@@ -24,9 +28,11 @@ def execute_business_flow_tool(run, user, name, args):
             or not 1 <= limit <= 10
         ):
             raise ValidationError("业务流分页范围无效")
-        flows = BusinessFlowDefinition.objects.filter(
-            is_active=True, name__icontains=query
-        ).select_related("current_version")[offset : offset + limit + 1]
+        flows = (
+            catalog_flows()
+            .filter(is_active=True, name__icontains=query)
+            .select_related("current_version")[offset : offset + limit + 1]
+        )
         rows = list(flows)
         items = []
         for flow in rows[:limit]:
@@ -63,7 +69,7 @@ def execute_business_flow_tool(run, user, name, args):
             pk=version_id,
             status="published",
             flow__is_active=True,
-            flow__project_tag_id=run.project_tag_id,
+            flow__in=available_flows(run.project_tag_id),
         )
         .first()
     )

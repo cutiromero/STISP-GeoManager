@@ -24,6 +24,8 @@ from tests.integration.test_agent import setup_agent  # noqa: F401
 @pytest.fixture
 def legacy_flow(setup_agent, monkeypatch):
     env = setup_agent
+    env["project"].code = "02"
+    env["project"].save(update_fields=["code"])
     monkeypatch.setattr(review.provider, "model_window", lambda model: 32768)
     monkeypatch.setattr("apps.agent.context.count_tokens", lambda *args: 123)
 

@@ -14,9 +14,11 @@ from apps.compute.packages import ComputeError
 from apps.projects.context import (
     is_superadmin,
     require_live_membership,
+    selected_project_id,
 )
 from . import catalog
 from .models import BusinessFlowDefinition
+from .scopes import available_flows, catalog_flows
 
 # Configuration: requests and list pages are bounded metadata, not source files.
 MAX_REQUEST_BYTES = 256 * 1024
@@ -79,7 +81,8 @@ def detail_value(flow, user):
         "flow": catalog.serialize_flow(flow),
         "version": catalog.serialize_version(current) if current else None,
         "versions": [catalog.serialize_version(item) for item in versions],
-        "canManage": is_superadmin(user),
+        "canManage": is_superadmin(user)
+        and flow.project_tag_id == selected_project_id(),
     }
 
 
@@ -97,9 +100,7 @@ def flows(request):
     if not 0 <= offset <= MAX_LIST_OFFSET or not 1 <= limit <= PAGE_LIMIT:
         raise ValidationError("目录offset须为0至1000000，limit须为1至50")
     can_manage = is_superadmin(request.user)
-    query = BusinessFlowDefinition.objects.select_related("current_version")
-    if not can_manage:
-        query = query.filter(is_active=True)
+    query = catalog_flows(manage=can_manage).select_related("current_version")
     text = request.GET.get("q", "")[:120].strip()
     if text:
         from django.db.models import Q
@@ -122,7 +123,12 @@ def flows(request):
 @endpoint(["GET", "PATCH"])
 def flow_detail(request, flow_id):
     flow = get_object_or_404(
-        BusinessFlowDefinition.objects.select_related("current_version"), pk=flow_id
+        (
+            BusinessFlowDefinition.objects
+            if request.method == "PATCH"
+            else available_flows()
+        ).select_related("current_version"),
+        pk=flow_id,
     )
     if request.method == "PATCH":
         flow = catalog.update_flow(
@@ -150,7 +156,7 @@ def start(request, flow_id):
     from .runtime import start_flow, serialize_run
 
     flow = get_object_or_404(
-        BusinessFlowDefinition.objects.select_related("current_version"), pk=flow_id
+        available_flows().select_related("current_version"), pk=flow_id
     )
     if not flow.is_active:
         raise ComputeError("此业务流已停用", 409)
@@ -200,7 +206,7 @@ def prepare_inputs(request, flow_id):
     from apps.agent.policy import require_access
 
     policy = require_access(request.user, "agent")
-    flow = get_object_or_404(BusinessFlowDefinition.objects, pk=flow_id, is_active=True)
+    flow = get_object_or_404(available_flows(), pk=flow_id, is_active=True)
     value = body(request, {"versionId", "inputs", "inputAdapters", "uploadBatchId"})
     if type(value.get("versionId")) is not int:
         raise ValidationError("请选择真实发布版本")

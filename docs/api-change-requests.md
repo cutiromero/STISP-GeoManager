@@ -1,5 +1,19 @@
 # API Change Requests
 
+
+## API-20261114-001 - 业务流项目目录与公开共享
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: 沿用业务流目录、详情、资料准备、启动与运行接口，智能体工具使用同一目录范围。
+- Change type: 目录和执行授权范围统一；请求响应字段及数据库结构不变。
+- OpenAPI change: BusinessFlowDefinition说明公开共享与登记项目归属；projectId继续表示登记项目，运行projectId表示执行项目。
+- Backend implementation notes: 当前项目与公开定义共用单次目录查询，本项目同编码定制优先；预置逻辑推理限定所属专题项目。共享定义只在登记项目维护，实际资料、会话、任务和成果逐执行边界重验当前项目权限；停用阻止后续步骤，既有本人历史记录保留。
+- Frontend reason: 目录与详情标明本项目或所有项目，共享定义在其他项目只读，启动沿用当前项目。
+- Mock examples: 沿用原有业务流字段，通过隔离测试覆盖公开定义、私有定制和项目切换。
+- Verification: 跨项目目录与直接编号访问、资料准备、智能体工具、队列执行、共享停用、维护权限、元信息单次读取与浏览器项目切换。
+- Result: 目录和执行边界采用同一项目范围，界面区分本项目与所有项目。
+
 ## API-20261113-004 - 遥感监测产品与场景
 
 - Status: BackendReady
@@ -674,6 +688,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261114-001 | BackendReady | 业务流目录、详情、准备、启动与运行 | 项目隔离与公开定义共享 | Updated | 沿用业务流示例 | Implemented | 项目隔离、共享执行、撤权及浏览器 | 定义共享，任务与数据归当前项目 |
 | API-20261113-004 | BackendReady | /api/ecology/monitoring/；项目功能 | 遥感产品与场景 | Updated | 171-remote-monitoring.json | Implemented | 权限、来源、科学时间、批量读取及浏览器 | 空状态不生成模拟结果 |
 | API-20261113-003 | BackendReady | Business flow recovery | 执行错误定位与人工续接 | Updated | 隔离恢复用例 | Implemented | 原会话、检查点与撤权回归 | 保留成果和原权限边界 |
 | API-20261112-002 | BackendReady | Business flow skill and main agent | 任务级主执行循环与有界技能 | Updated | 146节点记录 | Implemented | 版本、会话、台账、调整与恢复 | 不扩大上下文或审批权限 |

@@ -3,6 +3,7 @@
 import json
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
@@ -10,6 +11,11 @@ from apps.business_flows.builtins import builtin_flows
 from apps.business_flows.catalog import publish_version, register_flow, require_manager
 from apps.business_flows.definitions import definition_hash, normalize_definition
 from apps.business_flows.models import BusinessFlowDefinition
+from apps.business_flows.scopes import (
+    GEOLOGY_FLOW_CODE,
+    PUBLIC_PROJECT_ID,
+    require_registration_project,
+)
 from apps.projects.access import can_access_project
 from apps.projects.context import ProjectScope, project_scope
 from apps.projects.models import Project
@@ -46,12 +52,22 @@ class Command(BaseCommand):
         ):
             require_manager(user)
             for value in builtin_flows():
+                try:
+                    require_registration_project(value["code"], project.pk)
+                except ValidationError:
+                    continue
                 normalized = normalize_definition(value["definition"])
                 flow = (
                     BusinessFlowDefinition.objects.select_related("current_version")
                     .filter(code=value["code"])
                     .first()
                 )
+                if (
+                    project.pk != PUBLIC_PROJECT_ID
+                    and value["code"] != GEOLOGY_FLOW_CODE
+                    and flow is None
+                ):
+                    continue
                 changed = (
                     not flow
                     or not flow.current_version

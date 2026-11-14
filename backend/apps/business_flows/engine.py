@@ -75,17 +75,18 @@ def live_guard(workflow):
         if current.status not in {"queued", "running", "waiting_compute"}:
             raise ModelError("业务流状态已变化，当前模型请求已停止")
         from apps.agent.policy import require_access
-        from .models import BusinessFlowDefinition
+        from .scopes import available_flows
 
         user = fresh_user(current.owner_id)
         policy = require_access(user, "agent", workflow.model)
         if (
             not policy.get("workflowEnabled", True)
-            or not BusinessFlowDefinition._base_manager.filter(
+            or not available_flows(current.project_tag_id)
+            .filter(
                 pk=frozen["flowId"],
-                project_tag_id=current.project_tag_id,
                 is_active=True,
-            ).exists()
+            )
+            .exists()
         ):
             raise PermissionDenied("业务流已停用或执行权限已收窄")
         from .runtime import authorize_inputs

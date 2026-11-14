@@ -322,6 +322,14 @@ export default function BusinessFlowEditor({
           "Published versions retain their full definitions. Existing tasks keep their original version; reviews are configured per node and may be omitted for simple flows.",
         )}
       </p>
+      {!flow && (
+        <p className="business-flow-editor-intro">
+          {ui(
+            "业务流归当前项目。在公开项目登记的通用业务流可供所有项目使用。",
+            "Flows belong to the current project. General flows registered in the public project are available in all projects.",
+          )}
+        </p>
+      )}
       {error && (
         <Alert
           type="error"

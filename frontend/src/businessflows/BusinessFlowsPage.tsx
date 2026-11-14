@@ -448,6 +448,11 @@ export default function BusinessFlowsPage() {
                     {item.humanReviewCount}
                   </span>
                 )}
+                <span>
+                  {item.projectId === 1
+                    ? ui("所有项目", "All projects")
+                    : ui("本项目", "This project")}
+                </span>
                 {!item.isActive && <span>{ui("已停用", "Inactive")}</span>}
               </span>
             </button>
@@ -596,6 +601,11 @@ export default function BusinessFlowsPage() {
                   {detail.flow.description}
                 </p>
                 <div className="business-flow-facts">
+                  <span>
+                    {detail.flow.projectId === 1
+                      ? ui("所有项目可用", "Available in all projects")
+                      : ui("本项目可用", "Available in this project")}
+                  </span>
                   <span>
                     <BranchesOutlined />
                     {spec.nodes.length}

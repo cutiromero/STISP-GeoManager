@@ -235,18 +235,13 @@ def test_builtin_registration_is_explicit_and_idempotent(setup_agent):
         output = StringIO()
         call_command(
             "register_business_flows",
-            project_id=env["project"].pk,
+            project_id=1,
             user_id=env["admin"].pk,
             stdout=output,
         )
-        assert len(json.loads(output.getvalue())["items"]) == 3
-    assert (
-        BusinessFlowDefinition._base_manager.filter(
-            project_tag_id=env["project"].pk
-        ).count()
-        == 3
-    )
-    assert BusinessFlowVersion.objects.count() == 3
+        assert len(json.loads(output.getvalue())["items"]) == 2
+    assert BusinessFlowDefinition._base_manager.filter(project_tag_id=1).count() == 2
+    assert BusinessFlowVersion.objects.count() == 2
 
 
 def test_builtin_registration_preserves_custom_version_until_explicit_update(

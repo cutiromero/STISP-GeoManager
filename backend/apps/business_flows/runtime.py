@@ -22,6 +22,7 @@ from apps.agent.workflow_slots import require_compute_slot
 from apps.compute.packages import ComputeError
 from apps.projects.context import selected_project_id
 from .models import BusinessFlowVersion
+from .scopes import available_flows, PUBLIC_PROJECT_ID
 from .model_requests import request_limit
 from .state import (
     binding,
@@ -37,23 +38,26 @@ def authorize(user, workflow, *, history=False):
     if workflow.owner_id != user.pk or workflow.project_tag_id != selected_project_id():
         raise PermissionDenied("业务流不属于当前账号或项目")
     bind = binding(workflow)
-    version = (
-        BusinessFlowVersion.objects.select_related("flow")
-        .filter(
-            pk=bind.get("versionId"),
-            flow_id=bind.get("flowId"),
-            flow__project_tag_id=workflow.project_tag_id,
-        )
-        .first()
+    versions = BusinessFlowVersion.objects.select_related("flow").filter(
+        pk=bind.get("versionId"),
+        flow_id=bind.get("flowId"),
     )
+    versions = (
+        versions.filter(
+            flow__project_tag_id__in={PUBLIC_PROJECT_ID, workflow.project_tag_id}
+        )
+        if history
+        else versions.filter(
+            flow__in=available_flows(workflow.project_tag_id).filter(is_active=True)
+        )
+    )
+    version = versions.first()
     if (
         not version
         or version.definition_hash != bind.get("definitionHash")
         or version.definition != bind["definitionSnapshot"]
     ):
         raise PermissionDenied("冻结的业务流版本无法核实")
-    if not history and not version.flow.is_active:
-        raise PermissionDenied("业务流已停用，不能继续新的执行步骤")
     policy = require_access(user, "agent", workflow.model)
     if not policy.get("workflowEnabled", True):
         raise PermissionDenied("业务流执行权限已关闭")
@@ -415,8 +419,7 @@ def _launch_budget(user, policy, model, value, source_run, reviewer_aliases=()):
 @retry_run_admission
 def start_flow(user, version, value, *, source_run=None):
     if (
-        version.flow.project_tag_id != selected_project_id()
-        or not version.flow.is_active
+        not available_flows().filter(pk=version.flow_id, is_active=True).exists()
         or version.status != "published"
     ):
         raise PermissionDenied("业务流版本不可执行")

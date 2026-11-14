@@ -13,6 +13,7 @@ from apps.projects.context import (
 )
 from .definitions import CODE_PATTERN, definition_hash, normalize_definition, text
 from .models import BusinessFlowDefinition, BusinessFlowVersion
+from .scopes import require_registration_project
 
 
 def require_manager(user):
@@ -255,6 +256,7 @@ def register_flow(user, value):
         raise ValidationError("启用标记必须是布尔值")
     spec = normalize_definition(value.get("definition"))
     project_id = selected_project_id()
+    require_registration_project(code, project_id)
     validate_bindings(spec, project_id)
     with transaction.atomic():
         flow = BusinessFlowDefinition.objects.create(
