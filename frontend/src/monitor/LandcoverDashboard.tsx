@@ -296,20 +296,6 @@ export default function LandcoverDashboard({
                     ]}
                   />
                   <MonitorProductSelector selection={selection} />
-                  <p title={original?.name}>
-                    {original?.name ??
-                      ui("六个样区范围", "Six region footprints")}
-                  </p>
-                  <span className="landcover-secondary">
-                    {hasResult
-                      ? ui(
-                          selection.view === "standard"
-                            ? "已选择标准成果"
-                            : "分类成果已就绪",
-                          "Product selected",
-                        )
-                      : ui("原始影像可浏览", "Source imagery available")}
-                  </span>
                   {page?.nextBeforeId && (
                     <Button
                       type="link"

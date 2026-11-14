@@ -115,3 +115,28 @@ it("does not substitute a historical result for a region missing from the curren
   fireEvent.click(screen.getByRole("radio", { name: "历史解译", exact: true }));
   expect(screen.getByLabelText("所选成果")).toHaveTextContent("4");
 });
+
+it("keeps all origin tabs and batch information inside a narrow card", async () => {
+  const view = render(
+    <div style={{ width: 240 }}>
+      <Harness />
+    </div>,
+  );
+  const selector = view.container.querySelector<HTMLElement>(
+    ".monitor-product-selector",
+  )!;
+  const box = selector.getBoundingClientRect();
+  expect(selector.scrollWidth).toBeLessThanOrEqual(selector.clientWidth + 1);
+  for (const label of selector.querySelectorAll<HTMLElement>(
+    ".ant-segmented-item-label",
+  )) {
+    const item = label.getBoundingClientRect();
+    expect(item.left).toBeGreaterThanOrEqual(box.left - 1);
+    expect(item.right).toBeLessThanOrEqual(box.right + 1);
+  }
+  expect(
+    screen.getByText("批次 11111111", {
+      selector: ".monitor-product-identity > span",
+    }),
+  ).toBeVisible();
+});

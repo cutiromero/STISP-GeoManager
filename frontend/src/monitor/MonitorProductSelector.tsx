@@ -90,7 +90,8 @@ export default function MonitorProductSelector({
             );
           })}
         </div>
-      ) : options.length ? (
+      ) : options.length > 1 ||
+        (selection.view === "standard" && selection.references.length > 0) ? (
         <Select
           aria-label={ui("选择成果版本", "Select product version")}
           value={selection.key}
@@ -101,7 +102,7 @@ export default function MonitorProductSelector({
             <span title={String(option.label)}>{option.label}</span>
           )}
         />
-      ) : (
+      ) : !options.length ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
@@ -118,17 +119,12 @@ export default function MonitorProductSelector({
                 : ui("暂无此类成果", "No products in this group")
           }
         />
-      )}
+      ) : null}
       {(selected || selection.reference) && (
         <div className="monitor-product-identity">
           <Tag color={selection.view === "standard" ? "gold" : "cyan"}>
             {names[selection.view]}
           </Tag>
-          {presentation !== "list" && (
-            <strong title={selected?.name ?? selection.reference?.name}>
-              {selected?.name ?? selection.reference?.name}
-            </strong>
-          )}
           {selected?.provenance?.batchId && (
             <span title={selected.provenance.batchId}>
               批次 {selected.provenance.batchId.slice(0, 8)}
@@ -143,6 +139,11 @@ export default function MonitorProductSelector({
           )}
           {selected?.provenance?.creator && (
             <span>处理人 {selected.provenance.creator}</span>
+          )}
+          {presentation !== "list" && (
+            <strong title={selected?.name ?? selection.reference?.name}>
+              {selected?.name ?? selection.reference?.name}
+            </strong>
           )}
           {selection.reference && (
             <span>
