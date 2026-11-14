@@ -27,6 +27,15 @@ DEFAULT_REGION = {"west": 121.9, "south": 31.2, "east": 121.99, "north": 31.29}
 
 
 class Command(BaseCommand):
+    source_folder = "spartina-rf"
+    flow_code = CODE
+    flow_title = "互花米草分布解译"
+    flow_description = "选择研究区，以三季节48特征RF解译互花米草，生成分类、概率和面积统计，在监测大屏查看。"
+    algorithm_category = "互花米草分布解译"
+    scene = "spartina"
+    default_inputs = DEFAULT_INPUTS
+    default_parameters = DEFAULT_REGION
+    build_definition = staticmethod(definition)
     help = "登记互花米草RF算子、真实试运行及项目专属业务流"
 
     def add_arguments(self, parser):
@@ -35,8 +44,10 @@ class Command(BaseCommand):
         parser.add_argument(
             "--stage", choices=["operator", "trial", "publish"], required=True
         )
-        parser.add_argument("--inputs-json", default=json.dumps(DEFAULT_INPUTS))
-        parser.add_argument("--parameters-json", default=json.dumps(DEFAULT_REGION))
+        parser.add_argument("--inputs-json", default=json.dumps(self.default_inputs))
+        parser.add_argument(
+            "--parameters-json", default=json.dumps(self.default_parameters)
+        )
         parser.add_argument("--publish-updates", action="store_true")
 
     def handle(self, *args, **options):
@@ -46,14 +57,14 @@ class Command(BaseCommand):
             raise CommandError("登记账号无项目权限")
         with project_scope(ProjectScope((project.pk,), project.pk, actor.pk, True)):
             require_manager(actor)
-            source = settings.PROGRAM_ROOT / "examples/compute/spartina-rf"
+            source = settings.PROGRAM_ROOT / "examples/compute" / self.source_folder
             declared = json.loads((source / "operator.yaml").read_text())
             algorithm, _ = AlgorithmResource.objects.get_or_create(
                 identifier=declared["identifier"],
                 defaults={
                     "name": declared["name"],
                     "description": declared["description"],
-                    "category": "互花米草分布解译",
+                    "category": self.algorithm_category,
                     "created_by": actor,
                 },
             )
@@ -74,7 +85,10 @@ class Command(BaseCommand):
                             archive.write(path, path.relative_to(source).as_posix())
                 if version is None:
                     version = store_version(
-                        algorithm, SimpleUploadedFile("spartina.zip", stream.getvalue())
+                        algorithm,
+                        SimpleUploadedFile(
+                            self.source_folder + ".zip", stream.getvalue()
+                        ),
                     )
                 else:
 
@@ -102,10 +116,13 @@ class Command(BaseCommand):
                 task = submit(
                     actor,
                     {
-                        "name": "互花米草RF研究区试运行",
+                        "name": self.flow_title + "发布试运行",
                         "versionId": version.pk,
                         "trial": True,
-                        "idempotencyKey": "spartina-trial-" + version.checksum[:48],
+                        "idempotencyKey": "trial-"
+                        + self.source_folder
+                        + "-"
+                        + version.checksum[:48],
                         "inputs": json.loads(options["inputs_json"]),
                         "parameters": json.loads(options["parameters_json"]),
                     },
@@ -117,9 +134,9 @@ class Command(BaseCommand):
                 }
             else:
                 publish_algorithm_version(actor, version)
-                spec = normalize_definition(definition(version.pk))
+                spec = normalize_definition(self.build_definition(version.pk))
                 flow = (
-                    BusinessFlowDefinition.objects.filter(code=CODE)
+                    BusinessFlowDefinition.objects.filter(code=self.flow_code)
                     .select_related("current_version")
                     .first()
                 )
@@ -127,13 +144,16 @@ class Command(BaseCommand):
                     flow, published = register_flow(
                         actor,
                         {
-                            "code": CODE,
-                            "name": "互花米草分布解译",
-                            "description": "选择研究区，以三季节48特征RF解译互花米草，生成分类、概率和面积统计，在监测大屏查看。",
+                            "code": self.flow_code,
+                            "name": self.flow_title,
+                            "description": self.flow_description,
                             "definition": spec,
                         },
                     )
-                elif flow.current_version.definition_hash != definition_hash(spec):
+                elif (
+                    flow.current_version is None
+                    or flow.current_version.definition_hash != definition_hash(spec)
+                ):
                     if not options["publish_updates"]:
                         raise CommandError("业务流已有不同版本，请显式更新")
                     flow, published = publish_version(actor, flow, spec)
@@ -149,7 +169,7 @@ class Command(BaseCommand):
                 )
                 config["source"] = "remote_sensing_products"
                 config["scenes"] = list(
-                    dict.fromkeys([*config.get("scenes", []), "spartina"])
+                    dict.fromkeys([*config.get("scenes", []), self.scene])
                 )
                 set_feature(
                     actor, feature, project=project, enabled=True, config=config

@@ -37,6 +37,10 @@ def _stat(path):
 
 
 def _source(resource):
+    from .cube_inputs import is_native_cube, cube_root
+
+    if is_native_cube(resource):
+        return cube_root(resource) / ".zmetadata", None
     if resource.data_type == "raster":
         dataset = RasterDataset.objects.get(data_resource=resource, status="ready")
         return raster_source_path(dataset.source_relative_path), None
@@ -78,7 +82,11 @@ def source_version(resource):
     }
 
 
-def _source_dependencies(resource, source):
+def _source_dependencies(resource, source, variant=None):
+    from .cube_inputs import is_native_cube, source_dependencies
+
+    if is_native_cube(resource):
+        return source_dependencies(source.parent, variant)
     if resource.data_type != "raster":
         return []
     import rasterio
@@ -265,7 +273,7 @@ def stage_version(
             else ""
         ),
     )
-    dependencies = _source_dependencies(resource, source)
+    dependencies = _source_dependencies(resource, source, variant)
     version = {
         "resource": resource.id,
         "project": resource.project_tag_id,

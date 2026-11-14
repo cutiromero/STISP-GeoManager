@@ -70,6 +70,54 @@
     }
   ],
   "paths": {
+    "/api/ecology/wildfire/catalog/": {
+      "get": {
+        "tags": [
+          "数据目录"
+        ],
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "summary": "获取当前项目野火观测产品和真实时间索引",
+        "description": "只读已登记原生容器元信息及时间索引表；逐次检查项目和资源权限，不打开时空像元或运行模型。",
+        "operationId": "getWildfireObservationCatalog",
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "显式选择当前项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "当前项目可访问的野火资料和真实时期。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WildfireObservationCatalog"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/api/ecology/monitoring/": {
       "get": {
         "tags": [
@@ -35205,6 +35253,9 @@
           "extraction": {
             "$ref": "#/components/schemas/SpartinaExtraction"
           },
+          "observation": {
+            "$ref": "#/components/schemas/WildfireObservation"
+          },
           "threshold": {
             "type": [
               "number",
@@ -35270,6 +35321,297 @@
           "sklearnVersion": {
             "type": "string",
             "description": "实际验证运行的scikit-learn版本。"
+          }
+        }
+      },
+      "WildfireObservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "真实野火观测的物理单位、时段、格网统计与序列。",
+        "required": [
+          "product",
+          "unit",
+          "periodMode",
+          "series",
+          "activeCells",
+          "validCells",
+          "gridCells",
+          "grid",
+          "legend"
+        ],
+        "properties": {
+          "product": {
+            "type": "string",
+            "enum": [
+              "gwis_ba",
+              "gfed_ba",
+              "fcci_ba",
+              "cams_frpfire"
+            ],
+            "description": "原始观测变量。"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "ha",
+              "W m-2"
+            ],
+            "description": "物理单位，面积与FRP独立。"
+          },
+          "periodMode": {
+            "type": "string",
+            "enum": [
+              "8day",
+              "monthly"
+            ],
+            "description": "原始周期或FCCI月度口径。"
+          },
+          "activeCells": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "正观测值格网数。"
+          },
+          "validCells": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "有限观测值格网数。"
+          },
+          "gridCells": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "研究区格网总数。"
+          },
+          "grid": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "原始WGS84格网定义。",
+            "required": [
+              "width",
+              "height",
+              "transform",
+              "crs"
+            ],
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1440,
+                "description": "经向格网数。"
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 720,
+                "description": "纬向格网数。"
+              },
+              "crs": {
+                "type": "string",
+                "const": "EPSG:4326",
+                "description": "原始坐标参考。"
+              },
+              "transform": {
+                "type": "array",
+                "minItems": 6,
+                "maxItems": 6,
+                "description": "GDAL仿射变换。",
+                "items": {
+                  "type": "number",
+                  "description": "变换参数。"
+                }
+              }
+            }
+          },
+          "series": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 12,
+            "description": "实际观测序列，缺失值为null。",
+            "items": {
+              "$ref": "#/components/schemas/WildfireSeriesPoint"
+            }
+          },
+          "legend": {
+            "type": "array",
+            "maxItems": 8,
+            "description": "观测物理量分级图例，非风险校准等级。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "name",
+                "rgba"
+              ],
+              "properties": {
+                "code": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "description": "分级编码。"
+                },
+                "name": {
+                  "type": "string",
+                  "description": "原单位观测值区间。"
+                },
+                "rgba": {
+                  "type": "array",
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "description": "四通道颜色。",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255,
+                    "description": "一个颜色通道。"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "WildfireSeriesPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "研究区一个真实观测期的汇总。",
+        "required": [
+          "observedStart",
+          "observedEnd",
+          "value",
+          "validCells",
+          "activeCells",
+          "unit"
+        ],
+        "properties": {
+          "observedStart": {
+            "type": "string",
+            "format": "date",
+            "description": "实际观测开始。"
+          },
+          "observedEnd": {
+            "type": "string",
+            "format": "date",
+            "description": "实际观测结束。"
+          },
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "面积求和或FRP有效均值，缺测为null。"
+          },
+          "validCells": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "有效格网数。"
+          },
+          "activeCells": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "正观测值格网数。"
+          },
+          "unit": {
+            "type": "string",
+            "description": "本变量的物理单位。"
+          }
+        }
+      },
+      "WildfireObservationCatalog": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "已登记野火立方体与时间表，不读取三维时空像元。",
+        "required": [
+          "products",
+          "times"
+        ],
+        "properties": {
+          "cube": {
+            "$ref": "#/components/schemas/DataResource"
+          },
+          "timeIndexResource": {
+            "$ref": "#/components/schemas/DataResource"
+          },
+          "products": {
+            "type": "array",
+            "maxItems": 4,
+            "description": "支持的物理观测产品。",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "label",
+                "unit",
+                "periodMode"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "enum": [
+                    "gwis_ba",
+                    "gfed_ba",
+                    "fcci_ba",
+                    "cams_frpfire"
+                  ],
+                  "description": "原始观测变量。"
+                },
+                "label": {
+                  "type": "string",
+                  "description": "产品名称。"
+                },
+                "unit": {
+                  "type": "string",
+                  "description": "原物理单位。"
+                },
+                "periodMode": {
+                  "type": "string",
+                  "enum": [
+                    "8day",
+                    "monthly"
+                  ],
+                  "description": "实际时间口径。"
+                }
+              }
+            }
+          },
+          "times": {
+            "type": "array",
+            "maxItems": 1000,
+            "description": "原始时间表的有序索引与产品可用性。",
+            "items": {
+              "type": "object",
+              "required": [
+                "index",
+                "date",
+                "endDate",
+                "validProducts"
+              ],
+              "properties": {
+                "index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "原始位置索引。"
+                },
+                "date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "原始日期。"
+                },
+                "endDate": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "实际窗口结束日期。"
+                },
+                "validProducts": {
+                  "type": "array",
+                  "maxItems": 4,
+                  "description": "本期有效的产品。",
+                  "items": {
+                    "type": "string",
+                    "description": "产品变量编码。"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -35350,7 +35692,9 @@
                       "enum": [
                         "probability",
                         "statistics",
-                        "original"
+                        "original",
+                        "classification",
+                        "series"
                       ],
                       "description": "配套成果用途。"
                     },
@@ -48583,6 +48927,15 @@
           "fileFormat": {
             "type": "string",
             "description": "资源登记格式；候选字段和几何类型从实际入库文件读取，后缀不能替代角色校验"
+          },
+          "nativeCube": {
+            "type": "boolean",
+            "description": "是否为原生Zarr时空容器，原始时间维不作为光谱波段。"
+          },
+          "cubeTimeCount": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "原始时空容器的时间坐标数。"
           }
         },
         "required": [

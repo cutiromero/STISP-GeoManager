@@ -24,9 +24,11 @@ export function productVersionLabel(item: MonitoringProduct) {
 export default function MonitorProductSelector({
   selection,
   presentation = "select",
+  labels,
 }: {
   selection: MonitorProductSelection;
   presentation?: "select" | "list";
+  labels?: Partial<Record<ProductView, string>>;
 }) {
   const ui = useComputeText();
   const names = {
@@ -36,6 +38,7 @@ export default function MonitorProductSelector({
     history: ui("历史解译", "Previous runs"),
     standard: ui("标准成果", "Reference"),
     uploaded: ui("上传成果", "Uploaded"),
+    ...labels,
   };
   const options = selection.choices.map((item) => ({
     value: `product:${item.id}`,

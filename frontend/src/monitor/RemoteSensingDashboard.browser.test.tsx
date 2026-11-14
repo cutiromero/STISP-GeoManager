@@ -31,6 +31,10 @@ const context = vi.hoisted(() => ({
 const app = vi.hoisted(() => ({
   bootstrap: { map: { mapboxAccessToken: "", defaultBasemap: "osm" } },
 }));
+vi.mock("../api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/client")>()),
+  requestJson: vi.fn(async () => ({ products: [], times: [] })),
+}));
 vi.mock("../projects/ProjectContext", () => ({
   useProjectContext: () => context,
 }));
@@ -207,7 +211,7 @@ it("真实场景空状态不创建胡杨模拟源、站点或概率", async () =
   expect(screen.getByText("三季节联合识别")).toBeInTheDocument();
   expect(screen.queryByText("模拟事件流")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "野火", exact: true }));
-  await screen.findByText("0.25° 网格 · 8 天周期");
+  await screen.findByText("区域观测序列");
   expect(getMonitoringProducts).toHaveBeenLastCalledWith(
     "wildfire",
     expect.any(AbortSignal),
@@ -358,7 +362,7 @@ it("切换场景后取消旧请求并忽略迟到产品", async () => {
   fireEvent.click(
     await screen.findByRole("button", { name: "野火", exact: true }),
   );
-  await screen.findByText("暂无监测成果");
+  await screen.findByText("暂无观测成果");
   expect(oldSignal?.aborted).toBe(true);
   await act(async () => resolveOld(list("spartina", [product()])));
   expect(screen.queryByText("历史分布1")).not.toBeInTheDocument();

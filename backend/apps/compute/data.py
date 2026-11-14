@@ -50,6 +50,10 @@ def list_candidate(resource: DataResource) -> dict:
     and execution fixes and validates the actual input file independently.
     """
     result = _candidate_record(resource)
+    from .cube_inputs import is_native_cube, candidate_metadata as cube_metadata
+
+    if is_native_cube(resource):
+        return {**result, **cube_metadata(resource)}
     try:
         if resource.data_type == "raster":
             datasets = getattr(resource, "_compute_ready_rasters", None)
@@ -209,6 +213,10 @@ def candidate(resource, *, raster_metadata=False, semantic_metadata=False):
 
 def _read_candidate(resource, *, raster_metadata=False, semantic_metadata=False):
     result = _candidate_record(resource)
+    from .cube_inputs import is_native_cube, candidate_metadata as cube_metadata
+
+    if is_native_cube(resource):
+        return {**result, **cube_metadata(resource)}
     if resource.data_type == "raster":
         import rasterio
 
@@ -333,7 +341,8 @@ def freeze_input(record, directory):
     if kind in {"vector", "table"}:
         limit = min(limit, 120 * 1024**2)
     window = record.snapshot.get("rasterWindow")
-    if resource.size_bytes > limit and not window:
+    cube = record.snapshot.get("cubeInput")
+    if resource.size_bytes > limit and not (window or cube):
         raise ComputeError("输入文件超过平台大小限制")
     if kind in {"vector", "table"} and resource.size_bytes > 120 * 1024**2:
         raise ComputeError("矢量和表格计算首期最多支持120 MiB，请先裁剪或分组")
@@ -351,13 +360,16 @@ def freeze_input(record, directory):
         ).max_band_pixels
 
     from .raster_windows import materialize_window
+    from .cube_inputs import materialize as materialize_cube
 
     prepared = stage_version(
         resource,
         record.key,
         target,
         lambda path: (
-            materialize_window(resource, path, window)
+            materialize_cube(resource, path, cube)
+            if cube
+            else materialize_window(resource, path, window)
             if window
             else _materialize_input(resource, path, limit)
             if max_band_pixels == 100_000_000
@@ -366,7 +378,7 @@ def freeze_input(record, directory):
             )
         ),
         record.checksum,
-        variant=window,
+        variant=cube or window,
     )
     current = DataResource.objects.filter(
         pk=resource.id, status="active", updated_at=resource.updated_at

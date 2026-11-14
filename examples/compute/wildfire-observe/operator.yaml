@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 2,
+  "identifier": "wildfire-observe",
+  "name": "野火历史观测制图",
+  "version": "1.0.0",
+  "description": "从原生SeasFire时空立方体提取真实观测时期，生成火烧面积或FRP图、物理量分级、区域统计与真实序列。",
+  "author": "STISP",
+  "runtime": "python-geospatial-v1",
+  "deterministic": true,
+  "timeoutSeconds": 1800,
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
+  "inputs": [
+    {
+      "key": "cube",
+      "label": "原始SeasFire立方体",
+      "kind": "raster",
+      "required": true,
+      "description": "当前项目已登记的原生Zarr，保留原始时间和有效掩膜。",
+      "fields": [],
+      "crs": {
+        "mode": "any"
+      },
+      "raster": {
+        "cube": {
+          "family": "seasfire_observation_v04",
+          "variableParameter": "product",
+          "timeParameter": "time_index",
+          "historyParameter": "history"
+        },
+        "window": [
+          "west",
+          "south",
+          "east",
+          "north"
+        ]
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "key": "west",
+      "label": "西界",
+      "type": "number",
+      "default": 112,
+      "min": -180,
+      "max": 180,
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选定研究区边界。"
+      },
+      "help": "WGS84研究区边界，按原始0.25度格网中心选取。"
+    },
+    {
+      "key": "south",
+      "label": "南界",
+      "type": "number",
+      "default": -44,
+      "min": -90,
+      "max": 90,
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选定研究区边界。"
+      },
+      "help": "WGS84研究区边界，按原始0.25度格网中心选取。"
+    },
+    {
+      "key": "east",
+      "label": "东界",
+      "type": "number",
+      "default": 154,
+      "min": -180,
+      "max": 180,
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选定研究区边界。"
+      },
+      "help": "WGS84研究区边界，按原始0.25度格网中心选取。"
+    },
+    {
+      "key": "north",
+      "label": "北界",
+      "type": "number",
+      "default": -10,
+      "min": -90,
+      "max": 90,
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选定研究区边界。"
+      },
+      "help": "WGS84研究区边界，按原始0.25度格网中心选取。"
+    },
+    {
+      "key": "product",
+      "label": "观测产品",
+      "type": "enum",
+      "default": "gwis_ba",
+      "help": "GWIS/GFED火烧面积、FCCI月度面积或CAMS FRP，单位独立。",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选择的真实产品、时期和序列长度。"
+      },
+      "choices": [
+        "gwis_ba",
+        "gfed_ba",
+        "fcci_ba",
+        "cams_frpfire"
+      ]
+    },
+    {
+      "key": "time_index",
+      "label": "原始时间索引",
+      "type": "integer",
+      "default": 873,
+      "help": "来自原始966期时间坐标；按产品有效掩膜核对。",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选择的真实产品、时期和序列长度。"
+      },
+      "min": 0,
+      "max": 965
+    },
+    {
+      "key": "history",
+      "label": "观测序列长度",
+      "type": "integer",
+      "default": 12,
+      "help": "最多12期，FCCI以月为单位，其他以原始周期为单位。",
+      "agent": {
+        "adjustable": false,
+        "advice": "沿用用户选择的真实产品、时期和序列长度。"
+      },
+      "min": 1,
+      "max": 12
+    }
+  ],
+  "outputs": [
+    {
+      "key": "observation",
+      "label": "野火观测原值图",
+      "kind": "raster",
+      "file": "observation.tif",
+      "required": true,
+      "description": "源物理单位的真实观测GeoTIFF。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "classification",
+      "label": "观测值分级图",
+      "kind": "raster",
+      "file": "classification.tif",
+      "required": true,
+      "description": "依据明确物理量区间配色，0与缺测透明。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "statistics",
+      "label": "区域观测统计",
+      "kind": "table",
+      "file": "statistics.csv",
+      "required": true,
+      "description": "火烧面积ha求和或FRP有效均值、格网覆盖。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "series",
+      "label": "历史观测序列",
+      "kind": "table",
+      "file": "series.csv",
+      "required": true,
+      "description": "实际日期、有效格网与区域物理量。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "manifest",
+      "label": "处理依据",
+      "kind": "document",
+      "file": "result.json",
+      "required": true,
+      "description": "真实产品、时段、格网与处理方案。",
+      "fields": [],
+      "final": false
+    }
+  ],
+  "capabilities": {
+    "operations": [
+      "convert",
+      "map",
+      "statistics"
+    ],
+    "dataTypes": [
+      "raster"
+    ],
+    "summary": "真实野火观测时空制图和区域统计。",
+    "useWhen": "已登记SeasFire原生立方体，需浏览真实观测与序列。",
+    "avoidWhen": "需要尚未核对训练预处理的深度模型预测。"
+  },
+  "errors": [
+    {
+      "code": "WILDFIRE_INPUT_INVALID",
+      "meaning": "输入不是有正确时间语义的原生观测切片",
+      "remedy": "replace_data",
+      "precondition": "已登记SeasFire原始时空立方体"
+    },
+    {
+      "code": "WILDFIRE_PERIOD_UNAVAILABLE",
+      "meaning": "产品或研究区在所选时期没有有效观测",
+      "remedy": "adjust_parameters",
+      "precondition": "有效掩膜允许的实际观测期"
+    }
+  ],
+  "resources": {
+    "duration": "minutes",
+    "memory": "medium",
+    "scaling": "按研究区格网数与连续时期增长；单次批读需要的时期。"
+  },
+  "selfTests": [
+    {
+      "name": "拒绝普通光谱栅格作为时间切片",
+      "fixture": "selftest/invalid.json",
+      "expect": {
+        "errorCode": "WILDFIRE_INPUT_INVALID"
+      }
+    }
+  ]
+}

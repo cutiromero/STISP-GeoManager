@@ -26,6 +26,7 @@ export default function MonitorTaskDrawer({
   parameters,
   launchOptions,
   launchKey,
+  launchReady = true,
 }: {
   page?: MonitoringProductList;
   flow?: BusinessFlowRun;
@@ -41,6 +42,7 @@ export default function MonitorTaskDrawer({
   >["parameters"];
   launchOptions?: import("react").ReactNode;
   launchKey?: string;
+  launchReady?: boolean;
 }) {
   const ui = useComputeText();
   const navigate = useNavigate();
@@ -150,7 +152,9 @@ export default function MonitorTaskDrawer({
       {launch && page?.businessFlow && (
         <>
           {launchOptions}
-          {bootstrap ? (
+          {!launchReady ? (
+            <Alert type="info" title="请先选择可用资料、观测时期和有效研究区" />
+          ) : bootstrap ? (
             <BusinessFlowLaunch
               key={launchKey}
               launch={page.businessFlow}

@@ -32,3 +32,22 @@ def monitoring(request):
         return JsonResponse({"detail": "；".join(error.messages)}, status=400)
     except PermissionDenied as error:
         return JsonResponse({"detail": str(error)}, status=403)
+
+
+@api_login_required
+def wildfire_catalog(request):
+    if request.method != "GET":
+        return JsonResponse({"detail": "请求方法无效"}, status=405)
+    if not has_feature_perm(request.user, "core.browse_data"):
+        return feature_denied_response(request.user)
+    try:
+        if not request.headers.get("X-Project-Id"):
+            raise ValidationError("请显式选择当前项目")
+        require_live_membership()
+        from .wildfire import observation_catalog
+
+        return JsonResponse(observation_catalog(request.user))
+    except ValidationError as error:
+        return JsonResponse({"detail": "；".join(error.messages)}, status=400)
+    except PermissionDenied as error:
+        return JsonResponse({"detail": str(error)}, status=403)

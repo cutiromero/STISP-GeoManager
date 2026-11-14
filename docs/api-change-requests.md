@@ -1,5 +1,19 @@
 # API Change Requests
 
+## API-20261115-001 - 野火原生观测制图与真实时间目录
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/ecology/wildfire/catalog/；沿用观测产品读取、计算、业务流启动与入库接口。
+- Change type: 原生Zarr输入合同、只读真实时间目录及可选观测依据；不新增数据库结构。
+- OpenAPI change: WildfireObservationCatalog、WildfireObservation、WildfireSeriesPoint；MonitoringProduct.observation；配套classification/series资源；ComputeCandidate原生容器与时间数。
+- Mock examples: 沿用遥感空产品页，具体输入和时序由隔离与真实资料验证。
+- Frontend reason: 野火使用时期、物理观测概况、区域序列、任务、模型资料和成果卡；不复制互花米草二分类指标。
+- Backend implementation notes: 原生1475按明确变量、时间索引和ROI固定为时间切片栈，依赖绑定实际相关分块及坐标；时间目录仅读已登记表。面积ha直接求和，FCCI按月平均重复值，FRP独立单位。
+- Verification: 月度/周期窗口、有效掩膜、缺测与零、单位、分块变化、受控快照及原件不变；来源、任务、实际上色和正式浏览器。
+- Result: 历史观测流程使用真实原始值与时段，模型风险流程待训练预处理与目标定义核实后独立发布。
+
+
 ## API-20261114-005 - 互花米草模型解译与配套成果
 
 - Status: BackendReady
@@ -741,6 +755,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261115-001 | BackendReady | /api/ecology/wildfire/catalog/; 监测与业务流 | 原生时空观测、真实目录与独立野火大屏 | Updated | 遥感示例及真实观测 | Implemented | 时段、掩膜、单位、受控输入与来源 | 历史观测与模型结果独立 |
 | API-20261114-005 | BackendReady | /api/ecology/monitoring/; 计算与业务流 | 互花米草输入依据、配套成果与RF任务 | Updated | 171-remote-monitoring.json及真实候选 | Implemented | 窗口冻结、科学统计、权限、来源与浏览器 | 现有环境与三季节组合 |
 | API-20261114-004 | BackendReady | /api/business-flows/runs/{workflowId}/ | 完整成果引用与批量展示 | Updated | 原业务流示例及隔离用例 | Implemented | 引用、权限与按需读取 | 复用计算中心 |
 | API-20261114-003 | BackendReady | /api/ecology/monitoring/ | 成果来源、批次与标准资料选择 | Updated | 171-remote-monitoring.json | Implemented | 权限、批量读取与公共组件 | 本人记录边界 |

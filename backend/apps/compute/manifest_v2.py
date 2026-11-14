@@ -424,6 +424,16 @@ def validate_semantics(result, manifest):
                     text(summary["contains"], "selfTests.contains", 1000)
     parameters = {row["key"]: row for row in result["parameters"]}
     for port in result["inputs"]:
+        cube = (port.get("raster") or {}).get("cube")
+        if cube:
+            for name, types in [
+                ("variableParameter", {"enum", "string"}),
+                ("timeParameter", {"integer"}),
+                ("historyParameter", {"integer"}),
+            ]:
+                key = cube[name]
+                if key not in parameters or parameters[key]["type"] not in types:
+                    raise ComputeError("原生观测参数须引用已声明的正确类型")
         for key in (port.get("raster") or {}).get("window", []):
             if key not in parameters or parameters[key]["type"] not in {
                 "number",

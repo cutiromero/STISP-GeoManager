@@ -332,7 +332,23 @@ def validate_submission(user, body):
                 else candidate(resource)
             )
         info = candidate_cache[rid]
-        if resource.data_type == "raster" and (spec.get("raster") or {}).get("window"):
+        from .cube_inputs import (
+            is_native_cube,
+            prepare_metadata as prepare_cube_metadata,
+        )
+
+        if is_native_cube(resource):
+            info = prepare_cube_metadata(
+                resource,
+                spec,
+                info,
+                parameter_values(manifest, {}, params, check_inputs=False),
+            )
+        elif (spec.get("raster") or {}).get("cube"):
+            raise ComputeError("该算子须选择原生Zarr立方体")
+        elif resource.data_type == "raster" and (spec.get("raster") or {}).get(
+            "window"
+        ):
             from .raster_windows import windowed_metadata
 
             info = windowed_metadata(

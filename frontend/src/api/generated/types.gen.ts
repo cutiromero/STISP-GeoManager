@@ -3685,6 +3685,7 @@ export type MonitoringProductManifest = {
     model: MonitoringModel | null;
     classification?: LandcoverClassification;
     extraction?: SpartinaExtraction;
+    observation?: WildfireObservation;
     /**
      * 实际概率阈值，未使用为null。
      */
@@ -3732,6 +3733,170 @@ export type SpartinaExtraction = {
 };
 
 /**
+ * 真实野火观测的物理单位、时段、格网统计与序列。
+ */
+export type WildfireObservation = {
+    /**
+     * 原始观测变量。
+     */
+    product: 'gwis_ba' | 'gfed_ba' | 'fcci_ba' | 'cams_frpfire';
+    /**
+     * 物理单位，面积与FRP独立。
+     */
+    unit: 'ha' | 'W m-2';
+    /**
+     * 原始周期或FCCI月度口径。
+     */
+    periodMode: '8day' | 'monthly';
+    /**
+     * 正观测值格网数。
+     */
+    activeCells: number;
+    /**
+     * 有限观测值格网数。
+     */
+    validCells: number;
+    /**
+     * 研究区格网总数。
+     */
+    gridCells: number;
+    /**
+     * 原始WGS84格网定义。
+     */
+    grid: {
+        /**
+         * 经向格网数。
+         */
+        width: number;
+        /**
+         * 纬向格网数。
+         */
+        height: number;
+        /**
+         * 原始坐标参考。
+         */
+        crs: 'EPSG:4326';
+        /**
+         * GDAL仿射变换。
+         */
+        transform: [
+            number,
+            number,
+            number,
+            number,
+            number,
+            number
+        ];
+    };
+    /**
+     * 实际观测序列，缺失值为null。
+     */
+    series: Array<WildfireSeriesPoint>;
+    /**
+     * 观测物理量分级图例，非风险校准等级。
+     */
+    legend: Array<{
+        /**
+         * 分级编码。
+         */
+        code: number;
+        /**
+         * 原单位观测值区间。
+         */
+        name: string;
+        /**
+         * 四通道颜色。
+         */
+        rgba: [
+            number,
+            number,
+            number,
+            number
+        ];
+    }>;
+};
+
+/**
+ * 研究区一个真实观测期的汇总。
+ */
+export type WildfireSeriesPoint = {
+    /**
+     * 实际观测开始。
+     */
+    observedStart: string;
+    /**
+     * 实际观测结束。
+     */
+    observedEnd: string;
+    /**
+     * 面积求和或FRP有效均值，缺测为null。
+     */
+    value: number | null;
+    /**
+     * 有效格网数。
+     */
+    validCells: number;
+    /**
+     * 正观测值格网数。
+     */
+    activeCells: number;
+    /**
+     * 本变量的物理单位。
+     */
+    unit: string;
+};
+
+/**
+ * 已登记野火立方体与时间表，不读取三维时空像元。
+ */
+export type WildfireObservationCatalog = {
+    cube?: DataResource;
+    timeIndexResource?: DataResource;
+    /**
+     * 支持的物理观测产品。
+     */
+    products: Array<{
+        /**
+         * 原始观测变量。
+         */
+        key: 'gwis_ba' | 'gfed_ba' | 'fcci_ba' | 'cams_frpfire';
+        /**
+         * 产品名称。
+         */
+        label: string;
+        /**
+         * 原物理单位。
+         */
+        unit: string;
+        /**
+         * 实际时间口径。
+         */
+        periodMode: '8day' | 'monthly';
+    }>;
+    /**
+     * 原始时间表的有序索引与产品可用性。
+     */
+    times: Array<{
+        /**
+         * 原始位置索引。
+         */
+        index: number;
+        /**
+         * 原始日期。
+         */
+        date: string;
+        /**
+         * 实际窗口结束日期。
+         */
+        endDate: string;
+        /**
+         * 本期有效的产品。
+         */
+        validProducts: Array<string>;
+    }>;
+};
+
+/**
  * 具有固定中文含义与单位的场景指标。
  */
 export type MonitoringMetric = {
@@ -3774,7 +3939,7 @@ export type MonitoringProduct = MonitoringProductManifest & {
         /**
          * 配套成果用途。
          */
-        role: 'probability' | 'statistics' | 'original';
+        role: 'probability' | 'statistics' | 'original' | 'classification' | 'series';
         resource: DataResource;
     }>;
     /**
@@ -11612,6 +11777,14 @@ export type ComputeCandidate = {
      * 资源登记格式；候选字段和几何类型从实际入库文件读取，后缀不能替代角色校验
      */
     fileFormat?: string;
+    /**
+     * 是否为原生Zarr时空容器，原始时间维不作为光谱波段。
+     */
+    nativeCube?: boolean;
+    /**
+     * 原始时空容器的时间坐标数。
+     */
+    cubeTimeCount?: number;
 };
 
 /**
@@ -13879,6 +14052,45 @@ export type ResourceId = number;
  * 异步任务 ID
  */
 export type JobId = string;
+
+export type GetWildfireObservationCatalogData = {
+    body?: never;
+    headers: {
+        /**
+         * 显式选择当前项目。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/ecology/wildfire/catalog/';
+};
+
+export type GetWildfireObservationCatalogErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type GetWildfireObservationCatalogError = GetWildfireObservationCatalogErrors[keyof GetWildfireObservationCatalogErrors];
+
+export type GetWildfireObservationCatalogResponses = {
+    /**
+     * 当前项目可访问的野火资料和真实时期。
+     */
+    200: WildfireObservationCatalog;
+};
+
+export type GetWildfireObservationCatalogResponse = GetWildfireObservationCatalogResponses[keyof GetWildfireObservationCatalogResponses];
 
 export type GetMonitoringProductsData = {
     body?: never;

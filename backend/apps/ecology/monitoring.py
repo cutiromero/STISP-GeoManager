@@ -46,12 +46,12 @@ SCENES = {
     "wildfire": {
         "title": "野火风险研判",
         "route": [
-            "日期与区域",
-            "变量准备",
-            "风险推理",
-            "区域汇总",
-            "历史验证",
-            "成果发布",
+            "选择产品与时期",
+            "核对时间与单位",
+            "提取原生观测",
+            "区域统计与序列",
+            "观测成果入库",
+            "地图与大屏展示",
         ],
     },
 }
@@ -95,6 +95,7 @@ FIELDS = {
     "statistics",
     "classification",
     "extraction",
+    "observation",
     "referenceRole",
     "statisticsMethod",
     "model",
@@ -214,6 +215,12 @@ def normalize_product(value):
         if key == "patch_count" and number != int(number):
             invalid("斑块数量须为整数")
     item["statistics"] = statistics
+    if "observation" in item:
+        from .wildfire import normalize_observation
+
+        if scene != "wildfire" or item["kind"] != "observation":
+            invalid("原始观测说明须属于野火观测产品")
+        item["observation"] = normalize_observation(item["observation"])
     if "extraction" in item:
         from .spartina import normalize_extraction
 
@@ -372,6 +379,7 @@ def register_product(user, value, *, computed_import=None):
             not in {
                 ("landcover-unet-infer", "landcover"),
                 ("spartina-rf-infer", "spartina"),
+                ("wildfire-observe", "wildfire"),
             }
             or computed_import.resource_id != value.get("resourceId")
         ):
@@ -510,12 +518,22 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
         from .spartina import attach_related
 
         attach_related(items, user)
-    if scene in {"landcover", "spartina"}:
+    if scene == "wildfire" and any(item.get("observation") for item in items):
+        from .wildfire import attach_related
+
+        attach_related(items, user)
+    if scene in {"landcover", "spartina", "wildfire"}:
         from apps.business_flows.scopes import available_flows
         from apps.business_flows.landcover import CODE as LANDCOVER_CODE
         from apps.business_flows.spartina import CODE as SPARTINA_CODE
 
-        CODE = SPARTINA_CODE if scene == "spartina" else LANDCOVER_CODE
+        from apps.business_flows.wildfire import CODE as WILDFIRE_CODE
+
+        CODE = {
+            "spartina": SPARTINA_CODE,
+            "landcover": LANDCOVER_CODE,
+            "wildfire": WILDFIRE_CODE,
+        }[scene]
 
         flow = (
             available_flows()
@@ -549,6 +567,11 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
                             | Q(pk__in=source_ids)
                         )
                         if scene == "landcover"
+                        else Q(
+                            file_format="ZARR",
+                            code__startswith="wildfire-seasfire-cube-",
+                        )
+                        if scene == "wildfire"
                         else Q(
                             raster_datasets__band_count=16,
                             raster_datasets__status="ready",

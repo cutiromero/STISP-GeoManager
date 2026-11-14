@@ -38,10 +38,10 @@ import { useMonitorProject } from "../monitor/project";
 import { metricPrecision, metricUnits, riskColors } from "../monitor/state";
 import { metricIds, type MonitorDataSource } from "../monitor/types";
 import { useMonitor } from "../monitor/useMonitor";
-import RemoteSensingDashboard from "../monitor/RemoteSensingDashboard";
 import "./ecology-monitor.css";
 
 const MonitorGlobe = lazy(() => import("../monitor/MonitorGlobe"));
+const WildfireDashboard = lazy(() => import("../monitor/WildfireDashboard"));
 const SpartinaDashboard = lazy(() => import("../monitor/SpartinaDashboard"));
 const LandcoverDashboard = lazy(() => import("../monitor/LandcoverDashboard"));
 
@@ -127,12 +127,14 @@ export default function EcologyMonitorPage() {
             />
           </Suspense>
         ) : selectedScene === "wildfire" ? (
-          <RemoteSensingDashboard
-            key={`${user?.id ?? "visitor"}:${project.id}:${selectedScene}:${i18n.resolvedLanguage}`}
-            config={config}
-            scene={selectedScene}
-            navigation={sceneNavigation()}
-          />
+          <Suspense fallback={<Spin />}>
+            <WildfireDashboard
+              key={`${user?.id ?? "visitor"}:${project.id}:${i18n.resolvedLanguage}`}
+              projectId={project.id}
+              config={config}
+              navigation={sceneNavigation()}
+            />
+          </Suspense>
         ) : (
           source && (
             <EcologyMonitorDashboard

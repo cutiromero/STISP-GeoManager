@@ -15,8 +15,23 @@ def validate_contract(value):
         "minSide",
         "northUp",
         "window",
+        "cube",
     }:
         raise ComputeError("栅格输入合同包含未知字段")
+    if "cube" in value:
+        cube = value["cube"]
+        if (
+            not isinstance(cube, dict)
+            or set(cube)
+            != {"family", "variableParameter", "timeParameter", "historyParameter"}
+            or cube["family"] != "seasfire_observation_v04"
+            or any(
+                not isinstance(cube[key], str) or not cube[key].isidentifier()
+                for key in ("variableParameter", "timeParameter", "historyParameter")
+            )
+            or "window" not in value
+        ):
+            raise ComputeError("原生观测合同须声明变量、时间、序列参数和研究区")
     if "window" in value and (
         not isinstance(value["window"], list)
         or len(value["window"]) != 4

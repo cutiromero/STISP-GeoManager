@@ -58,6 +58,7 @@ export PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 - 最小：`make verify-fast`；浏览器：`cd frontend && node scripts/run-browser-check.mjs src/components/RightSidePanel.browser.test.tsx src/pages/MapPageExport.browser.test.tsx`。
 
 ## 知识、内容与领域数据
+- 野火观测：`backend/apps/compute/cube_inputs.py`、`native_cube_reader.py`、`backend/apps/ecology/wildfire.py`、`backend/apps/business_flows/wildfire.py`、`examples/compute/wildfire-observe/`；前端`WildfireDashboard.tsx`和`WildfireTaskDrawer.tsx`；行为见`docs/wildfire-observation.md`。
 - 互花米草RF：`backend/apps/business_flows/spartina.py`、`backend/apps/ecology/spartina.py`、`examples/compute/spartina-rf/`、`tools/spartina/`；前端`SpartinaDashboard.tsx`与公共`MonitorTaskDrawer.tsx`、`MonitorComparisonMap.tsx`；行为见`docs/spartina-interpretation.md`。
 - 遥感监测：`backend/apps/ecology/monitoring.py`、`monitoring_views.py`、`register_monitor_product`；前端`frontend/src/monitor/RemoteSensingDashboard.tsx`、`ProductMap.tsx`；准备检查`tools/monitoring/prepare.py`。路线与输入约束见`docs/remote-sensing-monitoring.md`；回归`backend/tests/integration/test_ecology_monitoring.py`、`frontend/src/monitor/RemoteSensingDashboard.browser.test.tsx`及`tools/monitoring/tests/`。
 - 知识：`backend/apps/knowledge/views.py`、`library.py`、`formal_rules.py`；前端 `frontend/src/knowledge/KnowledgePage.tsx`；测试 `backend/tests/integration/test_knowledge_library.py`、`frontend/src/knowledge/KnowledgeLibrary.browser.test.tsx`。
