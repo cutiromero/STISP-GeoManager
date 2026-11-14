@@ -1,7 +1,7 @@
-import { Alert, Button, Spin } from "antd";
-import mapboxgl, { type Map as MapboxMap } from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+import { AimOutlined, ExpandOutlined, GlobalOutlined } from "@ant-design/icons";
+import { Alert, Button, Spin, Tooltip } from "antd";
 import { useEffect, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type {
@@ -9,22 +9,17 @@ import type {
   ProjectMonitorConfig,
   RasterRenderResult,
 } from "../api/generated/types.gen";
-import { useAppContext } from "../contexts/AppContext";
-import {
-  applyChineseBasemapLanguage,
-  createBasemapStyle,
-} from "../map/basemapStyle";
 import { versionedRasterTileUrl } from "../map/rasterLayerSync";
 import { workbenchLegends, type LiveLayerLegend } from "../map/liveLegendData";
 import { createRasterLayerGroup } from "../utils/layerFactory";
 import { rasterSymbolizationFromRules } from "../symbolization";
 import { currentLocale } from "../i18n";
-import { globeFit } from "./MonitorGlobe";
-import { projectTransformRequest, projectUrl } from "../projects/session";
+import { projectUrl } from "../projects/session";
 import {
   RasterRenderTaskRegistry,
   waitForAbortableDelay,
 } from "../utils/rasterRenderTasks";
+import { useMonitorMap } from "./useMonitorMap";
 
 const layerIds = [
   "product-fill",
@@ -36,77 +31,49 @@ const layerIds = [
 export default function ProductMap({
   product,
   config,
+  animated,
 }: {
   product?: MonitoringProduct;
   config: ProjectMonitorConfig;
+  animated: boolean;
 }) {
-  const { bootstrap } = useAppContext();
   const { t } = useTranslation();
-  const container = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<MapboxMap | undefined>(undefined);
+  const { container, map, mapError, regionalView, focus, showBounds } =
+    useMonitorMap(config.initialView, animated);
   const boundsRef = useRef<[number, number, number, number] | undefined>(
     undefined,
   );
-  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
-  const [mapError, setMapError] = useState(false);
   const [legend, setLegend] = useState<LiveLayerLegend>();
-  const mapConfig = bootstrap.map;
+  const hasProduct = Boolean(product);
   useEffect(() => {
-    if (!container.current) return;
-    let map: MapboxMap;
-    setReady(false);
-    setMapError(false);
-    try {
-      map = new mapboxgl.Map({
-        container: container.current,
-        accessToken: mapConfig.mapboxAccessToken,
-        style: createBasemapStyle(mapConfig),
-        projection: "globe",
-        center: config.initialView.center as [number, number],
-        zoom: Math.min(
-          config.initialView.zoom,
-          globeFit(
-            container.current.clientWidth,
-            container.current.clientHeight,
-          ).zoom,
-        ),
-        transformRequest: projectTransformRequest,
-        maxZoom: 18,
-      });
-    } catch {
-      setMapError(true);
-      return;
-    }
-    mapRef.current = map;
-    const onLoad = () => {
-      applyChineseBasemapLanguage(map);
-      setReady(true);
-    };
-    map.on("load", onLoad);
-    const onError = () => setMapError(true);
-    map.on("error", onError);
-    const resize = new ResizeObserver(() => map.resize());
-    resize.observe(container.current);
+    if (!map || !hasProduct) return;
+    const element = document.createElement("button");
+    element.type = "button";
+    element.className = "monitor-map-cluster";
+    element.setAttribute("aria-label", t("remoteMonitor.openDistribution"));
+    const label = document.createElement("span");
+    label.textContent = t("monitor.studyArea");
+    const action = document.createElement("strong");
+    action.textContent = t("remoteMonitor.openDistribution");
+    element.append(label, action);
+    element.addEventListener("click", () => focus(true));
+    const marker = new mapboxgl.Marker({ element })
+      .setLngLat(config.initialView.center as [number, number])
+      .addTo(map);
     return () => {
-      resize.disconnect();
-      map.off("load", onLoad);
-      map.off("error", onError);
-      map.remove();
-      mapRef.current = undefined;
+      marker.remove();
     };
-  }, [mapConfig, config.initialView]);
-
+  }, [map, hasProduct, t]);
   useEffect(() => {
-    const map = mapRef.current;
-    if (!ready || !map) return;
+    if (!map) return;
+    let disposed = false;
     for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
     if (map.getSource("product")) map.removeSource("product");
     boundsRef.current = undefined;
     setError(undefined);
     setLegend(undefined);
-    setMapError(false);
     setLoading(Boolean(product));
     if (!product) return;
     const registry = new RasterRenderTaskRegistry();
@@ -239,16 +206,11 @@ export default function ProductMap({
       }
       if (bounds.length === 4 && bounds.every(Number.isFinite)) {
         boundsRef.current = bounds as [number, number, number, number];
-        map.fitBounds(boundsRef.current, {
-          padding: 55,
-          maxZoom: 11,
-          duration: 0,
-        });
       }
     };
     void load()
       .catch((failure: unknown) => {
-        if (!signal.aborted || task.timedOut) {
+        if (!disposed && (!signal.aborted || task.timedOut)) {
           for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
           if (map.getSource("product")) map.removeSource("product");
           setLegend(undefined);
@@ -262,100 +224,108 @@ export default function ProductMap({
         }
       })
       .finally(() => {
-        if (!signal.aborted || task.timedOut) setLoading(false);
+        if (!disposed && (!signal.aborted || task.timedOut)) setLoading(false);
         registry.finish(task);
       });
-    return () => registry.cancelAll();
-  }, [ready, product, t]);
-
+    return () => {
+      disposed = true;
+      registry.cancelAll();
+    };
+  }, [map, product?.id, product?.resource.id, product?.resource.updatedAt, t]);
   return (
-    <div className="remote-product-map" aria-label={t("remoteMonitor.map")}>
-      <div ref={container} className="remote-product-map-canvas" />
-      <div className="remote-map-toolbar">
-        {product && (
-          <Button
-            size="small"
-            disabled={!ready || loading}
-            onClick={() => {
-              if (boundsRef.current)
-                mapRef.current?.fitBounds(boundsRef.current, {
-                  padding: 55,
-                  maxZoom: 11,
-                });
-            }}
+    <>
+      <div
+        className="remote-product-map monitor-planet-stage"
+        data-view={regionalView ? "region" : "globe"}
+        aria-label={t("remoteMonitor.map")}
+      >
+        <div
+          ref={container}
+          className="monitor-map remote-product-map-canvas"
+        />
+        {legend && regionalView && (
+          <aside
+            className="remote-map-legend"
+            aria-label={t("remoteMonitor.legend")}
           >
-            {t("remoteMonitor.fullExtent")}
-          </Button>
+            <strong>{t("remoteMonitor.legend")}</strong>
+            {legend.note && <p>{legend.note}</p>}
+            {legend.gradient && (
+              <div className="remote-legend-gradient">
+                <div
+                  style={{
+                    background: `linear-gradient(90deg, ${legend.gradient.colors.join(",")})`,
+                    opacity: legend.opacity,
+                  }}
+                />
+                <span>{legend.gradient.low}</span>
+                <span>{legend.gradient.high}</span>
+              </div>
+            )}
+            {legend.entries.map((entry) => (
+              <div className="remote-legend-entry" key={entry.id}>
+                <span
+                  style={{
+                    backgroundColor: entry.color,
+                    opacity: legend.opacity,
+                  }}
+                />
+                <span>{entry.label}</span>
+              </div>
+            ))}
+          </aside>
         )}
-        <Button
-          size="small"
-          disabled={!ready || loading}
-          onClick={() => {
-            const host = mapRef.current?.getContainer();
-            mapRef.current?.flyTo({
-              center: config.initialView.center as [number, number],
-              zoom: product
-                ? config.initialView.regionZoom
-                : host
-                  ? globeFit(host.clientWidth, host.clientHeight).zoom
-                  : config.initialView.zoom,
-            });
-          }}
-        >
-          {t(product ? "monitor.regionView" : "monitor.globalView")}
-        </Button>
+
+        {product && regionalView && (
+          <div className="remote-map-caption">{product.name}</div>
+        )}
+      </div>
+      <div className="monitor-map-controls">
+        <Tooltip title={t("monitor.globalView")} placement="left">
+          <Button
+            shape="circle"
+            aria-label={t("monitor.globalView")}
+            icon={<GlobalOutlined />}
+            disabled={!map}
+            onClick={() => focus(false)}
+          />
+        </Tooltip>
+        <Tooltip title={t("monitor.regionView")} placement="left">
+          <Button
+            shape="circle"
+            aria-label={t("monitor.regionView")}
+            icon={<AimOutlined />}
+            disabled={!map || loading || !product}
+            onClick={() => focus(true)}
+          />
+        </Tooltip>
+        {product && (
+          <Tooltip title={t("remoteMonitor.fullExtent")} placement="left">
+            <Button
+              shape="circle"
+              aria-label={t("remoteMonitor.fullExtent")}
+              icon={<ExpandOutlined />}
+              disabled={!map || loading}
+              onClick={() => {
+                if (boundsRef.current) showBounds(boundsRef.current);
+              }}
+            />
+          </Tooltip>
+        )}
       </div>
       {loading && (
-        <div className="remote-map-notice">
+        <div className="monitor-map-notice">
           <Spin size="small" /> {t("remoteMonitor.loadingMap")}
         </div>
       )}
       {(error || mapError) && (
-        <div className="remote-map-notice">
+        <div className="monitor-map-notice">
           <Alert
             type="warning"
             title={error || t("remoteMonitor.mapUnavailable")}
           />
         </div>
       )}
-      {!product && (
-        <div className="remote-map-empty">
-          <span>{t("remoteMonitor.noLayer")}</span>
-        </div>
-      )}
-      {legend && (
-        <aside
-          className="remote-map-legend"
-          aria-label={t("remoteMonitor.legend")}
-        >
-          <strong>{t("remoteMonitor.legend")}</strong>
-          {legend.note && <p>{legend.note}</p>}
-          {legend.gradient && (
-            <div className="remote-legend-gradient">
-              <div
-                style={{
-                  background: `linear-gradient(90deg, ${legend.gradient.colors.join(",")})`,
-                  opacity: legend.opacity,
-                }}
-              />
-              <span>{legend.gradient.low}</span>
-              <span>{legend.gradient.high}</span>
-            </div>
-          )}
-          {legend.entries.map((entry) => (
-            <div className="remote-legend-entry" key={entry.id}>
-              <span
-                style={{
-                  backgroundColor: entry.color,
-                  opacity: legend.opacity,
-                }}
-              />
-              <span>{entry.label}</span>
-            </div>
-          ))}
-        </aside>
-      )}
-      {product && <div className="remote-map-caption">{product.name}</div>}
-    </div>
+    </>
   );
 }

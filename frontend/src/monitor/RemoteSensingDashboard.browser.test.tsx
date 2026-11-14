@@ -228,7 +228,7 @@ it("历史分布保留未知时间和空面积，选择后才加载同一地图�
       tiles: [expect.stringContaining("/101/vector-tiles/")],
     }),
   );
-  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalled();
+  expect(maps.maps[0]?.api.fitBounds).not.toHaveBeenCalled();
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
     window.innerWidth,
   );
@@ -247,8 +247,54 @@ it("历史分布保留未知时间和空面积，选择后才加载同一地图�
     expect.objectContaining({ center: [112, 32], zoom: 5 }),
   );
   fireEvent.click(screen.getByRole("button", { name: "全域" }));
-  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalledTimes(2);
+  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalledTimes(1);
   expect(api.resourceProfile).toHaveBeenCalledTimes(1);
+  expect(
+    document.querySelector(".monitor-layout > .monitor-globe-panel"),
+  ).not.toBeNull();
+  expect(
+    document.querySelectorAll(".monitor-information > .monitor-panel"),
+  ).toHaveLength(6);
+  expect(document.querySelector(".remote-monitor-layout")).toBeNull();
+  expect(
+    document.querySelector(".monitor-assessment")!.getBoundingClientRect()
+      .height,
+  ).toBeGreaterThanOrEqual(108);
+});
+
+it("刷新保留选中成果，等值视角配置不重建地图或重复读取文件", async () => {
+  vi.mocked(getMonitoringProducts).mockImplementation(async () =>
+    structuredClone(list("spartina", [product(), product(2)])),
+  );
+  const rendered = render(view());
+  await waitFor(() => expect(api.resourceProfile).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: /历史分布2/ }));
+  await waitFor(() => expect(api.resourceProfile).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "聚焦研究区" }),
+    ).not.toBeDisabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "聚焦研究区" }));
+  const config = context.projects[0]!.monitorConfig!;
+  context.projects[0]!.monitorConfig = structuredClone(config);
+  app.bootstrap.map = { defaultBasemap: "osm", mapboxAccessToken: "" };
+  rendered.rerender(view());
+  expect(maps.maps).toHaveLength(1);
+  expect(maps.maps[0]!.api.remove).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: /刷新成果/ })).not.toHaveClass(
+      "ant-btn-loading",
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /刷新成果/ }));
+  await waitFor(() => expect(getMonitoringProducts).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole("button", { name: /历史分布2/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(api.resourceProfile).toHaveBeenCalledTimes(2);
+  expect(maps.maps).toHaveLength(1);
 });
 
 it("切换场景后取消旧请求并忽略迟到产品", async () => {
@@ -379,6 +425,12 @@ it("分类栅格使用服务器瓦片、实际图例和nearest采样", async () 
     },
   } as Awaited<ReturnType<typeof api.renderRasterAsync>>);
   render(view());
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "聚焦研究区" }),
+    ).not.toBeDisabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "聚焦研究区" }));
   await screen.findByText("模型分类目标");
   expect(api.renderRasterAsync).toHaveBeenCalledWith(
     { datasetId: 17, rulesMode: "default" },

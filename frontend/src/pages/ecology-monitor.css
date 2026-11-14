@@ -31,6 +31,7 @@
   min-height: 42px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--monitor-line);
+  flex-shrink: 0;
 }
 .monitor-title {
   display: flex;
@@ -186,8 +187,12 @@
   animation: monitor-star-shimmer 5s ease-in-out infinite alternate;
 }
 @keyframes monitor-star-shimmer {
-  from { opacity: 0.25; }
-  to { opacity: 1; }
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes monitor-stars-drift {
   from {
@@ -277,7 +282,7 @@
 }
 .monitor-map-notice {
   position: absolute;
-  top: 240px;
+  top: min(240px, 35%);
   right: 18px;
   left: 18px;
   z-index: 3;
@@ -287,6 +292,8 @@
   border: 1px solid #6e5f44;
   border-radius: 6px;
   font-size: 12px;
+  max-height: calc(100% - min(240px, 35%) - 18px);
+  overflow-y: auto;
 }
 .monitor-map-point {
   width: 26px;
@@ -367,7 +374,7 @@
 .monitor-station-card {
   position: absolute;
   z-index: 4;
-  top: 190px;
+  top: 18px;
   left: 22px;
   width: min(310px, calc(100% - 44px));
   padding: 18px;
@@ -375,6 +382,10 @@
   border: 1px solid #4e857e;
   box-shadow: 0 12px 40px #0007;
   backdrop-filter: blur(12px);
+  max-height: calc(100% - 36px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #365666 transparent;
   border-radius: 8px;
 }
 .monitor-station-card-title {
@@ -429,14 +440,16 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows:
-    auto minmax(245px, 1fr) minmax(170px, 0.9fr) minmax(205px, 1.2fr)
-    auto;
-  gap: 14px;
+    minmax(30px, auto) minmax(170px, 1.1fr) minmax(130px, 0.85fr)
+    minmax(140px, 1fr) minmax(176px, 0.8fr);
+  gap: 12px;
   padding-right: 4px;
   scrollbar-width: thin;
   scrollbar-color: #365666 transparent;
 }
 .monitor-panel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   padding: 16px 18px;
@@ -452,6 +465,7 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 .monitor-panel-heading h2 {
   position: relative;
@@ -480,7 +494,8 @@
   display: flex;
   gap: 8px;
   align-items: center;
-  height: calc(100% - 30px);
+  flex: 1;
+  min-height: 0;
   justify-content: space-around;
 }
 .monitor-gauge {
@@ -489,6 +504,7 @@
   min-width: 80px;
   max-width: 170px;
   aspect-ratio: 1;
+  max-height: 100%;
 }
 .monitor-gauge svg {
   width: 100%;
@@ -549,6 +565,10 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px 18px;
+  flex: 1;
+  min-height: 0;
+  align-content: center;
+  overflow: auto;
 }
 .monitor-metric {
   min-width: 0;
@@ -565,6 +585,7 @@
   font-weight: 500;
   color: #d6f8ef;
   white-space: nowrap;
+  line-height: 1.2;
 }
 .monitor-metric strong small {
   color: #92afbb;
@@ -601,8 +622,9 @@
 }
 .monitor-trend-chart {
   width: 100%;
-  height: calc(100% - 55px);
-  min-height: 90px;
+  flex: 1;
+  height: auto;
+  min-height: 0;
   max-height: 210px;
 }
 .monitor-trend-chart text {
@@ -680,6 +702,8 @@
   list-style: none;
   display: grid;
   gap: 14px;
+  overflow-y: auto;
+  min-height: 0;
 }
 .monitor-ranking button {
   display: flex;
@@ -732,6 +756,7 @@
 }
 .monitor-assessment {
   grid-column: 1 / -1;
+  min-height: 108px;
 }
 .monitor-simulated {
   color: #d7bf86;
@@ -744,11 +769,17 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #365666 transparent;
 }
 .monitor-assessment-copy > span {
   font-size: 22px;
   color: #78dbcd;
   padding-top: 2px;
+  flex-shrink: 0;
 }
 .monitor-assessment-copy p {
   margin: 0 0 6px;
@@ -779,6 +810,7 @@
   padding: 10px 0;
   color: #7395a6;
   font-size: 10px;
+  flex-shrink: 0;
 }
 .monitor-footer > span:first-child {
   display: flex;
@@ -790,6 +822,19 @@
   flex: 1;
   display: grid;
   place-items: center;
+}
+.monitor-globe-panel > .monitor-loading {
+  position: absolute;
+  inset: 0;
+}
+.monitor-summary .monitor-summary-text {
+  font-size: 12px;
+}
+.monitor-source-error {
+  flex-shrink: 0;
+  margin-top: 8px;
+  max-height: 80px;
+  overflow-y: auto;
 }
 .ecology-monitor[data-motion="paused"] .monitor-point-core::after,
 .ecology-monitor[data-motion="paused"] .monitor-point-flash {
@@ -875,10 +920,63 @@
   }
   .monitor-information {
     gap: 10px;
-    grid-template-rows: auto 235px 175px 215px auto;
   }
   .monitor-panel {
     padding: 12px;
+  }
+}
+@media (min-width: 1101px) and (max-height: 850px) {
+  .monitor-information {
+    grid-template-rows:
+      minmax(28px, auto) minmax(164px, 1.1fr) minmax(130px, 0.85fr)
+      minmax(110px, 1fr) minmax(135px, 0.8fr);
+    gap: 8px;
+  }
+  .monitor-panel {
+    padding: 8px 10px;
+  }
+  .monitor-panel-heading {
+    margin-bottom: 6px;
+  }
+  .monitor-panel-heading h2 {
+    font-size: 12px;
+  }
+  .monitor-metrics {
+    gap: 6px 10px;
+  }
+  .monitor-metric {
+    gap: 1px;
+  }
+  .monitor-metric > span {
+    font-size: 10px;
+  }
+  .monitor-metric strong {
+    font-size: 23px;
+  }
+  .monitor-metric em {
+    font-size: 9px;
+  }
+  .monitor-gauge-value .monitor-number {
+    font-size: 27px;
+  }
+  .monitor-risk-legend li {
+    padding: 4px 0;
+  }
+  .monitor-ranking {
+    gap: 9px;
+  }
+  .monitor-assessment-copy p {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .monitor-summary {
+    padding-bottom: 5px;
+  }
+}
+@media (min-width: 1101px) and (max-height: 699px) {
+  .monitor-information {
+    grid-template-rows: 32px 160px 145px 130px minmax(120px, auto);
+    align-content: start;
   }
 }
 @media (max-width: 1100px) {
@@ -889,6 +987,7 @@
   }
   .ecology-monitor:fullscreen {
     height: 100dvh;
+    overflow-y: auto;
   }
   .monitor-topbar {
     flex-wrap: wrap;
@@ -907,12 +1006,14 @@
     flex-direction: column;
   }
   .monitor-globe-panel {
-    height: 720px;
-    min-height: 600px;
+    height: 65dvh;
+    min-height: 380px;
   }
   .monitor-information {
     overflow: visible;
-    grid-template-rows: auto 245px 190px 230px auto;
+    grid-template-rows:
+      auto minmax(220px, auto) minmax(190px, auto) minmax(220px, auto)
+      auto;
   }
 }
 @media (max-width: 640px) {
@@ -940,8 +1041,8 @@
     gap: 4px;
   }
   .monitor-globe-panel {
-    min-height: 670px;
-    height: 75dvh;
+    min-height: 360px;
+    height: 60dvh;
   }
   .monitor-information {
     display: flex;
@@ -957,7 +1058,7 @@
     height: 235px;
   }
   .monitor-assessment {
-    min-height: 0;
+    min-height: 125px;
   }
   .monitor-point-picker {
     bottom: 62px;

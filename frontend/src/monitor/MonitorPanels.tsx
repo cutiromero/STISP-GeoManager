@@ -444,22 +444,41 @@ export function RankingPanel({
 export function AssessmentPanel({ snapshot }: { snapshot: MonitorSnapshot }) {
   const { t } = useTranslation();
   return (
+    <MonitorAssessmentCard
+      summary={snapshot.assessment.summary}
+      recommendation={snapshot.assessment.recommendation}
+      badge={t(
+        snapshot.assessment.simulated
+          ? "monitor.simulatedAnalysis"
+          : "monitor.analysis",
+      )}
+    />
+  );
+}
+
+export function MonitorAssessmentCard({
+  summary,
+  recommendation,
+  badge,
+}: {
+  summary: string;
+  recommendation?: string;
+  badge?: string;
+}) {
+  const { t } = useTranslation();
+  return (
     <MonitorPanel
       className="monitor-assessment"
       title={t("monitor.assessmentTitle")}
       extra={
-        <span className="monitor-simulated">
-          {snapshot.assessment.simulated
-            ? t("monitor.simulatedAnalysis")
-            : t("monitor.analysis")}
-        </span>
+        badge ? <span className="monitor-simulated">{badge}</span> : undefined
       }
     >
       <div className="monitor-assessment-copy">
         <LineChartOutlined />
         <div>
-          <p>{snapshot.assessment.summary}</p>
-          <p className="monitor-advice">{snapshot.assessment.recommendation}</p>
+          <p>{summary}</p>
+          {recommendation && <p className="monitor-advice">{recommendation}</p>}
         </div>
       </div>
     </MonitorPanel>

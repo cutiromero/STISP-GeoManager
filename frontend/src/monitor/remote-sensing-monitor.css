@@ -1,9 +1,3 @@
-.remote-monitor {
-  --remote-color: #66e0a3;
-}
-.remote-monitor[data-scene="wildfire"] {
-  --remote-color: #ffb46a;
-}
 .monitor-scene-navigation {
   display: flex;
   gap: 6px;
@@ -12,206 +6,169 @@
 .monitor-scene-navigation .ant-btn {
   font-size: 12px;
 }
-.remote-scene-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 0 14px;
+.monitor-remote .monitor-topbar {
+  flex-wrap: wrap;
 }
-.remote-scene-heading > div {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 12px;
-  align-items: center;
+.monitor-remote .monitor-risk-content {
+  gap: 10px;
 }
-.remote-scene-number {
-  grid-row: span 2;
-  font-size: 36px;
-  font-weight: 300;
-  color: var(--remote-color);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.8;
+.monitor-product-gauge .monitor-gauge-value .monitor-number {
+  font-size: clamp(19px, 1.6vw, 28px);
 }
-.remote-scene-heading h2 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 500;
-  color: #edf9fc;
+.monitor-product-overview {
+  min-width: 0;
+  max-width: none;
 }
-.remote-scene-heading p {
-  margin: 4px 0 0;
-  color: #8ba9bc;
-  font-size: 12px;
+.monitor-product-overview li {
+  white-space: normal;
+  flex-wrap: wrap;
+  gap: 4px;
 }
-.remote-monitor-layout {
-  display: grid;
-  grid-template-columns: minmax(200px, 0.65fr) minmax(360px, 2fr) minmax(
-      280px,
-      0.9fr
-    );
-  gap: 16px;
+.monitor-product-overview strong {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.monitor-products-panel {
+  padding-bottom: 8px;
+}
+.monitor-product-list {
   flex: 1;
   min-height: 0;
-  padding-bottom: 14px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #365666 transparent;
 }
-.remote-panel {
-  background: #0a1b29d9;
-  border: 1px solid #203e50;
-  border-radius: 8px;
-  padding: 15px;
-  overflow: auto;
-  min-width: 0;
-}
-.remote-panel-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  border-bottom: 1px solid #254052;
-  padding-bottom: 12px;
-  margin-bottom: 14px;
-}
-.remote-panel-heading h3 {
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0;
-  color: #d7edf3;
-  letter-spacing: 1px;
-}
-.remote-panel-heading > span {
-  color: #8ba9bc;
-}
-.remote-products {
-  display: flex;
-  flex-direction: column;
-}
-.remote-product-list {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.remote-product-choice {
-  cursor: pointer;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  text-align: left;
-  color: #c4dbe4;
-  border: 1px solid #264659;
-  background: #102736;
-  border-radius: 5px;
-}
-.remote-product-choice:hover,
-.remote-product-choice.selected {
-  border-color: var(--remote-color);
-  background: #163642;
-}
-.remote-product-choice > span {
-  font-size: 10px;
-  letter-spacing: 1px;
-  color: var(--remote-color);
-}
-.remote-product-choice strong {
-  font-weight: 500;
-  line-height: 1.5;
-}
-.remote-product-choice time,
-.remote-product-choice small {
-  font-size: 11px;
-  color: #a4bdcc;
-}
-.remote-product-loading {
-  min-height: 120px;
-  display: grid;
-  place-content: center;
-}
-.remote-readiness {
-  margin-top: auto;
-  padding-top: 20px;
-  color: #8ba9bc;
-  line-height: 1.8;
-  font-size: 12px;
-}
-.remote-readiness h4,
-.remote-limitations h4,
-.remote-no-result h4 {
-  color: #c9dfe8;
-  font-weight: 500;
+.monitor-product-list .ant-empty {
   margin: 8px 0;
 }
-.remote-readiness p {
-  margin: 7px 0;
+.monitor-product-list .ant-empty-image {
+  height: 32px;
 }
-.remote-map-panel {
-  display: flex;
-  flex-direction: column;
+.monitor-product-choice {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  color: #c5dbe6;
+  border: 0;
+  border-bottom: 1px solid #24445570;
+  background: transparent;
+  text-align: left;
+  font-size: 11px;
+  cursor: pointer;
+}
+.monitor-product-choice.selected {
+  background: #173e4160;
+  box-shadow: inset 2px 0 #65dfc8;
+}
+.monitor-product-choice:hover {
+  background: #173e4180;
+}
+.monitor-product-choice strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+.monitor-product-choice time {
+  color: #8ba9bc;
+  font-size: 10px;
+}
+.monitor-product-choice > span {
+  color: #d7bf86;
+  font-size: 10px;
+}
+.monitor-panel-empty {
+  min-height: 50px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #8ba9bc;
+  font-size: 12px;
+}
+.monitor-panel-scroll {
+  flex: 1;
   min-height: 0;
-  min-width: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #365666 transparent;
+}
+.monitor-product-info {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 7px;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.monitor-product-info dt {
+  color: #8ba9bc;
+}
+.monitor-product-info dd {
+  margin: 0;
+  color: #c5dbe6;
+  overflow-wrap: anywhere;
+}
+.monitor-product-method {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #8ba9bc;
+  line-height: 1.7;
+}
+.monitor-product-method summary {
+  cursor: pointer;
+  color: #bad3df;
+}
+.monitor-product-method ul {
+  padding-left: 16px;
+}
+.monitor-product-hash {
+  overflow-wrap: anywhere;
+  font-family: monospace;
+}
+.monitor-route-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px 8px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.monitor-route-grid li {
+  font-size: 10px;
+  color: #a5c3ce;
+  line-height: 1.6;
+}
+.monitor-route-grid li > span {
+  color: #65dfc8;
+  font-family: monospace;
+  margin-right: 5px;
+}
+.monitor-remote
+  .monitor-panel:has(.monitor-route-grid)
+  .monitor-panel-heading
+  .ant-btn {
+  padding: 0;
+  font-size: 10px;
+  height: 18px;
 }
 .remote-product-map {
-  flex: 1;
-  position: relative;
-  isolation: isolate;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  border: 1px solid #254659;
-  border-radius: 9px;
-  background: #091725;
-  min-height: 320px;
-}
-.remote-map-pending {
-  flex: 1;
-  min-height: 320px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  border: 1px solid #254659;
-  border-radius: 9px;
-  color: #91adbf;
-  background: #091725;
 }
 .remote-product-map .remote-product-map-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-}
-.remote-map-toolbar {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  gap: 6px;
-}
-.remote-map-notice {
-  position: absolute;
-  top: 58px;
-  right: 12px;
-  left: 12px;
-  color: #c9dfe8;
-  padding: 8px;
-  background: #081a2ce8;
-  border-radius: 4px;
-}
-.remote-map-empty {
-  pointer-events: none;
-  position: absolute;
-  left: 20px;
-  right: 20px;
-  bottom: 40px;
-  padding: 18px;
-  background: #071927e8;
-  border-left: 2px solid var(--remote-color);
-}
-.remote-map-empty span {
-  font-size: 16px;
-  color: #deedf3;
-}
-.remote-map-empty p {
-  color: #9ab5c7;
-  margin: 9px 0 0;
-  line-height: 1.7;
 }
 .remote-map-caption {
   position: absolute;
@@ -220,9 +177,10 @@
   max-width: calc(100% - 24px);
   color: #d8ebf2;
   background: #081a2cd9;
-  padding: 7px 12px;
+  padding: 6px 10px;
   border-radius: 4px;
   overflow-wrap: anywhere;
+  font-size: 11px;
 }
 .remote-map-legend {
   position: absolute;
@@ -271,170 +229,18 @@
 .remote-legend-gradient > span:last-child {
   text-align: right;
 }
-.remote-map-footnote {
-  padding: 10px 3px 0;
-  color: #91adbf;
-  font-size: 11px;
-  line-height: 1.6;
-}
-.remote-metric-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px 10px;
-  padding: 3px 0 18px;
-  border-bottom: 1px solid #203d4f;
-}
-.remote-metric > span {
-  display: block;
-  color: #91adbf;
-  font-size: 11px;
-  margin-bottom: 7px;
-}
-.remote-metric strong {
-  font-size: 25px;
-  font-weight: 400;
-  color: var(--remote-color);
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-.remote-metric small {
-  font-size: 10px;
-  margin-left: 4px;
-  color: #94b3bf;
-}
-.remote-interpretation {
-  color: #c1d8e3;
-  line-height: 1.9;
-  font-size: 12px;
-  padding-top: 5px;
-}
-.remote-provenance {
-  display: grid;
-  grid-template-columns: 66px 1fr;
-  gap: 10px;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.remote-provenance dt {
-  color: #8ba9bc;
-}
-.remote-provenance dd {
-  margin: 0;
-  color: #cce0e8;
-  overflow-wrap: anywhere;
-}
-.remote-evidence {
-  margin: 14px 0;
-  color: #91adbf;
-  font-size: 11px;
-  line-height: 1.8;
-}
-.remote-evidence summary {
-  cursor: pointer;
-  color: #c4dae4;
-}
-.remote-hash {
-  overflow-wrap: anywhere;
-  font-family: monospace;
-}
-.remote-limitations {
-  background: #172b33;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 11px;
-  line-height: 1.8;
-  color: #b8cccf;
-}
-.remote-limitations ul {
-  margin: 0;
-  padding-left: 16px;
-}
-.remote-no-result {
-  margin-top: 20px;
-  color: #8ba9bc;
-  font-size: 12px;
-  line-height: 1.9;
-}
-.remote-route {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  border-top: 1px solid #254253;
-  padding: 12px 0 16px;
-}
-.remote-route > div {
-  max-width: 260px;
-}
-.remote-route > div > span {
-  color: #d1e6ed;
-  font-size: 12px;
-}
-.remote-route p {
-  font-size: 10px;
-  color: #86a4b8;
-  margin: 5px 0 0;
-  line-height: 1.6;
-}
-.remote-route ol {
-  flex: 1;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0;
-  padding: 0;
-  counter-reset: stage;
-  flex-wrap: wrap;
-}
-.remote-route li {
-  color: #a3c2cf;
-  font-size: 11px;
-  counter-increment: stage;
-}
-.remote-route li::before {
-  content: counter(stage, decimal-leading-zero);
-  color: var(--remote-color);
-  margin-right: 5px;
-}
-@media (max-width: 1200px) {
-  .remote-monitor .monitor-topbar {
-    flex-wrap: wrap;
+@media (max-width: 640px) {
+  .monitor-product-choice {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
-  .remote-monitor-layout {
-    grid-template-columns: 200px minmax(300px, 1fr) 280px;
-    gap: 10px;
+  .monitor-product-choice time {
+    grid-column: 1;
   }
-  .remote-monitor {
-    padding: 12px 12px 0;
+  .monitor-product-choice > span {
+    grid-column: 2;
+    grid-row: 1 / span 2;
   }
-  .remote-route {
-    gap: 10px;
-  }
-}
-@media (max-width: 900px) {
-  .remote-monitor {
-    height: auto;
-    min-height: 100dvh;
-    overflow: visible;
-  }
-  .remote-monitor-layout {
-    grid-template-columns: 1fr;
-  }
-  .remote-products {
-    max-height: 350px;
-  }
-  .remote-map-panel {
-    min-height: 480px;
-  }
-  .remote-details {
-    max-height: none;
-  }
-  .remote-route {
-    flex-wrap: wrap;
-  }
-  .remote-route > div,
-  .remote-route ol {
-    flex-basis: 100%;
-    max-width: none;
+  .monitor-remote .monitor-metrics {
+    min-height: 140px;
   }
 }

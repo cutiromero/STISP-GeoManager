@@ -561,25 +561,64 @@ it("目标分辨率和窄屏无横向溢出", async () => {
     </AntApp>,
   );
   await screen.findByTestId("monitor-alert-list");
+  await waitFor(() => expect(mapState.points).toHaveLength(13));
+  fireEvent.click(
+    mapState.points.find((point) =>
+      point.classList.contains("monitor-map-point"),
+    )!,
+  );
   for (const [width, height] of [
     [1920, 1080],
+    [1495, 883],
     [1710, 835],
     [1366, 768],
+    [1280, 720],
     [2560, 1440],
     [390, 844],
   ]) {
     await page.viewport(width!, height!);
     const root = document.querySelector<HTMLElement>(".ecology-monitor")!;
+    const assessment = root.querySelector<HTMLElement>(".monitor-assessment")!;
+    const assessmentBody = assessment.querySelector<HTMLElement>(
+      ".monitor-assessment-copy",
+    )!;
+    expect(assessment.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+      108,
+    );
+    expect(assessmentBody.clientHeight).toBeGreaterThan(35);
+    if (width! > 1100) {
+      const footer = root.querySelector<HTMLElement>(".monitor-footer")!;
+      expect(assessment.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        footer.getBoundingClientRect().top + 1,
+      );
+    }
     expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
     for (const panel of root.querySelectorAll<HTMLElement>(".monitor-panel"))
       expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth + 1);
     const map = root.querySelector<HTMLElement>(".monitor-map")!;
+    const stationCard = root.querySelector<HTMLElement>(
+      ".monitor-station-card",
+    )!;
+    const mapPanel = root.querySelector<HTMLElement>(".monitor-globe-panel")!;
+    expect(stationCard.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      mapPanel.getBoundingClientRect().top,
+    );
+    expect(stationCard.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      mapPanel.getBoundingClientRect().bottom + 1,
+    );
     expect(getComputedStyle(map).position).toBe("absolute");
     expect(map.clientHeight).toBeGreaterThan(250);
     const metrics = root.querySelector<HTMLElement>(".monitor-metrics")!;
     expect(metrics.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       metrics.closest(".monitor-panel")!.getBoundingClientRect().bottom,
     );
+    if (width! > 1100 && height! >= 700) {
+      for (const value of metrics.querySelectorAll<HTMLElement>("strong"))
+        expect(
+          value.getBoundingClientRect().bottom,
+          `${width}x${height}`,
+        ).toBeLessThanOrEqual(metrics.getBoundingClientRect().bottom + 1);
+    }
     for (const number of root.querySelectorAll<HTMLElement>(".monitor-number"))
       expect(number.getBoundingClientRect().height).toBeGreaterThanOrEqual(
         Number.parseFloat(getComputedStyle(number).fontSize),
@@ -587,4 +626,44 @@ it("目标分辨率和窄屏无横向溢出", async () => {
   }
   await page.viewport(1920, 1080);
   await page.screenshot({ path: "ecology-monitor-desktop.png" });
+});
+
+it("研判长文本与低高度窗口均能读到末尾，底栏不遮挡卡片", async () => {
+  await page.viewport(1495, 883);
+  const initial = await createMockMonitorSource().getSnapshot();
+  initial.assessment.summary = "水分与植被观测记录。".repeat(160);
+  initial.assessment.recommendation = "末尾复核建议";
+  const source: MonitorDataSource = {
+    getSnapshot: async () => initial,
+    subscribe: () => () => {},
+  };
+  const view = render(
+    <AntApp>
+      <MemoryRouter>
+        <EcologyMonitorDashboard source={source} config={monitorConfig} />
+      </MemoryRouter>
+    </AntApp>,
+  );
+  await screen.findByText("末尾复核建议");
+  const copy = document.querySelector<HTMLElement>(".monitor-assessment-copy")!;
+  expect(copy.scrollHeight).toBeGreaterThan(copy.clientHeight);
+  copy.scrollTop = copy.scrollHeight;
+  expect(
+    screen.getByText("末尾复核建议").getBoundingClientRect().bottom,
+  ).toBeLessThanOrEqual(copy.getBoundingClientRect().bottom + 1);
+  await page.viewport(1366, 640);
+  const information = document.querySelector<HTMLElement>(
+    ".monitor-information",
+  )!;
+  information.scrollTop = information.scrollHeight;
+  const assessment = document.querySelector<HTMLElement>(
+    ".monitor-assessment",
+  )!;
+  const footer = document.querySelector<HTMLElement>(".monitor-footer")!;
+  expect(assessment.getBoundingClientRect().height).toBeGreaterThanOrEqual(108);
+  expect(assessment.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    footer.getBoundingClientRect().top + 1,
+  );
+  view.unmount();
+  await page.viewport(1920, 1080);
 });
