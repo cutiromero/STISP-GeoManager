@@ -632,3 +632,38 @@ it("shows shared availability and keeps shared definitions readonly in a private
   const location = JSON.parse(screen.getByLabelText("当前导航").textContent!);
   expect(location.search).toContain("projectTagId=3");
 });
+
+it("drops the previous project's selected flow when the project boundary remounts", async () => {
+  const body = () => (
+    <>
+      <style>{platformStyles}</style>
+      <App>
+        <MemoryRouter
+          initialEntries={["/business-flows?flow=1&projectTagId=3"]}
+        >
+          <BusinessFlowsPage key={session.project} />
+          <Location />
+        </MemoryRouter>
+      </App>
+    </>
+  );
+  const view = render(body());
+  await screen.findByRole("heading", { name: geologyFlow.name });
+  const previousDetailCalls = vi.mocked(businessFlowsApi.detail).mock.calls
+    .length;
+  vi.mocked(businessFlowsApi.list).mockResolvedValue({
+    items: [summary(researchFlow, researchVersion)],
+    canManage: false,
+  });
+  session.project = "4";
+  view.rerender(body());
+  await screen.findByRole("heading", { name: researchFlow.name });
+  expect(
+    vi
+      .mocked(businessFlowsApi.detail)
+      .mock.calls.slice(previousDetailCalls)
+      .map((call) => call[0]),
+  ).toEqual([researchFlow.id]);
+  expect(screen.getByLabelText("当前导航").textContent).not.toContain("flow=1");
+  expect(screen.queryByText("业务流暂时无法打开")).not.toBeInTheDocument();
+});

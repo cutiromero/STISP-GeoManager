@@ -102,10 +102,14 @@ export default function BusinessFlowsPage() {
   const [goal, setGoal] = useState("");
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [editor, setEditor] = useState<"create" | "version" | null>(null);
+  const currentProject = String(project?.current ?? "1");
+  const linkedProject = searchParams.get("projectTagId");
+  const differentProject =
+    linkedProject !== null && linkedProject !== currentProject;
   const selected = Number(searchParams.get("flow"));
   const selectedId =
     initialSelection.scope === scope
-      ? Number.isSafeInteger(selected) && selected > 0
+      ? !differentProject && Number.isSafeInteger(selected) && selected > 0
         ? selected
         : initialSelection.id
       : undefined;
@@ -123,6 +127,26 @@ export default function BusinessFlowsPage() {
     [items, query],
   );
   const previousScope = useRef(scope);
+  useEffect(() => {
+    if (differentProject) {
+      setSearchParams({}, { replace: true });
+    } else if (
+      !linkedProject &&
+      Number.isSafeInteger(selected) &&
+      selected > 0
+    ) {
+      const next = new URLSearchParams(searchParams);
+      next.set("projectTagId", currentProject);
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    differentProject,
+    linkedProject,
+    currentProject,
+    selected,
+    searchParams,
+    setSearchParams,
+  ]);
   useEffect(() => {
     if (previousScope.current === scope) return;
     previousScope.current = scope;
@@ -301,7 +325,7 @@ export default function BusinessFlowsPage() {
     spec?.nodes.filter((item) => item.review.human || item.kind === "human")
       .length ?? 0;
   const choose = (id: number) => {
-    setSearchParams({ flow: String(id) });
+    setSearchParams({ flow: String(id), projectTagId: currentProject });
     setCatalogOpen(false);
   };
   const canStart = Boolean(
@@ -349,6 +373,7 @@ export default function BusinessFlowsPage() {
     setDetailScope(scope);
     setSearchParams({
       flow: String(result.flow.id),
+      projectTagId: currentProject,
       ...(result.version ? { version: String(result.version.id) } : {}),
     });
     setListAttempt((value) => value + 1);
@@ -577,6 +602,7 @@ export default function BusinessFlowsPage() {
                       onChange={(id) =>
                         setSearchParams({
                           flow: String(detail.flow.id),
+                          projectTagId: currentProject,
                           version: String(id),
                         })
                       }
