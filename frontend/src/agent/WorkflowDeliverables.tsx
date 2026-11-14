@@ -17,6 +17,7 @@ import type {
   ComputeTask,
 } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
+import "./workflow-deliverables.css";
 
 const importNames: Record<string, string> = {
   none: "待入库",

@@ -951,6 +951,13 @@ it("lists all delivered batch rasters and statistics beside the report without e
     expect(screen.getAllByText("地表覆盖分类图")).toHaveLength(6),
   );
   expect(screen.getAllByText("分类面积统计")).toHaveLength(6);
+  const row = screen
+    .getAllByText("地表覆盖分类图")[0]!
+    .closest(".agent-file-row")!;
+  expect(getComputedStyle(row).display).toBe("flex");
+  expect(
+    getComputedStyle(row.querySelector(".agent-file-main")!).overflowWrap,
+  ).toBe("anywhere");
   expect(screen.getAllByText("样区1原始影像")).toHaveLength(2);
   expect(screen.getAllByText("样区6原始影像")).toHaveLength(2);
   expect(screen.queryByText("不属于交付的中间文件")).not.toBeInTheDocument();

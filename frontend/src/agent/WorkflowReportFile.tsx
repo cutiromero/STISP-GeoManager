@@ -13,6 +13,7 @@ import type {
   AgentWorkflowReportPreview,
 } from "../api/generated/types.gen";
 import { useComputeText } from "../compute/ui";
+import "./workflow-deliverables.css";
 import SafeMarkdown from "./SafeMarkdown";
 
 // Cards that open together for the same task share one prepare request.
