@@ -12422,6 +12422,7 @@ components:
         name: {type: string, description: 产品名称。}
         resourceId: {type: integer, minimum: 1, description: 已入库的地图矢量或栅格资源ID。}
         scene: {type: string, enum: [spartina, wildfire, landcover], description: 监测场景。}
+        referenceRole: {type: string, enum: [standard, historical], description: 外部成果的登记用途；不将系统解译成果标为上传标准。}
         kind: {type: string, enum: [historical, model, observation], description: 历史成果、模型结果或观测资料。}
         quality: {type: string, enum: [unverified, passed, needs_review], description: 未验证、已核验或待复核；不代表自动拥有精度报告。}
         observedStart: {type: [string, 'null'], format: date, description: 真实观测周期起始日期，未知为null。}
@@ -12473,16 +12474,23 @@ components:
           id: {type: integer, description: 产品ID。}
           resource: {$ref: '#/components/schemas/ResourceListItem'}
           registeredAt: {type: string, format: date-time, description: 登记时间，不作为观测时间。}
+          provenance: {$ref: '#/components/schemas/MonitoringProductProvenance'}
           metrics:
             type: array
             description: 当前场景全部指标及缺失值。
             items: {$ref: '#/components/schemas/MonitoringMetric'}
+    MonitoringProductProvenance: {"type": "object", "description": "由真实计算、工作流与登记资料推导的成果来源。", "additionalProperties": false, "required": ["type", "batchId", "taskId", "workflowId", "createdAt", "creator", "owned"], "properties": {"type": {"type": "string", "enum": ["system_interpretation", "uploaded_standard", "uploaded_result"], "description": "系统解译、上传标准或其他上传成果。"}, "batchId": {"type": ["string", "null"], "description": "真实工作流批次；独立计算使用任务ID。"}, "taskId": {"type": ["string", "null"], "format": "uuid", "description": "实际计算任务ID。"}, "workflowId": {"type": ["string", "null"], "format": "uuid", "description": "仅本人可打开的业务流记录ID。"}, "createdAt": {"type": ["string", "null"], "format": "date-time", "description": "本次处理或登记时间，非影像观测时间。"}, "creator": {"type": "string", "description": "处理人显示名称。"}, "owned": {"type": "boolean", "description": "是否由当前账号处理。"}}}
     MonitoringProductList:
       type: object
       description: 一个项目、一个场景的有界产品页。
       required: [projectId, scene, title, route, items, nextBeforeId]
       properties:
         businessFlow: {$ref: '#/components/schemas/MonitoringWorkflowLaunch'}
+        referenceResources:
+          type: array
+          maxItems: 128
+          description: 当前项目可见的上传分类栅格与矢量资料，用户可选为标准成果；不自动认定其标准身份。
+          items: {$ref: '#/components/schemas/ResourceListItem'}
         inputBoundary: {$ref: '#/components/schemas/ResourceListItem'}
         inputResources:
           type: array

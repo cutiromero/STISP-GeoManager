@@ -20,7 +20,9 @@ import {
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ProjectMonitorConfig } from "../api/generated/types.gen";
+import { useAppContext } from "../contexts/AppContext";
 import { currentLocale } from "../i18n";
+import { MonitorDataStatus } from "../monitor/MonitorLayerStatus";
 import MonitorDashboardFrame from "../monitor/MonitorDashboardFrame";
 import {
   AlertsPanel,
@@ -44,6 +46,7 @@ const LandcoverDashboard = lazy(() => import("../monitor/LandcoverDashboard"));
 
 export default function EcologyMonitorPage() {
   const project = useMonitorProject();
+  const { user } = useAppContext();
   const { i18n, t } = useTranslation();
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
@@ -107,7 +110,7 @@ export default function EcologyMonitorPage() {
         {selectedScene === "landcover" ? (
           <Suspense fallback={<Spin />}>
             <LandcoverDashboard
-              key={`${project.id}:${i18n.resolvedLanguage}`}
+              key={`${user?.id ?? "visitor"}:${project.id}:${i18n.resolvedLanguage}`}
               projectId={project.id}
               config={config}
               navigation={sceneNavigation()}
@@ -115,7 +118,7 @@ export default function EcologyMonitorPage() {
           </Suspense>
         ) : selectedScene === "spartina" || selectedScene === "wildfire" ? (
           <RemoteSensingDashboard
-            key={`${project.id}:${selectedScene}:${i18n.resolvedLanguage}`}
+            key={`${user?.id ?? "visitor"}:${project.id}:${selectedScene}:${i18n.resolvedLanguage}`}
             config={config}
             scene={selectedScene}
             navigation={sceneNavigation()}
@@ -123,7 +126,7 @@ export default function EcologyMonitorPage() {
         ) : (
           source && (
             <EcologyMonitorDashboard
-              key={`${project.id}:${i18n.resolvedLanguage}`}
+              key={`${user?.id ?? "visitor"}:${project.id}:${i18n.resolvedLanguage}`}
               source={source}
               config={config}
               navigation={sceneNavigation()}
@@ -211,9 +214,10 @@ export function EcologyMonitorDashboard({
             >
               <Suspense
                 fallback={
-                  <div className="monitor-loading">
-                    <Spin />
-                  </div>
+                  <MonitorDataStatus
+                    title={t("monitor.networkTitle")}
+                    loading
+                  />
                 }
               >
                 <MonitorGlobe

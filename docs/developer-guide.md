@@ -4,6 +4,8 @@
 
 ## 遥感监测产品
 
+大屏框架、成果来源与图层更新遵循[公共展示规则](monitoring-shared-presentation.md)。
+
 地表覆盖场景、GPU运行、分类图例与大屏任务入口见[环江油田地表覆盖解译](landcover-interpretation.md)。大屏通过既有业务流模块创建同一智能体会话，不增加独立调度器。
 
 

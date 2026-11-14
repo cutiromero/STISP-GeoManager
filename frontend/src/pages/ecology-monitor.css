@@ -89,7 +89,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(480px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
   padding-top: 12px;
 }
@@ -440,9 +440,7 @@
   overflow-y: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows:
-    minmax(30px, auto) minmax(170px, 1.1fr) minmax(130px, 0.85fr)
-    minmax(140px, 1fr) minmax(176px, 0.8fr);
+  grid-template-rows: auto repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding-right: 4px;
   scrollbar-width: thin;
@@ -610,7 +608,6 @@
   color: #ffad7b;
 }
 .monitor-trend-panel {
-  grid-column: 1 / -1;
   padding-bottom: 6px;
 }
 .monitor-trend-panel .monitor-panel-heading {
@@ -756,7 +753,6 @@
   font-weight: 400;
 }
 .monitor-assessment {
-  grid-column: 1 / -1;
   min-height: 108px;
 }
 .monitor-simulated {
@@ -915,7 +911,7 @@
     font-size: 14px;
   }
   .monitor-layout {
-    grid-template-columns: minmax(0, 1.8fr) minmax(440px, 0.85fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 12px;
     padding-top: 12px;
   }
@@ -928,9 +924,7 @@
 }
 @media (min-width: 1101px) and (max-height: 850px) {
   .monitor-information {
-    grid-template-rows:
-      minmax(28px, auto) minmax(164px, 1.1fr) minmax(130px, 0.85fr)
-      minmax(110px, 1fr) minmax(135px, 0.8fr);
+    grid-template-rows: auto repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
   .monitor-panel {
@@ -976,7 +970,7 @@
 }
 @media (min-width: 1101px) and (max-height: 699px) {
   .monitor-information {
-    grid-template-rows: 32px 160px 145px 130px minmax(120px, auto);
+    grid-template-rows: auto repeat(3, minmax(150px, 1fr));
     align-content: start;
   }
 }
@@ -1012,9 +1006,7 @@
   }
   .monitor-information {
     overflow: visible;
-    grid-template-rows:
-      auto minmax(220px, auto) minmax(190px, auto) minmax(220px, auto)
-      auto;
+    grid-template-rows: auto repeat(3, minmax(220px, auto));
   }
 }
 @media (max-width: 640px) {
@@ -1096,5 +1088,47 @@
   }
   .ecology-monitor .monitor-alert-list {
     scroll-behavior: auto;
+  }
+}
+
+.monitor-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+  flex-shrink: 0;
+  color: var(--monitor-muted);
+  font-size: 11px;
+}
+.monitor-status-message,
+.monitor-status-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.monitor-status-message > span,
+.monitor-status-error {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.monitor-status-error {
+  color: #efbf76;
+}
+.monitor-status-bar .ant-btn {
+  padding: 0 4px;
+  font-size: 11px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.monitor-information > .monitor-summary {
+  grid-column: 1 / -1;
+}
+@media (max-width: 640px) {
+  .monitor-status-bar {
+    flex-wrap: wrap;
   }
 }

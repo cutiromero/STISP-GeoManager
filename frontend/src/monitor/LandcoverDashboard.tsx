@@ -1,6 +1,13 @@
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Checkbox, Empty, Segmented, Select } from "antd";
-import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
+import { Button, Checkbox, Empty, Segmented, Select } from "antd";
+import {
+  lazy,
+  Suspense,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { ProjectMonitorConfig } from "../api/generated/types.gen";
 import { useAppContext } from "../contexts/AppContext";
 import { useComputeText } from "../compute/ui";
@@ -8,6 +15,9 @@ import { api } from "../api/client";
 import { downloadBlob } from "../utils/download";
 import MonitorDashboardFrame from "./MonitorDashboardFrame";
 import { MonitorPanel } from "./MonitorPanels";
+import MonitorProductSelector from "./MonitorProductSelector";
+import { useMonitorProductSelection } from "./useMonitorProductSelection";
+import { MonitorDataStatus } from "./MonitorLayerStatus";
 import { useMonitoringProducts } from "./useMonitoringProducts";
 import { useMonitorTask } from "./useMonitorTask";
 import LandcoverTaskDrawer from "./LandcoverTaskDrawer";
@@ -42,7 +52,7 @@ export default function LandcoverDashboard({
   const products = useMonitoringProducts("landcover");
   const { page, loading, failure, setRevision } = products;
   const [sourceId, setSourceId] = useState<number>();
-  const [productId, setProductId] = useState<number>();
+  const selectCurrent = useRef<(() => void) | undefined>(undefined);
   const [mode, setMode] = useState<LandcoverView>("classification");
   const [hidden, setHidden] = useState<number[]>([]);
   const [downloading, setDownloading] = useState(false);
@@ -53,7 +63,7 @@ export default function LandcoverDashboard({
     user?.id,
     () => {
       setSourceId(undefined);
-      setProductId(undefined);
+      selectCurrent.current?.();
       setMode("classification");
       setRevision((value) => value + 1);
     },
@@ -62,15 +72,17 @@ export default function LandcoverDashboard({
   const resources = page?.inputResources ?? [];
   const selectedSource =
     sourceId ?? page?.items[0]?.sourceResourceIds[0] ?? resources[0]?.id ?? 0;
-  const sourceProducts = selectedSource
-    ? (page?.items.filter((product) =>
-        product.sourceResourceIds.includes(selectedSource),
-      ) ?? [])
-    : [];
-  const selected =
-    sourceProducts.find((product) => product.id === productId) ??
-    sourceProducts[0];
-  const displayMode = !selected ? "original" : mode;
+  const selection = useMonitorProductSelection({
+    items: page?.items ?? [],
+    references: page?.referenceResources ?? [],
+    sourceId: selectedSource,
+    currentBatchId: task.flow?.id,
+  });
+  selectCurrent.current = selection.showCurrent;
+  const selected = selection.selected;
+  const selectedReference = selection.reference;
+  const hasResult = Boolean(selected || selectedReference);
+  const displayMode = !hasResult ? "original" : mode;
   const original = resources.find((resource) => resource.id === selectedSource);
   const categories = selected?.classification?.categories ?? [];
   const visibleCodes = useMemo(
@@ -92,7 +104,7 @@ export default function LandcoverDashboard({
   const completed =
     task.flow?.nodes.filter((node) => node.status === "succeeded").length ?? 0;
   const download = async () => {
-    if (!selected || downloading) return;
+    if ((!selected && !selectedReference) || downloading) return;
     setDownloading(true);
     setDownloadError(undefined);
     try {
@@ -102,8 +114,8 @@ export default function LandcoverDashboard({
         items: [
           {
             layerType: "raster",
-            resourceId: selected.resourceId,
-            name: selected.name,
+            resourceId: selected?.resourceId ?? selectedReference!.id,
+            name: selected?.name ?? selectedReference!.name,
           },
         ],
       });
@@ -137,8 +149,10 @@ export default function LandcoverDashboard({
     <Empty
       image={Empty.PRESENTED_IMAGE_SIMPLE}
       description={ui(
-        "该样区暂无分类成果",
-        "No classification for this region",
+        hasResult ? "该成果未登记类别面积" : "该样区暂无分类成果",
+        hasResult
+          ? "Class areas are not registered"
+          : "No classification for this region",
       )}
     />
   );
@@ -148,12 +162,15 @@ export default function LandcoverDashboard({
       scene="landcover"
       navigation={navigation}
       updatedAt={selected?.registeredAt}
-      sourceLabel={ui(
-        "RGB影像 · UNet地表解译",
-        "RGB imagery · UNet land cover",
-      )}
+      sourceLabel={
+        selection.view === "standard"
+          ? ui("上传标准成果", "Uploaded reference")
+          : ui("RGB影像 · UNet地表解译", "RGB imagery · UNet land cover")
+      }
       status={() =>
-        selected?.name ?? ui("环江油田原始影像", "Huanjiang source imagery")
+        selected?.name ??
+        selectedReference?.name ??
+        ui("环江油田原始影像", "Huanjiang source imagery")
       }
       actions={
         <>
@@ -183,13 +200,11 @@ export default function LandcoverDashboard({
     >
       {({ animated }) => (
         <>
-          {failure && (
-            <Alert
-              className="monitor-source-error"
-              type="error"
-              title={failure}
-            />
-          )}
+          <MonitorDataStatus
+            title={ui("成果资料", "Product data")}
+            loading={loading}
+            error={failure}
+          />
           <main className="monitor-layout">
             <section
               className="monitor-globe-panel"
@@ -197,13 +212,15 @@ export default function LandcoverDashboard({
             >
               <Suspense
                 fallback={
-                  <div className="monitor-layer-loading">
-                    {ui("准备地图", "Preparing map")}
-                  </div>
+                  <MonitorDataStatus
+                    title={ui("准备地图", "Preparing map")}
+                    loading
+                  />
                 }
               >
                 <ComparisonMap
                   product={selected}
+                  displayResource={selectedReference}
                   original={original}
                   overview={page?.inputBoundary}
                   config={config}
@@ -221,18 +238,18 @@ export default function LandcoverDashboard({
                     {
                       value: "classification",
                       label: ui("分类", "Classes"),
-                      disabled: !selected,
+                      disabled: !hasResult,
                     },
                     { value: "original", label: ui("原图", "RGB") },
                     {
                       value: "overlay",
                       label: ui("叠加", "Overlay"),
-                      disabled: !selected,
+                      disabled: !hasResult,
                     },
                     {
                       value: "swipe",
                       label: ui("卷帘", "Swipe"),
-                      disabled: !selected,
+                      disabled: !hasResult,
                     },
                   ]}
                 />
@@ -278,24 +295,19 @@ export default function LandcoverDashboard({
                       })),
                     ]}
                   />
-                  {sourceProducts.length > 1 && (
-                    <Select
-                      aria-label={ui("选择分类成果", "Select classification")}
-                      value={selected?.id}
-                      onChange={setProductId}
-                      options={sourceProducts.map((product) => ({
-                        value: product.id,
-                        label: `${product.model?.variant ?? product.name} · ${new Date(product.registeredAt).toLocaleString()}`,
-                      }))}
-                    />
-                  )}
+                  <MonitorProductSelector selection={selection} />
                   <p title={original?.name}>
                     {original?.name ??
                       ui("六个样区范围", "Six region footprints")}
                   </p>
                   <span className="landcover-secondary">
-                    {selected
-                      ? ui("分类成果已就绪", "Classification ready")
+                    {hasResult
+                      ? ui(
+                          selection.view === "standard"
+                            ? "已选择标准成果"
+                            : "分类成果已就绪",
+                          "Product selected",
+                        )
                       : ui("原始影像可浏览", "Source imagery available")}
                   </span>
                   {page?.nextBeforeId && (
@@ -326,6 +338,12 @@ export default function LandcoverDashboard({
                 <div className="landcover-card-body">
                   {task.flow ? (
                     <>
+                      <span
+                        className="landcover-secondary"
+                        title={task.flow.id}
+                      >
+                        本次任务 · {task.flow.id.slice(0, 8)}
+                      </span>
                       <strong className="landcover-task-status">
                         {statusNames[task.flow.status] ?? task.flow.status}
                       </strong>
@@ -407,26 +425,44 @@ export default function LandcoverDashboard({
               </MonitorPanel>
               <MonitorPanel title={ui("模型与规则", "Models and rules")}>
                 <div className="landcover-card-body">
-                  <strong>UNet</strong>
-                  <p>
-                    {selected?.model?.variant ??
-                      ui(
-                        "五类模型 · 完整地表覆盖",
-                        "Five models · complete land cover",
-                      )}
-                  </p>
-                  <div className="landcover-priority">
-                    {ui(
-                      "建筑 › 水体 › 耕地 › 林地 › 道路",
-                      "Buildings › water › farmland › forest › roads",
-                    )}
-                  </div>
-                  <span className="landcover-secondary">
-                    {ui(
-                      "16m²小斑块处理 · 保留边界目标",
-                      "16m² filtering · preserve border objects",
-                    )}
-                  </span>
+                  {selection.view === "standard" ? (
+                    <>
+                      <strong>
+                        {ui("上传标准成果", "Uploaded reference")}
+                      </strong>
+                      <p>{selectedReference?.name ?? selected?.name}</p>
+                      <span>
+                        {ui(
+                          "用于与系统解译成果对照",
+                          "Reference for comparison with interpretation results",
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      {" "}
+                      <strong>UNet</strong>
+                      <p>
+                        {selected?.model?.variant ??
+                          ui(
+                            "五类模型 · 完整地表覆盖",
+                            "Five models · complete land cover",
+                          )}
+                      </p>
+                      <div className="landcover-priority">
+                        {ui(
+                          "建筑 › 水体 › 耕地 › 林地 › 道路",
+                          "Buildings › water › farmland › forest › roads",
+                        )}
+                      </div>
+                      <span className="landcover-secondary">
+                        {ui(
+                          "16m²小斑块处理 · 保留边界目标",
+                          "16m² filtering · preserve border objects",
+                        )}
+                      </span>
+                    </>
+                  )}
                 </div>
               </MonitorPanel>
               <MonitorPanel title={ui("成果说明", "Product details")}>
@@ -439,10 +475,12 @@ export default function LandcoverDashboard({
                           "Statistics are region-specific",
                         )}
                   </p>
-                  {selected && (
+                  {hasResult && (
                     <>
                       <span className="landcover-secondary">
-                        {new Date(selected.registeredAt).toLocaleString()}
+                        {selected
+                          ? new Date(selected.registeredAt).toLocaleString()
+                          : ui("上传标准成果", "Uploaded reference")}
                       </span>
                       <Button
                         type="link"
@@ -451,7 +489,11 @@ export default function LandcoverDashboard({
                       >
                         {ui("下载成果", "Download result")}
                       </Button>
-                      <Button type="link" onClick={downloadStatistics}>
+                      <Button
+                        type="link"
+                        disabled={!categories.length}
+                        onClick={downloadStatistics}
+                      >
                         {ui("下载统计", "Download statistics")}
                       </Button>
                       {downloadError && <span>{downloadError}</span>}

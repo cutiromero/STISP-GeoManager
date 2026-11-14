@@ -33,6 +33,12 @@ export default function LandcoverTaskDrawer({
   const navigate = useNavigate();
   const { bootstrap } = useAgentBootstrapState();
   const [launch, setLaunch] = useState(startNew);
+  const [record, setRecord] = useState<BusinessFlowRun>();
+  const displayed = records && record ? record : flow;
+  const updateDisplayed = (next: BusinessFlowRun) => {
+    if (records) setRecord(next);
+    if (next.id === flow?.id) onChanged(next);
+  };
   const [all, setAll] = useState(false);
   const [classes, setClasses] = useState("all");
   const [rows, setRows] = useState<BusinessFlowRunList["items"]>([]);
@@ -88,7 +94,7 @@ export default function LandcoverTaskDrawer({
     setLoading(true);
     setError(undefined);
     try {
-      onChanged(await businessFlowsApi.run(id));
+      setRecord(await businessFlowsApi.run(id));
       setLaunch(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "无法打开处理记录");
@@ -97,8 +103,10 @@ export default function LandcoverTaskDrawer({
     }
   };
   const terminal =
-    flow &&
-    ["succeeded", "failed", "cancelled", "interrupted"].includes(flow.status);
+    displayed &&
+    ["succeeded", "failed", "cancelled", "interrupted"].includes(
+      displayed.status,
+    );
   return (
     <Drawer
       open
@@ -119,14 +127,14 @@ export default function LandcoverTaskDrawer({
           ))}
         </div>
       )}
-      {!launch && flow && (
+      {!launch && displayed && (
         <>
-          <BusinessFlowActivity flow={flow} onChanged={onChanged} />
+          <BusinessFlowActivity flow={displayed} onChanged={updateDisplayed} />
           <Space wrap>
             <Button
               onClick={() =>
                 navigate(
-                  `/agent/workbench?projectTagId=${flow.projectId}&conversationId=${flow.conversationId}&runId=${flow.runId}`,
+                  `/agent/workbench?projectTagId=${displayed.projectId}&conversationId=${displayed.conversationId}&runId=${displayed.runId}`,
                 )
               }
             >
@@ -135,7 +143,7 @@ export default function LandcoverTaskDrawer({
             <Button
               onClick={() =>
                 navigate(
-                  `/business-flows?projectTagId=${flow.projectId}&flow=${flow.flowId}&version=${flow.versionId}`,
+                  `/business-flows?projectTagId=${displayed.projectId}&flow=${displayed.flowId}&version=${displayed.versionId}`,
                 )
               }
             >
@@ -187,6 +195,7 @@ export default function LandcoverTaskDrawer({
               parameters={{ nodeParameters: { interpret: { classes } } }}
               onStarted={(value) => {
                 onChanged(value);
+                setRecord(undefined);
                 setLaunch(false);
               }}
               onCancel={onClose}

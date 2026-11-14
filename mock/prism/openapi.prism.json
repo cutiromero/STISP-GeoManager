@@ -151,7 +151,8 @@
                   ],
                   "items": [],
                   "nextBeforeId": null,
-                  "inputResources": []
+                  "inputResources": [],
+                  "referenceResources": []
                 }
               }
             }
@@ -35100,6 +35101,14 @@
             ],
             "description": "监测场景。"
           },
+          "referenceRole": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "historical"
+            ],
+            "description": "外部成果的登记用途；不将系统解译成果标为上传标准。"
+          },
           "kind": {
             "type": "string",
             "enum": [
@@ -35265,6 +35274,9 @@
                 "format": "date-time",
                 "description": "登记时间，不作为观测时间。"
               },
+              "provenance": {
+                "$ref": "#/components/schemas/MonitoringProductProvenance"
+              },
               "metrics": {
                 "type": "array",
                 "description": "当前场景全部指标及缺失值。",
@@ -35275,6 +35287,70 @@
             }
           }
         ]
+      },
+      "MonitoringProductProvenance": {
+        "type": "object",
+        "description": "由真实计算、工作流与登记资料推导的成果来源。",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "batchId",
+          "taskId",
+          "workflowId",
+          "createdAt",
+          "creator",
+          "owned"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "system_interpretation",
+              "uploaded_standard",
+              "uploaded_result"
+            ],
+            "description": "系统解译、上传标准或其他上传成果。"
+          },
+          "batchId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "真实工作流批次；独立计算使用任务ID。"
+          },
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "实际计算任务ID。"
+          },
+          "workflowId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "仅本人可打开的业务流记录ID。"
+          },
+          "createdAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "本次处理或登记时间，非影像观测时间。"
+          },
+          "creator": {
+            "type": "string",
+            "description": "处理人显示名称。"
+          },
+          "owned": {
+            "type": "boolean",
+            "description": "是否由当前账号处理。"
+          }
+        }
       },
       "MonitoringProductList": {
         "type": "object",
@@ -35290,6 +35366,14 @@
         "properties": {
           "businessFlow": {
             "$ref": "#/components/schemas/MonitoringWorkflowLaunch"
+          },
+          "referenceResources": {
+            "type": "array",
+            "maxItems": 128,
+            "description": "当前项目可见的上传分类栅格与矢量资料，用户可选为标准成果；不自动认定其标准身份。",
+            "items": {
+              "$ref": "#/components/schemas/DataResource"
+            }
           },
           "inputBoundary": {
             "$ref": "#/components/schemas/DataResource"

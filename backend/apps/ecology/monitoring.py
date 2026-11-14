@@ -94,6 +94,7 @@ FIELDS = {
     "interpretation",
     "statistics",
     "classification",
+    "referenceRole",
     "statisticsMethod",
     "model",
     "threshold",
@@ -152,6 +153,13 @@ def normalize_product(value):
     if len(encoded) > MAX_MANIFEST_BYTES:
         invalid("监测成果清单超过64KiB")
     item = deepcopy(value)
+    if "referenceRole" in item and (
+        not isinstance(item["referenceRole"], str)
+        or item["referenceRole"] not in {"standard", "historical"}
+    ):
+        invalid("成果用途须为standard或historical")
+    if item.get("referenceRole") and item.get("kind") == "model":
+        invalid("系统解译成果不能登记为上传标准成果")
     if type(item.get("schemaVersion")) is not int or item["schemaVersion"] != 1:
         invalid("监测成果协议版本无效")
     for field, maximum in (
@@ -472,6 +480,18 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
         )
         if len(items) >= limit:
             break
+    from .product_provenance import attach_provenance
+
+    attach_provenance(
+        items,
+        user,
+        project,
+        {
+            row.data_resource_id
+            for row in candidates
+            if row.data_resource.is_compute_result
+        },
+    )
     more = examined < len(candidates)
     launch = {}
     if scene == "landcover":
@@ -526,6 +546,29 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
         )
         if boundary:
             launch["inputBoundary"] = serialize_resource(boundary)
+
+    from django.db.models import Q
+
+    references = (
+        filter_accessible(
+            DataResource.objects.filter(status="active", is_compute_result=False)
+            .filter(
+                Q(
+                    raster_datasets__raster_kind="categorical",
+                    raster_datasets__status="ready",
+                )
+                | Q(data_type="vector")
+            )
+            .exclude(source__startswith="landcover-handoff:")
+            .exclude(task_resource_q())
+            .select_related("category", "inventory_group")
+            .prefetch_related("access_groups"),
+            user,
+        )
+        .distinct()
+        .order_by("-id")[:128]
+    )
+    launch["referenceResources"] = [serialize_resource(row) for row in references]
 
     return {
         "projectId": project.pk,

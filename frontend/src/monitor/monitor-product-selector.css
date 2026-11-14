@@ -1,0 +1,33 @@
+.monitor-product-selector {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  min-width: 0;
+}
+.monitor-product-selector .ant-segmented {
+  width: 100%;
+}
+.monitor-product-selector .ant-select {
+  width: 100%;
+}
+.monitor-product-selector .ant-empty {
+  margin: 8px 0;
+}
+.monitor-product-selector .ant-empty-image {
+  height: 28px;
+}
+.monitor-product-identity {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+  min-width: 0;
+  line-height: 1.5;
+}
+.monitor-product-identity strong {
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+.monitor-product-identity time,
+.monitor-product-identity > span {
+  color: var(--monitor-muted);
+}

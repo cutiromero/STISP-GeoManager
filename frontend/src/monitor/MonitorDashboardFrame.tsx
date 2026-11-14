@@ -9,6 +9,10 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import type { ProjectMonitorConfig } from "../api/generated/types.gen";
 import { currentLocale } from "../i18n";
+import {
+  MonitorLayerStatusProvider,
+  MonitorLayerStatusBar,
+} from "./MonitorLayerStatus";
 import MonitorSpaceBackground from "./MonitorSpaceBackground";
 import { useMonitorActivity } from "./useMonitor";
 
@@ -68,67 +72,72 @@ export default function MonitorDashboardFrame({
   };
   const state = { animated, visible };
   return (
-    <div
-      ref={root}
-      className={`ecology-monitor${scene ? " monitor-remote" : ""}`}
-      data-scene={scene}
-      data-motion={animated ? "running" : "paused"}
-      data-reduced-motion={reducedMotion}
-    >
-      <MonitorSpaceBackground />
-      <header className="monitor-topbar">
-        <div
-          className="monitor-title"
-          title={t(
-            scene ? `remoteMonitor.${scene}Subtitle` : "monitor.subtitle",
-          )}
-        >
-          <div className="monitor-title-mark" aria-hidden="true">
-            ◎
+    <MonitorLayerStatusProvider>
+      <div
+        ref={root}
+        className={`ecology-monitor${scene ? " monitor-remote" : ""}`}
+        data-scene={scene}
+        data-motion={animated ? "running" : "paused"}
+        data-reduced-motion={reducedMotion}
+      >
+        <MonitorSpaceBackground />
+        <header className="monitor-topbar">
+          <div
+            className="monitor-title"
+            title={t(
+              scene ? `remoteMonitor.${scene}Subtitle` : "monitor.subtitle",
+            )}
+          >
+            <div className="monitor-title-mark" aria-hidden="true">
+              ◎
+            </div>
+            <div>
+              <h1>{config.title}</h1>
+            </div>
           </div>
-          <div>
-            <h1>{config.title}</h1>
+          {navigation}
+          <div className="monitor-topbar-meta">
+            <time
+              title={`${new Date(now).toLocaleString(locale, { hour12: false })}${updatedAt ? ` · ${t("monitor.updatedAt", { time: new Date(updatedAt).toLocaleString(locale, { hour12: false }) })}` : ""}`}
+            >
+              {new Date(now).toLocaleTimeString(locale, { hour12: false })}
+            </time>
           </div>
-        </div>
-        {navigation}
-        <div className="monitor-topbar-meta">
-          <time
-            title={`${new Date(now).toLocaleString(locale, { hour12: false })}${updatedAt ? ` · ${t("monitor.updatedAt", { time: new Date(updatedAt).toLocaleString(locale, { hour12: false }) })}` : ""}`}
-          >
-            {new Date(now).toLocaleTimeString(locale, { hour12: false })}
-          </time>
-        </div>
-        <div className="monitor-topbar-actions">
-          {actions}
-          <Button
-            size="small"
-            icon={
-              fullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />
-            }
-            onClick={() => void toggleFullscreen()}
-          >
-            {t(fullscreen ? "monitor.exitFullscreen" : "monitor.fullscreen")}
-          </Button>
-          <Button
-            size="small"
-            icon={<ArrowLeftOutlined />}
-            onClick={() => navigate("/results")}
-          >
-            {t("monitor.back")}
-          </Button>
-        </div>
-      </header>
-      {children(state)}
-      <footer className="monitor-footer">
-        <span>
-          <i />
-          {status(state)}
-        </span>
-        <span>
-          {t(reducedMotion ? "monitor.motionReduced" : "monitor.rotationHint")}
-        </span>
-        <span>{sourceLabel}</span>
-      </footer>
-    </div>
+          <div className="monitor-topbar-actions">
+            {actions}
+            <Button
+              size="small"
+              icon={
+                fullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />
+              }
+              onClick={() => void toggleFullscreen()}
+            >
+              {t(fullscreen ? "monitor.exitFullscreen" : "monitor.fullscreen")}
+            </Button>
+            <Button
+              size="small"
+              icon={<ArrowLeftOutlined />}
+              onClick={() => navigate("/results")}
+            >
+              {t("monitor.back")}
+            </Button>
+          </div>
+        </header>
+        <MonitorLayerStatusBar />
+        {children(state)}
+        <footer className="monitor-footer">
+          <span>
+            <i />
+            {status(state)}
+          </span>
+          <span>
+            {t(
+              reducedMotion ? "monitor.motionReduced" : "monitor.rotationHint",
+            )}
+          </span>
+          <span>{sourceLabel}</span>
+        </footer>
+      </div>
+    </MonitorLayerStatusProvider>
   );
 }

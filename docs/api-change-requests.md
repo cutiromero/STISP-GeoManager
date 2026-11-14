@@ -1,6 +1,19 @@
 # API Change Requests
 
 
+## API-20261114-003 - 公共大屏成果来源与批次
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/ecology/monitoring/。
+- Change type: 增加只读来源信息和可选标准资料候选，不增加数据库结构。
+- OpenAPI change: MonitoringProductProvenance；MonitoringProduct.provenance；MonitoringProductList.referenceResources；外部产品可选referenceRole。
+- Mock examples: 171-remote-monitoring增加空referenceResources；来源关联、权限和多批次由隔离用例验证。
+- Frontend reason: 本次解译按真实批次匹配，历史解译保留多版本，标准成果由明确选择区分；地图外统一展示状态和图例。
+- Backend implementation notes: 计算入库和工作流步骤批量关联，不读取科学像元；私有工作流编号仅向本人提供，参考资料复用当前项目资源权限。
+- Verification: 来源身份、当前与历史批次、标准资料和跨项目权限、查询次数；公共布局、地图外提示、取消与显示更新回归。
+- Result: 项目大屏共用框架和来源选择，类别显示保留已有图层直至新瓦片就绪。
+
 ## API-20261114-002 - 地表覆盖产品与大屏任务
 
 - Status: BackendReady
@@ -701,6 +714,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261114-003 | BackendReady | /api/ecology/monitoring/ | 成果来源、批次与标准资料选择 | Updated | 171-remote-monitoring.json | Implemented | 权限、批量读取与公共组件 | 本人记录边界 |
 | API-20261114-002 | BackendReady | /api/ecology/monitoring/; 业务流 | 地表覆盖产品、合同与大屏任务 | Updated | 171-remote-monitoring.json | Implemented | 科学分类、来源覆盖、入库恢复与浏览器 | 项目隔离、同一会话 |
 | API-20261114-001 | BackendReady | 业务流目录、详情、准备、启动与运行 | 项目隔离与公开定义共享 | Updated | 沿用业务流示例 | Implemented | 项目隔离、共享执行、撤权及浏览器 | 定义共享，任务与数据归当前项目 |
 | API-20261113-004 | BackendReady | /api/ecology/monitoring/；项目功能 | 遥感产品与场景 | Updated | 171-remote-monitoring.json | Implemented | 权限、来源、科学时间、批量读取及浏览器 | 空状态不生成模拟结果 |

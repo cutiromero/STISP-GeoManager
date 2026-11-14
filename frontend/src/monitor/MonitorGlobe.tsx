@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import type { ProjectMonitorConfig } from "../api/generated/types.gen";
 import { riskColors, typeColors } from "./state";
 import type { MonitorEvent, MonitorSnapshot } from "./types";
+import { useMonitorLayerStatus } from "./MonitorLayerStatus";
 import { useMonitorMap } from "./useMonitorMap";
 export { globeFit, isRegionalZoom } from "./globeView";
 
@@ -64,6 +65,15 @@ export default function MonitorGlobe({
   const { container, map, mapError, regionalView, focus } = useMonitorMap(
     initialView,
     animated,
+  );
+  const report = useMonitorLayerStatus();
+  useEffect(
+    () =>
+      report({
+        title: t("monitor.globeLabel"),
+        error: mapError ? t("monitor.mapError") : undefined,
+      }),
+    [report, mapError, t],
   );
   const latest = useRef({ snapshot, onSelect });
   latest.current = { snapshot, onSelect };
@@ -197,11 +207,6 @@ export default function MonitorGlobe({
           aria-label={t("monitor.globeLabel")}
         />
       </div>
-      {mapError && (
-        <div className="monitor-map-notice" role="status">
-          {t("monitor.mapError")}
-        </div>
-      )}
       <div className="monitor-map-controls">
         <Tooltip title={t("monitor.globalView")} placement="left">
           <Button

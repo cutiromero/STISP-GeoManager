@@ -1,5 +1,5 @@
 import { AimOutlined, ExpandOutlined, GlobalOutlined } from "@ant-design/icons";
-import { Alert, Button, Tooltip } from "antd";
+import { Button, Tooltip } from "antd";
 import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { useTranslation } from "react-i18next";
@@ -11,7 +11,8 @@ import type {
   ResourceListItem,
   ResourceProfileResponse,
 } from "../api/generated/types.gen";
-import { versionedRasterTileUrl } from "../map/rasterLayerSync";
+import { createRasterDisplaySwap } from "./rasterDisplaySwap";
+import { useMonitorLayerStatus } from "./MonitorLayerStatus";
 import { workbenchLegends, type LiveLayerLegend } from "../map/liveLegendData";
 import { createRasterLayerGroup } from "../utils/layerFactory";
 import { rasterSymbolizationFromRules } from "../symbolization";
@@ -39,6 +40,7 @@ export default function ProductMap({
   onMapReady,
   focusProduct = false,
   focusKey,
+  information = true,
 }: {
   product?: MonitoringProduct;
   config: ProjectMonitorConfig;
@@ -48,6 +50,7 @@ export default function ProductMap({
   onMapReady?: (map: mapboxgl.Map | undefined) => void;
   focusProduct?: boolean;
   focusKey?: number;
+  information?: boolean;
 }) {
   const { t } = useTranslation();
   const { container, map, mapError, regionalView, focus, showBounds } =
@@ -63,6 +66,24 @@ export default function ProductMap({
   const profiles = useRef(new Map<string, ResourceProfileResponse>());
   const focused = useRef<number | undefined>(undefined);
   const hasProduct = Boolean(target);
+  const report = useMonitorLayerStatus();
+  const activeResource = useRef("");
+  const swap = useRef<ReturnType<typeof createRasterDisplaySwap> | undefined>(
+    undefined,
+  );
+  const swapMap = useRef<mapboxgl.Map | undefined>(undefined);
+  const styles = useRef(new Map<string, RasterRenderResult>());
+  useEffect(
+    () =>
+      report({
+        title,
+        loading,
+        updating: loading && Boolean(swap.current?.hasActive()),
+        error: error || (mapError ? t("monitor.mapError") : undefined),
+        legend: information ? legend : undefined,
+      }),
+    [report, title, loading, error, mapError, legend, information, t],
+  );
   useEffect(() => {
     onMapReady?.(map);
     return () => onMapReady?.(undefined);
@@ -90,12 +111,22 @@ export default function ProductMap({
   useEffect(() => {
     if (!map) return;
     let disposed = false;
-    for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
-    if (map.getSource("product")) map.removeSource("product");
-    boundsRef.current = undefined;
+    if (swapMap.current !== map) {
+      swapMap.current = map;
+      swap.current = createRasterDisplaySwap(map);
+      activeResource.current = "";
+    }
+    const identity = target ? `${target.id}:${target.updatedAt}` : "";
+    if (activeResource.current !== identity) {
+      swap.current?.clear();
+      for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
+      if (map.getSource("product")) map.removeSource("product");
+      activeResource.current = identity;
+      boundsRef.current = undefined;
+      setLegend(undefined);
+    }
     setError(undefined);
-    setLegend(undefined);
-    setLoading(Boolean(product));
+    setLoading(Boolean(target));
     if (!target) return;
     const registry = new RasterRenderTaskRegistry();
     const task = registry.start("product");
@@ -112,66 +143,54 @@ export default function ProductMap({
       signal.throwIfAborted();
       let bounds = profile.bounds;
       if (profile.raster) {
-        let job = await api.renderRasterAsync(
-          {
-            datasetId: profile.raster.id,
-            ...(visibleCodes !== undefined &&
-            profile.raster.defaultRules.mode === "unique"
-              ? {
-                  rulesMode: "custom" as const,
-                  rules: {
-                    ...profile.raster.defaultRules,
-                    uniqueValues: rasterSymbolizationFromRules(
-                      profile.raster.defaultRules,
-                    ).uniqueValues.map((row) => ({
-                      ...row,
-                      color: visibleCodes.includes(row.value)
-                        ? row.color
-                        : "#00000000",
-                    })),
-                  },
-                }
-              : { rulesMode: "default" as const }),
-          },
-          { signal },
-        );
-        while (job.status !== "ready") {
-          if (job.status === "failed")
-            throw new Error(job.error || t("remoteMonitor.renderFailed"));
-          await waitForAbortableDelay(900, signal);
-          job = await api.rasterJob(job.id, { signal });
+        const styleKey = `${identity}:${visibleCodes?.join(",") ?? "default"}`;
+        let result = styles.current.get(styleKey);
+        if (!result) {
+          if (visibleCodes !== undefined && swap.current?.hasActive()) await waitForAbortableDelay(75, signal);
+          let job = await api.renderRasterAsync(
+            {
+              datasetId: profile.raster.id,
+              ...(visibleCodes !== undefined &&
+              profile.raster.defaultRules.mode === "unique"
+                ? {
+                    rulesMode: "custom" as const,
+                    rules: {
+                      ...profile.raster.defaultRules,
+                      uniqueValues: rasterSymbolizationFromRules(
+                        profile.raster.defaultRules,
+                      ).uniqueValues.map((row) => ({
+                        ...row,
+                        color: visibleCodes.includes(row.value)
+                          ? row.color
+                          : "#00000000",
+                      })),
+                    },
+                  }
+                : { rulesMode: "default" as const }),
+            },
+            { signal },
+          );
+          while (job.status !== "ready") {
+            if (job.status === "failed")
+              throw new Error(job.error || t("remoteMonitor.renderFailed"));
+            await waitForAbortableDelay(900, signal);
+            job = await api.rasterJob(job.id, { signal });
+          }
+          signal.throwIfAborted();
+          result = job.result as RasterRenderResult | undefined;
+          if (
+            !result ||
+            result.delivery !== "xyz" ||
+            result.datasetId !== profile.raster.id
+          )
+            throw new Error(t("remoteMonitor.renderFailed"));
+          if (styles.current.size >= 16)
+            styles.current.delete(styles.current.keys().next().value!);
+          styles.current.set(styleKey, result);
         }
         signal.throwIfAborted();
-        const result = job.result as RasterRenderResult | undefined;
-        if (
-          !result ||
-          result.delivery !== "xyz" ||
-          result.datasetId !== profile.raster.id
-        )
-          throw new Error(t("remoteMonitor.renderFailed"));
         bounds = result.bounds4326;
-        map.addSource("product", {
-          type: "raster",
-          tiles: [
-            projectUrl(versionedRasterTileUrl(result.tileUrl))
-              .replace(/%7B/g, "{")
-              .replace(/%7D/g, "}"),
-          ],
-          tileSize: 256,
-          minzoom: result.minZoom,
-          maxzoom: result.maxZoom,
-          bounds: bounds as [number, number, number, number],
-        });
-        map.addLayer({
-          id: "product-raster",
-          type: "raster",
-          source: "product",
-          paint: {
-            "raster-opacity": result.tileSampling === "nearest" ? 1 : 0.9,
-            "raster-resampling": result.tileSampling,
-            "raster-fade-duration": result.tileSampling === "nearest" ? 0 : 300,
-          },
-        });
+        await swap.current!.show(result, signal);
         const layer = createRasterLayerGroup(target, profile)?.children[0];
         if (layer?.layerType === "raster")
           setLegend(
@@ -265,9 +284,19 @@ export default function ProductMap({
     void load()
       .catch((failure: unknown) => {
         if (!disposed && (!signal.aborted || task.timedOut)) {
-          for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
-          if (map.getSource("product")) map.removeSource("product");
-          setLegend(undefined);
+          if (
+            failure &&
+            typeof failure === "object" &&
+            "status" in failure &&
+            [401, 403, 404].includes(Number(failure.status))
+          ) {
+            swap.current?.clear();
+            styles.current.clear();
+            for (const id of layerIds)
+              if (map.getLayer(id)) map.removeLayer(id);
+            if (map.getSource("product")) map.removeSource("product");
+            setLegend(undefined);
+          }
           setError(
             task.timedOut
               ? t("remoteMonitor.renderTimeout")
@@ -284,6 +313,7 @@ export default function ProductMap({
     return () => {
       disposed = true;
       registry.cancelAll();
+      swap.current?.cancel();
     };
   }, [
     map,
@@ -304,42 +334,6 @@ export default function ProductMap({
           ref={container}
           className="monitor-map remote-product-map-canvas"
         />
-        {legend && regionalView && (
-          <aside
-            className="remote-map-legend"
-            aria-label={t("remoteMonitor.legend")}
-          >
-            <strong>{t("remoteMonitor.legend")}</strong>
-            {legend.note && <p>{legend.note}</p>}
-            {legend.gradient && (
-              <div className="remote-legend-gradient">
-                <div
-                  style={{
-                    background: `linear-gradient(90deg, ${legend.gradient.colors.join(",")})`,
-                    opacity: legend.opacity,
-                  }}
-                />
-                <span>{legend.gradient.low}</span>
-                <span>{legend.gradient.high}</span>
-              </div>
-            )}
-            {legend.entries.map((entry) => (
-              <div className="remote-legend-entry" key={entry.id}>
-                <span
-                  style={{
-                    backgroundColor: entry.color,
-                    opacity: legend.opacity,
-                  }}
-                />
-                <span>{entry.label}</span>
-              </div>
-            ))}
-          </aside>
-        )}
-
-        {target && regionalView && (
-          <div className="remote-map-caption">{title}</div>
-        )}
       </div>
       <div className="monitor-map-controls">
         <Tooltip title={t("monitor.globalView")} placement="left">
@@ -374,19 +368,6 @@ export default function ProductMap({
           </Tooltip>
         )}
       </div>
-      {loading && (
-        <div className="monitor-layer-loading" role="status">
-          {t("remoteMonitor.loadingMap")}
-        </div>
-      )}
-      {(error || mapError) && (
-        <div className="monitor-map-notice">
-          <Alert
-            type="warning"
-            title={error || t("remoteMonitor.mapUnavailable")}
-          />
-        </div>
-      )}
     </>
   );
 }

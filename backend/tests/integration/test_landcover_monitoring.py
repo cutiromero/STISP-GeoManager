@@ -241,3 +241,64 @@ def test_registration_accepts_normalized_release_timestamps(
         results.append(json.loads(stream.getvalue()))
     assert results[0] == results[1]
     assert results[0]["status"] == "draft"
+
+
+def test_product_origin_uses_real_workflow_and_hides_foreign_private_record(imported):
+    from apps.agent.models import AgentWorkflow, AgentWorkflowStep
+
+    env, task, _, record = imported
+    with project_scope(env["scope"]):
+        workflow = AgentWorkflow.objects.create(
+            owner=env["owner"],
+            workflow_type="business_flow",
+            model="mock",
+            goal="本次六区解译",
+        )
+        AgentWorkflowStep.objects.create(
+            workflow=workflow,
+            compute_task_id=task.pk,
+            sequence=1,
+            kind="operator",
+            status="succeeded",
+        )
+        register_import(record.pk)
+        own = monitoring_snapshot(env["owner"], "landcover")["items"][0]["provenance"]
+        assert own["batchId"] == own["workflowId"] == str(workflow.pk)
+        assert own["taskId"] == str(task.pk) and own["owned"]
+        other = monitoring_snapshot(env["admin"], "landcover")["items"][0]["provenance"]
+        assert other["batchId"] == str(workflow.pk)
+        assert other["workflowId"] is None and not other["owned"]
+
+
+def test_reference_choices_only_read_authorized_uploaded_spatial_metadata(
+    imported, monkeypatch
+):
+    from apps.raster.models import RasterDataset
+    import rasterio
+
+    env, _, _, _ = imported
+    with project_scope(env["scope"]):
+        resource = DataResource.objects.create(
+            name="上传分类标准",
+            code="reference-raster",
+            data_type="raster",
+            coordinate_system="EPSG:3857",
+            storage_path="reference.tif",
+            maintainer=env["owner"],
+        )
+        RasterDataset.objects.create(
+            data_resource=resource,
+            name=resource.name,
+            code="reference-raster",
+            raster_kind="categorical",
+            status="ready",
+            source_relative_path="unread-reference.tif",
+        )
+        monkeypatch.setattr(
+            rasterio,
+            "open",
+            lambda *args, **kwargs: pytest.fail("资料选择不应读取像元"),
+        )
+        rows = monitoring_snapshot(env["owner"], "landcover")["referenceResources"]
+        assert resource.pk in {row["id"] for row in rows}
+        assert all(not row.get("isComputeResult") for row in rows)

@@ -12,6 +12,7 @@ export type LandcoverView = "classification" | "original" | "overlay" | "swipe";
 export default function LandcoverComparisonMap({
   product,
   original,
+  displayResource,
   overview,
   config,
   animated,
@@ -20,6 +21,7 @@ export default function LandcoverComparisonMap({
 }: {
   product?: MonitoringProduct;
   original?: ResourceListItem;
+  displayResource?: ResourceListItem;
   overview?: ResourceListItem;
   config: ProjectMonitorConfig;
   animated: boolean;
@@ -30,7 +32,9 @@ export default function LandcoverComparisonMap({
   const [reference, setReference] = useState<MapboxMap>();
   const [position, setPosition] = useState(50);
   const compare = Boolean(
-    product && original && ["overlay", "swipe"].includes(mode),
+    (product || displayResource) &&
+    original &&
+    ["overlay", "swipe"].includes(mode),
   );
   useEffect(() => {
     if (!primary || !reference) return;
@@ -66,6 +70,7 @@ export default function LandcoverComparisonMap({
         <div className="landcover-reference">
           <ProductMap
             resource={original}
+            information={false}
             config={config}
             animated={false}
             onMapReady={setReference}
@@ -90,9 +95,8 @@ export default function LandcoverComparisonMap({
           resource={
             mode === "original"
               ? (original ?? overview)
-              : product
-                ? undefined
-                : (original ?? overview)
+              : (displayResource ??
+                (product ? undefined : (original ?? overview)))
           }
           config={config}
           animated={compare ? false : animated}

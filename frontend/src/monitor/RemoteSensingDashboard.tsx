@@ -1,5 +1,5 @@
 import { ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Empty, Spin } from "antd";
+import { Button, Empty, Spin } from "antd";
 import { type CSSProperties, type ReactNode, Suspense, lazy } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +12,9 @@ import type {
 import { currentLocale } from "../i18n";
 import MonitorDashboardFrame from "./MonitorDashboardFrame";
 import { MonitorAssessmentCard, MonitorPanel } from "./MonitorPanels";
+import MonitorProductSelector from "./MonitorProductSelector";
+import { useMonitorProductSelection } from "./useMonitorProductSelection";
+import { MonitorDataStatus } from "./MonitorLayerStatus";
 import { useMonitoringProducts } from "./useMonitoringProducts";
 import "./remote-sensing-monitor.css";
 
@@ -28,16 +31,13 @@ export default function RemoteSensingDashboard({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const {
-    page,
-    selected,
-    setSelectedId,
-    loading,
-    failure,
-    setFailure,
-    setRevision,
-    loadMore,
-  } = useMonitoringProducts(scene);
+  const { page, loading, failure, setFailure, setRevision, loadMore } =
+    useMonitoringProducts(scene);
+  const selection = useMonitorProductSelection({
+    items: page?.items ?? [],
+    references: page?.referenceResources ?? [],
+  });
+  const selected = selection.selected;
   const metrics = selected?.metrics ?? emptyMetrics(scene);
   const primary =
     metrics.find(
@@ -74,15 +74,11 @@ export default function RemoteSensingDashboard({
     >
       {({ animated }) => (
         <>
-          {failure && (
-            <Alert
-              className="monitor-source-error"
-              type="error"
-              title={failure}
-              closable
-              onClose={() => setFailure(undefined)}
-            />
-          )}
+          <MonitorDataStatus
+            title={t("remoteMonitor.products")}
+            loading={loading}
+            error={failure}
+          />
           <main className="monitor-layout">
             <section
               className="monitor-globe-panel"
@@ -90,13 +86,15 @@ export default function RemoteSensingDashboard({
             >
               <Suspense
                 fallback={
-                  <div className="monitor-layer-loading" role="status">
-                    {t("remoteMonitor.loadingMap")}
-                  </div>
+                  <MonitorDataStatus
+                    title={t("remoteMonitor.loadingMap")}
+                    loading
+                  />
                 }
               >
                 <ProductMap
                   product={selected}
+                  resource={selection.reference}
                   config={config}
                   animated={animated}
                 />
@@ -219,10 +217,9 @@ export default function RemoteSensingDashboard({
               >
                 <div className="monitor-product-list" aria-busy={loading}>
                   {loading && !page ? (
-                    <div className="monitor-panel-empty">
-                      <Spin />
-                    </div>
-                  ) : !page?.items.length ? (
+                    <Spin />
+                  ) : !page?.items.length &&
+                    !page?.referenceResources?.length ? (
                     <Empty
                       image={Empty.PRESENTED_IMAGE_SIMPLE}
                       description={t(
@@ -232,23 +229,10 @@ export default function RemoteSensingDashboard({
                       )}
                     />
                   ) : (
-                    page.items.map((item) => (
-                      <button
-                        type="button"
-                        key={item.id}
-                        className={`monitor-product-choice${item.id === selected?.id ? " selected" : ""}`}
-                        aria-pressed={item.id === selected?.id}
-                        onClick={() => setSelectedId(item.id)}
-                      >
-                        <strong>{item.name}</strong>
-                        <time>
-                          {periodLabel(item, t("remoteMonitor.unknownTime"))}
-                        </time>
-                        <span>
-                          {t(`remoteMonitor.quality.${item.quality}`)}
-                        </span>
-                      </button>
-                    ))
+                    <MonitorProductSelector
+                      selection={selection}
+                      presentation="list"
+                    />
                   )}
                   {page?.nextBeforeId && (
                     <Button

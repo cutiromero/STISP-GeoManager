@@ -269,7 +269,11 @@ it("刷新保留选中成果，等值视角配置不重建地图或重复读取�
   );
   const rendered = render(view());
   await waitFor(() => expect(api.resourceProfile).toHaveBeenCalledTimes(1));
-  fireEvent.click(screen.getByRole("button", { name: /历史分布2/ }));
+  fireEvent.click(
+    screen
+      .getAllByRole("button", { name: /历史分布2/ })
+      .find((element) => element.classList.contains("monitor-product-choice"))!,
+  );
   await waitFor(() => expect(api.resourceProfile).toHaveBeenCalledTimes(2));
   await waitFor(() =>
     expect(
@@ -290,10 +294,11 @@ it("刷新保留选中成果，等值视角配置不重建地图或重复读取�
   );
   fireEvent.click(screen.getByRole("button", { name: /刷新成果/ }));
   await waitFor(() => expect(getMonitoringProducts).toHaveBeenCalledTimes(2));
-  expect(screen.getByRole("button", { name: /历史分布2/ })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  expect(
+    screen
+      .getAllByRole("button", { name: /历史分布2/ })
+      .find((element) => element.classList.contains("monitor-product-choice"))!,
+  ).toHaveAttribute("aria-pressed", "true");
   expect(api.resourceProfile).toHaveBeenCalledTimes(2);
   expect(maps.maps).toHaveLength(1);
 });
@@ -384,20 +389,23 @@ it("产品切换期间的迟到profile不能重新装回旧图层", async () => 
   );
   render(view());
   await waitFor(() => expect(api.resourceProfile).toHaveBeenCalledTimes(1));
-  const loading = await screen.findByText("正在准备成果图层");
+  const loading = await screen.findByRole("status", { name: "地图与数据状态" });
   const loadingBox = loading.getBoundingClientRect();
   const mapBox = document
     .querySelector(".monitor-globe-panel")!
     .getBoundingClientRect();
   expect(loading).toHaveAttribute("role", "status");
-  expect(loadingBox.left).toBeCloseTo(mapBox.left + 12, 0);
-  expect(loadingBox.top).toBeCloseTo(mapBox.top + 12, 0);
-  expect(loadingBox.width).toBeLessThan(320);
+  expect(loading.closest(".monitor-globe-panel")).toBeNull();
+  expect(loadingBox.bottom).toBeLessThanOrEqual(mapBox.top);
   expect(loadingBox.height).toBeLessThan(36);
   expect(
     screen.queryByRole("button", { name: /暂停动效|启动动效/ }),
   ).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: /历史分布2/ }));
+  fireEvent.click(
+    screen
+      .getAllByRole("button", { name: /历史分布2/ })
+      .find((element) => element.classList.contains("monitor-product-choice"))!,
+  );
   await waitFor(() => expect(maps.maps[0]?.sources.has("product")).toBe(true));
   await act(async () => resolveOld(profile(resource(101))));
   expect(maps.maps[0]?.api.addSource).toHaveBeenCalledTimes(1);
@@ -495,6 +503,7 @@ it("分类栅格使用服务器瓦片、实际图例和nearest采样", async () 
     ).not.toBeDisabled(),
   );
   fireEvent.click(screen.getByRole("button", { name: "聚焦研究区" }));
+  fireEvent.click(await screen.findByRole("button", { name: /图例/ }));
   await screen.findByText("模型分类目标");
   expect(api.renderRasterAsync).toHaveBeenCalledWith(
     { datasetId: 17, rulesMode: "default" },

@@ -3634,6 +3634,10 @@ export type MonitoringProductManifest = {
      */
     scene: 'spartina' | 'wildfire' | 'landcover';
     /**
+     * 外部成果的登记用途；不将系统解译成果标为上传标准。
+     */
+    referenceRole?: 'standard' | 'historical';
+    /**
      * 历史成果、模型结果或观测资料。
      */
     kind: 'historical' | 'model' | 'observation';
@@ -3722,6 +3726,7 @@ export type MonitoringProduct = MonitoringProductManifest & {
      * 登记时间，不作为观测时间。
      */
     registeredAt: string;
+    provenance?: MonitoringProductProvenance;
     /**
      * 当前场景全部指标及缺失值。
      */
@@ -3729,10 +3734,48 @@ export type MonitoringProduct = MonitoringProductManifest & {
 };
 
 /**
+ * 由真实计算、工作流与登记资料推导的成果来源。
+ */
+export type MonitoringProductProvenance = {
+    /**
+     * 系统解译、上传标准或其他上传成果。
+     */
+    type: 'system_interpretation' | 'uploaded_standard' | 'uploaded_result';
+    /**
+     * 真实工作流批次；独立计算使用任务ID。
+     */
+    batchId: string | null;
+    /**
+     * 实际计算任务ID。
+     */
+    taskId: string | null;
+    /**
+     * 仅本人可打开的业务流记录ID。
+     */
+    workflowId: string | null;
+    /**
+     * 本次处理或登记时间，非影像观测时间。
+     */
+    createdAt: string | null;
+    /**
+     * 处理人显示名称。
+     */
+    creator: string;
+    /**
+     * 是否由当前账号处理。
+     */
+    owned: boolean;
+};
+
+/**
  * 一个项目、一个场景的有界产品页。
  */
 export type MonitoringProductList = {
     businessFlow?: MonitoringWorkflowLaunch;
+    /**
+     * 当前项目可见的上传分类栅格与矢量资料，用户可选为标准成果；不自动认定其标准身份。
+     */
+    referenceResources?: Array<DataResource>;
     inputBoundary?: DataResource;
     /**
      * 当前项目可用的推荐原始影像，按原有资源权限过滤。
