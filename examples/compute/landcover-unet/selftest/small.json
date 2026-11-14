@@ -1,0 +1,1 @@
+{"inputs": {"image": {"kind": "raster", "shape": [32, 32], "bands": [{"fill": 100}, {"fill": 110}, {"fill": 80}], "dtype": "uint8", "transform": [2, 0, 0, 0, -2, 100], "crs": "EPSG:3857"}}, "parameters": {"classes": "all"}}

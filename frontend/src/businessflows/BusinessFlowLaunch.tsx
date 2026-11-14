@@ -17,6 +17,8 @@ import type {
   BusinessFlowInputAdapterChoices,
   BusinessFlowInputPlan,
   AgentBudgetProfileId,
+  BusinessFlowStart,
+  MonitoringWorkflowLaunch,
 } from "../api/generated/types.gen";
 import { businessFlowsApi } from "../api/businessFlows";
 import { agentApi } from "../api/agent";
@@ -50,12 +52,7 @@ const MAX_CANDIDATE_LABELS = 256;
 const GenericWorkflowUploads = lazy(
   () => import("../agent/GenericWorkflowUploads"),
 );
-export type BusinessFlowLaunchIntent = {
-  definitionId: number;
-  versionId: number;
-  title: string;
-  goal: string;
-};
+export type BusinessFlowLaunchIntent = MonitoringWorkflowLaunch;
 export default function BusinessFlowLaunch({
   launch,
   model,
@@ -65,6 +62,10 @@ export default function BusinessFlowLaunch({
   compact = false,
   reasoningEffort = "medium",
   onReasoningEffortChange,
+  initialInputs,
+  inputLabels,
+  parameters,
+  presentation = "default",
 }: {
   launch: BusinessFlowLaunchIntent;
   model: string;
@@ -74,6 +75,10 @@ export default function BusinessFlowLaunch({
   compact?: boolean;
   reasoningEffort?: ReasoningEffort;
   onReasoningEffortChange?: (value: ReasoningEffort) => void;
+  initialInputs?: Record<string, number>;
+  inputLabels?: Record<number, string>;
+  parameters?: BusinessFlowStart["parameters"];
+  presentation?: "default" | "task";
 }) {
   const ui = useComputeText();
   const { bootstrap } = useAgentBootstrapState();
@@ -183,7 +188,9 @@ export default function BusinessFlowLaunch({
   }, [candidateScope]);
   useEffect(() => {
     setGoal(typeof launch.goal === "string" ? launch.goal : "");
-    setInputs({});
+    setInputs(initialInputs ?? {});
+    for (const [key, label] of Object.entries(inputLabels ?? {}))
+      candidateLabels.current.set(Number(key), label);
     setReviewer(undefined);
     setBatchId(createUuid().replace(/-/g, ""));
     retry.current = null;
@@ -470,7 +477,7 @@ export default function BusinessFlowLaunch({
       inputs: Object.fromEntries(
         Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)),
       ),
-      parameters: isLegacy ? { uploadBatchId: batchId } : {},
+      parameters: isLegacy ? { uploadBatchId: batchId } : (parameters ?? {}),
       inputAdapters: Object.fromEntries(
         (preparation?.plan?.items ?? [])
           .filter((item) => item.status === "convert" && item.versionId)
@@ -519,6 +526,7 @@ export default function BusinessFlowLaunch({
     !missing.length &&
     goal.trim(),
   );
+  const SettingsTag = presentation === "task" ? "details" : "div";
   return (
     <section
       className="business-flow-launch-panel"
@@ -582,78 +590,83 @@ export default function BusinessFlowLaunch({
                     autoSize={{ minRows: 2, maxRows: 5 }}
                   />
                 </label>
-                <div className="business-flow-launch-roles">
-                  <span>
-                    <RobotOutlined />
-                    {ui("任务执行", "Executor")}
-                    <strong>
-                      {modelOptions.find((option) => option.value === model)
-                        ?.label ||
-                        model ||
-                        ui("尚未选择模型", "No model selected")}
-                    </strong>
-                  </span>
-                  {needsReview && (
-                    <label>
-                      <AuditOutlined />
-                      {ui("结果审核", "Independent reviewer")}
-                      <Select
-                        aria-label={ui("审核模型", "Reviewer model")}
-                        value={reviewerModel || undefined}
-                        options={
-                          modelOptions.length
-                            ? modelOptions
-                            : model
-                              ? [
-                                  {
-                                    value: model,
-                                    label: model,
-                                    disabled: false,
-                                  },
-                                ]
-                              : []
-                        }
-                        disabled={busy}
-                        onChange={setReviewer}
-                      />
-                    </label>
+                <SettingsTag className="business-flow-launch-settings">
+                  {presentation === "task" && (
+                    <summary>{ui("执行设置", "Execution settings")}</summary>
                   )}
-                </div>
-                {thinkingAvailable && (
-                  <ReasoningEffortControl
-                    value={effort}
-                    overridden={effort !== "medium"}
-                    disabled={busy}
-                    onChange={(value) => {
-                      const selected = value ?? "medium";
-                      setEffort(selected);
-                      onReasoningEffortChange?.(selected);
-                    }}
-                  />
-                )}
-                {bootstrap?.budgets?.enabled && (
-                  <div>
-                    <TaskBudgetControl
-                      canManage={bootstrap.canManage}
-                      options={bootstrap.budgets}
-                      profile={budgetProfile}
-                      output={outputTokens}
-                      serviceWindow={budgetWindow}
-                      disabled={busy}
-                      onProfile={(value) => {
-                        setBudgetProfile(value);
-                        setOutputTokens(undefined);
-                      }}
-                      onOutput={setOutputTokens}
-                    />
-                    <p className="business-flow-launch-note">
-                      {ui(
-                        "额度受所用模型窗口限制，每次请求分别计量；思考强度沿用上方所选档位。",
-                        "Model windows bound this budget, counted per request. Thinking effort follows the selection above.",
-                      )}
-                    </p>
+                  <div className="business-flow-launch-roles">
+                    <span>
+                      <RobotOutlined />
+                      {ui("任务执行", "Executor")}
+                      <strong>
+                        {modelOptions.find((option) => option.value === model)
+                          ?.label ||
+                          model ||
+                          ui("尚未选择模型", "No model selected")}
+                      </strong>
+                    </span>
+                    {needsReview && (
+                      <label>
+                        <AuditOutlined />
+                        {ui("结果审核", "Independent reviewer")}
+                        <Select
+                          aria-label={ui("审核模型", "Reviewer model")}
+                          value={reviewerModel || undefined}
+                          options={
+                            modelOptions.length
+                              ? modelOptions
+                              : model
+                                ? [
+                                    {
+                                      value: model,
+                                      label: model,
+                                      disabled: false,
+                                    },
+                                  ]
+                                : []
+                          }
+                          disabled={busy}
+                          onChange={setReviewer}
+                        />
+                      </label>
+                    )}
                   </div>
-                )}
+                  {thinkingAvailable && (
+                    <ReasoningEffortControl
+                      value={effort}
+                      overridden={effort !== "medium"}
+                      disabled={busy}
+                      onChange={(value) => {
+                        const selected = value ?? "medium";
+                        setEffort(selected);
+                        onReasoningEffortChange?.(selected);
+                      }}
+                    />
+                  )}
+                  {bootstrap?.budgets?.enabled && (
+                    <div>
+                      <TaskBudgetControl
+                        canManage={bootstrap.canManage}
+                        options={bootstrap.budgets}
+                        profile={budgetProfile}
+                        output={outputTokens}
+                        serviceWindow={budgetWindow}
+                        disabled={busy}
+                        onProfile={(value) => {
+                          setBudgetProfile(value);
+                          setOutputTokens(undefined);
+                        }}
+                        onOutput={setOutputTokens}
+                      />
+                      <p className="business-flow-launch-note">
+                        {ui(
+                          "额度受所用模型窗口限制，每次请求分别计量；思考强度沿用上方所选档位。",
+                          "Model windows bound this budget, counted per request. Thinking effort follows the selection above.",
+                        )}
+                      </p>
+                    </div>
+                  )}
+                </SettingsTag>
                 {isLegacy ? (
                   <Suspense fallback={<Spin />}>
                     <GenericWorkflowUploads

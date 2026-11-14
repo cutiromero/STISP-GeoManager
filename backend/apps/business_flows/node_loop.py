@@ -788,6 +788,56 @@ def completed_task(workflow, user, policy, node, item, loop):
         failure.setdefault("remedy", "human_review")
         loop["failure"] = failure
         return {"failure": failure, "message": "算子未完成：" + failure["message"]}
+    import_keys = (node.get("contract") or {}).get("importOutputs", [])
+    if import_keys:
+        from apps.compute.models import ComputeImport
+        from apps.compute.services import request_output_import
+
+        selected = list(task.outputs.filter(key__in=import_keys))
+        if {row.key for row in selected} != set(import_keys):
+            raise ComputeError("算子缺少合同要求入库的输出")
+        imports = {
+            row.output_id: row
+            for row in ComputeImport.objects.filter(output__in=selected)
+        }
+        for output in selected:
+            record = imports.get(output.pk)
+            if record is None:
+                source = task.input_records.order_by("id").first()
+                label = (
+                    (source.snapshot.get("name", "") + " · ") if source else ""
+                ) + output.label
+                with transaction.atomic():
+                    current = locked_workflow(workflow.pk)
+                    if (
+                        current.pause_requested
+                        or current.cancel_requested
+                        or current.policy_snapshot.get("businessFlowControlEpoch", 0)
+                        != workflow.policy_snapshot.get("businessFlowControlEpoch", 0)
+                    ):
+                        raise WorkflowControlChanged("用户控制已阻止成果入库")
+                    record = request_output_import(
+                        user,
+                        output,
+                        label[:160],
+                        request_source=f"workflow:{workflow.pk}",
+                    )
+            if record.status == "failed":
+                wait_recovery(
+                    workflow,
+                    node,
+                    item,
+                    {
+                        "code": "PLATFORM_OUTPUT_IMPORT",
+                        "message": "计算已完成，成果入库未完成：" + record.error[:500],
+                        "remedy": "human_review",
+                        "details": {"completedTaskId": str(task.pk)},
+                    },
+                )
+                return None
+            if record.status != "ready":
+                workflow.status = "waiting_compute"
+                return None
     rows = []
     for result in read_task_outputs(
         parent_run(workflow), user, policy, task, workflow=workflow
@@ -1231,6 +1281,9 @@ def execute_tool(
         )
         return {"message": question}
     if action == "finish_node":
+        from .node_coverage import require_source_coverage
+
+        require_source_coverage(workflow, node, item)
         result = finish(node, item, arguments, [*evidence, *loop["evidence"].values()])
         check_retained_outputs(
             workflow,
@@ -1296,6 +1349,8 @@ def advance_tool_execution(
         started = time.monotonic()
         try:
             result = completed_task(workflow, user, policy, node, item, loop)
+            if result is None:
+                return None
             guard()
         except (ComputeError, ValidationError) as error:
             failure = observation(error)

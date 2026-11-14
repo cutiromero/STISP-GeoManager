@@ -8,6 +8,8 @@ import type {
   MonitoringProduct,
   ProjectMonitorConfig,
   RasterRenderResult,
+  ResourceListItem,
+  ResourceProfileResponse,
 } from "../api/generated/types.gen";
 import { versionedRasterTileUrl } from "../map/rasterLayerSync";
 import { workbenchLegends, type LiveLayerLegend } from "../map/liveLegendData";
@@ -32,10 +34,20 @@ export default function ProductMap({
   product,
   config,
   animated,
+  resource,
+  visibleCodes,
+  onMapReady,
+  focusProduct = false,
+  focusKey,
 }: {
   product?: MonitoringProduct;
   config: ProjectMonitorConfig;
   animated: boolean;
+  resource?: ResourceListItem;
+  visibleCodes?: number[];
+  onMapReady?: (map: mapboxgl.Map | undefined) => void;
+  focusProduct?: boolean;
+  focusKey?: number;
 }) {
   const { t } = useTranslation();
   const { container, map, mapError, regionalView, focus, showBounds } =
@@ -46,7 +58,15 @@ export default function ProductMap({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [legend, setLegend] = useState<LiveLayerLegend>();
-  const hasProduct = Boolean(product);
+  const target = resource ?? product?.resource;
+  const title = product?.name ?? target?.name ?? "";
+  const profiles = useRef(new Map<string, ResourceProfileResponse>());
+  const focused = useRef<number | undefined>(undefined);
+  const hasProduct = Boolean(target);
+  useEffect(() => {
+    onMapReady?.(map);
+    return () => onMapReady?.(undefined);
+  }, [map, onMapReady]);
   useEffect(() => {
     if (!map || !hasProduct) return;
     const element = document.createElement("button");
@@ -76,17 +96,43 @@ export default function ProductMap({
     setError(undefined);
     setLegend(undefined);
     setLoading(Boolean(product));
-    if (!product) return;
+    if (!target) return;
     const registry = new RasterRenderTaskRegistry();
     const task = registry.start("product");
     const signal = task.controller.signal;
     const load = async () => {
-      const profile = await api.resourceProfile(product.resource, { signal });
+      const profileKey = `${target.id}:${target.updatedAt}`;
+      const profile =
+        profiles.current.get(profileKey) ??
+        (await api.resourceProfile(target, { signal }));
+      if (!signal.aborted) {
+        if (profiles.current.size > 4) profiles.current.clear();
+        profiles.current.set(profileKey, profile);
+      }
       signal.throwIfAborted();
       let bounds = profile.bounds;
       if (profile.raster) {
         let job = await api.renderRasterAsync(
-          { datasetId: profile.raster.id, rulesMode: "default" },
+          {
+            datasetId: profile.raster.id,
+            ...(visibleCodes !== undefined &&
+            profile.raster.defaultRules.mode === "unique"
+              ? {
+                  rulesMode: "custom" as const,
+                  rules: {
+                    ...profile.raster.defaultRules,
+                    uniqueValues: rasterSymbolizationFromRules(profile.raster.defaultRules).uniqueValues.map(
+                      (row) => ({
+                        ...row,
+                        color: visibleCodes.includes(row.value)
+                          ? row.color
+                          : "#00000000",
+                      }),
+                    ),
+                  },
+                }
+              : { rulesMode: "default" as const }),
+          },
           { signal },
         );
         while (job.status !== "ready") {
@@ -122,8 +168,7 @@ export default function ProductMap({
             "raster-fade-duration": result.tileSampling === "nearest" ? 0 : 300,
           },
         });
-        const layer = createRasterLayerGroup(product.resource, profile)
-          ?.children[0];
+        const layer = createRasterLayerGroup(target, profile)?.children[0];
         if (layer?.layerType === "raster")
           setLegend(
             workbenchLegends(
@@ -143,19 +188,19 @@ export default function ProductMap({
           );
       } else if (profile.vectorTiles) {
         const preview = profile.vectorTiles;
-        const color = product.scene === "spartina" ? "#66e0a3" : "#ffb46a";
+        const color = product?.scene === "spartina" ? "#66e0a3" : "#ffb46a";
         setLegend({
-          id: String(product.id),
-          title: product.name,
+          id: String(product?.id ?? target.id),
+          title,
           opacity: 0.65,
           updating: false,
           entries: [
             {
               id: "target",
               label:
-                product.scene === "spartina"
+                product?.scene === "spartina"
                   ? t("remoteMonitor.spartina")
-                  : product.name,
+                  : title,
               color,
               shape: "polygon",
             },
@@ -207,6 +252,10 @@ export default function ProductMap({
       }
       if (bounds.length === 4 && bounds.every(Number.isFinite)) {
         boundsRef.current = bounds as [number, number, number, number];
+        if (focusProduct && focused.current !== (focusKey ?? target.id)) {
+          focused.current = focusKey ?? target.id;
+          showBounds(boundsRef.current);
+        }
       }
     };
     void load()
@@ -232,7 +281,14 @@ export default function ProductMap({
       disposed = true;
       registry.cancelAll();
     };
-  }, [map, product?.id, product?.resource.id, product?.resource.updatedAt, t]);
+  }, [
+    map,
+    product?.id,
+    target?.id,
+    target?.updatedAt,
+    visibleCodes?.join(","),
+    t,
+  ]);
   return (
     <>
       <div
@@ -277,8 +333,8 @@ export default function ProductMap({
           </aside>
         )}
 
-        {product && regionalView && (
-          <div className="remote-map-caption">{product.name}</div>
+        {target && regionalView && (
+          <div className="remote-map-caption">{title}</div>
         )}
       </div>
       <div className="monitor-map-controls">
@@ -296,7 +352,7 @@ export default function ProductMap({
             shape="circle"
             aria-label={t("monitor.regionView")}
             icon={<AimOutlined />}
-            disabled={!map || loading || !product}
+            disabled={!map || loading || !target}
             onClick={() => focus(true)}
           />
         </Tooltip>

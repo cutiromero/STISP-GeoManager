@@ -3456,9 +3456,9 @@ export type ProjectMonitorConfig = {
      */
     source: 'tarim_poplar_mock' | 'remote_sensing_products';
     /**
-     * 显式开启的遥感场景。真实产品源省略时开启两场景；胡杨源省略时只展示原演示。
+     * 显式开启的遥感场景。真实产品源省略时开启互花米草和野火；胡杨源省略时只展示原演示。
      */
-    scenes?: Array<'spartina' | 'wildfire'>;
+    scenes?: Array<'spartina' | 'wildfire' | 'landcover'>;
     /**
      * 研究区初始视角。
      */
@@ -3466,10 +3466,7 @@ export type ProjectMonitorConfig = {
         /**
          * 经度、纬度；分别限制在正负180、90度。
          */
-        center: [
-            number,
-            number
-        ];
+        center: Array<number>;
         /**
          * 初始地球视角缩放级别。
          */
@@ -3479,6 +3476,89 @@ export type ProjectMonitorConfig = {
          */
         regionZoom: number;
     };
+};
+
+/**
+ * 大屏复用现有业务流入口的已发布版本。
+ */
+export type MonitoringWorkflowLaunch = {
+    /**
+     * 当前项目业务流登记ID。
+     */
+    definitionId: number;
+    /**
+     * 固定发布版本ID。
+     */
+    versionId: number;
+    /**
+     * 任务名称。
+     */
+    title: string;
+    /**
+     * 默认任务目标。
+     */
+    goal: string;
+};
+
+/**
+ * 原始网格上最终类别的实际统计。
+ */
+export type LandcoverCategoryStatistic = {
+    /**
+     * 地类编码。
+     */
+    code: 1 | 2 | 4 | 5 | 6 | 8;
+    /**
+     * 类别名称。
+     */
+    name: string;
+    /**
+     * 最终类别有效像元数。
+     */
+    pixelCount: number;
+    /**
+     * 原始米制投影上的面积，平方公里。
+     */
+    areaKm2: number;
+    /**
+     * 占原始有效区的百分比。
+     */
+    percent: number;
+    /**
+     * 类别显示颜色。
+     */
+    color: string;
+};
+
+/**
+ * landcover场景必填的分类统计和实际模型组依据。
+ */
+export type LandcoverClassification = {
+    /**
+     * 完整分类或专项提取。
+     */
+    mode: 'complete' | 'extract';
+    /**
+     * 互斥的最终类别统计。
+     */
+    categories: Array<LandcoverCategoryStatistic>;
+    /**
+     * 从高到低的合成优先级，剩余有效区归裸地。
+     */
+    priority: Array<string>;
+    /**
+     * 本次实际使用的小模型与权重摘要。
+     */
+    models: Array<{
+        /**
+         * 模型类别。
+         */
+        name: 'building' | 'water' | 'farmland' | 'forest' | 'road';
+        /**
+         * 实际权重SHA-256。
+         */
+        sha256: string;
+    }>;
 };
 
 /**
@@ -3530,7 +3610,7 @@ export type MonitoringTiming = {
 };
 
 /**
- * 由超级管理员登记的已入库成果交接清单；模型结果须提供真实权重摘要，来源和地图资源须全部同项目且可访问。
+ * 已入库成果交接清单，管理员登记或由本人真实计算入库后自动生成；模型结果须提供真实权重摘要，来源和地图资源须全部同项目且可访问。
  */
 export type MonitoringProductManifest = {
     /**
@@ -3552,7 +3632,7 @@ export type MonitoringProductManifest = {
     /**
      * 监测场景。
      */
-    scene: 'spartina' | 'wildfire';
+    scene: 'spartina' | 'wildfire' | 'landcover';
     /**
      * 历史成果、模型结果或观测资料。
      */
@@ -3599,6 +3679,7 @@ export type MonitoringProductManifest = {
      * 实际模型身份；历史或观测成果可以为null。
      */
     model: MonitoringModel | null;
+    classification?: LandcoverClassification;
     /**
      * 实际概率阈值，未使用为null。
      */
@@ -3651,6 +3732,12 @@ export type MonitoringProduct = MonitoringProductManifest & {
  * 一个项目、一个场景的有界产品页。
  */
 export type MonitoringProductList = {
+    businessFlow?: MonitoringWorkflowLaunch;
+    inputBoundary?: DataResource;
+    /**
+     * 当前项目可用的推荐原始影像，按原有资源权限过滤。
+     */
+    inputResources?: Array<DataResource>;
     /**
      * 当前项目ID。
      */
@@ -3658,7 +3745,7 @@ export type MonitoringProductList = {
     /**
      * 当前场景。
      */
-    scene: 'spartina' | 'wildfire';
+    scene: 'spartina' | 'wildfire' | 'landcover';
     /**
      * 场景标题。
      */
@@ -11028,6 +11115,31 @@ export type ComputeInputSpec = {
          */
         labelRequired: boolean;
     };
+    /**
+     * 可选原始栅格网格合同，复用元信息预检。
+     */
+    raster?: {
+        /**
+         * 所需波段数量。
+         */
+        bandCount?: number;
+        /**
+         * 允许的波段类型。
+         */
+        dtypes?: Array<'uint8' | 'uint16' | 'uint32' | 'int8' | 'int16' | 'int32' | 'float32' | 'float64'>;
+        /**
+         * 米制像元大小。
+         */
+        pixelSizeMeters?: number;
+        /**
+         * 最小边像元数。
+         */
+        minSide?: number;
+        /**
+         * 要求北向上网格。
+         */
+        northUp?: boolean;
+    };
 };
 
 /**
@@ -11906,7 +12018,7 @@ export type BusinessFlowNode = {
 };
 
 /**
- * 通用智能体节点有界合同；缺省保持旧单次请求。
+ * 通用分析或算子目标的有界执行合同。
  */
 export type BusinessFlowNodeContract = {
     /**
@@ -11954,6 +12066,23 @@ export type BusinessFlowNodeContract = {
      * 节点主动处理累计秒数上限；单次模型请求另受当前策略maxRunSeconds限制，等待队列和人工响应不计入
      */
     maxSeconds?: number;
+    /**
+     * 要求真实成功输出覆盖该角色的每份选定资料。
+     */
+    sourceCoverage?: {
+        /**
+         * 当前目标资料角色。
+         */
+        inputRole: string;
+        /**
+         * 必须真实生成的输出键。
+         */
+        outputKey: string;
+    };
+    /**
+     * 完成本目标前通过统一质量门禁入库的输出键。
+     */
+    importOutputs?: Array<string>;
 };
 
 /**
@@ -13655,7 +13784,7 @@ export type GetMonitoringProductsData = {
         /**
          * 当前项目已配置的互花米草或野火场景。
          */
-        scene: 'spartina' | 'wildfire';
+        scene: 'spartina' | 'wildfire' | 'landcover';
         /**
          * 上一页返回的nextBeforeId；只扫描比该ID更早的产品。
          */

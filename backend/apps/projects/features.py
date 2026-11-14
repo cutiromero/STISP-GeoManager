@@ -28,14 +28,15 @@ def validate_config(key, config):
         scenes = config["scenes"]
         if (
             not isinstance(scenes, list)
-            or not 1 <= len(scenes) <= 2
+            or not 1 <= len(scenes) <= 3
             or any(
-                not isinstance(value, str) or value not in {"spartina", "wildfire"}
+                not isinstance(value, str)
+                or value not in {"spartina", "wildfire", "landcover"}
                 for value in scenes
             )
             or len(set(scenes)) != len(scenes)
         ):
-            raise ValidationError("监测场景须为互花米草、野火的不重复列表")
+            raise ValidationError("监测场景须为已支持场景的不重复列表")
     if not isinstance(view, dict):
         raise ValidationError("大屏配置必须包含 initialView")
     center = view.get("center")

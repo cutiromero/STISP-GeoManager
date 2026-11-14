@@ -69,6 +69,17 @@ def validate_bindings(spec, project_id):
     nodes = {node["id"]: node for node in spec["nodes"]}
     roles = {item["key"]: item for item in spec["inputRequirements"]}
     for node in spec["nodes"]:
+        bound = versions.get(node.get("algorithmVersionId"))
+        if bound and node.get("contract"):
+            contract = node["contract"]
+            outputs = {row["key"]: row for row in bound.manifest.get("outputs", [])}
+            imports = set(contract.get("importOutputs", []))
+            coverage = contract.get("sourceCoverage", {}).get("outputKey")
+            required = imports | ({coverage} if coverage else set())
+            if required - outputs.keys():
+                raise ValidationError("节点入库或来源覆盖引用了未声明的算子输出键")
+            if any(outputs[key]["kind"] == "archive" for key in imports):
+                raise ValidationError("压缩包输出不能作为自动入库目标")
         bindings = node.get("inputBindings", {})
         if not bindings:
             continue

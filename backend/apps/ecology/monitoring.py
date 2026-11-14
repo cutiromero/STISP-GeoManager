@@ -21,6 +21,17 @@ from .models import RemoteSensingProduct
 
 # CONFIGURATION: bounded metadata only; raster and vector reads use catalog APIs.
 SCENES = {
+    "landcover": {
+        "title": "地表覆盖解译",
+        "route": [
+            "选择影像",
+            "影像与模型预检",
+            "模型解译与分类合成",
+            "结果核验与统计",
+            "分类成果入库",
+            "地图与大屏展示",
+        ],
+    },
     "spartina": {
         "title": "互花米草监测",
         "route": [
@@ -45,6 +56,11 @@ SCENES = {
     },
 }
 METRICS = {
+    "landcover": {
+        "valid_area_km2": ("有效统计面积", "km²"),
+        "classified_area_km2": ("已提取地类面积", "km²"),
+        "class_count": ("成果类别", "类"),
+    },
     "spartina": {
         "area_ha": ("分布面积", "ha"),
         "patch_count": ("斑块数量", "个"),
@@ -77,6 +93,7 @@ FIELDS = {
     "limitations",
     "interpretation",
     "statistics",
+    "classification",
     "statisticsMethod",
     "model",
     "threshold",
@@ -121,7 +138,7 @@ def configured_scenes(project):
     if not isinstance(config, dict):
         return []
     if config.get("source") == "remote_sensing_products":
-        return config.get("scenes", list(SCENES))
+        return config.get("scenes", ["spartina", "wildfire"])
     return config.get("scenes", [])
 
 
@@ -188,6 +205,20 @@ def normalize_product(value):
         if key == "patch_count" and number != int(number):
             invalid("斑块数量须为整数")
     item["statistics"] = statistics
+    if scene == "landcover":
+        from .landcover import normalize_classification
+
+        item["classification"] = normalize_classification(item.get("classification"))
+        total = sum(row["areaKm2"] for row in item["classification"]["categories"])
+        valid = statistics.get("valid_area_km2")
+        if valid is None or total > valid + max(1e-6, valid * 1e-6):
+            invalid("类别面积不能超过有效统计面积")
+        if item["classification"]["mode"] == "complete" and abs(total - valid) > max(
+            1e-6, valid * 1e-6
+        ):
+            invalid("完整解译的类别面积与有效区不一致")
+    elif item.get("classification") is not None:
+        invalid("当前场景不接受地表分类统计")
     item["statisticsMethod"] = text(item.get("statisticsMethod"), "统计口径", 1000)
     threshold = item.get("threshold")
     if threshold is not None and (
@@ -312,8 +343,20 @@ def validate_model_import(resource, item):
 
 
 @transaction.atomic
-def register_product(user, value):
-    if not is_superadmin(user):
+def register_product(user, value, *, computed_import=None):
+    if computed_import is not None:
+        if (
+            computed_import.requested_by_id != user.pk
+            or computed_import.status != "ready"
+            or computed_import.output.task.owner_id != user.pk
+            or computed_import.output.task.project_tag_id != selected_project_id()
+            or computed_import.output.task.version.algorithm.identifier
+            != "landcover-unet-infer"
+            or computed_import.resource_id != value.get("resourceId")
+            or value.get("scene") != "landcover"
+        ):
+            raise PermissionDenied("模型产品与本人实际入库任务不一致")
+    elif not is_superadmin(user):
         raise PermissionDenied("只有超级管理员可以登记监测成果")
     item = normalize_product(value)
     project = Project.objects.select_for_update().get(pk=selected_project_id())
@@ -430,6 +473,60 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
         if len(items) >= limit:
             break
     more = examined < len(candidates)
+    launch = {}
+    if scene == "landcover":
+        from apps.business_flows.scopes import available_flows
+        from apps.business_flows.landcover import CODE
+
+        flow = (
+            available_flows()
+            .filter(code=CODE, is_active=True, project_tag_id=project.pk)
+            .select_related("current_version")
+            .first()
+        )
+        if flow and flow.current_version and flow.current_version.status == "published":
+            launch["businessFlow"] = {
+                "definitionId": flow.pk,
+                "versionId": flow.current_version_id,
+                "title": flow.name,
+                "goal": flow.description,
+            }
+        from django.db.models import Q
+
+        source_ids = {
+            identity for item in items for identity in item["sourceResourceIds"]
+        }
+        recommended = list(
+            filter_accessible(
+                DataResource.objects.filter(
+                    status="active",
+                    data_type__in=["raster", "vector"],
+                    is_compute_result=False,
+                )
+                .filter(
+                    Q(source__startswith="landcover-handoff:") | Q(pk__in=source_ids)
+                )
+                .exclude(task_resource_q())
+                .select_related("category", "inventory_group")
+                .prefetch_related("access_groups"),
+                user,
+            ).order_by("id")[:128]
+        )
+        launch["inputResources"] = [
+            serialize_resource(row) for row in recommended if row.data_type == "raster"
+        ]
+        boundary = next(
+            (
+                row
+                for row in recommended
+                if row.data_type == "vector"
+                and row.source.startswith("landcover-handoff:")
+            ),
+            None,
+        )
+        if boundary:
+            launch["inputBoundary"] = serialize_resource(boundary)
+
     return {
         "projectId": project.pk,
         "scene": scene,
@@ -437,4 +534,5 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
         "route": SCENES[scene]["route"],
         "items": items,
         "nextBeforeId": candidates[examined - 1].pk if more and examined else None,
+        **launch,
     }

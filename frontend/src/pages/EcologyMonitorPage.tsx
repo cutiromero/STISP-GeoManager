@@ -40,6 +40,7 @@ import RemoteSensingDashboard from "../monitor/RemoteSensingDashboard";
 import "./ecology-monitor.css";
 
 const MonitorGlobe = lazy(() => import("../monitor/MonitorGlobe"));
+const LandcoverDashboard = lazy(() => import("../monitor/LandcoverDashboard"));
 
 export default function EcologyMonitorPage() {
   const project = useMonitorProject();
@@ -103,7 +104,16 @@ export default function EcologyMonitorPage() {
       }}
     >
       <App>
-        {selectedScene === "spartina" || selectedScene === "wildfire" ? (
+        {selectedScene === "landcover" ? (
+          <Suspense fallback={<Spin />}>
+            <LandcoverDashboard
+              key={`${project.id}:${i18n.resolvedLanguage}`}
+              projectId={project.id}
+              config={config}
+              navigation={sceneNavigation()}
+            />
+          </Suspense>
+        ) : selectedScene === "spartina" || selectedScene === "wildfire" ? (
           <RemoteSensingDashboard
             key={`${project.id}:${selectedScene}:${i18n.resolvedLanguage}`}
             config={config}

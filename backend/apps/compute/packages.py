@@ -144,7 +144,11 @@ def validate_manifest(manifest):
         r"[A-Za-z0-9][A-Za-z0-9._-]{0,39}", result["version"]
     ):
         raise ComputeError("标识或版本只允许规范的字母、数字及分隔符")
-    if manifest.get("runtime") not in {"python-geospatial-v1", "python-data-script-v1"}:
+    if manifest.get("runtime") not in {
+        "python-geospatial-v1",
+        "python-data-script-v1",
+        "python-geospatial-gpu-v1",
+    }:
         raise ComputeError("请选择平台已支持的运行环境")
     result.update(
         schemaVersion=manifest["schemaVersion"],

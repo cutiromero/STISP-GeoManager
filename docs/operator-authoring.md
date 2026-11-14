@@ -36,7 +36,7 @@ PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 | `identifier` | 1至80字符，小写英文开头，允许数字、`_`、`-`；不随版本变化 |
 | `name / description / author` | 名称最多160字；描述最多4000字；作者最多160字 |
 | `version` | 第2版为 `主.次.修订`，可带预发布后缀；新增兼容端口递增次版本，说明性补充递增修订版本 |
-| `runtime` | `python-geospatial-v1` 或 `python-data-script-v1`；后者只由平台受限解释器执行，不导入包内入口 |
+| `runtime` | `python-geospatial-v1`、`python-geospatial-gpu-v1` 或 `python-data-script-v1`；GPU类型须有项目与算子白名单及固定运行环境，脚本类型由平台受限解释器执行 |
 | `timeoutSeconds` | 1至7200秒，缺省1800；实际仍受平台配置上限约束 |
 | `deterministic` | 是否确定性执行；影响中断恢复，不代表结果正确性保证 |
 | `agent.enabled` | 是否允许智能体调用；省略沿用旧规则，`false` 明确禁止；不授予权限 |
@@ -69,6 +69,7 @@ PY=/opt/homebrew/Caskroom/miniconda/base/envs/stisp-geomanager/bin/python
 | `crs` | 必填；见坐标系规范 |
 | `spatial` | 可选；输入包围范围与另一个单输入的关系 |
 | `repeat` | 可选；将该端口变为同类资料集合 |
+| `raster` | 栅格可选合同：`bandCount`、`dtypes`、`pixelSizeMeters`、`minSide`、`northUp`；复用原始文件元信息完成预检，实际输入冻结后仍受运行预算限制 |
 
 每个 `fields[]` 项：
 
@@ -280,6 +281,8 @@ fail(context, "MISSING_NAME", "请绑定对象名称", remedy="complete_mapping"
 默认参数必须满足本清单的类型、范围、选项和长度；业务流发布复用计算中心的静态参数校验，实际字段、波段和语义在绑定真实资料后预检。固定算子节点冻结核心版本；需要自主发现能力时使用智能体合同，并声明查询、预检、运行工具和足够的算子额度。验收应覆盖同源重复预检的实际读取次数、来源变化后失效、成果损坏和撤权，不能只检查正常任务成功。
 
 默认参数和默认字段映射应能由计算中心稳定还原。预检与计算比较规范化后的实际方案，不要求调用方重复抄写等价默认项。`PREFLIGHT_REQUIRED`表示先补充预检，不是科学算法失败；不能为满足此类前置条件而调整阈值、改动数据或消耗计算补救额度。
+
+分类栅格可通过TIFF的`stisp_categorical`标签声明`schemaVersion: 1`、`legend`和`transparentValues`。图例每项包含`code`、`name`、`rgba`，必须匹配实际色表；输出检查在原有分块读取中核对像元编码，入库传递分类样式与最近邻规则。统计尽量在合成遍历中累计。GPU权重独立只读部署，按文件身份复用内容校验证据；运行环境或资产变化阻止新执行。参考[地表覆盖解译](landcover-interpretation.md)。
 
 ## 完整例子：从零制作表格算子
 

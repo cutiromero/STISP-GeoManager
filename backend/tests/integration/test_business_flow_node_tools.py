@@ -1547,3 +1547,149 @@ def test_old_operator_user_replacement_does_not_reset_recovery_budgets(
     workflow.refresh_from_db()
     with project_scope(env["scope"]):
         assert ComputeTask.objects.count() == 2
+
+
+def test_source_coverage_requires_success_for_every_selected_resource(
+    operators, monkeypatch
+):
+    from apps.business_flows.node_coverage import require_source_coverage
+    from apps.compute.models import ComputeInput
+
+    env = operators
+    upgrade(env)
+    workflow = create(
+        env,
+        node_contract=contract(
+            sourceCoverage={"inputRole": "source", "outputKey": "summary"}
+        ),
+    )
+    install(
+        monkeypatch,
+        [action("operator_catalog"), action("run_operator", **submit_args(env))],
+    )
+    item = advance(env, workflow, 2)
+    output = finish_task(env, item["computeTaskId"], "COVERED")
+    node = workflow.parameters["_businessFlow"]["definitionSnapshot"]["nodes"][0]
+    with project_scope(env["scope"]):
+        extra = DataResource.objects.create(
+            name="另一样区",
+            code="extra-coverage",
+            data_type="table",
+            storage_path="samples",
+        )
+        workflow.plan["inputs"][f"source:{extra.pk}"] = extra.pk
+        with pytest.raises(ComputeError, match="未完成实际计算"):
+            require_source_coverage(workflow, node, item)
+        ComputeInput.objects.create(task=output.task, key="extra", resource=extra)
+        require_source_coverage(workflow, node, item)
+        output.expired = True
+        output.save(update_fields=["expired"])
+        with pytest.raises(ComputeError):
+            require_source_coverage(workflow, node, item)
+
+
+def test_failed_output_import_retries_without_another_scientific_task(
+    operators, monkeypatch
+):
+    from apps.compute.models import ComputeImport
+    from apps.compute.worker import process_import
+
+    env = operators
+    upgrade(env)
+    workflow = create(env, node_contract=contract(importOutputs=["summary"]))
+    calls = install(
+        monkeypatch,
+        [
+            action("operator_catalog"),
+            action("run_operator", **submit_args(env)),
+            finish_action,
+        ],
+    )
+    item = advance(env, workflow, 2)
+    output = finish_task(env, item["computeTaskId"], "READY")
+    advance(env, workflow)
+    record = ComputeImport.objects.get(output=output)
+    record.status, record.error = "failed", "测试入库故障"
+    record.save(update_fields=["status", "error"])
+    item = advance(env, workflow)
+    assert item["recovery"]["failure"]["code"] == "PLATFORM_OUTPUT_IMPORT"
+    before = ComputeTask.objects.count()
+    with project_scope(env["scope"]):
+        workflow = runtime.decide_flow(
+            env["owner"],
+            workflow,
+            {
+                "nodeId": "calculate",
+                "decision": "retry_recovery",
+                "revision": state(workflow)["revision"],
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+        record.refresh_from_db()
+        assert record.status == "queued"
+        assert state(workflow)["nodes"]["calculate"]["toolLoop"]["taskId"] == str(
+            output.task_id
+        )
+        process_import(record)
+        record.refresh_from_db()
+        assert record.status == "ready", record.error
+    advance(env, workflow, 2)
+    assert ComputeTask.objects.count() == before
+    assert len(calls) == 3
+    assert workflow.operator_steps == 1
+
+
+@pytest.mark.parametrize("control", ["pause_requested", "cancel_requested"])
+def test_contract_output_import_stops_at_user_control_boundary(
+    operators, monkeypatch, control
+):
+    from apps.compute.models import ComputeImport
+    from apps.compute import worker as compute_worker
+    from apps.agent.models import AgentWorkflow
+
+    env = operators
+    upgrade(env)
+    workflow = create(env, node_contract=contract(importOutputs=["summary"]))
+    install(
+        monkeypatch,
+        [action("operator_catalog"), action("run_operator", **submit_args(env))],
+    )
+    item = advance(env, workflow, 2)
+    output = finish_task(env, item["computeTaskId"], "STOPPED")
+    advance(env, workflow)
+    record = ComputeImport.objects.get(output=output)
+    AgentWorkflow._base_manager.filter(pk=workflow.pk).update(**{control: True})
+    imported = []
+    monkeypatch.setattr(
+        compute_worker, "import_output", lambda row: imported.append(row.pk)
+    )
+    with project_scope(env["scope"]):
+        compute_worker.process_import(record)
+    record.refresh_from_db()
+    assert record.status == "failed"
+    assert imported == []
+
+
+@pytest.mark.parametrize("field", ["importOutputs", "sourceCoverage"])
+def test_fixed_operator_contract_rejects_unknown_output_before_publication(
+    operators, field
+):
+    env = operators
+    extra = {
+        field: ["absent"]
+        if field == "importOutputs"
+        else {"inputRole": "source", "outputKey": "absent"}
+    }
+    spec = {
+        "inputRequirements": [],
+        "nodes": [
+            {
+                "id": "calculate",
+                "review": {"ai": False},
+                "algorithmVersionId": env["version"].pk,
+                "contract": extra,
+            }
+        ],
+    }
+    with project_scope(env["scope"]), pytest.raises(ValidationError, match="未声明"):
+        catalog.validate_bindings(spec, env["project"].pk)

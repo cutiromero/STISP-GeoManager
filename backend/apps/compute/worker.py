@@ -112,6 +112,13 @@ def run_task(task):
         pulse()
 
     destination = None
+
+    def report_progress(stage, progress):
+        ComputeTask.objects.filter(
+            pk=task.pk, attempt_token=token, status="running"
+        ).update(stage=stage, progress=progress)
+
+    heartbeat.progress = report_progress
     try:
         heartbeat(True, verify_inputs=True)
         archive = app_path(task.version.package_path)
@@ -342,10 +349,12 @@ def clean_expired(*, force=False):
 
     from .input_versions import clean_versions
     from .result_reads import clean_read_indexes
+    from .gpu_runtime import clean_stage_caches
 
     try:
         clean_versions(config().input_mb * 1024**2, config().retention_days)
         clean_read_indexes(config().input_mb * 1024**2, config().retention_days)
+        clean_stage_caches(cutoff.timestamp())
     except (OSError, ComputeError):
         logger.warning("Input version cache cleanup deferred")
 
@@ -391,6 +400,13 @@ def process_import(record):
             ComputeImport.objects.filter(pk=record.pk).update(
                 status="ready", resource=resource, error="", heartbeat=timezone.now()
             )
+            if (
+                record.output.task.version.algorithm.identifier
+                == "landcover-unet-infer"
+            ):
+                from apps.ecology.landcover import register_import
+
+                register_import(record.pk)
             return
         except Exception as exc:
             busy = _sqlite_contention(exc)

@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 2,
+  "identifier": "landcover-unet-infer",
+  "name": "RGB地表覆盖解译",
+  "version": "1.0.0",
+  "description": "对2米RGB原始影像执行五类UNet解译、轻量后处理及固定优先级合成，输出六类配色成果与面积统计。",
+  "author": "STISP",
+  "runtime": "python-geospatial-gpu-v1",
+  "deterministic": false,
+  "timeoutSeconds": 1800,
+  "agent": {
+    "enabled": true
+  },
+  "qualityReport": {
+    "file": "quality.json"
+  },
+  "inputs": [
+    {
+      "key": "image",
+      "label": "原始RGB影像",
+      "kind": "raster",
+      "required": true,
+      "minBands": 3,
+      "description": "2米、Byte、RGB三波段、北向上、米制投影的原始GeoTIFF。",
+      "fields": [],
+      "crs": {
+        "mode": "projected"
+      },
+      "raster": {
+        "bandCount": 3,
+        "dtypes": [
+          "uint8"
+        ],
+        "pixelSizeMeters": 2,
+        "minSide": 1024,
+        "northUp": true
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "key": "classes",
+      "label": "提取类别",
+      "type": "string",
+      "default": "all",
+      "maxLength": 100,
+      "help": "all为完整六类；或逗号分隔building,water,farmland,forest,road。",
+      "agent": {
+        "adjustable": false,
+        "advice": "提取类别由本次用户选择绑定，执行时沿用节点参数。"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "key": "classification",
+      "label": "地表覆盖分类图",
+      "kind": "raster",
+      "file": "result.tif",
+      "required": true,
+      "description": "固定优先级合成的分类GeoTIFF，保留原始网格与色表。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "statistics",
+      "label": "分类面积统计",
+      "kind": "table",
+      "file": "statistics.csv",
+      "required": true,
+      "description": "最终分类像元数、面积与有效区占比。",
+      "fields": [
+        {
+          "role": "code",
+          "description": "地类编码",
+          "types": [
+            "integer"
+          ],
+          "required": true,
+          "name": "code"
+        },
+        {
+          "role": "name",
+          "description": "地类名称",
+          "types": [
+            "string"
+          ],
+          "required": true,
+          "name": "name"
+        },
+        {
+          "role": "pixel_count",
+          "description": "有效类别像元数",
+          "types": [
+            "integer"
+          ],
+          "required": true,
+          "name": "pixelCount"
+        },
+        {
+          "role": "area_km2",
+          "description": "面积，平方公里",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "name": "areaKm2"
+        },
+        {
+          "role": "percent",
+          "description": "有效区占比，百分数",
+          "types": [
+            "number"
+          ],
+          "required": true,
+          "name": "percent"
+        },
+        {
+          "role": "color",
+          "description": "类别显示颜色",
+          "types": [
+            "string"
+          ],
+          "required": true,
+          "name": "color"
+        }
+      ],
+      "final": true
+    },
+    {
+      "key": "manifest",
+      "label": "解译成果清单",
+      "kind": "document",
+      "file": "result.json",
+      "required": true,
+      "description": "图例、统计、权重与处理依据。",
+      "fields": [],
+      "final": true
+    },
+    {
+      "key": "report",
+      "label": "解译结果说明",
+      "kind": "document",
+      "file": "report.md",
+      "required": true,
+      "description": "本次解译的实际结果摘要。",
+      "fields": [],
+      "final": true
+    }
+  ],
+  "capabilities": {
+    "operations": [
+      "infer",
+      "map",
+      "statistics"
+    ],
+    "dataTypes": [
+      "raster"
+    ],
+    "summary": "以已登记UNet权重完成RGB影像地表覆盖解译与分类制图。",
+    "useWhen": "项目已有2米RGB原始影像，需查看建筑、水体、耕地、林地、道路和剩余区。",
+    "avoidWhen": "输入物理波段、分辨率或处理方式不符合已验证模型。"
+  },
+  "errors": [
+    {
+      "code": "LANDCOVER_INPUT_INVALID",
+      "meaning": "影像格式、网格或分辨率不符",
+      "remedy": "replace_data",
+      "precondition": "原始2米Byte三波段RGB影像"
+    },
+    {
+      "code": "LANDCOVER_CLASSES_INVALID",
+      "meaning": "类别组合无效",
+      "remedy": "adjust_parameters",
+      "precondition": "类别来自本算子五类清单"
+    },
+    {
+      "code": "LANDCOVER_RUNTIME_UNAVAILABLE",
+      "meaning": "GPU资源不可用",
+      "remedy": "human_review",
+      "precondition": "受控GPU执行环境可用"
+    }
+  ],
+  "resources": {
+    "duration": "minutes",
+    "memory": "large",
+    "scaling": "按影像像元数和选择类别数量增长；流式读取与单卡执行。"
+  },
+  "selfTests": [
+    {
+      "name": "拒绝过小影像",
+      "fixture": "selftest/small.json",
+      "expect": {
+        "errorCode": "LANDCOVER_INPUT_INVALID"
+      }
+    }
+  ]
+}

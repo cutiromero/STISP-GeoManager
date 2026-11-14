@@ -182,8 +182,11 @@ def normalize_definition(value):
         if "allowSkip" in node and type(node["allowSkip"]) is not bool:
             invalid("allowSkip必须为布尔值")
         if "contract" in node:
-            if node["kind"] != "agent" or result["adapter"] != "research_flow":
-                invalid("仅通用智能体节点可声明执行合同")
+            if (
+                node["kind"] not in {"agent", "operator"}
+                or result["adapter"] != "research_flow"
+            ):
+                invalid("仅通用分析或算子节点可声明执行合同")
             from .node_contracts import normalize_contract
 
             node["contract"] = normalize_contract(node["contract"])
@@ -209,6 +212,11 @@ def normalize_definition(value):
         )
         if set(node["dataRoles"]) - roles:
             invalid("节点引用了未定义的资料角色")
+        if node.get("contract", {}).get("sourceCoverage", {}).get("inputRole") not in {
+            None,
+            *node["dataRoles"],
+        }:
+            invalid("来源覆盖须引用本节点资料角色")
         if "parameters" in node:
             if node["kind"] != "operator" or result["adapter"] != "research_flow":
                 invalid("仅通用业务流算子节点可指定参数默认值")

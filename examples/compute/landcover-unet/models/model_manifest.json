@@ -1,0 +1,105 @@
+{
+  "weights": [
+    {
+      "name": "farmland",
+      "sha256": "a5803b25156a406374a12ba91219a3d20a76fa2e949e1321af3ded10dfc2a07f",
+      "bytes": 69131531,
+      "model": "UNet",
+      "num_class": 2,
+      "band_num": 3,
+      "target_size": 512,
+      "mean": [
+        108.88802,
+        111.6681,
+        84.48199
+      ],
+      "std": [
+        41.508663,
+        33.475975,
+        30.229158
+      ],
+      "file": "farmland.pth"
+    },
+    {
+      "name": "road",
+      "sha256": "533948c0e4977225fd912670374b601798da96368d3126bacf7fe34d501ed656",
+      "bytes": 69132227,
+      "model": "UNet",
+      "num_class": 2,
+      "band_num": 3,
+      "target_size": 512,
+      "mean": [
+        106.44786,
+        104.45425,
+        81.033966
+      ],
+      "std": [
+        24.216095,
+        20.408688,
+        15.599237
+      ],
+      "file": "road.pth"
+    },
+    {
+      "name": "water",
+      "sha256": "fbb5095a6f647f1fd90d0c803a16189e3b3ddda4836078cfe74dc1af2ca42242",
+      "bytes": 69132343,
+      "model": "UNet",
+      "num_class": 2,
+      "band_num": 3,
+      "target_size": 512,
+      "mean": [
+        102.23626,
+        100.91908,
+        78.244125
+      ],
+      "std": [
+        26.218067,
+        21.985134,
+        16.375723
+      ],
+      "file": "water.pth"
+    },
+    {
+      "name": "building",
+      "sha256": "23b79f972aa283ad561692eeb87fd394199a84a3b155ab68e0078f0fa5e6e263",
+      "bytes": 69132691,
+      "model": "UNet",
+      "num_class": 2,
+      "band_num": 3,
+      "target_size": 512,
+      "mean": [
+        119.19674,
+        120.4805,
+        95.81621
+      ],
+      "std": [
+        42.602337,
+        34.963184,
+        33.967697
+      ],
+      "file": "building.pth"
+    },
+    {
+      "name": "forest",
+      "sha256": "47d707e89f71937752cbe672b7907ee42844880cefed5565066b40b86bf91016",
+      "bytes": 69131415,
+      "model": "UNet",
+      "num_class": 2,
+      "band_num": 3,
+      "target_size": 1024,
+      "mean": [
+        103.54227,
+        98.95384,
+        75.52733
+      ],
+      "std": [
+        39.883476,
+        27.87078,
+        29.356565
+      ],
+      "file": "forest.pth"
+    }
+  ],
+  "inference_only": true
+}

@@ -1,14 +1,6 @@
 import { ReloadOutlined } from "@ant-design/icons";
 import { Alert, Button, Empty, Spin } from "antd";
-import {
-  type CSSProperties,
-  type ReactNode,
-  Suspense,
-  lazy,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type CSSProperties, type ReactNode, Suspense, lazy } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import type {
@@ -20,7 +12,7 @@ import type {
 import { currentLocale } from "../i18n";
 import MonitorDashboardFrame from "./MonitorDashboardFrame";
 import { MonitorAssessmentCard, MonitorPanel } from "./MonitorPanels";
-import { getMonitoringProducts } from "./productApi";
+import { useMonitoringProducts } from "./useMonitoringProducts";
 import "./remote-sensing-monitor.css";
 
 const ProductMap = lazy(() => import("./ProductMap"));
@@ -36,82 +28,16 @@ export default function RemoteSensingDashboard({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const pending = useRef<AbortController | undefined>(undefined);
-  const [page, setPage] = useState<MonitoringProductList>();
-  const [selectedId, setSelectedId] = useState<number>();
-  const [loading, setLoading] = useState(true);
-  const [failure, setFailure] = useState<string>();
-  const [revision, setRevision] = useState(0);
-  const selected =
-    page?.items.find((item) => item.id === selectedId) ?? page?.items[0];
-  useEffect(() => {
-    pending.current?.abort();
-    const controller = new AbortController();
-    pending.current = controller;
-    setFailure(undefined);
-    setLoading(true);
-    void getMonitoringProducts(scene, controller.signal)
-      .then((value) => {
-        if (controller.signal.aborted) return;
-        setPage(value);
-        setSelectedId((current) =>
-          value.items.some((item) => item.id === current) ? current : undefined,
-        );
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted) {
-          setPage(undefined);
-          setSelectedId(undefined);
-          setFailure(
-            error instanceof Error ? error.message : t("monitor.sourceError"),
-          );
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => pending.current?.abort();
-  }, [scene, revision, t]);
-  const loadMore = async () => {
-    if (!page?.nextBeforeId || loading) return;
-    pending.current?.abort();
-    const controller = new AbortController();
-    pending.current = controller;
-    setLoading(true);
-    setFailure(undefined);
-    try {
-      const value = await getMonitoringProducts(
-        scene,
-        controller.signal,
-        page.nextBeforeId,
-      );
-      if (!controller.signal.aborted)
-        setPage((previous) =>
-          previous
-            ? {
-                ...value,
-                items: [
-                  ...previous.items,
-                  ...value.items.filter(
-                    (item) =>
-                      !previous.items.some((entry) => entry.id === item.id),
-                  ),
-                ],
-              }
-            : value,
-        );
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        setPage(undefined);
-        setSelectedId(undefined);
-        setFailure(
-          error instanceof Error ? error.message : t("monitor.sourceError"),
-        );
-      }
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  };
+  const {
+    page,
+    selected,
+    setSelectedId,
+    loading,
+    failure,
+    setFailure,
+    setRevision,
+    loadMore,
+  } = useMonitoringProducts(scene);
   const metrics = selected?.metrics ?? emptyMetrics(scene);
   const primary =
     metrics.find(

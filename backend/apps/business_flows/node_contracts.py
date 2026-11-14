@@ -25,8 +25,27 @@ MAX_EVIDENCE_BYTES = 96 * 1024
 
 
 def normalize_contract(value):
-    keys(value, {"goal", "acceptance", "requiredOutputs", "tools", *LIMITS}, "节点合同")
+    keys(
+        value,
+        {
+            "goal",
+            "acceptance",
+            "requiredOutputs",
+            "tools",
+            "sourceCoverage",
+            "importOutputs",
+            *LIMITS,
+        },
+        "节点合同",
+    )
     result = dict(value)
+    if "sourceCoverage" in result:
+        coverage = result["sourceCoverage"]
+        keys(coverage, {"inputRole", "outputKey"}, "来源覆盖合同")
+        for key in ("inputRole", "outputKey"):
+            coverage[key] = text(coverage.get(key), "来源覆盖" + key, 64)
+    if "importOutputs" in result:
+        result["importOutputs"] = strings(result["importOutputs"], "自动入库输出", 30)
     result["goal"] = text(result.get("goal"), "节点目标", 2000)
     result["acceptance"] = strings(result.get("acceptance"), "验收条件", 8)
     if not result["acceptance"]:

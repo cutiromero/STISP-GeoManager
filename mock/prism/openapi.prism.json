@@ -103,7 +103,8 @@
               "type": "string",
               "enum": [
                 "spartina",
-                "wildfire"
+                "wildfire",
+                "landcover"
               ]
             }
           },
@@ -137,19 +138,20 @@
                   "$ref": "#/components/schemas/MonitoringProductList"
                 },
                 "example": {
-                  "projectId": 5,
-                  "scene": "spartina",
-                  "title": "互花米草监测",
+                  "projectId": 2,
+                  "scene": "landcover",
+                  "title": "地表覆盖解译",
                   "route": [
-                    "选区与资料",
-                    "输入准备",
-                    "模型识别",
-                    "斑块统计",
-                    "变化核验",
-                    "成果发布"
+                    "确认任务资料",
+                    "核对输入要求",
+                    "地表解译与成果准备",
+                    "核验分类统计",
+                    "整理展示成果",
+                    "完成结果交付"
                   ],
                   "items": [],
-                  "nextBeforeId": null
+                  "nextBeforeId": null,
+                  "inputResources": []
                 }
               }
             }
@@ -34766,14 +34768,15 @@
           "scenes": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 2,
+            "maxItems": 3,
             "uniqueItems": true,
-            "description": "显式开启的遥感场景。真实产品源省略时开启两场景；胡杨源省略时只展示原演示。",
+            "description": "显式开启的遥感场景。真实产品源省略时开启互花米草和野火；胡杨源省略时只展示原演示。",
             "items": {
               "type": "string",
               "enum": [
                 "spartina",
-                "wildfire"
+                "wildfire",
+                "landcover"
               ],
               "description": "遥感监测场景。"
             }
@@ -34790,7 +34793,7 @@
               "center": {
                 "type": "array",
                 "minItems": 2,
-                "maxItems": 2,
+                "maxItems": 3,
                 "description": "经度、纬度；分别限制在正负180、90度。",
                 "items": {
                   "type": "number"
@@ -34807,6 +34810,159 @@
                 "minimum": 0,
                 "maximum": 22,
                 "description": "研究区按钮缩放级别。"
+              }
+            }
+          }
+        }
+      },
+      "MonitoringWorkflowLaunch": {
+        "type": "object",
+        "description": "大屏复用现有业务流入口的已发布版本。",
+        "additionalProperties": false,
+        "required": [
+          "definitionId",
+          "versionId",
+          "title",
+          "goal"
+        ],
+        "properties": {
+          "definitionId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "当前项目业务流登记ID。"
+          },
+          "versionId": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "固定发布版本ID。"
+          },
+          "title": {
+            "type": "string",
+            "description": "任务名称。"
+          },
+          "goal": {
+            "type": "string",
+            "description": "默认任务目标。"
+          }
+        }
+      },
+      "LandcoverCategoryStatistic": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "原始网格上最终类别的实际统计。",
+        "required": [
+          "code",
+          "name",
+          "pixelCount",
+          "areaKm2",
+          "percent",
+          "color"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              4,
+              5,
+              6,
+              8
+            ],
+            "description": "地类编码。"
+          },
+          "name": {
+            "type": "string",
+            "description": "类别名称。"
+          },
+          "pixelCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "最终类别有效像元数。"
+          },
+          "areaKm2": {
+            "type": "number",
+            "minimum": 0,
+            "description": "原始米制投影上的面积，平方公里。"
+          },
+          "percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "占原始有效区的百分比。"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[a-fA-F0-9]{6}$",
+            "description": "类别显示颜色。"
+          }
+        }
+      },
+      "LandcoverClassification": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "landcover场景必填的分类统计和实际模型组依据。",
+        "required": [
+          "mode",
+          "categories",
+          "priority",
+          "models"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "extract"
+            ],
+            "description": "完整分类或专项提取。"
+          },
+          "categories": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 6,
+            "items": {
+              "$ref": "#/components/schemas/LandcoverCategoryStatistic"
+            },
+            "description": "互斥的最终类别统计。"
+          },
+          "priority": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string"
+            },
+            "description": "从高到低的合成优先级，剩余有效区归裸地。"
+          },
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "description": "本次实际使用的小模型与权重摘要。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "sha256"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "building",
+                    "water",
+                    "farmland",
+                    "forest",
+                    "road"
+                  ],
+                  "description": "模型类别。"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "description": "实际权重SHA-256。"
+                }
               }
             }
           }
@@ -34895,7 +35051,7 @@
       },
       "MonitoringProductManifest": {
         "type": "object",
-        "description": "由超级管理员登记的已入库成果交接清单；模型结果须提供真实权重摘要，来源和地图资源须全部同项目且可访问。",
+        "description": "已入库成果交接清单，管理员登记或由本人真实计算入库后自动生成；模型结果须提供真实权重摘要，来源和地图资源须全部同项目且可访问。",
         "required": [
           "schemaVersion",
           "code",
@@ -34939,7 +35095,8 @@
             "type": "string",
             "enum": [
               "spartina",
-              "wildfire"
+              "wildfire",
+              "landcover"
             ],
             "description": "监测场景。"
           },
@@ -35032,6 +35189,9 @@
                 "type": "null"
               }
             ]
+          },
+          "classification": {
+            "$ref": "#/components/schemas/LandcoverClassification"
           },
           "threshold": {
             "type": [
@@ -35128,6 +35288,20 @@
           "nextBeforeId"
         ],
         "properties": {
+          "businessFlow": {
+            "$ref": "#/components/schemas/MonitoringWorkflowLaunch"
+          },
+          "inputBoundary": {
+            "$ref": "#/components/schemas/DataResource"
+          },
+          "inputResources": {
+            "type": "array",
+            "maxItems": 128,
+            "description": "当前项目可用的推荐原始影像，按原有资源权限过滤。",
+            "items": {
+              "$ref": "#/components/schemas/DataResource"
+            }
+          },
           "projectId": {
             "type": "integer",
             "description": "当前项目ID。"
@@ -35136,7 +35310,8 @@
             "type": "string",
             "enum": [
               "spartina",
-              "wildfire"
+              "wildfire",
+              "landcover"
             ],
             "description": "当前场景。"
           },
@@ -47650,6 +47825,52 @@
               "max",
               "labelRequired"
             ]
+          },
+          "raster": {
+            "type": "object",
+            "description": "可选原始栅格网格合同，复用元信息预检。",
+            "additionalProperties": false,
+            "properties": {
+              "bandCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1024,
+                "description": "所需波段数量。"
+              },
+              "dtypes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "uint8",
+                    "uint16",
+                    "uint32",
+                    "int8",
+                    "int16",
+                    "int32",
+                    "float32",
+                    "float64"
+                  ]
+                },
+                "description": "允许的波段类型。"
+              },
+              "pixelSizeMeters": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "米制像元大小。"
+              },
+              "minSide": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000,
+                "description": "最小边像元数。"
+              },
+              "northUp": {
+                "type": "boolean",
+                "description": "要求北向上网格。"
+              }
+            }
           }
         },
         "required": [
@@ -48972,7 +49193,7 @@
       },
       "BusinessFlowNodeContract": {
         "type": "object",
-        "description": "通用智能体节点有界合同；缺省保持旧单次请求。",
+        "description": "通用分析或算子目标的有界执行合同。",
         "properties": {
           "goal": {
             "type": "string",
@@ -49068,6 +49289,34 @@
             "maximum": 14400,
             "default": 3600,
             "description": "节点主动处理累计秒数上限；单次模型请求另受当前策略maxRunSeconds限制，等待队列和人工响应不计入"
+          },
+          "sourceCoverage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "inputRole",
+              "outputKey"
+            ],
+            "description": "要求真实成功输出覆盖该角色的每份选定资料。",
+            "properties": {
+              "inputRole": {
+                "type": "string",
+                "description": "当前目标资料角色。"
+              },
+              "outputKey": {
+                "type": "string",
+                "description": "必须真实生成的输出键。"
+              }
+            }
+          },
+          "importOutputs": {
+            "type": "array",
+            "maxItems": 30,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            },
+            "description": "完成本目标前通过统一质量门禁入库的输出键。"
           }
         },
         "required": [

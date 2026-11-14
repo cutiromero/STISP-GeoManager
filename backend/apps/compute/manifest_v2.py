@@ -180,6 +180,7 @@ def validate_semantics(result, manifest):
                 "kind",
                 "required",
                 "minBands",
+                "raster",
                 "geometryTypes",
                 "description",
                 "fields",
@@ -226,6 +227,12 @@ def validate_semantics(result, manifest):
     parameters = {item["key"]: item for item in result["parameters"]}
     for item in result["inputs"]:
         path = "inputs." + item["key"]
+        if "raster" in item:
+            from .raster_contracts import validate_contract
+
+            if item["kind"] != "raster":
+                raise ComputeError("栅格合同只能用于栅格端口")
+            validate_contract(item["raster"])
         if strict or "fields" in item:
             fields(item.get("fields"), path + ".fields")
             legacy_names = [

@@ -1,0 +1,94 @@
+{
+  "defaults": {
+    "model": "UNet",
+    "num_class": 2,
+    "band_num": 3,
+    "label_norm": true,
+    "target_size": 512,
+    "overlap_rate": 0.1,
+    "batch_size": 8,
+    "amp_enable": true,
+    "prefetch_size": 2,
+    "flush_interval": 1024,
+    "read_chunk_size": 4096,
+    "ignore_bandnum": 0,
+    "img_data_type": "GDT_Byte",
+    "gpu_ids": [
+      0
+    ]
+  },
+  "jobs": [
+    {
+      "name": "farmland",
+      "model_path": "models/farmland.pth",
+      "mean": [
+        108.88802,
+        111.6681,
+        84.48199
+      ],
+      "std": [
+        41.508663,
+        33.475975,
+        30.229158
+      ]
+    },
+    {
+      "name": "road",
+      "model_path": "models/road.pth",
+      "mean": [
+        106.44786,
+        104.45425,
+        81.033966
+      ],
+      "std": [
+        24.216095,
+        20.408688,
+        15.599237
+      ]
+    },
+    {
+      "name": "water",
+      "model_path": "models/water.pth",
+      "mean": [
+        102.23626,
+        100.91908,
+        78.244125
+      ],
+      "std": [
+        26.218067,
+        21.985134,
+        16.375723
+      ]
+    },
+    {
+      "name": "building",
+      "model_path": "models/building.pth",
+      "mean": [
+        119.19674,
+        120.4805,
+        95.81621
+      ],
+      "std": [
+        42.602337,
+        34.963184,
+        33.967697
+      ]
+    },
+    {
+      "name": "forest",
+      "model_path": "models/forest.pth",
+      "mean": [
+        103.54227,
+        98.95384,
+        75.52733
+      ],
+      "std": [
+        39.883476,
+        27.87078,
+        29.356565
+      ],
+      "target_size": 1024,
+      "batch_size": 2
+    }
+  ]
+}

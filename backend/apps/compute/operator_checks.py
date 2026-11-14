@@ -254,7 +254,7 @@ def check_package(data, *, emit=lambda message: None):
         if not tests:
             emit("第1版清单：建议升级到第2版；未声明自检样例")
             return manifest
-        runtime = inspect_runtime()
+        runtime = inspect_runtime(manifest)
         if not runtime["ready"]:
             raise ComputeError("自检运行环境未就绪：" + runtime["detail"])
         attempt = SimpleNamespace(

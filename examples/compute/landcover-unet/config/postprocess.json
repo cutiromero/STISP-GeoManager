@@ -1,0 +1,37 @@
+{
+  "building": {
+    "min_area_m2": 16,
+    "max_hole_area_m2": 16,
+    "road_length_m": 0,
+    "preserve_border": true,
+    "connectivity": 8
+  },
+  "water": {
+    "min_area_m2": 16,
+    "max_hole_area_m2": 16,
+    "road_length_m": 0,
+    "preserve_border": true,
+    "connectivity": 8
+  },
+  "farmland": {
+    "min_area_m2": 16,
+    "max_hole_area_m2": 16,
+    "road_length_m": 0,
+    "preserve_border": true,
+    "connectivity": 8
+  },
+  "forest": {
+    "min_area_m2": 16,
+    "max_hole_area_m2": 0,
+    "road_length_m": 0,
+    "preserve_border": true,
+    "connectivity": 8
+  },
+  "road": {
+    "min_area_m2": 16,
+    "max_hole_area_m2": 0,
+    "road_length_m": 0,
+    "preserve_border": true,
+    "connectivity": 8
+  }
+}

@@ -304,22 +304,15 @@ def version_action(request, version_id):
     managed_algorithm(request.user, version.algorithm_id)
     action = payload(request).get("action")
     if action == "publish":
-        require_actor(request.user, project_id(), "publish_algorithm")
-        if version.status == "archived":
-            raise ComputeError("归档版本不能重新发布，请新增版本", 409)
-        if (
-            not version.runtime_digest
-            or not ComputeTask.objects.filter(
-                version=version, trial=True, status="succeeded"
-            ).exists()
-        ):
-            raise ComputeError("发布前必须完成一次隔离试运行，并通过结果检查", 409)
-        version.status = "published"
+        from .services import publish_algorithm_version
+
+        publish_algorithm_version(request.user, version)
     elif action == "archive":
         version.status = "archived"
     else:
         raise ComputeError("不支持该版本操作")
-    version.save(update_fields=["status"])
+    if action != "publish":
+        version.save(update_fields=["status"])
     audit(
         request,
         "发布算法版本" if action == "publish" else "归档算法版本",

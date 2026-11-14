@@ -225,6 +225,16 @@ def input_evidence(workflow, user, policy, node):
                 bands = (
                     (dataset.source_gdalinfo or {}).get("bands", []) if dataset else []
                 )
+                original = (dataset.source_gdalinfo or {}) if dataset else {}
+                projection = (original.get("stac") or {}).get("proj:projjson") or {}
+                metadata["originalRaster"] = {
+                    "size": original.get("size"),
+                    "geoTransform": original.get("geoTransform"),
+                    "crsName": projection.get("name"),
+                    "projectionType": projection.get("type"),
+                    "dtypes": [row.get("type") for row in bands],
+                    "noDataValues": [row.get("noDataValue") for row in bands],
+                }
                 metadata.update(
                     bands=len(bands),
                     bandMetadata=[

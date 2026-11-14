@@ -868,7 +868,10 @@ function AgentWorkspace({
     return () => observer.disconnect();
   }, [runs.length]);
 
-  const open = async (c: AgentConversation) => {
+  const open = async (
+    c: AgentConversation,
+    preloaded?: Awaited<ReturnType<typeof agentApi.detail>>,
+  ) => {
     setBusinessLaunch(undefined);
     clearLogicUploads();
     const seq = ++sequence.current;
@@ -878,7 +881,7 @@ function AgentWorkspace({
     setShowHistory(false);
     failedSubmission.current = null;
     try {
-      const detail = await agentApi.detail(c.id);
+      const detail = preloaded ?? (await agentApi.detail(c.id));
       if (alive.current && seq === sequence.current) {
         assertConversationDetail(detail);
         if (
@@ -941,6 +944,44 @@ function AgentWorkspace({
       if (alive.current && seq === sequence.current) setHistoryLoading(null);
     }
   };
+  useEffect(() => {
+    const query = new URLSearchParams(location.search);
+    const conversationId = Number(query.get("conversationId"));
+    if (!canUse || !Number.isSafeInteger(conversationId) || conversationId < 1)
+      return;
+    if (
+      query.get("projectTagId") &&
+      query.get("projectTagId") !== project?.current
+    ) {
+      setError("会话链接不属于当前项目。");
+      return;
+    }
+    restoredConversation.current = true;
+    const seq = ++sequence.current;
+    let stopped = false;
+    void agentApi
+      .detail(conversationId)
+      .then((detail) => {
+        if (stopped || !alive.current || sequence.current !== seq) return;
+        assertConversationDetail(detail);
+        if (
+          String(detail.conversation.projectId) !== project?.current ||
+          detail.conversation.mode !== mode
+        )
+          throw new Error("会话不属于当前项目或模块。");
+        const runId = Number(query.get("runId"));
+        if (detail.runs.some((run) => run.id === runId))
+          pendingScroll.current = runId;
+        void open(detail.conversation, detail);
+      })
+      .catch((error) => {
+        if (!stopped && alive.current && sequence.current === seq)
+          report(error);
+      });
+    return () => {
+      stopped = true;
+    };
+  }, [canUse, location.search, project?.current, mode]);
   useEffect(() => {
     if (
       !canUse ||

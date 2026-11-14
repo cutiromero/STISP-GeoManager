@@ -1,6 +1,19 @@
 # API Change Requests
 
 
+## API-20261114-002 - 地表覆盖产品与大屏任务
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: 沿用遥感产品读取、业务流启动和运行接口。
+- Change type: 新增landcover场景及可选分类统计、业务流启动资料与合同字段。
+- OpenAPI change: LandcoverClassification、MonitoringWorkflowLaunch；产品页可选businessFlow、inputResources、inputBoundary；节点合同增加sourceCoverage与importOutputs。
+- Mock examples: 171-remote-monitoring使用空成果页及已登记资料入口，真实分类由计算任务验证。
+- Frontend reason: 六卡片大屏显示真实分类，紧凑任务抽屉复用业务流与智能体会话，原图、叠加、卷帘和类别过滤复用地图表示。
+- Backend implementation notes: 项目和本人权限逐边界检查；GPU运行配置、只读模型资产与机器租约；分类图例校验合并现有分块读取，入库失败保留成功计算。
+- Verification: 原始网格合同、类别优先级与NoData、批量来源覆盖、入库恢复、项目隔离和元信息读取次数；共享任务读取及正式浏览器真实推理。
+- Result: 数据与模型沿原计算中心执行，成果入库后成为项目大屏产品。
+
 ## API-20261114-001 - 业务流项目目录与公开共享
 
 - Status: BackendReady
@@ -688,6 +701,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261114-002 | BackendReady | /api/ecology/monitoring/; 业务流 | 地表覆盖产品、合同与大屏任务 | Updated | 171-remote-monitoring.json | Implemented | 科学分类、来源覆盖、入库恢复与浏览器 | 项目隔离、同一会话 |
 | API-20261114-001 | BackendReady | 业务流目录、详情、准备、启动与运行 | 项目隔离与公开定义共享 | Updated | 沿用业务流示例 | Implemented | 项目隔离、共享执行、撤权及浏览器 | 定义共享，任务与数据归当前项目 |
 | API-20261113-004 | BackendReady | /api/ecology/monitoring/；项目功能 | 遥感产品与场景 | Updated | 171-remote-monitoring.json | Implemented | 权限、来源、科学时间、批量读取及浏览器 | 空状态不生成模拟结果 |
 | API-20261113-003 | BackendReady | Business flow recovery | 执行错误定位与人工续接 | Updated | 隔离恢复用例 | Implemented | 原会话、检查点与撤权回归 | 保留成果和原权限边界 |

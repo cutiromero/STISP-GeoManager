@@ -22,6 +22,7 @@ import time
 from functools import lru_cache
 
 from django.conf import settings
+from apps.core.storage import app_path
 from .config import config
 from .packages import ComputeError
 from .failures import runtime_failure, status_failure
@@ -171,7 +172,11 @@ def script_isolation_status():
         return {"available": False, "reason": "受限脚本隔离未就绪", "policyVersion": 1}
 
 
-def inspect_runtime():
+def inspect_runtime(manifest=None, project_id=None):
+    if (manifest or {}).get("runtime") == "python-geospatial-gpu-v1":
+        from .gpu_runtime import inspect
+
+        return inspect(manifest, project_id)
     if config().mode == "native":
         try:
             return _native_state()
@@ -279,7 +284,7 @@ def stop_container(name):
     command("rm", "-f", name, check=False)
 
 
-def _native_preexec(timeout_seconds, memory_mb):
+def _native_preexec(timeout_seconds, memory_mb, *, limit_address_space=True):
     if os.name == "nt":
         return None
 
@@ -290,7 +295,8 @@ def _native_preexec(timeout_seconds, memory_mb):
             cpu = max(1, int(timeout_seconds) + 5)
             resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
             memory = max(256, int(memory_mb)) * 1024 * 1024
-            resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
+            if limit_address_space:
+                resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
             resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
         except (ImportError, OSError, ValueError):
             pass
@@ -323,8 +329,43 @@ def _native_env(cfg, package, inputs, destination):
 
 
 def _execute_native(attempt, package, inputs, destination, manifest, heartbeat):
-    cfg = config()
-    runtime = inspect_runtime()
+    if manifest.get("runtime") == "python-geospatial-gpu-v1":
+        from .gpu_runtime import binding, lease
+
+        project_id = getattr(getattr(attempt, "task", None), "project_tag_id", None)
+        profile, runtime = binding(manifest, project_id)
+        if attempt.runtime_digest != runtime["imageDigest"]:
+            raise ComputeError("GPU运行环境与固定版本不一致，请重新试运行", 409)
+        with lease(profile) as device:
+            return _execute_native_process(
+                attempt,
+                package,
+                inputs,
+                destination,
+                manifest,
+                heartbeat,
+                profile,
+                runtime,
+                device,
+            )
+    return _execute_native_process(
+        attempt, package, inputs, destination, manifest, heartbeat
+    )
+
+
+def _execute_native_process(
+    attempt,
+    package,
+    inputs,
+    destination,
+    manifest,
+    heartbeat,
+    profile=None,
+    runtime=None,
+    device=None,
+):
+    cfg = profile or config()
+    runtime = runtime or inspect_runtime()
     if not runtime["ready"]:
         raise ComputeError(runtime["detail"], 503)
     scripted = manifest.get("runtime") == "python-data-script-v1"
@@ -356,26 +397,86 @@ def _execute_native(attempt, package, inputs, destination, manifest, heartbeat):
         str(destination.resolve()),
     ]
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    env = _native_env(cfg, package, inputs, destination)
+    if profile:
+        env.update(
+            CUDA_VISIBLE_DEVICES=device,
+            PROJ_DATA=profile.proj_data,
+            PROJ_LIB=profile.proj_data,
+            GDAL_DATA=profile.gdal_data,
+            GEOMANAGER_MODEL_ASSETS=profile.asset_root,
+            GEOMANAGER_RUNTIME_DIGEST=attempt.runtime_digest,
+        )
+        task = getattr(attempt, "task", None)
+        if task:
+            cache = app_path(
+                "projects",
+                str(task.project_tag_id),
+                "cache",
+                "landcover",
+                str(task.owner_id),
+                str(task.retry_of_id or task.pk),
+            )
+            cache.mkdir(parents=True, exist_ok=True)
+            env["GEOMANAGER_MODEL_CACHE"] = str(cache)
     process = subprocess.Popen(
         command,
         cwd=str(package),
-        env=_native_env(cfg, package, inputs, destination),
+        env=env,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=os.name != "nt",
         creationflags=flags,
         preexec_fn=_native_preexec(
-            min(cfg.timeout_seconds, manifest["timeoutSeconds"]), cfg.memory_mb
+            min(cfg.timeout_seconds, manifest["timeoutSeconds"]),
+            cfg.memory_mb,
+            limit_address_space=profile is None,
         ),
     )
     pid_file.write_text(str(process.pid), encoding="ascii")
     started = time.monotonic()
     timeout = min(cfg.timeout_seconds, manifest["timeoutSeconds"])
     status_limit = _status_limit(manifest)
+    progress_identity = None
+    last_memory_check = 0.0
     try:
         while True:
             heartbeat()
+            if profile:
+                if time.monotonic() - last_memory_check >= 2:
+                    from .gpu_runtime import resident_bytes
+
+                    if resident_bytes(process.pid) > profile.memory_mb * 1024**2:
+                        raise runtime_failure(
+                            "PLATFORM_OOM", "模型任务超过已配置的内存预算"
+                        )
+                    last_memory_check = time.monotonic()
+                progress_path = destination / "__platform_progress.json"
+                if (
+                    progress_path.is_file()
+                    and not progress_path.is_symlink()
+                    and progress_path.stat().st_size <= 4096
+                ):
+                    identity = (
+                        progress_path.stat().st_mtime_ns,
+                        progress_path.stat().st_size,
+                    )
+                    if identity != progress_identity:
+                        try:
+                            value = json.loads(progress_path.read_text())
+                            callback = getattr(heartbeat, "progress", None)
+                            if (
+                                callable(callback)
+                                and isinstance(value.get("stage"), str)
+                                and 1 <= len(value["stage"]) <= 100
+                                and type(value.get("progress")) is int
+                                and 0 <= value["progress"] <= 99
+                            ):
+                                callback(value["stage"], value["progress"])
+                            progress_identity = identity
+                        except (OSError, ValueError):
+                            pass
             if time.monotonic() - started > timeout:
                 raise runtime_failure(
                     "PLATFORM_TIMEOUT",

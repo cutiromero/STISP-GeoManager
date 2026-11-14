@@ -30,6 +30,7 @@ export default function BusinessFlowNodeRecovery({
   const [error, setError] = useState("");
   const recovery = node.recovery;
   if (!recovery) return null;
+  const importOnly = recovery.failure?.code === "PLATFORM_OUTPUT_IMPORT";
   const retry = () => {
     try {
       const replacements: unknown = JSON.parse(inputs);
@@ -85,7 +86,7 @@ export default function BusinessFlowNodeRecovery({
         placeholder="补充资料说明或填写调整原因"
         onChange={(event) => setAnswer(event.target.value)}
       />
-      {!legacy && (
+      {!legacy && !importOnly && (
         <>
           <label>
             更换输入数据（角色 → 当前项目资源编号，JSON）

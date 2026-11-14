@@ -197,6 +197,32 @@ def parameter_values(manifest, metadata, params, *, check_inputs=True):
     return normalized
 
 
+def publish_algorithm_version(user, version):
+    require_actor(user, version.algorithm.project_tag_id, "publish_algorithm")
+    if version.status == "archived":
+        raise ComputeError("归档版本不能重新发布，请新增版本", 409)
+    if (
+        not version.runtime_digest
+        or not ComputeTask.objects.filter(
+            version=version, trial=True, status="succeeded"
+        ).exists()
+    ):
+        raise ComputeError("发布前必须完成一次隔离试运行，并通过结果检查", 409)
+    if version.manifest.get("runtime") == "python-geospatial-gpu-v1":
+        from .gpu_runtime import binding
+
+        if (
+            binding(version.manifest, version.algorithm.project_tag_id)[1][
+                "imageDigest"
+            ]
+            != version.runtime_digest
+        ):
+            raise ComputeError("模型运行环境已变化，请重新试运行版本", 409)
+    version.status = "published"
+    version.save(update_fields=["status"])
+    return version
+
+
 def validate_submission(user, body):
     require_actor(user, project_id(), "submit_task", "core.browse_data")
     name = clean_text(body.get("name"), 160, "任务名称")
@@ -230,10 +256,19 @@ def validate_submission(user, body):
     if not isinstance(inputs, dict) or not isinstance(params, dict):
         raise ComputeError("inputs 与 parameters 必须为对象")
     manifest = version.manifest
+    if manifest.get("runtime") == "python-geospatial-gpu-v1":
+        from .gpu_runtime import configured
+
+        gpu_profile = configured(manifest, project_id())
     if set(inputs) - {item["key"] for item in manifest["inputs"]} or set(params) - {
         p["key"] for p in manifest["parameters"]
     }:
         raise ComputeError("输入或参数包含未声明字段")
+    if manifest.get("runtime") != "python-geospatial-gpu-v1":
+        gpu_profile = None
+    wants_raster = gpu_profile is not None or any(
+        port.get("raster") for port in manifest["inputs"]
+    )
     resources = []
     metadata = {}
     bindings, collections, input_specs = expand_bindings(manifest, inputs)
@@ -281,11 +316,21 @@ def validate_submission(user, body):
             raise ComputeError(spec["label"] + "的数据类型不符合算法要求")
         if rid not in candidate_cache:
             candidate_cache[rid] = (
-                candidate(resource, semantic_metadata=True)
+                candidate(
+                    resource, semantic_metadata=True, raster_metadata=wants_raster
+                )
                 if manifest.get("schemaVersion") == 2
                 else candidate(resource)
             )
         info = candidate_cache[rid]
+        if resource.data_type == "raster":
+            from .raster_contracts import gaps as raster_gaps
+
+            shape_gaps.extend(
+                raster_gaps(
+                    spec, info, gpu_profile.max_band_pixels if gpu_profile else None
+                )
+            )
         if info["sizeBytes"] > config().input_mb * 1024**2:
             raise ComputeError("输入超过平台大小限制")
         if info["bands"] < spec.get("minBands", 0):
@@ -379,6 +424,18 @@ def submit(user, body, retry_of=None, *, preflight_digest=None):
         raise ComputeError(
             "隔离计算环境未就绪，当前无法提交计算。请联系管理员完成部署。", 503
         )
+    version = data["version"]
+    if version.manifest.get("runtime") == "python-geospatial-gpu-v1":
+        from .gpu_runtime import binding
+
+        _, selected_runtime = binding(version.manifest, project_id())
+        if (
+            version.runtime_digest
+            and version.runtime_digest != selected_runtime["imageDigest"]
+        ):
+            raise ComputeError("模型环境已变化，请重新试运行版本", 409)
+    elif not version.runtime_digest:
+        selected_runtime = RuntimeLease.objects.get(pk="worker").detail
     cfg = config()
     with transaction.atomic():
         # Acquire SQLite write reservation before queue counts and insertion.
@@ -399,9 +456,8 @@ def submit(user, body, retry_of=None, *, preflight_digest=None):
             raise ComputeError("计算等待队列已满，请等待现有任务完成", 409)
         version = data["version"]
         if not version.runtime_digest:
-            runtime = RuntimeLease.objects.get(pk="worker").detail
             AlgorithmVersion.objects.filter(pk=version.pk, runtime_digest="").update(
-                runtime_digest=runtime["imageDigest"]
+                runtime_digest=selected_runtime["imageDigest"]
             )
             version.refresh_from_db()
         task = ComputeTask.objects.create(
@@ -436,6 +492,13 @@ def check_live_task(task):
     version = AlgorithmVersion.objects.select_related("algorithm").get(
         pk=task.version_id
     )
+    if (
+        version.manifest.get("runtime") == "python-geospatial-gpu-v1"
+        and task.status in ACTIVE
+    ):
+        from .gpu_runtime import require_binding
+
+        require_binding(task)
     if (
         not version.algorithm.enabled
         or version.status == "archived"

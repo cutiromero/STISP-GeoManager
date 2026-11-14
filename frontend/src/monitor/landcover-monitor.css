@@ -1,0 +1,153 @@
+.landcover-map {
+  position: absolute;
+  inset: 0;
+}
+.landcover-primary,
+.landcover-reference {
+  position: absolute;
+  inset: 0;
+}
+.landcover-reference .monitor-map-controls,
+.landcover-reference .remote-map-legend,
+.landcover-reference .monitor-map-cluster,
+.landcover-reference .monitor-layer-loading {
+  display: none;
+}
+.landcover-map .remote-map-legend {
+  display: none;
+}
+.landcover-map-toolbar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: calc(100% - 24px);
+}
+.landcover-compare-control {
+  position: absolute;
+  bottom: 64px;
+  left: 24px;
+  right: 76px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 6;
+  color: var(--monitor-text);
+  font-size: 12px;
+}
+.landcover-compare-control input {
+  flex: 1;
+  accent-color: #65dfc8;
+}
+.landcover-card-body {
+  padding: 12px 16px;
+  overflow: auto;
+  min-height: 0;
+  height: 100%;
+  color: var(--monitor-text);
+  font-size: 12px;
+}
+.landcover-card-body .ant-select {
+  width: 100%;
+}
+.landcover-card-body p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+.landcover-secondary {
+  color: var(--monitor-muted);
+  font-size: 11px;
+  display: block;
+  line-height: 1.6;
+}
+.landcover-task-status {
+  font-size: 23px;
+  color: #65dfc8;
+}
+.landcover-area-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+}
+.landcover-area-list span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.landcover-area-list i {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+}
+.landcover-area-list small {
+  font-size: 10px;
+  font-weight: normal;
+  color: var(--monitor-muted);
+}
+.landcover-composition {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+.landcover-composition .ant-checkbox-wrapper {
+  font-size: 11px;
+}
+.landcover-bar {
+  height: 5px;
+  background: #ffffff12;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.landcover-bar span {
+  display: block;
+  height: 100%;
+}
+.landcover-priority {
+  color: #65dfc8;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.monitor-task-options {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.monitor-task-options .ant-select {
+  flex: 1;
+}
+.monitor-task-records {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.monitor-task-drawer .business-flow-launch-panel {
+  margin: 0;
+}
+.monitor-task-drawer .business-flow-launch-settings summary {
+  cursor: pointer;
+  margin: 8px 0;
+}
+@media (max-width: 640px) {
+  .landcover-composition {
+    grid-template-columns: 70px minmax(0, 1fr) 38px;
+  }
+}
+
+.landcover-primary {
+  pointer-events: none;
+}
+.landcover-primary > .remote-product-map {
+  clip-path: var(--landcover-clip, none);
+  pointer-events: auto;
+}
+.landcover-primary .remote-product-map-canvas {
+  opacity: var(--landcover-class-opacity, 1);
+}
+.landcover-primary > .monitor-map-controls {
+  pointer-events: auto;
+}

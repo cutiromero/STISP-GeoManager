@@ -112,6 +112,12 @@ def decide_recovery(user, workflow, value):
         else:
             replacements = value.get("recoveryInputs", {})
             parameters = value.get("recoveryParameters", {})
+            import_only = (
+                item["recovery"].get("failure", {}).get("code")
+                == "PLATFORM_OUTPUT_IMPORT"
+            )
+            if import_only and (replacements or parameters):
+                raise ComputeError("计算已经完成，本次恢复只重试成果入库", 409)
             if (
                 not isinstance(replacements, dict)
                 or not isinstance(parameters, dict)
@@ -187,7 +193,37 @@ def decide_recovery(user, workflow, value):
             loop["userAnswer"] = value.get("feedback", "")
             loop["userAnswerScope"] = answer_scope
             loop.pop("pending", None)
-            loop.pop("taskId", None)
+            if import_only:
+                from apps.compute.models import ComputeTask
+                from apps.compute.services import request_output_import
+
+                task = ComputeTask.objects.filter(
+                    pk=loop.get("taskId"),
+                    owner_id=user.pk,
+                    project_tag_id=current.project_tag_id,
+                    status="succeeded",
+                ).first()
+                if (
+                    task is None
+                    or not current.steps.filter(compute_task_id=task.pk).exists()
+                ):
+                    raise ComputeError("本节点已完成计算记录无法核实", 409)
+                for output in task.outputs.filter(
+                    key__in=node.get("contract", {}).get("importOutputs", [])
+                ):
+                    record = (
+                        output.import_record
+                        if hasattr(output, "import_record")
+                        else None
+                    )
+                    request_output_import(
+                        user,
+                        output,
+                        record.name if record else "",
+                        request_source=f"workflow:{current.pk}",
+                    )
+            else:
+                loop.pop("taskId", None)
             if replacements or parameters:
                 loop.pop("failure", None)
                 loop.pop("lastObservation", None)

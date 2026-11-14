@@ -237,6 +237,10 @@ def _read_candidate(resource, *, raster_metadata=False, semantic_metadata=False)
                     "source": "actual_compute_input_file",
                     "size": [src.width, src.height],
                     "driver": src.driver,
+                    "geoTransform": list(src.transform.to_gdal()),
+                    "linearUnitMeters": src.crs.linear_units_factor[1]
+                    if src.crs and src.crs.is_projected
+                    else None,
                     "coordinateSystem": str(src.crs or ""),
                     "bounds": list(src.bounds),
                     "bands": [
@@ -334,11 +338,25 @@ def freeze_input(record, directory):
         raise ComputeError("矢量和表格计算首期最多支持120 MiB，请先裁剪或分组")
     from .input_versions import stage_version
 
+    max_band_pixels = 100_000_000
+    if record.task.version.manifest.get("runtime") == "python-geospatial-gpu-v1":
+        from .gpu_runtime import configured
+
+        max_band_pixels = configured(
+            record.task.version.manifest, record.task.project_tag_id
+        ).max_band_pixels
+
     prepared = stage_version(
         resource,
         record.key,
         target,
-        lambda path: _materialize_input(resource, path, limit),
+        lambda path: (
+            _materialize_input(resource, path, limit)
+            if max_band_pixels == 100_000_000
+            else _materialize_input(
+                resource, path, limit, max_band_pixels=max_band_pixels
+            )
+        ),
         record.checksum,
     )
     current = DataResource.objects.filter(
@@ -357,6 +375,13 @@ def freeze_input(record, directory):
     if target.stat().st_size > limit:
         target.unlink(missing_ok=True)
         raise ComputeError("输入快照超过大小限制")
+    if kind == "raster":
+        import rasterio
+
+        with rasterio.open(target) as source:
+            if source.width * source.height * source.count > max_band_pixels:
+                target.unlink(missing_ok=True)
+                raise ComputeError("输入栅格超过当前算子的波段像元预算")
     digest = prepared["sha256"]
     if record.checksum and record.checksum != digest:
         raise ComputeError("输入内容已变化，不能在原任务中自动重做")
@@ -377,7 +402,7 @@ def freeze_input(record, directory):
     }
 
 
-def _materialize_input(resource, target, limit):
+def _materialize_input(resource, target, limit, *, max_band_pixels=100_000_000):
     kind = resource.data_type
     if kind == "raster":
         dataset = RasterDataset.objects.get(data_resource=resource, status="ready")
@@ -390,7 +415,7 @@ def _materialize_input(resource, target, limit):
         from rasterio.shutil import copy as copy_raster
 
         with rasterio.open(source) as src:
-            if src.width * src.height * src.count > 100_000_000:
+            if src.width * src.height * src.count > max_band_pixels:
                 raise ComputeError("输入栅格超过1亿波段像元限制")
         with rasterio.Env(GDAL_TIFF_INTERNAL_MASK=True, GDAL_PAM_ENABLED="NO"):
             copy_raster(source, target, driver="GTiff")
@@ -485,6 +510,9 @@ def _inspect_output(path, kind, *, contract=None):
                 )
             if not src.count or not src.width or not src.height:
                 raise ComputeError("栅格输出为空")
+            from .raster_outputs import categorical_metadata
+
+            categorical = categorical_metadata(src)
             for _, window in src.block_windows(1):
                 if (contract or {}).get("semanticType") == "class_mask_stack_v1":
                     import numpy as np
@@ -495,7 +523,14 @@ def _inspect_output(path, kind, *, contract=None):
                             "实际类别掩膜含非0/1有效像元，不能作为分类输入"
                         )
                 else:
-                    src.read(window=window)  # Verify each actual block once.
+                    values = src.read(window=window)  # Verify each actual block once.
+                    if categorical:
+                        import numpy as np
+
+                        if not np.isin(
+                            values, [row["code"] for row in categorical["legend"]]
+                        ).all():
+                            raise ComputeError("分类成果含图例未声明的像元值")
             return {
                 "crs": str(src.crs),
                 "width": src.width,
@@ -507,6 +542,7 @@ def _inspect_output(path, kind, *, contract=None):
                 "dtypes": list(src.dtypes),
                 "nodata": str(src.nodata),
                 "bounds": list(src.bounds),
+                **(categorical or {}),
             }
     if kind == "vector":
         import geopandas as gpd
@@ -683,6 +719,7 @@ def import_output(record):
         return existing
     if output.kind == "raster":
         from apps.raster.services.importer import import_raster_file
+        from .raster_outputs import rendering_rules
         from apps.core.storage import research_path
 
         stable = research_path("raster", "original", "compute", f"{output.id}.tif")
@@ -692,9 +729,17 @@ def import_output(record):
         dataset = import_raster_file(
             stable,
             name=record.name,
-            raster_kind="continuous",
+            raster_kind=output.metadata.get("rasterKind", "continuous"),
             uploader_id=record.requested_by_id,
             source_checksum_sha256=output.checksum,
+            **(
+                {
+                    "requested_default_rules": rendering_rules(output.metadata),
+                    "resampling": "nearest",
+                }
+                if output.metadata.get("rasterKind") == "categorical"
+                else {}
+            ),
         )
         resource = dataset.data_resource
     elif output.kind in {"vector", "table"}:

@@ -19,7 +19,7 @@ def monitoring(request):
         require_live_membership()
         scene = request.GET.get("scene")
         if scene not in SCENES:
-            raise ValidationError("请选择互花米草或野火场景")
+            raise ValidationError("请选择已配置的遥感场景")
         try:
             limit = int(request.GET.get("limit", str(MAX_PAGE)))
             before = int(request.GET["beforeId"]) if "beforeId" in request.GET else None

@@ -325,11 +325,42 @@ def validate_import_intent(record):
                 .get("inputPreparation")
                 == "waiting"
             )
+            contract_import = False
+            contract_output = False
+            if workflow is not None and workflow.workflow_type == "business_flow":
+                node = next(
+                    (
+                        row
+                        for row in workflow.parameters.get("_businessFlow", {})
+                        .get("definitionSnapshot", {})
+                        .get("nodes", [])
+                        if row["id"] == workflow.current_step
+                    ),
+                    {},
+                )
+                item = (
+                    workflow.plan.get("businessFlow", {})
+                    .get("nodes", {})
+                    .get(workflow.current_step, {})
+                )
+                contract_output = record.output.key in node.get("contract", {}).get(
+                    "importOutputs", []
+                ) and item.get("toolLoop", {}).get("taskId") == str(
+                    record.output.task_id
+                )
+                contract_import = (
+                    contract_output
+                    and workflow.status in {"queued", "running", "waiting_compute"}
+                    and not workflow.pause_requested
+                )
             if (
                 workflow is None
                 or workflow.cancel_requested
                 or workflow.status != "waiting_compute"
                 and not paused_input_preparation
+                and not contract_import
+                or contract_output
+                and workflow.pause_requested
             ):
                 raise PermissionDenied("工作流已停止，自动入库已取消")
             if not workflow.steps.filter(
