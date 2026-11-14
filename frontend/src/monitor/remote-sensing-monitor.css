@@ -9,6 +9,31 @@
 .monitor-remote .monitor-topbar {
   flex-wrap: wrap;
 }
+.monitor-layer-loading {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 72px);
+  padding: 4px 6px;
+  border-radius: 3px;
+  color: var(--monitor-muted);
+  background: #08172480;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.monitor-layer-loading::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #65dfc880;
+}
 .monitor-remote .monitor-risk-content {
   gap: 10px;
 }

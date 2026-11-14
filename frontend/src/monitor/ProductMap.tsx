@@ -1,5 +1,5 @@
 import { AimOutlined, ExpandOutlined, GlobalOutlined } from "@ant-design/icons";
-import { Alert, Button, Spin, Tooltip } from "antd";
+import { Alert, Button, Tooltip } from "antd";
 import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import { useTranslation } from "react-i18next";
@@ -315,8 +315,8 @@ export default function ProductMap({
         )}
       </div>
       {loading && (
-        <div className="monitor-map-notice">
-          <Spin size="small" /> {t("remoteMonitor.loadingMap")}
+        <div className="monitor-layer-loading" role="status">
+          {t("remoteMonitor.loadingMap")}
         </div>
       )}
       {(error || mapError) && (

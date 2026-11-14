@@ -1,9 +1,7 @@
 import {
   ArrowLeftOutlined,
-  CaretRightOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
-  PauseOutlined,
 } from "@ant-design/icons";
 import { App, Button } from "antd";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -42,10 +40,7 @@ export default function MonitorDashboardFrame({
   const { message } = App.useApp();
   const navigate = useNavigate();
   const root = useRef<HTMLDivElement>(null);
-  const { visible, reducedMotion } = useMonitorActivity();
-  const [motionOverride, setMotionOverride] = useState<boolean>();
-  const motionEnabled = motionOverride ?? !reducedMotion;
-  const animated = visible && motionEnabled;
+  const { visible, reducedMotion, animated } = useMonitorActivity();
   const [now, setNow] = useState(Date.now);
   const [fullscreen, setFullscreen] = useState(false);
   const locale = currentLocale();
@@ -107,17 +102,6 @@ export default function MonitorDashboardFrame({
           {actions}
           <Button
             size="small"
-            icon={motionEnabled ? <PauseOutlined /> : <CaretRightOutlined />}
-            aria-label={t(
-              motionEnabled ? "monitor.pauseMotion" : "monitor.playMotion",
-            )}
-            aria-pressed={motionEnabled}
-            onClick={() => setMotionOverride(!motionEnabled)}
-          >
-            {t(motionEnabled ? "monitor.pauseMotion" : "monitor.playMotion")}
-          </Button>
-          <Button
-            size="small"
             icon={
               fullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />
             }
@@ -141,13 +125,7 @@ export default function MonitorDashboardFrame({
           {status(state)}
         </span>
         <span>
-          {t(
-            motionEnabled
-              ? "monitor.rotationHint"
-              : reducedMotion
-                ? "monitor.motionReduced"
-                : "monitor.motionPaused",
-          )}
+          {t(reducedMotion ? "monitor.motionReduced" : "monitor.rotationHint")}
         </span>
         <span>{sourceLabel}</span>
       </footer>

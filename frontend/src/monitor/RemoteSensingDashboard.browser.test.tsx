@@ -384,6 +384,19 @@ it("产品切换期间的迟到profile不能重新装回旧图层", async () => 
   );
   render(view());
   await waitFor(() => expect(api.resourceProfile).toHaveBeenCalledTimes(1));
+  const loading = await screen.findByText("正在准备成果图层");
+  const loadingBox = loading.getBoundingClientRect();
+  const mapBox = document
+    .querySelector(".monitor-globe-panel")!
+    .getBoundingClientRect();
+  expect(loading).toHaveAttribute("role", "status");
+  expect(loadingBox.left).toBeCloseTo(mapBox.left + 12, 0);
+  expect(loadingBox.top).toBeCloseTo(mapBox.top + 12, 0);
+  expect(loadingBox.width).toBeLessThan(320);
+  expect(loadingBox.height).toBeLessThan(36);
+  expect(
+    screen.queryByRole("button", { name: /暂停动效|启动动效/ }),
+  ).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /历史分布2/ }));
   await waitFor(() => expect(maps.maps[0]?.sources.has("product")).toBe(true));
   await act(async () => resolveOld(profile(resource(101))));

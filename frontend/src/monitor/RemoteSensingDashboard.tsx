@@ -164,8 +164,8 @@ export default function RemoteSensingDashboard({
             >
               <Suspense
                 fallback={
-                  <div className="monitor-loading">
-                    <Spin aria-label={t("remoteMonitor.loadingMap")} />
+                  <div className="monitor-layer-loading" role="status">
+                    {t("remoteMonitor.loadingMap")}
                   </div>
                 }
               >

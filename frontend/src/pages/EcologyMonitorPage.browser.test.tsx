@@ -460,12 +460,9 @@ it("地图外点击不会暂停地球，背景有位移与星光动态", async (
     getComputedStyle(document.querySelector(".monitor-space-star")!)
       .animationName,
   ).toBe("monitor-star-shimmer");
-  fireEvent.click(screen.getByRole("button", { name: "暂停动效" }));
-  expect(document.querySelector(".ecology-monitor")).toHaveAttribute(
-    "data-motion",
-    "paused",
-  );
-  fireEvent.click(screen.getByRole("button", { name: "启动动效" }));
+  expect(
+    screen.queryByRole("button", { name: /暂停动效|启动动效/ }),
+  ).toBeNull();
   expect(document.querySelector(".ecology-monitor")).toHaveAttribute(
     "data-motion",
     "running",
@@ -498,7 +495,7 @@ it("移出地球不会抢断切回全球视角的镜头动画，动画结束后�
   });
 });
 
-it("减少动态设置下可由用户明确启动演示动效", async () => {
+it("减少动态设置下保持静态展示且不显示动效开关", async () => {
   reducedMotion = true;
   const control = await controlledSource();
   render(
@@ -511,11 +508,15 @@ it("减少动态设置下可由用户明确启动演示动效", async () => {
       </MemoryRouter>
     </AntApp>,
   );
-  await screen.findByRole("button", { name: "启动动效" });
-  fireEvent.click(screen.getByRole("button", { name: "启动动效" }));
-  await waitFor(() =>
-    expect(mapState.maps[0]?.api.setCenter).toHaveBeenCalled(),
+  await screen.findByRole("button", { name: "全球视角" });
+  expect(document.querySelector(".ecology-monitor")).toHaveAttribute(
+    "data-motion",
+    "paused",
   );
+  expect(mapState.maps[0]?.api.setCenter).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("button", { name: /暂停动效|启动动效/ }),
+  ).toBeNull();
 });
 
 it("列表悬停和键盘聚焦暂停滚动，页面隐藏停止模拟产出并在恢复后继续", async () => {
