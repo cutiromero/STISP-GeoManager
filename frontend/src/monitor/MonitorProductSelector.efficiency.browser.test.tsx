@@ -79,7 +79,7 @@ it("binds current results to the exact batch and does not silently show an older
   await waitFor(() =>
     expect(screen.getByLabelText("所选成果")).toHaveTextContent("empty"),
   );
-  expect(screen.getByText("本次任务尚无该样区成果")).toBeInTheDocument();
+  expect(screen.getByText("该批次没有该样区成果")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("radio", { name: "历史解译", exact: true }));
   await choose(/22222222/);
   expect(screen.getByLabelText("所选成果")).toHaveTextContent("2");

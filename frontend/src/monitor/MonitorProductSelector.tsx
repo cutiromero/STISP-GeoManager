@@ -113,8 +113,8 @@ export default function MonitorProductSelector({
           description={
             selection.view === "current"
               ? ui(
-                  "本次任务尚无该样区成果",
-                  "No result for this region in this run",
+                  "该批次没有该样区成果",
+                  "No result for this region in the selected batch",
                 )
               : selection.view === "standard"
                 ? ui(

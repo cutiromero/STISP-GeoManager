@@ -262,3 +262,53 @@ it("shows RGB and disables classification for a region without a product", async
   ).toBeDisabled();
   expect(businessFlowsApi.start).not.toHaveBeenCalled();
 });
+
+it("opens the current user's batch instead of another user's newer result", async () => {
+  const own = {
+    ...product,
+    id: 20,
+    provenance: {
+      type: "system_interpretation" as const,
+      batchId: "own-batch",
+      taskId: "own-task",
+      workflowId: null,
+      creator: "本人",
+      createdAt: product.registeredAt,
+      owned: true,
+    },
+  };
+  const foreign = {
+    ...product,
+    id: 30,
+    sourceResourceIds: [1460],
+    name: "另一人的最新成果",
+    provenance: {
+      ...own.provenance,
+      batchId: "other-batch",
+      taskId: "other-task",
+      creator: "其他人",
+      owned: false,
+    },
+  };
+  vi.mocked(getMonitoringProducts).mockResolvedValue({
+    ...list,
+    items: [foreign, own],
+    inputResources: [
+      source,
+      { ...source, id: 1460, name: "环江油田_RGB原始影像_06_综合地表" },
+    ],
+  });
+  show();
+  await screen.findByRole("checkbox", { name: "建筑" });
+  expect(
+    screen
+      .getByRole("combobox", { name: "选择解译样区" })
+      .closest(".ant-select"),
+  ).toHaveTextContent("样区01原始RGB");
+  expect(screen.queryByText("另一人的最新成果")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("批次 own-batc", {
+      selector: ".monitor-product-identity > span",
+    }),
+  ).toBeVisible();
+});

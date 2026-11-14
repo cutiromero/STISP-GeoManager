@@ -70,8 +70,14 @@ export default function LandcoverDashboard({
     page?.businessFlow?.definitionId,
   );
   const resources = page?.inputResources ?? [];
+  const preferredBatch =
+    task.flow?.id ??
+    page?.items.find((item) => item.provenance?.owned)?.provenance?.batchId;
+  const preferredProduct = preferredBatch
+    ? page?.items.find((item) => item.provenance?.batchId === preferredBatch)
+    : page?.items[0];
   const selectedSource =
-    sourceId ?? page?.items[0]?.sourceResourceIds[0] ?? resources[0]?.id ?? 0;
+    sourceId ?? preferredProduct?.sourceResourceIds[0] ?? resources[0]?.id ?? 0;
   const selection = useMonitorProductSelection({
     items: page?.items ?? [],
     references: page?.referenceResources ?? [],
@@ -99,7 +105,13 @@ export default function LandcoverDashboard({
       "paused",
     ].includes(task.flow.status);
   const completedSources = new Set(
-    page?.items.flatMap((product) => product.sourceResourceIds),
+    page?.items
+      .filter(
+        (product) =>
+          !selection.batch || product.provenance?.batchId === selection.batch,
+      )
+      .flatMap((product) => product.sourceResourceIds)
+      .filter((id) => resources.some((resource) => resource.id === id)),
   );
   const completed =
     task.flow?.nodes.filter((node) => node.status === "succeeded").length ?? 0;
@@ -265,7 +277,13 @@ export default function LandcoverDashboard({
                   </strong>
                 </div>
                 <div>
-                  <span>{ui("已有成果", "Products")}</span>
+                  <span>
+                    {task.flow
+                      ? ui("本次完成", "This run")
+                      : selection.batch
+                        ? ui("最近完成", "Latest run")
+                        : ui("项目成果", "Project products")}
+                  </span>
                   <strong>
                     {completedSources.size}
                     <small>{ui("处", "")}</small>
