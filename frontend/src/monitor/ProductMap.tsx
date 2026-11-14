@@ -51,6 +51,7 @@ export default function ProductMap({
     if (!map || !hasProduct) return;
     const element = document.createElement("button");
     element.type = "button";
+    element.setAttribute("role", "button");
     element.className = "monitor-map-cluster";
     element.setAttribute("aria-label", t("remoteMonitor.openDistribution"));
     const label = document.createElement("span");

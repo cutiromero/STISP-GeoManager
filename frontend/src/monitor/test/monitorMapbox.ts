@@ -71,6 +71,8 @@ export function installMonitorMapboxMock() {
   vi.spyOn(mapboxgl, "Marker").mockImplementation(
     class {
       constructor({ element }: { element: HTMLButtonElement }) {
+        if (element.hasAttribute && !element.hasAttribute("role"))
+          element.setAttribute("role", "img");
         points.push(element);
         const marker = {
           setLngLat: vi.fn(() => marker),

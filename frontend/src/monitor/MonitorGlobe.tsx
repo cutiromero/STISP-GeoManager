@@ -110,6 +110,7 @@ export default function MonitorGlobe({
     });
     const element = document.createElement("button");
     element.type = "button";
+    element.setAttribute("role", "button");
     element.className = "monitor-map-cluster";
     element.setAttribute("aria-label", t("monitor.openStudyArea"));
     const label = document.createElement("span");
@@ -147,6 +148,7 @@ export default function MonitorGlobe({
       if (!point) {
         const element = document.createElement("button");
         element.type = "button";
+        element.setAttribute("role", "button");
         element.className = "monitor-map-point";
         element.setAttribute("aria-label", station.name);
         const core = document.createElement("span");
