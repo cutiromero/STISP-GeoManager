@@ -146,7 +146,8 @@ export default function ProductMap({
         const styleKey = `${identity}:${visibleCodes?.join(",") ?? "default"}`;
         let result = styles.current.get(styleKey);
         if (!result) {
-          if (visibleCodes !== undefined && swap.current?.hasActive()) await waitForAbortableDelay(75, signal);
+          if (visibleCodes !== undefined && swap.current?.hasActive())
+            await waitForAbortableDelay(75, signal);
           let job = await api.renderRasterAsync(
             {
               datasetId: profile.raster.id,
@@ -354,7 +355,7 @@ export default function ProductMap({
             onClick={() => focus(true)}
           />
         </Tooltip>
-        {product && (
+        {target && (
           <Tooltip title={t("remoteMonitor.fullExtent")} placement="left">
             <Button
               shape="circle"

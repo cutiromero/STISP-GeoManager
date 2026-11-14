@@ -100,7 +100,7 @@ it("chooses between multiple historical batches while keeping their identities v
 it("separates a user-chosen standard from system interpretation and history", async () => {
   render(<Harness />);
   fireEvent.click(screen.getByRole("radio", { name: "标准成果", exact: true }));
-  await choose("人工标准B");
+  await choose(/人工标准B/);
   expect(screen.getByLabelText("所选成果")).toHaveTextContent("502");
   expect(screen.getByText("数据资源 #502 · 上传资料")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("radio", { name: "本次解译", exact: true }));

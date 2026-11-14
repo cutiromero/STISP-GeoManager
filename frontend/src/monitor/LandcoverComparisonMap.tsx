@@ -102,7 +102,14 @@ export default function LandcoverComparisonMap({
           animated={compare ? false : animated}
           onMapReady={setPrimary}
           focusProduct
-          focusKey={original?.id ?? product?.resource.id ?? overview?.id}
+          focusKey={
+            mode === "original"
+              ? (original?.id ?? overview?.id)
+              : (displayResource?.id ??
+                original?.id ??
+                product?.resource.id ??
+                overview?.id)
+          }
           visibleCodes={
             product && mode !== "original" ? visibleCodes : undefined
           }

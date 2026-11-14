@@ -487,19 +487,35 @@ export default function LandcoverDashboard({
                   )}
                   <details>
                     <summary>{ui("来源与口径", "Sources and method")}</summary>
-                    <p>
-                      {selected?.statisticsMethod ??
-                        ui(
-                          "原始RGB影像、固定模型权重与原始网格",
-                          "Original RGB, fixed weights and native grid",
+                    {selection.view === "standard" ? (
+                      <>
+                        <p>
+                          {ui(
+                            "按上传资料的登记内容展示",
+                            "Displayed from the uploaded data record",
+                          )}
+                        </p>
+                        {selectedReference?.source && (
+                          <p>{selectedReference.source}</p>
                         )}
-                    </p>
-                    <p>
-                      {ui(
-                        "裸地表示五类之外的有效剩余区。",
-                        "Bare land denotes valid pixels not covered by the five models.",
-                      )}
-                    </p>
+                      </>
+                    ) : (
+                      <>
+                        <p>
+                          {selected?.statisticsMethod ??
+                            ui(
+                              "原始RGB影像、固定模型权重与原始网格",
+                              "Original RGB, fixed weights and native grid",
+                            )}
+                        </p>
+                        <p>
+                          {ui(
+                            "裸地表示五类之外的有效剩余区。",
+                            "Bare land denotes valid pixels not covered by the five models.",
+                          )}
+                        </p>
+                      </>
+                    )}
                   </details>
                 </div>
               </MonitorPanel>

@@ -46,7 +46,7 @@ export default function MonitorProductSelector({
       if (!selection.choices.some((item) => item.resourceId === resource.id))
         options.push({
           value: `resource:${resource.id}`,
-          label: resource.name,
+          label: `${resource.name} · #${resource.id}`,
         });
     }
   const selected = selection.selected;
@@ -95,6 +95,11 @@ export default function MonitorProductSelector({
         <Select
           aria-label={ui("选择成果版本", "Select product version")}
           value={selection.key}
+          placeholder={
+            selection.view === "standard"
+              ? ui("选择上传的标准成果", "Choose an uploaded reference")
+              : ui("选择处理批次", "Choose a processing batch")
+          }
           onChange={selection.selectKey}
           options={options}
           popupMatchSelectWidth={false}
@@ -144,6 +149,12 @@ export default function MonitorProductSelector({
             <strong title={selected?.name ?? selection.reference?.name}>
               {selected?.name ?? selection.reference?.name}
             </strong>
+          )}
+          {selection.reference?.updatedAt && (
+            <time>
+              {ui("资料更新", "Data updated")}{" "}
+              {new Date(selection.reference.updatedAt).toLocaleString()}
+            </time>
           )}
           {selection.reference && (
             <span>
