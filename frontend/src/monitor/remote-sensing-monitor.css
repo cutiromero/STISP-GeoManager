@@ -12,8 +12,24 @@
 .monitor-remote .monitor-risk-content {
   gap: 10px;
 }
+.monitor-product-gauge,
+.monitor-remote .monitor-metric {
+  container-type: inline-size;
+}
 .monitor-product-gauge .monitor-gauge-value .monitor-number {
-  font-size: clamp(19px, 1.6vw, 28px);
+  font-size: min(28px, calc(68cqi / var(--monitor-value-width)));
+}
+.monitor-remote .monitor-metric strong {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+}
+.monitor-remote .monitor-metric .monitor-number {
+  font-size: min(1em, calc(100cqi / var(--monitor-value-width)));
+}
+.monitor-remote .monitor-metric strong small {
+  margin-left: 0;
 }
 .monitor-product-overview {
   min-width: 0;
@@ -24,7 +40,7 @@
   flex-wrap: wrap;
   gap: 4px;
 }
-.monitor-product-overview strong {
+.monitor-risk-legend.monitor-product-overview strong {
   font-family: inherit;
   font-size: 11px;
   font-weight: 400;

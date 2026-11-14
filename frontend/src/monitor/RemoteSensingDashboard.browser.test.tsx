@@ -8,6 +8,7 @@ import {
 import { App as AntApp } from "antd";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import type {
   DataResource,
   MonitoringProduct,
@@ -295,6 +296,56 @@ it("刷新保留选中成果，等值视角配置不重建地图或重复读取�
   );
   expect(api.resourceProfile).toHaveBeenCalledTimes(2);
   expect(maps.maps).toHaveLength(1);
+});
+
+it("长面积和斑块数在不同窗口内完整显示，数值与相邻指标及图例不重叠", async () => {
+  const item = product();
+  item.metrics[0]!.value = 17615.30043001679;
+  vi.mocked(getMonitoringProducts).mockResolvedValue(list("spartina", [item]));
+  render(view());
+  await screen.findByText("12,881");
+  try {
+    for (const [width, height] of [
+      [1920, 1080],
+      [1495, 883],
+      [1280, 720],
+      [390, 844],
+    ]) {
+      await page.viewport(width!, height!);
+      await waitFor(() => {
+        for (const metric of document.querySelectorAll(".monitor-metric")) {
+          const container = metric.getBoundingClientRect();
+          for (const element of metric.querySelectorAll(
+            ".monitor-number, small",
+          )) {
+            const box = element.getBoundingClientRect();
+            expect(box.left).toBeGreaterThanOrEqual(container.left - 1);
+            expect(box.right).toBeLessThanOrEqual(container.right + 1);
+            expect(element.scrollWidth).toBeLessThanOrEqual(
+              element.clientWidth + 1,
+            );
+          }
+        }
+        const gauge = document
+          .querySelector(".monitor-product-gauge")!
+          .getBoundingClientRect();
+        const number = document
+          .querySelector(".monitor-gauge-value .monitor-number")!
+          .getBoundingClientRect();
+        expect(number.width).toBeLessThanOrEqual(gauge.width * 0.7);
+        expect(number.right).toBeLessThan(
+          document
+            .querySelector(".monitor-product-overview")!
+            .getBoundingClientRect().left,
+        );
+      });
+    }
+  } finally {
+    await page.viewport(1920, 1080);
+  }
+  expect(
+    screen.getByRole("button", { name: "刷新成果", exact: true }),
+  ).toBeInTheDocument();
 });
 
 it("切换场景后取消旧请求并忽略迟到产品", async () => {

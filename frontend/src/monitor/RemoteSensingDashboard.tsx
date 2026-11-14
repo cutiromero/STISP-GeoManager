@@ -1,6 +1,7 @@
 import { ReloadOutlined } from "@ant-design/icons";
 import { Alert, Button, Empty, Spin } from "antd";
 import {
+  type CSSProperties,
   type ReactNode,
   Suspense,
   lazy,
@@ -131,6 +132,7 @@ export default function RemoteSensingDashboard({
         <Button
           size="small"
           icon={<ReloadOutlined />}
+          aria-label={t("remoteMonitor.refresh")}
           onClick={() => setRevision((value) => value + 1)}
           loading={loading}
         >
@@ -208,6 +210,7 @@ export default function RemoteSensingDashboard({
                 <div className="monitor-risk-content">
                   <div
                     className="monitor-gauge monitor-product-gauge"
+                    style={metricNumberStyle(primary)}
                     role="img"
                     aria-label={`${primary.label} ${metricValue(primary)} ${metricUnit(primary)}`}
                   >
@@ -263,7 +266,11 @@ export default function RemoteSensingDashboard({
               <MonitorPanel title={t("remoteMonitor.keyMetrics")}>
                 <div className="monitor-metrics">
                   {preferred.map((metric) => (
-                    <div className="monitor-metric" key={metric.key}>
+                    <div
+                      className="monitor-metric"
+                      key={metric.key}
+                      style={metricNumberStyle(metric)}
+                    >
                       <span>{metric.label}</span>
                       <strong>
                         <span className="monitor-number">
@@ -448,6 +455,11 @@ function metricValue(metric: MonitoringMetric) {
 }
 function metricUnit(metric: MonitoringMetric) {
   return metric.key === "mean_probability" ? "%" : metric.unit;
+}
+function metricNumberStyle(metric: MonitoringMetric): CSSProperties {
+  return {
+    "--monitor-value-width": metricValue(metric).length * 0.62,
+  } as CSSProperties;
 }
 function emptyMetrics(
   scene: MonitoringProductList["scene"],
