@@ -13,7 +13,12 @@ function map() {
   let loaded = false;
   const value = {
     getStyle: () => ({ version: 8, sources: {}, layers: [] }),
-    getBounds: () => ({ intersects: () => true }),
+    getBounds: () => ({
+      toArray: () => [
+        [0, 0],
+        [5, 5],
+      ],
+    }),
     getLayer: (id: string) => layers.get(id),
     getSource: (id: string) => sources.has(id),
     addSource: vi.fn((id: string) => sources.add(id)),
@@ -129,13 +134,14 @@ it("retains the current map after a replacement times out", async () => {
 });
 
 it("restores the current combination without creating another raster source", async () => {
-  const m=map(); const display=createRasterDisplaySwap(m.value);
-  await display.show(result('all'),new AbortController().signal);
-  const stale=display.show(result('hidden'),new AbortController().signal);
-  const cancelled=expect(stale).rejects.toMatchObject({name:'AbortError'});
-  await display.show(result('all'),new AbortController().signal);
+  const m = map();
+  const display = createRasterDisplaySwap(m.value);
+  await display.show(result("all"), new AbortController().signal);
+  const stale = display.show(result("hidden"), new AbortController().signal);
+  const cancelled = expect(stale).rejects.toMatchObject({ name: "AbortError" });
+  await display.show(result("all"), new AbortController().signal);
   await cancelled;
   expect(m.api.addSource).toHaveBeenCalledTimes(2);
   expect(m.sources.size).toBe(1);
-  expect(m.layers.has('product-raster')).toBe(true);
+  expect(m.layers.has("product-raster")).toBe(true);
 });

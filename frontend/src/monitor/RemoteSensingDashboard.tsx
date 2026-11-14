@@ -31,7 +31,7 @@ export default function RemoteSensingDashboard({
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { page, loading, failure, setFailure, setRevision, loadMore } =
+  const { page, loading, failure, setRevision, loadMore } =
     useMonitoringProducts(scene);
   const selection = useMonitorProductSelection({
     items: page?.items ?? [],

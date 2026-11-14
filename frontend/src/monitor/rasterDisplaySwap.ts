@@ -64,9 +64,23 @@ export function createRasterDisplaySwap(map: Map) {
     return new Promise<void>((resolve, reject) => {
       let finished = false;
       let rendered = false;
-      let contentReady = !map
-        .getBounds()
-        .intersects(result.bounds4326 as [number, number, number, number]);
+      const viewport = map.getBounds();
+      let contentReady = false;
+      if (viewport) {
+        const [[west, south], [east, north]] = viewport.toArray();
+        const [left, bottom, right, top] = result.bounds4326 as [
+          number,
+          number,
+          number,
+          number,
+        ];
+        const shift = 360 * Math.floor((west + 180) / 360);
+        const longitudeIntersects = [-360, 0, 360].some(
+          (offset) =>
+            east - shift >= left + offset && west - shift <= right + offset,
+        );
+        contentReady = north < bottom || south > top || !longitudeIntersects;
+      }
       let timer: ReturnType<typeof setTimeout>;
       const clean = () => {
         clearTimeout(timer);

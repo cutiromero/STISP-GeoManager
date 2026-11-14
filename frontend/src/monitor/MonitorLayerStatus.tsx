@@ -101,7 +101,12 @@ export function MonitorLayerStatusBar() {
           }
         >
           {errors.length ? (
-            errors.map((value) => `${value.title}：${value.error}`).join("；")
+            errors.map((value) => (
+              <span key={`${value.title}:${value.error}`}>
+                <span>{value.title}：</span>
+                <span>{value.error}</span>
+              </span>
+            ))
           ) : pending.length ? (
             <>
               <Spin size="small" />
