@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET, require_POST
@@ -417,8 +416,7 @@ def datasets(request):
     ).prefetch_related("data_resource__access_groups")
     if not request.user.is_superuser:
         queryset = queryset.filter(
-            Q(data_resource__isnull=True)
-            | related_access_filter(request.user, "data_resource")
+            related_access_filter(request.user, "data_resource")
         ).distinct()
     items = [serialize_raster_dataset(dataset) for dataset in queryset]
     return JsonResponse({"items": items})

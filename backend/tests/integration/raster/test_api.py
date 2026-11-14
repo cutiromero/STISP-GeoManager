@@ -180,6 +180,104 @@ class RasterPermissionApiTests(TestCase):
         names = [item["name"] for item in response.json()["items"]]
         self.assertEqual(set(names), {"hidden-dataset", "public-dataset"})
 
+    def test_superadmin_datasets_include_linked_resources_in_selected_project(self):
+        from apps.core.initialization import SUPERADMIN_GROUP_NAME
+        from apps.projects.context import ProjectScope, project_scope
+        from apps.projects.models import Project
+
+        group, _ = Group.objects.get_or_create(name=SUPERADMIN_GROUP_NAME)
+        self.user.groups.add(group)
+        project = Project.objects.create(name="栅格项目", code="raster-admin-project")
+        other_project = Project.objects.create(
+            name="其他项目", code="raster-admin-other"
+        )
+        with project_scope(ProjectScope((project.pk,), project.pk)):
+            visible_ids = set()
+            for code, private, status in (
+                ("admin-shared", False, DataResource.Status.ACTIVE),
+                ("admin-private", True, DataResource.Status.ACTIVE),
+                ("admin-inactive", False, DataResource.Status.INACTIVE),
+            ):
+                resource = DataResource.objects.create(
+                    name=code,
+                    code=code,
+                    data_type=DataResource.DataType.RASTER,
+                    owner_only=private,
+                    status=status,
+                )
+                visible_ids.add(self._dataset(code, resource).pk)
+            visible_ids.add(self._dataset("admin-unlinked", None).pk)
+        with project_scope(ProjectScope((other_project.pk,), other_project.pk)):
+            self._dataset("admin-other-project", None)
+
+        for superuser in (False, True):
+            with self.subTest(is_superuser=superuser):
+                self.user.is_superuser = superuser
+                self.user.save(update_fields=["is_superuser"])
+                response = self.client.get(
+                    "/api/raster/datasets/", HTTP_X_PROJECT_ID=str(project.pk)
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    {item["id"] for item in response.json()["items"]}, visible_ids
+                )
+
+    def test_dataset_list_preserves_member_and_platform_admin_privacy(self):
+        from apps.core.initialization import PLATFORM_ADMIN_GROUP_NAME
+        from apps.projects.context import ProjectScope, project_scope
+        from apps.projects.models import Project, ProjectMembership
+
+        grant(self.user, ("core", "browse_data"))
+        other_user = get_user_model().objects.create_user(username="raster-owner")
+        project = Project.objects.create(name="私有栅格", code="raster-private-list")
+        membership = ProjectMembership.objects.create(project=project, user=self.user)
+        with project_scope(ProjectScope((project.pk,), project.pk)):
+            visible_ids = {self._dataset("member-unlinked", None).pk}
+            for code, owner, private, status, visible in (
+                ("member-shared", other_user, False, DataResource.Status.ACTIVE, True),
+                ("member-own", self.user, True, DataResource.Status.ACTIVE, True),
+                ("member-private", other_user, True, DataResource.Status.ACTIVE, False),
+                (
+                    "member-inactive",
+                    other_user,
+                    False,
+                    DataResource.Status.INACTIVE,
+                    False,
+                ),
+            ):
+                resource = DataResource.objects.create(
+                    name=code,
+                    code=code,
+                    data_type=DataResource.DataType.RASTER,
+                    maintainer=owner,
+                    owner_only=private,
+                    status=status,
+                )
+                dataset = self._dataset(code, resource)
+                if visible:
+                    visible_ids.add(dataset.pk)
+
+        for role in (None, PLATFORM_ADMIN_GROUP_NAME):
+            with self.subTest(role=role):
+                if role:
+                    group, _ = Group.objects.get_or_create(name=role)
+                    self.user.groups.add(group)
+                response = self.client.get(
+                    "/api/raster/datasets/", HTTP_X_PROJECT_ID=str(project.pk)
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    {item["id"] for item in response.json()["items"]}, visible_ids
+                )
+
+        membership.delete()
+        response = self.client.get(
+            "/api/raster/datasets/", HTTP_X_PROJECT_ID=str(project.pk)
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_scan_endpoint_does_not_write_operation_log(self):
         grant(self.user, ("raster", "manage_raster_dataset"))
         job = SimpleNamespace(
@@ -445,7 +543,7 @@ class RasterPermissionApiTests(TestCase):
         self.assertEqual(response.status_code, 204)
         self.assertEqual(response.content, b"")
 
-    def _dataset(self, code: str, resource: DataResource) -> RasterDataset:
+    def _dataset(self, code: str, resource: DataResource | None) -> RasterDataset:
         return RasterDataset.objects.create(
             name=code,
             code=code,
