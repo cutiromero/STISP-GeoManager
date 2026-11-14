@@ -41,6 +41,8 @@ def main():
     from django.conf import settings
     from django.contrib.auth import get_user_model
     from django.core.management import call_command
+    from django.db import transaction
+    from django.db.models import F
     from django.test import Client
     from osgeo import gdal
     from apps.compute.models import ComputeTask, AlgorithmVersion
@@ -76,7 +78,8 @@ def main():
         )
         return json.loads(stream.getvalue().strip().splitlines()[-1])
 
-    with project_scope(scope):
+    with project_scope(scope), transaction.atomic():
+        Project.objects.filter(pk=project.pk).update(name=F("name"))
         raster = import_raster_file(
             source, name="地表覆盖候选小窗", uploader_id=actor.pk
         )
@@ -107,39 +110,58 @@ def main():
             and output.metadata["height"] == WINDOW_SIZE
         )
         assert app_path(output.path).is_file()
-        register("publish", publish_updates=True)
+        with transaction.atomic():
+            Project.objects.filter(pk=project.pk).update(name=F("name"))
+            register("publish", publish_updates=True)
         snapshot = monitoring_snapshot(actor, "landcover")
         assert snapshot["businessFlow"]["definitionId"]
         version = AlgorithmVersion.objects.get(pk=registered["versionId"])
         assert version.status == "published"
+
+    def expect_status(response, expected):
+        assert response.status_code == expected, (
+            response.status_code,
+            response.content[:500],
+        )
+
     client = Client(HTTP_HOST="127.0.0.1")
-    assert (
-        client.get(
-            "/api/ecology/monitoring/?scene=landcover",
-            HTTP_X_PROJECT_ID="1",
-        ).status_code
-        == 401
+    expect_status(
+        client.get("/api/ecology/monitoring/?scene=landcover", HTTP_X_PROJECT_ID="1"),
+        401,
     )
-    assert (
+    expect_status(
         client.get(
             "/api/ecology/monitoring/?scene=landcover",
             HTTP_X_PROJECT_ID=str(project.pk),
-        ).status_code
-        == 404
+        ),
+        404,
     )
     client.force_login(actor)
-    assert (
+    expect_status(
+        client.post(
+            "/api/auth/browser-session/",
+            json.dumps(
+                {
+                    "action": "start",
+                    "pageId": "candidate_landcover_page",
+                    "token": "a" * 64,
+                    "sequence": 1,
+                }
+            ),
+            content_type="application/json",
+        ),
+        200,
+    )
+    expect_status(
         client.get(
             "/api/ecology/monitoring/?scene=landcover",
             HTTP_X_PROJECT_ID=str(project.pk),
-        ).status_code
-        == 200
+        ),
+        200,
     )
-    assert (
-        client.get(
-            "/api/ecology/monitoring/?scene=landcover", HTTP_X_PROJECT_ID="1"
-        ).status_code
-        == 403
+    expect_status(
+        client.get("/api/ecology/monitoring/?scene=landcover", HTTP_X_PROJECT_ID="1"),
+        403,
     )
     print(
         json.dumps(
