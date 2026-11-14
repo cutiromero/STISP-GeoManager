@@ -1693,3 +1693,33 @@ def test_fixed_operator_contract_rejects_unknown_output_before_publication(
     }
     with project_scope(env["scope"]), pytest.raises(ValidationError, match="未声明"):
         catalog.validate_bindings(spec, env["project"].pk)
+
+
+def test_public_batch_references_keep_every_actual_compute_task(operators, monkeypatch):
+    env = operators
+    upgrade(env)
+    workflow = create(env, node_contract=contract(maxOperatorCalls=2))
+    install(
+        monkeypatch,
+        [
+            action("operator_catalog"),
+            action("run_operator", **submit_args(env)),
+            action("run_operator", **submit_args(env, parameters={"threshold": 0.6})),
+        ],
+    )
+    item = advance(env, workflow, 2)
+    first = item["computeTaskId"]
+    finish_task(env, first, "FIRST")
+    advance(env, workflow)
+    item = advance(env, workflow)
+    second = item["computeTaskId"]
+    assert second != first
+    finish_task(env, second, "SECOND")
+    advance(env, workflow)
+    with project_scope(env["scope"]):
+        public = runtime.serialize_run(env["owner"], workflow)
+        outputs = public["nodes"][0]["outputs"]
+        assert outputs["taskIds"] == [first, second]
+        assert outputs["taskId"] == second
+        private = runtime.serialize_run(env["owner"], workflow, control_only=True)
+        assert private["nodes"][0]["outputs"] == {}

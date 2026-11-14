@@ -45,7 +45,7 @@ export { businessFlowProgress } from "./businessFlowPresentation";
 import "./business-flows.css";
 
 const WorkflowCard = lazy(() => import("../agent/WorkflowCard"));
-const WorkflowReportFile = lazy(() => import("../agent/WorkflowReportFile"));
+const BusinessFlowResults = lazy(() => import("./BusinessFlowResults"));
 const terminal = new Set(["succeeded", "failed", "cancelled", "interrupted"]);
 const finished = new Set(["succeeded", "completed", "skipped"]);
 const nodeActive = new Set([
@@ -1020,10 +1020,7 @@ export default function BusinessFlowActivity({
         !legacyOpen && (
           <div className="business-flow-report">
             <Suspense fallback={<Spin />}>
-              <WorkflowReportFile
-                workflowId={flow.id}
-                projectId={flow.projectId}
-              />
+              <BusinessFlowResults flow={flow} />
             </Suspense>
           </div>
         )}

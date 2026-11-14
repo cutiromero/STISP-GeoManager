@@ -863,3 +863,71 @@ it("shows the completed review without an obsolete running message", () => {
   expect(screen.queryByText("独立审核正在核对报告")).not.toBeInTheDocument();
   expect(screen.getByText("报告数量与计算成果一致，审核通过。")).toBeVisible();
 });
+
+it("lists all delivered batch rasters and statistics beside the report without executing anything", async () => {
+  const tasks = Array.from({ length: 6 }, (_, index) => {
+    const task = liveComputeTask("succeeded");
+    const id = `00000000-0000-4000-8000-${String(index + 10).padStart(12, "0")}`;
+    const output = task.outputs[0]!;
+    return {
+      ...task,
+      id,
+      projectTagId: 3,
+      name: "批量解译",
+      inputs: [{ key: "image", name: `样区${index + 1}原始影像` }],
+      outputs: [
+        {
+          ...output,
+          id: 100 + index * 2,
+          key: "classification",
+          label: "地表覆盖分类图",
+          importStatus: "ready" as const,
+          resourceId: 1000 + index,
+          mapUrl: `/map?resources=${1000 + index}`,
+          downloadUrl: `/api/compute/outputs/${100 + index * 2}/download/`,
+        },
+        {
+          ...output,
+          id: 101 + index * 2,
+          key: "statistics",
+          kind: "table",
+          fileName: "statistics.csv",
+          label: "分类面积统计",
+          downloadUrl: `/api/compute/outputs/${101 + index * 2}/download/`,
+        },
+      ],
+    };
+  });
+  tasks[0]!.outputs.push({
+    ...tasks[0]!.outputs[0]!,
+    id: 999,
+    key: "intermediate",
+    label: "不属于交付的中间文件",
+  });
+  const ids = tasks.map((task) => task.id);
+  const lookup = vi
+    .spyOn(computeApi, "task")
+    .mockImplementation(async (id) => tasks.find((task) => task.id === id)!);
+  const submit = vi.spyOn(computeApi, "submit");
+  const importOutput = vi.spyOn(computeApi, "importOutput");
+  const flow = businessFlowRun({
+    status: "succeeded",
+    currentNode: "finish",
+    resultOutputIds: Array.from({ length: 12 }, (_, i) => 100 + i),
+  });
+  flow.nodes[0]!.outputs = { taskIds: ids, taskId: ids.at(-1) };
+  showActivity(flow);
+  expect(lookup).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "报告与成果" }));
+  await screen.findByText("科研报告文件已打开");
+  await waitFor(() =>
+    expect(screen.getAllByText("地表覆盖分类图")).toHaveLength(6),
+  );
+  expect(screen.getAllByText("分类面积统计")).toHaveLength(6);
+  expect(screen.getAllByText("样区1原始影像")).toHaveLength(2);
+  expect(screen.getAllByText("样区6原始影像")).toHaveLength(2);
+  expect(screen.queryByText("不属于交付的中间文件")).not.toBeInTheDocument();
+  expect(lookup).toHaveBeenCalledTimes(6);
+  expect(submit).not.toHaveBeenCalled();
+  expect(importOutput).not.toHaveBeenCalled();
+});

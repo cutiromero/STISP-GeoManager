@@ -2,6 +2,7 @@ import { EyeOutlined } from "@ant-design/icons";
 import { Button, Spin } from "antd";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { BusinessFlowNodeState } from "../api/generated/types.gen";
+import { nodeComputeTaskIds } from "./businessFlowOutputs";
 import { useComputeText } from "../compute/ui";
 const RunComputeTasks = lazy(() => import("../agent/RunComputeTasks"));
 const ready = new Set([
@@ -23,19 +24,14 @@ export default function BusinessFlowNodeOutputs({
   revision: number;
 }) {
   const ui = useComputeText();
-  const taskId =
-    typeof node.outputs.taskId === "string" &&
-    /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(
-      node.outputs.taskId,
-    )
-      ? node.outputs.taskId
-      : undefined;
-  const [opened, setOpened] = useState<{ taskId: string; revision: string }>();
+  const taskIds = nodeComputeTaskIds(node);
+  const taskKey = taskIds.join(",");
+  const [opened, setOpened] = useState<{ taskKey: string; revision: string }>();
   useEffect(() => {
     setOpened(undefined);
-  }, [node.nodeId, taskId]);
+  }, [node.nodeId, taskKey]);
   if (
-    !taskId ||
+    !taskIds.length ||
     !(ready.has(node.status) || node.executor.status === "succeeded")
   )
     return null;
@@ -47,23 +43,23 @@ export default function BusinessFlowNodeOutputs({
         aria-label={`${title}：查看节点计算结果`}
         onClick={() =>
           setOpened((previous) =>
-            previous?.taskId === taskId
+            previous?.taskKey === taskKey
               ? undefined
-              : { taskId, revision: String(revision) },
+              : { taskKey, revision: String(revision) },
           )
         }
       >
-        {opened?.taskId === taskId
+        {opened?.taskKey === taskKey
           ? ui("收起计算结果", "Hide computation results")
           : node.status === "waiting_compute"
             ? ui("查看计算进度与结果", "View progress and results")
             : ui("查看节点计算结果", "View computation results")}
       </Button>
-      {opened?.taskId === taskId && (
+      {opened?.taskKey === taskKey && (
         <div className="business-flow-node-result">
           <Suspense fallback={<Spin size="small" />}>
             <RunComputeTasks
-              taskIds={[opened.taskId]}
+              taskIds={taskIds}
               refreshKey={opened.revision}
               autoImport={false}
               terminal

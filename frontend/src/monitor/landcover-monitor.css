@@ -18,15 +18,14 @@
 }
 .landcover-map-toolbar {
   position: absolute;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 12px;
+  left: 12px;
   z-index: 5;
-  max-width: calc(100% - 24px);
+  max-width: calc(100% - 76px);
 }
 .landcover-compare-control {
   position: absolute;
-  bottom: 64px;
+  bottom: 24px;
   left: 24px;
   right: 76px;
   display: flex;

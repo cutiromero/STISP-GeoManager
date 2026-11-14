@@ -197,6 +197,11 @@ def serialize_run(user, workflow, *, control_only=False):
                 for key in ("taskId",)
                 if key in item.get("outputs", {})
             },
+            **(
+                {"taskIds": list(dict.fromkeys(loop.get("taskIds", [])))}
+                if loop and loop.get("taskIds")
+                else {}
+            ),
         }
         if workflow.status in {"paused", "cancelled"} and item["status"] not in {
             "succeeded",

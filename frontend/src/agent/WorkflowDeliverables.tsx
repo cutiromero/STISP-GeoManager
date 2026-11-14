@@ -170,7 +170,14 @@ export default function WorkflowDeliverables({
                     <div className="agent-file-caption">
                       <span className="agent-file-name">{output.fileName}</span>
                       <span className="agent-file-source">
-                        {ui(taskDisplayNames?.[task.id] ?? task.name)}
+                        {ui(
+                          taskDisplayNames?.[task.id] ??
+                            (task.inputs
+                              .map((input) => String(input.name ?? ""))
+                              .filter(Boolean)
+                              .join("、") ||
+                              task.name),
+                        )}
                       </span>
                     </div>
                     <ResultMetadata output={output} />

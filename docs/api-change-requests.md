@@ -1,6 +1,19 @@
 # API Change Requests
 
 
+## API-20261114-004 - 业务流完整成果引用
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/business-flows/runs/{workflowId}/。
+- Change type: 可选节点批量任务引用，补全已有终态输出引用的契约。
+- OpenAPI change: BusinessFlowNodeState.outputs.taskIds；BusinessFlowRun.resultOutputIds、resultResourceIds。
+- Mock examples: 业务流示例沿用已有字段，隔离用例验证六任务十二文件和无交付中间文件。
+- Frontend reason: 报告与成果同时展示报告、分类图、统计等实际交付文件；批量成果显示真实样区名称。
+- Backend implementation notes: 直接读取既有节点状态与终态注册信息，不执行科学计算；控制回执不携带成果引用。
+- Verification: 全批次任务引用、控制回执、按需读取、文件去重和已消费输出过滤，以及浏览器查看与下载。
+- Result: 通用业务流复用现有计算成果组件展示完整交付。
+
 ## API-20261114-003 - 公共大屏成果来源与批次
 
 - Status: BackendReady
@@ -714,6 +727,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261114-004 | BackendReady | /api/business-flows/runs/{workflowId}/ | 完整成果引用与批量展示 | Updated | 原业务流示例及隔离用例 | Implemented | 引用、权限与按需读取 | 复用计算中心 |
 | API-20261114-003 | BackendReady | /api/ecology/monitoring/ | 成果来源、批次与标准资料选择 | Updated | 171-remote-monitoring.json | Implemented | 权限、批量读取与公共组件 | 本人记录边界 |
 | API-20261114-002 | BackendReady | /api/ecology/monitoring/; 业务流 | 地表覆盖产品、合同与大屏任务 | Updated | 171-remote-monitoring.json | Implemented | 科学分类、来源覆盖、入库恢复与浏览器 | 项目隔离、同一会话 |
 | API-20261114-001 | BackendReady | 业务流目录、详情、准备、启动与运行 | 项目隔离与公开定义共享 | Updated | 沿用业务流示例 | Implemented | 项目隔离、共享执行、撤权及浏览器 | 定义共享，任务与数据归当前项目 |

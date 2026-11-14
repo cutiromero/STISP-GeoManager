@@ -51221,7 +51221,24 @@
           "outputs": {
             "type": "object",
             "description": "仅包含本节点产出的结论或真实算子结果引用",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "最近一次实际计算任务。"
+              },
+              "taskIds": {
+                "type": "array",
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "description": "本节点已登记的实际计算任务，批量计算保留全部引用。"
+              }
+            }
           },
           "contextManagement": {
             "$ref": "#/components/schemas/BusinessFlowContextManagement"
@@ -51403,6 +51420,22 @@
           },
           "mainAgent": {
             "$ref": "#/components/schemas/BusinessFlowExecutorSession"
+          },
+          "resultOutputIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "该次执行实际保留交付的计算输出ID；不包括已消费的中间成果。"
+          },
+          "resultResourceIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "该次执行已入库的成果资源ID。"
           }
         },
         "required": [

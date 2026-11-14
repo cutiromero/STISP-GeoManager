@@ -533,3 +533,28 @@ it("分类栅格使用服务器瓦片、实际图例和nearest采样", async () 
     }),
   );
 });
+
+it("uses a 6:4 canvas and keeps land-cover comparison controls at the top-left", async () => {
+  context.projects[0]!.monitorConfig = {
+    ...context.projects[0]!.monitorConfig!,
+    scenes: ["landcover"],
+  };
+  vi.mocked(getMonitoringProducts).mockResolvedValue({
+    ...list("landcover"),
+    inputResources: [],
+  });
+  render(view());
+  await screen.findByText("样区与成果");
+  const map = document.querySelector<HTMLElement>(".monitor-globe-panel")!;
+  const info = document.querySelector<HTMLElement>(".monitor-information")!;
+  const toolbar = document.querySelector<HTMLElement>(
+    ".landcover-map-toolbar",
+  )!;
+  const canvas = map.getBoundingClientRect();
+  const panel = info.getBoundingClientRect();
+  const tools = toolbar.getBoundingClientRect();
+  expect(canvas.width / (canvas.width + panel.width)).toBeCloseTo(0.6, 2);
+  expect(tools.left).toBeCloseTo(canvas.left + 12, 0);
+  expect(tools.top).toBeCloseTo(canvas.top + 12, 0);
+  expect(tools.right).toBeLessThan(canvas.right - 48);
+});

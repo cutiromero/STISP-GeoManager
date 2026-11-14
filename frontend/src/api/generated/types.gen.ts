@@ -13237,6 +13237,14 @@ export type BusinessFlowNodeState = {
      * 仅包含本节点产出的结论或真实算子结果引用
      */
     outputs: {
+        /**
+         * 最近一次实际计算任务。
+         */
+        taskId?: string;
+        /**
+         * 本节点已登记的实际计算任务，批量计算保留全部引用。
+         */
+        taskIds?: Array<string>;
         [key: string]: unknown;
     };
     contextManagement?: BusinessFlowContextManagement;
@@ -13348,6 +13356,14 @@ export type BusinessFlowRun = {
     events: Array<BusinessFlowEvent>;
     inputPreparation?: BusinessFlowInputPlan;
     mainAgent?: BusinessFlowExecutorSession;
+    /**
+     * 该次执行实际保留交付的计算输出ID；不包括已消费的中间成果。
+     */
+    resultOutputIds?: Array<number>;
+    /**
+     * 该次执行已入库的成果资源ID。
+     */
+    resultResourceIds?: Array<number>;
     [key: string]: unknown;
 };
 
