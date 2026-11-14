@@ -116,9 +116,16 @@ def main():
     assert (
         client.get(
             "/api/ecology/monitoring/?scene=landcover",
-            HTTP_X_PROJECT_ID=str(project.pk),
+            HTTP_X_PROJECT_ID="1",
         ).status_code
         == 401
+    )
+    assert (
+        client.get(
+            "/api/ecology/monitoring/?scene=landcover",
+            HTTP_X_PROJECT_ID=str(project.pk),
+        ).status_code
+        == 404
     )
     client.force_login(actor)
     assert (
