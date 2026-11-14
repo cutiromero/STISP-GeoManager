@@ -4,7 +4,6 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
@@ -245,21 +244,31 @@ it("unmounting closes the byte stream and does not cancel the underlying task", 
   expect(cancelTask).not.toHaveBeenCalled();
 });
 
-it("does not fetch candidates for automatic mode and reads once when manual mode needs them", async () => {
+it("keeps automatic discovery without fetching candidates in the shared composer", async () => {
   vi.spyOn(agentApi, "detail").mockResolvedValue({ conversation, runs: [] });
+  vi.spyOn(agentApi, "submit").mockResolvedValue({
+    ...run,
+    status: "succeeded",
+    answer: "已按授权资料核对",
+  });
   show();
-  await screen.findByRole("button", { name: "选择数据" });
+  await screen.findByTitle("研究资料", { selector: "strong" });
+  const input = await screen.findByRole("textbox", { name: "输入消息" });
+  expect(screen.queryByRole("button", { name: "选择数据" })).toBeNull();
   expect(agentApi.resources).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "选择数据" }));
-  expect(agentApi.resources).not.toHaveBeenCalled();
-  fireEvent.click(
-    within(screen.getByRole("radiogroup", { name: "数据选择方式" })).getByRole(
-      "radio",
-      { name: "手动选择" },
+  fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
+  fireEvent.keyDown(await screen.findByRole("slider", { name: "思考强度" }), {
+    key: "Home",
+    keyCode: 36,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "调整思考强度" }));
+  fireEvent.change(input, { target: { value: "查找当前项目的可用资料" } });
+  fireEvent.click(screen.getByRole("button", { name: "发送" }));
+  await waitFor(() =>
+    expect(agentApi.submit).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ dataSelectionMode: "auto", resourceIds: [] }),
     ),
   );
-  await waitFor(() => expect(agentApi.resources).toHaveBeenCalledOnce());
-  expect(
-    vi.mocked(agentApi.resources).mock.calls[0]?.[1]?.signal,
-  ).toBeInstanceOf(AbortSignal);
+  expect(agentApi.resources).not.toHaveBeenCalled();
 });
