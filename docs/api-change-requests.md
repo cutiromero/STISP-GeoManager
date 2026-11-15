@@ -11,7 +11,7 @@
 - Frontend reason: 原始数据按真实日期切换，未画研究区默认全域，趋势范围由实际日期计算。
 - Backend implementation notes: 全域流式输入保留原始网格与依赖身份，固定大小工作集；斑块计数保持8连接。
 - Verification: 全域缺省、原件引用版本与权限、跨块斑块、原始时间分页与日期参数。
-- Result: 实现与专项验收中。
+- Result: 默认全域、原图时间浏览、统计范围说明和三阶段业务流已完成；正式站两类全域流程、桌面与窄屏、跨年循环和原生下载验证通过。
 
 
 ## API-20261115-002 - 监测资料用途、实际时相与动态输入目录
@@ -782,7 +782,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| API-20261115-003 | BackendReady | 原始时间及栅格输入合同 | 默认全域与原图时间浏览 | Updated | 172-monitoring-workspace.json | Implemented | 专项验证中 | 当前期与趋势区间分离 |
+| API-20261115-003 | BackendReady | 原始时间及栅格输入合同 | 默认全域与原图时间浏览 | Updated | 172-monitoring-workspace.json | Implemented | 正式站验证通过 | 当前期与趋势区间分离 |
 | API-20261115-002 | BackendReady | 资料用途/时相/监测输入目录 | 动态监测、原图预览与时间轴 | Updated | 元信息及真实时序 | Implemented | 项目、来源、掩膜、时相与查询界限 | 工作区接入中 |
 | API-20261115-001 | BackendReady | /api/ecology/wildfire/catalog/; 监测与业务流 | 原生时空观测、真实目录与独立野火大屏 | Updated | 遥感示例及真实观测 | Implemented | 时段、掩膜、单位、受控输入与来源 | 历史观测与模型结果独立 |
 | API-20261114-005 | BackendReady | /api/ecology/monitoring/; 计算与业务流 | 互花米草输入依据、配套成果与RF任务 | Updated | 171-remote-monitoring.json及真实候选 | Implemented | 窗口冻结、科学统计、权限、来源与浏览器 | 现有环境与三季节组合 |
