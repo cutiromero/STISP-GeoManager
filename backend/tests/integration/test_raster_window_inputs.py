@@ -243,6 +243,14 @@ def test_streaming_full_extent_stays_readable_after_freeze_and_rejects_source_ch
         target = tmp_path / "frozen"
         target.mkdir()
         first = freeze_input(record, target)
+        from apps.compute.raster_windows import streaming_output_grid
+
+        output_grid = streaming_output_grid(task, manifest)
+        assert output_grid["size"] == [32, 32] and output_grid["bands"] == 16
+        assert (
+            streaming_output_grid(task, {**manifest, "runtime": "python-geospatial-v1"})
+            is None
+        )
         # The temporary materialization directory has gone; absolute VRT sources remain valid.
         with rasterio.open(target / "march.tif") as src:
             assert src.driver == "VRT" and src.count == 16
@@ -275,3 +283,44 @@ def test_streaming_full_extent_stays_readable_after_freeze_and_rejects_source_ch
         ).update(starts_at=date(2026, 11, 1))
         with pytest.raises(ComputeError, match="月份"):
             validate_submission(env["owner"], request)
+
+
+def test_large_output_is_allowed_only_on_frozen_native_input_grid(
+    setup_compute, tmp_path
+):
+    from apps.compute.data import inspect_output
+    from apps.compute.packages import ComputeError
+    from rasterio.windows import Window
+
+    path = tmp_path / "huge-classification.tif"
+    transform = from_origin(120, 32, 0.0001, 0.0001)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        width=10001,
+        height=10001,
+        count=1,
+        dtype="uint8",
+        nodata=255,
+        crs="EPSG:4326",
+        transform=transform,
+        tiled=True,
+        SPARSE_OK="YES",
+        compress="deflate",
+    ) as output:
+        output.write(np.ones((16, 16), dtype="uint8"), 1, window=Window(0, 0, 16, 16))
+    grid = {
+        "size": [10001, 10001],
+        "bands": 16,
+        "crs": "EPSG:4326",
+        "geoTransform": list(transform.to_gdal()),
+    }
+    with pytest.raises(ComputeError, match="1亿"):
+        inspect_output(path, "raster")
+    value = inspect_output(path, "raster", raster_grid=grid)
+    assert value["width"] == 10001 and value["height"] == 10001 and value["bands"] == 1
+    with pytest.raises(ComputeError, match="冻结"):
+        inspect_output(path, "raster", raster_grid={**grid, "size": [10000, 10001]})
+    with pytest.raises(ComputeError, match="冻结"):
+        inspect_output(path, "raster", raster_grid={**grid, "crs": "EPSG:3857"})

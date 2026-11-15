@@ -178,6 +178,9 @@ def run_task(task):
             from .script_contracts import read_contract
 
             script_contract = read_contract(manifest, task.parameters)
+        from .raster_windows import streaming_output_grid
+
+        output_grid = streaming_output_grid(task, manifest)
         for spec in manifest["outputs"]:
             path = results / spec["file"]
             if not path.exists() and not spec["required"]:
@@ -185,6 +188,8 @@ def run_task(task):
             metadata = (
                 inspect_output(path, spec["kind"], contract=script_contract)
                 if script_contract is not None
+                else inspect_output(path, spec["kind"], raster_grid=output_grid)
+                if output_grid is not None
                 else inspect_output(path, spec["kind"])
             )
             metadata.update(quality)

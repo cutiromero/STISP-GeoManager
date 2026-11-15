@@ -256,3 +256,33 @@ def validate_temporal_inputs(manifest, resources):
             years.add(day.year)
     if len(years) > 1:
         raise ComputeError("该年度联合模型的输入影像须来自同一观测年")
+
+
+def streaming_output_grid(task, manifest):
+    """Only configured native streaming jobs may return source-grid-sized rasters."""
+    if manifest.get("runtime") not in {
+        "python-geospatial-ml-v1",
+        "python-geospatial-gpu-v1",
+    }:
+        return None
+    port = next(
+        (
+            row
+            for row in manifest["inputs"]
+            if (row.get("raster") or {}).get("streaming")
+        ),
+        None,
+    )
+    if port is None:
+        return None
+    record = task.input_records.get(key=port["key"])
+    snapshot = record.snapshot
+    if not snapshot.get("streamingRaster") or not snapshot.get("fixedAtExecution"):
+        raise ComputeError("全域输出检查缺少冻结原始网格")
+    metadata = snapshot["rasterMetadata"]
+    return {
+        "size": metadata["size"],
+        "bands": len(metadata["bands"]),
+        "geoTransform": metadata["geoTransform"],
+        "crs": snapshot["crs"],
+    }

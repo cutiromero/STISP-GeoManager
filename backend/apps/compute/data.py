@@ -507,8 +507,8 @@ def _materialize_input(resource, target, limit, *, max_band_pixels=100_000_000):
         raise ComputeError("输入快照超过大小限制")
 
 
-def inspect_output(path, kind, *, contract=None):
-    metadata = _inspect_output(path, kind, contract=contract)
+def inspect_output(path, kind, *, contract=None, raster_grid=None):
+    metadata = _inspect_output(path, kind, contract=contract, raster_grid=raster_grid)
     if contract:
         from .script_contracts import validate_metadata
 
@@ -516,7 +516,7 @@ def inspect_output(path, kind, *, contract=None):
     return metadata
 
 
-def _inspect_output(path, kind, *, contract=None):
+def _inspect_output(path, kind, *, contract=None, raster_grid=None):
     if not path.is_file() or path.is_symlink() or path.stat().st_size == 0:
         raise ComputeError("算法没有生成有效的输出文件")
     if path.stat().st_size > config().output_mb * 1024**2:
@@ -531,11 +531,20 @@ def _inspect_output(path, kind, *, contract=None):
         import rasterio
 
         with rasterio.open(path) as src:
-            if (
-                src.driver != "GTiff"
-                or not src.crs
-                or src.width * src.height * src.count > 100_000_000
-            ):
+            oversized = src.width * src.height * src.count > 100_000_000
+            source_bound = False
+            if oversized and raster_grid is not None:
+                source_bound = (
+                    [src.width, src.height] == raster_grid["size"]
+                    and 0 < src.count <= raster_grid["bands"]
+                    and str(src.crs) == raster_grid["crs"]
+                    and list(src.transform.to_gdal()) == raster_grid["geoTransform"]
+                )
+                if not source_bound:
+                    raise ComputeError(
+                        "全域栅格输出须与冻结原始输入的大小、坐标系和网格一致"
+                    )
+            if src.driver != "GTiff" or not src.crs or (oversized and not source_bound):
                 raise ComputeError(
                     "栅格输出须为有坐标参考系且不超过1亿波段像元的GeoTIFF"
                 )
