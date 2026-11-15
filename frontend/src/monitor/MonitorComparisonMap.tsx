@@ -111,7 +111,7 @@ export default function MonitorComparisonMap({
           refreshKey={refreshKey}
           product={mode === "original" || !resultVisible ? undefined : product}
           resource={
-            !resultVisible && mode !== "original"
+            !resultVisible
               ? undefined
               : mode === "original"
                 ? (original ?? overview)

@@ -155,7 +155,7 @@ export default function MonitorTaskDrawer({
         <>
           {launchOptions}
           {!launchReady ? (
-            <Alert type="info" title="请先选择可用资料、观测时期和有效研究区" />
+            <Alert type="info" title="请选择可用的输入资料和观测日期" />
           ) : bootstrap ? (
             <BusinessFlowLaunch
               key={launchKey}

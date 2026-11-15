@@ -8,6 +8,7 @@ from pathlib import Path
 
 # CONFIGURATION
 ROLES = ["march", "august", "december"]
+MODEL_THREADS = 1
 
 
 def run(context):
@@ -35,7 +36,12 @@ def run(context):
         )
     from core import infer
 
+    last_progress = [None]
+
     def progress(stage, value):
+        if last_progress[0] == (stage, value):
+            return
+        last_progress[0] = (stage, value)
         path = context.output_path("__platform_progress.json")
         temporary = path.with_suffix(".tmp")
         temporary.write_text(json.dumps({"stage": stage, "progress": value}))
@@ -44,7 +50,7 @@ def run(context):
     progress("加载RF模型", 30)
     root = Path(os.environ["GEOMANAGER_MODEL_ASSETS"])
     model = joblib.load(root / os.environ["GEOMANAGER_MODEL_FILE"])
-    model.n_jobs = 1
+    model.n_jobs = MODEL_THREADS
     facts = infer(
         {role: context.input_path(role) for role in ROLES},
         model,
@@ -53,9 +59,14 @@ def run(context):
     )
     facts.update(
         inputPeriods=[
-            ((context.inputs[role].get("observationPeriod") or {}).get("startsAt") or "时间未登记")[:7]
-            if (context.inputs[role].get("observationPeriod") or {}).get("precision") == "month"
-            else (context.inputs[role].get("observationPeriod") or {}).get("startsAt") or "时间未登记"
+            (
+                (context.inputs[role].get("observationPeriod") or {}).get("startsAt")
+                or "时间未登记"
+            )[:7]
+            if (context.inputs[role].get("observationPeriod") or {}).get("precision")
+            == "month"
+            else (context.inputs[role].get("observationPeriod") or {}).get("startsAt")
+            or "时间未登记"
             for role in ROLES
         ],
         modelSha256=os.environ["GEOMANAGER_MODEL_SHA256"],

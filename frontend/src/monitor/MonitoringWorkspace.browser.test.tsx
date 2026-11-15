@@ -6,6 +6,7 @@ import type {
   MonitoringProduct,
   ResourceListItem,
 } from "../api/generated/types.gen";
+import { requestJson } from "../api/client";
 import { useMonitoringWorkspace } from "./useMonitoringWorkspace";
 import MonitorRegionControls from "./MonitorRegionControls";
 import MonitoringSourceControls from "./MonitoringSourceControls";
@@ -15,7 +16,7 @@ import { sourceCatalog, sourceTimes } from "./monitoringWorkspace.testFixtures";
 vi.mock("../api/client", () => ({
   requestJson: vi.fn(async (url: string) =>
     url.includes("source-times")
-      ? sourceTimes
+      ? { ...sourceTimes, resourceId: 9000 }
       : sourceCatalog("wildfire", [
           {
             id: 9000,
@@ -52,7 +53,7 @@ it("draws a two-corner ROI and accepts the real source period beyond the old lim
   await waitFor(() =>
     expect(screen.getByTestId("selection")).toHaveTextContent('"time":2000'),
   );
-  expect(screen.getByTestId("selection")).toHaveTextContent('"ready":false');
+  expect(screen.getByTestId("selection")).toHaveTextContent('"ready":true');
   fireEvent.click(screen.getByRole("button", { name: "绘制研究区" }));
   map.emit("click", { lngLat: { lng: 120, lat: 30 } });
   map.emit("mousemove", { lngLat: { lng: 121, lat: 31 } });
@@ -168,4 +169,76 @@ it("loops playback from the last observation period back to the first", async ()
     timeout: 4000,
   });
   fireEvent.click(screen.getByRole("button", { name: "停止循环" }));
+});
+
+it("pages raw observations across years and switches the raw date without changing the selected result", async () => {
+  const catalog = sourceCatalog("wildfire", [
+    { id: 9000, name: "野火观测", updatedAt: "2026-11-15" } as ResourceListItem,
+  ]);
+  catalog.assets[0]!.years.unshift({
+    year: 2025,
+    count: 1,
+    validProducts: ["gwis_ba"],
+  });
+  vi.mocked(requestJson).mockImplementation(async (url) => {
+    if (!String(url).includes("source-times")) return catalog as never;
+    return {
+      resourceId: 9000,
+      indexVersion: "real-source-v1",
+      items: String(url).includes("after=")
+        ? [{ ordinal: 2000, date: "2026-01-01", endDate: "2026-01-08" }]
+        : [{ ordinal: 1999, date: "2025-12-27", endDate: "2025-12-31" }],
+      nextOrdinal: String(url).includes("after=") ? null : 1999,
+    } as never;
+  });
+  function Workspace() {
+    const w = useMonitoringWorkspace("wildfire", 13);
+    return (
+      <App>
+        <MonitorTimeline workspace={w} items={[]} onSelect={vi.fn()} />
+        <output data-testid="raw-selection">
+          {JSON.stringify({
+            year: w.selectedYear,
+            ordinal: w.time?.ordinal,
+            ready: w.ready,
+            raw: w.sourceVisible,
+            result: w.resultVisible,
+            count: w.allTimes.length,
+          })}
+        </output>
+      </App>
+    );
+  }
+  render(<Workspace />);
+  await waitFor(() =>
+    expect(screen.getByTestId("raw-selection")).toHaveTextContent('"count":2'),
+  );
+  const target = screen.getByRole("combobox", { name: "时间对象" });
+  fireEvent.mouseDown(target);
+  fireEvent.click(
+    await screen.findByText("原图", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByTestId("raw-selection")).toHaveTextContent('"raw":true'),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "上一期" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("raw-selection")).toHaveTextContent(
+      '"year":2025',
+    ),
+  );
+  expect(screen.getByTestId("raw-selection")).toHaveTextContent(
+    '"ordinal":1999',
+  );
+  expect(screen.getByTestId("raw-selection")).toHaveTextContent(
+    '"result":false',
+  );
+  fireEvent.click(screen.getByRole("button", { name: "下一期" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("raw-selection")).toHaveTextContent(
+      '"year":2026',
+    ),
+  );
 });

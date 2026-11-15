@@ -318,6 +318,14 @@ export type MonitoringMethodInput = {
      * 端口是否为原生时空容器
      */
     nativeCube: boolean;
+    /**
+     * 已发布模型的训练时相月份规范。
+     */
+    months?: Array<number>;
+    /**
+     * 联合输入按同一观测年组装。
+     */
+    sameYear?: boolean;
 };
 
 /**
@@ -11903,6 +11911,40 @@ export type ComputeInputSpec = {
          * 要求北向上网格。
          */
         northUp?: boolean;
+        /**
+         * 原始WGS84窗口的西南东北参数键。
+         */
+        window?: [
+            string,
+            string,
+            string,
+            string
+        ];
+        /**
+         * 原生地理模型按有界块读取已授权原件，输入快照为无重采样视图。
+         */
+        streaming?: boolean;
+        /**
+         * 窗口参数全部省略时，按当前授权输入的共同覆盖范围处理。
+         */
+        defaultExtent?: boolean;
+        /**
+         * 原生SeasFire变量、真实时间和趋势统计参数绑定。
+         */
+        cube?: {
+            family: 'seasfire_observation_v04';
+            variableParameter: string;
+            timeParameter: string;
+            historyParameter: string;
+        };
+        /**
+         * 已发布模型的训练时相月份规范。
+         */
+        months?: Array<number>;
+        /**
+         * 联合输入按同一观测年组装。
+         */
+        sameYear?: boolean;
     };
 };
 
@@ -14877,7 +14919,7 @@ export type GetMonitoringSourceTimesData = {
         /**
          * 选择真实年份。
          */
-        year: number;
+        year?: number;
         /**
          * 按实际产品掩膜筛选。
          */

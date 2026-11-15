@@ -138,6 +138,7 @@ export default function ProductMap({
       if (map.getSource("product")) map.removeSource("product");
       activeResource.current = identity;
       boundsRef.current = undefined;
+      if (!target) focused.current = undefined;
       setLegend(undefined);
     }
     setError(undefined);

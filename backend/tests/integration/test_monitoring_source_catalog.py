@@ -253,3 +253,41 @@ def test_one_monitoring_collection_spans_registration_groups_without_duplicate_k
         assert len(value["collections"]) == 1
         assert value["collections"][0]["key"] == "one-series"
         assert value["collections"][0]["count"] == 2
+
+
+def test_model_season_slots_match_new_years_without_crossing_years():
+    method = {
+        "versionId": 9,
+        "inputs": [
+            {
+                "key": key,
+                "kind": "raster",
+                "required": True,
+                "bandCount": 16,
+                "months": [month],
+                "sameYear": True,
+            }
+            for key, month in [("march", 3), ("august", 8), ("december", 12)]
+        ],
+    }
+    values = [
+        asset(11, 3, 2025),
+        asset(12, 8, 2025),
+        asset(13, 12, 2025),
+        asset(14, 3, 2026),
+        asset(15, 6, 2026),
+    ]
+    sets = input_sets(values, method, "spartina")
+    assert len(sets) == 1 and sets[0]["inputs"] == {
+        "march": 11,
+        "august": 12,
+        "december": 13,
+    }
+    values += [asset(16, 8, 2026), asset(17, 12, 2026)]
+    sets = input_sets(values, method, "spartina")
+    assert len(sets) == 2 and sets[0]["inputs"] == {
+        "march": 14,
+        "august": 16,
+        "december": 17,
+    }
+    assert sets[0]["collectionKey"] == "one"

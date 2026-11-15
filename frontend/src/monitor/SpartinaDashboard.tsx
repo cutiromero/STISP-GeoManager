@@ -277,6 +277,7 @@ export default function SpartinaDashboard({
               <MonitorRawLayer map={map} workspace={workspace} />
               <MonitorRegionControls map={map} workspace={workspace} />
               <MonitorTimeline
+                workspace={workspace}
                 items={page?.items ?? []}
                 selected={selected}
                 onSelect={selection.selectProduct}
@@ -290,11 +291,22 @@ export default function SpartinaDashboard({
                 <Segmented
                   aria-label="影像对比方式"
                   value={
-                    mode === "probability" && probability
-                      ? "probability"
-                      : displayMode
+                    workspace.timeTarget === "source"
+                      ? "original"
+                      : mode === "probability" && probability
+                        ? "probability"
+                        : displayMode
                   }
-                  onChange={(value) => setMode(value as typeof mode)}
+                  onChange={(value) => {
+                    workspace.selectTimeTarget(
+                      value === "original" ? "source" : "result",
+                    );
+                    setMode(
+                      value === "original"
+                        ? "classification"
+                        : (value as typeof mode),
+                    );
+                  }}
                   options={[
                     {
                       label: "分类",

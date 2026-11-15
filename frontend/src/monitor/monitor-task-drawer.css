@@ -18,3 +18,27 @@
   cursor: pointer;
   margin: 8px 0;
 }
+
+.monitor-concise-launch > header,
+.monitor-concise-launch label[for="business-flow-launch-goal"],
+.monitor-concise-launch .business-flow-launch-inputs,
+.monitor-concise-launch .flow-launch-outline {
+  display: none;
+}
+.monitor-concise-launch .flow-launch-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.monitor-trend-range {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+}
+.monitor-task-note {
+  color: #a2bfbc;
+  font-size: 12px;
+}
+.monitor-flow-guide p {
+  margin: 7px 0;
+  line-height: 1.7;
+  font-size: 12px;
+}

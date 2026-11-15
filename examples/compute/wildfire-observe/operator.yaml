@@ -2,8 +2,8 @@
   "schemaVersion": 2,
   "identifier": "wildfire-observe",
   "name": "野火历史观测制图",
-  "version": "1.1.0",
-  "description": "从原生SeasFire时空立方体提取真实观测时期，生成火烧面积或FRP图、物理量分级、区域统计与真实序列。",
+  "version": "1.2.0",
+  "description": "选择真实观测日期和统计时间范围，从原始野火资料提取、配色和统计；范围默认数据全域。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
   "deterministic": true,
@@ -37,7 +37,8 @@
           "south",
           "east",
           "north"
-        ]
+        ],
+        "defaultExtent": true
       }
     }
   ],
@@ -46,7 +47,6 @@
       "key": "west",
       "label": "西界",
       "type": "number",
-      "default": 112,
       "min": -180,
       "max": 180,
       "agent": {
@@ -59,7 +59,6 @@
       "key": "south",
       "label": "南界",
       "type": "number",
-      "default": -44,
       "min": -90,
       "max": 90,
       "agent": {
@@ -72,7 +71,6 @@
       "key": "east",
       "label": "东界",
       "type": "number",
-      "default": 154,
       "min": -180,
       "max": 180,
       "agent": {
@@ -85,7 +83,6 @@
       "key": "north",
       "label": "北界",
       "type": "number",
-      "default": -10,
       "min": -90,
       "max": 90,
       "agent": {
@@ -126,14 +123,14 @@
       "key": "history",
       "label": "观测序列长度",
       "type": "integer",
-      "default": 12,
-      "help": "最多12期，FCCI以月为单位，其他以原始周期为单位。",
+      "default": 1,
+      "help": "由所选趋势时间范围和真实观测日期计算；当前期为1，年内比较按实际周期或月份累计。",
       "agent": {
         "adjustable": false,
         "advice": "沿用用户选择的真实产品、时期和序列长度。"
       },
       "min": 1,
-      "max": 12
+      "max": 52
     }
   ],
   "outputs": [

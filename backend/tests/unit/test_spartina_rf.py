@@ -18,6 +18,11 @@ core = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(core)
 
 
+@pytest.fixture(autouse=True)
+def source_package_modules(monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "examples/compute/spartina-rf"))
+
+
 def test_manifest_and_window_use_original_grid_and_bounded_decoded_size():
     manifest = validate_manifest(
         json.loads((ROOT / "examples/compute/spartina-rf/operator.yaml").read_text())
@@ -39,12 +44,13 @@ def test_manifest_and_window_use_original_grid_and_bounded_decoded_size():
     assert data["rasterWindow"] == [10000, 9990, 10, 10]
     assert data["sizeBytes"] < 100000
     assert info["sizeBytes"] == 11000000000
+    legacy_port = {**port, "raster": {**port["raster"], "streaming": False}}
     for coordinates in (
         {"west": 120, "south": 30, "east": 130, "north": 40},
         {"west": 120, "south": 31, "east": 119, "north": 32},
     ):
         with pytest.raises(ComputeError):
-            windowed_metadata(port, info, coordinates)
+            windowed_metadata(legacy_port, info, coordinates)
 
 
 def test_three_season_order_and_all_band_validity_are_preserved(tmp_path):
@@ -94,3 +100,79 @@ def test_three_season_order_and_all_band_validity_are_preserved(tmp_path):
     with rasterio.open(tmp_path / "output/probability.tif") as src:
         assert src.read(1)[1, 1] == -9999
         assert src.read(1)[0, 0] == pytest.approx(0.8)
+
+
+@pytest.mark.parametrize("shape,tile", [((13, 17), 4), ((4, 4), 2), ((23, 31), 7)])
+def test_streaming_components_match_full_eight_connected_labels(shape, tile):
+    from rf_streaming import StreamingPatchCounter
+    from scipy.ndimage import label
+
+    rng = np.random.default_rng(71)
+    patterns = [
+        rng.random(shape) > 0.71,
+        np.eye(*shape, dtype=bool),
+        np.ones(shape, dtype=bool),
+        np.zeros(shape, dtype=bool),
+    ]
+    for mask in patterns:
+        counter = StreamingPatchCounter(shape[1])
+        for row in range(0, shape[0], tile):
+            for col in range(0, shape[1], tile):
+                block = mask[row : row + tile, col : col + tile]
+                counter.add(block if block.any() else None, row, col, *block.shape)
+        assert counter.finish() == label(mask, structure=np.ones((3, 3)))[1]
+
+
+def test_full_extent_streaming_exceeds_old_window_limit_without_full_scene_arrays(
+    tmp_path,
+):
+    from rasterio.windows import Window
+
+    height, width = 2049, 2048
+    paths = {}
+    for role in core.ROLES:
+        path = tmp_path / (role + "-full.tif")
+        paths[role] = path
+        with rasterio.open(
+            path,
+            "w",
+            driver="GTiff",
+            width=width,
+            height=height,
+            count=16,
+            dtype="float32",
+            crs="EPSG:4326",
+            transform=from_origin(120, 32, 0.0001, 0.0001),
+            nodata=np.nan,
+            tiled=True,
+            blockxsize=256,
+            blockysize=256,
+            compress="deflate",
+            SPARSE_OK="YES",
+        ) as target:
+            target.write(
+                np.ones((16, 512, 512), dtype="float32"),
+                window=Window(256, 256, 512, 512),
+            )
+
+    class Model:
+        n_features_in_ = 48
+        classes_ = np.array([0, 1])
+
+        def predict(self, data):
+            return np.ones(len(data), dtype="uint8")
+
+        def predict_proba(self, data):
+            return np.tile([0.1, 0.9], (len(data), 1))
+
+    value = core.infer(paths, Model(), tmp_path / "full-results")
+    assert (
+        value["validPixelCount"] == 512 * 512 and value["targetPixelCount"] == 512 * 512
+    )
+    assert value["statistics"]["patch_count"] == 1
+    assert value["processing"]["skippedInvalidBlocks"] > 0
+    with rasterio.open(tmp_path / "full-results/classification.tif") as source:
+        assert source.width == width and source.height == height
+        assert source.read(1, window=Window(300, 300, 1, 1))[0, 0] == 1
+        assert source.read(1, window=Window(0, 0, 1, 1))[0, 0] == 255
+    assert not (tmp_path / "full-results/original.tif").exists()

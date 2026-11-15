@@ -152,6 +152,7 @@ def test_rf_flow_publishes_three_seasons_as_one_operator_contract(setup_compute)
     ):
         spec = normalize_definition(definition(version.pk))
     assert spec["executionMode"] == "main_agent"
+    assert [node["id"] for node in spec["nodes"]] == ["sources", "interpret", "finish"]
     assert [row["key"] for row in spec["inputRequirements"]] == [
         "march",
         "august",
@@ -163,5 +164,4 @@ def test_rf_flow_publishes_three_seasons_as_one_operator_contract(setup_compute)
         "classification",
         "probability",
         "statistics",
-        "original",
     }

@@ -1,3 +1,4 @@
+import MonitorFlowGuide from "./MonitorFlowGuide";
 import type { ComponentProps } from "react";
 import { Alert } from "antd";
 import MonitorTaskDrawer from "./MonitorTaskDrawer";
@@ -18,7 +19,7 @@ export default function SpartinaTaskDrawer({ workspace: w, ...props }: Props) {
     businessFlow: w.catalog?.method
       ? {
           ...w.catalog.method,
-          goal: `对所选${set?.label ?? ""}时相组合进行互花米草RF解译。研究区WGS84：${JSON.stringify(w.region)}。输出分类、概率、分布统计并登记到监测大屏。`,
+          goal: `对所选${set?.label ?? ""}时相组合进行互花米草RF解译。研究区WGS84：${JSON.stringify(w.effectiveRegion)}。输出分类、概率、分布统计并登记到监测大屏。`,
         }
       : props.page.businessFlow,
   };
@@ -32,10 +33,10 @@ export default function SpartinaTaskDrawer({ workspace: w, ...props }: Props) {
       inputLabels={Object.fromEntries(
         (set?.resources ?? []).map((row) => [row.id, row.name]),
       )}
-      parameters={{ nodeParameters: { interpret: w.region ?? {} } }}
+      parameters={{ nodeParameters: { interpret: w.effectiveRegion ?? {} } }}
       launchKey={JSON.stringify([
         w.inputs,
-        w.region,
+        w.effectiveRegion,
         w.catalog?.method?.versionId,
       ])}
       launchReady={w.ready}
@@ -48,14 +49,10 @@ export default function SpartinaTaskDrawer({ workspace: w, ...props }: Props) {
               ? Object.values(w.region)
                   .map((value) => value.toFixed(4))
                   .join(" / ")
-              : "请在地图绘制研究区"}
+              : "全域（所选数据的共同覆盖范围）"}
           </p>
-          {!w.ready && (
-            <Alert
-              type="info"
-              title="在大屏选择原始资料并绘制研究区后开始任务"
-            />
-          )}
+          <MonitorFlowGuide scene="spartina" />
+          {!w.ready && <Alert type="info" title="请选择可用的原始资料" />}
         </div>
       }
     />

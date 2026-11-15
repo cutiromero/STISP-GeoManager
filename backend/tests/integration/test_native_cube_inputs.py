@@ -284,3 +284,45 @@ def test_native_container_is_frozen_as_source_bound_temporal_stack(
         chunk.write_bytes(b"changed")
         with pytest.raises(ComputeError):
             materialize(resource, tmp_path / "changed.tif", info["cubeInput"])
+
+
+def test_missing_region_uses_complete_native_data_extent(setup_compute):
+    env = setup_compute
+    with project_scope(
+        ProjectScope((env["project"].pk,), env["project"].pk, env["owner"].pk)
+    ):
+        root = raster_source_path("full-domain.zarr")
+        write_cube(root)
+        resource = DataResource.objects.create(
+            name="野火观测",
+            code="full-domain-native",
+            data_type="raster",
+            file_format="ZARR",
+            storage_path="original/full-domain.zarr",
+            coordinate_system="EPSG:4326",
+            size_bytes=44000000000,
+        )
+        manifest = json.loads(
+            (
+                Path(__file__).resolve().parents[3]
+                / "examples/compute/wildfire-observe/operator.yaml"
+            ).read_text()
+        )
+        env["version"].manifest = validate_manifest(manifest)
+        env["version"].save()
+        data = validate_submission(
+            env["owner"],
+            {
+                "name": "全域观测",
+                "versionId": env["version"].pk,
+                "inputs": {"cube": resource.pk},
+                "parameters": {"product": "gwis_ba", "time_index": 3, "history": 1},
+                "trial": False,
+                "idempotencyKey": "native-full-default",
+            },
+        )
+        assert [
+            data["parameters"][key] for key in ["west", "south", "east", "north"]
+        ] == [0, -0.25, 0.75, 0.25]
+        assert data["resources"][0][2]["rasterMetadata"]["size"] == [3, 2]
+        assert data["resources"][0][2]["cubeInput"]["history"] == 1

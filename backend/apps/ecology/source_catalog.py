@@ -103,6 +103,8 @@ def method_for_scene(scene):
             "minBands": row.get("minBands", 0),
             "dtypes": (row.get("raster") or {}).get("dtypes", []),
             "nativeCube": bool((row.get("raster") or {}).get("cube")),
+            "months": (row.get("raster") or {}).get("months", []),
+            "sameYear": (row.get("raster") or {}).get("sameYear", False),
         }
         for row in manifest["inputs"]
     ]
@@ -163,7 +165,11 @@ def input_sets(assets, method, scene):
         period = metadata["period"]
         if count > 1 and (not period or not period["startsAt"]):
             continue
-        groups[(metadata["collectionKey"], _grid_key(schema))].append(asset)
+        year = (period.get("startsAt") or "")[:4] if period else ""
+        group_collection = metadata["collectionKey"]
+        if any(port.get("sameYear") for port in ports):
+            group_collection += ":" + year
+        groups[(group_collection, _grid_key(schema))].append(asset)
     result = []
     for (collection, _), members in groups.items():
         members.sort(
@@ -182,8 +188,23 @@ def input_sets(assets, method, scene):
             )
             by_period[key] = member
         members = list(by_period.values())
-        for end in range(count, len(members) + 1):
-            selected = members[end - count : end]
+        combinations = [
+            members[end - count : end] for end in range(count, len(members) + 1)
+        ]
+        if any(port.get("months") for port in ports):
+            selected = []
+            for port in ports:
+                compatible = [
+                    asset
+                    for asset in members
+                    if _compatible(asset["metadata"]["sourceSchema"], port)
+                    and int(asset["metadata"]["period"]["startsAt"][5:7])
+                    in port.get("months", range(1, 13))
+                ]
+                if compatible:
+                    selected.append(compatible[-1])
+            combinations = [selected] if len(selected) == count else []
+        for selected in combinations:
             if not all(
                 _compatible(asset["metadata"]["sourceSchema"], port)
                 for port, asset in zip(ports, selected)
@@ -215,7 +236,7 @@ def input_sets(assets, method, scene):
             result.append(
                 {
                     "id": token,
-                    "collectionKey": collection,
+                    "collectionKey": selected[0]["metadata"]["collectionKey"],
                     "label": " / ".join(labels),
                     "startsAt": periods[0]["startsAt"],
                     "endsAt": periods[-1]["endsAt"],
@@ -331,7 +352,7 @@ def monitoring_sources(user, scene, *, offset=0, collection=None, year=None):
 
 
 def source_times(
-    user, scene, resource_id, year, product=None, after=None, limit=MAX_TIME_PAGE
+    user, scene, resource_id, year=None, product=None, after=None, limit=MAX_TIME_PAGE
 ):
     require_scene(scene)
     resource = source_query(user, scene).filter(pk=resource_id).first()
@@ -345,11 +366,13 @@ def source_times(
             "items": [],
             "nextOrdinal": None,
         }
-    if not 1 <= limit <= MAX_TIME_PAGE or not 1 <= year <= 9999:
+    if not 1 <= limit <= MAX_TIME_PAGE or (year is not None and not 1 <= year <= 9999):
         raise ValidationError("日期分页范围无效")
     if product and product not in {"gwis_ba", "gfed_ba", "fcci_ba", "cams_frpfire"}:
         raise ValidationError("观测产品无效")
-    query = observation.time_points.filter(starts_at__year=year)
+    query = observation.time_points.all()
+    if year is not None:
+        query = query.filter(starts_at__year=year)
     if after is not None:
         query = query.filter(ordinal__gt=after)
     rows = list(query.order_by("ordinal")[: limit + 1])

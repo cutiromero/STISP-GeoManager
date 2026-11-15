@@ -60,6 +60,8 @@ def gdalwarp_cog_command(
     resampling: str,
     *,
     nodata: int | float | None = None,
+    native_view: bool = False,
+    display_bounds: list[float] | None = None,
 ) -> list[str]:
     """Build a COG command whose warp and every overview use one resampler."""
 
@@ -100,6 +102,14 @@ def gdalwarp_cog_command(
         "-of",
         "COG",
     ]
+    if native_view:
+        # A warped VRT reads native pixels or the source's existing overviews on demand.
+        # No full-scene Web Mercator copy or exhaustive tile pyramid is allocated.
+        command = command[: command.index("-co")] + ["-of", "VRT"]
+    if display_bounds is not None:
+        command.extend(
+            ["-te", *[str(value) for value in display_bounds], "-te_srs", "EPSG:4326"]
+        )
     if nodata is not None:
         command.extend(("-srcnodata", str(nodata), "-dstnodata", str(nodata)))
     command.extend((str(source_path), str(processed_path)))
@@ -335,6 +345,7 @@ def import_raster_file(
     category_code: str = "",
     owner_only: bool = False,
     resource_source: str = "",
+    native_result: bool = False,
 ) -> RasterDataset:
     input_path = input_path.expanduser().resolve()
     if not input_path.exists() or not input_path.is_file():
@@ -344,6 +355,26 @@ def import_raster_file(
 
     source_path, source_relative = store_source_file(input_path)
     processed_relative = processed_relative_path(source_relative)
+    initial_info = gdalinfo_json(source_path) if native_result else None
+    native_view = bool(native_result and max(initial_info["size"]) > 8192)
+    display_bounds = None
+    if native_result:
+        footprint = bounds_4326_from_gdalinfo(initial_info)
+        if footprint and (
+            footprint[1] < -85.0511287798066 or footprint[3] > 85.0511287798066
+        ):
+            display_bounds = [
+                footprint[0],
+                max(footprint[1], -85.0511287798066),
+                footprint[2],
+                min(footprint[3], 85.0511287798066),
+            ]
+            if display_bounds[1] >= display_bounds[3]:
+                raise RasterImportError(
+                    "该范围超出Web Mercator可显示纬度，原生结果可下载查看"
+                )
+    if native_view:
+        processed_relative = str(Path(processed_relative).with_suffix(".display.vrt"))
     processed_path = raster_processed_path(processed_relative)
     source_metadata_relative = metadata_relative_path("source", source_relative)
     processed_metadata_relative = metadata_relative_path(
@@ -386,7 +417,8 @@ def import_raster_file(
         if progress:
             progress("gdalinfo -json 源文件")
         source_info = gdalinfo_json(source_path, calculate_statistics=True)
-        validate_raster_pixel_size(source_info)
+        if not native_result:
+            validate_raster_pixel_size(source_info)
         save_metadata(source_metadata_relative, source_info)
         dataset.source_format = str(source_info.get("driverShortName") or "")
 
@@ -419,6 +451,8 @@ def import_raster_file(
                     source_path,
                     temporary_processed_path,
                     resampling,
+                    native_view=native_view,
+                    display_bounds=display_bounds,
                     nodata=(
                         _first_band_nodata(source_info)
                         if raster_kind == RasterDataset.RasterKind.CATEGORICAL
@@ -440,6 +474,7 @@ def import_raster_file(
             "preprocessingVersion": RASTER_PREPROCESSING_VERSION,
             "rasterKind": raster_kind,
             "resampling": resampling,
+            **({"dynamicTiles": True} if native_view else {}),
         }
         save_metadata(processed_metadata_relative, processed_info)
 
@@ -484,7 +519,7 @@ def import_raster_file(
             dataset.processed_at = timezone.now()
             dataset.save()
             _sync_band_records(dataset, processed_info)
-        if raster_kind == RasterDataset.RasterKind.CATEGORICAL:
+        if raster_kind == RasterDataset.RasterKind.CATEGORICAL and not native_view:
             from apps.raster.services.renderer import (
                 build_static_xyz_tile_pyramid,
                 register_tile_style,

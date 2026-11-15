@@ -282,7 +282,7 @@ it("shows physical observation and a real dated series without synthetic risk", 
       expect(screen.getByTestId("observation-map")).toHaveTextContent("2011"),
     { timeout: 10000 },
   );
-  fireEvent.click(screen.getByText("观测原值", { exact: true }));
+  fireEvent.click(screen.getByRole("radio", { name: "观测原值", exact: true }));
   await waitFor(() =>
     expect(screen.getByTestId("observation-map")).toHaveTextContent("2010"),
   );
@@ -326,7 +326,7 @@ it("launches one native cube run with the real source index and region", async (
           interpret: {
             product: "gwis_ba",
             time_index: 2000,
-            history: 12,
+            history: 1,
             west: 112,
             south: -44,
             east: 154,
@@ -380,7 +380,7 @@ it("launches FCCI as a calendar month while retaining its real internal source p
   await waitFor(() => expect(businessFlowsApi.start).toHaveBeenCalledOnce());
   const request = vi.mocked(businessFlowsApi.start).mock.calls[0]![1];
   expect(request.goal).toContain("所选时期：2026-12；");
-  expect(request.goal).toContain("向前12个月");
+  expect(request.goal).toContain("趋势统计时段2026-12-01至2026-12-31");
   expect(request.parameters).toMatchObject({
     nodeParameters: { interpret: { product: "fcci_ba", time_index: 2000 } },
   });

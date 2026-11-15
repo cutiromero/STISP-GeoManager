@@ -516,6 +516,7 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
             {
                 "id": row.pk,
                 **item,
+                "name": row.name,
                 "resource": serialize_resource(row.data_resource),
                 "registeredAt": row.created_at.isoformat(),
                 "metrics": [
@@ -548,6 +549,7 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
     attach_observation_periods(items, known_periods)
     more = examined < len(candidates)
     launch = {}
+    route = SCENES[scene]["route"]
     if scene == "spartina" and any(item.get("extraction") for item in items):
         from .spartina import attach_related
 
@@ -576,6 +578,7 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
             .first()
         )
         if flow and flow.current_version and flow.current_version.status == "published":
+            route = [node["title"] for node in flow.current_version.definition["nodes"]]
             launch["businessFlow"] = {
                 "definitionId": flow.pk,
                 "versionId": flow.current_version_id,
@@ -668,7 +671,7 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
         "projectId": project.pk,
         "scene": scene,
         "title": SCENES[scene]["title"],
-        "route": SCENES[scene]["route"],
+        "route": route,
         "items": items,
         "nextBeforeId": candidates[examined - 1].pk if more and examined else None,
         **launch,

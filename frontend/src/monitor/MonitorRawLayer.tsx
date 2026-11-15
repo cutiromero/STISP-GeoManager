@@ -23,8 +23,11 @@ export default function MonitorRawLayer({
   useEffect(() => {
     if (!map?.getStyle() || !source || !w.sourceVisible) {
       setStatus("");
+      w.setRawPreviewBusy(false);
       return;
     }
+    let disposed = false;
+    w.setRawPreviewBusy(true);
     const controller = new AbortController();
     const signal = controller.signal;
     let imageUrl: string | undefined;
@@ -185,8 +188,12 @@ export default function MonitorRawLayer({
         )
           setStatus(signal.reason.message);
       })
-      .finally(() => clearTimeout(timer));
+      .finally(() => {
+        clearTimeout(timer);
+        if (!disposed) w.setRawPreviewBusy(false);
+      });
     return () => {
+      disposed = true;
       clearTimeout(timer);
       controller.abort();
       if (imageUrl) URL.revokeObjectURL(imageUrl);
@@ -209,6 +216,17 @@ export default function MonitorRawLayer({
     w.time?.ordinal,
     w.product,
   ]);
+  useEffect(() => {
+    const bounds = source?.metadata.sourceSchema.bounds;
+    if (map?.getStyle() && w.sourceFocusKey && bounds?.length === 4)
+      map.fitBounds(
+        [
+          [bounds[0]!, Math.max(-85, bounds[1]!)],
+          [bounds[2]!, Math.min(85, bounds[3]!)],
+        ],
+        { padding: 50, duration: 700 },
+      );
+  }, [map, w.sourceFocusKey]);
   useEffect(() => {
     if (map?.getStyle() && map.getLayer("monitor-raw-layer"))
       map.setPaintProperty(

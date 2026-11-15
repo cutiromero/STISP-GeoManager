@@ -1,13 +1,13 @@
 {
   "schemaVersion": 2,
   "identifier": "spartina-rf-infer",
-  "name": "互花米草三季节RF解译",
-  "version": "1.1.0",
-  "description": "对按实际日期排序的三时相16波段影像共同窗口执行48特征RF分类、概率与椭球面积统计。",
+  "name": "互花米草识别与制图",
+  "version": "1.2.0",
+  "description": "使用三期卫星影像联合识别互花米草，默认处理共同覆盖全域，按原始网格分块解译并统计。",
   "author": "STISP",
   "runtime": "python-geospatial-ml-v1",
   "deterministic": true,
-  "timeoutSeconds": 1800,
+  "timeoutSeconds": 7200,
   "agent": {
     "enabled": true
   },
@@ -17,7 +17,7 @@
   "inputs": [
     {
       "key": "march",
-      "label": "第1期16波段影像",
+      "label": "3月影像",
       "kind": "raster",
       "required": true,
       "minBands": 16,
@@ -37,12 +37,18 @@
           "south",
           "east",
           "north"
-        ]
+        ],
+        "defaultExtent": true,
+        "streaming": true,
+        "months": [
+          3
+        ],
+        "sameYear": true
       }
     },
     {
       "key": "august",
-      "label": "第2期16波段影像",
+      "label": "8月影像",
       "kind": "raster",
       "required": true,
       "minBands": 16,
@@ -62,12 +68,18 @@
           "south",
           "east",
           "north"
-        ]
+        ],
+        "defaultExtent": true,
+        "streaming": true,
+        "months": [
+          8
+        ],
+        "sameYear": true
       }
     },
     {
       "key": "december",
-      "label": "第3期16波段影像",
+      "label": "12月影像",
       "kind": "raster",
       "required": true,
       "minBands": 16,
@@ -87,7 +99,13 @@
           "south",
           "east",
           "north"
-        ]
+        ],
+        "defaultExtent": true,
+        "streaming": true,
+        "months": [
+          12
+        ],
+        "sameYear": true
       }
     }
   ],
@@ -96,53 +114,49 @@
       "key": "west",
       "label": "西界",
       "type": "number",
-      "default": 121.9,
       "min": -180,
       "max": 180,
       "agent": {
         "adjustable": false,
         "advice": "沿用用户选定研究区边界。"
       },
-      "help": "研究区WGS84经纬度边界，窗口不超过4194304像元。"
+      "help": "可选的WGS84经纬度边界。四界全部省略时使用三期影像共同覆盖全域；模型按256×256原生网格块处理。"
     },
     {
       "key": "south",
       "label": "南界",
       "type": "number",
-      "default": 31.2,
       "min": -90,
       "max": 90,
       "agent": {
         "adjustable": false,
         "advice": "沿用用户选定研究区边界。"
       },
-      "help": "研究区WGS84经纬度边界，窗口不超过4194304像元。"
+      "help": "可选的WGS84经纬度边界。四界全部省略时使用三期影像共同覆盖全域；模型按256×256原生网格块处理。"
     },
     {
       "key": "east",
       "label": "东界",
       "type": "number",
-      "default": 121.99,
       "min": -180,
       "max": 180,
       "agent": {
         "adjustable": false,
         "advice": "沿用用户选定研究区边界。"
       },
-      "help": "研究区WGS84经纬度边界，窗口不超过4194304像元。"
+      "help": "可选的WGS84经纬度边界。四界全部省略时使用三期影像共同覆盖全域；模型按256×256原生网格块处理。"
     },
     {
       "key": "north",
       "label": "北界",
       "type": "number",
-      "default": 31.29,
       "min": -90,
       "max": 90,
       "agent": {
         "adjustable": false,
         "advice": "沿用用户选定研究区边界。"
       },
-      "help": "研究区WGS84经纬度边界，窗口不超过4194304像元。"
+      "help": "可选的WGS84经纬度边界。四界全部省略时使用三期影像共同覆盖全域；模型按256×256原生网格块处理。"
     }
   ],
   "outputs": [
@@ -191,8 +205,8 @@
       "label": "输入影像真彩色预览",
       "kind": "raster",
       "file": "original.tif",
-      "required": true,
-      "description": "实际08月原始窗口B4/B3/B2显示预览，分位拉伸不参与模型输入。",
+      "required": false,
+      "description": "选区任务的输入真彩色预览；全域任务直接浏览已登记原始影像。",
       "fields": [],
       "final": false
     }

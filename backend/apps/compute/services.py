@@ -93,9 +93,14 @@ def request_output_import(user, output, name="", *, request_source=""):
         from .quality import require_automatic_quality
 
         require_automatic_quality(output)
+    from .monitoring_names import output_title
+
+    domain_title = output_title(output) if request_source or not name else None
     explicit_name = name not in ("", None)
     legacy_default_name = output.task.name + " · " + output.label
-    if not explicit_name or request_source:
+    if domain_title:
+        name = domain_title
+    elif not explicit_name or request_source:
         # An output has a stable, unique ID even when tasks and labels repeat.
         # Keep it outside the clipped human-readable part of a long name.
         suffix = f" [{output.task_id.hex[:8]}/{output.id}]"
@@ -109,6 +114,25 @@ def request_output_import(user, output, name="", *, request_source=""):
         name = display_text(name)
     name = clean_text(name, 160, "入库名称")
     with transaction.atomic():
+        if domain_title:
+            from django.db.models import F
+            from apps.catalog.models import DataResource
+
+            ComputeTask.objects.filter(pk=output.task_id).update(
+                heartbeat=F("heartbeat")
+            )
+            previous = ComputeImport.objects.filter(output=output).first()
+            if previous:
+                name = previous.name
+            else:
+                base = name
+                count = 1
+                while (
+                    DataResource.objects.filter(name=name).exists()
+                    or ComputeImport.objects.filter(name=name).exists()
+                ):
+                    count += 1
+                    name = f"{base}（{count}）"
         record, created = ComputeImport.objects.get_or_create(
             output=output,
             defaults={
@@ -294,6 +318,16 @@ def validate_submission(user, body):
     shape_gaps = []
     candidate_cache = {}
     resource_cache = {}
+    from .raster_windows import default_extent_parameters
+
+    params = default_extent_parameters(
+        manifest, inputs, params, user, candidate_cache, resource_cache
+    )
+    if (
+        any((port.get("raster") or {}).get("streaming") for port in input_specs)
+        and gpu_profile is None
+    ):
+        raise ComputeError("流式栅格输入需要已配置的原生地理模型环境")
     for spec in input_specs:
         rid = bindings.get(spec["key"])
         if rid is None and not spec["required"]:
@@ -406,6 +440,9 @@ def validate_submission(user, body):
         resources.append((spec["key"], resource, info))
     if shape_gaps:
         raise ComputeError("输入数据类型不符合算子要求", gaps=shape_gaps)
+    from .raster_windows import validate_temporal_inputs
+
+    validate_temporal_inputs(manifest, resources)
     field_mappings = {}
     if manifest.get("schemaVersion") == 2:
         field_mappings, params = semantic_preflight(

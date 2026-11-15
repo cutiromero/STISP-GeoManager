@@ -128,6 +128,20 @@ def main():
                 resource = raster.data_resource
                 resource.code = f"spartina-candidate-2025{month}"
                 resource.save(update_fields=["code"])
+                from apps.catalog.monitoring_metadata import update_metadata
+
+                update_metadata(
+                    actor,
+                    resource,
+                    {
+                        "usages": [{"scene": "spartina", "purpose": "input"}],
+                        "collectionKey": "spartina-candidate",
+                        "family": "raster",
+                        "startsAt": f"2025-{month}-01",
+                        "endsAt": f"2025-{month}-01",
+                        "precision": "day",
+                    },
+                )
                 inputs[role] = raster.data_resource_id
         params = dict(zip(["west", "south", "east", "north"], bounds))
         registered = register("operator")

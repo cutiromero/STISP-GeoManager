@@ -127,8 +127,6 @@ class Command(BaseCommand):
                 parameters = json.loads(options["parameters_json"])
                 if not inputs:
                     raise CommandError("试运行须显式指定已登记原始资料 --inputs-json")
-                if not parameters:
-                    raise CommandError("试运行须显式指定研究区与时期 --parameters-json")
                 task = submit(
                     actor,
                     {

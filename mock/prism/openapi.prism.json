@@ -566,7 +566,7 @@
           {
             "name": "year",
             "in": "query",
-            "required": true,
+            "required": false,
             "description": "选择真实年份。",
             "schema": {
               "type": "integer",
@@ -30410,6 +30410,19 @@
           "nativeCube": {
             "type": "boolean",
             "description": "端口是否为原生时空容器"
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "description": "已发布模型的训练时相月份规范。"
+          },
+          "sameYear": {
+            "type": "boolean",
+            "description": "联合输入按同一观测年组装。"
           }
         },
         "required": [
@@ -36935,7 +36948,7 @@
           "series": {
             "type": "array",
             "minItems": 1,
-            "maxItems": 12,
+            "maxItems": 52,
             "description": "实际观测序列，缺失值为null。",
             "items": {
               "$ref": "#/components/schemas/WildfireSeriesPoint"
@@ -49891,6 +49904,62 @@
               "northUp": {
                 "type": "boolean",
                 "description": "要求北向上网格。"
+              },
+              "window": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": {
+                  "type": "string"
+                },
+                "description": "原始WGS84窗口的西南东北参数键。"
+              },
+              "streaming": {
+                "type": "boolean",
+                "description": "原生地理模型按有界块读取已授权原件，输入快照为无重采样视图。"
+              },
+              "defaultExtent": {
+                "type": "boolean",
+                "description": "窗口参数全部省略时，按当前授权输入的共同覆盖范围处理。"
+              },
+              "cube": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "family",
+                  "variableParameter",
+                  "timeParameter",
+                  "historyParameter"
+                ],
+                "properties": {
+                  "family": {
+                    "type": "string",
+                    "const": "seasfire_observation_v04"
+                  },
+                  "variableParameter": {
+                    "type": "string"
+                  },
+                  "timeParameter": {
+                    "type": "string"
+                  },
+                  "historyParameter": {
+                    "type": "string"
+                  }
+                },
+                "description": "原生SeasFire变量、真实时间和趋势统计参数绑定。"
+              },
+              "months": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 12
+                },
+                "description": "已发布模型的训练时相月份规范。"
+              },
+              "sameYear": {
+                "type": "boolean",
+                "description": "联合输入按同一观测年组装。"
               }
             }
           }

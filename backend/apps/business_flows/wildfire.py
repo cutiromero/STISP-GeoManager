@@ -6,7 +6,7 @@ CODE = "wildfire-history-observation"
 
 
 def definition(version_id):
-    value = base_definition(version_id)
+    value = base_definition(version_id, compact=False)
     value["inputRequirements"] = [
         {
             "key": "cube",
@@ -42,7 +42,7 @@ def definition(version_id):
             dataRoles=["cube"] if index < 3 else [],
         )
         if node["id"] == "interpret":
-            node["parameters"] = {"history": 12}
+            node["parameters"] = {"history": 1}
             node["contract"].update(
                 goal=instructions[index],
                 acceptance=["真实观测时段、单位、格网与数据一致，图表完成标准入库"],
@@ -62,4 +62,23 @@ def definition(version_id):
         "实际时期的区域统计与序列",
         "同一业务流与智能体记录",
     ]
+    by_id = {node["id"]: node for node in value["nodes"]}
+    selected = [by_id["sources"], by_id["interpret"], by_id["finish"]]
+    labels = ["准备输入资料", "处理并生成成果", "查看与交付成果"]
+    for position, node in enumerate(selected):
+        node["title"] = labels[position]
+        node["dependsOn"] = [selected[position - 1]["id"]] if position else []
+    selected[0]["instruction"] = (
+        instructions[0]
+        + " "
+        + instructions[1]
+        + " 未给出范围时使用资料全域，无需让用户再次选择研究区。"
+    )
+    selected[0]["description"] = selected[0]["instruction"]
+    selected[2]["instruction"] = " ".join(instructions[3:])
+    selected[2]["description"] = selected[2]["instruction"]
+    for node in selected:
+        if node.get("contract"):
+            node["contract"]["goal"] = node["instruction"]
+    value["nodes"] = selected
     return value

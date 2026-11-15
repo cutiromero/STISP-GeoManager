@@ -166,3 +166,17 @@
     display: none;
   }
 }
+
+.monitor-timeline {
+  max-width: min(350px, calc(100% - 64px));
+}
+.monitor-timeline .monitor-time-target {
+  width: 60px;
+  min-width: 54px;
+  max-width: 60px;
+  flex-shrink: 0;
+}
+.monitor-timeline .monitor-time-date {
+  width: 150px;
+  min-width: 80px;
+}

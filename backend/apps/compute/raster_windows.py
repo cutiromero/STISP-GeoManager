@@ -43,7 +43,10 @@ def windowed_metadata(spec, info, parameters):
             or right > metadata["size"][0]
             or bottom > metadata["size"][1]
             or min(width, height) < 1
-            or width * height > MAX_WINDOW_PIXELS
+            or (
+                width * height > MAX_WINDOW_PIXELS
+                and not (spec.get("raster") or {}).get("streaming")
+            )
         ):
             raise ValueError()
     except (KeyError, ValueError, TypeError, OverflowError) as error:
@@ -60,9 +63,15 @@ def windowed_metadata(spec, info, parameters):
         ) from error
     value = deepcopy(info)
     value["rasterWindow"] = [x, y, width, height]
+    if (spec.get("raster") or {}).get("streaming"):
+        value["streamingRaster"] = True
     value["sourceSizeBytes"] = info["sizeBytes"]
     # Budget the uncompressed window, rather than the compressed continental file.
     value["sizeBytes"] = width * height * len(metadata["bands"]) * 8 + 65536
+    if value.get("streamingRaster"):
+        value["sizeBytes"] = (
+            min(width, 256) * min(height, 256) * len(metadata["bands"]) * 8 + 65536
+        )
     value["rasterMetadata"]["size"] = [width, height]
     value["rasterMetadata"]["geoTransform"] = list(
         (affine * Affine.translation(x, y)).to_gdal()
@@ -119,3 +128,131 @@ def materialize_window(resource, target, window):
                     * 255,
                     window=block,
                 )
+
+
+def materialize_streaming_window(resource, target, window):
+    """Freeze an exact source-grid view; source identities remain in stage_version."""
+    from apps.core.storage import raster_source_path
+    from apps.raster.models import RasterDataset
+    from apps.raster.services.gdal_ops import run_gdal_command
+
+    dataset = RasterDataset.objects.get(data_resource=resource, status="ready")
+    source = raster_source_path(dataset.source_relative_path)
+    run_gdal_command(
+        [
+            "gdal_translate",
+            "-of",
+            "VRT",
+            "-srcwin",
+            *[str(value) for value in window],
+            str(source),
+            str(target),
+        ]
+    )
+    import xml.etree.ElementTree as etree
+
+    tree = etree.parse(target)
+    for entry in tree.iter("SourceFilename"):
+        if entry.get("relativeToVRT") == "1":
+            resolved = (target.parent / entry.text).resolve()
+            if not resolved.is_relative_to(raster_source_path("").resolve()):
+                raise ValueError("流式输入源路径超出当前项目原始资料目录")
+            entry.text = str(resolved)
+            entry.set("relativeToVRT", "0")
+    # The descriptor checksum must also change if a referenced source changes.
+    # A VRT with identical XML paths is not an immutable pixel snapshot.
+    from .input_versions import source_version
+    import hashlib
+    import json
+
+    fingerprint = hashlib.sha256(
+        json.dumps(source_version(resource), sort_keys=True).encode()
+    ).hexdigest()
+    tree.getroot().append(etree.Comment("source-version-sha256=" + fingerprint))
+    tree.write(target, encoding="UTF-8")
+
+
+def default_extent_parameters(
+    manifest, bindings, parameters, user, candidate_cache, resource_cache
+):
+    """Resolve missing spatial parameters from authorized original input footprints."""
+    from apps.catalog.models import DataResource
+    from apps.catalog.permissions import user_can_access
+    from apps.projects.context import selected_project_id
+    from .data import candidate
+
+    ports = [
+        port
+        for port in manifest["inputs"]
+        if (port.get("raster") or {}).get("defaultExtent")
+    ]
+    if not ports:
+        return parameters
+    keys = ports[0]["raster"]["window"]
+    missing = [key for key in keys if key not in parameters]
+    if not missing:
+        return parameters
+    if len(missing) != 4 or any(port["raster"]["window"] != keys for port in ports):
+        raise ComputeError("请完整设置研究区四界，或全部省略使用数据全域")
+    bounds = []
+    for port in ports:
+        identity = bindings.get(port["key"])
+        resource = DataResource.objects.filter(
+            pk=identity, status="active", project_tag_id=selected_project_id()
+        ).first()
+        if resource is None or not user_can_access(resource, user):
+            raise ComputeError("当前用户无权使用所选原始资料")
+        resource_cache[identity] = resource
+        info = candidate(resource, raster_metadata=True, semantic_metadata=True)
+        candidate_cache[identity] = info
+        geometry = info.get("rasterMetadata") or {}
+        if geometry.get("geoTransform") and info.get("crs") == "EPSG:4326":
+            transform = geometry["geoTransform"]
+            width, height = geometry["size"]
+            footprint = [
+                transform[0],
+                transform[3] + height * transform[5],
+                transform[0] + width * transform[1],
+                transform[3],
+            ]
+        else:
+            footprint = info.get("bounds")
+        if not isinstance(footprint, list) or len(footprint) != 4:
+            raise ComputeError("所选资料尚无完整空间覆盖范围")
+        bounds.append(footprint)
+    west, south = max(row[0] for row in bounds), max(row[1] for row in bounds)
+    east, north = min(row[2] for row in bounds), min(row[3] for row in bounds)
+    if west >= east or south >= north:
+        raise ComputeError("所选资料没有共同覆盖范围")
+    return {**parameters, **dict(zip(keys, [west, south, east, north]))}
+
+
+def validate_temporal_inputs(manifest, resources):
+    """Check declared seasonal feature slots against registered observation time."""
+    from apps.catalog.models import ResourceObservationMetadata
+
+    ports = {
+        port["key"]: port
+        for port in manifest["inputs"]
+        if (port.get("raster") or {}).get("months")
+    }
+    if not ports:
+        return
+    dates = {
+        row.resource_id: row.starts_at
+        for row in ResourceObservationMetadata.objects.filter(
+            resource_id__in=[resource.pk for _, resource, _ in resources]
+        )
+    }
+    years = set()
+    for key, resource, _ in resources:
+        if key not in ports:
+            continue
+        contract = ports[key]["raster"]
+        day = dates.get(resource.pk)
+        if day is None or day.month not in contract["months"]:
+            raise ComputeError(ports[key]["label"] + "须使用模型声明月份的已登记影像")
+        if contract.get("sameYear"):
+            years.add(day.year)
+    if len(years) > 1:
+        raise ComputeError("该年度联合模型的输入影像须来自同一观测年")

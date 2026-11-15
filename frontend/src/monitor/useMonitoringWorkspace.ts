@@ -18,9 +18,9 @@ export const validRegion = (value?: MonitorRegion): value is MonitorRegion =>
     -180 <= value.west &&
     value.west < value.east &&
     value.east <= 180 &&
-    -85 <= value.south &&
+    -90 <= value.south &&
     value.south < value.north &&
-    value.north <= 85,
+    value.north <= 90,
   );
 export const observationProducts = [
   { value: "gwis_ba", label: "GWIS 火烧面积" },
@@ -67,6 +67,9 @@ export function useMonitoringWorkspace(
   const [sourceVisible, setSourceVisible] = useState(false);
   const [sourceOpacity, setSourceOpacity] = useState(70);
   const [resultVisible, setResultVisible] = useState(true);
+  const [rawPreviewBusy, setRawPreviewBusy] = useState(false);
+  const [timeTarget, setTimeTarget] = useState<"source" | "result">("result");
+  const [sourceFocusKey, setSourceFocusKey] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -105,41 +108,68 @@ export function useMonitoringWorkspace(
     ) ?? [];
   const selectedYear =
     years.find((row) => row.year === year)?.year ?? years.slice(-1)[0]?.year;
-  const timeKey = `${projectId}:${scene}:${source?.resource.id}:${source?.metadata.indexVersion}:${selectedYear}:${product}`;
+  const timeKey = `${projectId}:${scene}:${source?.resource.id}:${source?.metadata.indexVersion}:${product}`;
   const timePage = loadedTimes?.key === timeKey ? loadedTimes.page : undefined;
   useEffect(() => {
     if (source?.metadata.sourceSchema.kind !== "native_cube" || !selectedYear)
       return;
     const controller = new AbortController();
-    const query = new URLSearchParams({
-      scene,
-      resourceId: String(source.resource.id),
-      year: String(selectedYear),
-      product,
+    const read = async () => {
+      const items: MonitoringSourceTimePage["items"] = [];
+      let after: number | null = null;
+      const version = source.metadata.indexVersion;
+      do {
+        const query = new URLSearchParams({
+          scene,
+          resourceId: String(source.resource.id),
+          product,
+        });
+        if (after != null) query.set("after", String(after));
+        const page = await requestJson<MonitoringSourceTimePage>(
+          `/api/ecology/monitoring/source-times/?${query}`,
+          { signal: controller.signal },
+        );
+        if (
+          page.resourceId !== source.resource.id ||
+          page.indexVersion !== version
+        )
+          throw new Error("资料时相已更新，请刷新资料");
+        if (
+          page.nextOrdinal != null &&
+          after != null &&
+          page.nextOrdinal <= after
+        )
+          throw new Error("时相分页未能继续，请刷新资料");
+        items.push(...page.items);
+        after = page.nextOrdinal;
+        if (items.length > 100000) throw new Error("时相索引超出当前读取范围");
+      } while (after != null);
+      if (!controller.signal.aborted)
+        setLoadedTimes({
+          key: timeKey,
+          page: {
+            resourceId: source.resource.id,
+            indexVersion: version,
+            items,
+            nextOrdinal: null,
+          },
+        });
+    };
+    void read().catch((reason) => {
+      if (!controller.signal.aborted)
+        setError(String(reason.message ?? reason));
     });
-    void requestJson<MonitoringSourceTimePage>(
-      `/api/ecology/monitoring/source-times/?${query}`,
-      { signal: controller.signal },
-    )
-      .then((value) => {
-        if (!controller.signal.aborted)
-          setLoadedTimes({ key: timeKey, page: value });
-      })
-      .catch((reason) => {
-        if (!controller.signal.aborted)
-          setError(String(reason.message ?? reason));
-      });
     return () => controller.abort();
   }, [
     scene,
     projectId,
     source?.resource.id,
     source?.metadata.indexVersion,
-    selectedYear,
     product,
     timeKey,
+    revision,
   ]);
-  const times = useMemo(
+  const allTimes = useMemo(
     () =>
       (timePage?.items ?? []).filter(
         (row, index, rows) =>
@@ -149,6 +179,9 @@ export function useMonitoringWorkspace(
       ),
     [timePage, product],
   );
+  const times = allTimes.filter(
+    (row) => Number(row.date.slice(0, 4)) === selectedYear,
+  );
   const time =
     times.find((row) => row.ordinal === ordinal) ?? times.slice(-1)[0];
   const inputs: Record<string, number> =
@@ -157,8 +190,29 @@ export function useMonitoringWorkspace(
         ? { cube: source.resource.id }
         : {}
       : (inputSet?.inputs ?? {});
+  const extentAssets =
+    scene === "wildfire"
+      ? source
+        ? [source]
+        : []
+      : (catalog?.assets.filter((row) =>
+          Object.values(inputs).includes(row.resource.id),
+        ) ?? []);
+  const footprints = extentAssets
+    .map((row) => row.metadata.sourceSchema.bounds)
+    .filter((bounds): bounds is number[] => bounds?.length === 4);
+  const fullRegion =
+    footprints.length === extentAssets.length && footprints.length
+      ? {
+          west: Math.max(...footprints.map((row) => row[0]!)),
+          south: Math.max(...footprints.map((row) => row[1]!)),
+          east: Math.min(...footprints.map((row) => row[2]!)),
+          north: Math.min(...footprints.map((row) => row[3]!)),
+        }
+      : undefined;
+  const effectiveRegion = region ?? fullRegion;
   const ready = Boolean(
-    validRegion(region) &&
+    validRegion(effectiveRegion) &&
     catalog?.method &&
     (scene === "wildfire" ? time : inputSet),
   );
@@ -195,6 +249,27 @@ export function useMonitoringWorkspace(
     time,
     times,
     setOrdinal,
+    allTimes,
+    selectTime: (value: number) => {
+      const point = allTimes.find((row) => row.ordinal === value);
+      if (point) {
+        setYear(Number(point.date.slice(0, 4)));
+        setOrdinal(value);
+      }
+    },
+    effectiveRegion,
+    fullRegion,
+    rawPreviewBusy,
+    setRawPreviewBusy,
+    sourceFocusKey,
+    timeTarget,
+    selectTimeTarget: (target: "source" | "result") => {
+      setTimeTarget(target);
+      setSourceVisible(target === "source");
+      setResultVisible(target === "result");
+      if (target === "source") setSourceFocusKey((value) => value + 1);
+    },
+    focusSource: () => setSourceFocusKey((value) => value + 1),
     region,
     setRegion,
     drawing,

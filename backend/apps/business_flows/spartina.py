@@ -5,12 +5,12 @@ from .landcover import definition as base_definition
 CODE = "spartina-distribution"
 
 
-def definition(version_id):
+def definition(version_id, *, compact=True):
     value = base_definition(version_id)
     roles = [
-        ("march", "第一期16波段影像"),
-        ("august", "第二期16波段影像"),
-        ("december", "第三期16波段影像"),
+        ("march", "3月影像"),
+        ("august", "8月影像"),
+        ("december", "12月影像"),
     ]
     value["inputRequirements"] = [
         {
@@ -25,7 +25,7 @@ def definition(version_id):
         for key, label in roles
     ]
     instructions = [
-        "确认三时相输入组合和用户研究区。三个季节共同形成一次识别。",
+        "确认同年3月、8月、12月输入组合；未指定研究区时使用三期共同覆盖全域。三个季节共同形成一次识别。",
         "核对三期16波段顺序、原始WGS84网格和研究区共同有效范围。",
         "对三时相作为一个组合执行一次冻结RF版本，march、august、december端口各绑定一个真实资源ID；使用已配置研究区参数。依次查询算子、预检、执行；分类、概率和统计完成入库后结束节点。",
         "读取真实研究区面积、共同有效面积、占比及8连通斑块数。",
@@ -61,7 +61,6 @@ def definition(version_id):
                     "classification",
                     "probability",
                     "statistics",
-                    "original",
                 ],
                 maxOperatorCalls=2,
                 maxModelCalls=32,
@@ -73,4 +72,24 @@ def definition(version_id):
         "WGS84椭球面积统计",
         "本次业务流与智能体记录",
     ]
+    if compact:
+        by_id = {node["id"]: node for node in value["nodes"]}
+        selected = [by_id["sources"], by_id["interpret"], by_id["finish"]]
+        labels = ["准备输入资料", "处理并生成成果", "查看与交付成果"]
+        for position, node in enumerate(selected):
+            node["title"] = labels[position]
+            node["dependsOn"] = [selected[position - 1]["id"]] if position else []
+        selected[0]["instruction"] = (
+            instructions[0]
+            + " "
+            + instructions[1]
+            + " 未给出范围时使用所选资料共同覆盖的全域，无需让用户再次选择研究区。"
+        )
+        selected[0]["description"] = selected[0]["instruction"]
+        selected[2]["instruction"] = " ".join(instructions[3:])
+        selected[2]["description"] = selected[2]["instruction"]
+        for node in selected:
+            if node.get("contract"):
+                node["contract"]["goal"] = node["instruction"]
+        value["nodes"] = selected
     return value

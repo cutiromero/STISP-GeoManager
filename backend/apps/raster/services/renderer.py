@@ -140,7 +140,11 @@ def render_xyz_tile(dataset_id: int, style_hash: str, z: int, x: int, y: int) ->
     raster_path = raster_processed_path(dataset.processed_relative_path)
     _validated_tile_style(dataset, raster_path, style_hash)
 
-    if dataset.raster_kind == RasterDataset.RasterKind.CATEGORICAL:
+    if (
+        dataset.raster_kind == RasterDataset.RasterKind.CATEGORICAL
+        and (dataset.processed_gdalinfo.get("geoManager") or {}).get("dynamicTiles")
+        is not True
+    ):
         max_zoom = native_web_mercator_max_zoom(dataset.processed_gdalinfo)
         if z > max_zoom:
             raise RasterTileOutsideExtent("瓦片级别超过分类栅格原生最大级别")
@@ -207,7 +211,11 @@ def build_static_xyz_tile_pyramid(
 
     if dataset.status != RasterDataset.Status.READY:
         raise RasterRenderError("栅格数据集尚未完成预处理")
-    if dataset.raster_kind != RasterDataset.RasterKind.CATEGORICAL:
+    if (
+        dataset.raster_kind != RasterDataset.RasterKind.CATEGORICAL
+        or (dataset.processed_gdalinfo.get("geoManager") or {}).get("dynamicTiles")
+        is True
+    ):
         return None
 
     raster_path = raster_processed_path(dataset.processed_relative_path)

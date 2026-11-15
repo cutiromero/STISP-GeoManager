@@ -66,6 +66,14 @@ def configured(manifest, project_id=None):
         if type(value) is not int or not 1 <= value <= maximum:
             raise ComputeError("模型资源预算无效", 503)
         values[key] = value
+    if any(
+        (port.get("raster") or {}).get("streaming")
+        for port in manifest.get("inputs", [])
+    ):
+        seconds = raw.get("streaming_timeout_seconds", 7200)
+        if type(seconds) is not int or not 1 <= seconds <= 7200:
+            raise ComputeError("全域流式计算时限无效", 503)
+        values["timeout_seconds"] = seconds
     return MLProfile(
         interpreter=config().interpreter,
         model_file=name,

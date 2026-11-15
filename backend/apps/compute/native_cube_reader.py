@@ -9,6 +9,7 @@ import re
 # CONFIGURATION
 MAX_METADATA_BYTES = 2 * 1024 * 1024
 MAX_DECODED_RESULT_BYTES = 256 * 1024 * 1024
+MAX_HISTORY_PERIODS = 52
 PRODUCTS = {
     "gwis_ba": {
         "unit": "ha",
@@ -150,7 +151,7 @@ class Cube:
             or type(index) is not int
             or not 0 <= index < len(self.dates)
             or type(history) is not int
-            or not 1 <= history <= 12
+            or not 1 <= history <= MAX_HISTORY_PERIODS
         ):
             raise ValueError("观测源、时间索引或序列长度无效")
         expected = PRODUCTS[product]

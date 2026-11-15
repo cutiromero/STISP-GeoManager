@@ -125,7 +125,7 @@ def normalize_observation(value):
             raise ValidationError("格网计数无效")
     if not value["activeCells"] <= value["validCells"] <= value["gridCells"]:
         raise ValidationError("格网计数不一致")
-    if not isinstance(value["series"], list) or not 1 <= len(value["series"]) <= 12:
+    if not isinstance(value["series"], list) or not 1 <= len(value["series"]) <= 52:
         raise ValidationError("观测序列长度无效")
     for row in value["series"]:
         if not isinstance(row, dict) or set(row) != {
@@ -213,6 +213,20 @@ def register_import(record_id):
     project = Project.objects.get(pk=selected_project_id())
     if "wildfire" not in configured_scenes(project):
         return
+    from .models import RemoteSensingProduct
+    from .monitoring import register_product
+
+    previous = RemoteSensingProduct.objects.filter(
+        product_code="wildfire-observation-"
+        + str(task.pk)
+        + "-"
+        + str(record.output_id),
+        data_resource_id=record.resource_id,
+    ).first()
+    if previous:
+        return register_product(
+            record.requested_by, previous.metadata["monitoring"], computed_import=record
+        )
     facts = record.output.metadata.get("knowledgeFacts", {}).get("wildfireObservation")
     if not isinstance(facts, dict):
         raise ValidationError("观测成果缺少实际时空依据")

@@ -31,6 +31,9 @@ def test_large_source_is_read_as_window_and_cache_is_bound_to_region(
         ).read_text()
     )
     manifest["runtime"] = "python-geospatial-v1"
+    for port in manifest["inputs"]:
+        for key in ("streaming", "months", "sameYear"):
+            port["raster"].pop(key, None)
     env["version"].manifest = manifest
     env["version"].save()
     scope = ProjectScope((env["project"].pk,), env["project"].pk, env["owner"].pk)
@@ -137,3 +140,138 @@ def test_large_source_is_read_as_window_and_cache_is_bound_to_region(
         assert item.checksum != other.checksum
         assert resource.size_bytes == 11000000000
         assert source.exists()
+
+
+def test_streaming_full_extent_stays_readable_after_freeze_and_rejects_source_changes(
+    setup_compute, tmp_path
+):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from datetime import date
+    from apps.catalog.models import ResourceObservationMetadata
+    from apps.compute.packages import ComputeError
+
+    env = setup_compute
+    manifest = json.loads(
+        (
+            Path(__file__).resolve().parents[3]
+            / "examples/compute/spartina-rf/operator.yaml"
+        ).read_text()
+    )
+    env["version"].manifest = manifest
+    env["version"].save()
+    profile = SimpleNamespace(max_band_pixels=2_000_000)
+    scope = ProjectScope((env["project"].pk,), env["project"].pk, env["owner"].pk)
+    with (
+        project_scope(scope),
+        patch("apps.compute.model_runtime.configured", return_value=profile),
+    ):
+        inputs = {}
+        for key, month in [("march", 3), ("august", 8), ("december", 12)]:
+            source = raster_source_path(key + ".tif")
+            source.parent.mkdir(parents=True, exist_ok=True)
+            with rasterio.open(
+                source,
+                "w",
+                driver="GTiff",
+                width=32,
+                height=32,
+                count=16,
+                dtype="float32",
+                crs="EPSG:4326",
+                transform=from_origin(120, 32, 0.001, 0.001),
+            ) as dst:
+                dst.write(np.full((16, 32, 32), month, dtype="float32"))
+            resource = DataResource.objects.create(
+                name=key,
+                code=key,
+                data_type="raster",
+                storage_path=key + ".tif",
+                size_bytes=11000000000,
+            )
+            RasterDataset.objects.create(
+                name=key,
+                code=key,
+                data_resource=resource,
+                source_relative_path=key + ".tif",
+                status="ready",
+                band_count=16,
+            )
+            ResourceObservationMetadata.objects.create(
+                resource=resource,
+                starts_at=date(2026, month, 1),
+                ends_at=date(2026, month, 1),
+                precision="day",
+            )
+            inputs[key] = resource.pk
+        request = {
+            "name": "全域流式",
+            "versionId": env["version"].pk,
+            "idempotencyKey": uuid4().hex,
+            "inputs": inputs,
+            "parameters": {},
+        }
+        validated = validate_submission(env["owner"], request)
+        assert validated["parameters"] == {
+            "west": 120,
+            "south": 31.968,
+            "east": 120.032,
+            "north": 32,
+        }
+        metadata = validated["resources"][0][2]
+        assert metadata["streamingRaster"] and metadata["rasterWindow"] == [
+            0,
+            0,
+            32,
+            32,
+        ]
+        task = ComputeTask.objects.create(
+            owner=env["owner"],
+            version=env["version"],
+            parameters=validated["parameters"],
+            status="queued",
+            idempotency_key=uuid4().hex,
+            request_hash="b" * 64,
+        )
+        resource = DataResource.objects.get(pk=inputs["march"])
+        record = ComputeInput.objects.create(
+            task=task,
+            key="march",
+            resource=resource,
+            snapshot={**metadata, "updatedAt": resource.updated_at.isoformat()},
+        )
+        target = tmp_path / "frozen"
+        target.mkdir()
+        first = freeze_input(record, target)
+        # The temporary materialization directory has gone; absolute VRT sources remain valid.
+        with rasterio.open(target / "march.tif") as src:
+            assert src.driver == "VRT" and src.count == 16
+            np.testing.assert_array_equal(src.read(1), np.full((32, 32), 3))
+        again = tmp_path / "warm"
+        again.mkdir()
+        assert freeze_input(record, again)["preparation"]["reused"]
+        with rasterio.open(raster_source_path("march.tif"), "r+") as dst:
+            dst.write(np.full((32, 32), 42, dtype="float32"), 1)
+        changed = tmp_path / "changed"
+        changed.mkdir()
+        with pytest.raises(ComputeError, match="变化"):
+            freeze_input(record, changed)
+        # Access is checked again even when a frozen input version already exists.
+        DataResource.objects.filter(pk=resource.pk).update(
+            owner_only=True, maintainer=env["outsider"]
+        )
+        denied = tmp_path / "denied"
+        denied.mkdir()
+        with pytest.raises(ComputeError):
+            freeze_input(record, denied)
+        DataResource.objects.filter(pk=resource.pk).update(owner_only=False)
+        ResourceObservationMetadata.objects.filter(
+            resource_id=inputs["december"]
+        ).update(starts_at=date(2027, 12, 1))
+        with pytest.raises(ComputeError, match="同一观测年"):
+            validate_submission(env["owner"], request)
+        ResourceObservationMetadata.objects.filter(
+            resource_id=inputs["december"]
+        ).update(starts_at=date(2026, 11, 1))
+        with pytest.raises(ComputeError, match="月份"):
+            validate_submission(env["owner"], request)

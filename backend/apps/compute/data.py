@@ -359,7 +359,7 @@ def freeze_input(record, directory):
             record.task.version.manifest, record.task.project_tag_id
         ).max_band_pixels
 
-    from .raster_windows import materialize_window
+    from .raster_windows import materialize_window, materialize_streaming_window
     from .cube_inputs import materialize as materialize_cube
 
     prepared = stage_version(
@@ -369,6 +369,8 @@ def freeze_input(record, directory):
         lambda path: (
             materialize_cube(resource, path, cube)
             if cube
+            else materialize_streaming_window(resource, path, window)
+            if record.snapshot.get("streamingRaster")
             else materialize_window(resource, path, window)
             if window
             else _materialize_input(resource, path, limit)
@@ -400,7 +402,10 @@ def freeze_input(record, directory):
         import rasterio
 
         with rasterio.open(target) as source:
-            if source.width * source.height * source.count > max_band_pixels:
+            if (
+                source.width * source.height * source.count > max_band_pixels
+                and not record.snapshot.get("streamingRaster")
+            ):
                 target.unlink(missing_ok=True)
                 raise ComputeError("输入栅格超过当前算子的波段像元预算")
     digest = prepared["sha256"]
@@ -765,6 +770,15 @@ def import_output(record):
             raster_kind=output.metadata.get("rasterKind", "continuous"),
             uploader_id=record.requested_by_id,
             source_checksum_sha256=output.checksum,
+            **(
+                {"native_result": True}
+                if any(
+                    (port.get("raster") or {}).get("streaming")
+                    or (port.get("raster") or {}).get("cube")
+                    for port in output.task.version.manifest.get("inputs", [])
+                )
+                else {}
+            ),
             **(
                 {
                     "requested_default_rules": rendering_rules(output.metadata),

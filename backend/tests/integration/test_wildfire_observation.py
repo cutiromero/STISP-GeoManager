@@ -197,7 +197,7 @@ def test_wildfire_flow_keeps_native_cube_and_observation_contract(setup_compute)
         value = normalize_definition(definition(version.pk))
     assert [row["key"] for row in value["inputRequirements"]] == ["cube"]
     operator = next(row for row in value["nodes"] if row["kind"] == "operator")
-    assert operator["parameters"] == {"history": 12}
+    assert operator["parameters"] == {"history": 1}
     assert set(operator["contract"]["importOutputs"]) == {
         "observation",
         "classification",

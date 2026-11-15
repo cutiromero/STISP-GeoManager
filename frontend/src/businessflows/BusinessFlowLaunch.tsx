@@ -531,7 +531,7 @@ export default function BusinessFlowLaunch({
   const SettingsTag = presentation === "task" ? "details" : "div";
   return (
     <section
-      className="business-flow-launch-panel"
+      className={`business-flow-launch-panel${presentation === "task" && fixedInputs ? " monitor-concise-launch" : ""}`}
       aria-label={ui("业务流启动准备", "Business flow launch preparation")}
     >
       <header>
@@ -594,7 +594,7 @@ export default function BusinessFlowLaunch({
                 </label>
                 <SettingsTag className="business-flow-launch-settings">
                   {presentation === "task" && (
-                    <summary>{ui("执行设置", "Execution settings")}</summary>
+                    <summary>{ui("高级设置", "Advanced settings")}</summary>
                   )}
                   <div className="business-flow-launch-roles">
                     <span>
@@ -704,7 +704,12 @@ export default function BusinessFlowLaunch({
                     />
                   </Suspense>
                 ) : fixedInputs ? (
-                  <div className="business-flow-launch-inputs"><h3>本次任务资料</h3>{Object.entries(inputs).map(([key, id]) => <p key={key}>{inputLabels?.[id] ?? `资料 ${id}`}</p>)}</div>
+                  <div className="business-flow-launch-inputs">
+                    <h3>本次任务资料</h3>
+                    {Object.entries(inputs).map(([key, id]) => (
+                      <p key={key}>{inputLabels?.[id] ?? `资料 ${id}`}</p>
+                    ))}
+                  </div>
                 ) : version.definition.inputRequirements.length ? (
                   <div className="business-flow-launch-inputs">
                     <h3>{ui("任务资料", "Task data")}</h3>

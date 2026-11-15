@@ -16,6 +16,10 @@ def validate_contract(value):
         "northUp",
         "window",
         "cube",
+        "streaming",
+        "defaultExtent",
+        "months",
+        "sameYear",
     }:
         raise ComputeError("栅格输入合同包含未知字段")
     if "cube" in value:
@@ -32,6 +36,17 @@ def validate_contract(value):
             or "window" not in value
         ):
             raise ComputeError("原生观测合同须声明变量、时间、序列参数和研究区")
+    for name in ("streaming", "defaultExtent", "sameYear"):
+        if name in value and (type(value[name]) is not bool or "window" not in value):
+            raise ComputeError("流式处理和默认全域须绑定有效的研究区窗口")
+    if "months" in value and (
+        not isinstance(value["months"], list)
+        or not value["months"]
+        or any(
+            type(month) is not int or not 1 <= month <= 12 for month in value["months"]
+        )
+    ):
+        raise ComputeError("模型时相月份声明无效")
     if "window" in value and (
         not isinstance(value["window"], list)
         or len(value["window"]) != 4
@@ -91,8 +106,13 @@ def gaps(spec, info, max_band_pixels=None):
             gap(code, spec["key"], "replace_data", expected=expected, actual=actual)
         )
 
-    if max_band_pixels is not None and size[0] * size[1] * len(bands) > max_band_pixels:
-        add("RASTER_SIZE", max_band_pixels, size[0] * size[1] * len(bands))
+    working_pixels = (
+        min(size[0], 256) * min(size[1], 256)
+        if contract.get("streaming")
+        else size[0] * size[1]
+    )
+    if max_band_pixels is not None and working_pixels * len(bands) > max_band_pixels:
+        add("RASTER_SIZE", max_band_pixels, working_pixels * len(bands))
     if contract.get("bandCount") is not None and len(bands) != contract["bandCount"]:
         add("BAND_COUNT", contract["bandCount"], len(bands))
     if contract.get("dtypes") and any(

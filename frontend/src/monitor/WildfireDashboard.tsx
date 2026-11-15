@@ -325,6 +325,7 @@ export default function WildfireDashboard({
               <MonitorRawLayer map={map} workspace={workspace} />
               <MonitorRegionControls map={map} workspace={workspace} />
               <MonitorTimeline
+                workspace={workspace}
                 items={page?.items ?? []}
                 selected={selected}
                 onSelect={selection.selectProduct}
@@ -339,7 +340,10 @@ export default function WildfireDashboard({
                   <Segmented
                     aria-label="观测图显示方式"
                     value={mode}
-                    onChange={(value) => setMode(value as typeof mode)}
+                    onChange={(value) => {
+                      workspace.selectTimeTarget("result");
+                      setMode(value as typeof mode);
+                    }}
                     options={[
                       { value: "styled", label: "观测分级" },
                       { value: "values", label: "观测原值" },

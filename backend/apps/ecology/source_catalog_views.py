@@ -52,7 +52,7 @@ def times(request):
         request.user,
         request.GET.get("scene"),
         int(request.GET.get("resourceId", 0)),
-        int(request.GET.get("year", 0)),
+        int(request.GET["year"]) if request.GET.get("year") else None,
         request.GET.get("product"),
         int(request.GET["after"]) if request.GET.get("after") else None,
         int(request.GET.get("limit", 500)),
