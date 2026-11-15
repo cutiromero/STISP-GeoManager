@@ -32,6 +32,9 @@ export function mockAssessment(
     summary: t("monitor.analysisSummary", {
       name: station.name,
       level: t(`monitor.level.${station.level}`),
+      groundwater: station.readings.groundwater.toFixed(2),
+      moisture: station.readings.moisture.toFixed(1),
+      ndvi: station.readings.ndvi.toFixed(3),
     }),
     recommendation: t("monitor.analysisAdvice"),
     simulated: true,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextvars import copy_context
+from contextlib import nullcontext
 
 import logging
 import queue
@@ -70,6 +71,8 @@ _LOCK = threading.RLock()
 _LAST_PERSIST: dict[str, tuple[float, int]] = {}
 _RESTART_RECONCILE_LOCK = threading.Lock()
 _RESTART_RECONCILED = False
+_RENDER_FLIGHTS: dict[tuple, str] = {}
+_RENDER_SUBMISSION_LOCK = threading.Lock()
 
 HEAVY_TASK_QUEUE_SIZE = 4
 COMPLETED_JOB_TTL_SECONDS = 6 * 60 * 60
@@ -84,10 +87,11 @@ logger = logging.getLogger(__name__)
 class _HeavyTaskExecutor:
     """One worker with a hard cap on waiting memory-heavy tasks."""
 
-    def __init__(self, *, queue_size: int) -> None:
+    def __init__(self, *, queue_size: int, preview: bool = False) -> None:
         self._queue: queue.Queue[Callable[[], None]] = queue.Queue(maxsize=queue_size)
         self._start_lock = threading.Lock()
         self._worker: threading.Thread | None = None
+        self._preview = preview
 
     def submit(self, target: Callable[[], None]) -> bool:
         self._ensure_worker()
@@ -106,7 +110,9 @@ class _HeavyTaskExecutor:
                 return
             self._worker = threading.Thread(
                 target=self._run,
-                name="raster-heavy-worker",
+                name="raster-preview-worker"
+                if self._preview
+                else "raster-heavy-worker",
                 daemon=True,
             )
             self._worker.start()
@@ -117,7 +123,7 @@ class _HeavyTaskExecutor:
             try:
                 from apps.core.heavy_work import heavy_work
 
-                with heavy_work():
+                with nullcontext() if self._preview else heavy_work():
                     target()
             except Exception:
                 logger.exception("未捕获的栅格后台任务异常")
@@ -129,6 +135,11 @@ class _HeavyTaskExecutor:
 
 
 _HEAVY_TASK_EXECUTOR = _HeavyTaskExecutor(queue_size=HEAVY_TASK_QUEUE_SIZE)
+# Native source previews have a fixed 1440x720 input and 1024x1024 output.
+# One bounded worker lets these small reads proceed during full-scene compute.
+_PREVIEW_TASK_EXECUTOR = _HeavyTaskExecutor(
+    queue_size=HEAVY_TASK_QUEUE_SIZE, preview=True
+)
 
 
 class _DeleteOnCloseFile:
@@ -432,7 +443,12 @@ def _submit_job(
             fail_submission(f"后台任务执行环境异常：{exc}")
 
     try:
-        accepted = _HEAVY_TASK_EXECUTOR.submit(execute)
+        executor = (
+            _PREVIEW_TASK_EXECUTOR
+            if job.kind == "source-preview"
+            else _HEAVY_TASK_EXECUTOR
+        )
+        accepted = executor.submit(execute)
     except Exception as exc:
         logger.exception("栅格后台任务无法启动：%s", job.id)
         fail_submission(f"后台任务无法启动：{exc}")
@@ -593,6 +609,31 @@ def start_render_job(
     from apps.raster.services.renderer import (
         build_static_xyz_tile_pyramid,
         register_tile_style,
+        tile_style_is_ready,
+    )
+    from apps.projects.context import selected_project_id
+
+    # Resolve current input and rules on every call. Neither a shared job nor a
+    # ready style serves as authorization; views/job reads still check access.
+    layer = MapLayer.objects.filter(pk=layer_id).first() if layer_id else None
+    dataset = (
+        RasterDataset.objects.filter(pk=dataset_id).first() if dataset_id else None
+    )
+    if dataset is None and layer is not None:
+        dataset = dataset_for_layer(layer)
+    if dataset is None:
+        raise RasterRenderError("未找到可渲染的栅格数据集")
+    render_rules = rules or (
+        layer.raster_rules if layer and layer.raster_rules else dataset.default_rules
+    )
+    result = register_tile_style(dataset, render_rules)
+    ready = tile_style_is_ready(dataset, str(result["styleHash"]))
+    key = (
+        selected_project_id(),
+        created_by_id,
+        layer_id,
+        dataset.id,
+        result["styleHash"],
     )
 
     refs = {
@@ -600,10 +641,25 @@ def start_render_job(
         for key, value in {"layerId": layer_id, "datasetId": dataset_id}.items()
         if type(value) is int and value > 0
     }
-    try:
-        job = _create_job("render", created_by_id=created_by_id, input_refs=[refs])
-    except RasterJobError as exc:
-        raise RasterRenderError(str(exc)) from exc
+    with _RENDER_SUBMISSION_LOCK:
+        with _LOCK:
+            _prune_job_caches_locked()
+            previous = _JOBS.get(_RENDER_FLIGHTS.get(key, ""))
+            if previous and (
+                previous.status in {"queued", "running"}
+                or (previous.status == "ready" and ready)
+            ):
+                return previous
+        try:
+            job = _create_job("render", created_by_id=created_by_id, input_refs=[refs])
+        except RasterJobError as exc:
+            raise RasterRenderError(str(exc)) from exc
+        _RENDER_FLIGHTS[key] = job.id
+        while len(_RENDER_FLIGHTS) > JOB_CACHE_MAX_ENTRIES:
+            _RENDER_FLIGHTS.pop(next(iter(_RENDER_FLIGHTS)))
+        if ready:
+            _finish_job(job.id, result, "ready")
+            return job
 
     def runner() -> None:
         try:
@@ -624,6 +680,8 @@ def start_render_job(
                 else dataset.default_rules
             )
             result = register_tile_style(dataset, render_rules)
+            if result["styleHash"] != key[-1]:
+                raise RasterRenderError("栅格资料或显示规则已更新，请重新加载")
             if dataset.raster_kind == RasterDataset.RasterKind.CATEGORICAL:
                 _set_job_running(
                     job.id,

@@ -113,7 +113,7 @@ def build_atomic_mbtiles_pyramid(
     """Build a complete categorical pyramid before exposing one atomic file."""
 
     spec = tile_pyramid_spec(bounds, metadata)
-    if _is_complete_pyramid(target_path, style_hash, spec):
+    if is_complete_pyramid(target_path, style_hash, spec):
         return TilePyramidBuildResult(
             target_path,
             spec.min_zoom,
@@ -132,11 +132,7 @@ def build_atomic_mbtiles_pyramid(
     def report_build_progress(zoom: int, *, force: bool = False) -> None:
         if progress is None:
             return
-        if (
-            force
-            or completed == 1
-            or completed % PROGRESS_UPDATE_TILE_INTERVAL == 0
-        ):
+        if force or completed == 1 or completed % PROGRESS_UPDATE_TILE_INTERVAL == 0:
             progress(completed, spec.total_tiles, zoom)
 
     try:
@@ -213,7 +209,7 @@ def build_atomic_mbtiles_pyramid(
 
         # The style hash is immutable. A concurrent completed builder wins and
         # this temporary file can be discarded without replacing live readers.
-        if _is_complete_pyramid(target_path, style_hash, spec):
+        if is_complete_pyramid(target_path, style_hash, spec):
             temporary_path.unlink(missing_ok=True)
         else:
             os.replace(temporary_path, target_path)
@@ -348,7 +344,7 @@ def _parent_tile_from_children(
     return output.getvalue()
 
 
-def _is_complete_pyramid(path: Path, style_hash: str, spec: TilePyramidSpec) -> bool:
+def is_complete_pyramid(path: Path, style_hash: str, spec: TilePyramidSpec) -> bool:
     metadata = read_mbtiles_metadata(path)
     return (
         metadata.get("complete") == "1"

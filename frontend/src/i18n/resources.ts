@@ -157,9 +157,9 @@ export const zhCN = {
       waterAlert: "地下水埋深波动，建议复核",
       soilAlert: "土壤含水率变化，建议关注",
       analysisSummary:
-        "最新观测来自{{name}}，点位态势为“{{level}}”。下游水分胁迫仍是重点关注方向，需结合地下水与植被变化综合核查。",
+        "{{name}}本轮模拟态势为“{{level}}”：地下水埋深 {{groundwater}} m，土壤含水率 {{moisture}}%，NDVI {{ndvi}}。",
       analysisAdvice:
-        "重点关注英苏—阿拉干河段水分条件，结合生态输水记录与同期遥感影像开展复核。",
+        "优先核查高风险点位，结合地下水、土壤水分与同期植被变化综合判断。演示读数不作为实际预警依据。",
       metric: {
         groundwater: "地下水埋深",
         moisture: "土壤含水率",
@@ -1347,9 +1347,9 @@ export const enUS = {
       waterAlert: "Groundwater depth fluctuation; review recommended",
       soilAlert: "Soil moisture change; attention recommended",
       analysisSummary:
-        "Latest observations are from {{name}}, with status {{level}}. Downstream water stress remains a priority; review groundwater and vegetation jointly.",
+        "{{name}} has a simulated status of {{level}}: groundwater depth {{groundwater}} m, soil moisture {{moisture}}%, and NDVI {{ndvi}}.",
       analysisAdvice:
-        "Review water conditions along Yingsu–Alagan alongside ecological water-delivery records and concurrent imagery.",
+        "Review the higher-risk sites using groundwater, soil moisture and concurrent vegetation changes. Demo readings are not operational alerts.",
       metric: {
         groundwater: "Groundwater depth",
         moisture: "Soil moisture",

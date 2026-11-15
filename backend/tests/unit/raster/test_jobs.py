@@ -364,6 +364,18 @@ class RasterJobStateTests(SimpleTestCase):
 
 
 class HeavyTaskExecutorTests(SimpleTestCase):
+    def test_bounded_preview_worker_does_not_wait_for_heavy_compute(self):
+        finished = Event()
+        executor = _HeavyTaskExecutor(queue_size=1, preview=True)
+        with patch(
+            "apps.core.heavy_work.heavy_work",
+            side_effect=AssertionError("heavy slot must not be taken"),
+        ) as heavy:
+            self.assertTrue(executor.submit(finished.set))
+            self.assertTrue(finished.wait(1))
+            executor._queue.join()
+        heavy.assert_not_called()
+
     def test_single_worker_has_bounded_waiting_queue(self):
         executor = _HeavyTaskExecutor(queue_size=1)
         running = Event()

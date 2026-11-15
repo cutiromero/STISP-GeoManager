@@ -15,6 +15,7 @@ from .source_catalog import require_scene, source_query
 # CONFIGURATION
 MAX_FLIGHTS = 64
 PREVIEW_WIDTH = 1024
+MAX_PREVIEW_CELLS = 1_100_000
 PREVIEW_VERSION = "native-observation-preview-v1"
 _FLIGHTS = {}
 _LOCK = threading.RLock()
@@ -58,6 +59,8 @@ def request_preview(user, scene, resource_id, product, ordinal):
     cube = Cube(root)
     bounds = metadata.source_schema["bounds"]
     plan = cube.plan(product, ordinal, bounds, 1)
+    if plan["window"][2] * plan["window"][3] > MAX_PREVIEW_CELLS:
+        raise ValidationError("原始观测超出快速预览范围，请先生成区域观测成果")
     source_fingerprint = fingerprint(root, plan)
     identity = [
         selected_project_id(),

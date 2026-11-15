@@ -1,3 +1,4 @@
+import { monitorTaskWritingGuidance } from "./productNarrative";
 import MonitorFlowGuide from "./MonitorFlowGuide";
 import type { ComponentProps } from "react";
 import { Alert } from "antd";
@@ -19,7 +20,7 @@ export default function SpartinaTaskDrawer({ workspace: w, ...props }: Props) {
     businessFlow: w.catalog?.method
       ? {
           ...w.catalog.method,
-          goal: `对所选${set?.label ?? ""}时相组合进行互花米草RF解译。研究区WGS84：${JSON.stringify(w.effectiveRegion)}。输出分类、概率、分布统计并登记到监测大屏。`,
+          goal: `对所选${set?.label ?? ""}时相组合进行互花米草RF解译。研究区WGS84：${JSON.stringify(w.effectiveRegion)}。输出分类、概率、分布统计并登记到监测大屏。 ${monitorTaskWritingGuidance}`,
         }
       : props.page.businessFlow,
   };

@@ -134,6 +134,19 @@ class RasterJobPersistenceTests(TestCase):
     def test_input_reference_persistence_failure_prevents_render_submission(self):
         with (
             patch(
+                "apps.raster.models.RasterDataset.objects.filter",
+                return_value=SimpleNamespace(
+                    first=lambda: SimpleNamespace(id=1, default_rules={})
+                ),
+            ),
+            patch(
+                "apps.raster.services.renderer.register_tile_style",
+                return_value={"styleHash": "display"},
+            ),
+            patch(
+                "apps.raster.services.renderer.tile_style_is_ready", return_value=True
+            ),
+            patch(
                 "apps.raster.services.jobs.reconcile_interrupted_jobs",
                 return_value=True,
             ),
@@ -145,7 +158,7 @@ class RasterJobPersistenceTests(TestCase):
             patch("apps.raster.services.jobs._submit_job") as submit,
         ):
             with self.assertRaisesMessage(RuntimeError, "任务登记失败，数据库暂不可用"):
-                start_render_job(layer_id=1, dataset_id=None, rules={})
+                start_render_job(layer_id=None, dataset_id=1, rules={})
         submit.assert_not_called()
         self.assertFalse(_JOBS)
         self.assertFalse(RasterProcessingJob.objects.exists())

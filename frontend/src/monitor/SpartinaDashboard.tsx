@@ -1,3 +1,4 @@
+import { productNarrative } from "./productNarrative";
 import { useMonitoringWorkspace } from "./useMonitoringWorkspace";
 import MonitoringSourceControls from "./MonitoringSourceControls";
 import MonitorRegionControls from "./MonitorRegionControls";
@@ -40,7 +41,7 @@ const statusNames: Record<string, string> = {
   queued: "等待执行",
   running: "处理中",
   waiting_compute: "模型计算中",
-  waiting_approval: "等待处理",
+  waiting_approval: "待审核 · 请打开任务",
   paused: "已暂停",
   succeeded: "已完成",
   failed: "未完成",
@@ -513,7 +514,10 @@ export default function SpartinaDashboard({
                 <div className="spartina-card-body monitor-assessment-copy">
                   {selected ? (
                     <>
-                      <p>{selected.interpretation}</p>
+                      <p>{productNarrative(selected).summary}</p>
+                      <p className="monitor-advice">
+                        {productNarrative(selected).advice}
+                      </p>
                       <time
                         className="spartina-secondary"
                         dateTime={selected.registeredAt}

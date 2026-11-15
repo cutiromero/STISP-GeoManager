@@ -1,3 +1,4 @@
+import { monitorTaskWritingGuidance } from "./productNarrative";
 import { Button, Select } from "antd";
 import { useMemo, useState, type ComponentProps } from "react";
 import { useComputeText } from "../compute/ui";
@@ -37,6 +38,15 @@ export default function LandcoverTaskDrawer({
   return (
     <MonitorTaskDrawer
       {...props}
+      page={
+        props.page && {
+          ...props.page,
+          businessFlow: props.page.businessFlow && {
+            ...props.page.businessFlow,
+            goal: `${props.page.businessFlow.goal} ${monitorTaskWritingGuidance}`,
+          },
+        }
+      }
       title={ui("地表覆盖任务", "Land-cover task")}
       initialInputs={initialInputs}
       inputLabels={inputLabels}

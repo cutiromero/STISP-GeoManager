@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import pytest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -68,6 +69,114 @@ class LuccStaticRendererRegressionTests(TestCase):
 
         self.assertEqual(tile, expected_tile)
         rasterio_open.assert_not_called()
+
+    @pytest.mark.efficiency
+    def test_ready_display_bypasses_saturated_heavy_queue_and_reuses_owned_job(self):
+        dataset, path = self._create_categorical_dataset()
+        result = renderer.register_tile_style(dataset, dataset.default_rules)
+        target = raster_tile_pyramid_path(
+            dataset.id, result["styleHash"], renderer.RASTER_RENDERER_VERSION
+        )
+        build_atomic_mbtiles_pyramid(
+            target,
+            style_hash=result["styleHash"],
+            bounds=dataset.bounds_3857,
+            metadata=dataset.processed_gdalinfo,
+            render_native_tile=lambda *_: b"tile",
+        )
+        before = path.read_bytes()
+        with (
+            patch.object(
+                jobs_service._HEAVY_TASK_EXECUTOR, "submit", return_value=False
+            ) as submit,
+            patch("rasterio.open") as opened,
+        ):
+            first = jobs_service.start_render_job(
+                layer_id=None, dataset_id=dataset.id, rules=None
+            )
+            second = jobs_service.start_render_job(
+                layer_id=None, dataset_id=dataset.id, rules=None
+            )
+        self.assertEqual(first.status, "ready")
+        self.assertIs(first, second)
+        submit.assert_not_called()
+        opened.assert_not_called()
+        self.assertEqual(path.read_bytes(), before)
+        target.unlink()
+        with patch.object(jobs_service, "_submit_job") as submit:
+            retry = jobs_service.start_render_job(
+                layer_id=None, dataset_id=dataset.id, rules=None
+            )
+        self.assertNotEqual(retry.id, first.id)
+        self.assertEqual(retry.status, "queued")
+        submit.assert_called_once()
+
+    @pytest.mark.efficiency
+    def test_cold_render_merges_pending_work_and_failed_submission_can_retry(self):
+        dataset, path = self._create_categorical_dataset()
+        with patch.object(jobs_service, "_submit_job") as submit:
+            first = jobs_service.start_render_job(
+                layer_id=None, dataset_id=dataset.id, rules=None
+            )
+            second = jobs_service.start_render_job(
+                layer_id=None, dataset_id=dataset.id, rules=None
+            )
+            self.assertIs(first, second)
+            submit.assert_called_once()
+        jobs_service._fail_job(first.id, "temporary failure")
+        with patch.object(
+            jobs_service._HEAVY_TASK_EXECUTOR, "submit", return_value=False
+        ):
+            rejected = jobs_service.start_render_job(
+                layer_id=None, dataset_id=dataset.id, rules=None
+            )
+        self.assertEqual(rejected.status, "failed")
+        with patch.object(jobs_service, "_submit_job") as submit:
+            retry = jobs_service.start_render_job(
+                layer_id=None, dataset_id=dataset.id, rules=None
+            )
+            self.assertNotEqual(retry.id, rejected.id)
+            submit.assert_called_once()
+        path.write_bytes(b"a new file version")
+        with patch.object(jobs_service, "_submit_job") as submit:
+            changed = jobs_service.start_render_job(
+                layer_id=None, dataset_id=dataset.id, rules=None
+            )
+            self.assertNotEqual(changed.id, retry.id)
+            submit.assert_called_once()
+
+    @pytest.mark.efficiency
+    def test_dynamic_display_bypasses_heavy_work_and_keeps_jobs_account_owned(self):
+        from django.contrib.auth import get_user_model
+
+        dataset, _ = self._create_categorical_dataset()
+        dataset.processed_gdalinfo["geoManager"] = {"dynamicTiles": True}
+        dataset.save(update_fields=["processed_gdalinfo"])
+        first_user = get_user_model().objects.create_user(username="display-first")
+        second_user = get_user_model().objects.create_user(username="display-second")
+        with (
+            patch.object(jobs_service, "_submit_job") as submit,
+            patch("rasterio.open") as opened,
+        ):
+            first = jobs_service.start_render_job(
+                layer_id=None,
+                dataset_id=dataset.id,
+                rules=None,
+                created_by_id=first_user.id,
+            )
+            second = jobs_service.start_render_job(
+                layer_id=None,
+                dataset_id=dataset.id,
+                rules=None,
+                created_by_id=second_user.id,
+            )
+        self.assertEqual(first.status, "ready")
+        self.assertEqual(second.status, "ready")
+        self.assertNotEqual(first.id, second.id)
+        self.assertEqual(first.created_by_id, first_user.id)
+        self.assertEqual(second.created_by_id, second_user.id)
+        submit.assert_not_called()
+        opened.assert_not_called()
 
     def test_missing_static_mbtiles_never_falls_back_to_dynamic_rendering(self):
         dataset, _processed_path = self._create_categorical_dataset()
@@ -169,6 +278,7 @@ class LuccRenderJobRegressionTests(TestCase):
 
     def test_categorical_render_job_is_not_ready_until_pyramid_build_returns(self):
         dataset = SimpleNamespace(
+            id=7,
             raster_kind=RasterDataset.RasterKind.CATEGORICAL,
             default_rules={"mode": "unique", "bands": [1]},
         )
@@ -193,6 +303,9 @@ class LuccRenderJobRegressionTests(TestCase):
             patch(
                 "apps.raster.services.renderer.register_tile_style",
                 return_value={"styleHash": "lucc-style"},
+            ),
+            patch(
+                "apps.raster.services.renderer.tile_style_is_ready", return_value=False
             ),
             patch(
                 "apps.raster.services.renderer.build_static_xyz_tile_pyramid",

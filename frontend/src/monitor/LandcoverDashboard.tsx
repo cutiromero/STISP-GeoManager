@@ -1,3 +1,5 @@
+import { productNarrative } from "./productNarrative";
+import { currentLocale } from "../i18n";
 import { useNavigate } from "react-router-dom";
 import { monitorResourceProfile } from "./resourceProfiles";
 import { ReloadOutlined } from "@ant-design/icons";
@@ -32,7 +34,7 @@ const statusNames: Record<string, string> = {
   queued: "等待执行",
   running: "处理中",
   waiting_compute: "处理中",
-  waiting_approval: "等待处理",
+  waiting_approval: "待审核 · 请打开任务",
   succeeded: "已完成",
   paused: "已暂停",
   failed: "未完成",
@@ -489,6 +491,14 @@ export default function LandcoverDashboard({
                           "Statistics are region-specific",
                         )}
                   </p>
+                  {selected && (
+                    <p className="monitor-advice">
+                      {
+                        productNarrative(selected, currentLocale() === "en-US")
+                          .summary
+                      }
+                    </p>
+                  )}
                   {hasResult && (
                     <>
                       <span className="landcover-secondary">

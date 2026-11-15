@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "antd";
 import type { Map } from "mapbox-gl";
 import { api, requestJson } from "../api/client";
 import type {
@@ -9,6 +10,7 @@ import { projectUrl } from "../projects/session";
 import { monitorResourceProfile } from "./resourceProfiles";
 import { upsertPolygonLayer } from "../map/spatialDraw";
 import { waitForAbortableDelay } from "../utils/rasterRenderTasks";
+import { versionedRasterTileUrl } from "../map/rasterLayerSync";
 import type { MonitoringWorkspace } from "./useMonitoringWorkspace";
 
 export default function MonitorRawLayer({
@@ -19,6 +21,8 @@ export default function MonitorRawLayer({
   workspace: MonitoringWorkspace;
 }) {
   const [status, setStatus] = useState("");
+  const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
   const source = w.source;
   useEffect(() => {
     if (!map?.getStyle() || !source || !w.sourceVisible) {
@@ -27,6 +31,7 @@ export default function MonitorRawLayer({
       return;
     }
     let disposed = false;
+    setFailed(false);
     w.setRawPreviewBusy(true);
     const controller = new AbortController();
     const signal = controller.signal;
@@ -145,11 +150,12 @@ export default function MonitorRawLayer({
         map.addSource("monitor-raw", {
           type: "raster",
           tiles: [
-            projectUrl(result.tileUrl)
+            projectUrl(versionedRasterTileUrl(result.tileUrl))
               .replace(/%7B/g, "{")
               .replace(/%7D/g, "}"),
           ],
           tileSize: 256,
+          minzoom: result.minZoom,
           bounds: result.bounds4326 as [number, number, number, number],
           maxzoom: result.maxZoom,
         });
@@ -178,6 +184,8 @@ export default function MonitorRawLayer({
     };
     void load()
       .catch((reason) => {
+        if (disposed) return;
+        setFailed(true);
         if (!signal.aborted)
           setStatus(
             reason instanceof Error ? reason.message : "无法显示原始图层",
@@ -215,6 +223,7 @@ export default function MonitorRawLayer({
     w.sourceVisible,
     w.time?.ordinal,
     w.product,
+    retry,
   ]);
   useEffect(() => {
     const bounds = source?.metadata.sourceSchema.bounds;
@@ -236,8 +245,17 @@ export default function MonitorRawLayer({
       );
   }, [map, w.sourceOpacity]);
   return status ? (
-    <span className="monitor-source-status" role="status">
+    <span className="monitor-source-status" role={failed ? "alert" : "status"}>
       {status}
+      {failed && (
+        <Button
+          size="small"
+          type="link"
+          onClick={() => setRetry((value) => value + 1)}
+        >
+          重新加载
+        </Button>
+      )}
     </span>
   ) : null;
 }

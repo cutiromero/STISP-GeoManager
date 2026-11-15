@@ -1,3 +1,4 @@
+import { monitorTaskWritingGuidance } from "./productNarrative";
 import MonitorFlowGuide from "./MonitorFlowGuide";
 import { trendRange, trendOptions, type TrendSpan } from "./trendRange";
 import { Select } from "antd";
@@ -33,7 +34,7 @@ export default function WildfireTaskDrawer({ workspace: w, ...props }: Props) {
     businessFlow: w.catalog?.method
       ? {
           ...w.catalog.method,
-          goal: `生成${observationProducts.find((row) => row.value === w.product)?.label}观测图。所选时期：${period}；研究区WGS84：${JSON.stringify(w.effectiveRegion)}；趋势统计时段${range.start}至${range.end}（按真实坐标计算${history}${w.product === "fcci_ba" ? "个月" : "个观测期"}）。交付观测原值、分级图、区域统计与序列。`,
+          goal: `生成${observationProducts.find((row) => row.value === w.product)?.label}观测图。所选时期：${period}；研究区WGS84：${JSON.stringify(w.effectiveRegion)}；趋势统计时段${range.start}至${range.end}（按真实坐标计算${history}${w.product === "fcci_ba" ? "个月" : "个观测期"}）。交付观测原值、分级图、区域统计与序列。 ${monitorTaskWritingGuidance}`,
         }
       : props.page.businessFlow,
   };

@@ -21,7 +21,10 @@ import {
   RasterRenderTaskRegistry,
   waitForAbortableDelay,
 } from "../utils/rasterRenderTasks";
-import { monitorResourceProfile } from "./resourceProfiles";
+import {
+  clearMonitorResourceProfiles,
+  monitorResourceProfile,
+} from "./resourceProfiles";
 import { useMonitorMap } from "./useMonitorMap";
 
 const layerIds = [
@@ -55,8 +58,15 @@ export default function ProductMap({
   refreshKey?: number;
 }) {
   const { t } = useTranslation();
-  const { container, map, mapError, regionalView, focus, showBounds } =
-    useMonitorMap(config.initialView, animated);
+  const {
+    container,
+    map,
+    mapError,
+    regionalView,
+    focus,
+    showBounds,
+    resetMapError,
+  } = useMonitorMap(config.initialView, animated);
   const boundsRef = useRef<[number, number, number, number] | undefined>(
     undefined,
   );
@@ -66,6 +76,7 @@ export default function ProductMap({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [legend, setLegend] = useState<LiveLayerLegend>();
+  const [retry, setRetry] = useState(0);
   const target = resource ?? product?.resource;
   const title = product?.name ?? target?.name ?? "";
   const focused = useRef<number | undefined>(undefined);
@@ -88,6 +99,12 @@ export default function ProductMap({
         updating: loading && Boolean(swap.current?.hasActive()),
         error: error || (mapError ? t("monitor.mapError") : undefined),
         legend: information ? legend : undefined,
+        retry: () => {
+          resetMapError();
+          styles.current.clear();
+          clearMonitorResourceProfiles();
+          setRetry((value) => value + 1);
+        },
       }),
     [report, title, loading, error, mapError, legend, information, t],
   );
@@ -133,9 +150,11 @@ export default function ProductMap({
     }
     const identity = target ? `${target.id}:${target.updatedAt}` : "";
     if (activeResource.current !== identity) {
-      swap.current?.clear();
-      for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
-      if (map.getSource("product")) map.removeSource("product");
+      if (!target || !swap.current?.hasActive()) {
+        swap.current?.clear();
+        for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
+        if (map.getSource("product")) map.removeSource("product");
+      }
       activeResource.current = identity;
       boundsRef.current = undefined;
       if (!target) focused.current = undefined;
@@ -152,6 +171,10 @@ export default function ProductMap({
       signal.throwIfAborted();
       let bounds = profile.bounds;
       if (profile.raster) {
+        if (!swap.current?.hasActive()) {
+          for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
+          if (map.getSource("product")) map.removeSource("product");
+        }
         const styleKey = `${identity}:${visibleCodes?.join(",") ?? "default"}`;
         let result = styles.current.get(styleKey);
         if (!result) {
@@ -220,6 +243,9 @@ export default function ProductMap({
             )[0],
           );
       } else if (profile.vectorTiles) {
+        swap.current?.clear();
+        for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
+        if (map.getSource("product")) map.removeSource("product");
         const preview = profile.vectorTiles;
         const color = product?.scene === "spartina" ? "#66e0a3" : "#ffb46a";
         setLegend({
@@ -335,6 +361,7 @@ export default function ProductMap({
     target?.id,
     target?.updatedAt,
     refreshKey,
+    retry,
     focusKey,
     visibleCodes?.join(","),
     t,

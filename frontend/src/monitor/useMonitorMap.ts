@@ -232,5 +232,13 @@ export function useMonitorMap(
       duration: latest.current.animated ? 1000 : 0,
     });
   };
-  return { container, map, mapError, regionalView, focus, showBounds };
+  return {
+    container,
+    map,
+    mapError,
+    regionalView,
+    focus,
+    showBounds,
+    resetMapError: () => setMapError(false),
+  };
 }

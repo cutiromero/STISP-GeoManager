@@ -17,6 +17,7 @@ import { useMonitorProductSelection } from "./useMonitorProductSelection";
 import { MonitorDataStatus } from "./MonitorLayerStatus";
 import { useMonitoringProducts } from "./useMonitoringProducts";
 import "./remote-sensing-monitor.css";
+import { productNarrative } from "./productNarrative";
 
 const ProductMap = lazy(() => import("./ProductMap"));
 
@@ -333,7 +334,16 @@ export default function RemoteSensingDashboard({
               </MonitorPanel>
               <MonitorAssessmentCard
                 summary={
-                  selected?.interpretation ?? t("remoteMonitor.noConclusion")
+                  selected
+                    ? productNarrative(selected, currentLocale() === "en-US")
+                        .summary
+                    : t("remoteMonitor.noConclusion")
+                }
+                recommendation={
+                  selected
+                    ? productNarrative(selected, currentLocale() === "en-US")
+                        .advice
+                    : undefined
                 }
                 badge={
                   selected

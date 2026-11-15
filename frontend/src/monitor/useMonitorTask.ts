@@ -43,7 +43,7 @@ export function useMonitorTask(
       } catch {}
       if (
         previous?.id === next.id &&
-        active.has(previous.status) &&
+        previous.status !== "succeeded" &&
         next.status === "succeeded"
       )
         completed.current();
@@ -60,7 +60,9 @@ export function useMonitorTask(
     if (id && /^[a-f0-9-]{36}$/.test(id))
       void businessFlowsApi
         .run(id, { signal: controller.signal })
-        .then(accept)
+        .then((next) => {
+          if (!controller.signal.aborted) accept(next);
+        })
         .catch((reason) => {
           if (controller.signal.aborted) return;
           if (
@@ -85,7 +87,9 @@ export function useMonitorTask(
           if (running && !controller.signal.aborted)
             return businessFlowsApi
               .run(running.id, { signal: controller.signal })
-              .then(accept);
+              .then((next) => {
+                if (!controller.signal.aborted) accept(next);
+              });
         })
         .catch(() => {});
     return () => controller.abort();

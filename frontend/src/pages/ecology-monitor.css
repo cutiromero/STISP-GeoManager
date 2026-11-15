@@ -1116,6 +1116,9 @@
 }
 .monitor-status-error {
   color: #efbf76;
+  white-space: normal;
+  flex-wrap: wrap;
+  overflow-wrap: anywhere;
 }
 .monitor-status-bar .ant-btn {
   padding: 0 4px;

@@ -9,6 +9,7 @@ import { Button, Select, Tooltip } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MonitoringProduct } from "../api/generated/types.gen";
 import type { MonitoringWorkspace } from "./useMonitoringWorkspace";
+import { useMonitorDisplayState } from "./monitorDisplayState";
 
 type Entry = {
   key: string;
@@ -49,6 +50,7 @@ export default function MonitorTimeline({
   workspace?: MonitoringWorkspace;
 }) {
   const [playing, setPlaying] = useState(false);
+  const display = useMonitorDisplayState();
   const sourceMode = w?.timeTarget === "source";
   const resultEntries = useMemo(() => {
     const grouped = new Map<string, MonitoringProduct>();
@@ -113,7 +115,7 @@ export default function MonitorTimeline({
       ? periodKey(selected)
       : undefined;
   const index = entries.findIndex((item) => item.key === currentKey);
-  const busy = Boolean(sourceMode && w?.rawPreviewBusy);
+  const busy = Boolean(sourceMode ? w?.rawPreviewBusy : display.busy);
   const next = useRef(() => {});
   const move = (direction: number) => {
     const base = index < 0 ? (direction > 0 ? -1 : 0) : index;
@@ -130,6 +132,9 @@ export default function MonitorTimeline({
     return () => clearInterval(timer);
   }, [playing, entries.length]);
   useEffect(() => setPlaying(false), [sourceMode]);
+  useEffect(() => {
+    if (display.failed) setPlaying(false);
+  }, [display.failed]);
   const single = entries.length < 2;
   if (!w && (!selected?.observedStart || !entries.length)) return null;
   return (
@@ -228,7 +233,7 @@ export default function MonitorTimeline({
               onClick={() => setPlaying((value) => !value)}
             >
               <span className="monitor-loop-label">
-                {playing ? "停止" : "循环"}
+                {playing ? (busy ? "缓冲" : "停止") : "循环"}
               </span>
             </Button>
           </Tooltip>

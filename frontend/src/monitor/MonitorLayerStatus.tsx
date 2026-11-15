@@ -11,6 +11,7 @@ import {
 } from "react";
 import { clearMonitorResourceProfiles } from "./resourceProfiles";
 import type { LiveLayerLegend } from "../map/liveLegendData";
+import { MonitorLayerStates as States } from "./monitorDisplayState";
 
 export type MonitorLayerState = {
   title: string;
@@ -18,12 +19,12 @@ export type MonitorLayerState = {
   updating?: boolean;
   error?: string;
   legend?: LiveLayerLegend;
+  retry?: () => void;
 };
 const Dispatch = createContext<{
   update: (id: string, value: MonitorLayerState) => void;
   remove: (id: string) => void;
 } | null>(null);
-const States = createContext<Record<string, MonitorLayerState>>({});
 
 export function MonitorLayerStatusProvider({
   children,
@@ -107,6 +108,11 @@ export function MonitorLayerStatusBar() {
               <span key={`${value.title}:${value.error}`}>
                 <span>{value.title}：</span>
                 <span>{value.error}</span>
+                {value.retry && (
+                  <Button size="small" type="link" onClick={value.retry}>
+                    重新加载
+                  </Button>
+                )}
               </span>
             ))
           ) : pending.length ? (

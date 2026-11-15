@@ -103,7 +103,7 @@ def register_tile_style(
             "created_at": timezone.now().isoformat(),
         },
     )
-    RasterStyle.objects.update_or_create(
+    RasterStyle.objects.get_or_create(
         dataset=dataset,
         style_hash=sh,
         defaults={"rules": normalized_rules},
@@ -130,6 +130,26 @@ def register_tile_style(
         "rules": normalized_rules,
         "status": "ready",
     }
+
+
+def tile_style_is_ready(dataset: RasterDataset, style_hash: str) -> bool:
+    """Check immutable display metadata without decoding pixels or taking a slot."""
+    if (
+        dataset.raster_kind != RasterDataset.RasterKind.CATEGORICAL
+        or (dataset.processed_gdalinfo.get("geoManager") or {}).get("dynamicTiles")
+        is True
+    ):
+        return True
+    from apps.raster.services.tile_pyramid import (
+        is_complete_pyramid,
+        tile_pyramid_spec,
+    )
+
+    return is_complete_pyramid(
+        raster_tile_pyramid_path(dataset.id, style_hash, RASTER_RENDERER_VERSION),
+        style_hash,
+        tile_pyramid_spec(dataset.bounds_3857, dataset.processed_gdalinfo),
+    )
 
 
 def render_xyz_tile(dataset_id: int, style_hash: str, z: int, x: int, y: int) -> bytes:

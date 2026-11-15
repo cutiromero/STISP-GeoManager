@@ -1,6 +1,6 @@
 import "./monitor-task-drawer.css";
-import { Alert, Button, Drawer, Space, Spin } from "antd";
-import { useEffect, useState } from "react";
+import { Alert, Button, Drawer, Empty, Space, Spin } from "antd";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type {
   BusinessFlowRun,
@@ -59,6 +59,8 @@ export default function MonitorTaskDrawer({
   const [rows, setRows] = useState<BusinessFlowRunList["items"]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
+  const recordRequest = useRef<AbortController | undefined>(undefined);
+  useEffect(() => () => recordRequest.current?.abort(), []);
   useEffect(() => {
     if (!records) return;
     const controller = new AbortController();
@@ -85,15 +87,23 @@ export default function MonitorTaskDrawer({
     return () => controller.abort();
   }, [records, page?.businessFlow?.definitionId]);
   const openRecord = async (id: string) => {
+    recordRequest.current?.abort();
+    const controller = new AbortController();
+    recordRequest.current = controller;
     setLoading(true);
     setError(undefined);
     try {
-      setRecord(await businessFlowsApi.run(id));
+      const next = await businessFlowsApi.run(id, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      setRecord(next);
       setLaunch(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "无法打开处理记录");
+      if (!controller.signal.aborted)
+        setError(reason instanceof Error ? reason.message : "无法打开处理记录");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
   const terminal =
@@ -114,6 +124,12 @@ export default function MonitorTaskDrawer({
       {loading && <Spin />}
       {records && (
         <div className="monitor-task-records">
+          {!loading && !rows.length && !error && (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="暂无处理记录，可关闭面板后开始新任务"
+            />
+          )}
           {rows.map((row) => (
             <Button key={row.id} block onClick={() => void openRecord(row.id)}>
               {row.name} · {new Date(row.updatedAt).toLocaleString()}
