@@ -352,6 +352,10 @@ def update_metadata(user, resource, data, *, require_edit=True):
             ).encode()
         ).hexdigest()
     with transaction.atomic():
+        from django.db.models import F
+
+        # Reserve the WAL writer before live authorization reads fix a snapshot.
+        DataResource.objects.filter(pk=resource.pk).update(updated_at=F("updated_at"))
         require_live_membership()
         from django.contrib.auth import get_user_model
 

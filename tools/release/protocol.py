@@ -330,7 +330,16 @@ def launch(ops, fingerprint, action="publish"):
             start_new_session=True,
         )
     try:
-        identity = server.process(child.pid)
+        deadline = time.monotonic() + 5
+        while True:
+            identity = server.process(child.pid)
+            if identity.get("argv") == command and identity.get("cwd") == str(ops):
+                break
+            server.require(
+                time.monotonic() < deadline,
+                "发布进程启动身份未稳定，请只读检查同一作业",
+            )
+            time.sleep(0.01)
         server.write_json(ops / "run.json", {"pid": child.pid, "identity": identity})
     except (OSError, ProcessLookupError):
         server.require("receipt" in status(ops), "发布进程退出且缺少终态回执")

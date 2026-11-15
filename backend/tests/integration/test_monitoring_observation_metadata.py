@@ -13,6 +13,8 @@ from apps.core.storage import raster_source_path
 from apps.projects.context import ProjectScope, project_scope
 from tests.integration.test_compute import setup_compute  # noqa:F401
 from tests.integration.test_native_cube_inputs import write_cube
+from tests.integration.test_workflow_submit_contention import wal_workflows  # noqa:F401
+from tests.integration.test_agent import setup_agent  # noqa:F401
 
 # ruff:noqa:F811
 pytestmark = pytest.mark.django_db
@@ -188,3 +190,53 @@ def test_native_index_uses_real_coordinates_and_get_never_opens_cube(setup_compu
             HTTP_X_PROJECT_ID=str(env["project"].pk),
         )
         assert response.status_code == 200 and len(response.json()["items"]) == 1
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.efficiency
+def test_worker_writes_do_not_invalidate_metadata_update(wal_workflows):
+    import sqlite3
+    from unittest.mock import patch
+    from django.db import connection
+    from apps.catalog import monitoring_metadata as service
+
+    env = wal_workflows
+    actor = env["user"]
+    project = env["project"]
+    outcomes = []
+    original = service.require_live_membership
+    with project_scope(ProjectScope((project.pk,), project.pk, actor.pk)):
+        resource = DataResource.objects.create(
+            code="wal-monitor-source",
+            name="监测原始资料",
+            data_type="table",
+            file_format="SQLITE",
+            maintainer=actor,
+        )
+
+        def concurrent_progress():
+            value = original()
+            if connection.in_atomic_block and not outcomes:
+                with sqlite3.connect(env["database"], timeout=0) as writer:
+                    try:
+                        writer.execute(
+                            "UPDATE projects_project SET name=name WHERE id=?",
+                            (project.pk,),
+                        )
+                        writer.commit()
+                        outcomes.append("committed")
+                    except sqlite3.OperationalError:
+                        outcomes.append("reserved")
+            return value
+
+        with patch.object(
+            service, "require_live_membership", side_effect=concurrent_progress
+        ):
+            result = service.update_metadata(
+                actor,
+                resource,
+                {"usages": [{"scene": "wildfire", "purpose": "auxiliary"}]},
+                require_edit=False,
+            )
+        assert result["usages"] == [{"scene": "wildfire", "purpose": "auxiliary"}]
+        assert outcomes == ["reserved"]

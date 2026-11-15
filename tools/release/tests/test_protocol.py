@@ -73,7 +73,19 @@ def test_launch_is_detached_does_not_unpack_or_repeat_archive_scan(
         return SimpleNamespace(pid=12345)
 
     monkeypatch.setattr(protocol.subprocess, "Popen", popen)
-    monkeypatch.setattr(server, "process", lambda pid: {"pid": pid, "startTicks": 999})
+    observed = []
+
+    def starting_process(pid):
+        value = {
+            "pid": pid,
+            "startTicks": 999,
+            "cwd": str(operations),
+            "argv": [""] if not observed else spawned[0][0],
+        }
+        observed.append(value)
+        return value
+
+    monkeypatch.setattr(server, "process", starting_process)
     monkeypatch.setattr(
         server, "archive_files", lambda *args: pytest.fail("启动入口不重复扫描大归档")
     )
@@ -81,6 +93,11 @@ def test_launch_is_detached_does_not_unpack_or_repeat_archive_scan(
         operations, server.sha(operations / "frozen-manifest.json")
     )
     assert result["started"]
+    assert len(observed) == 2
+    assert (
+        json.loads((operations / "run.json").read_text())["identity"]["argv"]
+        == spawned[0][0]
+    )
     assert spawned[0][1]["start_new_session"] is True
     assert spawned[0][1]["stdin"] == subprocess.DEVNULL
     assert "--execute" in spawned[0][0]
