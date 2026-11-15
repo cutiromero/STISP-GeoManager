@@ -214,3 +214,39 @@ it("old SDK 401 neither notifies nor clears a newer login", async () => {
   expect(newerLoginCleared).toBe(false);
   expect(forbidden).not.toHaveBeenCalled();
 });
+
+it.each([false, true])(
+  "keeps monitoring preview image bodies in their original project (change=%s)",
+  async (change) => {
+    setActiveProject("13");
+    let source!: ReadableStreamDefaultController<Uint8Array>;
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          source = controller;
+        },
+      }),
+      { headers: { "Content-Type": "image/png" } },
+    );
+    fetchMock.mockImplementation((request: Request) =>
+      new URL(request.url).pathname === "/api/auth/browser-session/"
+        ? Promise.resolve(json({ active: true, detail: "ok" }))
+        : Promise.resolve(response),
+    );
+    await startBrowserSession();
+    const pending = api.monitoringSourcePreviewImage("source-preview-123");
+    await vi.waitFor(() => expect(response.body?.locked).toBe(true));
+    const request = fetchMock.mock.calls
+      .map((call) => call[0] as Request)
+      .find((item) =>
+        new URL(item.url).pathname.includes("source-preview-123"),
+      );
+    expect(request?.headers.get("X-Project-Id")).toBe("13");
+    if (change) setActiveProject("14");
+    source.enqueue(new Uint8Array([137, 80, 78, 71]));
+    source.close();
+    if (change)
+      await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    else expect((await pending).blob.type).toBe("image/png");
+  },
+);

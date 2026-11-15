@@ -1630,6 +1630,18 @@ export const api = {
     unwrap<RasterJob>(
       sdk.renderRasterAsync({ body: payload, signal: options.signal }),
     ),
+  monitoringSourcePreviewImage: (
+    jobId: string,
+    options: { signal?: AbortSignal } = {},
+  ) =>
+    unwrapBlob(
+      sdk.getMonitoringSourcePreviewImage({
+        headers: { "X-Project-Id": Number(getActiveProject()) },
+        path: { jobId },
+        parseAs: "blob",
+        signal: options.signal,
+      }),
+    ),
   rasterJob: (
     jobId: string,
     options: RequestLifecycleOptions & { projectTagId?: number } = {},

@@ -27,6 +27,7 @@ export default function MonitorRawLayer({
     }
     const controller = new AbortController();
     const signal = controller.signal;
+    let imageUrl: string | undefined;
     const timer = setTimeout(
       () => controller.abort(new Error("预览准备超时，请重试")),
       120000,
@@ -99,6 +100,12 @@ export default function MonitorRawLayer({
         }
         signal.throwIfAborted();
         if (!map.getStyle() || !job.imageUrl || !job.bounds) return;
+        const image = await api.monitoringSourcePreviewImage(job.id, {
+          signal,
+        });
+        signal.throwIfAborted();
+        if (!map.getStyle()) return;
+        imageUrl = URL.createObjectURL(image.blob);
         const [west, south, east, north] = job.bounds as [
           number,
           number,
@@ -107,7 +114,7 @@ export default function MonitorRawLayer({
         ];
         map.addSource("monitor-raw", {
           type: "image",
-          url: projectUrl(job.imageUrl),
+          url: imageUrl,
           coordinates: [
             [west, north],
             [east, north],
@@ -182,6 +189,7 @@ export default function MonitorRawLayer({
     return () => {
       clearTimeout(timer);
       controller.abort();
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
       if (!map.getStyle()) return;
       for (const id of [
         "monitor-raw-layer",
