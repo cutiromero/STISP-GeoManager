@@ -77,6 +77,7 @@ it("keeps the map alive while switching from a selected region to an empty resul
   await waitFor(() => expect(maps.maps[0]?.sources.has("product")).toBe(true));
   expect(maps.maps).toHaveLength(1);
   expect(api.resourceProfile).toHaveBeenCalledOnce();
+  expect(maps.maps[0]!.api.fitBounds).toHaveBeenCalledTimes(2);
 });
 
 it("does not clean layers on a destroyed map when the basemap configuration changes", async () => {

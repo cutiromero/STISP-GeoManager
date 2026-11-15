@@ -72,6 +72,9 @@ export default function ProductMap({
   );
   const swapMap = useRef<mapboxgl.Map | undefined>(undefined);
   const styles = useRef(new Map<string, RasterRenderResult>());
+  useEffect(() => {
+    focused.current = undefined;
+  }, [focusKey ?? target?.id]);
   useEffect(
     () =>
       report({
@@ -319,6 +322,7 @@ export default function ProductMap({
     product?.id,
     target?.id,
     target?.updatedAt,
+    focusKey,
     visibleCodes?.join(","),
     t,
   ]);
