@@ -71,9 +71,10 @@ export default function MonitorGlobe({
     () =>
       report({
         title: t("monitor.globeLabel"),
+        loading: !map && !mapError,
         error: mapError ? t("monitor.mapError") : undefined,
       }),
-    [report, mapError, t],
+    [report, map, mapError, t],
   );
   const latest = useRef({ snapshot, onSelect });
   latest.current = { snapshot, onSelect };

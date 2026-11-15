@@ -95,7 +95,7 @@ export default function ProductMap({
     () =>
       report({
         title,
-        loading,
+        loading: loading || (!map && !mapError),
         updating: loading && Boolean(swap.current?.hasActive()),
         error: error || (mapError ? t("monitor.mapError") : undefined),
         legend: information ? legend : undefined,
@@ -106,7 +106,7 @@ export default function ProductMap({
           setRetry((value) => value + 1);
         },
       }),
-    [report, title, loading, error, mapError, legend, information, t],
+    [report, title, loading, error, map, mapError, legend, information, t],
   );
   useEffect(() => {
     onMapReady?.(map);

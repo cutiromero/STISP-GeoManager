@@ -102,3 +102,18 @@ it("focuses the actual product extent rather than a shared project's default cen
   expect(maps.maps[0]!.api.fitBounds).toHaveBeenCalledOnce();
   expect(maps.maps[0]!.api.flyTo).not.toHaveBeenCalled();
 });
+
+it("initializes business layers on style readiness without waiting for remote basemap tiles", async () => {
+  render(view([121.92, 31.24], resource));
+  const map = maps.maps[0]!;
+  expect(map.api.setLanguage).not.toHaveBeenCalled();
+  const callback = map.api.on.mock.calls.find(
+    ([event]) => event === "style.load",
+  )?.[1];
+  expect(callback).toBeTypeOf("function");
+  map.emit("style.load");
+  expect(map.api.setLanguage).toHaveBeenCalledOnce();
+  map.emit("load");
+  expect(map.api.setLanguage).toHaveBeenCalledOnce();
+  await waitFor(() => expect(map.sources.has("product")).toBe(true));
+});

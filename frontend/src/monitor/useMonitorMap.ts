@@ -107,8 +107,10 @@ export function useMonitorMap(
             regional.current ? visibility : "none",
           );
     };
+    let initialized = false;
     const load = () => {
-      if (disposed) return;
+      if (disposed || initialized) return;
+      initialized = true;
       applyChineseBasemapLanguage(instance);
       for (const layer of instance.getStyle().layers ?? []) {
         if (layer.type === "raster") {
@@ -142,6 +144,8 @@ export function useMonitorMap(
     const leave = () => {
       hovered.current = false;
     };
+    // Business layers only need the style; remote basemap tiles may still load.
+    instance.on("style.load", load);
     instance.on("load", load);
     instance.on("error", error);
     instance.on("dragstart", start);
