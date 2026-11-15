@@ -239,6 +239,9 @@ def test_candidate_stages_only_the_declared_operator_package(
     source_directory = tmp_path / "different-directory-name"
     source_directory.mkdir()
     version = env["version"]
+    type(version.algorithm)._base_manager.filter(pk=version.algorithm_id).update(
+        project_tag_id=env["project"].pk
+    )
     (source_directory / "operator.yaml").write_text(
         json.dumps(
             {"identifier": version.algorithm.identifier, "version": version.version}
