@@ -8,6 +8,7 @@ export function createMonitorMapMock(options: MapOptions) {
   const layers = new Map<string, unknown>(
     (style.layers ?? []).map((layer) => [layer.id, layer]),
   );
+  let removed = false;
   const api = {
     on: vi.fn((name: string, callback: () => void) => {
       if (!events.has(name)) events.set(name, new Set());
@@ -18,8 +19,16 @@ export function createMonitorMapMock(options: MapOptions) {
       events.get(name)?.delete(callback);
       return api;
     }),
-    getStyle: vi.fn(() => ({ ...style, layers: Array.from(layers.values()) })),
-    getLayer: vi.fn((id: string) => layers.get(id)),
+    getStyle: vi.fn(() =>
+      removed ? undefined : { ...style, layers: Array.from(layers.values()) },
+    ),
+    getLayer: vi.fn((id: string) => {
+      if (removed)
+        throw new TypeError(
+          "Cannot read properties of undefined (reading 'getOwnLayer')",
+        );
+      return layers.get(id);
+    }),
     addLayer: vi.fn((layer: { id: string }) => layers.set(layer.id, layer)),
     addSource: vi.fn((id: string, source: { data: unknown }) => {
       sources.set(id, { ...source, setData: vi.fn() });
@@ -41,7 +50,10 @@ export function createMonitorMapMock(options: MapOptions) {
     setCenter: vi.fn(),
     flyTo: vi.fn(),
     jumpTo: vi.fn(),
-    remove: vi.fn(() => events.clear()),
+    remove: vi.fn(() => {
+      removed = true;
+      events.clear();
+    }),
   };
   return {
     value: api as unknown as mapboxgl.Map,

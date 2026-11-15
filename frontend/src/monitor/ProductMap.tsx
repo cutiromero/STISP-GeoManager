@@ -88,7 +88,7 @@ export default function ProductMap({
     return () => onMapReady?.(undefined);
   }, [map, onMapReady]);
   useEffect(() => {
-    if (!map || !hasProduct) return;
+    if (!map?.getStyle() || !hasProduct) return;
     const element = document.createElement("button");
     element.type = "button";
     element.setAttribute("role", "button");
@@ -106,9 +106,15 @@ export default function ProductMap({
     return () => {
       marker.remove();
     };
-  }, [map, hasProduct, t]);
+  }, [
+    map,
+    hasProduct,
+    t,
+    config.initialView.center[0],
+    config.initialView.center[1],
+  ]);
   useEffect(() => {
-    if (!map) return;
+    if (!map?.getStyle()) return;
     let disposed = false;
     if (swapMap.current !== map) {
       swapMap.current = map;

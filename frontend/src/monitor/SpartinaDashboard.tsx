@@ -330,6 +330,11 @@ export default function SpartinaDashboard({
                   <MonitorProductSelector
                     selection={selection}
                     presentation="list"
+                    labels={{
+                      current: selection.hasCurrentTask
+                        ? "本次解译"
+                        : "最近解译",
+                    }}
                   />
                   {page?.nextBeforeId && (
                     <Button

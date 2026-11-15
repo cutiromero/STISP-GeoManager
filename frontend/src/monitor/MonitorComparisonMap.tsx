@@ -44,10 +44,10 @@ export default function MonitorComparisonMap({
     ["overlay", "swipe"].includes(mode),
   );
   useEffect(() => {
-    if (!primary || !reference) return;
+    if (!primary?.getStyle() || !reference?.getStyle()) return;
     let syncing = false;
     const sync = (from: MapboxMap, to: MapboxMap) => {
-      if (syncing) return;
+      if (syncing || !from.getStyle() || !to.getStyle()) return;
       syncing = true;
       try {
         const center = from.getCenter();

@@ -222,9 +222,16 @@ it("历史分布保留未知时间和空面积，选择后才加载同一地图�
   vi.mocked(getMonitoringProducts).mockResolvedValue(
     list("spartina", [product()]),
   );
-  render(view());
+  const rendered = render(view());
   await screen.findByText("12,881");
-  expect(screen.getAllByText("日期待补充").length).toBeGreaterThan(0);
+  expect(
+    rendered.container.querySelector(".monitor-assessment-copy time"),
+  ).toHaveAttribute("datetime", "2026-11-13T10:00:00Z");
+  expect(
+    rendered.container.querySelector(
+      ".monitor-assessment-copy p.spartina-secondary",
+    ),
+  ).toBeNull();
   expect(screen.getByText("原始要素计数；尚未计算面积")).toBeInTheDocument();
   await waitFor(() => expect(api.resourceProfile).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(maps.maps[0]?.sources.has("product")).toBe(true));

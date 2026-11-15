@@ -36,8 +36,8 @@ export function useMonitorMap(
       left.localeCompare(right),
     ),
   );
-  const [longitude, latitude] = initialView.center;
 
+  // Region changes use the existing camera; replacing a map invalidates its style.
   useEffect(() => {
     const host = container.current;
     if (!host) return;
@@ -67,7 +67,7 @@ export function useMonitorMap(
         accessToken: latest.current.mapConfig.mapboxAccessToken,
         style: createBasemapStyle(latest.current.mapConfig),
         projection: "globe",
-        center: [longitude!, latitude!],
+        center: latest.current.initialView.center as [number, number],
         zoom: fit().zoom,
         minZoom: 0,
         maxZoom: 22,
@@ -178,10 +178,10 @@ export function useMonitorMap(
       instance.remove();
       if (mapRef.current === instance) mapRef.current = undefined;
     };
-  }, [styleKey, longitude, latitude]);
+  }, [styleKey]);
 
   useEffect(() => {
-    if (!map) return;
+    if (!map || mapRef.current !== map) return;
     if (!animated) {
       map.stop();
       return;
@@ -189,6 +189,7 @@ export function useMonitorMap(
     let frame = 0;
     let previous = performance.now();
     const spin = (time: number) => {
+      if (mapRef.current !== map) return;
       const elapsed = Math.min(100, time - previous);
       previous = time;
       if (
