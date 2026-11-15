@@ -233,9 +233,10 @@ def monitoring_sources(user, scene, *, offset=0, collection=None, year=None):
         raise ValidationError("资料分页或年份无效")
     query = source_query(user, scene)
     collections = list(
-        query.values(
-            "observation_metadata__collection_key", "inventory_group__name"
-        ).annotate(
+        query.order_by()
+        .values("observation_metadata__collection_key")
+        .annotate(
+            label=Min("inventory_group__name"),
             count=Count("pk"),
             startsAt=Min("observation_metadata__starts_at"),
             endsAt=Max("observation_metadata__ends_at"),
@@ -317,7 +318,7 @@ def monitoring_sources(user, scene, *, offset=0, collection=None, year=None):
         "collections": [
             {
                 "key": row["observation_metadata__collection_key"] or "",
-                "label": row["inventory_group__name"]
+                "label": row["label"]
                 or row["observation_metadata__collection_key"]
                 or "资料集合",
                 "count": row["count"],

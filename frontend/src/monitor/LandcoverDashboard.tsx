@@ -187,8 +187,8 @@ export default function LandcoverDashboard({
       navigation={navigation}
       updatedAt={selected?.registeredAt}
       sourceLabel={
-        selection.view === "standard"
-          ? ui("上传标准成果", "Uploaded reference")
+        selection.view === "registered"
+          ? ui("登记成果", "Registered result")
           : ui("RGB影像 · UNet地表解译", "RGB imagery · UNet land cover")
       }
       status={() =>
@@ -441,11 +441,9 @@ export default function LandcoverDashboard({
               </MonitorPanel>
               <MonitorPanel title={ui("模型与规则", "Models and rules")}>
                 <div className="landcover-card-body">
-                  {selection.view === "standard" ? (
+                  {selection.view === "registered" ? (
                     <>
-                      <strong>
-                        {ui("上传标准成果", "Uploaded reference")}
-                      </strong>
+                      <strong>{ui("登记成果", "Registered result")}</strong>
                       <p>{selectedReference?.name ?? selected?.name}</p>
                       <span>
                         {ui(
@@ -496,7 +494,7 @@ export default function LandcoverDashboard({
                       <span className="landcover-secondary">
                         {selected
                           ? new Date(selected.registeredAt).toLocaleString()
-                          : ui("上传标准成果", "Uploaded reference")}
+                          : ui("登记成果", "Registered result")}
                       </span>
                       <Button
                         type="link"
@@ -519,7 +517,7 @@ export default function LandcoverDashboard({
                   )}
                   <details>
                     <summary>{ui("来源与口径", "Sources and method")}</summary>
-                    {selection.view === "standard" ? (
+                    {selection.view === "registered" ? (
                       <>
                         <p>
                           {ui(

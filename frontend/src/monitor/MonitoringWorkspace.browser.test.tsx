@@ -103,9 +103,69 @@ it("selects products by observation date and keeps unknown dates outside the dat
       <Timeline />
     </App>,
   );
-  const range = screen.getByRole("slider", { name: "切换成果时期" });
-  expect(range).toHaveAttribute("max", "1");
-  fireEvent.change(range, { target: { value: "1" } });
+  expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "下一期" }));
   expect(changed).toHaveBeenLastCalledWith(2);
-  await screen.findByText("2026-08-01 — 2026-08-31", { exact: true });
+  expect(
+    screen.getByRole("combobox", { name: "切换观测日期" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("后期", { exact: true })).not.toBeInTheDocument();
+});
+
+it("shows a single RF interpretation period without playback controls", () => {
+  const item = {
+    id: 1,
+    observedStart: "2025-03-01",
+    observedEnd: "2025-12-31",
+    extraction: { inputPeriods: ["2025-03", "2025-08", "2025-12"] },
+  } as MonitoringProduct;
+  render(
+    <App>
+      <MonitorTimeline
+        items={[item, { ...item, id: 2 }]}
+        selected={item}
+        onSelect={vi.fn()}
+      />
+    </App>,
+  );
+  expect(screen.getByLabelText("成果观测时段")).toHaveTextContent("联合解译");
+  expect(screen.getByLabelText("成果观测时段")).toHaveTextContent("2025.03–12");
+  expect(
+    screen.queryByRole("button", { name: "循环播放" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+});
+
+it("loops playback from the last observation period back to the first", async () => {
+  const items = [
+    { id: 1, observedStart: "2020-01-01", observedEnd: "2020-01-08" },
+    { id: 2, observedStart: "2020-01-09", observedEnd: "2020-01-16" },
+  ] as MonitoringProduct[];
+  const changed = vi.fn();
+  function Timeline() {
+    const [id, setId] = useState(2);
+    return (
+      <MonitorTimeline
+        items={items}
+        selected={items.find((row) => row.id === id)}
+        onSelect={(value) => {
+          changed(value);
+          setId(value);
+        }}
+      />
+    );
+  }
+  render(
+    <App>
+      <Timeline />
+    </App>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "循环播放" }));
+  await waitFor(() => expect(changed).toHaveBeenCalledWith(1), {
+    timeout: 4000,
+  });
+  await waitFor(() => expect(changed).toHaveBeenLastCalledWith(2), {
+    timeout: 4000,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "停止循环" }));
 });

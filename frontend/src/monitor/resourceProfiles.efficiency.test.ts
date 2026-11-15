@@ -73,3 +73,24 @@ it("does not retain an aborted late response", async () => {
   await monitorResourceProfile(resource);
   expect(api.resourceProfile).toHaveBeenCalledTimes(2);
 });
+
+it("rechecks an unfinished vector preview and retains it only after preparation completes", async () => {
+  const vector = { ...resource, dataType: "vector" as const };
+  const pending = {
+    ...profile,
+    resource: vector,
+    raster: null,
+    vectorTiles: null,
+  };
+  const ready = {
+    ...pending,
+    vectorTiles: { revision: "ready" },
+  } as ResourceProfileResponse;
+  vi.mocked(api.resourceProfile)
+    .mockResolvedValueOnce(pending)
+    .mockResolvedValue(ready);
+  expect(await monitorResourceProfile(vector)).toBe(pending);
+  expect(await monitorResourceProfile(vector)).toBe(ready);
+  expect(await monitorResourceProfile(vector)).toBe(ready);
+  expect(api.resourceProfile).toHaveBeenCalledTimes(2);
+});

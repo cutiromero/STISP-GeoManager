@@ -26,6 +26,7 @@ export default function MonitorComparisonMap({
   focusKey,
   onMapReady,
   resultVisible = true,
+  refreshKey,
 }: {
   product?: MonitoringProduct;
   original?: ResourceListItem;
@@ -38,6 +39,7 @@ export default function MonitorComparisonMap({
   focusKey?: number;
   onMapReady?: (map: MapboxMap | undefined) => void;
   resultVisible?: boolean;
+  refreshKey?: number;
 }) {
   const [primary, setPrimary] = useState<MapboxMap>();
   const [reference, setReference] = useState<MapboxMap>();
@@ -106,6 +108,7 @@ export default function MonitorComparisonMap({
         }
       >
         <ProductMap
+          refreshKey={refreshKey}
           product={mode === "original" || !resultVisible ? undefined : product}
           resource={
             !resultVisible && mode !== "original"

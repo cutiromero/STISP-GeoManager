@@ -314,6 +314,7 @@ export default function WildfireDashboard({
               >
                 <ProductMap
                   onMapReady={setMap}
+                  refreshKey={products.revision}
                   resource={workspace.resultVisible ? display : undefined}
                   config={mapConfig}
                   animated={animated}
@@ -393,7 +394,7 @@ export default function WildfireDashboard({
                         ? "本次制图"
                         : "最近制图",
                       history: "历史制图",
-                      uploaded: "登记资料",
+                      registered: "登记成果",
                     }}
                   />
                   {page?.nextBeforeId && (

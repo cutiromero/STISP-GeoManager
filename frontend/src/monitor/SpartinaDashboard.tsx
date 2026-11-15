@@ -205,8 +205,8 @@ export default function SpartinaDashboard({
       navigation={navigation}
       updatedAt={selected?.registeredAt}
       sourceLabel={
-        selection.view === "standard"
-          ? "标准成果"
+        selection.view === "registered"
+          ? "登记成果"
           : selected?.kind === "model"
             ? "RF · 互花米草分布解译"
             : "互花米草历史分布"
@@ -258,6 +258,7 @@ export default function SpartinaDashboard({
               >
                 <ComparisonMap
                   onMapReady={setMap}
+                  refreshKey={products.revision}
                   resultVisible={workspace.resultVisible}
                   product={mode === "probability" ? undefined : selected}
                   displayResource={
@@ -474,7 +475,7 @@ export default function SpartinaDashboard({
                 <div className="spartina-card-body">
                   <strong>
                     {selected?.model?.name ??
-                      (selected ? "UNet历史分布" : "随机森林 RF")}
+                      (selected ? "登记分布" : "随机森林 RF")}
                   </strong>
                   <p>
                     {reference

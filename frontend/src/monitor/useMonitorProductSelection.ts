@@ -4,7 +4,7 @@ import type {
   ResourceListItem,
 } from "../api/generated/types.gen";
 
-export type ProductView = "current" | "history" | "standard" | "uploaded";
+export type ProductView = "current" | "history" | "registered";
 export function useMonitorProductSelection({
   items,
   references = [],
@@ -47,12 +47,7 @@ export function useMonitorProductSelection({
     history: candidates.filter(
       (item) => system(item) && item.provenance?.batchId !== batch,
     ),
-    standard: candidates.filter(
-      (item) => item.provenance?.type === "uploaded_standard",
-    ),
-    uploaded: candidates.filter(
-      (item) => !system(item) && item.provenance?.type !== "uploaded_standard",
-    ),
+    registered: candidates.filter((item) => !system(item)),
   };
   useEffect(() => {
     if (batch && batch !== previousBatch.current) {
@@ -62,7 +57,7 @@ export function useMonitorProductSelection({
       setKey(undefined);
     }
     if (!chosen.current && !batch && items.length)
-      setView(items.some(system) ? "history" : "uploaded");
+      setView(items.some(system) ? "history" : "registered");
   }, [batch, items]);
   useEffect(() => {
     if (previousSource.current !== sourceId) {
@@ -75,7 +70,7 @@ export function useMonitorProductSelection({
     choices.find((item) => `product:${item.id}` === key) ??
     (!key ? choices[0] : undefined);
   const reference =
-    view === "standard" && !key?.startsWith("product:")
+    view === "registered" && !key?.startsWith("product:")
       ? references.find((item) => `resource:${item.id}` === key)
       : undefined;
   const selectView = (next: ProductView) => {
@@ -94,7 +89,6 @@ export function useMonitorProductSelection({
   };
   return {
     hasCurrentTask: Boolean(currentBatchId),
-    hasUploaded: groups.uploaded.length > 0,
     view,
     selectView,
     key: reference

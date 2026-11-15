@@ -36,15 +36,14 @@ export default function MonitorProductSelector({
       ? ui("本次解译", "Current run")
       : ui("最近一次解译", "Latest run"),
     history: ui("历史解译", "Previous runs"),
-    standard: ui("标准成果", "Reference"),
-    uploaded: ui("上传成果", "Uploaded"),
+    registered: ui("登记成果", "Registered results"),
     ...labels,
   };
   const options = selection.choices.map((item) => ({
     value: `product:${item.id}`,
     label: productVersionLabel(item),
   }));
-  if (selection.view === "standard")
+  if (selection.view === "registered")
     for (const resource of selection.references) {
       if (!selection.choices.some((item) => item.resourceId === resource.id))
         options.push({
@@ -61,14 +60,10 @@ export default function MonitorProductSelector({
         aria-label={ui("成果来源", "Product origin")}
         value={selection.view}
         onChange={(value) => selection.selectView(value as ProductView)}
-        options={Object.entries(names)
-          .filter(
-            ([key]) =>
-              key !== "uploaded" ||
-              selection.view === "uploaded" ||
-              selection.hasUploaded,
-          )
-          .map(([value, label]) => ({ value, label }))}
+        options={Object.entries(names).map(([value, label]) => ({
+          value,
+          label,
+        }))}
       />
       {options.length && presentation === "list" ? (
         <div>
@@ -94,13 +89,13 @@ export default function MonitorProductSelector({
           })}
         </div>
       ) : options.length > 1 ||
-        (selection.view === "standard" && selection.references.length > 0) ? (
+        (selection.view === "registered" && selection.references.length > 0) ? (
         <Select
           aria-label={ui("选择成果版本", "Select product version")}
           value={selection.key}
           placeholder={
-            selection.view === "standard"
-              ? ui("选择上传的标准成果", "Choose an uploaded reference")
+            selection.view === "registered"
+              ? ui("选择登记成果", "Choose a registered result")
               : ui("选择处理批次", "Choose a processing batch")
           }
           onChange={selection.selectKey}
@@ -119,9 +114,9 @@ export default function MonitorProductSelector({
                   "该批次没有该样区成果",
                   "No result for this region in the selected batch",
                 )
-              : selection.view === "standard"
+              : selection.view === "registered"
                 ? ui(
-                    "可选择已上传的分类栅格或矢量成果",
+                    "暂无登记成果",
                     "Choose an uploaded classification or vector result",
                   )
                 : ui("暂无此类成果", "No products in this group")
@@ -130,7 +125,7 @@ export default function MonitorProductSelector({
       ) : null}
       {(selected || selection.reference) && (
         <div className="monitor-product-identity">
-          <Tag color={selection.view === "standard" ? "gold" : "cyan"}>
+          <Tag color={selection.view === "registered" ? "gold" : "cyan"}>
             {names[selection.view]}
           </Tag>
           {selected?.provenance?.batchId && (

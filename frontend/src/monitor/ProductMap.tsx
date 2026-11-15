@@ -41,6 +41,7 @@ export default function ProductMap({
   focusProduct = false,
   focusKey,
   information = true,
+  refreshKey,
 }: {
   product?: MonitoringProduct;
   config: ProjectMonitorConfig;
@@ -51,6 +52,7 @@ export default function ProductMap({
   focusProduct?: boolean;
   focusKey?: number;
   information?: boolean;
+  refreshKey?: number;
 }) {
   const { t } = useTranslation();
   const { container, map, mapError, regionalView, focus, showBounds } =
@@ -331,6 +333,7 @@ export default function ProductMap({
     product?.id,
     target?.id,
     target?.updatedAt,
+    refreshKey,
     focusKey,
     visibleCodes?.join(","),
     t,

@@ -223,3 +223,33 @@ def test_uploaded_results_are_not_implicitly_reference_standards(setup_compute):
         page = monitoring_snapshot(env["owner"], "wildfire")
         assert [row["id"] for row in page["referenceResources"]] == [reference.pk]
         assert not result.is_compute_result
+
+
+def test_one_monitoring_collection_spans_registration_groups_without_duplicate_keys(
+    setup_compute,
+):
+    from apps.catalog.models import DataResourceGroup
+
+    env = setup_compute
+    with project_scope(
+        ProjectScope((env["project"].pk,), env["project"].pk, env["owner"].pk)
+    ):
+        enable(env)
+        for year in [2025, 2026]:
+            group = DataResourceGroup.objects.create(name=f"{year}登记批次")
+            resource = DataResource.objects.create(
+                code=f"year-source-{year}",
+                name=f"{year}观测",
+                data_type="raster",
+                inventory_group=group,
+            )
+            ResourceObservationMetadata.objects.create(
+                resource=resource, collection_key="one-series"
+            )
+            ResourceMonitoringUsage.objects.create(
+                resource=resource, scene="wildfire", purpose="input"
+            )
+        value = monitoring_sources(env["owner"], "wildfire")
+        assert len(value["collections"]) == 1
+        assert value["collections"][0]["key"] == "one-series"
+        assert value["collections"][0]["count"] == 2

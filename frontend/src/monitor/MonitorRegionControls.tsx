@@ -1,5 +1,6 @@
-import { Button, InputNumber, Space } from "antd";
-import { useEffect } from "react";
+import { BorderOutlined, CheckOutlined, MoreOutlined } from "@ant-design/icons";
+import { Button, Dropdown, InputNumber, Modal, Tooltip } from "antd";
+import { useEffect, useState } from "react";
 import type { Map } from "mapbox-gl";
 import { bindGeometryDraw, upsertPolygonLayer } from "../map/spatialDraw";
 import {
@@ -15,6 +16,13 @@ export default function MonitorRegionControls({
   map?: Map;
   workspace: MonitoringWorkspace;
 }) {
+  const [coordinates, setCoordinates] = useState(false);
+  const [draft, setDraft] = useState<MonitorRegion>({
+    west: 0,
+    south: 0,
+    east: 0,
+    north: 0,
+  });
   useEffect(() => {
     if (!map?.getStyle() || !w.drawing) return;
     return bindGeometryDraw(map, "rectangle", (geometry) => {
@@ -67,64 +75,125 @@ export default function MonitorRegionControls({
       if (map.getSource("monitor-roi")) map.removeSource("monitor-roi");
     };
   }, [map, w.region]);
+  const selectView = () => {
+    const bounds = map?.getBounds();
+    if (!bounds) return;
+    const region = {
+      west: Math.max(-180, bounds.getWest()),
+      south: Math.max(-85, bounds.getSouth()),
+      east: Math.min(180, bounds.getEast()),
+      north: Math.min(85, bounds.getNorth()),
+    };
+    if (validRegion(region)) w.setRegion(region);
+  };
+  const locate = () => {
+    const bounds = w.source?.metadata.sourceSchema.bounds;
+    if (bounds?.length === 4)
+      map?.fitBounds(
+        [
+          [bounds[0]!, Math.max(-85, bounds[1]!)],
+          [bounds[2]!, Math.min(85, bounds[3]!)],
+        ],
+        { padding: 50, duration: 700 },
+      );
+  };
+  const label = w.region
+    ? `${w.region.west.toFixed(4)}, ${w.region.south.toFixed(4)} — ${w.region.east.toFixed(4)}, ${w.region.north.toFixed(4)}`
+    : "";
   return (
-    <div className="monitor-region-controls">
-      <Space wrap>
-        <Button
-          size="small"
-          disabled={!map || !w.source?.metadata.sourceSchema.bounds}
-          onClick={() => {
-            const bounds = w.source?.metadata.sourceSchema.bounds;
-            if (bounds?.length === 4)
-              map?.fitBounds(
-                [
-                  [bounds[0]!, Math.max(-85, bounds[1]!)],
-                  [bounds[2]!, Math.min(85, bounds[3]!)],
-                ],
-                { padding: 50, duration: 700 },
-              );
-          }}
-        >
-          定位原图
-        </Button>
-        <Button
-          size="small"
-          type={w.drawing ? "primary" : "default"}
-          disabled={!map}
-          onClick={() => w.setDrawing(!w.drawing)}
-        >
-          {w.drawing ? "取消绘制" : "绘制研究区"}
-        </Button>
-        <Button
-          size="small"
-          disabled={!map}
-          onClick={() => {
-            const bounds = map?.getBounds();
-            if (!bounds) return;
-            const region = {
-              west: Math.max(-180, bounds.getWest()),
-              south: Math.max(-85, bounds.getSouth()),
-              east: Math.min(180, bounds.getEast()),
-              north: Math.min(85, bounds.getNorth()),
-            };
-            if (validRegion(region)) w.setRegion(region);
-          }}
-        >
-          使用当前视野
-        </Button>
-        {w.region && (
-          <Button size="small" onClick={() => w.setRegion(undefined)}>
-            清除范围
+    <>
+      <div
+        className="monitor-region-controls"
+        data-selected={Boolean(w.region)}
+        data-region={w.region ? JSON.stringify(w.region) : undefined}
+      >
+        <Tooltip title={w.drawing ? "取消绘制" : "在地图上点击矩形的两个对角"}>
+          <Button
+            size="small"
+            aria-label={w.drawing ? "取消绘制" : "绘制研究区"}
+            icon={<BorderOutlined />}
+            type={w.drawing ? "primary" : "default"}
+            disabled={!map}
+            onClick={() => w.setDrawing(!w.drawing)}
+          >
+            {w.drawing ? "取消" : w.region ? "重绘范围" : "框选范围"}
           </Button>
+        </Tooltip>
+        {w.region && (
+          <Tooltip title={`已选研究区：${label}`}>
+            <CheckOutlined
+              className="monitor-region-check"
+              aria-label="已选研究区"
+            />
+          </Tooltip>
         )}
-      </Space>
-      {w.drawing && <p role="status">在地图上依次点击矩形的两个对角</p>}
-      <details>
-        <summary>
-          {w.region
-            ? `研究区 ${w.region.west.toFixed(3)} / ${w.region.south.toFixed(3)} — ${w.region.east.toFixed(3)} / ${w.region.north.toFixed(3)}`
-            : "经纬度范围"}
-        </summary>
+        <Dropdown
+          trigger={["click"]}
+          menu={{
+            items: [
+              {
+                key: "locate",
+                label: "定位原图",
+                disabled: !map || !w.source?.metadata.sourceSchema.bounds,
+                onClick: locate,
+              },
+              {
+                key: "view",
+                label: "使用当前视野",
+                disabled: !map,
+                onClick: selectView,
+              },
+              {
+                key: "coordinates",
+                label: "输入经纬度",
+                onClick: () => {
+                  setDraft(
+                    w.region ?? { west: 0, south: 0, east: 0, north: 0 },
+                  );
+                  setCoordinates(true);
+                },
+              },
+              {
+                key: "clear",
+                label: "清除范围",
+                disabled: !w.region,
+                onClick: () => w.setRegion(undefined),
+              },
+            ],
+          }}
+        >
+          <Button
+            size="small"
+            type="text"
+            aria-label="范围工具"
+            icon={<MoreOutlined />}
+          />
+        </Dropdown>
+        {w.drawing && (
+          <span className="monitor-draw-hint" role="status">
+            依次点击两个对角
+          </span>
+        )}
+      </div>
+      <Modal
+        className="monitor-task-drawer monitor-region-modal"
+        title="研究区经纬度"
+        open={coordinates}
+        width={360}
+        onCancel={() => setCoordinates(false)}
+        footer={
+          <Button
+            type="primary"
+            disabled={!validRegion(draft)}
+            onClick={() => {
+              w.setRegion(draft);
+              setCoordinates(false);
+            }}
+          >
+            应用范围
+          </Button>
+        }
+      >
         <div className="monitor-region-fields">
           {(
             [
@@ -133,32 +202,21 @@ export default function MonitorRegionControls({
               ["east", "东界"],
               ["north", "北界"],
             ] as const
-          ).map(([key, label]) => (
+          ).map(([key, name]) => (
             <label key={key}>
-              {label}
+              {name}
               <InputNumber
-                size="small"
-                aria-label={`研究区${label}`}
-                value={w.region?.[key]}
+                aria-label={`研究区${name}`}
+                value={draft[key]}
                 onChange={(value) =>
                   value != null &&
-                  w.setRegion(
-                    (previous) =>
-                      ({
-                        west: 0,
-                        south: 0,
-                        east: 0,
-                        north: 0,
-                        ...previous,
-                        [key]: value,
-                      }) as MonitorRegion,
-                  )
+                  setDraft((previous) => ({ ...previous, [key]: value }))
                 }
               />
             </label>
           ))}
         </div>
-      </details>
-    </div>
+      </Modal>
+    </>
   );
 }

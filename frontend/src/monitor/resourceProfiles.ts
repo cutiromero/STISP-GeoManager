@@ -31,6 +31,7 @@ export async function monitorResourceProfile(
   const value = await api.resourceProfile(resource, { signal });
   signal?.throwIfAborted();
   assertScope();
+  if (resource.dataType === "vector" && !value.vectorTiles) return value;
   if (profiles.size >= MAX_PROFILES)
     profiles.delete(profiles.keys().next().value!);
   profiles.set(key, value);

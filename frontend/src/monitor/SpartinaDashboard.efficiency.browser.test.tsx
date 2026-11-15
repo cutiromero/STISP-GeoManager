@@ -236,7 +236,8 @@ it("submits three seasonal sources as one run with the selected geographic regio
     exact: true,
   });
   await waitFor(() => expect(start).toBeEnabled());
-  fireEvent.click(screen.getByText("经纬度范围", { exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "范围工具" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "输入经纬度" }));
   for (const [label, value] of [
     ["西界", 121.9],
     ["南界", 31.2],
@@ -247,6 +248,7 @@ it("submits three seasonal sources as one run with the selected geographic regio
       screen.getByRole("spinbutton", { name: `研究区${label}` }),
       { target: { value: String(value) } },
     );
+  fireEvent.click(screen.getByRole("button", { name: "应用范围" }));
   fireEvent.click(start);
   const submit = await screen.findByRole("button", { name: "开始业务流" });
   await waitFor(() => expect(submit).toBeEnabled());

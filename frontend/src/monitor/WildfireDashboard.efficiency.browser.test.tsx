@@ -296,7 +296,8 @@ it("launches one native cube run with the real source index and region", async (
     exact: true,
   });
   await waitFor(() => expect(start).toBeEnabled());
-  fireEvent.click(screen.getByText("经纬度范围", { exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "范围工具" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "输入经纬度" }));
   for (const [label, value] of [
     ["西界", 112],
     ["南界", -44],
@@ -307,6 +308,7 @@ it("launches one native cube run with the real source index and region", async (
       screen.getByRole("spinbutton", { name: `研究区${label}` }),
       { target: { value: String(value) } },
     );
+  fireEvent.click(screen.getByRole("button", { name: "应用范围" }));
   fireEvent.click(start);
   const submit = await screen.findByRole("button", { name: "开始业务流" });
   await waitFor(() => expect(submit).toBeEnabled());
@@ -358,7 +360,8 @@ it("launches FCCI as a calendar month while retaining its real internal source p
   fireEvent.click(
     screen.getByRole("button", { name: "完成选择", exact: true }),
   );
-  fireEvent.click(screen.getByText("经纬度范围", { exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: "范围工具" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "输入经纬度" }));
   for (const [label, value] of [
     ["西界", 112],
     ["南界", -44],
@@ -369,6 +372,7 @@ it("launches FCCI as a calendar month while retaining its real internal source p
       screen.getByRole("spinbutton", { name: `研究区${label}` }),
       { target: { value: String(value) } },
     );
+  fireEvent.click(screen.getByRole("button", { name: "应用范围" }));
   fireEvent.click(start);
   const submit = await screen.findByRole("button", { name: "开始业务流" });
   await waitFor(() => expect(submit).toBeEnabled());

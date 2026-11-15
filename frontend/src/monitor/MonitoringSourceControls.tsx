@@ -62,6 +62,11 @@ export default function MonitoringSourceControls({
           onClose={() => setOpen(false)}
           destroyOnHidden
           className="monitor-task-drawer"
+          extra={
+            <Button size="small" loading={w.loading} onClick={w.refresh}>
+              刷新资料
+            </Button>
+          }
           footer={
             <Button type="primary" onClick={() => setOpen(false)}>
               完成选择
