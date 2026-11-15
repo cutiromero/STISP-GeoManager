@@ -192,3 +192,34 @@ def test_batch_roles_have_bounded_queries_and_stay_live(setup_compute):
             owner_only=True, maintainer=env["outsider"]
         )
         assert metadata_batch(env["owner"], [resources[0].pk]) == []
+
+
+def test_uploaded_results_are_not_implicitly_reference_standards(setup_compute):
+    from apps.ecology.monitoring import monitoring_snapshot
+
+    env = setup_compute
+    with project_scope(
+        ProjectScope((env["project"].pk,), env["project"].pk, env["owner"].pk)
+    ):
+        enable(env)
+        result = DataResource.objects.create(
+            code="uploaded-result",
+            name="登记解译成果",
+            data_type="vector",
+            storage_path="result_layer",
+        )
+        reference = DataResource.objects.create(
+            code="verified-reference",
+            name="核查标准",
+            data_type="vector",
+            storage_path="reference_layer",
+        )
+        ResourceMonitoringUsage.objects.create(
+            resource=result, scene="wildfire", purpose="result"
+        )
+        ResourceMonitoringUsage.objects.create(
+            resource=reference, scene="wildfire", purpose="reference"
+        )
+        page = monitoring_snapshot(env["owner"], "wildfire")
+        assert [row["id"] for row in page["referenceResources"]] == [reference.pk]
+        assert not result.is_compute_result

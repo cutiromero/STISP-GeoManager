@@ -40,6 +40,8 @@ export default function MonitoringSourceControls({
           解译时相组合
           <Select
             aria-label="解译时相组合"
+            showSearch
+            optionFilterProp="label"
             value={w.inputSet?.id}
             options={w.catalog?.inputSets.map((row) => ({
               value: row.id,
@@ -79,6 +81,8 @@ export default function MonitoringSourceControls({
               年份
               <Select
                 aria-label="观测年份"
+                showSearch
+                optionFilterProp="label"
                 value={w.selectedYear}
                 onChange={w.setYear}
                 options={w.years.map((row) => ({
@@ -91,6 +95,8 @@ export default function MonitoringSourceControls({
               观测时期
               <Select
                 aria-label="观测时期"
+                showSearch
+                optionFilterProp="label"
                 value={w.time?.ordinal}
                 onChange={w.setOrdinal}
                 options={w.times.map((row) => ({

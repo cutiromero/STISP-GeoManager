@@ -240,3 +240,33 @@ def test_worker_writes_do_not_invalidate_metadata_update(wal_workflows):
             )
         assert result["usages"] == [{"scene": "wildfire", "purpose": "auxiliary"}]
         assert outcomes == ["reserved"]
+
+
+def test_source_schema_uses_original_crs_instead_of_map_display_crs(setup_compute):
+    from apps.raster.models import RasterDataset
+
+    env = setup_compute
+    with own_scope(env):
+        resource = source(env, coordinate_system="EPSG:3857")
+        RasterDataset.objects.create(
+            name="原始格网",
+            code="source-crs",
+            data_resource=resource,
+            status="ready",
+            band_count=16,
+            bounds_4326=[121, 31, 122, 32],
+            source_gdalinfo={
+                "stac": {"proj:epsg": 4326},
+                "size": [16, 16],
+                "geoTransform": [121, 0.001, 0, 32, 0, -0.001],
+                "bands": [{"type": "Float32"}] * 16,
+            },
+        )
+        result = update_metadata(
+            env["admin"],
+            resource,
+            {"usages": [{"scene": "spartina", "purpose": "input"}]},
+        )
+        assert result["sourceSchema"]["coordinateSystem"] == "EPSG:4326"
+        resource.refresh_from_db()
+        assert resource.coordinate_system == "EPSG:3857"

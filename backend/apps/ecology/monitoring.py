@@ -656,9 +656,13 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
             user,
         )
         .distinct()
-        .order_by("-id")[:128]
+        .order_by("-id")
     )
-    launch["referenceResources"] = [serialize_resource(row) for row in references]
+    if scene in {"spartina", "wildfire"}:
+        references = references.filter(
+            monitoring_usages__scene=scene, monitoring_usages__purpose="reference"
+        )
+    launch["referenceResources"] = [serialize_resource(row) for row in references[:128]]
 
     return {
         "projectId": project.pk,

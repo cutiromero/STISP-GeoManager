@@ -159,12 +159,20 @@ def _raster_schema(resource):
         return {}
     info = dataset.source_gdalinfo
     bands = info.get("bands", [])
+    epsg = (info.get("stac") or {}).get("proj:epsg")
+    original_crs = (
+        (info.get("coordinateSystem") or {}).get("wkt")
+        if isinstance(info.get("coordinateSystem"), dict)
+        else info.get("coordinateSystem")
+    )
     return {
         "kind": "raster",
         "bands": dataset.band_count,
         "size": info.get("size", []),
         "bounds": dataset.bounds_4326,
-        "coordinateSystem": resource.coordinate_system,
+        "coordinateSystem": f"EPSG:{epsg}"
+        if epsg
+        else original_crs or resource.coordinate_system,
         "geoTransform": info.get("geoTransform", []),
         "bandTypes": [row.get("type") or "" for row in bands],
         "bandNames": [row.get("description") or "" for row in bands],
