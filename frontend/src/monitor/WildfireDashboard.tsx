@@ -1,9 +1,14 @@
+import { useMonitoringWorkspace } from "./useMonitoringWorkspace";
+import MonitoringSourceControls from "./MonitoringSourceControls";
+import MonitorRegionControls from "./MonitorRegionControls";
+import MonitorRawLayer from "./MonitorRawLayer";
+import MonitorTimeline from "./MonitorTimeline";
+import type { Map as MapboxMap } from "mapbox-gl";
 import { ReloadOutlined } from "@ant-design/icons";
 import { Button, Empty, Segmented } from "antd";
 import {
   lazy,
   Suspense,
-  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -12,11 +17,10 @@ import {
 import { useNavigate } from "react-router-dom";
 import type {
   ProjectMonitorConfig,
-  WildfireObservationCatalog,
   WildfireSeriesPoint,
   ResourceListItem,
 } from "../api/generated/types.gen";
-import { api, requestJson } from "../api/client";
+import { api } from "../api/client";
 import { useAppContext } from "../contexts/AppContext";
 import { downloadBlob } from "../utils/download";
 import MonitorDashboardFrame from "./MonitorDashboardFrame";
@@ -124,8 +128,8 @@ export default function WildfireDashboard({
   const navigate = useNavigate();
   const products = useMonitoringProducts("wildfire");
   const { page, loading, failure, setRevision } = products;
-  const [catalog, setCatalog] = useState<WildfireObservationCatalog>();
-  const [catalogError, setCatalogError] = useState<string>();
+  const workspace = useMonitoringWorkspace("wildfire", projectId);
+  const [map, setMap] = useState<MapboxMap>();
   const [drawer, setDrawer] = useState<"new" | "current" | "records">();
   const [mode, setMode] = useState<"styled" | "values">("styled");
   const [busy, setBusy] = useState(false);
@@ -188,26 +192,6 @@ export default function WildfireDashboard({
       "paused",
     ].includes(task.flow.status),
   );
-  useEffect(() => {
-    const controller = new AbortController();
-    setCatalogError(undefined);
-    void requestJson<WildfireObservationCatalog>(
-      "/api/ecology/wildfire/catalog/",
-      { signal: controller.signal },
-    )
-      .then((value) => {
-        if (!controller.signal.aborted) setCatalog(value);
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          setCatalog(undefined);
-          setCatalogError(
-            error instanceof Error ? error.message : "时间目录暂时不可用",
-          );
-        }
-      });
-    return () => controller.abort();
-  }, [projectId]);
   const download = async (resource?: ResourceListItem) => {
     if (!resource || busy) return;
     if (resource.dataType === "vector") {
@@ -277,9 +261,7 @@ export default function WildfireDashboard({
           <Button
             type="primary"
             size="small"
-            disabled={
-              !page?.businessFlow || !catalog?.cube || !catalog.times.length
-            }
+            disabled={!page?.businessFlow || !workspace.catalog?.assets.length}
             onClick={() => setDrawer(active ? "current" : "new")}
           >
             {active ? "查看任务" : "生成观测图"}
@@ -308,7 +290,7 @@ export default function WildfireDashboard({
           <MonitorDataStatus
             title="野火观测资料"
             loading={loading}
-            error={failure ?? catalogError ?? downloadError}
+            error={failure ?? workspace.error ?? downloadError}
           />
           <main className="monitor-layout">
             <section className="monitor-globe-panel" aria-label="野火观测地图">
@@ -316,13 +298,26 @@ export default function WildfireDashboard({
                 fallback={<MonitorDataStatus title="准备观测图" loading />}
               >
                 <ProductMap
-                  resource={display}
+                  onMapReady={setMap}
+                  resource={workspace.resultVisible ? display : undefined}
                   config={config}
                   animated={animated}
                   focusProduct
                   focusKey={display?.id}
                 />
               </Suspense>
+              <MonitorRawLayer map={map} workspace={workspace} />
+              <MonitorRegionControls map={map} workspace={workspace} />
+              <MonitorTimeline
+                items={page?.items ?? []}
+                selected={selected}
+                onSelect={selection.selectProduct}
+                onMore={
+                  page?.nextBeforeId
+                    ? () => void products.loadMore()
+                    : undefined
+                }
+              />
               {classification && (
                 <div className="wildfire-map-toolbar">
                   <Segmented
@@ -348,7 +343,7 @@ export default function WildfireDashboard({
                 <div>
                   <span>时间索引</span>
                   <strong>
-                    {catalog?.times.length ?? "—"}
+                    {workspace.source?.metadata.sourceSchema.timeCount ?? "—"}
                     <small>期</small>
                   </strong>
                 </div>
@@ -365,6 +360,7 @@ export default function WildfireDashboard({
               </div>
               <MonitorPanel title="时期与观测源">
                 <div className="wildfire-card-body">
+                  <MonitoringSourceControls workspace={workspace} />
                   {selected?.observedStart && (
                     <p className="wildfire-period">
                       {selected.observedStart}
@@ -443,9 +439,7 @@ export default function WildfireDashboard({
                     type="link"
                     size="small"
                     disabled={
-                      !page?.businessFlow ||
-                      !catalog?.cube ||
-                      !catalog.times.length
+                      !page?.businessFlow || !workspace.catalog?.assets.length
                     }
                     onClick={() => setDrawer(active ? "current" : "new")}
                   >
@@ -509,13 +503,13 @@ export default function WildfireDashboard({
                     <p>预处理试算：变量标准化，缺测值 −1</p>
                     <p>权重：w1 / w2 / w4 / w8 / w16</p>
                   </details>
-                  {catalog?.cube && (
+                  {workspace.source && (
                     <Button
                       type="link"
                       size="small"
                       onClick={() =>
                         navigate(
-                          `/catalog?projectTagId=${projectId}&resourceId=${catalog.cube!.id}`,
+                          `/catalog?projectTagId=${projectId}&resourceId=${workspace.source!.resource.id}`,
                         )
                       }
                     >
@@ -583,7 +577,7 @@ export default function WildfireDashboard({
           </main>
           {drawer && (
             <WildfireTaskDrawer
-              catalog={catalog}
+              workspace={workspace}
               page={page}
               flow={task.flow}
               onChanged={task.accept}

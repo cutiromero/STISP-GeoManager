@@ -6,7 +6,6 @@ from apps.projects.context import selected_project_id
 from apps.projects.models import Project
 
 IDENTIFIER = "spartina-rf-infer"
-PERIODS = ["2025-03", "2025-08", "2025-12"]
 
 
 def normalize_extraction(value):
@@ -19,8 +18,14 @@ def normalize_extraction(value):
         "sklearnVersion",
     }:
         raise ValidationError("互花米草成果缺少模型输入与研究区依据")
-    if value["method"] != "RF" or value["inputPeriods"] != PERIODS:
-        raise ValidationError("互花米草方法或三季节组合不符")
+    periods = value["inputPeriods"]
+    if (
+        value["method"] != "RF"
+        or not isinstance(periods, list)
+        or len(periods) != 3
+        or any(not isinstance(row, str) or not 1 <= len(row) <= 120 for row in periods)
+    ):
+        raise ValidationError("互花米草方法或三时相组合不符")
     bounds = value["bounds"]
     if (
         not isinstance(bounds, list)
@@ -90,6 +95,16 @@ def register_import(record_id):
             return
     except PermissionDenied:
         return
+    from .models import RemoteSensingProduct
+
+    previous = RemoteSensingProduct.objects.filter(
+        product_code="spartina-" + str(task.pk) + "-" + str(output.pk),
+        data_resource_id=record.resource_id,
+    ).first()
+    if previous:
+        return register_product(
+            record.requested_by, previous.metadata["monitoring"], computed_import=record
+        )
     facts = output.metadata.get("knowledgeFacts", {}).get("spartina")
     if not isinstance(facts, dict):
         raise ValidationError("模型成果缺少真实统计依据")
@@ -108,6 +123,9 @@ def register_import(record_id):
         )
     }
     area = facts["statistics"]["area_ha"]
+    from .product_time import input_periods, interval
+
+    begin, end = interval(input_periods(task))
     value = {
         "schemaVersion": 1,
         "code": "spartina-" + str(task.pk) + "-" + str(output.pk),
@@ -116,11 +134,11 @@ def register_import(record_id):
         "scene": "spartina",
         "kind": "model",
         "quality": "passed",
-        "observedStart": None,
-        "observedEnd": None,
+        "observedStart": begin,
+        "observedEnd": end,
         "sourceResourceIds": source_ids,
-        "sourceLabel": "2025三季节16波段原始影像与RF权重",
-        "limitations": ["影像获取日期未单独提供；输入按交付月份组合。"],
+        "sourceLabel": "已选时相16波段原始影像与RF权重",
+        "limitations": ["时相精度沿用原始资料登记，三期共同有效区参与统计。"],
         "interpretation": f"本研究区互花米草分布面积{area:,.2f} ha，按三季节共同有效区统计。",
         "statistics": facts["statistics"],
         "statisticsMethod": "原始WGS84网格椭球像元面积；三季节48特征共同有效区；8连通斑块。",

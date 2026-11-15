@@ -1,0 +1,111 @@
+.monitor-source-controls {
+  display: grid;
+  gap: 10px;
+}
+.monitor-source-controls label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+.monitor-source-controls .ant-select {
+  width: 100%;
+  min-width: 0;
+}
+.monitor-source-dates {
+  display: grid;
+  grid-template-columns: 85px minmax(0, 1fr);
+  gap: 8px;
+}
+.monitor-region-controls {
+  position: absolute;
+  left: 12px;
+  top: 58px;
+  z-index: 7;
+  max-width: calc(100% - 88px);
+  padding: 8px;
+  background: rgba(5, 20, 31, 0.84);
+  border: 1px solid rgba(90, 213, 203, 0.18);
+  border-radius: 6px;
+  color: var(--monitor-text);
+  font-size: 12px;
+}
+.monitor-region-controls p {
+  margin: 8px 0 0;
+}
+.monitor-region-controls details {
+  margin-top: 7px;
+}
+.monitor-region-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 290px;
+  padding-top: 8px;
+}
+.monitor-region-fields label {
+  display: grid;
+  gap: 4px;
+}
+.monitor-region-fields .ant-input-number {
+  width: 100%;
+}
+.monitor-timeline {
+  position: absolute;
+  bottom: 20px;
+  left: 16px;
+  right: 76px;
+  z-index: 7;
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  color: var(--monitor-text);
+  background: rgba(5, 20, 31, 0.87);
+  border: 1px solid rgba(90, 213, 203, 0.18);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.monitor-timeline .ant-select {
+  width: 100%;
+  min-width: 0;
+}
+.monitor-timeline input {
+  width: 100%;
+  accent-color: #68dfc7;
+}
+.monitor-source-active {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.monitor-source-active .remote-product-map {
+  pointer-events: auto;
+}
+.monitor-source-active .monitor-map-controls {
+  display: none;
+}
+.monitor-source-status {
+  position: absolute;
+  top: 10px;
+  left: 15px;
+  z-index: 8;
+  font-size: 11px;
+  color: #b4cdc9;
+}
+@media (max-width: 700px) {
+  .monitor-timeline {
+    bottom: 12px;
+    left: 8px;
+    right: 60px;
+  }
+  .monitor-region-controls {
+    left: 8px;
+    max-width: calc(100% - 68px);
+  }
+}
+
+.monitor-globe-panel:has(.monitor-timeline) .landcover-compare-control {
+  bottom: 168px;
+}
+.monitor-source-controls .ant-checkbox-wrapper {
+  display: inline-flex;
+}

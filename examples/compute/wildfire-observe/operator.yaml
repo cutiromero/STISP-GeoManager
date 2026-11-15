@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "identifier": "wildfire-observe",
   "name": "野火历史观测制图",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "从原生SeasFire时空立方体提取真实观测时期，生成火烧面积或FRP图、物理量分级、区域统计与真实序列。",
   "author": "STISP",
   "runtime": "python-geospatial-v1",
@@ -115,14 +115,12 @@
       "key": "time_index",
       "label": "原始时间索引",
       "type": "integer",
-      "default": 873,
-      "help": "来自原始966期时间坐标；按产品有效掩膜核对。",
+      "help": "从所选原始资料真实时间坐标确定；按产品有效掩膜核对。",
       "agent": {
         "adjustable": false,
         "advice": "沿用用户选择的真实产品、时期和序列长度。"
       },
-      "min": 0,
-      "max": 965
+      "min": 0
     },
     {
       "key": "history",

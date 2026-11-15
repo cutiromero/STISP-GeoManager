@@ -197,7 +197,7 @@ def test_wildfire_flow_keeps_native_cube_and_observation_contract(setup_compute)
         value = normalize_definition(definition(version.pk))
     assert [row["key"] for row in value["inputRequirements"]] == ["cube"]
     operator = next(row for row in value["nodes"] if row["kind"] == "operator")
-    assert operator["parameters"]["product"] == "gwis_ba"
+    assert operator["parameters"] == {"history": 12}
     assert set(operator["contract"]["importOutputs"]) == {
         "observation",
         "classification",
@@ -206,11 +206,12 @@ def test_wildfire_flow_keeps_native_cube_and_observation_contract(setup_compute)
     }
     assert (
         WildfireCommand.source_folder == "wildfire-observe"
-        and WildfireCommand.default_inputs == {"cube": 1475}
+        and WildfireCommand.default_inputs == {}
     )
-    assert SpartinaCommand.source_folder == "spartina-rf" and set(
-        SpartinaCommand.default_inputs
-    ) == {"march", "august", "december"}
+    assert (
+        SpartinaCommand.source_folder == "spartina-rf"
+        and set(SpartinaCommand.default_inputs) == set()
+    )
     command = WildfireCommand()
     first = command.trial_key(
         "f" * 64, {"cube": 1475}, {"history": 12, "time_index": 873}

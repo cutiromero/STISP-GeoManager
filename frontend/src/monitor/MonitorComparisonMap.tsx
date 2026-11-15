@@ -24,6 +24,8 @@ export default function MonitorComparisonMap({
   mode,
   visibleCodes,
   focusKey,
+  onMapReady,
+  resultVisible = true,
 }: {
   product?: MonitoringProduct;
   original?: ResourceListItem;
@@ -34,10 +36,16 @@ export default function MonitorComparisonMap({
   mode: MonitorComparisonView;
   visibleCodes: number[];
   focusKey?: number;
+  onMapReady?: (map: MapboxMap | undefined) => void;
+  resultVisible?: boolean;
 }) {
   const [primary, setPrimary] = useState<MapboxMap>();
   const [reference, setReference] = useState<MapboxMap>();
   const [position, setPosition] = useState(50);
+  useEffect(() => {
+    onMapReady?.(primary);
+    return () => onMapReady?.(undefined);
+  }, [primary, onMapReady]);
   const compare = Boolean(
     (product || displayResource) &&
     original &&
@@ -98,12 +106,14 @@ export default function MonitorComparisonMap({
         }
       >
         <ProductMap
-          product={mode === "original" ? undefined : product}
+          product={mode === "original" || !resultVisible ? undefined : product}
           resource={
-            mode === "original"
-              ? (original ?? overview)
-              : (displayResource ??
-                (product ? undefined : (original ?? overview)))
+            !resultVisible && mode !== "original"
+              ? undefined
+              : mode === "original"
+                ? (original ?? overview)
+                : (displayResource ??
+                  (product ? undefined : (original ?? overview)))
           }
           config={config}
           animated={compare ? false : animated}

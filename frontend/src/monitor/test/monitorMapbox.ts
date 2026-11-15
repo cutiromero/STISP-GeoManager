@@ -3,13 +3,16 @@ import { vi } from "vitest";
 
 export function createMonitorMapMock(options: MapOptions) {
   const sources = new Map<string, { setData: ReturnType<typeof vi.fn> }>();
-  const events = new Map<string, Set<() => void>>();
+  const events = new Map<string, Set<(event?: unknown) => void>>();
   const style = options.style as StyleSpecification;
   const layers = new Map<string, unknown>(
     (style.layers ?? []).map((layer) => [layer.id, layer]),
   );
   let removed = false;
+  let canvas: HTMLCanvasElement | undefined;
   const api = {
+    getCanvas: vi.fn(() => (canvas ??= document.createElement("canvas"))),
+    doubleClickZoom: { disable: vi.fn(), enable: vi.fn() },
     on: vi.fn((name: string, callback: () => void) => {
       if (!events.has(name)) events.set(name, new Set());
       events.get(name)!.add(callback);
@@ -41,6 +44,7 @@ export function createMonitorMapMock(options: MapOptions) {
     setLanguage: vi.fn(),
     setLayoutProperty: vi.fn(),
     setPaintProperty: vi.fn(),
+    setFilter: vi.fn(),
     setFog: vi.fn(),
     resize: vi.fn(),
     stop: vi.fn(),
@@ -61,7 +65,8 @@ export function createMonitorMapMock(options: MapOptions) {
     options,
     sources,
     layers,
-    emit: (name: string) => events.get(name)?.forEach((callback) => callback()),
+    emit: (name: string, event?: unknown) =>
+      events.get(name)?.forEach((callback) => callback(event)),
   };
 }
 

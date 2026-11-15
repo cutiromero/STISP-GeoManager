@@ -33,7 +33,7 @@ const app = vi.hoisted(() => ({
 }));
 vi.mock("../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/client")>()),
-  requestJson: vi.fn(async () => ({ products: [], times: [] })),
+  requestJson: vi.fn(async () => ({ assets: [], collections: [], inputSets: [], method: null, hasMoreSources: false, nextOffset: null })),
 }));
 vi.mock("../projects/ProjectContext", () => ({
   useProjectContext: () => context,

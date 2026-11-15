@@ -109,6 +109,18 @@ export function useMonitorProductSelection({
     references,
     batch,
     showCurrent,
+    selectProduct: (id: number) => {
+      const item = candidates.find((row) => row.id === id);
+      if (!item) return;
+      const group = (Object.keys(groups) as ProductView[]).find((name) =>
+        groups[name].some((row) => row.id === id),
+      );
+      if (group) {
+        chosen.current = true;
+        setView(group);
+        setKey(`product:${id}`);
+      }
+    },
   };
 }
 

@@ -70,6 +70,576 @@
     }
   ],
   "paths": {
+    "/api/ecology/monitoring/source-preview/": {
+      "post": {
+        "tags": [
+          "Ecology"
+        ],
+        "summary": "原始观测图层预览",
+        "description": "按当前项目、资料权限、真实时间及源版本准备后台预览。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "operationId": "createMonitoringSourcePreview",
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "显式选择当前单个项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "预览状态或图像",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringSourcePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求或预览无效"
+          },
+          "403": {
+            "description": "无权查看资料"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonitoringSourcePreviewRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ecology/monitoring/source-preview/{jobId}/": {
+      "get": {
+        "tags": [
+          "Ecology"
+        ],
+        "summary": "原始观测图层预览",
+        "description": "按当前项目、资料权限、真实时间及源版本准备后台预览。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "operationId": "getMonitoringSourcePreview",
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "显式选择当前单个项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "后台预览任务编号"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "预览状态或图像",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringSourcePreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求或预览无效"
+          },
+          "403": {
+            "description": "无权查看资料"
+          }
+        }
+      }
+    },
+    "/api/ecology/monitoring/source-preview/{jobId}/image/": {
+      "get": {
+        "tags": [
+          "Ecology"
+        ],
+        "summary": "原始观测图层预览",
+        "description": "按当前项目、资料权限、真实时间及源版本准备后台预览。",
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "operationId": "getMonitoringSourcePreviewImage",
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "显式选择当前单个项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "后台预览任务编号"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "预览状态或图像",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求或预览无效"
+          },
+          "403": {
+            "description": "无权查看资料"
+          }
+        }
+      }
+    },
+    "/api/catalog/observation-metadata/": {
+      "get": {
+        "tags": [
+          "数据目录"
+        ],
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "operationId": "getObservationMetadataBatch",
+        "summary": "批量读取资料用途和观测时相",
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "显式选择当前单个项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "description": "最多100个当前项目资料编号，逗号分隔。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "批量读取资料用途和观测时相",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceObservationProfiles"
+                },
+                "example": {
+                  "items": []
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/catalog/resources/{resourceId}/observation-metadata/": {
+      "get": {
+        "tags": [
+          "数据目录"
+        ],
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "operationId": "getResourceObservationMetadata",
+        "summary": "读取资料用途与科学时相",
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "显式选择当前单个项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "resourceId",
+            "in": "path",
+            "required": true,
+            "description": "当前项目资料编号。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "读取资料用途与科学时相",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceObservationProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "数据目录"
+        ],
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "operationId": "updateResourceObservationMetadata",
+        "summary": "维护资料用途与科学时相",
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "显式选择当前单个项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "resourceId",
+            "in": "path",
+            "required": true,
+            "description": "当前项目资料编号。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "维护资料用途与科学时相",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceObservationProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceObservationProfileUpdate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ecology/monitoring/sources/": {
+      "get": {
+        "tags": [
+          "数据目录"
+        ],
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "operationId": "getMonitoringSources",
+        "summary": "读取动态监测输入资料与时相组合",
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "显式选择当前单个项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "scene",
+            "in": "query",
+            "required": true,
+            "description": "已开启监测场景。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "spartina",
+                "wildfire",
+                "landcover"
+              ]
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "description": "来源页偏移。",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "collection",
+            "in": "query",
+            "required": false,
+            "description": "资料集合标识。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "description": "观测覆盖年份。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9999
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "读取动态监测输入资料与时相组合",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringSourceCatalog"
+                },
+                "example": {
+                  "projectId": 2,
+                  "scene": "spartina",
+                  "assets": [],
+                  "collections": [],
+                  "inputSets": [],
+                  "method": null,
+                  "hasMoreSources": false,
+                  "nextOffset": null
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/api/ecology/monitoring/source-times/": {
+      "get": {
+        "tags": [
+          "数据目录"
+        ],
+        "security": [
+          {
+            "sessionAuth": []
+          }
+        ],
+        "operationId": "getMonitoringSourceTimes",
+        "summary": "读取资料的真实可用观测期",
+        "parameters": [
+          {
+            "name": "X-Project-Id",
+            "in": "header",
+            "required": true,
+            "description": "显式选择当前单个项目。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "scene",
+            "in": "query",
+            "required": true,
+            "description": "已开启监测场景。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "spartina",
+                "wildfire",
+                "landcover"
+              ]
+            }
+          },
+          {
+            "name": "resourceId",
+            "in": "query",
+            "required": true,
+            "description": "源资料编号。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": true,
+            "description": "选择真实年份。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9999
+            }
+          },
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "按实际产品掩膜筛选。",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "gwis_ba",
+                "gfed_ba",
+                "fcci_ba",
+                "cams_frpfire"
+              ]
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "description": "上一页的原始位置。",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "每页最多500个原始观测期。",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "读取资料的真实可用观测期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitoringSourceTimePage"
+                },
+                "example": {
+                  "resourceId": 1,
+                  "indexVersion": "",
+                  "items": [],
+                  "nextOrdinal": null
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/api/ecology/wildfire/catalog/": {
       "get": {
         "tags": [
@@ -29269,6 +29839,947 @@
       }
     },
     "schemas": {
+      "MonitoringSourcePreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "真实原生资料单期预览请求。",
+        "required": [
+          "scene",
+          "resourceId",
+          "product",
+          "ordinal"
+        ],
+        "properties": {
+          "scene": {
+            "type": "string",
+            "enum": [
+              "wildfire"
+            ],
+            "description": "监测场景"
+          },
+          "resourceId": {
+            "type": "integer",
+            "description": "当前可访问原始资料"
+          },
+          "product": {
+            "type": "string",
+            "enum": [
+              "gwis_ba",
+              "gfed_ba",
+              "fcci_ba",
+              "cams_frpfire"
+            ],
+            "description": "观测变量"
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "由时间目录取得的原始位置"
+          }
+        }
+      },
+      "MonitoringSourcePreview": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "共用栅格队列中的原始图层预览；图像请求再次校验权限。",
+        "required": [
+          "id",
+          "status",
+          "error",
+          "imageUrl",
+          "bounds",
+          "resourceId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "预览任务编号"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "ready",
+              "failed"
+            ],
+            "description": "预览状态"
+          },
+          "error": {
+            "type": "string",
+            "description": "失败原因"
+          },
+          "imageUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "已就绪时的受控图像入口"
+          },
+          "bounds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "图像WGS84范围"
+          },
+          "resourceId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "已就绪时的来源编号"
+          }
+        }
+      },
+      "ResourceObservationPeriod": {
+        "type": "object",
+        "description": "科学观测时段；月/年精度用完整区间存储，不能当作精确采集日。",
+        "properties": {
+          "startsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "观测起点",
+            "format": "date"
+          },
+          "endsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "观测终点",
+            "format": "date"
+          },
+          "precision": {
+            "type": "string",
+            "description": "时相精度",
+            "enum": [
+              "unknown",
+              "day",
+              "month",
+              "year",
+              "interval"
+            ]
+          }
+        },
+        "required": [
+          "startsAt",
+          "endsAt",
+          "precision"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringResourceUsage": {
+        "type": "object",
+        "description": "同一资料在一个监测场景中的用途；不改变原件与计算产物的来源属性。",
+        "properties": {
+          "scene": {
+            "type": "string",
+            "description": "监测场景",
+            "enum": [
+              "spartina",
+              "wildfire",
+              "landcover"
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "description": "资料用途",
+            "enum": [
+              "input",
+              "result",
+              "reference",
+              "auxiliary"
+            ]
+          }
+        },
+        "required": [
+          "scene",
+          "purpose"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringSourceVariable": {
+        "type": "object",
+        "description": "原生空间变量元信息。",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "原始变量编码"
+          },
+          "label": {
+            "type": "string",
+            "description": "变量名称"
+          },
+          "unit": {
+            "type": "string",
+            "description": "物理单位"
+          },
+          "dimensions": {
+            "type": "array",
+            "description": "原始维度顺序",
+            "items": {
+              "type": "string",
+              "description": "原始维度名"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "unit",
+          "dimensions"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringSourceSchema": {
+        "type": "object",
+        "description": "从登记结构或原生元信息取得的可视化与输入结构，不包含像元。",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "空间资料类型",
+            "enum": [
+              "raster",
+              "native_cube",
+              "vector",
+              "table",
+              "image",
+              "gene",
+              "document"
+            ]
+          },
+          "bands": {
+            "type": "integer",
+            "description": "原始波段数"
+          },
+          "size": {
+            "type": "array",
+            "description": "原始宽高",
+            "items": {
+              "type": "integer",
+              "description": "像元数"
+            }
+          },
+          "bounds": {
+            "type": "array",
+            "description": "WGS84范围",
+            "items": {
+              "type": "number",
+              "description": "经纬度"
+            }
+          },
+          "coordinateSystem": {
+            "type": "string",
+            "description": "原始坐标系"
+          },
+          "geoTransform": {
+            "type": "array",
+            "description": "原始仿射变换",
+            "items": {
+              "type": "number",
+              "description": "仿射系数"
+            }
+          },
+          "bandTypes": {
+            "type": "array",
+            "description": "原始波段类型",
+            "items": {
+              "type": "string",
+              "description": "原始类型"
+            }
+          },
+          "bandNames": {
+            "type": "array",
+            "description": "原始波段名称",
+            "items": {
+              "type": "string",
+              "description": "原始波段名"
+            }
+          },
+          "renderDatasetId": {
+            "type": "integer",
+            "description": "已有显示数据集编号"
+          },
+          "gridResolution": {
+            "type": "number",
+            "description": "原生格网角分辨率"
+          },
+          "timeCount": {
+            "type": "integer",
+            "description": "真实时间坐标数"
+          },
+          "variables": {
+            "type": "array",
+            "description": "原生空间变量",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MonitoringSourceVariable"
+                }
+              ]
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "ResourceObservationProfile": {
+        "type": "object",
+        "description": "项目与当前权限校验后的资料用途、时相和结构。",
+        "properties": {
+          "resourceId": {
+            "type": "integer",
+            "description": "资料编号"
+          },
+          "resourceVersion": {
+            "type": "string",
+            "description": "当前资料修订",
+            "format": "date-time"
+          },
+          "family": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "资料族"
+          },
+          "collectionKey": {
+            "type": "string",
+            "description": "资料集合稳定标识"
+          },
+          "period": {
+            "description": "已登记观测时段",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResourceObservationPeriod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceSchema": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MonitoringSourceSchema"
+              }
+            ]
+          },
+          "indexVersion": {
+            "type": "string",
+            "description": "真实时间索引修订"
+          },
+          "usages": {
+            "type": "array",
+            "description": "各场景用途",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MonitoringResourceUsage"
+                }
+              ]
+            }
+          },
+          "canEdit": {
+            "type": "boolean",
+            "description": "当前用户可维护元信息"
+          }
+        },
+        "required": [
+          "resourceId",
+          "resourceVersion",
+          "family",
+          "collectionKey",
+          "period",
+          "sourceSchema",
+          "indexVersion",
+          "usages",
+          "canEdit"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceObservationProfileUpdate": {
+        "type": "object",
+        "description": "用途和时相更新；省略字段保留现值，原生容器日期从真实坐标建立。",
+        "properties": {
+          "family": {
+            "type": "string",
+            "description": "资料族；省略时从登记结构识别",
+            "enum": [
+              "raster",
+              "rgb_imagery",
+              "multitemporal_features",
+              "seasfire",
+              "result",
+              "vector",
+              "auxiliary"
+            ]
+          },
+          "collectionKey": {
+            "type": "string",
+            "description": "资料集合标识；默认使用登记组别",
+            "maxLength": 80
+          },
+          "startsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "时段起点",
+            "format": "date"
+          },
+          "endsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "时段终点",
+            "format": "date"
+          },
+          "precision": {
+            "type": "string",
+            "description": "时相精度",
+            "enum": [
+              "unknown",
+              "day",
+              "month",
+              "year",
+              "interval"
+            ]
+          },
+          "usages": {
+            "type": "array",
+            "description": "场景用途，按资料维护权限更新",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MonitoringResourceUsage"
+                }
+              ]
+            },
+            "maxItems": 3
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "ResourceObservationProfiles": {
+        "type": "object",
+        "description": "当前权限可见的资料元信息。",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "资料元信息",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ResourceObservationProfile"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringSourceYear": {
+        "type": "object",
+        "description": "原生数据中实际存在的年份与产品有效性。",
+        "properties": {
+          "year": {
+            "type": "integer",
+            "description": "真实年份"
+          },
+          "count": {
+            "type": "integer",
+            "description": "原始观测期数"
+          },
+          "validProducts": {
+            "type": "array",
+            "description": "该年有有效时间掩膜的观测产品",
+            "items": {
+              "type": "string",
+              "description": "有效观测产品",
+              "enum": [
+                "gwis_ba",
+                "gfed_ba",
+                "fcci_ba",
+                "cams_frpfire"
+              ]
+            }
+          }
+        },
+        "required": [
+          "year",
+          "count",
+          "validProducts"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringSourceAsset": {
+        "type": "object",
+        "description": "可作背景预览或方法输入的当前项目原始资料。",
+        "properties": {
+          "resource": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DataResource"
+              }
+            ]
+          },
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceObservationProfile"
+              }
+            ]
+          },
+          "years": {
+            "type": "array",
+            "description": "实际可用年份",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MonitoringSourceYear"
+                }
+              ]
+            }
+          },
+          "collectionLabel": {
+            "type": "string",
+            "description": "资料集合名称"
+          }
+        },
+        "required": [
+          "resource",
+          "metadata",
+          "years",
+          "collectionLabel"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringMethodInput": {
+        "type": "object",
+        "description": "已发布方法要求的输入端口；来源与日期由本次选择绑定。",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "固定端口编码"
+          },
+          "label": {
+            "type": "string",
+            "description": "输入名称"
+          },
+          "kind": {
+            "type": "string",
+            "description": "数据类型"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "是否必需"
+          },
+          "bandCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "精确波段数"
+          },
+          "minBands": {
+            "type": "integer",
+            "description": "最低波段数"
+          },
+          "dtypes": {
+            "type": "array",
+            "description": "可接受类型",
+            "items": {
+              "type": "string",
+              "description": "可接受原始类型"
+            }
+          },
+          "nativeCube": {
+            "type": "boolean",
+            "description": "端口是否为原生时空容器"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "kind",
+          "required",
+          "bandCount",
+          "minBands",
+          "dtypes",
+          "nativeCube"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringSourceMethod": {
+        "type": "object",
+        "description": "当前场景已发布的同一主执行业务流及方法输入规范。",
+        "properties": {
+          "definitionId": {
+            "type": "integer",
+            "description": "业务流编号"
+          },
+          "versionId": {
+            "type": "integer",
+            "description": "业务流冻结版本"
+          },
+          "operatorVersionId": {
+            "type": "integer",
+            "description": "方法冻结版本"
+          },
+          "title": {
+            "type": "string",
+            "description": "业务流名称"
+          },
+          "goal": {
+            "type": "string",
+            "description": "默认目标"
+          },
+          "inputs": {
+            "type": "array",
+            "description": "方法输入规范",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MonitoringMethodInput"
+                }
+              ]
+            }
+          },
+          "parameters": {
+            "type": "array",
+            "description": "内部方法参数规范",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ComputeParameterSpec"
+                }
+              ]
+            }
+          },
+          "inputRequirements": {
+            "type": "array",
+            "description": "业务流资料角色",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/BusinessFlowInputRequirement"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "definitionId",
+          "versionId",
+          "operatorVersionId",
+          "title",
+          "goal",
+          "inputs",
+          "parameters",
+          "inputRequirements"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringInputSet": {
+        "type": "object",
+        "description": "依据登记时间、集合和方法输入规范生成的输入组合。",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "组合和资料修订摘要"
+          },
+          "collectionKey": {
+            "type": "string",
+            "description": "资料集合"
+          },
+          "label": {
+            "type": "string",
+            "description": "实际时相或资料名称"
+          },
+          "startsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "输入时段起点",
+            "format": "date"
+          },
+          "endsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "输入时段终点",
+            "format": "date"
+          },
+          "inputs": {
+            "type": "object",
+            "description": "端口到真实资料编号",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "periods": {
+            "type": "array",
+            "description": "按输入顺序记录的时段",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/ResourceObservationPeriod"
+                }
+              ]
+            }
+          },
+          "resources": {
+            "type": "array",
+            "description": "真实输入资料",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/DataResource"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "collectionKey",
+          "label",
+          "startsAt",
+          "endsAt",
+          "inputs",
+          "periods",
+          "resources"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringSourceCollection": {
+        "type": "object",
+        "description": "可选监测资料集合。",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "集合标识"
+          },
+          "label": {
+            "type": "string",
+            "description": "集合名称"
+          },
+          "count": {
+            "type": "integer",
+            "description": "当前可访问资料数量"
+          },
+          "startsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "最早登记时段",
+            "format": "date"
+          },
+          "endsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "最晚登记时段",
+            "format": "date"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "count",
+          "startsAt",
+          "endsAt"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringSourceCatalog": {
+        "type": "object",
+        "description": "只读元信息的动态监测资料目录；用途、当前权限与已发布方法共同限制候选。",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "description": "当前项目"
+          },
+          "scene": {
+            "type": "string",
+            "description": "当前场景",
+            "enum": [
+              "spartina",
+              "wildfire",
+              "landcover"
+            ]
+          },
+          "assets": {
+            "type": "array",
+            "description": "当前页可访问输入资料",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MonitoringSourceAsset"
+                }
+              ]
+            }
+          },
+          "method": {
+            "description": "当前已发布方法",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonitoringSourceMethod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inputSets": {
+            "type": "array",
+            "description": "实际可用时相组合",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MonitoringInputSet"
+                }
+              ]
+            }
+          },
+          "hasMoreSources": {
+            "type": "boolean",
+            "description": "是否还有来源页"
+          },
+          "nextOffset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "后续来源页偏移"
+          },
+          "collections": {
+            "type": "array",
+            "description": "可访问资料集合",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MonitoringSourceCollection"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "scene",
+          "assets",
+          "method",
+          "inputSets",
+          "hasMoreSources",
+          "nextOffset",
+          "collections"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringSourceTimePoint": {
+        "type": "object",
+        "description": "来源于真实坐标的观测期；ordinal由平台内部使用。",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "真实时间点标识"
+          },
+          "ordinal": {
+            "type": "integer",
+            "description": "原生数据内部位置"
+          },
+          "date": {
+            "type": "string",
+            "description": "真实起点",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "description": "真实终点",
+            "format": "date"
+          },
+          "validProducts": {
+            "type": "array",
+            "description": "实际时间有效掩膜",
+            "items": {
+              "type": "string",
+              "description": "产品编码",
+              "enum": [
+                "gwis_ba",
+                "gfed_ba",
+                "fcci_ba",
+                "cams_frpfire"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "ordinal",
+          "date",
+          "endDate",
+          "validProducts"
+        ],
+        "additionalProperties": false
+      },
+      "MonitoringSourceTimePage": {
+        "type": "object",
+        "description": "按真实年份和原始位置分页，支持超过966期的新数据。",
+        "properties": {
+          "resourceId": {
+            "type": "integer",
+            "description": "源资料"
+          },
+          "indexVersion": {
+            "type": "string",
+            "description": "索引修订"
+          },
+          "items": {
+            "type": "array",
+            "description": "实际观测期",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/MonitoringSourceTimePoint"
+                }
+              ]
+            }
+          },
+          "nextOrdinal": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "后续页原始位置"
+          }
+        },
+        "required": [
+          "resourceId",
+          "indexVersion",
+          "items",
+          "nextOrdinal"
+        ],
+        "additionalProperties": false
+      },
       "ShareKind": {
         "type": "string",
         "description": "工程、专题图或单个计算输出；不分享整个计算任务",

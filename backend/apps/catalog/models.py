@@ -795,3 +795,103 @@ class VectorDataset(ProjectScopedModel):
 
     def __str__(self) -> str:
         return self.resource.name
+
+
+class ResourceObservationMetadata(ProjectScopedModel):
+    """Scientific time and source family, separate from storage provenance."""
+
+    class Precision(models.TextChoices):
+        UNKNOWN = "unknown", "未标时相"
+        DAY = "day", "日"
+        MONTH = "month", "月"
+        YEAR = "year", "年"
+        INTERVAL = "interval", "时段"
+
+    resource = models.OneToOneField(
+        DataResource, on_delete=models.CASCADE, related_name="observation_metadata"
+    )
+    family = models.SlugField(max_length=80, default="raster", verbose_name="资料族")
+    collection_key = models.SlugField(
+        max_length=80, blank=True, verbose_name="资料集合"
+    )
+    starts_at = models.DateField(null=True, blank=True, verbose_name="观测时段起点")
+    ends_at = models.DateField(null=True, blank=True, verbose_name="观测时段终点")
+    precision = models.CharField(
+        max_length=16, choices=Precision.choices, default=Precision.UNKNOWN
+    )
+    source_schema = models.JSONField(default=dict, blank=True)
+    index_version = models.CharField(max_length=64, blank=True)
+    indexed_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "资料时相与结构"
+        indexes = [
+            models.Index(
+                fields=["project_tag", "family", "collection_key"],
+                name="catalog_obs_collection_idx",
+            )
+        ]
+
+
+class ResourceMonitoringUsage(ProjectScopedModel):
+    """A resource can play different roles in different monitoring scenes."""
+
+    class Purpose(models.TextChoices):
+        INPUT = "input", "原始输入"
+        RESULT = "result", "解译成果"
+        REFERENCE = "reference", "标准参考"
+        AUXILIARY = "auxiliary", "辅助资料"
+
+    resource = models.ForeignKey(
+        DataResource, on_delete=models.CASCADE, related_name="monitoring_usages"
+    )
+    scene = models.SlugField(max_length=40)
+    purpose = models.CharField(max_length=16, choices=Purpose.choices)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "监测资料用途"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["resource", "scene"], name="catalog_resource_scene_usage"
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["project_tag", "scene", "purpose"],
+                name="catalog_monitoring_usage_idx",
+            )
+        ]
+
+
+class ResourceObservationTimePoint(ProjectScopedModel):
+    """A real source interval; the ordinal is internal to its source version."""
+
+    observation = models.ForeignKey(
+        ResourceObservationMetadata,
+        on_delete=models.CASCADE,
+        related_name="time_points",
+    )
+    ordinal = models.PositiveIntegerField()
+    starts_at = models.DateField()
+    ends_at = models.DateField()
+    available_products = models.JSONField(default=list)
+    source_version = models.CharField(max_length=64)
+
+    class Meta:
+        verbose_name = "资料原始观测期"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["observation", "ordinal"], name="catalog_observation_ordinal"
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["observation", "starts_at"], name="catalog_obs_time_idx"
+            )
+        ]
+        ordering = ["starts_at", "ordinal"]

@@ -427,6 +427,8 @@ def datasets(request):
 def job_status(request, job_id: str):
     try:
         job = get_job(job_id)
+        if job.kind == "source-preview":
+            return JsonResponse({"detail": "任务不存在"}, status=404)
         if not request.user.is_authenticated and (
             job.kind != "render"
             or job_id not in request.session.get("public_render_jobs", [])

@@ -1,5 +1,11 @@
+import { useMonitoringWorkspace } from "./useMonitoringWorkspace";
+import MonitoringSourceControls from "./MonitoringSourceControls";
+import MonitorRegionControls from "./MonitorRegionControls";
+import MonitorRawLayer from "./MonitorRawLayer";
+import MonitorTimeline from "./MonitorTimeline";
+import type { Map as MapboxMap } from "mapbox-gl";
 import { ReloadOutlined } from "@ant-design/icons";
-import { Button, Checkbox, Empty, Segmented, Select } from "antd";
+import { Button, Checkbox, Empty, Segmented } from "antd";
 import {
   lazy,
   Suspense,
@@ -60,7 +66,8 @@ export default function SpartinaDashboard({
     "classification",
   );
   const [hidden, setHidden] = useState(false);
-  const [month, setMonth] = useState("202508");
+  const workspace = useMonitoringWorkspace("spartina", projectId);
+  const [map, setMap] = useState<MapboxMap>();
   const [drawer, setDrawer] = useState<"new" | "current" | "records">();
   const [downloadError, setDownloadError] = useState<string>();
   const [downloading, setDownloading] = useState(false);
@@ -98,11 +105,7 @@ export default function SpartinaDashboard({
       : config;
   }, [config, selected?.extraction?.bounds]);
   const reference = selection.reference;
-  const original =
-    (month === "202508"
-      ? selected?.attachments?.find((row) => row.role === "original")?.resource
-      : undefined) ??
-    page?.inputResources?.find((row) => row.name.includes(month));
+  const original = workspace.source?.resource;
   const probability = selected?.attachments?.find(
     (row) => row.role === "probability",
   )?.resource;
@@ -208,7 +211,7 @@ export default function SpartinaDashboard({
             ? "RF · 互花米草分布解译"
             : "互花米草历史分布"
       }
-      status={() => selected?.name ?? reference?.name ?? "2025三季节原始影像"}
+      status={() => selected?.name ?? reference?.name ?? "原始监测资料"}
       actions={
         <>
           <Button
@@ -254,6 +257,8 @@ export default function SpartinaDashboard({
                 fallback={<MonitorDataStatus title="准备地图" loading />}
               >
                 <ComparisonMap
+                  onMapReady={setMap}
+                  resultVisible={workspace.resultVisible}
                   product={mode === "probability" ? undefined : selected}
                   displayResource={
                     mode === "probability" ? probability : reference
@@ -268,6 +273,18 @@ export default function SpartinaDashboard({
                   }
                 />
               </Suspense>
+              <MonitorRawLayer map={map} workspace={workspace} />
+              <MonitorRegionControls map={map} workspace={workspace} />
+              <MonitorTimeline
+                items={page?.items ?? []}
+                selected={selected}
+                onSelect={selection.selectProduct}
+                onMore={
+                  page?.nextBeforeId
+                    ? () => void products.loadMore()
+                    : undefined
+                }
+              />
               <div className="landcover-map-toolbar">
                 <Segmented
                   aria-label="影像对比方式"
@@ -308,7 +325,8 @@ export default function SpartinaDashboard({
                 <div>
                   <span>输入组合</span>
                   <strong>
-                    2025<small>三季节</small>
+                    {workspace.inputSet?.resources.length ?? "—"}
+                    <small>时相</small>
                   </strong>
                 </div>
                 <div>
@@ -449,18 +467,7 @@ export default function SpartinaDashboard({
                     <i className="spartina-color" />
                     互花米草
                   </Checkbox>
-                  <p>原图月份</p>
-                  <Select
-                    aria-label="原图月份"
-                    value={month}
-                    onChange={setMonth}
-                    disabled={!page?.inputResources?.length}
-                    options={[
-                      { value: "202503", label: "03月" },
-                      { value: "202508", label: "08月" },
-                      { value: "202512", label: "12月" },
-                    ]}
-                  />
+                  <MonitoringSourceControls workspace={workspace} />
                   <p className="spartina-secondary">
                     原图、分类与概率按同一位置查看
                   </p>
@@ -485,7 +492,7 @@ export default function SpartinaDashboard({
                       : (selected?.model?.variant ??
                         (selected
                           ? "历史分布成果"
-                          : "03 / 08 / 12月 · 16波段 × 3"))}
+                          : `${workspace.catalog?.method?.inputs.length ?? 3}时相 · 16波段`))}
                   </p>
                   <span className="spartina-secondary">
                     B1–B9、B8A、B11、B12 · NDVI / NDWI / NBR / EVI
@@ -568,6 +575,7 @@ export default function SpartinaDashboard({
           </main>
           {drawer && (
             <SpartinaTaskDrawer
+              workspace={workspace}
               page={page}
               flow={task.flow}
               onChanged={task.accept}

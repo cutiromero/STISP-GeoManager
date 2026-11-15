@@ -52,6 +52,12 @@ def run(context):
         progress,
     )
     facts.update(
+        inputPeriods=[
+            ((context.inputs[role].get("observationPeriod") or {}).get("startsAt") or "时间未登记")[:7]
+            if (context.inputs[role].get("observationPeriod") or {}).get("precision") == "month"
+            else (context.inputs[role].get("observationPeriod") or {}).get("startsAt") or "时间未登记"
+            for role in ROLES
+        ],
         modelSha256=os.environ["GEOMANAGER_MODEL_SHA256"],
         runtimeDigest=os.environ["GEOMANAGER_RUNTIME_DIGEST"],
         sklearnVersion=importlib.metadata.version("scikit-learn"),

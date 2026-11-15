@@ -1,8 +1,7 @@
-import { InputNumber } from "antd";
-import { useMemo, useState, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
+import { Alert } from "antd";
 import MonitorTaskDrawer from "./MonitorTaskDrawer";
-
-const initialRegion = { west: 121.9, south: 31.2, east: 121.99, north: 31.29 };
+import type { MonitoringWorkspace } from "./useMonitoringWorkspace";
 type Props = Omit<
   ComponentProps<typeof MonitorTaskDrawer>,
   | "title"
@@ -11,66 +10,51 @@ type Props = Omit<
   | "parameters"
   | "launchOptions"
   | "launchKey"
->;
-
-export default function SpartinaTaskDrawer(props: Props) {
-  const [region, setRegion] = useState(initialRegion);
-  const resources = props.page?.inputResources ?? [];
-  const inputs = useMemo(
-    () =>
-      Object.fromEntries(
-        (
-          [
-            ["march", "202503"],
-            ["august", "202508"],
-            ["december", "202512"],
-          ] as const
-        ).flatMap(([role, period]) => {
-          const resource = resources.find((row) => row.name.includes(period));
-          return resource ? [[role, resource.id]] : [];
-        }),
-      ),
-    [resources],
-  );
+> & { workspace: MonitoringWorkspace };
+export default function SpartinaTaskDrawer({ workspace: w, ...props }: Props) {
+  const set = w.inputSet;
+  const page = props.page && {
+    ...props.page,
+    businessFlow: w.catalog?.method
+      ? {
+          ...w.catalog.method,
+          goal: `对所选${set?.label ?? ""}时相组合进行互花米草RF解译。研究区WGS84：${JSON.stringify(w.region)}。输出分类、概率、分布统计并登记到监测大屏。`,
+        }
+      : props.page.businessFlow,
+  };
   return (
     <MonitorTaskDrawer
       {...props}
+      page={page}
       title="互花米草解译任务"
-      initialInputs={inputs}
+      initialInputs={w.inputs}
       inputLabels={Object.fromEntries(
-        resources.map((row) => [row.id, row.name]),
+        (set?.resources ?? []).map((row) => [row.id, row.name]),
       )}
-      parameters={{ nodeParameters: { interpret: region } }}
-      launchKey={JSON.stringify(region)}
+      parameters={{ nodeParameters: { interpret: w.region ?? {} } }}
+      launchKey={JSON.stringify([
+        w.inputs,
+        w.region,
+        w.catalog?.method?.versionId,
+      ])}
+      launchReady={w.ready}
       launchOptions={
-        <div className="spartina-task-region">
-          <strong>研究区 · WGS84</strong>
-          <p>默认长江口，可调整经纬度边界</p>
-          <div>
-            {(
-              [
-                ["west", "西界"],
-                ["south", "南界"],
-                ["east", "东界"],
-                ["north", "北界"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key}>
-                <span>{label}</span>
-                <InputNumber
-                  aria-label={label}
-                  value={region[key]}
-                  min={key === "west" || key === "east" ? -180 : -90}
-                  max={key === "west" || key === "east" ? 180 : 90}
-                  step={0.01}
-                  onChange={(value) =>
-                    value !== null &&
-                    setRegion((old) => ({ ...old, [key]: value }))
-                  }
-                />
-              </label>
-            ))}
-          </div>
+        <div>
+          <p>输入时相：{set?.label ?? "请先选择时相组合"}</p>
+          <p>
+            研究区：
+            {w.region
+              ? Object.values(w.region)
+                  .map((value) => value.toFixed(4))
+                  .join(" / ")
+              : "请在地图绘制研究区"}
+          </p>
+          {!w.ready && (
+            <Alert
+              type="info"
+              title="在大屏选择原始资料并绘制研究区后开始任务"
+            />
+          )}
         </div>
       }
     />

@@ -400,6 +400,9 @@ def process_import(record):
             ComputeImport.objects.filter(pk=record.pk).update(
                 status="ready", resource=resource, error="", heartbeat=timezone.now()
             )
+            from apps.ecology.product_time import record_import_metadata
+
+            record_import_metadata(record.pk)
             if (
                 record.output.task.version.algorithm.identifier
                 == "landcover-unet-infer"

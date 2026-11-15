@@ -161,6 +161,7 @@ export default function MonitorTaskDrawer({
               model={bootstrap.defaultAgentModel}
               compact
               presentation="task"
+              fixedInputs
               initialInputs={initialInputs}
               inputLabels={inputLabels}
               parameters={parameters}

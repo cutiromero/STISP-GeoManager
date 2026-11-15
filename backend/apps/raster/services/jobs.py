@@ -442,6 +442,32 @@ def _submit_job(
     fail_submission(HEAVY_TASK_QUEUE_FULL_MESSAGE)
 
 
+def start_source_preview_job(resource_id, created_by_id, build, *, cached=None):
+    """Run source previews on the existing bounded geospatial worker."""
+    job = _create_job(
+        "source-preview",
+        created_by_id=created_by_id,
+        input_refs=[{"resourceId": resource_id}],
+    )
+    if cached is not None:
+        result, artifact = cached
+        _set_job_artifact(job.id, artifact)
+        _finish_job(job.id, result, "ready")
+        return job
+
+    def runner():
+        try:
+            _set_job_running(job.id, "准备原始观测预览", 5)
+            result, artifact = build()
+            _set_job_artifact(job.id, artifact)
+            _finish_job(job.id, result, "ready")
+        except Exception as error:
+            _fail_job(job.id, str(error))
+
+    _submit_job(job, runner)
+    return job
+
+
 def start_import_job(
     source_path: str,
     name: str = "",

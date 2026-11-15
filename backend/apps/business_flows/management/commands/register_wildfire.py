@@ -12,14 +12,6 @@ class Command(RegisterCommand):
     flow_description = "选择真实时期和研究区，从原生SeasFire生成观测原值、面积分级、区域统计与历史序列。"
     algorithm_category = "野火观测制图"
     scene = "wildfire"
-    default_inputs = {"cube": 1475}
-    default_parameters = {
-        "product": "gwis_ba",
-        "time_index": 873,
-        "history": 12,
-        "west": 112,
-        "south": -44,
-        "east": 154,
-        "north": -10,
-    }
+    default_inputs = {}
+    default_parameters = {}
     build_definition = staticmethod(definition)

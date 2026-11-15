@@ -214,7 +214,7 @@ def infer(paths, model, output, progress=lambda *_: None):
                 "crs": "EPSG:4326",
             },
             "method": "RF",
-            "inputPeriods": ["2025-03", "2025-08", "2025-12"],
+            "inputPeriods": [],
             "normalization": "输入16波段原值，三季节顺序拼接",
             "connectivity": 8,
         }

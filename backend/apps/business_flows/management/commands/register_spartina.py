@@ -22,8 +22,8 @@ from apps.projects.features import set_feature
 from apps.projects.models import Project, ProjectFeature
 
 # CONFIGURATION
-DEFAULT_INPUTS = {"march": 1463, "august": 1464, "december": 1465}
-DEFAULT_REGION = {"west": 121.9, "south": 31.2, "east": 121.99, "north": 31.29}
+DEFAULT_INPUTS = {}
+DEFAULT_REGION = {}
 
 
 class Command(BaseCommand):
@@ -125,6 +125,10 @@ class Command(BaseCommand):
             elif options["stage"] == "trial":
                 inputs = json.loads(options["inputs_json"])
                 parameters = json.loads(options["parameters_json"])
+                if not inputs:
+                    raise CommandError("试运行须显式指定已登记原始资料 --inputs-json")
+                if not parameters:
+                    raise CommandError("试运行须显式指定研究区与时期 --parameters-json")
                 task = submit(
                     actor,
                     {

@@ -1,3 +1,4 @@
+import { sourceCatalog, sourceTimes } from "./monitoringWorkspace.testFixtures";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
@@ -44,7 +45,14 @@ vi.mock("../agent/useAgentBootstrap", () => ({
 }));
 vi.mock("../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/client")>()),
-  requestJson: vi.fn(async () => state.catalog),
+  requestJson: vi.fn(async (url: string) =>
+    url.includes("source-times")
+      ? sourceTimes
+      : sourceCatalog(
+          "wildfire",
+          state.catalog?.cube ? [state.catalog.cube] : [],
+        ),
+  ),
 }));
 vi.mock("./productApi", () => ({ getMonitoringProducts: vi.fn() }));
 vi.mock("./ProductMap", () => ({
@@ -288,6 +296,17 @@ it("launches one native cube run with the real source index and region", async (
     exact: true,
   });
   await waitFor(() => expect(start).toBeEnabled());
+  fireEvent.click(screen.getByText("经纬度范围", { exact: true }));
+  for (const [label, value] of [
+    ["西界", 112],
+    ["南界", -44],
+    ["东界", 154],
+    ["北界", -10],
+  ] as const)
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: `研究区${label}` }),
+      { target: { value: String(value) } },
+    );
   fireEvent.click(start);
   const submit = await screen.findByRole("button", { name: "开始业务流" });
   await waitFor(() => expect(submit).toBeEnabled());
@@ -299,12 +318,12 @@ it("launches one native cube run with the real source index and region", async (
     2,
     expect.objectContaining({
       inputs: { cube: 1475 },
-      goal: expect.stringContaining("所选时期：2019-12-27 — 2019-12-31"),
+      goal: expect.stringContaining("所选时期：2026-12-27 — 2026-12-31"),
       parameters: {
         nodeParameters: {
           interpret: {
             product: "gwis_ba",
-            time_index: 873,
+            time_index: 2000,
             history: 12,
             west: 112,
             south: -44,

@@ -3179,3 +3179,7 @@ start接受同一inputAdapters对象：键是输入角色，值是versionId及pa
 ### 主执行业务流开发标准
 
 新业务流统一采用 `executionMode: main_agent`，一个主执行智能体完成工具循环和报告分析，节点是目标与验收边界。合同默认动作/模型/算子/补救次数为32/32/6/4，累计主动处理时间3600秒；单次请求时限仍取实时策略。协议只把授权、实际输出及科学边界作为硬校验，写作风格和逐字验收不构成执行门槛。上下文整理、必要审核、报告分析及正式站验收要求见 [业务流开发规范](business-flow-development-standard.md)。
+
+### 遥感监测资料与时序
+
+[时空监测工作区](monitoring-temporal-workspace.md)使用独立用途、观测时段和原生时间索引表。新增接口以OpenAPI中的ResourceObservationProfile、MonitoringSourceCatalog、MonitoringSourceTimePage和MonitoringSourcePreview为准。来源和年份查询只读SQL；原生图层准备复用有界栅格后台队列。资料用途不改变原始文件来源标记，计算时相固定到输入快照；成果时间轴使用观测时段。

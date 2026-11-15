@@ -415,6 +415,11 @@ def freeze_input(record, directory):
     record.save(update_fields=["checksum", "snapshot"])
     return {
         "path": "/inputs/" + target.name,
+        **(
+            {"observationPeriod": record.snapshot["observationPeriod"]}
+            if "observationPeriod" in record.snapshot
+            else {}
+        ),
         "kind": kind,
         "resourceId": resource.id,
         "sha256": digest,

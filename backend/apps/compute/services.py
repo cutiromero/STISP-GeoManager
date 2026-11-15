@@ -516,13 +516,32 @@ def submit(user, body, retry_of=None, *, preflight_digest=None):
             field_mappings=data["field_mappings"],
             input_collections=data["input_collections"],
         )
+        observation_periods = {}
+        if version.algorithm.identifier in {"spartina-rf-infer", "wildfire-observe"}:
+            from apps.catalog.models import ResourceObservationMetadata
+            from apps.catalog.monitoring_metadata import period_payload
+
+            observation_periods = {
+                row.resource_id: period_payload(row)
+                for row in ResourceObservationMetadata.objects.filter(
+                    resource_id__in=[r.pk for _, r, _ in data["resources"]]
+                )
+            }
         ComputeInput.objects.bulk_create(
             [
                 ComputeInput(
                     task=task,
                     key=key,
                     resource=r,
-                    snapshot={**info, "updatedAt": r.updated_at.isoformat()},
+                    snapshot={
+                        **info,
+                        "updatedAt": r.updated_at.isoformat(),
+                        **(
+                            {"observationPeriod": observation_periods[r.pk]}
+                            if r.pk in observation_periods
+                            else {}
+                        ),
+                    },
                 )
                 for key, r, info in data["resources"]
             ]

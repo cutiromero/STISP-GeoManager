@@ -5,9 +5,25 @@ from django.urls import include, path, re_path
 from apps.core.views import frontend_app
 from apps.core.frontend_assets import historical_asset
 from apps.ecology.monitoring_views import monitoring, wildfire_catalog
+from apps.ecology.source_catalog_views import (
+    sources as monitoring_sources,
+    times as monitoring_source_times,
+)
+from apps.ecology.source_preview_views import preview as monitoring_source_preview
 
 
 urlpatterns = [
+    path("api/ecology/monitoring/source-preview/", monitoring_source_preview),
+    path(
+        "api/ecology/monitoring/source-preview/<str:job_id>/", monitoring_source_preview
+    ),
+    path(
+        "api/ecology/monitoring/source-preview/<str:job_id>/image/",
+        monitoring_source_preview,
+        {"image": True},
+    ),
+    path("api/ecology/monitoring/sources/", monitoring_sources),
+    path("api/ecology/monitoring/source-times/", monitoring_source_times),
     path("api/ecology/monitoring/", monitoring),
     path("api/ecology/wildfire/catalog/", wildfire_catalog),
     path("api/business-flows/", include("apps.business_flows.urls")),

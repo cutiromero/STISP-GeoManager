@@ -3,6 +3,7 @@ from django.views.decorators.gzip import gzip_page
 
 from apps.catalog import (
     map_compositions,
+    monitoring_metadata_views,
     nongeo,
     resource_management,
     results,
@@ -12,6 +13,16 @@ from apps.catalog import (
 from apps.catalog.vector_tiles import resource_vector_tile
 
 urlpatterns = [
+    path(
+        "catalog/observation-metadata/",
+        monitoring_metadata_views.observation_metadata_batch,
+        name="catalog-observation-metadata-batch",
+    ),
+    path(
+        "catalog/resources/<int:resource_id>/observation-metadata/",
+        monitoring_metadata_views.observation_metadata,
+        name="catalog-observation-metadata",
+    ),
     path(
         "catalog/resources/<int:pk>/vector-tiles/<str:revision>/<int:z>/<int:x>/<int:y>.pbf",
         resource_vector_tile,

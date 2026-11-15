@@ -2,8 +2,8 @@
   "schemaVersion": 2,
   "identifier": "spartina-rf-infer",
   "name": "互花米草三季节RF解译",
-  "version": "1.0.0",
-  "description": "使用03、08、12月各16波段原件的同一研究区窗口执行48特征RF分类、概率和椭球面积统计。",
+  "version": "1.1.0",
+  "description": "对按实际日期排序的三时相16波段影像共同窗口执行48特征RF分类、概率与椭球面积统计。",
   "author": "STISP",
   "runtime": "python-geospatial-ml-v1",
   "deterministic": true,
@@ -17,7 +17,7 @@
   "inputs": [
     {
       "key": "march",
-      "label": "03月16波段影像",
+      "label": "第1期16波段影像",
       "kind": "raster",
       "required": true,
       "minBands": 16,
@@ -42,7 +42,7 @@
     },
     {
       "key": "august",
-      "label": "08月16波段影像",
+      "label": "第2期16波段影像",
       "kind": "raster",
       "required": true,
       "minBands": 16,
@@ -67,7 +67,7 @@
     },
     {
       "key": "december",
-      "label": "12月16波段影像",
+      "label": "第3期16波段影像",
       "kind": "raster",
       "required": true,
       "minBands": 16,

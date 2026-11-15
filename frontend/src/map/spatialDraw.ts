@@ -48,6 +48,7 @@ function showDrawPreview(map: MapboxMap, geometry: GeoJsonGeometry) {
 }
 
 function clearDrawPreview(map: MapboxMap) {
+  if (!map.getStyle()) return;
   removeLayerGroup(map, previewSourceId, [previewFillId, previewLineId], {
     cleanInteraction: false,
   });
@@ -112,7 +113,7 @@ export function bindGeometryDraw(
     map.off("click", handleClick);
     map.off("mousemove", handleMouseMove);
     map.off("dblclick", handleDoubleClick);
-    map.doubleClickZoom.enable();
+    if (map.getStyle()) map.doubleClickZoom.enable();
     delete canvas.dataset.drawing;
     canvas.style.cursor = "";
     clearDrawPreview(map);

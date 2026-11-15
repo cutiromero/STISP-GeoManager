@@ -1,0 +1,27 @@
+{
+  "GET /api/ecology/monitoring/sources/": {
+    "200": {
+      "projectId": 2,
+      "scene": "spartina",
+      "assets": [],
+      "collections": [],
+      "inputSets": [],
+      "method": null,
+      "hasMoreSources": false,
+      "nextOffset": null
+    }
+  },
+  "GET /api/ecology/monitoring/source-times/": {
+    "200": {
+      "resourceId": 1,
+      "indexVersion": "",
+      "items": [],
+      "nextOrdinal": null
+    }
+  },
+  "GET /api/catalog/observation-metadata/": {
+    "200": {
+      "items": []
+    }
+  }
+}

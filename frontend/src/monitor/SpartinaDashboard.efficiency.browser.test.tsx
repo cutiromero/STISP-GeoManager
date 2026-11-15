@@ -1,3 +1,4 @@
+import { sourceCatalog } from "./monitoringWorkspace.testFixtures";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App } from "antd";
 import { MemoryRouter } from "react-router-dom";
@@ -37,6 +38,12 @@ vi.mock("../agent/useAgentBootstrap", () => ({
     },
     status: "ready",
   }),
+}));
+vi.mock("../api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../api/client")>()),
+  requestJson: vi.fn(async () =>
+    sourceCatalog("spartina", data.inputResources ?? []),
+  ),
 }));
 vi.mock("./productApi", () => ({ getMonitoringProducts: vi.fn() }));
 vi.mock("./MonitorComparisonMap", () => ({
@@ -229,6 +236,17 @@ it("submits three seasonal sources as one run with the selected geographic regio
     exact: true,
   });
   await waitFor(() => expect(start).toBeEnabled());
+  fireEvent.click(screen.getByText("经纬度范围", { exact: true }));
+  for (const [label, value] of [
+    ["西界", 121.9],
+    ["南界", 31.2],
+    ["东界", 121.99],
+    ["北界", 31.29],
+  ] as const)
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: `研究区${label}` }),
+      { target: { value: String(value) } },
+    );
   fireEvent.click(start);
   const submit = await screen.findByRole("button", { name: "开始业务流" });
   await waitFor(() => expect(submit).toBeEnabled());

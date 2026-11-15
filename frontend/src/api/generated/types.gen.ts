@@ -5,6 +5,512 @@ export type ClientOptions = {
 };
 
 /**
+ * 真实原生资料单期预览请求。
+ */
+export type MonitoringSourcePreviewRequest = {
+    /**
+     * 监测场景
+     */
+    scene: 'wildfire';
+    /**
+     * 当前可访问原始资料
+     */
+    resourceId: number;
+    /**
+     * 观测变量
+     */
+    product: 'gwis_ba' | 'gfed_ba' | 'fcci_ba' | 'cams_frpfire';
+    /**
+     * 由时间目录取得的原始位置
+     */
+    ordinal: number;
+};
+
+/**
+ * 共用栅格队列中的原始图层预览；图像请求再次校验权限。
+ */
+export type MonitoringSourcePreview = {
+    /**
+     * 预览任务编号
+     */
+    id: string;
+    /**
+     * 预览状态
+     */
+    status: 'queued' | 'running' | 'ready' | 'failed';
+    /**
+     * 失败原因
+     */
+    error: string;
+    /**
+     * 已就绪时的受控图像入口
+     */
+    imageUrl: string | null;
+    /**
+     * 图像WGS84范围
+     */
+    bounds: [
+        number,
+        number,
+        number,
+        number
+    ] | null;
+    /**
+     * 已就绪时的来源编号
+     */
+    resourceId: number | null;
+};
+
+/**
+ * 科学观测时段；月/年精度用完整区间存储，不能当作精确采集日。
+ */
+export type ResourceObservationPeriod = {
+    /**
+     * 观测起点
+     */
+    startsAt: string | null;
+    /**
+     * 观测终点
+     */
+    endsAt: string | null;
+    /**
+     * 时相精度
+     */
+    precision: 'unknown' | 'day' | 'month' | 'year' | 'interval';
+};
+
+/**
+ * 同一资料在一个监测场景中的用途；不改变原件与计算产物的来源属性。
+ */
+export type MonitoringResourceUsage = {
+    /**
+     * 监测场景
+     */
+    scene: 'spartina' | 'wildfire' | 'landcover';
+    /**
+     * 资料用途
+     */
+    purpose: 'input' | 'result' | 'reference' | 'auxiliary';
+};
+
+/**
+ * 原生空间变量元信息。
+ */
+export type MonitoringSourceVariable = {
+    /**
+     * 原始变量编码
+     */
+    key: string;
+    /**
+     * 变量名称
+     */
+    label: string;
+    /**
+     * 物理单位
+     */
+    unit: string;
+    /**
+     * 原始维度顺序
+     */
+    dimensions: Array<string>;
+};
+
+/**
+ * 从登记结构或原生元信息取得的可视化与输入结构，不包含像元。
+ */
+export type MonitoringSourceSchema = {
+    /**
+     * 空间资料类型
+     */
+    kind?: 'raster' | 'native_cube' | 'vector' | 'table' | 'image' | 'gene' | 'document';
+    /**
+     * 原始波段数
+     */
+    bands?: number;
+    /**
+     * 原始宽高
+     */
+    size?: Array<number>;
+    /**
+     * WGS84范围
+     */
+    bounds?: Array<number>;
+    /**
+     * 原始坐标系
+     */
+    coordinateSystem?: string;
+    /**
+     * 原始仿射变换
+     */
+    geoTransform?: Array<number>;
+    /**
+     * 原始波段类型
+     */
+    bandTypes?: Array<string>;
+    /**
+     * 原始波段名称
+     */
+    bandNames?: Array<string>;
+    /**
+     * 已有显示数据集编号
+     */
+    renderDatasetId?: number;
+    /**
+     * 原生格网角分辨率
+     */
+    gridResolution?: number;
+    /**
+     * 真实时间坐标数
+     */
+    timeCount?: number;
+    /**
+     * 原生空间变量
+     */
+    variables?: Array<MonitoringSourceVariable>;
+};
+
+/**
+ * 项目与当前权限校验后的资料用途、时相和结构。
+ */
+export type ResourceObservationProfile = {
+    /**
+     * 资料编号
+     */
+    resourceId: number;
+    /**
+     * 当前资料修订
+     */
+    resourceVersion: string;
+    /**
+     * 资料族
+     */
+    family: string | null;
+    /**
+     * 资料集合稳定标识
+     */
+    collectionKey: string;
+    /**
+     * 已登记观测时段
+     */
+    period: ResourceObservationPeriod | null;
+    sourceSchema: MonitoringSourceSchema;
+    /**
+     * 真实时间索引修订
+     */
+    indexVersion: string;
+    /**
+     * 各场景用途
+     */
+    usages: Array<MonitoringResourceUsage>;
+    /**
+     * 当前用户可维护元信息
+     */
+    canEdit: boolean;
+};
+
+/**
+ * 用途和时相更新；省略字段保留现值，原生容器日期从真实坐标建立。
+ */
+export type ResourceObservationProfileUpdate = {
+    /**
+     * 资料族；省略时从登记结构识别
+     */
+    family?: 'raster' | 'rgb_imagery' | 'multitemporal_features' | 'seasfire' | 'result' | 'vector' | 'auxiliary';
+    /**
+     * 资料集合标识；默认使用登记组别
+     */
+    collectionKey?: string;
+    /**
+     * 时段起点
+     */
+    startsAt?: string | null;
+    /**
+     * 时段终点
+     */
+    endsAt?: string | null;
+    /**
+     * 时相精度
+     */
+    precision?: 'unknown' | 'day' | 'month' | 'year' | 'interval';
+    /**
+     * 场景用途，按资料维护权限更新
+     */
+    usages?: Array<MonitoringResourceUsage>;
+};
+
+/**
+ * 当前权限可见的资料元信息。
+ */
+export type ResourceObservationProfiles = {
+    /**
+     * 资料元信息
+     */
+    items: Array<ResourceObservationProfile>;
+};
+
+/**
+ * 原生数据中实际存在的年份与产品有效性。
+ */
+export type MonitoringSourceYear = {
+    /**
+     * 真实年份
+     */
+    year: number;
+    /**
+     * 原始观测期数
+     */
+    count: number;
+    /**
+     * 该年有有效时间掩膜的观测产品
+     */
+    validProducts: Array<'gwis_ba' | 'gfed_ba' | 'fcci_ba' | 'cams_frpfire'>;
+};
+
+/**
+ * 可作背景预览或方法输入的当前项目原始资料。
+ */
+export type MonitoringSourceAsset = {
+    resource: DataResource;
+    metadata: ResourceObservationProfile;
+    /**
+     * 实际可用年份
+     */
+    years: Array<MonitoringSourceYear>;
+    /**
+     * 资料集合名称
+     */
+    collectionLabel: string;
+};
+
+/**
+ * 已发布方法要求的输入端口；来源与日期由本次选择绑定。
+ */
+export type MonitoringMethodInput = {
+    /**
+     * 固定端口编码
+     */
+    key: string;
+    /**
+     * 输入名称
+     */
+    label: string;
+    /**
+     * 数据类型
+     */
+    kind: string;
+    /**
+     * 是否必需
+     */
+    required: boolean;
+    /**
+     * 精确波段数
+     */
+    bandCount: number | null;
+    /**
+     * 最低波段数
+     */
+    minBands: number;
+    /**
+     * 可接受类型
+     */
+    dtypes: Array<string>;
+    /**
+     * 端口是否为原生时空容器
+     */
+    nativeCube: boolean;
+};
+
+/**
+ * 当前场景已发布的同一主执行业务流及方法输入规范。
+ */
+export type MonitoringSourceMethod = {
+    /**
+     * 业务流编号
+     */
+    definitionId: number;
+    /**
+     * 业务流冻结版本
+     */
+    versionId: number;
+    /**
+     * 方法冻结版本
+     */
+    operatorVersionId: number;
+    /**
+     * 业务流名称
+     */
+    title: string;
+    /**
+     * 默认目标
+     */
+    goal: string;
+    /**
+     * 方法输入规范
+     */
+    inputs: Array<MonitoringMethodInput>;
+    /**
+     * 内部方法参数规范
+     */
+    parameters: Array<ComputeParameterSpec>;
+    /**
+     * 业务流资料角色
+     */
+    inputRequirements: Array<BusinessFlowInputRequirement>;
+};
+
+/**
+ * 依据登记时间、集合和方法输入规范生成的输入组合。
+ */
+export type MonitoringInputSet = {
+    /**
+     * 组合和资料修订摘要
+     */
+    id: string;
+    /**
+     * 资料集合
+     */
+    collectionKey: string;
+    /**
+     * 实际时相或资料名称
+     */
+    label: string;
+    /**
+     * 输入时段起点
+     */
+    startsAt: string | null;
+    /**
+     * 输入时段终点
+     */
+    endsAt: string | null;
+    /**
+     * 端口到真实资料编号
+     */
+    inputs: {
+        [key: string]: number;
+    };
+    /**
+     * 按输入顺序记录的时段
+     */
+    periods: Array<ResourceObservationPeriod>;
+    /**
+     * 真实输入资料
+     */
+    resources: Array<DataResource>;
+};
+
+/**
+ * 可选监测资料集合。
+ */
+export type MonitoringSourceCollection = {
+    /**
+     * 集合标识
+     */
+    key: string;
+    /**
+     * 集合名称
+     */
+    label: string;
+    /**
+     * 当前可访问资料数量
+     */
+    count: number;
+    /**
+     * 最早登记时段
+     */
+    startsAt: string | null;
+    /**
+     * 最晚登记时段
+     */
+    endsAt: string | null;
+};
+
+/**
+ * 只读元信息的动态监测资料目录；用途、当前权限与已发布方法共同限制候选。
+ */
+export type MonitoringSourceCatalog = {
+    /**
+     * 当前项目
+     */
+    projectId: number;
+    /**
+     * 当前场景
+     */
+    scene: 'spartina' | 'wildfire' | 'landcover';
+    /**
+     * 当前页可访问输入资料
+     */
+    assets: Array<MonitoringSourceAsset>;
+    /**
+     * 当前已发布方法
+     */
+    method: MonitoringSourceMethod | null;
+    /**
+     * 实际可用时相组合
+     */
+    inputSets: Array<MonitoringInputSet>;
+    /**
+     * 是否还有来源页
+     */
+    hasMoreSources: boolean;
+    /**
+     * 后续来源页偏移
+     */
+    nextOffset: number | null;
+    /**
+     * 可访问资料集合
+     */
+    collections: Array<MonitoringSourceCollection>;
+};
+
+/**
+ * 来源于真实坐标的观测期；ordinal由平台内部使用。
+ */
+export type MonitoringSourceTimePoint = {
+    /**
+     * 真实时间点标识
+     */
+    id: number;
+    /**
+     * 原生数据内部位置
+     */
+    ordinal: number;
+    /**
+     * 真实起点
+     */
+    date: string;
+    /**
+     * 真实终点
+     */
+    endDate: string;
+    /**
+     * 实际时间有效掩膜
+     */
+    validProducts: Array<'gwis_ba' | 'gfed_ba' | 'fcci_ba' | 'cams_frpfire'>;
+};
+
+/**
+ * 按真实年份和原始位置分页，支持超过966期的新数据。
+ */
+export type MonitoringSourceTimePage = {
+    /**
+     * 源资料
+     */
+    resourceId: number;
+    /**
+     * 索引修订
+     */
+    indexVersion: string;
+    /**
+     * 实际观测期
+     */
+    items: Array<MonitoringSourceTimePoint>;
+    /**
+     * 后续页原始位置
+     */
+    nextOrdinal: number | null;
+};
+
+/**
  * 工程、专题图或单个计算输出；不分享整个计算任务
  */
 export type ShareKind = 'workspace' | 'composition' | 'compute_output';
@@ -14052,6 +14558,367 @@ export type ResourceId = number;
  * 异步任务 ID
  */
 export type JobId = string;
+
+export type CreateMonitoringSourcePreviewData = {
+    body: MonitoringSourcePreviewRequest;
+    headers: {
+        /**
+         * 显式选择当前单个项目。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/ecology/monitoring/source-preview/';
+};
+
+export type CreateMonitoringSourcePreviewErrors = {
+    /**
+     * 请求或预览无效
+     */
+    400: unknown;
+    /**
+     * 无权查看资料
+     */
+    403: unknown;
+};
+
+export type CreateMonitoringSourcePreviewResponses = {
+    /**
+     * 预览状态或图像
+     */
+    202: MonitoringSourcePreview;
+};
+
+export type CreateMonitoringSourcePreviewResponse = CreateMonitoringSourcePreviewResponses[keyof CreateMonitoringSourcePreviewResponses];
+
+export type GetMonitoringSourcePreviewData = {
+    body?: never;
+    headers: {
+        /**
+         * 显式选择当前单个项目。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 后台预览任务编号
+         */
+        jobId: string;
+    };
+    query?: never;
+    url: '/api/ecology/monitoring/source-preview/{jobId}/';
+};
+
+export type GetMonitoringSourcePreviewErrors = {
+    /**
+     * 请求或预览无效
+     */
+    400: unknown;
+    /**
+     * 无权查看资料
+     */
+    403: unknown;
+};
+
+export type GetMonitoringSourcePreviewResponses = {
+    /**
+     * 预览状态或图像
+     */
+    200: MonitoringSourcePreview;
+};
+
+export type GetMonitoringSourcePreviewResponse = GetMonitoringSourcePreviewResponses[keyof GetMonitoringSourcePreviewResponses];
+
+export type GetMonitoringSourcePreviewImageData = {
+    body?: never;
+    headers: {
+        /**
+         * 显式选择当前单个项目。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 后台预览任务编号
+         */
+        jobId: string;
+    };
+    query?: never;
+    url: '/api/ecology/monitoring/source-preview/{jobId}/image/';
+};
+
+export type GetMonitoringSourcePreviewImageErrors = {
+    /**
+     * 请求或预览无效
+     */
+    400: unknown;
+    /**
+     * 无权查看资料
+     */
+    403: unknown;
+};
+
+export type GetMonitoringSourcePreviewImageResponses = {
+    /**
+     * 预览状态或图像
+     */
+    200: Blob | File;
+};
+
+export type GetMonitoringSourcePreviewImageResponse = GetMonitoringSourcePreviewImageResponses[keyof GetMonitoringSourcePreviewImageResponses];
+
+export type GetObservationMetadataBatchData = {
+    body?: never;
+    headers: {
+        /**
+         * 显式选择当前单个项目。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query: {
+        /**
+         * 最多100个当前项目资料编号，逗号分隔。
+         */
+        ids: string;
+    };
+    url: '/api/catalog/observation-metadata/';
+};
+
+export type GetObservationMetadataBatchErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type GetObservationMetadataBatchError = GetObservationMetadataBatchErrors[keyof GetObservationMetadataBatchErrors];
+
+export type GetObservationMetadataBatchResponses = {
+    /**
+     * 批量读取资料用途和观测时相
+     */
+    200: ResourceObservationProfiles;
+};
+
+export type GetObservationMetadataBatchResponse = GetObservationMetadataBatchResponses[keyof GetObservationMetadataBatchResponses];
+
+export type GetResourceObservationMetadataData = {
+    body?: never;
+    headers: {
+        /**
+         * 显式选择当前单个项目。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前项目资料编号。
+         */
+        resourceId: number;
+    };
+    query?: never;
+    url: '/api/catalog/resources/{resourceId}/observation-metadata/';
+};
+
+export type GetResourceObservationMetadataErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type GetResourceObservationMetadataError = GetResourceObservationMetadataErrors[keyof GetResourceObservationMetadataErrors];
+
+export type GetResourceObservationMetadataResponses = {
+    /**
+     * 读取资料用途与科学时相
+     */
+    200: ResourceObservationProfile;
+};
+
+export type GetResourceObservationMetadataResponse = GetResourceObservationMetadataResponses[keyof GetResourceObservationMetadataResponses];
+
+export type UpdateResourceObservationMetadataData = {
+    body: ResourceObservationProfileUpdate;
+    headers: {
+        /**
+         * 显式选择当前单个项目。
+         */
+        'X-Project-Id': number;
+    };
+    path: {
+        /**
+         * 当前项目资料编号。
+         */
+        resourceId: number;
+    };
+    query?: never;
+    url: '/api/catalog/resources/{resourceId}/observation-metadata/';
+};
+
+export type UpdateResourceObservationMetadataErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type UpdateResourceObservationMetadataError = UpdateResourceObservationMetadataErrors[keyof UpdateResourceObservationMetadataErrors];
+
+export type UpdateResourceObservationMetadataResponses = {
+    /**
+     * 维护资料用途与科学时相
+     */
+    200: ResourceObservationProfile;
+};
+
+export type UpdateResourceObservationMetadataResponse = UpdateResourceObservationMetadataResponses[keyof UpdateResourceObservationMetadataResponses];
+
+export type GetMonitoringSourcesData = {
+    body?: never;
+    headers: {
+        /**
+         * 显式选择当前单个项目。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query: {
+        /**
+         * 已开启监测场景。
+         */
+        scene: 'spartina' | 'wildfire' | 'landcover';
+        /**
+         * 来源页偏移。
+         */
+        offset?: number;
+        /**
+         * 资料集合标识。
+         */
+        collection?: string;
+        /**
+         * 观测覆盖年份。
+         */
+        year?: number;
+    };
+    url: '/api/ecology/monitoring/sources/';
+};
+
+export type GetMonitoringSourcesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type GetMonitoringSourcesError = GetMonitoringSourcesErrors[keyof GetMonitoringSourcesErrors];
+
+export type GetMonitoringSourcesResponses = {
+    /**
+     * 读取动态监测输入资料与时相组合
+     */
+    200: MonitoringSourceCatalog;
+};
+
+export type GetMonitoringSourcesResponse = GetMonitoringSourcesResponses[keyof GetMonitoringSourcesResponses];
+
+export type GetMonitoringSourceTimesData = {
+    body?: never;
+    headers: {
+        /**
+         * 显式选择当前单个项目。
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query: {
+        /**
+         * 已开启监测场景。
+         */
+        scene: 'spartina' | 'wildfire' | 'landcover';
+        /**
+         * 源资料编号。
+         */
+        resourceId: number;
+        /**
+         * 选择真实年份。
+         */
+        year: number;
+        /**
+         * 按实际产品掩膜筛选。
+         */
+        product?: 'gwis_ba' | 'gfed_ba' | 'fcci_ba' | 'cams_frpfire';
+        /**
+         * 上一页的原始位置。
+         */
+        after?: number;
+        /**
+         * 每页最多500个原始观测期。
+         */
+        limit?: number;
+    };
+    url: '/api/ecology/monitoring/source-times/';
+};
+
+export type GetMonitoringSourceTimesErrors = {
+    /**
+     * 请求错误
+     */
+    400: ErrorResponse;
+    /**
+     * 未认证
+     */
+    401: ErrorResponse;
+    /**
+     * 权限不足或 CSRF 校验失败
+     */
+    403: ErrorResponse;
+};
+
+export type GetMonitoringSourceTimesError = GetMonitoringSourceTimesErrors[keyof GetMonitoringSourceTimesErrors];
+
+export type GetMonitoringSourceTimesResponses = {
+    /**
+     * 读取资料的真实可用观测期
+     */
+    200: MonitoringSourceTimePage;
+};
+
+export type GetMonitoringSourceTimesResponse = GetMonitoringSourceTimesResponses[keyof GetMonitoringSourceTimesResponses];
 
 export type GetWildfireObservationCatalogData = {
     body?: never;

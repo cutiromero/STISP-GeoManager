@@ -42,15 +42,7 @@ def definition(version_id):
             dataRoles=["cube"] if index < 3 else [],
         )
         if node["id"] == "interpret":
-            node["parameters"] = {
-                "product": "gwis_ba",
-                "time_index": 873,
-                "history": 12,
-                "west": 112,
-                "south": -44,
-                "east": 154,
-                "north": -10,
-            }
+            node["parameters"] = {"history": 12}
             node["contract"].update(
                 goal=instructions[index],
                 acceptance=["真实观测时段、单位、格网与数据一致，图表完成标准入库"],

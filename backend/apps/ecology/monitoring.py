@@ -456,6 +456,7 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
             "data_resource",
             "data_resource__category",
             "data_resource__category__parent",
+            "data_resource__observation_metadata",
         )
         .order_by("-pk")
     )
@@ -473,7 +474,37 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
             continue
         normalized[row.pk] = item
         all_ids.update(item["sourceResourceIds"])
-    allowed = set(visible_resources(user, all_ids).values_list("pk", flat=True))
+    source_periods = list(
+        visible_resources(user, all_ids).values(
+            "pk",
+            "observation_metadata__starts_at",
+            "observation_metadata__ends_at",
+            "observation_metadata__precision",
+        )
+    )
+    allowed = {row["pk"] for row in source_periods}
+    from apps.catalog.monitoring_metadata import period_payload
+
+    known_periods = {
+        row.data_resource_id: period_payload(
+            getattr(row.data_resource, "observation_metadata", None)
+        )
+        for row in candidates
+    }
+    known_periods.update(
+        {
+            row["pk"]: {
+                "startsAt": row["observation_metadata__starts_at"].isoformat()
+                if row["observation_metadata__starts_at"]
+                else None,
+                "endsAt": row["observation_metadata__ends_at"].isoformat()
+                if row["observation_metadata__ends_at"]
+                else None,
+                "precision": row["observation_metadata__precision"] or "unknown",
+            }
+            for row in source_periods
+        }
+    )
     items = []
     examined = 0
     for row in candidates[:MAX_CANDIDATES]:
@@ -512,6 +543,9 @@ def monitoring_snapshot(user, scene, before_id=None, limit=MAX_PAGE):
             if row.data_resource.is_compute_result
         },
     )
+    from .product_time import attach_observation_periods
+
+    attach_observation_periods(items, known_periods)
     more = examined < len(candidates)
     launch = {}
     if scene == "spartina" and any(item.get("extraction") for item in items):

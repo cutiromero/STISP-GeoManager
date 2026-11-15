@@ -1,4 +1,5 @@
 import { ProjectLabel } from "../projects/ProjectLabel";
+import ResourceObservationEditor from "../monitor/ResourceObservationEditor";
 import { getActiveProject } from "../projects/session";
 import {
   ApartmentOutlined,
@@ -655,6 +656,7 @@ export default function DataCatalogPage() {
               dataTypeLabel={dataTypeLabels[detailResource.dataType]}
               t={t}
             />
+            {user && <ResourceObservationEditor resourceId={detailResource.id} />}
           </>
         )}
       </Drawer>

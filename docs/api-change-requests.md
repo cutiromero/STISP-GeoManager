@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261115-002 - 监测资料用途、实际时相与动态输入目录
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/catalog/observation-metadata/；GET/PATCH /api/catalog/resources/{resourceId}/observation-metadata/；GET /api/ecology/monitoring/sources/；GET /api/ecology/monitoring/source-times/；POST /api/ecology/monitoring/source-preview/；GET /api/ecology/monitoring/source-preview/{jobId}/；GET /api/ecology/monitoring/source-preview/{jobId}/image/。
+- Change type: 新增资料用途与科学时相元信息、实际时间索引和只读动态输入目录；新增型独立表，不改变原件来源属性。
+- OpenAPI change: ResourceObservationProfile、MonitoringResourceUsage、MonitoringSourceCatalog、MonitoringInputSet、MonitoringSourceTimePage、MonitoringSourcePreview及相关结构。
+- Mock examples: 目录空页与已登记元信息由契约生成，真实时间索引使用隔离资料验证。
+- Frontend reason: 资料按用途和实际日期选择，绘制研究区前预览原始资料，结果时间轴与动态监测表单共用科学时相。
+- Backend implementation notes: 元信息和索引独立存储；目录仅读SQL并逐次检查项目、成员、owner_only；方法输入数量、类型来自发布规范，不按文件名或固定年份匹配。
+- Verification: 元信息维护权限、原件标识保留、月/年精度、原生有效掩膜、未来时间位置、无像元读取、查询数量上界、动态输入组合及撤权。
+- Result: 目录、资料维护、绘区、原始图层、动态任务参数和成果时间轴完成接入；发布验收中。
+
 ## API-20261115-001 - 野火原生观测制图与真实时间目录
 
 - Status: BackendReady
@@ -755,6 +768,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261115-002 | BackendReady | 资料用途/时相/监测输入目录 | 动态监测、原图预览与时间轴 | Updated | 元信息及真实时序 | Implemented | 项目、来源、掩膜、时相与查询界限 | 工作区接入中 |
 | API-20261115-001 | BackendReady | /api/ecology/wildfire/catalog/; 监测与业务流 | 原生时空观测、真实目录与独立野火大屏 | Updated | 遥感示例及真实观测 | Implemented | 时段、掩膜、单位、受控输入与来源 | 历史观测与模型结果独立 |
 | API-20261114-005 | BackendReady | /api/ecology/monitoring/; 计算与业务流 | 互花米草输入依据、配套成果与RF任务 | Updated | 171-remote-monitoring.json及真实候选 | Implemented | 窗口冻结、科学统计、权限、来源与浏览器 | 现有环境与三季节组合 |
 | API-20261114-004 | BackendReady | /api/business-flows/runs/{workflowId}/ | 完整成果引用与批量展示 | Updated | 原业务流示例及隔离用例 | Implemented | 引用、权限与按需读取 | 复用计算中心 |

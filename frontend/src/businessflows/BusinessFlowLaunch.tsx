@@ -66,6 +66,7 @@ export default function BusinessFlowLaunch({
   inputLabels,
   parameters,
   presentation = "default",
+  fixedInputs = false,
 }: {
   launch: BusinessFlowLaunchIntent;
   model: string;
@@ -79,6 +80,7 @@ export default function BusinessFlowLaunch({
   inputLabels?: Record<number, string>;
   parameters?: BusinessFlowStart["parameters"];
   presentation?: "default" | "task";
+  fixedInputs?: boolean;
 }) {
   const ui = useComputeText();
   const { bootstrap } = useAgentBootstrapState();
@@ -701,6 +703,8 @@ export default function BusinessFlowLaunch({
                       }}
                     />
                   </Suspense>
+                ) : fixedInputs ? (
+                  <div className="business-flow-launch-inputs"><h3>本次任务资料</h3>{Object.entries(inputs).map(([key, id]) => <p key={key}>{inputLabels?.[id] ?? `资料 ${id}`}</p>)}</div>
                 ) : version.definition.inputRequirements.length ? (
                   <div className="business-flow-launch-inputs">
                     <h3>{ui("任务资料", "Task data")}</h3>
