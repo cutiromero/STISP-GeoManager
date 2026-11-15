@@ -76,7 +76,19 @@ def main():
         page = source_times(actor, "wildfire", cubes[0].pk, 2019, "gwis_ba")
         assert page["items"] and page["items"][-1]["endDate"] == "2019-12-31"
         transaction.set_rollback(True)
-    print(json.dumps({"accepted": True, "temporalWorkspace": True}))
+    print(
+        json.dumps(
+            {
+                "accepted": True,
+                "checks": {
+                    "rfRealInference": True,
+                    "wildfireRealObservation": True,
+                    "dynamicSources": True,
+                    "actualTimeIndex": True,
+                },
+            }
+        )
+    )
 
 
 if __name__ == "__main__":
