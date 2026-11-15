@@ -152,9 +152,14 @@ it("keeps a restrained overview, reveals labels on focus and opens real relation
       ".knowledge-network-node text",
     ),
   ];
-  expect(
-    labels.filter((label) => getComputedStyle(label).opacity === "1").length,
-  ).toBeLessThanOrEqual(9);
+  await page
+    .getByRole("heading", { name: "让知识连成线", exact: true })
+    .hover();
+  await waitFor(() =>
+    expect(
+      labels.filter((label) => getComputedStyle(label).opacity === "1").length,
+    ).toBeLessThanOrEqual(9),
+  );
   const minor = screen.getByRole("button", { name: "筛选节点：水分条件" });
   fireEvent.focus(minor);
   expect(getComputedStyle(minor.querySelector("text")!).opacity).toBe("1");

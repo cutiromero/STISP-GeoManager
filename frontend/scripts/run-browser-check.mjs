@@ -34,6 +34,8 @@ const externalFixtures = [
   "backend/apps/knowledge/seed_entries_20261009.json",
   "backend/apps/knowledge/seed_entries_20261010.json",
 ];
+// Built API-reference HTML is not source; src/api/generated remains verified.
+const rootBuildOutputs = new Set(["generated"]);
 // =======================================================
 
 async function hashes(root) {
@@ -44,6 +46,7 @@ async function hashes(root) {
     )) {
       if (
         exclusions.has(entry.name) ||
+        (folder === root && rootBuildOutputs.has(entry.name)) ||
         entry.name.startsWith(".env") ||
         entry.name === ".npmrc"
       )
@@ -85,11 +88,14 @@ try {
       recursive: true,
       filter: (path) => {
         const parts = relative(frontend, path).split(/[\\/]/);
-        return !parts.some(
-          (part) =>
-            exclusions.has(part) ||
-            part.startsWith(".env") ||
-            part === ".npmrc",
+        return (
+          !rootBuildOutputs.has(parts[0]) &&
+          !parts.some(
+            (part) =>
+              exclusions.has(part) ||
+              part.startsWith(".env") ||
+              part === ".npmrc",
+          )
         );
       },
     });
