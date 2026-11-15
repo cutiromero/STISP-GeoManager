@@ -96,7 +96,7 @@ def main():
     with project_scope(scope):
         runpy.run_path(str(code / "tools/monitoring/candidate_assets.py"))[
             "stage_published_package"
-        ]("wildfire-observe", root)
+        ](code / "examples/compute/wildfire-observe", root)
         target = raster_source_path("wildfire-candidate.zarr")
         target.mkdir(parents=True, exist_ok=True)
         sources = [

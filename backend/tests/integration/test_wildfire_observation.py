@@ -224,3 +224,48 @@ def test_wildfire_flow_keeps_native_cube_and_observation_contract(setup_compute)
     assert first != command.trial_key(
         "f" * 64, {"cube": 1475}, {"history": 6, "time_index": 873}
     )
+
+
+def test_candidate_stages_only_the_declared_operator_package(
+    setup_compute, tmp_path, monkeypatch
+):
+    import hashlib
+    import json
+    from pathlib import Path
+    import runpy
+    from apps.core.storage import app_path
+
+    env = setup_compute
+    source_directory = tmp_path / "different-directory-name"
+    source_directory.mkdir()
+    version = env["version"]
+    (source_directory / "operator.yaml").write_text(
+        json.dumps(
+            {"identifier": version.algorithm.identifier, "version": version.version}
+        )
+    )
+    original = tmp_path / "formal-app"
+    original.mkdir()
+    package = original / "operator.zip"
+    package.write_bytes(b"immutable registered ZIP bytes")
+    version.package_path = "operator.zip"
+    version.checksum = hashlib.sha256(package.read_bytes()).hexdigest()
+    version.save()
+    config = tmp_path / "formal.toml"
+    config.write_text("[application.storage]\napp_data = " + json.dumps(str(original)))
+    helper = runpy.run_path(
+        str(
+            Path(__file__).resolve().parents[3] / "tools/monitoring/candidate_assets.py"
+        )
+    )["stage_published_package"]
+    monkeypatch.setitem(helper.__globals__, "PRODUCTION_CONFIG", config)
+    scope = ProjectScope((env["project"].pk,), env["project"].pk, env["owner"].pk)
+    with project_scope(scope):
+        helper(source_directory, app_path())
+        assert app_path("operator.zip").read_bytes() == package.read_bytes()
+        package.write_bytes(b"tampered package")
+        with pytest.raises(AssertionError):
+            helper(source_directory, app_path())
+        assert (
+            app_path("operator.zip").read_bytes() == b"immutable registered ZIP bytes"
+        )

@@ -90,7 +90,7 @@ def main():
     with project_scope(scope):
         runpy.run_path(str(code / "tools/monitoring/candidate_assets.py"))[
             "stage_published_package"
-        ]("spartina-rf", root)
+        ](code / "examples/compute/spartina-rf", root)
         manifest = json.loads(
             (code / "examples/compute/spartina-rf/operator.yaml").read_text()
         )
