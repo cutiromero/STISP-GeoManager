@@ -12,7 +12,7 @@ from apps.catalog.models import MapLayer
 from apps.catalog.permissions import related_access_filter, user_can_access
 from apps.catalog.taxonomy import TaxonomyError, resolve_data_category
 from apps.core.permissions import feature_denied_response, has_feature_perm
-from apps.raster.models import RasterDataset
+from apps.raster.models import RasterDataset, RasterStyle
 from apps.raster.permissions import can_manage_raster_data
 from apps.raster.services import (
     RasterImportError,
@@ -119,6 +119,15 @@ def render_async(request):
         return JsonResponse({"detail": "请求体不是有效 JSON"}, status=400)
 
     rules_mode = str(payload.get("rulesMode") or "default")
+    style_hash = payload.get("styleHash")
+    if style_hash is not None and (
+        not isinstance(style_hash, str)
+        or not style_hash
+        or len(style_hash) > 24
+        or payload.get("rules") is not None
+        or rules_mode != "default"
+    ):
+        return JsonResponse({"detail": "保存样式引用不能与自定义规则混用"}, status=400)
     if rules_mode == "custom" and not has_feature_perm(
         request.user, "core.custom_symbolization"
     ):
@@ -148,6 +157,18 @@ def render_async(request):
         return JsonResponse({"detail": "无权访问该数据资源"}, status=403)
     if not layer and not dataset:
         return JsonResponse({"detail": "缺少 layerId 或 datasetId"}, status=400)
+
+    if style_hash is not None:
+        # A saved display is readable with load permission. Never accept client
+        # rules through this path or change the custom-symbolization boundary.
+        if dataset is None or (layer and dataset.map_layer_id != layer.id):
+            return JsonResponse({"detail": "保存样式需要匹配的栅格数据集"}, status=400)
+        style = RasterStyle.objects.filter(
+            dataset_id=dataset.id, style_hash=style_hash
+        ).first()
+        if style is None:
+            return JsonResponse({"detail": "保存的栅格样式不存在"}, status=404)
+        rules = style.rules
 
     try:
         job = start_render_job(

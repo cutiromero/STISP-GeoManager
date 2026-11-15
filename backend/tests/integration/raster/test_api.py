@@ -11,7 +11,7 @@ from django.test import TestCase, override_settings
 from apps.audit.models import OperationLog
 from apps.catalog.models import DataResource, MapLayer
 from apps.core.config import load_project_config
-from apps.raster.models import RasterDataset
+from apps.raster.models import RasterDataset, RasterStyle
 from apps.raster.services import (
     RasterTileOutsideExtent,
     scan_unprocessed_source_files,
@@ -69,6 +69,91 @@ class RasterPermissionApiTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertIn("当前角色“未分配角色”无权限", response.json()["detail"])
+
+    def test_saved_style_restoration_uses_server_rules_with_load_permission(self):
+        grant(self.user, ("core", "load_raster_layer"))
+        dataset = self._dataset("saved-style", None)
+        rules = {
+            "mode": "unique",
+            "bands": [1],
+            "uniqueValues": [{"value": 1, "color": "#112233"}],
+        }
+        style = RasterStyle.objects.create(
+            dataset=dataset, style_hash="a" * 24, rules=rules
+        )
+        job = SimpleNamespace(
+            id="restore-job", as_dict=lambda: {"id": "restore-job", "status": "ready"}
+        )
+        with patch("apps.raster.views.start_render_job", return_value=job) as start:
+            response = self.client.post(
+                "/api/raster/render/async/",
+                data={"datasetId": dataset.pk, "styleHash": style.style_hash},
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 202)
+        start.assert_called_once_with(
+            layer_id=None,
+            dataset_id=dataset.pk,
+            rules=rules,
+            created_by_id=self.user.pk,
+        )
+        self.assertFalse(self.user.has_perm("core.custom_symbolization"))
+
+    def test_saved_style_cannot_override_rules_or_reference_another_dataset(self):
+        grant(self.user, ("core", "load_raster_layer"))
+        dataset = self._dataset("saved-style-owner", None)
+        other = self._dataset("saved-style-other", None)
+        RasterStyle.objects.create(
+            dataset=dataset, style_hash="a" * 24, rules={"mode": "gray"}
+        )
+        for payload, status in (
+            (
+                {
+                    "datasetId": dataset.pk,
+                    "styleHash": "a" * 24,
+                    "rules": {"mode": "rgb"},
+                },
+                400,
+            ),
+            (
+                {"datasetId": dataset.pk, "styleHash": "a" * 24, "rulesMode": "custom"},
+                400,
+            ),
+            ({"datasetId": other.pk, "styleHash": "a" * 24}, 404),
+            ({"datasetId": dataset.pk, "styleHash": []}, 400),
+        ):
+            with (
+                self.subTest(payload=payload),
+                patch("apps.raster.views.start_render_job") as start,
+            ):
+                response = self.client.post(
+                    "/api/raster/render/async/",
+                    data=payload,
+                    content_type="application/json",
+                )
+                self.assertEqual(response.status_code, status)
+                start.assert_not_called()
+
+    def test_saved_style_still_checks_resource_access_before_style_lookup(self):
+        grant(self.user, ("core", "load_raster_layer"))
+        resource = DataResource.objects.create(
+            name="已撤销资料",
+            code="revoked-saved-style",
+            data_type=DataResource.DataType.RASTER,
+            status=DataResource.Status.INACTIVE,
+        )
+        dataset = self._dataset("revoked-style", resource)
+        RasterStyle.objects.create(
+            dataset=dataset, style_hash="a" * 24, rules={"mode": "gray"}
+        )
+        with patch("apps.raster.views.start_render_job") as start:
+            response = self.client.post(
+                "/api/raster/render/async/",
+                data={"datasetId": dataset.pk, "styleHash": "a" * 24},
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 403)
+        start.assert_not_called()
 
     def test_sync_categorical_render_builds_complete_pyramid_before_response(self):
         grant(self.user, ("core", "load_raster_layer"))

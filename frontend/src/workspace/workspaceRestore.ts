@@ -227,8 +227,17 @@ export async function restoreWorkspaceGroups({
           action: "restored-with-warning",
         });
       }
+      const savedStyleHash =
+        currentRaster?.id === savedLayer.rasterDatasetId && currentRaster
+          ? savedRasterStyleHash(savedLayer.tileUrl, currentRaster.id)
+          : undefined;
+      // Renderer version alone does not prove that the persisted style still
+      // matches its source or that a static pyramid survived cache cleanup.
       const refreshSnapshotTiles =
-        !savedLayer.tileUrl || !usesCurrentRasterRenderer(savedLayer.tileUrl);
+        !savedLayer.tileUrl ||
+        !usesCurrentRasterRenderer(savedLayer.tileUrl) ||
+        rasterKind === "categorical" ||
+        Boolean(savedStyleHash);
       let refreshedRender: RasterRenderResult | undefined;
       let refreshError =
         refreshSnapshotTiles && !currentRaster
@@ -242,6 +251,7 @@ export async function restoreWorkspaceGroups({
             currentRaster.mapLayerId,
             savedLayer.symbolization as LoadedRasterLayer["symbolization"],
             savedLayer.rasterRulesMode ?? "custom",
+            savedStyleHash,
           );
           if (!usesCurrentRasterRenderer(refreshedRender.tileUrl)) {
             throw new Error("栅格服务返回了旧版瓦片地址");
@@ -338,14 +348,22 @@ async function renderSnapshotRaster(
   layerId: number | null,
   symbolization: LoadedRasterLayer["symbolization"],
   rulesMode: "default" | "custom",
+  styleHash?: string,
 ): Promise<RasterRenderResult> {
   const rules = symbolization as unknown as Record<string, unknown>;
-  let job = await api.renderRasterAsync({
-    datasetId,
-    layerId,
-    rules,
-    rulesMode,
-  });
+  let job: Awaited<ReturnType<typeof api.renderRasterAsync>>;
+  try {
+    job = await api.renderRasterAsync(
+      styleHash
+        ? { datasetId, layerId, styleHash }
+        : { datasetId, layerId, rules, rulesMode },
+    );
+  } catch (error) {
+    if (!styleHash || !isStatusError(error, 404)) throw error;
+    // Very old snapshots may no longer have a registered style. Recreating
+    // client rules still passes the backend custom-symbolization permission.
+    job = await api.renderRasterAsync({ datasetId, layerId, rules, rulesMode });
+  }
   const deadline = Date.now() + 120_000;
   while (job.status === "queued" || job.status === "running") {
     if (Date.now() >= deadline) {
@@ -374,11 +392,21 @@ function usesCurrentRasterRenderer(tileUrl: string | undefined) {
   );
 }
 
+function savedRasterStyleHash(tileUrl: string | undefined, datasetId: number) {
+  return tileUrl?.match(
+    new RegExp(`^/api/raster/tiles/${datasetId}/([a-f0-9]{24})/`),
+  )?.[1];
+}
+
 function isForbiddenError(error: unknown) {
+  return isStatusError(error, 403);
+}
+
+function isStatusError(error: unknown, status: number) {
   return (
     typeof error === "object" &&
     error !== null &&
     "status" in error &&
-    error.status === 403
+    error.status === status
   );
 }

@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261116-002 - 保存工程的分类瓦片缓存恢复
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: POST /api/raster/render/async/。
+- Change type: 请求新增可选styleHash，引用datasetId下服务端已经注册的显示规则；不能与客户端rules或custom模式混用。不存在返回404。
+- OpenAPI change: RasterRenderAsyncRequest新增可选styleHash，不改变原有rules和rulesMode语义。
+- Mock examples: 40-raster.json，沿用原有任务响应。
+- Frontend reason: 已保存工程的分类样式地址即使为当前renderer版本，也可能因静态缓存清理而失效；恢复图层前先确保瓦片准备完成。
+- Backend implementation notes: 保存样式只按当前项目与datasetId读取服务端规则，保持加载权限与资源ACL；允许只读用户恢复既有配色，不能借此修改规则。复用已有完整金字塔和同账号同样式在途任务，不重复进入重计算队列。未注册样式重建仍经过原有自定义符号化权限。
+- Verification: 只读样式恢复、规则混用拒绝、跨数据集拒绝、撤权检查、准备完成前不暴露瓦片、失败不加载失效地址、真实32图层工程加载。
+- Result: 后端与前端已实现，完成定点回归后进行标准候选与正式站验收。
+
 ## API-20261116-001 - 成果文件可用性与缩略图等待
 
 - Status: BackendReady
@@ -795,6 +808,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261116-002 | BackendReady | raster/render/async | additive请求字段 | RasterRenderAsyncRequest | 40 | 已实现 | 定点及正式工程验收 | 服务端保存样式恢复、ACL及缓存缺失 |
 | API-20261116-001 | BackendReady | catalog成果/版本与文件 | additive字段及缺失404 | MapCompositionVersion、ResultArtifact | 50、55 | 已实现 | 后端及浏览器回归通过 | 文件状态、后台生成与原件缺失边界 |
 | API-20261115-003 | BackendReady | 原始时间及栅格输入合同 | 默认全域与原图时间浏览 | Updated | 172-monitoring-workspace.json | Implemented | 正式站验证通过 | 当前期与趋势区间分离 |
 | API-20261115-002 | BackendReady | 资料用途/时相/监测输入目录 | 动态监测、原图预览与时间轴 | Updated | 元信息及真实时序 | Implemented | 项目、来源、掩膜、时相与查询界限 | 工作区接入中 |

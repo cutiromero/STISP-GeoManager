@@ -11603,6 +11603,10 @@ export type RasterRenderAsyncRequest = {
      */
     datasetId?: number | null;
     /**
+     * 恢复当前项目中该datasetId已注册的显示样式，使用服务端保存的规则重新准备瓦片；不能与rules或rulesMode=custom混用。只需原有栅格加载权限及资源访问权限；任意自定义规则仍需自定义符号化权限。样式不存在返回404。
+     */
+    styleHash?: string;
+    /**
      * 符号化规则模式
      */
     rulesMode?: 'default' | 'custom';

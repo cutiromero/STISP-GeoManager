@@ -475,6 +475,115 @@ describe("restoreWorkspaceGroups", () => {
     expect(result.issues).toEqual([]);
   });
 
+  it.each([false, true])(
+    "prepares current categorical snapshots from their registered style before exposing tiles (failure=%s)",
+    async (failed) => {
+      const symbolization = cloneDefaultRasterSymbolization();
+      symbolization.mode = "unique";
+      symbolization.opacity = 72;
+      symbolization.uniqueValues = [
+        { value: 1, color: "#112233", label: "类别一" },
+      ];
+      const tileUrl = `/api/raster/tiles/7/${"a".repeat(24)}/{z}/{x}/{y}.png?rv=4`;
+      mockApi.resourceProfile.mockResolvedValue({
+        raster: { id: 7, mapLayerId: 9, rasterKind: "categorical" },
+      });
+      mockApi.renderRasterAsync.mockResolvedValue({
+        id: "prepare",
+        status: "queued",
+      });
+      mockApi.rasterJob.mockResolvedValue(
+        failed
+          ? { status: "failed", error: "原始资料不可用" }
+          : {
+              status: "ready",
+              result: { datasetId: 7, tileUrl, rules: symbolization },
+            },
+      );
+      const pending = restoreWorkspaceGroups({
+        savedGroups: [
+          makeGroup([
+            makeSavedRasterLayer({
+              rasterKind: "categorical",
+              tileUrl,
+              symbolization,
+            }),
+          ]),
+        ],
+        canQueryData: true,
+        canLoadVectorLayer: true,
+        canLoadRasterLayer: true,
+        queryResultLimit: 30000,
+        notification,
+      });
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      await vi.waitFor(() =>
+        expect(mockApi.renderRasterAsync).toHaveBeenCalledWith({
+          datasetId: 7,
+          layerId: 9,
+          styleHash: "a".repeat(24),
+        }),
+      );
+      expect(settled).toBe(false);
+      const result = await pending;
+      expect(mockApi.rasterJob).toHaveBeenCalledWith("prepare");
+      expect(result.groups[0].children[0]).toMatchObject({
+        tileUrl: failed ? undefined : tileUrl,
+        renderStatus: failed ? "failed" : "ready",
+        symbolization: {
+          opacity: 72,
+          uniqueValues: symbolization.uniqueValues,
+        },
+      });
+      expect(result.issues).toHaveLength(failed ? 1 : 0);
+    },
+  );
+
+  it("only recreates missing registered styles through the ordinary custom permission boundary", async () => {
+    const symbolization = cloneDefaultRasterSymbolization();
+    symbolization.mode = "unique";
+    mockApi.resourceProfile.mockResolvedValue({
+      raster: { id: 7, mapLayerId: 9, rasterKind: "categorical" },
+    });
+    mockApi.renderRasterAsync
+      .mockRejectedValueOnce(
+        Object.assign(new Error("样式不存在"), { status: 404 }),
+      )
+      .mockRejectedValueOnce(
+        Object.assign(new Error("无权自定义符号化"), { status: 403 }),
+      );
+    const result = await restoreWorkspaceGroups({
+      savedGroups: [
+        makeGroup([
+          makeSavedRasterLayer({
+            rasterKind: "categorical",
+            tileUrl: `/api/raster/tiles/7/${"a".repeat(24)}/{z}/{x}/{y}.png?rv=4`,
+            symbolization,
+          }),
+        ]),
+      ],
+      canQueryData: true,
+      canLoadVectorLayer: true,
+      canLoadRasterLayer: true,
+      queryResultLimit: 30000,
+      notification,
+    });
+    expect(mockApi.renderRasterAsync).toHaveBeenNthCalledWith(2, {
+      datasetId: 7,
+      layerId: 9,
+      rules: symbolization,
+      rulesMode: "custom",
+    });
+    expect(result.groups[0].children[0]).toMatchObject({
+      tileUrl: undefined,
+      renderStatus: "failed",
+    });
+    expect(result.issues[0].reason).toBe("无权自定义符号化");
+  });
+
   it("skips forbidden raster snapshot references instead of requesting stale tiles", async () => {
     mockApi.resourceProfile.mockRejectedValue(
       Object.assign(new Error("Forbidden"), { status: 403 }),

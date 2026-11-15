@@ -2,6 +2,11 @@
 
 > 时空智能服务平台。当前规则见 [current-platform-rules.md](current-platform-rules.md)，接口结构以 [openapi.yaml](openapi.yaml) 为准。
 
+## 保存工程的分类栅格恢复
+
+分类栅格恢复前调用既有异步渲染入口确认静态瓦片就绪，即使保存地址包含当前renderer版本也不能直接视为缓存存在。请求可使用datasetId和styleHash引用服务端已注册规则；禁止同时提交rules或custom模式。该路径保留栅格加载权限、项目和资料ACL，仅复用既有配色；重新创建客户端自定义规则仍需自定义符号化权限。完整金字塔和在途任务沿用既有复用机制。准备失败时保留图层与具体错误，不请求已失效瓦片。
+
+
 ## 遥感监测产品
 
 大屏框架、成果来源与图层更新遵循[公共展示规则](monitoring-shared-presentation.md)。

@@ -1622,6 +1622,7 @@ export const api = {
     payload: {
       layerId?: number | null;
       datasetId?: number | null;
+      styleHash?: string;
       rules?: Record<string, unknown>;
       rulesMode?: "default" | "custom";
     },
