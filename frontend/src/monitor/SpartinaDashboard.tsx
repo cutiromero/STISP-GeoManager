@@ -499,13 +499,18 @@ export default function SpartinaDashboard({
                   {selected ? (
                     <>
                       <p>{selected.interpretation}</p>
-                      <span className="spartina-secondary">
+                      <time
+                        className="spartina-secondary"
+                        dateTime={selected.registeredAt}
+                      >
                         {selected.kind === "model" ? "生成时间" : "登记时间"}{" "}
                         {new Date(selected.registeredAt).toLocaleString()}
-                      </span>
-                      <p className="spartina-secondary">
-                        {selected.observedStart ?? "日期待补充"}
-                      </p>
+                      </time>
+                      {selected.observedStart && (
+                        <p className="spartina-secondary">
+                          {selected.observedStart}
+                        </p>
+                      )}
                       <Button
                         type="link"
                         size="small"
