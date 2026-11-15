@@ -21,6 +21,10 @@
   color: #edce97;
   font-size: 11px;
 }
+.wildfire-card-body .monitor-product-choice {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
 .wildfire-value {
   container-type: inline-size;
   margin: 6px 0 14px;

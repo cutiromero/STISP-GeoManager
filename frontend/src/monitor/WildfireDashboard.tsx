@@ -365,26 +365,26 @@ export default function WildfireDashboard({
               </div>
               <MonitorPanel title="时期与观测源">
                 <div className="wildfire-card-body">
-                  <MonitorProductSelector
-                    selection={selection}
-                    presentation="list"
-                    labels={{
-                      current: selection.hasCurrentTask
-                        ? "本次制图"
-                        : "最近一次制图",
-                      history: "历史制图",
-                      uploaded: "已登记资料",
-                    }}
-                  />
-                  {selected && (
+                  {selected?.observedStart && (
                     <p className="wildfire-period">
-                      {selected.observedStart ?? "日期待补充"}
+                      {selected.observedStart}
                       {selected.observedEnd &&
                       selected.observedEnd !== selected.observedStart
                         ? " — " + selected.observedEnd
                         : ""}
                     </p>
                   )}
+                  <MonitorProductSelector
+                    selection={selection}
+                    presentation="list"
+                    labels={{
+                      current: selection.hasCurrentTask
+                        ? "本次制图"
+                        : "最近制图",
+                      history: "历史制图",
+                      uploaded: "登记资料",
+                    }}
+                  />
                   {page?.nextBeforeId && (
                     <Button
                       type="link"
