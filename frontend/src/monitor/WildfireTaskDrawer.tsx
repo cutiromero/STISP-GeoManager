@@ -3,6 +3,7 @@ import { useState, type ComponentProps } from "react";
 import MonitorTaskDrawer from "./MonitorTaskDrawer";
 import {
   observationProducts,
+  monitoringPeriodLabel,
   type MonitoringWorkspace,
 } from "./useMonitoringWorkspace";
 type Props = Omit<
@@ -22,12 +23,13 @@ export default function WildfireTaskDrawer({ workspace: w, ...props }: Props) {
     time_index: w.time?.ordinal ?? 0,
     history,
   };
+  const period = monitoringPeriodLabel(w.product, w.time);
   const page = props.page && {
     ...props.page,
     businessFlow: w.catalog?.method
       ? {
           ...w.catalog.method,
-          goal: `生成${observationProducts.find((row) => row.value === w.product)?.label}观测图。所选时期：${w.time?.date} — ${w.time?.endDate}；研究区WGS84：${JSON.stringify(w.region)}；包含所选时期向前${history}${w.product === "fcci_ba" ? "个月" : "期"}。交付观测原值、分级图、区域统计与序列。`,
+          goal: `生成${observationProducts.find((row) => row.value === w.product)?.label}观测图。所选时期：${period}；研究区WGS84：${JSON.stringify(w.region)}；包含所选时期向前${history}${w.product === "fcci_ba" ? "个月" : "期"}。交付观测原值、分级图、区域统计与序列。`,
         }
       : props.page.businessFlow,
   };
@@ -53,7 +55,7 @@ export default function WildfireTaskDrawer({ workspace: w, ...props }: Props) {
           <p>{w.source?.resource.name}</p>
           <p>
             {observationProducts.find((row) => row.value === w.product)?.label}{" "}
-            · {w.time?.date} — {w.time?.endDate}
+            · {period}
           </p>
           <p>
             研究区：

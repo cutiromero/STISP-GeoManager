@@ -335,3 +335,49 @@ it("launches one native cube run with the real source index and region", async (
     }),
   );
 });
+
+it("launches FCCI as a calendar month while retaining its real internal source position", async () => {
+  show();
+  const start = await screen.findByRole("button", {
+    name: "生成观测图",
+    exact: true,
+  });
+  await waitFor(() => expect(start).toBeEnabled());
+  fireEvent.click(
+    screen.getByRole("button", { name: "选择资料与时相", exact: true }),
+  );
+  fireEvent.mouseDown(
+    screen.getByRole("combobox", { name: "监测内容", exact: true }),
+  );
+  fireEvent.click(
+    await screen.findByText("FCCI 月火烧面积", {
+      selector: ".ant-select-item-option-content",
+    }),
+  );
+  await screen.findByText("2026-12", { exact: true });
+  fireEvent.click(
+    screen.getByRole("button", { name: "完成选择", exact: true }),
+  );
+  fireEvent.click(screen.getByText("经纬度范围", { exact: true }));
+  for (const [label, value] of [
+    ["西界", 112],
+    ["南界", -44],
+    ["东界", 154],
+    ["北界", -10],
+  ] as const)
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: `研究区${label}` }),
+      { target: { value: String(value) } },
+    );
+  fireEvent.click(start);
+  const submit = await screen.findByRole("button", { name: "开始业务流" });
+  await waitFor(() => expect(submit).toBeEnabled());
+  fireEvent.click(submit);
+  await waitFor(() => expect(businessFlowsApi.start).toHaveBeenCalledOnce());
+  const request = vi.mocked(businessFlowsApi.start).mock.calls[0]![1];
+  expect(request.goal).toContain("所选时期：2026-12；");
+  expect(request.goal).toContain("向前12个月");
+  expect(request.parameters).toMatchObject({
+    nodeParameters: { interpret: { product: "fcci_ba", time_index: 2000 } },
+  });
+});

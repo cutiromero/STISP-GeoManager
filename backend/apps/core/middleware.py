@@ -22,7 +22,7 @@ CONTENT_SECURITY_POLICY = "; ".join(
         "https://tiles.openfreemap.org https://*.tile.openstreetmap.org "
         "https://*.tianditu.gov.cn https://images.unsplash.com",
         "font-src 'self' data:",
-        "connect-src 'self' https://api.mapbox.com "
+        "connect-src 'self' blob: https://api.mapbox.com "
         "https://tiles.openfreemap.org https://*.tile.openstreetmap.org "
         "https://*.tianditu.gov.cn",
         "worker-src 'self' blob:",

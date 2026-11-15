@@ -33,7 +33,14 @@ const app = vi.hoisted(() => ({
 }));
 vi.mock("../api/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../api/client")>()),
-  requestJson: vi.fn(async () => ({ assets: [], collections: [], inputSets: [], method: null, hasMoreSources: false, nextOffset: null })),
+  requestJson: vi.fn(async () => ({
+    assets: [],
+    collections: [],
+    inputSets: [],
+    method: null,
+    hasMoreSources: false,
+    nextOffset: null,
+  })),
 }));
 vi.mock("../projects/ProjectContext", () => ({
   useProjectContext: () => context,
@@ -257,11 +264,12 @@ it("历史分布保留未知时间和空面积，选择后才加载同一地图�
     ).not.toBeDisabled(),
   );
   fireEvent.click(screen.getByRole("button", { name: "聚焦研究区" }));
-  expect(maps.maps[0]?.api.flyTo).toHaveBeenCalledWith(
-    expect.objectContaining({ center: [112, 32], zoom: 5 }),
+  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalledWith(
+    [109, 21, 122, 39],
+    expect.objectContaining({ padding: 55 }),
   );
   fireEvent.click(screen.getByRole("button", { name: "全域" }));
-  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalledTimes(2);
+  expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalledTimes(3);
   expect(api.resourceProfile).toHaveBeenCalledTimes(1);
   expect(
     document.querySelector(".monitor-layout > .monitor-globe-panel"),

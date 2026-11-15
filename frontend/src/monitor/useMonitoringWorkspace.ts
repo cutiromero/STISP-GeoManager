@@ -29,6 +29,16 @@ export const observationProducts = [
   { value: "cams_frpfire", label: "CAMS 火辐射功率" },
 ];
 
+export const monitoringPeriodLabel = (
+  product: string,
+  time?: { date: string; endDate: string },
+) =>
+  time
+    ? product === "fcci_ba"
+      ? time.date.slice(0, 7)
+      : `${time.date} — ${time.endDate}`
+    : "";
+
 export function useMonitoringWorkspace(
   scene: MonitoringSourceCatalog["scene"],
   projectId: number,

@@ -9,6 +9,7 @@ import { Button, Empty, Segmented } from "antd";
 import {
   lazy,
   Suspense,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -155,6 +156,20 @@ export default function WildfireDashboard({
   const selected = selection.selected;
   const reference = selection.reference;
   const observation = selected?.observation;
+  const mapConfig = useMemo(() => {
+    const grid = observation?.grid;
+    if (!grid) return config;
+    return {
+      ...config,
+      initialView: {
+        ...config.initialView,
+        center: [
+          grid.transform[0]! + (grid.width * grid.transform[1]!) / 2,
+          grid.transform[3]! + (grid.height * grid.transform[5]!) / 2,
+        ] as [number, number],
+      },
+    };
+  }, [config, observation?.grid]);
   const classification = selected?.attachments?.find(
     (row) => row.role === "classification",
   )?.resource;
@@ -300,7 +315,7 @@ export default function WildfireDashboard({
                 <ProductMap
                   onMapReady={setMap}
                   resource={workspace.resultVisible ? display : undefined}
-                  config={config}
+                  config={mapConfig}
                   animated={animated}
                   focusProduct
                   focusKey={display?.id}

@@ -38,7 +38,13 @@ export function sourceCatalog(
     collectionLabel: "登记监测系列",
     years:
       scene === "wildfire"
-        ? [{ year: 2026, count: 46, validProducts: ["gwis_ba" as const] }]
+        ? [
+            {
+              year: 2026,
+              count: 46,
+              validProducts: ["gwis_ba" as const, "fcci_ba" as const],
+            },
+          ]
         : [],
   }));
   return {
@@ -110,7 +116,7 @@ export const sourceTimes: MonitoringSourceTimePage = {
       ordinal: 2000,
       date: "2026-12-27",
       endDate: "2026-12-31",
-      validProducts: ["gwis_ba"],
+      validProducts: ["gwis_ba", "fcci_ba"],
     },
   ],
 };

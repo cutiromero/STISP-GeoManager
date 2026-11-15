@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { App } from "antd";
 import { beforeEach, expect, it, vi } from "vitest";
 import { api } from "../api/client";
@@ -90,4 +90,15 @@ it("does not clean layers on a destroyed map when the basemap configuration chan
   expect(maps.maps[0]!.value.getStyle()).toBeUndefined();
   screen.rerender(view([121.92, 31.24], resource));
   await waitFor(() => expect(maps.maps[1]?.sources.has("product")).toBe(true));
+});
+
+it("focuses the actual product extent rather than a shared project's default center", async () => {
+  render(view([121.92, 31.24], resource));
+  await waitFor(() => expect(maps.maps[0]?.api.fitBounds).toHaveBeenCalled());
+  maps.maps[0]!.api.fitBounds.mockClear();
+  fireEvent.click(
+    screen.getByRole("button", { name: "聚焦研究区", exact: true }),
+  );
+  expect(maps.maps[0]!.api.fitBounds).toHaveBeenCalledOnce();
+  expect(maps.maps[0]!.api.flyTo).not.toHaveBeenCalled();
 });

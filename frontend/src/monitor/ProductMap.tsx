@@ -58,6 +58,9 @@ export default function ProductMap({
   const boundsRef = useRef<[number, number, number, number] | undefined>(
     undefined,
   );
+  const markerRef = useRef<mapboxgl.Marker | undefined>(undefined);
+  const focusRegion = () =>
+    boundsRef.current ? showBounds(boundsRef.current) : focus(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [legend, setLegend] = useState<LiveLayerLegend>();
@@ -102,12 +105,14 @@ export default function ProductMap({
     const action = document.createElement("strong");
     action.textContent = t("remoteMonitor.openDistribution");
     element.append(label, action);
-    element.addEventListener("click", () => focus(true));
+    element.addEventListener("click", focusRegion);
     const marker = new mapboxgl.Marker({ element })
       .setLngLat(config.initialView.center as [number, number])
       .addTo(map);
+    markerRef.current = marker;
     return () => {
       marker.remove();
+      if (markerRef.current === marker) markerRef.current = undefined;
     };
   }, [
     map,
@@ -277,6 +282,10 @@ export default function ProductMap({
       }
       if (bounds.length === 4 && bounds.every(Number.isFinite)) {
         boundsRef.current = bounds as [number, number, number, number];
+        markerRef.current?.setLngLat([
+          (bounds[0]! + bounds[2]!) / 2,
+          (bounds[1]! + bounds[3]!) / 2,
+        ]);
         if (focusProduct && focused.current !== (focusKey ?? target.id)) {
           focused.current = focusKey ?? target.id;
           showBounds(boundsRef.current);
@@ -354,7 +363,7 @@ export default function ProductMap({
             aria-label={t("monitor.regionView")}
             icon={<AimOutlined />}
             disabled={!map || loading || !target}
-            onClick={() => focus(true)}
+            onClick={focusRegion}
           />
         </Tooltip>
         {target && (

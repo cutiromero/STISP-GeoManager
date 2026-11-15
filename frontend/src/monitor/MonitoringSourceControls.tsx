@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import {
   observationProducts,
+  monitoringPeriodLabel,
   type MonitoringWorkspace,
 } from "./useMonitoringWorkspace";
 import "./monitor-workspace.css";
@@ -32,7 +33,7 @@ export default function MonitoringSourceControls({
         <span title={w.source?.resource.name}>
           {w.scene === "wildfire"
             ? w.time
-              ? `${observationProducts.find((row) => row.value === w.product)?.label} · ${w.time.date} — ${w.time.endDate}`
+              ? `${observationProducts.find((row) => row.value === w.product)?.label} · ${monitoringPeriodLabel(w.product, w.time)}`
               : "请选择观测时期"
             : `解译时相：${w.inputSet?.label ?? "请选择时相组合"}`}
         </span>
