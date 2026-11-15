@@ -54,6 +54,27 @@ from geomanager.settings import _default_csrf_trusted_origins
 
 
 class FrontendSecurityHeadersTests(SimpleTestCase):
+    def test_document_and_response_policy_directives_agree(self):
+        import re
+        from pathlib import Path
+        from apps.core.middleware import CONTENT_SECURITY_POLICY
+
+        source = (Path(settings.PROGRAM_ROOT) / "frontend/index.html").read_text()
+        meta = re.search(
+            r'http-equiv="Content-Security-Policy"\s+content="([^"]+)"', source
+        ).group(1)
+
+        def directives(value):
+            return {
+                entry.strip().split(" ", 1)[0]: entry.strip()
+                for entry in value.split(";")
+                if entry.strip()
+            }
+
+        response = directives(CONTENT_SECURITY_POLICY)
+        for name, directive in directives(meta).items():
+            self.assertEqual(directive, response[name], name)
+
     def test_spa_document_blocks_unexpected_media_and_picture_in_picture(self):
         response = self.client.get("/resources/data/import")
 

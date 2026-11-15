@@ -17,7 +17,7 @@ describe("frontend content security policy", () => {
         "https://*.tianditu.gov.cn",
     );
     expect(policy).toContain(
-      "connect-src 'self' https://api.mapbox.com " +
+      "connect-src 'self' blob: https://api.mapbox.com " +
         "https://tiles.openfreemap.org https://*.tile.openstreetmap.org " +
         "https://*.tianditu.gov.cn",
     );
