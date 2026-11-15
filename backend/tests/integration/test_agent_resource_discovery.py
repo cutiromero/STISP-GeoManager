@@ -70,6 +70,43 @@ def resource(env, name="business", **kwargs):
     )
 
 
+@pytest.mark.efficiency
+def test_native_cube_discovery_keeps_live_acl_without_a_display_dataset(env):
+    from unittest.mock import patch
+    from apps.agent.resource_discovery import resolve_discoverable_resource
+
+    native = DataResource.objects.create(
+        name="已登记原生立方体",
+        code="native-cube-discovery",
+        data_type="raster",
+        file_format="ZARR",
+        storage_path="original/cube.zarr",
+    )
+    pending = DataResource.objects.create(
+        name="尚未准备的普通栅格",
+        code="pending-raster-discovery",
+        data_type="raster",
+        file_format="GTIFF",
+    )
+    with patch(
+        "apps.compute.native_cube_reader.Cube", side_effect=AssertionError("Pixel read")
+    ):
+        assert (
+            resolve_discoverable_resource(env["user"], env["policy"], native.pk).pk
+            == native.pk
+        )
+        assert (
+            not discover_resources(env["user"], env["policy"])
+            .filter(pk=pending.pk)
+            .exists()
+        )
+        native.owner_only = True
+        native.maintainer = env["other"]
+        native.save(update_fields=["owner_only", "maintainer"])
+        with pytest.raises(PermissionDenied):
+            resolve_discoverable_resource(env["user"], env["policy"], native.pk)
+
+
 def imported(env, name="manual", key="summary", **task_options):
     task = ComputeTask.objects.create(
         owner=env["user"],

@@ -126,7 +126,9 @@ def _discover_resources(user, policy, selected):
         project_tag_id=project_id(), status="ready"
     ).values("data_resource_id")
     query = acl_resources(user, policy, selected).filter(
-        ~Q(data_type="raster") | Q(pk__in=ready_rasters)
+        ~Q(data_type="raster")
+        | Q(pk__in=ready_rasters)
+        | Q(data_type="raster", file_format__iexact="ZARR")
     )
     excluded = Q(code__in=RESERVED_RULE_CODES)
     excluded |= Q(code__startswith="geology-multi-rules")
