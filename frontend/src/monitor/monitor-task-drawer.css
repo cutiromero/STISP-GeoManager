@@ -42,3 +42,21 @@
   line-height: 1.7;
   font-size: 12px;
 }
+
+.monitor-task-drawer .monitor-concise-launch {
+  color: #d6eee9;
+  background: transparent;
+}
+.monitor-task-drawer .monitor-concise-launch .flow-launch-scroll {
+  padding: 12px 0 16px;
+}
+.monitor-task-drawer .monitor-concise-launch > footer {
+  padding: 12px 0;
+  background: transparent;
+  border-color: rgba(90, 213, 203, 0.18);
+}
+.monitor-task-drawer .monitor-concise-launch .business-flow-launch-field,
+.monitor-task-drawer .monitor-concise-launch .business-flow-launch-note,
+.monitor-task-drawer .monitor-concise-launch > footer > span {
+  color: #a2bfbc;
+}

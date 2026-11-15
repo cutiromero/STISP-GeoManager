@@ -171,9 +171,9 @@
   max-width: min(350px, calc(100% - 64px));
 }
 .monitor-timeline .monitor-time-target {
-  width: 60px;
-  min-width: 54px;
-  max-width: 60px;
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
   flex-shrink: 0;
 }
 .monitor-timeline .monitor-time-date {
