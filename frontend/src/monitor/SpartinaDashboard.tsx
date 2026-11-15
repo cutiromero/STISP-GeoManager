@@ -424,7 +424,7 @@ export default function SpartinaDashboard({
                   ) : (
                     <>
                       <strong>三季节联合识别</strong>
-                      <p>选择研究区，解译互花米草分布</p>
+                      <p>默认全域解译，也可框选局部范围</p>
                       <ol className="spartina-route">
                         {page?.route.map((title, index) => (
                           <li key={title}>

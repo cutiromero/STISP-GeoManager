@@ -492,7 +492,7 @@ export default function WildfireDashboard({
                     </>
                   ) : (
                     <>
-                      <p>选择观测时期和研究区，生成观测图与区域序列</p>
+                      <p>选择观测时期即可制图，也可框选局部范围</p>
                       <ol className="wildfire-route">
                         {page?.route.map((label, index) => (
                           <li key={label}>
