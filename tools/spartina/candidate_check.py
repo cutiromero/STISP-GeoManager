@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import os
+import runpy
 from pathlib import Path
 import sys
 import time
@@ -87,6 +88,9 @@ def main():
     inputs = {}
     bounds = None
     with project_scope(scope):
+        runpy.run_path(str(code / "tools/monitoring/candidate_assets.py"))[
+            "stage_published_package"
+        ]("spartina-rf", root)
         manifest = json.loads(
             (code / "examples/compute/spartina-rf/operator.yaml").read_text()
         )

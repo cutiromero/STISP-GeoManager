@@ -211,3 +211,16 @@ def test_wildfire_flow_keeps_native_cube_and_observation_contract(setup_compute)
     assert SpartinaCommand.source_folder == "spartina-rf" and set(
         SpartinaCommand.default_inputs
     ) == {"march", "august", "december"}
+    command = WildfireCommand()
+    first = command.trial_key(
+        "f" * 64, {"cube": 1475}, {"history": 12, "time_index": 873}
+    )
+    assert first == command.trial_key(
+        "f" * 64, {"cube": 1475}, {"time_index": 873, "history": 12}
+    )
+    assert first != command.trial_key(
+        "f" * 64, {"cube": 1476}, {"history": 12, "time_index": 873}
+    )
+    assert first != command.trial_key(
+        "f" * 64, {"cube": 1475}, {"history": 6, "time_index": 873}
+    )

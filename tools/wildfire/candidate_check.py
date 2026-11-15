@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import os
+import runpy
 from pathlib import Path
 import shutil
 import sqlite3
@@ -93,6 +94,9 @@ def main():
     original = Cube(ORIGINAL)
     plan = original.plan("gwis_ba", 873, [112, -44, 154, -10], 3)
     with project_scope(scope):
+        runpy.run_path(str(code / "tools/monitoring/candidate_assets.py"))[
+            "stage_published_package"
+        ]("wildfire-observe", root)
         target = raster_source_path("wildfire-candidate.zarr")
         target.mkdir(parents=True, exist_ok=True)
         sources = [

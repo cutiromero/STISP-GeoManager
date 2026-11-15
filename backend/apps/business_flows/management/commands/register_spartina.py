@@ -38,6 +38,16 @@ class Command(BaseCommand):
     build_definition = staticmethod(definition)
     help = "登记互花米草RF算子、真实试运行及项目专属业务流"
 
+    def trial_key(self, checksum, inputs, parameters):
+        signature = hashlib.sha256(
+            json.dumps(
+                {"checksum": checksum, "inputs": inputs, "parameters": parameters},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        return "trial-" + self.source_folder + "-" + signature[:48]
+
     def add_arguments(self, parser):
         parser.add_argument("--project", default="06")
         parser.add_argument("--actor", default="admin")
@@ -113,18 +123,19 @@ class Command(BaseCommand):
             elif version is None:
                 raise CommandError("请先登记算子")
             elif options["stage"] == "trial":
+                inputs = json.loads(options["inputs_json"])
+                parameters = json.loads(options["parameters_json"])
                 task = submit(
                     actor,
                     {
                         "name": self.flow_title + "发布试运行",
                         "versionId": version.pk,
                         "trial": True,
-                        "idempotencyKey": "trial-"
-                        + self.source_folder
-                        + "-"
-                        + version.checksum[:48],
-                        "inputs": json.loads(options["inputs_json"]),
-                        "parameters": json.loads(options["parameters_json"]),
+                        "idempotencyKey": self.trial_key(
+                            version.checksum, inputs, parameters
+                        ),
+                        "inputs": inputs,
+                        "parameters": parameters,
                     },
                 )
                 result = {

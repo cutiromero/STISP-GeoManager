@@ -299,6 +299,7 @@ it("launches one native cube run with the real source index and region", async (
     2,
     expect.objectContaining({
       inputs: { cube: 1475 },
+      goal: expect.stringContaining("所选时期：2019-12-27 — 2019-12-31"),
       parameters: {
         nodeParameters: {
           interpret: {

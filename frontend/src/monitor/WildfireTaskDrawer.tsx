@@ -48,10 +48,24 @@ export default function WildfireTaskDrawer({ catalog, ...props }: Props) {
     options.west < options.east &&
     options.south < options.north,
   );
+  const period =
+    product?.periodMode === "monthly"
+      ? selectedTime?.date.slice(0, 7)
+      : selectedTime
+        ? `${selectedTime.date} — ${selectedTime.endDate}`
+        : "";
+  const launchPage = props.page && {
+    ...props.page,
+    businessFlow: props.page.businessFlow && {
+      ...props.page.businessFlow,
+      goal: `生成${product?.label ?? options.product}观测图。所选时期：${period}；研究区：西界${options.west}°、南界${options.south}°、东界${options.east}°、北界${options.north}°（WGS84）；包含所选时期在内向前${options.history}${product?.periodMode === "monthly" ? "个月" : "期"}。交付观测原值、分级图、区域统计与序列。`,
+    },
+  };
 
   return (
     <MonitorTaskDrawer
       {...props}
+      page={launchPage}
       title="野火观测制图任务"
       initialInputs={inputs}
       inputLabels={cube ? { [cube.id]: cube.name } : {}}
