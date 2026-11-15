@@ -1,5 +1,18 @@
 # API Change Requests
 
+## API-20261116-001 - 成果文件可用性与缩略图等待
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: GET /api/catalog/map-compositions/；专题图详情/版本；GET /api/catalog/results/；既有文件与缩略图接口。
+- Change type: MapCompositionVersion与ResultArtifact新增可选previewAvailable、artifactAvailable，表示真实文件存在性；版本提交补充可选expectedUpdatedAt；原件缺失的缩略图返回既有404，不进入无效补生成队列。
+- OpenAPI change: 两个成果DTO补充文件存在性，既有URL和权限字段保持原语义。
+- Mock examples: 50-map-compositions.json、55-results.json。
+- Frontend reason: 不将后台pending占位当作最终成果图，不对缺失文件提供无效预览和下载，保留历史版本与来源信息。
+- Backend implementation notes: 授权后只核对文件元信息，不读像元或文件摘要；一次响应内同版本只序列化一次，PNG预览与原件同路径只检查一次。禁止发布没有正式文件的版本。同一专题图写入通过有界存储锁串行；编码在数据库短写事务之外，写事务先预留SQLite写锁，避免并发版本重号或WAL升级失败。
+- Verification: 冷缩略图后台就绪、同源在途共享与取消、版本/项目/账号隔离、源文件清理、发布门禁、版本列表的文件状态及正式站图像恢复。
+- Result: 后端与前端已实现文件状态、发布门禁及缩略图有界等待，接口和权限回归通过；正式文件恢复与网站验收进行中。
+
 ## API-20261115-003 - 默认全域、原始时间浏览与明确统计范围
 
 - Status: BackendReady
@@ -782,6 +795,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261116-001 | BackendReady | catalog成果/版本与文件 | additive字段及缺失404 | MapCompositionVersion、ResultArtifact | 50、55 | 已实现 | 后端及浏览器回归通过 | 文件状态、后台生成与原件缺失边界 |
 | API-20261115-003 | BackendReady | 原始时间及栅格输入合同 | 默认全域与原图时间浏览 | Updated | 172-monitoring-workspace.json | Implemented | 正式站验证通过 | 当前期与趋势区间分离 |
 | API-20261115-002 | BackendReady | 资料用途/时相/监测输入目录 | 动态监测、原图预览与时间轴 | Updated | 元信息及真实时序 | Implemented | 项目、来源、掩膜、时相与查询界限 | 工作区接入中 |
 | API-20261115-001 | BackendReady | /api/ecology/wildfire/catalog/; 监测与业务流 | 原生时空观测、真实目录与独立野火大屏 | Updated | 遥感示例及真实观测 | Implemented | 时段、掩膜、单位、受控输入与来源 | 历史观测与模型结果独立 |

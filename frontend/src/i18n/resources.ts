@@ -636,6 +636,9 @@ export const zhCN = {
       viewDetails: "查看详情",
       downloadResult: "下载成果",
       previewAlt: "{{name}}成果预览",
+      previewUnavailable: "预览文件暂不可用",
+      regenerateUnavailable:
+        "版本和来源记录仍保留，可从原工程重新生成成果；文件恢复后可继续预览和下载。",
       pdfPreview: "{{name}} PDF 预览",
       published: "已发布",
       previewUnsupported: "该成果格式不支持在线预览",
@@ -1859,6 +1862,9 @@ export const enUS = {
       viewDetails: "View details",
       downloadResult: "Download result",
       previewAlt: "Preview of {{name}}",
+      previewUnavailable: "Preview file unavailable",
+      regenerateUnavailable:
+        "The version and source records remain available. Regenerate the result from its source project to restore preview and download.",
       pdfPreview: "PDF preview of {{name}}",
       published: "Published",
       previewUnsupported: "This result format cannot be previewed online",

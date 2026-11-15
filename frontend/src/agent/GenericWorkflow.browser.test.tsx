@@ -296,7 +296,7 @@ it("uploads multiple files together, prefills roles and preserves a manual edit"
   fireEvent.change(container.querySelector('input[type="file"]')!, {
     target: { files },
   });
-  await screen.findByText("智能体已识别资料角色，请核对后生成执行计划");
+  await screen.findByText("资料用途已识别，请核对后生成执行计划");
   expect(uploadBatch).toHaveBeenCalledTimes(1);
   expect(uploadBatch.mock.calls[0]![1]).toHaveLength(2);
   expect(screen.getByText("字段含地层名称，且为面")).toBeVisible();
@@ -376,7 +376,7 @@ it("allows manual roles and retry after recognition fails", async () => {
     ],
   });
   fireEvent.click(retry);
-  await screen.findByText("智能体已识别资料角色，请核对后生成执行计划");
+  await screen.findByText("资料用途已识别，请核对后生成执行计划");
   expect(recognize).toHaveBeenCalledTimes(2);
 });
 

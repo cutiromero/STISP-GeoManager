@@ -319,7 +319,7 @@ def answer(source, user, policy, answers, text):
             r"(?:把)?第([1-9]|1[0-2])份(?:资料)?改为(.+?)[。！!]?", text.strip()
         )
         names = {label: key for key, label in LABELS.items()}
-        names.update({"不使用": "skip", "构造": "faults"})
+        names.update({"不使用": "skip", "构造": "faults", "地质图": "lithology"})
         if not matched or int(matched[1]) > len(questions) or matched[2] not in names:
             raise ComputeError(
                 "未能明确识别角色修改，请在卡片中核对后继续；尚未确认资料角色"

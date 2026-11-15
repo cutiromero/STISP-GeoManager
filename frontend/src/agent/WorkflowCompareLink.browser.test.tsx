@@ -6,7 +6,10 @@ import { agentApi } from "../api/agent";
 import { reviewWorkflow } from "../map/geologyReview.testFixtures";
 import WorkflowCard from "./WorkflowCard";
 
-vi.mock("./WorkflowReportFile", () => ({ default: () => null }));
+vi.mock("./WorkflowReportFile", async (original) => ({
+  ...(await original<typeof import("./WorkflowReportFile")>()),
+  default: () => null,
+}));
 
 it("keeps exactly one comparison link through expand, collapse and reopen without unmounting details", async () => {
   const detail = { ...reviewWorkflow(true), status: "succeeded" as const };

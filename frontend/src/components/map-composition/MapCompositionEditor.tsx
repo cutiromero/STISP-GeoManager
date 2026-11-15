@@ -385,6 +385,8 @@ export default function MapCompositionEditor({
         expectedUpdatedAt.current = saved.updatedAt;
         savedLayout.current = JSON.stringify(layout);
       }
+      const exportUpdatedAt =
+        "id" in saved ? saved.updatedAt : expectedUpdatedAt.current;
       const master = await renderCompositionPng(
         map,
         layout,
@@ -401,6 +403,7 @@ export default function MapCompositionEditor({
           heightPx: pixels.height,
           note: versionNote.trim(),
           workspaceSnapshot,
+          expectedUpdatedAt: exportUpdatedAt,
         },
       );
       const result = await api.downloadMapCompositionVersion(

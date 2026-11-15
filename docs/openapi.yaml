@@ -4848,6 +4848,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 专题图正在保存或生成，请按Retry-After稍后重试。
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/catalog/map-compositions/{compositionId}/versions/:
     parameters:
     - name: X-Project-Id
@@ -4920,6 +4929,21 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: 版式已在其他会话更新，请重新读取后再生成版本。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 专题图正在保存或生成，请按Retry-After稍后重试。
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/catalog/map-compositions/{compositionId}/publish/:
     parameters:
     - name: X-Project-Id
@@ -4979,6 +5003,15 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          description: 专题图正在保存或生成，请按Retry-After稍后重试。
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/catalog/map-compositions/{compositionId}/unpublish/:
     parameters:
     - name: X-Project-Id
@@ -5032,6 +5065,15 @@ paths:
           $ref: '#/components/responses/NotFound'
         '400':
           description: 请求参数无效或项目范围冲突。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 专题图正在保存或生成，请按Retry-After稍后重试。
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1}
           content:
             application/json:
               schema:
@@ -17181,12 +17223,18 @@ components:
         sizeBytes:
           type: integer
           description: 成果文件大小，单位字节
+        previewAvailable:
+          type: boolean
+          description: 当前版本的预览文件是否存在；false时显示明确的不可预览提示，不请求失效图片。
+        artifactAvailable:
+          type: boolean
+          description: 正式成果文件是否存在；false时停用下载入口，保留版本及来源记录。
         previewUrl:
           type: string
           description: 成果预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
         thumbnailUrl:
           type: [string, 'null']
-          description: 带内容版本与projectTagId的预生成WebP卡片地址，PDF使用首页，非可视类型使用统一占位。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问；不得回退previewUrl。
+          description: 带内容版本与projectTagId的预生成WebP卡片地址，PDF使用首页，非可视类型使用统一占位。原件存在但小图尚未生成时返回pending占位并后台补生成；原件和缓存均缺失返回404；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问；不得回退previewUrl。
         downloadUrl:
           type: string
           description: 成果下载地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
@@ -18695,12 +18743,18 @@ components:
         snapshotChecksum:
           type: string
           description: 版式和工程快照的 SHA-256 校验值
+        previewAvailable:
+          type: boolean
+          description: 当前版本的预览文件是否存在；false时显示明确的不可预览提示，不请求失效图片。
+        artifactAvailable:
+          type: boolean
+          description: 正式成果文件是否存在；false时停用下载入口，保留版本及来源记录。
         previewUrl:
           type: string
           description: PNG 预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
         thumbnailUrl:
           type: string
-          description: 带内容版本与projectTagId的预生成WebP卡片地址，保存版本时由PNG母图生成；读取绝不渲染地图。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问。
+          description: 带内容版本与projectTagId的预生成WebP卡片地址，保存版本时由PNG母图生成；读取绝不渲染地图。原件存在但小图尚未生成时返回pending占位并后台补生成；原件和缓存均缺失返回404；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问。
         downloadUrl:
           type: string
           description: 正式成果下载地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
@@ -18925,6 +18979,10 @@ components:
           type: string
           maxLength: 500
           description: 版本说明
+        expectedUpdatedAt:
+          type: string
+          format: date-time
+          description: 最后保存版式返回的updatedAt；提供时若版式已更新则409拒绝，避免旧图片对应新版本版式。
         workspaceSnapshot:
           $ref: '#/components/schemas/WorkspaceSceneSnapshot'
     MapCompositionPublishRequest:

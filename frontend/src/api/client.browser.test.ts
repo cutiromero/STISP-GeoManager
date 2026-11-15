@@ -65,7 +65,9 @@ describe("api client", () => {
 
   it("ends the local lease immediately and signs in only after the previous logout response", async () => {
     fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ detail: "ok", user: loginUser })),
+      Promise.resolve(
+        jsonResponse({ detail: "ok", user: loginUser, active: true }),
+      ),
     );
     await startBrowserSession();
     let finishLogout: (response: Response) => void = () => {};
@@ -88,7 +90,9 @@ describe("api client", () => {
 
   it("keeps the local lease ended even when server logout fails", async () => {
     fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ detail: "ok", user: loginUser })),
+      Promise.resolve(
+        jsonResponse({ detail: "ok", user: loginUser, active: true }),
+      ),
     );
     await startBrowserSession();
     fetchMock.mockRejectedValueOnce(new TypeError("network unavailable"));
@@ -101,7 +105,9 @@ describe("api client", () => {
 
   it("bounds a hanging logout and releases the next login after the timeout", async () => {
     fetchMock.mockImplementation(() =>
-      Promise.resolve(jsonResponse({ detail: "ok", user: loginUser })),
+      Promise.resolve(
+        jsonResponse({ detail: "ok", user: loginUser, active: true }),
+      ),
     );
     const timeoutSpy = vi.spyOn(window, "setTimeout");
     try {

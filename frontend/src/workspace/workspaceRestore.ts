@@ -227,30 +227,28 @@ export async function restoreWorkspaceGroups({
           action: "restored-with-warning",
         });
       }
-      const refreshLegacyCategoricalTiles =
-        !savedLayer.tileUrl ||
-        (rasterKind === "categorical" &&
-          !usesCurrentRasterRenderer(savedLayer.tileUrl));
+      const refreshSnapshotTiles =
+        !savedLayer.tileUrl || !usesCurrentRasterRenderer(savedLayer.tileUrl);
       let refreshedRender: RasterRenderResult | undefined;
       let refreshError =
-        refreshLegacyCategoricalTiles && !currentRaster
-          ? "无法校验原始分类栅格，已停止加载旧版瓦片"
+        refreshSnapshotTiles && !currentRaster
+          ? "无法校验原始栅格，已停止加载旧版瓦片"
           : undefined;
-      if (refreshLegacyCategoricalTiles && currentRaster) {
-        updateRestoreProgress(`正在升级分类栅格瓦片：${savedLayer.name}`);
+      if (refreshSnapshotTiles && currentRaster) {
+        updateRestoreProgress(`正在准备栅格显示：${savedLayer.name}`);
         try {
-          refreshedRender = await renderCategoricalSnapshot(
+          refreshedRender = await renderSnapshotRaster(
             currentRaster.id,
             currentRaster.mapLayerId,
             savedLayer.symbolization as LoadedRasterLayer["symbolization"],
             savedLayer.rasterRulesMode ?? "custom",
           );
           if (!usesCurrentRasterRenderer(refreshedRender.tileUrl)) {
-            throw new Error("分类栅格服务返回了旧版瓦片地址");
+            throw new Error("栅格服务返回了旧版瓦片地址");
           }
         } catch (error) {
           refreshError =
-            error instanceof Error ? error.message : "分类栅格瓦片升级失败";
+            error instanceof Error ? error.message : "栅格显示准备失败";
           issues.push({
             layerName: savedLayer.name,
             resourceName: savedLayer.sourceResource.name,
@@ -273,7 +271,7 @@ export async function restoreWorkspaceGroups({
         name: savedLayer.name,
         layerType: "raster",
         sourceResource: savedLayer.sourceResource as DataResource,
-        tileUrl: refreshLegacyCategoricalTiles
+        tileUrl: refreshSnapshotTiles
           ? refreshedRender?.tileUrl
           : savedLayer.tileUrl,
         tileMinZoom: refreshedRender?.minZoom ?? savedLayer.tileMinZoom,
@@ -284,10 +282,10 @@ export async function restoreWorkspaceGroups({
           (rasterKind === "categorical" ? "nearest" : undefined),
         imageCoordinates:
           refreshedRender?.imageCoordinates ?? savedLayer.imageCoordinates,
-        rasterDatasetId: refreshLegacyCategoricalTiles
+        rasterDatasetId: refreshSnapshotTiles
           ? currentRaster?.id
           : savedLayer.rasterDatasetId,
-        rasterLayerId: refreshLegacyCategoricalTiles
+        rasterLayerId: refreshSnapshotTiles
           ? currentRaster?.mapLayerId
           : savedLayer.rasterLayerId,
         rasterKind,
@@ -304,7 +302,7 @@ export async function restoreWorkspaceGroups({
             ? 0
             : savedLayer.renderProgress,
         renderMessages: refreshedRender
-          ? ["分类栅格静态瓦片已升级并就绪"]
+          ? ["栅格显示已更新并就绪"]
           : refreshError
             ? [refreshError]
             : savedLayer.renderMessages,
@@ -313,7 +311,7 @@ export async function restoreWorkspaceGroups({
         summary: refreshedRender
           ? "XYZ 瓦片已就绪"
           : refreshError
-            ? "分类栅格瓦片升级失败"
+            ? "栅格显示准备失败"
             : savedLayer.summary,
         metadata: refreshedRender
           ? {
@@ -335,7 +333,7 @@ export async function restoreWorkspaceGroups({
   return { groups: restored, issues };
 }
 
-async function renderCategoricalSnapshot(
+async function renderSnapshotRaster(
   datasetId: number,
   layerId: number | null,
   symbolization: LoadedRasterLayer["symbolization"],
@@ -351,7 +349,7 @@ async function renderCategoricalSnapshot(
   const deadline = Date.now() + 120_000;
   while (job.status === "queued" || job.status === "running") {
     if (Date.now() >= deadline) {
-      throw new Error("分类栅格瓦片升级等待超时");
+      throw new Error("栅格显示准备等待超时");
     }
     await new Promise((resolve) => globalThis.setTimeout(resolve, 900));
     job = await api.rasterJob(job.id);
@@ -364,7 +362,7 @@ async function renderCategoricalSnapshot(
   ) {
     return job.result as RasterRenderResult;
   }
-  throw new Error(job.error || "分类栅格瓦片升级失败");
+  throw new Error(job.error || "栅格显示准备失败");
 }
 
 function usesCurrentRasterRenderer(tileUrl: string | undefined) {

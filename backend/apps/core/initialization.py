@@ -80,13 +80,12 @@ def print_superadmin_credentials_on_startup() -> None:
     except (OperationalError, ProgrammingError):
         return
     username = user.get_username() if user is not None else superadmin_username()
-    password = _initial_password()
     print(
         "\n".join(
             [
                 f"{SUPERADMIN_GROUP_NAME}账号已就绪：",
                 f"用户名: {username}",
-                f"密码: {password}",
+                "初始凭据请在服务器受限文件或管理员配置中读取。",
             ]
         ),
         flush=True,

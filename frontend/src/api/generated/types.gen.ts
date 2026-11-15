@@ -7473,11 +7473,19 @@ export type ResultArtifact = {
      */
     sizeBytes: number;
     /**
+     * 当前版本的预览文件是否存在；false时显示明确的不可预览提示，不请求失效图片。
+     */
+    previewAvailable?: boolean;
+    /**
+     * 正式成果文件是否存在；false时停用下载入口，保留版本及来源记录。
+     */
+    artifactAvailable?: boolean;
+    /**
      * 成果预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
      */
     previewUrl: string;
     /**
-     * 带内容版本与projectTagId的预生成WebP卡片地址，PDF使用首页，非可视类型使用统一占位。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问；不得回退previewUrl。
+     * 带内容版本与projectTagId的预生成WebP卡片地址，PDF使用首页，非可视类型使用统一占位。原件存在但小图尚未生成时返回pending占位并后台补生成；原件和缓存均缺失返回404；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问；不得回退previewUrl。
      */
     thumbnailUrl: string | null;
     /**
@@ -9121,11 +9129,19 @@ export type MapCompositionVersion = {
      */
     snapshotChecksum: string;
     /**
+     * 当前版本的预览文件是否存在；false时显示明确的不可预览提示，不请求失效图片。
+     */
+    previewAvailable?: boolean;
+    /**
+     * 正式成果文件是否存在；false时停用下载入口，保留版本及来源记录。
+     */
+    artifactAvailable?: boolean;
+    /**
      * PNG 预览地址 URL 包含所属项目的 projectTagId；预览只读，原文件下载仍要求下载/导出权限。
      */
     previewUrl: string;
     /**
-     * 带内容版本与projectTagId的预生成WebP卡片地址，保存版本时由PNG母图生成；读取绝不渲染地图。缺失只返回占位并后台补生成；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问。
+     * 带内容版本与projectTagId的预生成WebP卡片地址，保存版本时由PNG母图生成；读取绝不渲染地图。原件存在但小图尚未生成时返回pending占位并后台补生成；原件和缓存均缺失返回404；长缓存需重验证，登录/私有项目沿用no-store，撤权后旧地址不可访问。
      */
     thumbnailUrl: string;
     /**
@@ -9288,6 +9304,10 @@ export type MapCompositionVersionCreatePayload = {
      * 版本说明
      */
     note?: string;
+    /**
+     * 最后保存版式返回的updatedAt；提供时若版式已更新则409拒绝，避免旧图片对应新版本版式。
+     */
+    expectedUpdatedAt?: string;
     workspaceSnapshot: WorkspaceSceneSnapshot;
 };
 
@@ -19272,6 +19292,10 @@ export type UpdateMapCompositionErrors = {
      * 内容或版式已被其他会话更新；重新读取后再保存。
      */
     409: ErrorResponse;
+    /**
+     * 专题图正在保存或生成，请按Retry-After稍后重试。
+     */
+    503: ErrorResponse;
 };
 
 export type UpdateMapCompositionError = UpdateMapCompositionErrors[keyof UpdateMapCompositionErrors];
@@ -19334,6 +19358,14 @@ export type CreateMapCompositionVersionErrors = {
      * 资源不存在
      */
     404: ErrorResponse;
+    /**
+     * 版式已在其他会话更新，请重新读取后再生成版本。
+     */
+    409: ErrorResponse;
+    /**
+     * 专题图正在保存或生成，请按Retry-After稍后重试。
+     */
+    503: ErrorResponse;
 };
 
 export type CreateMapCompositionVersionError = CreateMapCompositionVersionErrors[keyof CreateMapCompositionVersionErrors];
@@ -19384,6 +19416,10 @@ export type PublishMapCompositionErrors = {
      * 资源不存在
      */
     404: ErrorResponse;
+    /**
+     * 专题图正在保存或生成，请按Retry-After稍后重试。
+     */
+    503: ErrorResponse;
 };
 
 export type PublishMapCompositionError = PublishMapCompositionErrors[keyof PublishMapCompositionErrors];
@@ -19434,6 +19470,10 @@ export type UnpublishMapCompositionErrors = {
      * 资源不存在
      */
     404: ErrorResponse;
+    /**
+     * 专题图正在保存或生成，请按Retry-After稍后重试。
+     */
+    503: ErrorResponse;
 };
 
 export type UnpublishMapCompositionError = UnpublishMapCompositionErrors[keyof UnpublishMapCompositionErrors];

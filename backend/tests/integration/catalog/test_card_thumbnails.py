@@ -269,6 +269,20 @@ def test_content_change_invalidates_address_and_old_version(storage, owner, clie
     )
 
 
+@pytest.mark.efficiency
+def test_missing_original_does_not_enqueue_an_impossible_repair(storage, owner):
+    artifact = result(storage, owner)
+    source = source_for(artifact)
+    source.target.unlink()
+    source.path.unlink()
+    with patch("apps.catalog.thumbnails.enqueue_thumbnail") as enqueue:
+        response = thumbnail_response(source)
+    assert response.status_code == 404
+    assert response["X-Thumbnail-Status"] == "missing"
+    assert response["Cache-Control"] == "private, no-store"
+    enqueue.assert_not_called()
+
+
 def test_permission_project_revocation_and_unpublished_result(storage, owner, client):
     private = Project.objects.create(name="私有", code="card-private")
     membership = ProjectMembership.objects.create(project=private, user=owner)

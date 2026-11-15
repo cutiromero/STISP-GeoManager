@@ -45,11 +45,19 @@ export default function MapCompositionCard({
       <button
         className="map-composition-thumbnail"
         type="button"
-        disabled={!composition.canPreview || !previewVersion}
+        disabled={
+          !composition.canPreview ||
+          !previewVersion ||
+          previewVersion.previewAvailable === false
+        }
         onClick={onPreview}
       >
         <CardCover
-          thumbnailUrl={previewVersion?.thumbnailUrl}
+          thumbnailUrl={
+            previewVersion?.previewAvailable === false
+              ? undefined
+              : previewVersion?.thumbnailUrl
+          }
           alt={composition.name}
           fit="contain"
         />
@@ -57,7 +65,14 @@ export default function MapCompositionCard({
           <>
             <EyeOutlined />
             <span>
-              {english ? "Preview" : "预览"} V{previewVersion.versionNumber}
+              {previewVersion.previewAvailable === false
+                ? english
+                  ? "Preview unavailable"
+                  : "预览文件不可用"
+                : english
+                  ? "Preview"
+                  : "预览"}{" "}
+              V{previewVersion.versionNumber}
             </span>
           </>
         ) : (
@@ -120,7 +135,11 @@ export default function MapCompositionCard({
         <Button
           size="small"
           icon={<DownloadOutlined />}
-          disabled={!composition.canDownload || !previewVersion}
+          disabled={
+            !composition.canDownload ||
+            !previewVersion ||
+            previewVersion.artifactAvailable === false
+          }
           onClick={onDownload}
         >
           {english ? "Download" : "下载"}

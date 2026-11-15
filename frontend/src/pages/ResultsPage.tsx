@@ -41,6 +41,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -53,6 +54,8 @@ import type { MapComposition, ResultArtifact } from "../types";
 import { downloadBlob } from "../utils/download";
 import ResearchDemoShowcase from "./ResearchDemoShowcase";
 import { useComputeText } from "../compute/ui";
+import { useProjectContext } from "../projects/ProjectContext";
+import { getActiveProject, requestScope } from "../projects/session";
 
 type ResultSource = "all" | "mapping" | "analysis" | "imported";
 type ResultView = "cards" | "list";
@@ -96,6 +99,8 @@ export default function ResultsPage() {
   const { message } = App.useApp();
   const { t, i18n } = useTranslation();
   const { user } = useAppContext();
+  const projectId = useProjectContext()?.current ?? getActiveProject();
+  const loadSequence = useRef(0);
   const [mapItems, setMapItems] = useState<MapComposition[]>([]);
   const [artifactItems, setArtifactItems] = useState<ResultArtifact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,6 +132,8 @@ export default function ResultsPage() {
   ];
 
   const loadResults = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    const check = requestScope();
     setLoading(true);
     const [mappingResult, artifactResult] = await Promise.allSettled([
       canViewMapping
@@ -145,6 +152,13 @@ export default function ResultsPage() {
         : Promise.resolve([]),
     ]);
 
+    if (sequence !== loadSequence.current) return;
+    try {
+      check();
+    } catch {
+      return;
+    }
+
     if (mappingResult.status === "fulfilled") {
       setMapItems(mappingResult.value);
     } else {
@@ -162,10 +176,16 @@ export default function ResultsPage() {
       );
     }
     setLoading(false);
-  }, [canViewArtifactResults, canViewMapping, message, t]);
+  }, [canViewArtifactResults, canViewMapping, message, projectId, t]);
 
   useEffect(() => {
+    setMapItems([]);
+    setArtifactItems([]);
+    setDetail(null);
     void loadResults();
+    return () => {
+      loadSequence.current++;
+    };
   }, [loadResults]);
 
   const publishedResults = useMemo<PublishedResult[]>(
@@ -767,9 +787,13 @@ function ResultCard({
 
 function ResultCover({ item }: { item: PublishedResult }) {
   const { t } = useTranslation();
-  const thumbnailUrl = resultThumbnailUrl(item);
   const format = resultFormat(item);
   const imagePreview = resultPreviewIsImage(item);
+  const previewAvailable = resultPreviewAvailable(item);
+  const thumbnailUrl =
+    previewAvailable && (imagePreview || format === "pdf")
+      ? resultThumbnailUrl(item)
+      : undefined;
   return (
     <div
       className={`result-card-cover${imagePreview ? "" : " result-card-cover-file"}`}
@@ -777,6 +801,7 @@ function ResultCover({ item }: { item: PublishedResult }) {
       <CardCover
         alt={t("results.previewAlt", { name: resultName(item) })}
         thumbnailUrl={thumbnailUrl}
+        fit="contain"
       />
       {!thumbnailUrl && (
         <div
@@ -785,7 +810,11 @@ function ResultCover({ item }: { item: PublishedResult }) {
         >
           {resultFormatIcon(item)}
           <strong>{format.toUpperCase()}</strong>
-          <span>{sourceLabel(item, t)}</span>
+          <span>
+            {previewAvailable
+              ? sourceLabel(item, t)
+              : t("results.previewUnavailable")}
+          </span>
         </div>
       )}
       <Tag color="blue">{t("results.published")}</Tag>
@@ -799,10 +828,20 @@ function ResultDetail({ item }: { item: PublishedResult }) {
   const ui = useComputeText();
   const locale = i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN";
   const format = resultFormat(item);
-  const previewUrl = resultPreviewUrl(item);
+  const previewUrl = resultPreviewAvailable(item)
+    ? resultPreviewUrl(item)
+    : undefined;
   const imagePreview = resultPreviewIsImage(item);
   return (
     <Space orientation="vertical" size={20} className="full-width">
+      {!resultPreviewAvailable(item) && (
+        <Alert
+          type="warning"
+          showIcon
+          title={t("results.previewUnavailable")}
+          description={t("results.regenerateUnavailable")}
+        />
+      )}
       {previewUrl && imagePreview && (
         <Image
           alt={t("results.previewAlt", { name: resultName(item) })}
@@ -979,7 +1018,21 @@ function resultPreviewIsImage(item: PublishedResult) {
 }
 
 function resultCanDownload(item: PublishedResult) {
-  return item.item.canDownload;
+  const version =
+    item.kind === "mapping" ? item.item.publishedVersion : item.item;
+  return item.item.canDownload && version?.artifactAvailable !== false;
+}
+
+function resultPreviewAvailable(item: PublishedResult) {
+  const version =
+    item.kind === "mapping" ? item.item.publishedVersion : item.item;
+  if (
+    item.kind === "artifact" &&
+    !resultPreviewIsImage(item) &&
+    resultFormat(item) !== "pdf"
+  )
+    return version?.artifactAvailable !== false;
+  return version?.previewAvailable !== false;
 }
 
 function resultSearchText(item: PublishedResult, t: TFunction) {

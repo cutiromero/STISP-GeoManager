@@ -17,6 +17,8 @@
 .card-cover-placeholder {
   display: grid;
   place-items: center;
+  place-content: center;
+  gap: 8px;
   color: #8c9aa7;
 }
 

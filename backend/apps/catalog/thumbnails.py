@@ -15,7 +15,7 @@ import threading
 import time
 import uuid
 
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from PIL import Image, ImageOps
 
 from apps.core.storage import app_path
@@ -196,6 +196,13 @@ def thumbnail_response(source: ThumbnailSource, *, request=None):
     try:
         stream = source.target.open("rb")
     except OSError:
+        if not source.path.is_file():
+            response = JsonResponse(
+                {"detail": "预览原文件不可用，请恢复来源文件或重新生成成果"}, status=404
+            )
+            response["Cache-Control"] = "private, no-store"
+            response["X-Thumbnail-Status"] = "missing"
+            return response
         enqueue_thumbnail(source)
         response = HttpResponse(PLACEHOLDER_WEBP, content_type="image/webp")
         response["Cache-Control"] = "private, no-store"

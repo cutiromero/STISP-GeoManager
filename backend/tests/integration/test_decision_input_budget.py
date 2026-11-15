@@ -316,7 +316,14 @@ def test_first_request_uses_actual_tokenizer_gate_for_every_stage(phase, retry_m
     assert outcome[0]["nextAction"] == stage["identifier"]
     assert len(requests) == 1 and measured[0] > 49152
     attempt = stage["modelAttempts"][0]
-    assert attempt["inputTokens"] == measured[-1] <= attempt["inputLimit"] == 49152
+    # The model's capacity also reserves the configured output and 256 safety tokens.
+    expected_limit = min(49152, 65536 - policy["maxOutputTokens"] - 256)
+    assert (
+        attempt["inputTokens"]
+        == measured[-1]
+        <= attempt["inputLimit"]
+        == expected_limit
+    )
     assert attempt["contentBytes"] <= policy["maxContextBytes"]
     assert attempt["budgetLevel"] > 0 and not attempt["truncated"]
     assert stage["modelRequestPayload"] == payload

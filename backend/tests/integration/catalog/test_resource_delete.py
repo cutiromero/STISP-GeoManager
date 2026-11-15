@@ -375,7 +375,9 @@ class ResourceDeleteTests(ResourceDeleteFixture):
             resource_ids=[item.id],
             status="succeeded",
         )
-        self.assertIn("MH-workflow", self.delete([item.id]).json()["items"][0]["detail"])
+        self.assertIn(
+            "MH-workflow", self.delete([item.id]).json()["items"][0]["detail"]
+        )
         workflow.resource_ids = []
         workflow.save()
         AgentCheckpoint.objects.create(
@@ -759,6 +761,27 @@ class ResourceDeleteAtomicTests(ResourceDeleteFixture):
             code="render-delete-check",
             layer_type="raster",
             data_resource=item,
+        )
+        from apps.core.storage import raster_processed_path
+
+        self.write(raster_processed_path("delete-render.tif"))
+        RasterDataset.objects.create(
+            name="已预处理渲染资料",
+            code="delete-render",
+            data_resource=item,
+            map_layer=layer,
+            status="ready",
+            raster_kind="categorical",
+            processed_relative_path="delete-render.tif",
+            processed_gdalinfo={
+                "bands": [{"band": 1, "type": "Byte", "min": 0, "max": 1}]
+            },
+            default_rules={
+                "mode": "unique",
+                "bands": [1],
+                "uniqueValues": [{"value": 1, "label": "目标", "color": "#ff0000ff"}],
+            },
+            bounds_3857=[0, 0, 100, 100],
         )
         with (
             patch(

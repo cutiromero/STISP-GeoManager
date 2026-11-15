@@ -425,6 +425,56 @@ describe("restoreWorkspaceGroups", () => {
     ]);
   });
 
+  it("refreshes legacy RGB tile references as well as categorical snapshots", async () => {
+    const symbolization = cloneDefaultRasterSymbolization();
+    symbolization.mode = "rgb";
+    mockApi.resourceProfile.mockResolvedValue({
+      raster: {
+        id: 7,
+        mapLayerId: 9,
+        rasterKind: "continuous",
+        metadata: { size: [1024, 1024] },
+      },
+    });
+    mockApi.renderRasterAsync.mockResolvedValue({
+      status: "ready",
+      result: {
+        delivery: "xyz",
+        datasetId: 7,
+        tileUrl: "/api/raster/tiles/7/rgb-current/{z}/{x}/{y}.png?rv=4",
+        tileSampling: "linear",
+        minZoom: 0,
+        maxZoom: 16,
+        status: "ready",
+        rules: symbolization,
+      },
+    });
+    const result = await restoreWorkspaceGroups({
+      savedGroups: [
+        makeGroup([
+          makeSavedRasterLayer({
+            rasterKind: "continuous",
+            symbolization,
+            tileUrl: "/api/raster/tiles/7/rgb-old/{z}/{x}/{y}.png?rv=3",
+          }),
+        ]),
+      ],
+      canQueryData: true,
+      canLoadVectorLayer: true,
+      canLoadRasterLayer: true,
+      queryResultLimit: 30000,
+      notification,
+    });
+    expect(mockApi.renderRasterAsync).toHaveBeenCalledOnce();
+    expect(result.groups[0]?.children[0]).toMatchObject({
+      rasterKind: "continuous",
+      tileSampling: "linear",
+      renderStatus: "ready",
+      tileUrl: expect.stringContaining("rgb-current"),
+    });
+    expect(result.issues).toEqual([]);
+  });
+
   it("skips forbidden raster snapshot references instead of requesting stale tiles", async () => {
     mockApi.resourceProfile.mockRejectedValue(
       Object.assign(new Error("Forbidden"), { status: 403 }),

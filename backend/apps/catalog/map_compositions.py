@@ -5,13 +5,14 @@ import hashlib
 import io
 import json
 import logging
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
 from django.contrib.auth.models import Group
 from django.db import IntegrityError, transaction
-from django.db.models import Max, Q
-from django.http import FileResponse, JsonResponse
+from django.db.models import F, Max, Q
+from django.http import FileResponse, Http404, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from PIL import Image, UnidentifiedImageError
@@ -42,6 +43,7 @@ from apps.core.principal_visibility import (
     user_is_visible_to,
 )
 from apps.core.storage import app_path
+from apps.core.storage_locks import StorageLockTimeout, storage_lock
 from apps.catalog.thumbnails import source_for, thumbnail_response
 
 LAYOUT_MAX_BYTES = 512 * 1024
@@ -50,6 +52,35 @@ MAP_COMPOSITION_IMAGE_MAX_MB = 128
 MAP_COMPOSITION_IMAGE_MAX_BYTES = MAP_COMPOSITION_IMAGE_MAX_MB * 1024 * 1024
 MAX_OUTPUT_SIDE = 8192
 MAX_OUTPUT_PIXELS = 36_000_000
+
+
+def _serialized_composition_write(view):
+    @wraps(view)
+    def wrapped(request, composition_id, *args, **kwargs):
+        if request.method in {"GET", "HEAD"}:
+            return view(request, composition_id, *args, **kwargs)
+        lock = app_path("cache", "composition-writes", f"{composition_id % 256}.lock")
+        try:
+            with storage_lock(lock, timeout=10):
+                return view(request, composition_id, *args, **kwargs)
+        except StorageLockTimeout:
+            response = JsonResponse(
+                {"detail": "专题图正在保存或生成，请稍后重试"}, status=503
+            )
+            response["Retry-After"] = "2"
+            return response
+
+    return wrapped
+
+
+def _locked_composition(composition_id):
+    query = MapComposition.objects.filter(pk=composition_id)
+    # Reserve SQLite's short write before any transactional reads. Expensive
+    # image encoding stays outside this database transaction.
+    if not query.update(updated_at=F("updated_at")):
+        raise Http404("出图稿不存在")
+    return query.select_for_update().get()
+
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +169,7 @@ def _create_map_composition(request):
 
 @require_http_methods(["GET", "POST"])
 @api_login_required
+@_serialized_composition_write
 def map_composition_detail(request, composition_id: int):
     composition = _composition_for_user(request.user, composition_id)
     if composition is None:
@@ -201,9 +233,7 @@ def map_composition_detail(request, composition_id: int):
         return JsonResponse({"detail": "没有可更新的出图稿字段"}, status=400)
     try:
         with transaction.atomic():
-            composition = MapComposition.objects.select_for_update().get(
-                pk=composition.pk
-            )
+            composition = _locked_composition(composition.pk)
             expected = payload.get("expectedUpdatedAt")
             if expected is not None and expected != composition.updated_at.isoformat():
                 return JsonResponse(
@@ -233,6 +263,7 @@ def map_composition_detail(request, composition_id: int):
 
 @require_POST
 @api_login_required
+@_serialized_composition_write
 def publish_map_composition(request, composition_id: int):
     if not has_feature_perm(request.user, "catalog.publish_mapcomposition"):
         return feature_denied_response(request.user)
@@ -248,6 +279,13 @@ def publish_map_composition(request, composition_id: int):
     version = composition.versions.filter(version_number=version_number).first()
     if version is None:
         return JsonResponse({"detail": "专题成果版本不存在"}, status=404)
+    if not all(
+        app_path(path).is_file()
+        for path in (version.preview_path, version.artifact_path)
+    ):
+        return JsonResponse(
+            {"detail": "专题成果文件不可用，请从原工程重新生成后发布"}, status=400
+        )
     group_ids = _group_ids(payload.get("audienceGroupIds", []), required=False)
     if isinstance(group_ids, JsonResponse):
         return group_ids
@@ -288,6 +326,7 @@ def publish_map_composition(request, composition_id: int):
 
 @require_POST
 @api_login_required
+@_serialized_composition_write
 def unpublish_map_composition(request, composition_id: int):
     if not has_feature_perm(request.user, "catalog.publish_mapcomposition"):
         return feature_denied_response(request.user)
@@ -321,6 +360,7 @@ def unpublish_map_composition(request, composition_id: int):
 
 @require_POST
 @api_login_required
+@_serialized_composition_write
 def create_map_composition_version(request, composition_id: int):
     if not has_feature_perm(request.user, "catalog.export_mapcomposition"):
         return feature_denied_response(request.user)
@@ -364,32 +404,37 @@ def create_map_composition_version(request, composition_id: int):
         return JsonResponse({"detail": "上传内容不是有效 PNG 图片"}, status=400)
 
     workspace_snapshot = values.pop("workspace_snapshot")
+    expected = values.pop("expected_updated_at", None)
+    if expected is not None and expected != composition.updated_at.isoformat():
+        return JsonResponse(
+            {"detail": "版式已更新，请重新载入后生成成果版本"}, status=409
+        )
     resource_manifest = _resource_manifest(workspace_snapshot)
     snapshot_checksum = _snapshot_checksum(composition.layout, workspace_snapshot)
     snapshot_schema_version = _snapshot_schema_version(workspace_snapshot)
+    version_number = (
+        composition.versions.aggregate(maximum=Max("version_number"))["maximum"] or 0
+    ) + 1
+    output_dir = app_path(
+        "exports", "map-compositions", str(composition.id), f"v{version_number}"
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    preview_relative = _relative_export_path(
+        composition.id, version_number, "preview.png"
+    )
+    preview_path = app_path(preview_relative)
+    image.save(preview_path, "PNG", dpi=(values["dpi"], values["dpi"]))
+    artifact_relative, _ = _save_artifact(
+        image,
+        composition.id,
+        version_number,
+        values["format"],
+        values["dpi"],
+        preview_relative,
+        preview_path,
+    )
     with transaction.atomic():
-        locked = MapComposition.objects.select_for_update().get(pk=composition.id)
-        version_number = (
-            locked.versions.aggregate(maximum=Max("version_number"))["maximum"] or 0
-        ) + 1
-        output_dir = app_path(
-            "exports", "map-compositions", str(locked.id), f"v{version_number}"
-        )
-        output_dir.mkdir(parents=True, exist_ok=True)
-        preview_relative = _relative_export_path(
-            locked.id, version_number, "preview.png"
-        )
-        preview_path = app_path(*preview_relative.split("/"))
-        image.save(preview_path, "PNG", dpi=(values["dpi"], values["dpi"]))
-        artifact_relative, _ = _save_artifact(
-            image,
-            locked.id,
-            version_number,
-            values["format"],
-            values["dpi"],
-            preview_relative,
-            preview_path,
-        )
+        locked = _locked_composition(composition.id)
         version = MapCompositionVersion.objects.create(
             composition=locked,
             version_number=version_number,
@@ -697,6 +742,11 @@ def _version_values(payload: Any) -> dict[str, Any] | JsonResponse:
     note = str(payload.get("note") or "").strip()
     if len(note) > 500:
         return JsonResponse({"detail": "版本说明不能超过 500 个字符"}, status=400)
+    expected = payload.get("expectedUpdatedAt")
+    if expected is not None and not isinstance(expected, str):
+        return JsonResponse(
+            {"detail": "expectedUpdatedAt 必须为最后读取的更新时间"}, status=400
+        )
     workspace_snapshot = payload.get("workspaceSnapshot")
     snapshot_error = _validate_workspace_snapshot(workspace_snapshot)
     if snapshot_error:
@@ -708,6 +758,7 @@ def _version_values(payload: Any) -> dict[str, Any] | JsonResponse:
         "height_px": height_px,
         "note": note,
         "workspace_snapshot": workspace_snapshot,
+        "expected_updated_at": expected,
     }
 
 
@@ -829,6 +880,14 @@ def _serialize_composition(composition: MapComposition, request_user) -> dict[st
         else None
     )
     has_any_version = current_version is not None
+    visible_versions = {
+        version.pk: version
+        for version in [current_version, published_version, *versions]
+        if version is not None
+    }
+    serialized_versions = {
+        key: _serialize_version(value) for key, value in visible_versions.items()
+    }
     return {
         "id": composition.id,
         "projectTagId": composition.project_tag_id,
@@ -845,13 +904,15 @@ def _serialize_composition(composition: MapComposition, request_user) -> dict[st
                 composition.audience_groups.all(), request_user
             )
         ],
-        "currentVersion": _serialize_version(current_version)
+        "currentVersion": serialized_versions[current_version.pk]
         if current_version
         else None,
-        "publishedVersion": _serialize_version(published_version)
+        "publishedVersion": serialized_versions[published_version.pk]
         if published_version and composition.status == MapComposition.Status.PUBLISHED
         else None,
-        "versions": [_serialize_version(version) for version in versions if version],
+        "versions": [
+            serialized_versions[version.pk] for version in versions if version
+        ],
         "isOwner": composition.owner_id == request_user.id,
         "canPreview": has_any_version,
         "canDownload": bool(
@@ -896,6 +957,12 @@ def _serialize_composition(composition: MapComposition, request_user) -> dict[st
 
 
 def _serialize_version(version: MapCompositionVersion) -> dict[str, Any]:
+    preview = app_path(version.preview_path)
+    artifact = app_path(version.artifact_path)
+    preview_available = preview.is_file()
+    artifact_available = (
+        preview_available if preview == artifact else artifact.is_file()
+    )
     base = (
         f"/api/catalog/map-compositions/{version.composition_id}"
         f"/versions/{version.version_number}/file/"
@@ -911,6 +978,8 @@ def _serialize_version(version: MapCompositionVersion) -> dict[str, Any]:
         "note": version.note,
         "snapshotSchemaVersion": version.snapshot_schema_version,
         "snapshotChecksum": version.snapshot_checksum,
+        "previewAvailable": preview_available,
+        "artifactAvailable": artifact_available,
         "previewUrl": f"{base}?variant=preview&projectTagId={version.project_tag_id}",
         "thumbnailUrl": (
             f"{base}?variant=thumbnail&projectTagId={version.project_tag_id}"

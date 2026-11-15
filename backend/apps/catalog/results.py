@@ -502,6 +502,7 @@ def _related_resources(value, user, project_id=None):
 def _serialize_result(artifact: ResultArtifact, request_user) -> dict[str, Any]:
     extension = Path(artifact.file_name).suffix.lower().lstrip(".")
     base = f"/api/catalog/results/{artifact.id}/file/"
+    available = app_path(artifact.file_path).is_file()
     owner = artifact.owner if user_is_visible_to(request_user, artifact.owner) else None
     return {
         "id": artifact.id,
@@ -528,6 +529,9 @@ def _serialize_result(artifact: ResultArtifact, request_user) -> dict[str, Any]:
         "fileFormat": extension,
         "sizeBytes": artifact.size_bytes,
         "previewUrl": f"{base}?variant=preview&projectTagId={artifact.project_tag_id}",
+        "previewAvailable": available
+        and extension in {item.lstrip(".") for item in PREVIEWABLE_RESULT_EXTENSIONS},
+        "artifactAvailable": available,
         "thumbnailUrl": (
             f"{base}?variant=thumbnail&projectTagId={artifact.project_tag_id}"
             f"&v={source_for(artifact).version}"

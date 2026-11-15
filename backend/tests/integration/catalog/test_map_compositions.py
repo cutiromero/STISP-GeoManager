@@ -105,64 +105,76 @@ class MapCompositionApiTests(TestCase):
         self.assertEqual(update_response.status_code, 200)
         self.assertTrue(update_response.json()["layout"]["grid"]["enabled"])
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config = replace(
-                settings.PROJECT_CONFIG,
-                app_data=Path(tmpdir) / "app",
-                research_data_root=Path(tmpdir) / "research",
-            )
-            with override_settings(PROJECT_CONFIG=config):
-                version_response = self.client.post(
-                    f"/api/catalog/map-compositions/{composition_id}/versions/",
-                    data={
-                        "image": png_file(320, 240),
-                        "payload": json.dumps(
-                            {
-                                "format": "pdf",
-                                "dpi": 300,
-                                "widthPx": 320,
-                                "heightPx": 240,
-                                "note": "第一版",
-                                "workspaceSnapshot": self.workspace_snapshot,
-                            }
-                        ),
-                    },
-                )
+        tmpdir = self.enterContext(tempfile.TemporaryDirectory())
+        config = replace(
+            settings.PROJECT_CONFIG,
+            app_data=Path(tmpdir) / "app",
+            research_data_root=Path(tmpdir) / "research",
+        )
+        self.enterContext(override_settings(PROJECT_CONFIG=config))
+        version_response = self.client.post(
+            f"/api/catalog/map-compositions/{composition_id}/versions/",
+            data={
+                "image": png_file(320, 240),
+                "payload": json.dumps(
+                    {
+                        "format": "pdf",
+                        "dpi": 300,
+                        "widthPx": 320,
+                        "heightPx": 240,
+                        "note": "第一版",
+                        "workspaceSnapshot": self.workspace_snapshot,
+                    }
+                ),
+            },
+        )
 
-                self.assertEqual(version_response.status_code, 201)
-                version = version_response.json()
-                self.assertEqual(version["versionNumber"], 1)
-                self.assertEqual(version["format"], "pdf")
-                self.assertEqual(version["snapshotSchemaVersion"], 2)
-                self.assertEqual(len(version["snapshotChecksum"]), 64)
-                self.assertTrue(
-                    config.app_path(
-                        "exports",
-                        "map-compositions",
-                        str(composition_id),
-                        "v1",
-                        "artifact.pdf",
-                    ).is_file()
-                )
+        self.assertEqual(version_response.status_code, 201)
+        version = version_response.json()
+        self.assertEqual(version["versionNumber"], 1)
+        self.assertEqual(version["format"], "pdf")
+        stale_version = self.client.post(
+            f"/api/catalog/map-compositions/{composition_id}/versions/",
+            data={
+                "image": png_file(320, 240),
+                "payload": json.dumps({
+                    "format": "png", "dpi": 300, "widthPx": 320, "heightPx": 240,
+                    "workspaceSnapshot": self.workspace_snapshot,
+                    "expectedUpdatedAt": update_response.json()["updatedAt"],
+                }),
+            },
+        )
+        self.assertEqual(stale_version.status_code, 409)
+        self.assertEqual(MapCompositionVersion.objects.filter(composition_id=composition_id).count(), 1)
+        self.assertFalse(config.app_path("exports", "map-compositions", str(composition_id), "v2").exists())
+        self.assertEqual(version["snapshotSchemaVersion"], 2)
+        self.assertEqual(len(version["snapshotChecksum"]), 64)
+        self.assertTrue(
+            config.app_path(
+                "exports",
+                "map-compositions",
+                str(composition_id),
+                "v1",
+                "artifact.pdf",
+            ).is_file()
+        )
 
-                preview_response = self.client.get(
-                    version["previewUrl"],
-                )
-                self.assertEqual(preview_response.status_code, 200)
-                self.assertEqual(preview_response.headers["Content-Type"], "image/png")
-                b"".join(preview_response.streaming_content)
-                preview_response.close()
+        preview_response = self.client.get(
+            version["previewUrl"],
+        )
+        self.assertEqual(preview_response.status_code, 200)
+        self.assertEqual(preview_response.headers["Content-Type"], "image/png")
+        b"".join(preview_response.streaming_content)
+        preview_response.close()
 
-                download_response = self.client.get(version["downloadUrl"])
-                self.assertEqual(download_response.status_code, 200)
-                self.assertEqual(
-                    download_response.headers["Content-Type"], "application/pdf"
-                )
-                self.assertIn(".pdf", download_response.headers["Content-Disposition"])
-                pdf_content = b"".join(download_response.streaming_content)
-                self.assertTrue(pdf_content.startswith(b"%PDF-"))
-                self.assertGreater(len(pdf_content), 100)
-                download_response.close()
+        download_response = self.client.get(version["downloadUrl"])
+        self.assertEqual(download_response.status_code, 200)
+        self.assertEqual(download_response.headers["Content-Type"], "application/pdf")
+        self.assertIn(".pdf", download_response.headers["Content-Disposition"])
+        pdf_content = b"".join(download_response.streaming_content)
+        self.assertTrue(pdf_content.startswith(b"%PDF-"))
+        self.assertGreater(len(pdf_content), 100)
+        download_response.close()
 
         publish_response = self.client.post(
             f"/api/catalog/map-compositions/{composition_id}/publish/",

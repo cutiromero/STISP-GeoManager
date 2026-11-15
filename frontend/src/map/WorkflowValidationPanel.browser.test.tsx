@@ -20,7 +20,8 @@ import WorkflowValidationPanel from "./WorkflowValidationPanel";
 import "../agent/agent.css";
 
 vi.mock("../api/compute", () => ({ downloadComputeFile: vi.fn() }));
-vi.mock("../api/client", () => ({
+vi.mock("../api/client", async (original) => ({
+  ...(await original<typeof import("../api/client")>()),
   requestJson: vi.fn(),
   requestForm: vi.fn(),
 }));

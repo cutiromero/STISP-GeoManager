@@ -1372,7 +1372,14 @@ describe("application critical flows", () => {
       screen.getByRole("button", { name: /^地理工作台$/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^数据分析$/ }),
+      screen.queryByRole("button", { name: /^数据分析$/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^数据资源/ }),
+    ).toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByRole("button", { name: /^数据资源/ }));
+    expect(
+      await screen.findByRole("menuitem", { name: /数据分析/ }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /后台管理/ }),

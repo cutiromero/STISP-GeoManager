@@ -29,6 +29,11 @@ const exclusions = new Set([
 ]);
 const stamp = `${Date.now()}-${process.pid}`;
 const output = join(frontend, "test-results", "browser-runs", stamp);
+const externalFixtures = [
+  "backend/apps/knowledge/seed_entries.json",
+  "backend/apps/knowledge/seed_entries_20261009.json",
+  "backend/apps/knowledge/seed_entries_20261010.json",
+];
 // =======================================================
 
 async function hashes(root) {
@@ -56,6 +61,7 @@ async function hashes(root) {
 }
 
 let mirror;
+let mirrorRoot;
 let code = 1;
 let child;
 const forward = (signal) => child?.kill(signal);
@@ -73,7 +79,8 @@ try {
     Array.from(frontend).some((character) => character.codePointAt(0) > 127)
   ) {
     // Vitest browser mocks mismatch percent-encoded non-ASCII module URLs.
-    mirror = await mkdtemp(join(tmpdir(), "stisp-browser-"));
+    mirrorRoot = await mkdtemp(join(tmpdir(), "stisp-browser-"));
+    mirror = join(mirrorRoot, "frontend");
     await cp(frontend, mirror, {
       recursive: true,
       filter: (path) => {
@@ -92,11 +99,19 @@ try {
       join(mirror, ".cache/card-assets"),
       { recursive: true },
     );
+    for (const fixture of externalFixtures) {
+      const source = join(frontend, "..", fixture);
+      const target = join(mirrorRoot, fixture);
+      await mkdir(dirname(target), { recursive: true });
+      await cp(source, target);
+      if (!Buffer.from(await readFile(source)).equals(await readFile(target)))
+        throw new Error(`Browser fixture mirror differs: ${fixture}`);
+    }
     cwd = mirror;
     config = "vitest.browser.mirror.config.mjs";
     await writeFile(
       join(mirror, config),
-      `import {mergeConfig,defineConfig} from 'vitest/config';\nimport base from './vitest.browser.config.ts';\nexport default mergeConfig(base,defineConfig({cacheDir:'.test-cache',server:{fs:{allow:${JSON.stringify([mirror, dependencies])}}}}));\n`,
+      `import {mergeConfig,defineConfig} from 'vitest/config';\nimport base from './vitest.browser.config.ts';\nexport default mergeConfig(base,defineConfig({cacheDir:'.test-cache',server:{fs:{allow:${JSON.stringify([mirror, dependencies, join(mirrorRoot, "backend/apps/knowledge")])}}}}));\n`,
     );
     const copied = await hashes(mirror);
     for (const [name, digest] of Object.entries(before)) {
@@ -157,6 +172,6 @@ try {
 } finally {
   process.removeListener("SIGINT", forward);
   process.removeListener("SIGTERM", forward);
-  if (mirror) await rm(mirror, { recursive: true, force: true });
+  if (mirrorRoot) await rm(mirrorRoot, { recursive: true, force: true });
 }
 process.exitCode = code;
