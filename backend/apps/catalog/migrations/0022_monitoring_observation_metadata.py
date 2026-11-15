@@ -9,7 +9,6 @@ class Migration(migrations.Migration):
     dependencies = [
         ("catalog", "0021_shareinvitation"),
         ("projects", "0004_project_deleted_at"),
-        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
