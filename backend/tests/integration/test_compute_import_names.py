@@ -111,3 +111,44 @@ def test_default_retry_upgrades_failed_legacy_name_without_new_record(setup_comp
     assert retried.error == ""
     assert retried.name != legacy_name
     assert retried.name.endswith(f"[{task.id.hex[:8]}/{output.id}]")
+
+
+def test_automatic_explicit_names_are_unique_and_failed_retry_keeps_identity(
+    setup_compute,
+):
+    env = setup_compute
+    records = []
+    for index in range(2):
+        env["body"]["idempotencyKey"] = f"automatic-named-table-{index}"
+        task, _ = make_output(env, "table", "series.csv")
+        task.refresh_from_db()
+        output = ComputeOutput.objects.create(
+            task=task,
+            key="series",
+            label="历史观测序列",
+            kind="table",
+            file_name="series.csv",
+            path="unused.csv",
+            size_bytes=0,
+            checksum="a" * 64,
+        )
+        with task_scope(task):
+            record = request_output_import(
+                env["owner"],
+                output,
+                "同一区域历史观测序列",
+                request_source=f"workflow:{task.id}",
+            )
+            assert record.name.endswith(f"[{task.id.hex[:8]}/{output.id}]")
+            record.status = "failed"
+            record.save(update_fields=["status"])
+            retried = request_output_import(
+                env["owner"],
+                output,
+                "同一区域历史观测序列",
+                request_source=f"workflow:{task.id}",
+            )
+            assert retried.id == record.id and retried.name == record.name
+            assert retried.status == "queued"
+        records.append(record)
+    assert records[0].name != records[1].name

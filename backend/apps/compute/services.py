@@ -95,11 +95,16 @@ def request_output_import(user, output, name="", *, request_source=""):
         require_automatic_quality(output)
     explicit_name = name not in ("", None)
     legacy_default_name = output.task.name + " · " + output.label
-    if not explicit_name:
+    if not explicit_name or request_source:
         # An output has a stable, unique ID even when tasks and labels repeat.
         # Keep it outside the clipped human-readable part of a long name.
         suffix = f" [{output.task_id.hex[:8]}/{output.id}]"
-        name = display_text(legacy_default_name)[: 160 - len(suffix)].rstrip() + suffix
+        base = display_text(name if explicit_name else legacy_default_name)
+        name = (
+            base
+            if base.endswith(suffix)
+            else base[: 160 - len(suffix)].rstrip() + suffix
+        )
     else:
         name = display_text(name)
     name = clean_text(name, 160, "入库名称")
@@ -119,10 +124,15 @@ def request_output_import(user, output, name="", *, request_source=""):
             )
         if not created and record.status in {"queued", "failed"}:
             record.status, record.error = "queued", ""
-            if not explicit_name and record.name not in {
-                legacy_default_name,
-                display_text(legacy_default_name),
-            }:
+            if (
+                not explicit_name
+                and not request_source
+                and record.name
+                not in {
+                    legacy_default_name,
+                    display_text(legacy_default_name),
+                }
+            ):
                 # Omitted names preserve an earlier custom name. Legacy automatic
                 # names are upgraded so a duplicate-name failure can be retried.
                 name = display_text(record.name)
