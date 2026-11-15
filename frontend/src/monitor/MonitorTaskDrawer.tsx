@@ -27,6 +27,7 @@ export default function MonitorTaskDrawer({
   launchOptions,
   launchKey,
   launchReady = true,
+  fixedInputs = false,
 }: {
   page?: MonitoringProductList;
   flow?: BusinessFlowRun;
@@ -43,6 +44,7 @@ export default function MonitorTaskDrawer({
   launchOptions?: import("react").ReactNode;
   launchKey?: string;
   launchReady?: boolean;
+  fixedInputs?: boolean;
 }) {
   const ui = useComputeText();
   const navigate = useNavigate();
@@ -161,7 +163,7 @@ export default function MonitorTaskDrawer({
               model={bootstrap.defaultAgentModel}
               compact
               presentation="task"
-              fixedInputs
+              fixedInputs={fixedInputs}
               initialInputs={initialInputs}
               inputLabels={inputLabels}
               parameters={parameters}

@@ -1,4 +1,14 @@
-import { Alert, Button, Checkbox, Select, Slider, Space, Spin } from "antd";
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Drawer,
+  Select,
+  Slider,
+  Space,
+  Spin,
+} from "antd";
+import { useState } from "react";
 import {
   observationProducts,
   type MonitoringWorkspace,
@@ -7,9 +17,60 @@ import "./monitor-workspace.css";
 
 export default function MonitoringSourceControls({
   workspace: w,
+  compact = false,
 }: {
   workspace: MonitoringWorkspace;
+  compact?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  if (compact)
+    return (
+      <div className="monitor-source-summary">
+        <Button size="small" block onClick={() => setOpen(true)}>
+          选择资料与时相
+        </Button>
+        <span title={w.source?.resource.name}>
+          {w.scene === "wildfire"
+            ? w.time
+              ? `${observationProducts.find((row) => row.value === w.product)?.label} · ${w.time.date} — ${w.time.endDate}`
+              : "请选择观测时期"
+            : `解译时相：${w.inputSet?.label ?? "请选择时相组合"}`}
+        </span>
+        <span className="monitor-source-name" title={w.source?.resource.name}>
+          {w.source?.resource.name ?? "尚未选择原始资料"}
+        </span>
+        <Space wrap>
+          <Checkbox
+            checked={w.sourceVisible}
+            onChange={(event) => w.setSourceVisible(event.target.checked)}
+          >
+            原始图层
+          </Checkbox>
+          <Checkbox
+            checked={w.resultVisible}
+            onChange={(event) => w.setResultVisible(event.target.checked)}
+          >
+            成果图层
+          </Checkbox>
+        </Space>
+        {w.error && <span role="alert">{w.error}</span>}
+        <Drawer
+          open={open}
+          title="原始资料与观测时相"
+          size={480}
+          onClose={() => setOpen(false)}
+          destroyOnHidden
+          className="monitor-task-drawer"
+          footer={
+            <Button type="primary" onClick={() => setOpen(false)}>
+              完成选择
+            </Button>
+          }
+        >
+          <MonitoringSourceControls workspace={w} />
+        </Drawer>
+      </div>
+    );
   return (
     <div className="monitor-source-controls">
       {w.error && (

@@ -109,3 +109,19 @@
 .monitor-source-controls .ant-checkbox-wrapper {
   display: inline-flex;
 }
+
+.monitor-source-summary {
+  display: grid;
+  gap: 7px;
+  padding: 7px 0;
+}
+.monitor-source-summary > span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.monitor-source-name {
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  color: var(--monitor-muted);
+}

@@ -34,6 +34,7 @@ export default function WildfireTaskDrawer({ workspace: w, ...props }: Props) {
   return (
     <MonitorTaskDrawer
       {...props}
+      fixedInputs
       page={page}
       title="野火观测制图任务"
       initialInputs={w.inputs}

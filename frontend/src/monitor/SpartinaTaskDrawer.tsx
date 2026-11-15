@@ -25,6 +25,7 @@ export default function SpartinaTaskDrawer({ workspace: w, ...props }: Props) {
   return (
     <MonitorTaskDrawer
       {...props}
+      fixedInputs
       page={page}
       title="互花米草解译任务"
       initialInputs={w.inputs}

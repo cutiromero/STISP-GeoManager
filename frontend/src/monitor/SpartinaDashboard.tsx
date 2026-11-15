@@ -467,17 +467,7 @@ export default function SpartinaDashboard({
                     <i className="spartina-color" />
                     互花米草
                   </Checkbox>
-                  <MonitoringSourceControls workspace={workspace} />
-                  <p className="spartina-secondary">
-                    原图、分类与概率按同一位置查看
-                  </p>
-                  {metric("coverage_percent") != null && (
-                    <div className="spartina-coverage">
-                      <span
-                        style={{ width: `${metric("coverage_percent")}%` }}
-                      />
-                    </div>
-                  )}
+                  <MonitoringSourceControls workspace={workspace} compact />
                 </div>
               </MonitorPanel>
               <MonitorPanel title="方法与输入">

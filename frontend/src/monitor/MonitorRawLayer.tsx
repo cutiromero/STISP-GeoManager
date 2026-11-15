@@ -69,6 +69,7 @@ export default function MonitorRawLayer({
     setStatus("准备原始图层…");
     const load = async () => {
       const native = source.metadata.sourceSchema.kind === "native_cube";
+      let sampling: "nearest" | "linear" = "nearest";
       if (native) {
         if (!w.time) {
           setStatus("请选择观测时期");
@@ -130,6 +131,7 @@ export default function MonitorRawLayer({
         signal.throwIfAborted();
         const result = job.result as RasterRenderResult | undefined;
         if (!map.getStyle() || !result?.tileUrl) return;
+        sampling = result.tileSampling;
         map.addSource("monitor-raw", {
           type: "raster",
           tiles: [
@@ -157,7 +159,7 @@ export default function MonitorRawLayer({
           source: "monitor-raw",
           paint: {
             "raster-opacity": w.sourceOpacity / 100,
-            "raster-resampling": "nearest",
+            "raster-resampling": sampling,
           },
         },
         before,

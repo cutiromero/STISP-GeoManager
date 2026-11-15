@@ -360,7 +360,7 @@ export default function WildfireDashboard({
               </div>
               <MonitorPanel title="时期与观测源">
                 <div className="wildfire-card-body">
-                  <MonitoringSourceControls workspace={workspace} />
+                  <MonitoringSourceControls workspace={workspace} compact />
                   {selected?.observedStart && (
                     <p className="wildfire-period">
                       {selected.observedStart}
