@@ -505,8 +505,9 @@ export default function WildfireDashboard({
                   </span>
                   <details>
                     <summary>模型接入资料</summary>
-                    <p>5组U-Net++权重已归档</p>
-                    <p>训练归一化、缺测处理与目标期配置待补充</p>
+                    <p>5组U-Net++权重已核对</p>
+                    <p>预处理试算：变量标准化，缺测值 −1</p>
+                    <p>权重：w1 / w2 / w4 / w8 / w16</p>
                   </details>
                   {catalog?.cube && (
                     <Button
