@@ -187,7 +187,8 @@ def main():
             },
         )
     task = wait(task.pk)
-    with project_scope(scope):
+    with project_scope(scope), transaction.atomic():
+        Project.objects.filter(pk=project.pk).update(name=F("name"))
         records = [
             request_output_import(actor, output)
             for output in task.outputs.filter(
