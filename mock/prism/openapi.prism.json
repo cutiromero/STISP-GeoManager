@@ -53825,7 +53825,7 @@
           },
           "parameters": {
             "type": "object",
-            "description": "受控任务参数，不新增任意根级配置。research_flow仅允许nodeParameters对象（operator节点ID→该已发布算法manifest声明的参数值对象）；节点必须存在且类型为operator，未知节点/参数键不静默忽略。与冻结node.parameters默认值合并后，真实取值、类型、字段和波段仍由计算中心验证。geology_generic只允许既有专业参数及uploadBatchId；禁止_businessFlow等内部状态。",
+            "description": "受控任务参数，不新增任意根级配置。research_flow仅允许nodeParameters对象（operator节点ID→该已发布算法manifest声明的参数值对象）；节点必须存在且类型为operator，未知节点/参数键不静默忽略。与冻结node.parameters默认值合并后，固定必填参数的缺失、类型及范围在任务创建前校验，非法返回400且不消耗模型调用；真实字段、波段和来源仍由计算中心预检验证。geology_generic只允许既有专业参数及uploadBatchId；禁止_businessFlow等内部状态。",
             "additionalProperties": true
           },
           "conversationId": {

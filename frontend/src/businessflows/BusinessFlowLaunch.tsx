@@ -43,6 +43,9 @@ import ReasoningEffortControl, {
   type ReasoningEffort,
 } from "../agent/ReasoningEffortControl";
 import TaskBudgetControl from "../agent/TaskBudgetControl";
+import WildfireLaunchOptions, {
+  type WildfireLaunchSelection,
+} from "./WildfireLaunchOptions";
 import "./business-flows.css";
 import "./business-flow-launch.css";
 
@@ -85,6 +88,9 @@ export default function BusinessFlowLaunch({
   const ui = useComputeText();
   const { bootstrap } = useAgentBootstrapState();
   const [version, setVersion] = useState<BusinessFlowVersion>();
+  const [flowCode, setFlowCode] = useState("");
+  const [wildfireSelection, setWildfireSelection] =
+    useState<WildfireLaunchSelection>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -204,6 +210,8 @@ export default function BusinessFlowLaunch({
     setLoading(true);
     setError("");
     setVersion(undefined);
+    setFlowCode("");
+    setWildfireSelection(undefined);
     if (
       !Number.isSafeInteger(launch.definitionId) ||
       launch.definitionId < 1 ||
@@ -227,6 +235,7 @@ export default function BusinessFlowLaunch({
         if (!result.flow.isActive)
           throw new Error("此业务流已停用，不能启动新任务。");
         setVersion(selected);
+        setFlowCode(result.flow.code);
       })
       .catch((reason) => {
         if (!controller.signal.aborted)
@@ -240,6 +249,15 @@ export default function BusinessFlowLaunch({
     return () => controller.abort();
   }, [launch.definitionId, launch.versionId, attempt]);
   const isLegacy = version?.definition.adapter === "geology_generic";
+  const suppliedNodes = parameters?.nodeParameters as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+  const needsWildfireSelection =
+    flowCode === "wildfire-history-observation" &&
+    !Number.isInteger(suppliedNodes?.interpret?.time_index);
+  const wildfireReady =
+    !needsWildfireSelection ||
+    Boolean(wildfireSelection && wildfireSelection.resourceId === inputs.cube);
   const inputRequest = {
     versionId: launch.versionId,
     inputs,
@@ -453,6 +471,10 @@ export default function BusinessFlowLaunch({
       setError("请先完成输入适配方案，当前任务尚未启动。");
       return;
     }
+    if (!wildfireReady) {
+      setError("请先选择有效的野火观测产品与时期。");
+      return;
+    }
     if (!model || !bootstrap?.canAgent || !bootstrap.workerOnline) {
       setError("智能体执行服务尚未就绪，请连接成功后再开始。");
       return;
@@ -464,7 +486,10 @@ export default function BusinessFlowLaunch({
     setError("");
     const body = {
       versionId: version.id,
-      goal: goal.trim(),
+      goal:
+        needsWildfireSelection && wildfireSelection
+          ? `${goal.trim()}\n本次确认的观测选择：${wildfireSelection.summary}`
+          : goal.trim(),
       model,
       reviewerModel,
       ...(thinkingAvailable ? { reasoningEffort: effort } : {}),
@@ -479,7 +504,20 @@ export default function BusinessFlowLaunch({
       inputs: Object.fromEntries(
         Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b)),
       ),
-      parameters: isLegacy ? { uploadBatchId: batchId } : (parameters ?? {}),
+      parameters: isLegacy
+        ? { uploadBatchId: batchId }
+        : needsWildfireSelection && wildfireSelection
+          ? {
+              ...parameters,
+              nodeParameters: {
+                ...suppliedNodes,
+                interpret: {
+                  ...suppliedNodes?.interpret,
+                  ...wildfireSelection.parameters,
+                },
+              },
+            }
+          : (parameters ?? {}),
       inputAdapters: Object.fromEntries(
         (preparation?.plan?.items ?? [])
           .filter((item) => item.status === "convert" && item.versionId)
@@ -525,6 +563,7 @@ export default function BusinessFlowLaunch({
     !busy &&
     !uploading &&
     inputReady &&
+    wildfireReady &&
     !missing.length &&
     goal.trim(),
   );
@@ -592,6 +631,13 @@ export default function BusinessFlowLaunch({
                     autoSize={{ minRows: 2, maxRows: 5 }}
                   />
                 </label>
+                {needsWildfireSelection && (
+                  <WildfireLaunchOptions
+                    key={`${candidateScope}:${inputs.cube ?? "none"}`}
+                    resourceId={inputs.cube}
+                    onChange={setWildfireSelection}
+                  />
+                )}
                 <SettingsTag className="business-flow-launch-settings">
                   {presentation === "task" && (
                     <summary>{ui("高级设置", "Advanced settings")}</summary>

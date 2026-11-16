@@ -4,6 +4,7 @@ from copy import deepcopy
 from uuid import uuid4
 
 from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 import pytest
 
@@ -12,6 +13,7 @@ from apps.agent.policy import default_policy
 from apps.business_flows import catalog, engine, runtime
 from apps.business_flows.builtins import source_summary_definition
 from apps.business_flows.state import state
+from apps.agent.models import AgentWorkflow
 from apps.compute.data import inspect_output
 from apps.compute.models import ComputeOutput, ComputeTask
 from apps.compute.packages import checksum
@@ -20,6 +22,48 @@ from apps.projects.context import ProjectScope, project_scope
 from tests.integration.test_compute import setup_compute  # noqa: F401
 
 # ruff: noqa: F811
+
+
+def test_missing_fixed_launch_parameter_creates_no_workflow_and_accepts_user_zero(
+    operators,
+):
+    env = operators
+    manifest = deepcopy(env["version"].manifest)
+    manifest["parameters"].append(
+        {
+            "key": "time_index",
+            "label": "原始时间索引",
+            "type": "integer",
+            "required": True,
+            "min": 0,
+            "agent": {"adjustable": False},
+        }
+    )
+    env["version"].manifest = manifest
+    env["version"].save(update_fields=["manifest"])
+    with project_scope(env["scope"]):
+        before = AgentWorkflow.objects.count()
+        with pytest.raises(ValidationError, match="原始时间索引"):
+            env["create"](ai=False)
+        assert AgentWorkflow.objects.count() == before
+        from apps.business_flows.models import BusinessFlowVersion
+
+        version = BusinessFlowVersion.objects.order_by("-id").first()
+        assert version is not None
+        workflow = runtime.start_flow(
+            env["owner"],
+            version,
+            {
+                "model": "mock",
+                "inputs": {"source": env["resource"].pk},
+                "goal": "确认原始时期后计算",
+                "parameters": {"nodeParameters": {"calculate": {"time_index": 0}}},
+                "idempotencyKey": uuid4().hex,
+            },
+        )
+        assert workflow.parameters["nodeParameters"]["calculate"]["time_index"] == 0
+        assert workflow.steps.count() == 0
+        assert not ComputeTask.objects.filter(owner=env["owner"], trial=False).exists()
 
 
 @pytest.fixture

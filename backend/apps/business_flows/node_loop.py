@@ -408,6 +408,9 @@ def submission(workflow, user, policy, node, loop, arguments, *, source_state=No
         **workflow.parameters.get("nodeParameters", {}).get(node["id"], {}),
         **loop.get("humanParameters", {}),
     }
+    from .launch_parameters import require_fixed_parameters
+
+    require_fixed_parameters(version.manifest, baseline)
     from . import logic_nodes
 
     fixed_keys = set(parameters) - adjustable
@@ -1583,6 +1586,8 @@ def advance_tool_execution(
             )
         return None
     except (ComputeError, ValidationError) as error:
+        from .launch_parameters import MissingFixedParameters
+
         failure = observation(error)
         if loop.get("pending"):
             action = loop["pending"]["action"]
@@ -1606,8 +1611,10 @@ def advance_tool_execution(
                 {"failure": failure, "message": str(error)[:1000]},
                 arguments=arguments,
             )
-            if failure.get("remedy") in NO_RETRY or failure["code"].startswith(
-                "PLATFORM_"
+            if (
+                isinstance(error, MissingFixedParameters)
+                or failure.get("remedy") in NO_RETRY
+                or failure["code"].startswith("PLATFORM_")
             ):
                 wait_recovery(workflow, node, item, failure)
         else:

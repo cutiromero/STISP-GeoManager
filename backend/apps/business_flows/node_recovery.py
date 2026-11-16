@@ -168,6 +168,28 @@ def decide_recovery(user, workflow, value):
                         )
                 current.plan.pop("inputAdaptationComplete", None)
             loop = loop_state(item)
+            if (
+                item["recovery"].get("failure", {}).get("code")
+                == "NODE_PARAMETERS_MISSING"
+            ):
+                from apps.compute.models import AlgorithmVersion
+                from .launch_parameters import require_fixed_parameters
+
+                version_id = (
+                    loop.get("baseVersionId")
+                    or node.get("algorithmVersionId")
+                    or item["recovery"]["failure"].get("versionId")
+                )
+                version = AlgorithmVersion.objects.get(pk=version_id)
+                require_fixed_parameters(
+                    version.manifest,
+                    {
+                        **node.get("parameters", {}),
+                        **current.parameters.get("nodeParameters", {}).get(node_id, {}),
+                        **loop.get("humanParameters", {}),
+                        **parameters,
+                    },
+                )
             if parameters:
                 from apps.compute.models import AlgorithmVersion
                 from apps.agent.business_flow_operator_repair import _effective, _specs
@@ -181,6 +203,7 @@ def decide_recovery(user, workflow, value):
                 _effective(
                     {
                         **node.get("parameters", {}),
+                        **current.parameters.get("nodeParameters", {}).get(node_id, {}),
                         **loop.get("humanParameters", {}),
                         **parameters,
                     },

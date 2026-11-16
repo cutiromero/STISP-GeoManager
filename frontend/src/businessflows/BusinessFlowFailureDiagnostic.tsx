@@ -6,14 +6,11 @@ export default function BusinessFlowFailureDiagnostic({
   value?: Diagnostic;
 }) {
   if (!value) return null;
+  const parameterCheck = value.code === "NODE_PARAMETERS_MISSING";
   const analysis =
-    value.analysisStatus === "completed" ? (
+    value.analysisStatus === "completed" || parameterCheck ? (
       <>
-        <h4>
-          {value.analysisStatus === "completed"
-            ? "原因分析"
-            : "原因分析暂不可用"}
-        </h4>
+        <h4>{parameterCheck ? "参数检查" : "原因分析"}</h4>
         <p>{value.analysis}</p>
         <h4>处理建议</h4>
         <ul>

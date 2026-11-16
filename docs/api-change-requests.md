@@ -1,5 +1,19 @@
 # API Change Requests
 
+## API-20261116-003 - 业务流启动固定参数准入
+
+- Status: BackendReady
+- Owner: codex/xintao。
+- Endpoints: POST /api/business-flows/{flowId}/start/；POST /api/business-flows/runs/{workflowId}/decide/。
+- Change type: 沿用400错误响应和既有parameters.nodeParameters；缺少必填固定参数或值类型/范围非法时在创建任务前拒绝。旧任务缺参以既有恢复结构返回NODE_PARAMETERS_MISSING，空白继续不能重新入队。
+- OpenAPI change: BusinessFlowStart.parameters说明补充固定参数启动校验；DTO字段不变。
+- Mock examples: 145-business-flow-node-recovery.json，沿用恢复响应与原启动参数。
+- Frontend reason: 通用野火入口也选择真实产品、日期与趋势范围，避免只绑定立方体后让模型猜测时间索引；大屏已确认参数直接沿用。
+- Backend implementation notes: 元信息校验，不扫描科学文件、不修改冻结算子和已有任务配置；确定的缺参错误直接诊断，不增加AI诊断调用，保留模型与算子预算。
+- Verification: 缺参不创建任务、零索引及大于966的真实索引、非法索引、旧任务首次预检暂停、空恢复拒绝、通用日期选择与大屏选择复用、真实野火候选计算与入库。
+- Result: 本地已实现，完成回归及候选验收后发布。
+
+
 ## API-20261116-002 - 保存工程的分类瓦片缓存恢复
 
 - Status: BackendReady
@@ -808,6 +822,7 @@ Status: BackendReady。本任务依次完成契约、后端、前端三个职责
 
 | ID | Status | Endpoint | Change Type | OpenAPI | Mock | Backend | Tests | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| API-20261116-003 | BackendReady | business-flow start/decide | 400准入及恢复语义 | BusinessFlowStart | 145 | 已实现 | 回归与真实候选验收 | 确认固定参数，不重复消耗调用 |
 | API-20261116-002 | BackendReady | raster/render/async | additive请求字段 | RasterRenderAsyncRequest | 40 | 已实现 | 定点及正式工程验收 | 服务端保存样式恢复、ACL及缓存缺失 |
 | API-20261116-001 | BackendReady | catalog成果/版本与文件 | additive字段及缺失404 | MapCompositionVersion、ResultArtifact | 50、55 | 已实现 | 后端及浏览器回归通过 | 文件状态、后台生成与原件缺失边界 |
 | API-20261115-003 | BackendReady | 原始时间及栅格输入合同 | 默认全域与原图时间浏览 | Updated | 172-monitoring-workspace.json | Implemented | 正式站验证通过 | 当前期与趋势区间分离 |

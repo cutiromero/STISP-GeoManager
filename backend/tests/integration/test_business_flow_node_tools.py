@@ -225,6 +225,59 @@ def action(name, **arguments):
     return {"action": name, "arguments": arguments}
 
 
+def test_legacy_missing_fixed_configuration_pauses_at_first_preflight_without_extra_diagnosis(
+    operators, monkeypatch
+):
+    env = operators
+    upgrade(env)
+    workflow = create(env)
+    manifest = deepcopy(env["version"].manifest)
+    manifest["parameters"].append(
+        {
+            "key": "time_index",
+            "label": "原始时间索引",
+            "type": "integer",
+            "required": True,
+            "min": 0,
+            "agent": {"adjustable": False},
+        }
+    )
+    env["version"].manifest = manifest
+    env["version"].save(update_fields=["manifest"])
+    calls = install(
+        monkeypatch,
+        [
+            action("operator_catalog"),
+            action(
+                "preflight_operator",
+                **submit_args(env, parameters={"time_index": "all"}),
+            ),
+        ],
+    )
+    item = advance(env, workflow, 2)
+    assert len(calls) == 2
+    assert item["status"] == "waiting_recovery"
+    assert item["recovery"]["failure"]["code"] == "NODE_PARAMETERS_MISSING"
+    assert item["toolLoop"]["modelCalls"] == 2
+    assert item["toolLoop"]["operatorCalls"] == 0
+    assert "重复读取" in item["recovery"]["diagnostic"]["analysis"]
+    with project_scope(env["scope"]), pytest.raises(ComputeError, match="原始时间索引"):
+        runtime.decide_flow(
+            env["owner"],
+            workflow,
+            {
+                "nodeId": "calculate",
+                "decision": "retry_recovery",
+                "feedback": "继续",
+                "recoveryParameters": {},
+                "idempotencyKey": uuid4().hex,
+                "revision": state(workflow)["revision"],
+            },
+        )
+    workflow.refresh_from_db()
+    assert state(workflow)["nodes"]["calculate"]["toolLoop"]["modelCalls"] == 2
+
+
 def test_tool_result_returns_to_queue_without_waiting_for_stale_worker_recovery(
     operators, monkeypatch
 ):

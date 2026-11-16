@@ -198,6 +198,15 @@ def diagnose(workflow, node, recovery):
         ],
     }
     recovery["diagnostic"] = diagnostic
+    if failure.get("code") == "NODE_PARAMETERS_MISSING":
+        diagnostic["analysis"] = (
+            "平台已确认缺少必填固定参数，尚未提交计算；重复读取配置不能补齐用户选择。"
+        )
+        diagnostic["suggestions"] = [
+            "在启动准备中选择真实观测产品和日期；已有任务可填写缺少的已确认参数后从本节点继续。",
+            "无需重复读取同一配置或猜测时间索引；固定科学参数必须由用户明确选择。",
+        ]
+        return
     if recovery.get("permissionBlocked"):
         diagnostic["analysis"] = (
             "当前访问或执行权限不足，未发送AI诊断请求；请先恢复真实权限。"

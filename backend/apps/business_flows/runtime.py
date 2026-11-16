@@ -515,6 +515,18 @@ def start_flow(user, version, value, *, source_run=None):
                 item["key"] for item in algorithm.manifest["parameters"]
             }:
                 raise ValidationError("启动参数包含算子清单未声明字段")
+        from .launch_parameters import require_fixed_parameters
+
+        for identity, node in operators.items():
+            algorithm = versions_by_id.get(node["algorithmVersionId"])
+            if algorithm is not None:
+                try:
+                    require_fixed_parameters(
+                        algorithm.manifest,
+                        {**node.get("parameters", {}), **supplied.get(identity, {})},
+                    )
+                except ComputeError as error:
+                    raise ValidationError(f"{node['title']}：{error}") from error
     reviewer = value.get("reviewerModel") or model
     reviewer_aliases = {
         node["review"].get("model") or reviewer
