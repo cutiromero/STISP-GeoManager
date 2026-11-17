@@ -39,6 +39,33 @@ const operation = (
 
 afterEach(() => vi.restoreAllMocks());
 
+it("shows an unavailable state instead of asking to confirm a stopped run", async () => {
+  vi.spyOn(agentOperationsApi, "list").mockResolvedValue({
+    runId: 7,
+    projectId: 3,
+    items: [
+      operation({
+        canConfirm: false,
+        detail: "本轮已停止，不能执行待确认操作",
+      }),
+    ],
+  });
+  const decide = vi.spyOn(agentOperationsApi, "decide");
+  render(
+    <App>
+      <PlatformOperationsPanel projectId={3} accountId={1} runIds={[7]} />
+    </App>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /平台操作/ }));
+  expect(await screen.findByText("当前不可执行")).toBeVisible();
+  expect(screen.getByText("本轮已停止，不能执行待确认操作")).toBeVisible();
+  expect(screen.queryByText("待您确认")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "确认执行此操作" }),
+  ).not.toBeInTheDocument();
+  expect(decide).not.toHaveBeenCalled();
+});
+
 it("loads on demand and confirms only the exact displayed preview", async () => {
   const item = operation();
   const list = vi

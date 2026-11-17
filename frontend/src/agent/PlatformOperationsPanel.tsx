@@ -271,12 +271,16 @@ export default function PlatformOperationsPanel({
             title={operation.preview.title}
             extra={
               <Tag>
-                {stateLabel(
-                  expired && operation.status === "pending"
-                    ? "expired"
-                    : operation.status,
-                  operation.kind,
-                )}
+                {operation.status === "pending" &&
+                !expired &&
+                !operation.canConfirm
+                  ? ui("当前不可执行", "Currently unavailable")
+                  : stateLabel(
+                      expired && operation.status === "pending"
+                        ? "expired"
+                        : operation.status,
+                      operation.kind,
+                    )}
               </Tag>
             }
           >
