@@ -1,9 +1,11 @@
 {
   "name": "data-sharing-platform-frontend",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "agent:contracts:generate": "python ../scripts/generate_agent_contracts.py",
+    "agent:contracts:check": "python ../scripts/generate_agent_contracts.py --check",
     "dev": "vite --host 127.0.0.1",
     "api:lint": "redocly lint ../docs/openapi.yaml --config ./redocly.yaml",
     "api:bundle": "node scripts/ensure-dir.mjs generated && redocly bundle ../docs/openapi.yaml --config ./redocly.yaml -o generated/openapi-bundled.yaml --ext yaml",
@@ -21,7 +23,7 @@
     "demo:record": "node scripts/record-demo.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "build": "vite build",
-    "build:verify": "pnpm run brand:check && pnpm run i18n:check && pnpm run check:api && pnpm run typecheck && pnpm run check:efficiency && vite build --base=/static/",
+    "build:verify": "pnpm run agent:contracts:check && pnpm run brand:check && pnpm run i18n:check && pnpm run check:api && pnpm run typecheck && pnpm run check:efficiency && vite build --base=/static/",
     "check:efficiency": "vitest --config vitest.config.ts run efficiency",
     "check:efficiency:browser": "node scripts/run-browser-check.mjs efficiency",
     "perf:mock": "node scripts/perf-mock.mjs",

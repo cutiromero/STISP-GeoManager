@@ -14606,6 +14606,544 @@ export type BusinessFlowInputBinding = {
 };
 
 /**
+ * 查找当前项目已发布科研业务流，返回版本、资料规范、节点和审核边界；query可选。优先用于有定制流程的复杂科研任务。
+ */
+export type AgentToolListBusinessFlowsArguments = {
+    /**
+     * 当前授权范围内的检索关键词；空值是否允许取决于工具用途
+     */
+    query?: string;
+    /**
+     * 从0开始的分页位置
+     */
+    offset?: number;
+    /**
+     * 本次读取上限；完整性和下一页位置以真实返回值为准
+     */
+    limit?: number;
+};
+
+/**
+ * 只读规划业务流输入：versionId、inputs必需，inputAdapters和uploadBatchId可选。按真实资料与流程规范查已发布转换能力，返回字段、候选工具和需补参数；不启动计算。来源格式不同不能直接判定任务不可做。
+ */
+export type AgentToolPrepareBusinessFlowInputsArguments = {
+    /**
+     * 真实已发布且允许智能体使用的版本编号
+     */
+    versionId: number;
+    /**
+     * 角色键到真实资料编号的映射，角色取对应发布清单
+     */
+    inputs: {
+        [key: string]: number;
+    };
+    /**
+     * 由既有业务流规范定义的资料适配选择
+     */
+    inputAdapters?: BusinessFlowInputAdapterChoices;
+    /**
+     * 本人本项目的真实资料批次
+     */
+    uploadBatchId?: string;
+};
+
+/**
+ * 按目录真实versionId启动业务流；goal、inputs(角色到已授权资源ID)、parameters可选、reviewerModel可选。必须按该版本资料规范绑定；启动后由业务流处理，不再重复提交算子或伪造人工批准。
+ */
+export type AgentToolStartBusinessFlowArguments = {
+    /**
+     * 真实已发布且允许智能体使用的版本编号
+     */
+    versionId: number;
+    /**
+     * 本次科研业务目标，不授予额外权限或人工批准
+     */
+    goal?: string;
+    /**
+     * 角色键到真实资料编号的映射，角色取对应发布清单
+     */
+    inputs: {
+        [key: string]: number;
+    };
+    /**
+     * 发布清单允许的参数；单位、必填项和范围继续由真实清单验证
+     */
+    parameters?: {
+        [key: string]: unknown;
+    };
+    /**
+     * 策略允许的独立审核模型别名
+     */
+    reviewerModel?: string;
+    /**
+     * 由既有业务流规范定义的资料适配选择
+     */
+    inputAdapters?: BusinessFlowInputAdapterChoices;
+};
+
+/**
+ * 分页查找当前项目数据，query可为空；category为all/compute_results/uploaded_data；offset从0开始，limit默认50，按nextOffset继续；total是真实总数
+ */
+export type AgentToolSearchResourcesArguments = {
+    /**
+     * 当前授权范围内的检索关键词；空值是否允许取决于工具用途
+     */
+    query?: string;
+    /**
+     * 资源来源分类
+     */
+    category?: 'all' | 'compute_results' | 'uploaded_data';
+    /**
+     * 从0开始的分页位置
+     */
+    offset?: number;
+    /**
+     * 本次读取上限；完整性和下一页位置以真实返回值为准
+     */
+    limit?: number;
+};
+
+/**
+ * 全量统计当前授权项目的计算成果与上传/登记数据数量、类型及大小，不读取样本；query可为空，category可筛选
+ */
+export type AgentToolSummarizeResourceCatalogArguments = {
+    /**
+     * 当前授权范围内的检索关键词；空值是否允许取决于工具用途
+     */
+    query?: string;
+    /**
+     * 资源来源分类
+     */
+    category?: 'all' | 'compute_results' | 'uploaded_data';
+};
+
+/**
+ * 直接向用户展示当前项目完整分组目录和总数，计算成果与上传/登记数据自动分类；query可为空，category可筛选。平台直接格式化真实名称，无需模型逐条复述；调用后本轮完成
+ */
+export type AgentToolPresentResourceCatalogArguments = {
+    /**
+     * 当前授权范围内的检索关键词；空值是否允许取决于工具用途
+     */
+    query?: string;
+    /**
+     * 资源来源分类
+     */
+    category?: 'all' | 'compute_results' | 'uploaded_data';
+};
+
+/**
+ * 读取可加载的真实地图概况与完整类别，resourceId；矢量field可选（默认name等实际字段），栅格band默认1。返回categoryField/categories/value/count/suggestedColor、colorLocked、referenceId和colorPolicy，与逻辑推理共用标准及项目约定色；colorLocked不得改色、原表同色保留。分类配色前必须读取。分类最多96项，栅格最多400万像元；不能把不完整类别说成全部。
+ */
+export type AgentToolGetMapDataProfileArguments = {
+    /**
+     * 已登记且当前有权访问的资料正整数编号
+     */
+    resourceId: number;
+    /**
+     * 真实字段名称
+     */
+    field?: string;
+    /**
+     * 从1开始的真实波段编号
+     */
+    band?: number;
+};
+
+/**
+ * 生成真实个人地图工程，原始数据不变，不覆盖已有工程。resourceIds为当前授权资源整数数组，name可选。styles可省略沿用显示方案；优先用mode=reference,field=实际分类字段按共用规则配色，无需classes。命中色表不可改色、原表同色保留，仅未命中类别可建议新色；分类配色格式styles:[{"resourceId":12,"mode":"unique","field":"name","classes":[{"value":"实际类别","label":"显示名称","color":"#e0c080"}]}]，必须覆盖已读取的完整类别。矢量单色mode=single,color=#RRGGBB；分类栅格mode=unique,band=1使用真实整数类别颜色表。返回workspaceId才代表已准备，用户点击按钮加载地图。无需寻找配色计算算子。
+ */
+export type AgentToolPrepareMapWorkspaceArguments = {
+    /**
+     * 当前授权资料编号集合
+     */
+    resourceIds: Array<number>;
+    /**
+     * 仅用于个人地图工程的展示样式，不写入原始资料
+     */
+    styles?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * 本次创建对象的显示名称
+     */
+    name?: string;
+};
+
+/**
+ * 生成站内可用页面按钮；page只能是map/resources/compute/knowledge/business_flows，不接受模型自报网址，自动携带当前项目。
+ */
+export type AgentToolGetPlatformLinkArguments = {
+    /**
+     * 平台固定站内入口，不接受模型自报URL
+     */
+    page: 'map' | 'resources' | 'compute' | 'knowledge' | 'business_flows';
+};
+
+/**
+ * 查看资源说明、字段、记录范围；resourceId
+ */
+export type AgentToolDescribeResourceArguments = {
+    /**
+     * 已登记且当前有权访问的资料正整数编号
+     */
+    resourceId: number;
+};
+
+/**
+ * 读取最多30条样本；resourceId, fields字段数组, filters筛选数组
+ */
+export type AgentToolReadRowsArguments = {
+    /**
+     * 已登记且当前有权访问的资料正整数编号
+     */
+    resourceId: number;
+    /**
+     * 真实字段名列表，不接受SQL表达式
+     */
+    fields?: Array<string>;
+    /**
+     * 结构化属性条件，仍使用原查询语义
+     */
+    filters?: Array<AttributeFilter>;
+};
+
+/**
+ * 确定性统计计数、空值、最小、最大、均值、标准差；resourceId, fields, filters
+ */
+export type AgentToolSummarizeDataArguments = {
+    /**
+     * 已登记且当前有权访问的资料正整数编号
+     */
+    resourceId: number;
+    /**
+     * 真实字段名列表，不接受SQL表达式
+     */
+    fields: Array<string>;
+    /**
+     * 结构化属性条件，仍使用原查询语义
+     */
+    filters?: Array<AttributeFilter>;
+};
+
+/**
+ * 按groupBy字段分组统计field数值；metric为count/sum/mean/min/max；resourceId,groupBy,field,metric,filters
+ */
+export type AgentToolAggregateDataArguments = {
+    /**
+     * 已登记且当前有权访问的资料正整数编号
+     */
+    resourceId: number;
+    /**
+     * 实际分组字段
+     */
+    groupBy: string;
+    /**
+     * 真实字段名称
+     */
+    field?: string;
+    /**
+     * 确定性聚合指标
+     */
+    metric: 'count' | 'sum' | 'mean' | 'min' | 'max';
+    /**
+     * 结构化属性条件，仍使用原查询语义
+     */
+    filters?: Array<AttributeFilter>;
+};
+
+/**
+ * 引用本轮已有summarize_data证据比较，evidenceIds数组，保留单位与口径限制
+ */
+export type AgentToolCompareSummariesArguments = {
+    /**
+     * 本轮已读取且仍获授权的证据编号
+     */
+    evidenceIds: Array<string>;
+};
+
+/**
+ * 读取数据目录中的纯文本资源，resourceId须来自search_resources或用户选定数据；offset字符位置。知识库documentId不能用于此工具，知识文献使用search_knowledge检索
+ */
+export type AgentToolReadDocumentArguments = {
+    /**
+     * 已登记且当前有权访问的资料正整数编号
+     */
+    resourceId: number;
+    /**
+     * 从0开始的分页位置
+     */
+    offset?: number;
+};
+
+/**
+ * 查看平台运行参数、计算运行时和主机资源摘要（需管理员开启）
+ */
+export type AgentToolGetSystemInfoArguments = {
+    /**
+     * 平台参数白名单分区
+     */
+    sections?: Array<string>;
+};
+
+/**
+ * 按query目标关键词查找已发布算法，空格分词（如面积 周长）；返回具体版本完整manifest，先核对输入/参数/输出再执行。query可省略以列出目录
+ */
+export type AgentToolListComputeAlgorithmsArguments = {
+    /**
+     * 当前授权范围内的检索关键词；空值是否允许取决于工具用途
+     */
+    query?: string;
+};
+
+/**
+ * 提交已发布计算算法；versionId、inputs、parameters、name。inputs为对象，键取该版本manifest.inputs[].key、值为资源正整数ID，不能传数组或用资源编号作键；parameters为参数名到值的对象，参数名取manifest.parameters[].key。先核对完整manifest。默认计算后让用户选择入库，仅明确要求自动入库设置autoImport=true。缺少已确认波段/字段时生成计算卡片而不提交。返回taskId才代表实际提交
+ */
+export type AgentToolExecuteOperatorArguments = {
+    /**
+     * 真实已发布且允许智能体使用的版本编号
+     */
+    versionId: number;
+    /**
+     * 角色键到真实资料编号的映射，角色取对应发布清单
+     */
+    inputs: {
+        [key: string]: number;
+    };
+    /**
+     * 发布清单允许的参数；单位、必填项和范围继续由真实清单验证
+     */
+    parameters?: {
+        [key: string]: unknown;
+    };
+    /**
+     * 本次创建对象的显示名称
+     */
+    name?: string;
+    /**
+     * 同一逻辑提交的稳定重试键
+     */
+    idempotencyKey?: string;
+    /**
+     * 仅在用户明确授权自动入库时为true
+     */
+    autoImport?: boolean;
+};
+
+/**
+ * 查询计算任务真实状态及outputs和入库结果；taskId是UUID
+ */
+export type AgentToolGetComputeTaskArguments = {
+    /**
+     * 本任务真实计算任务UUID，不可与输出整数编号混用
+     */
+    taskId: string;
+};
+
+/**
+ * 读取真实计算输出并核对校验和，outputId来自get_compute_task的outputs；CSV可offset/limit分页，栅格返回GDAL近似统计（非因果结论），其他类型返回元信息与预览入口。计算完成后解释前必须读取实际输出
+ */
+export type AgentToolReadComputeOutputArguments = {
+    /**
+     * 真实计算输出正整数编号
+     */
+    outputId: number;
+    /**
+     * 从0开始的分页位置
+     */
+    offset?: number;
+    /**
+     * 本次读取上限；完整性和下一页位置以真实返回值为准
+     */
+    limit?: number;
+};
+
+/**
+ * 查找本人当前项目最近计算任务，可用query筛选名称
+ */
+export type AgentToolListComputeTasksArguments = {
+    /**
+     * 当前授权范围内的检索关键词；空值是否允许取决于工具用途
+     */
+    query?: string;
+};
+
+export type AgentToolImportComputeResultArguments = unknown & {
+    /**
+     * 本任务真实计算任务UUID，不可与输出整数编号混用
+     */
+    taskId?: string;
+    /**
+     * 真实计算输出正整数编号
+     */
+    outputId?: number;
+    /**
+     * 真实清单输出键集合
+     */
+    outputKeys?: Array<string>;
+    /**
+     * 本次创建对象的显示名称
+     */
+    name?: string;
+};
+
+/**
+ * 联合检索已审核知识规则与当前可见文档原文（语义+关键词），返回citation引用、来源和适用条件；query
+ */
+export type AgentToolSearchKnowledgeArguments = {
+    /**
+     * 当前授权范围内的检索关键词；空值是否允许取决于工具用途
+     */
+    query: string;
+};
+
+/**
+ * 按search_knowledge返回的documentId读取知识文献原文；offset从0开始，limit为1至8000字符；返回nextOffset供继续阅读。documentId属于知识库，不是数据resourceId
+ */
+export type AgentToolReadKnowledgeDocumentArguments = {
+    /**
+     * 知识库文献编号，不能替代业务资料resourceId
+     */
+    documentId: string;
+    /**
+     * 从0开始的分页位置
+     */
+    offset?: number;
+    /**
+     * 本次读取上限；完整性和下一页位置以真实返回值为准
+     */
+    limit?: number;
+};
+
+/**
+ * 按知识规则检查结构化facts，返回conflict/pass/needs_context；可选entryIds，缺条件时不能断言通过
+ */
+export type AgentToolCheckKnowledgeConstraintsArguments = {
+    /**
+     * 待核验的有界结构化事实
+     */
+    facts: {
+        [key: string]: unknown;
+    };
+    /**
+     * 知识条目编号集合
+     */
+    entryIds?: Array<number>;
+};
+
+export type AgentToolSearchWebArguments = unknown & {
+    /**
+     * 当前授权范围内的检索关键词；空值是否允许取决于工具用途
+     */
+    query?: string;
+    /**
+     * 待读取的公开HTTP地址，继续执行服务端SSRF及重定向校验
+     */
+    url?: string;
+    /**
+     * 公开联网检索的结果数量上限
+     */
+    maxResults?: number;
+};
+
+/**
+ * 受控Agent能力合同，发现不授予执行权
+ */
+export type AgentCapability = {
+    /**
+     * 稳定工具名
+     */
+    name: string;
+    /**
+     * 策略能力分组
+     */
+    capability: string;
+    /**
+     * 用途及适用条件
+     */
+    description: string;
+    /**
+     * 能力语义版本
+     */
+    version: string;
+    /**
+     * 操作影响类型
+     */
+    effect: string;
+    /**
+     * 影响等级
+     */
+    risk: string;
+    /**
+     * 实际授权要求
+     */
+    approval: string;
+    /**
+     * 重复请求语义
+     */
+    idempotency: string;
+    /**
+     * 重试条件
+     */
+    retry: string;
+    /**
+     * 完成判据
+     */
+    completion: string;
+    /**
+     * 权限与范围限制
+     */
+    limitations: string;
+    /**
+     * 从唯一OpenAPI合同生成的JSON Schema参数说明
+     */
+    inputSchema: {
+        [key: string]: unknown;
+    };
+    /**
+     * 共用业务接口的operationId
+     */
+    operationIds: Array<string>;
+    /**
+     * 共用业务服务或仅在智能体内部提供的受控工具实现
+     */
+    implementation: 'shared_service' | 'internal_service';
+    /**
+     * 全部须具备的功能权限
+     */
+    requiredPermissions: Array<string>;
+    /**
+     * 非空时至少具备其中一项；对象ACL在执行时另行核对
+     */
+    anyPermissions: Array<string>;
+};
+
+/**
+ * 按当前用户及项目策略过滤的能力目录，不包含资料、模型凭据或执行授权
+ */
+export type AgentCapabilityCatalog = {
+    /**
+     * 目录协议版本
+     */
+    schemaVersion: 1;
+    /**
+     * 当前项目编号
+     */
+    projectId: number;
+    /**
+     * 能力发现的身份范围
+     */
+    scope: 'current_user_current_project';
+    /**
+     * 当前策略允许发现的已注册工具
+     */
+    items: Array<AgentCapability>;
+    /**
+     * 执行时必须重新满足的边界
+     */
+    limitations: string;
+};
+
+/**
  * 可选的页面登录 familyId，仅用于发现跨标签页账号变化，不是身份凭据；不匹配当前 Cookie 身份时返回409，原有项目与数据权限仍实时检查。
  */
 export type BrowserSessionFamily = string;
@@ -22748,6 +23286,57 @@ export type UpdateAgentResearchIntentResponses = {
 };
 
 export type UpdateAgentResearchIntentResponse = UpdateAgentResearchIntentResponses[keyof UpdateAgentResearchIntentResponses];
+
+export type ListAgentCapabilitiesData = {
+    body?: never;
+    headers: {
+        /**
+         * 项目 ID
+         */
+        'X-Project-Id': number;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/agent/capabilities/';
+};
+
+export type ListAgentCapabilitiesErrors = {
+    /**
+     * 请求参数无效
+     */
+    400: ErrorResponse;
+    /**
+     * 请先登录
+     */
+    401: ErrorResponse;
+    /**
+     * 功能、用户、数据或管理权限不足
+     */
+    403: ErrorResponse;
+    /**
+     * 对象不存在或不属于当前用户及项目
+     */
+    404: ErrorResponse;
+    /**
+     * 能力目录只读，不支持其他方法
+     */
+    405: ErrorResponse;
+    /**
+     * 工作进程或模型不可用
+     */
+    503: ErrorResponse;
+};
+
+export type ListAgentCapabilitiesError = ListAgentCapabilitiesErrors[keyof ListAgentCapabilitiesErrors];
+
+export type ListAgentCapabilitiesResponses = {
+    /**
+     * 操作成功
+     */
+    200: AgentCapabilityCatalog;
+};
+
+export type ListAgentCapabilitiesResponse = ListAgentCapabilitiesResponses[keyof ListAgentCapabilitiesResponses];
 
 export type GetAgentBootstrapData = {
     body?: never;

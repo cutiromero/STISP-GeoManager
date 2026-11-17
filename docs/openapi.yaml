@@ -7342,6 +7342,67 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorResponse'}
+  /api/agent/capabilities/:
+    get:
+      tags:
+      - 智能体
+      operationId: listAgentCapabilities
+      summary: 读取当前项目Agent能力合同
+      description: 返回当前用户及单个项目可发现的工具、参数Schema、影响、授权、幂等、重试与完成判据。只读，不调用模型或执行工具；发现不授予对象访问权，具体执行继续重新授权。未开启本轮联网时不列出联网工具。
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCapabilityCatalog'
+        '400':
+          description: 请求参数无效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 请先登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 功能、用户、数据或管理权限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 对象不存在或不属于当前用户及项目
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 工作进程或模型不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '405':
+          description: 能力目录只读，不支持其他方法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        description: 唯一当前项目 ID，禁止 all
+        schema:
+          type: integer
+          description: 项目 ID
+          minimum: 1
   /api/agent/bootstrap/:
     get:
       tags:
@@ -22405,3 +22466,456 @@ components:
     BusinessFlowInputPreparation: {"type": "object", "description": "只读规划，不运行模型、算子或修改原始资料", "properties": {"versionId": {"type": "integer", "minimum": 1, "description": "发布流程版本"}, "inputs": {"type": "object", "description": "来源资料绑定", "additionalProperties": {"type": "integer", "minimum": 1, "description": "资料编号"}, "maxProperties": 30}, "inputAdapters": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoices"}, "uploadBatchId": {"type": "string", "description": "专业任务资料批次；只允许当前用户、本项目的真实上传或目录引用", "pattern": "^[a-f0-9]{32}$"}}, "required": ["versionId", "inputs"], "additionalProperties": false}
     BusinessFlowDecision: {"type": "object", "description": "只有真实用户可提交人工决定，绑定当前节点和修订。retry_context仅恢复上下文等待，不写human.approved；停止沿用cancel。", "properties": {"nodeId": {"type": "string", "description": "当前等待决定的节点编码"}, "revision": {"type": "integer", "description": "最后读取的状态修订号", "minimum": 0}, "decision": {"type": "string", "description": "批准、返修、重试上下文、恢复本节点或明确跳过；后两者不批准科研结果", "enum": ["approve", "request_changes", "retry_context", "retry_recovery", "skip_node"]}, "feedback": {"type": "string", "description": "返修原因或收紧范围说明；模型恢复的人工补充最多2000字，仅作用于当前请求", "maxLength": 4000}, "skipEvidenceIds": {"type": "array", "description": "仅retry_context可提交当前等待清单中的非必需证据编号；不能跳过直接依赖或指令点名证据", "uniqueItems": true, "items": {"type": "string", "maxLength": 160}}, "contextScope": {"$ref": "#/components/schemas/BusinessFlowContextScope"}, "idempotencyKey": {"type": "string", "description": "稳定决定重试键", "minLength": 8, "maxLength": 80}, "recoveryInputs": {"type": "object", "description": "仅恢复决定：当前节点角色到新资料编号，后端重新校验权限、修订及规范", "maxProperties": 30, "additionalProperties": {"type": "integer", "minimum": 1}}, "recoveryParameters": {"type": "object", "description": "用户明确调整的当前算子参数，仍须通过原清单校验", "maxProperties": 50, "additionalProperties": true}}, "required": ["nodeId", "revision", "decision", "feedback", "idempotencyKey"], "additionalProperties": false}
     BusinessFlowInputBinding: {"description": "互斥的算子输入来源：资料角色或本业务流前序算子的已登记输出，不授予额外访问和入库权限。", "oneOf": [{"type": "object", "description": "当前执行开始时绑定的资料角色，仍执行当前项目与资料访问校验。", "properties": {"role": {"type": "string", "description": "inputRequirements中的资料角色编码", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}}, "required": ["role"], "additionalProperties": false}, {"type": "object", "description": "当前节点依赖祖先中的真实算子输出；不能引用外部任务、他人结果、未来节点或归档文件。", "properties": {"nodeId": {"type": "string", "description": "前序operator节点编码，必须在当前dependsOn祖先集合中", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}, "outputKey": {"type": "string", "description": "上游已发布算法manifest中的输出键；kind必须匹配当前输入", "minLength": 1, "maxLength": 80}}, "required": ["nodeId", "outputKey"], "additionalProperties": false}]}
+
+    AgentToolListBusinessFlowsArguments: {"type": "object", "description": "查找当前项目已发布科研业务流，返回版本、资料规范、节点和审核边界；query可选。优先用于有定制流程的复杂科研任务。", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 300}, "offset": {"description": "从0开始的分页位置", "type": "integer", "minimum": 0}, "limit": {"description": "本次读取上限；完整性和下一页位置以真实返回值为准", "type": "integer", "minimum": 1, "maximum": 1000}}, "additionalProperties": false}
+    AgentToolPrepareBusinessFlowInputsArguments: {"type": "object", "description": "只读规划业务流输入：versionId、inputs必需，inputAdapters和uploadBatchId可选。按真实资料与流程规范查已发布转换能力，返回字段、候选工具和需补参数；不启动计算。来源格式不同不能直接判定任务不可做。", "properties": {"versionId": {"description": "真实已发布且允许智能体使用的版本编号", "type": "integer", "minimum": 1}, "inputs": {"description": "角色键到真实资料编号的映射，角色取对应发布清单", "type": "object", "additionalProperties": {"type": "integer", "minimum": 1, "description": "真实资料编号"}, "maxProperties": 100}, "inputAdapters": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoices", "description": "由既有业务流规范定义的资料适配选择"}, "uploadBatchId": {"description": "本人本项目的真实资料批次", "type": "string", "maxLength": 120, "pattern": "^[a-f0-9]{32}$"}}, "additionalProperties": false, "required": ["versionId", "inputs"]}
+    AgentToolStartBusinessFlowArguments: {"type": "object", "description": "按目录真实versionId启动业务流；goal、inputs(角色到已授权资源ID)、parameters可选、reviewerModel可选。必须按该版本资料规范绑定；启动后由业务流处理，不再重复提交算子或伪造人工批准。", "properties": {"versionId": {"description": "真实已发布且允许智能体使用的版本编号", "type": "integer", "minimum": 1}, "goal": {"description": "本次科研业务目标，不授予额外权限或人工批准", "type": "string", "maxLength": 2000}, "inputs": {"description": "角色键到真实资料编号的映射，角色取对应发布清单", "type": "object", "additionalProperties": {"type": "integer", "minimum": 1, "description": "真实资料编号"}, "maxProperties": 100}, "parameters": {"description": "发布清单允许的参数；单位、必填项和范围继续由真实清单验证", "type": "object", "additionalProperties": true, "maxProperties": 100}, "reviewerModel": {"description": "策略允许的独立审核模型别名", "type": "string", "maxLength": 120}, "inputAdapters": {"$ref": "#/components/schemas/BusinessFlowInputAdapterChoices", "description": "由既有业务流规范定义的资料适配选择"}}, "additionalProperties": false, "required": ["versionId", "inputs"]}
+    AgentToolSearchResourcesArguments: {"type": "object", "description": "分页查找当前项目数据，query可为空；category为all/compute_results/uploaded_data；offset从0开始，limit默认50，按nextOffset继续；total是真实总数", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 300}, "category": {"description": "资源来源分类", "type": "string", "maxLength": 120, "enum": ["all", "compute_results", "uploaded_data"]}, "offset": {"description": "从0开始的分页位置", "type": "integer", "minimum": 0}, "limit": {"description": "本次读取上限；完整性和下一页位置以真实返回值为准", "type": "integer", "minimum": 1, "maximum": 1000}}, "additionalProperties": false}
+    AgentToolSummarizeResourceCatalogArguments: {"type": "object", "description": "全量统计当前授权项目的计算成果与上传/登记数据数量、类型及大小，不读取样本；query可为空，category可筛选", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 300}, "category": {"description": "资源来源分类", "type": "string", "maxLength": 120, "enum": ["all", "compute_results", "uploaded_data"]}}, "additionalProperties": false}
+    AgentToolPresentResourceCatalogArguments: {"type": "object", "description": "直接向用户展示当前项目完整分组目录和总数，计算成果与上传/登记数据自动分类；query可为空，category可筛选。平台直接格式化真实名称，无需模型逐条复述；调用后本轮完成", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 300}, "category": {"description": "资源来源分类", "type": "string", "maxLength": 120, "enum": ["all", "compute_results", "uploaded_data"]}}, "additionalProperties": false}
+    AgentToolGetMapDataProfileArguments: {"type": "object", "description": "读取可加载的真实地图概况与完整类别，resourceId；矢量field可选（默认name等实际字段），栅格band默认1。返回categoryField/categories/value/count/suggestedColor、colorLocked、referenceId和colorPolicy，与逻辑推理共用标准及项目约定色；colorLocked不得改色、原表同色保留。分类配色前必须读取。分类最多96项，栅格最多400万像元；不能把不完整类别说成全部。", "properties": {"resourceId": {"description": "已登记且当前有权访问的资料正整数编号", "type": "integer", "minimum": 1}, "field": {"description": "真实字段名称", "type": "string", "maxLength": 120, "minLength": 1}, "band": {"description": "从1开始的真实波段编号", "type": "integer", "minimum": 1}}, "additionalProperties": false, "required": ["resourceId"]}
+    AgentToolPrepareMapWorkspaceArguments: {"type": "object", "description": "生成真实个人地图工程，原始数据不变，不覆盖已有工程。resourceIds为当前授权资源整数数组，name可选。styles可省略沿用显示方案；优先用mode=reference,field=实际分类字段按共用规则配色，无需classes。命中色表不可改色、原表同色保留，仅未命中类别可建议新色；分类配色格式styles:[{\"resourceId\":12,\"mode\":\"unique\",\"field\":\"name\",\"classes\":[{\"value\":\"实际类别\",\"label\":\"显示名称\",\"color\":\"#e0c080\"}]}]，必须覆盖已读取的完整类别。矢量单色mode=single,color=#RRGGBB；分类栅格mode=unique,band=1使用真实整数类别颜色表。返回workspaceId才代表已准备，用户点击按钮加载地图。无需寻找配色计算算子。", "properties": {"resourceIds": {"description": "当前授权资料编号集合", "type": "array", "items": {"type": "integer", "minimum": 1, "description": "真实编号"}, "maxItems": 5, "uniqueItems": true}, "styles": {"description": "仅用于个人地图工程的展示样式，不写入原始资料", "type": "array", "items": {"type": "object", "description": "结构化展示配置", "additionalProperties": true}, "maxItems": 5}, "name": {"description": "本次创建对象的显示名称", "type": "string", "maxLength": 120}}, "additionalProperties": false, "required": ["resourceIds"]}
+    AgentToolGetPlatformLinkArguments: {"type": "object", "description": "生成站内可用页面按钮；page只能是map/resources/compute/knowledge/business_flows，不接受模型自报网址，自动携带当前项目。", "properties": {"page": {"description": "平台固定站内入口，不接受模型自报URL", "type": "string", "maxLength": 120, "minLength": 1, "enum": ["map", "resources", "compute", "knowledge", "business_flows"]}}, "additionalProperties": false, "required": ["page"]}
+    AgentToolDescribeResourceArguments: {"type": "object", "description": "查看资源说明、字段、记录范围；resourceId", "properties": {"resourceId": {"description": "已登记且当前有权访问的资料正整数编号", "type": "integer", "minimum": 1}}, "additionalProperties": false, "required": ["resourceId"]}
+    AgentToolReadRowsArguments: {"type": "object", "description": "读取最多30条样本；resourceId, fields字段数组, filters筛选数组", "properties": {"resourceId": {"description": "已登记且当前有权访问的资料正整数编号", "type": "integer", "minimum": 1}, "fields": {"description": "真实字段名列表，不接受SQL表达式", "type": "array", "items": {"type": "string", "maxLength": 200, "description": "真实名称或证据标识"}, "maxItems": 100, "uniqueItems": true}, "filters": {"description": "结构化属性条件，仍使用原查询语义", "type": "array", "items": {"$ref": "#/components/schemas/AttributeFilter"}, "maxItems": 100}}, "additionalProperties": false, "required": ["resourceId"]}
+    AgentToolSummarizeDataArguments: {"type": "object", "description": "确定性统计计数、空值、最小、最大、均值、标准差；resourceId, fields, filters", "properties": {"resourceId": {"description": "已登记且当前有权访问的资料正整数编号", "type": "integer", "minimum": 1}, "fields": {"description": "真实字段名列表，不接受SQL表达式", "type": "array", "items": {"type": "string", "maxLength": 200, "description": "真实名称或证据标识"}, "maxItems": 100, "uniqueItems": true}, "filters": {"description": "结构化属性条件，仍使用原查询语义", "type": "array", "items": {"$ref": "#/components/schemas/AttributeFilter"}, "maxItems": 100}}, "additionalProperties": false, "required": ["resourceId", "fields"]}
+    AgentToolAggregateDataArguments: {"type": "object", "description": "按groupBy字段分组统计field数值；metric为count/sum/mean/min/max；resourceId,groupBy,field,metric,filters", "properties": {"resourceId": {"description": "已登记且当前有权访问的资料正整数编号", "type": "integer", "minimum": 1}, "groupBy": {"description": "实际分组字段", "type": "string", "maxLength": 120, "minLength": 1}, "field": {"description": "真实字段名称", "type": "string", "maxLength": 120, "minLength": 1}, "metric": {"description": "确定性聚合指标", "type": "string", "maxLength": 120, "minLength": 1, "enum": ["count", "sum", "mean", "min", "max"]}, "filters": {"description": "结构化属性条件，仍使用原查询语义", "type": "array", "items": {"$ref": "#/components/schemas/AttributeFilter"}, "maxItems": 100}}, "additionalProperties": false, "required": ["resourceId", "groupBy", "metric"]}
+    AgentToolCompareSummariesArguments: {"type": "object", "description": "引用本轮已有summarize_data证据比较，evidenceIds数组，保留单位与口径限制", "properties": {"evidenceIds": {"description": "本轮已读取且仍获授权的证据编号", "type": "array", "items": {"type": "string", "maxLength": 200, "description": "真实名称或证据标识"}, "maxItems": 100, "uniqueItems": true}}, "additionalProperties": false, "required": ["evidenceIds"]}
+    AgentToolReadDocumentArguments: {"type": "object", "description": "读取数据目录中的纯文本资源，resourceId须来自search_resources或用户选定数据；offset字符位置。知识库documentId不能用于此工具，知识文献使用search_knowledge检索", "properties": {"resourceId": {"description": "已登记且当前有权访问的资料正整数编号", "type": "integer", "minimum": 1}, "offset": {"description": "从0开始的分页位置", "type": "integer", "minimum": 0}}, "additionalProperties": false, "required": ["resourceId"]}
+    AgentToolGetSystemInfoArguments: {"type": "object", "description": "查看平台运行参数、计算运行时和主机资源摘要（需管理员开启）", "properties": {"sections": {"description": "平台参数白名单分区", "type": "array", "items": {"type": "string", "maxLength": 200, "description": "真实名称或证据标识"}, "maxItems": 5, "uniqueItems": true}}, "additionalProperties": false}
+    AgentToolListComputeAlgorithmsArguments: {"type": "object", "description": "按query目标关键词查找已发布算法，空格分词（如面积 周长）；返回具体版本完整manifest，先核对输入/参数/输出再执行。query可省略以列出目录", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 300}}, "additionalProperties": false}
+    AgentToolExecuteOperatorArguments: {"type": "object", "description": "提交已发布计算算法；versionId、inputs、parameters、name。inputs为对象，键取该版本manifest.inputs[].key、值为资源正整数ID，不能传数组或用资源编号作键；parameters为参数名到值的对象，参数名取manifest.parameters[].key。先核对完整manifest。默认计算后让用户选择入库，仅明确要求自动入库设置autoImport=true。缺少已确认波段/字段时生成计算卡片而不提交。返回taskId才代表实际提交", "properties": {"versionId": {"description": "真实已发布且允许智能体使用的版本编号", "type": "integer", "minimum": 1}, "inputs": {"description": "角色键到真实资料编号的映射，角色取对应发布清单", "type": "object", "additionalProperties": {"type": "integer", "minimum": 1, "description": "真实资料编号"}, "maxProperties": 100}, "parameters": {"description": "发布清单允许的参数；单位、必填项和范围继续由真实清单验证", "type": "object", "additionalProperties": true, "maxProperties": 100}, "name": {"description": "本次创建对象的显示名称", "type": "string", "maxLength": 120}, "idempotencyKey": {"description": "同一逻辑提交的稳定重试键", "type": "string", "maxLength": 120, "minLength": 1}, "autoImport": {"description": "仅在用户明确授权自动入库时为true", "type": "boolean"}}, "additionalProperties": false, "required": ["versionId", "inputs"]}
+    AgentToolGetComputeTaskArguments: {"type": "object", "description": "查询计算任务真实状态及outputs和入库结果；taskId是UUID", "properties": {"taskId": {"description": "本任务真实计算任务UUID，不可与输出整数编号混用", "type": "string", "maxLength": 120, "minLength": 1, "format": "uuid"}}, "additionalProperties": false, "required": ["taskId"]}
+    AgentToolReadComputeOutputArguments: {"type": "object", "description": "读取真实计算输出并核对校验和，outputId来自get_compute_task的outputs；CSV可offset/limit分页，栅格返回GDAL近似统计（非因果结论），其他类型返回元信息与预览入口。计算完成后解释前必须读取实际输出", "properties": {"outputId": {"description": "真实计算输出正整数编号", "type": "integer", "minimum": 1}, "offset": {"description": "从0开始的分页位置", "type": "integer", "minimum": 0}, "limit": {"description": "本次读取上限；完整性和下一页位置以真实返回值为准", "type": "integer", "minimum": 1, "maximum": 1000}}, "additionalProperties": false, "required": ["outputId"]}
+    AgentToolListComputeTasksArguments: {"type": "object", "description": "查找本人当前项目最近计算任务，可用query筛选名称", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 300}}, "additionalProperties": false}
+    AgentToolImportComputeResultArguments: {"type": "object", "description": "按taskId自动查找真实输出并入库，也可传整数outputId（两者互斥）；尚在计算时登记完成后自动入库。可选outputKeys、name。只有ready才表示已入库", "properties": {"taskId": {"description": "本任务真实计算任务UUID，不可与输出整数编号混用", "type": "string", "maxLength": 120, "minLength": 1, "format": "uuid"}, "outputId": {"description": "真实计算输出正整数编号", "type": "integer", "minimum": 1}, "outputKeys": {"description": "真实清单输出键集合", "type": "array", "items": {"type": "string", "maxLength": 200, "description": "真实名称或证据标识"}, "maxItems": 100, "uniqueItems": true}, "name": {"description": "本次创建对象的显示名称", "type": "string", "maxLength": 120}}, "additionalProperties": false, "oneOf": [{"required": ["taskId"]}, {"required": ["outputId"]}]}
+    AgentToolSearchKnowledgeArguments: {"type": "object", "description": "联合检索已审核知识规则与当前可见文档原文（语义+关键词），返回citation引用、来源和适用条件；query", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 300}}, "additionalProperties": false, "required": ["query"]}
+    AgentToolReadKnowledgeDocumentArguments: {"type": "object", "description": "按search_knowledge返回的documentId读取知识文献原文；offset从0开始，limit为1至8000字符；返回nextOffset供继续阅读。documentId属于知识库，不是数据resourceId", "properties": {"documentId": {"description": "知识库文献编号，不能替代业务资料resourceId", "type": "string", "maxLength": 120, "minLength": 1}, "offset": {"description": "从0开始的分页位置", "type": "integer", "minimum": 0}, "limit": {"description": "本次读取上限；完整性和下一页位置以真实返回值为准", "type": "integer", "minimum": 1, "maximum": 8000}}, "additionalProperties": false, "required": ["documentId"]}
+    AgentToolCheckKnowledgeConstraintsArguments: {"type": "object", "description": "按知识规则检查结构化facts，返回conflict/pass/needs_context；可选entryIds，缺条件时不能断言通过", "properties": {"facts": {"description": "待核验的有界结构化事实", "type": "object", "additionalProperties": true, "maxProperties": 100}, "entryIds": {"description": "知识条目编号集合", "type": "array", "items": {"type": "integer", "minimum": 1, "description": "真实编号"}, "maxItems": 100, "uniqueItems": true}}, "additionalProperties": false, "required": ["facts"]}
+    AgentToolSearchWebArguments: {"type": "object", "description": "联网检索公开网页；query或url，返回受限摘要和引用链接", "properties": {"query": {"description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途", "type": "string", "maxLength": 300}, "url": {"description": "待读取的公开HTTP地址，继续执行服务端SSRF及重定向校验", "type": "string", "maxLength": 2048}, "maxResults": {"description": "公开联网检索的结果数量上限", "type": "integer", "minimum": 1, "maximum": 8}}, "additionalProperties": false, "oneOf": [{"required": ["query"]}, {"required": ["url"]}]}
+    AgentCapability: {"type": "object", "description": "受控Agent能力合同，发现不授予执行权", "required": ["name", "capability", "description", "version", "inputSchema", "operationIds", "effect", "risk", "approval", "idempotency", "retry", "completion", "limitations", "implementation", "requiredPermissions", "anyPermissions"], "properties": {"name": {"type": "string", "description": "稳定工具名"}, "capability": {"type": "string", "description": "策略能力分组"}, "description": {"type": "string", "description": "用途及适用条件"}, "version": {"type": "string", "description": "能力语义版本"}, "effect": {"type": "string", "description": "操作影响类型"}, "risk": {"type": "string", "description": "影响等级"}, "approval": {"type": "string", "description": "实际授权要求"}, "idempotency": {"type": "string", "description": "重复请求语义"}, "retry": {"type": "string", "description": "重试条件"}, "completion": {"type": "string", "description": "完成判据"}, "limitations": {"type": "string", "description": "权限与范围限制"}, "inputSchema": {"type": "object", "description": "从唯一OpenAPI合同生成的JSON Schema参数说明", "additionalProperties": true}, "operationIds": {"type": "array", "description": "共用业务接口的operationId", "items": {"type": "string", "description": "稳定业务操作标识"}}, "implementation": {"type": "string", "enum": ["shared_service", "internal_service"], "description": "共用业务服务或仅在智能体内部提供的受控工具实现"}, "requiredPermissions": {"type": "array", "description": "全部须具备的功能权限", "items": {"type": "string", "description": "Django功能权限标识"}}, "anyPermissions": {"type": "array", "description": "非空时至少具备其中一项；对象ACL在执行时另行核对", "items": {"type": "string", "description": "Django功能权限标识"}}}}
+    AgentCapabilityCatalog: {"type": "object", "description": "按当前用户及项目策略过滤的能力目录，不包含资料、模型凭据或执行授权", "required": ["schemaVersion", "projectId", "scope", "items", "limitations"], "properties": {"schemaVersion": {"type": "integer", "const": 1, "description": "目录协议版本"}, "projectId": {"type": "integer", "minimum": 1, "description": "当前项目编号"}, "scope": {"type": "string", "const": "current_user_current_project", "description": "能力发现的身份范围"}, "items": {"type": "array", "description": "当前策略允许发现的已注册工具", "items": {"$ref": "#/components/schemas/AgentCapability"}}, "limitations": {"type": "string", "description": "执行时必须重新满足的边界"}}}
+
+x-agent-tools:
+  list_business_flows:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolListBusinessFlowsArguments'
+    operationIds:
+    - listBusinessFlows
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  prepare_business_flow_inputs:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolPrepareBusinessFlowInputsArguments'
+    operationIds:
+    - prepareBusinessFlowInputs
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  start_business_flow:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolStartBusinessFlowArguments'
+    operationIds:
+    - startBusinessFlow
+    effect: compute
+    risk: medium
+    approval: authorized_scope
+    idempotency: 复用本次运行的稳定提交键及既有业务对象幂等检查
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  search_resources:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolSearchResourcesArguments'
+    operationIds:
+    - getResources
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  summarize_resource_catalog:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolSummarizeResourceCatalogArguments'
+    operationIds:
+    - getResources
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  present_resource_catalog:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolPresentResourceCatalogArguments'
+    operationIds:
+    - getResources
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  get_map_data_profile:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolGetMapDataProfileArguments'
+    operationIds:
+    - getResourceProfile
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  prepare_map_workspace:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolPrepareMapWorkspaceArguments'
+    operationIds:
+    - createCatalogWorkspace
+    effect: draft
+    risk: low
+    approval: none
+    idempotency: 复用本次运行的稳定提交键及既有业务对象幂等检查
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions:
+    - catalog.add_workspacescene
+    - catalog.view_workspacescene
+    anyPermissions: []
+  get_platform_link:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolGetPlatformLinkArguments'
+    operationIds: []
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: internal_service
+    requiredPermissions: []
+    anyPermissions: []
+  describe_resource:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolDescribeResourceArguments'
+    operationIds:
+    - getResourceProfile
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  read_rows:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolReadRowsArguments'
+    operationIds:
+    - queryResourceNonGeoTable
+    - queryResource
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  summarize_data:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolSummarizeDataArguments'
+    operationIds:
+    - getResourceNonGeoAnalysis
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  aggregate_data:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolAggregateDataArguments'
+    operationIds:
+    - getResourceNonGeoAnalysis
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  compare_summaries:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolCompareSummariesArguments'
+    operationIds: []
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: internal_service
+    requiredPermissions: []
+    anyPermissions: []
+  read_document:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolReadDocumentArguments'
+    operationIds: []
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: internal_service
+    requiredPermissions: []
+    anyPermissions: []
+  get_system_info:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolGetSystemInfoArguments'
+    operationIds: []
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: internal_service
+    requiredPermissions: []
+    anyPermissions: []
+  list_compute_algorithms:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolListComputeAlgorithmsArguments'
+    operationIds:
+    - listComputeAlgorithms
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  execute_operator:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolExecuteOperatorArguments'
+    operationIds:
+    - createComputeTask
+    effect: compute
+    risk: medium
+    approval: authorized_scope
+    idempotency: 复用本次运行的稳定提交键及既有业务对象幂等检查
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions:
+    - compute.submit_task
+    anyPermissions: []
+  get_compute_task:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolGetComputeTaskArguments'
+    operationIds:
+    - getComputeTask
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions:
+    - compute.view_own_task
+    - compute.manage_tasks
+  read_compute_output:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolReadComputeOutputArguments'
+    operationIds:
+    - getComputeTask
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions:
+    - compute.view_own_task
+    - compute.manage_tasks
+  list_compute_tasks:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolListComputeTasksArguments'
+    operationIds:
+    - listComputeTasks
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions:
+    - compute.view_own_task
+    anyPermissions: []
+  import_compute_result:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolImportComputeResultArguments'
+    operationIds:
+    - getComputeTask
+    effect: import
+    risk: medium
+    approval: explicit_request
+    idempotency: 复用本次运行的稳定提交键及既有业务对象幂等检查
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions:
+    - catalog.add_dataresource
+    anyPermissions:
+    - compute.view_own_task
+    - compute.manage_tasks
+  search_knowledge:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolSearchKnowledgeArguments'
+    operationIds:
+    - searchKnowledgeDocuments
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  read_knowledge_document:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolReadKnowledgeDocumentArguments'
+    operationIds: []
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: internal_service
+    requiredPermissions: []
+    anyPermissions: []
+  check_knowledge_constraints:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolCheckKnowledgeConstraintsArguments'
+    operationIds:
+    - checkKnowledgeConstraints
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: shared_service
+    requiredPermissions: []
+    anyPermissions: []
+  search_web:
+    version: 1.0.0
+    inputSchema:
+      $ref: '#/components/schemas/AgentToolSearchWebArguments'
+    operationIds: []
+    effect: read
+    risk: low
+    approval: none
+    idempotency: 只读操作不产生业务写入
+    retry: 临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试
+    completion: 以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成
+    limitations: 仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件
+    implementation: internal_service
+    requiredPermissions: []
+    anyPermissions: []

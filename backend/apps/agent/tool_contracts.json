@@ -1,0 +1,1366 @@
+{
+  "schemaVersion": 1,
+  "tools": {
+    "aggregate_data": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "analyze_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "按groupBy字段分组统计field数值；metric为count/sum/mean/min/max；resourceId,groupBy,field,metric,filters",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按groupBy字段分组统计field数值；metric为count/sum/mean/min/max；resourceId,groupBy,field,metric,filters",
+        "properties": {
+          "field": {
+            "description": "真实字段名称",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "filters": {
+            "description": "结构化属性条件，仍使用原查询语义",
+            "items": {
+              "properties": {
+                "field": {
+                  "description": "字段名",
+                  "type": "string"
+                },
+                "operator": {
+                  "description": "过滤操作符",
+                  "enum": [
+                    "contains",
+                    "eq",
+                    "ne",
+                    "gt",
+                    "gte",
+                    "lt",
+                    "lte",
+                    "between"
+                  ],
+                  "type": "string"
+                },
+                "value": {
+                  "description": "过滤值",
+                  "type": "string"
+                },
+                "valueTo": {
+                  "description": "between 操作符时使用的结束值",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "operator",
+                "value"
+              ],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "groupBy": {
+            "description": "实际分组字段",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "metric": {
+            "description": "确定性聚合指标",
+            "enum": [
+              "count",
+              "sum",
+              "mean",
+              "min",
+              "max"
+            ],
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "resourceId": {
+            "description": "已登记且当前有权访问的资料正整数编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resourceId",
+          "groupBy",
+          "metric"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "aggregate_data",
+      "operationIds": [
+        "getResourceNonGeoAnalysis"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "check_knowledge_constraints": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "analyze_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "按知识规则检查结构化facts，返回conflict/pass/needs_context；可选entryIds，缺条件时不能断言通过",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按知识规则检查结构化facts，返回conflict/pass/needs_context；可选entryIds，缺条件时不能断言通过",
+        "properties": {
+          "entryIds": {
+            "description": "知识条目编号集合",
+            "items": {
+              "description": "真实编号",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "facts": {
+            "additionalProperties": true,
+            "description": "待核验的有界结构化事实",
+            "maxProperties": 100,
+            "type": "object"
+          }
+        },
+        "required": [
+          "facts"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "check_knowledge_constraints",
+      "operationIds": [
+        "checkKnowledgeConstraints"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "compare_summaries": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "analyze_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "引用本轮已有summarize_data证据比较，evidenceIds数组，保留单位与口径限制",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "internal_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "引用本轮已有summarize_data证据比较，evidenceIds数组，保留单位与口径限制",
+        "properties": {
+          "evidenceIds": {
+            "description": "本轮已读取且仍获授权的证据编号",
+            "items": {
+              "description": "真实名称或证据标识",
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "evidenceIds"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "compare_summaries",
+      "operationIds": [],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "describe_resource": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "查看资源说明、字段、记录范围；resourceId",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "查看资源说明、字段、记录范围；resourceId",
+        "properties": {
+          "resourceId": {
+            "description": "已登记且当前有权访问的资料正整数编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resourceId"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "describe_resource",
+      "operationIds": [
+        "getResourceProfile"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "execute_operator": {
+      "anyPermissions": [],
+      "approval": "authorized_scope",
+      "capability": "execute_operator",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "提交已发布计算算法；versionId、inputs、parameters、name。inputs为对象，键取该版本manifest.inputs[].key、值为资源正整数ID，不能传数组或用资源编号作键；parameters为参数名到值的对象，参数名取manifest.parameters[].key。先核对完整manifest。默认计算后让用户选择入库，仅明确要求自动入库设置autoImport=true。缺少已确认波段/字段时生成计算卡片而不提交。返回taskId才代表实际提交",
+      "effect": "compute",
+      "idempotency": "复用本次运行的稳定提交键及既有业务对象幂等检查",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "提交已发布计算算法；versionId、inputs、parameters、name。inputs为对象，键取该版本manifest.inputs[].key、值为资源正整数ID，不能传数组或用资源编号作键；parameters为参数名到值的对象，参数名取manifest.parameters[].key。先核对完整manifest。默认计算后让用户选择入库，仅明确要求自动入库设置autoImport=true。缺少已确认波段/字段时生成计算卡片而不提交。返回taskId才代表实际提交",
+        "properties": {
+          "autoImport": {
+            "description": "仅在用户明确授权自动入库时为true",
+            "type": "boolean"
+          },
+          "idempotencyKey": {
+            "description": "同一逻辑提交的稳定重试键",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "description": "真实资料编号",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "description": "角色键到真实资料编号的映射，角色取对应发布清单",
+            "maxProperties": 100,
+            "type": "object"
+          },
+          "name": {
+            "description": "本次创建对象的显示名称",
+            "maxLength": 120,
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "description": "发布清单允许的参数；单位、必填项和范围继续由真实清单验证",
+            "maxProperties": 100,
+            "type": "object"
+          },
+          "versionId": {
+            "description": "真实已发布且允许智能体使用的版本编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "versionId",
+          "inputs"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "execute_operator",
+      "operationIds": [
+        "createComputeTask"
+      ],
+      "requiredPermissions": [
+        "compute.submit_task"
+      ],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "medium",
+      "version": "1.0.0"
+    },
+    "get_compute_task": {
+      "anyPermissions": [
+        "compute.view_own_task",
+        "compute.manage_tasks"
+      ],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "查询计算任务真实状态及outputs和入库结果；taskId是UUID",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "查询计算任务真实状态及outputs和入库结果；taskId是UUID",
+        "properties": {
+          "taskId": {
+            "description": "本任务真实计算任务UUID，不可与输出整数编号混用",
+            "format": "uuid",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "get_compute_task",
+      "operationIds": [
+        "getComputeTask"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "get_map_data_profile": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "读取可加载的真实地图概况与完整类别，resourceId；矢量field可选（默认name等实际字段），栅格band默认1。返回categoryField/categories/value/count/suggestedColor、colorLocked、referenceId和colorPolicy，与逻辑推理共用标准及项目约定色；colorLocked不得改色、原表同色保留。分类配色前必须读取。分类最多96项，栅格最多400万像元；不能把不完整类别说成全部。",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "读取可加载的真实地图概况与完整类别，resourceId；矢量field可选（默认name等实际字段），栅格band默认1。返回categoryField/categories/value/count/suggestedColor、colorLocked、referenceId和colorPolicy，与逻辑推理共用标准及项目约定色；colorLocked不得改色、原表同色保留。分类配色前必须读取。分类最多96项，栅格最多400万像元；不能把不完整类别说成全部。",
+        "properties": {
+          "band": {
+            "description": "从1开始的真实波段编号",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "field": {
+            "description": "真实字段名称",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "resourceId": {
+            "description": "已登记且当前有权访问的资料正整数编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resourceId"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "get_map_data_profile",
+      "operationIds": [
+        "getResourceProfile"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "get_platform_link": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "生成站内可用页面按钮；page只能是map/resources/compute/knowledge/business_flows，不接受模型自报网址，自动携带当前项目。",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "internal_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "生成站内可用页面按钮；page只能是map/resources/compute/knowledge/business_flows，不接受模型自报网址，自动携带当前项目。",
+        "properties": {
+          "page": {
+            "description": "平台固定站内入口，不接受模型自报URL",
+            "enum": [
+              "map",
+              "resources",
+              "compute",
+              "knowledge",
+              "business_flows"
+            ],
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "page"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "get_platform_link",
+      "operationIds": [],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "get_system_info": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "system_info",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "查看平台运行参数、计算运行时和主机资源摘要（需管理员开启）",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "internal_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "查看平台运行参数、计算运行时和主机资源摘要（需管理员开启）",
+        "properties": {
+          "sections": {
+            "description": "平台参数白名单分区",
+            "items": {
+              "description": "真实名称或证据标识",
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 5,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "get_system_info",
+      "operationIds": [],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "import_compute_result": {
+      "anyPermissions": [
+        "compute.view_own_task",
+        "compute.manage_tasks"
+      ],
+      "approval": "explicit_request",
+      "capability": "write_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "按taskId自动查找真实输出并入库，也可传整数outputId（两者互斥）；尚在计算时登记完成后自动入库。可选outputKeys、name。只有ready才表示已入库",
+      "effect": "import",
+      "idempotency": "复用本次运行的稳定提交键及既有业务对象幂等检查",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按taskId自动查找真实输出并入库，也可传整数outputId（两者互斥）；尚在计算时登记完成后自动入库。可选outputKeys、name。只有ready才表示已入库",
+        "oneOf": [
+          {
+            "required": [
+              "taskId"
+            ]
+          },
+          {
+            "required": [
+              "outputId"
+            ]
+          }
+        ],
+        "properties": {
+          "name": {
+            "description": "本次创建对象的显示名称",
+            "maxLength": 120,
+            "type": "string"
+          },
+          "outputId": {
+            "description": "真实计算输出正整数编号",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "outputKeys": {
+            "description": "真实清单输出键集合",
+            "items": {
+              "description": "真实名称或证据标识",
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "taskId": {
+            "description": "本任务真实计算任务UUID，不可与输出整数编号混用",
+            "format": "uuid",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "import_compute_result",
+      "operationIds": [
+        "getComputeTask"
+      ],
+      "requiredPermissions": [
+        "catalog.add_dataresource"
+      ],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "medium",
+      "version": "1.0.0"
+    },
+    "list_business_flows": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "business_flow",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "查找当前项目已发布科研业务流，返回版本、资料规范、节点和审核边界；query可选。优先用于有定制流程的复杂科研任务。",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "查找当前项目已发布科研业务流，返回版本、资料规范、节点和审核边界；query可选。优先用于有定制流程的复杂科研任务。",
+        "properties": {
+          "limit": {
+            "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "从0开始的分页位置",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "query": {
+            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "list_business_flows",
+      "operationIds": [
+        "listBusinessFlows"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "list_compute_algorithms": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "按query目标关键词查找已发布算法，空格分词（如面积 周长）；返回具体版本完整manifest，先核对输入/参数/输出再执行。query可省略以列出目录",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按query目标关键词查找已发布算法，空格分词（如面积 周长）；返回具体版本完整manifest，先核对输入/参数/输出再执行。query可省略以列出目录",
+        "properties": {
+          "query": {
+            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "list_compute_algorithms",
+      "operationIds": [
+        "listComputeAlgorithms"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "list_compute_tasks": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "查找本人当前项目最近计算任务，可用query筛选名称",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "查找本人当前项目最近计算任务，可用query筛选名称",
+        "properties": {
+          "query": {
+            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "list_compute_tasks",
+      "operationIds": [
+        "listComputeTasks"
+      ],
+      "requiredPermissions": [
+        "compute.view_own_task"
+      ],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "prepare_business_flow_inputs": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "business_flow",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "只读规划业务流输入：versionId、inputs必需，inputAdapters和uploadBatchId可选。按真实资料与流程规范查已发布转换能力，返回字段、候选工具和需补参数；不启动计算。来源格式不同不能直接判定任务不可做。",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "只读规划业务流输入：versionId、inputs必需，inputAdapters和uploadBatchId可选。按真实资料与流程规范查已发布转换能力，返回字段、候选工具和需补参数；不启动计算。来源格式不同不能直接判定任务不可做。",
+        "properties": {
+          "inputAdapters": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "description": "已发布转换版本及其参数，不授予额外访问权",
+              "properties": {
+                "parameters": {
+                  "additionalProperties": true,
+                  "description": "真实manifest已声明的有界参数值",
+                  "type": "object"
+                },
+                "versionId": {
+                  "description": "已发布转换版本",
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "description": "由既有业务流规范定义的资料适配选择",
+            "maxProperties": 30,
+            "type": "object"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "description": "真实资料编号",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "description": "角色键到真实资料编号的映射，角色取对应发布清单",
+            "maxProperties": 100,
+            "type": "object"
+          },
+          "uploadBatchId": {
+            "description": "本人本项目的真实资料批次",
+            "maxLength": 120,
+            "pattern": "^[a-f0-9]{32}$",
+            "type": "string"
+          },
+          "versionId": {
+            "description": "真实已发布且允许智能体使用的版本编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "versionId",
+          "inputs"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "prepare_business_flow_inputs",
+      "operationIds": [
+        "prepareBusinessFlowInputs"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "prepare_map_workspace": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "map_display",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "生成真实个人地图工程，原始数据不变，不覆盖已有工程。resourceIds为当前授权资源整数数组，name可选。styles可省略沿用显示方案；优先用mode=reference,field=实际分类字段按共用规则配色，无需classes。命中色表不可改色、原表同色保留，仅未命中类别可建议新色；分类配色格式styles:[{\"resourceId\":12,\"mode\":\"unique\",\"field\":\"name\",\"classes\":[{\"value\":\"实际类别\",\"label\":\"显示名称\",\"color\":\"#e0c080\"}]}]，必须覆盖已读取的完整类别。矢量单色mode=single,color=#RRGGBB；分类栅格mode=unique,band=1使用真实整数类别颜色表。返回workspaceId才代表已准备，用户点击按钮加载地图。无需寻找配色计算算子。",
+      "effect": "draft",
+      "idempotency": "复用本次运行的稳定提交键及既有业务对象幂等检查",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "生成真实个人地图工程，原始数据不变，不覆盖已有工程。resourceIds为当前授权资源整数数组，name可选。styles可省略沿用显示方案；优先用mode=reference,field=实际分类字段按共用规则配色，无需classes。命中色表不可改色、原表同色保留，仅未命中类别可建议新色；分类配色格式styles:[{\"resourceId\":12,\"mode\":\"unique\",\"field\":\"name\",\"classes\":[{\"value\":\"实际类别\",\"label\":\"显示名称\",\"color\":\"#e0c080\"}]}]，必须覆盖已读取的完整类别。矢量单色mode=single,color=#RRGGBB；分类栅格mode=unique,band=1使用真实整数类别颜色表。返回workspaceId才代表已准备，用户点击按钮加载地图。无需寻找配色计算算子。",
+        "properties": {
+          "name": {
+            "description": "本次创建对象的显示名称",
+            "maxLength": 120,
+            "type": "string"
+          },
+          "resourceIds": {
+            "description": "当前授权资料编号集合",
+            "items": {
+              "description": "真实编号",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 5,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "styles": {
+            "description": "仅用于个人地图工程的展示样式，不写入原始资料",
+            "items": {
+              "additionalProperties": true,
+              "description": "结构化展示配置",
+              "type": "object"
+            },
+            "maxItems": 5,
+            "type": "array"
+          }
+        },
+        "required": [
+          "resourceIds"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "prepare_map_workspace",
+      "operationIds": [
+        "createCatalogWorkspace"
+      ],
+      "requiredPermissions": [
+        "catalog.add_workspacescene",
+        "catalog.view_workspacescene"
+      ],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "present_resource_catalog": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "直接向用户展示当前项目完整分组目录和总数，计算成果与上传/登记数据自动分类；query可为空，category可筛选。平台直接格式化真实名称，无需模型逐条复述；调用后本轮完成",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "直接向用户展示当前项目完整分组目录和总数，计算成果与上传/登记数据自动分类；query可为空，category可筛选。平台直接格式化真实名称，无需模型逐条复述；调用后本轮完成",
+        "properties": {
+          "category": {
+            "description": "资源来源分类",
+            "enum": [
+              "all",
+              "compute_results",
+              "uploaded_data"
+            ],
+            "maxLength": 120,
+            "type": "string"
+          },
+          "query": {
+            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "present_resource_catalog",
+      "operationIds": [
+        "getResources"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "read_compute_output": {
+      "anyPermissions": [
+        "compute.view_own_task",
+        "compute.manage_tasks"
+      ],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "读取真实计算输出并核对校验和，outputId来自get_compute_task的outputs；CSV可offset/limit分页，栅格返回GDAL近似统计（非因果结论），其他类型返回元信息与预览入口。计算完成后解释前必须读取实际输出",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "读取真实计算输出并核对校验和，outputId来自get_compute_task的outputs；CSV可offset/limit分页，栅格返回GDAL近似统计（非因果结论），其他类型返回元信息与预览入口。计算完成后解释前必须读取实际输出",
+        "properties": {
+          "limit": {
+            "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "从0开始的分页位置",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputId": {
+            "description": "真实计算输出正整数编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "outputId"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "read_compute_output",
+      "operationIds": [
+        "getComputeTask"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "read_document": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "读取数据目录中的纯文本资源，resourceId须来自search_resources或用户选定数据；offset字符位置。知识库documentId不能用于此工具，知识文献使用search_knowledge检索",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "internal_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "读取数据目录中的纯文本资源，resourceId须来自search_resources或用户选定数据；offset字符位置。知识库documentId不能用于此工具，知识文献使用search_knowledge检索",
+        "properties": {
+          "offset": {
+            "description": "从0开始的分页位置",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "resourceId": {
+            "description": "已登记且当前有权访问的资料正整数编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resourceId"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "read_document",
+      "operationIds": [],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "read_knowledge_document": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "按search_knowledge返回的documentId读取知识文献原文；offset从0开始，limit为1至8000字符；返回nextOffset供继续阅读。documentId属于知识库，不是数据resourceId",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "internal_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按search_knowledge返回的documentId读取知识文献原文；offset从0开始，limit为1至8000字符；返回nextOffset供继续阅读。documentId属于知识库，不是数据resourceId",
+        "properties": {
+          "documentId": {
+            "description": "知识库文献编号，不能替代业务资料resourceId",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "limit": {
+            "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
+            "maximum": 8000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "从0开始的分页位置",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "documentId"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "read_knowledge_document",
+      "operationIds": [],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "read_rows": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "读取最多30条样本；resourceId, fields字段数组, filters筛选数组",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "读取最多30条样本；resourceId, fields字段数组, filters筛选数组",
+        "properties": {
+          "fields": {
+            "description": "真实字段名列表，不接受SQL表达式",
+            "items": {
+              "description": "真实名称或证据标识",
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "filters": {
+            "description": "结构化属性条件，仍使用原查询语义",
+            "items": {
+              "properties": {
+                "field": {
+                  "description": "字段名",
+                  "type": "string"
+                },
+                "operator": {
+                  "description": "过滤操作符",
+                  "enum": [
+                    "contains",
+                    "eq",
+                    "ne",
+                    "gt",
+                    "gte",
+                    "lt",
+                    "lte",
+                    "between"
+                  ],
+                  "type": "string"
+                },
+                "value": {
+                  "description": "过滤值",
+                  "type": "string"
+                },
+                "valueTo": {
+                  "description": "between 操作符时使用的结束值",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "operator",
+                "value"
+              ],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "resourceId": {
+            "description": "已登记且当前有权访问的资料正整数编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resourceId"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "read_rows",
+      "operationIds": [
+        "queryResourceNonGeoTable",
+        "queryResource"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "search_knowledge": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "联合检索已审核知识规则与当前可见文档原文（语义+关键词），返回citation引用、来源和适用条件；query",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "联合检索已审核知识规则与当前可见文档原文（语义+关键词），返回citation引用、来源和适用条件；query",
+        "properties": {
+          "query": {
+            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "search_knowledge",
+      "operationIds": [
+        "searchKnowledgeDocuments"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "search_resources": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "分页查找当前项目数据，query可为空；category为all/compute_results/uploaded_data；offset从0开始，limit默认50，按nextOffset继续；total是真实总数",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "分页查找当前项目数据，query可为空；category为all/compute_results/uploaded_data；offset从0开始，limit默认50，按nextOffset继续；total是真实总数",
+        "properties": {
+          "category": {
+            "description": "资源来源分类",
+            "enum": [
+              "all",
+              "compute_results",
+              "uploaded_data"
+            ],
+            "maxLength": 120,
+            "type": "string"
+          },
+          "limit": {
+            "description": "本次读取上限；完整性和下一页位置以真实返回值为准",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "从0开始的分页位置",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "query": {
+            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "search_resources",
+      "operationIds": [
+        "getResources"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "search_web": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "internet",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "联网检索公开网页；query或url，返回受限摘要和引用链接",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "internal_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "联网检索公开网页；query或url，返回受限摘要和引用链接",
+        "oneOf": [
+          {
+            "required": [
+              "query"
+            ]
+          },
+          {
+            "required": [
+              "url"
+            ]
+          }
+        ],
+        "properties": {
+          "maxResults": {
+            "description": "公开联网检索的结果数量上限",
+            "maximum": 8,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
+            "maxLength": 300,
+            "type": "string"
+          },
+          "url": {
+            "description": "待读取的公开HTTP地址，继续执行服务端SSRF及重定向校验",
+            "maxLength": 2048,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "search_web",
+      "operationIds": [],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "start_business_flow": {
+      "anyPermissions": [],
+      "approval": "authorized_scope",
+      "capability": "business_flow",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "按目录真实versionId启动业务流；goal、inputs(角色到已授权资源ID)、parameters可选、reviewerModel可选。必须按该版本资料规范绑定；启动后由业务流处理，不再重复提交算子或伪造人工批准。",
+      "effect": "compute",
+      "idempotency": "复用本次运行的稳定提交键及既有业务对象幂等检查",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "按目录真实versionId启动业务流；goal、inputs(角色到已授权资源ID)、parameters可选、reviewerModel可选。必须按该版本资料规范绑定；启动后由业务流处理，不再重复提交算子或伪造人工批准。",
+        "properties": {
+          "goal": {
+            "description": "本次科研业务目标，不授予额外权限或人工批准",
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "inputAdapters": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "description": "已发布转换版本及其参数，不授予额外访问权",
+              "properties": {
+                "parameters": {
+                  "additionalProperties": true,
+                  "description": "真实manifest已声明的有界参数值",
+                  "type": "object"
+                },
+                "versionId": {
+                  "description": "已发布转换版本",
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "description": "由既有业务流规范定义的资料适配选择",
+            "maxProperties": 30,
+            "type": "object"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "description": "真实资料编号",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "description": "角色键到真实资料编号的映射，角色取对应发布清单",
+            "maxProperties": 100,
+            "type": "object"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "description": "发布清单允许的参数；单位、必填项和范围继续由真实清单验证",
+            "maxProperties": 100,
+            "type": "object"
+          },
+          "reviewerModel": {
+            "description": "策略允许的独立审核模型别名",
+            "maxLength": 120,
+            "type": "string"
+          },
+          "versionId": {
+            "description": "真实已发布且允许智能体使用的版本编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "versionId",
+          "inputs"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "start_business_flow",
+      "operationIds": [
+        "startBusinessFlow"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "medium",
+      "version": "1.0.0"
+    },
+    "summarize_data": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "analyze_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "确定性统计计数、空值、最小、最大、均值、标准差；resourceId, fields, filters",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "确定性统计计数、空值、最小、最大、均值、标准差；resourceId, fields, filters",
+        "properties": {
+          "fields": {
+            "description": "真实字段名列表，不接受SQL表达式",
+            "items": {
+              "description": "真实名称或证据标识",
+              "maxLength": 200,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "filters": {
+            "description": "结构化属性条件，仍使用原查询语义",
+            "items": {
+              "properties": {
+                "field": {
+                  "description": "字段名",
+                  "type": "string"
+                },
+                "operator": {
+                  "description": "过滤操作符",
+                  "enum": [
+                    "contains",
+                    "eq",
+                    "ne",
+                    "gt",
+                    "gte",
+                    "lt",
+                    "lte",
+                    "between"
+                  ],
+                  "type": "string"
+                },
+                "value": {
+                  "description": "过滤值",
+                  "type": "string"
+                },
+                "valueTo": {
+                  "description": "between 操作符时使用的结束值",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "operator",
+                "value"
+              ],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "resourceId": {
+            "description": "已登记且当前有权访问的资料正整数编号",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resourceId",
+          "fields"
+        ],
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "summarize_data",
+      "operationIds": [
+        "getResourceNonGeoAnalysis"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    },
+    "summarize_resource_catalog": {
+      "anyPermissions": [],
+      "approval": "none",
+      "capability": "read_data",
+      "completion": "以真实返回对象、任务状态及质量/入库状态核对；受理不等于完成",
+      "description": "全量统计当前授权项目的计算成果与上传/登记数据数量、类型及大小，不读取样本；query可为空，category可筛选",
+      "effect": "read",
+      "idempotency": "只读操作不产生业务写入",
+      "implementation": "shared_service",
+      "inputSchema": {
+        "additionalProperties": false,
+        "description": "全量统计当前授权项目的计算成果与上传/登记数据数量、类型及大小，不读取样本；query可为空，category可筛选",
+        "properties": {
+          "category": {
+            "description": "资源来源分类",
+            "enum": [
+              "all",
+              "compute_results",
+              "uploaded_data"
+            ],
+            "maxLength": 120,
+            "type": "string"
+          },
+          "query": {
+            "description": "当前授权范围内的检索关键词；空值是否允许取决于工具用途",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "limitations": "仅当前用户及当前单个项目；执行重验对象ACL、任务绑定、策略和资源预算；不修改用户原件",
+      "name": "summarize_resource_catalog",
+      "operationIds": [
+        "getResources"
+      ],
+      "requiredPermissions": [],
+      "retry": "临时繁忙时有限退避；参数、权限、质量及版本冲突不可盲目重试",
+      "risk": "low",
+      "version": "1.0.0"
+    }
+  }
+}

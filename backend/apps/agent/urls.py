@@ -1,8 +1,10 @@
 from django.urls import path
 from . import views, workflow_report_views, workflow_validation_views
 from .run_stream import response as run_stream
+from .capability_views import capabilities
 
 urlpatterns = [
+    path("capabilities/", capabilities),
     path("bootstrap/", views.bootstrap),
     path("attachments/", views.upload_attachment),
     path("conversations/", views.conversations),
